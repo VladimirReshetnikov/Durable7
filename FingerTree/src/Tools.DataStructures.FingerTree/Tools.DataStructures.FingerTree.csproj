@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Tools.DataStructures.FingerTree</AssemblyName>
+    <RootNamespace>Tools.DataStructures.FingerTree</RootNamespace>
+  </PropertyGroup>
+</Project>
