@@ -23,6 +23,7 @@ This document specifies the first production API for a persistent C# catenable d
 - A persistent immutable deque with structural sharing.
 - Constant-time `Count`, emptiness, first-element, and last-element queries.
 - End insertion and removal with logarithmic worst-case and constant amortized target complexity.
+- End replacement through `SetItem(0, value)` and `SetItem(Count - 1, value)` with constant worst-case complexity.
 - Catenation with logarithmic complexity in the smaller input.
 - Indexed read, update, insertion, deletion, range extraction, and split.
 - Sorted-search helpers for lower bound, upper bound, equal ranges, and comparer-compatible binary-search semantics.
@@ -34,7 +35,7 @@ This document specifies the first production API for a persistent C# catenable d
 - A public generic `Measured<TElement, TMeasure>` abstraction.
 - Sorted-set uniqueness semantics. A sorted deque may contain duplicates.
 - A mutable builder in the first implementation. A builder can be added later without changing the core immutable API.
-- Hard real-time worst-case constant deque-end updates. Finger-tree end updates are amortized constant but can be logarithmic in an individual operation.
+- Hard real-time worst-case constant deque-end insertions and removals. Finger-tree pushes and pops are amortized constant but can be logarithmic in an individual operation; this does not apply to replacing an existing end element with `SetItem`; see [Why Endpoint Insertions And Removals Are Not Worst-Case Constant](#why-endpoint-insertions-and-removals-are-not-worst-case-constant).
 - Validation that a sequence is sorted before a sorted-search helper runs. Debug-only validation may be added, but release behavior must not pay linear validation cost.
 
 ## Terminology And Mental Model
@@ -303,7 +304,7 @@ The refined split and search bounds come from finger-tree split cost: the path l
 
 ## Worst-Case Versus Amortized Guarantees
 
-The endpoint update target is:
+The endpoint insertion and removal target is:
 
 - worst-case O(log n);
 - amortized O(1) across any valid persistent usage pattern supported by the implementation;
@@ -313,9 +314,30 @@ The simplified paper gives a sequential physicist-method proof and notes that pe
 
 - an internal memoized-suspension strategy with tests that exercise branching persistent histories; or
 - a written proof or proof sketch showing that the strict representation preserves the advertised persistent amortized bound; or
-- a downgraded public guarantee that says endpoint updates are O(log n) worst-case and O(1) amortized only for single-threaded linear use of versions.
+- a downgraded public guarantee that says endpoint insertions and removals are O(log n) worst-case and O(1) amortized only for single-threaded linear use of versions.
 
 This specification records the desired production target, not permission to overstate an unproven implementation.
+
+## Why Endpoint Insertions And Removals Are Not Worst-Case Constant
+
+The exclusion of hard real-time worst-case O(1) endpoint insertions and removals is a deliberate scope boundary, not a claim that such data structures are impossible. It follows from the representation chosen for this first implementation.
+
+In the simplified finger tree, `AddFirst` usually modifies only the top prefix digit. When the prefix digit is already full, it must leave a neutral digit at the current level and push a node into the middle tree. If the middle tree is also at an overflow point, the same repair recurses one level down. A specially shaped tree can therefore force one endpoint insertion or removal to traverse the whole recursive spine, which is O(log n). `AddLast`, `RemoveFirst`, and `RemoveLast` have symmetric overflow or underflow cases.
+
+The amortized O(1) result is obtained by arranging that recursive endpoint repairs eliminate "dangerous" digit states. In the simplified paper's potential function, `One` and `Three` digits carry potential and `Two` digits do not. A recursive update pays for itself by turning a dangerous digit into a neutral one, so the average endpoint cost over a well-accounted history is constant. That argument bounds accumulated cost; it does not bound the latency of each individual public call.
+
+Replacing an existing endpoint element is different. `SetItem(0, value)` rewrites the first element in the top prefix digit, and `SetItem(Count - 1, value)` rewrites the last element in the top suffix digit. No middle-tree overflow or underflow repair is needed, and the operation only rebuilds the root-level path that directly stores the endpoint. For a singleton tree, the single stored value is replaced. Therefore endpoint replacement should be specified and implemented as O(1) worst-case.
+
+Guaranteeing worst-case O(1) endpoint insertions and removals would require a different engineering contract. The implementation would need to ensure that no public call ever performs an unbounded cascade, even when the tree contains dangerous states at every level. Plausible routes include:
+
+- A real-time scheduling layer that represents recursive repairs as pending work and advances a bounded amount of that work on each subsequent operation.
+- An explicitly lazy or memoized internal representation, adapted carefully to strict C#, so recursive repairs can be shared, forced incrementally, and made thread-safe under persistence.
+- A different worst-case catenable-deque representation, such as the more involved segmented-number-system family discussed in the original finger-tree paper's related work, with finger-tree-style measurements added only if they can preserve split and search.
+- A hybrid representation with local endpoint buffers plus a measured finger-tree core, together with invariants that prove buffer refills, drains, catenation, splitting, and sorted search cannot accumulate more deferred work than future operations are guaranteed to discharge.
+
+Those routes are substantially more than local tuning. They require new internal state, new invariants, and a proof or at least a mechanically stress-tested accounting discipline for persistent branching histories. For this collection, the main design value is the measured finger-tree operation set: catenation, indexing, splitting, and sorted search with a compact persistent representation. Accepting O(log n) worst-case endpoint insertions and removals keeps that design understandable and testable while still providing the expected O(1) amortized deque behavior once the implementation proves the amortized contract.
+
+If a future use case requires per-operation push/pop latency independent of `Count`, it should be treated as a separate design requirement. At that point the project should either introduce a distinct `RealTimeDeque<T>`-style type with a narrower API, or revise this type's internals only after the worst-case scheduling invariants are documented alongside the existing split and search invariants.
 
 ## Internal Design Obligations
 
@@ -425,7 +447,7 @@ The first implementation should include tests for at least these contracts:
 - Null element handling for nullable reference types with a comparer that accepts nulls.
 - Very small counts 0 through at least 12, because those exercise every empty/single/deep digit transition.
 - Large generated sequences sufficient to force multiple nested middle-tree levels.
-- Branching persistent histories, especially repeated endpoint updates from the same older version, before claiming persistent amortized O(1).
+- Branching persistent histories, especially repeated endpoint insertions and removals from the same older version, before claiming persistent amortized O(1).
 
 Property tests should generate random operation histories and compare the resulting sequences against a simple immutable reference model. Separate invariant tests should inspect internals through an `InternalsVisibleTo` test assembly and assert digit length, node length, count caches, and rightmost-element caches after every operation.
 
