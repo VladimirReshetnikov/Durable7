@@ -1,0 +1,438 @@
+# Finger Tree Deque API Specification
+
+- Status: Draft normative API specification
+- Created (UTC): 2026-04-27T18:33:25Z
+- Repository HEAD: df8ea08345ca22ba76e6f4fc7e92d0fd41686de3
+- Audience: Maintainers, reviewers, and implementers of the planned C# finger-tree collection
+- Scope: Public API shape, semantic contracts, and complexity targets for a persistent catenable deque
+- Related code:
+  - `src/DataStructures/FingerTree/`
+- Related docs:
+  - [Finger Trees Explained Anew, and Slightly Simplified](<Finger Trees Explained Anew, and Slightly Simplified.tex>)
+  - [Finger trees: a simple general-purpose data structure](<Finger trees - a simple general-purpose data structure/Finger trees - a simple general-purpose data structure.tex>)
+  - [Haskell containers 0.8 `Data.Sequence.Internal`](containers-0.8/src/Data/Sequence/Internal.hs)
+
+## Summary
+
+This document specifies the first production API for a persistent C# catenable deque backed by a simplified finger tree. The collection supports efficient access at both ends, concatenation, indexed lookup and replacement, splitting by index, and logarithmic sorted search when callers maintain the sequence in comparer order. The API is intentionally narrower than a general measured-finger-tree framework: the public type is a sequence collection, while the implementation remains free to use internal measurements for count and sorted-search signposts.
+
+## Scope And Non-Goals
+
+### In Scope
+
+- A persistent immutable deque with structural sharing.
+- Constant-time `Count`, emptiness, first-element, and last-element queries.
+- End insertion and removal with logarithmic worst-case and constant amortized target complexity.
+- Catenation with logarithmic complexity in the smaller input.
+- Indexed read, update, insertion, deletion, range extraction, and split.
+- Sorted-search helpers for lower bound, upper bound, equal ranges, and comparer-compatible binary-search semantics.
+- Exact exception and edge-case behavior for public methods.
+- Public complexity guarantees for time and allocation.
+
+### Out Of Scope
+
+- A public generic `Measured<TElement, TMeasure>` abstraction.
+- Sorted-set uniqueness semantics. A sorted deque may contain duplicates.
+- A mutable builder in the first implementation. A builder can be added later without changing the core immutable API.
+- Hard real-time worst-case constant deque-end updates. Finger-tree end updates are amortized constant but can be logarithmic in an individual operation.
+- Validation that a sequence is sorted before a sorted-search helper runs. Debug-only validation may be added, but release behavior must not pay linear validation cost.
+
+## Terminology And Mental Model
+
+- **Deque**: A double-ended queue. Elements can be read, inserted, and removed at both ends.
+- **Catenable**: Two instances can be concatenated without copying either complete input.
+- **Persistent**: Operations return new instances and leave all existing instances usable.
+- **Structural sharing**: New instances reuse unchanged internal nodes from older instances.
+- **Digit**: A bounded prefix or suffix buffer at a finger-tree level. This implementation follows the simplified paper and uses digits of length 1 through 3.
+- **Node**: A middle-tree element containing 2 or 3 child elements.
+- **Measure**: Cached per-subtree metadata. The public deque needs at least element count and rightmost element signposts.
+- **Sorted helper**: A method whose result is specified only when the sequence is sorted according to the same comparer supplied to that method.
+
+## Public Package Shape
+
+The first implementation should introduce a standalone project under `src/DataStructures/FingerTree/` with this public namespace and primary type:
+
+```csharp
+using System.Diagnostics.CodeAnalysis;
+
+namespace Tools.DataStructures.FingerTree;
+
+public sealed class FingerTreeDeque<T> : IReadOnlyList<T>
+{
+    public static FingerTreeDeque<T> Empty { get; }
+
+    public int Count { get; }
+    public bool IsEmpty { get; }
+
+    public T First { get; }
+    public T Last { get; }
+    public T this[int index] { get; }
+
+    public static FingerTreeDeque<T> Create(params ReadOnlySpan<T> items);
+    public static FingerTreeDeque<T> CreateRange(IEnumerable<T> items);
+
+    public FingerTreeDeque<T> AddFirst(T item);
+    public FingerTreeDeque<T> AddLast(T item);
+    public FingerTreeDeque<T> AddRange(IEnumerable<T> items);
+    public FingerTreeDeque<T> AddRange(FingerTreeDeque<T> items);
+    public FingerTreeDeque<T> Concat(FingerTreeDeque<T> other);
+
+    public FingerTreeDeque<T> RemoveFirst();
+    public FingerTreeDeque<T> RemoveLast();
+    public FingerTreeDequePop<T> PopFirst();
+    public FingerTreeDequePop<T> PopLast();
+    public bool TryPeekFirst([MaybeNullWhen(false)] out T value);
+    public bool TryPeekLast([MaybeNullWhen(false)] out T value);
+    public bool TryPopFirst([MaybeNullWhen(false)] out T value, out FingerTreeDeque<T> rest);
+    public bool TryPopLast([MaybeNullWhen(false)] out T value, out FingerTreeDeque<T> rest);
+
+    public bool TryGetItem(int index, [MaybeNullWhen(false)] out T value);
+    public FingerTreeDeque<T> SetItem(int index, T value);
+    public FingerTreeDeque<T> UpdateAt(int index, Func<T, T> updater);
+    public FingerTreeDeque<T> InsertAt(int index, T item);
+    public FingerTreeDeque<T> InsertRange(int index, IEnumerable<T> items);
+    public FingerTreeDeque<T> RemoveAt(int index);
+    public FingerTreeDeque<T> RemoveRange(int index, int count);
+    public FingerTreeDeque<T> GetRange(int index, int count);
+
+    public FingerTreeDequeSplit<T> SplitAt(int index);
+    public FingerTreeDequeItemSplit<T> SplitItemAt(int index);
+    public FingerTreeDequeRangeSplit<T> SplitRange(int index, int count);
+
+    public int SortedLowerBound(T item, IComparer<T>? comparer = null);
+    public int SortedUpperBound(T item, IComparer<T>? comparer = null);
+    public int SortedBinarySearch(T item, IComparer<T>? comparer = null);
+    public bool SortedContains(T item, IComparer<T>? comparer = null);
+    public FingerTreeDequeSplit<T> SplitAtSortedLowerBound(T item, IComparer<T>? comparer = null);
+    public FingerTreeDequeSplit<T> SplitAtSortedUpperBound(T item, IComparer<T>? comparer = null);
+    public FingerTreeDequeRangeSplit<T> SplitAtSortedEqualRange(T item, IComparer<T>? comparer = null);
+    public FingerTreeDeque<T> InsertSorted(T item, IComparer<T>? comparer = null);
+    public FingerTreeDeque<T> RemoveAllSorted(T item, IComparer<T>? comparer = null);
+
+    public T[] ToArray();
+    public void CopyTo(T[] array, int arrayIndex);
+    public Enumerator GetEnumerator();
+}
+```
+
+The `params ReadOnlySpan<T>` factory requires a target framework that supports span-backed `params`. If the project must target an older framework, the implementation should instead expose these overloads:
+
+```csharp
+public static FingerTreeDeque<T> Create(params T[] items);
+public static FingerTreeDeque<T> Create(ReadOnlySpan<T> items);
+```
+
+The type should not implement `IList<T>`, `ICollection<T>`, or non-read-only collection interfaces. It should not implement `IImmutableList<T>` in the first version, because that interface imposes a broad list-shaped API whose weaker operations can obscure the finger-tree-specific complexity contract.
+
+## Result Types
+
+Result structs make multi-value operations self-documenting and avoid public tuple field names becoming part of call-site folklore.
+
+```csharp
+namespace Tools.DataStructures.FingerTree;
+
+public readonly record struct FingerTreeDequeSplit<T>(
+    FingerTreeDeque<T> Left,
+    FingerTreeDeque<T> Right);
+
+public readonly record struct FingerTreeDequeItemSplit<T>(
+    FingerTreeDeque<T> Left,
+    T Item,
+    FingerTreeDeque<T> Right);
+
+public readonly record struct FingerTreeDequeRangeSplit<T>(
+    FingerTreeDeque<T> Before,
+    FingerTreeDeque<T> Range,
+    FingerTreeDeque<T> After);
+
+public readonly record struct FingerTreeDequePop<T>(
+    T Value,
+    FingerTreeDeque<T> Rest);
+```
+
+The `PopFirst` result stores the removed first value and the remaining suffix. The `PopLast` result stores the removed last value and the remaining prefix.
+
+## Deque Semantics
+
+`Empty` is the canonical empty sequence. Empty instances created through operations should return the canonical empty instance unless doing so would complicate implementation without observable benefit.
+
+`First` and `Last` return the endpoint elements in O(1). On an empty deque they throw `InvalidOperationException`.
+
+`TryPeekFirst` and `TryPeekLast` return `false` on an empty deque and set `value` to `default!`. They return `true` and the endpoint value otherwise.
+
+`AddFirst` and `AddLast` preserve all existing versions. They accept `null` when `T` permits it.
+
+`RemoveFirst` and `RemoveLast` throw `InvalidOperationException` on an empty deque. Their `TryPop*` counterparts return `false`, set `value` to `default!`, and set `rest` to `Empty`.
+
+`Concat` returns a sequence whose elements are all elements of the receiver followed by all elements of `other`. It must preserve the relative order and multiplicity of both inputs. Concatenating with `Empty` should return the non-empty input instance when possible.
+
+`AddRange(FingerTreeDeque<T>)` is equivalent to `Concat`. `AddRange(IEnumerable<T>)` enumerates `items` once, appending elements in enumeration order. Passing `null` as an enumerable throws `ArgumentNullException`.
+
+`Count` is an `int`, matching the .NET collection ecosystem. Any operation that would create a deque with more than `int.MaxValue` elements must throw `InvalidOperationException` or `OverflowException` before publishing an invalid instance.
+
+## Indexed Semantics
+
+All index parameters are zero-based.
+
+`this[int index]` returns the element at `index`. It throws `ArgumentOutOfRangeException` when `index < 0` or `index >= Count`.
+
+`TryGetItem` returns `false` for an out-of-range index and sets `value` to `default!`. It returns `true` and the element otherwise.
+
+`SetItem` returns a new deque with exactly one replaced element. It must not interpret equality as a no-op; callers can rely on the operation preserving length and replacing the stored value even when the new value compares equal to the old value.
+
+`UpdateAt` reads the current element, calls `updater` exactly once, and stores the returned value. It throws `ArgumentNullException` when `updater` is null. If `updater` throws, the original deque remains unchanged.
+
+`InsertAt` accepts `index` in the inclusive range `0..Count`. `index == 0` is `AddFirst`; `index == Count` is `AddLast`. Other values split the deque at `index` and insert between the two parts.
+
+`RemoveAt` accepts `index` in the range `0..Count - 1` and removes exactly that element.
+
+`GetRange(index, count)` returns exactly `count` elements starting at `index`. `RemoveRange(index, count)` removes exactly that range. `SplitRange(index, count)` returns the prefix before the range, the range itself, and the suffix after it. These methods throw `ArgumentOutOfRangeException` when `index < 0`, `count < 0`, or `index + count > Count`. The implementation must avoid signed-integer overflow in this validation.
+
+## Split Semantics
+
+`SplitAt(index)` accepts `index` in the inclusive range `0..Count`.
+
+- `SplitAt(0)` returns `(Empty, this)`.
+- `SplitAt(Count)` returns `(this, Empty)`.
+- For any valid `index`, `Left.Count == index`, `Right.Count == Count - index`, and `Left.Concat(Right)` is sequence-equal to the original deque.
+
+`SplitItemAt(index)` accepts `index` in the range `0..Count - 1`.
+
+- `Left.Count == index`.
+- `Item` is the original element at `index`.
+- `Right.Count == Count - index - 1`.
+- `Left.AddLast(Item).Concat(Right)` is sequence-equal to the original deque.
+
+`SplitRange(index, count)` accepts the same range as `GetRange`.
+
+- `Before.Count == index`.
+- `Range.Count == count`.
+- `After.Count == Count - index - count`.
+- `Before.Concat(Range).Concat(After)` is sequence-equal to the original deque.
+
+## Sorted Search Semantics
+
+Sorted methods are specified only under this precondition:
+
+The deque is sorted in nondecreasing order according to the comparer used for the call, and comparer results for stored elements are stable during the call.
+
+If `comparer` is null, the method uses `Comparer<T>.Default`. If the default comparer cannot compare the stored values and search item, the comparer exception is part of the method behavior.
+
+Sorted helpers do not store the comparer in the deque. A deque can be searched with any comparer, but the result is specified only when the current element order is sorted by that comparer.
+
+### Lower Bound
+
+`SortedLowerBound(item, comparer)` returns the first index `i` such that `comparer.Compare(this[i], item) >= 0`. If all elements are less than `item`, it returns `Count`.
+
+`SplitAtSortedLowerBound(item, comparer)` returns `(Less, GreaterOrEqual)` where every element of `Less` compares less than `item`, and every element of `GreaterOrEqual` compares greater than or equal to `item`.
+
+### Upper Bound
+
+`SortedUpperBound(item, comparer)` returns the first index `i` such that `comparer.Compare(this[i], item) > 0`. If no element is greater than `item`, it returns `Count`.
+
+`SplitAtSortedUpperBound(item, comparer)` returns `(LessOrEqual, Greater)` where every element of `LessOrEqual` compares less than or equal to `item`, and every element of `Greater` compares greater than `item`.
+
+### Binary Search
+
+`SortedBinarySearch(item, comparer)` returns deterministic .NET-style binary-search output:
+
+- If at least one equal element exists, it returns the first equal element index, which is the lower bound.
+- If no equal element exists, it returns the bitwise complement of the insertion index, `~SortedLowerBound(item, comparer)`.
+
+Returning the first equal element is a stronger guarantee than `Array.BinarySearch`, whose matching duplicate is unspecified. The stronger guarantee follows naturally from lower-bound search and is useful for persistent editing.
+
+`SortedContains(item, comparer)` is equivalent to checking whether `SortedBinarySearch` returns a nonnegative index.
+
+### Equal Range
+
+`SplitAtSortedEqualRange(item, comparer)` returns `(Before, Range, After)` where:
+
+- every element of `Before` compares less than `item`;
+- every element of `Range` compares equal to `item`;
+- every element of `After` compares greater than `item`.
+
+`InsertSorted(item, comparer)` inserts after existing equal elements by using the upper bound. This preserves the relative order of equal elements already present in the deque.
+
+`RemoveAllSorted(item, comparer)` removes the complete equal range.
+
+### Unsorted Inputs
+
+When the sorted precondition is false, sorted helper results are unspecified. The methods must still preserve memory safety and immutable-instance validity, but callers must not rely on any returned index or partition.
+
+## Complexity Model
+
+Let:
+
+- `n` be the receiver count;
+- `m` be the count of another deque or inserted range;
+- `i` be a valid element index;
+- `s` be a split index in `0..n`;
+- `r` be a range length;
+- `k` be the lower-bound or upper-bound result index;
+- `nearIndex(i, n) = min(i + 1, n - i)`;
+- `nearSplit(s, n) = min(s, n - s)`;
+- `nearBound(k, n) = min(k + 1, n - k + 1)`.
+
+Complexities below assume comparer calls, delegate calls, and element assignment are O(1). If a comparer or updater is more expensive, its own cost is additional.
+
+| Operation | Worst-case time | Amortized time | Additional allocation |
+| --- | ---: | ---: | ---: |
+| `Empty`, `IsEmpty`, `Count` | O(1) | O(1) | O(1) |
+| `First`, `Last`, `TryPeekFirst`, `TryPeekLast` | O(1) | O(1) | O(1) |
+| `CreateRange(IEnumerable<T>)` | O(n) | O(n) | O(n) |
+| `ToArray`, `CopyTo` | O(n) | O(n) | O(n) for `ToArray`, O(1) for `CopyTo` |
+| Enumeration | O(n) total, O(log n) setup | O(1) per yielded element | O(log n) enumerator stack |
+| `AddFirst`, `AddLast` | O(log n) | O(1) target | O(log n) worst, O(1) amortized target |
+| `RemoveFirst`, `RemoveLast`, `PopFirst`, `PopLast` | O(log n) | O(1) target | O(log n) worst, O(1) amortized target |
+| `Concat` / `AddRange(FingerTreeDeque<T>)` | O(log(min(n, m) + 1)) | same | O(log(min(n, m) + 1)) |
+| `AddRange(IEnumerable<T>)` | O(m + log(n + 1)) if built then concatenated | same | O(m + log(n + 1)) |
+| Indexer get, `TryGetItem` | O(1 + log nearIndex(i, n)) | same | O(1) |
+| `SetItem`, `UpdateAt` | O(1 + log nearIndex(i, n)) | same | O(1 + log nearIndex(i, n)) |
+| `InsertAt` | O(1 + log(nearSplit(index, n) + 1)) | same | O(1 + log(nearSplit(index, n) + 1)) |
+| `RemoveAt` | O(1 + log nearIndex(i, n)) | same | O(1 + log nearIndex(i, n)) |
+| `SplitAt` | O(1 + log(nearSplit(s, n) + 1)) | same | O(1 + log(nearSplit(s, n) + 1)) |
+| `SplitItemAt` | O(1 + log nearIndex(i, n)) | same | O(1 + log nearIndex(i, n)) |
+| `GetRange`, `RemoveRange`, `SplitRange` | O(1 + log n) | same | O(1 + log n) |
+| `SortedLowerBound`, `SortedUpperBound` | O(1 + log nearBound(k, n)) | same | O(1) |
+| `SplitAtSortedLowerBound`, `SplitAtSortedUpperBound` | O(1 + log nearBound(k, n)) | same | O(1 + log nearBound(k, n)) |
+| `SortedBinarySearch`, `SortedContains` | O(1 + log nearBound(k, n)) | same | O(1) |
+| `SplitAtSortedEqualRange`, `RemoveAllSorted` | O(1 + log n) | same | O(1 + log n) |
+| `InsertSorted` | O(1 + log n) | same | O(1 + log n) |
+
+The refined split and search bounds come from finger-tree split cost: the path length is logarithmic in the smaller side created by the split, not necessarily in the whole sequence. It is still correct to document these operations as O(log n) in XML summaries when a shorter summary is preferable, but the detailed docs should preserve the sharper bound.
+
+## Worst-Case Versus Amortized Guarantees
+
+The endpoint update target is:
+
+- worst-case O(log n);
+- amortized O(1) across any valid persistent usage pattern supported by the implementation;
+- O(1) endpoint reads.
+
+The simplified paper gives a sequential physicist-method proof and notes that persistent amortized complexity requires the usual finger-tree laziness argument. C# is strict by default, so the implementation must not casually inherit the Haskell claim. Before XML docs or package docs advertise persistent amortized O(1), the implementation must have one of the following:
+
+- an internal memoized-suspension strategy with tests that exercise branching persistent histories; or
+- a written proof or proof sketch showing that the strict representation preserves the advertised persistent amortized bound; or
+- a downgraded public guarantee that says endpoint updates are O(log n) worst-case and O(1) amortized only for single-threaded linear use of versions.
+
+This specification records the desired production target, not permission to overstate an unproven implementation.
+
+## Internal Design Obligations
+
+The public API does not expose implementation nodes, but the implementation should follow the simplified finger-tree shape unless benchmarks or proof obligations justify changing it:
+
+```text
+Tree<T> =
+    Empty
+  | Single(T)
+  | Deep(Digit<T> prefix, Tree<Node<T>> middle, Digit<T> suffix)
+
+Digit<T> = One(T) | Two(T, T) | Three(T, T, T)
+Node<T> = Node2(T, T) | Node3(T, T, T)
+```
+
+Every tree, node, and deep node must cache enough measure data to implement public operations without scanning subtrees:
+
+- `Count`: number of leaf elements represented by the subtree.
+- `Last`: the rightmost leaf element, used as a sorted-search signpost.
+- `HasLast`: needed for empty subtrees and nullable element types.
+
+The count measure drives indexed split and lookup. The rightmost-element signpost drives sorted lower-bound and upper-bound search: in a sorted subtree, if the subtree's rightmost element is still less than the target, the whole subtree can be skipped.
+
+The implementation may cache digit measures as well. The asymptotic complexity is unchanged because digits have bounded length, but cached digit summaries may reduce comparer calls in sorted search.
+
+Endpoint insertion and removal must preserve the simplified-paper potential invariant:
+
+- Recursive `AddFirst` overflow from a `Three` prefix must leave a `Two` prefix at the current level and push a `Node2` into the middle tree.
+- Recursive `AddLast` overflow is symmetric.
+- Removing from a one-element prefix must pull from the middle tree when needed.
+- When the pulled middle node is a `Node3`, the implementation should expose one element and push the remaining pair back without recursing, following the paper's `chop` idea.
+- Symmetric suffix removal follows the same rule.
+
+These rules are not merely implementation taste. They are what creates a neutral digit state and pays for future endpoint operations in the amortized analysis.
+
+## Thread Safety And Persistence
+
+Instances are immutable snapshots. Reading the same instance concurrently from multiple threads is safe.
+
+If the implementation uses lazy or memoized internal repairs, forcing those repairs must also be thread-safe. It is acceptable for two racing readers to duplicate bounded internal work, but it is not acceptable for a race to publish a partially initialized node, corrupt a cached measure, or make equal public operations observe different element sequences.
+
+The collection does not deep-freeze element objects. If `T` is a mutable reference type and callers mutate an object after insertion, the deque still preserves the object reference, but sorted-search results are specified only if the comparer order remains stable.
+
+## Equality And Identity
+
+`FingerTreeDeque<T>` should not override `Equals` or `GetHashCode` in the first implementation. Structural equality is O(n), and making it the default object equality would hide a linear operation behind common APIs.
+
+Callers that need structural equality should use `Enumerable.SequenceEqual`, a future explicit `SequenceEqual` helper, or a comparer-aware method with clear O(n) documentation.
+
+Operations may return an existing instance when the result is observably identical and no element equality test is required. Callers must not depend on reference identity to detect logical equality or no-op behavior.
+
+## Examples
+
+Basic persistent deque usage:
+
+```csharp
+var items = FingerTreeDeque<int>.Empty
+    .AddLast(10)
+    .AddLast(20)
+    .AddFirst(5);
+
+var split = items.SplitAt(2);
+
+// split.Left:  [5, 10]
+// split.Right: [20]
+// items is still [5, 10, 20]
+```
+
+Indexed update:
+
+```csharp
+var updated = items.UpdateAt(1, static value => value + 1);
+
+// updated: [5, 11, 20]
+// items:   [5, 10, 20]
+```
+
+Sorted search and insertion:
+
+```csharp
+var sorted = FingerTreeDeque<int>.Create(1, 3, 3, 7, 9);
+
+int lower = sorted.SortedLowerBound(3);
+int upper = sorted.SortedUpperBound(3);
+int binary = sorted.SortedBinarySearch(4);
+var equalRange = sorted.SplitAtSortedEqualRange(3);
+var inserted = sorted.InsertSorted(5);
+
+// lower == 1
+// upper == 3
+// binary == ~3
+// equalRange.Range is [3, 3]
+// inserted is [1, 3, 3, 5, 7, 9]
+```
+
+## Validation Requirements For The Implementation
+
+The first implementation should include tests for at least these contracts:
+
+- Structural persistence: every operation leaves its input sequences unchanged.
+- Endpoint operation equivalence against `List<T>` or `ImmutableList<T>` reference behavior.
+- Concatenation associativity at the sequence level.
+- `SplitAt`, `SplitItemAt`, and `SplitRange` reconstruction laws.
+- Indexed get, set, update, insert, and delete around every endpoint and around tree-level boundaries.
+- Sorted lower bound, upper bound, binary search, equal range, insertion, and removal with duplicates.
+- Custom comparer behavior, including reversed or projection comparers when the input is sorted accordingly.
+- Null element handling for nullable reference types with a comparer that accepts nulls.
+- Very small counts 0 through at least 12, because those exercise every empty/single/deep digit transition.
+- Large generated sequences sufficient to force multiple nested middle-tree levels.
+- Branching persistent histories, especially repeated endpoint updates from the same older version, before claiming persistent amortized O(1).
+
+Property tests should generate random operation histories and compare the resulting sequences against a simple immutable reference model. Separate invariant tests should inspect internals through an `InternalsVisibleTo` test assembly and assert digit length, node length, count caches, and rightmost-element caches after every operation.
+
+## Notes For Maintainers
+
+The tempting public abstraction is a fully generic measured finger tree. Do not expose that first. C# lacks Haskell's typeclass ergonomics for this pattern, and exposing the general machinery would lock the project into a complicated public shape before there is a second concrete use case.
+
+The sorted-search API deliberately lives on the deque instead of a separate sorted collection type. That keeps the first implementation focused and lets callers decide whether sortedness is a local invariant. A future `FingerTreeSortedBag<T>` can wrap `FingerTreeDeque<T>` and store a comparer if enough call sites need an invariant-enforcing sorted container.
+
+The implementation should keep XML documentation aligned with this file. XML summaries may use coarser O(log n) wording, but remarks on the key methods should point to this specification for sharper split-distance complexity.
