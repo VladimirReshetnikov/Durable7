@@ -12,6 +12,6 @@
 
 ## Reference Material
 
-- [Finger Trees Explained Anew, and Slightly Simplified](<Finger Trees Explained Anew, and Slightly Simplified.tex>) is the primary algorithmic reference for the simplified digit and node shape.
-- [Finger trees: a simple general-purpose data structure](<Finger trees - a simple general-purpose data structure/Finger trees - a simple general-purpose data structure.tex>) is the original measured-finger-tree reference for splitting, positional annotations, and ordered-sequence search.
+- [Finger Trees Explained Anew, and Slightly Simplified](<Finger Trees Explained Anew, and Slightly Simplified.md>) is the primary algorithmic reference for the simplified digit and node shape; the matching `.tex` and `.pdf` files remain alongside it.
+- [Finger trees: a simple general-purpose data structure](<Finger trees - a simple general-purpose data structure/Finger trees - a simple general-purpose data structure.md>) is the original measured-finger-tree reference for splitting, positional annotations, and ordered-sequence search; the matching `.tex` source remains alongside it, with the PDF one directory up.
 - [Haskell containers 0.8 `Data.Sequence.Internal`](containers-0.8/src/Data/Sequence/Internal.hs) is a production reference for strictness, splitting, indexing, and edge-case handling, though it uses the original 1-through-4 digit representation rather than the simplified 1-through-3 digit representation.
