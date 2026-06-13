@@ -240,6 +240,57 @@ public sealed class ReversibleDequeTests
         Assert.InRange(bytes, 1, 512);   // O(1): mirror the root plus the wrapper, independent of size
     }
 
+    /// <summary>
+    /// Targets the subtle reversed-multi-level-middle path: a <see cref="ReversibleDeque{T}.SetItem"/> deep
+    /// inside a large reversed deque descends through several reversed inner middles and must rebuild a
+    /// logically correct (forward) tree, after which the result must keep operating correctly (re-reverse,
+    /// split/rejoin, endpoint pushes). This pins the adjudication that operating on a reversed inner middle
+    /// never desynchronizes orientation between a deep level and its middle subtree.
+    /// </summary>
+    [Fact]
+    public void SetItem_DeepInReversedMiddle_StaysConsistent()
+    {
+        const int size = 300;   // large enough for a multi-level middle (a middle-of-a-middle), all reversed
+        var model = Enumerable.Range(0, size).Reverse().ToList();
+        var deque = ReversibleDeque<int>.CreateRange(Enumerable.Range(0, size)).Reverse();
+        AssertSequence(model, deque);
+
+        // Hit the prefix region, several deep-middle positions, and the suffix region.
+        foreach (var index in new[] { 0, 1, 2, 7, size / 3, size / 2, 2 * size / 3, size - 3, size - 2, size - 1 })
+        {
+            var value = -index - 1;
+            model[index] = value;
+            deque = deque.SetItem(index, value);
+            AssertSequence(model, deque);   // full sequence + internal invariants after each mutation
+        }
+
+        // The mutated, reversed-origin tree must still behave under every other operation.
+        AssertSequence(((IEnumerable<int>)model).Reverse().ToArray(), deque.Reverse());
+        var (left, right) = deque.SplitAt(size / 2);
+        AssertSequence(model, left.Concat(right));
+        AssertSequence([.. model, 777], deque.AddLast(777));
+        AssertSequence([999, .. model], deque.AddFirst(999));
+    }
+
+    /// <summary>
+    /// Verifies <see cref="ReversibleDeque{T}.SetItem"/> on a reversed deque is persistent: deriving a mutated
+    /// version leaves the reversed source version untouched (the reversal bit is a non-mutating view).
+    /// </summary>
+    [Fact]
+    public void Reverse_ThenSetItem_PreservesOriginalVersion()
+    {
+        const int size = 200;
+        var reversedModel = Enumerable.Range(0, size).Reverse().ToArray();
+        var reversed = ReversibleDeque<int>.CreateRange(Enumerable.Range(0, size)).Reverse();
+
+        var mutated = reversed.SetItem(size / 2, -1);
+
+        AssertSequence(reversedModel, reversed);   // source version intact after deriving a mutation
+        var expectedMutated = reversedModel.ToArray();
+        expectedMutated[size / 2] = -1;
+        AssertSequence(expectedMutated, mutated);
+    }
+
     /// <summary>Verifies empty-deque degenerate behavior.</summary>
     [Fact]
     public void Empty_IsDegenerate()
