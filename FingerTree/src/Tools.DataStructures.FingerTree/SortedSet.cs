@@ -453,7 +453,10 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
         return (onlyThis, both, onlyOther);
     }
 
-    private SortedSet<T> Wrap(FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree) => new(tree, _comparer);
+    // Collapse to the shared empty singleton only when the tree is empty AND the default comparer is in use;
+    // a non-default-comparer set must keep its own comparer when it becomes empty.
+    private SortedSet<T> Wrap(FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree) =>
+        tree.IsEmpty && ReferenceEquals(_comparer, Comparer<T>.Default) ? EmptyDefault : new(tree, _comparer);
 
     private static InvalidOperationException EmptyError() => new("The sorted set is empty.");
 }

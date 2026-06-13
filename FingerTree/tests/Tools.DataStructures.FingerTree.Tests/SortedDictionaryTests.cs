@@ -186,6 +186,26 @@ public sealed class SortedDictionaryTests
             map.ToArray());
     }
 
+    /// <summary>Verifies emptying a default-comparer dictionary collapses to the shared <c>Empty</c> singleton.</summary>
+    [Fact]
+    public void EmptyingWithDefaultComparer_CollapsesToSingleton()
+    {
+        var map = FtSortedDictionary.Empty.SetItem(7, "v").Remove(7);
+        Assert.True(map.IsEmpty);
+        Assert.Same(FtSortedDictionary.Empty, map);
+    }
+
+    /// <summary>Verifies emptying a custom-comparer dictionary keeps its own comparer (no singleton collapse).</summary>
+    [Fact]
+    public void EmptyingWithCustomComparer_PreservesComparer()
+    {
+        var descending = Comparer<int>.Create((x, y) => y.CompareTo(x));
+        var map = FtSortedDictionary.Create(descending).SetItem(7, "v").Remove(7);
+        Assert.True(map.IsEmpty);
+        Assert.NotSame(FtSortedDictionary.Empty, map);
+        Assert.Same(descending, map.Comparer);
+    }
+
     /// <summary>Verifies empty-dictionary degenerate behavior.</summary>
     [Fact]
     public void Empty_HasNoEntries()

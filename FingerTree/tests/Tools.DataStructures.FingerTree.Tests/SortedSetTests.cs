@@ -172,6 +172,26 @@ public sealed class SortedSetTests
         Assert.Equal("bravo", floor);
     }
 
+    /// <summary>Verifies emptying a default-comparer set collapses to the shared <c>Empty</c> singleton.</summary>
+    [Fact]
+    public void EmptyingWithDefaultComparer_CollapsesToSingleton()
+    {
+        var set = FtSortedSet.Empty.Add(7).Remove(7);
+        Assert.True(set.IsEmpty);
+        Assert.Same(FtSortedSet.Empty, set);
+    }
+
+    /// <summary>Verifies emptying a custom-comparer set keeps its own comparer (no singleton collapse).</summary>
+    [Fact]
+    public void EmptyingWithCustomComparer_PreservesComparer()
+    {
+        var descending = Comparer<int>.Create((x, y) => y.CompareTo(x));
+        var set = FtSortedSet.Create(descending).Add(7).Remove(7);
+        Assert.True(set.IsEmpty);
+        Assert.NotSame(FtSortedSet.Empty, set);
+        Assert.Same(descending, set.Comparer);
+    }
+
     /// <summary>Verifies empty-set degenerate behavior.</summary>
     [Fact]
     public void Empty_HasNoElements()

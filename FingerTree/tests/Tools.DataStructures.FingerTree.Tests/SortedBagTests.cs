@@ -154,6 +154,26 @@ public sealed class SortedBagTests
         Assert.Equal(viaAdd, viaCreateRange);           // the two construction paths agree
     }
 
+    /// <summary>Verifies emptying a default-comparer bag collapses to the shared <c>Empty</c> singleton.</summary>
+    [Fact]
+    public void EmptyingWithDefaultComparer_CollapsesToSingleton()
+    {
+        var bag = SortedBag<int>.Empty.Add(7).Remove(7);
+        Assert.True(bag.IsEmpty);
+        Assert.Same(SortedBag<int>.Empty, bag);
+    }
+
+    /// <summary>Verifies emptying a custom-comparer bag keeps its own comparer (no singleton collapse).</summary>
+    [Fact]
+    public void EmptyingWithCustomComparer_PreservesComparer()
+    {
+        var descending = Comparer<int>.Create((x, y) => y.CompareTo(x));
+        var bag = SortedBag<int>.Create(descending).Add(7).RemoveAll(7);
+        Assert.True(bag.IsEmpty);
+        Assert.NotSame(SortedBag<int>.Empty, bag);
+        Assert.Same(descending, bag.Comparer);
+    }
+
     /// <summary>Verifies the empty bag's degenerate behavior.</summary>
     [Fact]
     public void Empty_HasNoElements()

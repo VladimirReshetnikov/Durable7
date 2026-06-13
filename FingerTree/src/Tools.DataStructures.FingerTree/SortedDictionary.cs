@@ -348,9 +348,11 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
         return true;
     }
 
+    // Collapse to the shared empty singleton only when the tree is empty AND the default comparer is in use;
+    // a non-default-comparer dictionary must keep its own comparer when it becomes empty.
     private SortedDictionary<TKey, TValue> Wrap(
         FingerTree<KeyValuePair<TKey, TValue>, RankedKey<TKey>, EntryMeasure<TKey, TValue>> tree) =>
-        new(tree, _comparer);
+        tree.IsEmpty && ReferenceEquals(_comparer, Comparer<TKey>.Default) ? EmptyDefault : new(tree, _comparer);
 
     private static InvalidOperationException EmptyError() => new("The sorted dictionary is empty.");
 }
