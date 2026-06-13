@@ -239,6 +239,122 @@ public sealed class IntervalTree<T> : IEnumerable<Interval<T>>
         return results;
     }
 
+    /// <summary>Counts the intervals overlapping <paramref name="query"/>. O(k log n) for k results.</summary>
+    /// <param name="query">The query interval.</param>
+    /// <returns>The number of overlapping intervals.</returns>
+    public int CountOverlaps(Interval<T> query) => FindOverlaps(query).Count;
+
+    /// <summary>
+    /// Determines whether an interval value-equal to <paramref name="interval"/> is present.
+    /// O(log n) when low endpoints are distinct; otherwise additionally linear in the number of intervals
+    /// sharing that low endpoint.
+    /// </summary>
+    /// <param name="interval">The interval to look for (matched by value equality).</param>
+    /// <returns><see langword="true"/> when present; otherwise <see langword="false"/>.</returns>
+    public bool Contains(Interval<T> interval)
+    {
+        var comparer = Comparer<T>.Default;
+        var (_, atOrAfter) = _tree.Split(m => m.LastLow.HasValue && comparer.Compare(m.LastLow.Value, interval.Low) >= 0);
+        var current = atOrAfter;
+        while (current.TryViewLeft(out var head, out var tail))
+        {
+            if (comparer.Compare(head.Low, interval.Low) != 0)
+                break;
+            if (head.Equals(interval))
+                return true;
+            current = tail;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Removes one interval value-equal to <paramref name="interval"/>, if present.
+    /// O(log n) when low endpoints are distinct; otherwise additionally linear in the number of intervals
+    /// sharing that low endpoint.
+    /// </summary>
+    /// <param name="interval">The interval to remove (matched by value equality).</param>
+    /// <param name="result">The tree with one matching interval removed; otherwise the unchanged tree.</param>
+    /// <returns><see langword="true"/> when an interval was removed; otherwise <see langword="false"/>.</returns>
+    public bool TryRemove(Interval<T> interval, out IntervalTree<T> result)
+    {
+        var comparer = Comparer<T>.Default;
+        var (left, atOrAfter) = _tree.Split(m => m.LastLow.HasValue && comparer.Compare(m.LastLow.Value, interval.Low) >= 0);
+
+        var skipped = FingerTree<Interval<T>, IntervalAnnotation<T>, IntervalMeasure<T>>.Empty;
+        var current = atOrAfter;
+        while (current.TryViewLeft(out var head, out var tail))
+        {
+            if (comparer.Compare(head.Low, interval.Low) != 0)
+                break;
+            if (head.Equals(interval))
+            {
+                result = new(left.Concat(skipped).Concat(tail));
+                return true;
+            }
+
+            skipped = skipped.Append(head);
+            current = tail;
+        }
+
+        result = this;
+        return false;
+    }
+
+    /// <summary>
+    /// Removes one interval value-equal to <paramref name="interval"/> if present, returning the unchanged
+    /// tree otherwise.
+    /// </summary>
+    /// <param name="interval">The interval to remove (matched by value equality).</param>
+    /// <returns>The resulting tree.</returns>
+    public IntervalTree<T> Remove(Interval<T> interval) => TryRemove(interval, out var result) ? result : this;
+
+    /// <summary>
+    /// Returns an interval tree in which overlapping intervals (including those touching at a single point,
+    /// per closed-interval semantics) are merged into maximal disjoint intervals. O(n).
+    /// </summary>
+    /// <returns>A tree of disjoint merged intervals in low-endpoint order.</returns>
+    /// <remarks>
+    /// Intervals are merged only when they share a point; intervals that are merely adjacent with a gap
+    /// (for example <c>[1, 2]</c> and <c>[4, 5]</c>) are left separate, since "adjacency" would require a
+    /// successor operation that an arbitrary <typeparamref name="T"/> does not provide.
+    /// </remarks>
+    public IntervalTree<T> Coalesce()
+    {
+        if (_tree.IsEmpty)
+            return this;
+
+        var comparer = Comparer<T>.Default;
+        var merged = FingerTree<Interval<T>, IntervalAnnotation<T>, IntervalMeasure<T>>.Empty;
+        var current = default(Interval<T>);
+        var hasCurrent = false;
+
+        foreach (var interval in _tree)
+        {
+            if (!hasCurrent)
+            {
+                current = interval;
+                hasCurrent = true;
+                continue;
+            }
+
+            if (comparer.Compare(interval.Low, current.High) <= 0)
+            {
+                // Sorted by low, so interval.Low >= current.Low; they overlap, so extend the running high.
+                var high = comparer.Compare(interval.High, current.High) >= 0 ? interval.High : current.High;
+                current = new Interval<T>(current.Low, high);
+            }
+            else
+            {
+                merged = merged.Append(current);
+                current = interval;
+            }
+        }
+
+        merged = merged.Append(current);
+        return new(merged);
+    }
+
     /// <summary>Copies the intervals to a new array in low-endpoint order. O(n).</summary>
     /// <returns>A new array of the intervals in low order.</returns>
     public Interval<T>[] ToArray() => _tree.ToArray();

@@ -164,6 +164,105 @@ public sealed class IntervalTreeTests
         Assert.False(tree.TryFindContaining(16, out _));
     }
 
+    /// <summary>Verifies exact-membership and removal of value-equal intervals, including duplicates.</summary>
+    [Fact]
+    public void ContainsAndRemove_HandleValueEqualityAndDuplicates()
+    {
+        var tree = IntervalTree<int>.Empty
+            .Insert(1, 5)
+            .Insert(3, 8)
+            .Insert(3, 8)   // duplicate
+            .Insert(10, 15);
+
+        Assert.Equal(4, tree.Count);
+        Assert.True(tree.Contains(new Interval<int>(3, 8)));
+        Assert.False(tree.Contains(new Interval<int>(3, 9)));
+        Assert.False(tree.Contains(new Interval<int>(2, 5)));
+
+        // Removing a duplicate takes out exactly one occurrence.
+        Assert.True(tree.TryRemove(new Interval<int>(3, 8), out var once));
+        Assert.Equal(3, once.Count);
+        Assert.True(once.Contains(new Interval<int>(3, 8)));
+        Assert.True(once.TryRemove(new Interval<int>(3, 8), out var twice));
+        Assert.Equal(2, twice.Count);
+        Assert.False(twice.Contains(new Interval<int>(3, 8)));
+
+        // Removing something absent reports false and leaves the tree unchanged.
+        Assert.False(tree.TryRemove(new Interval<int>(0, 0), out var unchanged));
+        Assert.Equal(tree.ToArray(), unchanged.ToArray());
+        Assert.Equal(tree.ToArray(), tree.Remove(new Interval<int>(99, 100)).ToArray());
+    }
+
+    /// <summary>Verifies overlap counting agrees with brute force.</summary>
+    /// <param name="seed">Deterministic random seed.</param>
+    [Theory]
+    [InlineData(20)]
+    [InlineData(21)]
+    public void CountOverlaps_AgreesWithBruteForce(int seed)
+    {
+        var random = new Random(seed);
+        var intervals = Enumerable.Range(0, 120)
+            .Select(_ => { var low = random.Next(0, 300); return new Interval<int>(low, low + random.Next(0, 40)); })
+            .ToList();
+        var tree = IntervalTree<int>.CreateRange(intervals);
+
+        for (var q = 0; q < 200; q++)
+        {
+            var low = random.Next(-10, 320);
+            var query = new Interval<int>(low, low + random.Next(0, 40));
+            Assert.Equal(intervals.Count(iv => iv.Overlaps(query)), tree.CountOverlaps(query));
+        }
+    }
+
+    /// <summary>Verifies coalescing produces disjoint maximal intervals matching a sweep-merge model.</summary>
+    /// <param name="seed">Deterministic random seed.</param>
+    [Theory]
+    [InlineData(30)]
+    [InlineData(31)]
+    [InlineData(32)]
+    public void Coalesce_MatchesSweepMergeModel(int seed)
+    {
+        var random = new Random(seed);
+        var intervals = Enumerable.Range(0, 80)
+            .Select(_ => { var low = random.Next(0, 100); return new Interval<int>(low, low + random.Next(0, 20)); })
+            .ToList();
+        var tree = IntervalTree<int>.CreateRange(intervals);
+
+        var coalesced = tree.Coalesce().ToArray();
+
+        // Model: sort by low, sweep-merge overlapping (touching counts as overlap).
+        var expected = new List<Interval<int>>();
+        foreach (var iv in intervals.OrderBy(i => i.Low).ThenBy(i => i.High))
+        {
+            if (expected.Count > 0 && iv.Low <= expected[^1].High)
+            {
+                var last = expected[^1];
+                expected[^1] = new Interval<int>(last.Low, Math.Max(last.High, iv.High));
+            }
+            else
+            {
+                expected.Add(iv);
+            }
+        }
+
+        Assert.Equal(expected, coalesced);
+
+        // The result is disjoint: each interval starts strictly after the previous one ends.
+        for (var i = 1; i < coalesced.Length; i++)
+            Assert.True(coalesced[i].Low > coalesced[i - 1].High);
+
+        // Coalescing covers exactly the same point set: every original interval is contained in some merged one.
+        foreach (var iv in intervals)
+            Assert.Contains(coalesced, m => m.Low <= iv.Low && iv.High <= m.High);
+    }
+
+    /// <summary>Verifies coalescing an empty tree yields an empty tree.</summary>
+    [Fact]
+    public void Coalesce_OnEmpty_IsEmpty()
+    {
+        Assert.True(IntervalTree<int>.Empty.Coalesce().IsEmpty);
+    }
+
     /// <summary>Verifies the documented worked example produces the stated results.</summary>
     [Fact]
     public void DocumentedExample_ProducesStatedResults()
