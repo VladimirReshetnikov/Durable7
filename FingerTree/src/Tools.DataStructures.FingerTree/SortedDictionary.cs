@@ -122,10 +122,16 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
     /// <summary>Gets the comparer defining the key order.</summary>
     public IComparer<TKey> Comparer => _comparer;
 
-    /// <summary>Gets the keys in ascending order.</summary>
+    /// <summary>
+    /// Gets the keys in ascending order. The sequence is lazy; each enumeration is O(n) and materializes a
+    /// snapshot.
+    /// </summary>
     public IEnumerable<TKey> Keys => _tree.Select(entry => entry.Key);
 
-    /// <summary>Gets the values in ascending key order.</summary>
+    /// <summary>
+    /// Gets the values in ascending key order. The sequence is lazy; each enumeration is O(n) and
+    /// materializes a snapshot.
+    /// </summary>
     public IEnumerable<TValue> Values => _tree.Select(entry => entry.Value);
 
     /// <summary>Gets the value associated with <paramref name="key"/>. O(log n).</summary>

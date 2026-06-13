@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Tools.DataStructures.FingerTree;
 
@@ -184,7 +185,7 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     /// <param name="item">Reference value.</param>
     /// <param name="floor">The floor element when one exists; otherwise <see langword="default"/>.</param>
     /// <returns><see langword="true"/> when a floor exists; otherwise <see langword="false"/>.</returns>
-    public bool TryFloor(T item, out T floor)
+    public bool TryFloor(T item, [MaybeNullWhen(false)] out T floor)
     {
         var (atMost, _) = SplitAtMost(item);
         if (atMost.IsEmpty)
@@ -201,7 +202,7 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     /// <param name="item">Reference value.</param>
     /// <param name="ceiling">The ceiling element when one exists; otherwise <see langword="default"/>.</param>
     /// <returns><see langword="true"/> when a ceiling exists; otherwise <see langword="false"/>.</returns>
-    public bool TryCeiling(T item, out T ceiling)
+    public bool TryCeiling(T item, [MaybeNullWhen(false)] out T ceiling)
     {
         var (_, atLeast) = SplitAtLeast(item);
         if (atLeast.IsEmpty)
@@ -218,7 +219,7 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     /// <param name="item">Reference value.</param>
     /// <param name="lower">The predecessor when one exists; otherwise <see langword="default"/>.</param>
     /// <returns><see langword="true"/> when a strictly smaller element exists; otherwise <see langword="false"/>.</returns>
-    public bool TryLower(T item, out T lower)
+    public bool TryLower(T item, [MaybeNullWhen(false)] out T lower)
     {
         var (less, _) = SplitAtLeast(item);
         if (less.IsEmpty)
@@ -235,7 +236,7 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     /// <param name="item">Reference value.</param>
     /// <param name="higher">The successor when one exists; otherwise <see langword="default"/>.</param>
     /// <returns><see langword="true"/> when a strictly greater element exists; otherwise <see langword="false"/>.</returns>
-    public bool TryHigher(T item, out T higher)
+    public bool TryHigher(T item, [MaybeNullWhen(false)] out T higher)
     {
         var (_, greater) = SplitAtMost(item);
         if (greater.IsEmpty)

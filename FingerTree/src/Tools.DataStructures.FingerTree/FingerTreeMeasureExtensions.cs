@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Tools.DataStructures.FingerTree;
 
 /// <summary>
@@ -13,7 +15,8 @@ public static class FingerTreeMeasureExtensions
     /// <param name="tree">A tree measured by <see cref="MaxMeasure{T}"/>.</param>
     /// <param name="max">The maximum element when non-empty; otherwise <see langword="default"/>.</param>
     /// <returns><see langword="true"/> when the tree is non-empty; otherwise <see langword="false"/>.</returns>
-    public static bool TryPeekMax<T>(this FingerTree<T, Optional<T>, MaxMeasure<T>> tree, out T max)
+    /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
+    public static bool TryPeekMax<T>(this FingerTree<T, Optional<T>, MaxMeasure<T>> tree, [MaybeNullWhen(false)] out T max)
     {
         ArgumentNullException.ThrowIfNull(tree);
         var measure = tree.Measure;
@@ -30,6 +33,7 @@ public static class FingerTreeMeasureExtensions
     /// <param name="max">The removed maximum element when non-empty; otherwise <see langword="default"/>.</param>
     /// <param name="rest">The remaining tree with that occurrence removed.</param>
     /// <returns><see langword="true"/> when an element was removed; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     /// <example>
     /// <code>
     /// var pq = FingerTree&lt;int, Optional&lt;int&gt;, MaxMeasure&lt;int&gt;&gt;.Create(3, 9, 1, 9, 4);
@@ -39,7 +43,7 @@ public static class FingerTreeMeasureExtensions
     /// </example>
     public static bool TryExtractMax<T>(
         this FingerTree<T, Optional<T>, MaxMeasure<T>> tree,
-        out T max,
+        [MaybeNullWhen(false)] out T max,
         out FingerTree<T, Optional<T>, MaxMeasure<T>> rest)
     {
         ArgumentNullException.ThrowIfNull(tree);
@@ -62,7 +66,8 @@ public static class FingerTreeMeasureExtensions
     /// <param name="tree">A tree measured by <see cref="MinMeasure{T}"/>.</param>
     /// <param name="min">The minimum element when non-empty; otherwise <see langword="default"/>.</param>
     /// <returns><see langword="true"/> when the tree is non-empty; otherwise <see langword="false"/>.</returns>
-    public static bool TryPeekMin<T>(this FingerTree<T, Optional<T>, MinMeasure<T>> tree, out T min)
+    /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
+    public static bool TryPeekMin<T>(this FingerTree<T, Optional<T>, MinMeasure<T>> tree, [MaybeNullWhen(false)] out T min)
     {
         ArgumentNullException.ThrowIfNull(tree);
         var measure = tree.Measure;
@@ -79,9 +84,10 @@ public static class FingerTreeMeasureExtensions
     /// <param name="min">The removed minimum element when non-empty; otherwise <see langword="default"/>.</param>
     /// <param name="rest">The remaining tree with that occurrence removed.</param>
     /// <returns><see langword="true"/> when an element was removed; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static bool TryExtractMin<T>(
         this FingerTree<T, Optional<T>, MinMeasure<T>> tree,
-        out T min,
+        [MaybeNullWhen(false)] out T min,
         out FingerTree<T, Optional<T>, MinMeasure<T>> rest)
     {
         ArgumentNullException.ThrowIfNull(tree);
@@ -108,6 +114,7 @@ public static class FingerTreeMeasureExtensions
     /// <typeparam name="T">Element type, sorted by <see cref="Comparer{T}.Default"/>.</typeparam>
     /// <param name="tree">A sorted tree measured by <see cref="KeyMeasure{T}"/>.</param>
     /// <param name="key">The search key.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, Optional<T>, KeyMeasure<T>> Left, FingerTree<T, Optional<T>, KeyMeasure<T>> Right)
         SplitByLowerBound<T>(this FingerTree<T, Optional<T>, KeyMeasure<T>> tree, T key)
     {
@@ -125,6 +132,7 @@ public static class FingerTreeMeasureExtensions
     /// <typeparam name="T">Element type, sorted by <see cref="Comparer{T}.Default"/>.</typeparam>
     /// <param name="tree">A sorted tree measured by <see cref="KeyMeasure{T}"/>.</param>
     /// <param name="key">The search key.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, Optional<T>, KeyMeasure<T>> Left, FingerTree<T, Optional<T>, KeyMeasure<T>> Right)
         SplitByUpperBound<T>(this FingerTree<T, Optional<T>, KeyMeasure<T>> tree, T key)
     {
@@ -140,6 +148,7 @@ public static class FingerTreeMeasureExtensions
     /// <typeparam name="T">Element type.</typeparam>
     /// <param name="tree">A tree measured by <see cref="OrderStatisticMeasure{T}"/>.</param>
     /// <param name="index">Number of elements to place in the left part; clamped conceptually to the count.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Left, FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Right)
         SplitAtIndex<T>(this FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree, int index)
     {
@@ -155,6 +164,7 @@ public static class FingerTreeMeasureExtensions
     /// <typeparam name="T">Element type, sorted by <see cref="Comparer{T}.Default"/>.</typeparam>
     /// <param name="tree">A sorted tree measured by <see cref="OrderStatisticMeasure{T}"/>.</param>
     /// <param name="key">The search key.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Left, FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Right)
         SplitByLowerBound<T>(this FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree, T key)
     {
@@ -170,6 +180,7 @@ public static class FingerTreeMeasureExtensions
     /// <typeparam name="T">Element type.</typeparam>
     /// <param name="tree">A sorted tree measured by <see cref="OrderStatisticMeasure{T}"/>.</param>
     /// <param name="key">The search key.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Left, FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Right)
         SplitByUpperBound<T>(this FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree, T key)
     {
@@ -188,7 +199,8 @@ public static class FingerTreeMeasureExtensions
     /// <param name="tree">A tree measured by <see cref="MaxMeasure{T, TComparison}"/>.</param>
     /// <param name="max">The maximum element when non-empty; otherwise <see langword="default"/>.</param>
     /// <returns><see langword="true"/> when the tree is non-empty; otherwise <see langword="false"/>.</returns>
-    public static bool TryPeekMax<T, TComparison>(this FingerTree<T, Optional<T>, MaxMeasure<T, TComparison>> tree, out T max)
+    /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
+    public static bool TryPeekMax<T, TComparison>(this FingerTree<T, Optional<T>, MaxMeasure<T, TComparison>> tree, [MaybeNullWhen(false)] out T max)
         where TComparison : IComparison<T>
     {
         ArgumentNullException.ThrowIfNull(tree);
@@ -204,9 +216,10 @@ public static class FingerTreeMeasureExtensions
     /// <param name="max">The removed maximum element when non-empty; otherwise <see langword="default"/>.</param>
     /// <param name="rest">The remaining tree with that occurrence removed.</param>
     /// <returns><see langword="true"/> when an element was removed; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static bool TryExtractMax<T, TComparison>(
         this FingerTree<T, Optional<T>, MaxMeasure<T, TComparison>> tree,
-        out T max,
+        [MaybeNullWhen(false)] out T max,
         out FingerTree<T, Optional<T>, MaxMeasure<T, TComparison>> rest)
         where TComparison : IComparison<T>
     {
@@ -230,7 +243,8 @@ public static class FingerTreeMeasureExtensions
     /// <param name="tree">A tree measured by <see cref="MinMeasure{T, TComparison}"/>.</param>
     /// <param name="min">The minimum element when non-empty; otherwise <see langword="default"/>.</param>
     /// <returns><see langword="true"/> when the tree is non-empty; otherwise <see langword="false"/>.</returns>
-    public static bool TryPeekMin<T, TComparison>(this FingerTree<T, Optional<T>, MinMeasure<T, TComparison>> tree, out T min)
+    /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
+    public static bool TryPeekMin<T, TComparison>(this FingerTree<T, Optional<T>, MinMeasure<T, TComparison>> tree, [MaybeNullWhen(false)] out T min)
         where TComparison : IComparison<T>
     {
         ArgumentNullException.ThrowIfNull(tree);
@@ -246,9 +260,10 @@ public static class FingerTreeMeasureExtensions
     /// <param name="min">The removed minimum element when non-empty; otherwise <see langword="default"/>.</param>
     /// <param name="rest">The remaining tree with that occurrence removed.</param>
     /// <returns><see langword="true"/> when an element was removed; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static bool TryExtractMin<T, TComparison>(
         this FingerTree<T, Optional<T>, MinMeasure<T, TComparison>> tree,
-        out T min,
+        [MaybeNullWhen(false)] out T min,
         out FingerTree<T, Optional<T>, MinMeasure<T, TComparison>> rest)
         where TComparison : IComparison<T>
     {
@@ -274,6 +289,7 @@ public static class FingerTreeMeasureExtensions
     /// <typeparam name="TComparison">The order the tree is sorted by.</typeparam>
     /// <param name="tree">A tree measured by <see cref="KeyMeasure{T}"/>, sorted by <typeparamref name="TComparison"/>.</param>
     /// <param name="key">The search key.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, Optional<T>, KeyMeasure<T>> Left, FingerTree<T, Optional<T>, KeyMeasure<T>> Right)
         SplitByLowerBound<T, TComparison>(this FingerTree<T, Optional<T>, KeyMeasure<T>> tree, T key)
         where TComparison : IComparison<T>
@@ -290,6 +306,7 @@ public static class FingerTreeMeasureExtensions
     /// <typeparam name="TComparison">The order the tree is sorted by.</typeparam>
     /// <param name="tree">A tree measured by <see cref="KeyMeasure{T}"/>, sorted by <typeparamref name="TComparison"/>.</param>
     /// <param name="key">The search key.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, Optional<T>, KeyMeasure<T>> Left, FingerTree<T, Optional<T>, KeyMeasure<T>> Right)
         SplitByUpperBound<T, TComparison>(this FingerTree<T, Optional<T>, KeyMeasure<T>> tree, T key)
         where TComparison : IComparison<T>
@@ -306,6 +323,7 @@ public static class FingerTreeMeasureExtensions
     /// <typeparam name="TComparison">The order the tree is sorted by.</typeparam>
     /// <param name="tree">A tree measured by <see cref="OrderStatisticMeasure{T}"/>, sorted by <typeparamref name="TComparison"/>.</param>
     /// <param name="key">The search key.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Left, FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Right)
         SplitByLowerBound<T, TComparison>(this FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree, T key)
         where TComparison : IComparison<T>
@@ -322,6 +340,7 @@ public static class FingerTreeMeasureExtensions
     /// <typeparam name="TComparison">The order the tree is sorted by.</typeparam>
     /// <param name="tree">A tree measured by <see cref="OrderStatisticMeasure{T}"/>, sorted by <typeparamref name="TComparison"/>.</param>
     /// <param name="key">The search key.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Left, FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Right)
         SplitByUpperBound<T, TComparison>(this FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree, T key)
         where TComparison : IComparison<T>

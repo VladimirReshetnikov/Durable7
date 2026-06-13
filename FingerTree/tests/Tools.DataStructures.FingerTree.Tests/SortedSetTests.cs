@@ -155,6 +155,23 @@ public sealed class SortedSetTests
         }
     }
 
+    /// <summary>
+    /// Verifies the navigable queries on a reference-type set: the not-found path reports false (exercising
+    /// the <c>[MaybeNullWhen(false)]</c> contract on the out parameter for a nullable reference type).
+    /// </summary>
+    [Fact]
+    public void NavigableQueries_OnReferenceType_HandleAbsence()
+    {
+        var set = Tools.DataStructures.FingerTree.SortedSet<string>.CreateRange(new[] { "bravo", "delta" });
+
+        Assert.False(set.TryLower("alpha", out _));     // nothing strictly before "alpha"
+        Assert.False(set.TryHigher("echo", out _));     // nothing strictly after "echo"
+        Assert.True(set.TryCeiling("charlie", out var ceiling));
+        Assert.Equal("delta", ceiling);
+        Assert.True(set.TryFloor("charlie", out var floor));
+        Assert.Equal("bravo", floor);
+    }
+
     /// <summary>Verifies empty-set degenerate behavior.</summary>
     [Fact]
     public void Empty_HasNoElements()
