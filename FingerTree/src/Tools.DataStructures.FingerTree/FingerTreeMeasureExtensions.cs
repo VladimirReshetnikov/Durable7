@@ -163,6 +163,21 @@ public static class FingerTreeMeasureExtensions
         return tree.Split(m => m.Key.HasValue && comparer.Compare(m.Key.Value, key) >= 0);
     }
 
+    /// <summary>
+    /// Upper-bound split of an order-statistic tree by key. Specified only when the tree is sorted by
+    /// <see cref="Comparer{T}.Default"/>. O(log(min(k, n − k))) amortized.
+    /// </summary>
+    /// <typeparam name="T">Element type.</typeparam>
+    /// <param name="tree">A sorted tree measured by <see cref="OrderStatisticMeasure{T}"/>.</param>
+    /// <param name="key">The search key.</param>
+    public static (FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Left, FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Right)
+        SplitByUpperBound<T>(this FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree, T key)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+        var comparer = Comparer<T>.Default;
+        return tree.Split(m => m.Key.HasValue && comparer.Compare(m.Key.Value, key) > 0);
+    }
+
     // ---- Custom-comparison overloads -------------------------------------------------------------------
     // These mirror the operations above but use a static IComparison<T> strategy instead of
     // Comparer<T>.Default, so callers can order by a projection or in reverse without hand-rolling a measure.
@@ -297,5 +312,21 @@ public static class FingerTreeMeasureExtensions
     {
         ArgumentNullException.ThrowIfNull(tree);
         return tree.Split(m => m.Key.HasValue && TComparison.Compare(m.Key.Value, key) >= 0);
+    }
+
+    /// <summary>
+    /// Upper-bound split of an order-statistic tree by key under a custom order. Specified only when the tree
+    /// is sorted by <typeparamref name="TComparison"/>. O(log(min(k, n − k))) amortized.
+    /// </summary>
+    /// <typeparam name="T">Element type.</typeparam>
+    /// <typeparam name="TComparison">The order the tree is sorted by.</typeparam>
+    /// <param name="tree">A tree measured by <see cref="OrderStatisticMeasure{T}"/>, sorted by <typeparamref name="TComparison"/>.</param>
+    /// <param name="key">The search key.</param>
+    public static (FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Left, FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Right)
+        SplitByUpperBound<T, TComparison>(this FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree, T key)
+        where TComparison : IComparison<T>
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+        return tree.Split(m => m.Key.HasValue && TComparison.Compare(m.Key.Value, key) > 0);
     }
 }

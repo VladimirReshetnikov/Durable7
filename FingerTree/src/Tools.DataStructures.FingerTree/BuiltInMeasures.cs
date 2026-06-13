@@ -108,7 +108,7 @@ public readonly struct MinMeasure<T> : IMeasure<T, Optional<T>>
 /// "last element &gt;= key" is monotone over a sorted sequence and locates the lower bound; "last element
 /// &gt; key" locates the upper bound. See
 /// <see cref="FingerTreeMeasureExtensions.SplitByLowerBound{T}(FingerTree{T, Optional{T}, KeyMeasure{T}}, T)"/>
-/// and <see cref="FingerTreeMeasureExtensions.SplitByUpperBound{T}"/>.
+/// and <see cref="FingerTreeMeasureExtensions.SplitByUpperBound{T}(FingerTree{T, Optional{T}, KeyMeasure{T}}, T)"/>.
 /// </para>
 /// <para>Results are specified only when the sequence is sorted by <see cref="Comparer{T}.Default"/>.</para>
 /// </remarks>
