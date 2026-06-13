@@ -21,8 +21,8 @@ This document specifies the first production API for a persistent C# catenable d
 ### In Scope
 
 - A persistent immutable deque with structural sharing.
-- Constant-time `Count`, emptiness, first-element, and last-element queries.
-- End insertion and removal with logarithmic worst-case and constant amortized target complexity.
+- Constant worst-case `Count`, emptiness, first-element, and last-element queries.
+- End insertion and removal with logarithmic worst-case and constant amortized (persistent) complexity.
 - End replacement through `SetItem(0, value)` and `SetItem(Count - 1, value)` with constant worst-case complexity.
 - Catenation with logarithmic complexity in the smaller input.
 - Indexed read, update, insertion, deletion, range extraction, and split.
@@ -30,9 +30,9 @@ This document specifies the first production API for a persistent C# catenable d
 - Exact exception and edge-case behavior for public methods.
 - Public complexity guarantees for time and allocation.
 
-### Out Of Scope
+### Out Of Scope (for this `FingerTreeDeque<T>` specification)
 
-- A public generic `Measured<TElement, TMeasure>` abstraction.
+- A public generic measured finger tree. This is no longer deferred: it now ships as the sibling type `FingerTree<TElement, TMeasure, TMeasureOps>` (with the `IMonoid<TMeasure>` / `IMeasure<TElement, TMeasure>` static-abstract measure interfaces). It is governed by its own contract in [The General Measured Finger Tree](#the-general-measured-finger-tree) rather than by this deque specification, which remains the authority for `FingerTreeDeque<T>` only.
 - Sorted-set uniqueness semantics. A sorted deque may contain duplicates.
 - A mutable builder in the first implementation. A builder can be added later without changing the core immutable API.
 - Hard real-time worst-case constant deque-end insertions and removals. Finger-tree pushes and pops are amortized constant but can be logarithmic in an individual operation; this does not apply to replacing an existing end element with `SetItem`; see [Why Endpoint Insertions And Removals Are Not Worst-Case Constant](#why-endpoint-insertions-and-removals-are-not-worst-case-constant).
@@ -279,44 +279,57 @@ Complexities below assume comparer calls, delegate calls, and element assignment
 | Operation | Worst-case time | Amortized time | Additional allocation |
 | --- | ---: | ---: | ---: |
 | `Empty`, `IsEmpty`, `Count` | O(1) | O(1) | O(1) |
-| `First`, `Last`, `TryPeekFirst`, `TryPeekLast` | O(1) | O(1) | O(1) |
+| `First`, `Last`, `TryPeekFirst`, `TryPeekLast` | O(1) ‡ | O(1) | O(1) |
 | `CreateRange(IEnumerable<T>)` | O(n) | O(n) | O(n) |
-| `ToArray`, `CopyTo` | O(n) | O(n) | O(n) for `ToArray`, O(1) for `CopyTo` |
+| `ToArray`, `CopyTo` | O(n) | O(n) | O(n) for `ToArray`, O(log n) for `CopyTo` ◇ |
 | Enumeration | O(n) total, O(log n) setup | O(1) per yielded element | O(log n) enumerator stack |
-| `AddFirst`, `AddLast` | O(log n) | O(1) target | O(log n) worst, O(1) amortized target |
-| `RemoveFirst`, `RemoveLast`, `PopFirst`, `PopLast` | O(log n) | O(1) target | O(log n) worst, O(1) amortized target |
-| `Concat` / `AddRange(FingerTreeDeque<T>)` | O(log(min(n, m) + 1)) | same | O(log(min(n, m) + 1)) |
-| `AddRange(IEnumerable<T>)` | O(m + log(n + 1)) if built then concatenated | same | O(m + log(n + 1)) |
-| Indexer get, `TryGetItem` | O(1 + log nearIndex(i, n)) | same | O(1) |
-| `SetItem`, `UpdateAt` | O(1 + log nearIndex(i, n)) | same | O(1 + log nearIndex(i, n)) |
-| `InsertAt` | O(1 + log(nearSplit(index, n) + 1)) | same | O(1 + log(nearSplit(index, n) + 1)) |
-| `RemoveAt` | O(1 + log nearIndex(i, n)) | same | O(1 + log nearIndex(i, n)) |
-| `SplitAt` | O(1 + log(nearSplit(s, n) + 1)) | same | O(1 + log(nearSplit(s, n) + 1)) |
-| `SplitItemAt` | O(1 + log nearIndex(i, n)) | same | O(1 + log nearIndex(i, n)) |
-| `GetRange`, `RemoveRange`, `SplitRange` | O(1 + log n) | same | O(1 + log n) |
-| `SortedLowerBound`, `SortedUpperBound` | O(1 + log nearBound(k, n)) | same | O(1) |
-| `SplitAtSortedLowerBound`, `SplitAtSortedUpperBound` | O(1 + log nearBound(k, n)) | same | O(1 + log nearBound(k, n)) |
-| `SortedBinarySearch`, `SortedContains` | O(1 + log nearBound(k, n)) | same | O(1) |
-| `SplitAtSortedEqualRange`, `RemoveAllSorted` | O(1 + log n) | same | O(1 + log n) |
-| `InsertSorted` | O(1 + log n) | same | O(1 + log n) |
+| `AddFirst`, `AddLast` | O(log n) | O(1) † | O(log n) worst, O(1) amortized † |
+| `RemoveFirst`, `RemoveLast`, `PopFirst`, `PopLast` | O(log n) | O(1) † | O(log n) worst, O(1) amortized † |
+| `Concat` / `AddRange(FingerTreeDeque<T>)` | O(log(n + m)) | O(log(min(n, m) + 1)) † | O(log(n + m)) worst, sharp amortized † |
+| `AddRange(IEnumerable<T>)` | O(m + log(n + 1)) | same | O(m + log(n + 1)) |
+| Indexer get, `TryGetItem` | O(log n); O(1) at i ∈ {0, n − 1} ‡ | O(1 + log nearIndex(i, n)) † | O(log n) worst, O(1) at endpoints ‡ |
+| `SetItem`, `UpdateAt` | O(log n); O(1) at i ∈ {0, n − 1} ‡ | O(1 + log nearIndex(i, n)) † | O(log n) worst, sharp amortized; O(1) at endpoints ‡ |
+| `InsertAt` | O(log n) | O(1 + log(nearSplit(index, n) + 1)) † | O(log n) worst, sharp amortized † |
+| `RemoveAt` | O(log n) | O(1 + log nearIndex(i, n)) † | O(log n) worst, sharp amortized † |
+| `SplitAt` | O(log n) | O(1 + log(nearSplit(s, n) + 1)) † | O(log n) worst, sharp amortized † |
+| `SplitItemAt` | O(log n) | O(1 + log nearIndex(i, n)) † | O(log n) worst, sharp amortized † |
+| `GetRange`, `RemoveRange`, `SplitRange` | O(log n) | same | O(log n) |
+| `SortedLowerBound`, `SortedUpperBound` | O(1 + log nearBound(k, n)) § | same | O(1) § |
+| `SplitAtSortedLowerBound`, `SplitAtSortedUpperBound` | O(log n) | O(1 + log nearBound(k, n)) † | O(log n) worst, sharp amortized † |
+| `SortedBinarySearch`, `SortedContains` | O(1 + log nearBound(k, n)) § | same | O(1) § |
+| `SplitAtSortedEqualRange`, `RemoveAllSorted` | O(log n) | same | O(log n) |
+| `InsertSorted` | O(log n) | O(1 + log n) † | O(log n) |
 
-The refined split and search bounds come from finger-tree split cost: the path length is logarithmic in the smaller side created by the split, not necessarily in the whole sequence. It is still correct to document these operations as O(log n) in XML summaries when a shorter summary is preferable, but the detailed docs should preserve the sharper bound.
+Footnotes to the table:
+
+- **†** The amortized bound is the sharp "distance to the nearer end" cost for the split family, and the log-of-smaller-operand cost for concatenation. It holds under fully persistent (branching) version use, because the middle subtree of each deep node is held behind a memoize-on-first-force suspension (the original paper's strict-language strategy; see [Worst-Case Versus Amortized Guarantees](#worst-case-versus-amortized-guarantees)). The worst-case column is the cost of a single call that must force deferred spine work, bounded by O(log n): the *descent* alone is sharp worst-case, but the reconstruction (smart deep constructors pulling from a middle, and the carry pushes at the bottom of `glue`) can cascade the full spine. The cascades telescope (no O(log² n) compounding) and are paid for by the potential released when dangerous `One`/`Three` digits collapse to safe `Two` digits.
+- **‡** Endpoint reads never force a suspension, because the first and last elements live in the top prefix and suffix digits and the middle leaf count is cached arithmetically. `First`, `Last`, `TryPeekFirst`, `TryPeekLast`, and the indexer and `TryGetItem` at i ∈ {0, n − 1} are therefore O(1) worst-case. Endpoint replacement (`SetItem`/`UpdateAt` at i ∈ {0, n − 1}) likewise rebuilds only the top digit and is O(1) worst-case.
+- **§** For sorted searches the stated bound is the comparer-call count, which is worst-case (forcing performs no comparisons), and is the contract that matters when comparisons dominate. Wall-clock time and allocation additionally include amortized forcing of deferred spine work bounded by O(log n) per call; a search whose result index is at the nearer end may resolve within the top digits and force nothing.
+- **◇** `CopyTo` allocates no destination storage; the O(log n) is the one-time forcing of any pending spine work, memoized for later readers. On an already-forced tree it is O(1).
+
+The sharp split and search bounds come from finger-tree cost analysis: the *descent* path length is logarithmic in the smaller side created by the split or in the distance to the nearer search bound, not in the whole sequence. It is still correct to document these operations as O(log n) in XML summaries when a shorter summary is preferable, but the detailed docs should preserve the sharper amortized bound and the endpoint worst-case guarantee.
 
 ## Worst-Case Versus Amortized Guarantees
 
-The endpoint insertion and removal target is:
+The endpoint insertion and removal guarantee is:
 
 - worst-case O(log n);
-- amortized O(1) across any valid persistent usage pattern supported by the implementation;
-- O(1) endpoint reads.
+- amortized O(1) across any valid persistent usage pattern, including branching version histories;
+- O(1) worst-case endpoint reads, and O(1) worst-case endpoint replacement.
 
-The simplified paper gives a sequential physicist-method proof and notes that persistent amortized complexity requires the usual finger-tree laziness argument. C# is strict by default, so the implementation must not casually inherit the Haskell claim. Before XML docs or package docs advertise persistent amortized O(1), the implementation must have one of the following:
+The same split-distance amortized bounds (sharp "distance to the nearer end" for the split family, log-of-smaller-operand for concatenation) hold under the same fully persistent usage, with O(log n) worst-case per single call. Accessing — as opposed to inserting or removing — the first and last elements is O(1) worst-case unconditionally.
+
+The simplified paper gives a sequential physicist-method proof and notes that persistent amortized complexity requires the usual finger-tree laziness argument; Hinze and Paterson's original paper obtains the persistent bounds by suspending the middle subtree of each deep node and discharges them with an Okasaki debit analysis. C# is strict by default, so the implementation must not casually inherit the Haskell claim by structural resemblance. This specification permits advertising persistent amortized O(1) only when the implementation has one of the following:
 
 - an internal memoized-suspension strategy with tests that exercise branching persistent histories; or
 - a written proof or proof sketch showing that the strict representation preserves the advertised persistent amortized bound; or
-- a downgraded public guarantee that says endpoint insertions and removals are O(log n) worst-case and O(1) amortized only for single-threaded linear use of versions.
+- a downgraded public guarantee that says the relevant operations are O(log n) worst-case and O(1) amortized only for single-threaded linear use of versions.
 
-This specification records the desired production target, not permission to overstate an unproven implementation.
+The current implementation satisfies the first option. It holds the middle subtree of every deep node behind a memoize-on-first-force suspension, exactly Hinze and Paterson's strict-language strategy ("we need only suspend the middle subtree of each Deep node, so only Θ(log n) suspensions are required"). Each suspension is created over an already-forced source and defers exactly one operation — the paper's refinement that forces the middle subtree in the recursive case "to avoid building a chain of suspensions" — so a single force never recurses deeper than the tree height, and `AddFirst`/`AddLast` are O(log n) worst-case rather than the O(1) worst-case the bare-suspension variant would give. Forcing publishes its result with a compare-exchange, so the bounds are robust under branching persistence: once any version forces a shared suspension, every version sharing it reads the memoized result. The branching-persistence and deterministic complexity-guard tests required by the first option are part of the suite (they assert, among other things, that replaying an endpoint or near-end operation on a single retained version has size-independent marginal cost, which a fully strict representation cannot achieve).
+
+One trade-off is recorded for honesty: with suspended middles, an indexed read or sorted search that descends into the middle may force pending spine work, so those operations' wall-clock time becomes amortized rather than worst-case sharp (the sorted-search comparer-call counts remain worst-case sharp, since forcing performs no comparisons). This matches `Data.Sequence`, whose every documented bound is amortized for the same reason. Endpoint reads are unaffected and remain O(1) worst-case.
+
+This specification records guarantees the implementation meets and tests, not an aspirational target.
 
 ## Why Endpoint Insertions And Removals Are Not Worst-Case Constant
 
@@ -373,11 +386,13 @@ Endpoint insertion and removal must preserve the simplified-paper potential inva
 
 These rules are not merely implementation taste. They are what creates a neutral digit state and pays for future endpoint operations in the amortized analysis.
 
+To make the amortized bounds robust under branching persistence, the middle subtree of each deep node is held behind a memoize-on-first-force suspension rather than being computed eagerly, following Hinze and Paterson's strict-language strategy. The cached count measure of a deep node is therefore stored explicitly and derived arithmetically at every construction site, never by forcing the middle, so `Count`, emptiness, index routing, endpoint reads, and endpoint replacement remain force-free and worst-case constant where the table promises it. Each suspension is created over an already-forced source middle and defers exactly one push or pop, so forcing one suspension never recurses deeper than the tree height; this is the paper's refinement of forcing the recursive-case middle "to avoid building a chain of suspensions". Endpoint insertion is consequently O(log n) worst-case (an overflow forces the old middle before suspending its push), not O(1) worst-case.
+
 ## Thread Safety And Persistence
 
 Instances are immutable snapshots. Reading the same instance concurrently from multiple threads is safe.
 
-If the implementation uses lazy or memoized internal repairs, forcing those repairs must also be thread-safe. It is acceptable for two racing readers to duplicate bounded internal work, but it is not acceptable for a race to publish a partially initialized node, corrupt a cached measure, or make equal public operations observe different element sequences.
+The implementation uses memoized internal suspensions (the middle subtree of each deep node), and forcing them is thread-safe: a forcer reads the suspension state with acquire semantics, runs the pure pending operation over immutable captured state, and publishes the result with a compare-exchange. It is acceptable for two racing readers to duplicate that bounded computation, but a race can never publish a partially initialized node, corrupt a cached measure, or make equal public operations observe different element sequences, because at most one result is ever published per suspension cell and all forcers converge on it.
 
 The collection does not deep-freeze element objects. If `T` is a mutable reference type and callers mutate an object after insertion, the deque still preserves the object reference, but sorted-search results are specified only if the comparer order remains stable.
 
@@ -453,8 +468,18 @@ Property tests should generate random operation histories and compare the result
 
 ## Notes For Maintainers
 
-The tempting public abstraction is a fully generic measured finger tree. Do not expose that first. C# lacks Haskell's typeclass ergonomics for this pattern, and exposing the general machinery would lock the project into a complicated public shape before there is a second concrete use case.
+The fully generic measured finger tree was initially deferred, but is now provided as the sibling type `FingerTree<TElement, TMeasure, TMeasureOps>` (see below). C# expresses the Haskell `Measured v a` typeclass through static-abstract interface members (`IMonoid<TMeasure>`, `IMeasure<TElement, TMeasure>`), so the general machinery is available without per-call allocation or virtual dispatch. The deque remains a separate, individually tuned type — the same split as Haskell keeps `Data.Sequence` distinct from `Data.FingerTree` — and is not re-platformed onto the general core in this revision.
 
-The sorted-search API deliberately lives on the deque instead of a separate sorted collection type. That keeps the first implementation focused and lets callers decide whether sortedness is a local invariant. A future `FingerTreeSortedBag<T>` can wrap `FingerTreeDeque<T>` and store a comparer if enough call sites need an invariant-enforcing sorted container.
+The sorted-search API deliberately lives on the deque instead of a separate sorted collection type. That keeps the deque focused and lets callers decide whether sortedness is a local invariant. A future `FingerTreeSortedBag<T>` can wrap either `FingerTreeDeque<T>` or a key-measured `FingerTree<...>` and store a comparer if enough call sites need an invariant-enforcing sorted container.
 
 The implementation should keep XML documentation aligned with this file. XML summaries may use coarser O(log n) wording, but remarks on the key methods should point to this specification for sharper split-distance complexity.
+
+## The General Measured Finger Tree
+
+`FingerTree<TElement, TMeasure, TMeasureOps>` is the general Hinze–Paterson measured finger tree: a persistent sequence of `TElement` annotated by a monoidal `TMeasure`, where `TMeasureOps` supplies the measure algebra statically.
+
+- **Measure interfaces.** `IMonoid<TMeasure>` provides `Empty` (identity) and `Combine` (associative); `IMeasure<TElement, TMeasure> : IMonoid<TMeasure>` adds `Measure(element)`. Both use static-abstract members, so the measure type argument is monomorphized with no allocation or virtual dispatch. Implementations must obey the monoid laws (two-sided identity, associativity); the tree caches combined measures and relies on them. `SizeMeasure<TElement>` is provided as the element-count measure that makes the tree a positional sequence.
+- **Representation.** The canonical general structure: one-through-four element digits, two-or-three child nodes, polymorphic recursion (`Deep` middles store nodes), with each `Deep` caching its combined measure for O(1) `Measure`.
+- **Operations.** `Empty`, `IsEmpty`, `Measure`, `First`, `Last`, `Prepend`, `Append`, `Concat`, `TryViewLeft`, `TryViewRight`, `Create`/`CreateRange`, `ToArray`, enumeration, and the headline `Split(predicate)` / `TrySplitFind(predicate, …)` — splitting at the element where a monotone predicate over the accumulated measure first becomes true. Choosing the measure specializes the structure: element count → positional sequence and order statistics; maximum priority → mergeable priority queue; maximum key → ordered search tree; product measures combine these.
+- **Complexity.** With O(1) measure operations: `Measure`/`IsEmpty`/`First`/`Last` are O(1); endpoint and view operations are O(1) amortized and O(log n) worst-case; `Concat` is O(log(min(n, m))) amortized; `Split`/`TrySplitFind` are O(log(min(k, n − k))) amortized for a boundary at distance k from the nearer end.
+- **Strictness boundary.** Unlike `FingerTreeDeque<T>`, this type is strict (measures cached eagerly; no memoized-suspension spine), so the amortized bounds are stated for ephemeral, single-threaded linear use and are not claimed under branching persistent histories. The deque can use a memoized-suspension spine because its size measure is a *group* (subtractable), letting it recover a popped subtree's measure without forcing; a general monoid has no inverse, so persistence-robust amortization here would require memoized *lazy measure annotations* (Haskell's approach). That upgrade is a documented future option, not part of this revision.

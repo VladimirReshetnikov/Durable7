@@ -3,4 +3,8 @@
     <AssemblyName>Tools.DataStructures.FingerTree</AssemblyName>
     <RootNamespace>Tools.DataStructures.FingerTree</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Tools.DataStructures.FingerTree.Tests" />
+  </ItemGroup>
 </Project>
