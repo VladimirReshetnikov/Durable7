@@ -263,6 +263,38 @@ public sealed class IntervalTreeTests
         Assert.True(IntervalTree<int>.Empty.Coalesce().IsEmpty);
     }
 
+    /// <summary>
+    /// An endpoint type whose ordering ignores a field its equality distinguishes, so
+    /// <see cref="Comparer{T}.Default"/> and record value-equality disagree.
+    /// </summary>
+    private readonly struct Keyed(int order, int id) : IComparable<Keyed>
+    {
+        public int Order { get; } = order;
+
+        public int Id { get; } = id;
+
+        public int CompareTo(Keyed other) => Order.CompareTo(other.Order);
+    }
+
+    /// <summary>
+    /// Verifies membership and removal match by the comparer on both endpoints, not by record value
+    /// equality — so an interval whose endpoints compare equal is found even when a distinguishing field
+    /// differs (regression for the Compare/Equals-divergence finding).
+    /// </summary>
+    [Fact]
+    public void ContainsAndRemove_MatchByComparerNotValueEquality()
+    {
+        var stored = new Interval<Keyed>(new Keyed(5, 1), new Keyed(10, 1));
+        var tree = IntervalTree<Keyed>.Empty.Insert(stored);
+
+        // Same endpoint Order (so comparer-equal) but a different Id (so record value-unequal).
+        var query = new Interval<Keyed>(new Keyed(5, 2), new Keyed(10, 2));
+        Assert.NotEqual(stored, query);                 // value-distinct
+        Assert.True(tree.Contains(query));              // but comparer-equal on both endpoints
+        Assert.True(tree.TryRemove(query, out var removed));
+        Assert.True(removed.IsEmpty);
+    }
+
     /// <summary>Verifies the documented worked example produces the stated results.</summary>
     [Fact]
     public void DocumentedExample_ProducesStatedResults()

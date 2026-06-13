@@ -136,6 +136,24 @@ public sealed class SortedBagTests
         }
     }
 
+    /// <summary>
+    /// Verifies <c>CreateRange</c> is a stable sort: among comparer-equal elements it preserves input order,
+    /// matching the incremental <c>Add</c> path (regression for the documented stability invariant).
+    /// </summary>
+    [Fact]
+    public void CreateRange_IsStableAmongEqualElements()
+    {
+        // Key-only comparer, so the Tag is satellite data that stability must preserve.
+        var byKey = Comparer<(int Key, char Tag)>.Create((a, b) => a.Key.CompareTo(b.Key));
+        var items = Enumerable.Range(0, 20).Select(i => (Key: 7, Tag: (char)('a' + i))).ToArray();
+
+        var viaCreateRange = SortedBag<(int, char)>.CreateRange(items, byKey).ToArray();
+        var viaAdd = items.Aggregate(SortedBag<(int, char)>.Create(byKey), (bag, item) => bag.Add(item)).ToArray();
+
+        Assert.Equal(items, viaCreateRange);            // input order preserved
+        Assert.Equal(viaAdd, viaCreateRange);           // the two construction paths agree
+    }
+
     /// <summary>Verifies the empty bag's degenerate behavior.</summary>
     [Fact]
     public void Empty_HasNoElements()

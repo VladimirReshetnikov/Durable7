@@ -245,11 +245,12 @@ public sealed class IntervalTree<T> : IEnumerable<Interval<T>>
     public int CountOverlaps(Interval<T> query) => FindOverlaps(query).Count;
 
     /// <summary>
-    /// Determines whether an interval value-equal to <paramref name="interval"/> is present.
+    /// Determines whether an interval matching <paramref name="interval"/> is present, where "matching" means
+    /// both endpoints compare equal under <see cref="Comparer{T}.Default"/> (the order the tree is built on).
     /// O(log n) when low endpoints are distinct; otherwise additionally linear in the number of intervals
     /// sharing that low endpoint.
     /// </summary>
-    /// <param name="interval">The interval to look for (matched by value equality).</param>
+    /// <param name="interval">The interval to look for (matched by the comparer on both endpoints).</param>
     /// <returns><see langword="true"/> when present; otherwise <see langword="false"/>.</returns>
     public bool Contains(Interval<T> interval)
     {
@@ -260,7 +261,7 @@ public sealed class IntervalTree<T> : IEnumerable<Interval<T>>
         {
             if (comparer.Compare(head.Low, interval.Low) != 0)
                 break;
-            if (head.Equals(interval))
+            if (comparer.Compare(head.High, interval.High) == 0)
                 return true;
             current = tail;
         }
@@ -269,11 +270,12 @@ public sealed class IntervalTree<T> : IEnumerable<Interval<T>>
     }
 
     /// <summary>
-    /// Removes one interval value-equal to <paramref name="interval"/>, if present.
+    /// Removes one interval matching <paramref name="interval"/>, if present, where "matching" means both
+    /// endpoints compare equal under <see cref="Comparer{T}.Default"/> (the order the tree is built on).
     /// O(log n) when low endpoints are distinct; otherwise additionally linear in the number of intervals
     /// sharing that low endpoint.
     /// </summary>
-    /// <param name="interval">The interval to remove (matched by value equality).</param>
+    /// <param name="interval">The interval to remove (matched by the comparer on both endpoints).</param>
     /// <param name="result">The tree with one matching interval removed; otherwise the unchanged tree.</param>
     /// <returns><see langword="true"/> when an interval was removed; otherwise <see langword="false"/>.</returns>
     public bool TryRemove(Interval<T> interval, out IntervalTree<T> result)
@@ -287,7 +289,7 @@ public sealed class IntervalTree<T> : IEnumerable<Interval<T>>
         {
             if (comparer.Compare(head.Low, interval.Low) != 0)
                 break;
-            if (head.Equals(interval))
+            if (comparer.Compare(head.High, interval.High) == 0)
             {
                 result = new(left.Concat(skipped).Concat(tail));
                 return true;
@@ -302,10 +304,10 @@ public sealed class IntervalTree<T> : IEnumerable<Interval<T>>
     }
 
     /// <summary>
-    /// Removes one interval value-equal to <paramref name="interval"/> if present, returning the unchanged
-    /// tree otherwise.
+    /// Removes one interval matching <paramref name="interval"/> (both endpoints comparer-equal) if present,
+    /// returning the unchanged tree otherwise.
     /// </summary>
-    /// <param name="interval">The interval to remove (matched by value equality).</param>
+    /// <param name="interval">The interval to remove (matched by the comparer on both endpoints).</param>
     /// <returns>The resulting tree.</returns>
     public IntervalTree<T> Remove(Interval<T> interval) => TryRemove(interval, out var result) ? result : this;
 

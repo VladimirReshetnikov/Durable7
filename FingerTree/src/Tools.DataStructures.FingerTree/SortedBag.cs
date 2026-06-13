@@ -24,7 +24,9 @@ namespace Tools.DataStructures.FingerTree;
 /// Complexity: <see cref="Count"/>, <see cref="IsEmpty"/>, <see cref="Min"/>, <see cref="Max"/> are O(1);
 /// <see cref="Add"/>, <see cref="Remove"/>, <see cref="RemoveAll"/>, <see cref="Contains"/>,
 /// <see cref="CountOf"/>, <see cref="CountLessThan"/>, <see cref="CountAtMost"/>, the indexer, and
-/// <see cref="GetRange"/> are O(log n). Instances are immutable and safe for concurrent reads.
+/// <see cref="GetRange"/> are O(log n). Instances are immutable and safe for concurrent reads, provided the
+/// supplied comparer is itself safe for concurrent <c>Compare</c> calls — as <see cref="Comparer{T}.Default"/>
+/// and the results of <see cref="Comparer{T}.Create"/> are.
 /// </para>
 /// </remarks>
 /// <example>
@@ -70,8 +72,9 @@ public sealed class SortedBag<T> : IReadOnlyCollection<T>
     {
         ArgumentNullException.ThrowIfNull(items);
         var order = comparer ?? Comparer<T>.Default;
-        var sorted = items.ToArray();
-        Array.Sort(sorted, order);
+        // OrderBy is a stable sort, so equal elements keep input order — matching the incremental Add path
+        // and honoring the documented stability invariant (Array.Sort is unstable and would not).
+        var sorted = items.OrderBy(item => item, order);
 
         var tree = FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>>.Empty;
         foreach (var item in sorted)
@@ -88,11 +91,11 @@ public sealed class SortedBag<T> : IReadOnlyCollection<T>
     /// <summary>Gets the comparer defining the order.</summary>
     public IComparer<T> Comparer => _comparer;
 
-    /// <summary>Gets the smallest element. O(1).</summary>
+    /// <summary>Gets the least element under the bag's <see cref="Comparer"/>. O(1).</summary>
     /// <exception cref="InvalidOperationException">The bag is empty.</exception>
     public T Min => _tree.IsEmpty ? throw EmptyError() : _tree.First;
 
-    /// <summary>Gets the largest element. O(1).</summary>
+    /// <summary>Gets the greatest element under the bag's <see cref="Comparer"/>. O(1).</summary>
     /// <exception cref="InvalidOperationException">The bag is empty.</exception>
     public T Max => _tree.IsEmpty ? throw EmptyError() : _tree.Last;
 
