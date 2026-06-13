@@ -167,6 +167,11 @@ public static class FingerTreeProductExtensions
     /// <typeparam name="T">A numeric element/weight type (generic math).</typeparam>
     /// <param name="tree">A size + sum tree (see <see cref="ProductMeasures.CreateSizeAndSum{T}"/>).</param>
     /// <param name="threshold">The cumulative-weight threshold.</param>
+    /// <remarks>
+    /// As with <see cref="SumMeasure{T}"/>, floating-point addition is not exactly associative; with
+    /// <see cref="double"/> or <see cref="float"/> weights the accumulated sums — and therefore the split
+    /// boundary — are subject to the usual rounding, which the caller must tolerate.
+    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (
         FingerTree<T, MeasurePair<int, T>, ProductMeasure<T, int, T, SizeMeasure<T>, SumMeasure<T>>> Left,
@@ -190,6 +195,10 @@ public static class FingerTreeProductExtensions
     /// <param name="indexBefore">The number of elements before the selected one (its zero-based index).</param>
     /// <returns><see langword="true"/> when an element's interval contains <paramref name="threshold"/> (the
     /// total weight exceeds it); otherwise <see langword="false"/>.</returns>
+    /// <remarks>
+    /// As with <see cref="SumMeasure{T}"/>, with <see cref="double"/> or <see cref="float"/> weights the
+    /// cumulative sums (and therefore the selection boundary) are subject to floating-point rounding.
+    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     /// <example>
     /// <code>
