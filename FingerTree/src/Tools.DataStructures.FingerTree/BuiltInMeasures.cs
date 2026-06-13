@@ -157,3 +157,56 @@ public readonly struct OrderStatisticMeasure<T> : IMeasure<T, RankedKey<T>>
     public static RankedKey<T> Combine(RankedKey<T> left, RankedKey<T> right) =>
         new(left.Count + right.Count, right.Key.HasValue ? right.Key : left.Key);
 }
+
+/// <summary>
+/// Like <see cref="MaxMeasure{T}"/> but ordered by a custom <typeparamref name="TComparison"/> instead of
+/// <see cref="Comparer{T}.Default"/>, so a longest-first / by-projection / reversed priority queue needs only
+/// a one-method <see cref="IComparison{T}"/> rather than a hand-rolled measure.
+/// </summary>
+/// <typeparam name="T">Stored element type.</typeparam>
+/// <typeparam name="TComparison">The order used to pick the maximum.</typeparam>
+public readonly struct MaxMeasure<T, TComparison> : IMeasure<T, Optional<T>>
+    where TComparison : IComparison<T>
+{
+    /// <inheritdoc/>
+    public static Optional<T> Empty => Optional<T>.None;
+
+    /// <inheritdoc/>
+    public static Optional<T> Measure(T element) => Optional<T>.Some(element);
+
+    /// <inheritdoc/>
+    public static Optional<T> Combine(Optional<T> left, Optional<T> right)
+    {
+        if (!left.HasValue)
+            return right;
+        if (!right.HasValue)
+            return left;
+        return TComparison.Compare(left.Value, right.Value) >= 0 ? left : right;
+    }
+}
+
+/// <summary>
+/// Like <see cref="MinMeasure{T}"/> but ordered by a custom <typeparamref name="TComparison"/> instead of
+/// <see cref="Comparer{T}.Default"/>.
+/// </summary>
+/// <typeparam name="T">Stored element type.</typeparam>
+/// <typeparam name="TComparison">The order used to pick the minimum.</typeparam>
+public readonly struct MinMeasure<T, TComparison> : IMeasure<T, Optional<T>>
+    where TComparison : IComparison<T>
+{
+    /// <inheritdoc/>
+    public static Optional<T> Empty => Optional<T>.None;
+
+    /// <inheritdoc/>
+    public static Optional<T> Measure(T element) => Optional<T>.Some(element);
+
+    /// <inheritdoc/>
+    public static Optional<T> Combine(Optional<T> left, Optional<T> right)
+    {
+        if (!left.HasValue)
+            return right;
+        if (!right.HasValue)
+            return left;
+        return TComparison.Compare(left.Value, right.Value) <= 0 ? left : right;
+    }
+}

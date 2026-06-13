@@ -17,6 +17,7 @@ This workspace provides two public finger-tree types. `FingerTree<TElement, TMea
 - `FingerTree.sln` is the solution entry point.
 - `src/Tools.DataStructures.FingerTree/` contains the public library.
   - `Measures.cs` — the `IMonoid<TMeasure>` / `IMeasure<TElement, TMeasure>` static-abstract measure interfaces and the built-in `SizeMeasure<T>`.
+  - `Comparisons.cs` — the static-abstract `IComparison<T>` order strategy with `DefaultComparison<T>` and `ReverseComparison<T, TComparison>`, letting the comparison measures use a custom order without a hand-rolled measure.
   - `BuiltInMeasures.cs` — ready-made measures (`MaxMeasure<T>`, `MinMeasure<T>`, `KeyMeasure<T>`, `OrderStatisticMeasure<T>`) with their `Optional<T>` / `RankedKey<T>` carriers, covering priority queues, ordered sets, and order-statistic trees out of the box.
   - `FingerTreeMeasureExtensions.cs` — named operations over the ready-made measures (`TryExtractMax`/`Min`, `SplitByLowerBound`/`UpperBound`, `SplitAtIndex`).
   - `IntervalTree.cs` — a full Hinze–Paterson interval tree (`IntervalTree<T>`, `Interval<T>`, `IntervalMeasure<T>`) with O(log n) insert and stabbing/overlap queries and O(k log n) overlap enumeration.
