@@ -140,10 +140,20 @@ public readonly record struct RankedKey<T>(int Count, Optional<T> Key);
 /// <typeparam name="T">Stored element type, ordered by <see cref="Comparer{T}.Default"/> for the key
 /// component.</typeparam>
 /// <remarks>
+/// <para>
 /// Split by the count component for positional / order-statistic access
 /// (<see cref="FingerTreeMeasureExtensions.SplitAtIndex{T}"/>) and by the key component for ordered search
 /// (<see cref="FingerTreeMeasureExtensions.SplitByLowerBound{T}(FingerTree{T, RankedKey{T}, OrderStatisticMeasure{T}}, T)"/>),
 /// on the same tree.
+/// </para>
+/// <para>
+/// This is the same construction as
+/// <c>ProductMeasure&lt;T, int, Optional&lt;T&gt;, SizeMeasure&lt;T&gt;, KeyMeasure&lt;T&gt;&gt;</c> (size paired with
+/// last-key); it keeps a dedicated type and the named <see cref="RankedKey{T}"/> carrier — clearer than the
+/// generic <see cref="MeasurePair{TFirst, TSecond}"/> for the order-statistic case it specializes. Reach for
+/// <see cref="ProductMeasure{TElement, TFirst, TSecond, TFirstOps, TSecondOps}"/> when composing other pairs of
+/// measures.
+/// </para>
 /// </remarks>
 public readonly struct OrderStatisticMeasure<T> : IMeasure<T, RankedKey<T>>
 {
