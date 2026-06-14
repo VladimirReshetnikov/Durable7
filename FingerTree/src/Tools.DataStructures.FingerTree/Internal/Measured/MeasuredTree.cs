@@ -88,6 +88,19 @@ internal abstract class MeasuredTree<TElement, TChild, TMeasure, TMonoid>
     public abstract (MeasuredTree<TElement, TChild, TMeasure, TMonoid> Left, TChild Hit, MeasuredTree<TElement, TChild, TMeasure, TMonoid> Right)
         SplitTree(Func<TMeasure, bool> predicate, TMeasure accumulator);
 
+    /// <summary>
+    /// Locates, without reconstructing any subtree, the element where <paramref name="predicate"/> over the
+    /// left-accumulated measure (starting at <paramref name="accumulator"/>) first becomes true, and the
+    /// measure accumulated strictly before it. A read-only downward walk: the allocation-free analogue of
+    /// <see cref="SplitTree"/> for queries that need only the boundary element or the measure preceding it.
+    /// </summary>
+    /// <param name="predicate">Monotone predicate (false then true) over the accumulated measure.</param>
+    /// <param name="accumulator">Measure of everything to the left of this tree.</param>
+    /// <returns>The measure accumulated before the boundary element, and the boundary element itself.</returns>
+    /// <remarks>Requires a non-empty tree for which <c>predicate(accumulator ⊕ Measure)</c> holds. O(log n);
+    /// allocates nothing beyond forcing already-deferred spine repairs along the descended path.</remarks>
+    public abstract (TMeasure MeasureBefore, TChild Hit) LocateTree(Func<TMeasure, bool> predicate, TMeasure accumulator);
+
     /// <summary>Concatenates this tree with <paramref name="right"/>. O(log min) amortized.</summary>
     /// <param name="right">Tree whose elements follow this tree's elements.</param>
     public MeasuredTree<TElement, TChild, TMeasure, TMonoid> Concat(MeasuredTree<TElement, TChild, TMeasure, TMonoid> right) =>
@@ -168,6 +181,30 @@ internal abstract class MeasuredTree<TElement, TChild, TMeasure, TMonoid>
         }
 
         return (values[..^1], values[^1], []);
+    }
+
+    /// <summary>
+    /// Locates the element of a one-through-four element buffer where <paramref name="predicate"/> over the
+    /// left-accumulated measure first becomes true, returning the measure before it and the element — without
+    /// allocating the before/after sub-buffers that <see cref="SplitBuffer"/> produces.
+    /// </summary>
+    /// <param name="predicate">Monotone predicate.</param>
+    /// <param name="accumulator">Measure to the left of the buffer.</param>
+    /// <param name="values">The buffer to search; the last element is the hit by elimination.</param>
+    private protected static (TMeasure MeasureBefore, TChild Hit) LocateBuffer(
+        Func<TMeasure, bool> predicate,
+        TMeasure accumulator,
+        TChild[] values)
+    {
+        for (var i = 0; i < values.Length - 1; i++)
+        {
+            var next = TMonoid.Combine(accumulator, values[i].Measure);
+            if (predicate(next))
+                return (accumulator, values[i]);
+            accumulator = next;
+        }
+
+        return (accumulator, values[^1]);
     }
 
     /// <summary>Groups a buffer of two or more elements into two-or-three-child nodes.</summary>

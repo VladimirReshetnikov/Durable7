@@ -152,11 +152,9 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
     /// <summary>Determines whether <paramref name="key"/> is present. O(log n).</summary>
     /// <param name="key">Key to test.</param>
     /// <returns><see langword="true"/> when present; otherwise <see langword="false"/>.</returns>
-    public bool ContainsKey(TKey key)
-    {
-        var (_, atLeast) = SplitAtLeast(key);
-        return !atLeast.IsEmpty && _comparer.Compare(atLeast.First.Key, key) == 0;
-    }
+    public bool ContainsKey(TKey key) =>
+        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, key) >= 0, out _, out var found)
+        && _comparer.Compare(found.Key, key) == 0;
 
     /// <summary>Looks up the value for <paramref name="key"/>. O(log n).</summary>
     /// <param name="key">Key to look up.</param>
@@ -164,10 +162,10 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
     /// <returns><see langword="true"/> when present; otherwise <see langword="false"/>.</returns>
     public bool TryGetValue(TKey key, [MaybeNullWhen(false)] out TValue value)
     {
-        var (_, atLeast) = SplitAtLeast(key);
-        if (!atLeast.IsEmpty && _comparer.Compare(atLeast.First.Key, key) == 0)
+        if (_tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, key) >= 0, out _, out var found)
+            && _comparer.Compare(found.Key, key) == 0)
         {
-            value = atLeast.First.Value;
+            value = found.Value;
             return true;
         }
 
@@ -183,18 +181,17 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
     {
         if ((uint)index >= (uint)Count)
             throw new ArgumentOutOfRangeException(nameof(index), index, "Rank is outside the dictionary's range.");
-        var (_, right) = _tree.Split(m => m.Count > index);
-        return right.First;
+        return EntryAtRank(index);
     }
 
     /// <summary>Returns the rank of <paramref name="key"/> (number of smaller keys), or -1 when absent. O(log n).</summary>
     /// <param name="key">Key to locate.</param>
     /// <returns>The zero-based rank, or -1 when <paramref name="key"/> is not present.</returns>
-    public int IndexOfKey(TKey key)
-    {
-        var (less, atLeast) = SplitAtLeast(key);
-        return !atLeast.IsEmpty && _comparer.Compare(atLeast.First.Key, key) == 0 ? less.Measure.Count : -1;
-    }
+    public int IndexOfKey(TKey key) =>
+        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, key) >= 0, out var before, out var found)
+        && _comparer.Compare(found.Key, key) == 0
+            ? before.Count
+            : -1;
 
     /// <summary>Adds or replaces the entry for <paramref name="key"/>. O(log n).</summary>
     /// <param name="key">Key to set.</param>
@@ -268,19 +265,24 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
     /// <returns><see langword="true"/> when a floor exists; otherwise <see langword="false"/>.</returns>
     public bool TryFloorEntry(TKey key, out KeyValuePair<TKey, TValue> entry)
     {
-        var (atMost, _) = SplitAtMost(key);
-        return Endpoint(atMost, takeLast: true, out entry);
+        // The floor is the entry just before the first one with a key greater than `key`.
+        var atMost = CountBelow(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, key) > 0);
+        if (atMost == 0)
+        {
+            entry = default;
+            return false;
+        }
+
+        entry = EntryAtRank(atMost - 1);
+        return true;
     }
 
     /// <summary>Finds the entry with the least key greater than or equal to <paramref name="key"/>. O(log n).</summary>
     /// <param name="key">Reference key.</param>
     /// <param name="entry">The ceiling entry when one exists; otherwise <see langword="default"/>.</param>
     /// <returns><see langword="true"/> when a ceiling exists; otherwise <see langword="false"/>.</returns>
-    public bool TryCeilingEntry(TKey key, out KeyValuePair<TKey, TValue> entry)
-    {
-        var (_, atLeast) = SplitAtLeast(key);
-        return Endpoint(atLeast, takeLast: false, out entry);
-    }
+    public bool TryCeilingEntry(TKey key, out KeyValuePair<TKey, TValue> entry) =>
+        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, key) >= 0, out _, out entry);
 
     /// <summary>Finds the entry with the greatest key strictly less than <paramref name="key"/>. O(log n).</summary>
     /// <param name="key">Reference key.</param>
@@ -288,19 +290,24 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
     /// <returns><see langword="true"/> when a strictly smaller key exists; otherwise <see langword="false"/>.</returns>
     public bool TryLowerEntry(TKey key, out KeyValuePair<TKey, TValue> entry)
     {
-        var (less, _) = SplitAtLeast(key);
-        return Endpoint(less, takeLast: true, out entry);
+        // The strict predecessor is the entry just before the first one with a key at or after `key`.
+        var less = CountBelow(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, key) >= 0);
+        if (less == 0)
+        {
+            entry = default;
+            return false;
+        }
+
+        entry = EntryAtRank(less - 1);
+        return true;
     }
 
     /// <summary>Finds the entry with the least key strictly greater than <paramref name="key"/>. O(log n).</summary>
     /// <param name="key">Reference key.</param>
     /// <param name="entry">The successor entry when one exists; otherwise <see langword="default"/>.</param>
     /// <returns><see langword="true"/> when a strictly greater key exists; otherwise <see langword="false"/>.</returns>
-    public bool TryHigherEntry(TKey key, out KeyValuePair<TKey, TValue> entry)
-    {
-        var (_, greater) = SplitAtMost(key);
-        return Endpoint(greater, takeLast: false, out entry);
-    }
+    public bool TryHigherEntry(TKey key, out KeyValuePair<TKey, TValue> entry) =>
+        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, key) > 0, out _, out entry);
 
     /// <summary>Returns the sub-dictionary of entries whose keys lie in the inclusive range <c>[low, high]</c>. O(log n).</summary>
     /// <param name="low">Inclusive lower key bound.</param>
@@ -328,24 +335,21 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
         SplitAtLeast(TKey key) =>
         _tree.Split(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, key) >= 0);
 
-    private (FingerTree<KeyValuePair<TKey, TValue>, RankedKey<TKey>, EntryMeasure<TKey, TValue>> AtMost,
-        FingerTree<KeyValuePair<TKey, TValue>, RankedKey<TKey>, EntryMeasure<TKey, TValue>> Greater)
-        SplitAtMost(TKey key) =>
-        _tree.Split(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, key) > 0);
-
-    private static bool Endpoint(
-        FingerTree<KeyValuePair<TKey, TValue>, RankedKey<TKey>, EntryMeasure<TKey, TValue>> tree,
-        bool takeLast,
-        out KeyValuePair<TKey, TValue> entry)
+    /// <summary>Reads the entry at rank <paramref name="rank"/> without reconstructing a subtree. O(log n).</summary>
+    /// <param name="rank">A zero-based rank known to be in <c>0 .. Count - 1</c>.</param>
+    private KeyValuePair<TKey, TValue> EntryAtRank(int rank)
     {
-        if (tree.IsEmpty)
-        {
-            entry = default;
-            return false;
-        }
+        _tree.TryLocate(m => m.Count > rank, out _, out var entry);
+        return entry;
+    }
 
-        entry = takeLast ? tree.Last : tree.First;
-        return true;
+    /// <summary>Counts the entries strictly before the first one satisfying <paramref name="atOrPast"/>, without
+    /// reconstructing a subtree. O(log n).</summary>
+    /// <param name="atOrPast">Monotone predicate marking the boundary entry.</param>
+    private int CountBelow(Func<RankedKey<TKey>, bool> atOrPast)
+    {
+        _tree.TryLocate(atOrPast, out var before, out _);
+        return before.Count;
     }
 
     // Collapse to the shared empty singleton only when the tree is empty AND the default comparer is in use;

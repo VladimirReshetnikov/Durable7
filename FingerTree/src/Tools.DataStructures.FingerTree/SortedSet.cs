@@ -112,19 +112,18 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
         {
             if ((uint)index >= (uint)Count)
                 throw new ArgumentOutOfRangeException(nameof(index), index, "Rank is outside the set's range.");
-            var (_, right) = _tree.Split(m => m.Count > index);
-            return right.First;
+            return ElementAt(index);
         }
     }
 
     /// <summary>Returns the rank of <paramref name="item"/> (number of smaller elements), or -1 when absent. O(log n).</summary>
     /// <param name="item">Element to locate.</param>
     /// <returns>The zero-based rank, or -1 when <paramref name="item"/> is not present.</returns>
-    public int IndexOf(T item)
-    {
-        var (less, atLeast) = SplitAtLeast(item);
-        return !atLeast.IsEmpty && _comparer.Compare(atLeast.First, item) == 0 ? less.Measure.Count : -1;
-    }
+    public int IndexOf(T item) =>
+        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) >= 0, out var before, out var found)
+        && _comparer.Compare(found, item) == 0
+            ? before.Count
+            : -1;
 
     /// <summary>Adds an element, or returns the unchanged set when an equal element is already present. O(log n).</summary>
     /// <param name="item">Element to add.</param>
@@ -153,11 +152,9 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     /// <summary>Determines whether an element comparing equal to <paramref name="item"/> is present. O(log n).</summary>
     /// <param name="item">Element to search for.</param>
     /// <returns><see langword="true"/> when present; otherwise <see langword="false"/>.</returns>
-    public bool Contains(T item)
-    {
-        var (_, atLeast) = SplitAtLeast(item);
-        return !atLeast.IsEmpty && _comparer.Compare(atLeast.First, item) == 0;
-    }
+    public bool Contains(T item) =>
+        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) >= 0, out _, out var found)
+        && _comparer.Compare(found, item) == 0;
 
     /// <summary>Removes the element comparing equal to <paramref name="item"/>, if present. O(log n).</summary>
     /// <param name="item">Element to remove.</param>
@@ -187,14 +184,15 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     /// <returns><see langword="true"/> when a floor exists; otherwise <see langword="false"/>.</returns>
     public bool TryFloor(T item, [MaybeNullWhen(false)] out T floor)
     {
-        var (atMost, _) = SplitAtMost(item);
-        if (atMost.IsEmpty)
+        // The floor is the element just before the first element greater than item.
+        var atMost = CountBelow(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) > 0);
+        if (atMost == 0)
         {
             floor = default!;
             return false;
         }
 
-        floor = atMost.Last;
+        floor = ElementAt(atMost - 1);
         return true;
     }
 
@@ -202,18 +200,8 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     /// <param name="item">Reference value.</param>
     /// <param name="ceiling">The ceiling element when one exists; otherwise <see langword="default"/>.</param>
     /// <returns><see langword="true"/> when a ceiling exists; otherwise <see langword="false"/>.</returns>
-    public bool TryCeiling(T item, [MaybeNullWhen(false)] out T ceiling)
-    {
-        var (_, atLeast) = SplitAtLeast(item);
-        if (atLeast.IsEmpty)
-        {
-            ceiling = default!;
-            return false;
-        }
-
-        ceiling = atLeast.First;
-        return true;
-    }
+    public bool TryCeiling(T item, [MaybeNullWhen(false)] out T ceiling) =>
+        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) >= 0, out _, out ceiling);
 
     /// <summary>Finds the greatest element strictly less than <paramref name="item"/>. O(log n).</summary>
     /// <param name="item">Reference value.</param>
@@ -221,14 +209,15 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     /// <returns><see langword="true"/> when a strictly smaller element exists; otherwise <see langword="false"/>.</returns>
     public bool TryLower(T item, [MaybeNullWhen(false)] out T lower)
     {
-        var (less, _) = SplitAtLeast(item);
-        if (less.IsEmpty)
+        // The strict predecessor is the element just before the first element at or after item.
+        var less = CountBelow(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) >= 0);
+        if (less == 0)
         {
             lower = default!;
             return false;
         }
 
-        lower = less.Last;
+        lower = ElementAt(less - 1);
         return true;
     }
 
@@ -236,18 +225,8 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     /// <param name="item">Reference value.</param>
     /// <param name="higher">The successor when one exists; otherwise <see langword="default"/>.</param>
     /// <returns><see langword="true"/> when a strictly greater element exists; otherwise <see langword="false"/>.</returns>
-    public bool TryHigher(T item, [MaybeNullWhen(false)] out T higher)
-    {
-        var (_, greater) = SplitAtMost(item);
-        if (greater.IsEmpty)
-        {
-            higher = default!;
-            return false;
-        }
-
-        higher = greater.First;
-        return true;
-    }
+    public bool TryHigher(T item, [MaybeNullWhen(false)] out T higher) =>
+        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) > 0, out _, out higher);
 
     /// <summary>Returns the subset of elements in the inclusive range <c>[low, high]</c>. O(log n).</summary>
     /// <param name="low">Inclusive lower bound.</param>
@@ -349,6 +328,23 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     public IEnumerator<T> GetEnumerator() => _tree.GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+    /// <summary>Reads the element at rank <paramref name="rank"/> without reconstructing a subtree. O(log n).</summary>
+    /// <param name="rank">A zero-based rank known to be in <c>0 .. Count - 1</c>.</param>
+    private T ElementAt(int rank)
+    {
+        _tree.TryLocate(m => m.Count > rank, out _, out var item);
+        return item!;
+    }
+
+    /// <summary>Counts the elements strictly before the first one satisfying <paramref name="atOrPast"/>, without
+    /// reconstructing a subtree. O(log n).</summary>
+    /// <param name="atOrPast">Monotone predicate marking the boundary element.</param>
+    private int CountBelow(Func<RankedKey<T>, bool> atOrPast)
+    {
+        _tree.TryLocate(atOrPast, out var before, out _);
+        return before.Count;
+    }
 
     private (FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Less, FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> AtLeast)
         SplitAtLeast(T item) =>

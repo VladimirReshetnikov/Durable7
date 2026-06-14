@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Tools.DataStructures.FingerTree;
 
@@ -238,6 +239,43 @@ public sealed class FingerTree<TElement, TMeasure, TMeasureOps>
         left = Wrap(leftTree);
         found = hit.Value;
         right = Wrap(rightTree);
+        return true;
+    }
+
+    /// <summary>
+    /// Locates the boundary element where <paramref name="predicate"/> over the accumulated measure first
+    /// becomes true, returning it and the measure accumulated strictly before it — <em>without</em>
+    /// reconstructing the surrounding subtrees. This is the allocation-free read counterpart to
+    /// <see cref="TrySplitFind"/>: use it for membership, rank, order-statistic, and neighbor queries that need
+    /// only the boundary element or the preceding measure, not the split halves.
+    /// </summary>
+    /// <param name="predicate">Monotone predicate over the accumulated measure (false then true).</param>
+    /// <param name="measureBefore">
+    /// The measure accumulated strictly before the boundary element when one is found; otherwise the measure of
+    /// the whole tree (so a rank query reads the full count when no element satisfies the predicate).
+    /// </param>
+    /// <param name="found">The boundary element when one exists; otherwise <see langword="default"/>.</param>
+    /// <returns>
+    /// <see langword="true"/> when some prefix satisfies <paramref name="predicate"/> (a boundary element
+    /// exists); otherwise <see langword="false"/>.
+    /// </returns>
+    /// <remarks>O(log(min(k, n − k))) amortized, allocating nothing beyond forcing already-deferred spine
+    /// repairs along the descended path. Unlike <see cref="TrySplitFind"/> it builds no result trees, so it is
+    /// the right tool for hot read paths over the sorted and order-statistic collections.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="predicate"/> is <see langword="null"/>.</exception>
+    public bool TryLocate(Func<TMeasure, bool> predicate, out TMeasure measureBefore, [MaybeNullWhen(false)] out TElement found)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        if (_root.IsEmpty || !predicate(_root.Measure))
+        {
+            measureBefore = _root.Measure;
+            found = default;
+            return false;
+        }
+
+        var (before, hit) = _root.LocateTree(predicate, TMeasureOps.Empty);
+        measureBefore = before;
+        found = hit.Value;
         return true;
     }
 

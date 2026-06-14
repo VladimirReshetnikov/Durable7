@@ -109,12 +109,24 @@ small, and the gap widens without bound as n grows.
 Our `SortedSet` is a persistent finger-tree sorted set with order-statistic indexing, ranking, and
 set-algebra-as-sorted-merge. The BCL `ImmutableSortedSet` is a mature, heavily optimized persistent collection
 that *also* offers O(log n) `Contains`, an O(log n) rank indexer (`IReadOnlyList<T>`), and `IndexOf` — so the
-order-statistic operations are **not unique to the finger tree**. On those shared read operations the BCL is
-faster by a constant factor, and our reads allocate (the split machinery): e.g. `Ours.SelectByRank` at 100,000
-is ~2.2 µs allocating ~2.4 KB. (The BCL's sub-nanosecond reads here are in the hoisting-caveat regime and are
-not literal.) The finger-tree value proposition for sorted data is the **unified measure framework** — one core
-yielding multiset, set, map, interval tree, priority queue, and order-statistic tree — and structural-sharing
-persistence, not out-reading a specialized BCL collection.
+order-statistic operations are **not unique to the finger tree**.
+
+The read paths were originally routed through `Split`, which rebuilt both result halves and so allocated ~1–2 KB
+per query. They now use a read-only `TryLocate` descent that finds the boundary element (and the measure before
+it) without reconstructing any subtree, which cut both time and allocation dramatically:
+
+| `SortedSet` read (100,000) | Before (`Split`) | After (`TryLocate`) |
+|----------------------------|-----------------:|--------------------:|
+| `Contains`                 | 2,612 ns · 2,400 B | 351 ns · 96 B |
+| rank-select (indexer)      | 2,229 ns · 2,392 B | 360 ns · 88 B |
+
+That is ~7× faster and ~25× less allocation. The residual ~90 B is the predicate *closure* (the lambda captures
+the query key and comparer); eliminating it entirely would require non-capturing struct predicates, a possible
+further step toward the BCL's zero-allocation reads. The BCL's sub-nanosecond reads here are in the
+hoisting-caveat regime and are not literal. The finger-tree value proposition for sorted data is the **unified
+measure framework** — one core yielding multiset, set, map, interval tree, priority queue, and order-statistic
+tree — and structural-sharing persistence; on shared reads it is now within a small constant factor of the
+specialized BCL collection.
 
 ## Takeaways
 
@@ -122,5 +134,7 @@ persistence, not out-reading a specialized BCL collection.
 - **Endpoint operations** and **weighted selection** show the expected O(1) / O(log n) advantage over the BCL's
   O(log n) / O(n), with ratios that grow with size.
 - **Indexing** exhibits the predicted distance-from-nearer-end U-shape.
-- The finger tree trades a constant-factor read overhead (and per-read allocation for the measured collections)
-  for persistence, structural sharing, and a single unified core behind a whole family of collections.
+- **Sorted-collection reads** route through the allocation-free `TryLocate` descent (~7× faster, ~25× less
+  allocation than the former `Split`-based reads), leaving only a small per-query predicate closure.
+- The finger tree trades a constant-factor read overhead for persistence, structural sharing, and a single
+  unified core behind a whole family of collections.

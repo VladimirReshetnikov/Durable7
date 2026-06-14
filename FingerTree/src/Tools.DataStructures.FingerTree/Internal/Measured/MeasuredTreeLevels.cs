@@ -61,6 +61,10 @@ internal sealed class EmptyMeasuredTree<TElement, TChild, TMeasure, TMonoid>
         SplitTree(Func<TMeasure, bool> predicate, TMeasure accumulator) =>
         throw EmptyAccess();
 
+    /// <inheritdoc/>
+    public override (TMeasure MeasureBefore, TChild Hit) LocateTree(Func<TMeasure, bool> predicate, TMeasure accumulator) =>
+        throw EmptyAccess();
+
     private static InvalidOperationException EmptyAccess() =>
         new("Internal invariant violation: element access on an empty measured finger-tree level.");
 }
@@ -122,6 +126,10 @@ internal sealed class SingleMeasuredTree<TElement, TChild, TMeasure, TMonoid>(TC
     public override (MeasuredTree<TElement, TChild, TMeasure, TMonoid> Left, TChild Hit, MeasuredTree<TElement, TChild, TMeasure, TMonoid> Right)
         SplitTree(Func<TMeasure, bool> predicate, TMeasure accumulator) =>
         (Empty, Element, Empty);
+
+    /// <inheritdoc/>
+    public override (TMeasure MeasureBefore, TChild Hit) LocateTree(Func<TMeasure, bool> predicate, TMeasure accumulator) =>
+        (accumulator, Element);
 }
 
 /// <summary>
@@ -313,5 +321,23 @@ internal sealed class DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>
 
         var (suffixBefore, suffixHit, suffixAfter) = SplitBuffer(predicate, afterMiddle, Suffix);
         return (DeepRight(Prefix, middle, suffixBefore), suffixHit, FromBuffer(suffixAfter));
+    }
+
+    /// <inheritdoc/>
+    public override (TMeasure MeasureBefore, TChild Hit) LocateTree(Func<TMeasure, bool> predicate, TMeasure accumulator)
+    {
+        var beforeMiddle = TMonoid.Combine(accumulator, CombineAll(Prefix));
+        if (predicate(beforeMiddle))
+            return LocateBuffer(predicate, accumulator, Prefix);
+
+        var middle = ForceMiddle();
+        var afterMiddle = TMonoid.Combine(beforeMiddle, middle.Measure);
+        if (predicate(afterMiddle))
+        {
+            var (nodeBefore, node) = middle.LocateTree(predicate, beforeMiddle);
+            return LocateBuffer(predicate, nodeBefore, node.Children);
+        }
+
+        return LocateBuffer(predicate, afterMiddle, Suffix);
     }
 }

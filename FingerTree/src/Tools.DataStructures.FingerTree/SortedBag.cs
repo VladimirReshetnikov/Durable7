@@ -109,8 +109,8 @@ public sealed class SortedBag<T> : IReadOnlyCollection<T>
         {
             if ((uint)index >= (uint)Count)
                 throw new ArgumentOutOfRangeException(nameof(index), index, "Rank is outside the bag's range.");
-            var (_, right) = _tree.Split(m => m.Count > index);
-            return right.First;
+            _tree.TryLocate(m => m.Count > index, out _, out var item);
+            return item!;
         }
     }
 
@@ -139,29 +139,22 @@ public sealed class SortedBag<T> : IReadOnlyCollection<T>
     /// <summary>Determines whether an element comparing equal to <paramref name="item"/> is present. O(log n).</summary>
     /// <param name="item">Element to search for.</param>
     /// <returns><see langword="true"/> when present; otherwise <see langword="false"/>.</returns>
-    public bool Contains(T item)
-    {
-        var (_, atLeast) = _tree.Split(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) >= 0);
-        return !atLeast.IsEmpty && _comparer.Compare(atLeast.First, item) == 0;
-    }
+    public bool Contains(T item) =>
+        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) >= 0, out _, out var found)
+        && _comparer.Compare(found, item) == 0;
 
     /// <summary>Counts elements comparing equal to <paramref name="item"/>. O(log n).</summary>
     /// <param name="item">Element to count.</param>
     /// <returns>The multiplicity of <paramref name="item"/>.</returns>
-    public int CountOf(T item)
-    {
-        var (_, atLeast) = _tree.Split(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) >= 0);
-        var (equal, _) = atLeast.Split(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) > 0);
-        return equal.Measure.Count;
-    }
+    public int CountOf(T item) => CountAtMost(item) - CountLessThan(item);
 
     /// <summary>Counts elements comparing strictly less than <paramref name="item"/> (its rank / lower bound). O(log n).</summary>
     /// <param name="item">Reference element.</param>
     /// <returns>The number of elements less than <paramref name="item"/>.</returns>
     public int CountLessThan(T item)
     {
-        var (less, _) = _tree.Split(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) >= 0);
-        return less.Measure.Count;
+        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) >= 0, out var before, out _);
+        return before.Count;
     }
 
     /// <summary>Counts elements comparing less than or equal to <paramref name="item"/> (its upper bound). O(log n).</summary>
@@ -169,8 +162,8 @@ public sealed class SortedBag<T> : IReadOnlyCollection<T>
     /// <returns>The number of elements less than or equal to <paramref name="item"/>.</returns>
     public int CountAtMost(T item)
     {
-        var (atMost, _) = _tree.Split(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) > 0);
-        return atMost.Measure.Count;
+        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) > 0, out var before, out _);
+        return before.Count;
     }
 
     /// <summary>Removes one element comparing equal to <paramref name="item"/>, if present. O(log n).</summary>
