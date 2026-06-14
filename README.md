@@ -10,4 +10,4 @@
 
 ## Workspaces
 
-- [FingerTree](FingerTree/README.md) contains the .NET 10 C# preview TDD scaffold for a persistent catenable deque backed by a simplified finger tree.
+- [FingerTree](FingerTree/README.md) is a .NET 10 persistent finger-tree library: two engine cores (a tuned catenable deque and a general monoid-measured tree), a full collection family (sorted bag/set/dictionary, priority queue, interval tree, reversible deque), product/sum/built-in measures with a closure-free predicate API, and a rope family (positional, measured, and text). It ships a navigable design-notes document ([FingerTree-Design-Notes.pdf](FingerTree/docs/FingerTree-Design-Notes.pdf), with `.tex` source and a rebuild script alongside), a BenchmarkDotNet harness, two runnable samples, and a three-tier (example + property + model-based command) test suite plus tearable-struct concurrency stress tests.
