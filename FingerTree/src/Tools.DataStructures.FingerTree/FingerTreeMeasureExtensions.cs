@@ -55,8 +55,7 @@ public static class FingerTreeMeasureExtensions
         }
 
         var target = tree.Measure.Value;
-        var comparer = Comparer<T>.Default;
-        tree.TrySplitFind(m => m.HasValue && comparer.Compare(m.Value, target) >= 0, out var before, out max, out var after);
+        tree.TrySplitFind(new OptionalAtLeastPredicate<T>(Comparer<T>.Default, target), out var before, out max, out var after);
         rest = before.Concat(after);
         return true;
     }
@@ -99,8 +98,7 @@ public static class FingerTreeMeasureExtensions
         }
 
         var target = tree.Measure.Value;
-        var comparer = Comparer<T>.Default;
-        tree.TrySplitFind(m => m.HasValue && comparer.Compare(m.Value, target) <= 0, out var before, out min, out var after);
+        tree.TrySplitFind(new OptionalAtMostPredicate<T>(Comparer<T>.Default, target), out var before, out min, out var after);
         rest = before.Concat(after);
         return true;
     }
@@ -119,8 +117,7 @@ public static class FingerTreeMeasureExtensions
         SplitByLowerBound<T>(this FingerTree<T, Optional<T>, KeyMeasure<T>> tree, T key)
     {
         ArgumentNullException.ThrowIfNull(tree);
-        var comparer = Comparer<T>.Default;
-        return tree.Split(m => m.HasValue && comparer.Compare(m.Value, key) >= 0);
+        return tree.Split(new OptionalAtLeastPredicate<T>(Comparer<T>.Default, key));
     }
 
     /// <summary>
@@ -137,8 +134,7 @@ public static class FingerTreeMeasureExtensions
         SplitByUpperBound<T>(this FingerTree<T, Optional<T>, KeyMeasure<T>> tree, T key)
     {
         ArgumentNullException.ThrowIfNull(tree);
-        var comparer = Comparer<T>.Default;
-        return tree.Split(m => m.HasValue && comparer.Compare(m.Value, key) > 0);
+        return tree.Split(new OptionalAbovePredicate<T>(Comparer<T>.Default, key));
     }
 
     /// <summary>
@@ -153,7 +149,7 @@ public static class FingerTreeMeasureExtensions
         SplitAtIndex<T>(this FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree, int index)
     {
         ArgumentNullException.ThrowIfNull(tree);
-        return tree.Split(m => m.Count > index);
+        return tree.Split(new CountAbovePredicate<T>(index));
     }
 
     /// <summary>
@@ -169,8 +165,7 @@ public static class FingerTreeMeasureExtensions
         SplitByLowerBound<T>(this FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree, T key)
     {
         ArgumentNullException.ThrowIfNull(tree);
-        var comparer = Comparer<T>.Default;
-        return tree.Split(m => m.Key.HasValue && comparer.Compare(m.Key.Value, key) >= 0);
+        return tree.Split(new KeyAtLeastPredicate<T>(Comparer<T>.Default, key));
     }
 
     /// <summary>
@@ -185,8 +180,7 @@ public static class FingerTreeMeasureExtensions
         SplitByUpperBound<T>(this FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree, T key)
     {
         ArgumentNullException.ThrowIfNull(tree);
-        var comparer = Comparer<T>.Default;
-        return tree.Split(m => m.Key.HasValue && comparer.Compare(m.Key.Value, key) > 0);
+        return tree.Split(new KeyAbovePredicate<T>(Comparer<T>.Default, key));
     }
 
     // ---- Custom-comparison overloads -------------------------------------------------------------------
@@ -232,7 +226,7 @@ public static class FingerTreeMeasureExtensions
         }
 
         var target = tree.Measure.Value;
-        tree.TrySplitFind(m => m.HasValue && TComparison.Compare(m.Value, target) >= 0, out var before, out max, out var after);
+        tree.TrySplitFind(new OptionalAtLeastPredicate<T, TComparison>(target), out var before, out max, out var after);
         rest = before.Concat(after);
         return true;
     }
@@ -276,7 +270,7 @@ public static class FingerTreeMeasureExtensions
         }
 
         var target = tree.Measure.Value;
-        tree.TrySplitFind(m => m.HasValue && TComparison.Compare(m.Value, target) <= 0, out var before, out min, out var after);
+        tree.TrySplitFind(new OptionalAtMostPredicate<T, TComparison>(target), out var before, out min, out var after);
         rest = before.Concat(after);
         return true;
     }
@@ -295,7 +289,7 @@ public static class FingerTreeMeasureExtensions
         where TComparison : IComparison<T>
     {
         ArgumentNullException.ThrowIfNull(tree);
-        return tree.Split(m => m.HasValue && TComparison.Compare(m.Value, key) >= 0);
+        return tree.Split(new OptionalAtLeastPredicate<T, TComparison>(key));
     }
 
     /// <summary>
@@ -312,7 +306,7 @@ public static class FingerTreeMeasureExtensions
         where TComparison : IComparison<T>
     {
         ArgumentNullException.ThrowIfNull(tree);
-        return tree.Split(m => m.HasValue && TComparison.Compare(m.Value, key) > 0);
+        return tree.Split(new OptionalAbovePredicate<T, TComparison>(key));
     }
 
     /// <summary>
@@ -329,7 +323,7 @@ public static class FingerTreeMeasureExtensions
         where TComparison : IComparison<T>
     {
         ArgumentNullException.ThrowIfNull(tree);
-        return tree.Split(m => m.Key.HasValue && TComparison.Compare(m.Key.Value, key) >= 0);
+        return tree.Split(new RankedKeyAtLeastPredicate<T, TComparison>(key));
     }
 
     /// <summary>
@@ -346,6 +340,6 @@ public static class FingerTreeMeasureExtensions
         where TComparison : IComparison<T>
     {
         ArgumentNullException.ThrowIfNull(tree);
-        return tree.Split(m => m.Key.HasValue && TComparison.Compare(m.Key.Value, key) > 0);
+        return tree.Split(new RankedKeyAbovePredicate<T, TComparison>(key));
     }
 }

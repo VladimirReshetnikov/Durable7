@@ -59,7 +59,7 @@ public static class FingerTreeSumExtensions
         where T : IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T>, IComparisonOperators<T, T, bool>
     {
         ArgumentNullException.ThrowIfNull(tree);
-        return tree.Split(sum => sum > threshold);
+        return tree.Split(new SumAbovePredicate<T>(threshold));
     }
 
     /// <summary>
@@ -93,7 +93,7 @@ public static class FingerTreeSumExtensions
         where T : IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T>, IComparisonOperators<T, T, bool>
     {
         ArgumentNullException.ThrowIfNull(tree);
-        if (tree.TrySplitFind(sum => sum > threshold, out var before, out selected, out _))
+        if (tree.TrySplitFind(new SumAbovePredicate<T>(threshold), out var before, out selected, out _))
         {
             weightBefore = before.Measure;
             return true;

@@ -43,7 +43,7 @@ public static class FingerTreeProductExtensions
     {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(predicate);
-        return tree.Split(m => predicate(m.First));
+        return tree.Split(new FirstComponentPredicate<FuncMeasurePredicate<TFirst>, TFirst, TSecond>(new FuncMeasurePredicate<TFirst>(predicate)));
     }
 
     /// <summary>
@@ -74,7 +74,7 @@ public static class FingerTreeProductExtensions
     {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(predicate);
-        return tree.Split(m => predicate(m.Second));
+        return tree.Split(new SecondComponentPredicate<FuncMeasurePredicate<TSecond>, TFirst, TSecond>(new FuncMeasurePredicate<TSecond>(predicate)));
     }
 
     /// <summary>
@@ -106,7 +106,7 @@ public static class FingerTreeProductExtensions
     {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(predicate);
-        return tree.TrySplitFind(m => predicate(m.First), out left, out found, out right);
+        return tree.TrySplitFind(new FirstComponentPredicate<FuncMeasurePredicate<TFirst>, TFirst, TSecond>(new FuncMeasurePredicate<TFirst>(predicate)), out left, out found, out right);
     }
 
     /// <summary>
@@ -138,7 +138,75 @@ public static class FingerTreeProductExtensions
     {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(predicate);
-        return tree.TrySplitFind(m => predicate(m.Second), out left, out found, out right);
+        return tree.TrySplitFind(new SecondComponentPredicate<FuncMeasurePredicate<TSecond>, TFirst, TSecond>(new FuncMeasurePredicate<TSecond>(predicate)), out left, out found, out right);
+    }
+
+    // ---- Generic component-projecting splits with value-type predicates (zero closure) -----------------
+
+    /// <summary>Closure-free overload of <see cref="SplitByFirst{TElement, TFirst, TSecond, TFirstOps,
+    /// TSecondOps}(FingerTree{TElement, MeasurePair{TFirst, TSecond}, ProductMeasure{TElement, TFirst, TSecond,
+    /// TFirstOps, TSecondOps}}, Func{TFirst, bool})"/> taking a value-type predicate over the first component,
+    /// so the split allocates no delegate. Identical behavior otherwise.</summary>
+    public static (
+        FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> Left,
+        FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> Right)
+        SplitByFirst<TElement, TFirst, TSecond, TFirstOps, TSecondOps, TPredicate>(
+            this FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> tree,
+            TPredicate predicate)
+        where TFirstOps : IMeasure<TElement, TFirst>
+        where TSecondOps : IMeasure<TElement, TSecond>
+        where TPredicate : struct, IMeasurePredicate<TFirst>
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+        return tree.Split(new FirstComponentPredicate<TPredicate, TFirst, TSecond>(predicate));
+    }
+
+    /// <summary>Closure-free, value-type-predicate counterpart of the second-component split. Identical behavior
+    /// to the <see cref="Func{TSecond, Boolean}"/> overload, but allocates no delegate.</summary>
+    public static (
+        FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> Left,
+        FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> Right)
+        SplitBySecond<TElement, TFirst, TSecond, TFirstOps, TSecondOps, TPredicate>(
+            this FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> tree,
+            TPredicate predicate)
+        where TFirstOps : IMeasure<TElement, TFirst>
+        where TSecondOps : IMeasure<TElement, TSecond>
+        where TPredicate : struct, IMeasurePredicate<TSecond>
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+        return tree.Split(new SecondComponentPredicate<TPredicate, TFirst, TSecond>(predicate));
+    }
+
+    /// <summary>Closure-free, value-type-predicate counterpart of the first-component split-find. Identical
+    /// behavior to the <see cref="Func{TFirst, Boolean}"/> overload, but allocates no delegate.</summary>
+    public static bool TrySplitFindByFirst<TElement, TFirst, TSecond, TFirstOps, TSecondOps, TPredicate>(
+        this FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> tree,
+        TPredicate predicate,
+        out FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> left,
+        out TElement found,
+        out FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> right)
+        where TFirstOps : IMeasure<TElement, TFirst>
+        where TSecondOps : IMeasure<TElement, TSecond>
+        where TPredicate : struct, IMeasurePredicate<TFirst>
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+        return tree.TrySplitFind(new FirstComponentPredicate<TPredicate, TFirst, TSecond>(predicate), out left, out found, out right);
+    }
+
+    /// <summary>Closure-free, value-type-predicate counterpart of the second-component split-find. Identical
+    /// behavior to the <see cref="Func{TSecond, Boolean}"/> overload, but allocates no delegate.</summary>
+    public static bool TrySplitFindBySecond<TElement, TFirst, TSecond, TFirstOps, TSecondOps, TPredicate>(
+        this FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> tree,
+        TPredicate predicate,
+        out FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> left,
+        out TElement found,
+        out FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> right)
+        where TFirstOps : IMeasure<TElement, TFirst>
+        where TSecondOps : IMeasure<TElement, TSecond>
+        where TPredicate : struct, IMeasurePredicate<TSecond>
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+        return tree.TrySplitFind(new SecondComponentPredicate<TPredicate, TFirst, TSecond>(predicate), out left, out found, out right);
     }
 
     // ---- Size + sum (positional and Fenwick) -----------------------------------------------------------
@@ -157,7 +225,7 @@ public static class FingerTreeProductExtensions
         FingerTree<T, MeasurePair<int, T>, ProductMeasure<T, int, T, SizeMeasure<T>, SumMeasure<T>>> Right)
         SplitAtIndex<T>(this FingerTree<T, MeasurePair<int, T>, ProductMeasure<T, int, T, SizeMeasure<T>, SumMeasure<T>>> tree, int index)
         where T : IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T> =>
-        tree.SplitByFirst(count => count > index);
+        tree.SplitByFirst(new IntAbovePredicate(index));
 
     /// <summary>
     /// Splits a size + sum tree at the first point where the cumulative sum exceeds
@@ -178,7 +246,7 @@ public static class FingerTreeProductExtensions
         FingerTree<T, MeasurePair<int, T>, ProductMeasure<T, int, T, SizeMeasure<T>, SumMeasure<T>>> Right)
         SplitByCumulativeWeight<T>(this FingerTree<T, MeasurePair<int, T>, ProductMeasure<T, int, T, SizeMeasure<T>, SumMeasure<T>>> tree, T threshold)
         where T : IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T>, IComparisonOperators<T, T, bool> =>
-        tree.SplitBySecond(sum => sum > threshold);
+        tree.SplitBySecond(new SumAbovePredicate<T>(threshold));
 
     /// <summary>
     /// Selects the element whose cumulative-weight interval contains <paramref name="threshold"/> — the first
@@ -215,7 +283,7 @@ public static class FingerTreeProductExtensions
         where T : IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T>, IComparisonOperators<T, T, bool>
     {
         ArgumentNullException.ThrowIfNull(tree);
-        if (tree.TrySplitFindBySecond(sum => sum > threshold, out var before, out selected, out _))
+        if (tree.TrySplitFindBySecond(new SumAbovePredicate<T>(threshold), out var before, out selected, out _))
         {
             indexBefore = before.Measure.First;
             return true;
@@ -268,8 +336,7 @@ public static class FingerTreeProductExtensions
         }
 
         var target = tree.Measure.Second.Value;
-        var comparer = Comparer<T>.Default;
-        tree.TrySplitFindBySecond(m => m.HasValue && comparer.Compare(m.Value, target) >= 0, out var before, out max, out var after);
+        tree.TrySplitFindBySecond(new OptionalAtLeastPredicate<T>(Comparer<T>.Default, target), out var before, out max, out var after);
         rest = before.Concat(after);
         return true;
     }
@@ -316,8 +383,7 @@ public static class FingerTreeProductExtensions
         }
 
         var target = tree.Measure.Second.Value;
-        var comparer = Comparer<T>.Default;
-        tree.TrySplitFindBySecond(m => m.HasValue && comparer.Compare(m.Value, target) <= 0, out var before, out min, out var after);
+        tree.TrySplitFindBySecond(new OptionalAtMostPredicate<T>(Comparer<T>.Default, target), out var before, out min, out var after);
         rest = before.Concat(after);
         return true;
     }

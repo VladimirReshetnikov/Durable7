@@ -313,7 +313,9 @@ public sealed class MeasuredRope<T, TMeasure, TMeasureOps> : IReadOnlyList<T>
     public (MeasuredRope<T, TMeasure, TMeasureOps> Left, MeasuredRope<T, TMeasure, TMeasureOps> Right) SplitByMeasure(Func<TMeasure, bool> predicate)
     {
         ArgumentNullException.ThrowIfNull(predicate);
-        if (!_tree.TrySplitFind(m => predicate(m.Second), out var left, out var chunk, out var right))
+        if (!_tree.TrySplitFind(
+                new SecondComponentPredicate<FuncMeasurePredicate<TMeasure>, int, TMeasure>(new FuncMeasurePredicate<TMeasure>(predicate)),
+                out var left, out var chunk, out var right))
             return (this, EmptyInstance);
 
         var offset = ChunkSplitOffset(chunk, left.Measure.Second, predicate);
@@ -336,7 +338,9 @@ public sealed class MeasuredRope<T, TMeasure, TMeasureOps> : IReadOnlyList<T>
     public bool TryLocateByMeasure(Func<TMeasure, bool> predicate, out int index, out TMeasure measureBefore, [MaybeNullWhen(false)] out T element)
     {
         ArgumentNullException.ThrowIfNull(predicate);
-        if (!_tree.TryLocate(m => predicate(m.Second), out var before, out var chunk))
+        if (!_tree.TryLocate(
+                new SecondComponentPredicate<FuncMeasurePredicate<TMeasure>, int, TMeasure>(new FuncMeasurePredicate<TMeasure>(predicate)),
+                out var before, out var chunk))
         {
             index = Count;
             measureBefore = _tree.Measure.Second;

@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace Tools.DataStructures.FingerTree;
 
 // The public IMeasurePredicate<TMeasure> contract lives in MeasurePredicate.cs; this file holds the library's
@@ -98,4 +100,152 @@ internal readonly struct LastLowAbovePredicate<T>(IComparer<T> comparer, T low)
     /// <inheritdoc/>
     public bool Invoke(IntervalAnnotation<T> measure) =>
         measure.LastLow.HasValue && comparer.Compare(measure.LastLow.Value, low) > 0;
+}
+
+// ---- Optional<T> predicates for the max/min and key-measured named operations -----------------------------
+// These back the closure-free FingerTreeMeasureExtensions named ops (peek/extract max/min, key lower/upper
+// bound). Each comes in a runtime-comparer flavor and a static IComparison<T> flavor.
+
+/// <summary>Locates the first element whose value reaches <paramref name="target"/> under
+/// <paramref name="comparer"/> (the max-priority front, or a key lower bound). Specified only over a sequence
+/// ordered by that comparer.</summary>
+/// <typeparam name="T">The value type carried by the <see cref="Optional{T}"/> measure.</typeparam>
+/// <param name="comparer">The order the sequence is arranged by.</param>
+/// <param name="target">The value to reach.</param>
+internal readonly struct OptionalAtLeastPredicate<T>(IComparer<T> comparer, T target) : IMeasurePredicate<Optional<T>>
+{
+    /// <inheritdoc/>
+    public bool Invoke(Optional<T> measure) => measure.HasValue && comparer.Compare(measure.Value, target) >= 0;
+}
+
+/// <summary>Locates the first element whose value is at most <paramref name="target"/> under
+/// <paramref name="comparer"/> (the min-priority front). Specified only over a sequence ordered by that
+/// comparer.</summary>
+/// <typeparam name="T">The value type carried by the <see cref="Optional{T}"/> measure.</typeparam>
+/// <param name="comparer">The order the sequence is arranged by.</param>
+/// <param name="target">The value to reach from above.</param>
+internal readonly struct OptionalAtMostPredicate<T>(IComparer<T> comparer, T target) : IMeasurePredicate<Optional<T>>
+{
+    /// <inheritdoc/>
+    public bool Invoke(Optional<T> measure) => measure.HasValue && comparer.Compare(measure.Value, target) <= 0;
+}
+
+/// <summary>Locates the first element whose value strictly exceeds <paramref name="key"/> under
+/// <paramref name="comparer"/> (a key upper bound). Specified only over a sequence sorted by that comparer.</summary>
+/// <typeparam name="T">The value type carried by the <see cref="Optional{T}"/> measure.</typeparam>
+/// <param name="comparer">The order the sequence is sorted by.</param>
+/// <param name="key">The search key.</param>
+internal readonly struct OptionalAbovePredicate<T>(IComparer<T> comparer, T key) : IMeasurePredicate<Optional<T>>
+{
+    /// <inheritdoc/>
+    public bool Invoke(Optional<T> measure) => measure.HasValue && comparer.Compare(measure.Value, key) > 0;
+}
+
+/// <summary>Static-comparison counterpart of <see cref="OptionalAtLeastPredicate{T}"/>.</summary>
+/// <typeparam name="T">The value type.</typeparam>
+/// <typeparam name="TComparison">The static order strategy.</typeparam>
+/// <param name="target">The value to reach.</param>
+internal readonly struct OptionalAtLeastPredicate<T, TComparison>(T target) : IMeasurePredicate<Optional<T>>
+    where TComparison : IComparison<T>
+{
+    /// <inheritdoc/>
+    public bool Invoke(Optional<T> measure) => measure.HasValue && TComparison.Compare(measure.Value, target) >= 0;
+}
+
+/// <summary>Static-comparison counterpart of <see cref="OptionalAtMostPredicate{T}"/>.</summary>
+/// <typeparam name="T">The value type.</typeparam>
+/// <typeparam name="TComparison">The static order strategy.</typeparam>
+/// <param name="target">The value to reach from above.</param>
+internal readonly struct OptionalAtMostPredicate<T, TComparison>(T target) : IMeasurePredicate<Optional<T>>
+    where TComparison : IComparison<T>
+{
+    /// <inheritdoc/>
+    public bool Invoke(Optional<T> measure) => measure.HasValue && TComparison.Compare(measure.Value, target) <= 0;
+}
+
+/// <summary>Static-comparison counterpart of <see cref="OptionalAbovePredicate{T}"/>.</summary>
+/// <typeparam name="T">The value type.</typeparam>
+/// <typeparam name="TComparison">The static order strategy.</typeparam>
+/// <param name="key">The search key.</param>
+internal readonly struct OptionalAbovePredicate<T, TComparison>(T key) : IMeasurePredicate<Optional<T>>
+    where TComparison : IComparison<T>
+{
+    /// <inheritdoc/>
+    public bool Invoke(Optional<T> measure) => measure.HasValue && TComparison.Compare(measure.Value, key) > 0;
+}
+
+/// <summary>Static-comparison lower-bound predicate over the key component of a <see cref="RankedKey{T}"/>
+/// (order-statistic) measure.</summary>
+/// <typeparam name="T">The key type.</typeparam>
+/// <typeparam name="TComparison">The static order strategy.</typeparam>
+/// <param name="key">The search key.</param>
+internal readonly struct RankedKeyAtLeastPredicate<T, TComparison>(T key) : IMeasurePredicate<RankedKey<T>>
+    where TComparison : IComparison<T>
+{
+    /// <inheritdoc/>
+    public bool Invoke(RankedKey<T> measure) => measure.Key.HasValue && TComparison.Compare(measure.Key.Value, key) >= 0;
+}
+
+/// <summary>Static-comparison upper-bound predicate over the key component of a <see cref="RankedKey{T}"/>
+/// (order-statistic) measure.</summary>
+/// <typeparam name="T">The key type.</typeparam>
+/// <typeparam name="TComparison">The static order strategy.</typeparam>
+/// <param name="key">The search key.</param>
+internal readonly struct RankedKeyAbovePredicate<T, TComparison>(T key) : IMeasurePredicate<RankedKey<T>>
+    where TComparison : IComparison<T>
+{
+    /// <inheritdoc/>
+    public bool Invoke(RankedKey<T> measure) => measure.Key.HasValue && TComparison.Compare(measure.Key.Value, key) > 0;
+}
+
+/// <summary>Locates the first prefix whose running count exceeds <paramref name="index"/> over a bare
+/// <see cref="int"/> size measure (the positional split of a size-component product).</summary>
+/// <param name="index">The zero-based positional boundary.</param>
+internal readonly struct IntAbovePredicate(int index) : IMeasurePredicate<int>
+{
+    /// <inheritdoc/>
+    public bool Invoke(int count) => count > index;
+}
+
+/// <summary>Locates the first prefix whose running total exceeds <paramref name="threshold"/> over a
+/// generic-numeric sum measure (cumulative-weight selection).</summary>
+/// <typeparam name="T">A numeric measure type.</typeparam>
+/// <param name="threshold">The cumulative-weight threshold.</param>
+internal readonly struct SumAbovePredicate<T>(T threshold) : IMeasurePredicate<T>
+    where T : IComparisonOperators<T, T, bool>
+{
+    /// <inheritdoc/>
+    public bool Invoke(T sum) => sum > threshold;
+}
+
+// ---- Product-measure component projectors ----------------------------------------------------------------
+// These lift a value-type predicate over one component of a MeasurePair to a value-type predicate over the
+// whole pair, so the product-measure named ops (and caller-supplied struct predicates) stay closure-free.
+
+/// <summary>Projects a value-type predicate onto the <em>first</em> component of a
+/// <see cref="MeasurePair{TFirst, TSecond}"/>.</summary>
+/// <typeparam name="TInner">The inner value-type predicate over the first component.</typeparam>
+/// <typeparam name="TFirst">First component measure type.</typeparam>
+/// <typeparam name="TSecond">Second component measure type.</typeparam>
+/// <param name="inner">The predicate evaluated against the first component.</param>
+internal readonly struct FirstComponentPredicate<TInner, TFirst, TSecond>(TInner inner)
+    : IMeasurePredicate<MeasurePair<TFirst, TSecond>>
+    where TInner : struct, IMeasurePredicate<TFirst>
+{
+    /// <inheritdoc/>
+    public bool Invoke(MeasurePair<TFirst, TSecond> measure) => inner.Invoke(measure.First);
+}
+
+/// <summary>Projects a value-type predicate onto the <em>second</em> component of a
+/// <see cref="MeasurePair{TFirst, TSecond}"/>.</summary>
+/// <typeparam name="TInner">The inner value-type predicate over the second component.</typeparam>
+/// <typeparam name="TFirst">First component measure type.</typeparam>
+/// <typeparam name="TSecond">Second component measure type.</typeparam>
+/// <param name="inner">The predicate evaluated against the second component.</param>
+internal readonly struct SecondComponentPredicate<TInner, TFirst, TSecond>(TInner inner)
+    : IMeasurePredicate<MeasurePair<TFirst, TSecond>>
+    where TInner : struct, IMeasurePredicate<TSecond>
+{
+    /// <inheritdoc/>
+    public bool Invoke(MeasurePair<TFirst, TSecond> measure) => inner.Invoke(measure.Second);
 }
