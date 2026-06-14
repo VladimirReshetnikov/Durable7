@@ -313,9 +313,15 @@ public sealed class MeasuredRope<T, TMeasure, TMeasureOps> : IReadOnlyList<T>
     public (MeasuredRope<T, TMeasure, TMeasureOps> Left, MeasuredRope<T, TMeasure, TMeasureOps> Right) SplitByMeasure(Func<TMeasure, bool> predicate)
     {
         ArgumentNullException.ThrowIfNull(predicate);
-        if (!_tree.TrySplitFind(
-                new SecondComponentPredicate<FuncMeasurePredicate<TMeasure>, int, TMeasure>(new FuncMeasurePredicate<TMeasure>(predicate)),
-                out var left, out var chunk, out var right))
+        return SplitByMeasure(new FuncMeasurePredicate<TMeasure>(predicate));
+    }
+
+    /// <summary>Value-type-predicate overload of <see cref="SplitByMeasure(Func{TMeasure, bool})"/>: splits with
+    /// no delegate allocation, including the within-chunk scan, so a hot split path is fully closure-free. O(log n).</summary>
+    public (MeasuredRope<T, TMeasure, TMeasureOps> Left, MeasuredRope<T, TMeasure, TMeasureOps> Right) SplitByMeasure<TPredicate>(TPredicate predicate)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>
+    {
+        if (!_tree.TrySplitFind(new SecondComponentPredicate<TPredicate, int, TMeasure>(predicate), out var left, out var chunk, out var right))
             return (this, EmptyInstance);
 
         var offset = ChunkSplitOffset(chunk, left.Measure.Second, predicate);
@@ -338,9 +344,15 @@ public sealed class MeasuredRope<T, TMeasure, TMeasureOps> : IReadOnlyList<T>
     public bool TryLocateByMeasure(Func<TMeasure, bool> predicate, out int index, out TMeasure measureBefore, [MaybeNullWhen(false)] out T element)
     {
         ArgumentNullException.ThrowIfNull(predicate);
-        if (!_tree.TryLocate(
-                new SecondComponentPredicate<FuncMeasurePredicate<TMeasure>, int, TMeasure>(new FuncMeasurePredicate<TMeasure>(predicate)),
-                out var before, out var chunk))
+        return TryLocateByMeasure(new FuncMeasurePredicate<TMeasure>(predicate), out index, out measureBefore, out element);
+    }
+
+    /// <summary>Value-type-predicate overload of <see cref="TryLocateByMeasure(Func{TMeasure, bool}, out int, out
+    /// TMeasure, out T)"/>: locates with no delegate allocation, including the within-chunk scan. O(log n).</summary>
+    public bool TryLocateByMeasure<TPredicate>(TPredicate predicate, out int index, out TMeasure measureBefore, [MaybeNullWhen(false)] out T element)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>
+    {
+        if (!_tree.TryLocate(new SecondComponentPredicate<TPredicate, int, TMeasure>(predicate), out var before, out var chunk))
         {
             index = Count;
             measureBefore = _tree.Measure.Second;
@@ -465,14 +477,15 @@ public sealed class MeasuredRope<T, TMeasure, TMeasureOps> : IReadOnlyList<T>
 
     // Scans a chunk for the first offset at which the accumulated measure (starting from accBefore) satisfies the
     // predicate; that element is the split boundary. The caller guarantees some element in the chunk flips it.
-    private static int ChunkSplitOffset(MeasuredChunk<T, TMeasure, TMeasureOps> chunk, TMeasure accBefore, Func<TMeasure, bool> predicate)
+    private static int ChunkSplitOffset<TPredicate>(MeasuredChunk<T, TMeasure, TMeasureOps> chunk, TMeasure accBefore, TPredicate predicate)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>
     {
         var acc = accBefore;
         var span = chunk.Chunk.Data.Span;
         for (var offset = 0; offset < span.Length; offset++)
         {
             acc = TMeasureOps.Combine(acc, TMeasureOps.Measure(span[offset]));
-            if (predicate(acc))
+            if (predicate.Invoke(acc))
                 return offset;
         }
 

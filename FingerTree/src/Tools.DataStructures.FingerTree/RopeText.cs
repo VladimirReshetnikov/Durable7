@@ -123,7 +123,7 @@ public static class RopeText
             return 0;
         // The character after the `line`-th newline starts line `line`. The range guard above guarantees the
         // `line`-th newline exists, so the locate always succeeds; the throw documents that invariant.
-        if (!rope.TryLocateByMeasure(newlines => newlines >= line, out var index, out _, out _))
+        if (!rope.TryLocateByMeasure(new NewlineAtLeastPredicate(line), out var index, out _, out _))
             throw new InvalidOperationException("Inconsistent rope: the requested line's starting newline was not found.");
         return index + 1;
     }
@@ -189,6 +189,13 @@ public static class RopeText
         }
 
         yield return builder.ToString();   // the final line (always present, possibly empty)
+    }
+
+    /// <summary>A value-type predicate locating the first position whose accumulated newline count reaches a
+    /// target line, so <see cref="LineStartOffset"/> navigates with no delegate allocation.</summary>
+    private readonly struct NewlineAtLeastPredicate(int line) : IMeasurePredicate<int>
+    {
+        public bool Invoke(int newlines) => newlines >= line;
     }
 
     /// <summary>A forward-only <see cref="TextReader"/> over a character rope's enumerator.</summary>
