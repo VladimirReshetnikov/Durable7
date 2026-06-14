@@ -193,7 +193,43 @@ public sealed class ModelBasedCommandTests
                 (m, raw) => { var i = raw % (m.Count + 1); m.RemoveRange(i, m.Count - i); }),
         };
 
-        initial.SampleModelBased(operations, (b, m) => b.Value.ToArray().SequenceEqual(m), iter: 200);
+        initial.SampleModelBased(
+            operations,
+            (b, m) =>
+            {
+                if (!b.Value.ToArray().SequenceEqual(m))
+                    return false;
+
+                // For the size measure, `measured > k` locates the element at index k, so TryLocate/TrySplitFind
+                // should find m[k] with k elements before it. Sample a handful of positions plus the just-past-end
+                // boundary (where both must report no hit) to keep the per-step cost linear.
+                var count = m.Count;
+                foreach (var k in new[] { 0, count / 4, count / 2, 3 * count / 4, count - 1, count }.Distinct())
+                {
+                    if (k < 0)
+                        continue;
+
+                    var located = b.Value.TryLocate(measured => measured > k, out var measureBefore, out var found);
+                    var split = b.Value.TrySplitFind(measured => measured > k, out var left, out var hit, out var right);
+
+                    if (k < count)
+                    {
+                        if (!located || measureBefore != k || found != m[k])
+                            return false;
+                        if (!split || hit != m[k]
+                            || !left.ToArray().SequenceEqual(m.Take(k))
+                            || !right.ToArray().SequenceEqual(m.Skip(k + 1)))
+                            return false;
+                    }
+                    else if (located || split)
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            },
+            iter: 200);
     }
 
     /// <summary>
@@ -295,13 +331,36 @@ public sealed class ModelBasedCommandTests
             {
                 if (b.Value.Count != m.Count)
                     return false;
+                var sorted = m.ToArray();   // BCL set enumerates in sorted order
                 var actual = new int[b.Value.Count];
                 for (var i = 0; i < actual.Length; i++)
                     actual[i] = b.Value[i];
-                return actual.SequenceEqual(m);
+                if (!actual.SequenceEqual(sorted))
+                    return false;
+
+                for (var v = -31; v <= 31; v++)
+                {
+                    var present = m.Contains(v);
+                    if (b.Value.Contains(v) != present)
+                        return false;
+                    if (present && b.Value.IndexOf(v) != sorted.Count(x => x < v))
+                        return false;
+                    if (!NeighborMatches(sorted.Where(x => x <= v).LastOrNull(), b.Value.TryFloor(v, out var floor), floor)
+                        || !NeighborMatches(sorted.Where(x => x >= v).FirstOrNull(), b.Value.TryCeiling(v, out var ceil), ceil)
+                        || !NeighborMatches(sorted.Where(x => x < v).LastOrNull(), b.Value.TryLower(v, out var low), low)
+                        || !NeighborMatches(sorted.Where(x => x > v).FirstOrNull(), b.Value.TryHigher(v, out var high), high))
+                        return false;
+                }
+
+                return true;
             },
             iter: 200);
     }
+
+    /// <summary>Returns whether a navigable-query result (presence flag and value) matches the model's expected
+    /// neighbor (present iff <paramref name="expected"/> has a value, and equal when present).</summary>
+    private static bool NeighborMatches(int? expected, bool found, int actual) =>
+        expected.HasValue == found && (!expected.HasValue || expected.Value == actual);
 
     /// <summary>
     /// Replays generated command sequences against the deque's order-maintaining sorted surface
@@ -340,11 +399,28 @@ public sealed class ModelBasedCommandTests
                     return false;
                 for (var v = -1; v <= 21; v++)
                 {
-                    if (b.Value.SortedContains(v) != sorted.Contains(v))
+                    var lower = sorted.Count(x => x < v);    // SortedLowerBound: first index >= v
+                    var upper = sorted.Count(x => x <= v);   // SortedUpperBound: first index > v
+                    var present = upper > lower;
+
+                    if (b.Value.SortedContains(v) != present
+                        || b.Value.SortedLowerBound(v) != lower
+                        || b.Value.SortedUpperBound(v) != upper
+                        || b.Value.SortedBinarySearch(v) != (present ? lower : ~lower))
                         return false;
-                    if (b.Value.SortedLowerBound(v) != sorted.Count(x => x < v))
+
+                    var atLower = b.Value.SplitAtSortedLowerBound(v);
+                    if (!atLower.Left.SequenceEqual(sorted.Take(lower)) || !atLower.Right.SequenceEqual(sorted.Skip(lower)))
                         return false;
-                    if (b.Value.SortedUpperBound(v) != sorted.Count(x => x <= v))
+
+                    var atUpper = b.Value.SplitAtSortedUpperBound(v);
+                    if (!atUpper.Left.SequenceEqual(sorted.Take(upper)) || !atUpper.Right.SequenceEqual(sorted.Skip(upper)))
+                        return false;
+
+                    var equalRange = b.Value.SplitAtSortedEqualRange(v);
+                    if (!equalRange.Before.SequenceEqual(sorted.Take(lower))
+                        || !equalRange.Range.SequenceEqual(sorted.Skip(lower).Take(upper - lower))
+                        || !equalRange.After.SequenceEqual(sorted.Skip(upper)))
                         return false;
                 }
 
