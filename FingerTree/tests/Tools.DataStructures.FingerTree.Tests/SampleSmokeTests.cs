@@ -40,13 +40,20 @@ public sealed class SampleSmokeTests
         ShowcaseProgram.Run(writer);
 
         var transcript = writer.ToString();
-        Assert.Contains("hotfix(0), alert(1), build(2), deploy(3), report(4), backup(5)", transcript);
-        Assert.Contains("Act 2 - Weighted random sampling", transcript);
-        Assert.Contains("overlapping [2,4]", transcript);
+        Assert.Contains("hotfix(0), alert(1), build(2), deploy(3), report(4), backup(5)", transcript);   // Act 1
+        // Act 2 (weighted sampling): expected % is deterministic from the weights; sampled % is deterministic
+        // from the seeded RNG, so these also guard the cumulative-weight selection logic.
+        Assert.Contains("apple  weight 5 ( 50.0% expected) -> sampled  50.1%", transcript);
+        Assert.Contains("fig    weight 1 ( 10.0% expected) -> sampled   9.8%", transcript);
+        // Act 3 (order statistics): deterministic integer results from the seeded set.
+        Assert.Contains("min 15, median 56, max 97", transcript);
+        Assert.Contains("rank of median 56  : index 7", transcript);
+        Assert.Contains("|A union B| = 27,  |A intersect B| = 2", transcript);
+        Assert.Contains("overlapping [2,4]", transcript);                                                  // Act 4
         Assert.Contains("[1,5], [3,8]", transcript);
-        Assert.Contains("reversed : 8 7 6 5 4 3 2 1", transcript);   // O(1) reverse
-        Assert.Contains("40 -> forty", transcript);                 // floor(50)
-        Assert.Contains("55 -> fifty-five", transcript);            // ceiling(50)
+        Assert.Contains("reversed : 8 7 6 5 4 3 2 1", transcript);                                         // Act 5 (O(1) reverse)
+        Assert.Contains("40 -> forty", transcript);                                                       // Act 6 floor(50)
+        Assert.Contains("55 -> fifty-five", transcript);                                                  // Act 6 ceiling(50)
         Assert.Contains("Done.", transcript);
     }
 }

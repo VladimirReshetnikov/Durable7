@@ -61,8 +61,8 @@ public static class ShowcaseProgram
                 counts[index]++;
 
         for (var i = 0; i < weights.Length; i++)
-            output.WriteLine(
-                $"  {names[i],-6} weight {weights[i]} ({100.0 * weights[i] / total,5:0.0}% expected) -> sampled {100.0 * counts[i] / draws,5:0.0}%");
+            output.WriteLine(FormattableString.Invariant(   // invariant so the percentages read the same in any culture
+                $"  {names[i],-6} weight {weights[i]} ({100.0 * weights[i] / total,5:0.0}% expected) -> sampled {100.0 * counts[i] / draws,5:0.0}%"));
         output.WriteLine();
     }
 
