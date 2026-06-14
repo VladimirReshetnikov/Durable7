@@ -108,4 +108,71 @@ public sealed class AllocationFreeReadTests
 
         Assert.True(bytes < Budget, $"PriorityQueue/IntervalTree reads allocated {bytes} bytes over the loop (sink={sink}).");
     }
+
+    /// <summary>Verifies the peek named operations (now routed through struct predicates / the memoized measure)
+    /// read with no allocation, for both the bare max/min measures and the size+max / size+min products.</summary>
+    [Fact]
+    public void MeasureExtensionPeeks_AllocateNothing()
+    {
+        var maxTree = FingerTree<int, Optional<int>, MaxMeasure<int>>.CreateRange(Enumerable.Range(0, 1 << 13).Select(i => (i * 31) % 1000));
+        var minTree = FingerTree<int, Optional<int>, MinMeasure<int>>.CreateRange(Enumerable.Range(0, 1 << 13).Select(i => (i * 17) % 1000));
+        var sizeMax = ProductMeasures.CreateSizeAndMaxRange(Enumerable.Range(0, 1 << 13).Select(i => (i * 13) % 1000));
+        var sizeMin = ProductMeasures.CreateSizeAndMinRange(Enumerable.Range(0, 1 << 13).Select(i => (i * 7) % 1000));
+        var sink = 0;
+        var bytes = MeasureLoop(_ =>
+        {
+            if (maxTree.TryPeekMax(out var mx)) sink += mx;
+            if (minTree.TryPeekMin(out var mn)) sink += mn;
+            if (sizeMax.TryPeekMax(out var smx)) sink += smx;
+            if (sizeMin.TryPeekMin(out var smn)) sink += smn;
+        }, 2000);
+
+        Assert.True(bytes < Budget, $"Peek ops allocated {bytes} bytes over the loop (sink={sink}).");
+    }
+
+    /// <summary>Verifies the measured rope's value-type-predicate locate runs fully closure-free, including the
+    /// within-chunk scan — the headline of the fully-closure-free measure navigation.</summary>
+    [Fact]
+    public void MeasuredRopeLocateByMeasure_AllocatesNothing()
+    {
+        var rope = string.Concat(Enumerable.Range(0, 4000).Select(i => $"line {i}\n")).ToTextRope();
+        var lineCount = rope.LineCount();
+        var sink = 0;
+        var bytes = MeasureLoop(i =>
+        {
+            if (rope.TryLocateByMeasure(new MeasureAtLeast(i % lineCount), out var index, out var before, out var ch))
+                sink += index + before + ch;
+        }, 2000);
+
+        Assert.True(bytes < Budget, $"MeasuredRope locate allocated {bytes} bytes over the loop (sink={sink}).");
+    }
+
+    /// <summary>Verifies RopeText line/column navigation reads allocate nothing now that LineStartOffset is
+    /// closure-free (GetLine, which materializes a string, is intentionally excluded).</summary>
+    [Fact]
+    public void RopeTextLineNavigation_AllocatesNothing()
+    {
+        var rope = string.Concat(Enumerable.Range(0, 4000).Select(i => $"line {i}\n")).ToTextRope();
+        var count = rope.Count;
+        var lineCount = rope.LineCount();
+        var sink = 0;
+        var bytes = MeasureLoop(i =>
+        {
+            var offset = i % (count + 1);
+            sink += rope.LineOfOffset(offset);
+            var (line, column) = rope.LineColumnOf(offset);
+            sink += line + column;
+            var lineIndex = i % lineCount;
+            sink += rope.LineStartOffset(lineIndex);
+            sink += rope.OffsetOf(lineIndex, 0);
+        }, 2000);
+
+        Assert.True(bytes < Budget, $"RopeText navigation allocated {bytes} bytes over the loop (sink={sink}).");
+    }
+
+    /// <summary>A value-type predicate over an <see cref="int"/> measure, driving a closure-free locate.</summary>
+    private readonly struct MeasureAtLeast(int target) : IMeasurePredicate<int>
+    {
+        public bool Invoke(int measure) => measure >= target;
+    }
 }
