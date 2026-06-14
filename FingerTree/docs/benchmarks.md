@@ -177,6 +177,20 @@ insert; and `string` random indexing is O(1) versus the rope's O(log n). The rop
 versus `string`/`StringBuilder`, on build throughput, and on bulk range operations — which is exactly the
 text-editor / large-buffer workload it is meant for.
 
+### Line navigation (measured rope)
+
+`MeasuredRope<char, int, NewlineMeasure>` navigates by line in O(log n) by descending its cached newline measure,
+where a plain `string` must scan. For a document of 1,000,000 lines:
+
+| Line query (1,000,000 lines) | `MeasuredRope` | `string` scan | Speedup |
+|------------------------------|---------------:|--------------:|--------:|
+| offset → line index          | 1,012 ns | 3,493,972 ns | ~3,450× |
+| line → start offset          | 1,691 ns | 3,469,608 ns | ~2,050× |
+
+The rope's line lookups are flat across sizes (O(log n); ~0.3–2.7 µs from 10,000 to 1,000,000 lines) while the
+scans grow linearly (O(n)) — microseconds versus milliseconds. This is the measured-rope payoff: a line-aware
+text buffer that answers offset↔line queries on a million-line document in microseconds.
+
 ## Takeaways
 
 - **O(1) `Reverse`** and **O(log(min)) `Meld`** are the standout structural wins (millions-fold and ~750–900×).
@@ -190,5 +204,7 @@ text-editor / large-buffer workload it is meant for.
   from 100 to 1,000,000 — so the amortized bounds survive branching, and the derived collections inherit it.
 - **Rope editing** of a 1,000,000-element buffer is ~230–330× faster than `string` (and allocates kilobytes, not
   megabytes), with edit times flat across sizes (O(log n)) — the persistent-text-buffer payoff.
+- **Measured-rope line navigation** answers offset↔line queries on a 1,000,000-line document in ~1–2 µs versus a
+  ~3.5 ms `string` scan (~2,000–3,450×), flat across sizes (O(log n)).
 - The finger tree trades a constant-factor read overhead for persistence, structural sharing, and a single
   unified core behind a whole family of collections.
