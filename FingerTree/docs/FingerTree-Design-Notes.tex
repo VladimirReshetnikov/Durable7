@@ -256,6 +256,39 @@ pushes just extend a non-full digit in $\bigO(1)$.}
 \label{fig:repair}
 \end{figure}
 
+\paragraph{Pull repair --- the dual on removal.}
+Removal is the mirror image. Popping an element from a digit that still holds two or more elements is
+$\bigO(1)$. Popping the sole element of a one-element digit \emph{underflows}: the node pulls the nearest
+node up out of the middle subtree and unpacks it into a fresh digit (Figure~\ref{fig:pull}). As with push,
+the only non-constant work is the descent into the middle, and the freshly refilled digit banks the next
+several cheap pops --- the same amortization, running backwards. When the middle is empty the node instead
+borrows from the opposite digit, degrading gracefully toward the single/empty base cases.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[>=stealth, font=\footnotesize,
+  cl/.style={draw, minimum size=6.5mm, inner sep=0pt},
+  one/.style={cl, fill=red!12},
+  ok/.style={cl, fill=green!14},
+  nd/.style={draw, rounded corners=2pt, fill=blue!10, minimum height=6.5mm, inner xsep=5pt}]
+  \node[anchor=east, font=\scriptsize] at (-0.35,0) {pop $a$:};
+  \node[one] (a) at (0.15,0) {$a$};
+  \node[font=\scriptsize, anchor=west] at (a.east) {\;\;prefix holds one element};
+  \node[nd] (n3) at (4.7,0) {$(p\;\;q\;\;r)$};
+  \node[font=\scriptsize, anchor=west] at (n3.east) {\;\;front of the middle};
+  \node[anchor=east, font=\scriptsize] at (-0.35,-1.8) {becomes:};
+  \node[ok] (p) at (0.15,-1.8) {$p$};
+  \node[ok, right=0pt of p] (q) {$q$};
+  \node[ok, right=0pt of q] (r) {$r$};
+  \node[font=\scriptsize, anchor=west] at (r.east) {\;\;new prefix (3)};
+  \draw[->, orange!70!black] (n3.south west) to[bend left=22] (q.north east);
+\end{tikzpicture}
+\caption{Pull repair, the dual of Figure~\ref{fig:repair}. Popping the sole element of a one-element prefix
+pulls the front node $(p,q,r)$ up out of the middle and unpacks it into a fresh three-element prefix; only
+the (rare) underflow descends into the middle.}
+\label{fig:pull}
+\end{figure}
+
 \paragraph{Concatenation --- merging two spines.}
 Concatenating two trees keeps the left tree's prefix and the right tree's suffix; the left suffix and the
 right prefix are regrouped into nodes and folded into a single recursive concatenation of the two middles
