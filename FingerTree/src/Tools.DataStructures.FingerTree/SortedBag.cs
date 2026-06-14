@@ -119,7 +119,7 @@ public sealed class SortedBag<T> : IReadOnlyCollection<T>
     /// <returns>A bag containing the added element.</returns>
     public SortedBag<T> Add(T item)
     {
-        var (atMost, greater) = _tree.Split(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) > 0);
+        var (atMost, greater) = _tree.Split(new KeyAbovePredicate<T>(_comparer, item));
         return Wrap(atMost.Append(item).Concat(greater));
     }
 
@@ -172,7 +172,7 @@ public sealed class SortedBag<T> : IReadOnlyCollection<T>
     /// <returns><see langword="true"/> when an element was removed; otherwise <see langword="false"/>.</returns>
     public bool TryRemove(T item, out SortedBag<T> result)
     {
-        var (less, atLeast) = _tree.Split(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) >= 0);
+        var (less, atLeast) = _tree.Split(new KeyAtLeastPredicate<T>(_comparer, item));
         if (atLeast.TryViewLeft(out var head, out var tail) && _comparer.Compare(head, item) == 0)
         {
             result = Wrap(less.Concat(tail));
@@ -193,8 +193,8 @@ public sealed class SortedBag<T> : IReadOnlyCollection<T>
     /// <returns>A bag with every equal element removed.</returns>
     public SortedBag<T> RemoveAll(T item)
     {
-        var (less, atLeast) = _tree.Split(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) >= 0);
-        var (_, greater) = atLeast.Split(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) > 0);
+        var (less, atLeast) = _tree.Split(new KeyAtLeastPredicate<T>(_comparer, item));
+        var (_, greater) = atLeast.Split(new KeyAbovePredicate<T>(_comparer, item));
         return Wrap(less.Concat(greater));
     }
 
@@ -206,8 +206,8 @@ public sealed class SortedBag<T> : IReadOnlyCollection<T>
     /// <returns>A bag of the in-range elements (empty when <paramref name="low"/> exceeds <paramref name="high"/>).</returns>
     public SortedBag<T> GetRange(T low, T high)
     {
-        var (_, atLeast) = _tree.Split(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, low) >= 0);
-        var (inRange, _) = atLeast.Split(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, high) > 0);
+        var (_, atLeast) = _tree.Split(new KeyAtLeastPredicate<T>(_comparer, low));
+        var (inRange, _) = atLeast.Split(new KeyAbovePredicate<T>(_comparer, high));
         return Wrap(inRange);
     }
 

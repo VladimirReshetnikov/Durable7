@@ -72,3 +72,30 @@ internal readonly struct MaxHighAtLeastPredicate<T>(IComparer<T> comparer, T low
     public bool Invoke(IntervalAnnotation<T> measure) =>
         measure.MaxHigh.HasValue && comparer.Compare(measure.MaxHigh.Value, low) >= 0;
 }
+
+/// <summary>Splits an interval tree at the first interval whose last (rightmost) low endpoint reaches
+/// <paramref name="low"/> under <paramref name="comparer"/> — the insertion/removal boundary in low-endpoint
+/// order.</summary>
+/// <typeparam name="T">The endpoint type.</typeparam>
+/// <param name="comparer">The endpoint order.</param>
+/// <param name="low">The reference low endpoint.</param>
+internal readonly struct LastLowAtLeastPredicate<T>(IComparer<T> comparer, T low)
+    : IMeasurePredicate<IntervalAnnotation<T>>
+{
+    /// <inheritdoc/>
+    public bool Invoke(IntervalAnnotation<T> measure) =>
+        measure.LastLow.HasValue && comparer.Compare(measure.LastLow.Value, low) >= 0;
+}
+
+/// <summary>Splits an interval tree at the first interval whose last (rightmost) low endpoint exceeds
+/// <paramref name="low"/> under <paramref name="comparer"/> — the upper end of a low-endpoint range.</summary>
+/// <typeparam name="T">The endpoint type.</typeparam>
+/// <param name="comparer">The endpoint order.</param>
+/// <param name="low">The reference low endpoint.</param>
+internal readonly struct LastLowAbovePredicate<T>(IComparer<T> comparer, T low)
+    : IMeasurePredicate<IntervalAnnotation<T>>
+{
+    /// <inheritdoc/>
+    public bool Invoke(IntervalAnnotation<T> measure) =>
+        measure.LastLow.HasValue && comparer.Compare(measure.LastLow.Value, low) > 0;
+}

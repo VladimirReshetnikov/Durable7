@@ -82,11 +82,14 @@ internal abstract class MeasuredTree<TElement, TChild, TMeasure, TMonoid>
     /// Splits a non-empty tree at the element where <paramref name="predicate"/>, applied to the measure
     /// accumulated from the left (starting at <paramref name="accumulator"/>), first becomes true.
     /// </summary>
+    /// <typeparam name="TPredicate">A value-type monotone predicate; passed by the constrained generic so the
+    /// descent allocates no closure.</typeparam>
     /// <param name="predicate">Monotone predicate (false then true) over the accumulated measure.</param>
     /// <param name="accumulator">Measure of everything to the left of this tree.</param>
     /// <returns>The elements before the hit, the hit element, and the elements after it.</returns>
     public abstract (MeasuredTree<TElement, TChild, TMeasure, TMonoid> Left, TChild Hit, MeasuredTree<TElement, TChild, TMeasure, TMonoid> Right)
-        SplitTree(Func<TMeasure, bool> predicate, TMeasure accumulator);
+        SplitTree<TPredicate>(TPredicate predicate, TMeasure accumulator)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>;
 
     /// <summary>
     /// Locates, without reconstructing any subtree, the element where <paramref name="predicate"/> over the
@@ -171,15 +174,16 @@ internal abstract class MeasuredTree<TElement, TChild, TMeasure, TMonoid>
     /// <param name="predicate">Monotone predicate.</param>
     /// <param name="accumulator">Measure to the left of the buffer.</param>
     /// <param name="values">The buffer to split.</param>
-    private protected static (TChild[] Before, TChild Hit, TChild[] After) SplitBuffer(
-        Func<TMeasure, bool> predicate,
+    private protected static (TChild[] Before, TChild Hit, TChild[] After) SplitBuffer<TPredicate>(
+        TPredicate predicate,
         TMeasure accumulator,
         TChild[] values)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>
     {
         for (var i = 0; i < values.Length - 1; i++)
         {
             accumulator = TMonoid.Combine(accumulator, values[i].Measure);
-            if (predicate(accumulator))
+            if (predicate.Invoke(accumulator))
                 return (values[..i], values[i], values[(i + 1)..]);
         }
 

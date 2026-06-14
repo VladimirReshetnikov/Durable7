@@ -58,7 +58,7 @@ internal sealed class EmptyMeasuredTree<TElement, TChild, TMeasure, TMonoid>
 
     /// <inheritdoc/>
     public override (MeasuredTree<TElement, TChild, TMeasure, TMonoid> Left, TChild Hit, MeasuredTree<TElement, TChild, TMeasure, TMonoid> Right)
-        SplitTree(Func<TMeasure, bool> predicate, TMeasure accumulator) =>
+        SplitTree<TPredicate>(TPredicate predicate, TMeasure accumulator) =>
         throw EmptyAccess();
 
     /// <inheritdoc/>
@@ -124,7 +124,7 @@ internal sealed class SingleMeasuredTree<TElement, TChild, TMeasure, TMonoid>(TC
 
     /// <inheritdoc/>
     public override (MeasuredTree<TElement, TChild, TMeasure, TMonoid> Left, TChild Hit, MeasuredTree<TElement, TChild, TMeasure, TMonoid> Right)
-        SplitTree(Func<TMeasure, bool> predicate, TMeasure accumulator) =>
+        SplitTree<TPredicate>(TPredicate predicate, TMeasure accumulator) =>
         (Empty, Element, Empty);
 
     /// <inheritdoc/>
@@ -300,10 +300,10 @@ internal sealed class DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>
 
     /// <inheritdoc/>
     public override (MeasuredTree<TElement, TChild, TMeasure, TMonoid> Left, TChild Hit, MeasuredTree<TElement, TChild, TMeasure, TMonoid> Right)
-        SplitTree(Func<TMeasure, bool> predicate, TMeasure accumulator)
+        SplitTree<TPredicate>(TPredicate predicate, TMeasure accumulator)
     {
         var beforeMiddle = TMonoid.Combine(accumulator, CombineAll(Prefix));
-        if (predicate(beforeMiddle))
+        if (predicate.Invoke(beforeMiddle))
         {
             var (before, hit, after) = SplitBuffer(predicate, accumulator, Prefix);
             return (FromBuffer(before), hit, DeepLeft(after, ForceMiddle(), Suffix));
@@ -311,7 +311,7 @@ internal sealed class DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>
 
         var middle = ForceMiddle();
         var afterMiddle = TMonoid.Combine(beforeMiddle, middle.Measure);
-        if (predicate(afterMiddle))
+        if (predicate.Invoke(afterMiddle))
         {
             var (middleLeft, node, middleRight) = middle.SplitTree(predicate, beforeMiddle);
             var accBeforeNode = TMonoid.Combine(beforeMiddle, middleLeft.Measure);

@@ -185,7 +185,22 @@ public sealed class FingerTree<TElement, TMeasure, TMeasureOps>
         Split(Func<TMeasure, bool> predicate)
     {
         ArgumentNullException.ThrowIfNull(predicate);
-        if (_root.IsEmpty || !predicate(_root.Measure))
+        return Split(new FuncMeasurePredicate<TMeasure>(predicate));
+    }
+
+    /// <summary>
+    /// Splits the tree using a value-type predicate instead of a delegate, so the split builds its result trees
+    /// without also allocating a predicate closure. Otherwise identical to
+    /// <see cref="Split(Func{TMeasure, bool})"/>.
+    /// </summary>
+    /// <typeparam name="TPredicate">A value-type monotone predicate over the measure.</typeparam>
+    /// <param name="predicate">The monotone split predicate.</param>
+    /// <returns>The longest prefix not satisfying <paramref name="predicate"/>, and the remaining suffix.</returns>
+    public (FingerTree<TElement, TMeasure, TMeasureOps> Left, FingerTree<TElement, TMeasure, TMeasureOps> Right)
+        Split<TPredicate>(TPredicate predicate)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>
+    {
+        if (_root.IsEmpty || !predicate.Invoke(_root.Measure))
             return (this, EmptyInstance);
 
         var (left, hit, right) = _root.SplitTree(predicate, TMeasureOps.Empty);
@@ -227,7 +242,28 @@ public sealed class FingerTree<TElement, TMeasure, TMeasureOps>
         out FingerTree<TElement, TMeasure, TMeasureOps> right)
     {
         ArgumentNullException.ThrowIfNull(predicate);
-        if (_root.IsEmpty || !predicate(_root.Measure))
+        return TrySplitFind(new FuncMeasurePredicate<TMeasure>(predicate), out left, out found, out right);
+    }
+
+    /// <summary>
+    /// Splits around the boundary element using a value-type predicate instead of a delegate, so no predicate
+    /// closure is allocated. Otherwise identical to
+    /// <see cref="TrySplitFind(Func{TMeasure, bool}, out FingerTree{TElement, TMeasure, TMeasureOps}, out TElement, out FingerTree{TElement, TMeasure, TMeasureOps})"/>.
+    /// </summary>
+    /// <typeparam name="TPredicate">A value-type monotone predicate over the measure.</typeparam>
+    /// <param name="predicate">The monotone split predicate.</param>
+    /// <param name="left">Elements before the boundary element.</param>
+    /// <param name="found">The boundary element when one exists; otherwise <see langword="default"/>.</param>
+    /// <param name="right">Elements after the boundary element.</param>
+    /// <returns><see langword="true"/> when a boundary element exists; otherwise <see langword="false"/>.</returns>
+    public bool TrySplitFind<TPredicate>(
+        TPredicate predicate,
+        out FingerTree<TElement, TMeasure, TMeasureOps> left,
+        out TElement found,
+        out FingerTree<TElement, TMeasure, TMeasureOps> right)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>
+    {
+        if (_root.IsEmpty || !predicate.Invoke(_root.Measure))
         {
             left = this;
             found = default!;

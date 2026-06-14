@@ -316,7 +316,7 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
     public SortedDictionary<TKey, TValue> GetRange(TKey low, TKey high)
     {
         var (_, atLeast) = SplitAtLeast(low);
-        var (inRange, _) = atLeast.Split(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, high) > 0);
+        var (inRange, _) = atLeast.Split(new KeyAbovePredicate<TKey>(_comparer, high));
         return Wrap(inRange);
     }
 
@@ -333,7 +333,7 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
     private (FingerTree<KeyValuePair<TKey, TValue>, RankedKey<TKey>, EntryMeasure<TKey, TValue>> Less,
         FingerTree<KeyValuePair<TKey, TValue>, RankedKey<TKey>, EntryMeasure<TKey, TValue>> AtLeast)
         SplitAtLeast(TKey key) =>
-        _tree.Split(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, key) >= 0);
+        _tree.Split(new KeyAtLeastPredicate<TKey>(_comparer, key));
 
     /// <summary>Reads the entry at rank <paramref name="rank"/> without reconstructing a subtree. O(log n).</summary>
     /// <param name="rank">A zero-based rank known to be in <c>0 .. Count - 1</c>.</param>

@@ -98,6 +98,34 @@ public sealed class TryLocateTests
         Assert.True(sink != int.MinValue);
     }
 
+    /// <summary>
+    /// Verifies the public generic struct-predicate <c>Split</c>/<c>TrySplitFind</c> overloads produce exactly
+    /// the same halves and boundary element as the delegate overloads, across every threshold.
+    /// </summary>
+    [Fact]
+    public void StructPredicateSplit_MatchesDelegateSplit()
+    {
+        var tree = FingerTree<int, int, SizeMeasure<int>>.CreateRange(Enumerable.Range(0, 60));
+
+        for (var k = -1; k <= 61; k++)
+        {
+            var (fl, fr) = tree.Split(m => m >= k);
+            var (sl, sr) = tree.Split(new AtLeastSum(k));
+            Assert.Equal(fl.ToArray(), sl.ToArray());
+            Assert.Equal(fr.ToArray(), sr.ToArray());
+
+            var delegateFound = tree.TrySplitFind(m => m >= k, out var fLeft, out var fHit, out var fRight);
+            var structFound = tree.TrySplitFind(new AtLeastSum(k), out var sLeft, out var sHit, out var sRight);
+            Assert.Equal(delegateFound, structFound);
+            if (delegateFound)
+            {
+                Assert.Equal(fHit, sHit);
+                Assert.Equal(fLeft.ToArray(), sLeft.ToArray());
+                Assert.Equal(fRight.ToArray(), sRight.ToArray());
+            }
+        }
+    }
+
     /// <summary>Verifies the degenerate cases: empty tree and a predicate satisfied by the very first element.</summary>
     [Fact]
     public void Locate_HandlesEdges()

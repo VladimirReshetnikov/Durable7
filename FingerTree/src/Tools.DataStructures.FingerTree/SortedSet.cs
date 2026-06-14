@@ -235,7 +235,7 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     public SortedSet<T> GetRange(T low, T high)
     {
         var (_, atLeast) = SplitAtLeast(low);
-        var (inRange, _) = atLeast.Split(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, high) > 0);
+        var (inRange, _) = atLeast.Split(new KeyAbovePredicate<T>(_comparer, high));
         return Wrap(inRange);
     }
 
@@ -350,11 +350,7 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
 
     private (FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Less, FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> AtLeast)
         SplitAtLeast(T item) =>
-        _tree.Split(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) >= 0);
-
-    private (FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> AtMost, FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Greater)
-        SplitAtMost(T item) =>
-        _tree.Split(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) > 0);
+        _tree.Split(new KeyAtLeastPredicate<T>(_comparer, item));
 
     private SortedSet<T> Merge(SortedSet<T> other, bool emitOnlyThis, bool emitBoth, bool emitOnlyOther)
     {

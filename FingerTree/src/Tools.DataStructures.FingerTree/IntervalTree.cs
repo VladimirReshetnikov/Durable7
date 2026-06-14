@@ -152,7 +152,7 @@ public sealed class IntervalTree<T> : IEnumerable<Interval<T>>
     public IntervalTree<T> Insert(Interval<T> interval)
     {
         var comparer = Comparer<T>.Default;
-        var (left, right) = _tree.Split(m => m.LastLow.HasValue && comparer.Compare(m.LastLow.Value, interval.Low) >= 0);
+        var (left, right) = _tree.Split(new LastLowAtLeastPredicate<T>(comparer, interval.Low));
         return new(left.Append(interval).Concat(right));
     }
 
@@ -222,12 +222,12 @@ public sealed class IntervalTree<T> : IEnumerable<Interval<T>>
         var results = new List<Interval<T>>();
 
         // Restrict to intervals whose low is at most the query's high; only these can overlap.
-        var (candidates, _) = _tree.Split(m => m.LastLow.HasValue && comparer.Compare(m.LastLow.Value, query.High) > 0);
+        var (candidates, _) = _tree.Split(new LastLowAbovePredicate<T>(comparer, query.High));
 
         // Repeatedly take the leftmost candidate whose high reaches the query's low; everything before it
         // ends too early to overlap, so advance into the suffix after each hit.
         while (candidates.TrySplitFind(
-            m => m.MaxHigh.HasValue && comparer.Compare(m.MaxHigh.Value, query.Low) >= 0,
+            new MaxHighAtLeastPredicate<T>(comparer, query.Low),
             out _,
             out var hit,
             out var after))
@@ -255,7 +255,7 @@ public sealed class IntervalTree<T> : IEnumerable<Interval<T>>
     public bool Contains(Interval<T> interval)
     {
         var comparer = Comparer<T>.Default;
-        var (_, atOrAfter) = _tree.Split(m => m.LastLow.HasValue && comparer.Compare(m.LastLow.Value, interval.Low) >= 0);
+        var (_, atOrAfter) = _tree.Split(new LastLowAtLeastPredicate<T>(comparer, interval.Low));
         var current = atOrAfter;
         while (current.TryViewLeft(out var head, out var tail))
         {
@@ -281,7 +281,7 @@ public sealed class IntervalTree<T> : IEnumerable<Interval<T>>
     public bool TryRemove(Interval<T> interval, out IntervalTree<T> result)
     {
         var comparer = Comparer<T>.Default;
-        var (left, atOrAfter) = _tree.Split(m => m.LastLow.HasValue && comparer.Compare(m.LastLow.Value, interval.Low) >= 0);
+        var (left, atOrAfter) = _tree.Split(new LastLowAtLeastPredicate<T>(comparer, interval.Low));
 
         var skipped = FingerTree<Interval<T>, IntervalAnnotation<T>, IntervalMeasure<T>>.Empty;
         var current = atOrAfter;
