@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tools.DataStructures.Finger
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tools.DataStructures.FingerTree.Showcase", "samples\Tools.DataStructures.FingerTree.Showcase\Tools.DataStructures.FingerTree.Showcase.csproj", "{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tools.DataStructures.FingerTree.Editor", "samples\Tools.DataStructures.FingerTree.Editor\Tools.DataStructures.FingerTree.Editor.csproj", "{A8422208-B2C4-4D3A-861C-63D1CB7BCD08}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -91,6 +93,18 @@ Global
 		{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71}.Release|x64.Build.0 = Release|Any CPU
 		{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71}.Release|x86.ActiveCfg = Release|Any CPU
 		{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71}.Release|x86.Build.0 = Release|Any CPU
+		{A8422208-B2C4-4D3A-861C-63D1CB7BCD08}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A8422208-B2C4-4D3A-861C-63D1CB7BCD08}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A8422208-B2C4-4D3A-861C-63D1CB7BCD08}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A8422208-B2C4-4D3A-861C-63D1CB7BCD08}.Debug|x64.Build.0 = Debug|Any CPU
+		{A8422208-B2C4-4D3A-861C-63D1CB7BCD08}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A8422208-B2C4-4D3A-861C-63D1CB7BCD08}.Debug|x86.Build.0 = Debug|Any CPU
+		{A8422208-B2C4-4D3A-861C-63D1CB7BCD08}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A8422208-B2C4-4D3A-861C-63D1CB7BCD08}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A8422208-B2C4-4D3A-861C-63D1CB7BCD08}.Release|x64.ActiveCfg = Release|Any CPU
+		{A8422208-B2C4-4D3A-861C-63D1CB7BCD08}.Release|x64.Build.0 = Release|Any CPU
+		{A8422208-B2C4-4D3A-861C-63D1CB7BCD08}.Release|x86.ActiveCfg = Release|Any CPU
+		{A8422208-B2C4-4D3A-861C-63D1CB7BCD08}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -101,5 +115,6 @@ Global
 		{5EAC2F95-35EE-40D6-9320-31A328F2094F} = {66320409-64EC-F7C5-3DEF-65E7510DAAD1}
 		{16A7CF47-0480-46C2-B49A-792DFB70C60E} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 		{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
+		{A8422208-B2C4-4D3A-861C-63D1CB7BCD08} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 	EndGlobalSection
 EndGlobal

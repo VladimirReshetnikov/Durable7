@@ -1,3 +1,4 @@
+using Tools.DataStructures.FingerTree.Editor;
 using Tools.DataStructures.FingerTree.Showcase;
 using Tools.DataStructures.FingerTree.Tour;
 using Xunit;
@@ -54,6 +55,25 @@ public sealed class SampleSmokeTests
         Assert.Contains("reversed : 8 7 6 5 4 3 2 1", transcript);                                         // Act 5 (O(1) reverse)
         Assert.Contains("40 -> forty", transcript);                                                       // Act 6 floor(50)
         Assert.Contains("55 -> fifty-five", transcript);                                                  // Act 6 ceiling(50)
+        Assert.Contains("Done.", transcript);
+    }
+
+    /// <summary>The editor-extras tour runs to completion with the expected character/code-point/grapheme counts
+    /// and offset-addressing results.</summary>
+    [Fact]
+    public void Editor_RunsAndProducesExpectedTranscript()
+    {
+        var writer = new StringWriter();
+
+        EditorProgram.Run(writer);
+
+        var transcript = writer.ToString();
+        Assert.Contains("UTF-16 chars     : 29", transcript);                 // chars, code points, and graphemes differ
+        Assert.Contains("code points      : 28", transcript);
+        Assert.Contains("graphemes        : 25", transcript);
+        Assert.Contains("newline style    : CrLf", transcript);
+        Assert.Contains("char offset 3    : code point #3, grapheme #3", transcript);
+        Assert.Contains("grapheme #8 at     : char offset 9", transcript);
         Assert.Contains("Done.", transcript);
     }
 }

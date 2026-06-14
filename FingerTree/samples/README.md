@@ -30,3 +30,17 @@ The acts are seeded and reproducible. The logic is exposed as `ShowcaseProgram.R
 ```bash
 dotnet run --project samples/Tools.DataStructures.FingerTree.Showcase -c Release
 ```
+
+## `Tools.DataStructures.FingerTree.Editor`
+
+The editor-grade text extras, in four acts over a document built with `RopeBuilder`:
+
+- **Three different lengths** — a document mixing an emoji (a surrogate pair) and a decomposed accented letter has 29 UTF-16 chars, 28 code points, and 25 grapheme clusters.
+- **Newline style detection** (`CrLf`) and carriage-return-stripped lines.
+- **Offset addressing** — converting between character offsets and code-point / grapheme indices.
+
+Deterministic, exposed as `EditorProgram.Run(TextWriter)` and smoke-tested.
+
+```bash
+dotnet run --project samples/Tools.DataStructures.FingerTree.Editor -c Release
+```
