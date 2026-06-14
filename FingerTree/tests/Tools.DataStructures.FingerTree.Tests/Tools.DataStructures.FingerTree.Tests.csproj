@@ -6,6 +6,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Tools.DataStructures.FingerTree\Tools.DataStructures.FingerTree.csproj" />
+    <!-- The samples are referenced so their Run(...) entry points can be smoke-tested. -->
+    <ProjectReference Include="..\..\samples\Tools.DataStructures.FingerTree.Tour\Tools.DataStructures.FingerTree.Tour.csproj" />
+    <ProjectReference Include="..\..\samples\Tools.DataStructures.FingerTree.Showcase\Tools.DataStructures.FingerTree.Showcase.csproj" />
   </ItemGroup>
 
   <ItemGroup>
