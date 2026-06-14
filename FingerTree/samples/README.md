@@ -15,3 +15,18 @@ The program runs a bounded, deterministic scenario and exits.
 ```bash
 dotnet run --project samples/Tools.DataStructures.FingerTree.Tour -c Release
 ```
+
+## `Tools.DataStructures.FingerTree.Showcase`
+
+The "one measured tree, many data structures" thesis, in four acts — the same general measured finger tree becomes each structure purely by choice of measure:
+
+- **Meldable priority queue** (minimum-priority measure): enqueue tasks, meld two queues, drain in priority order.
+- **Weighted random sampling** (cumulative-sum measure): 100,000 seeded draws land within a fraction of a percent of the configured weights.
+- **Order-statistic sorted set**: k-th element, rank, range, and set algebra.
+- **Interval index** (maximum-endpoint measure): overlap queries against a set of intervals.
+
+The acts are seeded and reproducible. The logic is exposed as `ShowcaseProgram.Run(TextWriter)` so it is smoke-tested.
+
+```bash
+dotnet run --project samples/Tools.DataStructures.FingerTree.Showcase -c Release
+```

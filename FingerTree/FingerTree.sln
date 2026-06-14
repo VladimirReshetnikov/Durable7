@@ -19,6 +19,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{5D20
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tools.DataStructures.FingerTree.Tour", "samples\Tools.DataStructures.FingerTree.Tour\Tools.DataStructures.FingerTree.Tour.csproj", "{16A7CF47-0480-46C2-B49A-792DFB70C60E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tools.DataStructures.FingerTree.Showcase", "samples\Tools.DataStructures.FingerTree.Showcase\Tools.DataStructures.FingerTree.Showcase.csproj", "{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -77,6 +79,18 @@ Global
 		{16A7CF47-0480-46C2-B49A-792DFB70C60E}.Release|x64.Build.0 = Release|Any CPU
 		{16A7CF47-0480-46C2-B49A-792DFB70C60E}.Release|x86.ActiveCfg = Release|Any CPU
 		{16A7CF47-0480-46C2-B49A-792DFB70C60E}.Release|x86.Build.0 = Release|Any CPU
+		{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71}.Debug|x64.Build.0 = Debug|Any CPU
+		{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71}.Debug|x86.Build.0 = Debug|Any CPU
+		{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71}.Release|x64.ActiveCfg = Release|Any CPU
+		{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71}.Release|x64.Build.0 = Release|Any CPU
+		{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71}.Release|x86.ActiveCfg = Release|Any CPU
+		{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -86,5 +100,6 @@ Global
 		{AB16EBEC-A464-43FF-8D6E-1BC8177E4E99} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{5EAC2F95-35EE-40D6-9320-31A328F2094F} = {66320409-64EC-F7C5-3DEF-65E7510DAAD1}
 		{16A7CF47-0480-46C2-B49A-792DFB70C60E} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
+		{CE8EDEAB-7A8E-44C5-BD44-248EF1D8DC71} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 	EndGlobalSection
 EndGlobal
