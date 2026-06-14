@@ -156,6 +156,104 @@ public static class RopeTextExtras
             yield return TrimCarriageReturn(line);
     }
 
+    // ---- Offset conversions (char offset <-> code-point / grapheme index) ---------------------------
+
+    /// <summary>Returns the character offset at which the code point with the given zero-based index begins. An
+    /// index equal to the code-point count returns <c>Count</c> (the end). O(n).</summary>
+    /// <param name="rope">The character rope.</param>
+    /// <param name="codePointIndex">A zero-based code-point index in <c>0 .. CodePointCount</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="rope"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="codePointIndex"/> is out of range.</exception>
+    public static int CodePointIndexToCharOffset(this Rope<char> rope, int codePointIndex)
+    {
+        ArgumentNullException.ThrowIfNull(rope);
+        return CodePointStartOffset(rope, codePointIndex);
+    }
+
+    /// <summary>Returns the character offset at which the code point with the given zero-based index begins. O(n).</summary>
+    /// <param name="rope">The text rope.</param>
+    /// <param name="codePointIndex">A zero-based code-point index in <c>0 .. CodePointCount</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="rope"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="codePointIndex"/> is out of range.</exception>
+    public static int CodePointIndexToCharOffset(this MeasuredRope<char, int, NewlineMeasure> rope, int codePointIndex)
+    {
+        ArgumentNullException.ThrowIfNull(rope);
+        return CodePointStartOffset(rope, codePointIndex);
+    }
+
+    /// <summary>Returns the code-point index for a character offset: the number of code points that begin before
+    /// it. A code-point-boundary offset round-trips with
+    /// <see cref="CodePointIndexToCharOffset(Rope{char}, int)"/>; an offset inside a surrogate pair counts that
+    /// pair. O(n).</summary>
+    /// <param name="rope">The character rope.</param>
+    /// <param name="charOffset">A character offset in <c>0 .. Count</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="rope"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="charOffset"/> is outside <c>0 .. Count</c>.</exception>
+    public static int CharOffsetToCodePointIndex(this Rope<char> rope, int charOffset)
+    {
+        ArgumentNullException.ThrowIfNull(rope);
+        return CodePointIndexAtOffset(rope, charOffset, rope.Count);
+    }
+
+    /// <summary>Returns the code-point index for a character offset (the number of code points beginning before
+    /// it). O(n).</summary>
+    /// <param name="rope">The text rope.</param>
+    /// <param name="charOffset">A character offset in <c>0 .. Count</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="rope"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="charOffset"/> is outside <c>0 .. Count</c>.</exception>
+    public static int CharOffsetToCodePointIndex(this MeasuredRope<char, int, NewlineMeasure> rope, int charOffset)
+    {
+        ArgumentNullException.ThrowIfNull(rope);
+        return CodePointIndexAtOffset(rope, charOffset, rope.Count);
+    }
+
+    /// <summary>Returns the character offset at which the grapheme cluster with the given zero-based index begins.
+    /// An index equal to the grapheme count returns the length. Materializes the text. O(n).</summary>
+    /// <param name="rope">The character rope.</param>
+    /// <param name="graphemeIndex">A zero-based grapheme index in <c>0 .. GraphemeCount</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="rope"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="graphemeIndex"/> is out of range.</exception>
+    public static int GraphemeIndexToCharOffset(this Rope<char> rope, int graphemeIndex)
+    {
+        ArgumentNullException.ThrowIfNull(rope);
+        return GraphemeStartOffset(rope.AsString(), graphemeIndex);
+    }
+
+    /// <summary>Returns the character offset at which the grapheme cluster with the given zero-based index begins.
+    /// Materializes the text. O(n).</summary>
+    /// <param name="rope">The text rope.</param>
+    /// <param name="graphemeIndex">A zero-based grapheme index in <c>0 .. GraphemeCount</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="rope"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="graphemeIndex"/> is out of range.</exception>
+    public static int GraphemeIndexToCharOffset(this MeasuredRope<char, int, NewlineMeasure> rope, int graphemeIndex)
+    {
+        ArgumentNullException.ThrowIfNull(rope);
+        return GraphemeStartOffset(rope.AsString(), graphemeIndex);
+    }
+
+    /// <summary>Returns the grapheme-cluster index for a character offset (the number of clusters beginning before
+    /// it). Materializes the text. O(n).</summary>
+    /// <param name="rope">The character rope.</param>
+    /// <param name="charOffset">A character offset in <c>0 .. Count</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="rope"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="charOffset"/> is outside <c>0 .. Count</c>.</exception>
+    public static int CharOffsetToGraphemeIndex(this Rope<char> rope, int charOffset)
+    {
+        ArgumentNullException.ThrowIfNull(rope);
+        return GraphemeIndexAtOffset(rope.AsString(), charOffset);
+    }
+
+    /// <summary>Returns the grapheme-cluster index for a character offset. Materializes the text. O(n).</summary>
+    /// <param name="rope">The text rope.</param>
+    /// <param name="charOffset">A character offset in <c>0 .. Count</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="rope"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="charOffset"/> is outside <c>0 .. Count</c>.</exception>
+    public static int CharOffsetToGraphemeIndex(this MeasuredRope<char, int, NewlineMeasure> rope, int charOffset)
+    {
+        ArgumentNullException.ThrowIfNull(rope);
+        return GraphemeIndexAtOffset(rope.AsString(), charOffset);
+    }
+
     // ---- shared cores -------------------------------------------------------------------------------
 
     private static int CountCodePoints(IEnumerable<char> characters)
@@ -272,4 +370,78 @@ public static class RopeTextExtras
 
     private static string TrimCarriageReturn(string line) =>
         line.Length > 0 && line[^1] == '\r' ? line[..^1] : line;
+
+    private static int CodePointStartOffset(IEnumerable<char> characters, int codePointIndex)
+    {
+        if (codePointIndex < 0)
+            throw new ArgumentOutOfRangeException(nameof(codePointIndex), codePointIndex, "Code-point index is negative.");
+
+        var position = 0;
+        var index = 0;
+        var prevHigh = false;
+        foreach (var character in characters)
+        {
+            if (!(prevHigh && char.IsLowSurrogate(character)))   // not the low half of a pair: a code point starts here
+            {
+                if (index == codePointIndex)
+                    return position;
+                index++;
+            }
+
+            position++;
+            prevHigh = char.IsHighSurrogate(character);
+        }
+
+        if (index == codePointIndex)
+            return position;   // the end boundary (codePointIndex == CodePointCount)
+        throw new ArgumentOutOfRangeException(nameof(codePointIndex), codePointIndex, "Code-point index is past the end of the rope.");
+    }
+
+    private static int CodePointIndexAtOffset(IEnumerable<char> characters, int charOffset, int charCount)
+    {
+        if ((uint)charOffset > (uint)charCount)
+            throw new ArgumentOutOfRangeException(nameof(charOffset), charOffset, "Character offset is outside 0 .. Count.");
+
+        var position = 0;
+        var index = 0;
+        var prevHigh = false;
+        foreach (var character in characters)
+        {
+            if (position >= charOffset)
+                return index;
+            if (!(prevHigh && char.IsLowSurrogate(character)))
+                index++;
+            position++;
+            prevHigh = char.IsHighSurrogate(character);
+        }
+
+        return index;   // charOffset == charCount
+    }
+
+    // The character offset at which each grapheme cluster begins, using the SAME segmentation as GraphemeCount /
+    // EnumerateGraphemes (TextElementEnumerator), so counts and offsets are always consistent.
+    private static int[] GraphemeStarts(string text)
+    {
+        var enumerator = StringInfo.GetTextElementEnumerator(text);
+        var starts = new List<int>();
+        while (enumerator.MoveNext())
+            starts.Add(enumerator.ElementIndex);
+        return [.. starts];
+    }
+
+    private static int GraphemeStartOffset(string text, int graphemeIndex)
+    {
+        var starts = GraphemeStarts(text);
+        if ((uint)graphemeIndex > (uint)starts.Length)
+            throw new ArgumentOutOfRangeException(nameof(graphemeIndex), graphemeIndex, "Grapheme index is outside 0 .. GraphemeCount.");
+        return graphemeIndex < starts.Length ? starts[graphemeIndex] : text.Length;
+    }
+
+    private static int GraphemeIndexAtOffset(string text, int charOffset)
+    {
+        if ((uint)charOffset > (uint)text.Length)
+            throw new ArgumentOutOfRangeException(nameof(charOffset), charOffset, "Character offset is outside 0 .. Count.");
+        var found = Array.BinarySearch(GraphemeStarts(text), charOffset);
+        return found >= 0 ? found : ~found;   // count of grapheme starts strictly before charOffset
+    }
 }

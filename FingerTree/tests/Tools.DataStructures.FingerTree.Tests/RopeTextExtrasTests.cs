@@ -120,4 +120,72 @@ public sealed class RopeTextExtrasTests
         Assert.Equal(charRope.EnumerateRunes().ToArray(), textRope.EnumerateRunes().ToArray());
         Assert.Equal(charRope.DetectNewlineStyle(), textRope.DetectNewlineStyle());
     }
+
+    /// <summary>Code-point offset conversions round-trip on every boundary and map the endpoints.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("plain ascii text")]
+    [InlineData("á b \U0001F600 c")]
+    [InlineData("\U0001D11E\U0001F600\U0001F601")]   // back-to-back surrogate pairs
+    public void CodePointOffsetConversions_RoundTrip(string text)
+    {
+        var rope = text.ToCharRope();
+        var count = rope.CodePointCount();
+        Assert.Equal(0, rope.CodePointIndexToCharOffset(0));
+        Assert.Equal(rope.Count, rope.CodePointIndexToCharOffset(count));
+        for (var k = 0; k <= count; k++)
+            Assert.Equal(k, rope.CharOffsetToCodePointIndex(rope.CodePointIndexToCharOffset(k)));
+    }
+
+    /// <summary>CodePointIndexToCharOffset returns the char offset of each code point's first UTF-16 unit.</summary>
+    [Fact]
+    public void CodePointIndexToCharOffset_LocatesSurrogatePairs()
+    {
+        var rope = "A\U0001D11EB".ToCharRope();   // A(0), pair(1..2), B(3)
+        Assert.Equal(0, rope.CodePointIndexToCharOffset(0));
+        Assert.Equal(1, rope.CodePointIndexToCharOffset(1));
+        Assert.Equal(3, rope.CodePointIndexToCharOffset(2));
+        Assert.Equal(4, rope.CodePointIndexToCharOffset(3));   // end
+    }
+
+    /// <summary>Grapheme offset conversions round-trip on every cluster boundary and map the endpoints.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("abc")]
+    [InlineData("áb̂c")]
+    [InlineData("x\U0001F600y\U0001F1FA\U0001F1F8z")]   // emoji and a flag (two regional indicators = one cluster)
+    public void GraphemeOffsetConversions_RoundTrip(string text)
+    {
+        var rope = text.ToCharRope();
+        var count = rope.GraphemeCount();
+        Assert.Equal(rope.Count, rope.GraphemeIndexToCharOffset(count));
+        for (var k = 0; k <= count; k++)
+            Assert.Equal(k, rope.CharOffsetToGraphemeIndex(rope.GraphemeIndexToCharOffset(k)));
+    }
+
+    /// <summary>Code-point offset conversions round-trip over randomly generated UTF-16 sequences.</summary>
+    [Fact]
+    public void CodePointOffsetConversions_RoundTrip_OverRandomSequences()
+    {
+        Gen.Char.Array[0, 40].Select(chars => new string(chars)).Sample(text =>
+        {
+            var rope = Rope<char>.Create(text.AsSpan());
+            var count = rope.CodePointCount();
+            Assert.Equal(rope.Count, rope.CodePointIndexToCharOffset(count));
+            for (var k = 0; k <= count; k++)
+                Assert.Equal(k, rope.CharOffsetToCodePointIndex(rope.CodePointIndexToCharOffset(k)));
+        }, iter: 500);
+    }
+
+    /// <summary>Out-of-range indices and offsets throw.</summary>
+    [Fact]
+    public void OffsetConversions_ThrowOutOfRange()
+    {
+        var rope = "abc".ToCharRope();
+        Assert.Throws<ArgumentOutOfRangeException>(() => rope.CodePointIndexToCharOffset(4));
+        Assert.Throws<ArgumentOutOfRangeException>(() => rope.CodePointIndexToCharOffset(-1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => rope.CharOffsetToCodePointIndex(4));
+        Assert.Throws<ArgumentOutOfRangeException>(() => rope.GraphemeIndexToCharOffset(4));
+        Assert.Throws<ArgumentOutOfRangeException>(() => rope.CharOffsetToGraphemeIndex(4));
+    }
 }
