@@ -104,6 +104,27 @@ prefix sum. The query targets the midpoint of the total weight (worst case for t
 The tree's time grew only 1.6× for a 100× size increase (O(log n)); the scan grew ~95× (O(n)). The crossover is
 small, and the gap widens without bound as n grows.
 
+## Persistence robustness (branching use)
+
+The general measured tree's amortized bounds are claimed to hold under fully persistent (branching) histories,
+not merely ephemeral linear use — the payoff of its lazy-memoized spine. This is directly measurable:
+BenchmarkDotNet invokes each method many times against the single instance built in `[GlobalSetup]`, so every
+invocation branches off the *same retained version*. If the bounds held only ephemerally, repeatedly operating
+on a retained version would re-pay an O(log n) cascade each time and the cost would climb with size. Instead it
+is flat:
+
+| Op on a retained version | Size 100 | Size 10,000 | Size 1,000,000 |
+|--------------------------|---------:|------------:|---------------:|
+| `Prepend`                | 24.3 ns · 112 B | 23.5 ns · 112 B | 21.1 ns · 112 B |
+| `Append`                 | 22.4 ns · 128 B | 22.1 ns · 128 B | 22.8 ns · 128 B |
+
+A flat ~22 ns across four orders of magnitude is O(1) amortized under branching — the persistence-robustness
+the lazy spine was built for. The collections built on the same core inherit it: `SortedSet.Add` on a retained
+set stays O(log n) (~180–224 ns across the sizes), on par with the BCL's persistent `ImmutableSortedSet.Add`
+(~127–298 ns). (Reading the memoized `Measure` of a retained tree is O(1); see the
+[unit-test guards](../tests/Tools.DataStructures.FingerTree.Tests/MeasuredFingerTreePersistenceTests.cs), which
+also pin branching correctness, 1,000,000-element stack safety, and concurrent convergence.)
+
 ## Sorted collections — competitive, honest
 
 Our `SortedSet` is a persistent finger-tree sorted set with order-statistic indexing, ranking, and
@@ -141,5 +162,7 @@ specialized BCL collection's.
 - **Sorted-collection reads** route through the `TryLocate` descent with non-capturing struct predicates: ~7×
   faster than the former `Split`-based reads and **zero allocation** (down from ~2.4 KB/query), matching the
   BCL's allocation behavior.
+- **Persistence is robust**: operations on a retained version stay O(1)/O(log n) amortized — flat across sizes
+  from 100 to 1,000,000 — so the amortized bounds survive branching, and the derived collections inherit it.
 - The finger tree trades a constant-factor read overhead for persistence, structural sharing, and a single
   unified core behind a whole family of collections.

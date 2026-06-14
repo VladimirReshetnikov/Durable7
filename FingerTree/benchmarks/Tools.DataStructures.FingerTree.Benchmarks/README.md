@@ -43,6 +43,7 @@ Results are written under `BenchmarkDotNet.Artifacts/` (git-ignored); curated ta
 | `SortedSetBenchmarks` | order-statistic rank-select in O(log n) | `ImmutableSortedSet` (no indexer → O(k) skip) |
 | `PriorityQueueBenchmarks` | meldable `Meld` in O(log(min(n, m))) | BCL `PriorityQueue` (rebuild, O(n + m)) |
 | `WeightedSelectBenchmarks` | Fenwick cumulative-weight select in O(log n) | naive prefix scan (O(n)) |
+| `PersistenceBenchmarks` | branching ops on a retained version stay O(1)/O(log n) (flat across sizes) | `ImmutableSortedSet` (derived-collection parity) |
 
 ## Fairness methodology
 
