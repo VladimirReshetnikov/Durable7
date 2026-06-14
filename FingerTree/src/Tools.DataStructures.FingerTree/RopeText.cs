@@ -121,8 +121,10 @@ public static class RopeText
             throw new ArgumentOutOfRangeException(nameof(line), line, "Line is outside the rope's range.");
         if (line == 0)
             return 0;
-        // The character after the `line`-th newline starts line `line`.
-        rope.TryLocateByMeasure(newlines => newlines >= line, out var index, out _, out _);
+        // The character after the `line`-th newline starts line `line`. The range guard above guarantees the
+        // `line`-th newline exists, so the locate always succeeds; the throw documents that invariant.
+        if (!rope.TryLocateByMeasure(newlines => newlines >= line, out var index, out _, out _))
+            throw new InvalidOperationException("Inconsistent rope: the requested line's starting newline was not found.");
         return index + 1;
     }
 
@@ -146,7 +148,7 @@ public static class RopeText
     public static int OffsetOf(this MeasuredRope<char, int, NewlineMeasure> rope, int line, int column)
     {
         var start = rope.LineStartOffset(line);
-        if (column < 0 || start + column > rope.Count)
+        if (column < 0 || (long)start + column > rope.Count)   // widen so a huge column cannot overflow the check
             throw new ArgumentOutOfRangeException(nameof(column), column, "Column is outside the line.");
         return start + column;
     }
