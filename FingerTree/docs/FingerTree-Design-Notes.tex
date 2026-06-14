@@ -756,6 +756,20 @@ int offset      = doc.OffsetOf(line: 2, column: 0);// the start of "third"
 string second   = doc.GetLine(1);                  // "second line"
 \end{lstlisting}
 
+\subsection{Running the demos}
+
+These ideas run end to end in two small console samples under \texttt{samples/}. The \emph{text buffer}
+tour walks through undo/redo over snapshots, line navigation, and a background reader taking millions of
+lock-free snapshots while a writer publishes versions; the \emph{measures showcase} exercises the priority
+queue, weighted sampling, order-statistic set, interval index, reversible deque, and a navigable sorted map
+--- one finger tree under six guises. Both are smoke-tested, so they cannot silently drift from the library.
+Run either with:
+
+\begin{lstlisting}[language={}]
+dotnet run --project samples/Tools.DataStructures.FingerTree.Tour      -c Release
+dotnet run --project samples/Tools.DataStructures.FingerTree.Showcase  -c Release
+\end{lstlisting}
+
 \clearpage
 \section{Complexity summary}
 \label{sec:complexitysummary}
@@ -840,6 +854,8 @@ readable minimal programs.
     tearable concurrency stress tests.
   \item \texttt{benchmarks/} --- the BenchmarkDotNet harness; curated results in
     \texttt{docs/benchmarks.md}.
+  \item \texttt{samples/} --- two runnable console tours (the text buffer and the measures showcase of
+    Section~\ref{sec:examples}), each smoke-tested from the suite.
   \item \texttt{docs/} --- this document, the normative API specification and its defect report, the
     persistence/concurrency guide, the benchmark write-up, and the bundled source papers.
 \end{itemize}
