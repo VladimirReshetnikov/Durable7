@@ -124,11 +124,22 @@ internal sealed class SingleMeasuredTree<TElement, TChild, TMeasure, TMonoid>(TC
         (Empty, Element, Empty);
 }
 
-/// <summary>A deep level of a measured finger tree, with a cached combined measure.</summary>
+/// <summary>
+/// A deep level of a measured finger tree: a one-through-four element prefix, a lazily memoized middle tree of
+/// grouping nodes, and a one-through-four element suffix, with a lazily memoized combined measure.
+/// </summary>
 /// <typeparam name="TElement">Stored leaf element type.</typeparam>
 /// <typeparam name="TChild">Element type at this level.</typeparam>
 /// <typeparam name="TMeasure">Measure type.</typeparam>
 /// <typeparam name="TMonoid">Static monoid provider.</typeparam>
+/// <remarks>
+/// The middle is held behind a <see cref="MeasuredMiddle{TElement, TNode, TMeasure, TMonoid}"/> suspension so
+/// deep spine repairs are deferred and memoized — the strict-language realization of Hinze and Paterson's lazy
+/// finger tree that makes the amortized bounds hold under branching persistence. The measure is computed on
+/// first read and memoized: constructing a deep node never forces its middle (a push suspension answers its
+/// measure arithmetically; a pop suspension defers it), so the spine stays lazy. The first read of a measure
+/// may force a chain of suspensions O(log n) deep; subsequent reads are O(1).
+/// </remarks>
 internal sealed class DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>
     : MeasuredTree<TElement, TChild, TMeasure, TMonoid>
     where TChild : IMeasuredElement<TElement, TMeasure>
@@ -137,29 +148,45 @@ internal sealed class DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>
     /// <summary>Prefix buffer; one through four elements.</summary>
     public readonly TChild[] Prefix;
 
-    /// <summary>Middle tree of grouping nodes, one level closer to the leaves.</summary>
-    public readonly MeasuredTree<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid> Middle;
-
     /// <summary>Suffix buffer; one through four elements.</summary>
     public readonly TChild[] Suffix;
 
-    /// <summary>Builds a deep level and caches its combined measure in O(1).</summary>
+    /// <summary>Middle tree of grouping nodes, one level closer to the leaves, possibly suspended.</summary>
+    private readonly MeasuredMiddle<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid> _middle;
+
+    /// <summary>Memoized boxed measure; <see langword="null"/> until first read, then the boxed <typeparamref name="TMeasure"/>.</summary>
+    private object? _measureBox;
+
+    /// <summary>Builds a deep level without forcing its middle or computing its measure.</summary>
     /// <param name="prefix">One through four prefix elements.</param>
-    /// <param name="middle">Middle tree of nodes.</param>
+    /// <param name="middle">Middle tree of nodes, computed or suspended.</param>
     /// <param name="suffix">One through four suffix elements.</param>
     public DeepMeasuredTree(
         TChild[] prefix,
-        MeasuredTree<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid> middle,
+        MeasuredMiddle<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid> middle,
         TChild[] suffix)
     {
         Prefix = prefix;
-        Middle = middle;
+        _middle = middle;
         Suffix = suffix;
-        Measure = TMonoid.Combine(TMonoid.Combine(CombineAll(prefix), middle.Measure), CombineAll(suffix));
     }
 
     /// <inheritdoc/>
-    public override TMeasure Measure { get; }
+    public override TMeasure Measure
+    {
+        get
+        {
+            if (Volatile.Read(ref _measureBox) is { } existing)
+                return (TMeasure)existing;
+
+            // Reading _middle.Measure forces only a pop suspension (push answers arithmetically); the result is
+            // memoized once via compare-exchange, so concurrent readers converge on a single boxed value.
+            var measure = TMonoid.Combine(TMonoid.Combine(CombineAll(Prefix), _middle.Measure), CombineAll(Suffix));
+            var boxed = (object)measure!;
+            var witnessed = Interlocked.CompareExchange(ref _measureBox, boxed, null);
+            return witnessed is null ? measure : (TMeasure)witnessed;
+        }
+    }
 
     /// <inheritdoc/>
     public override bool IsEmpty => false;
@@ -170,33 +197,61 @@ internal sealed class DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>
     /// <inheritdoc/>
     public override TChild Last => Suffix[^1];
 
+    /// <summary>Forces and returns the middle tree of nodes. O(1) when already computed.</summary>
+    public MeasuredTree<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid> ForceMiddle() =>
+        _middle.Force();
+
     /// <inheritdoc/>
     public override MeasuredTree<TElement, TChild, TMeasure, TMonoid> Cons(TChild value)
     {
         if (Prefix.Length < 4)
-            return Deep([value, .. Prefix], Middle, Suffix);
+            return new DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>([value, .. Prefix], _middle, Suffix);
 
+        // Overflow: force the current middle (keeping the new suspension one operation deep) and defer the push.
         var pushed = new MeasuredNode<TElement, TChild, TMeasure, TMonoid>([Prefix[1], Prefix[2], Prefix[3]]);
-        return Deep([value, Prefix[0]], Middle.Cons(pushed), Suffix);
+        var suspended = new MeasuredMiddle<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid>(
+            new LazyMeasuredMiddle<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid>(
+                new PendingMeasuredPushFront<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid>(ForceMiddle(), pushed)));
+        return new DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>([value, Prefix[0]], suspended, Suffix);
     }
 
     /// <inheritdoc/>
     public override MeasuredTree<TElement, TChild, TMeasure, TMonoid> Snoc(TChild value)
     {
         if (Suffix.Length < 4)
-            return Deep(Prefix, Middle, [.. Suffix, value]);
+            return new DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>(Prefix, _middle, [.. Suffix, value]);
 
         var pushed = new MeasuredNode<TElement, TChild, TMeasure, TMonoid>([Suffix[0], Suffix[1], Suffix[2]]);
-        return Deep(Prefix, Middle.Snoc(pushed), [Suffix[3], value]);
+        var suspended = new MeasuredMiddle<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid>(
+            new LazyMeasuredMiddle<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid>(
+                new PendingMeasuredPushBack<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid>(ForceMiddle(), pushed)));
+        return new DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>(Prefix, suspended, [Suffix[3], value]);
     }
 
     /// <inheritdoc/>
     public override bool TryViewLeft(out TChild head, out MeasuredTree<TElement, TChild, TMeasure, TMonoid> rest)
     {
         head = Prefix[0];
-        rest = Prefix.Length > 1
-            ? Deep(Prefix[1..], Middle, Suffix)
-            : DeepLeft([], Middle, Suffix);
+        if (Prefix.Length > 1)
+        {
+            rest = new DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>(Prefix[1..], _middle, Suffix);
+            return true;
+        }
+
+        // Prefix exhausted: pull the head node up from the middle, deferring the pop so it is paid once even
+        // under branching. The source is forced first, keeping the new suspension one operation deep.
+        var middle = ForceMiddle();
+        if (middle.IsEmpty)
+        {
+            rest = FromBuffer(Suffix);
+            return true;
+        }
+
+        var node = middle.First;
+        var popped = new MeasuredMiddle<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid>(
+            new LazyMeasuredMiddle<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid>(
+                new PendingMeasuredPopFront<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid>(middle)));
+        rest = new DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>(node.Children, popped, Suffix);
         return true;
     }
 
@@ -204,9 +259,24 @@ internal sealed class DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>
     public override bool TryViewRight(out TChild last, out MeasuredTree<TElement, TChild, TMeasure, TMonoid> rest)
     {
         last = Suffix[^1];
-        rest = Suffix.Length > 1
-            ? Deep(Prefix, Middle, Suffix[..^1])
-            : DeepRight(Prefix, Middle, []);
+        if (Suffix.Length > 1)
+        {
+            rest = new DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>(Prefix, _middle, Suffix[..^1]);
+            return true;
+        }
+
+        var middle = ForceMiddle();
+        if (middle.IsEmpty)
+        {
+            rest = FromBuffer(Prefix);
+            return true;
+        }
+
+        var node = middle.Last;
+        var popped = new MeasuredMiddle<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid>(
+            new LazyMeasuredMiddle<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid>(
+                new PendingMeasuredPopBack<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid>(middle)));
+        rest = new DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>(Prefix, popped, node.Children);
         return true;
     }
 
@@ -215,7 +285,7 @@ internal sealed class DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>
     {
         foreach (var child in Prefix)
             child.Flatten(sink);
-        Middle.Flatten(sink);
+        ForceMiddle().Flatten(sink);
         foreach (var child in Suffix)
             child.Flatten(sink);
     }
@@ -228,19 +298,20 @@ internal sealed class DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>
         if (predicate(beforeMiddle))
         {
             var (before, hit, after) = SplitBuffer(predicate, accumulator, Prefix);
-            return (FromBuffer(before), hit, DeepLeft(after, Middle, Suffix));
+            return (FromBuffer(before), hit, DeepLeft(after, ForceMiddle(), Suffix));
         }
 
-        var afterMiddle = TMonoid.Combine(beforeMiddle, Middle.Measure);
+        var middle = ForceMiddle();
+        var afterMiddle = TMonoid.Combine(beforeMiddle, middle.Measure);
         if (predicate(afterMiddle))
         {
-            var (middleLeft, node, middleRight) = Middle.SplitTree(predicate, beforeMiddle);
+            var (middleLeft, node, middleRight) = middle.SplitTree(predicate, beforeMiddle);
             var accBeforeNode = TMonoid.Combine(beforeMiddle, middleLeft.Measure);
             var (before, hit, after) = SplitBuffer(predicate, accBeforeNode, node.Children);
             return (DeepRight(Prefix, middleLeft, before), hit, DeepLeft(after, middleRight, Suffix));
         }
 
         var (suffixBefore, suffixHit, suffixAfter) = SplitBuffer(predicate, afterMiddle, Suffix);
-        return (DeepRight(Prefix, Middle, suffixBefore), suffixHit, FromBuffer(suffixAfter));
+        return (DeepRight(Prefix, middle, suffixBefore), suffixHit, FromBuffer(suffixAfter));
     }
 }

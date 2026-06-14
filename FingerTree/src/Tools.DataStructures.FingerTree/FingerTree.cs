@@ -23,14 +23,17 @@ namespace Tools.DataStructures.FingerTree;
 /// monotone predicate over the accumulated measure first becomes true.
 /// </para>
 /// <para>
-/// Complexity (with O(1) measure operations): <see cref="Measure"/>, <see cref="IsEmpty"/>,
-/// <see cref="First"/>, <see cref="Last"/> are O(1); <see cref="Prepend"/>/<see cref="Append"/> and the
-/// view operations are O(1) amortized, O(log n) worst-case; <see cref="Concat"/> is O(log(min(n, m)))
-/// amortized; <see cref="Split(Func{TMeasure, bool})"/> and
+/// Complexity (with O(1) measure operations): <see cref="IsEmpty"/>, <see cref="First"/>,
+/// <see cref="Last"/> are O(1) worst-case; <see cref="Measure"/> is O(1) amortized (the first read of a fresh
+/// node may force an O(log n) chain of suspended spine repairs before memoizing);
+/// <see cref="Prepend"/>/<see cref="Append"/> and the view operations are O(1) amortized, O(log n) worst-case;
+/// <see cref="Concat"/> is O(log(min(n, m))) amortized; <see cref="Split(Func{TMeasure, bool})"/> and
 /// <see cref="TrySplitFind"/> are O(log(min(k, n − k))) amortized for a boundary at distance k from the
-/// nearer end. The representation is strict, so these amortized bounds hold for ephemeral (single-threaded
-/// linear) use; they are not claimed to survive branching persistent histories (see the type remarks in the
-/// internal <c>MeasuredTree</c> for why a general monoid cannot reuse the deque's group-subtraction trick).
+/// nearer end. The middle subtree of each deep node is held behind a memoized suspension and each node's
+/// measure is lazily memoized — Hinze and Paterson's lazy finger tree realized in a strict language — so these
+/// amortized bounds hold under fully persistent (branching) histories, not merely ephemeral linear use. Because
+/// a general monoid has no inverse, a popped subtree's measure cannot be recovered by subtraction (the deque's
+/// trick for its size measure), which is why <see cref="Measure"/> is amortized rather than worst-case O(1).
 /// </para>
 /// <para>Instances are immutable and safe for concurrent reads.</para>
 /// </remarks>

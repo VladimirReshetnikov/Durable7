@@ -17,12 +17,16 @@ namespace Tools.DataStructures.FingerTree;
 /// the chosen measure.
 /// </para>
 /// <para>
-/// Measures are cached eagerly (every deep node stores its combined measure), so <see cref="Measure"/> is
-/// O(1) and never forces. The representation is strict: endpoint operations, concatenation, and splitting
-/// are O(log n) worst-case and O(1)/O(log min) amortized for ephemeral (single-threaded linear) use. Unlike
-/// <see cref="FingerTreeDeque{T}"/>, it does not memoize spine repairs, because a general monoid has no
-/// inverse and so a popped subtree's measure cannot be recovered without forcing; persistence-robust
-/// amortization would require memoized lazy measure annotations.
+/// The middle subtree of each deep node is held behind a memoized suspension
+/// (<see cref="MeasuredMiddle{TElement, TNode, TMeasure, TMonoid}"/>), and each deep node's combined measure is
+/// itself lazily memoized. This is Hinze and Paterson's lazy finger tree realized in a strict language: spine
+/// repairs are deferred and paid once even when an old version is reused, so the amortized bounds
+/// (O(1) endpoints, O(log(min)) concatenation, O(log) split) hold under fully persistent (branching) histories,
+/// not merely ephemeral linear use. Because a general monoid has no inverse, a popped subtree's measure cannot
+/// be recovered by subtraction (the trick <see cref="FingerTreeDeque{T}"/> uses for its size measure), so
+/// <see cref="Measure"/> is O(1) amortized but may force a chain of suspensions O(log n) deep on the first read
+/// of a fresh tree; <see cref="First"/> and <see cref="Last"/> read the prefix/suffix digits directly and stay
+/// O(1) worst-case, never forcing.
 /// </para>
 /// </remarks>
 internal abstract class MeasuredTree<TElement, TChild, TMeasure, TMonoid>
@@ -37,7 +41,8 @@ internal abstract class MeasuredTree<TElement, TChild, TMeasure, TMonoid>
     private protected static MeasuredTree<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid> EmptyMiddle =>
         EmptyMeasuredTree<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid>.Instance;
 
-    /// <summary>Gets the cached measure of this tree. O(1).</summary>
+    /// <summary>Gets the measure of this tree. O(1) amortized; the first read of a deep node may force an
+    /// O(log n) chain of suspended spine repairs.</summary>
     public abstract TMeasure Measure { get; }
 
     /// <summary>Gets a value indicating whether this tree has no elements. O(1).</summary>
@@ -112,7 +117,7 @@ internal abstract class MeasuredTree<TElement, TChild, TMeasure, TMonoid>
         var deepRight = (DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>)right;
         TChild[] combined = [.. left.Suffix, .. mid, .. deepRight.Prefix];
         var bridge = Nodes(combined);
-        return Deep(left.Prefix, left.Middle.Glue(bridge, deepRight.Middle), deepRight.Suffix);
+        return Deep(left.Prefix, left.ForceMiddle().Glue(bridge, deepRight.ForceMiddle()), deepRight.Suffix);
     }
 
     private static MeasuredTree<TElement, TChild, TMeasure, TMonoid> PrependAll(
@@ -249,5 +254,8 @@ internal abstract class MeasuredTree<TElement, TChild, TMeasure, TMonoid>
         TChild[] prefix,
         MeasuredTree<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid> middle,
         TChild[] suffix) =>
-        new DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>(prefix, middle, suffix);
+        new DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>(
+            prefix,
+            new MeasuredMiddle<TElement, MeasuredNode<TElement, TChild, TMeasure, TMonoid>, TMeasure, TMonoid>(middle),
+            suffix);
 }
