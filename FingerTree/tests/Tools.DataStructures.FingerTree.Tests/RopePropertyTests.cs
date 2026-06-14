@@ -192,4 +192,43 @@ public sealed class RopePropertyTests
             }
         }, iter: 500);
     }
+
+    /// <summary>
+    /// Verifies the closure-free value-type-predicate overloads of the measured rope's measure navigation
+    /// (<c>SplitByMeasure&lt;TPredicate&gt;</c> and <c>TryLocateByMeasure&lt;TPredicate&gt;</c>) produce results
+    /// identical to the delegate overloads across random sum-measured ropes and thresholds — so the struct path,
+    /// including the now-generic within-chunk scan, is behaviorally equivalent to the known-correct delegate path.
+    /// </summary>
+    [Fact]
+    public void MeasuredRope_StructPredicate_MatchesFuncPredicate()
+    {
+        Gen.Int[0, 40].Array[0, 500]
+            .SelectMany(values => Gen.Int[-1, Math.Max(0, values.Sum()) + 1].Select(threshold => (values, threshold)))
+            .Sample(t =>
+            {
+                var (values, threshold) = t;
+                var rope = MeasuredRope<int, int, IntSumMeasure>.CreateRange(values);
+
+                var (structLeft, structRight) = rope.SplitByMeasure(new SumAbove(threshold));
+                var (funcLeft, funcRight) = rope.SplitByMeasure(measure => measure > threshold);
+                Assert.Equal(funcLeft.ToArray(), structLeft.ToArray());
+                Assert.Equal(funcRight.ToArray(), structRight.ToArray());
+
+                var structFound = rope.TryLocateByMeasure(new SumAbove(threshold), out var si, out var sb, out var se);
+                var funcFound = rope.TryLocateByMeasure(measure => measure > threshold, out var fi, out var fb, out var fe);
+                Assert.Equal(funcFound, structFound);
+                if (funcFound)
+                {
+                    Assert.Equal(fi, si);
+                    Assert.Equal(fb, sb);
+                    Assert.Equal(fe, se);
+                }
+            }, iter: 300);
+    }
+
+    /// <summary>A caller-supplied value-type predicate over an accumulated integer sum measure.</summary>
+    private readonly struct SumAbove(int threshold) : IMeasurePredicate<int>
+    {
+        public bool Invoke(int measure) => measure > threshold;
+    }
 }

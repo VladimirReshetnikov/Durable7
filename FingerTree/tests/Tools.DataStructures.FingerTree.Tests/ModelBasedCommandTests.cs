@@ -285,9 +285,23 @@ public sealed class ModelBasedCommandTests
             (b, m) =>
             {
                 b.Value.ValidateInvariants();
-                return b.Value.Count == m.Count
-                    && b.Value.ToArray().SequenceEqual(m)
-                    && b.Value.Measure == m.Sum();
+                if (b.Value.Count != m.Count || !b.Value.ToArray().SequenceEqual(m) || b.Value.Measure != m.Sum())
+                    return false;
+
+                // The closure-free value-type-predicate locate must agree with the delegate locate at every
+                // reached state, including the now-generic within-chunk scan.
+                var sum = m.Sum();
+                foreach (var threshold in new[] { -1, sum / 2, sum })
+                {
+                    var structFound = b.Value.TryLocateByMeasure(new SumAboveInt(threshold), out var si, out var sb, out var se);
+                    var funcFound = b.Value.TryLocateByMeasure(measure => measure > threshold, out var fi, out var fb, out var fe);
+                    if (structFound != funcFound)
+                        return false;
+                    if (funcFound && (si != fi || sb != fb || se != fe))
+                        return false;
+                }
+
+                return true;
             },
             iter: 200);
     }
@@ -449,6 +463,13 @@ public sealed class ModelBasedCommandTests
     private sealed class Box<T>(T value)
     {
         public T Value = value;
+    }
+
+    /// <summary>A value-type predicate over an accumulated integer sum measure, used to check the measured rope's
+    /// closure-free locate against the delegate locate.</summary>
+    private readonly struct SumAboveInt(int threshold) : IMeasurePredicate<int>
+    {
+        public bool Invoke(int measure) => measure > threshold;
     }
 }
 
