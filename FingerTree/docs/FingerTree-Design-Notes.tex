@@ -10,7 +10,7 @@
 \usepackage{enumitem}
 \usepackage{listings}
 \usepackage{tikz}
-\usetikzlibrary{positioning,fit,backgrounds,shapes.geometric}
+\usetikzlibrary{positioning,fit,backgrounds,shapes.geometric,decorations.pathreplacing,calc}
 \usepackage[colorlinks=true,linkcolor=blue,urlcolor=teal,citecolor=blue]{hyperref}
 
 % --- Code listings (C#) --------------------------------------------------
@@ -420,6 +420,28 @@ keeping logarithmic edits.
     \cs{TextReader} adapter.
 \end{itemize}
 
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[>=stealth, font=\footnotesize,
+  ch/.style={draw, rounded corners=1pt, minimum height=8mm, align=center}]
+  % split row
+  \node[ch, minimum width=38mm, fill=red!8]   (big) at (0,0)   {2200 elements\\[-1pt] \scriptsize $>$ max (2048)};
+  \node[ch, minimum width=18mm, fill=green!10] (h1)  at (6.4,0) {1100};
+  \node[ch, minimum width=18mm, fill=green!10, right=1.5mm of h1] (h2) {1100};
+  \draw[->, thick] (big.east) -- node[above, font=\scriptsize]{split on grow} (h1.west);
+  % coalesce row
+  \node[ch, minimum width=12mm, fill=red!8] (a) at (-0.3,-1.9) {200};
+  \node[ch, minimum width=11mm, fill=red!8, right=1.5mm of a] (b) {150};
+  \node[ch, minimum width=24mm, fill=green!10] (m) at (6.4,-1.9) {350};
+  \draw[->, thick] (b.east) -- node[above, font=\scriptsize]{coalesce on shrink} (m.west);
+  \node[font=\scriptsize, text=black!55, below=0.5mm of a] {both $<$ min (256)};
+\end{tikzpicture}
+\caption{The rope chunk-size policy keeps leaves healthy. An insert that grows a chunk past the maximum
+splits it (top); adjacent chunks that fall below the minimum coalesce (bottom), including across a
+concatenation boundary. Healthy chunks bound both the per-edit copy and the tree depth.}
+\label{fig:chunks}
+\end{figure}
+
 Editing a $10^6$-element rope is $\sim$2--3 orders of magnitude faster than the equivalent \cs{string}
 rebuild and flat across size (logarithmic, kilobytes not megabytes); line navigation on a million-line
 buffer is thousands of times faster than a linear scan. The curated numbers and their honest
@@ -435,6 +457,32 @@ Keeping a snapshot is keeping a reference --- $\bigO(1)$, zero allocation, never
 nothing mutates it. An edit allocates only the $\bigO(\log n)$ of structure that actually changes; the
 rest is shared. An undo/redo history is therefore a cursor over retained versions, needing no diffing and
 no inverse operations. A thousand versions cost a thousand small deltas, not a thousand copies.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[>=stealth, font=\footnotesize,
+  nd/.style={draw, circle, minimum size=6.5mm, inner sep=0pt},
+  cp/.style={nd, fill=orange!20},
+  lf/.style={draw, rounded corners=1pt, minimum size=6mm},
+  sub/.style={draw, regular polygon, regular polygon sides=3, inner sep=0pt, minimum size=10mm, fill=blue!10}]
+  \node[nd, label=above:{old version}] (o1) at (0,0) {};
+  \node[nd] (o2) at (0,-1.5) {};
+  \node[lf] (o3) at (0,-3.0) {$x$};
+  \node[cp, label=above:{new version}] (n1) at (5,0) {};
+  \node[cp] (n2) at (5,-1.5) {};
+  \node[lf, fill=orange!20] (n3) at (5,-3.0) {$x'$};
+  \node[sub] (s1) at (2.5,-0.75) {$S_1$};
+  \node[sub] (s2) at (2.5,-2.25) {$S_2$};
+  \draw[->] (o1) -- (o2);  \draw[->] (o2) -- (o3);
+  \draw[->] (n1) -- (n2);  \draw[->] (n2) -- (n3);
+  \draw[->] (o1) -- (s1);  \draw[->] (n1) -- (s1);
+  \draw[->] (o2) -- (s2);  \draw[->] (n2) -- (s2);
+\end{tikzpicture}
+\caption{Path copying. Editing leaf $x \to x'$ allocates only the $\bigO(\log n)$ nodes on the
+root-to-leaf path (orange); every off-path subtree ($S_1$, $S_2$) is shared by both versions. The old
+version is untouched and remains valid --- this is why a snapshot is free and an edit is logarithmic.}
+\label{fig:sharing}
+\end{figure}
 
 \subsection{Lock-free concurrent reads, and a memory-model argument}
 
@@ -466,6 +514,85 @@ work the amortized bounds depend on. The full worked patterns are in
 \texttt{docs/persistence-and-concurrency.md}.
 
 % =========================================================================
+\clearpage
+\section{Worked examples}
+\label{sec:examples}
+
+Three of the ideas above, as code. Each compiles against the public API.
+
+\subsection{A monotone-predicate split}
+
+Every split and locate is driven by a monotone predicate over the \emph{accumulated} measure: the boundary
+is the first element at which the running measure satisfies the predicate (Figure~\ref{fig:split}). The
+descent visits only $\bigO(\log n)$ nodes --- it does not scan the sequence.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[>=stealth, font=\footnotesize,
+  cell/.style={draw, minimum size=7mm},
+  hit/.style={cell, fill=orange!30, very thick}]
+  \foreach \i/\v in {0/3,1/1,2/4,3/1,4/5,5/9,6/2}
+    \node[cell] (c\i) at (\i*0.9,0) {\v};
+  \node[hit] at (4*0.9,0) {5};                       % boundary element
+  \foreach \i/\s in {0/3,1/4,2/8,3/9,4/14,5/23,6/25}
+    \node[font=\scriptsize, text=black!55] at (\i*0.9,-0.62) {\s};
+  \node[font=\scriptsize, text=black!55] at (-1.15,-0.62) {total:};
+  \node[font=\scriptsize, text=black!55] at (-1.15,0) {elem:};
+  \draw[decorate, decoration={brace, amplitude=4pt, raise=2pt}] (-0.42,0.5) -- node[above=6pt]{\emph{Left}} (2.97,0.5);
+  \draw[decorate, decoration={brace, amplitude=4pt, raise=2pt}] (3.18,0.5) -- node[above=6pt]{\emph{Right}} (5.82,0.5);
+  \node[font=\scriptsize, text=orange!60!black] at (3.6,-1.15) {first total $> 13$};
+\end{tikzpicture}
+\caption{A monotone-predicate split with a sum measure: each cell's running total is shown beneath it. For
+the predicate ``total $> 13$'', \cs{Split} returns the prefix \emph{Left} and suffix \emph{Right};
+\cs{TrySplitFind} also returns the boundary element (highlighted).}
+\label{fig:split}
+\end{figure}
+
+With a sum measure, ``cumulative-weight'' selection --- and therefore weighted random sampling --- is a
+one-liner over exactly this machinery:
+
+\begin{lstlisting}
+// Weights 5, 1, 4 (total 10). A threshold in [0,10) selects index 0 with probability 5/10, etc.
+var weights = FingerTree<int, int, SumMeasure<int>>.Create(5, 1, 4);
+var draw = random.Next(10);
+if (weights.TrySelectByCumulativeWeight(draw, out var picked, out var weightBefore))
+{
+    // `picked` is the sampled element; `weightBefore` is the summed weight ahead of it. O(log n).
+}
+\end{lstlisting}
+
+\subsection{A zero-allocation custom query}
+
+Because the predicate is a value-type strategy (Section~\ref{sec:predicates}), a caller can supply their own
+query that runs with no closure and no allocation. Here is an order-statistic lookup --- the $k$-th element
+--- over a size-measured tree:
+
+\begin{lstlisting}
+readonly struct RankAbove(int rank) : IMeasurePredicate<int>
+{
+    public bool Invoke(int countSoFar) => countSoFar > rank;   // monotone in the running count
+}
+
+var tree = FingerTree<int, int, SizeMeasure<int>>.CreateRange(Enumerable.Range(0, 1_000));
+if (tree.TryLocate(new RankAbove(500), out var before, out var element))
+{
+    // element == the 500th item; before == 500. No result trees built, no delegate allocated.
+}
+\end{lstlisting}
+
+\subsection{Line and column navigation over text}
+
+The rope text layer keeps the cores element-agnostic while making editor-style navigation $\bigO(\log n)$
+on the underlying \cs{MeasuredRope<char, int, NewlineMeasure>}:
+
+\begin{lstlisting}
+var doc = "first line\nsecond line\nthird".ToTextRope();
+int lineCount   = doc.LineCount();                 // 3
+var (line, col) = doc.LineColumnOf(offset: 14);    // (1, 3): the 'o' in "second"
+int offset      = doc.OffsetOf(line: 2, column: 0);// the start of "third"
+string second   = doc.GetLine(1);                  // "second line"
+\end{lstlisting}
+
 \clearpage
 \section{Complexity summary}
 \label{sec:complexitysummary}
