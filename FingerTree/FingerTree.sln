@@ -15,6 +15,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "benchmarks", "benchmarks", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tools.DataStructures.FingerTree.Benchmarks", "benchmarks\Tools.DataStructures.FingerTree.Benchmarks\Tools.DataStructures.FingerTree.Benchmarks.csproj", "{5EAC2F95-35EE-40D6-9320-31A328F2094F}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{5D20AA90-6969-D8BD-9DCD-8634F4692FDA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tools.DataStructures.FingerTree.Tour", "samples\Tools.DataStructures.FingerTree.Tour\Tools.DataStructures.FingerTree.Tour.csproj", "{16A7CF47-0480-46C2-B49A-792DFB70C60E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -61,6 +65,18 @@ Global
 		{5EAC2F95-35EE-40D6-9320-31A328F2094F}.Release|x64.Build.0 = Release|Any CPU
 		{5EAC2F95-35EE-40D6-9320-31A328F2094F}.Release|x86.ActiveCfg = Release|Any CPU
 		{5EAC2F95-35EE-40D6-9320-31A328F2094F}.Release|x86.Build.0 = Release|Any CPU
+		{16A7CF47-0480-46C2-B49A-792DFB70C60E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{16A7CF47-0480-46C2-B49A-792DFB70C60E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{16A7CF47-0480-46C2-B49A-792DFB70C60E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{16A7CF47-0480-46C2-B49A-792DFB70C60E}.Debug|x64.Build.0 = Debug|Any CPU
+		{16A7CF47-0480-46C2-B49A-792DFB70C60E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{16A7CF47-0480-46C2-B49A-792DFB70C60E}.Debug|x86.Build.0 = Debug|Any CPU
+		{16A7CF47-0480-46C2-B49A-792DFB70C60E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{16A7CF47-0480-46C2-B49A-792DFB70C60E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{16A7CF47-0480-46C2-B49A-792DFB70C60E}.Release|x64.ActiveCfg = Release|Any CPU
+		{16A7CF47-0480-46C2-B49A-792DFB70C60E}.Release|x64.Build.0 = Release|Any CPU
+		{16A7CF47-0480-46C2-B49A-792DFB70C60E}.Release|x86.ActiveCfg = Release|Any CPU
+		{16A7CF47-0480-46C2-B49A-792DFB70C60E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -69,5 +85,6 @@ Global
 		{425946FD-A430-47DC-9EB4-AB520940F3AB} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{AB16EBEC-A464-43FF-8D6E-1BC8177E4E99} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{5EAC2F95-35EE-40D6-9320-31A328F2094F} = {66320409-64EC-F7C5-3DEF-65E7510DAAD1}
+		{16A7CF47-0480-46C2-B49A-792DFB70C60E} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 	EndGlobalSection
 EndGlobal
