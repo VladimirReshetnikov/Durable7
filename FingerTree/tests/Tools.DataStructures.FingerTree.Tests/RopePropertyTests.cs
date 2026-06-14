@@ -23,9 +23,10 @@ public sealed class RopePropertyTests
 
     private static readonly Gen<(int Op, int Index, int Length)[]> HistoryGen = EditGen.Array[0, 60];
 
-    /// <summary>Generated text drawn from a small alphabet rich in newlines, so line structure varies widely.</summary>
+    /// <summary>Generated text over a mixed alphabet with a moderate newline rate, so both multi-character lines
+    /// and degenerate line structure (blank, leading, trailing, and consecutive newlines) all occur.</summary>
     private static readonly Gen<string> TextGen =
-        Gen.OneOfConst('a', 'b', 'c', '\n', '\n').Array[0, 120].Select(chars => new string(chars));
+        Gen.OneOfConst('a', 'b', 'c', 'd', 'e', ' ', '\n').Array[0, 120].Select(chars => new string(chars));
 
     /// <summary>
     /// Replays a generated edit history against a <see cref="Rope{T}"/> and a <see cref="List{T}"/> oracle,
@@ -95,7 +96,10 @@ public sealed class RopePropertyTests
                     case 8 when n > 0:
                     {
                         var i = indexSource % n;
-                        var count = length % (n - i + 1);
+                        // Clamp the generated length into the removable range. Using Math.Min (rather than a
+                        // modulo) keeps a non-zero removal the overwhelmingly common case, so this branch actually
+                        // exercises range removal — only length == 0 yields the empty no-op.
+                        var count = Math.Min(length, n - i);
                         rope = rope.RemoveRange(i, count);
                         model.RemoveRange(i, count);
                         break;
