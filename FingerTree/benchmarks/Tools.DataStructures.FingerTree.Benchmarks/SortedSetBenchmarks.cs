@@ -5,10 +5,11 @@ using BclImmutableSortedSet = System.Collections.Immutable.ImmutableSortedSet<in
 
 namespace Tools.DataStructures.FingerTree.Benchmarks;
 
-// Sorted-set operations versus the persistent BCL ImmutableSortedSet. Contains and Add are O(log n) for both;
-// the distinguishing capability is order-statistic indexing — the finger-tree SortedSet returns the k-th
-// element in O(log n) via its cached size measure, whereas ImmutableSortedSet has no indexer and a rank query
-// must enumerate (O(k)). The aliases keep our SortedSet distinct from System.Collections.Generic.SortedSet.
+// Sorted-set operations versus the persistent BCL ImmutableSortedSet. Contains, Add, and order-statistic
+// rank-select are all O(log n) on both: ImmutableSortedSet implements IReadOnlyList<T>, so its indexer is an
+// O(log n) rank-select too — this measures whether the finger-tree SortedSet is competitive with the mature
+// BCL collection on the operations they share (it is, within a small constant factor). The aliases keep our
+// SortedSet distinct from System.Collections.Generic.SortedSet.
 [MemoryDiagnoser]
 public class SortedSetBenchmarks
 {
@@ -47,13 +48,13 @@ public class SortedSetBenchmarks
     [BenchmarkCategory("Add")]
     public BclImmutableSortedSet Immutable_Add() => _immutable.Add(-1);
 
-    // O(log n): the headline order-statistic capability — the k-th smallest element by rank.
+    // O(log n): order-statistic rank-select via the cached size measure (the k-th smallest element).
     [Benchmark]
     [BenchmarkCategory("RankSelect")]
     public int Ours_SelectByRank() => _ours[_rank];
 
-    // O(k): ImmutableSortedSet has no indexer, so a rank query must skip through the ordered enumeration.
+    // O(log n): ImmutableSortedSet's IReadOnlyList indexer is also a rank-select — the fair comparison.
     [Benchmark]
     [BenchmarkCategory("RankSelect")]
-    public int Immutable_SelectByRank() => _immutable.Skip(_rank).First();
+    public int Immutable_SelectByRank() => _immutable[_rank];
 }
