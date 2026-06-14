@@ -611,6 +611,42 @@ version is untouched and remains valid --- this is why a snapshot is free and an
 \label{fig:sharing}
 \end{figure}
 
+\subsection{The cost, concretely}
+
+The structural-sharing claim is quantitative. Editing a 1{,}000{,}000-character rope rebuilds only the
+$\bigO(\log n)$ path to the touched chunk plus that one chunk, so a mid-buffer edit allocates single-digit
+kilobytes regardless of length, while the eager \cs{string} equivalent copies the whole buffer
+(Table~\ref{tab:editcost}). The retained old version is untouched, so a snapshot is a bare reference ---
+zero bytes.
+
+\begin{table}[ht]
+\centering
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Operation on 1{,}000{,}000 chars} & \textbf{\texttt{Rope<char>}} & \textbf{\texttt{string}} \\
+\midrule
+insert a short run mid-buffer        & 2{,}939 ns \quad 5.8 KB & 844{,}426 ns \quad 1{,}953 KB \\
+remove a 1{,}000-char run mid-buffer & 2{,}217 ns \quad 7 KB   & 507{,}297 ns \quad 1{,}951 KB \\
+split in half and re-concatenate     & 2{,}066 ns \quad 4 KB   & 682{,}576 ns \quad 1{,}953 KB \\
+\bottomrule
+\end{tabular}
+\caption{Edit cost on a million-character sequence (BenchmarkDotNet, .NET~10). The rope's per-edit
+allocation is kilobytes and flat across size; the string's is the whole buffer. Full results and honest
+counterpoints are in \texttt{docs/benchmarks.md}.}
+\label{tab:editcost}
+\end{table}
+
+The same arithmetic governs history. Keeping $K$ undo states of that buffer costs the one shared structure
+plus $K$ small deltas --- on the order of $K \times 6$~KB, not $K \times 2$~MB. A thousand-step undo history
+is therefore a few megabytes of deltas rather than the $\sim$2~GB a thousand full copies would need. And
+because the deltas come from the lazy-memoized spine, the per-edit cost stays flat even when every edit
+branches off the \emph{same} retained version: a prepend on a retained measured tree benchmarks at a flat
+$\sim$22~ns from 100 to 1{,}000{,}000 elements (Section~\ref{sec:lazy}) --- the amortized bound holding
+under branching rather than degrading to an $\bigO(\log n)$ re-pay per branch. A read does even better: the
+struct-predicate descent (Section~\ref{sec:predicates}) allocates \emph{nothing}, so a query on any version,
+old or new, costs zero bytes.
+
 \subsection{Lock-free concurrent reads, and a memory-model argument}
 
 Because a version is immutable, any number of threads may read it concurrently with no locks. A
