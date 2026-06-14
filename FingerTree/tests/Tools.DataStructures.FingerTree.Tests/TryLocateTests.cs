@@ -64,6 +64,40 @@ public sealed class TryLocateTests
         }
     }
 
+    /// <summary>A user-defined non-capturing struct predicate, the public zero-allocation locate API.</summary>
+    private readonly struct AtLeastSum(int threshold) : IMeasurePredicate<int>
+    {
+        public bool Invoke(int runningTotal) => runningTotal >= threshold;
+    }
+
+    /// <summary>
+    /// Verifies the public generic <see cref="FingerTree{TElement, TMeasure, TMeasureOps}.TryLocate{TPredicate}"/>
+    /// works with a caller-supplied struct predicate (matching the documented example) and allocates nothing.
+    /// </summary>
+    [Fact]
+    public void PublicStructPredicate_LocatesAndAllocatesNothing()
+    {
+        var tree = FingerTree<int, int, SumMeasure<int>>.Create(5, 1, 4, 2);
+
+        Assert.True(tree.TryLocate(new AtLeastSum(7), out var before, out var element));
+        Assert.Equal(4, element);    // 5 + 1 + 4 = 10 first reaches 7 at the third element
+        Assert.Equal(6, before);     // summed measure to its left
+
+        Assert.False(tree.TryLocate(new AtLeastSum(100), out var none, out _));
+        Assert.Equal(12, none);      // whole-tree measure when the predicate is never satisfied
+
+        // The struct-predicate overload allocates nothing once the spine measures are memoized.
+        var large = FingerTree<int, int, SumMeasure<int>>.CreateRange(Enumerable.Range(1, 1 << 14));
+        for (var i = 0; i < 50; i++)
+            large.TryLocate(new AtLeastSum(i * 1000), out _, out _);   // warm up
+        var beforeBytes = GC.GetAllocatedBytesForCurrentThread();
+        var sink = 0;
+        for (var i = 0; i < 1000; i++)
+            if (large.TryLocate(new AtLeastSum(i * 100), out _, out var hit)) sink += hit;
+        Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - beforeBytes, 0, 256);
+        Assert.True(sink != int.MinValue);
+    }
+
     /// <summary>Verifies the degenerate cases: empty tree and a predicate satisfied by the very first element.</summary>
     [Fact]
     public void Locate_HandlesEdges()

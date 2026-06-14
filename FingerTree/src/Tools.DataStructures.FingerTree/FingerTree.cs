@@ -272,16 +272,28 @@ public sealed class FingerTree<TElement, TMeasure, TMeasureOps>
     /// <summary>
     /// The allocation-free locate over a value-type predicate: the same boundary search as
     /// <see cref="TryLocate(Func{TMeasure, bool}, out TMeasure, out TElement)"/> but with the predicate supplied
-    /// as a constrained struct, so the JIT monomorphizes the descent and it allocates nothing at all. The
-    /// library's sorted, order-statistic, priority-queue, and interval collections route their hot reads through
-    /// this overload with non-capturing predicate structs.
+    /// as a constrained struct, so the runtime monomorphizes the descent and it allocates nothing at all.
+    /// Supply a non-capturing <see cref="IMeasurePredicate{TMeasure}"/> struct to write a zero-allocation
+    /// membership, rank, order-statistic, or neighbor query; the library's own sorted, order-statistic,
+    /// priority-queue, and interval collections use this overload internally.
     /// </summary>
     /// <typeparam name="TPredicate">A value-type monotone predicate over the measure.</typeparam>
     /// <param name="predicate">The boundary predicate.</param>
     /// <param name="measureBefore">The measure before the boundary element, or the whole-tree measure when none.</param>
     /// <param name="found">The boundary element when one exists; otherwise <see langword="default"/>.</param>
     /// <returns><see langword="true"/> when a boundary element exists; otherwise <see langword="false"/>.</returns>
-    internal bool TryLocate<TPredicate>(TPredicate predicate, out TMeasure measureBefore, [MaybeNullWhen(false)] out TElement found)
+    /// <example>
+    /// <code>
+    /// readonly struct AtLeast(int threshold) : IMeasurePredicate&lt;int&gt;
+    /// {
+    ///     public bool Invoke(int runningTotal) =&gt; runningTotal &gt;= threshold;
+    /// }
+    ///
+    /// var tree = FingerTree&lt;int, int, SumMeasure&lt;int&gt;&gt;.Create(5, 1, 4, 2);
+    /// tree.TryLocate(new AtLeast(7), out var before, out var element);   // element = 4, before = 6; no allocation
+    /// </code>
+    /// </example>
+    public bool TryLocate<TPredicate>(TPredicate predicate, out TMeasure measureBefore, [MaybeNullWhen(false)] out TElement found)
         where TPredicate : struct, IMeasurePredicate<TMeasure>
     {
         if (_root.IsEmpty || !predicate.Invoke(_root.Measure))

@@ -1,20 +1,8 @@
 namespace Tools.DataStructures.FingerTree;
 
-/// <summary>
-/// A monotone predicate over a measure, supplied as a constrained value type so a measured-tree read
-/// (<see cref="FingerTree{TElement, TMeasure, TMeasureOps}.TryLocate{TPredicate}"/>) can descend without
-/// allocating a closure. The generic constraint <c>where TPredicate : struct, IMeasurePredicate&lt;TMeasure&gt;</c>
-/// lets the JIT monomorphize and devirtualize <see cref="Invoke"/>, so a hot read of a sorted or
-/// order-statistic collection allocates nothing at all.
-/// </summary>
-/// <typeparam name="TMeasure">The measure (annotation) type the predicate inspects.</typeparam>
-internal interface IMeasurePredicate<TMeasure>
-{
-    /// <summary>Evaluates the predicate for the accumulated measure of a candidate prefix.</summary>
-    /// <param name="measure">The accumulated measure to test.</param>
-    /// <returns><see langword="true"/> once the boundary has been reached or passed.</returns>
-    bool Invoke(TMeasure measure);
-}
+// The public IMeasurePredicate<TMeasure> contract lives in MeasurePredicate.cs; this file holds the library's
+// own non-capturing struct predicates (and the delegate adapter) that route the collections' reads through the
+// zero-allocation FingerTree.TryLocate<TPredicate> overload.
 
 /// <summary>Adapts a <see cref="Func{TMeasure, Boolean}"/> to <see cref="IMeasurePredicate{TMeasure}"/>, so the
 /// closure-based public locate API shares the single generic descent. The wrapped delegate's own closure is
