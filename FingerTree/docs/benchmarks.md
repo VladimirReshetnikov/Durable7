@@ -153,6 +153,30 @@ in the hoisting-caveat regime and are not literal. The finger-tree value proposi
 order-statistic tree — plus structural-sharing persistence; its reads are now allocation-free like the
 specialized BCL collection's.
 
+## Rope: editing a large sequence
+
+`Rope<T>` (a persistent chunked sequence) exists to edit a large sequence in O(log n) instead of O(n). The
+clearest demonstration is `Rope<char>` against `string` — the usual text-buffer baseline — for a buffer of
+1,000,000 characters:
+
+| Operation (1,000,000 chars) | `Rope<char>` | `string` | Speedup |
+|-----------------------------|-------------:|---------:|--------:|
+| insert a short run mid-buffer | 2,939 ns · 5.8 KB | 844,426 ns · 1,953 KB | ~287× |
+| remove a 1,000-char run mid-buffer | 2,217 ns · 7 KB | 507,297 ns · 1,951 KB | ~229× |
+| split in half and re-concatenate | 2,066 ns · 4 KB | 682,576 ns · 1,953 KB | ~330× |
+| build from a char array | 256,924 ns · 2.1 MB | (`ImmutableList`: 91,813,733 ns · 39 MB) | ~358× vs `ImmutableList` |
+
+The rope's edit times are **flat** from 100,000 to 1,000,000 elements (O(log n)) and allocate kilobytes, while
+`string` edits grow linearly and copy the whole megabyte-scale buffer each time. Building is dramatically faster
+than `ImmutableList` because the rope fills bulk chunks instead of inserting elements one at a time into a
+balanced tree.
+
+Honest counterpoints: for a *single-element* insert at one position, `ImmutableList<char>.Insert` (~806 ns) beats
+the rope (~3 µs) — the rope's split + chunk + coalesce carries more fixed overhead than a balanced-tree leaf
+insert; and `string` random indexing is O(1) versus the rope's O(log n). The rope wins on large-buffer editing
+versus `string`/`StringBuilder`, on build throughput, and on bulk range operations — which is exactly the
+text-editor / large-buffer workload it is meant for.
+
 ## Takeaways
 
 - **O(1) `Reverse`** and **O(log(min)) `Meld`** are the standout structural wins (millions-fold and ~750–900×).
@@ -164,5 +188,7 @@ specialized BCL collection's.
   BCL's allocation behavior.
 - **Persistence is robust**: operations on a retained version stay O(1)/O(log n) amortized — flat across sizes
   from 100 to 1,000,000 — so the amortized bounds survive branching, and the derived collections inherit it.
+- **Rope editing** of a 1,000,000-element buffer is ~230–330× faster than `string` (and allocates kilobytes, not
+  megabytes), with edit times flat across sizes (O(log n)) — the persistent-text-buffer payoff.
 - The finger tree trades a constant-factor read overhead for persistence, structural sharing, and a single
   unified core behind a whole family of collections.
