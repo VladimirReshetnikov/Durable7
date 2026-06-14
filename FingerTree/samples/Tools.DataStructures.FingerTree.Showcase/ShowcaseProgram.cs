@@ -21,8 +21,10 @@ public static class ShowcaseProgram
         WeightedSamplingAct(output, seed);
         OrderStatisticAct(output, seed);
         IntervalAct(output);
+        ReversibleDequeAct(output);
+        SortedMapAct(output);
 
-        output.WriteLine("Done. Each structure above is the same finger tree under a different measure.");
+        output.WriteLine("Done. Every structure above is a persistent finger tree; the measured ones differ only by their measure.");
     }
 
     private static void PriorityQueueAct(TextWriter output)
@@ -92,4 +94,34 @@ public static class ShowcaseProgram
 
         output.WriteLine();
     }
+
+    private static void ReversibleDequeAct(TextWriter output)
+    {
+        output.WriteLine("Act 5 - Reversible deque (O(1) reverse via a per-node orientation bit)");
+        var deque = ReversibleDeque<int>.CreateRange(Enumerable.Range(1, 8));
+        var reversed = deque.Reverse();   // O(1): flips an orientation bit and shares all structure
+        output.WriteLine($"  forward  : {Render(deque)}   (first {deque.First}, last {deque.Last})");
+        output.WriteLine($"  reversed : {Render(reversed)}   (first {reversed.First}, last {reversed.Last})  -- O(1), shared structure");
+        output.WriteLine($"  d ++ rev : {Render(deque.Concat(reversed))}   (mixed-orientation concat stays O(log min))\n");
+    }
+
+    private static void SortedMapAct(TextWriter output)
+    {
+        output.WriteLine("Act 6 - Navigable sorted map (order-statistic + floor/ceiling)");
+        var map = SortedDictionary<int, string>.CreateRange(
+        [
+            new(10, "ten"), new(25, "twenty-five"), new(40, "forty"), new(55, "fifty-five"), new(70, "seventy"),
+        ]);
+        var median = map.EntryAt(map.Count / 2);
+        output.WriteLine($"  count {map.Count}, min key {map.MinEntry.Key}, max key {map.MaxEntry.Key}");
+        output.WriteLine($"  this[40]            : {map[40]}");
+        output.WriteLine($"  median entry (k={map.Count / 2}) : {median.Key} -> {median.Value}");
+        map.TryFloorEntry(50, out var floor);
+        map.TryCeilingEntry(50, out var ceiling);
+        output.WriteLine($"  floor(50)           : {floor.Key} -> {floor.Value}");
+        output.WriteLine($"  ceiling(50)         : {ceiling.Key} -> {ceiling.Value}\n");
+    }
+
+    private static string Render(ReversibleDeque<int> deque) =>
+        string.Join(" ", Enumerable.Range(0, deque.Count).Select(index => deque[index]));
 }

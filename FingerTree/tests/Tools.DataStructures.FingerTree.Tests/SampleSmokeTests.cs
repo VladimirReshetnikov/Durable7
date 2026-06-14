@@ -44,6 +44,9 @@ public sealed class SampleSmokeTests
         Assert.Contains("Act 2 - Weighted random sampling", transcript);
         Assert.Contains("overlapping [2,4]", transcript);
         Assert.Contains("[1,5], [3,8]", transcript);
+        Assert.Contains("reversed : 8 7 6 5 4 3 2 1", transcript);   // O(1) reverse
+        Assert.Contains("40 -> forty", transcript);                 // floor(50)
+        Assert.Contains("55 -> fifty-five", transcript);            // ceiling(50)
         Assert.Contains("Done.", transcript);
     }
 }
