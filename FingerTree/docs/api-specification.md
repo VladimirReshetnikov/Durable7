@@ -7,10 +7,10 @@
 - Scope: Public API shape, semantic contracts, and complexity targets for a persistent catenable deque
 - Related code:
   - `src/DataStructures/FingerTree/`
-- Related docs:
-  - [Finger Trees Explained Anew, and Slightly Simplified](<Finger Trees Explained Anew, and Slightly Simplified.tex>)
-  - [Finger trees: a simple general-purpose data structure](<Finger trees - a simple general-purpose data structure/Finger trees - a simple general-purpose data structure.tex>)
-  - [Haskell containers 0.8 `Data.Sequence.Internal`](containers-0.8/src/Data/Sequence/Internal.hs)
+- Related docs (external reference material, segregated under [`external/`](external/README.md)):
+  - [Finger Trees Explained Anew, and Slightly Simplified](<external/Finger Trees Explained Anew, and Slightly Simplified.tex>)
+  - [Finger trees: a simple general-purpose data structure](<external/Finger trees - a simple general-purpose data structure/Finger trees - a simple general-purpose data structure.tex>)
+  - [Haskell containers 0.8 `Data.Sequence.Internal`](external/containers-0.8/src/Data/Sequence/Internal.hs)
 
 ## Summary
 

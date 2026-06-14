@@ -7,9 +7,9 @@
 - Scope: Defects in the [API specification](api-specification.md) complexity model and their remediation
 - Related docs:
   - [Finger Tree Deque API Specification](api-specification.md) (the document under review)
-  - [Finger trees: a simple general-purpose data structure](<Finger trees - a simple general-purpose data structure/Finger trees - a simple general-purpose data structure.md>) (Hinze and Paterson 2006, "the original paper")
-  - [Finger Trees Explained Anew, and Slightly Simplified](<Finger Trees Explained Anew, and Slightly Simplified.md>) (Claessen 2020, "the simplified paper")
-  - [Haskell containers 0.8 `Data.Sequence`](containers-0.8/src/Data/Sequence.hs)
+  - [Finger trees: a simple general-purpose data structure](<external/Finger trees - a simple general-purpose data structure/Finger trees - a simple general-purpose data structure.md>) (Hinze and Paterson 2006, "the original paper"; external reference under [`external/`](external/README.md))
+  - [Finger Trees Explained Anew, and Slightly Simplified](<external/Finger Trees Explained Anew, and Slightly Simplified.md>) (Claessen 2020, "the simplified paper")
+  - [Haskell containers 0.8 `Data.Sequence`](external/containers-0.8/src/Data/Sequence.hs)
 
 ## Summary
 
