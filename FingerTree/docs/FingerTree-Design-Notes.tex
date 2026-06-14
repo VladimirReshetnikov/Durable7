@@ -214,6 +214,80 @@ pessimize the common size-only case, exactly the reason the Haskell ecosystem sh
 \texttt{Data.Sequence} and \texttt{Data.FingerTree}.
 
 % =========================================================================
+\section{Algorithmic intuition: repair and concatenation}
+\label{sec:intuition}
+
+Two operations explain both the amortized bounds and why the spine must be lazy.
+
+\paragraph{Push repair --- the source of amortization.}
+A push onto a digit that still has room (one to three elements) is $\bigO(1)$ and touches nothing else. A
+push onto a \emph{full} four-element digit overflows: the node keeps a two-element digit and pushes a
+three-element node down into the middle subtree (Figure~\ref{fig:repair}). That descent is the only
+non-constant work, and it recurs at most $\bigO(\log n)$ levels. But a digit that just overflowed is now
+nearly empty, so it banks enough cheap pushes to pay for the next overflow --- that is the amortization.
+The lazy-memoized middle (Section~\ref{sec:lazy}) is exactly what preserves this argument when the descent
+is shared across retained versions.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[>=stealth, font=\footnotesize,
+  cl/.style={draw, minimum size=6.5mm, inner sep=0pt},
+  full/.style={cl, fill=red!12},
+  ok/.style={cl, fill=green!14},
+  nd/.style={draw, rounded corners=2pt, fill=blue!10, minimum height=6.5mm, inner xsep=5pt}]
+  \node[anchor=east, font=\scriptsize] at (-0.35,0) {push $x$:};
+  \node[cl, fill=orange!22] (x) at (0.15,0) {$x$};
+  \node[full] (a) at (1.7,0) {$a$};
+  \node[full, right=0pt of a] (b) {$b$};
+  \node[full, right=0pt of b] (c) {$c$};
+  \node[full, right=0pt of c] (d) {$d$};
+  \node[font=\scriptsize, anchor=west] at (d.east) {\;\;prefix is full (4)};
+  \draw[->] (x.east) -- (a.west);
+  \node[anchor=east, font=\scriptsize] at (-0.35,-1.7) {becomes:};
+  \node[ok] (x2) at (0.15,-1.7) {$x$};
+  \node[ok, right=0pt of x2] (a2) {$a$};
+  \node[font=\scriptsize, anchor=west] at (a2.east) {\;\;prefix (2)};
+  \node[nd] (n3) at (4.7,-1.7) {$(b\;\;c\;\;d)$};
+  \draw[->] (n3.south) -- ++(0,-0.65) node[below, font=\scriptsize, align=center]{pushed into the\\ middle (one level down)};
+\end{tikzpicture}
+\caption{Push repair. Consing $x$ onto a full four-element prefix keeps a two-element prefix $(x,a)$ and
+pushes the three-element node $(b,c,d)$ down into the middle. Only the (rare) overflow descends; most
+pushes just extend a non-full digit in $\bigO(1)$.}
+\label{fig:repair}
+\end{figure}
+
+\paragraph{Concatenation --- merging two spines.}
+Concatenating two trees keeps the left tree's prefix and the right tree's suffix; the left suffix and the
+right prefix are regrouped into nodes and folded into a single recursive concatenation of the two middles
+(Figure~\ref{fig:concat}). The recursion descends both spines in lock-step, so concat is
+$\bigO(\log(\min(n,m)))$ rather than linear.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[>=stealth, font=\footnotesize,
+  seg/.style={draw, rounded corners=1pt, minimum height=7mm, align=center}]
+  \node[seg, fill=blue!8, minimum width=12mm] (lp) at (0,0) {L.pre};
+  \node[seg, fill=gray!10, minimum width=13mm, right=0pt of lp] (lm) {L.mid};
+  \node[seg, fill=orange!16, minimum width=12mm, right=0pt of lm] (ls) {L.suf};
+  \node[seg, fill=orange!16, minimum width=12mm, right=7mm of ls] (rp) {R.pre};
+  \node[seg, fill=gray!10, minimum width=13mm, right=0pt of rp] (rm) {R.mid};
+  \node[seg, fill=blue!8, minimum width=12mm, right=0pt of rm] (rs) {R.suf};
+  \node[font=\scriptsize, above=0.5mm of lm] {tree $L$};
+  \node[font=\scriptsize, above=0.5mm of rm] {tree $R$};
+  \node[seg, fill=blue!8, minimum width=12mm] (op) at (1.0,-2.0) {L.pre};
+  \node[seg, fill=gray!10, minimum width=52mm, right=0pt of op] (om)
+     {L.mid $\Vert$ nodes(L.suf, R.pre) $\Vert$ R.mid};
+  \node[seg, fill=blue!8, minimum width=12mm, right=0pt of om] (os) {R.suf};
+  \node[font=\scriptsize, above=0.5mm of om] {result $L \Vert R$};
+  \draw[->, orange!70!black] (ls.south) to[bend right=18] (om.north);
+  \draw[->, orange!70!black] (rp.south) to[bend left=18] (om.north);
+\end{tikzpicture}
+\caption{Concatenation. The outer prefix and suffix are inherited from $L$ and $R$; the adjacent inner
+digits (L.suf and R.pre) are regrouped into nodes and merged into a single recursive concatenation of the
+middles. Here ``$\Vert$'' denotes sequence concatenation one level down.}
+\label{fig:concat}
+\end{figure}
+
 \section{The lazy-memoized spine}
 \label{sec:lazy}
 
@@ -328,7 +402,27 @@ carrier whose monoid combines component-wise. Named operations (\cs{SplitByFirst
 the size$+$sum / size$+$max / size$+$min pairings via the \cs{ProductMeasures} factory) infer all the
 type arguments, so callers write a clean call and get, for example, an order-statistic \emph{and}
 cumulative-weight structure at once. Product measures nest, so three-component measures compose without
-new code.
+new code (Figure~\ref{fig:product}).
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[>=stealth, font=\footnotesize,
+  mb/.style={draw, rounded corners=2pt, minimum height=8mm, align=center}]
+  \node[mb, fill=blue!8, minimum width=22mm] (m1) at (0,0.75) {size measure\\ \scriptsize (count)};
+  \node[mb, fill=green!10, minimum width=22mm] (m2) at (0,-0.75) {sum measure\\ \scriptsize (weight)};
+  \node[mb, fill=orange!14, minimum width=27mm] (pair) at (4.0,0) {\texttt{MeasurePair}\\ \scriptsize (count, weight)};
+  \node[mb, fill=gray!8, minimum width=30mm] (tree) at (8.4,0) {one tree caches\\ both annotations};
+  \draw[->] (m1.east) -- (pair.north west);
+  \draw[->] (m2.east) -- (pair.south west);
+  \draw[->] (pair.east) -- (tree.west);
+  \node[font=\scriptsize, align=center] at (4.2,-2.0)
+     {one structure, two $\bigO(\log n)$ queries: \emph{$k$-th element by count} and \emph{weighted pick by sum}};
+\end{tikzpicture}
+\caption{A product measure. Two independent measures combine component-wise into a \texttt{MeasurePair}
+cached at every node, so one structure answers order-statistic \emph{and} weighted-selection queries.
+Product measures nest, so three or more components compose without new code.}
+\label{fig:product}
+\end{figure}
 
 % =========================================================================
 \section{Closure-free reads and splits}
