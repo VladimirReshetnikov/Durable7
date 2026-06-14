@@ -113,20 +113,24 @@ order-statistic operations are **not unique to the finger tree**.
 
 The read paths were originally routed through `Split`, which rebuilt both result halves and so allocated ~1–2 KB
 per query. They now use a read-only `TryLocate` descent that finds the boundary element (and the measure before
-it) without reconstructing any subtree, which cut both time and allocation dramatically:
+it) without reconstructing any subtree — and, supplied with a non-capturing **struct predicate** through the
+generic `TryLocate<TPredicate>` overload, the descent allocates nothing at all:
 
-| `SortedSet` read (100,000) | Before (`Split`) | After (`TryLocate`) |
-|----------------------------|-----------------:|--------------------:|
-| `Contains`                 | 2,612 ns · 2,400 B | 351 ns · 96 B |
-| rank-select (indexer)      | 2,229 ns · 2,392 B | 360 ns · 88 B |
+| `SortedSet.Contains` (100,000) | Time | Allocated |
+|--------------------------------|-----:|----------:|
+| Original (`Split`)             | 2,612 ns | 2,400 B |
+| `TryLocate` + lambda predicate | 351 ns | 96 B (the closure) |
+| `TryLocate` + struct predicate | ~410 ns | **0 B** |
 
-That is ~7× faster and ~25× less allocation. The residual ~90 B is the predicate *closure* (the lambda captures
-the query key and comparer); eliminating it entirely would require non-capturing struct predicates, a possible
-further step toward the BCL's zero-allocation reads. The BCL's sub-nanosecond reads here are in the
-hoisting-caveat regime and are not literal. The finger-tree value proposition for sorted data is the **unified
-measure framework** — one core yielding multiset, set, map, interval tree, priority queue, and order-statistic
-tree — and structural-sharing persistence; on shared reads it is now within a small constant factor of the
-specialized BCL collection.
+So the reads went from ~2.4 KB per query to **zero** — BCL-parity allocation behavior — at comparable speed.
+Eliminating the tree rebuild gave the ~7× speedup; replacing the capturing lambda with a constrained value-type
+predicate (`KeyAtLeastPredicate<T>` etc.) removed the last per-read closure, which the
+[zero-allocation guard tests](../tests/Tools.DataStructures.FingerTree.Tests/AllocationFreeReadTests.cs) pin
+across SortedSet/SortedBag/SortedDictionary/PriorityQueue/IntervalTree. The BCL's sub-nanosecond reads here are
+in the hoisting-caveat regime and are not literal. The finger-tree value proposition for sorted data is the
+**unified measure framework** — one core yielding multiset, set, map, interval tree, priority queue, and
+order-statistic tree — plus structural-sharing persistence; its reads are now allocation-free like the
+specialized BCL collection's.
 
 ## Takeaways
 
@@ -134,7 +138,8 @@ specialized BCL collection.
 - **Endpoint operations** and **weighted selection** show the expected O(1) / O(log n) advantage over the BCL's
   O(log n) / O(n), with ratios that grow with size.
 - **Indexing** exhibits the predicted distance-from-nearer-end U-shape.
-- **Sorted-collection reads** route through the allocation-free `TryLocate` descent (~7× faster, ~25× less
-  allocation than the former `Split`-based reads), leaving only a small per-query predicate closure.
+- **Sorted-collection reads** route through the `TryLocate` descent with non-capturing struct predicates: ~7×
+  faster than the former `Split`-based reads and **zero allocation** (down from ~2.4 KB/query), matching the
+  BCL's allocation behavior.
 - The finger tree trades a constant-factor read overhead for persistence, structural sharing, and a single
   unified core behind a whole family of collections.

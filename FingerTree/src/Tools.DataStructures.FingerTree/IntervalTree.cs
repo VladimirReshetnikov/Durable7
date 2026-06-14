@@ -177,7 +177,7 @@ public sealed class IntervalTree<T> : IEnumerable<Interval<T>>
     public bool TryFindOverlap(Interval<T> query, out Interval<T> match)
     {
         var comparer = Comparer<T>.Default;
-        if (!_tree.TryLocate(m => m.MaxHigh.HasValue && comparer.Compare(m.MaxHigh.Value, query.Low) >= 0, out _, out var candidate))
+        if (!_tree.TryLocate(new MaxHighAtLeastPredicate<T>(comparer, query.Low), out _, out var candidate))
         {
             match = default;
             return false;

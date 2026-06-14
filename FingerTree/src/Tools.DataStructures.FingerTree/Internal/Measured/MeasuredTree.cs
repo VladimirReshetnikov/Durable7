@@ -94,12 +94,15 @@ internal abstract class MeasuredTree<TElement, TChild, TMeasure, TMonoid>
     /// measure accumulated strictly before it. A read-only downward walk: the allocation-free analogue of
     /// <see cref="SplitTree"/> for queries that need only the boundary element or the measure preceding it.
     /// </summary>
+    /// <typeparam name="TPredicate">A value-type monotone predicate; passed by the constrained generic so the
+    /// descent allocates no closure.</typeparam>
     /// <param name="predicate">Monotone predicate (false then true) over the accumulated measure.</param>
     /// <param name="accumulator">Measure of everything to the left of this tree.</param>
     /// <returns>The measure accumulated before the boundary element, and the boundary element itself.</returns>
     /// <remarks>Requires a non-empty tree for which <c>predicate(accumulator ⊕ Measure)</c> holds. O(log n);
     /// allocates nothing beyond forcing already-deferred spine repairs along the descended path.</remarks>
-    public abstract (TMeasure MeasureBefore, TChild Hit) LocateTree(Func<TMeasure, bool> predicate, TMeasure accumulator);
+    public abstract (TMeasure MeasureBefore, TChild Hit) LocateTree<TPredicate>(TPredicate predicate, TMeasure accumulator)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>;
 
     /// <summary>Concatenates this tree with <paramref name="right"/>. O(log min) amortized.</summary>
     /// <param name="right">Tree whose elements follow this tree's elements.</param>
@@ -191,15 +194,16 @@ internal abstract class MeasuredTree<TElement, TChild, TMeasure, TMonoid>
     /// <param name="predicate">Monotone predicate.</param>
     /// <param name="accumulator">Measure to the left of the buffer.</param>
     /// <param name="values">The buffer to search; the last element is the hit by elimination.</param>
-    private protected static (TMeasure MeasureBefore, TChild Hit) LocateBuffer(
-        Func<TMeasure, bool> predicate,
+    private protected static (TMeasure MeasureBefore, TChild Hit) LocateBuffer<TPredicate>(
+        TPredicate predicate,
         TMeasure accumulator,
         TChild[] values)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>
     {
         for (var i = 0; i < values.Length - 1; i++)
         {
             var next = TMonoid.Combine(accumulator, values[i].Measure);
-            if (predicate(next))
+            if (predicate.Invoke(next))
                 return (accumulator, values[i]);
             accumulator = next;
         }

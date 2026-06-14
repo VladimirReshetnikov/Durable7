@@ -109,7 +109,7 @@ public sealed class SortedBag<T> : IReadOnlyCollection<T>
         {
             if ((uint)index >= (uint)Count)
                 throw new ArgumentOutOfRangeException(nameof(index), index, "Rank is outside the bag's range.");
-            _tree.TryLocate(m => m.Count > index, out _, out var item);
+            _tree.TryLocate(new CountAbovePredicate<T>(index), out _, out var item);
             return item!;
         }
     }
@@ -140,7 +140,7 @@ public sealed class SortedBag<T> : IReadOnlyCollection<T>
     /// <param name="item">Element to search for.</param>
     /// <returns><see langword="true"/> when present; otherwise <see langword="false"/>.</returns>
     public bool Contains(T item) =>
-        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) >= 0, out _, out var found)
+        _tree.TryLocate(new KeyAtLeastPredicate<T>(_comparer, item), out _, out var found)
         && _comparer.Compare(found, item) == 0;
 
     /// <summary>Counts elements comparing equal to <paramref name="item"/>. O(log n).</summary>
@@ -153,7 +153,7 @@ public sealed class SortedBag<T> : IReadOnlyCollection<T>
     /// <returns>The number of elements less than <paramref name="item"/>.</returns>
     public int CountLessThan(T item)
     {
-        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) >= 0, out var before, out _);
+        _tree.TryLocate(new KeyAtLeastPredicate<T>(_comparer, item), out var before, out _);
         return before.Count;
     }
 
@@ -162,7 +162,7 @@ public sealed class SortedBag<T> : IReadOnlyCollection<T>
     /// <returns>The number of elements less than or equal to <paramref name="item"/>.</returns>
     public int CountAtMost(T item)
     {
-        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) > 0, out var before, out _);
+        _tree.TryLocate(new KeyAbovePredicate<T>(_comparer, item), out var before, out _);
         return before.Count;
     }
 

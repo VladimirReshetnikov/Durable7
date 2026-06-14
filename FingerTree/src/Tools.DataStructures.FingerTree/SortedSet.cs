@@ -120,7 +120,7 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     /// <param name="item">Element to locate.</param>
     /// <returns>The zero-based rank, or -1 when <paramref name="item"/> is not present.</returns>
     public int IndexOf(T item) =>
-        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) >= 0, out var before, out var found)
+        _tree.TryLocate(new KeyAtLeastPredicate<T>(_comparer, item), out var before, out var found)
         && _comparer.Compare(found, item) == 0
             ? before.Count
             : -1;
@@ -153,7 +153,7 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     /// <param name="item">Element to search for.</param>
     /// <returns><see langword="true"/> when present; otherwise <see langword="false"/>.</returns>
     public bool Contains(T item) =>
-        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) >= 0, out _, out var found)
+        _tree.TryLocate(new KeyAtLeastPredicate<T>(_comparer, item), out _, out var found)
         && _comparer.Compare(found, item) == 0;
 
     /// <summary>Removes the element comparing equal to <paramref name="item"/>, if present. O(log n).</summary>
@@ -185,7 +185,7 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     public bool TryFloor(T item, [MaybeNullWhen(false)] out T floor)
     {
         // The floor is the element just before the first element greater than item.
-        var atMost = CountBelow(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) > 0);
+        var atMost = CountBelow(new KeyAbovePredicate<T>(_comparer, item));
         if (atMost == 0)
         {
             floor = default!;
@@ -201,7 +201,7 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     /// <param name="ceiling">The ceiling element when one exists; otherwise <see langword="default"/>.</param>
     /// <returns><see langword="true"/> when a ceiling exists; otherwise <see langword="false"/>.</returns>
     public bool TryCeiling(T item, [MaybeNullWhen(false)] out T ceiling) =>
-        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) >= 0, out _, out ceiling);
+        _tree.TryLocate(new KeyAtLeastPredicate<T>(_comparer, item), out _, out ceiling);
 
     /// <summary>Finds the greatest element strictly less than <paramref name="item"/>. O(log n).</summary>
     /// <param name="item">Reference value.</param>
@@ -210,7 +210,7 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     public bool TryLower(T item, [MaybeNullWhen(false)] out T lower)
     {
         // The strict predecessor is the element just before the first element at or after item.
-        var less = CountBelow(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) >= 0);
+        var less = CountBelow(new KeyAtLeastPredicate<T>(_comparer, item));
         if (less == 0)
         {
             lower = default!;
@@ -226,7 +226,7 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     /// <param name="higher">The successor when one exists; otherwise <see langword="default"/>.</param>
     /// <returns><see langword="true"/> when a strictly greater element exists; otherwise <see langword="false"/>.</returns>
     public bool TryHigher(T item, [MaybeNullWhen(false)] out T higher) =>
-        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, item) > 0, out _, out higher);
+        _tree.TryLocate(new KeyAbovePredicate<T>(_comparer, item), out _, out higher);
 
     /// <summary>Returns the subset of elements in the inclusive range <c>[low, high]</c>. O(log n).</summary>
     /// <param name="low">Inclusive lower bound.</param>
@@ -333,14 +333,16 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     /// <param name="rank">A zero-based rank known to be in <c>0 .. Count - 1</c>.</param>
     private T ElementAt(int rank)
     {
-        _tree.TryLocate(m => m.Count > rank, out _, out var item);
+        _tree.TryLocate(new CountAbovePredicate<T>(rank), out _, out var item);
         return item!;
     }
 
     /// <summary>Counts the elements strictly before the first one satisfying <paramref name="atOrPast"/>, without
-    /// reconstructing a subtree. O(log n).</summary>
+    /// reconstructing a subtree or allocating a closure. O(log n).</summary>
+    /// <typeparam name="TPredicate">A value-type boundary predicate.</typeparam>
     /// <param name="atOrPast">Monotone predicate marking the boundary element.</param>
-    private int CountBelow(Func<RankedKey<T>, bool> atOrPast)
+    private int CountBelow<TPredicate>(TPredicate atOrPast)
+        where TPredicate : struct, IMeasurePredicate<RankedKey<T>>
     {
         _tree.TryLocate(atOrPast, out var before, out _);
         return before.Count;

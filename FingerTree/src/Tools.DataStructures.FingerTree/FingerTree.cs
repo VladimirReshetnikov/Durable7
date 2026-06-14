@@ -266,7 +266,25 @@ public sealed class FingerTree<TElement, TMeasure, TMeasureOps>
     public bool TryLocate(Func<TMeasure, bool> predicate, out TMeasure measureBefore, [MaybeNullWhen(false)] out TElement found)
     {
         ArgumentNullException.ThrowIfNull(predicate);
-        if (_root.IsEmpty || !predicate(_root.Measure))
+        return TryLocate(new FuncMeasurePredicate<TMeasure>(predicate), out measureBefore, out found);
+    }
+
+    /// <summary>
+    /// The allocation-free locate over a value-type predicate: the same boundary search as
+    /// <see cref="TryLocate(Func{TMeasure, bool}, out TMeasure, out TElement)"/> but with the predicate supplied
+    /// as a constrained struct, so the JIT monomorphizes the descent and it allocates nothing at all. The
+    /// library's sorted, order-statistic, priority-queue, and interval collections route their hot reads through
+    /// this overload with non-capturing predicate structs.
+    /// </summary>
+    /// <typeparam name="TPredicate">A value-type monotone predicate over the measure.</typeparam>
+    /// <param name="predicate">The boundary predicate.</param>
+    /// <param name="measureBefore">The measure before the boundary element, or the whole-tree measure when none.</param>
+    /// <param name="found">The boundary element when one exists; otherwise <see langword="default"/>.</param>
+    /// <returns><see langword="true"/> when a boundary element exists; otherwise <see langword="false"/>.</returns>
+    internal bool TryLocate<TPredicate>(TPredicate predicate, out TMeasure measureBefore, [MaybeNullWhen(false)] out TElement found)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>
+    {
+        if (_root.IsEmpty || !predicate.Invoke(_root.Measure))
         {
             measureBefore = _root.Measure;
             found = default;

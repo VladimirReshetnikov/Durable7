@@ -153,7 +153,7 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
     /// <param name="key">Key to test.</param>
     /// <returns><see langword="true"/> when present; otherwise <see langword="false"/>.</returns>
     public bool ContainsKey(TKey key) =>
-        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, key) >= 0, out _, out var found)
+        _tree.TryLocate(new KeyAtLeastPredicate<TKey>(_comparer, key), out _, out var found)
         && _comparer.Compare(found.Key, key) == 0;
 
     /// <summary>Looks up the value for <paramref name="key"/>. O(log n).</summary>
@@ -162,7 +162,7 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
     /// <returns><see langword="true"/> when present; otherwise <see langword="false"/>.</returns>
     public bool TryGetValue(TKey key, [MaybeNullWhen(false)] out TValue value)
     {
-        if (_tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, key) >= 0, out _, out var found)
+        if (_tree.TryLocate(new KeyAtLeastPredicate<TKey>(_comparer, key), out _, out var found)
             && _comparer.Compare(found.Key, key) == 0)
         {
             value = found.Value;
@@ -188,7 +188,7 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
     /// <param name="key">Key to locate.</param>
     /// <returns>The zero-based rank, or -1 when <paramref name="key"/> is not present.</returns>
     public int IndexOfKey(TKey key) =>
-        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, key) >= 0, out var before, out var found)
+        _tree.TryLocate(new KeyAtLeastPredicate<TKey>(_comparer, key), out var before, out var found)
         && _comparer.Compare(found.Key, key) == 0
             ? before.Count
             : -1;
@@ -266,7 +266,7 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
     public bool TryFloorEntry(TKey key, out KeyValuePair<TKey, TValue> entry)
     {
         // The floor is the entry just before the first one with a key greater than `key`.
-        var atMost = CountBelow(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, key) > 0);
+        var atMost = CountBelow(new KeyAbovePredicate<TKey>(_comparer, key));
         if (atMost == 0)
         {
             entry = default;
@@ -282,7 +282,7 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
     /// <param name="entry">The ceiling entry when one exists; otherwise <see langword="default"/>.</param>
     /// <returns><see langword="true"/> when a ceiling exists; otherwise <see langword="false"/>.</returns>
     public bool TryCeilingEntry(TKey key, out KeyValuePair<TKey, TValue> entry) =>
-        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, key) >= 0, out _, out entry);
+        _tree.TryLocate(new KeyAtLeastPredicate<TKey>(_comparer, key), out _, out entry);
 
     /// <summary>Finds the entry with the greatest key strictly less than <paramref name="key"/>. O(log n).</summary>
     /// <param name="key">Reference key.</param>
@@ -291,7 +291,7 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
     public bool TryLowerEntry(TKey key, out KeyValuePair<TKey, TValue> entry)
     {
         // The strict predecessor is the entry just before the first one with a key at or after `key`.
-        var less = CountBelow(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, key) >= 0);
+        var less = CountBelow(new KeyAtLeastPredicate<TKey>(_comparer, key));
         if (less == 0)
         {
             entry = default;
@@ -307,7 +307,7 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
     /// <param name="entry">The successor entry when one exists; otherwise <see langword="default"/>.</param>
     /// <returns><see langword="true"/> when a strictly greater key exists; otherwise <see langword="false"/>.</returns>
     public bool TryHigherEntry(TKey key, out KeyValuePair<TKey, TValue> entry) =>
-        _tree.TryLocate(m => m.Key.HasValue && _comparer.Compare(m.Key.Value, key) > 0, out _, out entry);
+        _tree.TryLocate(new KeyAbovePredicate<TKey>(_comparer, key), out _, out entry);
 
     /// <summary>Returns the sub-dictionary of entries whose keys lie in the inclusive range <c>[low, high]</c>. O(log n).</summary>
     /// <param name="low">Inclusive lower key bound.</param>
@@ -339,14 +339,16 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
     /// <param name="rank">A zero-based rank known to be in <c>0 .. Count - 1</c>.</param>
     private KeyValuePair<TKey, TValue> EntryAtRank(int rank)
     {
-        _tree.TryLocate(m => m.Count > rank, out _, out var entry);
+        _tree.TryLocate(new CountAbovePredicate<TKey>(rank), out _, out var entry);
         return entry;
     }
 
     /// <summary>Counts the entries strictly before the first one satisfying <paramref name="atOrPast"/>, without
-    /// reconstructing a subtree. O(log n).</summary>
+    /// reconstructing a subtree or allocating a closure. O(log n).</summary>
+    /// <typeparam name="TPredicate">A value-type boundary predicate.</typeparam>
     /// <param name="atOrPast">Monotone predicate marking the boundary entry.</param>
-    private int CountBelow(Func<RankedKey<TKey>, bool> atOrPast)
+    private int CountBelow<TPredicate>(TPredicate atOrPast)
+        where TPredicate : struct, IMeasurePredicate<RankedKey<TKey>>
     {
         _tree.TryLocate(atOrPast, out var before, out _);
         return before.Count;

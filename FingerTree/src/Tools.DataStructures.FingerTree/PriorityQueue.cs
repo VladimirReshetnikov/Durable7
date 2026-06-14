@@ -211,7 +211,7 @@ public sealed class PriorityQueue<TElement, TPriority> : IReadOnlyCollection<(TE
 
         var comparer = Comparer<TPriority>.Default;
         var target = min.Value;
-        _tree.TryLocate(m => m.Min.HasValue && comparer.Compare(m.Min.Value, target) <= 0, out _, out entry);
+        _tree.TryLocate(new PriorityFrontPredicate<TPriority>(comparer, target), out _, out entry);
         return true;
     }
 

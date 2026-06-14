@@ -62,7 +62,7 @@ internal sealed class EmptyMeasuredTree<TElement, TChild, TMeasure, TMonoid>
         throw EmptyAccess();
 
     /// <inheritdoc/>
-    public override (TMeasure MeasureBefore, TChild Hit) LocateTree(Func<TMeasure, bool> predicate, TMeasure accumulator) =>
+    public override (TMeasure MeasureBefore, TChild Hit) LocateTree<TPredicate>(TPredicate predicate, TMeasure accumulator) =>
         throw EmptyAccess();
 
     private static InvalidOperationException EmptyAccess() =>
@@ -128,7 +128,7 @@ internal sealed class SingleMeasuredTree<TElement, TChild, TMeasure, TMonoid>(TC
         (Empty, Element, Empty);
 
     /// <inheritdoc/>
-    public override (TMeasure MeasureBefore, TChild Hit) LocateTree(Func<TMeasure, bool> predicate, TMeasure accumulator) =>
+    public override (TMeasure MeasureBefore, TChild Hit) LocateTree<TPredicate>(TPredicate predicate, TMeasure accumulator) =>
         (accumulator, Element);
 }
 
@@ -324,15 +324,15 @@ internal sealed class DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>
     }
 
     /// <inheritdoc/>
-    public override (TMeasure MeasureBefore, TChild Hit) LocateTree(Func<TMeasure, bool> predicate, TMeasure accumulator)
+    public override (TMeasure MeasureBefore, TChild Hit) LocateTree<TPredicate>(TPredicate predicate, TMeasure accumulator)
     {
         var beforeMiddle = TMonoid.Combine(accumulator, CombineAll(Prefix));
-        if (predicate(beforeMiddle))
+        if (predicate.Invoke(beforeMiddle))
             return LocateBuffer(predicate, accumulator, Prefix);
 
         var middle = ForceMiddle();
         var afterMiddle = TMonoid.Combine(beforeMiddle, middle.Measure);
-        if (predicate(afterMiddle))
+        if (predicate.Invoke(afterMiddle))
         {
             var (nodeBefore, node) = middle.LocateTree(predicate, beforeMiddle);
             return LocateBuffer(predicate, nodeBefore, node.Children);
