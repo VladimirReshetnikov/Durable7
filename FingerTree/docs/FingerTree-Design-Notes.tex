@@ -756,18 +756,43 @@ int offset      = doc.OffsetOf(line: 2, column: 0);// the start of "third"
 string second   = doc.GetLine(1);                  // "second line"
 \end{lstlisting}
 
+\subsection{Editor-grade text extras}
+
+UTF-16 length, Unicode code-point count, and grapheme-cluster count are three different numbers; the text
+extras expose all three, plus offset conversions, carriage-return-aware lines, and a fluent builder
+(Section~\ref{sec:ropes}):
+
+\begin{lstlisting}
+var doc = new RopeBuilder()
+    .Append("Hi ").Append(new Rune(0x1F600)).Append(" cafe\u0301\r\nend")   // emoji + combining accent + CRLF
+    .ToTextRope();
+
+int chars      = doc.Count;             // 16 UTF-16 code units
+int codePoints = doc.CodePointCount();  // 15 (the emoji is one code point over two units)
+int graphemes  = doc.GraphemeCount();   // 13 (base + combining accent is one cluster; CRLF is one)
+
+NewlineStyle style = doc.DetectNewlineStyle();          // NewlineStyle.CrLf
+string firstLine   = doc.GetLineText(0);                // first line with its trailing '\r' removed
+int graphemeAt3    = doc.CharOffsetToGraphemeIndex(3);  // 3: character offset 3 is the emoji cluster
+\end{lstlisting}
+
+The code-point operations stream over the rope; the grapheme operations materialize the text (cluster
+boundaries are a global property) but share one segmentation, so counts and offsets always agree.
+
 \subsection{Running the demos}
 
-These ideas run end to end in two small console samples under \texttt{samples/}. The \emph{text buffer}
+These ideas run end to end in three small console samples under \texttt{samples/}. The \emph{text buffer}
 tour walks through undo/redo over snapshots, line navigation, and a background reader taking millions of
 lock-free snapshots while a writer publishes versions; the \emph{measures showcase} exercises the priority
 queue, weighted sampling, order-statistic set, interval index, reversible deque, and a navigable sorted map
---- one finger tree under six guises. Both are smoke-tested, so they cannot silently drift from the library.
-Run either with:
+--- one finger tree under six guises; and the \emph{editor extras} tour shows character / code-point /
+grapheme addressing, newline-style detection, and the fluent builder. All three are smoke-tested, so they
+cannot silently drift from the library. Run any with:
 
 \begin{lstlisting}[language={}]
 dotnet run --project samples/Tools.DataStructures.FingerTree.Tour      -c Release
 dotnet run --project samples/Tools.DataStructures.FingerTree.Showcase  -c Release
+dotnet run --project samples/Tools.DataStructures.FingerTree.Editor    -c Release
 \end{lstlisting}
 
 \clearpage
@@ -854,8 +879,8 @@ readable minimal programs.
     tearable concurrency stress tests.
   \item \texttt{benchmarks/} --- the BenchmarkDotNet harness; curated results in
     \texttt{docs/benchmarks.md}.
-  \item \texttt{samples/} --- two runnable console tours (the text buffer and the measures showcase of
-    Section~\ref{sec:examples}), each smoke-tested from the suite.
+  \item \texttt{samples/} --- three runnable console tours (the text buffer, the measures showcase, and the
+    editor extras of Section~\ref{sec:examples}), each smoke-tested from the suite.
   \item \texttt{docs/} --- this document, the normative API specification and its defect report, the
     persistence/concurrency guide, the benchmark write-up, and the bundled source papers.
 \end{itemize}
