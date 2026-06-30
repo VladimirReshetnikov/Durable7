@@ -7,8 +7,19 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <iostream>
 #include <string_view>
 #include <vector>
+
+#ifdef _MSC_VER
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <crtdbg.h>
+#include <windows.h>
+#endif
 
 using namespace tools::data_structures::finger_tree;
 using namespace tools::data_structures::finger_tree::tests;
@@ -21,8 +32,39 @@ void add_measured_lazy_cell_tests(suite& tests);
 void add_persistent_deque_tests(suite& tests);
 void add_priority_queue_tests(suite& tests);
 
+#ifdef _MSC_VER
+void configure_non_interactive_failure_reporting()
+{
+    _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
+    _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+
+    _set_error_mode(_OUT_TO_STDERR);
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+    _set_invalid_parameter_handler([](
+                                       const wchar_t*,
+                                       const wchar_t*,
+                                       const wchar_t*,
+                                       unsigned int,
+                                       uintptr_t) {
+        std::abort();
+    });
+
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+}
+#endif
+
 int main()
 {
+#ifdef _MSC_VER
+    configure_non_interactive_failure_reporting();
+#endif
+    std::cout << std::unitbuf;
+    std::cerr << std::unitbuf;
+
     suite tests;
 
     tests.add("public aggregate header exposes version metadata", [] {
