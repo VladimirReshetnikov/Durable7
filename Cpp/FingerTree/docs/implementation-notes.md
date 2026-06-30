@@ -180,3 +180,37 @@ Validation:
   convergence.
 - Built `msvc-debug` and ran `ctest --preset msvc-debug`.
 - Built `msvc-release` and ran `ctest --preset msvc-release`.
+
+## Checkpoint: Atomic Measure Box
+
+Compared C# source:
+
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/TearableConcurrencyStressTests.cs`
+- `Cpp/FingerTree/docs/port-plan-editorial-notes.md`
+
+Implemented:
+
+- `detail::atomic_box<T>`, a one-shot atomic publication cell for lazily computed values.
+- Null `std::shared_ptr<const T>` is the "not computed" sentinel, matching C#'s `object? _measureBox` null state.
+- `get_or_compute` first loads the published pointer, computes a fully initialized value outside the atomic slot,
+  then publishes the pointer with compare-exchange.
+- The factory may return either `T` or `std::shared_ptr<const T>`.
+- Exceptions and null factory results do not publish anything; a later read can retry from the empty state.
+
+Parity notes:
+
+- This is the C++ analogue of the boxed deep-node measure in `DeepMeasuredTree`: the measure is published as a
+  pointer, not as a racing non-atomic `T` write and not as `std::atomic<T>`.
+- Publishing a pointer preserves the C# tear-free property for large measure values. The tests use a four-word
+  `wide_value` whose fields must agree, so concurrent first publication validates that readers observe a fully
+  constructed value.
+- The primitive is separate from `lazy_cell<T>` because the measured tree has two independent cells per deep node:
+  one for the middle suspension and one for the combined measure.
+
+Validation:
+
+- Added tests for empty/quiescent publication, prebuilt pointer publication, null result rejection, exception
+  retry, and concurrent publication of intact wide values.
+- Built `msvc-debug` and ran `ctest --preset msvc-debug`.
+- Built `msvc-release` and ran `ctest --preset msvc-release`.
