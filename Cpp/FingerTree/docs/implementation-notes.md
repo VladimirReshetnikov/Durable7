@@ -251,3 +251,100 @@ Validation:
   release after force.
 - Built `msvc-debug` and ran `ctest --preset msvc-debug`.
 - Built `msvc-release` and ran `ctest --preset msvc-release`.
+
+## Checkpoint: Persistent Deque Core
+
+Compared C# source:
+
+- `FingerTree/src/Tools.DataStructures.FingerTree/FingerTreeDeque.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/FingerTreeDequeResults.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/TreeElement.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/Digit.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/Node.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/Tree.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/MiddleTree.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/TreeOperations.cs`
+
+Compared C# tests:
+
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeEndpointOperationTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeBranchingPersistenceTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeIndexingAndSplitTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeEnumerationAndCopyTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeSortedSearchTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeSortedSearchEdgeTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeComplexityGuardTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeRandomizedModelTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
+
+Implemented:
+
+- `persistent_deque<T>`, a public immutable deque facade with C++ names for the C# operations:
+  endpoint reads and updates, indexed reads/replacement/update, insertion/removal, range extraction,
+  split-at/index/range results, concatenation, sorted lower/upper-bound search, deterministic duplicate
+  binary search, sorted insertion/removal, vector materialization, iterator traversal, and invariant validation.
+- A tuned internal 2-3 finger-tree engine in `detail/deque_tree.hpp`:
+  zero-through-three transient digits, one-through-three stored digits, two/three-child nodes, cached leaf counts,
+  cached rightmost-leaf signposts, empty/single/deep tree levels, and lazy memoized middle subtrees.
+- Endpoint overflow and repair rules matching the C# implementation:
+  `Cons`/`Snoc` over a three-child digit leaves a safe two-child digit and suspends a `Node2` push into a forced
+  middle; removal from a one-child digit pulls from the middle, using the `Node3` chop fast path and deferring
+  only the recursive `Node2` pop.
+- Level-spanning construction and concatenation helpers matching `TreeOperations`:
+  `FromDigit`, `FromPartialDigit`, `DeepLeft`, `DeepRight`, `PullLeft`, `PullRight`, and `Concat`/`Glue` with the
+  same two-through-nine element chunking rule where two- and four-element remainders become `Node2` chunks.
+- A stack iterator that traverses tree and node blocks left-to-right without flattening the collection first.
+
+Parity notes:
+
+- Leaves are stored inline inside digits and nodes through a value wrapper, not as separately allocated heap
+  objects. That preserves the important C# `Leaf<T>` property: endpoint-heavy workloads do not allocate one
+  object per element merely to represent leaves.
+- Internal `Node2`/`Node3` and tree-level reps are heap objects shared by `std::shared_ptr<const ...>`, matching
+  the C# design where nodes and tree levels are immutable reference objects shared by persistent versions.
+- The middle subtree uses the previously implemented `detail::lazy_cell<deque_tree<T>>`, so pending operations
+  are atomically published, memoized, and released after first force. This is the C++ analogue of C# `LazyMiddle`
+  with `Volatile.Read` and `Interlocked.CompareExchange`.
+- The C# implementation encodes element height with polymorphic recursion (`Tree<T, TChild>` and
+  `Node<T, TChild>`). C++ cannot express that infinite type family directly in one public template, so the port
+  uses type-erased `deque_element<T>` values whose node case points to a node containing children one level closer
+  to the leaves. Construction sites preserve the same height discipline; invariant validation recomputes sizes and
+  signposts.
+- Sorted lower/upper-bound search uses the cached rightmost-leaf signpost exactly like C# `BoundIndex`. The C++
+  API accepts `std::less`-style callables rather than `IComparer<T>`.
+
+Justified divergences:
+
+- Counts and indices use `std::size_t`; C# uses `int` and throws before exceeding `Int32.MaxValue`. This follows the
+  port-wide count policy already chosen for measures and avoids baking a 32-bit limit into the native container.
+  Arithmetic still uses checked unsigned addition on structural cached sizes.
+- Public names follow C++ container conventions (`size`, `empty`, `front`, `back`, `at`, `push_front`,
+  `push_back`) while retaining C#-recognizable operation families (`set_item`, `insert_at`, `split_at`,
+  `sorted_lower_bound`, etc.). The semantic operations and result shapes are the same.
+- `try_front`, `try_back`, and `try_get` return pointers rather than copying into out parameters. This avoids
+  unnecessary copies for large `T` and is idiomatic for nullable read probes in C++.
+- `sorted_binary_search` returns `std::ptrdiff_t` so it can preserve the C# bitwise-complement insertion-index
+  convention without narrowing every native index to `int`.
+- Concat uses small `std::vector<deque_element<T>>` buffers for the two-through-nine combined elements and up to
+  three carried nodes. The C# code allocates short arrays for the same buffers; this is the same asymptotic shape
+  and limited to the logarithmic concat descent.
+
+Validation:
+
+- Added deterministic tests for construction, endpoint persistence, empty behavior, indexing, replacement,
+  updater calls, insertion/removal, range extraction, split reconstruction, concat, range insertion/appending,
+  iterator/copy order, sorted lower/upper-bound semantics, deterministic duplicate binary search, sorted equal
+  range splitting, sorted insertion/removal, and a comparer-call guard over signpost-guided search.
+- Added a bounded randomized model replay that interleaves endpoint operations, indexed updates, insertion,
+  removal, split reconstruction, retained-version branching, and concat while validating invariants after each
+  operation and rechecking retained versions at the end.
+- Built `msvc-debug` with `/W4 /WX`.
+- Ran `ctest --preset msvc-debug --output-on-failure`; all tests passed.
+- Built `msvc-release` with `/W4 /WX`.
+- Ran `ctest --preset msvc-release --output-on-failure`; all tests passed.
+
+Findings:
+
+- No C# defect, flaw, or improvement proposal was found in this deque-core pass. The C# implementation comments for
+  overflow, pull/chop, one-operation-deep suspension, cached size, cached rightmost signposts, split, concat, and
+  enumeration matched the implementation behavior reviewed for this checkpoint.

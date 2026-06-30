@@ -17,6 +17,7 @@ void add_measure_tests(suite& tests);
 void add_lazy_cell_tests(suite& tests);
 void add_atomic_box_tests(suite& tests);
 void add_measured_lazy_cell_tests(suite& tests);
+void add_persistent_deque_tests(suite& tests);
 
 int main()
 {
@@ -70,6 +71,7 @@ int main()
     add_lazy_cell_tests(tests);
     add_atomic_box_tests(tests);
     add_measured_lazy_cell_tests(tests);
+    add_persistent_deque_tests(tests);
 
     return tests.run();
 }
