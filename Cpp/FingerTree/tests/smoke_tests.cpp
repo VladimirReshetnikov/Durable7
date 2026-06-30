@@ -32,6 +32,7 @@ void add_measured_finger_tree_tests(suite& tests);
 void add_measured_lazy_cell_tests(suite& tests);
 void add_persistent_deque_tests(suite& tests);
 void add_priority_queue_tests(suite& tests);
+void add_reversible_deque_tests(suite& tests);
 void add_sorted_collection_tests(suite& tests);
 
 #ifdef _MSC_VER
@@ -121,6 +122,7 @@ int main()
     add_measured_lazy_cell_tests(tests);
     add_persistent_deque_tests(tests);
     add_priority_queue_tests(tests);
+    add_reversible_deque_tests(tests);
     add_sorted_collection_tests(tests);
 
     return tests.run();

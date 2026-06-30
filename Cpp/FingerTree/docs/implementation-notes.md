@@ -670,3 +670,72 @@ Findings:
 
 - No new C# defect, flaw, or improvement proposal was found in the sorted collection pass. The C# source and tests
   matched the measured-tree wrapper algorithms ported here.
+
+## Checkpoint: Reversible Deque
+
+Compared C# source:
+
+- `FingerTree/src/Tools.DataStructures.FingerTree/ReversibleDeque.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/Reversible/ReversibleTree.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/Reversible/ReversibleElements.cs`
+
+Compared C# tests:
+
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/ReversibleDequeTests.cs`
+
+Implemented:
+
+- `reversible_deque<T>`, a persistent catenable deque with O(1) whole-sequence reversal.
+- A strict internal reversible finger tree in `detail::rev_tree<T>` with empty/single/deep levels, one-through-three
+  prefix and suffix digits, two/three-child internal nodes, cached leaf counts, cached endpoint values, and a
+  reversal bit on deep levels and grouping nodes.
+- Reversal-aware endpoint reads, endpoint updates, indexed reads, indexed replacement, insertion, removal, split,
+  concatenation, vector materialization, and invariant validation.
+- Mixed-orientation concatenation through the same C# glue algorithm: concatenate logical suffix/middle/prefix
+  bridge digits, chunk the bridge into two/three-child nodes, and recurse over the logical middles without
+  materializing either operand.
+- Public aggregate-header and CMake/test-harness integration for the new wrapper.
+
+Parity notes:
+
+- The C++ reversible core follows the C# reversible source rather than layering a mode bit on
+  `persistent_deque<T>`. That preserves the deliberate strict representation and keeps `reverse()` O(1).
+- `mirror()` on a deep level or node allocates only a new shallow wrapper with the reversal bit toggled. It reuses
+  the same child structures, so reversal is independent of the number of stored leaves just like C# `Mirror`.
+- Endpoint reads use cached first/last values and return references when the public operation can safely bind to
+  storage owned by the deque. Indexed descent returns values because reversed logical child/digit access may create
+  temporary mirrored views; this matches the C# indexer returning `T` and avoids unsafe C++ references.
+- The concat implementation uses the representation kind tag followed by `static_cast` for the checked cases
+  instead of RTTI. This is a C++ quality improvement over a literal dynamic-cast translation and does not change
+  the C# algorithm or asymptotic behavior.
+- Node construction validates the two/three-child arity before reading cached endpoint values. The C# source uses
+  `Debug.Assert` for this invariant; the C++ internal constructor throws before any invalid vector access so debug
+  builds fail through the non-interactive test path.
+
+Justified divergences:
+
+- Counts and indices use `std::size_t`, continuing the C++ count policy. Structural size arithmetic uses checked
+  unsigned addition.
+- Public names follow the C++ deque spellings already used by `persistent_deque<T>` (`push_front`, `push_back`,
+  `front`, `back`, `at`) while retaining C#-recognizable operation families (`set_item`, `insert_at`, `split_at`,
+  `concat`, `reverse`).
+- `try_pop_front` and `try_pop_back` return `std::optional<reversible_deque_pop<T>>` instead of C# `bool` plus out
+  parameters.
+- The public C++ checkpoint exposes `to_vector` rather than a lazy iterator. This is not a regression relative to
+  C# `ReversibleDeque<T>`, whose enumerator explicitly materializes `ToArray()` before yielding.
+
+Validation:
+
+- Added tests for endpoint operation persistence, reverse correctness and double-reverse identity, operations after
+  reverse, all four concat orientation combinations, split/reconcat at every index, large reversed indexing,
+  reversed-deep-middle mutation, randomized histories that interleave reverse with every operation, and empty
+  behavior.
+- Built `msvc-debug` with `/W4 /WX`.
+- Ran `ctest --preset msvc-debug --output-on-failure`; all tests passed.
+- Built `msvc-release` with `/W4 /WX`.
+- Ran `ctest --preset msvc-release --output-on-failure`; all tests passed.
+
+Findings:
+
+- No new C# defect, flaw, or improvement proposal was found in the reversible deque pass. The C# source and tests
+  matched the strict reversible-tree algorithms ported here.

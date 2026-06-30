@@ -73,6 +73,31 @@ Notable C++ differences from C#:
 - enumeration is exposed through `to_vector`/`copy_to` in this checkpoint. A streaming iterator can be added on top
   of the same tree/node block traversal used by the deque without changing tree semantics.
 
+## `reversible_deque<T>`
+
+`reversible_deque<T>` is the C++ port of C# `ReversibleDeque<T>`. It is the strict, reversal-aware sibling of
+`persistent_deque<T>`: every update returns a new immutable snapshot, and `reverse()` flips an orientation bit in
+O(1) instead of rebuilding the sequence.
+
+Primary operations:
+
+- observers: `empty`, `size`, `front`, `back`, `try_front`, `try_back`, `at`, and `operator[]`;
+- endpoint updates: `push_front`, `push_back`, `remove_first`, `remove_last`, `try_pop_front`, and `try_pop_back`;
+- indexed updates: `set_item`, `set_at`, `insert_at`, and `remove_at`;
+- slicing and catenation: `split_at`, `concat`, and `reverse`;
+- materialization and test support: `to_vector`, `validate_invariants`, and `tree_depth`.
+
+Notable C++ differences from C#:
+
+- indexed reads return by value. This matches the C# indexer semantics and avoids dangling references because
+  reversed logical descent can materialize temporary mirrored node/digit views;
+- try-pop operations return `std::optional` result structs instead of C# `bool` plus out parameters;
+- counts and indices use `std::size_t`, continuing the port-wide count policy;
+- construction uses initializer-list, iterator, and range APIs rather than C# `params ReadOnlySpan<T>` and
+  `IEnumerable<T>` overloads;
+- traversal is exposed through vector materialization in this checkpoint, matching the C# reversible deque's
+  documented materialize-then-enumerate behavior.
+
 ## `sorted_bag<T, Less>`, `sorted_set<T, Less>`, And `sorted_map<Key, T, Less>`
 
 The sorted collection wrappers are the C++ ports of C# `SortedBag<T>`, `SortedSet<T>`, and
