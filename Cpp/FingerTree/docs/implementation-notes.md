@@ -879,3 +879,68 @@ Findings:
 
 - No new C# defect, flaw, or improvement proposal was found in the measured rope pass. The source and tests matched
   the two-level navigation algorithm ported here.
+
+## Checkpoint: Basic Text Rope Helpers
+
+Compared C# source:
+
+- `FingerTree/src/Tools.DataStructures.FingerTree/RopeText.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/RopeBuilder.cs`
+
+Compared C# tests and samples:
+
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/RopeTextTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/RopeBuilderTests.cs`
+- The text-rope line-navigation property in `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/RopePropertyTests.cs`
+- The text-rope usage in `FingerTree/samples/Tools.DataStructures.FingerTree.Tour/TourProgram.cs`
+
+Implemented:
+
+- `newline_measure`, counting `'\n'` characters as a `std::size_t` monoid.
+- `text_rope` as `measured_rope<char, newline_measure>`.
+- String interop helpers: `to_char_rope`, `to_text_rope`, and `as_string`.
+- Basic line helpers: `line_count`, `line_of_offset`, `line_start_offset`, `line_column_of`, `offset_of`,
+  `get_line`, and `lines`.
+- `rope_builder`, an append-only character builder with fluent `append`, `append_line`, `clear`, `to_rope`, and
+  `to_text_rope`.
+- Public aggregate-header and CMake/test-harness integration for the text helper tests.
+
+Parity notes:
+
+- Line numbering is zero-based and line count is newline count plus one. Empty text is one empty line, and a text
+  ending in `'\n'` has a trailing empty line, matching the C# text-editor convention.
+- `line_of_offset` delegates to `prefix_measure(offset)`, so offset validation and O(log n) navigation come from
+  the measured rope.
+- `line_start_offset(line)` locates the newline whose accumulated newline count reaches `line` and returns the
+  following character offset, matching C# `LineStartOffset`.
+- `get_line` returns text without the trailing newline. It intentionally does not strip carriage returns; that is
+  C# `RopeTextExtras.GetLineText` behavior and remains out of scope.
+- `offset_of(line, column)` preserves the C# basic helper's broad column validation: it checks that
+  `line_start + column` is within the rope, not that the column lies before the next newline.
+
+Justified divergences:
+
+- C# `NewlineMeasure` uses `int`; C++ `newline_measure` uses `std::size_t`, continuing the native count policy and
+  using checked unsigned addition.
+- C# `RopeBuilder` supports `Rune` and `ReadOnlySpan<char>` overloads. The C++ first-wave builder supports
+  `std::string_view` and `char`; Unicode scalar/grapheme/editor helpers are intentionally outside the requested
+  scope.
+- `lines` returns a `std::vector<std::string>` in this checkpoint rather than a lazy enumerable. This follows the
+  current C++ materialization-first traversal surface for ropes.
+- `TextReader` adapters are not ported because the user explicitly excluded editor-level text manipulation
+  extensions, and the port plan marks adapters as deferrable extras.
+
+Validation:
+
+- Added tests for string interop; line count/start/offset/column navigation over empty, leading, trailing, blank,
+  and ordinary newline shapes; edit round-trips through `text_rope`; builder output and reset behavior; large
+  document line lookup; and argument validation.
+- Built `msvc-debug` with `/W4 /WX`.
+- Ran `ctest --preset msvc-debug --output-on-failure`; all tests passed.
+- Built `msvc-release` with `/W4 /WX`.
+- Ran `ctest --preset msvc-release --output-on-failure`; all tests passed.
+
+Findings:
+
+- No new C# defect, flaw, or improvement proposal was found in the basic text helper pass. The intentionally
+  omitted text extras remain outside the requested C++ scope.

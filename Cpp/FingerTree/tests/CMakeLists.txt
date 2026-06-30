@@ -11,6 +11,7 @@ add_executable(
     priority_queue_tests.cpp
     reversible_deque_tests.cpp
     rope_tests.cpp
+    rope_text_tests.cpp
     sorted_collection_tests.cpp
     smoke_tests.cpp
     test_support/allocation_counter.cpp

@@ -151,6 +151,21 @@ Notable C++ differences from C#:
 - traversal is exposed through vector materialization in this checkpoint, matching the positional rope follow-up
   plan for streaming traversal.
 
+## Text Rope Helpers
+
+The in-scope text layer mirrors the non-editor C# `RopeText` and `RopeBuilder` surface:
+
+- `newline_measure`, a `char -> std::size_t` measure that counts `'\n'`;
+- `text_rope`, an alias for `measured_rope<char, newline_measure>`;
+- string interop: `to_char_rope`, `to_text_rope`, and `as_string`;
+- line helpers: `line_count`, `line_of_offset`, `line_start_offset`, `line_column_of`, `offset_of`, `get_line`,
+  and `lines`;
+- `rope_builder`, a fluent append-only character builder with `append`, `append_line`, `clear`, `to_rope`, and
+  `to_text_rope`.
+
+Out of scope for the first C++ port are the editor-grade extensions from C# `RopeTextExtras`: Unicode scalar and
+grapheme indexing, newline-style detection, CR-stripping line helpers, and `TextReader` adapters.
+
 ## `sorted_bag<T, Less>`, `sorted_set<T, Less>`, And `sorted_map<Key, T, Less>`
 
 The sorted collection wrappers are the C++ ports of C# `SortedBag<T>`, `SortedSet<T>`, and
