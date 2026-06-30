@@ -19,8 +19,10 @@ different digit shapes. Collapsing them into one implementation would erase usef
 C# codebase.
 
 The port should use the newest C++ dialect mode that is usable on the local toolchain, currently MSVC 19.50 in
-`/std:c++latest` mode through CMake `CXX_STANDARD 26`. Treat that as an implementation mode, not permission to
-build on fragile draft-only facilities: concepts, ranges, `std::span`, modern `constexpr`, and
+`/std:c++latest` mode. CMake 4.2 in this installation does not yet enable that mode through
+`CXX_STANDARD 26`, so the initial build files request `CXX_STANDARD 23` for CMake feature modeling and pass
+`/std:c++latest` explicitly to MSVC targets. Treat that as an implementation mode, not permission to build on
+fragile draft-only facilities: concepts, ranges, `std::span`, modern `constexpr`, and
 `std::atomic<std::shared_ptr<T>>` are welcome; modules, coroutines, reflection experiments, and volatile library
 features are out of the first wave. The target is a stable, header-first C++ library with tests, samples, and
 benchmarks.
@@ -189,10 +191,12 @@ Optional:
 
 ## Dialect And Build Policy
 
-Set the project to C++26 draft mode because it is the latest mode supported by the installed MSVC toolchain:
+Set MSVC targets to C++ latest mode because it is the latest dialect supported by the installed toolchain. Because
+the bundled CMake currently rejects `CXX_STANDARD 26` for this MSVC, model the target as C++23 in CMake and add
+`/std:c++latest` explicitly:
 
 ```cmake
-set(CMAKE_CXX_STANDARD 26)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 ```
@@ -201,6 +205,7 @@ For MSVC targets:
 
 ```cmake
 target_compile_options(target PRIVATE
+    /std:c++latest
     /permissive-
     /Zc:__cplusplus
     /W4
