@@ -11,6 +11,7 @@
 #include <tools/data_structures/finger_tree/priority_queue.hpp>
 #include <tools/data_structures/finger_tree/product_measure.hpp>
 #include <tools/data_structures/finger_tree/reversible_deque.hpp>
+#include <tools/data_structures/finger_tree/rope.hpp>
 #include <tools/data_structures/finger_tree/sorted_bag.hpp>
 #include <tools/data_structures/finger_tree/sorted_map.hpp>
 #include <tools/data_structures/finger_tree/sorted_set.hpp>

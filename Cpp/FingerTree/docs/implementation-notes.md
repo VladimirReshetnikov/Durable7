@@ -739,3 +739,75 @@ Findings:
 
 - No new C# defect, flaw, or improvement proposal was found in the reversible deque pass. The C# source and tests
   matched the strict reversible-tree algorithms ported here.
+
+## Checkpoint: Positional Rope
+
+Compared C# source:
+
+- `FingerTree/src/Tools.DataStructures.FingerTree/Rope.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/RopeChunk.cs`
+
+Compared C# tests:
+
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/RopeTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/RopeModelTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/RopePropertyTests.cs`
+- The rope section of `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
+
+Implemented:
+
+- `rope<T>`, a persistent chunked positional sequence backed by the C++ general measured tree.
+- `detail::rope_chunk<T>`, a bounded immutable chunk handle over `std::shared_ptr<const std::vector<T>>` plus
+  offset/length. Chunk slices share backing storage; chunk edits allocate fresh vectors.
+- `detail::rope_chunk_length_measure<T>` and `detail::rope_index_predicate`, giving the measured tree the same
+  cumulative-length addressing model as C# `ChunkLengthMeasure<T>` and `ElementIndexPredicate`.
+- Construction from initializer lists, iterator pairs, ranges, spans, and owned shared chunks.
+- Endpoint reads/updates, indexed reads/replacement, insertion, removal, range insertion/removal, split, slice,
+  concat with boundary coalescing, copying/materialization, `compact`, and invariant validation.
+- Public aggregate-header and CMake/test-harness integration for the new wrapper.
+
+Parity notes:
+
+- The C++ rope follows the C# structure: a measured tree of chunks, a maximum chunk size of 2048, a minimum
+  coalescing threshold of 256, split/locate by cumulative chunk length, and bounded chunk copying on edits.
+- `insert_at`, `remove_at`, `set_item`, `split_at`, and `slice` isolate the touched chunk with
+  `finger_tree::try_split_find`/`try_locate`, then rebuild only that chunk plus the tree path.
+- `concat` peeks at the rightmost and leftmost boundary chunks and merges them when they fit, preserving the C#
+  behavior that repeated concatenation does not leave a seam of tiny chunks.
+- `compact()` materializes the sequence and rebuilds fresh chunks, releasing oversized backing vectors retained by
+  slices. Tests cover the shared-storage use-count drop after the slice is dropped.
+- `from_chunks` splits oversized source blocks into chunk-sized views without copying, preserving the C# zero-copy
+  import behavior while making ownership explicit through `shared_ptr<const std::vector<T>>`.
+
+Justified divergences:
+
+- Counts and indices use `std::size_t`, continuing the C++ count policy. Chunk and tree length arithmetic use
+  checked unsigned addition.
+- The C++ zero-copy `from_chunks` entry point does not accept `std::span`, raw pointers, or mutable vector
+  references for retained storage. A persistent rope can outlive such views, and a mutable backing array/vector
+  would undermine immutable-snapshot semantics.
+- The safe default construction paths copy input ranges into fresh immutable chunk vectors. This is the C++ analogue
+  of using `Create`/`CreateRange` rather than C# `FromChunks` for ordinary mutable arrays.
+- Public names follow the C++ spellings already used by the deque wrappers (`size`, `empty`, `front`, `back`,
+  `insert_at`, `remove_at`, `split_at`, `to_vector`) while preserving the C# operation families.
+- The first checkpoint exposes vector materialization rather than a chunk-aware iterator. This temporarily trails
+  the C# `IReadOnlyList<T>`/enumerator surface, but does not affect the indexed/editing semantics or asymptotic
+  update behavior. A streaming iterator should be added with the measured-tree traversal follow-up.
+
+Validation:
+
+- Added tests for construction from ranges, initializer lists, and owned chunks including oversized imported
+  blocks; endpoint operation persistence; indexed mutation across chunk boundaries; range insertion/removal;
+  split/slice/copy reconstruction; concat boundary coalescing; `compact()` releasing borrowed storage after slices;
+  randomized histories against a vector model; large splice/indexing; and empty/error behavior.
+- Built `msvc-debug` with `/W4 /WX`.
+- Ran `ctest --preset msvc-debug --output-on-failure`; all tests passed.
+- Built `msvc-release` with `/W4 /WX`.
+- Ran `ctest --preset msvc-release --output-on-failure`; all tests passed.
+
+Findings:
+
+- A C# improvement proposal was recorded in
+  [`FingerTree/docs/rope-fromchunks-immutable-storage-improvement-proposal.md`](../../../FingerTree/docs/rope-fromchunks-immutable-storage-improvement-proposal.md).
+  `Rope<T>.FromChunks` imports `ReadOnlyMemory<T>` without copying; that is useful, but the backing storage may be
+  externally mutable, so the immutable-storage precondition should be documented or reflected in the API name.

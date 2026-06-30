@@ -98,6 +98,33 @@ Notable C++ differences from C#:
 - traversal is exposed through vector materialization in this checkpoint, matching the C# reversible deque's
   documented materialize-then-enumerate behavior.
 
+## `rope<T>`
+
+`rope<T>` is the C++ port of C# `Rope<T>`. It is a persistent chunked positional sequence backed by
+`finger_tree<rope_chunk<T>, rope_chunk_length_measure<T>>`, with bounded chunks for locality and O(log n) editing.
+
+Primary operations:
+
+- observers: `empty`, `size`, `front`, `back`, `at`, `operator[]`, and `try_get`;
+- endpoint updates: `push_front`, `push_back`, `add_first`, `add_last`, `remove_first`, and `remove_last`;
+- indexed and range updates: `set_item`, `set_at`, `insert_at`, `insert_range`, `remove_at`, and `remove_range`;
+- slicing and catenation: `slice`, `split_at`, and `concat`;
+- copying/materialization: `to_vector`, `get_range`, `copy_to`, and `compact`;
+- test/diagnostic support: `validate_invariants` and `chunk_count`.
+
+Notable C++ differences from C#:
+
+- counts and indices use `std::size_t`, continuing the port-wide count policy;
+- copying construction is available through initializer-list, iterator, range, and `std::span<const T>` entry
+  points;
+- zero-copy `from_chunks` accepts `std::shared_ptr<const std::vector<T>>` storage, making retained ownership and
+  immutability expectations visible at the type boundary. It does not accept raw spans or pointers for retained
+  storage;
+- chunks store `shared_ptr<const std::vector<T>>` plus offset/length instead of `ReadOnlyMemory<T>`. Slices share
+  backing vectors, and `compact()` rebuilds fresh chunks to release oversized retained backing storage;
+- traversal is exposed through vector materialization in this checkpoint. A chunk-aware iterator remains a follow-up
+  once the general measured tree grows streaming traversal.
+
 ## `sorted_bag<T, Less>`, `sorted_set<T, Less>`, And `sorted_map<Key, T, Less>`
 
 The sorted collection wrappers are the C++ ports of C# `SortedBag<T>`, `SortedSet<T>`, and
