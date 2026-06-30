@@ -348,3 +348,89 @@ Findings:
 - No C# defect, flaw, or improvement proposal was found in this deque-core pass. The C# implementation comments for
   overflow, pull/chop, one-operation-deep suspension, cached size, cached rightmost signposts, split, concat, and
   enumeration matched the implementation behavior reviewed for this checkpoint.
+
+## Checkpoint: General Measured Finger Tree Core
+
+Compared C# source:
+
+- `FingerTree/src/Tools.DataStructures.FingerTree/FingerTree.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/MeasurePredicate.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredElements.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTree.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredMiddle.cs`
+
+Compared C# tests:
+
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/MeasuredFingerTreeTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/MeasuredFingerTreePersistenceTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/TryLocateTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/AllocationFreeReadTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
+
+Implemented:
+
+- `finger_tree<T, MeasurePolicy>`, the public general measured finger tree facade using the C++ static measure
+  policy shape already implemented in the measure checkpoint.
+- `detail::measured_tree<T, MeasurePolicy>`, a type-erased 1-through-4 digit measured finger tree following the
+  Hinze-Paterson general core: empty/single/deep levels, two/three-child measured nodes, measured leaves, cached
+  element/node measures, lazy middle subtrees, and lazy deep-node measure boxes.
+- Endpoint operations matching the C# general measured core:
+  prefix/suffix room extends the digit; a four-child prefix/suffix overflow forces the source middle and suspends
+  a `Node3` push; a one-child underflow pulls a node from a forced middle and suspends the corresponding pop.
+- General concat (`app3`/`Glue`) with the same 1..4 digit and 2/3-node chunking rule as C#:
+  chunk triples while more than four elements remain, then use Node2 for a two-element remainder, Node3 for three,
+  and two Node2 chunks for four.
+- Measure-guided `split`, `try_split_find`, and `try_locate`, including the allocation-free locate shape that
+  descends without reconstructing result trees.
+- Lazy deep measure publication through `detail::atomic_box<TMeasure>` and lazy measured middle publication through
+  `detail::measured_lazy_cell<tree>`.
+
+Parity notes:
+
+- The general measured tree uses one-through-four digits, unlike the tuned deque's simplified one-through-three
+  digits. The C++ measured core follows the C# measured source, not the deque source.
+- Push suspensions capture a forced source middle plus the pushed node and answer `measure()` from the monoidal
+  combination of source measure and node measure without forcing the resulting structure. Pop suspensions use
+  `defer_force_only`, matching C#'s non-group monoid behavior where a pop measure cannot be recovered by
+  subtraction.
+- Deep node measure is computed lazily and published as a pointer through `atomic_box`, preserving the C# boxed
+  measure cell's tear-free publication behavior for large measure values.
+- Leaves are value-stored with their measure cached once at construction. Nodes are shared immutable heap objects
+  with cached combined measures, matching the C# `MeasuredLeaf`/`MeasuredNode` responsibilities.
+- `split` and `try_locate` use the same accumulator order as C#: test the prefix measure, then the middle measure,
+  then the suffix; when descending into the middle, combine the left-middle measure before splitting the hit node's
+  children.
+
+Justified divergences:
+
+- C# exposes `FingerTree<TElement, TMeasure, TMeasureOps>` with separate measure and operation type parameters.
+  The C++ API uses `finger_tree<T, MeasurePolicy>` because every C++ measure policy already names its
+  `measure_type`; this removes a redundant template argument without changing semantics.
+- C# value-type predicates avoid delegate closure allocation. C++ templates over ordinary predicate callables give
+  the same monomorphized descent for lambdas and predicate objects, so no separate public predicate interface is
+  needed for the raw tree.
+- The C++ public view/search methods return `std::optional` result structs instead of C# `bool` plus out
+  parameters. This is idiomatic C++ and avoids default-output sentinel states.
+- Internal prefix/suffix/node buffers use small `std::vector` values. The C# measured core uses short arrays for
+  the same buffers, so this preserves the same asymptotic allocation pattern. The tuned deque remains separately
+  optimized with inline digit storage because its C# source also uses inline digit structs.
+
+Validation:
+
+- Added tests for empty behavior, endpoint construction, positional split across every index for sizes up to 96,
+  concat order/measure/associativity, max-priority extraction, count-plus-last-key indexing/lower-bound search,
+  locate versus split-find across thresholds, and a bounded randomized branching history with retained versions,
+  endpoint views, split/concat round-trips, and concat with retained versions.
+- Built `msvc-debug` with `/W4 /WX`.
+- Ran `ctest --preset msvc-debug --output-on-failure`; all tests passed.
+- Built `msvc-release` with `/W4 /WX`.
+- Ran `ctest --preset msvc-release --output-on-failure`; all tests passed.
+
+Findings:
+
+- A C# improvement proposal was recorded in
+  [`FingerTree/docs/measured-fingertree-enumerator-allocation-improvement-proposal.md`](../../../FingerTree/docs/measured-fingertree-enumerator-allocation-improvement-proposal.md).
+  The C# public general measured tree enumerator materializes a `List<TElement>` before yielding; this is documented
+  behavior rather than a correctness bug, but it is an allocation/performance shortcoming relative to the tuned
+  deque's stack enumerator.

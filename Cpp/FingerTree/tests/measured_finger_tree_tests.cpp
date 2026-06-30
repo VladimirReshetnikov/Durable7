@@ -1,0 +1,354 @@
+#include <tools/data_structures/finger_tree/finger_tree.hpp>
+
+#include "test_support/command_model.hpp"
+#include "test_support/test_runner.hpp"
+
+#include <algorithm>
+#include <cstddef>
+#include <functional>
+#include <limits>
+#include <source_location>
+#include <sstream>
+#include <stdexcept>
+#include <vector>
+
+namespace ft = tools::data_structures::finger_tree;
+using namespace tools::data_structures::finger_tree::tests;
+
+namespace {
+
+struct int_max_measure {
+    using measure_type = int;
+
+    [[nodiscard]] static constexpr measure_type empty() noexcept
+    {
+        return (std::numeric_limits<int>::min)();
+    }
+
+    [[nodiscard]] static constexpr measure_type measure(const int element) noexcept
+    {
+        return element;
+    }
+
+    [[nodiscard]] static constexpr measure_type combine(const measure_type left, const measure_type right) noexcept
+    {
+        return (std::max)(left, right);
+    }
+};
+
+struct count_and_last_key final {
+    std::size_t count = 0;
+    int last_key = (std::numeric_limits<int>::min)();
+
+    [[nodiscard]] friend bool operator==(const count_and_last_key&, const count_and_last_key&) = default;
+};
+
+struct count_last_key_measure {
+    using measure_type = count_and_last_key;
+
+    [[nodiscard]] static constexpr measure_type empty() noexcept
+    {
+        return {};
+    }
+
+    [[nodiscard]] static constexpr measure_type measure(const int element) noexcept
+    {
+        return {1, element};
+    }
+
+    [[nodiscard]] static constexpr measure_type combine(const measure_type left, const measure_type right) noexcept
+    {
+        return {
+            left.count + right.count,
+            right.count == 0 ? left.last_key : right.last_key};
+    }
+};
+
+template <class T>
+void require_vector_equal(
+    const std::vector<T>& actual,
+    const std::vector<T>& expected,
+    const std::source_location location = std::source_location::current())
+{
+    if (actual == expected) {
+        return;
+    }
+
+    std::ostringstream message;
+    message << location.file_name() << ':' << location.line() << ": vector mismatch. Actual [";
+    for (std::size_t index = 0; index != actual.size(); ++index) {
+        if (index != 0) {
+            message << ", ";
+        }
+
+        message << actual[index];
+    }
+
+    message << "], expected [";
+    for (std::size_t index = 0; index != expected.size(); ++index) {
+        if (index != 0) {
+            message << ", ";
+        }
+
+        message << expected[index];
+    }
+
+    message << ']';
+    throw test_failure(message.str());
+}
+
+template <class T>
+std::vector<T> vector_range(const std::vector<T>& source, const std::size_t index, const std::size_t count)
+{
+    return std::vector<T>{source.begin() + static_cast<std::ptrdiff_t>(index),
+        source.begin() + static_cast<std::ptrdiff_t>(index + count)};
+}
+
+[[nodiscard]] std::vector<int> iota_vector(const int count, const int start = 0)
+{
+    auto result = std::vector<int>{};
+    result.reserve(static_cast<std::size_t>(count));
+    for (auto value = 0; value != count; ++value) {
+        result.push_back(start + value);
+    }
+
+    return result;
+}
+
+void add_measured_finger_tree_tests_impl(suite& tests)
+{
+    tests.add("measured finger tree empty reports identity and degenerate operations", [] {
+        const auto tree = ft::finger_tree<int, ft::size_measure<int>>{};
+
+        FT_REQUIRE(tree.empty());
+        FT_REQUIRE_EQUAL(tree.measure(), static_cast<std::size_t>(0));
+        FT_REQUIRE_THROWS(std::logic_error, tree.front());
+        FT_REQUIRE_THROWS(std::logic_error, tree.back());
+        FT_REQUIRE(!tree.try_view_left().has_value());
+        FT_REQUIRE(!tree.try_view_right().has_value());
+
+        const auto split = tree.split([](const std::size_t measure) {
+            return measure > 0;
+        });
+        FT_REQUIRE(split.left.empty());
+        FT_REQUIRE(split.right.empty());
+        FT_REQUIRE(!tree.try_split_find([](const std::size_t measure) { return measure > 0; }).has_value());
+        FT_REQUIRE(!tree.try_locate([](const std::size_t measure) { return measure > 0; }).has_value());
+    });
+
+    tests.add("measured finger tree size measure tracks endpoint construction", [] {
+        auto tree = ft::finger_tree<int, ft::size_measure<int>>{};
+        auto model = std::vector<int>{};
+
+        for (auto value = 0; value != 120; ++value) {
+            if (value % 2 == 0) {
+                tree = tree.append(value);
+                model.push_back(value);
+            } else {
+                tree = tree.prepend(value);
+                model.insert(model.begin(), value);
+            }
+        }
+
+        FT_REQUIRE_EQUAL(tree.measure(), model.size());
+        FT_REQUIRE_EQUAL(tree.front(), model.front());
+        FT_REQUIRE_EQUAL(tree.back(), model.back());
+        require_vector_equal(tree.to_vector(), model);
+    });
+
+    tests.add("measured finger tree size split matches list slices", [] {
+        for (auto size = 0; size <= 96; ++size) {
+            const auto values = iota_vector(size);
+            const auto tree = ft::finger_tree<int, ft::size_measure<int>>::from_range(values);
+            require_vector_equal(tree.to_vector(), values);
+
+            for (auto index = 0; index <= size; ++index) {
+                const auto split = tree.split([index](const std::size_t measured) {
+                    return measured > static_cast<std::size_t>(index);
+                });
+                require_vector_equal(split.left.to_vector(), vector_range(values, 0, static_cast<std::size_t>(index)));
+                require_vector_equal(
+                    split.right.to_vector(),
+                    vector_range(values, static_cast<std::size_t>(index), values.size() - static_cast<std::size_t>(index)));
+                require_vector_equal(split.left.concat(split.right).to_vector(), values);
+            }
+        }
+    });
+
+    tests.add("measured finger tree concat preserves order measure and associativity", [] {
+        constexpr int sizes[] = {0, 1, 2, 5, 13, 40};
+        for (const auto a : sizes) {
+            for (const auto b : sizes) {
+                for (const auto c : sizes) {
+                    const auto va = iota_vector(a, 0);
+                    const auto vb = iota_vector(b, 100);
+                    const auto vc = iota_vector(c, 200);
+
+                    const auto ta = ft::finger_tree<int, ft::size_measure<int>>::from_range(va);
+                    const auto tb = ft::finger_tree<int, ft::size_measure<int>>::from_range(vb);
+                    const auto tc = ft::finger_tree<int, ft::size_measure<int>>::from_range(vc);
+
+                    auto expected = va;
+                    expected.insert(expected.end(), vb.begin(), vb.end());
+                    expected.insert(expected.end(), vc.begin(), vc.end());
+
+                    const auto left = ta.concat(tb).concat(tc);
+                    const auto right = ta.concat(tb.concat(tc));
+                    require_vector_equal(left.to_vector(), expected);
+                    require_vector_equal(right.to_vector(), expected);
+                    FT_REQUIRE_EQUAL(left.measure(), expected.size());
+                }
+            }
+        }
+    });
+
+    tests.add("measured finger tree max measure acts as mergeable priority queue", [] {
+        auto values = std::vector<int>{3, 9, 1, 9, 4, 7, 2, 10, 10, 5};
+        auto queue = ft::finger_tree<int, int_max_measure>::from_range(values);
+        FT_REQUIRE_EQUAL(queue.measure(), 10);
+
+        auto extracted = std::vector<int>{};
+        while (!queue.empty()) {
+            const auto max = queue.measure();
+            auto split = queue.try_split_find([max](const int measure) {
+                return measure >= max;
+            });
+            FT_REQUIRE(split.has_value());
+            FT_REQUIRE_EQUAL(split->item, max);
+            extracted.push_back(split->item);
+            queue = split->left.concat(split->right);
+        }
+
+        std::ranges::sort(values, std::greater<>{});
+        require_vector_equal(extracted, values);
+    });
+
+    tests.add("measured finger tree product-like measure supports indexing and lower-bound search", [] {
+        const auto values = [] {
+            auto result = std::vector<int>{};
+            for (auto value = 0; value != 150; ++value) {
+                result.push_back(value * 2);
+            }
+
+            return result;
+        }();
+        const auto tree = ft::finger_tree<int, count_last_key_measure>::from_range(values);
+
+        FT_REQUIRE_EQUAL(tree.measure().count, values.size());
+        FT_REQUIRE_EQUAL(tree.measure().last_key, values.back());
+
+        const auto first_ten = tree.split([](const count_and_last_key& measure) {
+            return measure.count > 10;
+        });
+        require_vector_equal(first_ten.left.to_vector(), vector_range(values, 0, 10));
+        require_vector_equal(first_ten.right.to_vector(), vector_range(values, 10, values.size() - 10));
+
+        for (const auto target : {-5, 0, 1, 199, 200, 298, 299, 300}) {
+            const auto lower = static_cast<std::size_t>(
+                std::ranges::lower_bound(values, target) - values.begin());
+            const auto split = tree.split([target](const count_and_last_key& measure) {
+                return measure.count != 0 && measure.last_key >= target;
+            });
+            require_vector_equal(split.left.to_vector(), vector_range(values, 0, lower));
+            require_vector_equal(split.right.to_vector(), vector_range(values, lower, values.size() - lower));
+        }
+    });
+
+    tests.add("measured finger tree locate matches split-find at every count threshold", [] {
+        for (auto size = 0; size <= 80; ++size) {
+            const auto values = iota_vector(size);
+            const auto tree = ft::finger_tree<int, ft::size_measure<int>>::from_range(values);
+
+            for (auto threshold = -1; threshold <= size + 1; ++threshold) {
+                auto predicate = [threshold](const std::size_t measure) {
+                    return measure > static_cast<std::size_t>(threshold);
+                };
+
+                const auto located = tree.try_locate(predicate);
+                const auto split = tree.try_split_find(predicate);
+                FT_REQUIRE_EQUAL(located.has_value(), split.has_value());
+                if (split.has_value()) {
+                    FT_REQUIRE_EQUAL(located->item, split->item);
+                    FT_REQUIRE_EQUAL(located->measure_before, split->left.measure());
+                }
+            }
+        }
+    });
+
+    tests.add("measured finger tree randomized branching history matches model", [] {
+        auto rng = deterministic_rng{0x600df00d};
+        using tree_type = ft::finger_tree<int, ft::size_measure<int>>;
+
+        auto versions = std::vector<std::pair<tree_type, std::vector<int>>>{{tree_type{}, {}}};
+
+        for (auto step = 0; step != 450; ++step) {
+            const auto selected = rng.next_index(versions.size());
+            auto tree = versions[selected].first;
+            auto model = versions[selected].second;
+
+            switch (rng.next_index(6)) {
+            case 0:
+                tree = tree.prepend(step);
+                model.insert(model.begin(), step);
+                break;
+            case 1:
+                tree = tree.append(step);
+                model.push_back(step);
+                break;
+            case 2:
+                if (!model.empty()) {
+                    const auto view = tree.try_view_left();
+                    FT_REQUIRE(view.has_value());
+                    FT_REQUIRE_EQUAL(view->item, model.front());
+                    tree = view->right;
+                    model.erase(model.begin());
+                }
+                break;
+            case 3:
+                if (!model.empty()) {
+                    const auto view = tree.try_view_right();
+                    FT_REQUIRE(view.has_value());
+                    FT_REQUIRE_EQUAL(view->item, model.back());
+                    tree = view->left;
+                    model.pop_back();
+                }
+                break;
+            case 4: {
+                const auto index = rng.next_index(model.size() + 1);
+                const auto split = tree.split([index](const std::size_t measure) {
+                    return measure > index;
+                });
+                tree = split.left.concat(split.right);
+                break;
+            }
+            default: {
+                const auto other_index = rng.next_index(versions.size());
+                if (model.size() + versions[other_index].second.size() <= 600) {
+                    tree = tree.concat(versions[other_index].first);
+                    model.insert(model.end(), versions[other_index].second.begin(), versions[other_index].second.end());
+                }
+                break;
+            }
+            }
+
+            FT_REQUIRE_EQUAL(tree.measure(), model.size());
+            require_vector_equal(tree.to_vector(), model);
+            versions.push_back({tree, model});
+            if (versions.size() > 64) {
+                versions.erase(versions.begin());
+            }
+        }
+
+        for (const auto& [tree, model] : versions) {
+            FT_REQUIRE_EQUAL(tree.measure(), model.size());
+            require_vector_equal(tree.to_vector(), model);
+        }
+    });
+}
+
+} // namespace
+
+void add_measured_finger_tree_tests(suite& tests)
+{
+    add_measured_finger_tree_tests_impl(tests);
+}

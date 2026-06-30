@@ -48,3 +48,27 @@ Notable C++ differences from C#:
 - construction uses initializer-list, iterator, and range APIs rather than C# `params ReadOnlySpan<T>` and
   `IEnumerable<T>` overloads;
 - runtime sorted-search comparers are `std::less`-style callables where `compare(a, b)` means `a < b`.
+
+## `finger_tree<T, MeasurePolicy>`
+
+`finger_tree<T, MeasurePolicy>` is the C++ port of the public C# general measured
+`FingerTree<TElement, TMeasure, TMeasureOps>`. `MeasurePolicy` supplies the monoid identity, monoid combine, and
+element measure through the same static-policy shape used by the measure infrastructure.
+
+Primary operations:
+
+- observers: `empty`, `measure`, `front`, `back`;
+- endpoint updates/views: `prepend`, `append`, `try_view_left`, `try_view_right`;
+- catenation: `concat`;
+- measure-guided search: `split`, `try_split_find`, `try_locate`;
+- materialization/copy: `to_vector`, `copy_to`.
+
+Notable C++ differences from C#:
+
+- the measure policy is a single C++ type parameter whose nested `measure_type` names the measure, rather than
+  separate `TMeasure` and `TMeasureOps` generic parameters;
+- split and locate predicates are ordinary C++ callables; non-capturing predicate objects and lambdas both
+  instantiate the same templated descent path;
+- result values use `std::optional` for absent views/searches instead of C# `bool` plus out parameters;
+- enumeration is exposed through `to_vector`/`copy_to` in this checkpoint. A streaming iterator can be added on top
+  of the same tree/node block traversal used by the deque without changing tree semantics.

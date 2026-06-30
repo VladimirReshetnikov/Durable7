@@ -5,6 +5,7 @@
 #include <tools/data_structures/finger_tree/detail/common.hpp>
 #include <tools/data_structures/finger_tree/measure_predicates.hpp>
 #include <tools/data_structures/finger_tree/measures.hpp>
+#include <tools/data_structures/finger_tree/measured_finger_tree.hpp>
 #include <tools/data_structures/finger_tree/persistent_deque.hpp>
 #include <tools/data_structures/finger_tree/product_measure.hpp>
 #include <tools/data_structures/finger_tree/sum_measure.hpp>
