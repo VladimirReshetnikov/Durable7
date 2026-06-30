@@ -1,6 +1,7 @@
 add_executable(
     fingertree_smoke_tests
     atomic_box_tests.cpp
+    interval_tree_tests.cpp
     lazy_cell_tests.cpp
     measured_finger_tree_tests.cpp
     measured_lazy_cell_tests.cpp

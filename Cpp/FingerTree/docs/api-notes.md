@@ -91,3 +91,28 @@ Notable C++ differences from C#:
   `reverse_comparison<Priority>`;
 - absent peek/dequeue results use `std::optional`;
 - `to_vector` returns entries in insertion/tree order, matching the C# queue's unspecified enumeration order.
+
+## `interval_tree<T, Comparison>`
+
+`interval_tree<T, Comparison>` is the C++ port of C# `IntervalTree<T>`. It stores closed `interval<T>` values in
+nondecreasing low-endpoint order and is backed by
+`finger_tree<interval<T>, interval_measure<T, Comparison>>`.
+
+Primary operations:
+
+- observers: `empty`, `size`;
+- construction: default construction, initializer-list construction, iterator construction, and `from_range`;
+- updates: `insert`, `try_remove`, `remove`, `coalesce`;
+- queries: `try_find_overlap`, `try_find_containing`, `find_overlaps`, `count_overlaps`, `contains`;
+- materialization: `to_vector`.
+
+Notable C++ differences from C#:
+
+- endpoint ordering is a compile-time static comparison policy, defaulting to `default_comparison<T>`. C# uses
+  `Comparer<T>.Default`; the C++ policy shape avoids per-node comparer storage and also supports custom endpoint
+  orderings such as projections;
+- absent query/remove results use `std::optional` result values rather than C# `bool` plus out parameters;
+- `size()` returns `std::size_t`;
+- `find_overlaps` returns `std::vector<interval<T>>` in nondecreasing low-endpoint order;
+- `contains` and `try_remove` match endpoints by the configured comparison policy, not by `operator==`, matching
+  the C# comparer-equality contract.

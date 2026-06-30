@@ -3,6 +3,7 @@
 #include <tools/data_structures/finger_tree/built_in_measures.hpp>
 #include <tools/data_structures/finger_tree/comparisons.hpp>
 #include <tools/data_structures/finger_tree/detail/common.hpp>
+#include <tools/data_structures/finger_tree/interval_tree.hpp>
 #include <tools/data_structures/finger_tree/measure_predicates.hpp>
 #include <tools/data_structures/finger_tree/measures.hpp>
 #include <tools/data_structures/finger_tree/measured_finger_tree.hpp>

@@ -492,3 +492,97 @@ Findings:
 - No C# defect, flaw, or improvement proposal was found in the priority queue pass. The C# source and tests matched
   the measured-core mechanics used by the C++ wrapper: append for enqueue, stable minimum signposts, split/locate at
   the front minimum, and concat for meld.
+
+## Checkpoint: Interval Tree Wrapper
+
+Compared C# source:
+
+- `FingerTree/src/Tools.DataStructures.FingerTree/IntervalTree.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/BuiltInMeasures.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/MeasurePredicates.cs`
+
+Compared C# tests:
+
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/IntervalTreeTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/BuiltInMeasureTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/CustomComparisonMeasureTests.cs`
+
+Implemented:
+
+- `interval_tree<T, Comparison>`, a persistent closed-interval tree backed by
+  `finger_tree<interval<T>, interval_measure<T, Comparison>>`.
+- Insertion by splitting at the first low endpoint greater than or equal to the inserted interval's low, appending
+  the interval, and concatenating the suffix. This preserves nondecreasing low-endpoint order and mirrors the C#
+  `LastLowAtLeastPredicate` path.
+- Single-overlap and point-stabbing queries by locating the first prefix whose maximum high endpoint reaches the
+  query low, then checking the candidate low against the query high.
+- Full overlap enumeration by first discarding intervals whose low is above the query high, then repeatedly
+  splitting at the next candidate whose maximum high reaches the query low. This is the C# `FindOverlaps`
+  algorithm in C++ result-value form.
+- Exact membership and one-item removal over duplicate low endpoints. Endpoint matching uses comparison-policy
+  equality for both low and high endpoints, not structural value equality.
+- Coalescing of overlapping/touching closed intervals into maximal disjoint intervals in low-endpoint order.
+- Public aggregate-header and CMake/test-harness integration for the new wrapper.
+
+Parity notes:
+
+- The C++ interval measure carries the same three pieces of information as C#: count, right-biased last low
+  endpoint, and maximum high endpoint.
+- `try_find_overlap`, `try_find_containing`, `find_overlaps`, `count_overlaps`, `contains`, `try_remove`, `remove`,
+  `coalesce`, and `to_vector` follow the same algorithms and observable contracts as the C# implementation.
+- `contains` and `try_remove` were checked against the C# comparer-equality regression: an endpoint type can order
+  by one field while value equality distinguishes another field, and the tree still finds/removes by comparer
+  equality.
+- `coalesce` currently materializes the interval order into a `std::vector` before the sweep. This does not regress
+  relative to the current C# public interval tree, because C# `foreach` over the public general measured tree also
+  materializes before yielding, as recorded in the measured-tree enumerator improvement proposal. Once the C++
+  measured tree gains a streaming iterator, `coalesce` can switch to it without changing semantics.
+
+Justified divergences:
+
+- C# `IntervalTree<T>` uses `Comparer<T>.Default`; C++ exposes a static `Comparison` policy parameter. This is the
+  same compile-time comparison regime already chosen for C++ max/min/priority/interval measures and avoids storing
+  a runtime comparer in every persistent version while supporting custom endpoint orderings.
+- Empty query/remove operations return `std::optional` instead of C# `bool` plus out parameters.
+- Counts use `std::size_t`, continuing the port-wide count policy. The underlying interval measure uses
+  `checked_add` for count accumulation.
+- C++ construction supports initializer-list, iterator, and range inputs rather than C# `IEnumerable<T>` factory
+  methods.
+- `interval<T>::contains` and `interval<T>::overlaps` are generic over a comparison policy and default to natural
+  ordering. The tree methods use the tree's `Comparison` policy internally, so custom tree orderings do not depend
+  on structural equality.
+
+Validation:
+
+- Added tests for closed-interval containment/overlap semantics, empty-tree behavior, insertion order, single
+  overlap queries versus brute force, full overlap enumeration and counts versus brute force, point stabbing,
+  duplicate membership/removal, coalescing versus a sweep model, and comparer-equality behavior where value
+  equality differs from endpoint ordering.
+- The debug assertion reported while developing the interval wrapper was traced to a C++ test loop that used
+  `index != actual.size()` starting from one. Empty overlap results made the loop enter on an empty vector. The
+  loop was corrected to use `index < actual.size()`.
+- Built `msvc-debug` with `/W4 /WX`.
+- Ran `ctest --preset msvc-debug --output-on-failure`; all tests passed.
+- Built `msvc-release` with `/W4 /WX`.
+- Ran `ctest --preset msvc-release --output-on-failure`; all tests passed.
+
+Findings:
+
+- No new C# defect, flaw, or improvement proposal was found in the interval tree pass. The C# implementation and
+  tests matched the measured interval-tree algorithms ported here.
+- The previously recorded C# wording defect for the interval tree still applies:
+  [`FingerTree/docs/interval-tree-strict-core-wording-defect-report.md`](../../../FingerTree/docs/interval-tree-strict-core-wording-defect-report.md).
+
+## Checkpoint: Non-Interactive MSVC Test Failures
+
+Implemented:
+
+- The native smoke-test executable now configures the MSVC debug CRT at startup so warnings, errors, asserts, and
+  invalid-parameter failures report through stderr rather than modal Visual C++ Runtime Library dialogs.
+- The test harness also disables the relevant Windows fault/open-file critical-error boxes and unit-buffers stdout
+  and stderr, so CTest output records the last completed test before an abort.
+
+Validation:
+
+- Applied the staged harness-only diff to a detached temporary worktree and ran both MSVC debug and release CTest
+  presets successfully before committing that checkpoint.
