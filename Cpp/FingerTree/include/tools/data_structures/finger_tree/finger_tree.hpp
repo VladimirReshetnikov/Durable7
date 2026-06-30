@@ -10,6 +10,9 @@
 #include <tools/data_structures/finger_tree/persistent_deque.hpp>
 #include <tools/data_structures/finger_tree/priority_queue.hpp>
 #include <tools/data_structures/finger_tree/product_measure.hpp>
+#include <tools/data_structures/finger_tree/sorted_bag.hpp>
+#include <tools/data_structures/finger_tree/sorted_map.hpp>
+#include <tools/data_structures/finger_tree/sorted_set.hpp>
 #include <tools/data_structures/finger_tree/sum_measure.hpp>
 
 namespace tools::data_structures::finger_tree {

@@ -586,3 +586,87 @@ Validation:
 
 - Applied the staged harness-only diff to a detached temporary worktree and ran both MSVC debug and release CTest
   presets successfully before committing that checkpoint.
+
+## Checkpoint: Sorted Collection Wrappers
+
+Compared C# source:
+
+- `FingerTree/src/Tools.DataStructures.FingerTree/SortedBag.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/SortedSet.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/SortedDictionary.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/BuiltInMeasures.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/MeasurePredicates.cs`
+
+Compared C# tests:
+
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/SortedBagTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/SortedSetTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/SortedDictionaryTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/SortedCollectionPropertyTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/AllocationFreeReadTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/DerivedCollectionPersistenceTests.cs`
+- The sorted-set section of `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
+
+Implemented:
+
+- `sorted_bag<T, Less>`, a persistent sorted multiset backed by
+  `finger_tree<T, order_statistic_measure<T>>`.
+- `sorted_set<T, Less>`, a persistent sorted set backed by the same order-statistic measured tree.
+- `sorted_map<Key, T, Less>`, the C++ analogue of C# `SortedDictionary<TKey, TValue>`, backed by
+  `finger_tree<std::pair<Key, T>, sorted_map_entry_measure<Key, T>>`.
+- Runtime comparator storage through a `Less` object in each wrapper. The order-statistic measures remain
+  comparison-independent and the comparator is applied only in split/locate predicates, matching the C# design.
+- Sorted construction through `std::stable_sort` followed by measured-tree appends. Bag construction preserves
+  comparer-equal input order; set construction keeps the first comparer-equal value; map construction keeps the
+  last duplicate-key entry.
+- Bag rank/count/index/range/multiplicity/removal operations.
+- Set rank/index/navigation/range/update operations plus linear-merge union, intersection, difference,
+  symmetric difference, subset/superset predicates, overlap, and equality checks.
+- Map lookup, rank/index, set/insert/try-insert/remove, floor/ceiling/lower/higher entry navigation, key ranges,
+  and key/value/entry materialization.
+
+Parity notes:
+
+- The bag `add` path splits at the first key above the inserted item, so new comparer-equal items are appended
+  after existing equals just as in C#.
+- The set `add` path splits at the first key at least equal to the inserted item and returns the unchanged set
+  when that first suffix item is comparer-equal, preserving C# uniqueness by comparer equality.
+- The map `set_item` path replaces a comparer-equal key in place relative to the surrounding key order; `insert`
+  throws on duplicate keys and `try_insert` reports absence with `std::optional`.
+- Rank and neighbor queries use `try_locate` rather than rebuilding split results, preserving the allocation-free
+  read shape that motivated the C# zero-closure predicate tests.
+- Set algebra currently materializes both operands into vectors before the linear merge. This is not worse than
+  the current C# sorted-wrapper behavior over the public general measured tree, whose enumerator materializes
+  before yielding as recorded in the measured-tree enumerator improvement proposal. Once C++ `finger_tree` has a
+  streaming iterator, these merges can be switched to iterator traversal without changing public semantics.
+
+Justified divergences:
+
+- C# stores an `IComparer<T>` object. C++ stores a `Less` object whose type is part of the wrapper type. This gives
+  the same runtime-comparator behavior for ordinary function objects while keeping the wrapper allocation-free and
+  avoiding type erasure. Capturing comparers remain available by instantiating the wrapper with the comparer type.
+- `sorted_map` uses C++ naming rather than `sorted_dictionary`.
+- Missing ranks and navigation/lookup/update misses use `std::optional`; C# uses `-1`, `bool` plus out parameters,
+  or throwing indexers depending on the member.
+- Counts and ranks use `std::size_t`, continuing the C++ count policy.
+- C++ exposes `to_vector`, `keys_to_vector`, and `values_to_vector` in this checkpoint instead of C# collection
+  interfaces. Lazy iterators remain a follow-up on the measured-tree iterator work.
+
+Validation:
+
+- Added tests for bag construction/order/stable equal-key behavior, ranks, counts, indexing, one-vs-all removal,
+  range extraction, descending order, and randomized multiset histories against a sorted vector model.
+- Added tests for set uniqueness, indexing, optional rank results, floor/ceiling/lower/higher navigation, range
+  extraction, set algebra and relation predicates against `std::set`, descending order, and randomized histories.
+- Added tests for map last-wins construction, lookup, set/insert/try-insert/remove semantics, rank/index,
+  floor/ceiling/lower/higher entry navigation, range extraction, descending key order, and randomized histories
+  against `std::map`.
+- Built `msvc-debug` with `/W4 /WX`.
+- Ran `ctest --preset msvc-debug --output-on-failure`; all tests passed.
+- Built `msvc-release` with `/W4 /WX`.
+- Ran `ctest --preset msvc-release --output-on-failure`; all tests passed.
+
+Findings:
+
+- No new C# defect, flaw, or improvement proposal was found in the sorted collection pass. The C# source and tests
+  matched the measured-tree wrapper algorithms ported here.

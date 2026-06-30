@@ -73,6 +73,48 @@ Notable C++ differences from C#:
 - enumeration is exposed through `to_vector`/`copy_to` in this checkpoint. A streaming iterator can be added on top
   of the same tree/node block traversal used by the deque without changing tree semantics.
 
+## `sorted_bag<T, Less>`, `sorted_set<T, Less>`, And `sorted_map<Key, T, Less>`
+
+The sorted collection wrappers are the C++ ports of C# `SortedBag<T>`, `SortedSet<T>`, and
+`SortedDictionary<TKey, TValue>`. They are persistent wrappers over the general measured tree with
+order-statistic measures.
+
+Primary bag operations:
+
+- observers: `empty`, `size`, `comparison`, `min`, `max`, `at`, `operator[]`;
+- updates: `add`, `add_range`, `try_remove`, `remove`, `remove_all`;
+- queries: `contains`, `count_less_than`, `count_at_most`, `count_of`, `get_range`;
+- materialization: `to_vector`.
+
+Primary set operations:
+
+- observers and rank access: `empty`, `size`, `comparison`, `min`, `max`, `at`, `operator[]`, `index_of`;
+- updates: `add`, `add_range`, `try_remove`, `remove`;
+- navigation: `try_floor`, `try_ceiling`, `try_lower`, `try_higher`, `get_range`;
+- algebra and relations: `union_with`, `intersect`, `except`, `symmetric_except`, subset/superset predicates,
+  `overlaps`, and `set_equals`;
+- materialization: `to_vector`.
+
+Primary map operations:
+
+- observers and key/rank access: `empty`, `size`, `comparison`, `min_entry`, `max_entry`, `at`, `entry_at`,
+  `index_of_key`;
+- lookup and updates: `contains_key`, `try_get`, `set_item`, `insert`, `try_insert`, `try_remove`, `remove`;
+- navigation: `try_floor_entry`, `try_ceiling_entry`, `try_lower_entry`, `try_higher_entry`, `get_range`;
+- materialization: `to_vector`, `keys_to_vector`, `values_to_vector`.
+
+Notable C++ differences from C#:
+
+- sorted wrappers store a runtime `Less` object, defaulting to `std::less<>`, because their order-statistic
+  measures are comparison-independent just like the C# sorted wrappers' measures;
+- absent ranks use `std::optional<std::size_t>` instead of C#'s `-1` sentinel;
+- absent lookup, navigation, insertion, and removal results use `std::optional`;
+- `sorted_map` is the C++ name for C# `SortedDictionary`;
+- `sorted_bag` preserves comparer-equal insertion order, `sorted_set` keeps the first comparer-equal value during
+  range construction, and `sorted_map` keeps the last duplicate-key entry;
+- traversal is exposed through vector materialization in this checkpoint. Lazy sorted-wrapper iterators can be
+  added after the general measured tree grows a streaming iterator.
+
 ## `priority_queue<T, Priority, Comparison>`
 
 `priority_queue<T, Priority, Comparison>` is the C++ port of C# `PriorityQueue<TElement, TPriority>`. It is a
