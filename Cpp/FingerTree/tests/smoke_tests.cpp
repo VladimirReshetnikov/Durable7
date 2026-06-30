@@ -16,6 +16,7 @@ using namespace tools::data_structures::finger_tree::tests;
 void add_measure_tests(suite& tests);
 void add_lazy_cell_tests(suite& tests);
 void add_atomic_box_tests(suite& tests);
+void add_measured_lazy_cell_tests(suite& tests);
 
 int main()
 {
@@ -68,6 +69,7 @@ int main()
     add_measure_tests(tests);
     add_lazy_cell_tests(tests);
     add_atomic_box_tests(tests);
+    add_measured_lazy_cell_tests(tests);
 
     return tests.run();
 }

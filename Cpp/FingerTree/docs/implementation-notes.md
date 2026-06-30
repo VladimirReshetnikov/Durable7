@@ -214,3 +214,40 @@ Validation:
   retry, and concurrent publication of intact wide values.
 - Built `msvc-debug` and ran `ctest --preset msvc-debug`.
 - Built `msvc-release` and ran `ctest --preset msvc-release`.
+
+## Checkpoint: Measured Lazy Cell
+
+Compared C# source:
+
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredMiddle.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
+- `Cpp/FingerTree/docs/port-plan.md`
+- `Cpp/FingerTree/docs/port-plan-editorial-notes.md`
+
+Implemented:
+
+- `detail::measured_lazy_cell<Tree>`, a measured-middle publication primitive with the same computed-or-pending
+  atomic state shape as `detail::lazy_cell`.
+- `measure()` checks the computed state first, then asks the pending operation for an optional measure without
+  forcing, and only forces the tree if the pending operation cannot answer.
+- Pending factories may return either a `Tree` value or `std::shared_ptr<const Tree>`.
+- `defer_force_only` models pop-like pending operations whose measure cannot be recovered without forcing.
+
+Parity notes:
+
+- This captures the C# push-versus-pop asymmetry directly. `PendingMeasuredPushFront` and
+  `PendingMeasuredPushBack` can report their resulting middle measure arithmetically from the forced source and
+  pushed node, while `PendingMeasuredPopFront` and `PendingMeasuredPopBack` return false and force.
+- A successful force replaces the pending state with a computed tree state, so pending operations and captured
+  sources are released just as in the C# compare-exchange cells.
+- The primitive is still deliberately lower-level than the final measured tree. It enforces publication semantics
+  and the measure-probe protocol; the tree constructors still have to preserve the one-operation-deep suspension
+  discipline.
+
+Validation:
+
+- Added tests for computed measure reads, null computed tree rejection, push-like measure probes that avoid
+  forcing, force-only measure reads that publish the tree, retry after force-time exceptions, and captured-state
+  release after force.
+- Built `msvc-debug` and ran `ctest --preset msvc-debug`.
+- Built `msvc-release` and ran `ctest --preset msvc-release`.
