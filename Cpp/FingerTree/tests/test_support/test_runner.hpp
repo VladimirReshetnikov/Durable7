@@ -53,6 +53,33 @@ void require_equal(
     throw test_failure(message.str());
 }
 
+template <class Exception, class Function>
+void require_throws(
+    Function&& function,
+    const std::string_view expression,
+    const std::source_location location = std::source_location::current())
+{
+    try {
+        std::forward<Function>(function)();
+    } catch (const Exception&) {
+        return;
+    } catch (const std::exception& ex) {
+        std::ostringstream message;
+        message << location.file_name() << ':' << location.line() << ": expected exception for " << expression
+                << ", but caught different exception: " << ex.what();
+        throw test_failure(message.str());
+    } catch (...) {
+        std::ostringstream message;
+        message << location.file_name() << ':' << location.line() << ": expected exception for " << expression
+                << ", but caught non-standard exception";
+        throw test_failure(message.str());
+    }
+
+    std::ostringstream message;
+    message << location.file_name() << ':' << location.line() << ": expected exception for " << expression;
+    throw test_failure(message.str());
+}
+
 class suite final {
 public:
     using test_function = std::function<void()>;
@@ -104,3 +131,6 @@ private:
 
 #define FT_REQUIRE_EQUAL(actual, expected) \
     ::tools::data_structures::finger_tree::tests::require_equal((actual), (expected), #actual, #expected)
+
+#define FT_REQUIRE_THROWS(exception_type, expression) \
+    ::tools::data_structures::finger_tree::tests::require_throws<exception_type>([&] { (void)(expression); }, #expression)

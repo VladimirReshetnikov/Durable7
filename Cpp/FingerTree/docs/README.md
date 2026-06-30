@@ -12,5 +12,7 @@
   C#-to-C++ design mapping.
 - [Port plan editorial notes](port-plan-editorial-notes.md) records the non-obvious hazards behind the plan,
   especially lazy memoization, type erasure, comparator regimes, and C++ memory-model rules.
+- [Implementation notes](implementation-notes.md) records concrete C# comparisons, justified C++ divergences,
+  validation observations, and links to any defect reports found during the port.
 - [API notes](api-notes.md) records C++ API conventions and active differences from the C# workspace.
 - [Validation](validation.md) records build, test, stress, and benchmark entry points for this workspace.

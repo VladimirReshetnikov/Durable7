@@ -13,6 +13,8 @@
 using namespace tools::data_structures::finger_tree;
 using namespace tools::data_structures::finger_tree::tests;
 
+void add_measure_tests(suite& tests);
+
 int main()
 {
     suite tests;
@@ -60,6 +62,8 @@ int main()
         FT_REQUIRE(scope.allocations() > 0);
         FT_REQUIRE(scope.bytes_allocated() >= 32 * sizeof(int));
     });
+
+    add_measure_tests(tests);
 
     return tests.run();
 }

@@ -1,5 +1,6 @@
 add_executable(
     fingertree_smoke_tests
+    measure_tests.cpp
     smoke_tests.cpp
     test_support/allocation_counter.cpp
 )
