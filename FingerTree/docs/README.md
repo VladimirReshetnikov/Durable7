@@ -4,7 +4,7 @@
 - Created (UTC): 2026-04-27T18:33:25Z
 - Repository HEAD: df8ea08345ca22ba76e6f4fc7e92d0fd41686de3
 - Audience: Maintainers and implementers working on the C# finger-tree collection
-- Scope: Index of design references and local specifications for `src/DataStructures/FingerTree`
+- Scope: Index of design references and local specifications for `FingerTree`
 
 ## Current Documents
 

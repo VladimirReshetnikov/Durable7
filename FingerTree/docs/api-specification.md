@@ -6,7 +6,7 @@
 - Audience: Maintainers, reviewers, and implementers of the planned C# finger-tree collection
 - Scope: Public API shape, semantic contracts, and complexity targets for a persistent catenable deque
 - Related code:
-  - `src/DataStructures/FingerTree/`
+  - `FingerTree/`
 - Related docs (external reference material, segregated under [`external/`](external/README.md)):
   - [Finger Trees Explained Anew, and Slightly Simplified](<external/Finger Trees Explained Anew, and Slightly Simplified.tex>)
   - [Finger trees: a simple general-purpose data structure](<external/Finger trees - a simple general-purpose data structure/Finger trees - a simple general-purpose data structure.tex>)
@@ -51,7 +51,7 @@ This document specifies the first production API for a persistent C# catenable d
 
 ## Public Package Shape
 
-The first implementation should introduce a standalone project under `src/DataStructures/FingerTree/` with this public namespace and primary type:
+The implementation lives under `FingerTree/` with this public namespace and primary type:
 
 ```csharp
 using System.Diagnostics.CodeAnalysis;

@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: MIT-0
+
+# Normalize line endings to LF in repository and checkout
+* text=auto eol=lf
+
+# Treat certain files as binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.7z binary

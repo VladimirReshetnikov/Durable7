@@ -1,0 +1,60 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+out/
+
+# User-specific files
+*.DotSettings.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDE folders
+.vs/
+.vscode/
+
+# Test and coverage artifacts
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+coverage/
+
+# NuGet
+packages/
+*.nupkg
+*.snupkg
+
+# BenchmarkDotNet
+BenchmarkDotNet.Artifacts/
+
+# Generated files
+Generated/
+*.g.cs
+*.generated.cs
+
+# Logs
+*.log
+/tmp-pwsh-*.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Tooling caches
+_ReSharper*/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.venv/
+venv/
+build/
+dist/

@@ -14,7 +14,7 @@ constant-factor claims into measured evidence, comparing against the BCL's persi
 The project is an executable that uses `BenchmarkSwitcher`, so the command line selects what runs.
 
 ```powershell
-cd src/DataStructures/FingerTree/benchmarks/Tools.DataStructures.FingerTree.Benchmarks
+cd C:\DataStructures\FingerTree\benchmarks\Tools.DataStructures.FingerTree.Benchmarks
 
 # Everything, full (default) job — the trustworthy but slow run.
 dotnet run -c Release -- --filter *

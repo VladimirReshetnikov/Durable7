@@ -3,7 +3,7 @@
 # contents and cross-references resolve, then removing the LaTeX byproducts (.aux/.log/.out/.toc). Run from
 # anywhere:
 #
-#     pwsh -File src/DataStructures/FingerTree/docs/build-design-notes.ps1
+#     pwsh -File C:\DataStructures\FingerTree\docs\build-design-notes.ps1
 #
 # Requires MiKTeX (package auto-install handles any missing LaTeX packages on first run).
 
