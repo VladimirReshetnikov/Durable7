@@ -72,3 +72,22 @@ Notable C++ differences from C#:
 - result values use `std::optional` for absent views/searches instead of C# `bool` plus out parameters;
 - enumeration is exposed through `to_vector`/`copy_to` in this checkpoint. A streaming iterator can be added on top
   of the same tree/node block traversal used by the deque without changing tree semantics.
+
+## `priority_queue<T, Priority, Comparison>`
+
+`priority_queue<T, Priority, Comparison>` is the C++ port of C# `PriorityQueue<TElement, TPriority>`. It is a
+persistent meldable minimum-priority queue backed by `finger_tree<priority_entry<T, Priority>, priority_measure<...>>`.
+
+Primary operations:
+
+- observers: `empty`, `size`, `try_peek_priority`, `try_peek`;
+- updates: `enqueue`, `try_dequeue`, `meld`;
+- materialization: `to_vector`.
+
+Notable C++ differences from C#:
+
+- priority ordering is a compile-time static comparison policy, defaulting to `default_comparison<Priority>`. This
+  matches the measure layer's compile-time comparison regime and still supports max-queue behavior through
+  `reverse_comparison<Priority>`;
+- absent peek/dequeue results use `std::optional`;
+- `to_vector` returns entries in insertion/tree order, matching the C# queue's unspecified enumeration order.

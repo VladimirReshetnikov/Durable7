@@ -434,3 +434,61 @@ Findings:
   The C# public general measured tree enumerator materializes a `List<TElement>` before yielding; this is documented
   behavior rather than a correctness bug, but it is an allocation/performance shortcoming relative to the tuned
   deque's stack enumerator.
+
+## Checkpoint: Priority Queue Wrapper
+
+Compared C# source:
+
+- `FingerTree/src/Tools.DataStructures.FingerTree/PriorityQueue.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/MeasurePredicates.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/BuiltInMeasures.cs`
+
+Compared C# tests:
+
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/PriorityQueueTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/BuiltInMeasureTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/CustomComparisonMeasureTests.cs`
+
+Implemented:
+
+- `priority_queue<T, Priority, Comparison>`, a persistent meldable min-priority queue backed by
+  `finger_tree<priority_entry<T, Priority>, priority_measure<T, Priority, Comparison>>`.
+- O(1) count/min-priority observation from the measured tree aggregate.
+- Enqueue as append, preserving insertion order among equal priorities.
+- Peek/dequeue by locating or splitting at the first prefix whose aggregate minimum reaches the whole-tree minimum.
+- Meld by measured-tree concatenation.
+- Reversed-priority behavior through `reverse_comparison<Priority>`.
+
+Parity notes:
+
+- The C# queue uses `Comparer<TPriority>.Default` inside `PriorityMeasure`; the C++ queue uses the existing static
+  comparison policy parameter so priority ordering remains part of the measure type. This is the same design choice
+  already used by C++ max/min/priority measures.
+- Equal-priority FIFO behavior follows from two places, matching C#: `priority_measure::combine` keeps the left
+  minimum on equality, and dequeue splits at the first subtree whose minimum is at most the whole-tree minimum.
+- Enumeration/materialization order is insertion/tree order and intentionally not priority order, matching the C#
+  documentation's unspecified enumeration order.
+
+Justified divergences:
+
+- Empty peek/dequeue returns `std::optional` rather than C# `bool` plus out parameters.
+- `size()` returns `std::size_t`, continuing the C++ count policy chosen for the rest of the port.
+- Runtime priority comparers are not accepted because the priority measure itself depends on the ordering. This
+  matches the C# queue's design note that a different priority order needs a different priority type; C++ exposes
+  the equivalent through a different static comparison policy.
+
+Validation:
+
+- Added tests for empty behavior, priority peek without removal, nondecreasing drain order against a sorted model,
+  FIFO stability among equal priorities, meld, persistence after dequeue, and reversed-comparison max-queue
+  behavior.
+- Built `msvc-debug` with `/W4 /WX`.
+- Ran `ctest --preset msvc-debug --output-on-failure`; all tests passed.
+- Built `msvc-release` with `/W4 /WX`.
+- Ran `ctest --preset msvc-release --output-on-failure`; all tests passed.
+
+Findings:
+
+- No C# defect, flaw, or improvement proposal was found in the priority queue pass. The C# source and tests matched
+  the measured-core mechanics used by the C++ wrapper: append for enqueue, stable minimum signposts, split/locate at
+  the front minimum, and concat for meld.
