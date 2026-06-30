@@ -125,6 +125,32 @@ Notable C++ differences from C#:
 - traversal is exposed through vector materialization in this checkpoint. A chunk-aware iterator remains a follow-up
   once the general measured tree grows streaming traversal.
 
+## `measured_rope<T, MeasurePolicy>`
+
+`measured_rope<T, MeasurePolicy>` is the C++ port of C#
+`MeasuredRope<T, TMeasure, TMeasureOps>`. It is the measured sibling of `rope<T>`: a persistent chunked sequence
+whose tree measure is `{count, user_measure}`.
+
+Primary operations:
+
+- positional observers and edits: the same `empty`, `size`, `front`, `back`, `at`, `try_get`, endpoint, indexed,
+  range, split, slice, concat, copy, materialization, and `compact` operations as `rope<T>`;
+- measure observers/navigation: `measure`, `prefix_measure`, `split_by_measure`, and `try_locate_by_measure`;
+- test/diagnostic support: `validate_invariants` and `chunk_count`.
+
+Notable C++ differences from C#:
+
+- `MeasurePolicy` is the single C++ policy parameter and supplies the nested `measure_type`, matching the rest of
+  the C++ measure layer;
+- measure predicates are ordinary copyable callables. Function objects and lambdas use the same templated path, so
+  the value-type-predicate overload distinction in C# is not needed;
+- absent measure-locate results use `std::optional<measured_rope_locate_result<...>>` instead of C# `bool` plus out
+  parameters;
+- measure navigation descends by the second component of the tree measure, then scans within the isolated chunk to
+  find the exact boundary element and measure-before value. The scan is bounded by `max_chunk_size`;
+- traversal is exposed through vector materialization in this checkpoint, matching the positional rope follow-up
+  plan for streaming traversal.
+
 ## `sorted_bag<T, Less>`, `sorted_set<T, Less>`, And `sorted_map<Key, T, Less>`
 
 The sorted collection wrappers are the C++ ports of C# `SortedBag<T>`, `SortedSet<T>`, and

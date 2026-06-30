@@ -5,6 +5,7 @@ add_executable(
     lazy_cell_tests.cpp
     measured_finger_tree_tests.cpp
     measured_lazy_cell_tests.cpp
+    measured_rope_tests.cpp
     measure_tests.cpp
     persistent_deque_tests.cpp
     priority_queue_tests.cpp

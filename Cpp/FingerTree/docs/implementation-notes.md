@@ -811,3 +811,71 @@ Findings:
   [`FingerTree/docs/rope-fromchunks-immutable-storage-improvement-proposal.md`](../../../FingerTree/docs/rope-fromchunks-immutable-storage-improvement-proposal.md).
   `Rope<T>.FromChunks` imports `ReadOnlyMemory<T>` without copying; that is useful, but the backing storage may be
   externally mutable, so the immutable-storage precondition should be documented or reflected in the API name.
+
+## Checkpoint: Measured Rope
+
+Compared C# source:
+
+- `FingerTree/src/Tools.DataStructures.FingerTree/MeasuredRope.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/MeasuredRopeChunk.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/RopeChunk.cs`
+
+Compared C# tests:
+
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/MeasuredRopeTests.cs`
+- The measured-rope section of `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
+- The measured-rope property checks in `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/RopePropertyTests.cs`
+
+Implemented:
+
+- `measured_rope<T, MeasurePolicy>`, a persistent measured chunked sequence backed by the C++ general measured tree.
+- `detail::measured_rope_chunk<T, MeasurePolicy>`, wrapping the positional `rope_chunk<T>` and caching the combined
+  user measure of its elements.
+- `detail::measured_rope_chunk_measure<T, MeasurePolicy>`, whose tree measure is
+  `measure_pair<std::size_t, user_measure>`.
+- Positional operations matching `rope<T>`: endpoint reads/updates, indexed reads/replacement, insertion, removal,
+  range insertion/removal, split, slice, concat with boundary coalescing, copying/materialization, `compact`, and
+  invariant validation.
+- Measure operations: whole-rope `measure`, `prefix_measure(count)`, `split_by_measure(predicate)`, and
+  `try_locate_by_measure(predicate)`.
+- Public aggregate-header and CMake/test-harness integration for the new wrapper.
+
+Parity notes:
+
+- The measured rope uses the same chunk-size policy as C# and as the positional C++ rope: min 256 and max 2048.
+- Positional navigation splits on the count component of the product measure with the same cumulative-count
+  predicate used by C# `PairCountAbovePredicate`.
+- Measure navigation splits/locates on the second component of the product measure to isolate the boundary chunk,
+  then scans within that chunk element-by-element. This is load-bearing: a chunk's cached total measure is not
+  generally prefix-summable, so stopping at chunk granularity would return the wrong split point.
+- Measured chunk slicing recomputes the sliced chunk's user measure, matching the C# `MeasuredChunk.Slice`
+  behavior. Concatenating two measured chunks combines their cached measures without rescanning, matching C#.
+- The implementation reuses `detail::rope_chunk<T>` for storage, so measured and positional ropes share the same
+  immutable shared-vector slice semantics and copy-on-write/fresh-buffer behavior.
+
+Justified divergences:
+
+- C# exposes separate `TMeasure` and `TMeasureOps` generic parameters. The C++ API uses a single
+  `MeasurePolicy` whose nested `measure_type` names the user measure, following the C++ measured-tree API.
+- C# has delegate and struct-predicate overloads to avoid closure allocations. C++ templates over copyable
+  predicate callables give lambdas and predicate objects the same monomorphized path, including the in-chunk scan,
+  so no separate public strategy interface is needed.
+- Absent measure-locate results use `std::optional` rather than `bool` plus out parameters.
+- Counts and indices use `std::size_t`, continuing the C++ count policy.
+- The first checkpoint exposes vector materialization rather than a chunk-aware iterator, matching the positional
+  rope follow-up.
+
+Validation:
+
+- Added tests for positional operations versus a vector model and sum measure; prefix sums at every offset;
+  measure split/locate versus brute-force cumulative sums; newline-count primitive navigation over text; randomized
+  histories against a vector/sum model; and empty/error behavior.
+- Built `msvc-debug` with `/W4 /WX`.
+- Ran `ctest --preset msvc-debug --output-on-failure`; all tests passed.
+- Built `msvc-release` with `/W4 /WX`.
+- Ran `ctest --preset msvc-release --output-on-failure`; all tests passed.
+
+Findings:
+
+- No new C# defect, flaw, or improvement proposal was found in the measured rope pass. The source and tests matched
+  the two-level navigation algorithm ported here.
