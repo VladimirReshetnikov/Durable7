@@ -6,7 +6,7 @@
 - Audience: Maintainers and AI coding agents working on repository-owned data structures
 - Scope: Repository layout, build entry points, and agent guidance
 
-This repository contains Vladimir Reshetnikov's standalone data-structure workspaces and design references. It was extracted from `C:\Tools0\src\DataStructures` / `VladimirReshetnikov/Tools` with path-local Git history preserved as precisely as practical.
+This repository contains Vladimir Reshetnikov's standalone data-structure workspaces and design references. It was extracted from `C:\Tools0\src\DataStructures` / `VladimirReshetnikov/Tools` with path-local Git history preserved as precisely as practical. The Tools-side handoff is recorded by [`5fc4054da`](https://github.com/VladimirReshetnikov/Tools/commit/5fc4054da), which removes the former subtree and points the Tools indexes here.
 
 This document is the canonical repository guidance for Vladimir and the AI coding agents that help him. `AGENTS.md` and `CLAUDE.md` point here, so keep shared project and agent instructions in this file.
 
