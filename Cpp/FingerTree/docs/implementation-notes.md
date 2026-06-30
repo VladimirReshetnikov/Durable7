@@ -122,3 +122,61 @@ Findings:
   [`FingerTree/docs/interval-tree-strict-core-wording-defect-report.md`](../../../FingerTree/docs/interval-tree-strict-core-wording-defect-report.md):
   `IntervalTree<T>` refers to the underlying measured core as "strict" where the repository docs and implementation
   describe the lazy-memoized measured finger tree.
+
+## Checkpoint: Atomic Lazy Cell
+
+Compared C# source:
+
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/MiddleTree.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredMiddle.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
+- `Cpp/FingerTree/docs/port-plan.md`
+- `Cpp/FingerTree/docs/port-plan-editorial-notes.md`
+
+Compared C# tests and examples:
+
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/MeasuredFingerTreePersistenceTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/PersistenceConcurrencyExamplesTests.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/TearableConcurrencyStressTests.cs`
+
+Implemented:
+
+- `detail::lazy_cell<T>`, a copyable shared handle around an atomic `std::shared_ptr<const state_base>`.
+- Eager/computed construction from a value or a prebuilt `std::shared_ptr<const T>`.
+- Deferred construction from a pure factory returning either `T` or `std::shared_ptr<const T>`.
+- First-force publication through compare-exchange. Racing first readers may duplicate bounded factory work, but
+  all converge on the single published value state.
+- Retry-after-exception behavior: a throwing factory leaves the cell pending, matching the C# lazy middle's strong
+  exception-safety shape.
+- Pending-state release after publication: replacing the pending state with the computed state releases captured
+  source structures once the forcing call returns, avoiding the `std::call_once` retention problem called out in
+  the port plan.
+
+Parity notes:
+
+- This primitive mirrors the C# `LazyMiddle<T, TChild>._state` and `LazyMeasuredMiddle<...>._state` shape: one
+  shared cell holds either a pending operation object or a computed result, and compare-exchange publishes the
+  computed result.
+- The cell deliberately does not use `std::once_flag`; the pending operation object is dropped after successful
+  publication, preserving the C# space behavior where `_state` no longer references the pending operation or the
+  already-forced source tree it captured.
+- `std::atomic<std::shared_ptr<...>>` is used for the concurrently read/written state pointer. This is the C++
+  analogue of C# `Volatile.Read` plus `Interlocked.CompareExchange` on an object reference; plain `shared_ptr`
+  reassignment would be a data race.
+
+Remaining engine work:
+
+- The general measured tree also needs a separate atomic pointer-published measure box for deep-node measures.
+  `lazy_cell<T>` can inform that implementation, but the measure box has slightly different construction timing
+  because push middles can report a measure without forcing while pop middles cannot.
+- The lazy cell is an internal primitive only. It does not by itself implement the one-operation-deep discipline;
+  the measured-tree and deque constructors must still force captured source middles before creating pending
+  push/pop operations, just as the C# code does.
+
+Validation:
+
+- Added tests for eager/computed cells, null computed-pointer rejection, quiescent one-shot forcing, exception
+  retry, copied-cell sharing, release of captured pending state after publication, and concurrent first-force
+  convergence.
+- Built `msvc-debug` and ran `ctest --preset msvc-debug`.
+- Built `msvc-release` and ran `ctest --preset msvc-release`.
