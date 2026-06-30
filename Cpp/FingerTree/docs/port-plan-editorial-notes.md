@@ -2,7 +2,8 @@
 
 - Status: Review companion to `port-plan.md`
 - Created (UTC): 2026-06-30T03:24:30Z
-- Repository HEAD: 85afac7c685f71be23509103c80c1f37a0fe8ac9
+- Reviewed (UTC): 2026-06-30T16:54:50Z
+- Repository HEAD: c9aef9636783ee5d4be6cee7819bb9a4ad70fb5a
 - Audience: Maintainers and AI agents implementing the C++ port; reviewers of `port-plan.md`
 - Scope: Non-obvious C#→C++ porting hazards found by reviewing the original `Tools.DataStructures.FingerTree`
   source against the plan, and the rationale for the edits applied to `port-plan.md`
@@ -17,8 +18,9 @@ bite during porting. Each item cites the C# evidence by `file:line` so an implem
 
 The plan was already strong: it correctly keeps the tuned deque separate from the general measured tree, picks
 `shared_ptr`-based persistence, maps static-abstract interfaces to concepts/policies, keeps the closure-free
-struct-predicate fast path, and is honest about amortized-vs-worst-case bounds. The issues below are refinements
-and a few genuine make-or-break gaps, not a rewrite.
+struct-predicate fast path, and is honest about amortized-vs-worst-case bounds. The first ten sections below
+record the original review findings; section 11 records the follow-up edits from the 2026-06-30 comprehensive
+review that expanded the plan into a more executable implementation checklist.
 
 Severity convention: **H** = make-or-break (wrong result, data race, or won't compile); **M** = behavioral or
 complexity fidelity / a real footgun; **L** = clarity, hygiene, or test/doc coverage.
@@ -313,9 +315,9 @@ wrong boundary element and the wrong measure-before. The plan now states the two
 The plan frames the builder as generic with a char specialization as a fallback. In the C# there is no generic
 builder: `RopeBuilder` is `StringBuilder`-backed, `Rune`-aware, newline-aware, and its primary output is
 `MeasuredRope<char, int, NewlineMeasure>` ([`RopeBuilder.cs:21-83`](../../../FingerTree/src/Tools.DataStructures.FingerTree/RopeBuilder.cs)).
-`NewlineMeasure` lives in `RopeText.cs`, which the plan excludes — but `newline_measure` is a *trivial in-scope
-monoid policy*, distinct from the excluded grapheme/scalar-indexing/text-reader extras. So `to_text_rope()` stays
-in scope; only the editor-grade navigation conveniences are out. Milestone 7's builder bullet is reworded to a
+`NewlineMeasure` and the basic line helpers live in `RopeText.cs`; they are ordinary measured-rope operations, not
+the editor-grade extras. So `to_text_rope()` and line/column helpers stay in scope; only the Unicode
+scalar/grapheme/newline-style/TextReader conveniences are out. Milestone 7's builder bullet is reworded to a
 char/text builder with `to_rope() -> rope<char>` and `to_text_rope() -> measured_rope<char, newline_measure>`.
 
 ---
@@ -406,12 +408,13 @@ The plan picks forward iterators and avoids coroutines. Two facts to record:
   errors. Keep `/WX` but exclude system/vcpkg headers from it via MSVC external-header flags
   (`/external:anglebrackets /external:W0`, `/external:I <vcpkg-include>`), so `/WX` gates the project's own code
   only.
-- **Stale build path.** `port-plan.md:45` `cd C:\Users\vresh\.codex\worktrees\23eb\DataStructures\Cpp\FingerTree`
-  is a different (codex) worktree that does not exist here; the repo root is `C:\DataStructures`. Replaced with a
-  repo-relative `cd Cpp/FingerTree`.
-- The provenance `Repository HEAD: 8f20c4d…` was reviewed and is *correct* — it records the parent commit the plan
-  was authored against (the plan itself is added by the child commit `85afac7`), matching the repo convention. No
-  change.
+- **Stale build path in the earlier draft.** The original command used an absolute Codex worktree path
+  (`C:\Users\vresh\.codex\worktrees\23eb\...`) that was not portable to this worktree. The plan now uses a
+  repository-relative `cd Cpp\FingerTree` plus absolute paths only for the Visual Studio-bundled tools.
+- The original provenance `Repository HEAD: 8f20c4d…` was correct for the first draft because it recorded the
+  parent commit the plan was authored against. This review updates the plan and editorial headers to the current
+  pre-edit repository head (`c9aef963…`) and adds an explicit `Reviewed (UTC)` field, so future edits can
+  distinguish creation provenance from later review provenance.
 
 ---
 
@@ -449,6 +452,87 @@ allocation, and complexity-guard families. The plan's validation lists are light
   demonstration (undo/redo cursor, line/column navigation, lock-free snapshotting), and rope/measured_rope are in
   scope. Make `persistent_snapshots.cpp` concretely the Tour. Each sample should expose a testable
   `run(std::ostream&)` seam smoke-tested via CTest ([`SampleSmokeTests.cs`](../../../FingerTree/tests/Tools.DataStructures.FingerTree.Tests/SampleSmokeTests.cs)).
+
+---
+
+## 11. Follow-up edits from the comprehensive plan rewrite (M/L)
+
+These edits were made after re-reading the existing plan, the C# public surface, `RopeText`, the Tour sample, and
+the current local toolchain state.
+
+### 11.1 `std::once_flag` was still listed as acceptable despite being rejected later (M)
+
+The plan's dependency section said to use "`std::atomic`, `std::once_flag`, or a small custom atomic lazy cell" for
+memoized suspensions, while §1.7 above rejects `std::call_once` for the middle suspension because it retains the
+callable and therefore the already-forced source subtree captured by a pending operation. That was not merely a
+wording nit: an implementer reading top-down could reasonably choose `std::once_flag` before reaching the later
+rejection. The plan now makes the compare-exchange `atomic<shared_ptr<const state_base>>` lazy cell the only
+recommended middle-suspension design, and says explicitly that `std::once_flag`/`std::call_once` are not for this
+cell.
+
+### 11.2 Toolchain discovery needed to match this worktree, not an earlier snapshot (L)
+
+The previous baseline said CMake and Ninja were available through Visual Studio, but the current plain PowerShell
+has `cl.exe` on `PATH` and does **not** have `cmake.exe` or `ninja.exe` on `PATH`. The bundled tools do exist under
+Visual Studio 18 Insiders:
+
+- `...\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe`
+- `...\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe`
+
+The plan now gives absolute-path build commands and tells presets to set `CMAKE_MAKE_PROGRAM`. This removes a
+first-command failure mode without changing the compiler decision.
+
+### 11.3 The text scope boundary was too coarse: line helpers are in scope (M)
+
+The initial plan correctly excluded editor-grade text extras, but its wording risked excluding all text
+navigation. That would undercut the C# Tour sample and an important measured-rope use case. `RopeText.cs`
+separates a simple newline-count measure and line/column helpers from `RopeTextExtras.cs`: `LineCount`,
+`LineOfOffset`, `LineStartOffset`, `LineColumnOf`, `OffsetOf`, `GetLine`, and `Lines` are all ordinary
+measured-rope operations over `MeasuredRope<char, int, NewlineMeasure>`
+([`RopeText.cs:91-174`](../../../FingerTree/src/Tools.DataStructures.FingerTree/RopeText.cs)). The Tour sample
+uses exactly those operations for its second act
+([`TourProgram.cs:57-67`](../../../FingerTree/samples/Tools.DataStructures.FingerTree.Tour/TourProgram.cs)).
+
+By contrast, Unicode scalar indexing, grapheme segmentation, newline-style detection, CR-stripping
+`GetLineText`/`LinesText`, and `TextReader` adapters are the editor/convenience layer that can wait
+([`RopeTextExtras.cs`](../../../FingerTree/src/Tools.DataStructures.FingerTree/RopeTextExtras.cs);
+[`RopeText.cs:73-89`](../../../FingerTree/src/Tools.DataStructures.FingerTree/RopeText.cs)). The plan now keeps
+`newline_measure`, the basic line helpers, and the char/text builder in Milestone 7, while explicitly leaving the
+extras out.
+
+### 11.4 The plan needed a public API checklist, not only architecture (M/L)
+
+The architecture sections were detailed, but a C++ implementer still had to infer public coverage from the C#
+source. The rewrite adds a "Public Surface Checklist" with the expected first-wave surface for:
+
+- the raw measured tree;
+- the tuned deque and its sorted-search helpers;
+- sorted bag/set/map, including optional ranks instead of `-1`;
+- priority queue, including FIFO equal-priority behavior without an insertion ordinal;
+- interval tree duplicate/removal semantics;
+- rope, measured rope, and text helpers.
+
+This was added because the C# surface is broad and easy to accidentally narrow. The relevant source files are the
+public wrappers (`FingerTree.cs`, `FingerTreeDeque.cs`, `SortedBag.cs`, `SortedSet.cs`, `SortedDictionary.cs`,
+`PriorityQueue.cs`, `IntervalTree.cs`, `Rope.cs`, `MeasuredRope.cs`, and `ReversibleDeque.cs`), whose member lists
+show that the port is not just the two cores plus a couple of examples.
+
+### 11.5 Iterator, exception, and allocator policy moved out of "open questions" (M/L)
+
+The previous "Open Design Questions" section left iterator allocation behavior, exception guarantees, and
+allocator support too vague. The rewrite does three things:
+
+- Resolves the iterator category to forward iterators, keeps indexed access separate from iterator category, and
+  requires a genuinely lazy deque iterator because the C# deque has an explicit stack enumerator while most other
+  families currently materialize.
+- Sets strong exception safety as the target for public operations. This follows from immutable snapshots but must
+  be restated for lazy cells: compute fully before CAS publication, and if forcing throws, leave the cell pending
+  for a retry rather than publishing a partial state.
+- Defers public allocator customization but requires allocation helper choke points (`make_node`, `make_leaf`,
+  `make_lazy_cell`) so the implementation does not paint itself into a corner.
+
+These are not algorithmic changes; they prevent first-wave implementation choices from silently defining weak API
+contracts that would be hard to tighten later.
 
 ---
 

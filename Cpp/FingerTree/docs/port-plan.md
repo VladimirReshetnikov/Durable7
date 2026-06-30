@@ -1,8 +1,9 @@
 # C++ Finger Tree Port Plan
 
-- Status: Planning
+- Status: Reviewed and expanded planning
 - Created (UTC): 2026-06-30T02:52:50Z
-- Repository HEAD: 8f20c4d9e49550ad8aa8de6fc177bdd8cc41f9fd
+- Reviewed (UTC): 2026-06-30T16:54:50Z
+- Repository HEAD: c9aef9636783ee5d4be6cee7819bb9a4ad70fb5a
 - Audience: Maintainers and AI agents implementing the C++ port of the FingerTree workspace
 - Scope: Directory layout, toolchain choice, architecture, implementation sequence, and validation strategy
 - Companion: [`port-plan-editorial-notes.md`](port-plan-editorial-notes.md) records the non-obvious C#→C++
@@ -17,39 +18,45 @@ and the general measured tree share the same intellectual lineage, but they opti
 different digit shapes. Collapsing them into one implementation would erase useful engineering choices from the
 C# codebase.
 
-The port should use the latest C++ dialect supported by the local toolchain, currently MSVC 19.50 in
-`/std:c++latest` mode through CMake `CXX_STANDARD 26`. The implementation should use modern C++ library and
-language facilities where they improve clarity or performance, but it should avoid fragile draft-only features
-such as modules in the first implementation wave. The initial target is a stable, header-first C++ library with
-tests, samples, and benchmarks.
+The port should use the newest C++ dialect mode that is usable on the local toolchain, currently MSVC 19.50 in
+`/std:c++latest` mode through CMake `CXX_STANDARD 26`. Treat that as an implementation mode, not permission to
+build on fragile draft-only facilities: concepts, ranges, `std::span`, modern `constexpr`, and
+`std::atomic<std::shared_ptr<T>>` are welcome; modules, coroutines, reflection experiments, and volatile library
+features are out of the first wave. The target is a stable, header-first C++ library with tests, samples, and
+benchmarks.
 
-Editor-grade text extras are intentionally out of scope for the first C++ port. This excludes Unicode scalar
-indexing, grapheme-cluster indexing, newline-style detection, and text-reader adapters. The positional rope and
-measured rope remain in scope because they are repository-owned data structures rather than merely text
-conveniences.
+The first complete C++ port should include the two engine cores, the measure/predicate framework, sorted
+collections, priority queue, interval tree, reversible deque, the positional and measured ropes, the newline
+measure, line/column navigation over `measured_rope<char, newline_measure>`, and the text builder. Editor-grade
+text extras are intentionally out of scope: Unicode scalar indexing, grapheme-cluster indexing, newline-style
+detection, carriage-return-stripping line helpers, and `TextReader`-style adapters. This keeps the initial scope on
+repository-owned data structures while still preserving the C# Tour sample's core text-buffer story.
 
 ## Local Toolchain Baseline
 
-The current machine has:
+Verified on 2026-06-30, the current machine has:
 
 - MSVC `cl.exe` 19.50.35728 from Visual Studio 18 Insiders.
-- CMake 4.2.3 bundled with Visual Studio.
-- Ninja 1.12.1 bundled with Visual Studio.
+- CMake bundled with Visual Studio at
+  `C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe`.
+- Ninja bundled with Visual Studio at
+  `C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe`.
 - MSBuild available under the Visual Studio installation.
-- No `clang++`, `g++`, `vcpkg`, or Conan on the current `PATH` at planning time.
+- `cl.exe` is visible on the current `PATH`; `cmake`, `ninja`, `clang++`, `g++`, `vcpkg`, and Conan are not.
 
-The MSVC compiler must be run from an initialized Visual Studio developer environment, or through CMake presets
-that locate the Visual Studio toolchain. A direct PowerShell invocation of `cl` without `VsDevCmd.bat` does not
-have the standard library include path configured.
+CMake presets should not assume the bundled CMake/Ninja directories are on `PATH`. Either launch an initialized
+Visual Studio developer environment or call the bundled tools by absolute path. Presets should set
+`CMAKE_MAKE_PROGRAM` to the bundled Ninja path for the Ninja generator.
 
 Recommended build entry points:
 
 ```powershell
 cd Cpp\FingerTree   # repository-relative; the C# workspace builds from C:\DataStructures\FingerTree
 & "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
-cmake --preset msvc-debug
-cmake --build --preset msvc-debug
-ctest --preset msvc-debug
+$cmakeDir = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
+& "$cmakeDir\cmake.exe" --preset msvc-debug
+& "$cmakeDir\cmake.exe" --build --preset msvc-debug
+& "$cmakeDir\ctest.exe" --preset msvc-debug
 ```
 
 The repository may install additional tooling. If dependency management is needed, prefer bootstrapping `vcpkg`
@@ -109,16 +116,27 @@ Cpp/
     │           ├── reversible_tree.hpp
     │           ├── rope_chunk.hpp
     │           └── measured_rope_chunk.hpp
+    ├── src/
+    │   └── CMakeLists.txt            # optional non-template helpers; keep templates in headers
     ├── tests/
     │   ├── CMakeLists.txt
+    │   ├── test_support/
+    │   │   ├── allocation_counter.hpp
+    │   │   ├── command_model.hpp
+    │   │   └── operation_counter.hpp
+    │   ├── measure_tests.cpp
     │   ├── persistent_deque_tests.cpp
+    │   ├── persistent_deque_complexity_tests.cpp
     │   ├── measured_tree_tests.cpp
+    │   ├── measured_tree_persistence_tests.cpp
     │   ├── sorted_collection_tests.cpp
     │   ├── interval_tree_tests.cpp
     │   ├── priority_queue_tests.cpp
     │   ├── reversible_deque_tests.cpp
     │   ├── rope_tests.cpp
     │   ├── measured_rope_tests.cpp
+    │   ├── text_rope_tests.cpp
+    │   ├── model_command_tests.cpp
     │   └── persistence_concurrency_tests.cpp
     ├── benchmarks/
     │   ├── CMakeLists.txt
@@ -143,16 +161,20 @@ Core library:
 - Prefer the C++ standard library.
 - Use `std::shared_ptr<const node>` or equivalent internal reference-counted ownership for persistent structure
   sharing.
-- Use `std::atomic`, `std::once_flag`, or a small custom atomic lazy cell for memoized suspensions.
+- Use a small compare-exchange lazy cell over `std::atomic<std::shared_ptr<const state_base>>` (or
+  `std::shared_ptr` accessed only through the atomic free functions) for memoized suspensions. Do **not** use
+  `std::once_flag`/`std::call_once` for middle suspensions; it pins captured source trees after forcing.
 - Use concepts to encode measure, comparison, and predicate contracts.
-- Use `std::span`, `std::array`, `std::vector`, `std::optional`, and simple result structs.
+- Use `std::span`, `std::array`, `std::vector`, `std::optional`, `std::expected` only if it is reliably available
+  in the selected standard library, and simple result structs.
 
 Tests:
 
 - Prefer Catch2 through `vcpkg`.
 - Use deterministic randomized model tests against `std::vector`, `std::multiset`, `std::set`, and `std::map`.
-- Add property-style loops directly first; bring in RapidCheck or another property library only if it pays for
-  itself.
+- Stateful command-sequence tests are required, not optional. Start with a small local `test_support` command-model
+  harness that can replay and reduce operation sequences; use RapidCheck or another property library only if it
+  integrates cleanly with the local harness and Visual Studio toolchain.
 
 Benchmarks:
 
@@ -245,6 +267,125 @@ Naming guidelines:
   signed/unsigned comparison surprises. Map absent-rank results (`IndexOf`/`IndexOfKey` returning `-1`) to
   `std::optional<std::size_t>`, never a `-1` sentinel.
 
+## Public Surface Checklist
+
+The following is the minimum first-wave public API. Names are C++-idiomatic, but each item corresponds to a C#
+capability that should not disappear silently.
+
+### `finger_tree<T, MeasurePolicy>`
+
+- Construction: default construction yields the empty tree; provide `from_range`, `from_span` where contiguous
+  input is available, and initializer-list convenience when `T` is copyable.
+- Observers: `empty()`, `measure()`, `front()`, `back()`, `to_vector()`, and forward iteration with documented
+  allocation behavior.
+- Updates: `push_front`, `push_back`, `concat`.
+- Views/results: `try_view_front() -> std::optional<view_result<finger_tree, T>>`,
+  `try_view_back() -> std::optional<view_result<finger_tree, T>>`; throwing `pop_front`/`pop_back` helpers may be
+  added but should be implemented over the total/optional view layer.
+- Search/split: `split(predicate)`, `try_split_find(predicate) -> std::optional<split_find_result<finger_tree,T>>`,
+  and total `try_locate(predicate) -> locate_result<T, measure_type>`.
+- Named measure operations: lower/upper-bound splits, split-at-index, peek/extract min/max, cumulative-weight
+  split/select, and product-component splits/finds as free functions.
+
+### `persistent_deque<T>`
+
+- Construction: default construction yields the empty deque; provide `from_range`, `from_span`, and initializer-list
+  convenience.
+- Observers: `empty()`, `size()`, `front()`, `back()`, `try_front()`, `try_back()`, `operator[]`, `at`,
+  `to_vector()`, `copy_to`, and an allocation-free lazy forward iterator modeled on the C# struct enumerator.
+- Updates: `push_front`, `push_back`, `append_range`, `concat`, `set_at`, `update_at`, `insert_at`,
+  `insert_range`, `erase_at`, and `erase_range`.
+- Views/results: `try_pop_front`, `try_pop_back`, `split_at`, `split_item_at`, `split_range`.
+- Sorted helpers over a sorted deque: `lower_bound_rank`, `upper_bound_rank`, `binary_search_rank`,
+  `contains_sorted`, `split_lower_bound`, `split_upper_bound`, `equal_range_split`, `insert_sorted`,
+  and `erase_all_sorted`. Ranks are `std::size_t`; absent binary-search results are `std::optional<std::size_t>`.
+
+### `sorted_bag<T, Compare>` / `sorted_set<T, Compare>` / `sorted_map<Key, T, Compare>`
+
+- Construction: default construction uses a default-constructed `Compare`; provide constructors/factories accepting
+  a runtime comparator object plus `from_range` overloads that bulk-build in sorted order.
+- All three expose `empty()`, `size()`, `min`/`max` endpoint access, `at_rank`, `to_vector`, and forward iteration.
+- `sorted_bag`: `add`, `add_range`, `contains`, `count_less_than`, `count_at_most`, `count_of`, `erase_one`,
+  `erase_all`, and `subrange`.
+- `sorted_set`: `add`, `add_range`, `contains`, `index_of -> std::optional<std::size_t>`, `erase`,
+  `floor`/`ceiling`/`lower`/`higher`, `subrange`, `union_with`, `intersect`, `except`, `symmetric_except`,
+  subset/superset/proper-subset/proper-superset, `overlaps`, and `set_equals`.
+- `sorted_map`: `contains_key`, `try_get`, throwing `at(key)`, `entry_at(rank)`,
+  `index_of_key -> std::optional<std::size_t>`, `set_item`, `insert` (throw on duplicate), `try_insert`,
+  `erase`, `floor_entry`/`ceiling_entry`/`lower_entry`/`higher_entry`, and `subrange`.
+- Runtime comparator storage is required for these wrappers even when the primary template parameter is
+  `Compare`: it matches the C# runtime comparer regime and keeps the measure comparator-independent. Transparent
+  heterogeneous lookup can be a later extension; first-wave lookup keys should be the collection key type.
+
+### `priority_queue<T, Priority, Compare>`
+
+- Construction: default construction yields the empty queue; provide `from_range`.
+- Observers: `empty()`, `size()`, `peek_priority()`, `try_peek_priority()`, `try_peek()`, `to_vector`, iteration.
+- Updates: `push`, `meld`, `try_pop() -> std::optional<priority_pop_result<T, Priority>>`.
+- Equal priorities are drained FIFO by leftmost-min locate over append order; no insertion ordinal should be stored.
+
+### `interval_tree<T, Compare>`
+
+- Value carriers: `interval<T>` and `interval_annotation<T>` with structural equality; `std::hash<interval<T>>`
+  is useful if the endpoint type is hashable.
+- Construction: default construction yields the empty tree; provide `from_range`.
+- Observers and queries: `empty()`, `size()`, `contains(interval)`, `try_find_overlap`, `try_find_containing`,
+  `find_overlaps`, `count_overlaps`, `to_vector`, iteration.
+- Updates: `insert`, `erase_one`/`try_erase`, and `coalesce`.
+- Endpoint comparison is by `Compare`, not `operator==`; duplicate-low runs are scanned left-to-right for
+  containment/removal just as in C#.
+
+### `rope<T>` / `measured_rope<T, MeasurePolicy>` / text helpers
+
+- Construction: default construction yields an empty rope; provide `from_span`, `from_range`, initializer-list
+  convenience, and ownership-taking `from_chunks` for retained chunk storage.
+- `rope<T>`: `empty()`, `size()`, `front()`, `back()`, `operator[]`, `at`, `set_at`, `push_front`,
+  `push_back`, `insert`, `insert_range`, `erase_at`, `erase_range`, `slice`, `subrange_to_vector`, `split_at`,
+  `concat`, `copy_to`, and `compact`.
+- `measured_rope<T, MeasurePolicy>`: all positional rope operations plus `measure()`, `prefix_measure`,
+  `split_by_measure`, and total `try_locate_by_measure` returning index, measure-before, and optional element.
+- Text helpers in scope: `newline_measure`, `to_char_rope`, `to_text_rope`, `as_string`, `line_count`,
+  `line_of_offset`, `line_start_offset`, `line_column_of`, `offset_of`, `get_line`, and `lines`.
+- Text helpers out of scope for the first port: `as_text_reader`, Unicode scalar/code-point indexing, grapheme
+  segmentation, newline-style detection, and CR-stripping `get_line_text`/`lines_text`.
+
+## Iterator, Range, And Lifetime Policy
+
+All public containers are immutable snapshots. Operations that look like mutation return new snapshots and must
+not invalidate iterators, references, or pointers into the old snapshot as long as that snapshot (or an iterator
+owning it) remains alive.
+
+Use forward iterators first. The `persistent_deque` iterator should be genuinely lazy and allocation-free after
+construction: it walks with an explicit O(log n) frame stack, matching the only C# enumerator that is lazy today.
+Rope iterators should be chunk-aware and avoid per-element tree descent. For `finger_tree` and the derived
+collections, either a lazy stack iterator or an owning materialized iterator is acceptable in the first wave, but
+the choice must be explicit in `docs/api-notes.md` and tests: a materialized iterator may allocate O(n) on
+`begin()`, while `to_vector()` always allocates O(n).
+
+Avoid returning references from optional results unless the lifetime is obvious. Direct accessors such as
+`front()`, `back()`, `operator[]`, and `at()` may return `const T&` with standard container lifetime rules;
+`try_*` APIs that may miss should usually return value/result objects. If a no-copy endpoint probe is needed,
+prefer a documented nullable pointer (`const T*`) over `std::optional<std::reference_wrapper<const T>>`.
+
+## Exception Safety, Comparers, And Allocators
+
+The natural public guarantee is strong exception safety: if allocation, element copy/move, measure computation, or
+comparison throws, the operation either throws before publishing a new snapshot or returns a complete new snapshot,
+and every existing snapshot remains valid. This is mostly a consequence of immutability, but the lazy cells must
+respect it: compute the pending tree or measure fully, then publish with the compare-exchange cell; if computation
+throws, leave the cell pending so a later read can retry.
+
+Measure policies, predicates, and comparison objects are logical dependencies of the cached measures. They must be
+pure for the lifetime of a structure: no time-varying order, mutation through captured pointers, or comparator
+state that changes after nodes have been measured. For sorted wrappers with runtime comparators, combining two
+collections requires semantically equivalent comparator state. For priority queues and interval trees, `Compare`
+is part of the measure monoid and is intentionally compile-time/stateless in the first port.
+
+Do not expose allocator customization in the first wave. Internally, centralize node allocation behind tiny helper
+functions (`make_node`, `make_leaf`, `make_lazy_cell`) so a later allocator-aware design has one place to hook in.
+Use `std::make_shared`/`std::allocate_shared` consistently; do not mix raw `new` with ownership unless a benchmark
+proves it matters and the tear-free publication invariant remains intact.
+
 ## Measure And Predicate Concepts
 
 The C# code uses static abstract interfaces. C++ can express the same idea naturally with policy types and
@@ -280,6 +421,18 @@ auto try_locate(Predicate predicate) const -> locate_result<T, measure_type>;
 Non-capturing struct predicates from the C# code should map to small C++ function objects. Capturing lambdas are
 also fine for user code; hot library paths should use concrete predicate types so the compiler can inline and
 devirtualize.
+
+The split/locate predicate contract is semantic, not fully checkable by concepts: predicates must be monotone over
+left-to-right accumulated measures (`false...false, true...true`). Document this precondition on the raw
+`split`/`try_split_find`/`try_locate` primitives and keep named operations as the safe public path for common
+queries. Tests should include deliberately simple vectors that cross-check every named predicate's boundary
+against `std::lower_bound`, `std::upper_bound`, prefix sums, or brute-force scans.
+
+Measure policies should be stateless in the first implementation wave. If a later pass adds stateful policies, the
+policy state must become part of the tree value and every cached measure must be tied to that state; otherwise
+lazy measure computation and structural sharing become unsound. This is why sorted wrappers keep runtime
+comparators in predicates only, while priority queues and interval trees use compile-time comparison policies in
+their measure monoids.
 
 There are **three distinct comparator regimes** in the C# library, and the C++ `Compare` parameter means
 something different in each (see editorial notes §3). (1) The sorted collections use a *comparator-independent*
@@ -485,11 +638,13 @@ than pretending the standard heap has the same contract.
   chunk granularity (correctness, not just constant factor).
 - `prefix_measure(count)` computes the user measure of a positional prefix.
 
-Text-navigation extras (Unicode-scalar/grapheme indexing, newline-style detection, text-reader adapters) are a
-non-goal for the initial port. But `newline_measure` is a *trivial in-scope monoid policy*, so the char/text
-builder (the C# `RopeBuilder` is text-bound, not a generic `rope_builder<T>`) stays in scope: port it with
+Text helpers are split deliberately. `newline_measure` is a trivial in-scope monoid policy, and the line-aware
+helpers over `measured_rope<char, newline_measure>` stay in scope: `line_count`, `line_of_offset`,
+`line_start_offset`, `line_column_of`, `offset_of`, `get_line`, and `lines`. The char/text builder (the C#
+`RopeBuilder` is text-bound, not a generic `rope_builder<T>`) also stays in scope: port it with
 `to_rope() -> rope<char>` and `to_text_rope() -> measured_rope<char, newline_measure>`. The core rope itself stays
-element-agnostic.
+element-agnostic. Unicode scalar/grapheme indexing, newline-style detection, CR-stripping text-line helpers, and
+text-reader adapters are non-goals for the initial port.
 
 ## Lazy Memoization And Thread Safety
 
@@ -512,6 +667,9 @@ Recommended design for the lazy middle:
 - Pending operations must be immutable and pure.
 - A new suspension must capture an *already-forced* source and defer *exactly one* push or pop, matching the C#
   discipline that prevents unbounded chains of nested suspensions.
+- If a pending operation throws, do **not** publish a partial state and do **not** replace the pending operation
+  with an exception object. Leave the cell pending so another read can retry; this matches the strong-exception
+  guarantee of immutable updates.
 - The recommended cell is a `std::atomic<std::shared_ptr<const state_base>>` (or `shared_ptr<const state_base>`
   accessed only via `std::atomic_load`/`atomic_store`) holding either the pending op or the computed result.
   Prefer this over `std::once_flag` + a stored callable: only the compare-exchange cell can **drop the pending
@@ -564,11 +722,15 @@ Create the C++ workspace:
 - `CMakePresets.json`
 - `vcpkg.json`
 - basic README and docs index
-- one empty library target
-- one smoke-test target
+- one header-first library target (`INTERFACE` until a non-template `src/` helper is actually needed)
+- one smoke-test target registered with CTest
+- warning policy wired through target helpers: `/permissive-`, `/Zc:__cplusplus`, `/W4`, `/WX`, and external-header
+  warning suppression for STL/vcpkg headers
+- Visual Studio/Ninja presets that work when `cmake.exe` and `ninja.exe` are not on `PATH`
 - test-support instrumentation used from Milestone 3 on: a counting global `operator new`/`delete` (or an
   instrumented allocator) and an operation/comparison counter, so the complexity-guard tests can observe
   allocation and comparer-call counts
+- a deterministic RNG wrapper and command-sequence test scaffold with replayable seeds
 
 Validation:
 
@@ -588,6 +750,8 @@ Implement:
   are a strict `>` vs non-strict `>=` pair of distinct predicates)
 - the named-operation free-function layer over the primitives (peek/extract max/min, lower/upper-bound split,
   split-at-index, cumulative-weight split/select, component-projecting product splits/finds)
+- structural-equality carriers (`measure_pair`, `ranked_key`, `optional_measure`, `priority_aggregate`,
+  `interval`, `interval_annotation`) and selected `std::hash` specializations
 
 The `sum_measure` element-type contract guarantees the built-in arithmetic types via an addable-monoid concept
 (plus ordering for split/select). `System.Decimal` has no standard C++ equivalent and is out of scope; `BigInteger`
@@ -605,12 +769,13 @@ Validation:
 Implement `finger_tree<T, MeasurePolicy>`:
 
 - empty, single, deep levels
-- measured leaves and measured nodes
-- lazy middles
+- erased measured leaves and measured 2/3 nodes under one level-invariant child handle
+- lazy middles with CAS publication, retry-on-exception, and pending push/pop measure probes
+- atomic pointer-published measure boxes on deep nodes
 - append/prepend/view-left/view-right
 - concat
 - split/try-split-find/try-locate
-- iteration and materialization helpers
+- iteration and materialization helpers with the documented allocation contract
 - invariant validation in test-only hooks
 
 Validation:
@@ -644,12 +809,14 @@ Implement `persistent_deque<T>`:
 - indexing, update, insert, remove
 - split and range operations
 - sorted lower/upper-bound helpers
-- iteration
+- allocation-free lazy iteration with an explicit frame stack
+- no measure box: the cached size remains an immutable field
 
 Validation:
 
 - API contract tests against `std::vector`.
 - Sorted-search tests against `std::lower_bound`/`std::upper_bound`.
+- Result-struct tests for `try_pop_front`/`try_pop_back`, split-item, split-range, and equal-range split.
 - Randomized model histories, plus a stateful command-sequence model test that shrinks to a minimal failing
   program (analogue of the C# `ModelBasedCommandTests`).
 - Invariant validation after every randomized operation.
@@ -665,6 +832,8 @@ Implement:
 - `sorted_map`
 - `priority_queue`
 - `interval_tree`
+- comparator-aware runtime wrappers for the sorted collections, with comparator-independent measures
+- compile-time comparison policies for priority queue and interval-tree measures
 
 Validation:
 
@@ -673,6 +842,7 @@ Validation:
 - Verify the construction/insert invariants: `sorted_bag` stable order for equal elements (`std::stable_sort`),
   `sorted_set` keeps-first, `sorted_map` last-wins, and the three distinct insert variants; priority-queue stable
   FIFO among equal minima; interval-tree `coalesce` and leftmost-match duplicate removal.
+- Verify absent-rank results use `std::optional<std::size_t>` and never a `-1` sentinel.
 - Add persistence tests over retained versions, plus a stateful command-sequence model test (analogue of the C#
   `ModelBasedCommandTests`, which covers the sorted set).
 - Add allocation/operation-count guards for the hot locate paths (the C++ analogue of the C# zero-closure /
@@ -708,6 +878,8 @@ Implement:
 - a char/text builder mirroring the C# `RopeBuilder` (fluent char/string/span appends, `append_line`,
   `to_rope() -> rope<char>`, `to_text_rope() -> measured_rope<char, newline_measure>`) — there is no generic
   `rope_builder<T>` in the C# to port
+- `newline_measure` and the basic line helpers (`line_count`, `line_of_offset`, `line_start_offset`,
+  `line_column_of`, `offset_of`, `get_line`, `lines`)
 
 Validation:
 
@@ -718,6 +890,8 @@ Validation:
 - Large mid-splice tests.
 - Measured-rope prefix and measure-split tests against brute-force models, plus a stateful command-sequence model
   test (analogue of the C# `ModelBasedCommandTests`, which covers rope and measured rope).
+- Line-helper tests against a `std::string`/newline model over empty, leading/trailing newline, blank-line, and
+  large-document cases.
 - A tearable concurrent-read test over a `rope`/`measured_rope` of a multi-word struct.
 
 ### Milestone 8: Samples And Benchmarks
@@ -730,6 +904,8 @@ extras are out of scope):
   text buffer demonstrating (a) undo/redo as a cursor over O(1) structurally-shared snapshots, (b) lock-free
   single-writer/concurrent-reader snapshot publication over an atomic `shared_ptr`, and (c) O(log n) line/column
   navigation via the newline measure. (Not element-agnostic — rope/measured_rope are in scope.)
+- Do not port the C# Editor sample in the first wave; it exists to demonstrate Unicode scalar, grapheme, and
+  newline-style extras that are intentionally out of scope.
 - Each sample exposes a testable `run(std::ostream&)` seam with `main()` a thin wrapper over `std::cout`, and is
   deterministic, so the samples can be smoke-tested.
 
@@ -760,16 +936,21 @@ Every milestone should include:
 - `cmake --preset msvc-debug`
 - `cmake --build --preset msvc-debug`
 - `ctest --preset msvc-debug`
+- a replay seed in any randomized failure output
+- a quick documentation/link check for files touched in the milestone
 
 Before treating the C++ port as usable:
 
 - Build debug and release presets.
 - Run all deterministic and randomized tests.
+- Re-run failed randomized tests from their printed replay seeds.
 - Run benchmarks at least in short mode.
 - Run concurrency tests under a duration environment variable similar to `FINGERTREE_STRESS_SECONDS`.
 - Run the sample smoke tests (each sample's `run()` captured into a string and checked against expected
   deterministic transcript markers) so the samples cannot silently rot.
 - Run static analysis available from MSVC where practical.
+- Build at least one consumer smoke project that includes only public headers and links against the installed or
+  exported target, so internal include paths do not leak into the public API.
 
 ## Documentation Policy
 
@@ -797,13 +978,15 @@ documentation is unusually careful here; the C++ docs should be just as explicit
 - Lazy cell implementation: **resolved** — use a compare-exchange `std::shared_ptr<const state_base>` cell, not
   `std::call_once`, because only it releases the pending op and its captured forced source on publication (see
   Lazy Memoization And Thread Safety).
-- Iterator category: forward iterators, but keep O(log n) `operator[]`/`at` for the indexable types (iterator
-  category is independent of providing an indexer). Decide per family whether `begin()` walks the spine lazily (a
-  hand-written O(log n) frame stack — only the deque does this in C#) or returns iterators over a materialized
-  buffer (what the general tree and derived collections do in C# today), and document the allocation/complexity
-  contract either way.
-- Public allocator support: defer until the core invariants are stable. Allocator-aware persistent trees are
+- Iterator category: **partly resolved** — use forward iterators, keep `operator[]`/`at` for indexable types, make
+  `persistent_deque` and ropes lazy, and document the allocation contract for `finger_tree`/derived collections if
+  they start with owning materialized iterators.
+- Text scope: **resolved for first wave** — newline measure and basic line helpers are in; Unicode
+  scalar/grapheme/newline-style/TextReader extras are out.
+- Public allocator support: **deferred** until the core invariants are stable. Allocator-aware persistent trees are
   possible, but the interaction with shared immutable nodes and lazy cells deserves a separate design pass.
-- Exception guarantees: document and test the intended guarantee for comparers, copy/move construction, and
-  allocation failure. The natural target is strong exception safety for public operations when element operations
-  meet the standard container requirements.
+- Exception guarantees: **resolved target** — strong exception safety for public operations when element,
+  measure, and comparator operations meet the standard container requirements; lazy cells retry after exceptions
+  and publish only complete states.
+- Stateful measure policies: **deferred**. The first port uses stateless measure policies. Adding policy state
+  later requires tying every cached measure and lazy force to that exact policy state.
