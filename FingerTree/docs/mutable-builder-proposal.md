@@ -118,12 +118,17 @@ This should be investigated only after bulk builders and bottom-up construction 
 
 ## Proposed Public API
 
+The API sketches below describe the public surface, not the source layout. If a builder is implemented in a separate
+file, the owning collection type may need to become `partial`; if the builder lives beside the existing collection
+implementation, no `partial` modifier is required. The important contract is the nested builder type and the
+`ToBuilder()` / `CreateBuilder()` entry points.
+
 ### Generic Rope Builder
 
 Prefer a nested builder to avoid colliding with the existing text-specific `RopeBuilder` name:
 
 ```csharp
-public sealed partial class Rope<T>
+public sealed class Rope<T>
 {
     public Builder ToBuilder();
     public static Builder CreateBuilder();
@@ -133,9 +138,9 @@ public sealed partial class Rope<T>
         public int Count { get; }
         public T this[int index] { get; set; }
 
-        public Builder Add(T item);
-        public Builder AddRange(ReadOnlySpan<T> items);
-        public Builder AddRange(IEnumerable<T> items);
+        public Builder Append(T item);
+        public Builder AppendRange(ReadOnlySpan<T> items);
+        public Builder AppendRange(IEnumerable<T> items);
         public Builder Insert(int index, T item);
         public Builder InsertRange(int index, ReadOnlySpan<T> items);
         public Builder RemoveAt(int index);
@@ -150,6 +155,8 @@ public sealed partial class Rope<T>
 The first implementation can optimize append-heavy workloads and implement indexed edits by materializing the
 staged chunks into a mutable list. It does not need to match every immutable operation's asymptotic bound inside the
 builder. The contract should say that the builder is for private, single-threaded mutation and snapshot production.
+`Append` / `AppendRange` should be the primary construction verbs. `Add` aliases are optional convenience members,
+not a requirement, because `IReadOnlyList<T>` intentionally does not promise mutable collection semantics.
 
 An even smaller first slice is append-only:
 
@@ -172,7 +179,7 @@ That append-only version already solves the highest-value rope construction case
 Measured ropes need the same shape, with measure-aware freeze:
 
 ```csharp
-public sealed partial class MeasuredRope<T, TMeasure, TMeasureOps>
+public sealed class MeasuredRope<T, TMeasure, TMeasureOps>
     where TMeasureOps : IMeasure<T, TMeasure>
 {
     public Builder ToBuilder();
@@ -184,9 +191,9 @@ public sealed partial class MeasuredRope<T, TMeasure, TMeasureOps>
         public TMeasure Measure { get; }
         public T this[int index] { get; set; }
 
-        public Builder Add(T item);
-        public Builder AddRange(ReadOnlySpan<T> items);
-        public Builder AddRange(IEnumerable<T> items);
+        public Builder Append(T item);
+        public Builder AppendRange(ReadOnlySpan<T> items);
+        public Builder AppendRange(IEnumerable<T> items);
         public Builder Clear();
 
         public MeasuredRope<T, TMeasure, TMeasureOps> ToImmutable();
@@ -195,7 +202,7 @@ public sealed partial class MeasuredRope<T, TMeasure, TMeasureOps>
 ```
 
 For append-only staging, the builder can maintain a current mutable chunk and its current measure. On freeze, each
-chunk is copied exactly once into immutable owned storage and wrapped in `MeasuredChunk`.
+chunk is copied or retired into immutable owned storage and wrapped in `MeasuredChunk`.
 
 ### Text Rope Builder
 
@@ -212,7 +219,7 @@ The likely best split is:
 ### Sorted Set Builder
 
 ```csharp
-public sealed partial class SortedSet<T>
+public sealed class SortedSet<T>
 {
     public Builder ToBuilder();
     public static Builder CreateBuilder(IComparer<T>? comparer = null);
@@ -246,6 +253,10 @@ Implementation options:
   are `O(1)`.
 - Rebuild on every dirty freeze; do not attempt node-level mutation in the first version.
 
+The BCL staging option preserves one representative for each comparer-equal group. `Add` should keep the existing
+representative on duplicate keys, matching `SortedSet<T>.Add`; a remove followed by add may choose a new
+representative because that is the mutation sequence the caller requested.
+
 This builder is especially attractive because current `AddRange` performs `m` independent persistent `Add`s, while
 the builder can batch into mutable sorted staging and build once.
 
@@ -256,14 +267,15 @@ the builder can batch into mutable sorted staging and build once.
 Possible staging representations:
 
 1. `List<T>` plus dirty sorted snapshot. Best for append-heavy then freeze.
-2. `SortedDictionary<T, Queue<T>>` keyed by comparer order. Preserves insertion order among comparer-equal elements.
+2. `SortedDictionary<T, Run>` keyed by comparer order, where each run stores the actual comparer-equal values in
+   insertion order.
 3. `SortedDictionary<T, int>` when only values matter and equal-element identity does not matter.
 
 Because `SortedBag<T>` currently documents that equal elements keep insertion order, option 2 is the safest general
 form:
 
 ```csharp
-public sealed partial class SortedBag<T>
+public sealed class SortedBag<T>
 {
     public Builder ToBuilder();
     public static Builder CreateBuilder(IComparer<T>? comparer = null);
@@ -286,12 +298,16 @@ public sealed partial class SortedBag<T>
 }
 ```
 
-Freeze enumerates comparer-key runs in order, preserving each run's queue order, then builds the measured tree once.
+Freeze enumerates comparer-key runs in order, preserving each run's value order, then builds the measured tree once.
+The implementation should model those runs explicitly rather than treating the dictionary key object as the whole
+value. A practical `Run` stores the current representative plus the actual comparer-equal values. `CountOf` returns
+the run length, `Remove` removes one value from the run, and `RemoveAll` removes the whole run. If the first value in
+a run is removed, the next surviving value becomes the representative before the next freeze.
 
 ### Sorted Dictionary Builder
 
 ```csharp
-public sealed partial class SortedDictionary<TKey, TValue>
+public sealed class SortedDictionary<TKey, TValue>
 {
     public Builder ToBuilder();
     public static Builder CreateBuilder(IComparer<TKey>? comparer = null);
@@ -324,7 +340,7 @@ increasing sequence number internally, even if the immutable tree stores only `(
 sequence order.
 
 ```csharp
-public sealed partial class PriorityQueue<TElement, TPriority>
+public sealed class PriorityQueue<TElement, TPriority>
 {
     public Builder ToBuilder();
     public static Builder CreateBuilder();
@@ -346,12 +362,15 @@ public sealed partial class PriorityQueue<TElement, TPriority>
 
 The first implementation can stage in a list and freeze by appending in insertion order. If builder-side dequeue is
 important, use a mutable heap for operations and retain a separate insertion-order list or deleted markers for
-freezing. That extra complexity should be benchmark-driven.
+freezing. `ToImmutable()` must enumerate surviving entries in original enqueue order, not heap order; otherwise
+equal-priority FIFO stability is lost. The builder's own enumeration should follow the immutable queue enumeration
+contract, which is insertion order today but not priority order. That extra heap-plus-log complexity should be
+benchmark-driven.
 
 ### Interval Tree Builder
 
 ```csharp
-public sealed partial class IntervalTree<T>
+public sealed class IntervalTree<T>
 {
     public Builder ToBuilder();
     public static Builder CreateBuilder();
@@ -380,7 +399,7 @@ to an internal immutable snapshot for query operations and mark it dirty on muta
 The deque and raw measured tree should get builders after internal bottom-up construction helpers exist:
 
 ```csharp
-public sealed partial class FingerTreeDeque<T>
+public sealed class FingerTreeDeque<T>
 {
     public Builder ToBuilder();
     public static Builder CreateBuilder();
@@ -406,7 +425,7 @@ simple, safe, and still useful for many edits before publication. A true transie
 For the raw measured tree:
 
 ```csharp
-public sealed partial class FingerTree<TElement, TMeasure, TMeasureOps>
+public sealed class FingerTree<TElement, TMeasure, TMeasureOps>
     where TMeasureOps : IMeasure<TElement, TMeasure>
 {
     public Builder ToBuilder();
@@ -448,11 +467,17 @@ internal static class TreeBulkBuilder
 Expected behavior:
 
 - consume input once;
+- for `IEnumerable<T>` inputs with no cheap count, collect into a `List<T>` or pooled buffer before packing rather
+  than mixing enumeration with deep-tree construction state;
 - group leaves into digits and nodes with valid invariants;
 - use computed middle trees, not suspended pending repairs, because bulk construction has no deferred endpoint
   operation to amortize;
 - compute cached sizes and rightmost signposts exactly once;
 - avoid repeated persistent `Snoc` allocation where possible.
+
+Do not overfit this helper to one supposedly perfect balanced shape. The required properties are valid digit/node
+invariants, preserved sequence order, correct cached metadata, and competitive allocation behavior against repeated
+append construction.
 
 This helper can replace `FingerTreeDeque<T>.BuildTree`, support `CreateRange`, and build results of sorted merges.
 
@@ -508,8 +533,10 @@ internal sealed class MeasuredChunkBuilder<T, TMeasure, TMeasureOps>
 }
 ```
 
-The builder owns mutable arrays. `FreezeChunks()` copies or seals them so immutable chunks never observe later
-builder mutation. A final partially filled chunk may be copied to exact length.
+The builder owns mutable arrays. `FreezeChunks()` must either copy a chunk or transfer ownership of a fully retired
+array to an immutable chunk. After ownership is transferred, the builder must never write to that array again; later
+mutations allocate new mutable storage. A final partially filled chunk should usually be copied to exact length unless
+it is retired and no longer reachable from the builder.
 
 ## Complexity And Allocation Expectations
 
@@ -518,7 +545,7 @@ The first builder wave should make these claims:
 | Operation | Expected complexity | Notes |
 | --- | ---: | --- |
 | Append into rope builder | Amortized O(1) | Fills mutable chunks; no persistent tree edit per element. |
-| Freeze rope builder | O(n) | Copies/seals chunks and builds chunk tree. |
+| Freeze rope builder | O(n) | Copies chunks or transfers retired chunk ownership, then builds chunk tree. |
 | Sorted builder add/remove | O(log n) or staging-dependent | Depends on BCL sorted staging. |
 | Sorted builder freeze | O(n) if already sorted, O(n log n) if list-staged | Builds measured tree once. |
 | Deque/raw sequence builder append | Amortized O(1) | List-backed initially. |
@@ -527,6 +554,20 @@ The first builder wave should make these claims:
 
 Important: builders improve constants and batch behavior, but they should not obscure the immutable types' persistent
 operation contracts. Documentation should phrase builder complexity separately from immutable operation complexity.
+
+## Builder Semantic Contract
+
+A builder is a mutable workspace, not a persistent value. Intermediate builder states are not preserved unless the
+caller explicitly asks for an immutable snapshot with `ToImmutable()`.
+
+Every public builder should document these rules:
+
+- mutations after `ToImmutable()` do not affect any previously produced immutable value;
+- repeated `ToImmutable()` with no intervening mutation may return a cached immutable instance;
+- any mutation invalidates the cached snapshot and advances the builder version;
+- enumeration and indexed reads observe the builder's current mutable state, with invalidation behavior documented
+  like ordinary mutable collections;
+- builders are intended for single-owner use and should not be passed between threads while they are being mutated.
 
 ## Snapshot And Thread-Safety Contract
 
@@ -537,8 +578,8 @@ Produced immutable values must keep the existing contract:
 
 - immutable snapshots are safe for concurrent reads;
 - mutating a builder after `ToImmutable()` never changes any previously produced immutable value;
-- builder staging memory is not exposed through immutable chunks unless it has been made permanently immutable or
-  copied;
+- builder staging memory is not exposed through immutable chunks unless it has been copied or ownership has been
+  transferred away from the builder;
 - comparer and element-object caveats remain the same as the immutable collections: mutable reference elements can
   still be mutated by the caller, and comparer order must remain stable for sorted structures.
 
@@ -627,7 +668,14 @@ snapshot workloads.
 
 ### Phase 1: Internal Bottom-Up Builders
 
-Implement `TreeBulkBuilder` and `MeasuredTreeBulkBuilder`. Route:
+Implement construction machinery in two slices:
+
+1. chunk staging for ropes, because it can ship behind `RopeBuilder` and `Rope<T>.Builder` without changing the raw
+   tree packers;
+2. `TreeBulkBuilder` and `MeasuredTreeBulkBuilder`, once the benchmark harness can compare tree shapes and allocation
+   behavior.
+
+Route the packers through:
 
 - `FingerTreeDeque<T>.CreateRange`;
 - `FingerTree<TElement, TMeasure, TMeasureOps>.CreateRange`;
@@ -679,6 +727,18 @@ Only after the earlier phases and benchmarks:
 - run the full property/model/concurrency suite plus targeted allocation tests.
 
 This phase should be optional, not assumed.
+
+## Adoption Criteria
+
+Add a public builder when at least one of these is true:
+
+- benchmarks show lower allocation or elapsed time for a documented bulk-edit workload;
+- the builder exposes a common construction workflow that is awkward or allocation-heavy with only immutable
+  operations;
+- the builder lets existing factory or merge APIs share an internal bulk-construction path.
+
+Do not add a builder solely for API symmetry. Each builder should have tests for snapshot isolation, comparer/order
+preservation, and freeze invariants before it becomes public.
 
 ## Open Questions
 
