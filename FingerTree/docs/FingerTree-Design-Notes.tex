@@ -531,11 +531,12 @@ elements, so bulk text-like workloads get cache-friendly storage and $\bigO(1)$ 
 keeping logarithmic edits.
 
 \begin{itemize}[leftmargin=1.4em, itemsep=1pt]
-  \item \cs{Rope<T>} --- element-agnostic positional rope. A \cs{Chunk<T>} is a \cs{ReadOnlyMemory<T>}
-    plus a cached length; leaves of a \cs{FingerTree<Chunk<T>, int, ...>} measured by total element
-    count. Index $i$ locates the first chunk whose cumulative length exceeds $i$ (a zero-allocation
-    \cs{TryLocate}), then offsets within it. A chunk-size policy (min~256, max~2048) splits on growth and
-    coalesces on shrink and at concat boundaries to keep chunks healthy.
+  \item \cs{Rope<T>} --- element-agnostic positional rope. A \cs{Chunk<T>} is rope-owned
+    \cs{ReadOnlyMemory<T>} plus a cached length; leaves of a \cs{FingerTree<Chunk<T>, int, ...>}
+    measured by total element count. Public imports copy caller memory before publication, while slices share
+    already-owned backing arrays. Index $i$ locates the first chunk whose cumulative length exceeds $i$ (a
+    zero-allocation \cs{TryLocate}), then offsets within it. A chunk-size policy (min~256, max~2048) splits on
+    growth and coalesces on shrink and at concat boundaries to keep chunks healthy.
   \item \cs{MeasuredRope<T,TMeasure,TMeasureOps>} --- the measure-navigable sibling. Each chunk caches a
     combined user measure; the tree is measured by the product \cs{MeasurePair<int,TMeasure>} (count
     \emph{and} user measure). Positional operations run on the count component; \cs{Measure},

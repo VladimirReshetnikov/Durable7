@@ -1,6 +1,6 @@
 # Defect Report: IntervalTree Documentation Calls The Measured Core Strict
 
-- Status: Proposed documentation fix
+- Status: Fixed 2026-07-01
 - Created (UTC): 2026-06-30T17:21:46Z
 - Repository HEAD: d140fb07d8ae21726e96b9ad916154c3bf87411d
 - Audience: Maintainers of the C# FingerTree workspace
@@ -13,12 +13,13 @@ strict measured tree." The word "strict" is misleading: the underlying general m
 the lazy-memoized measured core. The implementation is in a strict language, but the data structure itself uses
 memoized suspensions in its deep middle spine and lazy measure boxes.
 
-This appears to be a documentation wording defect only. I did not find evidence of a runtime or test defect while
-cross-checking the measure and predicate layer for the C++ port.
+This was a documentation wording defect only. I did not find evidence of a runtime or test defect while
+cross-checking the measure and predicate layer for the C++ port. It was fixed by changing the XML documentation to
+describe the lazy-memoized measured finger tree directly.
 
 ## Evidence
 
-- `FingerTree/src/Tools.DataStructures.FingerTree/IntervalTree.cs` contains the phrase:
+- `FingerTree/src/Tools.DataStructures.FingerTree/IntervalTree.cs` formerly contained the phrase:
   "Bounds are amortized for ephemeral use, matching the underlying strict measured tree."
 - `FingerTree/README.md` describes the shared general measured core as holding each deep node's middle subtree
   behind a memoized suspension and computing measures lazily.

@@ -358,13 +358,13 @@ public sealed class FingerTree<TElement, TMeasure, TMeasureOps>
 
     /// <summary>Returns an enumerator over the elements in order.</summary>
     /// <returns>An enumerator yielding elements left to right.</returns>
-    /// <remarks>Materializes the elements once, in O(n) time and space, then yields them.</remarks>
-    public IEnumerator<TElement> GetEnumerator()
-    {
-        var list = new List<TElement>();
-        _root.Flatten(list);
-        return list.GetEnumerator();
-    }
+    /// <remarks>
+    /// Enumeration is O(n) total with O(1) amortized cost per yielded element; the enumerator keeps an O(log n)
+    /// traversal stack and does not materialize the tree before yielding.
+    /// </remarks>
+    public Enumerator GetEnumerator() => new(_root);
+
+    IEnumerator<TElement> IEnumerable<TElement>.GetEnumerator() => GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
@@ -373,4 +373,89 @@ public sealed class FingerTree<TElement, TMeasure, TMeasureOps>
         root.IsEmpty ? EmptyInstance : new(root);
 
     private static InvalidOperationException EmptyError() => new("The finger tree is empty.");
+
+    /// <summary>
+    /// Enumerates a <see cref="FingerTree{TElement, TMeasure, TMeasureOps}"/> without allocating a boxed
+    /// enumerator in pattern-based foreach.
+    /// </summary>
+    /// <remarks>
+    /// Maintains an explicit traversal stack of O(log n) frames, yielding from the immutable snapshot captured
+    /// when the enumerator was created.
+    /// </remarks>
+    public struct Enumerator : IEnumerator<TElement>
+    {
+        private Frame[]? _stack;
+        private int _depth;
+        private TElement _current;
+
+        internal Enumerator(MeasuredTree<TElement, MeasuredLeaf<TElement, TMeasure, TMeasureOps>, TMeasure, TMeasureOps> root)
+        {
+            _stack = null;
+            _depth = 0;
+            _current = default!;
+            if (!root.IsEmpty)
+                Push(root);
+        }
+
+        /// <summary>Gets the current element.</summary>
+        /// <remarks>Undefined before the first call to <see cref="MoveNext"/> and after enumeration ends.</remarks>
+        public readonly TElement Current => _current;
+
+        readonly object? IEnumerator.Current => Current;
+
+        /// <summary>Releases resources held by the enumerator.</summary>
+        public void Dispose()
+        {
+        }
+
+        /// <summary>Advances to the next element.</summary>
+        /// <returns><see langword="true"/> when the enumerator advanced to an element; otherwise <see langword="false"/>.</returns>
+        public bool MoveNext()
+        {
+            while (_depth > 0)
+            {
+                ref var frame = ref _stack![_depth - 1];
+                if (frame.NextChild == frame.Block.ChildCount)
+                {
+                    frame = default;
+                    _depth--;
+                    continue;
+                }
+
+                var block = frame.Block;
+                if (block.TryGetChild(frame.NextChild++, out var leaf, out var child))
+                {
+                    _current = leaf;
+                    return true;
+                }
+
+                Push(child!);
+            }
+
+            _current = default!;
+            return false;
+        }
+
+        /// <summary>
+        /// Not supported; the enumerator cannot be reset. Create a new enumerator instead.
+        /// </summary>
+        /// <exception cref="NotSupportedException">Always thrown.</exception>
+        void IEnumerator.Reset() => throw new NotSupportedException();
+
+        private void Push(IEnumerationBlock<TElement> block)
+        {
+            _stack ??= new Frame[8];
+            if (_depth == _stack.Length)
+                Array.Resize(ref _stack, _depth * 2);
+            _stack[_depth++] = new Frame(block);
+        }
+
+        /// <summary>One traversal-stack entry: a block and the index of its next unvisited child.</summary>
+        /// <param name="block">The block being traversed at this depth.</param>
+        private struct Frame(IEnumerationBlock<TElement> block)
+        {
+            public readonly IEnumerationBlock<TElement> Block = block;
+            public int NextChild = 0;
+        }
+    }
 }

@@ -1,13 +1,13 @@
 namespace Tools.DataStructures.FingerTree;
 
 /// <summary>
-/// Provides type-erased child traversal for the struct-based <see cref="FingerTreeDeque{T}.Enumerator"/>.
+/// Provides type-erased child traversal for stack-based struct enumerators over polymorphically recursive trees.
 /// </summary>
 /// <typeparam name="T">Leaf element type stored in the deque.</typeparam>
 /// <remarks>
-/// Implemented by every internal tree and node class. The enumerator keeps an explicit stack of blocks so
-/// that enumeration costs O(1) amortized per yielded element with an O(log n) stack, independent of the
-/// polymorphic-recursion depth of the underlying representation.
+/// Implemented by internal tree and node classes whose children alternate between leaf values and deeper blocks.
+/// Enumerators keep an explicit stack of blocks so enumeration costs O(1) amortized per yielded element with an
+/// O(log n) stack, independent of the polymorphic-recursion depth of the underlying representation.
 /// </remarks>
 internal interface IEnumerationBlock<T>
 {

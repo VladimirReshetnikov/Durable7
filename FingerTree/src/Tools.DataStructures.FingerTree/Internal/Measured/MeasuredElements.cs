@@ -16,6 +16,14 @@ internal interface IMeasuredElement<TElement, TMeasure>
     /// <summary>Appends every stored leaf element beneath this element, in order, to <paramref name="sink"/>.</summary>
     /// <param name="sink">Destination collection.</param>
     void Flatten(ICollection<TElement> sink);
+
+    /// <summary>
+    /// Classifies this element as either a stored leaf value or a nested enumeration block.
+    /// </summary>
+    /// <param name="leaf">The stored leaf value when this element is a leaf; otherwise <see langword="default"/>.</param>
+    /// <param name="block">The nested block when this element groups children; otherwise <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when this element is a leaf; otherwise <see langword="false"/>.</returns>
+    bool TryGetLeaf(out TElement leaf, out IEnumerationBlock<TElement>? block);
 }
 
 /// <summary>
@@ -38,6 +46,14 @@ internal readonly struct MeasuredLeaf<TElement, TMeasure, TMeasureOps>(TElement 
 
     /// <inheritdoc/>
     public void Flatten(ICollection<TElement> sink) => sink.Add(Value);
+
+    /// <inheritdoc/>
+    public bool TryGetLeaf(out TElement leaf, out IEnumerationBlock<TElement>? block)
+    {
+        leaf = Value;
+        block = null;
+        return true;
+    }
 }
 
 /// <summary>
@@ -52,7 +68,8 @@ internal readonly struct MeasuredLeaf<TElement, TMeasure, TMeasureOps>(TElement 
 /// nodes is just another <see cref="MeasuredTree{TElement, TChild, TMeasure, TMonoid}"/> one level down
 /// (polymorphic recursion).
 /// </remarks>
-internal sealed class MeasuredNode<TElement, TChild, TMeasure, TMonoid> : IMeasuredElement<TElement, TMeasure>
+internal sealed class MeasuredNode<TElement, TChild, TMeasure, TMonoid>
+    : IMeasuredElement<TElement, TMeasure>, IEnumerationBlock<TElement>
     where TChild : IMeasuredElement<TElement, TMeasure>
     where TMonoid : IMonoid<TMeasure>
 {
@@ -79,4 +96,19 @@ internal sealed class MeasuredNode<TElement, TChild, TMeasure, TMonoid> : IMeasu
         foreach (var child in Children)
             child.Flatten(sink);
     }
+
+    /// <inheritdoc/>
+    public bool TryGetLeaf(out TElement leaf, out IEnumerationBlock<TElement>? block)
+    {
+        leaf = default!;
+        block = this;
+        return false;
+    }
+
+    /// <inheritdoc/>
+    public int ChildCount => Children.Length;
+
+    /// <inheritdoc/>
+    public bool TryGetChild(int index, out TElement leaf, out IEnumerationBlock<TElement>? block) =>
+        Children[index].TryGetLeaf(out leaf, out block);
 }

@@ -70,6 +70,32 @@ public sealed class MeasuredFingerTreeTests
     }
 
     /// <summary>
+    /// Verifies the public enumerator walks the measured tree incrementally instead of flattening every element
+    /// into a temporary list before yielding the first item.
+    /// </summary>
+    [Fact]
+    public void Enumerator_UsesBoundedTraversalStackBeforeFirstYield()
+    {
+        const int size = 1 << 15;
+        var tree = FingerTree<int, int, SizeMeasure<int>>.CreateRange(Enumerable.Range(0, size));
+
+        Assert.Equal(Enumerable.Range(0, size), tree);
+
+        // Warm up JIT and the exact first-yield path outside the measured window.
+        var warmup = tree.GetEnumerator();
+        Assert.True(warmup.MoveNext());
+        Assert.Equal(0, warmup.Current);
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var enumerator = tree.GetEnumerator();
+        Assert.True(enumerator.MoveNext());
+        Assert.Equal(0, enumerator.Current);
+        var bytes = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.InRange(bytes, 1, 16 * 1024);
+    }
+
+    /// <summary>
     /// Verifies positional split via the size measure matches list slicing at every index for many sizes,
     /// and that the two halves concatenate back to the original.
     /// </summary>

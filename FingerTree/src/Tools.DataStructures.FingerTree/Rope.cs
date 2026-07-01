@@ -344,8 +344,12 @@ public sealed class Rope<T> : IReadOnlyList<T>
         return Create(array);
     }
 
-    /// <summary>Creates a rope from existing memory blocks as chunks, without copying them. O(number of chunks).</summary>
-    /// <param name="chunks">Backing memory blocks, used in order; empty blocks are skipped.</param>
+    /// <summary>Creates a rope from existing memory blocks, copying them into rope-owned chunks. O(total length).</summary>
+    /// <param name="chunks">Memory blocks to import in order; empty blocks are skipped.</param>
+    /// <remarks>
+    /// Each block is copied when imported, so later mutation of an array that backed a <see cref="ReadOnlyMemory{T}"/>
+    /// argument cannot change the immutable rope snapshot.
+    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="chunks"/> is <see langword="null"/>.</exception>
     public static Rope<T> FromChunks(params ReadOnlyMemory<T>[] chunks)
     {
@@ -355,9 +359,7 @@ public sealed class Rope<T> : IReadOnlyList<T>
         {
             if (chunk.Length == 0)
                 continue;
-            tree = chunk.Length <= MaxChunkSize
-                ? tree.Append(new Chunk<T>(chunk))
-                : AppendSplit(tree, chunk);
+            tree = AppendCopied(tree, chunk);
         }
 
         return tree.IsEmpty ? EmptyInstance : new Rope<T>(tree);
@@ -432,14 +434,14 @@ public sealed class Rope<T> : IReadOnlyList<T>
         return left.Append(shrunk).Concat(right);
     }
 
-    private static FingerTree<Chunk<T>, int, ChunkLengthMeasure<T>> AppendSplit(
+    private static FingerTree<Chunk<T>, int, ChunkLengthMeasure<T>> AppendCopied(
         FingerTree<Chunk<T>, int, ChunkLengthMeasure<T>> tree,
         ReadOnlyMemory<T> block)
     {
         for (var start = 0; start < block.Length; start += MaxChunkSize)
         {
             var length = Math.Min(MaxChunkSize, block.Length - start);
-            tree = tree.Append(new Chunk<T>(block.Slice(start, length)));
+            tree = tree.Append(new Chunk<T>(block.Slice(start, length).ToArray()));
         }
 
         return tree;

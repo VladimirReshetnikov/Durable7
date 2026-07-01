@@ -97,8 +97,8 @@ public readonly struct IntervalMeasure<T> : IMeasure<Interval<T>, IntervalAnnota
 /// <para>
 /// Complexity: <see cref="Count"/>/<see cref="IsEmpty"/> are O(1); <see cref="Insert(Interval{T})"/> is
 /// O(log n) amortized; <see cref="TryFindOverlap(Interval{T}, out Interval{T})"/> is O(log n);
-/// <see cref="FindOverlaps(Interval{T})"/> is O(k log n) for k results. Bounds are amortized for ephemeral
-/// use, matching the underlying strict measured tree.
+/// <see cref="FindOverlaps(Interval{T})"/> is O(k log n) for k results. Bounds follow the underlying
+/// lazy-memoized measured finger tree and hold under fully persistent branching histories.
 /// </para>
 /// <para>Instances are immutable and safe for concurrent reads.</para>
 /// </remarks>

@@ -57,6 +57,13 @@ internal sealed class EmptyMeasuredTree<TElement, TChild, TMeasure, TMonoid>
     }
 
     /// <inheritdoc/>
+    public override int ChildCount => 0;
+
+    /// <inheritdoc/>
+    public override bool TryGetChild(int index, out TElement leaf, out IEnumerationBlock<TElement>? block) =>
+        throw new ArgumentOutOfRangeException(nameof(index), index, "The empty measured tree has no children.");
+
+    /// <inheritdoc/>
     public override (MeasuredTree<TElement, TChild, TMeasure, TMonoid> Left, TChild Hit, MeasuredTree<TElement, TChild, TMeasure, TMonoid> Right)
         SplitTree<TPredicate>(TPredicate predicate, TMeasure accumulator) =>
         throw EmptyAccess();
@@ -121,6 +128,17 @@ internal sealed class SingleMeasuredTree<TElement, TChild, TMeasure, TMonoid>(TC
 
     /// <inheritdoc/>
     public override void Flatten(ICollection<TElement> sink) => Element.Flatten(sink);
+
+    /// <inheritdoc/>
+    public override int ChildCount => 1;
+
+    /// <inheritdoc/>
+    public override bool TryGetChild(int index, out TElement leaf, out IEnumerationBlock<TElement>? block)
+    {
+        if (index != 0)
+            throw new ArgumentOutOfRangeException(nameof(index), index, "The single measured tree has one child.");
+        return Element.TryGetLeaf(out leaf, out block);
+    }
 
     /// <inheritdoc/>
     public override (MeasuredTree<TElement, TChild, TMeasure, TMonoid> Left, TChild Hit, MeasuredTree<TElement, TChild, TMeasure, TMonoid> Right)
@@ -296,6 +314,25 @@ internal sealed class DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>
         ForceMiddle().Flatten(sink);
         foreach (var child in Suffix)
             child.Flatten(sink);
+    }
+
+    /// <inheritdoc/>
+    public override int ChildCount => Prefix.Length + 1 + Suffix.Length;
+
+    /// <inheritdoc/>
+    public override bool TryGetChild(int index, out TElement leaf, out IEnumerationBlock<TElement>? block)
+    {
+        if (index < Prefix.Length)
+            return Prefix[index].TryGetLeaf(out leaf, out block);
+
+        if (index == Prefix.Length)
+        {
+            leaf = default!;
+            block = ForceMiddle();
+            return false;
+        }
+
+        return Suffix[index - Prefix.Length - 1].TryGetLeaf(out leaf, out block);
     }
 
     /// <inheritdoc/>

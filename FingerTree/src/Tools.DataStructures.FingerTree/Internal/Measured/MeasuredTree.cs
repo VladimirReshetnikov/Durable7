@@ -29,7 +29,7 @@ namespace Tools.DataStructures.FingerTree;
 /// O(1) worst-case, never forcing.
 /// </para>
 /// </remarks>
-internal abstract class MeasuredTree<TElement, TChild, TMeasure, TMonoid>
+internal abstract class MeasuredTree<TElement, TChild, TMeasure, TMonoid> : IEnumerationBlock<TElement>
     where TChild : IMeasuredElement<TElement, TMeasure>
     where TMonoid : IMonoid<TMeasure>
 {
@@ -77,6 +77,12 @@ internal abstract class MeasuredTree<TElement, TChild, TMeasure, TMonoid>
     /// <summary>Appends every stored leaf element, in order, to <paramref name="sink"/>. O(n).</summary>
     /// <param name="sink">Destination collection.</param>
     public abstract void Flatten(ICollection<TElement> sink);
+
+    /// <inheritdoc/>
+    public abstract int ChildCount { get; }
+
+    /// <inheritdoc/>
+    public abstract bool TryGetChild(int index, out TElement leaf, out IEnumerationBlock<TElement>? block);
 
     /// <summary>
     /// Splits a non-empty tree at the element where <paramref name="predicate"/>, applied to the measure

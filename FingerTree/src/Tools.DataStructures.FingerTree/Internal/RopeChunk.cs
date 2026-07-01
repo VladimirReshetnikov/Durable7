@@ -2,14 +2,14 @@ namespace Tools.DataStructures.FingerTree;
 
 /// <summary>
 /// An immutable segment of <typeparamref name="T"/> elements — the leaf payload of a <see cref="Rope{T}"/>.
-/// Wraps a <see cref="ReadOnlyMemory{T}"/> so slicing is O(1) (no copy), and caches the element count so the
-/// length measure is read without touching the span.
+/// Wraps rope-owned <see cref="ReadOnlyMemory{T}"/> so slicing is O(1) (no copy), and caches the element count so
+/// the length measure is read without touching the span.
 /// </summary>
 /// <typeparam name="T">Element type.</typeparam>
 /// <remarks>
-/// The backing memory is never mutated after construction; the array-producing helpers (<see cref="SetAt"/>,
-/// <see cref="InsertAt"/>, <see cref="RemoveAt"/>, <see cref="Concat"/>) each allocate a fresh array, keeping
-/// every chunk safe to share across persistent versions. <see cref="Slice"/> shares the backing array.
+/// The backing memory is never mutated after construction; public import APIs copy caller memory before creating
+/// chunks, and the array-producing helpers (<see cref="SetAt"/>, <see cref="InsertAt"/>, <see cref="RemoveAt"/>,
+/// <see cref="Concat"/>) each allocate a fresh array. <see cref="Slice"/> shares an already-owned backing array.
 /// </remarks>
 internal readonly struct Chunk<T>
 {
@@ -19,8 +19,8 @@ internal readonly struct Chunk<T>
     /// <summary>The element count, cached from <see cref="Data"/>'s length.</summary>
     public readonly int Length;
 
-    /// <summary>Wraps a block of memory as a chunk.</summary>
-    /// <param name="data">The backing memory; treated as immutable.</param>
+    /// <summary>Wraps a block of rope-owned memory as a chunk.</summary>
+    /// <param name="data">The backing memory; treated as immutable and not externally mutated after publication.</param>
     public Chunk(ReadOnlyMemory<T> data)
     {
         Data = data;

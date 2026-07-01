@@ -56,6 +56,21 @@ public sealed class RopeTests
         AssertSequence(expected, Rope<int>.FromChunks(blocks));
     }
 
+    /// <summary>Verifies FromChunks copies caller memory so later array mutation cannot change a rope snapshot.</summary>
+    [Fact]
+    public void FromChunks_CopiesMutableBackingStorage()
+    {
+        var small = new[] { 1, 2, 3 };
+        var large = Enumerable.Range(10, 5000).ToArray();
+        var rope = Rope<int>.FromChunks(small, large);
+
+        small[1] = -1;
+        large[3000] = -3000;
+
+        var expected = new[] { 1, 2, 3 }.Concat(Enumerable.Range(10, 5000)).ToArray();
+        AssertSequence(expected, rope);
+    }
+
     /// <summary>Verifies endpoint additions and removals build the expected order and preserve earlier versions.</summary>
     [Fact]
     public void Endpoints_AddAndRemove_ArePersistent()
