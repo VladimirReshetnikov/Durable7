@@ -89,11 +89,11 @@ struct line_column final {
     auto located = rope.try_locate_by_measure([line](const std::size_t newlines) {
         return newlines >= line;
     });
-    if (!located.has_value()) {
+    if (!located.value.has_value()) {
         throw std::logic_error("text rope line index was not found");
     }
 
-    return checked_add(located->index, std::size_t{1});
+    return checked_add(located.index, std::size_t{1});
 }
 
 [[nodiscard]] inline line_column line_column_of(const text_rope& rope, const std::size_t offset)

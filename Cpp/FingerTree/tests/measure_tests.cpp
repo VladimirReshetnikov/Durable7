@@ -176,6 +176,114 @@ void add_measure_tests_impl(suite& tests)
         FT_REQUIRE(product::combine(product::combine(a, b), c) == product::combine(a, product::combine(b, c)));
     });
 
+    tests.add("named max and min operations peek and extract extrema", [] {
+        auto max_tree = ft::finger_tree<int, ft::max_measure<int>>{3, 9, 1, 9, 4};
+        auto min_tree = ft::finger_tree<int, ft::min_measure<int>>{3, 9, 1, 9, 4};
+
+        const auto max = ft::try_peek_max(max_tree);
+        const auto min = ft::try_peek_min(min_tree);
+        FT_REQUIRE(max.has_value());
+        FT_REQUIRE(min.has_value());
+        FT_REQUIRE_EQUAL(*max, 9);
+        FT_REQUIRE_EQUAL(*min, 1);
+
+        auto descending = std::vector<int>{};
+        while (auto extracted = ft::try_extract_max(max_tree)) {
+            descending.push_back(extracted->item);
+            max_tree = extracted->rest;
+        }
+
+        auto ascending = std::vector<int>{};
+        while (auto extracted = ft::try_extract_min(min_tree)) {
+            ascending.push_back(extracted->item);
+            min_tree = extracted->rest;
+        }
+
+        FT_REQUIRE(descending == (std::vector<int>{9, 9, 4, 3, 1}));
+        FT_REQUIRE(ascending == (std::vector<int>{1, 3, 4, 9, 9}));
+        FT_REQUIRE(!ft::try_peek_max(max_tree).has_value());
+        FT_REQUIRE(!ft::try_extract_min(min_tree).has_value());
+    });
+
+    tests.add("named key and order-statistic splits match binary-search models", [] {
+        constexpr std::array sorted{1, 3, 3, 5, 8, 13};
+        const auto key_tree = ft::finger_tree<int, ft::key_measure<int>>::from_range(sorted);
+        const auto ranked_tree = ft::finger_tree<int, ft::order_statistic_measure<int>>::from_range(sorted);
+
+        const auto key_lower = ft::split_by_lower_bound(key_tree, 4);
+        const auto key_upper = ft::split_by_upper_bound(key_tree, 3);
+        FT_REQUIRE(key_lower.left.to_vector() == (std::vector<int>{1, 3, 3}));
+        FT_REQUIRE(key_lower.right.to_vector() == (std::vector<int>{5, 8, 13}));
+        FT_REQUIRE(key_upper.left.to_vector() == (std::vector<int>{1, 3, 3}));
+        FT_REQUIRE(key_upper.right.to_vector() == (std::vector<int>{5, 8, 13}));
+
+        const auto ranked_index = ft::split_at_index(ranked_tree, 4);
+        const auto ranked_lower = ft::split_by_lower_bound(ranked_tree, 8);
+        const auto ranked_upper = ft::split_by_upper_bound(ranked_tree, 3);
+        FT_REQUIRE(ranked_index.left.to_vector() == (std::vector<int>{1, 3, 3, 5}));
+        FT_REQUIRE(ranked_index.right.to_vector() == (std::vector<int>{8, 13}));
+        FT_REQUIRE(ranked_lower.left.to_vector() == (std::vector<int>{1, 3, 3, 5}));
+        FT_REQUIRE(ranked_lower.right.to_vector() == (std::vector<int>{8, 13}));
+        FT_REQUIRE(ranked_upper.left.to_vector() == (std::vector<int>{1, 3, 3}));
+        FT_REQUIRE(ranked_upper.right.to_vector() == (std::vector<int>{5, 8, 13}));
+    });
+
+    tests.add("named sum operations split and select by cumulative weight", [] {
+        auto weights = ft::finger_tree<int, ft::sum_measure<int>>{5, 1, 4};
+
+        const auto split = ft::split_by_cumulative_weight(weights, 5);
+        FT_REQUIRE(split.left.to_vector() == (std::vector<int>{5}));
+        FT_REQUIRE(split.right.to_vector() == (std::vector<int>{1, 4}));
+
+        const auto selected = ft::try_select_by_cumulative_weight(weights, 6);
+        FT_REQUIRE(selected.has_value());
+        FT_REQUIRE_EQUAL(selected->value, 4);
+        FT_REQUIRE_EQUAL(selected->measure_before, 6);
+
+        const auto missed = ft::try_select_by_cumulative_weight(weights, 10);
+        FT_REQUIRE(!missed.has_value());
+    });
+
+    tests.add("named product operations project components and support size-plus helpers", [] {
+        using size_sum = ft::product_measure<int, ft::size_measure<int>, ft::sum_measure<int>>;
+        auto tree = ft::finger_tree<int, size_sum>{5, 1, 4, 2};
+
+        const auto by_index = ft::split_at_index(tree, 2);
+        const auto by_weight = ft::split_by_cumulative_weight(tree, 6);
+        const auto by_first = ft::split_by_first(tree, [](const std::size_t count) {
+            return count > 3;
+        });
+        const auto found_by_second = ft::try_split_find_by_second(tree, [](const int sum) {
+            return sum > 6;
+        });
+
+        FT_REQUIRE(by_index.left.to_vector() == (std::vector<int>{5, 1}));
+        FT_REQUIRE(by_index.right.to_vector() == (std::vector<int>{4, 2}));
+        FT_REQUIRE(by_weight.left.to_vector() == (std::vector<int>{5, 1}));
+        FT_REQUIRE(by_weight.right.to_vector() == (std::vector<int>{4, 2}));
+        FT_REQUIRE(by_first.left.to_vector() == (std::vector<int>{5, 1, 4}));
+        FT_REQUIRE(by_first.right.to_vector() == (std::vector<int>{2}));
+        FT_REQUIRE(found_by_second.has_value());
+        FT_REQUIRE_EQUAL(found_by_second->item, 4);
+
+        const auto selected = ft::try_select_by_cumulative_weight(tree, 6);
+        FT_REQUIRE(selected.has_value());
+        FT_REQUIRE_EQUAL(selected->value, 4);
+        FT_REQUIRE_EQUAL(selected->index_before, static_cast<std::size_t>(2));
+        FT_REQUIRE_EQUAL(selected->measure_before, 6);
+
+        using size_max = ft::product_measure<int, ft::size_measure<int>, ft::max_measure<int>>;
+        auto max_tree = ft::finger_tree<int, size_max>{3, 9, 1, 9, 4};
+        const auto peeked = ft::try_peek_max(max_tree);
+        FT_REQUIRE(peeked.has_value());
+        FT_REQUIRE_EQUAL(*peeked, 9);
+
+        const auto extracted = ft::try_extract_max(max_tree);
+        FT_REQUIRE(extracted.has_value());
+        FT_REQUIRE_EQUAL(extracted->item, 9);
+        FT_REQUIRE(extracted->rest.to_vector() == (std::vector<int>{3, 1, 9, 4}));
+    });
+
     tests.add("component predicates project without allocation", [] {
         using pair = ft::measure_pair<std::size_t, int>;
         const auto first = ft::first_component_predicate<ft::size_above_predicate, std::size_t, int>{

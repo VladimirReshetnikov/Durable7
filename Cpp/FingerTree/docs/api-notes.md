@@ -69,9 +69,21 @@ Notable C++ differences from C#:
   separate `TMeasure` and `TMeasureOps` generic parameters;
 - split and locate predicates are ordinary C++ callables; non-capturing predicate objects and lambdas both
   instantiate the same templated descent path;
-- result values use `std::optional` for absent views/searches instead of C# `bool` plus out parameters;
+- absent views and split-find searches use `std::optional` instead of C# `bool` plus out parameters;
+- `try_locate` is a total result: `item` is optional, while `measure_before` is the boundary prefix measure when
+  found, the whole-tree measure on a miss, and the identity for an empty tree;
 - enumeration is exposed through `to_vector`/`copy_to` in this checkpoint. A streaming iterator can be added on top
   of the same tree/node block traversal used by the deque without changing tree semantics.
+
+## Named Measure Operations
+
+The C++ measure layer includes free functions corresponding to the C# named extension methods:
+
+- max/min trees: `try_peek_max`, `try_extract_max`, `try_peek_min`, and `try_extract_min`;
+- key and order-statistic trees: `split_by_lower_bound`, `split_by_upper_bound`, and `split_at_index`;
+- product trees: `split_by_first`, `split_by_second`, `try_split_find_by_first`, `try_split_find_by_second`, plus
+  size+max/size+min peek/extract helpers;
+- sum and size+sum trees: `split_by_cumulative_weight` and `try_select_by_cumulative_weight`.
 
 ## `reversible_deque<T>`
 
@@ -144,8 +156,9 @@ Notable C++ differences from C#:
   the C++ measure layer;
 - measure predicates are ordinary copyable callables. Function objects and lambdas use the same templated path, so
   the value-type-predicate overload distinction in C# is not needed;
-- absent measure-locate results use `std::optional<measured_rope_locate_result<...>>` instead of C# `bool` plus out
-  parameters;
+- `try_locate_by_measure` is a total result: `value` is optional, `index` is the boundary index when found and
+  `size()` on a miss, and `measure_before` is the boundary prefix measure when found and the whole user measure on
+  a miss;
 - measure navigation descends by the second component of the tree measure, then scans within the isolated chunk to
   find the exact boundary element and measure-before value. The scan is bounded by `max_chunk_size`;
 - traversal is exposed through vector materialization in this checkpoint, matching the positional rope follow-up

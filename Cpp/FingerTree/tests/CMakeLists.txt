@@ -14,6 +14,7 @@ add_executable(
     rope_text_tests.cpp
     sorted_collection_tests.cpp
     smoke_tests.cpp
+    tearable_concurrency_tests.cpp
     test_support/allocation_counter.cpp
 )
 

@@ -154,11 +154,11 @@ private:
         }
 
         auto located = tree_.try_locate(front_predicate{min.value()});
-        if (!located.has_value()) {
+        if (!located.item.has_value()) {
             throw std::logic_error("priority queue measure indicated a front entry but locate did not find it");
         }
 
-        return located->item;
+        return located.item;
     }
 
     tree_type tree_;

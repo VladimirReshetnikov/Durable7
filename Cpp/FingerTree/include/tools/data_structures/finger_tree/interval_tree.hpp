@@ -85,12 +85,12 @@ public:
     [[nodiscard]] std::optional<interval_type> try_find_overlap(const interval_type& query) const
     {
         auto located = tree_.try_locate(max_high_at_least{query.low});
-        if (!located.has_value()) {
+        if (!located.item.has_value()) {
             return std::nullopt;
         }
 
-        if (comparison_type::compare(located->item.low, query.high) <= 0) {
-            return located->item;
+        if (comparison_type::compare(located.item->low, query.high) <= 0) {
+            return located.item;
         }
 
         return std::nullopt;

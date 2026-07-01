@@ -25,6 +25,9 @@ discarding the miss-path `measure_before`, the missing named-operation free-func
 absent structure-level (tree/rope) concurrency stress test — and all three agree the shipped code
 has no correctness or data-race defect. They are kept as separate documents.
 
+The first correction pass for those converged findings is recorded in
+[`implementation-notes.md`](implementation-notes.md#checkpoint-independent-review-corrections).
+
 - [Independent review report](cpp-port-review-report-2026-06-30T20-06-08Z.md) (Opus 4.8) - outcome
   and process review backed by hands-on quantitative experiments: tear-free concurrent first reads,
   allocation-free endpoint/measure reads, flat branching-persistence marginal cost, and O(1)

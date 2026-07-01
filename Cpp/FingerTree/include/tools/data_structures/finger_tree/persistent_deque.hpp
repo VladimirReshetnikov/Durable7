@@ -100,13 +100,13 @@ public:
 
     [[nodiscard]] const_reference front() const
     {
-        throw_if_not_empty();
+        throw_if_empty();
         return root_.first_leaf();
     }
 
     [[nodiscard]] const_reference back() const
     {
-        throw_if_not_empty();
+        throw_if_empty();
         return root_.last_leaf();
     }
 
@@ -158,26 +158,26 @@ public:
 
     [[nodiscard]] persistent_deque remove_first() const
     {
-        throw_if_not_empty();
+        throw_if_empty();
         return wrap(root_.remove_first().rest);
     }
 
     [[nodiscard]] persistent_deque remove_last() const
     {
-        throw_if_not_empty();
+        throw_if_empty();
         return wrap(root_.remove_last().rest);
     }
 
     [[nodiscard]] deque_pop<T> pop_first() const
     {
-        throw_if_not_empty();
+        throw_if_empty();
         auto result = root_.remove_first();
         return deque_pop<T>{result.removed.leaf_value(), wrap(result.rest)};
     }
 
     [[nodiscard]] deque_pop<T> pop_last() const
     {
-        throw_if_not_empty();
+        throw_if_empty();
         auto result = root_.remove_last();
         return deque_pop<T>{result.removed.leaf_value(), wrap(result.rest)};
     }
@@ -646,7 +646,7 @@ private:
         return root;
     }
 
-    void throw_if_not_empty() const
+    void throw_if_empty() const
     {
         if (empty()) {
             throw std::logic_error("persistent_deque is empty");

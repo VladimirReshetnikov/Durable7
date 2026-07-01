@@ -116,7 +116,11 @@ public:
     {
         throw_if_index_out_of_range(index, size());
         auto located = tree_.try_locate(detail::rope_index_predicate{index});
-        return located->item[index - located->measure_before];
+        if (!located.item.has_value()) {
+            throw std::logic_error("rope index locate failed");
+        }
+
+        return located.item.value()[index - located.measure_before];
     }
 
     [[nodiscard]] const_reference operator[](const size_type index) const
@@ -131,7 +135,11 @@ public:
         }
 
         auto located = tree_.try_locate(detail::rope_index_predicate{index});
-        return &located->item[index - located->measure_before];
+        if (!located.item.has_value()) {
+            throw std::logic_error("rope index locate failed");
+        }
+
+        return &located.item.value()[index - located.measure_before];
     }
 
     [[nodiscard]] rope set_item(const size_type index, value_type value) const

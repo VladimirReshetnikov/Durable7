@@ -1,5 +1,6 @@
 #include <tools/data_structures/finger_tree/finger_tree.hpp>
 
+#include "test_support/allocation_counter.hpp"
 #include "test_support/command_model.hpp"
 #include "test_support/test_runner.hpp"
 
@@ -133,7 +134,9 @@ void add_measured_finger_tree_tests_impl(suite& tests)
         FT_REQUIRE(split.left.empty());
         FT_REQUIRE(split.right.empty());
         FT_REQUIRE(!tree.try_split_find([](const std::size_t measure) { return measure > 0; }).has_value());
-        FT_REQUIRE(!tree.try_locate([](const std::size_t measure) { return measure > 0; }).has_value());
+        const auto located = tree.try_locate([](const std::size_t measure) { return measure > 0; });
+        FT_REQUIRE(!located.item.has_value());
+        FT_REQUIRE_EQUAL(located.measure_before, static_cast<std::size_t>(0));
     });
 
     tests.add("measured finger tree size measure tracks endpoint construction", [] {
@@ -266,13 +269,53 @@ void add_measured_finger_tree_tests_impl(suite& tests)
 
                 const auto located = tree.try_locate(predicate);
                 const auto split = tree.try_split_find(predicate);
-                FT_REQUIRE_EQUAL(located.has_value(), split.has_value());
+                FT_REQUIRE_EQUAL(located.item.has_value(), split.has_value());
                 if (split.has_value()) {
-                    FT_REQUIRE_EQUAL(located->item, split->item);
-                    FT_REQUIRE_EQUAL(located->measure_before, split->left.measure());
+                    FT_REQUIRE_EQUAL(*located.item, split->item);
+                    FT_REQUIRE_EQUAL(located.measure_before, split->left.measure());
+                } else {
+                    FT_REQUIRE_EQUAL(located.measure_before, tree.measure());
                 }
             }
         }
+    });
+
+    tests.add("measured finger tree locate miss reports whole non-group measure", [] {
+        const auto values = iota_vector(64, 10);
+        const auto tree = ft::finger_tree<int, count_last_key_measure>::from_range(values);
+
+        const auto below = tree.try_locate([](const count_and_last_key& measure) {
+            return measure.last_key >= 1000;
+        });
+        FT_REQUIRE(!below.item.has_value());
+        FT_REQUIRE(below.measure_before == tree.measure());
+
+        const auto empty = ft::finger_tree<int, count_last_key_measure>{};
+        const auto empty_located = empty.try_locate([](const count_and_last_key& measure) {
+            return measure.last_key >= 0;
+        });
+        FT_REQUIRE(!empty_located.item.has_value());
+        FT_REQUIRE(empty_located.measure_before == count_last_key_measure::empty());
+    });
+
+    tests.add("measured finger tree hot reads do not allocate after first force", [] {
+        const auto values = iota_vector(4096);
+        const auto tree = ft::finger_tree<int, ft::size_measure<int>>::from_range(values);
+
+        FT_REQUIRE_EQUAL(tree.measure(), values.size());
+        FT_REQUIRE_EQUAL(tree.front(), values.front());
+        FT_REQUIRE_EQUAL(tree.back(), values.back());
+
+        auto sink = std::size_t{0};
+        allocation_counting_scope allocations;
+        for (auto iteration = 0; iteration != 2000; ++iteration) {
+            sink += tree.measure();
+            sink += static_cast<std::size_t>(tree.front());
+            sink += static_cast<std::size_t>(tree.back());
+        }
+
+        FT_REQUIRE(sink > 0);
+        FT_REQUIRE_EQUAL(allocations.allocations(), static_cast<std::size_t>(0));
     });
 
     tests.add("measured finger tree randomized branching history matches model", [] {

@@ -151,8 +151,8 @@ public:
     [[nodiscard]] std::optional<size_type> index_of_key(const key_type& key) const
     {
         auto located = tree_.try_locate(key_at_least_predicate<key_type, Less>{key, less_});
-        if (located.has_value() && equivalent_key(located->item.first, key)) {
-            return located->measure_before.count;
+        if (located.item.has_value() && equivalent_key(located.item->first, key)) {
+            return located.measure_before.count;
         }
 
         return std::nullopt;
@@ -220,7 +220,7 @@ public:
     [[nodiscard]] std::optional<entry_type> try_ceiling_entry(const key_type& key) const
     {
         auto located = tree_.try_locate(key_at_least_predicate<key_type, Less>{key, less_});
-        return located.has_value() ? std::optional<entry_type>{located->item} : std::nullopt;
+        return located.item;
     }
 
     [[nodiscard]] std::optional<entry_type> try_lower_entry(const key_type& key) const
@@ -236,7 +236,7 @@ public:
     [[nodiscard]] std::optional<entry_type> try_higher_entry(const key_type& key) const
     {
         auto located = tree_.try_locate(key_above_predicate<key_type, Less>{key, less_});
-        return located.has_value() ? std::optional<entry_type>{located->item} : std::nullopt;
+        return located.item;
     }
 
     [[nodiscard]] sorted_map get_range(const key_type& low, const key_type& high) const
@@ -309,8 +309,8 @@ private:
     [[nodiscard]] std::optional<entry_type> locate_key(const key_type& key) const
     {
         auto located = tree_.try_locate(key_at_least_predicate<key_type, Less>{key, less_});
-        if (located.has_value() && equivalent_key(located->item.first, key)) {
-            return located->item;
+        if (located.item.has_value() && equivalent_key(located.item->first, key)) {
+            return located.item;
         }
 
         return std::nullopt;
@@ -319,18 +319,18 @@ private:
     [[nodiscard]] entry_type entry_at_rank(const size_type rank) const
     {
         auto located = tree_.try_locate(count_above_predicate<key_type>{rank});
-        if (!located.has_value()) {
+        if (!located.item.has_value()) {
             throw std::logic_error("sorted_map rank locate failed");
         }
 
-        return located->item;
+        return *located.item;
     }
 
     template <class Predicate>
     [[nodiscard]] size_type count_before(Predicate predicate) const
     {
         auto located = tree_.try_locate(std::move(predicate));
-        return located.has_value() ? located->measure_before.count : size();
+        return located.measure_before.count;
     }
 
     void throw_if_empty() const

@@ -87,11 +87,11 @@ public:
     {
         throw_if_index_out_of_range(index, size());
         auto located = tree_.try_locate(count_above_predicate<value_type>{index});
-        if (!located.has_value()) {
+        if (!located.item.has_value()) {
             throw std::logic_error("sorted_bag rank locate failed");
         }
 
-        return located->item;
+        return *located.item;
     }
 
     [[nodiscard]] value_type operator[](const size_type index) const
@@ -119,7 +119,7 @@ public:
     [[nodiscard]] bool contains(const value_type& item) const
     {
         auto located = tree_.try_locate(key_at_least_predicate<value_type, Less>{item, less_});
-        return located.has_value() && equivalent(located->item, item);
+        return located.item.has_value() && equivalent(*located.item, item);
     }
 
     [[nodiscard]] size_type count_less_than(const value_type& item) const
@@ -204,7 +204,7 @@ private:
     [[nodiscard]] size_type count_before(Predicate predicate) const
     {
         auto located = tree_.try_locate(std::move(predicate));
-        return located.has_value() ? located->measure_before.count : size();
+        return located.measure_before.count;
     }
 
     void throw_if_empty() const

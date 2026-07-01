@@ -151,11 +151,13 @@ void add_measured_rope_tests_impl(suite& tests)
             const auto located = rope.try_locate_by_measure(ft::sum_above_predicate<int>{threshold});
             if (boundary < values.size()) {
                 FT_REQUIRE(located.has_value());
-                FT_REQUIRE_EQUAL(located->index, boundary);
-                FT_REQUIRE_EQUAL(located->measure_before, running);
-                FT_REQUIRE_EQUAL(located->value, values[boundary]);
+                FT_REQUIRE_EQUAL(located.index, boundary);
+                FT_REQUIRE_EQUAL(located.measure_before, running);
+                FT_REQUIRE_EQUAL(*located.value, values[boundary]);
             } else {
                 FT_REQUIRE(!located.has_value());
+                FT_REQUIRE_EQUAL(located.index, values.size());
+                FT_REQUIRE_EQUAL(located.measure_before, total);
             }
         }
     });
@@ -178,11 +180,11 @@ void add_measured_rope_tests_impl(suite& tests)
                 return count >= line;
             });
             FT_REQUIRE(located.has_value());
-            FT_REQUIRE_EQUAL(located->value, '\n');
-            FT_REQUIRE_EQUAL(located->measure_before, line - 1);
+            FT_REQUIRE_EQUAL(*located.value, '\n');
+            FT_REQUIRE_EQUAL(located.measure_before, line - 1);
             FT_REQUIRE_EQUAL(
                 static_cast<std::size_t>(std::ranges::count(
-                    std::string_view{text.data(), located->index + 1},
+                    std::string_view{text.data(), located.index + 1},
                     '\n')),
                 line);
         }
@@ -265,8 +267,11 @@ void add_measured_rope_tests_impl(suite& tests)
                 const auto located = rope.try_locate_by_measure(ft::sum_above_predicate<int>{threshold});
                 FT_REQUIRE_EQUAL(located.has_value(), boundary < model.size());
                 if (located.has_value()) {
-                    FT_REQUIRE_EQUAL(located->index, boundary);
-                    FT_REQUIRE_EQUAL(located->measure_before, running);
+                    FT_REQUIRE_EQUAL(located.index, boundary);
+                    FT_REQUIRE_EQUAL(located.measure_before, running);
+                } else {
+                    FT_REQUIRE_EQUAL(located.index, model.size());
+                    FT_REQUIRE_EQUAL(located.measure_before, sum_of(model));
                 }
             }
         }
@@ -277,7 +282,10 @@ void add_measured_rope_tests_impl(suite& tests)
         FT_REQUIRE(empty.empty());
         FT_REQUIRE_EQUAL(empty.size(), static_cast<std::size_t>(0));
         FT_REQUIRE_EQUAL(empty.measure(), 0);
-        FT_REQUIRE(!empty.try_locate_by_measure(ft::sum_above_predicate<int>{0}).has_value());
+        const auto empty_located = empty.try_locate_by_measure(ft::sum_above_predicate<int>{0});
+        FT_REQUIRE(!empty_located.has_value());
+        FT_REQUIRE_EQUAL(empty_located.index, static_cast<std::size_t>(0));
+        FT_REQUIRE_EQUAL(empty_located.measure_before, 0);
         FT_REQUIRE_THROWS(std::logic_error, empty.front());
         FT_REQUIRE_THROWS(std::logic_error, empty.remove_first());
         FT_REQUIRE_THROWS(std::out_of_range, empty.at(0));

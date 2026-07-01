@@ -944,3 +944,55 @@ Findings:
 
 - No new C# defect, flaw, or improvement proposal was found in the basic text helper pass. The intentionally
   omitted text extras remain outside the requested C++ scope.
+
+## Checkpoint: Independent Review Corrections
+
+Updated (UTC): 2026-07-01T17:29:56Z
+
+Compared review material:
+
+- `Cpp/FingerTree/docs/cpp-port-review-report-2026-06-30T20-06-08Z.md`
+- `Cpp/FingerTree/docs/cpp-fingertree-port-review-2026-06-30T20-14-15Z.md`
+- `Cpp/FingerTree/docs/cpp-port-quality-review-2026-06-30T20-17-39Z.md`
+
+Compared C# source and tests:
+
+- `FingerTree/src/Tools.DataStructures.FingerTree/FingerTree.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/FingerTreeMeasureExtensions.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/FingerTreeProductExtensions.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/SumMeasure.cs`
+- `FingerTree/src/Tools.DataStructures.FingerTree/MeasuredRope.cs`
+- `FingerTree/tests/Tools.DataStructures.FingerTree.Tests/TearableConcurrencyStressTests.cs`
+
+Implemented:
+
+- Changed `finger_tree::try_locate` to the planned total result shape: the result is always returned, `item` is
+  optional, and `measure_before` reports the boundary prefix, the whole-tree measure on a miss, or the identity for
+  an empty tree.
+- Changed `measured_rope::try_locate_by_measure` to the analogous total result shape: `value` is optional, `index`
+  is the boundary index or `size()` on a miss, and `measure_before` is the boundary prefix or whole user measure.
+- Updated sorted wrappers, interval tree, priority queue, rope, and text helpers for the total locate contract.
+- Added the named-operation free-function layer: max/min peek/extract, key/order-statistic lower/upper/index
+  splits, product first/second component split/find, product size+max/size+min peek/extract, and pure/product
+  cumulative-weight split/select helpers.
+- Added structure-level tearable concurrency stress tests for measured finger trees, measured ropes, lock-free rope
+  publication, and branching histories over retained rope snapshots. The tests honor `FINGERTREE_STRESS_SECONDS`.
+- Added allocation/complexity guards for measured-tree hot reads, tuned-deque hot reads and branch pushes, and
+  reversible-deque `reverse()` allocation flatness.
+- Renamed the misleading private `throw_if_not_empty` helpers to `throw_if_empty` and restored checked size
+  addition in `sorted_set::merge`.
+
+Validation:
+
+- Configured `msvc-debug` through the Visual Studio developer environment after confirming plain PowerShell still
+  lacks `rc.exe`/`mt.exe` for CMake compiler probes.
+- Built `msvc-debug` with `/W4 /WX`.
+- Ran `ctest --preset msvc-debug --output-on-failure`; all tests passed.
+- Configured and built `msvc-release` with `/W4 /WX`.
+- Ran `ctest --preset msvc-release --output-on-failure`; all tests passed.
+
+Remaining review work:
+
+- Milestone 8 samples and benchmarks remain unstarted.
+- The stateful command-sequence-with-shrinking tier remains future work.
+- Install/export packaging, CI, and multi-compiler/ThreadSanitizer coverage remain future work.

@@ -33,7 +33,14 @@ template <class T, class MeasurePolicy>
 struct measured_rope_locate_result final {
     std::size_t index = 0;
     typename MeasurePolicy::measure_type measure_before = MeasurePolicy::empty();
-    T value;
+    std::optional<T> value;
+
+    [[nodiscard]] bool has_value() const noexcept
+    {
+        return value.has_value();
+    }
+
+    [[nodiscard]] bool operator==(const measured_rope_locate_result&) const = default;
 };
 
 template <class T, class MeasurePolicy>
@@ -122,7 +129,11 @@ public:
     {
         throw_if_index_out_of_range(index, size());
         auto located = tree_.try_locate(count_predicate(index));
-        return located->item[index - located->measure_before.first];
+        if (!located.item.has_value()) {
+            throw std::logic_error("measured_rope index locate failed");
+        }
+
+        return located.item.value()[index - located.measure_before.first];
     }
 
     [[nodiscard]] const_reference operator[](const size_type index) const
@@ -137,7 +148,11 @@ public:
         }
 
         auto located = tree_.try_locate(count_predicate(index));
-        return &located->item[index - located->measure_before.first];
+        if (!located.item.has_value()) {
+            throw std::logic_error("measured_rope index locate failed");
+        }
+
+        return &located.item.value()[index - located.measure_before.first];
     }
 
     [[nodiscard]] measured_rope set_item(const size_type index, value_type value) const
@@ -332,9 +347,13 @@ public:
         }
 
         auto located = tree_.try_locate(count_predicate(count));
+        if (!located.item.has_value()) {
+            throw std::logic_error("measured_rope prefix locate failed");
+        }
+
         return measure_policy::combine(
-            located->measure_before.second,
-            located->item.measure_prefix(count - located->measure_before.first));
+            located.measure_before.second,
+            located.item.value().measure_prefix(count - located.measure_before.first));
     }
 
     template <class Predicate>
@@ -354,19 +373,19 @@ public:
 
     template <class Predicate>
         requires measure_predicate<Predicate, user_measure_type>
-    [[nodiscard]] std::optional<measured_rope_locate_result<value_type, measure_policy>> try_locate_by_measure(
-        Predicate predicate) const
+    [[nodiscard]] measured_rope_locate_result<value_type, measure_policy> try_locate_by_measure(Predicate predicate) const
     {
         auto located = tree_.try_locate(second_component_predicate<Predicate, size_type, user_measure_type>{predicate});
-        if (!located.has_value()) {
-            return std::nullopt;
+        if (!located.item.has_value()) {
+            return measured_rope_locate_result<value_type, measure_policy>{size(), located.measure_before.second, std::nullopt};
         }
 
-        const auto offset = chunk_split_offset(located->item, located->measure_before.second, predicate);
+        const auto& chunk = located.item.value();
+        const auto offset = chunk_split_offset(chunk, located.measure_before.second, predicate);
         return measured_rope_locate_result<value_type, measure_policy>{
-            located->measure_before.first + offset,
-            measure_policy::combine(located->measure_before.second, located->item.measure_prefix(offset)),
-            located->item[offset]};
+            located.measure_before.first + offset,
+            measure_policy::combine(located.measure_before.second, chunk.measure_prefix(offset)),
+            chunk[offset]};
     }
 
     [[nodiscard]] std::vector<value_type> to_vector() const

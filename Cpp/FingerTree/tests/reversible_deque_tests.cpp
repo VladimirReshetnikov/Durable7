@@ -1,5 +1,6 @@
 #include <tools/data_structures/finger_tree/finger_tree.hpp>
 
+#include "test_support/allocation_counter.hpp"
 #include "test_support/command_model.hpp"
 #include "test_support/test_runner.hpp"
 
@@ -167,6 +168,24 @@ void add_reversible_deque_tests_impl(suite& tests)
         }
 
         require_sequence_equal(deque, expected);
+    });
+
+    tests.add("reversible deque reverse allocation count is independent of size", [] {
+        const auto small = ft::reversible_deque<int>::from_range(iota_vector(128));
+        const auto large = ft::reversible_deque<int>::from_range(iota_vector(4096));
+
+        const auto reverse_allocations = [](ft::reversible_deque<int> deque) {
+            const auto expected_size = deque.size();
+            allocation_counting_scope allocations;
+            for (auto iteration = 0; iteration != 128; ++iteration) {
+                deque = deque.reverse();
+            }
+
+            FT_REQUIRE_EQUAL(deque.size(), expected_size);
+            return allocations.allocations();
+        };
+
+        FT_REQUIRE_EQUAL(reverse_allocations(small), reverse_allocations(large));
     });
 
     tests.add("reversible deque deep reversed middle set remains consistent", [] {

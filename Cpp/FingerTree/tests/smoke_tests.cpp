@@ -37,6 +37,7 @@ void add_reversible_deque_tests(suite& tests);
 void add_rope_tests(suite& tests);
 void add_rope_text_tests(suite& tests);
 void add_sorted_collection_tests(suite& tests);
+void add_tearable_concurrency_tests(suite& tests);
 
 #ifdef _MSC_VER
 void configure_non_interactive_failure_reporting()
@@ -130,6 +131,7 @@ int main()
     add_rope_tests(tests);
     add_rope_text_tests(tests);
     add_sorted_collection_tests(tests);
+    add_tearable_concurrency_tests(tests);
 
     return tests.run();
 }

@@ -1,11 +1,13 @@
 #pragma once
 
 #include <tools/data_structures/finger_tree/comparisons.hpp>
+#include <tools/data_structures/finger_tree/measured_finger_tree.hpp>
 #include <tools/data_structures/finger_tree/measures.hpp>
 
 #include <cstddef>
 #include <functional>
 #include <optional>
+#include <stdexcept>
 #include <type_traits>
 #include <utility>
 
@@ -299,6 +301,122 @@ private:
         return Comparison::compare(left.value(), right.value()) >= 0 ? left : right;
     }
 };
+
+template <class T, class Comparison = default_comparison<T>>
+    requires static_comparison_policy<Comparison, T>
+[[nodiscard]] std::optional<T> try_peek_max(const finger_tree<T, max_measure<T, Comparison>>& tree)
+{
+    const auto measure = tree.measure();
+    return measure.has_value() ? std::optional<T>{measure.value()} : std::nullopt;
+}
+
+template <class T, class Comparison = default_comparison<T>>
+    requires static_comparison_policy<Comparison, T>
+[[nodiscard]] std::optional<finger_tree_extract_result<T, max_measure<T, Comparison>>> try_extract_max(
+    const finger_tree<T, max_measure<T, Comparison>>& tree)
+{
+    const auto measure = tree.measure();
+    if (!measure.has_value()) {
+        return std::nullopt;
+    }
+
+    const auto target = measure.value();
+    auto split = tree.try_split_find([target](const optional_measure<T>& current) {
+        return current.has_value() && Comparison::compare(current.value(), target) >= 0;
+    });
+    if (!split.has_value()) {
+        throw std::logic_error("max-measured tree reported a maximum but split did not find it");
+    }
+
+    return finger_tree_extract_result<T, max_measure<T, Comparison>>{
+        split->item,
+        split->left.concat(split->right)};
+}
+
+template <class T, class Comparison = default_comparison<T>>
+    requires static_comparison_policy<Comparison, T>
+[[nodiscard]] std::optional<T> try_peek_min(const finger_tree<T, min_measure<T, Comparison>>& tree)
+{
+    const auto measure = tree.measure();
+    return measure.has_value() ? std::optional<T>{measure.value()} : std::nullopt;
+}
+
+template <class T, class Comparison = default_comparison<T>>
+    requires static_comparison_policy<Comparison, T>
+[[nodiscard]] std::optional<finger_tree_extract_result<T, min_measure<T, Comparison>>> try_extract_min(
+    const finger_tree<T, min_measure<T, Comparison>>& tree)
+{
+    const auto measure = tree.measure();
+    if (!measure.has_value()) {
+        return std::nullopt;
+    }
+
+    const auto target = measure.value();
+    auto split = tree.try_split_find([target](const optional_measure<T>& current) {
+        return current.has_value() && Comparison::compare(current.value(), target) <= 0;
+    });
+    if (!split.has_value()) {
+        throw std::logic_error("min-measured tree reported a minimum but split did not find it");
+    }
+
+    return finger_tree_extract_result<T, min_measure<T, Comparison>>{
+        split->item,
+        split->left.concat(split->right)};
+}
+
+template <class T, class Comparison = default_comparison<T>>
+    requires static_comparison_policy<Comparison, T>
+[[nodiscard]] finger_tree_split<T, key_measure<T>> split_by_lower_bound(
+    const finger_tree<T, key_measure<T>>& tree,
+    T key)
+{
+    return tree.split([key = std::move(key)](const optional_measure<T>& measure) {
+        return measure.has_value() && Comparison::compare(measure.value(), key) >= 0;
+    });
+}
+
+template <class T, class Comparison = default_comparison<T>>
+    requires static_comparison_policy<Comparison, T>
+[[nodiscard]] finger_tree_split<T, key_measure<T>> split_by_upper_bound(
+    const finger_tree<T, key_measure<T>>& tree,
+    T key)
+{
+    return tree.split([key = std::move(key)](const optional_measure<T>& measure) {
+        return measure.has_value() && Comparison::compare(measure.value(), key) > 0;
+    });
+}
+
+template <class T>
+[[nodiscard]] finger_tree_split<T, order_statistic_measure<T>> split_at_index(
+    const finger_tree<T, order_statistic_measure<T>>& tree,
+    const std::size_t index)
+{
+    return tree.split([index](const ranked_key<T>& measure) {
+        return measure.count > index;
+    });
+}
+
+template <class T, class Comparison = default_comparison<T>>
+    requires static_comparison_policy<Comparison, T>
+[[nodiscard]] finger_tree_split<T, order_statistic_measure<T>> split_by_lower_bound(
+    const finger_tree<T, order_statistic_measure<T>>& tree,
+    T key)
+{
+    return tree.split([key = std::move(key)](const ranked_key<T>& measure) {
+        return measure.key.has_value() && Comparison::compare(measure.key.value(), key) >= 0;
+    });
+}
+
+template <class T, class Comparison = default_comparison<T>>
+    requires static_comparison_policy<Comparison, T>
+[[nodiscard]] finger_tree_split<T, order_statistic_measure<T>> split_by_upper_bound(
+    const finger_tree<T, order_statistic_measure<T>>& tree,
+    T key)
+{
+    return tree.split([key = std::move(key)](const ranked_key<T>& measure) {
+        return measure.key.has_value() && Comparison::compare(measure.key.value(), key) > 0;
+    });
+}
 
 } // namespace tools::data_structures::finger_tree
 

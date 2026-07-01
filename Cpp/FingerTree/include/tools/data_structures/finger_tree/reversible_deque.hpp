@@ -68,13 +68,13 @@ public:
 
     [[nodiscard]] const_reference front() const
     {
-        throw_if_not_empty();
+        throw_if_empty();
         return root_.first_leaf();
     }
 
     [[nodiscard]] const_reference back() const
     {
-        throw_if_not_empty();
+        throw_if_empty();
         return root_.last_leaf();
     }
 
@@ -195,7 +195,7 @@ private:
         return root;
     }
 
-    void throw_if_not_empty() const
+    void throw_if_empty() const
     {
         if (empty()) {
             throw std::logic_error("reversible_deque is empty");

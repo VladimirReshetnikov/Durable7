@@ -106,8 +106,8 @@ public:
     [[nodiscard]] std::optional<size_type> index_of(const value_type& item) const
     {
         auto located = tree_.try_locate(key_at_least_predicate<value_type, Less>{item, less_});
-        if (located.has_value() && equivalent(located->item, item)) {
-            return located->measure_before.count;
+        if (located.item.has_value() && equivalent(*located.item, item)) {
+            return located.measure_before.count;
         }
 
         return std::nullopt;
@@ -169,7 +169,7 @@ public:
     [[nodiscard]] std::optional<value_type> try_ceiling(const value_type& item) const
     {
         auto located = tree_.try_locate(key_at_least_predicate<value_type, Less>{item, less_});
-        return located.has_value() ? std::optional<value_type>{located->item} : std::nullopt;
+        return located.item;
     }
 
     [[nodiscard]] std::optional<value_type> try_lower(const value_type& item) const
@@ -185,7 +185,7 @@ public:
     [[nodiscard]] std::optional<value_type> try_higher(const value_type& item) const
     {
         auto located = tree_.try_locate(key_above_predicate<value_type, Less>{item, less_});
-        return located.has_value() ? std::optional<value_type>{located->item} : std::nullopt;
+        return located.item;
     }
 
     [[nodiscard]] sorted_set get_range(const value_type& low, const value_type& high) const
@@ -289,18 +289,18 @@ private:
     [[nodiscard]] value_type element_at(const size_type rank) const
     {
         auto located = tree_.try_locate(count_above_predicate<value_type>{rank});
-        if (!located.has_value()) {
+        if (!located.item.has_value()) {
             throw std::logic_error("sorted_set rank locate failed");
         }
 
-        return located->item;
+        return *located.item;
     }
 
     template <class Predicate>
     [[nodiscard]] size_type count_before(Predicate predicate) const
     {
         auto located = tree_.try_locate(std::move(predicate));
-        return located.has_value() ? located->measure_before.count : size();
+        return located.measure_before.count;
     }
 
     [[nodiscard]] sorted_set merge(
@@ -312,7 +312,7 @@ private:
         const auto left = to_vector();
         const auto right = other.to_vector();
         auto output = std::vector<value_type>{};
-        output.reserve(left.size() + right.size());
+        output.reserve(checked_add(left.size(), right.size()));
 
         auto left_index = size_type{0};
         auto right_index = size_type{0};

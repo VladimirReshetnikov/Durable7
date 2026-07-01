@@ -1,5 +1,6 @@
 #include <tools/data_structures/finger_tree/finger_tree.hpp>
 
+#include "test_support/allocation_counter.hpp"
 #include "test_support/command_model.hpp"
 #include "test_support/operation_counter.hpp"
 #include "test_support/test_runner.hpp"
@@ -217,6 +218,39 @@ void add_persistent_deque_tests_impl(suite& tests)
         auto copied = std::vector<int>{};
         deque.copy_to(std::back_inserter(copied));
         FT_REQUIRE(iterated == copied);
+    });
+
+    tests.add("persistent deque hot endpoint and index reads do not allocate", [] {
+        const auto deque = make_deque(4096);
+        FT_REQUIRE_EQUAL(deque.front(), 0);
+        FT_REQUIRE_EQUAL(deque.back(), 4095);
+        FT_REQUIRE_EQUAL(deque[2048], 2048);
+
+        auto sink = std::size_t{0};
+        allocation_counting_scope allocations;
+        for (auto iteration = 0; iteration != 2000; ++iteration) {
+            sink += static_cast<std::size_t>(deque.front());
+            sink += static_cast<std::size_t>(deque.back());
+            sink += static_cast<std::size_t>(deque[2048]);
+        }
+
+        FT_REQUIRE(sink > 0);
+        FT_REQUIRE_EQUAL(allocations.allocations(), static_cast<std::size_t>(0));
+    });
+
+    tests.add("persistent deque branch push marginal allocation is size independent", [] {
+        const auto small = make_deque(1024);
+        const auto large = make_deque(32768);
+
+        const auto push_allocations = [](const ft::persistent_deque<int>& deque) {
+            allocation_counting_scope allocations;
+            const auto branch = deque.push_back(42);
+            FT_REQUIRE_EQUAL(branch.size(), deque.size() + 1);
+            FT_REQUIRE_EQUAL(branch.back(), 42);
+            return allocations.allocations();
+        };
+
+        FT_REQUIRE_EQUAL(push_allocations(small), push_allocations(large));
     });
 
     tests.add("persistent deque sorted search follows lower and upper bound semantics", [] {

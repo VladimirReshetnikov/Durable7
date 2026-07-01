@@ -2,7 +2,6 @@
 
 #include <tools/data_structures/finger_tree/detail/common.hpp>
 #include <tools/data_structures/finger_tree/detail/measured_tree.hpp>
-#include <tools/data_structures/finger_tree/measure_predicates.hpp>
 #include <tools/data_structures/finger_tree/measures.hpp>
 
 #include <concepts>
@@ -36,9 +35,22 @@ struct finger_tree_item_split final {
 };
 
 template <class Element, class MeasurePolicy>
+struct finger_tree_extract_result final {
+    Element item;
+    finger_tree<Element, MeasurePolicy> rest;
+};
+
+template <class Element, class MeasurePolicy>
 struct finger_tree_locate_result final {
     typename MeasurePolicy::measure_type measure_before;
-    Element item;
+    std::optional<Element> item;
+
+    [[nodiscard]] bool has_value() const noexcept
+    {
+        return item.has_value();
+    }
+
+    [[nodiscard]] bool operator==(const finger_tree_locate_result&) const = default;
 };
 
 template <class Element, class MeasurePolicy>
@@ -86,13 +98,13 @@ public:
 
     [[nodiscard]] const value_type& front() const
     {
-        throw_if_not_empty();
+        throw_if_empty();
         return root_.first_element().value();
     }
 
     [[nodiscard]] const value_type& back() const
     {
-        throw_if_not_empty();
+        throw_if_empty();
         return root_.last_element().value();
     }
 
@@ -168,10 +180,15 @@ public:
 
     template <class Predicate>
         requires std::predicate<Predicate&, const measure_type&>
-    [[nodiscard]] std::optional<finger_tree_locate_result<Element, MeasurePolicy>> try_locate(Predicate predicate) const
+    [[nodiscard]] finger_tree_locate_result<Element, MeasurePolicy> try_locate(Predicate predicate) const
     {
-        if (root_.is_empty() || !std::invoke(predicate, root_.measure())) {
-            return std::nullopt;
+        if (root_.is_empty()) {
+            return finger_tree_locate_result<Element, MeasurePolicy>{MeasurePolicy::empty(), std::nullopt};
+        }
+
+        auto total = root_.measure();
+        if (!std::invoke(predicate, total)) {
+            return finger_tree_locate_result<Element, MeasurePolicy>{std::move(total), std::nullopt};
         }
 
         auto located = root_.locate_tree(predicate, MeasurePolicy::empty());
@@ -218,7 +235,7 @@ private:
         return root;
     }
 
-    void throw_if_not_empty() const
+    void throw_if_empty() const
     {
         if (empty()) {
             throw std::logic_error("finger_tree is empty");
