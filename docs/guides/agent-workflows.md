@@ -40,6 +40,7 @@ Include examples for nontrivial APIs, especially measured-tree predicates, persi
 ## Technical documentation
 
 Documentation should describe current state. Historical context belongs in explicit reports or provenance documents. Update active docs when changing paths, public APIs, complexity guarantees, benchmark claims, or external-reference layout.
+Use [the documentation maintenance guide](documentation-maintenance.md) for placement rules, metadata, link/path conventions, and documentation-specific validation.
 
 Every new long-lived document should include:
 

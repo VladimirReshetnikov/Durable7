@@ -13,6 +13,7 @@ Library-specific design and API documentation lives beside each workspace under 
 - [Guides index](guides/README.md) - task-oriented repository procedures.
 - [Agent workflows](guides/agent-workflows.md) - compact task-conditional workflow guidance inherited from the Tools repository where relevant.
 - [Build and validation](guides/build-and-validation.md) - repository-wide validation matrix, exact build/test commands, CMake cache notes, and Markdown checks.
+- [Documentation maintenance](guides/documentation-maintenance.md) - documentation placement, writing standards, metadata, and validation.
 
 ## Reference
 

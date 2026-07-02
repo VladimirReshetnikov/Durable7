@@ -142,6 +142,7 @@ Release configuration is required for meaningful benchmark numbers.
 - [docs/guides/README.md](docs/guides/README.md) indexes task-oriented repository procedures.
 - [docs/guides/agent-workflows.md](docs/guides/agent-workflows.md) holds compact task-conditional workflow guidance.
 - [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) is the repository-wide validation matrix and command guide.
+- [docs/guides/documentation-maintenance.md](docs/guides/documentation-maintenance.md) defines documentation placement, writing standards, metadata, and validation.
 - [docs/reference/README.md](docs/reference/README.md) indexes durable cross-workspace reference material.
 - [docs/reference/workspace-map.md](docs/reference/workspace-map.md) explains the language-first, data-structure-second layout and port lineage.
 - [src/CSharp/Hamt/docs/README.md](src/CSharp/Hamt/docs/README.md) indexes the HAMT library's API specification.
