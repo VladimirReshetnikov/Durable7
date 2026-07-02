@@ -1,6 +1,24 @@
 # Samples
 
-Runnable demonstrations of `Tools.DataStructures.FingerTree`.
+- Created (UTC): 2026-06-14T18:28:03Z
+- Updated (UTC): 2026-07-02T20:50:27Z
+- Repository HEAD: 1cc49d57d1949230877f1e10c24465f7905905dd
+- Audience: Maintainers and users exploring the C# FingerTree sample programs
+- Scope: Runnable sample tours under `src/CSharp/FingerTree/samples`
+
+Runnable demonstrations of `Tools.DataStructures.FingerTree`. The samples are ordinary console
+projects, but their main logic lives in `Run(TextWriter)` methods so the test suite can smoke-test
+the deterministic transcript markers without depending on console I/O.
+
+From `src/CSharp/FingerTree/samples`, run a sample with:
+
+```powershell
+dotnet run --project .\Tools.DataStructures.FingerTree.Tour -c Release
+dotnet run --project .\Tools.DataStructures.FingerTree.Showcase -c Release
+dotnet run --project .\Tools.DataStructures.FingerTree.Editor -c Release
+```
+
+From the workspace root `src/CSharp/FingerTree`, prefix the project paths with `samples\`.
 
 ## `Tools.DataStructures.FingerTree.Tour`
 
@@ -12,8 +30,8 @@ A short, narrated end-to-end tour built around a persistent text buffer, in thre
 
 The program runs a bounded, deterministic scenario and exits.
 
-```bash
-dotnet run --project samples/Tools.DataStructures.FingerTree.Tour -c Release
+```powershell
+dotnet run --project .\Tools.DataStructures.FingerTree.Tour -c Release
 ```
 
 ## `Tools.DataStructures.FingerTree.Showcase`
@@ -27,8 +45,8 @@ The "one measured tree, many data structures" thesis, in four acts — the same 
 
 The acts are seeded and reproducible. The logic is exposed as `ShowcaseProgram.Run(TextWriter)` so it is smoke-tested.
 
-```bash
-dotnet run --project samples/Tools.DataStructures.FingerTree.Showcase -c Release
+```powershell
+dotnet run --project .\Tools.DataStructures.FingerTree.Showcase -c Release
 ```
 
 ## `Tools.DataStructures.FingerTree.Editor`
@@ -41,6 +59,19 @@ The editor-grade text extras, in four acts over a document built with `RopeBuild
 
 Deterministic, exposed as `EditorProgram.Run(TextWriter)` and smoke-tested.
 
-```bash
-dotnet run --project samples/Tools.DataStructures.FingerTree.Editor -c Release
+```powershell
+dotnet run --project .\Tools.DataStructures.FingerTree.Editor -c Release
 ```
+
+## Smoke Tests
+
+`tests/Tools.DataStructures.FingerTree.Tests/SampleSmokeTests.cs` drives `TourProgram.Run`,
+`ShowcaseProgram.Run`, and `EditorProgram.Run` with a captured writer and checks transcript markers.
+Run the focused sample gate from `src/CSharp/FingerTree` with:
+
+```powershell
+dotnet test .\FingerTree.sln --filter FullyQualifiedName~SampleSmokeTests
+```
+
+Use the full workspace validation guide when sample changes also touch library APIs, build shape, or
+performance claims: [`../docs/validation.md`](../docs/validation.md).
