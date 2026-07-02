@@ -1,0 +1,56 @@
+{
+  "version": 7,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "msvc-debug",
+      "displayName": "MSVC debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/msvc-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_MAKE_PROGRAM": "C:/Program Files/Microsoft Visual Studio/18/Insiders/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe"
+      }
+    },
+    {
+      "name": "msvc-release",
+      "displayName": "MSVC release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/msvc-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_MAKE_PROGRAM": "C:/Program Files/Microsoft Visual Studio/18/Insiders/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "msvc-debug",
+      "configurePreset": "msvc-debug"
+    },
+    {
+      "name": "msvc-release",
+      "configurePreset": "msvc-release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "msvc-debug",
+      "configurePreset": "msvc-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "msvc-release",
+      "configurePreset": "msvc-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

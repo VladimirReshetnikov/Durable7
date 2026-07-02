@@ -46,6 +46,25 @@ This document is the canonical repository guidance for Vladimir and the AI codin
 │   ├── docs/
 │   ├── include/
 │   └── tests/
+├── C/
+│   └── FingerTree/
+│       ├── CMakeLists.txt
+│       ├── CMakePresets.json
+│       ├── README.md
+│       ├── benchmarks/
+│       ├── docs/
+│       ├── include/
+│       ├── samples/
+│       ├── src/
+│       └── tests/
+├── Cpp/
+│   └── FingerTree/
+│       ├── CMakeLists.txt
+│       ├── CMakePresets.json
+│       ├── README.md
+│       ├── docs/
+│       ├── include/
+│       └── tests/
 └── FingerTree/
     ├── Directory.Build.props
     ├── FingerTree.sln
@@ -69,6 +88,8 @@ This document is the canonical repository guidance for Vladimir and the AI codin
   branching, immutable equal-hash collision buckets, custom hash/equality policy objects, structural
   sharing via immutable `std::shared_ptr` nodes, and deterministic native model tests.
 - [FingerTree](FingerTree/README.md) is a .NET 10 persistent finger-tree library: two engine cores (a tuned catenable deque and a general monoid-measured tree), a full collection family (sorted bag/set/dictionary, priority queue, interval tree, reversible deque), product/sum/built-in measures with a closure-free predicate API, and a rope family (positional, measured, and text). It ships a navigable design-notes document ([FingerTree-Design-Notes.pdf](FingerTree/docs/FingerTree-Design-Notes.pdf), with `.tex` source and a rebuild script alongside), a BenchmarkDotNet harness, three runnable samples, and a three-tier (example + property + model-based command) test suite plus tearable-struct concurrency stress tests.
+- [Cpp/FingerTree](Cpp/FingerTree/README.md) is the native C++ port of the FingerTree workspace. It is a header-first CMake/Ninja library with the two engine cores, derived collections, ropes, text helpers, and CTest validation.
+- [C/FingerTree](C/FingerTree/README.md) is the C11 port from the C++ workspace. It provides a generic measured-tree core with shared lazy middle publication, size-measured deque alias, reversible deque facade, sorted set/multiset/map wrappers, generic priority queue, generic and signed-64-bit interval tree facades, generic chunked and measured ropes, text-rope facade, CTest validation, sample smoke tests, and a dependency-light benchmark harness.
 
 ## Build and test
 
@@ -93,6 +114,13 @@ cd C:\DataStructures\HamtC
 cd C:\DataStructures\HamtCpp
 .\build.ps1 -RunTests
 .\build.ps1 -Configuration Release -RunTests
+
+cd C:\DataStructures\C\FingerTree
+$cmakeDir = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
+& "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
+& "$cmakeDir\cmake.exe" --preset msvc-debug
+& "$cmakeDir\cmake.exe" --build --preset msvc-debug
+& "$cmakeDir\ctest.exe" --preset msvc-debug
 ```
 
 Run benchmarks from the benchmark project:
@@ -113,6 +141,8 @@ Release configuration is required for meaningful benchmark numbers.
 - [HamtCpp/docs/README.md](HamtCpp/docs/README.md) indexes the C++ HAMT port's API
   specification.
 - [FingerTree/docs/README.md](FingerTree/docs/README.md) indexes the library's specifications, design notes, benchmark notes, and external references.
+- [Cpp/FingerTree/docs/README.md](Cpp/FingerTree/docs/README.md) indexes the C++ port plan, API notes, validation guide, and review reports.
+- [C/FingerTree/docs/README.md](C/FingerTree/docs/README.md) indexes the C port API and validation notes.
 
 The large `TECHNICAL_DOCUMENTATION_STANDARD.md` and `XML_DOCUMENTATION_STANDARD.md` files from Tools are intentionally not part of this repository. Keep documentation thorough and current-state oriented, and write XML documentation in semantic terms: contracts, invariants, ordering, failure behavior, complexity, allocation behavior, and examples where they help.
 
@@ -138,6 +168,7 @@ The expected local Windows environment includes:
 - `git` and `gh` for source-control and GitHub workflows.
 - `python` for ad hoc tooling.
 - .NET SDK 10.0 or newer with the .NET 10 targeting packs.
+- Visual Studio native C/C++ toolchain, plus the bundled CMake and Ninja used by the `C/FingerTree` and `Cpp/FingerTree` presets.
 - MSVC C17/C++20 toolchain for `HamtC` and `HamtCpp`; use Scriptorium's
   `Import-VisualCppEnvironment.ps1` helper when compiling from a plain PowerShell process.
 - `git-filter-repo` usable as `python -m git_filter_repo` when future history work is needed.

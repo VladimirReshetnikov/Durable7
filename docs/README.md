@@ -8,7 +8,9 @@
 This directory contains repository-level guidance and extraction provenance. Library-specific design
 and API documentation lives under [Hamt/docs](../Hamt/docs/README.md),
 [HamtC/docs](../HamtC/docs/README.md), [HamtCpp/docs](../HamtCpp/docs/README.md), and
-[FingerTree/docs](../FingerTree/docs/README.md).
+[FingerTree/docs](../FingerTree/docs/README.md), with native FingerTree port docs under
+[Cpp/FingerTree/docs](../Cpp/FingerTree/docs/README.md) and
+[C/FingerTree/docs](../C/FingerTree/docs/README.md).
 
 ## Current documents
 
@@ -22,4 +24,6 @@ Put repository-wide reports and migration records here. Put C# HAMT implementati
 documents under [Hamt/docs](../Hamt/docs/README.md), C HAMT port documents under
 [HamtC/docs](../HamtC/docs/README.md), C++ HAMT port documents under
 [HamtCpp/docs](../HamtCpp/docs/README.md), and FingerTree implementation, API, benchmark, and
-algorithm documents under [FingerTree/docs](../FingerTree/docs/README.md).
+algorithm documents under [FingerTree/docs](../FingerTree/docs/README.md). Put native FingerTree port
+documents under [Cpp/FingerTree/docs](../Cpp/FingerTree/docs/README.md) and
+[C/FingerTree/docs](../C/FingerTree/docs/README.md).
