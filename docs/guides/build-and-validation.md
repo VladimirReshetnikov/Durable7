@@ -102,7 +102,7 @@ Use `rg` for stale path and accidental-rewrite scans. This current-state scan ex
 provenance, where old extraction paths are intentional historical evidence:
 
 ```powershell
-rg -n "C:\\DataStructures\\(Hamt|HamtC|HamtCpp|FingerTree|C\\FingerTree|Cpp\\FingerTree)|sr[s]rc|src[/\\]src|iladimi[r]|T[i]alue|MS[i]C|[i]ersion" README.md docs src --glob "!docs/migration/**" --glob "!src/CSharp/FingerTree/docs/external/**" --glob "!*.pdf"
+rg -n "C:\\DataStructures\\(Hamt|HamtC|HamtCpp|FingerTree|C\\FingerTree|Cpp\\FingerTree)|sr[s]rc|src[/\\]src|iladimi[r]|T[i]alue|MS[i]C|[i]ersion|docs/agent-workflows\\.md" README.md docs src --glob "!docs/migration/**" --glob "!src/CSharp/FingerTree/docs/external/**" --glob "!*.pdf"
 ```
 
 For repository-owned Markdown links:
@@ -120,7 +120,7 @@ foreach ($file in $files) {
         if ($target.StartsWith('<') -and $target.EndsWith('>')) { $target = $target.Substring(1, $target.Length - 2) }
         if ($target -match '^(https?|mailto|app|file)://' -or $target -match '^(https?|mailto|app|file):' -or $target.StartsWith('//') -or $target.StartsWith('#') -or [string]::IsNullOrWhiteSpace($target)) { continue }
         $target = ($target -split '#',2)[0]
-        if ($target -match '^(?<path>.+\.(md|cs|hpp|h|c|cpp|ps1|txt|tex|pdf|sln|csproj)):\d+(-\d+)?$') { $target = $Matches['path'] }
+        if ($target -match '^(?<path>.+\.(md|cs|hpp|h|c|cpp|ps1|txt|tex|pdf|sln|csproj|tsv)):\d+(-\d+)?$') { $target = $Matches['path'] }
         if ([string]::IsNullOrWhiteSpace($target)) { continue }
         $target = [System.Uri]::UnescapeDataString($target)
         $candidate = if ([System.IO.Path]::IsPathRooted($target)) { $target } else { Join-Path (Split-Path $full -Parent) $target }
