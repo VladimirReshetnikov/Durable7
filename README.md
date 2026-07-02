@@ -33,6 +33,12 @@ This document is the canonical repository guidance for Vladimir and the AI codin
 │   ├── docs/
 │   ├── src/
 │   └── tests/
+├── HamtCpp/
+│   ├── build.ps1
+│   ├── README.md
+│   ├── docs/
+│   ├── include/
+│   └── tests/
 └── FingerTree/
     ├── Directory.Build.props
     ├── FingerTree.sln
@@ -47,11 +53,16 @@ This document is the canonical repository guidance for Vladimir and the AI codin
 ## Workspaces
 
 - [Hamt](Hamt/README.md) is a .NET 10 persistent hash-array mapped trie library. It provides `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` with bitmap-indexed 32-way branching, immutable equal-hash collision buckets, comparer-preserving factories, structural sharing across versions, and xUnit/CsCheck model tests against BCL dictionaries and sets.
+- [HamtCpp](HamtCpp/README.md) is a C++20 port of the persistent HAMT library. It provides
+  header-only `persistent_hash_map` and `persistent_hash_set` templates with bitmap-indexed
+  branching, immutable equal-hash collision buckets, custom hash/equality policy objects, structural
+  sharing via immutable `std::shared_ptr` nodes, and deterministic native model tests.
 - [FingerTree](FingerTree/README.md) is a .NET 10 persistent finger-tree library: two engine cores (a tuned catenable deque and a general monoid-measured tree), a full collection family (sorted bag/set/dictionary, priority queue, interval tree, reversible deque), product/sum/built-in measures with a closure-free predicate API, and a rope family (positional, measured, and text). It ships a navigable design-notes document ([FingerTree-Design-Notes.pdf](FingerTree/docs/FingerTree-Design-Notes.pdf), with `.tex` source and a rebuild script alongside), a BenchmarkDotNet harness, three runnable samples, and a three-tier (example + property + model-based command) test suite plus tearable-struct concurrency stress tests.
 
 ## Build and test
 
-Use the local .NET SDK toolchain. The solution targets `net10.0` and uses C# preview features.
+Use the local .NET SDK toolchain for the C# workspaces. Those solutions target `net10.0` and use
+C# preview features. Use the local MSVC C++20 toolchain for `HamtCpp`.
 
 ```powershell
 cd C:\DataStructures\FingerTree
@@ -63,6 +74,10 @@ cd C:\DataStructures\Hamt
 dotnet restore
 dotnet build
 dotnet test .\Hamt.sln
+
+cd C:\DataStructures\HamtCpp
+.\build.ps1 -RunTests
+.\build.ps1 -Configuration Release -RunTests
 ```
 
 Run benchmarks from the benchmark project:
@@ -79,6 +94,8 @@ Release configuration is required for meaningful benchmark numbers.
 - [docs/README.md](docs/README.md) indexes repository-level documentation and migration provenance.
 - [docs/agent-workflows.md](docs/agent-workflows.md) holds compact task-conditional workflow guidance.
 - [Hamt/docs/README.md](Hamt/docs/README.md) indexes the HAMT library's API specification.
+- [HamtCpp/docs/README.md](HamtCpp/docs/README.md) indexes the C++ HAMT port's API
+  specification.
 - [FingerTree/docs/README.md](FingerTree/docs/README.md) indexes the library's specifications, design notes, benchmark notes, and external references.
 
 The large `TECHNICAL_DOCUMENTATION_STANDARD.md` and `XML_DOCUMENTATION_STANDARD.md` files from Tools are intentionally not part of this repository. Keep documentation thorough and current-state oriented, and write XML documentation in semantic terms: contracts, invariants, ordering, failure behavior, complexity, allocation behavior, and examples where they help.
@@ -105,6 +122,8 @@ The expected local Windows environment includes:
 - `git` and `gh` for source-control and GitHub workflows.
 - `python` for ad hoc tooling.
 - .NET SDK 10.0 or newer with the .NET 10 targeting packs.
+- MSVC C++20 toolchain for `HamtCpp`; use Scriptorium's `Import-VisualCppEnvironment.ps1` helper
+  when compiling from a plain PowerShell process.
 - `git-filter-repo` usable as `python -m git_filter_repo` when future history work is needed.
 
 Use `dotnet` directly for C# validation in this local environment.

@@ -5,7 +5,9 @@
 - Audience: Maintainers and AI agents working in the standalone DataStructures repository
 - Scope: Repository-level documentation index
 
-This directory contains repository-level guidance and extraction provenance. Library-specific design and API documentation lives under [Hamt/docs](../Hamt/docs/README.md) and [FingerTree/docs](../FingerTree/docs/README.md).
+This directory contains repository-level guidance and extraction provenance. Library-specific design
+and API documentation lives under [Hamt/docs](../Hamt/docs/README.md),
+[HamtCpp/docs](../HamtCpp/docs/README.md), and [FingerTree/docs](../FingerTree/docs/README.md).
 
 ## Current documents
 
@@ -15,4 +17,7 @@ This directory contains repository-level guidance and extraction provenance. Lib
 
 ## Placement
 
-Put repository-wide reports and migration records here. Put HAMT implementation and API documents under [Hamt/docs](../Hamt/docs/README.md), and FingerTree implementation, API, benchmark, and algorithm documents under [FingerTree/docs](../FingerTree/docs/README.md).
+Put repository-wide reports and migration records here. Put C# HAMT implementation and API
+documents under [Hamt/docs](../Hamt/docs/README.md), C++ HAMT port documents under
+[HamtCpp/docs](../HamtCpp/docs/README.md), and FingerTree implementation, API, benchmark, and
+algorithm documents under [FingerTree/docs](../FingerTree/docs/README.md).
