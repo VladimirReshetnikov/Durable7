@@ -40,6 +40,6 @@ warning policy, and generated-output locations, see the [validation guide](docs/
 
 - `include/tools/data_structures/finger_tree/` contains the public header-first library.
 - `include/tools/data_structures/finger_tree/detail/` contains implementation helpers.
-- `tests/` contains CTest-registered native tests and shared test support.
+- `tests/` contains the [CTest-registered native smoke runner](tests/README.md) and shared test support.
 - `docs/` contains the port plan and C++-specific API, usage, implementation, review, and validation notes.
 - No C++ `samples/` or `benchmarks/` directory is currently checked in; those remain later port-plan milestones.

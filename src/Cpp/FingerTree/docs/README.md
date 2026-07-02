@@ -18,6 +18,8 @@
 - [Usage guide](usage.md) shows public include paths, value-semantics patterns, common update flows, and facade quick starts.
 - [Validation](validation.md) records build, test, stress, warning-policy, generated-output, and
   benchmark-harness-status guidance for this workspace.
+- [Tests README](../tests/README.md) maps the native smoke runner, domain test files, direct executable path, and
+  tearable concurrency stress control.
 
 ## Independent Reviews
 

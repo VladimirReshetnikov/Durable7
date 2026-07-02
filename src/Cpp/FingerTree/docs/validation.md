@@ -60,7 +60,8 @@ once the dependency manager is intentionally introduced and wired into CMake.
 ## Current Coverage
 
 CTest currently registers one executable, `fingertree.smoke`, backed by `tests/fingertree_smoke_tests`.
-It is a local test-runner binary rather than a Catch2/GoogleTest target.
+It is a local test-runner binary rather than a Catch2/GoogleTest target. See the
+[tests README](../tests/README.md) for the source map, direct executable path, and stress-control notes.
 
 The suite covers:
 
