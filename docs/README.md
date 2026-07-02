@@ -21,6 +21,7 @@ Library-specific design and API documentation lives beside each workspace under 
 - [Reference index](reference/README.md) - durable cross-workspace reference material.
 - [Data structure catalog](reference/data-structure-catalog.md) - cross-language catalog of repository-owned data-structure families, public entry points, and primary references.
 - [Documentation navigation matrix](reference/navigation-matrix.md) - task-oriented entry points for usage, API, validation, porting, history, and maintenance work.
+- [Test suite map](reference/test-suite-map.md) - cross-workspace map of test runners, routine commands, stress knobs, sample smoke tests, and benchmark boundaries.
 - [Workspace map](reference/workspace-map.md) - language-first layout, data-structure workspace roles, port lineage, and documentation placement rules.
 
 ## Migration

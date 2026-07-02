@@ -16,7 +16,8 @@ routes a reader to the narrowest document that owns the question.
 | Browse workspaces by language | [Source index](../../src/README.md) | [C](../../src/C/README.md), [C++](../../src/Cpp/README.md), [C#](../../src/CSharp/README.md) |
 | Choose a data structure across languages | [Data-structure catalog](data-structure-catalog.md) | The matching workspace usage guide and API specification or notes |
 | Use an existing collection | The relevant usage guide below | Source tests for executable examples when behavior is subtle |
-| Build or validate a workspace | [Build and validation](../guides/build-and-validation.md) | Workspace validation docs and workspace README |
+| Build or validate a workspace | [Build and validation](../guides/build-and-validation.md) | [Test suite map](test-suite-map.md), workspace validation docs, and workspace README |
+| Understand test coverage | [Test suite map](test-suite-map.md) | Workspace tests README and validation guide |
 | Change public API or semantics | [Porting and semantic parity](../guides/porting-and-semantic-parity.md) | API specs/notes for all affected language workspaces, catalog rows, tests |
 | Update documentation | [Documentation maintenance](../guides/documentation-maintenance.md) | This matrix, the affected workspace docs index, and the catalog |
 | Investigate extraction history | [Migration index](../migration/README.md) | [Extraction provenance](../migration/extraction-provenance.md), [filter-repo commit map](../migration/filter-repo-commit-map.tsv) |
@@ -55,7 +56,7 @@ Use these when behavior, complexity, allocation, ownership, or cross-language pa
 
 | Scope | Document | What it proves |
 | --- | --- | --- |
-| Whole repository | [Build and validation](../guides/build-and-validation.md) | Canonical commands for C#, C, C++, CMake presets, and Markdown checks |
+| Whole repository | [Build and validation](../guides/build-and-validation.md) / [Test suite map](test-suite-map.md) | Canonical commands for C#, C, C++, CMake presets, Markdown checks, and test-suite entry points |
 | C# HAMT | [Validation](../../src/CSharp/Hamt/docs/validation.md) | .NET restore/build/test commands, XML-documentation warning gate, and xUnit/CsCheck coverage |
 | C HAMT | [Validation](../../src/C/Hamt/docs/validation.md) | MSVC C17 build script, Debug/Release commands, warning policy, and native model tests |
 | C++ HAMT | [Validation](../../src/Cpp/Hamt/docs/validation.md) | MSVC C++20 build script, Debug/Release commands, warning policy, and native model tests |
