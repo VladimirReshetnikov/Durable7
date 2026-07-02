@@ -15,3 +15,5 @@
   patterns, iteration, and set algebra for `tds_hamt_map` and `tds_hamt_set`.
 - [Validation](validation.md) records the local MSVC build script, Debug/Release commands, warning
   policy, generated outputs, and native model-test coverage.
+- [Tests README](../tests/README.md) maps the native executable, named test cases, direct executable path,
+  and runner failure behavior.

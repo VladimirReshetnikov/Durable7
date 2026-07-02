@@ -44,7 +44,8 @@ behavior changes, public API changes, policy-object changes, or documentation th
 ## Test Coverage
 
 `tests/persistent_hamt_tests.cpp` is a deterministic native test executable with a small local test
-registry. It prints `[PASS]` lines and exits nonzero if any check fails.
+registry. It prints `[PASS]` lines and exits nonzero if any check fails. See the
+[tests README](../tests/README.md) for named test cases, the direct executable path, and runner failure behavior.
 
 The suite covers:
 

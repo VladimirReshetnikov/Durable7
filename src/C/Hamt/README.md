@@ -23,7 +23,7 @@ version lifetimes.
 
 - `include/Tools/DataStructures/Hamt/hamt.h` contains the public C API.
 - `src/hamt.c` contains the HAMT implementation.
-- `tests/hamt_tests.c` contains deterministic unit and randomized model tests.
+- `tests/` contains the [deterministic native test executable](tests/README.md).
 - `build.ps1` imports the MSVC toolchain through Scriptorium and compiles the test executable.
 - `docs/api-specification.md` documents the C API adaptation and complexity guarantees.
 - `docs/usage.md` provides practical policy, lifetime, update, iteration, and set-algebra examples.

@@ -24,7 +24,7 @@ are expressed as shared root identity rather than object reference identity.
   implementation.
 - `include/Tools/DataStructures/Hamt/persistent_hash_set.hpp` contains the set wrapper and set
   algebra.
-- `tests/persistent_hamt_tests.cpp` contains deterministic unit and randomized model tests.
+- `tests/` contains the [deterministic native test executable](tests/README.md).
 - `build.ps1` imports the MSVC toolchain through Scriptorium and compiles the test executable.
 - `docs/api-specification.md` documents the C++ API adaptation and complexity guarantees.
 - `docs/usage.md` provides practical include, value-semantics, map/set, policy, iteration, and set-algebra examples.

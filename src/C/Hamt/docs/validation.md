@@ -45,7 +45,8 @@ behavior changes, public API changes, ownership-policy changes, or documentation
 ## Test Coverage
 
 `tests/hamt_tests.c` is a deterministic native test executable. It prints `[PASS]` lines and exits nonzero
-on the first failed check.
+on the first failed check. See the [tests README](../tests/README.md) for named test cases, the direct
+executable path, and runner failure behavior.
 
 The suite covers:
 
