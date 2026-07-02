@@ -9,19 +9,26 @@ The repository is organized by programming language first and by data structure 
 
 ```text
 src/
+├── README.md
 ├── C/
+│   ├── README.md
 │   ├── FingerTree/
 │   └── Hamt/
 ├── Cpp/
+│   ├── README.md
 │   ├── FingerTree/
 │   └── Hamt/
 └── CSharp/
+    ├── README.md
     ├── FingerTree/
     └── Hamt/
 ```
 
 This makes language-local build systems, toolchains, include paths, and idioms easy to find while keeping
 the same data-structure families aligned across languages.
+
+Use the [source index](../../src/README.md) when browsing by language, or jump directly to the
+[C](../../src/C/README.md), [C++](../../src/Cpp/README.md), or [C#](../../src/CSharp/README.md) language index.
 
 For the cross-language list of public data-structure surfaces, see the
 [data structure catalog](data-structure-catalog.md).

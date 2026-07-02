@@ -12,7 +12,8 @@ routes a reader to the narrowest document that owns the question.
 
 | Task | Open first | Then inspect |
 | --- | --- | --- |
-| Understand repository layout | [Workspace map](workspace-map.md) | Root [README](../../README.md), [data-structure catalog](data-structure-catalog.md) |
+| Understand repository layout | [Workspace map](workspace-map.md) | Root [README](../../README.md), [source index](../../src/README.md), [data-structure catalog](data-structure-catalog.md) |
+| Browse workspaces by language | [Source index](../../src/README.md) | [C](../../src/C/README.md), [C++](../../src/Cpp/README.md), [C#](../../src/CSharp/README.md) |
 | Choose a data structure across languages | [Data-structure catalog](data-structure-catalog.md) | The matching workspace usage guide and API specification or notes |
 | Use an existing collection | The relevant usage guide below | Source tests for executable examples when behavior is subtle |
 | Build or validate a workspace | [Build and validation](../guides/build-and-validation.md) | Workspace validation docs and workspace README |

@@ -28,7 +28,9 @@ This document is the canonical repository guidance for Vladimir and the AI codin
 │   ├── reference/
 │   └── migration/
 └── src/
+    ├── README.md
     ├── C/
+    │   ├── README.md
     │   ├── Hamt/
     │   │   ├── build.ps1
     │   │   ├── README.md
@@ -47,6 +49,7 @@ This document is the canonical repository guidance for Vladimir and the AI codin
     │       ├── src/
     │       └── tests/
     ├── Cpp/
+    │   ├── README.md
     │   ├── Hamt/
     │   │   ├── build.ps1
     │   │   ├── README.md
@@ -61,6 +64,7 @@ This document is the canonical repository guidance for Vladimir and the AI codin
     │       ├── include/
     │       └── tests/
     └── CSharp/
+        ├── README.md
         ├── Hamt/
         │   ├── Directory.Build.props
         │   ├── Hamt.sln
@@ -80,6 +84,10 @@ This document is the canonical repository guidance for Vladimir and the AI codin
 ```
 
 ## Workspaces
+
+The [source index](src/README.md) and language indexes for [C](src/C/README.md),
+[C++](src/Cpp/README.md), and [C#](src/CSharp/README.md) are the quickest way to browse the
+language-first layout.
 
 - [src/CSharp/Hamt](src/CSharp/Hamt/README.md) is a .NET 10 persistent hash-array mapped trie library. It provides `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` with bitmap-indexed 32-way branching, immutable equal-hash collision buckets, comparer-preserving factories, structural sharing across versions, and xUnit/CsCheck model tests against BCL dictionaries and sets.
 - [src/CSharp/FingerTree](src/CSharp/FingerTree/README.md) is a .NET 10 persistent finger-tree library: two engine cores (a tuned catenable deque and a general monoid-measured tree), a full collection family (sorted bag/set/dictionary, priority queue, interval tree, reversible deque), product/sum/built-in measures with a closure-free predicate API, and a rope family (positional, measured, and text). It ships a navigable design-notes document ([FingerTree-Design-Notes.pdf](src/CSharp/FingerTree/docs/FingerTree-Design-Notes.pdf), with `.tex` source and a rebuild script alongside), a BenchmarkDotNet harness, three runnable samples, and a three-tier (example + property + model-based command) test suite plus tearable-struct concurrency stress tests.
@@ -139,6 +147,7 @@ Release configuration is required for meaningful benchmark numbers.
 ## Documentation
 
 - [docs/README.md](docs/README.md) indexes repository-level documentation and migration provenance.
+- [src/README.md](src/README.md) indexes language-level source workspaces.
 - [docs/guides/README.md](docs/guides/README.md) indexes task-oriented repository procedures.
 - [docs/guides/agent-workflows.md](docs/guides/agent-workflows.md) holds compact task-conditional workflow guidance.
 - [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) is the repository-wide validation matrix and command guide.

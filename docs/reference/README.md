@@ -8,6 +8,8 @@
 Reference documents explain the shape of the repository and where long-lived information belongs.
 They should be updated when layout, ownership, or cross-workspace relationships change.
 
+For language-level source browsing, start with the [`src` index](../../src/README.md).
+
 ## Current Reference
 
 - [Data structure catalog](data-structure-catalog.md) - cross-language catalog of repository-owned data-structure families, public entry points, and primary references.
