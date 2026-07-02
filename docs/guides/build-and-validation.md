@@ -97,10 +97,11 @@ Release configuration is required for meaningful benchmark numbers.
 
 ## Documentation Checks
 
-Use `rg` for stale path and accidental-rewrite scans:
+Use `rg` for stale path and accidental-rewrite scans. This current-state scan excludes migration
+provenance, where old extraction paths are intentional historical evidence:
 
 ```powershell
-rg -n "C:\\DataStructures\\(Hamt|HamtC|HamtCpp|FingerTree|C\\FingerTree|Cpp\\FingerTree)|sr[s]rc|src[/\\]src|iladimi[r]|T[i]alue|MS[i]C|[i]ersion" README.md docs src --glob "!src/CSharp/FingerTree/docs/external/**" --glob "!*.pdf"
+rg -n "C:\\DataStructures\\(Hamt|HamtC|HamtCpp|FingerTree|C\\FingerTree|Cpp\\FingerTree)|sr[s]rc|src[/\\]src|iladimi[r]|T[i]alue|MS[i]C|[i]ersion" README.md docs src --glob "!docs/migration/**" --glob "!src/CSharp/FingerTree/docs/external/**" --glob "!*.pdf"
 ```
 
 For repository-owned Markdown links:

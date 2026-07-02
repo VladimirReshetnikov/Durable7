@@ -16,7 +16,7 @@ Use the narrowest layer that owns the information:
 | --- | --- | --- |
 | Root `README.md` / `AGENTS.md` / `CLAUDE.md` | Repository entry point, canonical agent guidance, top-level build and layout orientation | Workspaces list, local environment, version-control policy |
 | [`docs/guides`](README.md) | Procedures and repeatable workflows | Validation commands, agent workflow guidance, documentation maintenance |
-| [`docs/reference`](../reference/README.md) | Durable cross-workspace maps and facts | Language/data-structure layout, port lineage |
+| [`docs/reference`](../reference/README.md) | Durable cross-workspace maps and facts | Language/data-structure layout, port lineage, data-structure catalog |
 | [`docs/migration`](../migration/extraction-provenance.md) | Extraction, history filtering, and provenance records | Filter-repo notes, commit maps |
 | Workspace `README.md` | Workspace orientation and local entry points | Purpose, layout, primary build/test command |
 | Workspace `docs/` | API contracts, design notes, validation details, benchmark notes, review reports | `src/CSharp/FingerTree/docs/api-specification.md` |
@@ -46,7 +46,7 @@ Use this checklist when changing repository behavior:
 | Change | Documentation to inspect |
 | --- | --- |
 | Workspace move, rename, or new workspace | Root `README.md`, [`workspace-map.md`](../reference/workspace-map.md), [`build-and-validation.md`](build-and-validation.md), affected workspace README/docs indexes |
-| Public API change | Workspace API specification, XML docs, examples, README surface summary, relevant port notes |
+| Public API change | Workspace API specification, XML docs, examples, README surface summary, relevant port notes, [`data-structure-catalog.md`](../reference/data-structure-catalog.md) when a long-lived public data-structure surface changes |
 | Complexity, allocation, or concurrency behavior | API specification, benchmark notes, validation guide, persistence/concurrency docs, tests called out as evidence |
 | Build/test command change | Root `README.md`, [`build-and-validation.md`](build-and-validation.md), affected workspace README, validation docs |
 | Benchmark result or benchmark harness change | Workspace benchmark README, benchmark notes, root benchmark summary if claims changed |
@@ -99,10 +99,11 @@ from a content hash. Do this for review reports, defect reports, and generated a
 
 ## Validation
 
-For documentation-only changes, at minimum run:
+For documentation-only changes, at minimum run this current-state scan, excluding migration
+provenance where old extraction paths are intentional:
 
 ```powershell
-rg -n "C:\\DataStructures\\(Hamt|HamtC|HamtCpp|FingerTree|C\\FingerTree|Cpp\\FingerTree)|sr[s]rc|src[/\\]src|iladimi[r]|T[i]alue|MS[i]C|[i]ersion|docs/agent-workflows\\.md" README.md docs src --glob "!src/CSharp/FingerTree/docs/external/**" --glob "!*.pdf"
+rg -n "C:\\DataStructures\\(Hamt|HamtC|HamtCpp|FingerTree|C\\FingerTree|Cpp\\FingerTree)|sr[s]rc|src[/\\]src|iladimi[r]|T[i]alue|MS[i]C|[i]ersion|docs/agent-workflows\\.md" README.md docs src --glob "!docs/migration/**" --glob "!src/CSharp/FingerTree/docs/external/**" --glob "!*.pdf"
 git diff --check
 ```
 

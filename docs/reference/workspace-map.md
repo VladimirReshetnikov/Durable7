@@ -23,6 +23,9 @@ src/
 This makes language-local build systems, toolchains, include paths, and idioms easy to find while keeping
 the same data-structure families aligned across languages.
 
+For the cross-language list of public data-structure surfaces, see the
+[data structure catalog](data-structure-catalog.md).
+
 ## Workspace Roles
 
 | Workspace | Role | Main entry points | Local docs |

@@ -18,6 +18,7 @@ Library-specific design and API documentation lives beside each workspace under 
 ## Reference
 
 - [Reference index](reference/README.md) - durable cross-workspace reference material.
+- [Data structure catalog](reference/data-structure-catalog.md) - cross-language catalog of repository-owned data-structure families, public entry points, and primary references.
 - [Workspace map](reference/workspace-map.md) - language-first layout, data-structure workspace roles, port lineage, and documentation placement rules.
 
 ## Migration
