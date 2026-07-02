@@ -48,6 +48,11 @@ typedef struct map_buffer {
     size_t count;
 } map_buffer;
 
+typedef struct int_summary {
+    long long sum;
+    size_t count;
+} int_summary;
+
 static void init_int_policy(ft_tree_policy* policy)
 {
     ft_value_type value_type;
@@ -83,6 +88,13 @@ static void collect_map_entry(const void* key, const void* value, void* context)
     buffer->keys[buffer->count] = *(const int*)key;
     buffer->values[buffer->count] = *(const int*)value;
     ++buffer->count;
+}
+
+static void summarize_int(const void* value, void* context)
+{
+    int_summary* summary = (int_summary*)context;
+    summary->sum += *(const int*)value;
+    ++summary->count;
 }
 
 static bool size_reaches(const void* measure, void* context)
@@ -457,6 +469,88 @@ static void test_sorted_map(void)
     ft_sorted_map_dispose(&map);
 }
 
+static void test_rope(void)
+{
+    ft_value_type int_type;
+    ft_value_type_init(&int_type, sizeof(int));
+
+    int values[3000];
+    long long expected_sum = 0;
+    for (int index = 0; index != 3000; ++index) {
+        values[index] = index;
+        expected_sum += index;
+    }
+
+    ft_rope rope;
+    REQUIRE_STATUS(ft_rope_from_array(&rope, &int_type, values, 3000), FT_STATUS_OK);
+    REQUIRE(ft_rope_size(&rope) == 3000);
+
+    const int probes[] = {0, 2047, 2048, 2999};
+    for (size_t index = 0; index != sizeof(probes) / sizeof(probes[0]); ++index) {
+        int actual = -1;
+        REQUIRE_STATUS(ft_rope_at(&rope, (size_t)probes[index], &actual), FT_STATUS_OK);
+        REQUIRE(actual == probes[index]);
+    }
+
+    int_summary summary;
+    summary.sum = 0;
+    summary.count = 0;
+    REQUIRE_STATUS(ft_rope_visit(&rope, summarize_int, &summary), FT_STATUS_OK);
+    REQUIRE(summary.count == 3000);
+    REQUIRE(summary.sum == expected_sum);
+
+    ft_rope_split_result split;
+    REQUIRE_STATUS(ft_rope_split_at(&rope, 2050, &split), FT_STATUS_OK);
+    REQUIRE(ft_rope_size(&split.left) == 2050);
+    REQUIRE(ft_rope_size(&split.right) == 950);
+    int boundary_left = -1;
+    int boundary_right = -1;
+    REQUIRE_STATUS(ft_rope_at(&split.left, 2049, &boundary_left), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_rope_at(&split.right, 0, &boundary_right), FT_STATUS_OK);
+    REQUIRE(boundary_left == 2049);
+    REQUIRE(boundary_right == 2050);
+
+    ft_rope joined;
+    REQUIRE_STATUS(ft_rope_concat(&split.left, &split.right, &joined), FT_STATUS_OK);
+    REQUIRE(ft_rope_size(&joined) == 3000);
+    for (size_t index = 0; index < 3000; index += 257) {
+        int actual = -1;
+        REQUIRE_STATUS(ft_rope_at(&joined, index, &actual), FT_STATUS_OK);
+        REQUIRE(actual == (int)index);
+    }
+
+    int inserted_value = 7777;
+    ft_rope inserted;
+    REQUIRE_STATUS(ft_rope_insert_at(&joined, 3, &inserted_value, &inserted), FT_STATUS_OK);
+    REQUIRE(ft_rope_size(&inserted) == 3001);
+    int actual = -1;
+    REQUIRE_STATUS(ft_rope_at(&inserted, 3, &actual), FT_STATUS_OK);
+    REQUIRE(actual == inserted_value);
+    REQUIRE_STATUS(ft_rope_at(&joined, 3, &actual), FT_STATUS_OK);
+    REQUIRE(actual == 3);
+
+    ft_rope removed;
+    REQUIRE_STATUS(ft_rope_remove_at(&inserted, 3, &removed), FT_STATUS_OK);
+    REQUIRE(ft_rope_size(&removed) == 3000);
+    REQUIRE_STATUS(ft_rope_at(&removed, 3, &actual), FT_STATUS_OK);
+    REQUIRE(actual == 3);
+
+    int pushed = 9001;
+    ft_rope pushed_rope;
+    REQUIRE_STATUS(ft_rope_push_back(&removed, &pushed, &pushed_rope), FT_STATUS_OK);
+    REQUIRE(ft_rope_size(&pushed_rope) == 3001);
+    REQUIRE_STATUS(ft_rope_at(&pushed_rope, 3000, &actual), FT_STATUS_OK);
+    REQUIRE(actual == pushed);
+
+    ft_rope_dispose(&pushed_rope);
+    ft_rope_dispose(&removed);
+    ft_rope_dispose(&inserted);
+    ft_rope_dispose(&joined);
+    ft_rope_dispose(&split.left);
+    ft_rope_dispose(&split.right);
+    ft_rope_dispose(&rope);
+}
+
 static void test_interval_tree(void)
 {
     ft_interval_tree_i64 tree;
@@ -553,6 +647,7 @@ int main(void)
     run_test("measure locate and split", test_measure_locate_and_split);
     run_test("sorted set and multiset", test_sorted_set_and_multiset);
     run_test("sorted map", test_sorted_map);
+    run_test("rope", test_rope);
     run_test("priority queue", test_priority_queue);
     run_test("interval tree", test_interval_tree);
     run_test("text rope", test_text_rope);

@@ -31,12 +31,13 @@ Implemented in this checkpoint:
 - persistent sorted set, sorted multiset, and sorted map wrappers using a runtime comparator;
 - generic persistent minimum-priority queue with caller-supplied value and priority copy policies;
 - signed 64-bit closed-interval tree facade with insertion, removal, containment, first-overlap, and overlap count;
+- generic chunked positional rope with cumulative-length indexing, split, concat, insertion, removal, and traversal;
 - character text rope facade with insertion/removal/indexing and basic line navigation.
 
 Deferred from the C++ port:
 
 - atomic lazy-middle cells and the full persistent amortization/concurrency argument;
-- generic endpoint interval tree, measured rope chunks, and samples/benchmarks;
+- generic endpoint interval tree, measured rope navigation, and samples/benchmarks;
 - allocator customization and typed macro-generation helpers.
 
 The strict core is still useful for validating C ownership, policy, and ABI shape before porting the lazy

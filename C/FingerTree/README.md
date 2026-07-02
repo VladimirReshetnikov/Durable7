@@ -21,6 +21,7 @@ The related C-facing surfaces currently included are:
   surface;
 - `ft_priority_queue`, a generic persistent minimum-priority queue with FIFO tie-breaking for equal priorities;
 - `ft_interval_tree_i64`, a closed-interval tree facade for signed 64-bit endpoints;
+- `ft_rope`, a generic persistent chunked positional sequence backed by measured chunk leaves;
 - `ft_text_rope`, a small character-rope facade with insertion, removal, indexing, line count, and line/column
   navigation.
 

@@ -243,6 +243,39 @@ ft_status ft_sorted_map_remove(
     ft_sorted_map* result);
 ft_status ft_sorted_map_visit(const ft_sorted_map* map, ft_sorted_map_visit_fn visitor, void* context);
 
+typedef struct ft_rope_chunk_context ft_rope_chunk_context;
+
+typedef struct ft_rope {
+    ft_tree_policy policy;
+    ft_tree tree;
+    ft_value_type value_type;
+    size_t max_chunk_length;
+    ft_rope_chunk_context* chunk_context;
+} ft_rope;
+
+typedef struct ft_rope_split_result {
+    ft_rope left;
+    ft_rope right;
+} ft_rope_split_result;
+
+ft_status ft_rope_init(ft_rope* rope, const ft_value_type* value_type);
+ft_status ft_rope_from_array(
+    ft_rope* rope,
+    const ft_value_type* value_type,
+    const void* values,
+    size_t count);
+ft_status ft_rope_copy(const ft_rope* source, ft_rope* destination);
+void ft_rope_dispose(ft_rope* rope);
+bool ft_rope_empty(const ft_rope* rope);
+size_t ft_rope_size(const ft_rope* rope);
+ft_status ft_rope_at(const ft_rope* rope, size_t index, void* destination);
+ft_status ft_rope_push_back(const ft_rope* rope, const void* value, ft_rope* result);
+ft_status ft_rope_insert_at(const ft_rope* rope, size_t index, const void* value, ft_rope* result);
+ft_status ft_rope_remove_at(const ft_rope* rope, size_t index, ft_rope* result);
+ft_status ft_rope_split_at(const ft_rope* rope, size_t index, ft_rope_split_result* result);
+ft_status ft_rope_concat(const ft_rope* left, const ft_rope* right, ft_rope* result);
+ft_status ft_rope_visit(const ft_rope* rope, ft_visit_fn visitor, void* context);
+
 typedef struct ft_priority_queue_entry_context ft_priority_queue_entry_context;
 
 typedef struct ft_priority_queue {
