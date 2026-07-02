@@ -1962,6 +1962,8 @@ static ft_status ft_sorted_bounds(
         } else {
             hi = mid;
         }
+
+        ft_value_destroy(&set->tree.policy->value, current);
     }
 
     *lower = lo;
@@ -1979,10 +1981,11 @@ static ft_status ft_sorted_bounds(
         } else {
             lo = mid + 1;
         }
+
+        ft_value_destroy(&set->tree.policy->value, current);
     }
 
     *upper = lo;
-    ft_value_destroy(&set->tree.policy->value, current);
     free(current);
     return FT_STATUS_OK;
 }
@@ -3860,6 +3863,391 @@ ft_status ft_interval_tree_i64_at(const ft_interval_tree_i64* tree, size_t index
     }
 
     return ft_sorted_multiset_at(&tree->intervals, index, destination);
+}
+
+typedef struct ft_interval_entry {
+    void* low;
+    void* high;
+} ft_interval_entry;
+
+struct ft_interval_tree_context {
+    ft_value_type endpoint_type;
+    ft_compare_fn compare_endpoint;
+    void* compare_context;
+};
+
+static int ft_interval_endpoint_compare(const ft_interval_tree_context* context, const void* left, const void* right)
+{
+    return context->compare_endpoint(left, right, context->compare_context);
+}
+
+static bool ft_interval_entry_valid(const ft_interval_tree_context* context, const void* low, const void* high)
+{
+    return ft_interval_endpoint_compare(context, low, high) <= 0;
+}
+
+static bool ft_interval_entry_overlaps(
+    const ft_interval_tree_context* context,
+    const ft_interval_entry* left,
+    const void* query_low,
+    const void* query_high)
+{
+    return ft_interval_endpoint_compare(context, left->low, query_high) <= 0 &&
+        ft_interval_endpoint_compare(context, query_low, left->high) <= 0;
+}
+
+static void ft_interval_entry_destroy_value(ft_interval_tree_context* context, ft_interval_entry* entry)
+{
+    if (entry->low != NULL) {
+        ft_value_destroy(&context->endpoint_type, entry->low);
+        free(entry->low);
+    }
+
+    if (entry->high != NULL) {
+        ft_value_destroy(&context->endpoint_type, entry->high);
+        free(entry->high);
+    }
+
+    entry->low = NULL;
+    entry->high = NULL;
+}
+
+static void ft_interval_entry_copy(void* destination, const void* source, void* context)
+{
+    ft_interval_tree_context* interval_context = (ft_interval_tree_context*)context;
+    const ft_interval_entry* source_entry = (const ft_interval_entry*)source;
+    ft_interval_entry* destination_entry = (ft_interval_entry*)destination;
+    destination_entry->low = ft_allocate(interval_context->endpoint_type.size);
+    destination_entry->high = ft_allocate(interval_context->endpoint_type.size);
+    if (destination_entry->low == NULL || destination_entry->high == NULL) {
+        abort();
+    }
+
+    ft_value_copy(&interval_context->endpoint_type, destination_entry->low, source_entry->low);
+    ft_value_copy(&interval_context->endpoint_type, destination_entry->high, source_entry->high);
+}
+
+static void ft_interval_entry_destroy(void* value, void* context)
+{
+    ft_interval_entry_destroy_value((ft_interval_tree_context*)context, (ft_interval_entry*)value);
+}
+
+static int ft_interval_entry_compare(const void* left, const void* right, void* context)
+{
+    ft_interval_tree_context* interval_context = (ft_interval_tree_context*)context;
+    const ft_interval_entry* left_entry = (const ft_interval_entry*)left;
+    const ft_interval_entry* right_entry = (const ft_interval_entry*)right;
+    const int low_comparison = ft_interval_endpoint_compare(interval_context, left_entry->low, right_entry->low);
+    if (low_comparison != 0) {
+        return low_comparison;
+    }
+
+    return ft_interval_endpoint_compare(interval_context, left_entry->high, right_entry->high);
+}
+
+static ft_status ft_interval_entry_init(
+    const ft_interval_tree* tree,
+    const void* low,
+    const void* high,
+    ft_interval_entry* entry)
+{
+    entry->low = ft_allocate(tree->endpoint_type.size);
+    entry->high = ft_allocate(tree->endpoint_type.size);
+    if (entry->low == NULL || entry->high == NULL) {
+        ft_interval_entry_destroy_value(tree->interval_context, entry);
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    ft_value_copy(&tree->endpoint_type, entry->low, low);
+    ft_value_copy(&tree->endpoint_type, entry->high, high);
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_interval_tree_configure(
+    ft_interval_tree* tree,
+    const ft_value_type* endpoint_type,
+    ft_compare_fn compare_endpoint,
+    void* compare_context)
+{
+    tree->interval_context = (ft_interval_tree_context*)calloc(1, sizeof(*tree->interval_context));
+    if (tree->interval_context == NULL) {
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    tree->endpoint_type = *endpoint_type;
+    tree->compare_endpoint = compare_endpoint;
+    tree->compare_context = compare_context;
+    tree->interval_context->endpoint_type = *endpoint_type;
+    tree->interval_context->compare_endpoint = compare_endpoint;
+    tree->interval_context->compare_context = compare_context;
+
+    tree->policy.value.size = sizeof(ft_interval_entry);
+    tree->policy.value.copy = ft_interval_entry_copy;
+    tree->policy.value.destroy = ft_interval_entry_destroy;
+    tree->policy.value.context = tree->interval_context;
+    ft_size_measure_policy_init(&tree->policy.measure);
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_interval_tree_prepare_result(const ft_interval_tree* source, ft_interval_tree* result)
+{
+    (void)memset(result, 0, sizeof(*result));
+    return ft_interval_tree_configure(
+        result,
+        &source->endpoint_type,
+        source->compare_endpoint,
+        source->compare_context);
+}
+
+ft_status ft_interval_tree_init(
+    ft_interval_tree* tree,
+    const ft_value_type* endpoint_type,
+    ft_compare_fn compare_endpoint,
+    void* compare_context)
+{
+    if (tree == NULL || endpoint_type == NULL || endpoint_type->size == 0 || compare_endpoint == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    (void)memset(tree, 0, sizeof(*tree));
+    ft_status status = ft_interval_tree_configure(tree, endpoint_type, compare_endpoint, compare_context);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_sorted_multiset_init(
+        &tree->intervals,
+        &tree->policy,
+        ft_interval_entry_compare,
+        tree->interval_context);
+    if (status != FT_STATUS_OK) {
+        free(tree->interval_context);
+        (void)memset(tree, 0, sizeof(*tree));
+        return status;
+    }
+
+    return FT_STATUS_OK;
+}
+
+ft_status ft_interval_tree_copy(const ft_interval_tree* source, ft_interval_tree* destination)
+{
+    if (source == NULL || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_status status = ft_interval_tree_prepare_result(source, destination);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_sorted_multiset_copy(&source->intervals, &destination->intervals);
+    if (status != FT_STATUS_OK) {
+        free(destination->interval_context);
+        (void)memset(destination, 0, sizeof(*destination));
+        return status;
+    }
+
+    destination->intervals.tree.policy = &destination->policy;
+    destination->intervals.compare_context = destination->interval_context;
+    return FT_STATUS_OK;
+}
+
+void ft_interval_tree_dispose(ft_interval_tree* tree)
+{
+    if (tree == NULL) {
+        return;
+    }
+
+    ft_sorted_multiset_dispose(&tree->intervals);
+    free(tree->interval_context);
+    (void)memset(tree, 0, sizeof(*tree));
+}
+
+bool ft_interval_tree_empty(const ft_interval_tree* tree)
+{
+    return tree == NULL || ft_sorted_multiset_empty(&tree->intervals);
+}
+
+size_t ft_interval_tree_size(const ft_interval_tree* tree)
+{
+    return tree == NULL ? 0 : ft_sorted_multiset_size(&tree->intervals);
+}
+
+ft_status ft_interval_tree_insert(
+    const ft_interval_tree* tree,
+    const void* low,
+    const void* high,
+    ft_interval_tree* result)
+{
+    if (tree == NULL || low == NULL || high == NULL || result == NULL ||
+        !ft_interval_entry_valid(tree->interval_context, low, high)) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_interval_entry entry;
+    ft_status status = ft_interval_entry_init(tree, low, high, &entry);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_interval_tree_prepare_result(tree, result);
+    if (status != FT_STATUS_OK) {
+        ft_interval_entry_destroy_value(tree->interval_context, &entry);
+        return status;
+    }
+
+    status = ft_sorted_multiset_add(&tree->intervals, &entry, &result->intervals);
+    ft_interval_entry_destroy_value(tree->interval_context, &entry);
+    if (status != FT_STATUS_OK) {
+        ft_interval_tree_dispose(result);
+        return status;
+    }
+
+    result->intervals.tree.policy = &result->policy;
+    result->intervals.compare_context = result->interval_context;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_interval_tree_remove_one(
+    const ft_interval_tree* tree,
+    const void* low,
+    const void* high,
+    ft_interval_tree* result)
+{
+    if (tree == NULL || low == NULL || high == NULL || result == NULL ||
+        !ft_interval_entry_valid(tree->interval_context, low, high)) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_interval_entry key;
+    key.low = (void*)low;
+    key.high = (void*)high;
+
+    ft_status status = ft_interval_tree_prepare_result(tree, result);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_sorted_multiset_remove_one(&tree->intervals, &key, &result->intervals);
+    if (status != FT_STATUS_OK) {
+        ft_interval_tree_dispose(result);
+        return status;
+    }
+
+    result->intervals.tree.policy = &result->policy;
+    result->intervals.compare_context = result->interval_context;
+    return FT_STATUS_OK;
+}
+
+bool ft_interval_tree_contains(const ft_interval_tree* tree, const void* low, const void* high)
+{
+    if (tree == NULL || low == NULL || high == NULL ||
+        !ft_interval_entry_valid(tree->interval_context, low, high)) {
+        return false;
+    }
+
+    ft_interval_entry key;
+    key.low = (void*)low;
+    key.high = (void*)high;
+    return ft_sorted_multiset_contains(&tree->intervals, &key);
+}
+
+ft_status ft_interval_tree_try_find_overlap(
+    const ft_interval_tree* tree,
+    const void* query_low,
+    const void* query_high,
+    bool* found,
+    void* overlap_low,
+    void* overlap_high)
+{
+    if (tree == NULL || query_low == NULL || query_high == NULL || found == NULL ||
+        !ft_interval_entry_valid(tree->interval_context, query_low, query_high)) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    *found = false;
+    const size_t count = ft_interval_tree_size(tree);
+    for (size_t index = 0; index != count; ++index) {
+        ft_interval_entry current;
+        ft_status status = ft_sorted_multiset_at(&tree->intervals, index, &current);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        if (ft_interval_entry_overlaps(tree->interval_context, &current, query_low, query_high)) {
+            if (overlap_low != NULL) {
+                ft_value_copy(&tree->endpoint_type, overlap_low, current.low);
+            }
+
+            if (overlap_high != NULL) {
+                ft_value_copy(&tree->endpoint_type, overlap_high, current.high);
+            }
+
+            ft_interval_entry_destroy_value(tree->interval_context, &current);
+            *found = true;
+            return FT_STATUS_OK;
+        }
+
+        ft_interval_entry_destroy_value(tree->interval_context, &current);
+    }
+
+    return FT_STATUS_OK;
+}
+
+size_t ft_interval_tree_count_overlaps(
+    const ft_interval_tree* tree,
+    const void* query_low,
+    const void* query_high)
+{
+    if (tree == NULL || query_low == NULL || query_high == NULL ||
+        !ft_interval_entry_valid(tree->interval_context, query_low, query_high)) {
+        return 0;
+    }
+
+    size_t overlaps = 0;
+    const size_t count = ft_interval_tree_size(tree);
+    for (size_t index = 0; index != count; ++index) {
+        ft_interval_entry current;
+        if (ft_sorted_multiset_at(&tree->intervals, index, &current) != FT_STATUS_OK) {
+            return overlaps;
+        }
+
+        if (ft_interval_entry_overlaps(tree->interval_context, &current, query_low, query_high)) {
+            ++overlaps;
+        }
+
+        ft_interval_entry_destroy_value(tree->interval_context, &current);
+    }
+
+    return overlaps;
+}
+
+ft_status ft_interval_tree_at(
+    const ft_interval_tree* tree,
+    size_t index,
+    void* low,
+    void* high)
+{
+    if (tree == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_interval_entry entry;
+    ft_status status = ft_sorted_multiset_at(&tree->intervals, index, &entry);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (low != NULL) {
+        ft_value_copy(&tree->endpoint_type, low, entry.low);
+    }
+
+    if (high != NULL) {
+        ft_value_copy(&tree->endpoint_type, high, entry.high);
+    }
+
+    ft_interval_entry_destroy_value(tree->interval_context, &entry);
+    return FT_STATUS_OK;
 }
 
 static void ft_count_newlines(const void* value, void* context)

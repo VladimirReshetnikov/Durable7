@@ -39,6 +39,8 @@ The bootstrap test executable covers:
   removal, append, and persistence;
 - priority queue minimum-first drain order and FIFO stability for equal priorities;
 - signed 64-bit interval insertion, ordering, containment, removal, first-overlap, and overlap counting;
+- generic endpoint interval insertion, ordering, containment, removal, invalid interval rejection, first-overlap,
+  overlap counting, and persistence;
 - text rope construction, editing, indexing, line count, line/column navigation, and traversal.
 
 Both `msvc-debug` and `msvc-release` are expected to build warning-free under `/W4 /WX`.

@@ -594,6 +594,62 @@ static void test_interval_tree(void)
     ft_interval_tree_i64_dispose(&tree);
 }
 
+static void test_generic_interval_tree(void)
+{
+    ft_value_type int_type;
+    ft_value_type_init(&int_type, sizeof(int));
+
+    ft_interval_tree tree;
+    REQUIRE_STATUS(ft_interval_tree_init(&tree, &int_type, compare_ints, NULL), FT_STATUS_OK);
+
+    const int lows[] = {5, 1, 4};
+    const int highs[] = {8, 3, 6};
+    for (size_t index = 0; index != sizeof(lows) / sizeof(lows[0]); ++index) {
+        ft_interval_tree next;
+        REQUIRE_STATUS(ft_interval_tree_insert(&tree, &lows[index], &highs[index], &next), FT_STATUS_OK);
+        ft_interval_tree_dispose(&tree);
+        tree = next;
+    }
+
+    REQUIRE(ft_interval_tree_size(&tree) == 3);
+
+    int low = 0;
+    int high = 0;
+    REQUIRE_STATUS(ft_interval_tree_at(&tree, 0, &low, &high), FT_STATUS_OK);
+    REQUIRE(low == 1);
+    REQUIRE(high == 3);
+
+    int query_low = 6;
+    int query_high = 7;
+    REQUIRE(ft_interval_tree_count_overlaps(&tree, &query_low, &query_high) == 2);
+
+    bool found = false;
+    low = -1;
+    high = -1;
+    query_low = 2;
+    query_high = 2;
+    REQUIRE_STATUS(ft_interval_tree_try_find_overlap(&tree, &query_low, &query_high, &found, &low, &high), FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(low == 1);
+    REQUIRE(high == 3);
+
+    int remove_low = 5;
+    int remove_high = 8;
+    REQUIRE(ft_interval_tree_contains(&tree, &remove_low, &remove_high));
+    ft_interval_tree removed;
+    REQUIRE_STATUS(ft_interval_tree_remove_one(&tree, &remove_low, &remove_high, &removed), FT_STATUS_OK);
+    REQUIRE(!ft_interval_tree_contains(&removed, &remove_low, &remove_high));
+    REQUIRE(ft_interval_tree_contains(&tree, &remove_low, &remove_high));
+
+    int invalid_low = 9;
+    int invalid_high = 1;
+    ft_interval_tree invalid;
+    REQUIRE_STATUS(ft_interval_tree_insert(&tree, &invalid_low, &invalid_high, &invalid), FT_STATUS_INVALID_ARGUMENT);
+
+    ft_interval_tree_dispose(&removed);
+    ft_interval_tree_dispose(&tree);
+}
+
 static void test_text_rope(void)
 {
     ft_text_rope rope;
@@ -635,8 +691,10 @@ static void run_test(const char* name, void (*test)(void))
     test();
     if (g_failures == before) {
         (void)printf("[pass] %s\n", name);
+        (void)fflush(stdout);
     } else {
         (void)fprintf(stderr, "[fail] %s\n", name);
+        (void)fflush(stderr);
     }
 }
 
@@ -650,6 +708,7 @@ int main(void)
     run_test("rope", test_rope);
     run_test("priority queue", test_priority_queue);
     run_test("interval tree", test_interval_tree);
+    run_test("generic interval tree", test_generic_interval_tree);
     run_test("text rope", test_text_rope);
 
     if (g_failures != 0) {

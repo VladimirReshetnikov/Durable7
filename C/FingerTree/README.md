@@ -20,7 +20,8 @@ The related C-facing surfaces currently included are:
 - `ft_sorted_set`, `ft_sorted_multiset`, and `ft_sorted_map`, persistent sorted wrappers over the deque/tree
   surface;
 - `ft_priority_queue`, a generic persistent minimum-priority queue with FIFO tie-breaking for equal priorities;
-- `ft_interval_tree_i64`, a closed-interval tree facade for signed 64-bit endpoints;
+- `ft_interval_tree`, a generic closed-interval tree facade over caller-supplied endpoint policies;
+- `ft_interval_tree_i64`, a convenience closed-interval facade for signed 64-bit endpoints;
 - `ft_rope`, a generic persistent chunked positional sequence backed by measured chunk leaves;
 - `ft_text_rope`, a small character-rope facade with insertion, removal, indexing, line count, and line/column
   navigation.

@@ -348,6 +348,54 @@ ft_status ft_interval_tree_i64_try_find_overlap(
 size_t ft_interval_tree_i64_count_overlaps(const ft_interval_tree_i64* tree, ft_interval_i64 query);
 ft_status ft_interval_tree_i64_at(const ft_interval_tree_i64* tree, size_t index, ft_interval_i64* destination);
 
+typedef struct ft_interval_tree_context ft_interval_tree_context;
+
+typedef struct ft_interval_tree {
+    ft_tree_policy policy;
+    ft_sorted_multiset intervals;
+    ft_value_type endpoint_type;
+    ft_compare_fn compare_endpoint;
+    void* compare_context;
+    ft_interval_tree_context* interval_context;
+} ft_interval_tree;
+
+ft_status ft_interval_tree_init(
+    ft_interval_tree* tree,
+    const ft_value_type* endpoint_type,
+    ft_compare_fn compare_endpoint,
+    void* compare_context);
+ft_status ft_interval_tree_copy(const ft_interval_tree* source, ft_interval_tree* destination);
+void ft_interval_tree_dispose(ft_interval_tree* tree);
+bool ft_interval_tree_empty(const ft_interval_tree* tree);
+size_t ft_interval_tree_size(const ft_interval_tree* tree);
+ft_status ft_interval_tree_insert(
+    const ft_interval_tree* tree,
+    const void* low,
+    const void* high,
+    ft_interval_tree* result);
+ft_status ft_interval_tree_remove_one(
+    const ft_interval_tree* tree,
+    const void* low,
+    const void* high,
+    ft_interval_tree* result);
+bool ft_interval_tree_contains(const ft_interval_tree* tree, const void* low, const void* high);
+ft_status ft_interval_tree_try_find_overlap(
+    const ft_interval_tree* tree,
+    const void* query_low,
+    const void* query_high,
+    bool* found,
+    void* overlap_low,
+    void* overlap_high);
+size_t ft_interval_tree_count_overlaps(
+    const ft_interval_tree* tree,
+    const void* query_low,
+    const void* query_high);
+ft_status ft_interval_tree_at(
+    const ft_interval_tree* tree,
+    size_t index,
+    void* low,
+    void* high);
+
 typedef struct ft_text_rope {
     ft_tree_policy policy;
     ft_tree tree;
