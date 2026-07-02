@@ -26,6 +26,13 @@ This document is the canonical repository guidance for Vladimir and the AI codin
 │   ├── README.md
 │   ├── agent-workflows.md
 │   └── migration/
+├── Hamt/
+│   ├── Directory.Build.props
+│   ├── Hamt.sln
+│   ├── README.md
+│   ├── docs/
+│   ├── src/
+│   └── tests/
 └── FingerTree/
     ├── Directory.Build.props
     ├── FingerTree.sln
@@ -39,6 +46,7 @@ This document is the canonical repository guidance for Vladimir and the AI codin
 
 ## Workspaces
 
+- [Hamt](Hamt/README.md) is a .NET 10 persistent hash-array mapped trie library. It provides `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` with bitmap-indexed 32-way branching, immutable equal-hash collision buckets, comparer-preserving factories, structural sharing across versions, and xUnit/CsCheck model tests against BCL dictionaries and sets.
 - [FingerTree](FingerTree/README.md) is a .NET 10 persistent finger-tree library: two engine cores (a tuned catenable deque and a general monoid-measured tree), a full collection family (sorted bag/set/dictionary, priority queue, interval tree, reversible deque), product/sum/built-in measures with a closure-free predicate API, and a rope family (positional, measured, and text). It ships a navigable design-notes document ([FingerTree-Design-Notes.pdf](FingerTree/docs/FingerTree-Design-Notes.pdf), with `.tex` source and a rebuild script alongside), a BenchmarkDotNet harness, three runnable samples, and a three-tier (example + property + model-based command) test suite plus tearable-struct concurrency stress tests.
 
 ## Build and test
@@ -50,6 +58,11 @@ cd C:\DataStructures\FingerTree
 dotnet restore
 dotnet build
 dotnet test .\FingerTree.sln
+
+cd C:\DataStructures\Hamt
+dotnet restore
+dotnet build
+dotnet test .\Hamt.sln
 ```
 
 Run benchmarks from the benchmark project:
@@ -65,6 +78,7 @@ Release configuration is required for meaningful benchmark numbers.
 
 - [docs/README.md](docs/README.md) indexes repository-level documentation and migration provenance.
 - [docs/agent-workflows.md](docs/agent-workflows.md) holds compact task-conditional workflow guidance.
+- [Hamt/docs/README.md](Hamt/docs/README.md) indexes the HAMT library's API specification.
 - [FingerTree/docs/README.md](FingerTree/docs/README.md) indexes the library's specifications, design notes, benchmark notes, and external references.
 
 The large `TECHNICAL_DOCUMENTATION_STANDARD.md` and `XML_DOCUMENTATION_STANDARD.md` files from Tools are intentionally not part of this repository. Keep documentation thorough and current-state oriented, and write XML documentation in semantic terms: contracts, invariants, ordering, failure behavior, complexity, allocation behavior, and examples where they help.

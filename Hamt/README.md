@@ -1,0 +1,34 @@
+# Hamt
+
+- Status: Implemented workspace
+- Created (UTC): 2026-07-02T05:02:24Z
+- Repository HEAD: 3c639e02d05377685676923a13b30a3d22fd4994
+- Audience: Maintainers implementing and reviewing persistent hash-array mapped tries
+- Scope: Project layout and validation entry points for `Hamt`
+
+`Hamt` contains the .NET 10 C# preview workspace for `Tools.DataStructures.Hamt`, a persistent
+hash-array mapped trie library. The core type is `PersistentHashMap<TKey, TValue>`, an immutable
+unordered dictionary with structural sharing across versions. `PersistentHashSet<T>` is built on the
+same HAMT core.
+
+The trie consumes 5 hash bits per level, stores sparse branch nodes as bitmaps plus compact child
+arrays, and represents equal-hash unequal-key collisions with immutable collision buckets. Insert,
+replace, lookup, and removal run in O(hash-width / 5) expected time plus collision-bucket length for
+adversarial equal hashes; operations clone only the search path and reuse every untouched subtree.
+
+## Layout
+
+- `Hamt.sln` is the solution entry point.
+- `src/Tools.DataStructures.Hamt/` contains the public library.
+  - `PersistentHashMap.cs` is the bitmap-indexed HAMT map implementation.
+  - `PersistentHashSet.cs` is the set wrapper over the map core.
+- `tests/Tools.DataStructures.Hamt.Tests/` contains xUnit and CsCheck-backed model tests.
+- `docs/api-specification.md` documents public contracts and complexity guarantees.
+
+## Validation
+
+Use the local .NET SDK:
+
+```powershell
+dotnet test .\Hamt.sln
+```
