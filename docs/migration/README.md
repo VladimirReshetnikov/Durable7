@@ -5,11 +5,10 @@
 - Audience: Maintainers and AI agents auditing repository extraction and path-history provenance
 - Scope: Migration records under `docs/migration`
 
-This directory contains historical records for the extraction of the standalone DataStructures
-repository from `C:\Tools0\src\DataStructures` / `VladimirReshetnikov/Tools`. These documents are
-evidence, not active build or layout guidance. Use the root [README](../../README.md), the
-[workspace map](../reference/workspace-map.md), and the
-[build and validation guide](../guides/build-and-validation.md) for current paths and commands.
+This directory contains historical records for the standalone DataStructures repository extraction,
+history filtering, and later path reorganizations. These documents are evidence, not active build or
+layout guidance. Use the root [README](../../README.md), the [workspace map](../reference/workspace-map.md),
+and the [build and validation guide](../guides/build-and-validation.md) for current paths and commands.
 
 ## Records
 
