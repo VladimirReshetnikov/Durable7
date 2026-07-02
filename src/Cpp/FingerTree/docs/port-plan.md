@@ -54,12 +54,15 @@ Recommended build entry points:
 
 ```powershell
 cd src\Cpp\FingerTree   # repository-relative; the C# workspace builds from C:\DataStructures\src\CSharp\FingerTree
-& "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
+$vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
 $cmakeDir = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
-& "$cmakeDir\cmake.exe" --preset msvc-debug
-& "$cmakeDir\cmake.exe" --build --preset msvc-debug
-& "$cmakeDir\ctest.exe" --preset msvc-debug
+
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-debug && ""$cmakeDir\cmake.exe"" --build --preset msvc-debug && ""$cmakeDir\ctest.exe"" --preset msvc-debug --output-on-failure"
 ```
+
+A direct PowerShell invocation of `VsDevCmd.bat` does not persist its environment changes in the current
+PowerShell process; keep developer-environment setup and the CMake/CTest commands in one `cmd.exe` chain when the
+shell is not already initialized.
 
 The repository may install additional tooling. If dependency management is needed, prefer bootstrapping `vcpkg`
 for stable open-source C++ libraries. Keep the core implementation dependency-light; use third-party packages

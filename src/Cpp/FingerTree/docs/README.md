@@ -16,18 +16,29 @@
   validation observations, and links to any defect reports found during the port.
 - [API notes](api-notes.md) records C++ API conventions and active differences from the C# workspace.
 - [Usage guide](usage.md) shows public include paths, value-semantics patterns, common update flows, and facade quick starts.
-- [Validation](validation.md) records build, test, stress, and benchmark entry points for this workspace.
+- [Validation](validation.md) records build, test, stress, warning-policy, generated-output, and
+  benchmark-harness-status guidance for this workspace.
 
-## Independent reviews
+## Independent Reviews
 
 Three reviews of the finished port were produced independently (separate sessions and toolchains,
-no shared context). They converge on the same top findings — `try_locate`/`try_locate_by_measure`
-discarding the miss-path `measure_before`, the missing named-operation free-function layer, and the
-absent structure-level (tree/rope) concurrency stress test — and all three agree the shipped code
-has no correctness or data-race defect. They are kept as separate documents.
+no shared context). They originally converged on the same top findings:
 
-The first correction pass for those converged findings is recorded in
-[`implementation-notes.md`](implementation-notes.md#checkpoint-independent-review-corrections).
+- `try_locate` / `try_locate_by_measure` discarded the miss-path `measure_before`;
+- the named-operation free-function layer was missing;
+- structure-level tree/rope concurrency stress tests were absent;
+- Milestone 8 samples and benchmarks were still missing.
+
+The first correction pass is recorded in
+[`implementation-notes.md`](implementation-notes.md#checkpoint-independent-review-corrections): the locate result
+shape is now total, the named-operation layer is present, and structure-level tearable concurrency stress tests are
+part of `fingertree.smoke`. The current active gap is Milestone 8: no C++ `samples/` or `benchmarks/` directory is
+checked in yet. Stateful command-sequence shrinking, install/export packaging, CI, and multi-compiler or
+ThreadSanitizer coverage also remain future validation work.
+
+The review reports are historical snapshots. Keep them intact as evidence of the review process, and use the
+current [API notes](api-notes.md), [usage guide](usage.md), [validation guide](validation.md), and correction
+checkpoint for today's contract.
 
 - [Independent review report](cpp-port-review-report-2026-06-30T20-06-08Z.md) (Opus 4.8) - outcome
   and process review backed by hands-on quantitative experiments: tear-free concurrent first reads,

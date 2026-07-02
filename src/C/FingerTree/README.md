@@ -37,15 +37,17 @@ be used concurrently under normal handle-lifetime rules.
 From this directory:
 
 ```powershell
+$vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
 $cmakeDir = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
-& "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
-& "$cmakeDir\cmake.exe" --preset msvc-debug
-& "$cmakeDir\cmake.exe" --build --preset msvc-debug
-& "$cmakeDir\ctest.exe" --preset msvc-debug
+
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-debug && ""$cmakeDir\cmake.exe"" --build --preset msvc-debug && ""$cmakeDir\ctest.exe"" --preset msvc-debug --output-on-failure"
 ```
 
 Use `msvc-release` for the optimized configuration. The presets use Visual Studio's bundled Ninja by absolute
-path, so CMake and Ninja do not need to be on `PATH`.
+path, so CMake and Ninja do not need to be on `PATH`. Keep the Visual Studio environment setup, configure, build,
+and CTest run in one `cmd.exe` chain when starting from plain PowerShell; invoking `VsDevCmd.bat` directly from
+PowerShell does not persist its environment changes in that process. For release commands, benchmark entry points,
+warning policy, and generated-output locations, see the [validation guide](docs/validation.md).
 
 ## Layout
 

@@ -10,4 +10,5 @@
 
 - [API notes](api-notes.md) records the C API shape, ownership rules, and active differences from the C++ port.
 - [Usage guide](usage.md) shows public API setup, lifetime patterns, persistent update ownership, and facade quick starts.
-- [Validation](validation.md) records local build and test commands for the C workspace.
+- [Validation](validation.md) records local build, test, sample-smoke, benchmark, warning-policy, and
+  generated-output guidance for the C workspace.
