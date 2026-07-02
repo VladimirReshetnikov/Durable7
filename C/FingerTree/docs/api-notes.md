@@ -37,11 +37,11 @@ Implemented in this checkpoint:
   and split, split, concat, insertion, removal, and traversal;
 - character text rope facade, backed by the chunked rope, with insertion/removal/indexing and basic line
   navigation.
+- deterministic sample executables and a dependency-light benchmark harness.
 
 Deferred from the C++ port:
 
 - atomic lazy-middle cells and the full persistent amortization/concurrency argument;
-- samples/benchmarks;
 - allocator customization and typed macro-generation helpers.
 
 The strict core is still useful for validating C ownership, policy, and ABI shape before porting the lazy

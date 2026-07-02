@@ -52,4 +52,6 @@ path, so CMake and Ninja do not need to be on `PATH`.
 - `include/tools/data_structures/finger_tree/fingertree.h` contains the public C API.
 - `src/fingertree.c` contains the strict measured-tree implementation and the current wrappers.
 - `tests/` contains the bootstrap CTest executable.
+- `samples/` contains deterministic C sample executables that are also registered as CTest smoke tests.
+- `benchmarks/` contains a dependency-light timing harness for quick local comparisons.
 - `docs/` contains C-specific API and validation notes.
