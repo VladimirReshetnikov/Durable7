@@ -1,13 +1,14 @@
 # C FingerTree API Notes
 
-- Status: Initial notes
+- Status: Current API notes
 - Created (UTC): 2026-07-02T18:12:21Z
 - Repository HEAD: 9bba9109d24a3a104e05212e3828f12783fe8aaa
 - Audience: Maintainers implementing and reviewing public C APIs
 - Scope: C naming, contracts, ownership, and intentional differences from `src/Cpp/FingerTree`
 
-The public C API lives in `tools/data_structures/finger_tree/fingertree.h`. It uses opaque handles plus explicit
-policy callbacks rather than C++ templates:
+The public C API lives in `tools/data_structures/finger_tree/fingertree.h`. For setup and handle-lifetime
+examples, start with the [usage guide](usage.md). The API uses opaque handles plus explicit policy callbacks
+rather than C++ templates:
 
 - `ft_value_type` describes element size and optional copy/destroy callbacks.
 - `ft_measure_policy` describes the monoid identity, element measure, and measure combine operations.

@@ -1,6 +1,6 @@
 # C FingerTree
 
-- Status: Initial C workspace
+- Status: Active C workspace
 - Created (UTC): 2026-07-02T18:12:21Z
 - Repository HEAD: 9bba9109d24a3a104e05212e3828f12783fe8aaa
 - Audience: Maintainers implementing and reviewing the C port
@@ -54,4 +54,4 @@ path, so CMake and Ninja do not need to be on `PATH`.
 - `tests/` contains the bootstrap CTest executable.
 - `samples/` contains deterministic C sample executables that are also registered as CTest smoke tests.
 - `benchmarks/` contains a dependency-light timing harness for quick local comparisons.
-- `docs/` contains C-specific API and validation notes.
+- `docs/` contains C-specific API, usage, and validation notes.

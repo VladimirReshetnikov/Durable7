@@ -1,6 +1,6 @@
 # C FingerTree Validation
 
-- Status: Initial validation guide
+- Status: Current validation guide
 - Created (UTC): 2026-07-02T18:12:21Z
 - Repository HEAD: 9bba9109d24a3a104e05212e3828f12783fe8aaa
 - Audience: Maintainers validating the C port
