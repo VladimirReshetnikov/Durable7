@@ -5,25 +5,35 @@
 - Audience: Maintainers and AI agents working in the standalone DataStructures repository
 - Scope: Repository-level documentation index
 
-This directory contains repository-level guidance and extraction provenance. Library-specific design
-and API documentation lives under [src/CSharp/Hamt/docs](../src/CSharp/Hamt/docs/README.md),
-[src/C/Hamt/docs](../src/C/Hamt/docs/README.md), [src/Cpp/Hamt/docs](../src/Cpp/Hamt/docs/README.md), and
-[src/CSharp/FingerTree/docs](../src/CSharp/FingerTree/docs/README.md), with native FingerTree port docs under
-[src/Cpp/FingerTree/docs](../src/Cpp/FingerTree/docs/README.md) and
-[src/C/FingerTree/docs](../src/C/FingerTree/docs/README.md).
+This directory contains repository-level guides, reference material, and extraction provenance.
+Library-specific design and API documentation lives beside each workspace under `src/`.
 
-## Current documents
+## Guides
 
-- [Agent workflows](agent-workflows.md) - compact task-conditional workflow guidance inherited from the Tools repository where relevant.
+- [Guides index](guides/README.md) - task-oriented repository procedures.
+- [Agent workflows](guides/agent-workflows.md) - compact task-conditional workflow guidance inherited from the Tools repository where relevant.
+- [Build and validation](guides/build-and-validation.md) - repository-wide validation matrix, exact build/test commands, CMake cache notes, and Markdown checks.
+
+## Reference
+
+- [Reference index](reference/README.md) - durable cross-workspace reference material.
+- [Workspace map](reference/workspace-map.md) - language-first layout, data-structure workspace roles, port lineage, and documentation placement rules.
+
+## Migration
+
 - [Migration provenance](migration/extraction-provenance.md) - source repository, source HEAD, filter command, validation notes, and follow-up policy for the extraction from Tools.
 - [Filter-repo commit map](migration/filter-repo-commit-map.tsv) - retained old-to-new commit mapping for the extracted history.
 
 ## Placement
 
-Put repository-wide reports and migration records here. Put C# HAMT implementation and API
-documents under [src/CSharp/Hamt/docs](../src/CSharp/Hamt/docs/README.md), C HAMT port documents under
-[src/C/Hamt/docs](../src/C/Hamt/docs/README.md), C++ HAMT port documents under
-[src/Cpp/Hamt/docs](../src/Cpp/Hamt/docs/README.md), and FingerTree implementation, API, benchmark, and
-algorithm documents under [src/CSharp/FingerTree/docs](../src/CSharp/FingerTree/docs/README.md). Put native FingerTree port
+Put repository-wide task procedures under `docs/guides`, durable cross-workspace maps under
+`docs/reference`, and extraction/history records under `docs/migration`.
+
+Put C# HAMT implementation and API documents under
+[src/CSharp/Hamt/docs](../src/CSharp/Hamt/docs/README.md), C HAMT port documents under
+[src/C/Hamt/docs](../src/C/Hamt/docs/README.md), and C++ HAMT port documents under
+[src/Cpp/Hamt/docs](../src/Cpp/Hamt/docs/README.md). Put C# FingerTree implementation, API,
+benchmark, and algorithm documents under
+[src/CSharp/FingerTree/docs](../src/CSharp/FingerTree/docs/README.md), with native FingerTree port
 documents under [src/Cpp/FingerTree/docs](../src/Cpp/FingerTree/docs/README.md) and
 [src/C/FingerTree/docs](../src/C/FingerTree/docs/README.md).

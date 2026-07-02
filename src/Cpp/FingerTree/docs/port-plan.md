@@ -12,7 +12,7 @@
 
 ## Summary
 
-The C++ port should live under `Cpp/FingerTree/` and should preserve the C# workspace's central design
+The C++ port should live under `src/Cpp/FingerTree/` and should preserve the C# workspace's central design
 decision: keep the tuned catenable deque separate from the fully general measured finger tree. The tuned deque
 and the general measured tree share the same intellectual lineage, but they optimize different things and use
 different digit shapes. Collapsing them into one implementation would erase useful engineering choices from the
@@ -67,90 +67,91 @@ primarily for tests and benchmarks.
 
 ## Workspace Layout
 
-Use `Cpp/FingerTree/` as the C++ workspace root:
+Use `src/Cpp/FingerTree/` as the C++ workspace root:
 
 ```text
-Cpp/
-└── FingerTree/
-    ├── CMakeLists.txt
-    ├── CMakePresets.json
-    ├── vcpkg.json
-    ├── README.md
-    ├── docs/
-    │   ├── README.md
-    │   ├── api-notes.md
-    │   ├── port-plan.md
-    │   ├── port-plan-editorial-notes.md
-    │   └── validation.md
-    ├── include/
-    │   └── tools/data_structures/finger_tree/
-    │       ├── finger_tree.hpp
-    │       ├── persistent_deque.hpp
-    │       ├── reversible_deque.hpp
-    │       ├── measures.hpp
-    │       ├── comparisons.hpp
-    │       ├── measure_predicates.hpp
-    │       ├── built_in_measures.hpp
-    │       ├── product_measure.hpp
-    │       ├── sum_measure.hpp
-    │       ├── sorted_bag.hpp
-    │       ├── sorted_set.hpp
-    │       ├── sorted_map.hpp
-    │       ├── priority_queue.hpp
-    │       ├── interval_tree.hpp
-    │       ├── rope.hpp
-    │       ├── measured_rope.hpp
-    │       ├── rope_builder.hpp
-    │       └── detail/
-    │           ├── common.hpp
-    │           ├── small_digit.hpp
-    │           ├── node.hpp
-    │           ├── lazy_cell.hpp
-    │           ├── deque_elements.hpp
-    │           ├── deque_tree.hpp
-    │           ├── deque_middle.hpp
-    │           ├── deque_operations.hpp
-    │           ├── measured_elements.hpp
-    │           ├── measured_tree.hpp
-    │           ├── measured_tree_levels.hpp
-    │           ├── measured_middle.hpp
-    │           ├── reversible_elements.hpp
-    │           ├── reversible_tree.hpp
-    │           ├── rope_chunk.hpp
-    │           └── measured_rope_chunk.hpp
-    ├── src/
-    │   └── CMakeLists.txt            # optional non-template helpers; keep templates in headers
-    ├── tests/
-    │   ├── CMakeLists.txt
-    │   ├── test_support/
-    │   │   ├── allocation_counter.hpp
-    │   │   ├── command_model.hpp
-    │   │   └── operation_counter.hpp
-    │   ├── measure_tests.cpp
-    │   ├── persistent_deque_tests.cpp
-    │   ├── persistent_deque_complexity_tests.cpp
-    │   ├── measured_tree_tests.cpp
-    │   ├── measured_tree_persistence_tests.cpp
-    │   ├── sorted_collection_tests.cpp
-    │   ├── interval_tree_tests.cpp
-    │   ├── priority_queue_tests.cpp
-    │   ├── reversible_deque_tests.cpp
-    │   ├── rope_tests.cpp
-    │   ├── measured_rope_tests.cpp
-    │   ├── text_rope_tests.cpp
-    │   ├── model_command_tests.cpp
-    │   └── persistence_concurrency_tests.cpp
-    ├── benchmarks/
-    │   ├── CMakeLists.txt
-    │   ├── deque_benchmarks.cpp
-    │   ├── measured_tree_benchmarks.cpp
-    │   ├── sorted_collection_benchmarks.cpp
-    │   ├── priority_queue_benchmarks.cpp
-    │   └── rope_benchmarks.cpp
-    └── samples/
+src/
+└── Cpp/
+    └── FingerTree/
         ├── CMakeLists.txt
-        ├── showcase.cpp
-        └── persistent_snapshots.cpp
+        ├── CMakePresets.json
+        ├── vcpkg.json
+        ├── README.md
+        ├── docs/
+        │   ├── README.md
+        │   ├── api-notes.md
+        │   ├── port-plan.md
+        │   ├── port-plan-editorial-notes.md
+        │   └── validation.md
+        ├── include/
+        │   └── tools/data_structures/finger_tree/
+        │       ├── finger_tree.hpp
+        │       ├── persistent_deque.hpp
+        │       ├── reversible_deque.hpp
+        │       ├── measures.hpp
+        │       ├── comparisons.hpp
+        │       ├── measure_predicates.hpp
+        │       ├── built_in_measures.hpp
+        │       ├── product_measure.hpp
+        │       ├── sum_measure.hpp
+        │       ├── sorted_bag.hpp
+        │       ├── sorted_set.hpp
+        │       ├── sorted_map.hpp
+        │       ├── priority_queue.hpp
+        │       ├── interval_tree.hpp
+        │       ├── rope.hpp
+        │       ├── measured_rope.hpp
+        │       ├── rope_builder.hpp
+        │       └── detail/
+        │           ├── common.hpp
+        │           ├── small_digit.hpp
+        │           ├── node.hpp
+        │           ├── lazy_cell.hpp
+        │           ├── deque_elements.hpp
+        │           ├── deque_tree.hpp
+        │           ├── deque_middle.hpp
+        │           ├── deque_operations.hpp
+        │           ├── measured_elements.hpp
+        │           ├── measured_tree.hpp
+        │           ├── measured_tree_levels.hpp
+        │           ├── measured_middle.hpp
+        │           ├── reversible_elements.hpp
+        │           ├── reversible_tree.hpp
+        │           ├── rope_chunk.hpp
+        │           └── measured_rope_chunk.hpp
+        ├── src/
+        │   └── CMakeLists.txt            # optional non-template helpers; keep templates in headers
+        ├── tests/
+        │   ├── CMakeLists.txt
+        │   ├── test_support/
+        │   │   ├── allocation_counter.hpp
+        │   │   ├── command_model.hpp
+        │   │   └── operation_counter.hpp
+        │   ├── measure_tests.cpp
+        │   ├── persistent_deque_tests.cpp
+        │   ├── persistent_deque_complexity_tests.cpp
+        │   ├── measured_tree_tests.cpp
+        │   ├── measured_tree_persistence_tests.cpp
+        │   ├── sorted_collection_tests.cpp
+        │   ├── interval_tree_tests.cpp
+        │   ├── priority_queue_tests.cpp
+        │   ├── reversible_deque_tests.cpp
+        │   ├── rope_tests.cpp
+        │   ├── measured_rope_tests.cpp
+        │   ├── text_rope_tests.cpp
+        │   ├── model_command_tests.cpp
+        │   └── persistence_concurrency_tests.cpp
+        ├── benchmarks/
+        │   ├── CMakeLists.txt
+        │   ├── deque_benchmarks.cpp
+        │   ├── measured_tree_benchmarks.cpp
+        │   ├── sorted_collection_benchmarks.cpp
+        │   ├── priority_queue_benchmarks.cpp
+        │   └── rope_benchmarks.cpp
+        └── samples/
+            ├── CMakeLists.txt
+            ├── showcase.cpp
+            └── persistent_snapshots.cpp
 ```
 
 The public include namespace should be `tools::data_structures::finger_tree`. Internal implementation should
@@ -723,7 +724,7 @@ regardless of the internal memoization.
 
 Create the C++ workspace:
 
-- `Cpp/FingerTree/CMakeLists.txt`
+- `src/Cpp/FingerTree/CMakeLists.txt`
 - `CMakePresets.json`
 - `vcpkg.json`
 - basic README and docs index

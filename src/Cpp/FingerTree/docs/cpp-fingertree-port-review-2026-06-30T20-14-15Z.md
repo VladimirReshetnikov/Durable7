@@ -35,7 +35,7 @@ I reviewed both the declared intent and the code outcome.
 Documentation read:
 
 - `AGENTS.md` and repository `README.md`.
-- `docs/README.md` and `docs/agent-workflows.md`.
+- `docs/README.md` and `docs/guides/agent-workflows.md`.
 - `src/CSharp/FingerTree/README.md` and `src/CSharp/FingerTree/docs/README.md`.
 - `src/CSharp/FingerTree/docs/api-specification.md`, with targeted checks against C# source and tests.
 - `src/Cpp/FingerTree/README.md`.

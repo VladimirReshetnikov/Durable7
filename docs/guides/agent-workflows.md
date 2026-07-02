@@ -5,6 +5,12 @@
 - Audience: AI agents and maintainers
 - Scope: Compact task-conditional workflow guidance for this repository
 
+## Repository Orientation
+
+Use [the workspace map](../reference/workspace-map.md) for the language-first layout, port lineage,
+and documentation placement rules. Use [the build and validation guide](build-and-validation.md) for
+the complete cross-repository validation matrix.
+
 ## C# and .NET validation
 
 Use the real .NET SDK in the local Windows environment:

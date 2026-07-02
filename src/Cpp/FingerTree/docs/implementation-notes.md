@@ -20,7 +20,7 @@ Compared material:
 - `src/Cpp/FingerTree/docs/port-plan.md`
 - `src/Cpp/FingerTree/docs/port-plan-editorial-notes.md`
 - `README.md`
-- `docs/agent-workflows.md`
+- `docs/guides/agent-workflows.md`
 
 Implemented:
 

@@ -4,10 +4,10 @@
 - Created (UTC): 2026-07-02T18:12:21Z
 - Repository HEAD: 9bba9109d24a3a104e05212e3828f12783fe8aaa
 - Audience: Maintainers implementing and reviewing the C port
-- Scope: Build entry points, layout, validation, and current port boundaries for `C/FingerTree`
+- Scope: Build entry points, layout, validation, and current port boundaries for `src/C/FingerTree`
 
 This workspace contains the C port of the native FingerTree work. It starts from the completed
-[`Cpp/FingerTree`](../../Cpp/FingerTree/README.md) port and exposes a C11 API centered on a generic measured
+[`src/Cpp/FingerTree`](../../Cpp/FingerTree/README.md) port and exposes a C11 API centered on a generic measured
 finger-tree core.
 
 The C workspace is intentionally dependency-light: the library is ordinary C, builds as a static library, and uses
