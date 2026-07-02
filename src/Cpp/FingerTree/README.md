@@ -11,9 +11,14 @@ This workspace contains the C++ port of the `FingerTree` data-structure library.
 `tools::data_structures::finger_tree`, CMake/Ninja build entry points for the local MSVC toolchain, and CTest
 validation from the first milestone onward.
 
-The first implementation wave is intentionally dependency-light. The core library uses only the standard library,
-and the bootstrap tests use a small local test runner so the workspace builds before any package manager is
-introduced. The `vcpkg.json` manifest is present for future Catch2 and Google Benchmark integration.
+The workspace is intentionally dependency-light. The core library uses only the standard library, and the CTest
+executables use a small local test runner so the workspace builds without a package manager. The `vcpkg.json`
+manifest is present but currently has no dependencies; introduce Catch2, Google Benchmark, or other packages only
+when they are intentionally wired into CMake.
+
+The active CMake model is C++23 plus MSVC `/std:c++latest`: the interface library advertises `cxx_std_23`, test
+targets use `CXX_STANDARD 23`, and MSVC targets receive `/std:c++latest` explicitly because the bundled CMake does
+not model the installed compiler's latest language mode as a standard number.
 
 ## Build
 
@@ -35,4 +40,4 @@ from an initialized Visual Studio developer environment first.
 - `include/tools/data_structures/finger_tree/detail/` contains implementation helpers.
 - `tests/` contains CTest-registered native tests and shared test support.
 - `docs/` contains the port plan and C++-specific API, usage, implementation, review, and validation notes.
-- `samples/` and `benchmarks/` are reserved for the later milestones in the port plan.
+- No C++ `samples/` or `benchmarks/` directory is currently checked in; those remain later port-plan milestones.

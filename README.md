@@ -96,7 +96,7 @@ This document is the canonical repository guidance for Vladimir and the AI codin
 
 ## Build and test
 
-Use [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) as the complete validation guide. In short, use the local .NET SDK toolchain for the C# workspaces, the local MSVC C17/C++20 toolchain for HAMT native ports, and the Visual Studio-bundled CMake/Ninja presets for the FingerTree native ports.
+Use [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) as the complete validation guide. In short, use the local .NET SDK toolchain for the C# workspaces, the local MSVC C17/C++20 toolchain for HAMT native ports, and the Visual Studio-bundled CMake/Ninja presets for the C11 and C++23 FingerTree native ports.
 
 ```powershell
 cd C:\DataStructures\src\CSharp\FingerTree
@@ -180,7 +180,7 @@ The expected local Windows environment includes:
 - `git` and `gh` for source-control and GitHub workflows.
 - `python` for ad hoc tooling.
 - .NET SDK 10.0 or newer with the .NET 10 targeting packs.
-- Visual Studio native C/C++ toolchain, plus the bundled CMake and Ninja used by the `src/C/FingerTree` and `src/Cpp/FingerTree` presets.
+- Visual Studio native C/C++ toolchain, including C++23 `/std:c++latest` support for `src/Cpp/FingerTree`, plus the bundled CMake and Ninja used by the `src/C/FingerTree` and `src/Cpp/FingerTree` presets.
 - MSVC C17/C++20 toolchain for `src/C/Hamt` and `src/Cpp/Hamt`; use Scriptorium's
   `Import-VisualCppEnvironment.ps1` helper when compiling from a plain PowerShell process.
 - `git-filter-repo` usable as `python -m git_filter_repo` when future history work is needed.

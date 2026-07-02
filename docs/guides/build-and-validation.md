@@ -18,7 +18,7 @@ library; this document is the cross-repository checklist.
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | `.\build.ps1 -RunTests` | C17 build and deterministic HAMT tests |
 | [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | `.\build.ps1 -RunTests` | C++20 build and deterministic HAMT tests |
 | [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | `cmake --preset msvc-debug; cmake --build --preset msvc-debug; ctest --preset msvc-debug` | C11 static library, tests, samples |
-| [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | `cmake --preset msvc-debug; cmake --build --preset msvc-debug; ctest --preset msvc-debug` | C++20 header-first library and CTest suite |
+| [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | `cmake --preset msvc-debug; cmake --build --preset msvc-debug; ctest --preset msvc-debug` | C++23 header-first library and CTest suite |
 
 For broad repository edits, run every row that could be affected. For documentation-only edits, run the
 Markdown link check below and any build/test commands whose documented paths changed.
@@ -53,9 +53,10 @@ under `build/<Configuration>/` and are ignored by the repository.
 
 ## FingerTree Native Ports
 
-The FingerTree C and C++ workspaces use CMake presets with Visual Studio's bundled Ninja. A plain
-PowerShell invocation of `VsDevCmd.bat` does not persist environment changes in the current PowerShell
-process, so use a single `cmd.exe` chain when starting from an uninitialized shell.
+The FingerTree C and C++ workspaces use CMake presets with Visual Studio's bundled Ninja. The C++ workspace
+models the target as `CXX_STANDARD 23` and adds MSVC `/std:c++latest` explicitly. A plain PowerShell invocation
+of `VsDevCmd.bat` does not persist environment changes in the current PowerShell process, so use a single
+`cmd.exe` chain when starting from an uninitialized shell.
 
 ```powershell
 $vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"

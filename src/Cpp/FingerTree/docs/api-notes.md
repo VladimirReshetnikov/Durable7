@@ -20,9 +20,9 @@ The C++ port follows the repository's C# semantics, but it uses idiomatic C++ sp
   compile-time comparison policy state;
 - concurrently published structure, lazy-state, and measure-box pointers use atomic `std::shared_ptr` publication.
 
-The first wave targets MSVC `/std:c++latest`, while keeping the implementation to stable C++20/23-era facilities
-where practical. CMake currently models the target as `CXX_STANDARD 23` and adds `/std:c++latest` explicitly for
-MSVC because this bundled CMake rejects `CXX_STANDARD 26` for the installed compiler.
+The workspace targets MSVC `/std:c++latest`, while keeping the implementation to stable C++20/23-era facilities
+where practical. CMake models the target as `CXX_STANDARD 23` and adds `/std:c++latest` explicitly for MSVC
+because this bundled CMake rejects `CXX_STANDARD 26` for the installed compiler.
 
 ## `persistent_deque<T>`
 

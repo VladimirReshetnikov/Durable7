@@ -15,6 +15,10 @@ $cmakeDir = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\Co
 & "$cmakeDir\ctest.exe" --preset msvc-debug
 ```
 
+The C++ targets require the active MSVC latest language mode. CMake records that as `CXX_STANDARD 23` plus an
+explicit `/std:c++latest` compile option for MSVC targets; keep validation shells on a Visual Studio toolchain
+new enough for that mode.
+
 ## Release Build
 
 ```powershell
@@ -33,7 +37,8 @@ The current bootstrap tests are self-contained CTest executables. Structure-leve
 honor `FINGERTREE_STRESS_SECONDS`; unset runs use a short default suitable for ordinary `ctest`, while soak runs
 can raise the value without editing source.
 
-Later milestones may add Catch2 through vcpkg once the dependency manager is intentionally introduced.
+The checked-in `vcpkg.json` is intentionally dependency-free today. Later milestones may add Catch2 through vcpkg
+once the dependency manager is intentionally introduced and wired into CMake.
 
 ## Benchmark Harness Status
 

@@ -34,7 +34,7 @@ For the cross-language list of public data-structure surfaces, see the
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | C17 HAMT port | `include/Tools/DataStructures/Hamt/hamt.h`, `build.ps1` | [`docs`](../../src/C/Hamt/docs/README.md) |
 | [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | C++20 HAMT port | `include/Tools/DataStructures/Hamt/*.hpp`, `build.ps1` | [`docs`](../../src/Cpp/Hamt/docs/README.md) |
 | [`src/CSharp/FingerTree`](../../src/CSharp/FingerTree/README.md) | Canonical managed FingerTree library | `FingerTree.sln`, `src/Tools.DataStructures.FingerTree/` | [`docs`](../../src/CSharp/FingerTree/docs/README.md) |
-| [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | C++20 FingerTree port | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/Cpp/FingerTree/docs/README.md) |
+| [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | C++23 FingerTree port | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/Cpp/FingerTree/docs/README.md) |
 | [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | C11 FingerTree port | `include/tools/data_structures/finger_tree/fingertree.h`, `CMakePresets.json` | [`docs`](../../src/C/FingerTree/docs/README.md) |
 
 ## Port Lineage
@@ -48,7 +48,7 @@ HAMT lineage:
 FingerTree lineage:
 
 1. `src/CSharp/FingerTree` is the broadest implementation and documentation source: tuned deque, general measured tree, derived sorted/priority/interval collections, ropes, text helpers, samples, benchmarks, and design notes.
-2. `src/Cpp/FingerTree` ports the FingerTree family to a header-first C++20 library with CMake/CTest validation.
+2. `src/Cpp/FingerTree` ports the FingerTree family to a header-first C++23 library with CMake/CTest validation.
 3. `src/C/FingerTree` starts from the C++ port and exposes a C11 API with explicit handles, ownership, and facade types.
 
 When porting behavior across languages, prefer the managed workspace for the semantic contract, the adjacent
