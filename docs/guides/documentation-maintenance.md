@@ -16,10 +16,12 @@ Use the narrowest layer that owns the information:
 | --- | --- | --- |
 | Root `README.md` / `AGENTS.md` / `CLAUDE.md` | Repository entry point, canonical agent guidance, top-level build and layout orientation | Workspaces list, local environment, version-control policy |
 | [`docs/guides`](README.md) | Procedures and repeatable workflows | Validation commands, agent workflow guidance, documentation maintenance, porting parity |
-| [`docs/reference`](../reference/README.md) | Durable cross-workspace maps and facts | Language/data-structure layout, port lineage, data-structure catalog |
+| [`docs/reference`](../reference/README.md) | Durable cross-workspace maps and facts | Language/data-structure layout, port lineage, data-structure catalog, test-suite map |
 | [`docs/migration`](../migration/README.md) | Extraction, history filtering, and provenance records | Filter-repo notes, commit maps |
 | Workspace `README.md` | Workspace orientation and local entry points | Purpose, layout, primary build/test command |
 | Workspace `docs/` | API contracts, design notes, validation details, benchmark notes, review reports | `src/CSharp/FingerTree/docs/api-specification.md` |
+| Workspace `tests/` README | Local test runner shape, test-file grouping, direct executable path, filters, stress knobs | `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/README.md` |
+| Workspace `samples/` or `benchmarks/` README | Runnable sample programs, expected transcript markers, benchmark workloads, output shape | `src/C/FingerTree/samples/README.md` |
 | Workspace `docs/external/` | External study material and source snapshots | Papers, source snapshots, article copies |
 
 When a change crosses boundaries, update every layer whose readers would otherwise be misled. A path
@@ -48,8 +50,9 @@ Use this checklist when changing repository behavior:
 | Workspace move, rename, or new workspace | Root `README.md`, [`workspace-map.md`](../reference/workspace-map.md), [`build-and-validation.md`](build-and-validation.md), affected workspace README/docs indexes |
 | Public API change | Workspace API specification, XML docs, examples, README surface summary, relevant port notes, [`porting-and-semantic-parity.md`](porting-and-semantic-parity.md), [`data-structure-catalog.md`](../reference/data-structure-catalog.md) when a long-lived public data-structure surface changes |
 | Complexity, allocation, or concurrency behavior | API specification, benchmark notes, validation guide, persistence/concurrency docs, tests called out as evidence |
-| Build/test command change | Root `README.md`, [`build-and-validation.md`](build-and-validation.md), affected workspace README, validation docs |
-| Benchmark result or benchmark harness change | Workspace benchmark README, benchmark notes, root benchmark summary if claims changed |
+| Test runner, test-file, sample-smoke, or stress-control change | Workspace tests README, workspace validation guide, [`test-suite-map.md`](../reference/test-suite-map.md), [`build-and-validation.md`](build-and-validation.md) if commands changed |
+| Build/test command change | Root `README.md`, [`build-and-validation.md`](build-and-validation.md), [`test-suite-map.md`](../reference/test-suite-map.md), affected workspace README, validation docs |
+| Benchmark result or benchmark harness change | Workspace benchmark README, benchmark notes, [`test-suite-map.md`](../reference/test-suite-map.md), root benchmark summary if claims changed |
 | External reference addition | External index, license/provenance note, root external-material policy if the shape changes |
 | New long-lived report | Correct `docs/` bucket or workspace `docs/`, provenance metadata, collision-safe filename if needed |
 
@@ -117,6 +120,8 @@ For docs that change commands, paths, or build claims, also run the relevant com
 Before committing docs:
 
 - Can a new maintainer find the right workspace, command, and local docs from the root README?
+- Can they find the local test map and the repository [test-suite map](../reference/test-suite-map.md) when coverage,
+  stress, sample-smoke, or benchmark boundaries matter?
 - Does each new document live in the right layer?
 - Are active docs current-state, and are historical notes explicitly historical?
 - Are external sources and repository-owned material separated?

@@ -24,6 +24,7 @@ intentional differences are explicit in the local API notes.
 | [Data structure catalog](../reference/data-structure-catalog.md) | Cross-language inventory of public data-structure entry points. |
 | [Workspace map](../reference/workspace-map.md) | Port lineage, path conventions, and documentation placement. |
 | [Build and validation guide](build-and-validation.md) plus workspace validation guides | Commands that prove the affected workspaces still build and pass tests, and the local warning policy, coverage map, stress controls, benchmark boundary, and evidence wording for each workspace. |
+| [Test suite map](../reference/test-suite-map.md) plus local test READMEs | Runner shape, test-file grouping, sample-smoke hooks, stress knobs, and the local evidence entry point for changed behavior. |
 | Workspace review reports and port plans | Historical rationale and previously identified hazards; keep them historical unless rewriting them into current-state guidance. |
 
 When evidence conflicts, inspect the current source and tests. Treat old plans and review reports as
@@ -70,7 +71,7 @@ Check these items before calling a cross-language change complete:
 | Complexity and allocation | Do docs and tests protect the promised asymptotic shape and hot-path allocation behavior? |
 | Concurrency | Are immutable publication and family-specific reference-counting rules documented without overstating guarantees? |
 | Validation | Do tests cover the affected behavior in every touched workspace, including model or property tests when those are the relevant evidence? |
-| Documentation | Are API specs, validation guides, README summaries, catalog entries, and port notes updated together? |
+| Documentation | Are API specs, validation guides, test READMEs, README summaries, catalog entries, test-suite map rows, and port notes updated together? |
 
 ## API Shape Mapping
 
@@ -100,9 +101,10 @@ Do not copy names mechanically. Preserve contracts while using each language's n
    files for surface summaries, repository reference docs for cross-workspace inventory, and guides
    when the workflow or validation rule changes.
 6. Run the validation commands from [build-and-validation.md](build-and-validation.md) for every
-   affected workspace. Use the relevant workspace validation guide for coverage expectations,
-   stress controls, benchmark boundaries, and exact evidence wording. Run repository-owned Markdown
-   link and stale-path checks for docs changes.
+   affected workspace. Use the relevant workspace validation guide and
+   [test suite map](../reference/test-suite-map.md) for coverage expectations, stress controls,
+   sample-smoke hooks, benchmark boundaries, and exact evidence wording. Run repository-owned
+   Markdown link and stale-path checks for docs changes.
 7. Commit only after the evidence matches the scope of the claim. A C# unit test does not prove a C
    port is aligned; a successful build does not prove a changed ordering or allocation contract.
 
@@ -175,6 +177,7 @@ crosses ports:
 | Public API contract change in one workspace | That workspace's validation-guide command plus updated API docs. |
 | Behavior intended to match across ports | Validation-guide commands for every affected language workspace. |
 | Complexity, allocation, or concurrency claim | Tests or benchmarks that actually exercise the claimed hot path or publication behavior. |
+| Test runner, coverage-map, sample-smoke, or stress-control change | Updated local tests README, workspace validation guide, and [test-suite map](../reference/test-suite-map.md), plus the runner command that proves the changed path. |
 | Build command, preset, or layout change | The command in [build-and-validation.md](build-and-validation.md) and the local validation guide for each affected workspace. |
 
 Record validation in commit messages or final notes with the command and what it proves. If a command
