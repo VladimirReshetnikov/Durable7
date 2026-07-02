@@ -1,6 +1,6 @@
 # src/C/Hamt
 
-- Status: Initial port workspace
+- Status: Active port workspace
 - Created (UTC): 2026-07-02T18:18:57Z
 - Repository HEAD: 3444f5ee27357d86c43db484993f8f12dfd4887c
 - Audience: Maintainers implementing and reviewing the pure C HAMT port
@@ -26,6 +26,7 @@ version lifetimes.
 - `tests/hamt_tests.c` contains deterministic unit and randomized model tests.
 - `build.ps1` imports the MSVC toolchain through Scriptorium and compiles the test executable.
 - `docs/api-specification.md` documents the C API adaptation and complexity guarantees.
+- `docs/usage.md` provides practical policy, lifetime, update, iteration, and set-algebra examples.
 
 ## Validation
 

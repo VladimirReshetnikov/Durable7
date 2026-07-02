@@ -1,10 +1,12 @@
 # HAMT C API Specification
 
-- Status: Initial port
+- Status: Current API specification
 - Created (UTC): 2026-07-02T18:18:57Z
 - Repository HEAD: 3444f5ee27357d86c43db484993f8f12dfd4887c
 - Audience: Maintainers and reviewers of the pure C `tds_hamt` API
 - Scope: Public C API, ownership semantics, persistence behavior, and complexity guarantees
+
+For practical policy setup and lifetime examples, start with the [usage guide](usage.md).
 
 ## Overview
 

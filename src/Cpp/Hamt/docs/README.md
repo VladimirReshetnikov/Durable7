@@ -11,3 +11,5 @@
 - [API Specification](api-specification.md) defines the C++ public API shape, semantic adaptation
   from the C# workspace, persistence behavior, and complexity targets for `persistent_hash_map` and
   `persistent_hash_set`.
+- [Usage guide](usage.md) shows include paths, value-semantics patterns, map/set operations,
+  policy objects, iteration, and set algebra for the C++ HAMT templates.

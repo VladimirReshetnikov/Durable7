@@ -11,3 +11,5 @@
 - [API Specification](api-specification.md) defines the C public API shape, semantic adaptation from
   the C# and C++ workspaces, persistence behavior, ownership rules, and complexity targets for
   `tds_hamt_map` and `tds_hamt_set`.
+- [Usage guide](usage.md) shows policy setup, borrowed/owned lifetime rules, persistent update
+  patterns, iteration, and set algebra for `tds_hamt_map` and `tds_hamt_set`.

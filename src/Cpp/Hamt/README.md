@@ -1,6 +1,6 @@
 # src/Cpp/Hamt
 
-- Status: Initial port workspace
+- Status: Active port workspace
 - Created (UTC): 2026-07-02T17:58:46Z
 - Repository HEAD: 9bba9109d24a3a104e05212e3828f12783fe8aaa
 - Audience: Maintainers implementing and reviewing the native C++ HAMT port
@@ -27,6 +27,7 @@ are expressed as shared root identity rather than object reference identity.
 - `tests/persistent_hamt_tests.cpp` contains deterministic unit and randomized model tests.
 - `build.ps1` imports the MSVC toolchain through Scriptorium and compiles the test executable.
 - `docs/api-specification.md` documents the C++ API adaptation and complexity guarantees.
+- `docs/usage.md` provides practical include, value-semantics, map/set, policy, iteration, and set-algebra examples.
 
 ## Validation
 

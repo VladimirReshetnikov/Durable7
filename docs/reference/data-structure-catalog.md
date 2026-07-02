@@ -21,8 +21,8 @@ versions, and comparer/hash-policy preservation.
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
 | C# | `PersistentHashMap<TKey, TValue>`, `PersistentHashSet<T>` | [Workspace](../../src/CSharp/Hamt/README.md), [API spec](../../src/CSharp/Hamt/docs/api-specification.md), [map source](../../src/CSharp/Hamt/src/Tools.DataStructures.Hamt/PersistentHashMap.cs), [set source](../../src/CSharp/Hamt/src/Tools.DataStructures.Hamt/PersistentHashSet.cs) |
-| C | `tds_hamt_map`, `tds_hamt_set`, `tds_hamt_policy`, `tds_hamt_set_policy` | [Workspace](../../src/C/Hamt/README.md), [API spec](../../src/C/Hamt/docs/api-specification.md), [public header](../../src/C/Hamt/include/Tools/DataStructures/Hamt/hamt.h) |
-| C++ | `persistent_hash_map<Key, T, Hash, KeyEqual, ValueEqual>`, `persistent_hash_set<T, Hash, KeyEqual>` | [Workspace](../../src/Cpp/Hamt/README.md), [API spec](../../src/Cpp/Hamt/docs/api-specification.md), [map header](../../src/Cpp/Hamt/include/Tools/DataStructures/Hamt/persistent_hash_map.hpp), [set header](../../src/Cpp/Hamt/include/Tools/DataStructures/Hamt/persistent_hash_set.hpp) |
+| C | `tds_hamt_map`, `tds_hamt_set`, `tds_hamt_policy`, `tds_hamt_set_policy` | [Workspace](../../src/C/Hamt/README.md), [usage guide](../../src/C/Hamt/docs/usage.md), [API spec](../../src/C/Hamt/docs/api-specification.md), [public header](../../src/C/Hamt/include/Tools/DataStructures/Hamt/hamt.h) |
+| C++ | `persistent_hash_map<Key, T, Hash, KeyEqual, ValueEqual>`, `persistent_hash_set<T, Hash, KeyEqual>` | [Workspace](../../src/Cpp/Hamt/README.md), [usage guide](../../src/Cpp/Hamt/docs/usage.md), [API spec](../../src/Cpp/Hamt/docs/api-specification.md), [map header](../../src/Cpp/Hamt/include/Tools/DataStructures/Hamt/persistent_hash_map.hpp), [set header](../../src/Cpp/Hamt/include/Tools/DataStructures/Hamt/persistent_hash_set.hpp) |
 
 ## Finger-Tree Core And Deque
 

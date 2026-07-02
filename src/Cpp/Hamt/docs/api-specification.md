@@ -1,10 +1,13 @@
 # HAMT C++ API Specification
 
-- Status: Initial port
+- Status: Current API specification
 - Created (UTC): 2026-07-02T17:58:46Z
 - Repository HEAD: 9bba9109d24a3a104e05212e3828f12783fe8aaa
 - Audience: Maintainers and reviewers of `tools::data_structures::hamt`
 - Scope: Public C++ API, persistence semantics, and complexity guarantees
+
+For practical include, value-semantics, and set-algebra examples, start with the
+[usage guide](usage.md).
 
 ## Overview
 
