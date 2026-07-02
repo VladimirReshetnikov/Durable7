@@ -15,6 +15,8 @@
   stored equivalent key/item recovery, iteration, and set algebra for the C# HAMT collections.
 - [Validation](validation.md) records the local .NET restore/build/test commands, workspace warning
   policy, generated XML-documentation gate, and xUnit/CsCheck coverage.
+- [Tests README](../tests/Tools.DataStructures.Hamt.Tests/README.md) maps the xUnit/CsCheck test project,
+  source files, filter commands, and model/property coverage.
 - [Implementation Review 2026-07-02](hamt-implementation-review-2026-07-02__afa84237ef48.md)
   records the adversarially-verified multi-agent review of the initial implementation, the
   improvements applied in response (annotations, `IReadOnlySet<T>`, single-pass adds,

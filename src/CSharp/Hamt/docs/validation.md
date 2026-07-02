@@ -45,7 +45,10 @@ or warning-policy changes, or when you want a clearer failure boundary.
 
 ## Test Coverage
 
-`tests/Tools.DataStructures.Hamt.Tests/` covers:
+`tests/Tools.DataStructures.Hamt.Tests/` covers the xUnit/CsCheck suite. See the
+[tests README](../tests/Tools.DataStructures.Hamt.Tests/README.md) for source-file grouping and filter examples.
+
+The suite covers:
 
 - map construction, lookup, replacement, removal, no-op behavior, and enumeration;
 - set construction, membership, add/remove, set algebra, and `IReadOnlySet<T>` behavior;

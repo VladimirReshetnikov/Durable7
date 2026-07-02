@@ -67,7 +67,11 @@ Release configuration is required for meaningful benchmark numbers.
 
 ## Test Coverage
 
-`tests/Tools.DataStructures.FingerTree.Tests/` covers:
+`tests/Tools.DataStructures.FingerTree.Tests/` covers the xUnit/CsCheck suite. See the
+[tests README](../tests/Tools.DataStructures.FingerTree.Tests/README.md) for source-file grouping, filter examples,
+sample-smoke hooks, and stress controls.
+
+The suite covers:
 
 - `FingerTreeDeque<T>` endpoint, indexing, splitting, concatenation, sorted-search, enumeration, invariant,
   branching-persistence, randomized model, and complexity-guard behavior;

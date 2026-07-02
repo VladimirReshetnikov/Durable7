@@ -24,7 +24,8 @@ allocation-free copy-safe struct enumerators.
 - `src/Tools.DataStructures.Hamt/` contains the public library.
   - `PersistentHashMap.cs` is the bitmap-indexed HAMT map implementation.
   - `PersistentHashSet.cs` is the set wrapper over the map core.
-- `tests/Tools.DataStructures.Hamt.Tests/` contains xUnit and CsCheck-backed model tests.
+- [`tests/Tools.DataStructures.Hamt.Tests/`](tests/Tools.DataStructures.Hamt.Tests/README.md) contains xUnit
+  and CsCheck-backed model tests.
 - `docs/api-specification.md` documents public contracts and complexity guarantees.
 - `docs/usage.md` provides practical construction, comparer, persistent update, iteration, and
   set-algebra examples.
