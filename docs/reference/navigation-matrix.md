@@ -18,7 +18,7 @@ routes a reader to the narrowest document that owns the question.
 | Build or validate a workspace | [Build and validation](../guides/build-and-validation.md) | Workspace validation docs and workspace README |
 | Change public API or semantics | [Porting and semantic parity](../guides/porting-and-semantic-parity.md) | API specs/notes for all affected language workspaces, catalog rows, tests |
 | Update documentation | [Documentation maintenance](../guides/documentation-maintenance.md) | This matrix, the affected workspace docs index, and the catalog |
-| Investigate extraction history | [Migration provenance](../migration/extraction-provenance.md) | [Filter-repo commit map](../migration/filter-repo-commit-map.tsv) |
+| Investigate extraction history | [Migration index](../migration/README.md) | [Extraction provenance](../migration/extraction-provenance.md), [filter-repo commit map](../migration/filter-repo-commit-map.tsv) |
 | Run or interpret benchmarks | [C# FingerTree benchmark notes](../../src/CSharp/FingerTree/docs/benchmarks.md) | Benchmark project [README](../../src/CSharp/FingerTree/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/README.md), root benchmark summary |
 | Inspect persistence/concurrency patterns | [C# FingerTree persistence and concurrency](../../src/CSharp/FingerTree/docs/persistence-and-concurrency.md) | Corresponding native usage/API notes for C and C++ ports |
 | Review C++ FingerTree port history | [C++ implementation notes](../../src/Cpp/FingerTree/docs/implementation-notes.md) | Port plan, editorial notes, independent review reports |
@@ -68,7 +68,7 @@ Use these when behavior, complexity, allocation, ownership, or cross-language pa
 
 | Material | Location | Use |
 | --- | --- | --- |
-| Repository extraction record | [docs/migration](../migration/extraction-provenance.md) | Preserve source-repo, filter-repo, and commit-map provenance |
+| Repository extraction record | [docs/migration](../migration/README.md) | Preserve source-repo, filter-repo, and commit-map provenance |
 | C++ FingerTree port reports | [src/Cpp/FingerTree/docs](../../src/Cpp/FingerTree/docs/README.md) | Retain independent review findings and correction context |
 | C# FingerTree external references | [external index](../../src/CSharp/FingerTree/docs/external/README.md) | Study source papers and snapshots; not repository-owned license material |
 | C# FingerTree design notes | [PDF](../../src/CSharp/FingerTree/docs/FingerTree-Design-Notes.pdf) / [TeX](../../src/CSharp/FingerTree/docs/FingerTree-Design-Notes.tex) | Architecture, algorithms, concurrency, and test-strategy tour |

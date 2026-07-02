@@ -3,6 +3,7 @@
 - Status: Proposed
 - Created (UTC): 2026-07-01T18:14:04Z
 - Revised (UTC): 2026-07-01T20:14:30Z
+- Repository HEAD: b1913bf759823ab78b1208ad94a9bd9a9839a8f5
 - Repository HEAD at creation: 8a0104880d57bcf77daeff761b74f352b14ce906
 - Repository HEAD at revision: b1913bf759823ab78b1208ad94a9bd9a9839a8f5
 - Audience: Maintainers designing bulk construction and builder APIs for the C# FingerTree workspace

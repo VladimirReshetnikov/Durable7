@@ -25,6 +25,7 @@ Library-specific design and API documentation lives beside each workspace under 
 
 ## Migration
 
+- [Migration index](migration/README.md) - extraction provenance and retained history-rewrite artifacts.
 - [Migration provenance](migration/extraction-provenance.md) - source repository, source HEAD, filter command, validation notes, and follow-up policy for the extraction from Tools.
 - [Filter-repo commit map](migration/filter-repo-commit-map.tsv) - retained old-to-new commit mapping for the extracted history.
 

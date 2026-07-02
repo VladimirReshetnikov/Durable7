@@ -17,7 +17,7 @@ Use the narrowest layer that owns the information:
 | Root `README.md` / `AGENTS.md` / `CLAUDE.md` | Repository entry point, canonical agent guidance, top-level build and layout orientation | Workspaces list, local environment, version-control policy |
 | [`docs/guides`](README.md) | Procedures and repeatable workflows | Validation commands, agent workflow guidance, documentation maintenance, porting parity |
 | [`docs/reference`](../reference/README.md) | Durable cross-workspace maps and facts | Language/data-structure layout, port lineage, data-structure catalog |
-| [`docs/migration`](../migration/extraction-provenance.md) | Extraction, history filtering, and provenance records | Filter-repo notes, commit maps |
+| [`docs/migration`](../migration/README.md) | Extraction, history filtering, and provenance records | Filter-repo notes, commit maps |
 | Workspace `README.md` | Workspace orientation and local entry points | Purpose, layout, primary build/test command |
 | Workspace `docs/` | API contracts, design notes, validation details, benchmark notes, review reports | `src/CSharp/FingerTree/docs/api-specification.md` |
 | Workspace `docs/external/` | External study material and source snapshots | Papers, source snapshots, article copies |
