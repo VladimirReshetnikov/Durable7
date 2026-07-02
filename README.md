@@ -95,6 +95,13 @@ The expected local Windows environment includes:
 
 Use `dotnet` directly for C# validation in this local environment.
 
+## Cross-repo toolbox
+
+Reusable automation (web mining, browser CDP capture, PDF/OCR, git/GitHub tooling, Windows GUI
+control, agent-log processing, installers) lives in the sibling **Scriptorium** repo
+(`C:\Scriptorium`; <https://github.com/VladimirReshetnikov/Scriptorium>) — see its `TOOLS.md`
+index. **Before writing a new automation script, grep `..\Scriptorium\TOOLS.md`.** Repo-agnostic
+scripts are born there and called in place, never copied here. `FingerTree/docs/build-design-notes.ps1` is a thin wrapper over Scriptorium's `render/Build-LatexDoc.ps1`.
 ## Agent working guidelines
 
 When starting on a task, read `AGENTS.md` first; in this repository it points to this file. Read the relevant workspace README and local docs before editing source.
