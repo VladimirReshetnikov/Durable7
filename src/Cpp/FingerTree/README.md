@@ -1,6 +1,6 @@
 # C++ FingerTree
 
-- Status: Initial C++ workspace
+- Status: Active C++ workspace
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
 - Audience: Maintainers implementing and reviewing the C++ port
@@ -34,5 +34,5 @@ from an initialized Visual Studio developer environment first.
 - `include/tools/data_structures/finger_tree/` contains the public header-first library.
 - `include/tools/data_structures/finger_tree/detail/` contains implementation helpers.
 - `tests/` contains CTest-registered native tests and shared test support.
-- `docs/` contains the port plan and C++-specific API/validation notes.
+- `docs/` contains the port plan and C++-specific API, usage, implementation, review, and validation notes.
 - `samples/` and `benchmarks/` are reserved for the later milestones in the port plan.

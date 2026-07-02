@@ -1,6 +1,6 @@
 # C++ FingerTree Documentation
 
-- Status: Initial documentation index
+- Status: Informational
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
 - Audience: Maintainers and AI agents implementing the C++ port
@@ -15,6 +15,7 @@
 - [Implementation notes](implementation-notes.md) records concrete C# comparisons, justified C++ divergences,
   validation observations, and links to any defect reports found during the port.
 - [API notes](api-notes.md) records C++ API conventions and active differences from the C# workspace.
+- [Usage guide](usage.md) shows public include paths, value-semantics patterns, common update flows, and facade quick starts.
 - [Validation](validation.md) records build, test, stress, and benchmark entry points for this workspace.
 
 ## Independent reviews

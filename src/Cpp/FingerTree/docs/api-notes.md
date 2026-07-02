@@ -1,12 +1,13 @@
 # C++ FingerTree API Notes
 
-- Status: Initial notes
+- Status: Current API notes
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
 - Audience: Maintainers implementing and reviewing public C++ APIs
 - Scope: C++ naming, contracts, and intentional differences from the C# workspace
 
-The public namespace is `tools::data_structures::finger_tree`.
+The public namespace is `tools::data_structures::finger_tree`. For practical construction,
+update, and snapshot examples, start with the [usage guide](usage.md).
 
 The C++ port follows the repository's C# semantics, but it uses idiomatic C++ spelling:
 

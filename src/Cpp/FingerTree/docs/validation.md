@@ -1,6 +1,6 @@
 # C++ FingerTree Validation
 
-- Status: Initial validation guide
+- Status: Current validation guide
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
 - Audience: Maintainers validating the C++ port
