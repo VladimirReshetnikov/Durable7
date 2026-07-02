@@ -42,6 +42,12 @@ typedef struct char_buffer {
     size_t count;
 } char_buffer;
 
+typedef struct map_buffer {
+    int keys[128];
+    int values[128];
+    size_t count;
+} map_buffer;
+
 static void init_int_policy(ft_tree_policy* policy)
 {
     ft_value_type value_type;
@@ -68,6 +74,14 @@ static void collect_char(const void* value, void* context)
 {
     char_buffer* buffer = (char_buffer*)context;
     buffer->values[buffer->count] = *(const char*)value;
+    ++buffer->count;
+}
+
+static void collect_map_entry(const void* key, const void* value, void* context)
+{
+    map_buffer* buffer = (map_buffer*)context;
+    buffer->keys[buffer->count] = *(const int*)key;
+    buffer->values[buffer->count] = *(const int*)value;
     ++buffer->count;
 }
 
@@ -364,6 +378,85 @@ static void test_priority_queue(void)
     ft_priority_queue_dispose(&queue);
 }
 
+static void test_sorted_map(void)
+{
+    ft_value_type int_type;
+    ft_value_type_init(&int_type, sizeof(int));
+
+    ft_sorted_map map;
+    REQUIRE_STATUS(ft_sorted_map_init(&map, &int_type, &int_type, compare_ints, NULL), FT_STATUS_OK);
+
+    const int keys[] = {3, 1, 2};
+    const int values[] = {30, 10, 20};
+    for (size_t index = 0; index != sizeof(keys) / sizeof(keys[0]); ++index) {
+        ft_sorted_map next;
+        REQUIRE_STATUS(ft_sorted_map_insert(&map, &keys[index], &values[index], &next), FT_STATUS_OK);
+        ft_sorted_map_dispose(&map);
+        map = next;
+    }
+
+    REQUIRE(ft_sorted_map_size(&map) == 3);
+    for (int expected_key = 1; expected_key != 4; ++expected_key) {
+        int actual_key = -1;
+        int actual_value = -1;
+        REQUIRE_STATUS(ft_sorted_map_entry_at(&map, (size_t)(expected_key - 1), &actual_key, &actual_value), FT_STATUS_OK);
+        REQUIRE(actual_key == expected_key);
+        REQUIRE(actual_value == expected_key * 10);
+    }
+
+    bool found = false;
+    size_t index = 99;
+    int key = 2;
+    int value = -1;
+    REQUIRE_STATUS(ft_sorted_map_index_of_key(&map, &key, &found, &index), FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(index == 1);
+    REQUIRE_STATUS(ft_sorted_map_try_get(&map, &key, &found, &value), FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(value == 20);
+
+    ft_sorted_map duplicate;
+    REQUIRE_STATUS(ft_sorted_map_insert(&map, &key, &value, &duplicate), FT_STATUS_ALREADY_EXISTS);
+
+    int replacement = 200;
+    ft_sorted_map replaced;
+    REQUIRE_STATUS(ft_sorted_map_set(&map, &key, &replacement, &replaced), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_sorted_map_try_get(&replaced, &key, &found, &value), FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(value == 200);
+    REQUIRE_STATUS(ft_sorted_map_try_get(&map, &key, &found, &value), FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(value == 20);
+
+    int new_key = 4;
+    int new_value = 40;
+    ft_sorted_map extended;
+    REQUIRE_STATUS(ft_sorted_map_set(&replaced, &new_key, &new_value, &extended), FT_STATUS_OK);
+    REQUIRE(ft_sorted_map_size(&extended) == 4);
+    REQUIRE(ft_sorted_map_contains_key(&extended, &new_key));
+
+    ft_sorted_map removed;
+    REQUIRE_STATUS(ft_sorted_map_remove(&extended, &key, &removed), FT_STATUS_OK);
+    REQUIRE(!ft_sorted_map_contains_key(&removed, &key));
+    REQUIRE(ft_sorted_map_contains_key(&extended, &key));
+
+    map_buffer buffer;
+    buffer.count = 0;
+    REQUIRE_STATUS(ft_sorted_map_visit(&removed, collect_map_entry, &buffer), FT_STATUS_OK);
+    REQUIRE(buffer.count == 3);
+    REQUIRE(buffer.keys[0] == 1);
+    REQUIRE(buffer.values[0] == 10);
+    REQUIRE(buffer.keys[1] == 3);
+    REQUIRE(buffer.values[1] == 30);
+    REQUIRE(buffer.keys[2] == 4);
+    REQUIRE(buffer.values[2] == 40);
+
+    ft_sorted_map_dispose(&removed);
+    ft_sorted_map_dispose(&extended);
+    ft_sorted_map_dispose(&replaced);
+    ft_sorted_map_dispose(&map);
+}
+
 static void test_interval_tree(void)
 {
     ft_interval_tree_i64 tree;
@@ -459,6 +552,7 @@ int main(void)
     run_test("tree endpoint/index/split/concat", test_tree_endpoint_index_split_and_concat);
     run_test("measure locate and split", test_measure_locate_and_split);
     run_test("sorted set and multiset", test_sorted_set_and_multiset);
+    run_test("sorted map", test_sorted_map);
     run_test("priority queue", test_priority_queue);
     run_test("interval tree", test_interval_tree);
     run_test("text rope", test_text_rope);

@@ -2219,6 +2219,527 @@ ft_status ft_sorted_set_visit(const ft_sorted_set* set, ft_visit_fn visitor, voi
     return ft_sorted_multiset_visit(set, visitor, context);
 }
 
+typedef struct ft_sorted_map_entry {
+    void* key;
+    void* value;
+} ft_sorted_map_entry;
+
+struct ft_sorted_map_entry_context {
+    ft_value_type key_type;
+    ft_value_type value_type;
+};
+
+static void ft_sorted_map_entry_destroy_value(ft_sorted_map_entry_context* context, ft_sorted_map_entry* entry)
+{
+    if (entry->key != NULL) {
+        ft_value_destroy(&context->key_type, entry->key);
+        free(entry->key);
+    }
+
+    if (entry->value != NULL) {
+        ft_value_destroy(&context->value_type, entry->value);
+        free(entry->value);
+    }
+
+    entry->key = NULL;
+    entry->value = NULL;
+}
+
+static void ft_sorted_map_entry_copy(void* destination, const void* source, void* context)
+{
+    ft_sorted_map_entry_context* entry_context = (ft_sorted_map_entry_context*)context;
+    const ft_sorted_map_entry* source_entry = (const ft_sorted_map_entry*)source;
+    ft_sorted_map_entry* destination_entry = (ft_sorted_map_entry*)destination;
+    destination_entry->key = ft_allocate(entry_context->key_type.size);
+    destination_entry->value = ft_allocate(entry_context->value_type.size);
+
+    if (destination_entry->key == NULL || destination_entry->value == NULL) {
+        abort();
+    }
+
+    ft_value_copy(&entry_context->key_type, destination_entry->key, source_entry->key);
+    ft_value_copy(&entry_context->value_type, destination_entry->value, source_entry->value);
+}
+
+static void ft_sorted_map_entry_destroy(void* value, void* context)
+{
+    ft_sorted_map_entry_destroy_value((ft_sorted_map_entry_context*)context, (ft_sorted_map_entry*)value);
+}
+
+static ft_status ft_sorted_map_entry_init(
+    const ft_sorted_map* map,
+    const void* key,
+    const void* value,
+    ft_sorted_map_entry* entry)
+{
+    entry->key = ft_allocate(map->key_type.size);
+    entry->value = ft_allocate(map->value_type.size);
+    if (entry->key == NULL || entry->value == NULL) {
+        ft_sorted_map_entry_destroy_value(map->entry_context, entry);
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    ft_value_copy(&map->key_type, entry->key, key);
+    ft_value_copy(&map->value_type, entry->value, value);
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_sorted_map_configure(
+    ft_sorted_map* map,
+    const ft_value_type* key_type,
+    const ft_value_type* value_type,
+    ft_compare_fn compare_key,
+    void* compare_context)
+{
+    map->entry_context = (ft_sorted_map_entry_context*)calloc(1, sizeof(*map->entry_context));
+    if (map->entry_context == NULL) {
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    map->key_type = *key_type;
+    map->value_type = *value_type;
+    map->compare_key = compare_key;
+    map->compare_context = compare_context;
+    map->entry_context->key_type = *key_type;
+    map->entry_context->value_type = *value_type;
+
+    map->policy.value.size = sizeof(ft_sorted_map_entry);
+    map->policy.value.copy = ft_sorted_map_entry_copy;
+    map->policy.value.destroy = ft_sorted_map_entry_destroy;
+    map->policy.value.context = map->entry_context;
+    ft_size_measure_policy_init(&map->policy.measure);
+    return FT_STATUS_OK;
+}
+
+static int ft_sorted_map_compare_key(const ft_sorted_map* map, const void* left, const void* right)
+{
+    return map->compare_key(left, right, map->compare_context);
+}
+
+static ft_status ft_sorted_map_bounds(
+    const ft_sorted_map* map,
+    const void* key,
+    size_t* lower,
+    size_t* upper)
+{
+    ft_sorted_map_entry current;
+    size_t lo = 0;
+    size_t hi = ft_tree_size(&map->tree);
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+        ft_status status = ft_tree_at(&map->tree, mid, &current);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        const int comparison = ft_sorted_map_compare_key(map, current.key, key);
+        ft_sorted_map_entry_destroy_value(map->entry_context, &current);
+        if (comparison < 0) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+
+    *lower = lo;
+    hi = ft_tree_size(&map->tree);
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+        ft_status status = ft_tree_at(&map->tree, mid, &current);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        const int comparison = ft_sorted_map_compare_key(map, key, current.key);
+        ft_sorted_map_entry_destroy_value(map->entry_context, &current);
+        if (comparison < 0) {
+            hi = mid;
+        } else {
+            lo = mid + 1;
+        }
+    }
+
+    *upper = lo;
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_sorted_map_prepare_result(const ft_sorted_map* map, ft_sorted_map* result)
+{
+    (void)memset(result, 0, sizeof(*result));
+    return ft_sorted_map_configure(
+        result,
+        &map->key_type,
+        &map->value_type,
+        map->compare_key,
+        map->compare_context);
+}
+
+ft_status ft_sorted_map_init(
+    ft_sorted_map* map,
+    const ft_value_type* key_type,
+    const ft_value_type* value_type,
+    ft_compare_fn compare_key,
+    void* compare_context)
+{
+    if (map == NULL || key_type == NULL || value_type == NULL || compare_key == NULL ||
+        key_type->size == 0 || value_type->size == 0) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    (void)memset(map, 0, sizeof(*map));
+    ft_status status = ft_sorted_map_configure(map, key_type, value_type, compare_key, compare_context);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_tree_init(&map->tree, &map->policy);
+    if (status != FT_STATUS_OK) {
+        free(map->entry_context);
+        (void)memset(map, 0, sizeof(*map));
+        return status;
+    }
+
+    return FT_STATUS_OK;
+}
+
+ft_status ft_sorted_map_copy(const ft_sorted_map* source, ft_sorted_map* destination)
+{
+    if (source == NULL || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_status status = ft_sorted_map_prepare_result(source, destination);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_tree_copy(&source->tree, &destination->tree);
+    if (status != FT_STATUS_OK) {
+        free(destination->entry_context);
+        (void)memset(destination, 0, sizeof(*destination));
+        return status;
+    }
+
+    destination->tree.policy = &destination->policy;
+    return FT_STATUS_OK;
+}
+
+void ft_sorted_map_dispose(ft_sorted_map* map)
+{
+    if (map == NULL) {
+        return;
+    }
+
+    ft_tree_dispose(&map->tree);
+    free(map->entry_context);
+    (void)memset(map, 0, sizeof(*map));
+}
+
+bool ft_sorted_map_empty(const ft_sorted_map* map)
+{
+    return map == NULL || ft_tree_empty(&map->tree);
+}
+
+size_t ft_sorted_map_size(const ft_sorted_map* map)
+{
+    return map == NULL ? 0 : ft_tree_size(&map->tree);
+}
+
+bool ft_sorted_map_contains_key(const ft_sorted_map* map, const void* key)
+{
+    if (map == NULL || key == NULL) {
+        return false;
+    }
+
+    size_t lower = 0;
+    size_t upper = 0;
+    if (ft_sorted_map_bounds(map, key, &lower, &upper) != FT_STATUS_OK) {
+        return false;
+    }
+
+    return lower != upper;
+}
+
+ft_status ft_sorted_map_try_get(
+    const ft_sorted_map* map,
+    const void* key,
+    bool* found,
+    void* value)
+{
+    if (map == NULL || key == NULL || found == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    size_t lower = 0;
+    size_t upper = 0;
+    ft_status status = ft_sorted_map_bounds(map, key, &lower, &upper);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (lower == upper) {
+        *found = false;
+        return FT_STATUS_OK;
+    }
+
+    ft_sorted_map_entry entry;
+    status = ft_tree_at(&map->tree, lower, &entry);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (value != NULL) {
+        ft_value_copy(&map->value_type, value, entry.value);
+    }
+
+    ft_sorted_map_entry_destroy_value(map->entry_context, &entry);
+    *found = true;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_sorted_map_index_of_key(
+    const ft_sorted_map* map,
+    const void* key,
+    bool* found,
+    size_t* index)
+{
+    if (map == NULL || key == NULL || found == NULL || index == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    size_t lower = 0;
+    size_t upper = 0;
+    ft_status status = ft_sorted_map_bounds(map, key, &lower, &upper);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    *found = lower != upper;
+    *index = lower;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_sorted_map_entry_at(
+    const ft_sorted_map* map,
+    size_t index,
+    void* key,
+    void* value)
+{
+    if (map == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_sorted_map_entry entry;
+    ft_status status = ft_tree_at(&map->tree, index, &entry);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (key != NULL) {
+        ft_value_copy(&map->key_type, key, entry.key);
+    }
+
+    if (value != NULL) {
+        ft_value_copy(&map->value_type, value, entry.value);
+    }
+
+    ft_sorted_map_entry_destroy_value(map->entry_context, &entry);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_sorted_map_set(
+    const ft_sorted_map* map,
+    const void* key,
+    const void* value,
+    ft_sorted_map* result)
+{
+    if (map == NULL || key == NULL || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    size_t lower = 0;
+    size_t upper = 0;
+    ft_status status = ft_sorted_map_bounds(map, key, &lower, &upper);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    ft_sorted_map_entry entry;
+    status = ft_sorted_map_entry_init(map, key, value, &entry);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_sorted_map_prepare_result(map, result);
+    if (status != FT_STATUS_OK) {
+        ft_sorted_map_entry_destroy_value(map->entry_context, &entry);
+        return status;
+    }
+
+    ft_tree without_old;
+    bool has_without_old = false;
+    if (lower != upper) {
+        status = ft_tree_remove_at(&map->tree, lower, &without_old);
+        if (status != FT_STATUS_OK) {
+            ft_sorted_map_entry_destroy_value(map->entry_context, &entry);
+            ft_sorted_map_dispose(result);
+            return status;
+        }
+
+        has_without_old = true;
+    } else {
+        status = ft_tree_copy(&map->tree, &without_old);
+        if (status != FT_STATUS_OK) {
+            ft_sorted_map_entry_destroy_value(map->entry_context, &entry);
+            ft_sorted_map_dispose(result);
+            return status;
+        }
+
+        has_without_old = true;
+    }
+
+    status = ft_tree_insert_at(&without_old, lower, &entry, &result->tree);
+    ft_sorted_map_entry_destroy_value(map->entry_context, &entry);
+    if (has_without_old) {
+        ft_tree_dispose(&without_old);
+    }
+
+    if (status != FT_STATUS_OK) {
+        ft_sorted_map_dispose(result);
+        return status;
+    }
+
+    result->tree.policy = &result->policy;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_sorted_map_try_insert(
+    const ft_sorted_map* map,
+    const void* key,
+    const void* value,
+    bool* inserted,
+    ft_sorted_map* result)
+{
+    if (map == NULL || key == NULL || value == NULL || inserted == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    size_t lower = 0;
+    size_t upper = 0;
+    ft_status status = ft_sorted_map_bounds(map, key, &lower, &upper);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (lower != upper) {
+        *inserted = false;
+        return ft_sorted_map_copy(map, result);
+    }
+
+    ft_sorted_map_entry entry;
+    status = ft_sorted_map_entry_init(map, key, value, &entry);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_sorted_map_prepare_result(map, result);
+    if (status != FT_STATUS_OK) {
+        ft_sorted_map_entry_destroy_value(map->entry_context, &entry);
+        return status;
+    }
+
+    status = ft_tree_insert_at(&map->tree, lower, &entry, &result->tree);
+    ft_sorted_map_entry_destroy_value(map->entry_context, &entry);
+    if (status != FT_STATUS_OK) {
+        ft_sorted_map_dispose(result);
+        return status;
+    }
+
+    result->tree.policy = &result->policy;
+    *inserted = true;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_sorted_map_insert(
+    const ft_sorted_map* map,
+    const void* key,
+    const void* value,
+    ft_sorted_map* result)
+{
+    bool inserted = false;
+    ft_status status = ft_sorted_map_try_insert(map, key, value, &inserted, result);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (!inserted) {
+        ft_sorted_map_dispose(result);
+        return FT_STATUS_ALREADY_EXISTS;
+    }
+
+    return FT_STATUS_OK;
+}
+
+ft_status ft_sorted_map_remove(
+    const ft_sorted_map* map,
+    const void* key,
+    ft_sorted_map* result)
+{
+    if (map == NULL || key == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    size_t lower = 0;
+    size_t upper = 0;
+    ft_status status = ft_sorted_map_bounds(map, key, &lower, &upper);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_sorted_map_prepare_result(map, result);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (lower == upper) {
+        status = ft_tree_copy(&map->tree, &result->tree);
+    } else {
+        status = ft_tree_remove_at(&map->tree, lower, &result->tree);
+    }
+
+    if (status != FT_STATUS_OK) {
+        ft_sorted_map_dispose(result);
+        return status;
+    }
+
+    result->tree.policy = &result->policy;
+    return FT_STATUS_OK;
+}
+
+typedef struct ft_sorted_map_visit_context {
+    ft_sorted_map_visit_fn visitor;
+    void* context;
+} ft_sorted_map_visit_context;
+
+static void ft_sorted_map_visit_entry(const void* value, void* context)
+{
+    ft_sorted_map_visit_context* visit_context = (ft_sorted_map_visit_context*)context;
+    const ft_sorted_map_entry* entry = (const ft_sorted_map_entry*)value;
+    visit_context->visitor(entry->key, entry->value, visit_context->context);
+}
+
+ft_status ft_sorted_map_visit(const ft_sorted_map* map, ft_sorted_map_visit_fn visitor, void* context)
+{
+    if (map == NULL || visitor == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_sorted_map_visit_context visit_context;
+    visit_context.visitor = visitor;
+    visit_context.context = context;
+    return ft_tree_visit(&map->tree, ft_sorted_map_visit_entry, &visit_context);
+}
+
 typedef struct ft_priority_entry {
     uint64_t ordinal;
     void* priority;
@@ -2256,8 +2777,7 @@ static void ft_priority_entry_copy(void* destination, const void* source, void* 
     destination_entry->value = ft_allocate(entry_context->value_type.size);
 
     if (destination_entry->priority == NULL || destination_entry->value == NULL) {
-        ft_priority_entry_destroy_value(entry_context, destination_entry);
-        return;
+        abort();
     }
 
     ft_value_copy(&entry_context->priority_type, destination_entry->priority, source_entry->priority);

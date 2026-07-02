@@ -16,7 +16,8 @@ typedef enum ft_status {
     FT_STATUS_EMPTY = 3,
     FT_STATUS_NOT_FOUND = 4,
     FT_STATUS_NO_MEMORY = 5,
-    FT_STATUS_OVERFLOW = 6
+    FT_STATUS_OVERFLOW = 6,
+    FT_STATUS_ALREADY_EXISTS = 7
 } ft_status;
 
 typedef void (*ft_copy_fn)(void* destination, const void* source, void* context);
@@ -179,6 +180,68 @@ ft_status ft_sorted_set_remove(const ft_sorted_set* set, const void* value, ft_s
 bool ft_sorted_set_contains(const ft_sorted_set* set, const void* value);
 ft_status ft_sorted_set_at(const ft_sorted_set* set, size_t index, void* destination);
 ft_status ft_sorted_set_visit(const ft_sorted_set* set, ft_visit_fn visitor, void* context);
+
+typedef void (*ft_sorted_map_visit_fn)(const void* key, const void* value, void* context);
+
+typedef struct ft_sorted_map_entry_context ft_sorted_map_entry_context;
+
+typedef struct ft_sorted_map {
+    ft_tree_policy policy;
+    ft_tree tree;
+    ft_value_type key_type;
+    ft_value_type value_type;
+    ft_compare_fn compare_key;
+    void* compare_context;
+    ft_sorted_map_entry_context* entry_context;
+} ft_sorted_map;
+
+ft_status ft_sorted_map_init(
+    ft_sorted_map* map,
+    const ft_value_type* key_type,
+    const ft_value_type* value_type,
+    ft_compare_fn compare_key,
+    void* compare_context);
+ft_status ft_sorted_map_copy(const ft_sorted_map* source, ft_sorted_map* destination);
+void ft_sorted_map_dispose(ft_sorted_map* map);
+bool ft_sorted_map_empty(const ft_sorted_map* map);
+size_t ft_sorted_map_size(const ft_sorted_map* map);
+bool ft_sorted_map_contains_key(const ft_sorted_map* map, const void* key);
+ft_status ft_sorted_map_try_get(
+    const ft_sorted_map* map,
+    const void* key,
+    bool* found,
+    void* value);
+ft_status ft_sorted_map_index_of_key(
+    const ft_sorted_map* map,
+    const void* key,
+    bool* found,
+    size_t* index);
+ft_status ft_sorted_map_entry_at(
+    const ft_sorted_map* map,
+    size_t index,
+    void* key,
+    void* value);
+ft_status ft_sorted_map_set(
+    const ft_sorted_map* map,
+    const void* key,
+    const void* value,
+    ft_sorted_map* result);
+ft_status ft_sorted_map_try_insert(
+    const ft_sorted_map* map,
+    const void* key,
+    const void* value,
+    bool* inserted,
+    ft_sorted_map* result);
+ft_status ft_sorted_map_insert(
+    const ft_sorted_map* map,
+    const void* key,
+    const void* value,
+    ft_sorted_map* result);
+ft_status ft_sorted_map_remove(
+    const ft_sorted_map* map,
+    const void* key,
+    ft_sorted_map* result);
+ft_status ft_sorted_map_visit(const ft_sorted_map* map, ft_sorted_map_visit_fn visitor, void* context);
 
 typedef struct ft_priority_queue_entry_context ft_priority_queue_entry_context;
 

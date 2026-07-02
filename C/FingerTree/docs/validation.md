@@ -34,6 +34,7 @@ The bootstrap test executable covers:
 - size-measure `locate` and measure-guided split behavior;
 - reversible-deque logical reversal, endpoint edits, and persistence;
 - sorted set uniqueness, sorted multiset duplicates, rank access, removal, and traversal;
+- sorted map insert/set/remove, duplicate rejection, lookup, rank access, traversal, and persistence;
 - priority queue minimum-first drain order and FIFO stability for equal priorities;
 - signed 64-bit interval insertion, ordering, containment, removal, first-overlap, and overlap counting;
 - text rope construction, editing, indexing, line count, line/column navigation, and traversal.
