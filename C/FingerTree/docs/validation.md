@@ -32,6 +32,7 @@ The bootstrap test executable covers:
 
 - endpoint, index, split, concat, and persistence behavior for the generic tree/deque surface;
 - size-measure `locate` and measure-guided split behavior;
+- concurrent shared-snapshot copy/read/update/dispose behavior over atomic node and tree reference counts;
 - reversible-deque logical reversal, endpoint edits, and persistence;
 - sorted set uniqueness, sorted multiset duplicates, rank access, removal, and traversal;
 - sorted map insert/set/remove, duplicate rejection, lookup, rank access, traversal, and persistence;

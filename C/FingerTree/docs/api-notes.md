@@ -14,6 +14,8 @@ policy callbacks rather than C++ templates:
 - `ft_tree_policy` combines the two and must outlive every `ft_tree` created with it.
 - Measure values are byte-copied by this checkpoint; custom measure storage should therefore be trivially
   copyable or externally owned.
+- Tree and node reps use atomic reference counts, so independently held immutable handles may be copied, read,
+  updated into new handles, and disposed concurrently when callers still obey normal handle-lifetime rules.
 
 `ft_tree` is immutable. Operations such as `ft_tree_push_back`, `ft_tree_concat`, `ft_tree_insert_at`, and
 `ft_tree_remove_at` return new handles and leave their inputs valid. Handles must be released with
@@ -25,7 +27,7 @@ persistent-update convention.
 Implemented in this checkpoint:
 
 - strict measured-tree core with reference-counted immutable reps, digits, 2/3 nodes, split, locate, concat,
-  endpoint operations, indexing, and traversal;
+  endpoint operations, indexing, traversal, and atomic shared-snapshot reference counts;
 - size-measured persistent deque alias;
 - reversible deque facade with a logical orientation bit and persistent endpoint operations;
 - persistent sorted set, sorted multiset, and sorted map wrappers using a runtime comparator;
@@ -44,6 +46,6 @@ Deferred from the C++ port:
 - atomic lazy-middle cells and the full persistent amortization/concurrency argument;
 - allocator customization and typed macro-generation helpers.
 
-The strict core is still useful for validating C ownership, policy, and ABI shape before porting the lazy
-publication machinery. Documentation and comments should not claim the C++ lazy-spine bounds for this C workspace
-until that follow-up lands.
+The strict core is still useful for validating C ownership, policy, ABI shape, and shared-snapshot lifetime safety
+before porting the lazy publication machinery. Documentation and comments should not claim the C++ lazy-spine
+bounds for this C workspace until that follow-up lands.

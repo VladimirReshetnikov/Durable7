@@ -5,6 +5,45 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+typedef volatile LONG ft_ref_count;
+
+static void ft_ref_init(ft_ref_count* count)
+{
+    *count = 1;
+}
+
+static void ft_ref_retain(ft_ref_count* count)
+{
+    (void)InterlockedIncrement(count);
+}
+
+static bool ft_ref_release(ft_ref_count* count)
+{
+    return InterlockedDecrement(count) == 0;
+}
+#else
+#include <stdatomic.h>
+typedef atomic_size_t ft_ref_count;
+
+static void ft_ref_init(ft_ref_count* count)
+{
+    atomic_init(count, 1);
+}
+
+static void ft_ref_retain(ft_ref_count* count)
+{
+    (void)atomic_fetch_add_explicit(count, 1, memory_order_relaxed);
+}
+
+static bool ft_ref_release(ft_ref_count* count)
+{
+    return atomic_fetch_sub_explicit(count, 1, memory_order_acq_rel) == 1;
+}
+#endif
+
 typedef enum ft_element_kind {
     FT_ELEMENT_LEAF,
     FT_ELEMENT_NODE
@@ -24,7 +63,7 @@ struct ft_element {
 };
 
 struct ft_node {
-    size_t ref_count;
+    ft_ref_count ref_count;
     size_t child_count;
     size_t leaf_count;
     void* measure;
@@ -38,7 +77,7 @@ typedef enum ft_rep_kind {
 } ft_rep_kind;
 
 struct ft_tree_rep {
-    size_t ref_count;
+    ft_ref_count ref_count;
     ft_rep_kind kind;
     size_t leaf_count;
     void* measure;
@@ -155,7 +194,7 @@ static ft_status ft_measure_new_combine(
 static void ft_node_retain(ft_node* node)
 {
     if (node != NULL) {
-        ++node->ref_count;
+        ft_ref_retain(&node->ref_count);
     }
 }
 
@@ -167,8 +206,7 @@ static void ft_node_release(const ft_tree_policy* policy, ft_node* node)
         return;
     }
 
-    --node->ref_count;
-    if (node->ref_count != 0) {
+    if (!ft_ref_release(&node->ref_count)) {
         return;
     }
 
@@ -260,7 +298,7 @@ static ft_status ft_node_create(const ft_tree_policy* policy, const ft_element* 
         return FT_STATUS_NO_MEMORY;
     }
 
-    node->ref_count = 1;
+    ft_ref_init(&node->ref_count);
     node->child_count = count;
 
     ft_status status = FT_STATUS_OK;
@@ -327,7 +365,7 @@ static ft_status ft_element_init_node(const ft_tree_policy* policy, const ft_ele
 static void ft_rep_retain(ft_tree_rep* rep)
 {
     if (rep != NULL) {
-        ++rep->ref_count;
+        ft_ref_retain(&rep->ref_count);
     }
 }
 
@@ -337,8 +375,7 @@ static void ft_rep_release(const ft_tree_policy* policy, ft_tree_rep* rep)
         return;
     }
 
-    --rep->ref_count;
-    if (rep->ref_count != 0) {
+    if (!ft_ref_release(&rep->ref_count)) {
         return;
     }
 
@@ -367,7 +404,7 @@ static ft_status ft_rep_create_empty(const ft_tree_policy* policy, ft_tree_rep**
         return FT_STATUS_NO_MEMORY;
     }
 
-    rep->ref_count = 1;
+    ft_ref_init(&rep->ref_count);
     rep->kind = FT_REP_EMPTY;
     ft_status status = ft_measure_new_identity(&policy->measure, &rep->measure);
     if (status != FT_STATUS_OK) {
@@ -386,7 +423,7 @@ static ft_status ft_rep_create_single(const ft_tree_policy* policy, const ft_ele
         return FT_STATUS_NO_MEMORY;
     }
 
-    rep->ref_count = 1;
+    ft_ref_init(&rep->ref_count);
     rep->kind = FT_REP_SINGLE;
     rep->leaf_count = element->leaf_count;
 
@@ -465,7 +502,7 @@ static ft_status ft_rep_create_deep(
         return FT_STATUS_NO_MEMORY;
     }
 
-    rep->ref_count = 1;
+    ft_ref_init(&rep->ref_count);
     rep->kind = FT_REP_DEEP;
     rep->as.deep.prefix_count = prefix_count;
     rep->as.deep.suffix_count = suffix_count;

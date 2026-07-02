@@ -6,6 +6,45 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+typedef volatile LONG test_atomic_long;
+
+static void test_atomic_long_init(test_atomic_long* value, long initial_value)
+{
+    *value = initial_value;
+}
+
+static void test_atomic_long_increment(test_atomic_long* value)
+{
+    (void)InterlockedIncrement(value);
+}
+
+static long test_atomic_long_read(test_atomic_long* value)
+{
+    return InterlockedCompareExchange(value, 0, 0);
+}
+#else
+#include <stdatomic.h>
+typedef atomic_long test_atomic_long;
+
+static void test_atomic_long_init(test_atomic_long* value, long initial_value)
+{
+    atomic_init(value, initial_value);
+}
+
+static void test_atomic_long_increment(test_atomic_long* value)
+{
+    (void)atomic_fetch_add_explicit(value, 1, memory_order_relaxed);
+}
+
+static long test_atomic_long_read(test_atomic_long* value)
+{
+    return atomic_load_explicit(value, memory_order_relaxed);
+}
+#endif
+
 static int g_failures = 0;
 
 static void fail_at(const char* file, int line, const char* expression)
@@ -134,6 +173,112 @@ static bool size_reaches(const void* measure, void* context)
 static bool int_sum_reaches(const void* measure, void* context)
 {
     return *(const int*)measure >= *(const int*)context;
+}
+
+typedef struct concurrent_tree_context {
+    const ft_tree* tree;
+    int iterations;
+    test_atomic_long failures;
+} concurrent_tree_context;
+
+static void concurrent_tree_worker(concurrent_tree_context* context)
+{
+    for (int iteration = 0; iteration != context->iterations; ++iteration) {
+        ft_tree snapshot;
+        if (ft_tree_copy(context->tree, &snapshot) != FT_STATUS_OK) {
+            test_atomic_long_increment(&context->failures);
+            return;
+        }
+
+        int front = -1;
+        int back = -1;
+        int middle = -1;
+        if (ft_tree_front(&snapshot, &front) != FT_STATUS_OK ||
+            ft_tree_back(&snapshot, &back) != FT_STATUS_OK ||
+            ft_tree_at(&snapshot, 500, &middle) != FT_STATUS_OK ||
+            front != 0 ||
+            back != 999 ||
+            middle != 500) {
+            test_atomic_long_increment(&context->failures);
+            ft_tree_dispose(&snapshot);
+            return;
+        }
+
+        const int extra = -iteration - 1;
+        ft_tree updated;
+        if (ft_tree_push_front(&snapshot, &extra, &updated) != FT_STATUS_OK) {
+            test_atomic_long_increment(&context->failures);
+            ft_tree_dispose(&snapshot);
+            return;
+        }
+
+        int updated_front = 0;
+        if (ft_tree_front(&updated, &updated_front) != FT_STATUS_OK || updated_front != extra) {
+            test_atomic_long_increment(&context->failures);
+            ft_tree_dispose(&updated);
+            ft_tree_dispose(&snapshot);
+            return;
+        }
+
+        ft_tree_dispose(&updated);
+        ft_tree_dispose(&snapshot);
+    }
+}
+
+#ifdef _WIN32
+static DWORD WINAPI concurrent_tree_thread_proc(void* parameter)
+{
+    concurrent_tree_worker((concurrent_tree_context*)parameter);
+    return 0;
+}
+#endif
+
+static void test_concurrent_snapshot_refcounts(void)
+{
+    ft_tree_policy policy;
+    init_int_policy(&policy);
+
+    ft_tree tree;
+    REQUIRE_STATUS(ft_tree_init(&tree, &policy), FT_STATUS_OK);
+    for (int value = 0; value != 1000; ++value) {
+        ft_tree next;
+        REQUIRE_STATUS(ft_tree_push_back(&tree, &value, &next), FT_STATUS_OK);
+        ft_tree_dispose(&tree);
+        tree = next;
+    }
+
+    concurrent_tree_context context;
+    context.tree = &tree;
+    context.iterations = 400;
+    test_atomic_long_init(&context.failures, 0);
+
+#ifdef _WIN32
+    enum { thread_count = 8 };
+    HANDLE threads[thread_count];
+    for (DWORD index = 0; index != thread_count; ++index) {
+        threads[index] = CreateThread(NULL, 0, concurrent_tree_thread_proc, &context, 0, NULL);
+        REQUIRE(threads[index] != NULL);
+    }
+
+    const DWORD wait_result = WaitForMultipleObjects(thread_count, threads, TRUE, INFINITE);
+    REQUIRE(wait_result >= WAIT_OBJECT_0 && wait_result < WAIT_OBJECT_0 + thread_count);
+    for (DWORD index = 0; index != thread_count; ++index) {
+        CloseHandle(threads[index]);
+    }
+#else
+    for (int index = 0; index != 8; ++index) {
+        concurrent_tree_worker(&context);
+    }
+#endif
+
+    REQUIRE(test_atomic_long_read(&context.failures) == 0);
+    int front = -1;
+    int back = -1;
+    REQUIRE_STATUS(ft_tree_front(&tree, &front), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_tree_back(&tree, &back), FT_STATUS_OK);
+    REQUIRE(front == 0);
+    REQUIRE(back == 999);
+    ft_tree_dispose(&tree);
 }
 
 static void test_reversible_deque(void)
@@ -828,6 +973,7 @@ static void run_test(const char* name, void (*test)(void))
 
 int main(void)
 {
+    run_test("concurrent snapshot refcounts", test_concurrent_snapshot_refcounts);
     run_test("reversible deque", test_reversible_deque);
     run_test("tree endpoint/index/split/concat", test_tree_endpoint_index_split_and_concat);
     run_test("measure locate and split", test_measure_locate_and_split);
