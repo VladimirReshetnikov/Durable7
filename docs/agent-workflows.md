@@ -10,7 +10,7 @@
 Use the real .NET SDK in the local Windows environment:
 
 ```powershell
-cd C:\DataStructures\FingerTree
+cd C:\DataStructures\src\CSharp\FingerTree
 dotnet restore
 dotnet build
 dotnet test .\FingerTree.sln
@@ -44,7 +44,7 @@ Every new long-lived document should include:
 
 ## External references
 
-`FingerTree/docs/external` is external study material. Do not make substantive edits there unless the task explicitly concerns curation or provenance. Keep license and authorship distinctions visible.
+`src/CSharp/FingerTree/docs/external` is external study material. Do not make substantive edits there unless the task explicitly concerns curation or provenance. Keep license and authorship distinctions visible.
 
 ## History filtering
 

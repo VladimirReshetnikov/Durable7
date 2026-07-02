@@ -1,0 +1,12 @@
+# C FingerTree Documentation
+
+- Status: Initial documentation index
+- Created (UTC): 2026-07-02T18:12:21Z
+- Repository HEAD: 9bba9109d24a3a104e05212e3828f12783fe8aaa
+- Audience: Maintainers and AI agents implementing the C port
+- Scope: C port documentation under `src/C/FingerTree/docs`
+
+## Current Documents
+
+- [API notes](api-notes.md) records the C API shape, ownership rules, and active differences from the C++ port.
+- [Validation](validation.md) records local build and test commands for the C workspace.

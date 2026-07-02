@@ -64,9 +64,9 @@ dotnet test .\FingerTree.sln
 
 Result: passed 346 tests, 0 failed, 0 skipped.
 
-Validation can be repeated with:
+After the 2026-07 language-first repository reorganization, the equivalent validation command is:
 
 ```powershell
-cd C:\DataStructures\FingerTree
+cd C:\DataStructures\src\CSharp\FingerTree
 dotnet test .\FingerTree.sln
 ```

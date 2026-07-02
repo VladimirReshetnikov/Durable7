@@ -6,11 +6,11 @@
 - Scope: Repository-level documentation index
 
 This directory contains repository-level guidance and extraction provenance. Library-specific design
-and API documentation lives under [Hamt/docs](../Hamt/docs/README.md),
-[HamtC/docs](../HamtC/docs/README.md), [HamtCpp/docs](../HamtCpp/docs/README.md), and
-[FingerTree/docs](../FingerTree/docs/README.md), with native FingerTree port docs under
-[Cpp/FingerTree/docs](../Cpp/FingerTree/docs/README.md) and
-[C/FingerTree/docs](../C/FingerTree/docs/README.md).
+and API documentation lives under [src/CSharp/Hamt/docs](../src/CSharp/Hamt/docs/README.md),
+[src/C/Hamt/docs](../src/C/Hamt/docs/README.md), [src/Cpp/Hamt/docs](../src/Cpp/Hamt/docs/README.md), and
+[src/CSharp/FingerTree/docs](../src/CSharp/FingerTree/docs/README.md), with native FingerTree port docs under
+[src/Cpp/FingerTree/docs](../src/Cpp/FingerTree/docs/README.md) and
+[src/C/FingerTree/docs](../src/C/FingerTree/docs/README.md).
 
 ## Current documents
 
@@ -21,9 +21,9 @@ and API documentation lives under [Hamt/docs](../Hamt/docs/README.md),
 ## Placement
 
 Put repository-wide reports and migration records here. Put C# HAMT implementation and API
-documents under [Hamt/docs](../Hamt/docs/README.md), C HAMT port documents under
-[HamtC/docs](../HamtC/docs/README.md), C++ HAMT port documents under
-[HamtCpp/docs](../HamtCpp/docs/README.md), and FingerTree implementation, API, benchmark, and
-algorithm documents under [FingerTree/docs](../FingerTree/docs/README.md). Put native FingerTree port
-documents under [Cpp/FingerTree/docs](../Cpp/FingerTree/docs/README.md) and
-[C/FingerTree/docs](../C/FingerTree/docs/README.md).
+documents under [src/CSharp/Hamt/docs](../src/CSharp/Hamt/docs/README.md), C HAMT port documents under
+[src/C/Hamt/docs](../src/C/Hamt/docs/README.md), C++ HAMT port documents under
+[src/Cpp/Hamt/docs](../src/Cpp/Hamt/docs/README.md), and FingerTree implementation, API, benchmark, and
+algorithm documents under [src/CSharp/FingerTree/docs](../src/CSharp/FingerTree/docs/README.md). Put native FingerTree port
+documents under [src/Cpp/FingerTree/docs](../src/Cpp/FingerTree/docs/README.md) and
+[src/C/FingerTree/docs](../src/C/FingerTree/docs/README.md).
