@@ -6,6 +6,9 @@
 - Audience: Maintainers and reviewers of `Tools.DataStructures.Hamt`
 - Scope: Public API, persistence semantics, and complexity guarantees
 
+For practical namespace, comparer, persistent update, and set-algebra examples, start with the
+[usage guide](usage.md).
+
 ## Overview
 
 `PersistentHashMap<TKey, TValue>` is an immutable unordered dictionary backed by a hash-array mapped

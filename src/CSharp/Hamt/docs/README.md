@@ -11,6 +11,8 @@
 - [API Specification](api-specification.md) defines the public C# API shape, semantic contracts,
   persistence behavior, and complexity targets for `PersistentHashMap<TKey, TValue>` and
   `PersistentHashSet<T>`.
+- [Usage guide](usage.md) shows namespace setup, persistent update patterns, comparer behavior,
+  stored equivalent key/item recovery, iteration, and set algebra for the C# HAMT collections.
 - [Implementation Review 2026-07-02](hamt-implementation-review-2026-07-02__afa84237ef48.md)
   records the adversarially-verified multi-agent review of the initial implementation, the
   improvements applied in response (annotations, `IReadOnlySet<T>`, single-pass adds,
