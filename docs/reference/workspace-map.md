@@ -52,7 +52,9 @@ FingerTree lineage:
 3. `src/C/FingerTree` starts from the C++ port and exposes a C11 API with explicit handles, ownership, and facade types.
 
 When porting behavior across languages, prefer the managed workspace for the semantic contract, the adjacent
-native workspace for local idioms, and the local tests for the exact validation shape.
+native workspace for local idioms, and the local tests for the exact validation shape. Use the
+[porting and semantic parity guide](../guides/porting-and-semantic-parity.md) for the cross-language
+change workflow.
 
 ## Documentation Organization
 

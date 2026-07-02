@@ -107,5 +107,6 @@ callbacks and context pointers.
 
 - Start with this catalog when comparing data-structure availability across languages.
 - Use the [workspace map](workspace-map.md) when choosing the correct language/data-structure directory.
+- Use the [porting and semantic parity guide](../guides/porting-and-semantic-parity.md) when changing behavior that may cross language workspaces.
 - Use workspace API specs and public headers for normative contracts.
 - Keep new public data structures visible here when they become part of a long-lived workspace surface.
