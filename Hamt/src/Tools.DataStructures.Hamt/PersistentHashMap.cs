@@ -1,5 +1,8 @@
 using System.Collections;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace Tools.DataStructures.Hamt;
 
@@ -15,10 +18,18 @@ namespace Tools.DataStructures.Hamt;
 /// removing clone only the search path and, for equal-hash collisions, the touched collision bucket.
 /// </para>
 /// <para>
+/// Single-key operations visit at most seven trie levels for 32-bit hashes plus, for equal full
+/// hashes, a linear collision-bucket scan. Lookups and enumeration allocate nothing; updates allocate
+/// only the rebuilt search path. Published trie nodes are never mutated, so any version can be read
+/// and enumerated concurrently with updates that produce new versions.
+/// </para>
+/// <para>
 /// Enumeration order follows the trie bitmap order and collision-bucket order. It is stable for an
 /// unchanged version but is not insertion order, sorted order, or part of the semantic contract.
 /// </para>
 /// </remarks>
+[DebuggerDisplay("Count = {Count}")]
+[DebuggerTypeProxy(typeof(PersistentHashMapDebugView<,>))]
 public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, TValue>
 {
     private const int BitsPerLevel = 5;
@@ -59,6 +70,7 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     /// <summary>
     /// Gets an enumerable view of the keys in the map's trie enumeration order.
     /// </summary>
+    /// <remarks>Each enumeration of the view allocates one iterator object.</remarks>
     public IEnumerable<TKey> Keys
     {
         get
@@ -71,6 +83,7 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     /// <summary>
     /// Gets an enumerable view of the values in the map's trie enumeration order.
     /// </summary>
+    /// <remarks>Each enumeration of the view allocates one iterator object.</remarks>
     public IEnumerable<TValue> Values
     {
         get
@@ -86,6 +99,10 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     /// <param name="key">The key to locate.</param>
     /// <returns>The value associated with <paramref name="key"/>.</returns>
     /// <exception cref="KeyNotFoundException">The key is not present in the map.</exception>
+    /// <remarks>
+    /// Visits at most seven trie levels plus any equal-hash collision-bucket scan and allocates
+    /// nothing.
+    /// </remarks>
     public TValue this[TKey key]
     {
         get
@@ -93,11 +110,11 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             if (TryGetValue(key, out var value))
                 return value;
 
-            throw new KeyNotFoundException("The specified key was not present in the map.");
+            throw new KeyNotFoundException($"The key '{key}' was not present in the map.");
         }
     }
 
-    internal object? RootForTesting => _root;
+    internal Node? RootForTesting => _root;
 
     /// <summary>
     /// Creates an empty map with the specified key comparer.
@@ -120,9 +137,12 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     /// </param>
     /// <returns>
     /// A map containing the supplied entries. When two entries have equivalent keys, the value from
-    /// the later entry wins and the first equivalent key object remains the enumerated key.
+    /// the later entry wins and the first equivalent key object remains the enumerated key. When a
+    /// later value compares equal to the stored value under <see cref="EqualityComparer{T}.Default"/>
+    /// for values, the earlier stored value object is retained.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
+    /// <remarks>Runs in O(n) single-key updates with structural sharing during the build.</remarks>
     public static PersistentHashMap<TKey, TValue> CreateRange(
         IEnumerable<KeyValuePair<TKey, TValue>> items,
         IEqualityComparer<TKey>? comparer = null)
@@ -141,6 +161,10 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     /// </summary>
     /// <param name="key">The key to locate.</param>
     /// <returns><see langword="true"/> when the key is present; otherwise, <see langword="false"/>.</returns>
+    /// <remarks>
+    /// Visits at most seven trie levels plus any equal-hash collision-bucket scan and allocates
+    /// nothing.
+    /// </remarks>
     public bool ContainsKey(TKey key) => TryGetValue(key, out _);
 
     /// <summary>
@@ -152,15 +176,42 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     /// or the default value of <typeparamref name="TValue"/> otherwise.
     /// </param>
     /// <returns><see langword="true"/> when the key is present; otherwise, <see langword="false"/>.</returns>
-    public bool TryGetValue(TKey key, out TValue value)
+    /// <remarks>
+    /// Visits at most seven trie levels plus any equal-hash collision-bucket scan and allocates
+    /// nothing.
+    /// </remarks>
+    public bool TryGetValue(TKey key, [MaybeNullWhen(false)] out TValue value) =>
+        TryGetEntry(key, out _, out value);
+
+    /// <summary>
+    /// Searches for the stored key equivalent to the specified key.
+    /// </summary>
+    /// <param name="equalKey">The key to search for.</param>
+    /// <param name="actualKey">
+    /// When this method returns, contains the originally stored key object when an equivalent key is
+    /// present, or <paramref name="equalKey"/> otherwise.
+    /// </param>
+    /// <returns><see langword="true"/> when an equivalent key is present; otherwise, <see langword="false"/>.</returns>
+    /// <remarks>
+    /// <para>
+    /// Because updates of an equivalent key retain the originally stored key object, this method is
+    /// the O(trie-depth) way to recover that canonical object, for example when interning.
+    /// </para>
+    /// <para>
+    /// Visits at most seven trie levels plus any equal-hash collision-bucket scan and allocates
+    /// nothing.
+    /// </para>
+    /// </remarks>
+    public bool TryGetKey(TKey equalKey, out TKey actualKey)
     {
-        if (_root is null)
+        if (TryGetEntry(equalKey, out var storedKey, out _))
         {
-            value = default!;
-            return false;
+            actualKey = storedKey;
+            return true;
         }
 
-        return _root.TryGet(key, GetHash(key), shift: 0, _comparer, out value);
+        actualKey = equalKey;
+        return false;
     }
 
     /// <summary>
@@ -171,15 +222,21 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     /// <returns>
     /// A map containing the supplied key/value pair. If the existing value compares equal to
     /// <paramref name="value"/> under <see cref="EqualityComparer{T}.Default"/> for values, this
-    /// method returns the current map instance.
+    /// method returns the current map instance and retains the stored value object. When an
+    /// equivalent key is already present, the originally stored key object is retained.
     /// </returns>
+    /// <remarks>
+    /// Visits at most seven trie levels plus any equal-hash collision-bucket scan; allocates only the
+    /// rebuilt search path (at most one node per level plus a leaf or cloned collision bucket) and
+    /// shares every untouched subtree with the current version.
+    /// </remarks>
     public PersistentHashMap<TKey, TValue> SetItem(TKey key, TValue value)
     {
         var hash = GetHash(key);
         if (_root is null)
             return new PersistentHashMap<TKey, TValue>(new LeafNode(hash, key, value), count: 1, _comparer);
 
-        var newRoot = _root.Set(key, value, hash, shift: 0, _comparer, out var added);
+        var newRoot = _root.Set(key, value, hash, shift: 0, _comparer, overwrite: true, out var added);
         if (ReferenceEquals(newRoot, _root))
             return this;
 
@@ -193,12 +250,17 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     /// <param name="value">The value to associate with <paramref name="key"/>.</param>
     /// <returns>A map containing the supplied key/value pair.</returns>
     /// <exception cref="ArgumentException">An equivalent key is already present.</exception>
+    /// <remarks>
+    /// Hashes the key once and walks the trie once. Unlike
+    /// <c>System.Collections.Immutable.ImmutableDictionary&lt;TKey, TValue&gt;.Add</c>, this method
+    /// throws for any existing equivalent key, including a re-add of an equal value.
+    /// </remarks>
     public PersistentHashMap<TKey, TValue> Add(TKey key, TValue value)
     {
-        if (ContainsKey(key))
-            throw new ArgumentException("An equivalent key is already present.", nameof(key));
+        if (!TryAdd(key, value, out var result))
+            throw new ArgumentException($"An equivalent key '{key}' is already present.", nameof(key));
 
-        return SetItem(key, value);
+        return result;
     }
 
     /// <summary>
@@ -211,15 +273,27 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     /// already exists.
     /// </param>
     /// <returns><see langword="true"/> when the key was added; otherwise, <see langword="false"/>.</returns>
+    /// <remarks>
+    /// Hashes the key once and walks the trie once; when the key already exists, nothing is
+    /// allocated.
+    /// </remarks>
     public bool TryAdd(TKey key, TValue value, out PersistentHashMap<TKey, TValue> result)
     {
-        if (ContainsKey(key))
+        var hash = GetHash(key);
+        if (_root is null)
+        {
+            result = new PersistentHashMap<TKey, TValue>(new LeafNode(hash, key, value), count: 1, _comparer);
+            return true;
+        }
+
+        var newRoot = _root.Set(key, value, hash, shift: 0, _comparer, overwrite: false, out var added);
+        if (!added)
         {
             result = this;
             return false;
         }
 
-        result = SetItem(key, value);
+        result = new PersistentHashMap<TKey, TValue>(newRoot, checked(_count + 1), _comparer);
         return true;
     }
 
@@ -227,8 +301,14 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     /// Adds or replaces every key/value pair from the specified sequence.
     /// </summary>
     /// <param name="items">The key/value pairs to add in enumeration order.</param>
-    /// <returns>A map containing all supplied key/value pairs.</returns>
+    /// <returns>
+    /// A map containing all supplied key/value pairs, applied in enumeration order with last-wins
+    /// semantics. When a supplied value compares equal to the stored value under
+    /// <see cref="EqualityComparer{T}.Default"/> for values, the earlier stored value object is
+    /// retained; when every entry leaves the map unchanged, the current map instance is returned.
+    /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
+    /// <remarks>Runs in O(n) single-key updates with structural sharing during the build.</remarks>
     public PersistentHashMap<TKey, TValue> SetItems(IEnumerable<KeyValuePair<TKey, TValue>> items)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -248,6 +328,10 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     /// A map without <paramref name="key"/>. If the key is absent, this method returns the current
     /// map instance.
     /// </returns>
+    /// <remarks>
+    /// Visits at most seven trie levels plus any equal-hash collision-bucket scan; allocates only the
+    /// rebuilt search path and shares every untouched subtree with the current version.
+    /// </remarks>
     public PersistentHashMap<TKey, TValue> Remove(TKey key)
     {
         if (_root is null)
@@ -273,12 +357,16 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     /// <typeparamref name="TValue"/> when the key was absent.
     /// </param>
     /// <returns><see langword="true"/> when the key was present; otherwise, <see langword="false"/>.</returns>
-    public bool TryRemove(TKey key, out PersistentHashMap<TKey, TValue> result, out TValue value)
+    /// <remarks>
+    /// Visits at most seven trie levels plus any equal-hash collision-bucket scan; allocates only the
+    /// rebuilt search path and shares every untouched subtree with the current version.
+    /// </remarks>
+    public bool TryRemove(TKey key, out PersistentHashMap<TKey, TValue> result, [MaybeNullWhen(false)] out TValue value)
     {
         if (_root is null)
         {
             result = this;
-            value = default!;
+            value = default;
             return false;
         }
 
@@ -296,18 +384,81 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     /// <summary>
     /// Returns an empty map that preserves this map's comparer.
     /// </summary>
-    /// <returns>An empty map with the same key comparer.</returns>
-    public PersistentHashMap<TKey, TValue> Clear() => EmptyFor(_comparer);
+    /// <returns>
+    /// An empty map with the same key comparer. If the map is already empty, this method returns the
+    /// current map instance.
+    /// </returns>
+    public PersistentHashMap<TKey, TValue> Clear() => _count == 0 ? this : EmptyFor(_comparer);
 
     /// <summary>
     /// Returns an enumerator over the map's key/value pairs in trie order.
     /// </summary>
     /// <returns>An enumerator over the map.</returns>
+    /// <remarks>
+    /// Enumeration is O(n) with O(1) amortized cost per entry. The enumerator keeps its whole
+    /// traversal state inline, so obtaining and draining it allocates nothing.
+    /// </remarks>
     public Enumerator GetEnumerator() => new(_root);
 
     IEnumerator<KeyValuePair<TKey, TValue>> IEnumerable<KeyValuePair<TKey, TValue>>.GetEnumerator() => GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+    private bool TryGetEntry(
+        TKey key,
+        [MaybeNullWhen(false)] out TKey actualKey,
+        [MaybeNullWhen(false)] out TValue value)
+    {
+        var node = _root;
+        if (node is not null)
+        {
+            var hash = GetHash(key);
+            var shift = 0;
+            while (node is BitmapIndexedNode branch)
+            {
+                var bit = Bit(Index(hash, shift));
+                if ((branch.Bitmap & bit) == 0)
+                {
+                    actualKey = default;
+                    value = default;
+                    return false;
+                }
+
+                node = branch.Children[Slot(branch.Bitmap, bit)];
+                shift += BitsPerLevel;
+            }
+
+            if (node is LeafNode leaf)
+            {
+                if (leaf.Hash == hash && _comparer.Equals(leaf.Key, key))
+                {
+                    actualKey = leaf.Key;
+                    value = leaf.Value;
+                    return true;
+                }
+            }
+            else
+            {
+                var collision = (CollisionNode)node;
+                if (collision.Hash == hash)
+                {
+                    foreach (var entry in collision.Entries)
+                    {
+                        if (_comparer.Equals(entry.Key, key))
+                        {
+                            actualKey = entry.Key;
+                            value = entry.Value;
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        actualKey = default;
+        value = default;
+        return false;
+    }
 
     private static PersistentHashMap<TKey, TValue> FromRoot(
         Node? root,
@@ -333,11 +484,13 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
 
     private static int Slot(uint bitmap, uint bit) => BitOperations.PopCount(bitmap & (bit - 1));
 
-    private static Node MergeHashNodes(HashNode left, HashNode right, int shift)
+    private static Node MergeHashNodes(HashNode left, LeafNode right, int shift)
     {
         if (left.Hash == right.Hash)
             return CollisionNode.Create(left, right);
 
+        // Two differing 32-bit hashes must split at or before shift 30, so this guard is an
+        // unreachable invariant assertion.
         if (shift >= 32)
             throw new InvalidOperationException("Different 32-bit hashes cannot share every HAMT level.");
 
@@ -349,35 +502,39 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
         if (leftIndex == rightIndex)
         {
             var child = MergeHashNodes(left, right, shift + BitsPerLevel);
-            return new BitmapIndexedNode(leftBit, new[] { child });
+            return new BitmapIndexedNode(leftBit, [child]);
         }
 
         return leftIndex < rightIndex
-            ? new BitmapIndexedNode(leftBit | rightBit, new Node[] { left, right })
-            : new BitmapIndexedNode(leftBit | rightBit, new Node[] { right, left });
+            ? new BitmapIndexedNode(leftBit | rightBit, [left, right])
+            : new BitmapIndexedNode(leftBit | rightBit, [right, left]);
     }
 
     /// <summary>
     /// Enumerates the key/value pairs in a <see cref="PersistentHashMap{TKey, TValue}"/>.
     /// </summary>
+    /// <remarks>
+    /// The enumerator keeps its entire traversal state inline, so obtaining and draining one
+    /// allocates nothing, and a copied enumerator advances independently of the original. Enumerating
+    /// any map version is safe while newer versions are produced, because published trie nodes are
+    /// never mutated.
+    /// </remarks>
     public struct Enumerator : IEnumerator<KeyValuePair<TKey, TValue>>
     {
-        private Node[]? _stack;
-        private int _stackCount;
+        // Bitmap-indexed branches exist only at hash shifts 0, 5, ..., 30, so a branch chain is at
+        // most seven frames deep for 32-bit hashes.
+        private const int MaxDepth = 7;
+
+        private Node? _next;
+        private FrameStack _frames;
+        private int _depth;
         private Entry[]? _collisionEntries;
         private int _collisionIndex;
         private KeyValuePair<TKey, TValue> _current;
 
         internal Enumerator(Node? root)
         {
-            _stack = null;
-            _stackCount = 0;
-            _collisionEntries = null;
-            _collisionIndex = 0;
-            _current = default;
-
-            if (root is not null)
-                Push(root);
+            _next = root;
         }
 
         /// <summary>
@@ -399,32 +556,47 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             if (MoveNextCollisionEntry())
                 return true;
 
-            while (_stackCount > 0)
+            var node = _next;
+            _next = null;
+
+            while (true)
             {
-                var node = _stack![--_stackCount];
-                switch (node)
+                if (node is null)
                 {
-                    case LeafNode leaf:
-                        _current = new KeyValuePair<TKey, TValue>(leaf.Key, leaf.Value);
-                        return true;
+                    if (_depth == 0)
+                    {
+                        _current = default;
+                        return false;
+                    }
 
-                    case CollisionNode collision:
-                        _collisionEntries = collision.Entries;
-                        _collisionIndex = 0;
-                        if (MoveNextCollisionEntry())
-                            return true;
-                        break;
+                    ref var top = ref _frames[_depth - 1];
+                    if (top.Index == top.Children.Length)
+                    {
+                        _frames[--_depth] = default;
+                        continue;
+                    }
 
-                    case BitmapIndexedNode branch:
-                        var children = branch.Children;
-                        for (var i = children.Length - 1; i >= 0; i--)
-                            Push(children[i]);
-                        break;
+                    node = top.Children[top.Index++];
                 }
-            }
 
-            _current = default;
-            return false;
+                if (node is LeafNode leaf)
+                {
+                    _current = new KeyValuePair<TKey, TValue>(leaf.Key, leaf.Value);
+                    return true;
+                }
+
+                if (node is CollisionNode collision)
+                {
+                    // Collision buckets always hold at least two entries.
+                    _collisionEntries = collision.Entries;
+                    _collisionIndex = 0;
+                    MoveNextCollisionEntry();
+                    return true;
+                }
+
+                _frames[_depth++] = new Frame(((BitmapIndexedNode)node).Children);
+                node = null;
+            }
         }
 
         /// <summary>
@@ -434,11 +606,8 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
         {
         }
 
-        /// <summary>
-        /// Resets the enumerator.
-        /// </summary>
-        /// <exception cref="NotSupportedException">Resetting this enumerator is not supported.</exception>
-        public readonly void Reset() => throw new NotSupportedException("Resetting this enumerator is not supported.");
+        readonly void IEnumerator.Reset() =>
+            throw new NotSupportedException("Resetting this enumerator is not supported; create a new enumerator instead.");
 
         private bool MoveNextCollisionEntry()
         {
@@ -457,22 +626,20 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             return false;
         }
 
-        private void Push(Node node)
+        private struct Frame(Node[] children)
         {
-            if (_stack is null)
-            {
-                _stack = new Node[8];
-            }
-            else if (_stackCount == _stack.Length)
-            {
-                Array.Resize(ref _stack, _stack.Length * 2);
-            }
+            public readonly Node[] Children = children;
+            public int Index;
+        }
 
-            _stack[_stackCount++] = node;
+        [InlineArray(MaxDepth)]
+        private struct FrameStack
+        {
+            private Frame _frame0;
         }
     }
 
-    private readonly struct Entry(TKey key, TValue value)
+    internal readonly struct Entry(TKey key, TValue value)
     {
         public readonly TKey Key = key;
         public readonly TValue Value = value;
@@ -480,19 +647,13 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
 
     internal abstract class Node
     {
-        internal abstract bool TryGet(
-            TKey key,
-            uint hash,
-            int shift,
-            IEqualityComparer<TKey> comparer,
-            out TValue value);
-
         internal abstract Node Set(
             TKey key,
             TValue value,
             uint hash,
             int shift,
             IEqualityComparer<TKey> comparer,
+            bool overwrite,
             out bool added);
 
         internal abstract Node? Remove(
@@ -504,38 +665,16 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             out TValue value);
     }
 
-    private abstract class HashNode : Node
+    internal abstract class HashNode(uint hash) : Node
     {
-        internal abstract uint Hash { get; }
-
-        internal abstract Entry[] ToEntries();
+        internal readonly uint Hash = hash;
     }
 
-    private sealed class LeafNode(uint hash, TKey key, TValue value) : HashNode
+    internal sealed class LeafNode(uint hash, TKey key, TValue value) : HashNode(hash)
     {
-        internal override uint Hash { get; } = hash;
-
         internal TKey Key { get; } = key;
 
         internal TValue Value { get; } = value;
-
-        internal override bool TryGet(
-            TKey key,
-            uint hash,
-            int shift,
-            IEqualityComparer<TKey> comparer,
-            out TValue value)
-        {
-            _ = shift;
-            if (Hash == hash && comparer.Equals(Key, key))
-            {
-                value = Value;
-                return true;
-            }
-
-            value = default!;
-            return false;
-        }
 
         internal override Node Set(
             TKey key,
@@ -543,14 +682,16 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             uint hash,
             int shift,
             IEqualityComparer<TKey> comparer,
+            bool overwrite,
             out bool added)
         {
             if (Hash == hash && comparer.Equals(Key, key))
             {
                 added = false;
-                return EqualityComparer<TValue>.Default.Equals(Value, value)
-                    ? this
-                    : new LeafNode(Hash, Key, value);
+                if (!overwrite || EqualityComparer<TValue>.Default.Equals(Value, value))
+                    return this;
+
+                return new LeafNode(Hash, Key, value);
             }
 
             added = true;
@@ -565,7 +706,6 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             out bool removed,
             out TValue value)
         {
-            _ = shift;
             if (Hash == hash && comparer.Equals(Key, key))
             {
                 removed = true;
@@ -577,51 +717,30 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             value = default!;
             return this;
         }
-
-        internal override Entry[] ToEntries() => new[] { new Entry(Key, Value) };
     }
 
-    private sealed class CollisionNode(uint hash, Entry[] entries) : HashNode
+    internal sealed class CollisionNode(uint hash, Entry[] entries) : HashNode(hash)
     {
-        internal override uint Hash { get; } = hash;
-
         internal Entry[] Entries { get; } = entries;
 
-        internal static CollisionNode Create(HashNode left, HashNode right)
+        internal static CollisionNode Create(HashNode left, LeafNode right)
         {
-            var leftEntries = left.ToEntries();
-            var rightEntries = right.ToEntries();
-            var entries = new Entry[leftEntries.Length + rightEntries.Length];
-            Array.Copy(leftEntries, 0, entries, 0, leftEntries.Length);
-            Array.Copy(rightEntries, 0, entries, leftEntries.Length, rightEntries.Length);
+            Entry[] entries;
+            if (left is CollisionNode collision)
+            {
+                var source = collision.Entries;
+                entries = new Entry[source.Length + 1];
+                Array.Copy(source, entries, source.Length);
+            }
+            else
+            {
+                var leaf = (LeafNode)left;
+                entries = new Entry[2];
+                entries[0] = new Entry(leaf.Key, leaf.Value);
+            }
+
+            entries[^1] = new Entry(right.Key, right.Value);
             return new CollisionNode(left.Hash, entries);
-        }
-
-        internal override bool TryGet(
-            TKey key,
-            uint hash,
-            int shift,
-            IEqualityComparer<TKey> comparer,
-            out TValue value)
-        {
-            _ = shift;
-            if (Hash != hash)
-            {
-                value = default!;
-                return false;
-            }
-
-            foreach (var entry in Entries)
-            {
-                if (comparer.Equals(entry.Key, key))
-                {
-                    value = entry.Value;
-                    return true;
-                }
-            }
-
-            value = default!;
-            return false;
         }
 
         internal override Node Set(
@@ -630,6 +749,7 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             uint hash,
             int shift,
             IEqualityComparer<TKey> comparer,
+            bool overwrite,
             out bool added)
         {
             if (Hash != hash)
@@ -644,7 +764,7 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
                     continue;
 
                 added = false;
-                if (EqualityComparer<TValue>.Default.Equals(Entries[i].Value, value))
+                if (!overwrite || EqualityComparer<TValue>.Default.Equals(Entries[i].Value, value))
                     return this;
 
                 var replaced = (Entry[])Entries.Clone();
@@ -667,7 +787,6 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             out bool removed,
             out TValue value)
         {
-            _ = shift;
             if (Hash != hash)
             {
                 removed = false;
@@ -701,32 +820,13 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             value = default!;
             return this;
         }
-
-        internal override Entry[] ToEntries() => Entries;
     }
 
-    private sealed class BitmapIndexedNode(uint bitmap, Node[] children) : Node
+    internal sealed class BitmapIndexedNode(uint bitmap, Node[] children) : Node
     {
         internal uint Bitmap { get; } = bitmap;
 
         internal Node[] Children { get; } = children;
-
-        internal override bool TryGet(
-            TKey key,
-            uint hash,
-            int shift,
-            IEqualityComparer<TKey> comparer,
-            out TValue value)
-        {
-            var bit = Bit(Index(hash, shift));
-            if ((Bitmap & bit) == 0)
-            {
-                value = default!;
-                return false;
-            }
-
-            return Children[Slot(Bitmap, bit)].TryGet(key, hash, shift + BitsPerLevel, comparer, out value);
-        }
 
         internal override Node Set(
             TKey key,
@@ -734,6 +834,7 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             uint hash,
             int shift,
             IEqualityComparer<TKey> comparer,
+            bool overwrite,
             out bool added)
         {
             var bit = Bit(Index(hash, shift));
@@ -750,7 +851,7 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             }
 
             var oldChild = Children[slot];
-            var newChild = oldChild.Set(key, value, hash, shift + BitsPerLevel, comparer, out added);
+            var newChild = oldChild.Set(key, value, hash, shift + BitsPerLevel, comparer, overwrite, out added);
             if (ReferenceEquals(newChild, oldChild))
                 return this;
 
@@ -808,4 +909,10 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             return new BitmapIndexedNode(bitmap, children);
         }
     }
+}
+
+internal sealed class PersistentHashMapDebugView<TKey, TValue>(PersistentHashMap<TKey, TValue> map)
+{
+    [DebuggerBrowsable(DebuggerBrowsableState.RootHidden)]
+    public KeyValuePair<TKey, TValue>[] Items => [.. map];
 }

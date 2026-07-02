@@ -57,8 +57,25 @@ public sealed class PersistentHashSetTests
         Assert.Equal(2, set.Count);
         Assert.True(set.Contains("alpha"));
         Assert.Contains("Alpha", set);
-        Assert.DoesNotContain("ALPHA", set);
+        Assert.DoesNotContain("ALPHA", set.AsEnumerable(), StringComparer.Ordinal);
+        Assert.True(set.TryGetValue("ALPHA", out var stored));
+        Assert.Equal("Alpha", stored, StringComparer.Ordinal);
         Assert.Same(StringComparer.OrdinalIgnoreCase, set.Comparer);
+    }
+
+    /// <summary>Verifies that stored item objects are recoverable through <c>TryGetValue</c>.</summary>
+    [Fact]
+    public void TryGetValue_ReturnsStoredItemObject()
+    {
+        var storedItem = new string(['A', 'l', 'p', 'h', 'a']);
+        var set = PersistentHashSet<string>.Create(StringComparer.OrdinalIgnoreCase).Add(storedItem);
+
+        Assert.True(set.TryGetValue("ALPHA", out var actual));
+        Assert.Same(storedItem, actual);
+
+        var missing = "gamma";
+        Assert.False(set.TryGetValue(missing, out var fallback));
+        Assert.Same(missing, fallback);
     }
 
     /// <summary>Verifies null reference items follow the configured comparer semantics.</summary>
@@ -110,9 +127,99 @@ public sealed class PersistentHashSetTests
 
                 Assert.Equal(ha.IsSubsetOf(hb), a.IsSubsetOf(right));
                 Assert.Equal(ha.IsSupersetOf(hb), a.IsSupersetOf(right));
+                Assert.Equal(ha.IsProperSubsetOf(hb), a.IsProperSubsetOf(right));
+                Assert.Equal(ha.IsProperSupersetOf(hb), a.IsProperSupersetOf(right));
                 Assert.Equal(ha.Overlaps(hb), a.Overlaps(right));
                 Assert.Equal(ha.SetEquals(hb), a.SetEquals(right));
             }, iter: 300);
+    }
+
+    /// <summary>Verifies set algebra honors a custom comparer and retains stored item objects.</summary>
+    [Fact]
+    public void Algebra_HonorsCustomComparer()
+    {
+        var comparer = StringComparer.OrdinalIgnoreCase;
+        var set = PersistentHashSet<string>.CreateRange(["Alpha", "Beta"], comparer);
+
+        var intersection = set.Intersect(["ALPHA"]);
+        Assert.Equal("Alpha", Assert.Single(intersection), StringComparer.Ordinal);
+        Assert.Same(comparer, intersection.Comparer);
+
+        var union = set.Union(["ALPHA", "gamma"]);
+        Assert.Equal(["Alpha", "Beta", "gamma"], union.OrderBy(x => x, StringComparer.Ordinal).ToArray());
+        Assert.Same(comparer, union.Comparer);
+
+        var symmetric = set.SymmetricExcept(["BETA", "gamma"]);
+        Assert.Equal(["Alpha", "gamma"], symmetric.OrderBy(x => x, StringComparer.Ordinal).ToArray());
+
+        Assert.True(set.IsSubsetOf(["ALPHA", "BETA", "x"]));
+        Assert.True(set.IsProperSubsetOf(["ALPHA", "BETA", "x"]));
+        Assert.False(set.IsProperSubsetOf(["ALPHA", "BETA"]));
+        Assert.True(set.IsSupersetOf(["ALPHA"]));
+        Assert.True(set.IsProperSupersetOf(["ALPHA"]));
+        Assert.False(set.IsProperSupersetOf(["ALPHA", "BETA"]));
+        Assert.True(set.SetEquals(["ALPHA", "beta"]));
+        Assert.True(set.Overlaps(["ALPHA"]));
+    }
+
+    /// <summary>Verifies the set satisfies the <see cref="IReadOnlySet{T}"/> contract.</summary>
+    [Fact]
+    public void ImplementsReadOnlySet()
+    {
+        IReadOnlySet<int> set = IntSet.CreateRange([1, 2]);
+
+        Assert.Equal(2, set.Count);
+        Assert.True(set.Contains(1));
+        Assert.True(set.IsSubsetOf([1, 2, 3]));
+        Assert.True(set.IsProperSubsetOf([1, 2, 3]));
+        Assert.True(set.IsSupersetOf([1]));
+        Assert.True(set.IsProperSupersetOf([1]));
+        Assert.True(set.Overlaps([2, 9]));
+        Assert.True(set.SetEquals([2, 1]));
+    }
+
+    /// <summary>Verifies every sequence-accepting member rejects null arguments.</summary>
+    [Fact]
+    public void SequenceArguments_RejectNull()
+    {
+        var set = IntSet.Empty;
+
+        Assert.Throws<ArgumentNullException>(() => PersistentHashSet<int>.CreateRange(null!));
+        Assert.Throws<ArgumentNullException>(() => set.Union(null!));
+        Assert.Throws<ArgumentNullException>(() => set.Intersect(null!));
+        Assert.Throws<ArgumentNullException>(() => set.Except(null!));
+        Assert.Throws<ArgumentNullException>(() => set.SymmetricExcept(null!));
+        Assert.Throws<ArgumentNullException>(() => set.IsSubsetOf(null!));
+        Assert.Throws<ArgumentNullException>(() => set.IsProperSubsetOf(null!));
+        Assert.Throws<ArgumentNullException>(() => set.IsSupersetOf(null!));
+        Assert.Throws<ArgumentNullException>(() => set.IsProperSupersetOf(null!));
+        Assert.Throws<ArgumentNullException>(() => set.Overlaps(null!));
+        Assert.Throws<ArgumentNullException>(() => set.SetEquals(null!));
+    }
+
+    /// <summary>Verifies default-comparer empty results canonicalize to the shared empty singleton.</summary>
+    [Fact]
+    public void EmptyResults_CanonicalizeToSharedSingleton()
+    {
+        Assert.Same(IntSet.Empty, IntSet.Create());
+        Assert.Same(IntSet.Empty, IntSet.CreateRange([]));
+        Assert.Same(IntSet.Empty, IntSet.Empty.Add(1).Remove(1));
+        Assert.Same(IntSet.Empty, IntSet.Empty.Add(1).Clear());
+    }
+
+    /// <summary>Verifies the struct enumerator's direct-use contract.</summary>
+    [Fact]
+    public void StructEnumerator_EnumeratesAllItems()
+    {
+        var set = IntSet.CreateRange([1, 2, 3]);
+        var seen = new List<int>();
+
+        var enumerator = set.GetEnumerator();
+        while (enumerator.MoveNext())
+            seen.Add(enumerator.Current);
+
+        Assert.Equal([1, 2, 3], seen.OrderBy(x => x).ToArray());
+        Assert.False(enumerator.MoveNext());
     }
 
     /// <summary>Verifies symmetric difference treats duplicate right-side items as a set.</summary>

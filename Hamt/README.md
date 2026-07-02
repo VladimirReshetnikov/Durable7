@@ -9,12 +9,14 @@
 `Hamt` contains the .NET 10 C# preview workspace for `Tools.DataStructures.Hamt`, a persistent
 hash-array mapped trie library. The core type is `PersistentHashMap<TKey, TValue>`, an immutable
 unordered dictionary with structural sharing across versions. `PersistentHashSet<T>` is built on the
-same HAMT core.
+same HAMT core and implements `IReadOnlySet<T>`.
 
 The trie consumes 5 hash bits per level, stores sparse branch nodes as bitmaps plus compact child
 arrays, and represents equal-hash unequal-key collisions with immutable collision buckets. Insert,
 replace, lookup, and removal run in O(hash-width / 5) expected time plus collision-bucket length for
 adversarial equal hashes; operations clone only the search path and reuse every untouched subtree.
+Lookups allocate nothing, single-pass `Add`/`TryAdd` hash and walk once, and both collections expose
+allocation-free copy-safe struct enumerators.
 
 ## Layout
 

@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics;
 
 namespace Tools.DataStructures.Hamt;
 
@@ -7,11 +8,14 @@ namespace Tools.DataStructures.Hamt;
 /// </summary>
 /// <typeparam name="T">The type of items stored in the set.</typeparam>
 /// <remarks>
-/// This type is a thin set layer over <see cref="PersistentHashMap{TKey, TValue}"/>. Updates return
-/// new set versions, old versions remain unchanged, and untouched HAMT subtrees are shared by
-/// reference across versions.
+/// This type is a thin set layer over <see cref="PersistentHashMap{TKey, TValue}"/> and implements
+/// <see cref="IReadOnlySet{T}"/>. Updates return new set versions, old versions remain unchanged,
+/// and untouched HAMT subtrees are shared by reference across versions. Single-item operations visit
+/// at most seven trie levels plus any equal-hash collision-bucket scan.
 /// </remarks>
-public sealed class PersistentHashSet<T> : IReadOnlyCollection<T>
+[DebuggerDisplay("Count = {Count}")]
+[DebuggerTypeProxy(typeof(PersistentHashSetDebugView<>))]
+public sealed class PersistentHashSet<T> : IReadOnlySet<T>
 {
     /// <summary>
     /// Gets the shared empty set that uses <see cref="EqualityComparer{T}.Default"/>.
@@ -61,8 +65,12 @@ public sealed class PersistentHashSet<T> : IReadOnlyCollection<T>
     /// The comparer that defines item hashing and equality, or <see langword="null"/> to use
     /// <see cref="EqualityComparer{T}.Default"/>.
     /// </param>
-    /// <returns>A set containing the distinct supplied items.</returns>
+    /// <returns>
+    /// A set containing the distinct supplied items. When items are equivalent under the comparer,
+    /// the first item object is retained.
+    /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
+    /// <remarks>Runs in O(n) single-item updates with structural sharing during the build.</remarks>
     public static PersistentHashSet<T> CreateRange(IEnumerable<T> items, IEqualityComparer<T>? comparer = null)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -79,7 +87,32 @@ public sealed class PersistentHashSet<T> : IReadOnlyCollection<T>
     /// </summary>
     /// <param name="item">The item to locate.</param>
     /// <returns><see langword="true"/> when the item is present; otherwise, <see langword="false"/>.</returns>
+    /// <remarks>
+    /// Visits at most seven trie levels plus any equal-hash collision-bucket scan and allocates
+    /// nothing.
+    /// </remarks>
     public bool Contains(T item) => _map.ContainsKey(item);
+
+    /// <summary>
+    /// Searches for the stored item equivalent to the specified value.
+    /// </summary>
+    /// <param name="equalValue">The value to search for.</param>
+    /// <param name="actualValue">
+    /// When this method returns, contains the originally stored item object when an equivalent item
+    /// is present, or <paramref name="equalValue"/> otherwise.
+    /// </param>
+    /// <returns><see langword="true"/> when an equivalent item is present; otherwise, <see langword="false"/>.</returns>
+    /// <remarks>
+    /// <para>
+    /// Because adding an equivalent item retains the originally stored item object, this method is
+    /// the O(trie-depth) way to recover that canonical object, for example when interning.
+    /// </para>
+    /// <para>
+    /// Visits at most seven trie levels plus any equal-hash collision-bucket scan and allocates
+    /// nothing.
+    /// </para>
+    /// </remarks>
+    public bool TryGetValue(T equalValue, out T actualValue) => _map.TryGetKey(equalValue, out actualValue);
 
     /// <summary>
     /// Adds an item to the set.
@@ -89,6 +122,10 @@ public sealed class PersistentHashSet<T> : IReadOnlyCollection<T>
     /// A set containing <paramref name="item"/>. If an equivalent item is already present, this
     /// method returns the current set instance and preserves the originally stored item object.
     /// </returns>
+    /// <remarks>
+    /// Visits at most seven trie levels plus any equal-hash collision-bucket scan; allocates only the
+    /// rebuilt search path and shares every untouched subtree with the current version.
+    /// </remarks>
     public PersistentHashSet<T> Add(T item) => WithMap(_map.SetItem(item, default));
 
     /// <summary>
@@ -100,6 +137,7 @@ public sealed class PersistentHashSet<T> : IReadOnlyCollection<T>
     /// equivalent item already exists.
     /// </param>
     /// <returns><see langword="true"/> when the item was added; otherwise, <see langword="false"/>.</returns>
+    /// <remarks>Hashes the item once and walks the trie once.</remarks>
     public bool TryAdd(T item, out PersistentHashSet<T> result)
     {
         if (_map.TryAdd(item, default, out var map))
@@ -120,6 +158,10 @@ public sealed class PersistentHashSet<T> : IReadOnlyCollection<T>
     /// A set without <paramref name="item"/>. If the item is absent, this method returns the current
     /// set instance.
     /// </returns>
+    /// <remarks>
+    /// Visits at most seven trie levels plus any equal-hash collision-bucket scan; allocates only the
+    /// rebuilt search path and shares every untouched subtree with the current version.
+    /// </remarks>
     public PersistentHashSet<T> Remove(T item) => WithMap(_map.Remove(item));
 
     /// <summary>
@@ -146,15 +188,22 @@ public sealed class PersistentHashSet<T> : IReadOnlyCollection<T>
     /// <summary>
     /// Returns an empty set that preserves this set's comparer.
     /// </summary>
-    /// <returns>An empty set with the same item comparer.</returns>
-    public PersistentHashSet<T> Clear() => _map.IsEmpty ? this : Wrap(_map.Clear());
+    /// <returns>
+    /// An empty set with the same item comparer. If the set is already empty, this method returns the
+    /// current set instance.
+    /// </returns>
+    public PersistentHashSet<T> Clear() => WithMap(_map.Clear());
 
     /// <summary>
     /// Returns the union of this set and the specified items.
     /// </summary>
     /// <param name="items">The items to include in the result.</param>
-    /// <returns>A set containing every item from this set and <paramref name="items"/>.</returns>
+    /// <returns>
+    /// A set containing every item from this set and <paramref name="items"/>. For items equivalent
+    /// under this set's comparer, the first stored item object is retained.
+    /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
+    /// <remarks>Runs in O(m) single-item updates over <paramref name="items"/>.</remarks>
     public PersistentHashSet<T> Union(IEnumerable<T> items)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -170,8 +219,15 @@ public sealed class PersistentHashSet<T> : IReadOnlyCollection<T>
     /// Returns the intersection of this set and the specified items.
     /// </summary>
     /// <param name="items">The items to intersect with this set.</param>
-    /// <returns>A set containing items present in both collections under this set's comparer.</returns>
+    /// <returns>
+    /// A set containing items present in both collections under this set's comparer. The stored item
+    /// objects of this set are retained in the result.
+    /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// Materializes <paramref name="items"/> into a probe <see cref="HashSet{T}"/> — O(m) time and
+    /// space — and then rebuilds the result from this set's matching items.
+    /// </remarks>
     public PersistentHashSet<T> Intersect(IEnumerable<T> items)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -193,6 +249,7 @@ public sealed class PersistentHashSet<T> : IReadOnlyCollection<T>
     /// <param name="items">The items to remove from this set.</param>
     /// <returns>A set containing items from this set that are not present in <paramref name="items"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
+    /// <remarks>Runs in O(m) single-item removals over <paramref name="items"/>.</remarks>
     public PersistentHashSet<T> Except(IEnumerable<T> items)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -213,6 +270,10 @@ public sealed class PersistentHashSet<T> : IReadOnlyCollection<T>
     /// are treated as one item under this set's comparer.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// Materializes <paramref name="items"/> into a probe <see cref="HashSet{T}"/> — O(m) time and
+    /// space — before toggling membership.
+    /// </remarks>
     public PersistentHashSet<T> SymmetricExcept(IEnumerable<T> items)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -234,11 +295,46 @@ public sealed class PersistentHashSet<T> : IReadOnlyCollection<T>
     /// otherwise, <see langword="false"/>.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// Materializes <paramref name="items"/> into a probe <see cref="HashSet{T}"/> — O(m) time and
+    /// space — before testing membership.
+    /// </remarks>
     public bool IsSubsetOf(IEnumerable<T> items)
     {
         ArgumentNullException.ThrowIfNull(items);
 
         var probe = new HashSet<T>(items, Comparer);
+        foreach (var item in this)
+        {
+            if (!probe.Contains(item))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Determines whether this set is a proper subset of the specified items.
+    /// </summary>
+    /// <param name="items">The items to compare against.</param>
+    /// <returns>
+    /// <see langword="true"/> when every item in this set is present in <paramref name="items"/> and
+    /// <paramref name="items"/> contains at least one additional distinct item; otherwise,
+    /// <see langword="false"/>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// Materializes <paramref name="items"/> into a probe <see cref="HashSet{T}"/> — O(m) time and
+    /// space — before testing membership.
+    /// </remarks>
+    public bool IsProperSubsetOf(IEnumerable<T> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+
+        var probe = new HashSet<T>(items, Comparer);
+        if (Count >= probe.Count)
+            return false;
+
         foreach (var item in this)
         {
             if (!probe.Contains(item))
@@ -257,11 +353,42 @@ public sealed class PersistentHashSet<T> : IReadOnlyCollection<T>
     /// set; otherwise, <see langword="false"/>.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
+    /// <remarks>Streams <paramref name="items"/> and exits early on the first missing item.</remarks>
     public bool IsSupersetOf(IEnumerable<T> items)
     {
         ArgumentNullException.ThrowIfNull(items);
 
         foreach (var item in items)
+        {
+            if (!Contains(item))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Determines whether this set is a proper superset of the specified items.
+    /// </summary>
+    /// <param name="items">The items to compare against.</param>
+    /// <returns>
+    /// <see langword="true"/> when every distinct item in <paramref name="items"/> is present in this
+    /// set and this set contains at least one additional item; otherwise, <see langword="false"/>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// Materializes <paramref name="items"/> into a probe <see cref="HashSet{T}"/> — O(m) time and
+    /// space — to count its distinct items under this set's comparer.
+    /// </remarks>
+    public bool IsProperSupersetOf(IEnumerable<T> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+
+        var probe = new HashSet<T>(items, Comparer);
+        if (probe.Count >= Count)
+            return false;
+
+        foreach (var item in probe)
         {
             if (!Contains(item))
                 return false;
@@ -279,6 +406,7 @@ public sealed class PersistentHashSet<T> : IReadOnlyCollection<T>
     /// otherwise, <see langword="false"/>.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
+    /// <remarks>Streams <paramref name="items"/> and exits early on the first shared item.</remarks>
     public bool Overlaps(IEnumerable<T> items)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -301,6 +429,10 @@ public sealed class PersistentHashSet<T> : IReadOnlyCollection<T>
     /// comparer; otherwise, <see langword="false"/>.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// Materializes <paramref name="items"/> into a probe <see cref="HashSet{T}"/> — O(m) time and
+    /// space — before comparing memberships.
+    /// </remarks>
     public bool SetEquals(IEnumerable<T> items)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -322,7 +454,13 @@ public sealed class PersistentHashSet<T> : IReadOnlyCollection<T>
     /// Returns an enumerator over the set's items in trie order.
     /// </summary>
     /// <returns>An enumerator over the set.</returns>
-    public IEnumerator<T> GetEnumerator() => _map.Keys.GetEnumerator();
+    /// <remarks>
+    /// Enumeration is O(n) with O(1) amortized cost per item. The enumerator keeps its whole
+    /// traversal state inline, so obtaining and draining it allocates nothing.
+    /// </remarks>
+    public Enumerator GetEnumerator() => new(_map.GetEnumerator());
+
+    IEnumerator<T> IEnumerable<T>.GetEnumerator() => GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
@@ -337,5 +475,61 @@ public sealed class PersistentHashSet<T> : IReadOnlyCollection<T>
     private PersistentHashSet<T> WithMap(PersistentHashMap<T, Unit> map) =>
         ReferenceEquals(map, _map) ? this : Wrap(map);
 
-    private readonly struct Unit;
+    /// <summary>
+    /// Enumerates the items in a <see cref="PersistentHashSet{T}"/>.
+    /// </summary>
+    /// <remarks>
+    /// The enumerator keeps its entire traversal state inline, so obtaining and draining one
+    /// allocates nothing, and a copied enumerator advances independently of the original.
+    /// </remarks>
+    public struct Enumerator : IEnumerator<T>
+    {
+        private PersistentHashMap<T, Unit>.Enumerator _inner;
+
+        internal Enumerator(PersistentHashMap<T, Unit>.Enumerator inner)
+        {
+            _inner = inner;
+        }
+
+        /// <summary>
+        /// Gets the item at the current enumerator position.
+        /// </summary>
+        public readonly T Current => _inner.Current.Key;
+
+        readonly object? IEnumerator.Current => Current;
+
+        /// <summary>
+        /// Advances the enumerator to the next item.
+        /// </summary>
+        /// <returns>
+        /// <see langword="true"/> when the enumerator advanced to an item; otherwise,
+        /// <see langword="false"/> after the final item.
+        /// </returns>
+        public bool MoveNext() => _inner.MoveNext();
+
+        /// <summary>
+        /// Releases resources held by the enumerator.
+        /// </summary>
+        public readonly void Dispose()
+        {
+        }
+
+        readonly void IEnumerator.Reset() =>
+            throw new NotSupportedException("Resetting this enumerator is not supported; create a new enumerator instead.");
+    }
+
+    internal readonly struct Unit : IEquatable<Unit>
+    {
+        public bool Equals(Unit other) => true;
+
+        public override bool Equals(object? obj) => obj is Unit;
+
+        public override int GetHashCode() => 0;
+    }
+}
+
+internal sealed class PersistentHashSetDebugView<T>(PersistentHashSet<T> set)
+{
+    [DebuggerBrowsable(DebuggerBrowsableState.RootHidden)]
+    public T[] Items => [.. set];
 }

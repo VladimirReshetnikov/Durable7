@@ -119,7 +119,44 @@ public sealed class PersistentHashMapTests
         Assert.True(cleared.IsEmpty);
         Assert.Same(comparer, cleared.Comparer);
         Assert.NotSame(PersistentHashMap<string, int>.Empty, cleared);
+        Assert.Same(cleared, cleared.Clear());
         Assert.Same(PersistentHashMap<string, int>.Empty, PersistentHashMap<string, int>.Empty.SetItem("x", 1).Remove("x"));
+        Assert.Same(Map.Empty, Map.Create());
+    }
+
+    /// <summary>Verifies that stored key objects are recoverable through <c>TryGetKey</c>.</summary>
+    [Fact]
+    public void TryGetKey_ReturnsStoredKeyObject()
+    {
+        var storedKey = new string(['A', 'l', 'p', 'h', 'a']);
+        var map = PersistentHashMap<string, int>.Create(StringComparer.OrdinalIgnoreCase)
+            .SetItem(storedKey, 1);
+
+        Assert.True(map.TryGetKey("ALPHA", out var actualKey));
+        Assert.Same(storedKey, actualKey);
+
+        var missing = "gamma";
+        Assert.False(map.TryGetKey(missing, out var fallback));
+        Assert.Same(missing, fallback);
+    }
+
+    /// <summary>Verifies every sequence-accepting member rejects null arguments.</summary>
+    [Fact]
+    public void SequenceArguments_RejectNull()
+    {
+        Assert.Throws<ArgumentNullException>(() => PersistentHashMap<int, string>.CreateRange(null!));
+        Assert.Throws<ArgumentNullException>(() => Map.Empty.SetItems(null!));
+    }
+
+    /// <summary>Verifies the Keys and Values views align with pair enumeration in trie order.</summary>
+    [Fact]
+    public void KeysAndValues_AlignWithPairEnumeration()
+    {
+        var map = Map.Empty.SetItem(5, "five").SetItem(2, "two").SetItem(7, "seven");
+
+        Assert.Equal(map.Select(kv => kv.Key), map.Keys);
+        Assert.Equal(map.Select(kv => kv.Value), map.Values);
+        Assert.Equal(map, map.Keys.Zip(map.Values, KeyValuePair.Create));
     }
 
     /// <summary>Verifies <see cref="IReadOnlyDictionary{TKey, TValue}"/> behavior.</summary>
