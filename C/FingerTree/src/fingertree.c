@@ -3332,6 +3332,1012 @@ ft_status ft_rope_visit(const ft_rope* rope, ft_visit_fn visitor, void* context)
     return ft_tree_visit(&rope->tree, ft_rope_visit_chunk, &visit_context);
 }
 
+typedef struct ft_measured_rope_chunk {
+    size_t length;
+    unsigned char* data;
+    void* user_measure;
+} ft_measured_rope_chunk;
+
+struct ft_measured_rope_chunk_context {
+    ft_value_type value_type;
+    ft_measure_policy user_measure;
+    size_t pair_user_offset;
+};
+
+static size_t ft_align_up_size(size_t value, size_t alignment)
+{
+    const size_t remainder = value % alignment;
+    return remainder == 0 ? value : value + alignment - remainder;
+}
+
+static size_t ft_measure_buffer_alignment(void)
+{
+    size_t alignment = sizeof(void*);
+    if (sizeof(double) > alignment) {
+        alignment = sizeof(double);
+    }
+
+    if (sizeof(long double) > alignment) {
+        alignment = sizeof(long double);
+    }
+
+    return alignment;
+}
+
+static size_t ft_measured_rope_pair_size(const ft_measure_policy* user_measure)
+{
+    return ft_align_up_size(sizeof(size_t), ft_measure_buffer_alignment()) + user_measure->size;
+}
+
+static size_t* ft_measured_rope_pair_length(void* pair)
+{
+    return (size_t*)pair;
+}
+
+static const size_t* ft_measured_rope_pair_length_const(const void* pair)
+{
+    return (const size_t*)pair;
+}
+
+static void* ft_measured_rope_pair_user(const ft_measured_rope_chunk_context* context, void* pair)
+{
+    return (unsigned char*)pair + context->pair_user_offset;
+}
+
+static const void* ft_measured_rope_pair_user_const(const ft_measured_rope_chunk_context* context, const void* pair)
+{
+    return (const unsigned char*)pair + context->pair_user_offset;
+}
+
+static void ft_measured_rope_chunk_destroy_value(
+    ft_measured_rope_chunk_context* context,
+    ft_measured_rope_chunk* chunk)
+{
+    if (chunk->data != NULL) {
+        for (size_t index = 0; index != chunk->length; ++index) {
+            void* item = chunk->data + index * context->value_type.size;
+            ft_value_destroy(&context->value_type, item);
+        }
+
+        free(chunk->data);
+    }
+
+    free(chunk->user_measure);
+    chunk->length = 0;
+    chunk->data = NULL;
+    chunk->user_measure = NULL;
+}
+
+static void ft_measured_rope_chunk_copy(void* destination, const void* source, void* context)
+{
+    ft_measured_rope_chunk_context* chunk_context = (ft_measured_rope_chunk_context*)context;
+    const ft_measured_rope_chunk* source_chunk = (const ft_measured_rope_chunk*)source;
+    ft_measured_rope_chunk* destination_chunk = (ft_measured_rope_chunk*)destination;
+    destination_chunk->length = source_chunk->length;
+    destination_chunk->data = NULL;
+    destination_chunk->user_measure = NULL;
+
+    destination_chunk->user_measure = ft_allocate(chunk_context->user_measure.size);
+    if (destination_chunk->user_measure == NULL) {
+        abort();
+    }
+
+    (void)memcpy(destination_chunk->user_measure, source_chunk->user_measure, chunk_context->user_measure.size);
+
+    if (source_chunk->length == 0) {
+        return;
+    }
+
+    destination_chunk->data = (unsigned char*)ft_allocate(source_chunk->length * chunk_context->value_type.size);
+    if (destination_chunk->data == NULL) {
+        abort();
+    }
+
+    for (size_t index = 0; index != source_chunk->length; ++index) {
+        void* destination_item = destination_chunk->data + index * chunk_context->value_type.size;
+        const void* source_item = source_chunk->data + index * chunk_context->value_type.size;
+        ft_value_copy(&chunk_context->value_type, destination_item, source_item);
+    }
+}
+
+static void ft_measured_rope_chunk_destroy(void* value, void* context)
+{
+    ft_measured_rope_chunk_destroy_value(
+        (ft_measured_rope_chunk_context*)context,
+        (ft_measured_rope_chunk*)value);
+}
+
+static ft_status ft_measured_rope_chunk_compute_measure(
+    const ft_measured_rope* rope,
+    const ft_measured_rope_chunk* chunk,
+    void* destination)
+{
+    void* accumulator = ft_allocate(rope->user_measure.size);
+    void* element_measure = ft_allocate(rope->user_measure.size);
+    void* combined = ft_allocate(rope->user_measure.size);
+    if (accumulator == NULL || element_measure == NULL || combined == NULL) {
+        free(accumulator);
+        free(element_measure);
+        free(combined);
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    ft_measure_identity(&rope->user_measure, accumulator);
+    for (size_t index = 0; index != chunk->length; ++index) {
+        const void* item = chunk->data + index * rope->value_type.size;
+        ft_measure_for_value(&rope->user_measure, element_measure, item);
+        ft_measure_combine(&rope->user_measure, combined, accumulator, element_measure);
+        (void)memcpy(accumulator, combined, rope->user_measure.size);
+    }
+
+    (void)memcpy(destination, accumulator, rope->user_measure.size);
+    free(accumulator);
+    free(element_measure);
+    free(combined);
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_measured_rope_chunk_init_from_array(
+    const ft_measured_rope* rope,
+    const void* values,
+    size_t count,
+    ft_measured_rope_chunk* chunk)
+{
+    chunk->length = count;
+    chunk->data = NULL;
+    chunk->user_measure = NULL;
+    if (count > SIZE_MAX / rope->value_type.size) {
+        return FT_STATUS_OVERFLOW;
+    }
+
+    chunk->user_measure = ft_allocate(rope->user_measure.size);
+    if (chunk->user_measure == NULL) {
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    if (count != 0) {
+        chunk->data = (unsigned char*)ft_allocate(count * rope->value_type.size);
+        if (chunk->data == NULL) {
+            ft_measured_rope_chunk_destroy_value(rope->chunk_context, chunk);
+            return FT_STATUS_NO_MEMORY;
+        }
+
+        for (size_t index = 0; index != count; ++index) {
+            void* destination = chunk->data + index * rope->value_type.size;
+            const void* source = (const unsigned char*)values + index * rope->value_type.size;
+            ft_value_copy(&rope->value_type, destination, source);
+        }
+    }
+
+    ft_status status = ft_measured_rope_chunk_compute_measure(rope, chunk, chunk->user_measure);
+    if (status != FT_STATUS_OK) {
+        ft_measured_rope_chunk_destroy_value(rope->chunk_context, chunk);
+    }
+
+    return status;
+}
+
+static ft_status ft_measured_rope_chunk_slice(
+    const ft_measured_rope* rope,
+    const ft_measured_rope_chunk* source,
+    size_t index,
+    size_t count,
+    ft_measured_rope_chunk* chunk)
+{
+    if (index > source->length || count > source->length - index) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    return ft_measured_rope_chunk_init_from_array(
+        rope,
+        source->data + index * rope->value_type.size,
+        count,
+        chunk);
+}
+
+static void ft_measured_rope_tree_measure_identity(void* destination, void* context)
+{
+    ft_measured_rope_chunk_context* chunk_context = (ft_measured_rope_chunk_context*)context;
+    *ft_measured_rope_pair_length(destination) = 0;
+    ft_measure_identity(
+        &chunk_context->user_measure,
+        ft_measured_rope_pair_user(chunk_context, destination));
+}
+
+static void ft_measured_rope_tree_measure_value(void* destination, const void* value, void* context)
+{
+    ft_measured_rope_chunk_context* chunk_context = (ft_measured_rope_chunk_context*)context;
+    const ft_measured_rope_chunk* chunk = (const ft_measured_rope_chunk*)value;
+    *ft_measured_rope_pair_length(destination) = chunk->length;
+    (void)memcpy(
+        ft_measured_rope_pair_user(chunk_context, destination),
+        chunk->user_measure,
+        chunk_context->user_measure.size);
+}
+
+static void ft_measured_rope_tree_measure_combine(
+    void* destination,
+    const void* left,
+    const void* right,
+    void* context)
+{
+    ft_measured_rope_chunk_context* chunk_context = (ft_measured_rope_chunk_context*)context;
+    *ft_measured_rope_pair_length(destination) =
+        *ft_measured_rope_pair_length_const(left) + *ft_measured_rope_pair_length_const(right);
+    ft_measure_combine(
+        &chunk_context->user_measure,
+        ft_measured_rope_pair_user(chunk_context, destination),
+        ft_measured_rope_pair_user_const(chunk_context, left),
+        ft_measured_rope_pair_user_const(chunk_context, right));
+}
+
+static ft_status ft_measured_rope_configure(
+    ft_measured_rope* rope,
+    const ft_value_type* value_type,
+    const ft_measure_policy* user_measure)
+{
+    rope->chunk_context = (ft_measured_rope_chunk_context*)calloc(1, sizeof(*rope->chunk_context));
+    if (rope->chunk_context == NULL) {
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    rope->value_type = *value_type;
+    rope->user_measure = *user_measure;
+    rope->max_chunk_length = FT_ROPE_DEFAULT_MAX_CHUNK_LENGTH;
+    rope->chunk_context->value_type = *value_type;
+    rope->chunk_context->user_measure = *user_measure;
+    rope->chunk_context->pair_user_offset = ft_align_up_size(sizeof(size_t), ft_measure_buffer_alignment());
+
+    rope->policy.value.size = sizeof(ft_measured_rope_chunk);
+    rope->policy.value.copy = ft_measured_rope_chunk_copy;
+    rope->policy.value.destroy = ft_measured_rope_chunk_destroy;
+    rope->policy.value.context = rope->chunk_context;
+    rope->policy.measure.size = ft_measured_rope_pair_size(user_measure);
+    rope->policy.measure.identity = ft_measured_rope_tree_measure_identity;
+    rope->policy.measure.measure = ft_measured_rope_tree_measure_value;
+    rope->policy.measure.combine = ft_measured_rope_tree_measure_combine;
+    rope->policy.measure.context = rope->chunk_context;
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_measured_rope_prepare_result(const ft_measured_rope* source, ft_measured_rope* result)
+{
+    (void)memset(result, 0, sizeof(*result));
+    return ft_measured_rope_configure(result, &source->value_type, &source->user_measure);
+}
+
+static ft_status ft_measured_rope_wrap_tree(
+    const ft_measured_rope* source,
+    ft_tree tree,
+    ft_measured_rope* result)
+{
+    ft_status status = ft_measured_rope_prepare_result(source, result);
+    if (status != FT_STATUS_OK) {
+        ft_tree_dispose(&tree);
+        return status;
+    }
+
+    result->tree = tree;
+    result->tree.policy = &result->policy;
+    return FT_STATUS_OK;
+}
+
+static bool ft_measured_rope_count_reaches(const void* measure, void* context)
+{
+    return *ft_measured_rope_pair_length_const(measure) >= *(const size_t*)context;
+}
+
+typedef struct ft_measured_rope_user_predicate_context {
+    const ft_measured_rope_chunk_context* chunk_context;
+    ft_measure_predicate_fn predicate;
+    void* predicate_context;
+} ft_measured_rope_user_predicate_context;
+
+static bool ft_measured_rope_user_predicate(const void* measure, void* context)
+{
+    ft_measured_rope_user_predicate_context* predicate_context =
+        (ft_measured_rope_user_predicate_context*)context;
+    return predicate_context->predicate(
+        ft_measured_rope_pair_user_const(predicate_context->chunk_context, measure),
+        predicate_context->predicate_context);
+}
+
+ft_status ft_measured_rope_init(
+    ft_measured_rope* rope,
+    const ft_value_type* value_type,
+    const ft_measure_policy* user_measure)
+{
+    if (rope == NULL || value_type == NULL || user_measure == NULL || value_type->size == 0 ||
+        user_measure->size == 0 || user_measure->identity == NULL || user_measure->measure == NULL ||
+        user_measure->combine == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    (void)memset(rope, 0, sizeof(*rope));
+    ft_status status = ft_measured_rope_configure(rope, value_type, user_measure);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_tree_init(&rope->tree, &rope->policy);
+    if (status != FT_STATUS_OK) {
+        free(rope->chunk_context);
+        (void)memset(rope, 0, sizeof(*rope));
+        return status;
+    }
+
+    return FT_STATUS_OK;
+}
+
+ft_status ft_measured_rope_from_array(
+    ft_measured_rope* rope,
+    const ft_value_type* value_type,
+    const ft_measure_policy* user_measure,
+    const void* values,
+    size_t count)
+{
+    if (rope == NULL || value_type == NULL || user_measure == NULL || (values == NULL && count != 0)) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_status status = ft_measured_rope_init(rope, value_type, user_measure);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    size_t offset = 0;
+    while (offset != count) {
+        size_t chunk_length = count - offset;
+        if (chunk_length > rope->max_chunk_length) {
+            chunk_length = rope->max_chunk_length;
+        }
+
+        ft_measured_rope_chunk chunk;
+        status = ft_measured_rope_chunk_init_from_array(
+            rope,
+            (const unsigned char*)values + offset * value_type->size,
+            chunk_length,
+            &chunk);
+        if (status != FT_STATUS_OK) {
+            ft_measured_rope_dispose(rope);
+            return status;
+        }
+
+        ft_tree next;
+        status = ft_tree_push_back(&rope->tree, &chunk, &next);
+        ft_measured_rope_chunk_destroy_value(rope->chunk_context, &chunk);
+        if (status != FT_STATUS_OK) {
+            ft_measured_rope_dispose(rope);
+            return status;
+        }
+
+        ft_tree_dispose(&rope->tree);
+        rope->tree = next;
+        rope->tree.policy = &rope->policy;
+        offset += chunk_length;
+    }
+
+    return FT_STATUS_OK;
+}
+
+ft_status ft_measured_rope_copy(const ft_measured_rope* source, ft_measured_rope* destination)
+{
+    if (source == NULL || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_status status = ft_measured_rope_prepare_result(source, destination);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_tree_copy(&source->tree, &destination->tree);
+    if (status != FT_STATUS_OK) {
+        free(destination->chunk_context);
+        (void)memset(destination, 0, sizeof(*destination));
+        return status;
+    }
+
+    destination->tree.policy = &destination->policy;
+    return FT_STATUS_OK;
+}
+
+void ft_measured_rope_dispose(ft_measured_rope* rope)
+{
+    if (rope == NULL) {
+        return;
+    }
+
+    ft_tree_dispose(&rope->tree);
+    free(rope->chunk_context);
+    (void)memset(rope, 0, sizeof(*rope));
+}
+
+bool ft_measured_rope_empty(const ft_measured_rope* rope)
+{
+    return rope == NULL || ft_tree_empty(&rope->tree);
+}
+
+size_t ft_measured_rope_size(const ft_measured_rope* rope)
+{
+    if (rope == NULL) {
+        return 0;
+    }
+
+    void* pair = ft_allocate(rope->policy.measure.size);
+    if (pair == NULL) {
+        return 0;
+    }
+
+    const ft_status status = ft_tree_measure(&rope->tree, pair);
+    const size_t result = status == FT_STATUS_OK ? *ft_measured_rope_pair_length_const(pair) : 0;
+    free(pair);
+    return result;
+}
+
+ft_status ft_measured_rope_measure(const ft_measured_rope* rope, void* destination)
+{
+    if (rope == NULL || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    void* pair = ft_allocate(rope->policy.measure.size);
+    if (pair == NULL) {
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    ft_status status = ft_tree_measure(&rope->tree, pair);
+    if (status == FT_STATUS_OK) {
+        (void)memcpy(
+            destination,
+            ft_measured_rope_pair_user_const(rope->chunk_context, pair),
+            rope->user_measure.size);
+    }
+
+    free(pair);
+    return status;
+}
+
+ft_status ft_measured_rope_at(const ft_measured_rope* rope, size_t index, void* destination)
+{
+    if (rope == NULL || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    const size_t size = ft_measured_rope_size(rope);
+    if (index >= size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+
+    size_t threshold = index + 1;
+    void* pair_before = ft_allocate(rope->policy.measure.size);
+    if (pair_before == NULL) {
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    bool found = false;
+    ft_measured_rope_chunk chunk;
+    ft_status status = ft_tree_locate(
+        &rope->tree,
+        ft_measured_rope_count_reaches,
+        &threshold,
+        &found,
+        pair_before,
+        &chunk);
+    if (status != FT_STATUS_OK) {
+        free(pair_before);
+        return status;
+    }
+
+    if (!found) {
+        free(pair_before);
+        return FT_STATUS_NOT_FOUND;
+    }
+
+    const size_t chunk_index = index - *ft_measured_rope_pair_length_const(pair_before);
+    ft_value_copy(
+        &rope->value_type,
+        destination,
+        chunk.data + chunk_index * rope->value_type.size);
+    ft_measured_rope_chunk_destroy_value(rope->chunk_context, &chunk);
+    free(pair_before);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_measured_rope_prefix_measure(const ft_measured_rope* rope, size_t count, void* destination)
+{
+    if (rope == NULL || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (count > ft_measured_rope_size(rope)) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    ft_measure_identity(&rope->user_measure, destination);
+    void* element_measure = ft_allocate(rope->user_measure.size);
+    void* combined = ft_allocate(rope->user_measure.size);
+    if (element_measure == NULL || combined == NULL) {
+        free(element_measure);
+        free(combined);
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    for (size_t index = 0; index != count; ++index) {
+        void* value = ft_allocate(rope->value_type.size);
+        if (value == NULL) {
+            free(element_measure);
+            free(combined);
+            return FT_STATUS_NO_MEMORY;
+        }
+
+        ft_status status = ft_measured_rope_at(rope, index, value);
+        if (status != FT_STATUS_OK) {
+            free(value);
+            free(element_measure);
+            free(combined);
+            return status;
+        }
+
+        ft_measure_for_value(&rope->user_measure, element_measure, value);
+        ft_measure_combine(&rope->user_measure, combined, destination, element_measure);
+        (void)memcpy(destination, combined, rope->user_measure.size);
+        ft_value_destroy(&rope->value_type, value);
+        free(value);
+    }
+
+    free(element_measure);
+    free(combined);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_measured_rope_split_at(
+    const ft_measured_rope* rope,
+    size_t index,
+    ft_measured_rope_split_result* result)
+{
+    if (rope == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    const size_t size = ft_measured_rope_size(rope);
+    if (index > size) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    if (index == 0) {
+        ft_status status = ft_measured_rope_init(&result->left, &rope->value_type, &rope->user_measure);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_measured_rope_copy(rope, &result->right);
+        if (status != FT_STATUS_OK) {
+            ft_measured_rope_dispose(&result->left);
+        }
+
+        return status;
+    }
+
+    if (index == size) {
+        ft_status status = ft_measured_rope_copy(rope, &result->left);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_measured_rope_init(&result->right, &rope->value_type, &rope->user_measure);
+        if (status != FT_STATUS_OK) {
+            ft_measured_rope_dispose(&result->left);
+        }
+
+        return status;
+    }
+
+    const size_t threshold = index + 1;
+    bool found = false;
+    ft_tree left_tree;
+    ft_tree right_tree;
+    ft_measured_rope_chunk hit;
+    ft_status status = ft_tree_split(
+        &rope->tree,
+        ft_measured_rope_count_reaches,
+        (void*)&threshold,
+        &found,
+        &left_tree,
+        &hit,
+        &right_tree);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (!found) {
+        return FT_STATUS_NOT_FOUND;
+    }
+
+    void* pair_before = ft_allocate(rope->policy.measure.size);
+    if (pair_before == NULL) {
+        ft_tree_dispose(&left_tree);
+        ft_tree_dispose(&right_tree);
+        ft_measured_rope_chunk_destroy_value(rope->chunk_context, &hit);
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    status = ft_tree_measure(&left_tree, pair_before);
+    if (status != FT_STATUS_OK) {
+        free(pair_before);
+        ft_tree_dispose(&left_tree);
+        ft_tree_dispose(&right_tree);
+        ft_measured_rope_chunk_destroy_value(rope->chunk_context, &hit);
+        return status;
+    }
+
+    status = ft_measured_rope_wrap_tree(rope, left_tree, &result->left);
+    if (status != FT_STATUS_OK) {
+        free(pair_before);
+        ft_tree_dispose(&right_tree);
+        ft_measured_rope_chunk_destroy_value(rope->chunk_context, &hit);
+        return status;
+    }
+
+    status = ft_measured_rope_wrap_tree(rope, right_tree, &result->right);
+    if (status != FT_STATUS_OK) {
+        free(pair_before);
+        ft_measured_rope_dispose(&result->left);
+        ft_measured_rope_chunk_destroy_value(rope->chunk_context, &hit);
+        return status;
+    }
+
+    const size_t chunk_index = index - *ft_measured_rope_pair_length_const(pair_before);
+    if (chunk_index != 0) {
+        ft_measured_rope_chunk before;
+        status = ft_measured_rope_chunk_slice(rope, &hit, 0, chunk_index, &before);
+        if (status != FT_STATUS_OK) {
+            free(pair_before);
+            ft_measured_rope_dispose(&result->left);
+            ft_measured_rope_dispose(&result->right);
+            ft_measured_rope_chunk_destroy_value(rope->chunk_context, &hit);
+            return status;
+        }
+
+        ft_tree next_left;
+        status = ft_tree_push_back(&result->left.tree, &before, &next_left);
+        ft_measured_rope_chunk_destroy_value(rope->chunk_context, &before);
+        if (status != FT_STATUS_OK) {
+            free(pair_before);
+            ft_measured_rope_dispose(&result->left);
+            ft_measured_rope_dispose(&result->right);
+            ft_measured_rope_chunk_destroy_value(rope->chunk_context, &hit);
+            return status;
+        }
+
+        ft_tree_dispose(&result->left.tree);
+        result->left.tree = next_left;
+        result->left.tree.policy = &result->left.policy;
+    }
+
+    if (chunk_index != hit.length) {
+        ft_measured_rope_chunk after;
+        status = ft_measured_rope_chunk_slice(rope, &hit, chunk_index, hit.length - chunk_index, &after);
+        if (status != FT_STATUS_OK) {
+            free(pair_before);
+            ft_measured_rope_dispose(&result->left);
+            ft_measured_rope_dispose(&result->right);
+            ft_measured_rope_chunk_destroy_value(rope->chunk_context, &hit);
+            return status;
+        }
+
+        ft_tree next_right;
+        status = ft_tree_push_front(&result->right.tree, &after, &next_right);
+        ft_measured_rope_chunk_destroy_value(rope->chunk_context, &after);
+        if (status != FT_STATUS_OK) {
+            free(pair_before);
+            ft_measured_rope_dispose(&result->left);
+            ft_measured_rope_dispose(&result->right);
+            ft_measured_rope_chunk_destroy_value(rope->chunk_context, &hit);
+            return status;
+        }
+
+        ft_tree_dispose(&result->right.tree);
+        result->right.tree = next_right;
+        result->right.tree.policy = &result->right.policy;
+    }
+
+    free(pair_before);
+    ft_measured_rope_chunk_destroy_value(rope->chunk_context, &hit);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_measured_rope_concat(
+    const ft_measured_rope* left,
+    const ft_measured_rope* right,
+    ft_measured_rope* result)
+{
+    if (left == NULL || right == NULL || result == NULL || left->value_type.size != right->value_type.size ||
+        left->user_measure.size != right->user_measure.size) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_status status = ft_measured_rope_prepare_result(left, result);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    ft_tree_rep* rep = NULL;
+    status = ft_rep_concat_with_middle(&result->policy, left->tree.rep, NULL, 0, right->tree.rep, &rep);
+    if (status != FT_STATUS_OK) {
+        ft_measured_rope_dispose(result);
+        return status;
+    }
+
+    result->tree.policy = &result->policy;
+    result->tree.rep = rep;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_measured_rope_insert_at(
+    const ft_measured_rope* rope,
+    size_t index,
+    const void* value,
+    ft_measured_rope* result)
+{
+    if (rope == NULL || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (index > ft_measured_rope_size(rope)) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    ft_measured_rope_split_result split;
+    ft_status status = ft_measured_rope_split_at(rope, index, &split);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    ft_measured_rope single;
+    status = ft_measured_rope_from_array(&single, &rope->value_type, &rope->user_measure, value, 1);
+    if (status != FT_STATUS_OK) {
+        ft_measured_rope_dispose(&split.left);
+        ft_measured_rope_dispose(&split.right);
+        return status;
+    }
+
+    ft_measured_rope left_with_item;
+    status = ft_measured_rope_concat(&split.left, &single, &left_with_item);
+    ft_measured_rope_dispose(&single);
+    if (status != FT_STATUS_OK) {
+        ft_measured_rope_dispose(&split.left);
+        ft_measured_rope_dispose(&split.right);
+        return status;
+    }
+
+    status = ft_measured_rope_concat(&left_with_item, &split.right, result);
+    ft_measured_rope_dispose(&left_with_item);
+    ft_measured_rope_dispose(&split.left);
+    ft_measured_rope_dispose(&split.right);
+    return status;
+}
+
+ft_status ft_measured_rope_push_back(const ft_measured_rope* rope, const void* value, ft_measured_rope* result)
+{
+    if (rope == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    return ft_measured_rope_insert_at(rope, ft_measured_rope_size(rope), value, result);
+}
+
+ft_status ft_measured_rope_remove_at(const ft_measured_rope* rope, size_t index, ft_measured_rope* result)
+{
+    if (rope == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (index >= ft_measured_rope_size(rope)) {
+        return ft_measured_rope_empty(rope) ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+
+    ft_measured_rope_split_result first;
+    ft_status status = ft_measured_rope_split_at(rope, index, &first);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    ft_measured_rope_split_result second;
+    status = ft_measured_rope_split_at(&first.right, 1, &second);
+    if (status != FT_STATUS_OK) {
+        ft_measured_rope_dispose(&first.left);
+        ft_measured_rope_dispose(&first.right);
+        return status;
+    }
+
+    status = ft_measured_rope_concat(&first.left, &second.right, result);
+    ft_measured_rope_dispose(&second.left);
+    ft_measured_rope_dispose(&second.right);
+    ft_measured_rope_dispose(&first.left);
+    ft_measured_rope_dispose(&first.right);
+    return status;
+}
+
+ft_status ft_measured_rope_locate_by_measure(
+    const ft_measured_rope* rope,
+    ft_measure_predicate_fn predicate,
+    void* predicate_context,
+    bool* found,
+    size_t* index,
+    void* measure_before,
+    void* value)
+{
+    if (rope == NULL || predicate == NULL || found == NULL || index == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_measured_rope_user_predicate_context tree_predicate_context;
+    tree_predicate_context.chunk_context = rope->chunk_context;
+    tree_predicate_context.predicate = predicate;
+    tree_predicate_context.predicate_context = predicate_context;
+
+    void* pair_before = ft_allocate(rope->policy.measure.size);
+    if (pair_before == NULL) {
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    ft_measured_rope_chunk chunk;
+    bool tree_found = false;
+    ft_status status = ft_tree_locate(
+        &rope->tree,
+        ft_measured_rope_user_predicate,
+        &tree_predicate_context,
+        &tree_found,
+        pair_before,
+        &chunk);
+    if (status != FT_STATUS_OK) {
+        free(pair_before);
+        return status;
+    }
+
+    if (!tree_found) {
+        *found = false;
+        *index = ft_measured_rope_size(rope);
+        if (measure_before != NULL) {
+            (void)memcpy(
+                measure_before,
+                ft_measured_rope_pair_user_const(rope->chunk_context, pair_before),
+                rope->user_measure.size);
+        }
+
+        free(pair_before);
+        return FT_STATUS_OK;
+    }
+
+    void* accumulator = ft_allocate(rope->user_measure.size);
+    void* element_measure = ft_allocate(rope->user_measure.size);
+    void* combined = ft_allocate(rope->user_measure.size);
+    if (accumulator == NULL || element_measure == NULL || combined == NULL) {
+        free(accumulator);
+        free(element_measure);
+        free(combined);
+        ft_measured_rope_chunk_destroy_value(rope->chunk_context, &chunk);
+        free(pair_before);
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    (void)memcpy(
+        accumulator,
+        ft_measured_rope_pair_user_const(rope->chunk_context, pair_before),
+        rope->user_measure.size);
+    const size_t base_index = *ft_measured_rope_pair_length_const(pair_before);
+    for (size_t local = 0; local != chunk.length; ++local) {
+        const void* item = chunk.data + local * rope->value_type.size;
+        ft_measure_for_value(&rope->user_measure, element_measure, item);
+        ft_measure_combine(&rope->user_measure, combined, accumulator, element_measure);
+        if (predicate(combined, predicate_context)) {
+            *found = true;
+            *index = base_index + local;
+            if (measure_before != NULL) {
+                (void)memcpy(measure_before, accumulator, rope->user_measure.size);
+            }
+
+            if (value != NULL) {
+                ft_value_copy(&rope->value_type, value, item);
+            }
+
+            free(accumulator);
+            free(element_measure);
+            free(combined);
+            ft_measured_rope_chunk_destroy_value(rope->chunk_context, &chunk);
+            free(pair_before);
+            return FT_STATUS_OK;
+        }
+
+        (void)memcpy(accumulator, combined, rope->user_measure.size);
+    }
+
+    *found = false;
+    *index = ft_measured_rope_size(rope);
+    if (measure_before != NULL) {
+        (void)memcpy(measure_before, accumulator, rope->user_measure.size);
+    }
+
+    free(accumulator);
+    free(element_measure);
+    free(combined);
+    ft_measured_rope_chunk_destroy_value(rope->chunk_context, &chunk);
+    free(pair_before);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_measured_rope_split_by_measure(
+    const ft_measured_rope* rope,
+    ft_measure_predicate_fn predicate,
+    void* predicate_context,
+    ft_measured_rope_split_result* result)
+{
+    if (rope == NULL || predicate == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    bool found = false;
+    size_t index = 0;
+    ft_status status = ft_measured_rope_locate_by_measure(
+        rope,
+        predicate,
+        predicate_context,
+        &found,
+        &index,
+        NULL,
+        NULL);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (!found) {
+        status = ft_measured_rope_copy(rope, &result->left);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_measured_rope_init(&result->right, &rope->value_type, &rope->user_measure);
+        if (status != FT_STATUS_OK) {
+            ft_measured_rope_dispose(&result->left);
+        }
+
+        return status;
+    }
+
+    return ft_measured_rope_split_at(rope, index, result);
+}
+
+typedef struct ft_measured_rope_visit_context {
+    const ft_measured_rope* rope;
+    ft_visit_fn visitor;
+    void* context;
+} ft_measured_rope_visit_context;
+
+static void ft_measured_rope_visit_chunk(const void* value, void* context)
+{
+    ft_measured_rope_visit_context* visit_context = (ft_measured_rope_visit_context*)context;
+    const ft_measured_rope_chunk* chunk = (const ft_measured_rope_chunk*)value;
+    for (size_t index = 0; index != chunk->length; ++index) {
+        visit_context->visitor(
+            chunk->data + index * visit_context->rope->value_type.size,
+            visit_context->context);
+    }
+}
+
+ft_status ft_measured_rope_visit(const ft_measured_rope* rope, ft_visit_fn visitor, void* context)
+{
+    if (rope == NULL || visitor == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_measured_rope_visit_context visit_context;
+    visit_context.rope = rope;
+    visit_context.visitor = visitor;
+    visit_context.context = context;
+    return ft_tree_visit(&rope->tree, ft_measured_rope_visit_chunk, &visit_context);
+}
+
 typedef struct ft_priority_entry {
     uint64_t ordinal;
     void* priority;

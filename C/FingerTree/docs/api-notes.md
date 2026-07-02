@@ -33,13 +33,15 @@ Implemented in this checkpoint:
 - generic closed-interval tree facade, plus a signed 64-bit convenience facade, with insertion, removal,
   containment, first-overlap, and overlap count;
 - generic chunked positional rope with cumulative-length indexing, split, concat, insertion, removal, and traversal;
+- generic measured rope with cached per-chunk user measures, whole/prefix measure reads, cumulative-measure locate
+  and split, split, concat, insertion, removal, and traversal;
 - character text rope facade, backed by the chunked rope, with insertion/removal/indexing and basic line
   navigation.
 
 Deferred from the C++ port:
 
 - atomic lazy-middle cells and the full persistent amortization/concurrency argument;
-- measured rope navigation and samples/benchmarks;
+- samples/benchmarks;
 - allocator customization and typed macro-generation helpers.
 
 The strict core is still useful for validating C ownership, policy, and ABI shape before porting the lazy

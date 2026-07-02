@@ -68,6 +68,33 @@ static int compare_ints(const void* left, const void* right, void* context)
     return (left_value > right_value) - (left_value < right_value);
 }
 
+static void int_sum_identity(void* destination, void* context)
+{
+    (void)context;
+    *(int*)destination = 0;
+}
+
+static void int_sum_measure(void* destination, const void* value, void* context)
+{
+    (void)context;
+    *(int*)destination = *(const int*)value;
+}
+
+static void int_sum_combine(void* destination, const void* left, const void* right, void* context)
+{
+    (void)context;
+    *(int*)destination = *(const int*)left + *(const int*)right;
+}
+
+static void init_int_sum_measure(ft_measure_policy* policy)
+{
+    policy->size = sizeof(int);
+    policy->identity = int_sum_identity;
+    policy->measure = int_sum_measure;
+    policy->combine = int_sum_combine;
+    policy->context = NULL;
+}
+
 static void collect_int(const void* value, void* context)
 {
     int_buffer* buffer = (int_buffer*)context;
@@ -102,6 +129,11 @@ static bool size_reaches(const void* measure, void* context)
     const size_t value = *(const size_t*)measure;
     const size_t threshold = *(const size_t*)context;
     return value >= threshold;
+}
+
+static bool int_sum_reaches(const void* measure, void* context)
+{
+    return *(const int*)measure >= *(const int*)context;
 }
 
 static void test_reversible_deque(void)
@@ -551,6 +583,102 @@ static void test_rope(void)
     ft_rope_dispose(&rope);
 }
 
+static void test_measured_rope(void)
+{
+    ft_value_type int_type;
+    ft_value_type_init(&int_type, sizeof(int));
+    ft_measure_policy sum_measure;
+    init_int_sum_measure(&sum_measure);
+
+    int values[3000];
+    int expected_sum = 0;
+    for (int index = 0; index != 3000; ++index) {
+        values[index] = 1;
+        expected_sum += values[index];
+    }
+    values[2048] = 10;
+    expected_sum += 9;
+
+    ft_measured_rope rope;
+    REQUIRE_STATUS(ft_measured_rope_from_array(&rope, &int_type, &sum_measure, values, 3000), FT_STATUS_OK);
+    REQUIRE(ft_measured_rope_size(&rope) == 3000);
+
+    int measure = -1;
+    REQUIRE_STATUS(ft_measured_rope_measure(&rope, &measure), FT_STATUS_OK);
+    REQUIRE(measure == expected_sum);
+
+    int prefix = -1;
+    REQUIRE_STATUS(ft_measured_rope_prefix_measure(&rope, 2050, &prefix), FT_STATUS_OK);
+    REQUIRE(prefix == 2059);
+
+    int actual = -1;
+    REQUIRE_STATUS(ft_measured_rope_at(&rope, 2048, &actual), FT_STATUS_OK);
+    REQUIRE(actual == 10);
+
+    int threshold = 2054;
+    bool found = false;
+    size_t index = 0;
+    int before = -1;
+    int value = -1;
+    REQUIRE_STATUS(
+        ft_measured_rope_locate_by_measure(
+            &rope,
+            int_sum_reaches,
+            &threshold,
+            &found,
+            &index,
+            &before,
+            &value),
+        FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(index == 2048);
+    REQUIRE(before == 2048);
+    REQUIRE(value == 10);
+
+    ft_measured_rope_split_result split;
+    REQUIRE_STATUS(ft_measured_rope_split_by_measure(&rope, int_sum_reaches, &threshold, &split), FT_STATUS_OK);
+    REQUIRE(ft_measured_rope_size(&split.left) == 2048);
+    REQUIRE(ft_measured_rope_size(&split.right) == 952);
+    REQUIRE_STATUS(ft_measured_rope_measure(&split.left, &measure), FT_STATUS_OK);
+    REQUIRE(measure == 2048);
+    REQUIRE_STATUS(ft_measured_rope_at(&split.right, 0, &actual), FT_STATUS_OK);
+    REQUIRE(actual == 10);
+
+    ft_measured_rope joined;
+    REQUIRE_STATUS(ft_measured_rope_concat(&split.left, &split.right, &joined), FT_STATUS_OK);
+    REQUIRE(ft_measured_rope_size(&joined) == 3000);
+    REQUIRE_STATUS(ft_measured_rope_measure(&joined, &measure), FT_STATUS_OK);
+    REQUIRE(measure == expected_sum);
+
+    int inserted_value = 7;
+    ft_measured_rope inserted;
+    REQUIRE_STATUS(ft_measured_rope_insert_at(&joined, 3, &inserted_value, &inserted), FT_STATUS_OK);
+    REQUIRE(ft_measured_rope_size(&inserted) == 3001);
+    REQUIRE_STATUS(ft_measured_rope_measure(&inserted, &measure), FT_STATUS_OK);
+    REQUIRE(measure == expected_sum + inserted_value);
+    REQUIRE_STATUS(ft_measured_rope_at(&joined, 3, &actual), FT_STATUS_OK);
+    REQUIRE(actual == 1);
+
+    ft_measured_rope removed;
+    REQUIRE_STATUS(ft_measured_rope_remove_at(&inserted, 3, &removed), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_measured_rope_measure(&removed, &measure), FT_STATUS_OK);
+    REQUIRE(measure == expected_sum);
+
+    int pushed = 11;
+    ft_measured_rope pushed_rope;
+    REQUIRE_STATUS(ft_measured_rope_push_back(&removed, &pushed, &pushed_rope), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_measured_rope_measure(&pushed_rope, &measure), FT_STATUS_OK);
+    REQUIRE(measure == expected_sum + pushed);
+
+    ft_measured_rope_dispose(&pushed_rope);
+    ft_measured_rope_dispose(&removed);
+    ft_measured_rope_dispose(&inserted);
+    ft_measured_rope_dispose(&joined);
+    ft_measured_rope_dispose(&split.left);
+    ft_measured_rope_dispose(&split.right);
+    ft_measured_rope_dispose(&rope);
+}
+
 static void test_interval_tree(void)
 {
     ft_interval_tree_i64 tree;
@@ -706,6 +834,7 @@ int main(void)
     run_test("sorted set and multiset", test_sorted_set_and_multiset);
     run_test("sorted map", test_sorted_map);
     run_test("rope", test_rope);
+    run_test("measured rope", test_measured_rope);
     run_test("priority queue", test_priority_queue);
     run_test("interval tree", test_interval_tree);
     run_test("generic interval tree", test_generic_interval_tree);

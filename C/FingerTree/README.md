@@ -23,6 +23,8 @@ The related C-facing surfaces currently included are:
 - `ft_interval_tree`, a generic closed-interval tree facade over caller-supplied endpoint policies;
 - `ft_interval_tree_i64`, a convenience closed-interval facade for signed 64-bit endpoints;
 - `ft_rope`, a generic persistent chunked positional sequence backed by measured chunk leaves;
+- `ft_measured_rope`, a generic persistent chunked sequence with cached user measures and cumulative-measure
+  navigation;
 - `ft_text_rope`, a character-rope facade backed by `ft_rope`, with insertion, removal, indexing, line count, and
   line/column navigation.
 

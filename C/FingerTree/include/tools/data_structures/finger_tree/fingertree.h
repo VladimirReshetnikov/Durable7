@@ -276,6 +276,69 @@ ft_status ft_rope_split_at(const ft_rope* rope, size_t index, ft_rope_split_resu
 ft_status ft_rope_concat(const ft_rope* left, const ft_rope* right, ft_rope* result);
 ft_status ft_rope_visit(const ft_rope* rope, ft_visit_fn visitor, void* context);
 
+typedef struct ft_measured_rope_chunk_context ft_measured_rope_chunk_context;
+
+typedef struct ft_measured_rope {
+    ft_tree_policy policy;
+    ft_tree tree;
+    ft_value_type value_type;
+    ft_measure_policy user_measure;
+    size_t max_chunk_length;
+    ft_measured_rope_chunk_context* chunk_context;
+} ft_measured_rope;
+
+typedef struct ft_measured_rope_split_result {
+    ft_measured_rope left;
+    ft_measured_rope right;
+} ft_measured_rope_split_result;
+
+ft_status ft_measured_rope_init(
+    ft_measured_rope* rope,
+    const ft_value_type* value_type,
+    const ft_measure_policy* user_measure);
+ft_status ft_measured_rope_from_array(
+    ft_measured_rope* rope,
+    const ft_value_type* value_type,
+    const ft_measure_policy* user_measure,
+    const void* values,
+    size_t count);
+ft_status ft_measured_rope_copy(const ft_measured_rope* source, ft_measured_rope* destination);
+void ft_measured_rope_dispose(ft_measured_rope* rope);
+bool ft_measured_rope_empty(const ft_measured_rope* rope);
+size_t ft_measured_rope_size(const ft_measured_rope* rope);
+ft_status ft_measured_rope_measure(const ft_measured_rope* rope, void* destination);
+ft_status ft_measured_rope_prefix_measure(const ft_measured_rope* rope, size_t count, void* destination);
+ft_status ft_measured_rope_at(const ft_measured_rope* rope, size_t index, void* destination);
+ft_status ft_measured_rope_push_back(const ft_measured_rope* rope, const void* value, ft_measured_rope* result);
+ft_status ft_measured_rope_insert_at(
+    const ft_measured_rope* rope,
+    size_t index,
+    const void* value,
+    ft_measured_rope* result);
+ft_status ft_measured_rope_remove_at(const ft_measured_rope* rope, size_t index, ft_measured_rope* result);
+ft_status ft_measured_rope_split_at(
+    const ft_measured_rope* rope,
+    size_t index,
+    ft_measured_rope_split_result* result);
+ft_status ft_measured_rope_split_by_measure(
+    const ft_measured_rope* rope,
+    ft_measure_predicate_fn predicate,
+    void* predicate_context,
+    ft_measured_rope_split_result* result);
+ft_status ft_measured_rope_locate_by_measure(
+    const ft_measured_rope* rope,
+    ft_measure_predicate_fn predicate,
+    void* predicate_context,
+    bool* found,
+    size_t* index,
+    void* measure_before,
+    void* value);
+ft_status ft_measured_rope_concat(
+    const ft_measured_rope* left,
+    const ft_measured_rope* right,
+    ft_measured_rope* result);
+ft_status ft_measured_rope_visit(const ft_measured_rope* rope, ft_visit_fn visitor, void* context);
+
 typedef struct ft_priority_queue_entry_context ft_priority_queue_entry_context;
 
 typedef struct ft_priority_queue {
