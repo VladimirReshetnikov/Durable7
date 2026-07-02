@@ -15,6 +15,8 @@ evidence, not active build or layout guidance. Use the root [README](../../READM
 
 - [Extraction provenance](extraction-provenance.md) records the source repository, extracted path,
   filter command, standalone-repack validation, and post-extraction validation notes.
+- [Language-first reorganization](language-first-reorganization.md) records the 2026-07 path move
+  from top-level workspaces to `src/<Language>/<DataStructure>` and keeps the old-to-new path map.
 - [Filter-repo commit map](filter-repo-commit-map.tsv) preserves the old-to-new commit mapping
   produced by the history rewrite.
 
