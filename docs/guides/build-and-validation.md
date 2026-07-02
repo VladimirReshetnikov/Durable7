@@ -7,18 +7,19 @@
 
 Use this guide when a change crosses workspace boundaries, moves files, edits public docs, or touches
 shared repository guidance. Workspace-local README files remain the shortest entry point for a single
-library; this document is the cross-repository checklist.
+library; this document is the cross-repository checklist. The workspace validation guides linked below
+own the local warning policy, generated-output locations, test coverage map, and evidence wording.
 
 ## Validation Matrix
 
-| Workspace | Primary command | Coverage |
-| --- | --- | --- |
-| [`src/CSharp/Hamt`](../../src/CSharp/Hamt/README.md) | `dotnet test .\Hamt.sln` | .NET library build, xUnit tests, CsCheck model tests |
-| [`src/CSharp/FingerTree`](../../src/CSharp/FingerTree/README.md) | `dotnet test .\FingerTree.sln` | .NET library, samples, benchmarks project build, xUnit/CsCheck suites |
-| [`src/C/Hamt`](../../src/C/Hamt/README.md) | `.\build.ps1 -RunTests` | C17 build and deterministic HAMT tests |
-| [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | `.\build.ps1 -RunTests` | C++20 build and deterministic HAMT tests |
-| [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | `cmake --preset msvc-debug; cmake --build --preset msvc-debug; ctest --preset msvc-debug` | C11 static library, tests, samples |
-| [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | `cmake --preset msvc-debug; cmake --build --preset msvc-debug; ctest --preset msvc-debug` | C++23 header-first library and CTest suite |
+| Workspace | Primary command | Local validation guide | Coverage |
+| --- | --- | --- | --- |
+| [`src/CSharp/Hamt`](../../src/CSharp/Hamt/README.md) | `dotnet test .\Hamt.sln` | [Validation](../../src/CSharp/Hamt/docs/validation.md) | .NET library build, XML-doc warning gate, xUnit tests, CsCheck model tests |
+| [`src/CSharp/FingerTree`](../../src/CSharp/FingerTree/README.md) | `dotnet test .\FingerTree.sln` | [Validation](../../src/CSharp/FingerTree/docs/validation.md) | .NET library, samples, benchmark project build, stress controls, xUnit/CsCheck suites |
+| [`src/C/Hamt`](../../src/C/Hamt/README.md) | `.\build.ps1 -RunTests` | [Validation](../../src/C/Hamt/docs/validation.md) | C17 build, warning policy, deterministic HAMT tests |
+| [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | `.\build.ps1 -RunTests` | [Validation](../../src/Cpp/Hamt/docs/validation.md) | C++20 build, warning policy, deterministic HAMT tests |
+| [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | `cmake --preset msvc-debug; cmake --build --preset msvc-debug; ctest --preset msvc-debug` | [Validation](../../src/C/FingerTree/docs/validation.md) | C11 static library, tests, samples, benchmark harness entry points |
+| [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | `cmake --preset msvc-debug; cmake --build --preset msvc-debug; ctest --preset msvc-debug` | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | C++23 header-first library, CTest suite, stress controls |
 
 For broad repository edits, run every row that could be affected. For documentation-only edits, run the
 Markdown link check below and any build/test commands whose documented paths changed.
@@ -34,7 +35,11 @@ dotnet test .\FingerTree.sln
 ```
 
 The C# solutions target `net10.0` and use C# preview features. Treat public XML documentation warnings
-as build-relevant: `CS1591` and `CS1573` are intentionally escalated in the C# workspaces.
+as build-relevant: `CS1591` and `CS1573` are intentionally escalated in the C# workspaces. The local
+validation guides define test coverage and optional stress/benchmark boundaries:
+
+- [C# HAMT validation](../../src/CSharp/Hamt/docs/validation.md)
+- [C# FingerTree validation](../../src/CSharp/FingerTree/docs/validation.md)
 
 ## HAMT Native Ports
 
@@ -49,7 +54,11 @@ cd C:\DataStructures\src\Cpp\Hamt
 ```
 
 The HAMT native build scripts import the MSVC environment through Scriptorium. Build outputs are written
-under `build/<Configuration>/` and are ignored by the repository.
+under `build/<Configuration>/` and are ignored by the repository. The local guides define compiler flags,
+warning policy, generated outputs, and native model-test coverage:
+
+- [C HAMT validation](../../src/C/Hamt/docs/validation.md)
+- [C++ HAMT validation](../../src/Cpp/Hamt/docs/validation.md)
 
 ## FingerTree Native Ports
 
@@ -83,6 +92,12 @@ directory before reconfiguring. Verify the resolved target is inside the workspa
 Remove-Item -LiteralPath .\out\build\msvc-debug -Recurse -Force
 Remove-Item -LiteralPath .\out\build\msvc-release -Recurse -Force
 ```
+
+The native FingerTree validation guides describe local CMake presets, stress controls, sample smoke
+tests, and benchmark harness status:
+
+- [C FingerTree validation](../../src/C/FingerTree/docs/validation.md)
+- [C++ FingerTree validation](../../src/Cpp/FingerTree/docs/validation.md)
 
 ## Benchmarks
 
