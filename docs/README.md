@@ -33,11 +33,11 @@ Library-specific design and API documentation lives beside each workspace under 
 Put repository-wide task procedures under `docs/guides`, durable cross-workspace maps under
 `docs/reference`, and extraction/history records under `docs/migration`.
 
-Put C# HAMT implementation and API documents under
+Put C# HAMT implementation, API, and validation documents under
 [src/CSharp/Hamt/docs](../src/CSharp/Hamt/docs/README.md), C HAMT port documents under
 [src/C/Hamt/docs](../src/C/Hamt/docs/README.md), and C++ HAMT port documents under
 [src/Cpp/Hamt/docs](../src/Cpp/Hamt/docs/README.md). Put C# FingerTree usage, implementation, API,
-benchmark, and algorithm documents under
+validation, benchmark, and algorithm documents under
 [src/CSharp/FingerTree/docs](../src/CSharp/FingerTree/docs/README.md), with native FingerTree usage,
 API, port, and validation documents under [src/Cpp/FingerTree/docs](../src/Cpp/FingerTree/docs/README.md) and
 [src/C/FingerTree/docs](../src/C/FingerTree/docs/README.md).

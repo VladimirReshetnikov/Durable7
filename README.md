@@ -148,11 +148,11 @@ Release configuration is required for meaningful benchmark numbers.
 - [docs/reference/data-structure-catalog.md](docs/reference/data-structure-catalog.md) catalogs repository-owned data-structure families, public entry points, and primary references across C#, C, and C++.
 - [docs/reference/navigation-matrix.md](docs/reference/navigation-matrix.md) maps common tasks to the right usage, API, validation, porting, history, and maintenance documents.
 - [docs/reference/workspace-map.md](docs/reference/workspace-map.md) explains the language-first, data-structure-second layout and port lineage.
-- [src/CSharp/Hamt/docs/README.md](src/CSharp/Hamt/docs/README.md) indexes the HAMT library's usage guide, API specification, and implementation review.
+- [src/CSharp/Hamt/docs/README.md](src/CSharp/Hamt/docs/README.md) indexes the HAMT library's usage guide, API specification, validation guide, and implementation review.
 - [src/C/Hamt/docs/README.md](src/C/Hamt/docs/README.md) indexes the C HAMT port's usage guide, API specification, and validation guide.
 - [src/Cpp/Hamt/docs/README.md](src/Cpp/Hamt/docs/README.md) indexes the C++ HAMT port's usage
   guide, API specification, and validation guide.
-- [src/CSharp/FingerTree/docs/README.md](src/CSharp/FingerTree/docs/README.md) indexes the library's usage guide, specifications, design notes, benchmark notes, and external references.
+- [src/CSharp/FingerTree/docs/README.md](src/CSharp/FingerTree/docs/README.md) indexes the library's usage guide, specifications, validation guide, design notes, benchmark notes, and external references.
 - [src/Cpp/FingerTree/docs/README.md](src/Cpp/FingerTree/docs/README.md) indexes the C++ usage guide, port plan, API notes, validation guide, implementation notes, and review reports.
 - [src/C/FingerTree/docs/README.md](src/C/FingerTree/docs/README.md) indexes the C usage guide, API notes, and validation guide.
 

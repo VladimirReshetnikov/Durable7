@@ -28,6 +28,7 @@ allocation-free copy-safe struct enumerators.
 - `docs/api-specification.md` documents public contracts and complexity guarantees.
 - `docs/usage.md` provides practical construction, comparer, persistent update, iteration, and
   set-algebra examples.
+- `docs/validation.md` records local restore/build/test commands, warning policy, and test coverage.
 
 ## Validation
 
@@ -36,3 +37,6 @@ Use the local .NET SDK:
 ```powershell
 dotnet test .\Hamt.sln
 ```
+
+See [`docs/validation.md`](docs/validation.md) for the restore/build/test split, XML documentation
+warning gate, and xUnit/CsCheck coverage.

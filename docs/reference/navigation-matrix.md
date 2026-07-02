@@ -55,8 +55,10 @@ Use these when behavior, complexity, allocation, ownership, or cross-language pa
 | Scope | Document | What it proves |
 | --- | --- | --- |
 | Whole repository | [Build and validation](../guides/build-and-validation.md) | Canonical commands for C#, C, C++, CMake presets, and Markdown checks |
+| C# HAMT | [Validation](../../src/CSharp/Hamt/docs/validation.md) | .NET restore/build/test commands, XML-documentation warning gate, and xUnit/CsCheck coverage |
 | C HAMT | [Validation](../../src/C/Hamt/docs/validation.md) | MSVC C17 build script, Debug/Release commands, warning policy, and native model tests |
 | C++ HAMT | [Validation](../../src/Cpp/Hamt/docs/validation.md) | MSVC C++20 build script, Debug/Release commands, warning policy, and native model tests |
+| C# FingerTree | [Validation](../../src/CSharp/FingerTree/docs/validation.md) | .NET restore/build/test commands, sample smoke coverage, benchmark boundary, stress controls, and xUnit/CsCheck coverage |
 | C FingerTree | [Validation](../../src/C/FingerTree/docs/validation.md) | CMake build, CTest validation, sample smoke tests, and benchmark harness entry points |
 | C++ FingerTree | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | CMake build, CTest validation, stress controls, and benchmark entry points |
 | C# FingerTree benchmarks | [Benchmark notes](../../src/CSharp/FingerTree/docs/benchmarks.md) | Curated BenchmarkDotNet results and interpretation |
