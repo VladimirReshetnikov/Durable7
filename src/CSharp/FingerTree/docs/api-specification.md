@@ -1,12 +1,14 @@
-# Finger Tree Deque API Specification
+# C# FingerTree API Specification
 
-- Status: Draft normative API specification
+- Status: Current normative API specification
 - Created (UTC): 2026-04-27T18:33:25Z
 - Repository HEAD: df8ea08345ca22ba76e6f4fc7e92d0fd41686de3
-- Audience: Maintainers, reviewers, and implementers of the planned C# finger-tree collection
-- Scope: Public API shape, semantic contracts, and complexity targets for a persistent catenable deque
+- Audience: Maintainers, reviewers, and implementers of the C# FingerTree workspace
+- Scope: Public API shape, semantic contracts, complexity targets, and collection roles for the C# FingerTree library
 - Related code:
   - `src/CSharp/FingerTree/`
+- Related first-use guide:
+  - [C# FingerTree usage guide](usage.md)
 - Related docs (external reference material, segregated under [`external/`](external/README.md)):
   - [Finger Trees Explained Anew, and Slightly Simplified](<external/Finger Trees Explained Anew, and Slightly Simplified.tex>)
   - [Finger trees: a simple general-purpose data structure](<external/Finger trees - a simple general-purpose data structure/Finger trees - a simple general-purpose data structure.tex>)
@@ -14,27 +16,28 @@
 
 ## Summary
 
-This document specifies the first production API for a persistent C# catenable deque backed by a simplified finger tree. The collection supports efficient access at both ends, concatenation, indexed lookup and replacement, splitting by index, and logarithmic sorted search when callers maintain the sequence in comparer order. The API is intentionally narrower than a general measured-finger-tree framework: the public type is a sequence collection, while the implementation remains free to use internal measurements for count and sorted-search signposts.
+This document specifies the public API contract for the C# FingerTree workspace. It opens with the tuned `FingerTreeDeque<T>` contract, then records the sibling measured tree, sorted collections, priority queue, interval tree, reversible deque, and rope contracts that now ship from the same library. For first-use examples and facade selection, start with the [usage guide](usage.md).
 
 ## Scope And Non-Goals
 
 ### In Scope
 
-- A persistent immutable deque with structural sharing.
+- The tuned `FingerTreeDeque<T>` persistent immutable deque with structural sharing.
 - Constant worst-case `Count`, emptiness, first-element, and last-element queries.
 - End insertion and removal with logarithmic worst-case and constant amortized (persistent) complexity.
 - End replacement through `SetItem(0, value)` and `SetItem(Count - 1, value)` with constant worst-case complexity.
 - Catenation with logarithmic complexity in the smaller input.
 - Indexed read, update, insertion, deletion, range extraction, and split.
-- Sorted-search helpers for lower bound, upper bound, equal ranges, and comparer-compatible binary-search semantics.
+- Sorted-search helpers on `FingerTreeDeque<T>` for lower bound, upper bound, equal ranges, and comparer-compatible binary-search semantics.
+- The measured tree and derived collection contracts in the later sections of this document.
 - Exact exception and edge-case behavior for public methods.
 - Public complexity guarantees for time and allocation.
 
-### Out Of Scope (for this `FingerTreeDeque<T>` specification)
+### Outside The Deque-Specific Contract
 
-- A public generic measured finger tree. This is no longer deferred: it now ships as the sibling type `FingerTree<TElement, TMeasure, TMeasureOps>` (with the `IMonoid<TMeasure>` / `IMeasure<TElement, TMeasure>` static-abstract measure interfaces). It is governed by its own contract in [The General Measured Finger Tree](#the-general-measured-finger-tree) rather than by this deque specification, which remains the authority for `FingerTreeDeque<T>` only.
+- Generic measured-tree semantics. The public generic measured finger tree now ships as the sibling type `FingerTree<TElement, TMeasure, TMeasureOps>` (with the `IMonoid<TMeasure>` / `IMeasure<TElement, TMeasure>` static-abstract measure interfaces). It is governed by its own contract in [The General Measured Finger Tree](#the-general-measured-finger-tree) rather than by these deque-specific bullets.
 - Sorted-set uniqueness semantics. A sorted deque may contain duplicates.
-- A mutable builder in the first implementation. A builder can be added later without changing the core immutable API.
+- A mutable builder for `FingerTreeDeque<T>`. A builder can be added later without changing the core immutable API.
 - Hard real-time worst-case constant deque-end insertions and removals. Finger-tree pushes and pops are amortized constant but can be logarithmic in an individual operation; this does not apply to replacing an existing end element with `SetItem`; see [Why Endpoint Insertions And Removals Are Not Worst-Case Constant](#why-endpoint-insertions-and-removals-are-not-worst-case-constant).
 - Validation that a sequence is sorted before a sorted-search helper runs. Debug-only validation may be added, but release behavior must not pay linear validation cost.
 
@@ -333,7 +336,7 @@ This specification records guarantees the implementation meets and tests, not an
 
 ## Why Endpoint Insertions And Removals Are Not Worst-Case Constant
 
-The exclusion of hard real-time worst-case O(1) endpoint insertions and removals is a deliberate scope boundary, not a claim that such data structures are impossible. It follows from the representation chosen for this first implementation.
+The exclusion of hard real-time worst-case O(1) endpoint insertions and removals is a deliberate scope boundary, not a claim that such data structures are impossible. It follows from the representation chosen for `FingerTreeDeque<T>`.
 
 In the simplified finger tree, `AddFirst` usually modifies only the top prefix digit. When the prefix digit is already full, it must leave a neutral digit at the current level and push a node into the middle tree. If the middle tree is also at an overflow point, the same repair recurses one level down. A specially shaped tree can therefore force one endpoint insertion or removal to traverse the whole recursive spine, which is O(log n). `AddLast`, `RemoveFirst`, and `RemoveLast` have symmetric overflow or underflow cases.
 
@@ -398,7 +401,7 @@ The collection does not deep-freeze element objects. If `T` is a mutable referen
 
 ## Equality And Identity
 
-`FingerTreeDeque<T>` should not override `Equals` or `GetHashCode` in the first implementation. Structural equality is O(n), and making it the default object equality would hide a linear operation behind common APIs.
+`FingerTreeDeque<T>` should not override `Equals` or `GetHashCode`. Structural equality is O(n), and making it the default object equality would hide a linear operation behind common APIs.
 
 Callers that need structural equality should use `Enumerable.SequenceEqual`, a future explicit `SequenceEqual` helper, or a comparer-aware method with clear O(n) documentation.
 
@@ -450,7 +453,7 @@ var inserted = sorted.InsertSorted(5);
 
 ## Validation Requirements For The Implementation
 
-The first implementation should include tests for at least these contracts:
+The implementation should include tests for at least these contracts:
 
 - Structural persistence: every operation leaves its input sequences unchanged.
 - Endpoint operation equivalence against `List<T>` or `ImmutableList<T>` reference behavior.
@@ -470,7 +473,7 @@ Property tests should generate random operation histories and compare the result
 
 The fully generic measured finger tree was initially deferred, but is now provided as the sibling type `FingerTree<TElement, TMeasure, TMeasureOps>` (see below). C# expresses the Haskell `Measured v a` typeclass through static-abstract interface members (`IMonoid<TMeasure>`, `IMeasure<TElement, TMeasure>`), so the general machinery is available without per-call allocation or virtual dispatch. The deque remains a separate, individually tuned type — the same split as Haskell keeps `Data.Sequence` distinct from `Data.FingerTree` — and is not re-platformed onto the general core in this revision.
 
-The sorted-search API deliberately lives on the deque instead of a separate sorted collection type. That keeps the deque focused and lets callers decide whether sortedness is a local invariant. A future `FingerTreeSortedBag<T>` can wrap either `FingerTreeDeque<T>` or a key-measured `FingerTree<...>` and store a comparer if enough call sites need an invariant-enforcing sorted container.
+The sorted-search API deliberately remains available on the deque as a local-invariant helper: callers may keep an ordinary sequence sorted for a short workflow without paying for a wrapper. Long-lived sorted invariants are owned by `SortedBag<T>`, `SortedSet<T>`, and `SortedDictionary<TKey, TValue>`, which store comparers, enforce their ordering contracts by construction, and expose rank, range, and neighbor operations over the measured-tree surface.
 
 The implementation should keep XML documentation aligned with this file. XML summaries may use coarser O(log n) wording, but remarks on the key methods should point to this specification for sharper split-distance complexity.
 
