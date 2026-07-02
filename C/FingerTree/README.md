@@ -23,8 +23,8 @@ The related C-facing surfaces currently included are:
 - `ft_interval_tree`, a generic closed-interval tree facade over caller-supplied endpoint policies;
 - `ft_interval_tree_i64`, a convenience closed-interval facade for signed 64-bit endpoints;
 - `ft_rope`, a generic persistent chunked positional sequence backed by measured chunk leaves;
-- `ft_text_rope`, a small character-rope facade with insertion, removal, indexing, line count, and line/column
-  navigation.
+- `ft_text_rope`, a character-rope facade backed by `ft_rope`, with insertion, removal, indexing, line count, and
+  line/column navigation.
 
 Unlike the C++ port, this checkpoint is strict: it does not yet port the atomic lazy-middle cells or the full
 general measured-tree concurrency story. The API and docs avoid claiming the persistent amortized lazy-spine

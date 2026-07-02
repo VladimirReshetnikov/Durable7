@@ -4291,8 +4291,7 @@ ft_status ft_text_rope_init(ft_text_rope* rope)
 
     ft_value_type char_type;
     ft_value_type_init(&char_type, sizeof(char));
-    ft_tree_policy_init_size(&rope->policy, &char_type);
-    return ft_tree_init(&rope->tree, &rope->policy);
+    return ft_rope_init(&rope->rope, &char_type);
 }
 
 ft_status ft_text_rope_from_cstr(const char* text, ft_text_rope* rope)
@@ -4301,26 +4300,9 @@ ft_status ft_text_rope_from_cstr(const char* text, ft_text_rope* rope)
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    ft_status status = ft_text_rope_init(rope);
-    if (status != FT_STATUS_OK) {
-        return status;
-    }
-
-    const size_t length = strlen(text);
-    for (size_t index = 0; index != length; ++index) {
-        ft_tree next;
-        status = ft_tree_push_back(&rope->tree, &text[index], &next);
-        if (status != FT_STATUS_OK) {
-            ft_text_rope_dispose(rope);
-            return status;
-        }
-
-        ft_tree_dispose(&rope->tree);
-        rope->tree = next;
-        rope->tree.policy = &rope->policy;
-    }
-
-    return FT_STATUS_OK;
+    ft_value_type char_type;
+    ft_value_type_init(&char_type, sizeof(char));
+    return ft_rope_from_array(&rope->rope, &char_type, text, strlen(text));
 }
 
 ft_status ft_text_rope_copy(const ft_text_rope* source, ft_text_rope* destination)
@@ -4329,17 +4311,7 @@ ft_status ft_text_rope_copy(const ft_text_rope* source, ft_text_rope* destinatio
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    ft_value_type char_type;
-    ft_value_type_init(&char_type, sizeof(char));
-    ft_tree_policy_init_size(&destination->policy, &char_type);
-
-    ft_status status = ft_tree_copy(&source->tree, &destination->tree);
-    if (status != FT_STATUS_OK) {
-        return status;
-    }
-
-    destination->tree.policy = &destination->policy;
-    return FT_STATUS_OK;
+    return ft_rope_copy(&source->rope, &destination->rope);
 }
 
 void ft_text_rope_dispose(ft_text_rope* rope)
@@ -4348,12 +4320,12 @@ void ft_text_rope_dispose(ft_text_rope* rope)
         return;
     }
 
-    ft_tree_dispose(&rope->tree);
+    ft_rope_dispose(&rope->rope);
 }
 
 size_t ft_text_rope_size(const ft_text_rope* rope)
 {
-    return rope == NULL ? 0 : ft_tree_size(&rope->tree);
+    return rope == NULL ? 0 : ft_rope_size(&rope->rope);
 }
 
 ft_status ft_text_rope_at(const ft_text_rope* rope, size_t index, char* value)
@@ -4362,7 +4334,7 @@ ft_status ft_text_rope_at(const ft_text_rope* rope, size_t index, char* value)
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    return ft_tree_at(&rope->tree, index, value);
+    return ft_rope_at(&rope->rope, index, value);
 }
 
 ft_status ft_text_rope_insert_char(const ft_text_rope* rope, size_t index, char value, ft_text_rope* result)
@@ -4371,22 +4343,7 @@ ft_status ft_text_rope_insert_char(const ft_text_rope* rope, size_t index, char 
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    ft_status status = ft_text_rope_init(result);
-    if (status != FT_STATUS_OK) {
-        return status;
-    }
-
-    ft_tree inserted;
-    status = ft_tree_insert_at(&rope->tree, index, &value, &inserted);
-    if (status != FT_STATUS_OK) {
-        ft_text_rope_dispose(result);
-        return status;
-    }
-
-    ft_tree_dispose(&result->tree);
-    result->tree = inserted;
-    result->tree.policy = &result->policy;
-    return FT_STATUS_OK;
+    return ft_rope_insert_at(&rope->rope, index, &value, &result->rope);
 }
 
 ft_status ft_text_rope_remove_at(const ft_text_rope* rope, size_t index, ft_text_rope* result)
@@ -4395,22 +4352,7 @@ ft_status ft_text_rope_remove_at(const ft_text_rope* rope, size_t index, ft_text
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    ft_status status = ft_text_rope_init(result);
-    if (status != FT_STATUS_OK) {
-        return status;
-    }
-
-    ft_tree removed;
-    status = ft_tree_remove_at(&rope->tree, index, &removed);
-    if (status != FT_STATUS_OK) {
-        ft_text_rope_dispose(result);
-        return status;
-    }
-
-    ft_tree_dispose(&result->tree);
-    result->tree = removed;
-    result->tree.policy = &result->policy;
-    return FT_STATUS_OK;
+    return ft_rope_remove_at(&rope->rope, index, &result->rope);
 }
 
 size_t ft_text_rope_line_count(const ft_text_rope* rope)
@@ -4420,7 +4362,7 @@ size_t ft_text_rope_line_count(const ft_text_rope* rope)
     }
 
     size_t newlines = 0;
-    (void)ft_tree_visit(&rope->tree, ft_count_newlines, &newlines);
+    (void)ft_rope_visit(&rope->rope, ft_count_newlines, &newlines);
     return newlines + 1;
 }
 
@@ -4439,7 +4381,7 @@ ft_status ft_text_rope_line_column_of(const ft_text_rope* rope, size_t offset, f
     scan.offset = 0;
     scan.line = 0;
     scan.column = 0;
-    ft_status status = ft_tree_visit(&rope->tree, ft_line_column_visit, &scan);
+    ft_status status = ft_rope_visit(&rope->rope, ft_line_column_visit, &scan);
     if (status != FT_STATUS_OK) {
         return status;
     }
@@ -4455,5 +4397,5 @@ ft_status ft_text_rope_visit(const ft_text_rope* rope, ft_visit_fn visitor, void
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    return ft_tree_visit(&rope->tree, visitor, context);
+    return ft_rope_visit(&rope->rope, visitor, context);
 }

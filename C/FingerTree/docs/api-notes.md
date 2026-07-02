@@ -33,7 +33,8 @@ Implemented in this checkpoint:
 - generic closed-interval tree facade, plus a signed 64-bit convenience facade, with insertion, removal,
   containment, first-overlap, and overlap count;
 - generic chunked positional rope with cumulative-length indexing, split, concat, insertion, removal, and traversal;
-- character text rope facade with insertion/removal/indexing and basic line navigation.
+- character text rope facade, backed by the chunked rope, with insertion/removal/indexing and basic line
+  navigation.
 
 Deferred from the C++ port:
 

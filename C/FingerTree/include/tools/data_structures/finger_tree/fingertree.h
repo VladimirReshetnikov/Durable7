@@ -397,8 +397,7 @@ ft_status ft_interval_tree_at(
     void* high);
 
 typedef struct ft_text_rope {
-    ft_tree_policy policy;
-    ft_tree tree;
+    ft_rope rope;
 } ft_text_rope;
 
 typedef struct ft_line_column {
