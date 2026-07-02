@@ -20,6 +20,7 @@ Library-specific design and API documentation lives beside each workspace under 
 
 - [Reference index](reference/README.md) - durable cross-workspace reference material.
 - [Data structure catalog](reference/data-structure-catalog.md) - cross-language catalog of repository-owned data-structure families, public entry points, and primary references.
+- [Documentation navigation matrix](reference/navigation-matrix.md) - task-oriented entry points for usage, API, validation, porting, history, and maintenance work.
 - [Workspace map](reference/workspace-map.md) - language-first layout, data-structure workspace roles, port lineage, and documentation placement rules.
 
 ## Migration
@@ -37,6 +38,6 @@ Put C# HAMT implementation and API documents under
 [src/C/Hamt/docs](../src/C/Hamt/docs/README.md), and C++ HAMT port documents under
 [src/Cpp/Hamt/docs](../src/Cpp/Hamt/docs/README.md). Put C# FingerTree usage, implementation, API,
 benchmark, and algorithm documents under
-[src/CSharp/FingerTree/docs](../src/CSharp/FingerTree/docs/README.md), with native FingerTree port
-documents under [src/Cpp/FingerTree/docs](../src/Cpp/FingerTree/docs/README.md) and
+[src/CSharp/FingerTree/docs](../src/CSharp/FingerTree/docs/README.md), with native FingerTree usage,
+API, port, and validation documents under [src/Cpp/FingerTree/docs](../src/Cpp/FingerTree/docs/README.md) and
 [src/C/FingerTree/docs](../src/C/FingerTree/docs/README.md).

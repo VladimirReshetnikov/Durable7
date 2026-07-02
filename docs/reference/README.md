@@ -11,4 +11,5 @@ They should be updated when layout, ownership, or cross-workspace relationships 
 ## Current Reference
 
 - [Data structure catalog](data-structure-catalog.md) - cross-language catalog of repository-owned data-structure families, public entry points, and primary references.
+- [Documentation navigation matrix](navigation-matrix.md) - task-oriented entry points across repository-level docs and workspace-owned docs.
 - [Workspace map](workspace-map.md) - language-first layout, data-structure workspace roles, port lineage, and documentation placement rules.

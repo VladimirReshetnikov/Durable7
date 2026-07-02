@@ -146,14 +146,15 @@ Release configuration is required for meaningful benchmark numbers.
 - [docs/guides/porting-and-semantic-parity.md](docs/guides/porting-and-semantic-parity.md) defines the workflow for keeping C#, C++, and C data-structure surfaces semantically aligned.
 - [docs/reference/README.md](docs/reference/README.md) indexes durable cross-workspace reference material.
 - [docs/reference/data-structure-catalog.md](docs/reference/data-structure-catalog.md) catalogs repository-owned data-structure families, public entry points, and primary references across C#, C, and C++.
+- [docs/reference/navigation-matrix.md](docs/reference/navigation-matrix.md) maps common tasks to the right usage, API, validation, porting, history, and maintenance documents.
 - [docs/reference/workspace-map.md](docs/reference/workspace-map.md) explains the language-first, data-structure-second layout and port lineage.
 - [src/CSharp/Hamt/docs/README.md](src/CSharp/Hamt/docs/README.md) indexes the HAMT library's usage guide, API specification, and implementation review.
 - [src/C/Hamt/docs/README.md](src/C/Hamt/docs/README.md) indexes the C HAMT port's usage guide and API specification.
 - [src/Cpp/Hamt/docs/README.md](src/Cpp/Hamt/docs/README.md) indexes the C++ HAMT port's usage
   guide and API specification.
 - [src/CSharp/FingerTree/docs/README.md](src/CSharp/FingerTree/docs/README.md) indexes the library's usage guide, specifications, design notes, benchmark notes, and external references.
-- [src/Cpp/FingerTree/docs/README.md](src/Cpp/FingerTree/docs/README.md) indexes the C++ port plan, API notes, validation guide, and review reports.
-- [src/C/FingerTree/docs/README.md](src/C/FingerTree/docs/README.md) indexes the C port API and validation notes.
+- [src/Cpp/FingerTree/docs/README.md](src/Cpp/FingerTree/docs/README.md) indexes the C++ usage guide, port plan, API notes, validation guide, implementation notes, and review reports.
+- [src/C/FingerTree/docs/README.md](src/C/FingerTree/docs/README.md) indexes the C usage guide, API notes, and validation guide.
 
 The large `TECHNICAL_DOCUMENTATION_STANDARD.md` and `XML_DOCUMENTATION_STANDARD.md` files from Tools are intentionally not part of this repository. Keep documentation thorough and current-state oriented, and write XML documentation in semantic terms: contracts, invariants, ordering, failure behavior, complexity, allocation behavior, and examples where they help.
 
