@@ -28,6 +28,8 @@ are expressed as shared root identity rather than object reference identity.
 - `build.ps1` imports the MSVC toolchain through Scriptorium and compiles the test executable.
 - `docs/api-specification.md` documents the C++ API adaptation and complexity guarantees.
 - `docs/usage.md` provides practical include, value-semantics, map/set, policy, iteration, and set-algebra examples.
+- `docs/validation.md` records the local build script, warning policy, Debug/Release commands, and
+  native test coverage.
 
 ## Validation
 
@@ -38,4 +40,5 @@ Use the local MSVC toolchain:
 .\build.ps1 -Configuration Release -RunTests
 ```
 
-Build outputs are written under `build/<Configuration>/`, which is ignored by the repository.
+Build outputs are written under `build/<Configuration>/`, which is ignored by the repository. See
+[`docs/validation.md`](docs/validation.md) for compiler flags, generated outputs, and test coverage.

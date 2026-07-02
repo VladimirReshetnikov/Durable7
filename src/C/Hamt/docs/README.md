@@ -13,3 +13,5 @@
   `tds_hamt_map` and `tds_hamt_set`.
 - [Usage guide](usage.md) shows policy setup, borrowed/owned lifetime rules, persistent update
   patterns, iteration, and set algebra for `tds_hamt_map` and `tds_hamt_set`.
+- [Validation](validation.md) records the local MSVC build script, Debug/Release commands, warning
+  policy, generated outputs, and native model-test coverage.

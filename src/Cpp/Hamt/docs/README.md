@@ -13,3 +13,5 @@
   `persistent_hash_set`.
 - [Usage guide](usage.md) shows include paths, value-semantics patterns, map/set operations,
   policy objects, iteration, and set algebra for the C++ HAMT templates.
+- [Validation](validation.md) records the local MSVC build script, Debug/Release commands, warning
+  policy, generated outputs, and native model-test coverage.
