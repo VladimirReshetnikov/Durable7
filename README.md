@@ -33,6 +33,23 @@ This document is the canonical repository guidance for Vladimir and the AI codin
 │   ├── docs/
 │   ├── src/
 │   └── tests/
+├── C/
+│   └── FingerTree/
+│       ├── CMakeLists.txt
+│       ├── CMakePresets.json
+│       ├── README.md
+│       ├── docs/
+│       ├── include/
+│       ├── src/
+│       └── tests/
+├── Cpp/
+│   └── FingerTree/
+│       ├── CMakeLists.txt
+│       ├── CMakePresets.json
+│       ├── README.md
+│       ├── docs/
+│       ├── include/
+│       └── tests/
 └── FingerTree/
     ├── Directory.Build.props
     ├── FingerTree.sln
@@ -48,6 +65,8 @@ This document is the canonical repository guidance for Vladimir and the AI codin
 
 - [Hamt](Hamt/README.md) is a .NET 10 persistent hash-array mapped trie library. It provides `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` with bitmap-indexed 32-way branching, immutable equal-hash collision buckets, comparer-preserving factories, structural sharing across versions, and xUnit/CsCheck model tests against BCL dictionaries and sets.
 - [FingerTree](FingerTree/README.md) is a .NET 10 persistent finger-tree library: two engine cores (a tuned catenable deque and a general monoid-measured tree), a full collection family (sorted bag/set/dictionary, priority queue, interval tree, reversible deque), product/sum/built-in measures with a closure-free predicate API, and a rope family (positional, measured, and text). It ships a navigable design-notes document ([FingerTree-Design-Notes.pdf](FingerTree/docs/FingerTree-Design-Notes.pdf), with `.tex` source and a rebuild script alongside), a BenchmarkDotNet harness, three runnable samples, and a three-tier (example + property + model-based command) test suite plus tearable-struct concurrency stress tests.
+- [Cpp/FingerTree](Cpp/FingerTree/README.md) is the native C++ port of the FingerTree workspace. It is a header-first CMake/Ninja library with the two engine cores, derived collections, ropes, text helpers, and CTest validation.
+- [C/FingerTree](C/FingerTree/README.md) is the initial C11 port from the C++ workspace. It provides a strict generic measured-tree core, size-measured deque alias, reversible deque facade, sorted set/multiset wrappers, generic priority queue, signed 64-bit interval tree facade, text-rope facade, and CTest validation. The C++ lazy-middle concurrency machinery is documented as follow-up work for the C port.
 
 ## Build and test
 
@@ -63,6 +82,13 @@ cd C:\DataStructures\Hamt
 dotnet restore
 dotnet build
 dotnet test .\Hamt.sln
+
+cd C:\DataStructures\C\FingerTree
+$cmakeDir = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
+& "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
+& "$cmakeDir\cmake.exe" --preset msvc-debug
+& "$cmakeDir\cmake.exe" --build --preset msvc-debug
+& "$cmakeDir\ctest.exe" --preset msvc-debug
 ```
 
 Run benchmarks from the benchmark project:
@@ -80,6 +106,8 @@ Release configuration is required for meaningful benchmark numbers.
 - [docs/agent-workflows.md](docs/agent-workflows.md) holds compact task-conditional workflow guidance.
 - [Hamt/docs/README.md](Hamt/docs/README.md) indexes the HAMT library's API specification.
 - [FingerTree/docs/README.md](FingerTree/docs/README.md) indexes the library's specifications, design notes, benchmark notes, and external references.
+- [Cpp/FingerTree/docs/README.md](Cpp/FingerTree/docs/README.md) indexes the C++ port plan, API notes, validation guide, and review reports.
+- [C/FingerTree/docs/README.md](C/FingerTree/docs/README.md) indexes the C port API and validation notes.
 
 The large `TECHNICAL_DOCUMENTATION_STANDARD.md` and `XML_DOCUMENTATION_STANDARD.md` files from Tools are intentionally not part of this repository. Keep documentation thorough and current-state oriented, and write XML documentation in semantic terms: contracts, invariants, ordering, failure behavior, complexity, allocation behavior, and examples where they help.
 
@@ -105,6 +133,7 @@ The expected local Windows environment includes:
 - `git` and `gh` for source-control and GitHub workflows.
 - `python` for ad hoc tooling.
 - .NET SDK 10.0 or newer with the .NET 10 targeting packs.
+- Visual Studio native C/C++ toolchain, plus the bundled CMake and Ninja used by the `C/FingerTree` and `Cpp/FingerTree` presets.
 - `git-filter-repo` usable as `python -m git_filter_repo` when future history work is needed.
 
 Use `dotnet` directly for C# validation in this local environment.
