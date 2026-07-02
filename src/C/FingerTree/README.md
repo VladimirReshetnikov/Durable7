@@ -54,6 +54,8 @@ warning policy, and generated-output locations, see the [validation guide](docs/
 - `include/tools/data_structures/finger_tree/fingertree.h` contains the public C API.
 - `src/fingertree.c` contains the measured-tree implementation and the current wrappers.
 - `tests/` contains the bootstrap CTest executable.
-- `samples/` contains deterministic C sample executables that are also registered as CTest smoke tests.
-- `benchmarks/` contains a dependency-light timing harness for quick local comparisons.
+- `samples/` contains deterministic C sample executables that are also registered as CTest smoke tests; see
+  [`samples/README.md`](samples/README.md).
+- `benchmarks/` contains a dependency-light timing harness for quick local comparisons; see
+  [`benchmarks/README.md`](benchmarks/README.md).
 - `docs/` contains C-specific API, usage, and validation notes.

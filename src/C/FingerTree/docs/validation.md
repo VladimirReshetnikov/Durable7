@@ -72,12 +72,16 @@ The sample executables are registered as CTest smoke tests:
 - `fingertree_c.sample.showcase` exercises the priority queue, sorted set, interval tree, and text rope.
 - `fingertree_c.sample.snapshots` exercises persistent text snapshots and edit/restore behavior.
 
+See the sample [README](../samples/README.md) for direct executable paths and expected transcript markers.
+
 The benchmark executable is built when `FINGERTREE_C_BUILD_BENCHMARKS` is enabled. Run it from the workspace
 root after a release build:
 
 ```powershell
 .\out\build\msvc-release\benchmarks\fingertree_c_benchmarks.exe 10000
 ```
+
+See the benchmark [README](../benchmarks/README.md) for workload names, output shape, and timing caveats.
 
 Both `msvc-debug` and `msvc-release` are expected to build warning-free under `/W4 /WX`.
 
