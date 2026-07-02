@@ -62,7 +62,7 @@ Repository-level docs live under `docs/`:
 
 - [`docs/guides`](../guides/README.md) holds workflow documents: validation, agent workflows, and task procedures.
 - [`docs/reference`](README.md) holds durable maps and cross-workspace reference material.
-- [`docs/migration`](../migration/extraction-provenance.md) preserves extraction and history-filtering provenance.
+- [`docs/migration`](../migration/README.md) preserves extraction and history-filtering provenance.
 
 Workspace-level docs live next to the code they describe:
 

@@ -6,7 +6,7 @@
 - Scope: Task-oriented repository procedures
 
 Guides describe how to do recurring work in this repository. They are procedural and current-state
-oriented; historical records belong under [`../migration`](../migration/extraction-provenance.md), and
+oriented; historical records belong under [`../migration`](../migration/README.md), and
 durable maps belong under [`../reference`](../reference/README.md).
 
 ## Current Guides

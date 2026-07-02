@@ -206,7 +206,8 @@ The worktree may contain changes from Vladimir or other tools. Do not revert cha
 
 ## Version control
 
-Commit self-contained changes on `main` after validation. If a remote is configured, push to `origin/main` unless Vladimir explicitly asks not to. This extracted repository starts without a GitHub remote; add one only when intentionally publishing it.
+Commit self-contained changes on `main` after validation. This repository currently has `origin`
+configured; push to `origin/main` unless Vladimir explicitly asks not to.
 
 Commit messages should describe the logical change and end with a `Co-Authored-By` trailer for the AI assistant when applicable.
 
