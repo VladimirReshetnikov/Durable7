@@ -411,6 +411,78 @@ static void test_tree_endpoint_index_split_and_concat(void)
     ft_tree_dispose(&tree);
 }
 
+static void test_lazy_middle_force_paths(void)
+{
+    ft_tree_policy policy;
+    init_int_policy(&policy);
+
+    ft_tree tree;
+    REQUIRE_STATUS(ft_tree_init(&tree, &policy), FT_STATUS_OK);
+    for (int value = 0; value != 96; ++value) {
+        ft_tree next;
+        REQUIRE_STATUS(ft_tree_push_back(&tree, &value, &next), FT_STATUS_OK);
+        ft_tree_dispose(&tree);
+        tree = next;
+    }
+
+    size_t measure = 0;
+    REQUIRE_STATUS(ft_tree_measure(&tree, &measure), FT_STATUS_OK);
+    REQUIRE(measure == 96);
+
+    int removed_front = -1;
+    ft_tree popped_front;
+    REQUIRE_STATUS(ft_tree_pop_front(&tree, &removed_front, &popped_front), FT_STATUS_OK);
+    REQUIRE(removed_front == 0);
+    REQUIRE(ft_tree_size(&popped_front) == 95);
+
+    measure = 0;
+    REQUIRE_STATUS(ft_tree_measure(&popped_front, &measure), FT_STATUS_OK);
+    REQUIRE(measure == 95);
+
+    int front = -1;
+    int middle = -1;
+    int back = -1;
+    REQUIRE_STATUS(ft_tree_front(&popped_front, &front), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_tree_at(&popped_front, 47, &middle), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_tree_back(&popped_front, &back), FT_STATUS_OK);
+    REQUIRE(front == 1);
+    REQUIRE(middle == 48);
+    REQUIRE(back == 95);
+
+    int_summary summary = { 0, 0 };
+    REQUIRE_STATUS(ft_tree_visit(&popped_front, summarize_int, &summary), FT_STATUS_OK);
+    REQUIRE(summary.count == 95);
+    REQUIRE(summary.sum == 4560);
+
+    ft_tree_split_result split;
+    REQUIRE_STATUS(ft_tree_split_at(&popped_front, 40, &split), FT_STATUS_OK);
+    REQUIRE(ft_tree_size(&split.left) == 40);
+    REQUIRE(ft_tree_size(&split.right) == 55);
+
+    ft_tree joined;
+    REQUIRE_STATUS(ft_tree_concat(&split.left, &split.right, &joined), FT_STATUS_OK);
+    for (int expected = 1; expected != 96; ++expected) {
+        int actual = -1;
+        REQUIRE_STATUS(ft_tree_at(&joined, (size_t)(expected - 1), &actual), FT_STATUS_OK);
+        REQUIRE(actual == expected);
+    }
+
+    int removed_back = -1;
+    ft_tree popped_both;
+    REQUIRE_STATUS(ft_tree_pop_back(&joined, &removed_back, &popped_both), FT_STATUS_OK);
+    REQUIRE(removed_back == 95);
+    measure = 0;
+    REQUIRE_STATUS(ft_tree_measure(&popped_both, &measure), FT_STATUS_OK);
+    REQUIRE(measure == 94);
+
+    ft_tree_dispose(&popped_both);
+    ft_tree_dispose(&joined);
+    ft_tree_dispose(&split.left);
+    ft_tree_dispose(&split.right);
+    ft_tree_dispose(&popped_front);
+    ft_tree_dispose(&tree);
+}
+
 static void test_measure_locate_and_split(void)
 {
     ft_tree_policy policy;
@@ -976,6 +1048,7 @@ int main(void)
     run_test("concurrent snapshot refcounts", test_concurrent_snapshot_refcounts);
     run_test("reversible deque", test_reversible_deque);
     run_test("tree endpoint/index/split/concat", test_tree_endpoint_index_split_and_concat);
+    run_test("lazy middle force paths", test_lazy_middle_force_paths);
     run_test("measure locate and split", test_measure_locate_and_split);
     run_test("sorted set and multiset", test_sorted_set_and_multiset);
     run_test("sorted map", test_sorted_map);

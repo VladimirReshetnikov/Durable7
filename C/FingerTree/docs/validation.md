@@ -31,6 +31,7 @@ $cmakeDir = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\Co
 The bootstrap test executable covers:
 
 - endpoint, index, split, concat, and persistence behavior for the generic tree/deque surface;
+- lazy middle force paths through boundary pop, measure reads, indexing, traversal, split, concat, and disposal;
 - size-measure `locate` and measure-guided split behavior;
 - concurrent shared-snapshot copy/read/update/dispose behavior over atomic node and tree reference counts;
 - reversible-deque logical reversal, endpoint edits, and persistence;

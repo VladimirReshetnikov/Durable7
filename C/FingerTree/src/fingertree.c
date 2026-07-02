@@ -9,6 +9,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 typedef volatile LONG ft_ref_count;
+typedef PVOID volatile ft_atomic_ptr;
 
 static void ft_ref_init(ft_ref_count* count)
 {
@@ -24,9 +25,31 @@ static bool ft_ref_release(ft_ref_count* count)
 {
     return InterlockedDecrement(count) == 0;
 }
+
+static void ft_atomic_ptr_init(ft_atomic_ptr* target, void* value)
+{
+    *target = value;
+}
+
+static void* ft_atomic_ptr_load(ft_atomic_ptr* target)
+{
+    return InterlockedCompareExchangePointer(target, NULL, NULL);
+}
+
+static bool ft_atomic_ptr_compare_exchange(ft_atomic_ptr* target, void** expected, void* desired)
+{
+    void* actual = InterlockedCompareExchangePointer(target, desired, *expected);
+    if (actual == *expected) {
+        return true;
+    }
+
+    *expected = actual;
+    return false;
+}
 #else
 #include <stdatomic.h>
 typedef atomic_size_t ft_ref_count;
+typedef _Atomic(void*) ft_atomic_ptr;
 
 static void ft_ref_init(ft_ref_count* count)
 {
@@ -42,6 +65,26 @@ static bool ft_ref_release(ft_ref_count* count)
 {
     return atomic_fetch_sub_explicit(count, 1, memory_order_acq_rel) == 1;
 }
+
+static void ft_atomic_ptr_init(ft_atomic_ptr* target, void* value)
+{
+    atomic_init(target, value);
+}
+
+static void* ft_atomic_ptr_load(ft_atomic_ptr* target)
+{
+    return atomic_load_explicit(target, memory_order_acquire);
+}
+
+static bool ft_atomic_ptr_compare_exchange(ft_atomic_ptr* target, void** expected, void* desired)
+{
+    return atomic_compare_exchange_strong_explicit(
+        target,
+        expected,
+        desired,
+        memory_order_acq_rel,
+        memory_order_acquire);
+}
 #endif
 
 typedef enum ft_element_kind {
@@ -51,6 +94,7 @@ typedef enum ft_element_kind {
 
 typedef struct ft_element ft_element;
 typedef struct ft_node ft_node;
+typedef struct ft_middle ft_middle;
 
 struct ft_element {
     ft_element_kind kind;
@@ -80,16 +124,41 @@ struct ft_tree_rep {
     ft_ref_count ref_count;
     ft_rep_kind kind;
     size_t leaf_count;
-    void* measure;
+    ft_atomic_ptr measure;
     union {
         ft_element single;
         struct {
             size_t prefix_count;
             ft_element prefix[4];
-            ft_tree_rep* middle;
+            ft_middle* middle;
             size_t suffix_count;
             ft_element suffix[4];
         } deep;
+    } as;
+};
+
+typedef enum ft_middle_kind {
+    FT_MIDDLE_COMPUTED,
+    FT_MIDDLE_PUSH_FRONT,
+    FT_MIDDLE_PUSH_BACK,
+    FT_MIDDLE_POP_FRONT,
+    FT_MIDDLE_POP_BACK
+} ft_middle_kind;
+
+struct ft_middle {
+    ft_ref_count ref_count;
+    ft_atomic_ptr computed;
+    ft_middle_kind kind;
+    size_t leaf_count;
+    void* measure;
+    union {
+        struct {
+            ft_tree_rep* source;
+            ft_element element;
+        } push;
+        struct {
+            ft_tree_rep* source;
+        } pop;
     } as;
 };
 
@@ -369,6 +438,21 @@ static void ft_rep_retain(ft_tree_rep* rep)
     }
 }
 
+static void ft_middle_release(const ft_tree_policy* policy, ft_middle* middle);
+static ft_status ft_rep_get_measure(const ft_tree_policy* policy, const ft_tree_rep* rep, const void** measure);
+static ft_status ft_rep_snoc(const ft_tree_policy* policy, const ft_tree_rep* rep, const ft_element* value, ft_tree_rep** result);
+static ft_status ft_rep_cons(const ft_tree_policy* policy, const ft_tree_rep* rep, const ft_element* value, ft_tree_rep** result);
+static ft_status ft_rep_view_left(
+    const ft_tree_policy* policy,
+    const ft_tree_rep* rep,
+    ft_element* value,
+    ft_tree_rep** rest);
+static ft_status ft_rep_view_right(
+    const ft_tree_policy* policy,
+    const ft_tree_rep* rep,
+    ft_element* value,
+    ft_tree_rep** rest);
+
 static void ft_rep_release(const ft_tree_policy* policy, ft_tree_rep* rep)
 {
     if (rep == NULL) {
@@ -386,14 +470,14 @@ static void ft_rep_release(const ft_tree_policy* policy, ft_tree_rep* rep)
             ft_element_dispose(policy, &rep->as.deep.prefix[index]);
         }
 
-        ft_rep_release(policy, rep->as.deep.middle);
+        ft_middle_release(policy, rep->as.deep.middle);
 
         for (size_t index = 0; index != rep->as.deep.suffix_count; ++index) {
             ft_element_dispose(policy, &rep->as.deep.suffix[index]);
         }
     }
 
-    free(rep->measure);
+    free(ft_atomic_ptr_load(&rep->measure));
     free(rep);
 }
 
@@ -406,12 +490,14 @@ static ft_status ft_rep_create_empty(const ft_tree_policy* policy, ft_tree_rep**
 
     ft_ref_init(&rep->ref_count);
     rep->kind = FT_REP_EMPTY;
-    ft_status status = ft_measure_new_identity(&policy->measure, &rep->measure);
+    void* measure = NULL;
+    ft_status status = ft_measure_new_identity(&policy->measure, &measure);
     if (status != FT_STATUS_OK) {
         free(rep);
         return status;
     }
 
+    ft_atomic_ptr_init(&rep->measure, measure);
     *result = rep;
     return FT_STATUS_OK;
 }
@@ -433,13 +519,15 @@ static ft_status ft_rep_create_single(const ft_tree_policy* policy, const ft_ele
         return status;
     }
 
-    status = ft_measure_new_copy(&policy->measure, element->measure, &rep->measure);
+    void* measure = NULL;
+    status = ft_measure_new_copy(&policy->measure, element->measure, &measure);
     if (status != FT_STATUS_OK) {
         ft_element_dispose(policy, &rep->as.single);
         free(rep);
         return status;
     }
 
+    ft_atomic_ptr_init(&rep->measure, measure);
     *result = rep;
     return FT_STATUS_OK;
 }
@@ -484,11 +572,302 @@ static ft_status ft_combine_element_array(
     return FT_STATUS_OK;
 }
 
-static ft_status ft_rep_create_deep(
+static ft_status ft_count_element_array(const ft_element* elements, size_t count, size_t* leaf_count)
+{
+    *leaf_count = 0;
+    for (size_t index = 0; index != count; ++index) {
+        if (ft_add_overflows(*leaf_count, elements[index].leaf_count, leaf_count)) {
+            return FT_STATUS_OVERFLOW;
+        }
+    }
+
+    return FT_STATUS_OK;
+}
+
+static void ft_middle_retain(ft_middle* middle)
+{
+    if (middle != NULL) {
+        ft_ref_retain(&middle->ref_count);
+    }
+}
+
+static ft_status ft_middle_create_computed(const ft_tree_policy* policy, ft_tree_rep* rep, ft_middle** result)
+{
+    (void)policy;
+    ft_middle* middle = (ft_middle*)calloc(1, sizeof(*middle));
+    if (middle == NULL) {
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    ft_ref_init(&middle->ref_count);
+    ft_atomic_ptr_init(&middle->computed, rep);
+    middle->kind = FT_MIDDLE_COMPUTED;
+    middle->leaf_count = rep->leaf_count;
+    ft_rep_retain(rep);
+    *result = middle;
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_middle_create_push(
+    const ft_tree_policy* policy,
+    ft_middle_kind kind,
+    ft_tree_rep* source,
+    const ft_element* element,
+    ft_middle** result)
+{
+    size_t leaf_count = 0;
+    if (ft_add_overflows(source->leaf_count, element->leaf_count, &leaf_count)) {
+        return FT_STATUS_OVERFLOW;
+    }
+
+    ft_middle* middle = (ft_middle*)calloc(1, sizeof(*middle));
+    if (middle == NULL) {
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    ft_ref_init(&middle->ref_count);
+    ft_atomic_ptr_init(&middle->computed, NULL);
+    middle->kind = kind;
+    middle->leaf_count = leaf_count;
+    middle->as.push.source = source;
+    ft_rep_retain(source);
+
+    ft_status status = ft_element_clone(policy, element, &middle->as.push.element);
+    if (status != FT_STATUS_OK) {
+        ft_middle_release(policy, middle);
+        return status;
+    }
+
+    const void* source_measure = NULL;
+    status = ft_rep_get_measure(policy, source, &source_measure);
+    if (status != FT_STATUS_OK) {
+        ft_middle_release(policy, middle);
+        return status;
+    }
+
+    if (kind == FT_MIDDLE_PUSH_FRONT) {
+        status = ft_measure_new_combine(&policy->measure, element->measure, source_measure, &middle->measure);
+    } else {
+        status = ft_measure_new_combine(&policy->measure, source_measure, element->measure, &middle->measure);
+    }
+
+    if (status != FT_STATUS_OK) {
+        ft_middle_release(policy, middle);
+        return status;
+    }
+
+    *result = middle;
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_middle_create_pop(
+    const ft_tree_policy* policy,
+    ft_middle_kind kind,
+    ft_tree_rep* source,
+    size_t removed_leaf_count,
+    ft_middle** result)
+{
+    (void)policy;
+    if (removed_leaf_count > source->leaf_count) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_middle* middle = (ft_middle*)calloc(1, sizeof(*middle));
+    if (middle == NULL) {
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    ft_ref_init(&middle->ref_count);
+    ft_atomic_ptr_init(&middle->computed, NULL);
+    middle->kind = kind;
+    middle->leaf_count = source->leaf_count - removed_leaf_count;
+    middle->as.pop.source = source;
+    ft_rep_retain(source);
+    *result = middle;
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_middle_force(const ft_tree_policy* policy, const ft_middle* middle, ft_tree_rep** result)
+{
+    for (;;) {
+        ft_tree_rep* existing = (ft_tree_rep*)ft_atomic_ptr_load((ft_atomic_ptr*)&middle->computed);
+        if (existing != NULL) {
+            ft_rep_retain(existing);
+            *result = existing;
+            return FT_STATUS_OK;
+        }
+
+        ft_tree_rep* computed = NULL;
+        ft_status status = FT_STATUS_OK;
+        if (middle->kind == FT_MIDDLE_PUSH_FRONT) {
+            status = ft_rep_cons(policy, middle->as.push.source, &middle->as.push.element, &computed);
+        } else if (middle->kind == FT_MIDDLE_PUSH_BACK) {
+            status = ft_rep_snoc(policy, middle->as.push.source, &middle->as.push.element, &computed);
+        } else if (middle->kind == FT_MIDDLE_POP_FRONT) {
+            ft_element ignored;
+            status = ft_rep_view_left(policy, middle->as.pop.source, &ignored, &computed);
+            if (status == FT_STATUS_OK) {
+                ft_element_dispose(policy, &ignored);
+            }
+        } else if (middle->kind == FT_MIDDLE_POP_BACK) {
+            ft_element ignored;
+            status = ft_rep_view_right(policy, middle->as.pop.source, &ignored, &computed);
+            if (status == FT_STATUS_OK) {
+                ft_element_dispose(policy, &ignored);
+            }
+        } else {
+            return FT_STATUS_INVALID_ARGUMENT;
+        }
+
+        if (status != FT_STATUS_OK) {
+            existing = (ft_tree_rep*)ft_atomic_ptr_load((ft_atomic_ptr*)&middle->computed);
+            if (existing != NULL) {
+                ft_rep_retain(existing);
+                *result = existing;
+                return FT_STATUS_OK;
+            }
+
+            return status;
+        }
+
+        void* expected = NULL;
+        if (ft_atomic_ptr_compare_exchange((ft_atomic_ptr*)&middle->computed, &expected, computed)) {
+            ft_rep_retain(computed);
+            *result = computed;
+            return FT_STATUS_OK;
+        }
+
+        ft_rep_release(policy, computed);
+        if (expected != NULL) {
+            ft_rep_retain((ft_tree_rep*)expected);
+            *result = (ft_tree_rep*)expected;
+            return FT_STATUS_OK;
+        }
+    }
+}
+
+static ft_status ft_middle_get_measure(const ft_tree_policy* policy, const ft_middle* middle, const void** measure)
+{
+    if (middle->measure != NULL) {
+        *measure = middle->measure;
+        return FT_STATUS_OK;
+    }
+
+    ft_tree_rep* computed = NULL;
+    ft_status status = ft_middle_force(policy, middle, &computed);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_rep_get_measure(policy, computed, measure);
+    ft_rep_release(policy, computed);
+    return status;
+}
+
+static void ft_middle_release(const ft_tree_policy* policy, ft_middle* middle)
+{
+    if (middle == NULL) {
+        return;
+    }
+
+    if (!ft_ref_release(&middle->ref_count)) {
+        return;
+    }
+
+    ft_tree_rep* computed = (ft_tree_rep*)ft_atomic_ptr_load(&middle->computed);
+    ft_rep_release(policy, computed);
+
+    if (middle->kind == FT_MIDDLE_PUSH_FRONT || middle->kind == FT_MIDDLE_PUSH_BACK) {
+        ft_rep_release(policy, middle->as.push.source);
+        ft_element_dispose(policy, &middle->as.push.element);
+    } else if (middle->kind == FT_MIDDLE_POP_FRONT || middle->kind == FT_MIDDLE_POP_BACK) {
+        ft_rep_release(policy, middle->as.pop.source);
+    }
+
+    free(middle->measure);
+    free(middle);
+}
+
+static ft_status ft_rep_get_measure(const ft_tree_policy* policy, const ft_tree_rep* rep, const void** measure)
+{
+    ft_atomic_ptr* measure_slot = &((ft_tree_rep*)rep)->measure;
+    void* existing = ft_atomic_ptr_load(measure_slot);
+    if (existing != NULL) {
+        *measure = existing;
+        return FT_STATUS_OK;
+    }
+
+    void* computed = NULL;
+    ft_status status = FT_STATUS_OK;
+    if (rep->kind == FT_REP_EMPTY) {
+        status = ft_measure_new_identity(&policy->measure, &computed);
+    } else if (rep->kind == FT_REP_SINGLE) {
+        status = ft_measure_new_copy(&policy->measure, rep->as.single.measure, &computed);
+    } else {
+        void* prefix_measure = NULL;
+        size_t prefix_leaves = 0;
+        status = ft_combine_element_array(
+            policy,
+            rep->as.deep.prefix,
+            rep->as.deep.prefix_count,
+            &prefix_measure,
+            &prefix_leaves);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        const void* middle_measure = NULL;
+        status = ft_middle_get_measure(policy, rep->as.deep.middle, &middle_measure);
+        if (status != FT_STATUS_OK) {
+            free(prefix_measure);
+            return status;
+        }
+
+        void* prefix_middle = NULL;
+        status = ft_measure_new_combine(&policy->measure, prefix_measure, middle_measure, &prefix_middle);
+        free(prefix_measure);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        void* suffix_measure = NULL;
+        size_t suffix_leaves = 0;
+        status = ft_combine_element_array(
+            policy,
+            rep->as.deep.suffix,
+            rep->as.deep.suffix_count,
+            &suffix_measure,
+            &suffix_leaves);
+        if (status != FT_STATUS_OK) {
+            free(prefix_middle);
+            return status;
+        }
+
+        status = ft_measure_new_combine(&policy->measure, prefix_middle, suffix_measure, &computed);
+        free(prefix_middle);
+        free(suffix_measure);
+    }
+
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    void* expected = NULL;
+    if (ft_atomic_ptr_compare_exchange(measure_slot, &expected, computed)) {
+        *measure = computed;
+        return FT_STATUS_OK;
+    }
+
+    free(computed);
+    *measure = expected;
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_rep_create_deep_with_middle(
     const ft_tree_policy* policy,
     const ft_element* prefix,
     size_t prefix_count,
-    ft_tree_rep* middle,
+    ft_middle* middle,
     const ft_element* suffix,
     size_t suffix_count,
     ft_tree_rep** result)
@@ -503,6 +882,7 @@ static ft_status ft_rep_create_deep(
     }
 
     ft_ref_init(&rep->ref_count);
+    ft_atomic_ptr_init(&rep->measure, NULL);
     rep->kind = FT_REP_DEEP;
     rep->as.deep.prefix_count = prefix_count;
     rep->as.deep.suffix_count = suffix_count;
@@ -518,7 +898,7 @@ static ft_status ft_rep_create_deep(
     }
 
     rep->as.deep.middle = middle;
-    ft_rep_retain(middle);
+    ft_middle_retain(middle);
 
     for (size_t index = 0; index != suffix_count; ++index) {
         status = ft_element_clone(policy, &suffix[index], &rep->as.deep.suffix[index]);
@@ -529,34 +909,15 @@ static ft_status ft_rep_create_deep(
         }
     }
 
-    void* prefix_measure = NULL;
     size_t prefix_leaves = 0;
-    status = ft_combine_element_array(policy, prefix, prefix_count, &prefix_measure, &prefix_leaves);
+    status = ft_count_element_array(prefix, prefix_count, &prefix_leaves);
     if (status != FT_STATUS_OK) {
         ft_rep_release(policy, rep);
         return status;
     }
 
-    void* prefix_middle = NULL;
-    status = ft_measure_new_combine(&policy->measure, prefix_measure, middle->measure, &prefix_middle);
-    free(prefix_measure);
-    if (status != FT_STATUS_OK) {
-        ft_rep_release(policy, rep);
-        return status;
-    }
-
-    void* suffix_measure = NULL;
     size_t suffix_leaves = 0;
-    status = ft_combine_element_array(policy, suffix, suffix_count, &suffix_measure, &suffix_leaves);
-    if (status != FT_STATUS_OK) {
-        free(prefix_middle);
-        ft_rep_release(policy, rep);
-        return status;
-    }
-
-    status = ft_measure_new_combine(&policy->measure, prefix_middle, suffix_measure, &rep->measure);
-    free(prefix_middle);
-    free(suffix_measure);
+    status = ft_count_element_array(suffix, suffix_count, &suffix_leaves);
     if (status != FT_STATUS_OK) {
         ft_rep_release(policy, rep);
         return status;
@@ -573,8 +934,33 @@ static ft_status ft_rep_create_deep(
     return FT_STATUS_OK;
 }
 
-static ft_status ft_rep_snoc(const ft_tree_policy* policy, const ft_tree_rep* rep, const ft_element* value, ft_tree_rep** result);
-static ft_status ft_rep_cons(const ft_tree_policy* policy, const ft_tree_rep* rep, const ft_element* value, ft_tree_rep** result);
+static ft_status ft_rep_create_deep(
+    const ft_tree_policy* policy,
+    const ft_element* prefix,
+    size_t prefix_count,
+    ft_tree_rep* middle,
+    const ft_element* suffix,
+    size_t suffix_count,
+    ft_tree_rep** result)
+{
+    ft_middle* computed_middle = NULL;
+    ft_status status = ft_middle_create_computed(policy, middle, &computed_middle);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_rep_create_deep_with_middle(
+        policy,
+        prefix,
+        prefix_count,
+        computed_middle,
+        suffix,
+        suffix_count,
+        result);
+    ft_middle_release(policy, computed_middle);
+    return status;
+}
+
 static ft_status ft_rep_from_buffer(const ft_tree_policy* policy, const ft_element* values, size_t count, ft_tree_rep** result);
 
 static ft_status ft_rep_cons(const ft_tree_policy* policy, const ft_tree_rep* rep, const ft_element* value, ft_tree_rep** result)
@@ -602,7 +988,7 @@ static ft_status ft_rep_cons(const ft_tree_policy* policy, const ft_tree_rep* re
             prefix[index + 1] = rep->as.deep.prefix[index];
         }
 
-        return ft_rep_create_deep(
+        return ft_rep_create_deep_with_middle(
             policy,
             prefix,
             rep->as.deep.prefix_count + 1,
@@ -618,8 +1004,16 @@ static ft_status ft_rep_cons(const ft_tree_policy* policy, const ft_tree_rep* re
         return status;
     }
 
-    ft_tree_rep* next_middle = NULL;
-    status = ft_rep_cons(policy, rep->as.deep.middle, &pushed, &next_middle);
+    ft_tree_rep* forced_middle = NULL;
+    status = ft_middle_force(policy, rep->as.deep.middle, &forced_middle);
+    if (status != FT_STATUS_OK) {
+        ft_element_dispose(policy, &pushed);
+        return status;
+    }
+
+    ft_middle* next_middle = NULL;
+    status = ft_middle_create_push(policy, FT_MIDDLE_PUSH_FRONT, forced_middle, &pushed, &next_middle);
+    ft_rep_release(policy, forced_middle);
     ft_element_dispose(policy, &pushed);
     if (status != FT_STATUS_OK) {
         return status;
@@ -628,7 +1022,7 @@ static ft_status ft_rep_cons(const ft_tree_policy* policy, const ft_tree_rep* re
     ft_element prefix[2];
     prefix[0] = *value;
     prefix[1] = rep->as.deep.prefix[0];
-    status = ft_rep_create_deep(
+    status = ft_rep_create_deep_with_middle(
         policy,
         prefix,
         2,
@@ -636,7 +1030,7 @@ static ft_status ft_rep_cons(const ft_tree_policy* policy, const ft_tree_rep* re
         rep->as.deep.suffix,
         rep->as.deep.suffix_count,
         result);
-    ft_rep_release(policy, next_middle);
+    ft_middle_release(policy, next_middle);
     return status;
 }
 
@@ -665,7 +1059,7 @@ static ft_status ft_rep_snoc(const ft_tree_policy* policy, const ft_tree_rep* re
         }
 
         suffix[rep->as.deep.suffix_count] = *value;
-        return ft_rep_create_deep(
+        return ft_rep_create_deep_with_middle(
             policy,
             rep->as.deep.prefix,
             rep->as.deep.prefix_count,
@@ -681,8 +1075,16 @@ static ft_status ft_rep_snoc(const ft_tree_policy* policy, const ft_tree_rep* re
         return status;
     }
 
-    ft_tree_rep* next_middle = NULL;
-    status = ft_rep_snoc(policy, rep->as.deep.middle, &pushed, &next_middle);
+    ft_tree_rep* forced_middle = NULL;
+    status = ft_middle_force(policy, rep->as.deep.middle, &forced_middle);
+    if (status != FT_STATUS_OK) {
+        ft_element_dispose(policy, &pushed);
+        return status;
+    }
+
+    ft_middle* next_middle = NULL;
+    status = ft_middle_create_push(policy, FT_MIDDLE_PUSH_BACK, forced_middle, &pushed, &next_middle);
+    ft_rep_release(policy, forced_middle);
     ft_element_dispose(policy, &pushed);
     if (status != FT_STATUS_OK) {
         return status;
@@ -691,7 +1093,7 @@ static ft_status ft_rep_snoc(const ft_tree_policy* policy, const ft_tree_rep* re
     ft_element suffix[2];
     suffix[0] = rep->as.deep.suffix[3];
     suffix[1] = *value;
-    status = ft_rep_create_deep(
+    status = ft_rep_create_deep_with_middle(
         policy,
         rep->as.deep.prefix,
         rep->as.deep.prefix_count,
@@ -699,7 +1101,7 @@ static ft_status ft_rep_snoc(const ft_tree_policy* policy, const ft_tree_rep* re
         suffix,
         2,
         result);
-    ft_rep_release(policy, next_middle);
+    ft_middle_release(policy, next_middle);
     return status;
 }
 
@@ -756,7 +1158,7 @@ static ft_status ft_rep_view_left(
     }
 
     if (rep->as.deep.prefix_count > 1) {
-        status = ft_rep_create_deep(
+        status = ft_rep_create_deep_with_middle(
             policy,
             &rep->as.deep.prefix[1],
             rep->as.deep.prefix_count - 1,
@@ -771,7 +1173,7 @@ static ft_status ft_rep_view_left(
         return status;
     }
 
-    if (rep->as.deep.middle->kind == FT_REP_EMPTY) {
+    if (rep->as.deep.middle->leaf_count == 0) {
         status = ft_rep_from_buffer(policy, rep->as.deep.suffix, rep->as.deep.suffix_count, rest);
         if (status != FT_STATUS_OK) {
             ft_element_dispose(policy, value);
@@ -780,32 +1182,45 @@ static ft_status ft_rep_view_left(
         return status;
     }
 
-    ft_element pulled;
-    ft_tree_rep* middle_rest = NULL;
-    status = ft_rep_view_left(policy, rep->as.deep.middle, &pulled, &middle_rest);
+    ft_tree_rep* forced_middle = NULL;
+    status = ft_middle_force(policy, rep->as.deep.middle, &forced_middle);
     if (status != FT_STATUS_OK) {
         ft_element_dispose(policy, value);
         return status;
     }
 
-    if (pulled.kind != FT_ELEMENT_NODE) {
-        ft_element_dispose(policy, &pulled);
-        ft_rep_release(policy, middle_rest);
+    const ft_element* pulled = NULL;
+    if (forced_middle->kind == FT_REP_SINGLE) {
+        pulled = &forced_middle->as.single;
+    } else if (forced_middle->kind == FT_REP_DEEP) {
+        pulled = &forced_middle->as.deep.prefix[0];
+    }
+
+    if (pulled == NULL || pulled->kind != FT_ELEMENT_NODE) {
+        ft_rep_release(policy, forced_middle);
         ft_element_dispose(policy, value);
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    status = ft_rep_create_deep(
+    ft_middle* middle_rest = NULL;
+    status = ft_middle_create_pop(policy, FT_MIDDLE_POP_FRONT, forced_middle, pulled->leaf_count, &middle_rest);
+    if (status != FT_STATUS_OK) {
+        ft_rep_release(policy, forced_middle);
+        ft_element_dispose(policy, value);
+        return status;
+    }
+
+    status = ft_rep_create_deep_with_middle(
         policy,
-        pulled.as.node->children,
-        pulled.as.node->child_count,
+        pulled->as.node->children,
+        pulled->as.node->child_count,
         middle_rest,
         rep->as.deep.suffix,
         rep->as.deep.suffix_count,
         rest);
 
-    ft_element_dispose(policy, &pulled);
-    ft_rep_release(policy, middle_rest);
+    ft_middle_release(policy, middle_rest);
+    ft_rep_release(policy, forced_middle);
     if (status != FT_STATUS_OK) {
         ft_element_dispose(policy, value);
     }
@@ -846,7 +1261,7 @@ static ft_status ft_rep_view_right(
     }
 
     if (rep->as.deep.suffix_count > 1) {
-        status = ft_rep_create_deep(
+        status = ft_rep_create_deep_with_middle(
             policy,
             rep->as.deep.prefix,
             rep->as.deep.prefix_count,
@@ -861,7 +1276,7 @@ static ft_status ft_rep_view_right(
         return status;
     }
 
-    if (rep->as.deep.middle->kind == FT_REP_EMPTY) {
+    if (rep->as.deep.middle->leaf_count == 0) {
         status = ft_rep_from_buffer(policy, rep->as.deep.prefix, rep->as.deep.prefix_count, rest);
         if (status != FT_STATUS_OK) {
             ft_element_dispose(policy, value);
@@ -870,32 +1285,45 @@ static ft_status ft_rep_view_right(
         return status;
     }
 
-    ft_element pulled;
-    ft_tree_rep* middle_rest = NULL;
-    status = ft_rep_view_right(policy, rep->as.deep.middle, &pulled, &middle_rest);
+    ft_tree_rep* forced_middle = NULL;
+    status = ft_middle_force(policy, rep->as.deep.middle, &forced_middle);
     if (status != FT_STATUS_OK) {
         ft_element_dispose(policy, value);
         return status;
     }
 
-    if (pulled.kind != FT_ELEMENT_NODE) {
-        ft_element_dispose(policy, &pulled);
-        ft_rep_release(policy, middle_rest);
+    const ft_element* pulled = NULL;
+    if (forced_middle->kind == FT_REP_SINGLE) {
+        pulled = &forced_middle->as.single;
+    } else if (forced_middle->kind == FT_REP_DEEP) {
+        pulled = &forced_middle->as.deep.suffix[forced_middle->as.deep.suffix_count - 1];
+    }
+
+    if (pulled == NULL || pulled->kind != FT_ELEMENT_NODE) {
+        ft_rep_release(policy, forced_middle);
         ft_element_dispose(policy, value);
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    status = ft_rep_create_deep(
+    ft_middle* middle_rest = NULL;
+    status = ft_middle_create_pop(policy, FT_MIDDLE_POP_BACK, forced_middle, pulled->leaf_count, &middle_rest);
+    if (status != FT_STATUS_OK) {
+        ft_rep_release(policy, forced_middle);
+        ft_element_dispose(policy, value);
+        return status;
+    }
+
+    status = ft_rep_create_deep_with_middle(
         policy,
         rep->as.deep.prefix,
         rep->as.deep.prefix_count,
         middle_rest,
-        pulled.as.node->children,
-        pulled.as.node->child_count,
+        pulled->as.node->children,
+        pulled->as.node->child_count,
         rest);
 
-    ft_element_dispose(policy, &pulled);
-    ft_rep_release(policy, middle_rest);
+    ft_middle_release(policy, middle_rest);
+    ft_rep_release(policy, forced_middle);
     if (status != FT_STATUS_OK) {
         ft_element_dispose(policy, value);
     }
@@ -1083,14 +1511,31 @@ static ft_status ft_rep_concat_with_middle(
         return status;
     }
 
+    ft_tree_rep* left_middle = NULL;
+    status = ft_middle_force(policy, left->as.deep.middle, &left_middle);
+    if (status != FT_STATUS_OK) {
+        for (size_t index = 0; index != node_count; ++index) {
+            ft_element_dispose(policy, &nodes[index]);
+        }
+
+        return status;
+    }
+
+    ft_tree_rep* right_middle = NULL;
+    status = ft_middle_force(policy, right->as.deep.middle, &right_middle);
+    if (status != FT_STATUS_OK) {
+        ft_rep_release(policy, left_middle);
+        for (size_t index = 0; index != node_count; ++index) {
+            ft_element_dispose(policy, &nodes[index]);
+        }
+
+        return status;
+    }
+
     ft_tree_rep* middle_result = NULL;
-    status = ft_rep_concat_with_middle(
-        policy,
-        left->as.deep.middle,
-        nodes,
-        node_count,
-        right->as.deep.middle,
-        &middle_result);
+    status = ft_rep_concat_with_middle(policy, left_middle, nodes, node_count, right_middle, &middle_result);
+    ft_rep_release(policy, right_middle);
+    ft_rep_release(policy, left_middle);
 
     for (size_t index = 0; index != node_count; ++index) {
         ft_element_dispose(policy, &nodes[index]);
@@ -1168,11 +1613,20 @@ static ft_status ft_rep_copy_leaf_at(
         offset -= current->leaf_count;
     }
 
-    if (offset < rep->as.deep.middle->leaf_count) {
-        return ft_rep_copy_leaf_at(policy, rep->as.deep.middle, offset, destination);
+    const size_t middle_leaf_count = rep->as.deep.middle->leaf_count;
+    if (offset < middle_leaf_count) {
+        ft_tree_rep* middle = NULL;
+        ft_status status = ft_middle_force(policy, rep->as.deep.middle, &middle);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_rep_copy_leaf_at(policy, middle, offset, destination);
+        ft_rep_release(policy, middle);
+        return status;
     }
 
-    offset -= rep->as.deep.middle->leaf_count;
+    offset -= middle_leaf_count;
     for (size_t child = 0; child != rep->as.deep.suffix_count; ++child) {
         const ft_element* current = &rep->as.deep.suffix[child];
         if (offset < current->leaf_count) {
@@ -1219,7 +1673,14 @@ static ft_status ft_visit_rep(const ft_tree_policy* policy, const ft_tree_rep* r
         }
     }
 
-    ft_status status = ft_visit_rep(policy, rep->as.deep.middle, visitor, context);
+    ft_tree_rep* middle = NULL;
+    ft_status status = ft_middle_force(policy, rep->as.deep.middle, &middle);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_visit_rep(policy, middle, visitor, context);
+    ft_rep_release(policy, middle);
     if (status != FT_STATUS_OK) {
         return status;
     }
@@ -1303,7 +1764,14 @@ static ft_status ft_scan_rep(ft_index_scan* scan, const ft_tree_rep* rep)
         }
     }
 
-    ft_status status = ft_scan_rep(scan, rep->as.deep.middle);
+    ft_tree_rep* middle = NULL;
+    ft_status status = ft_middle_force(scan->policy, rep->as.deep.middle, &middle);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_scan_rep(scan, middle);
+    ft_rep_release(scan->policy, middle);
     if (status != FT_STATUS_OK || scan->found) {
         return status;
     }
@@ -1436,7 +1904,13 @@ ft_status ft_tree_measure(const ft_tree* tree, void* destination)
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    (void)memcpy(destination, tree->rep->measure, tree->policy->measure.size);
+    const void* measure = NULL;
+    ft_status status = ft_rep_get_measure(tree->policy, tree->rep, &measure);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    (void)memcpy(destination, measure, tree->policy->measure.size);
     return FT_STATUS_OK;
 }
 

@@ -10,10 +10,10 @@ This workspace contains the C port of the native FingerTree work. It starts from
 [`Cpp/FingerTree`](../../Cpp/FingerTree/README.md) port and exposes a C11 API centered on a generic measured
 finger-tree core.
 
-The first C checkpoint is intentionally dependency-light: the library is ordinary C, builds as a static library,
-and uses a small local C test executable registered with CTest. The core preserves immutable structural sharing
-through reference-counted tree reps, digits, 2/3 nodes, concatenation, split, locate, and endpoint operations.
-The related C-facing surfaces currently included are:
+The C workspace is intentionally dependency-light: the library is ordinary C, builds as a static library, and uses
+a small local C test executable registered with CTest. The core preserves immutable structural sharing through
+atomic reference-counted tree reps, shared lazy middle cells, lazy deep-measure publication, digits, 2/3 nodes,
+concatenation, split, locate, and endpoint operations. The related C-facing surfaces currently included are:
 
 - `ft_persistent_deque`, an alias over the size-measured tree;
 - `ft_reversible_deque`, a logical-orientation facade with O(1) `reverse` over shared snapshots;
@@ -28,9 +28,9 @@ The related C-facing surfaces currently included are:
 - `ft_text_rope`, a character-rope facade backed by `ft_rope`, with insertion, removal, indexing, line count, and
   line/column navigation.
 
-Unlike the C++ port, this checkpoint is strict: it does not yet port the atomic lazy-middle cells or the full
-general measured-tree concurrency story. The API and docs avoid claiming the persistent amortized lazy-spine
-guarantees until that machinery exists in C.
+The central C++ lazy-middle publication machinery is now present in the C core: endpoint overflow and boundary
+pop repairs share memoized middle cells across persistent versions, and independently held immutable handles may
+be used concurrently under normal handle-lifetime rules.
 
 ## Build
 
@@ -50,7 +50,7 @@ path, so CMake and Ninja do not need to be on `PATH`.
 ## Layout
 
 - `include/tools/data_structures/finger_tree/fingertree.h` contains the public C API.
-- `src/fingertree.c` contains the strict measured-tree implementation and the current wrappers.
+- `src/fingertree.c` contains the measured-tree implementation and the current wrappers.
 - `tests/` contains the bootstrap CTest executable.
 - `samples/` contains deterministic C sample executables that are also registered as CTest smoke tests.
 - `benchmarks/` contains a dependency-light timing harness for quick local comparisons.

@@ -16,6 +16,9 @@ policy callbacks rather than C++ templates:
   copyable or externally owned.
 - Tree and node reps use atomic reference counts, so independently held immutable handles may be copied, read,
   updated into new handles, and disposed concurrently when callers still obey normal handle-lifetime rules.
+- Deep nodes use shared lazy middle cells for overflow pushes and boundary-pop repairs. Push cells cache their
+  resulting middle measure without forcing; pop cells force only when a later operation needs the repaired
+  middle or its measure.
 
 `ft_tree` is immutable. Operations such as `ft_tree_push_back`, `ft_tree_concat`, `ft_tree_insert_at`, and
 `ft_tree_remove_at` return new handles and leave their inputs valid. Handles must be released with
@@ -26,8 +29,9 @@ persistent-update convention.
 
 Implemented in this checkpoint:
 
-- strict measured-tree core with reference-counted immutable reps, digits, 2/3 nodes, split, locate, concat,
-  endpoint operations, indexing, traversal, and atomic shared-snapshot reference counts;
+- generic measured-tree core with reference-counted immutable reps, digits, 2/3 nodes, split, locate, concat,
+  endpoint operations, indexing, traversal, lazy middle publication, lazy deep-measure publication, and atomic
+  shared-snapshot reference counts;
 - size-measured persistent deque alias;
 - reversible deque facade with a logical orientation bit and persistent endpoint operations;
 - persistent sorted set, sorted multiset, and sorted map wrappers using a runtime comparator;
@@ -43,9 +47,7 @@ Implemented in this checkpoint:
 
 Deferred from the C++ port:
 
-- atomic lazy-middle cells and the full persistent amortization/concurrency argument;
 - allocator customization and typed macro-generation helpers.
 
-The strict core is still useful for validating C ownership, policy, ABI shape, and shared-snapshot lifetime safety
-before porting the lazy publication machinery. Documentation and comments should not claim the C++ lazy-spine
-bounds for this C workspace until that follow-up lands.
+The core now carries the C++ port's shared lazy-middle shape in C form. Remaining follow-up work is mostly API
+ergonomics and allocator/tooling polish rather than the central persistent-amortization mechanism.
