@@ -18,8 +18,8 @@ own the local warning policy, generated-output locations, test coverage map, and
 | [`src/CSharp/FingerTree`](../../src/CSharp/FingerTree/README.md) | `dotnet test .\FingerTree.sln` | [Validation](../../src/CSharp/FingerTree/docs/validation.md) | .NET library, samples, benchmark project build, stress controls, xUnit/CsCheck suites |
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | `.\build.ps1 -RunTests` | [Validation](../../src/C/Hamt/docs/validation.md) | C17 build, warning policy, deterministic HAMT tests |
 | [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | `.\build.ps1 -RunTests` | [Validation](../../src/Cpp/Hamt/docs/validation.md) | C++20 build, warning policy, deterministic HAMT tests |
-| [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | `cmake --preset msvc-debug; cmake --build --preset msvc-debug; ctest --preset msvc-debug` | [Validation](../../src/C/FingerTree/docs/validation.md) | C11 static library, tests, samples, benchmark harness entry points |
-| [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | `cmake --preset msvc-debug; cmake --build --preset msvc-debug; ctest --preset msvc-debug` | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | C++23 header-first library, CTest suite, stress controls |
+| [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | Visual Studio `cmd.exe` CMake/CTest chain below | [Validation](../../src/C/FingerTree/docs/validation.md) | C11 static library, tests, samples, benchmark harness entry points |
+| [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | Visual Studio `cmd.exe` CMake/CTest chain below | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | C++23 header-first library, CTest suite, stress controls, benchmark-harness status |
 
 For broad repository edits, run every row that could be affected. For documentation-only edits, run the
 Markdown link check below and any build/test commands whose documented paths changed.
