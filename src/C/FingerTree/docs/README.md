@@ -12,3 +12,5 @@
 - [Usage guide](usage.md) shows public API setup, lifetime patterns, persistent update ownership, and facade quick starts.
 - [Validation](validation.md) records local build, test, sample-smoke, benchmark, warning-policy, and
   generated-output guidance for the C workspace.
+- [Tests README](../tests/README.md) maps the core CTest executable, named test cases, direct executable path, and
+  runner failure behavior.

@@ -63,6 +63,7 @@ Use these when behavior, complexity, allocation, ownership, or cross-language pa
 | C++ FingerTree | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | CMake build, CTest validation, stress controls, and benchmark-harness status |
 | C# FingerTree benchmarks | [Benchmark notes](../../src/CSharp/FingerTree/docs/benchmarks.md) | Curated BenchmarkDotNet results and interpretation |
 | C# FingerTree samples | [Samples README](../../src/CSharp/FingerTree/samples/README.md) | Runnable tours covering text, measured-tree facades, and editor-grade text extras |
+| C FingerTree tests | [Tests README](../../src/C/FingerTree/tests/README.md) | Core CTest executable, named test cases, direct executable path, and runner failure behavior |
 | C FingerTree samples | [Samples README](../../src/C/FingerTree/samples/README.md) | Deterministic C sample executables and CTest smoke-test names |
 | C FingerTree benchmarks | [Benchmarks README](../../src/C/FingerTree/benchmarks/README.md) | Dependency-light timing harness workloads and output shape |
 | C++ FingerTree tests | [Tests README](../../src/Cpp/FingerTree/tests/README.md) | Native smoke runner source map, direct executable path, and tearable stress controls |

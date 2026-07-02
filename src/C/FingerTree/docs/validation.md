@@ -48,7 +48,10 @@ PowerShell process; keep configure/build/test in one `cmd.exe` chain when starti
 
 ## Current Coverage
 
-The bootstrap test executable covers:
+The bootstrap test executable `fingertree_c_tests` is registered as `fingertree_c.core`. See the
+[tests README](../tests/README.md) for named test cases, direct executable path, and runner failure behavior.
+
+The executable covers:
 
 - endpoint, index, split, concat, and persistence behavior for the generic tree/deque surface;
 - lazy middle force paths through boundary pop, measure reads, indexing, traversal, split, concat, and disposal;
