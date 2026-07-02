@@ -33,6 +33,13 @@ This document is the canonical repository guidance for Vladimir and the AI codin
 │   ├── docs/
 │   ├── src/
 │   └── tests/
+├── HamtC/
+│   ├── build.ps1
+│   ├── README.md
+│   ├── docs/
+│   ├── include/
+│   ├── src/
+│   └── tests/
 ├── HamtCpp/
 │   ├── build.ps1
 │   ├── README.md
@@ -53,6 +60,10 @@ This document is the canonical repository guidance for Vladimir and the AI codin
 ## Workspaces
 
 - [Hamt](Hamt/README.md) is a .NET 10 persistent hash-array mapped trie library. It provides `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` with bitmap-indexed 32-way branching, immutable equal-hash collision buckets, comparer-preserving factories, structural sharing across versions, and xUnit/CsCheck model tests against BCL dictionaries and sets.
+- [HamtC](HamtC/README.md) is a C17 port of the persistent HAMT library. It provides type-erased
+  `tds_hamt_map` and `tds_hamt_set` value structs with callback-driven hash/equality/ownership
+  policy, reference-counted immutable nodes, structural sharing across versions, and deterministic
+  native model tests.
 - [HamtCpp](HamtCpp/README.md) is a C++20 port of the persistent HAMT library. It provides
   header-only `persistent_hash_map` and `persistent_hash_set` templates with bitmap-indexed
   branching, immutable equal-hash collision buckets, custom hash/equality policy objects, structural
@@ -62,7 +73,7 @@ This document is the canonical repository guidance for Vladimir and the AI codin
 ## Build and test
 
 Use the local .NET SDK toolchain for the C# workspaces. Those solutions target `net10.0` and use
-C# preview features. Use the local MSVC C++20 toolchain for `HamtCpp`.
+C# preview features. Use the local MSVC C17/C++20 toolchain for `HamtC` and `HamtCpp`.
 
 ```powershell
 cd C:\DataStructures\FingerTree
@@ -74,6 +85,10 @@ cd C:\DataStructures\Hamt
 dotnet restore
 dotnet build
 dotnet test .\Hamt.sln
+
+cd C:\DataStructures\HamtC
+.\build.ps1 -RunTests
+.\build.ps1 -Configuration Release -RunTests
 
 cd C:\DataStructures\HamtCpp
 .\build.ps1 -RunTests
@@ -94,6 +109,7 @@ Release configuration is required for meaningful benchmark numbers.
 - [docs/README.md](docs/README.md) indexes repository-level documentation and migration provenance.
 - [docs/agent-workflows.md](docs/agent-workflows.md) holds compact task-conditional workflow guidance.
 - [Hamt/docs/README.md](Hamt/docs/README.md) indexes the HAMT library's API specification.
+- [HamtC/docs/README.md](HamtC/docs/README.md) indexes the C HAMT port's API specification.
 - [HamtCpp/docs/README.md](HamtCpp/docs/README.md) indexes the C++ HAMT port's API
   specification.
 - [FingerTree/docs/README.md](FingerTree/docs/README.md) indexes the library's specifications, design notes, benchmark notes, and external references.
@@ -122,8 +138,8 @@ The expected local Windows environment includes:
 - `git` and `gh` for source-control and GitHub workflows.
 - `python` for ad hoc tooling.
 - .NET SDK 10.0 or newer with the .NET 10 targeting packs.
-- MSVC C++20 toolchain for `HamtCpp`; use Scriptorium's `Import-VisualCppEnvironment.ps1` helper
-  when compiling from a plain PowerShell process.
+- MSVC C17/C++20 toolchain for `HamtC` and `HamtCpp`; use Scriptorium's
+  `Import-VisualCppEnvironment.ps1` helper when compiling from a plain PowerShell process.
 - `git-filter-repo` usable as `python -m git_filter_repo` when future history work is needed.
 
 Use `dotnet` directly for C# validation in this local environment.
