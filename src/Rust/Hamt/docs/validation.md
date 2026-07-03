@@ -23,6 +23,6 @@ The crate uses `#![forbid(unsafe_code)]`. The unit tests are inline in `Hamt/src
 - no-op root sharing for equal-value replacement and absent removal;
 - duplicate rejection through `try_add` and `add`;
 - same-hash collision insertion, lookup, and removal;
+- streaming iterator exact-size accounting over collision buckets;
 - last-wins bulk map construction while retaining the original stored key;
 - persistent set algebra.
-

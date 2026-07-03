@@ -224,12 +224,15 @@ where
 
     #[must_use]
     pub fn iter(&self) -> Iter<'_, K, V> {
-        let mut entries = Vec::with_capacity(self.len);
+        let mut stack = Vec::new();
         if let Some(root) = self.root.as_deref() {
-            collect_entries(root, &mut entries);
+            stack.push(IterFrame::Node(root));
         }
 
-        Iter { entries, index: 0 }
+        Iter {
+            stack,
+            remaining: self.len,
+        }
     }
 
     pub fn keys(&self) -> impl Iterator<Item = &K> {
@@ -281,22 +284,55 @@ where
 }
 
 pub struct Iter<'a, K, V> {
-    entries: Vec<(&'a K, &'a V)>,
-    index: usize,
+    stack: Vec<IterFrame<'a, K, V>>,
+    remaining: usize,
+}
+
+enum IterFrame<'a, K, V> {
+    Node(&'a Node<K, V>),
+    Branch(std::slice::Iter<'a, Arc<Node<K, V>>>),
+    Collision(std::slice::Iter<'a, (K, V)>),
 }
 
 impl<'a, K, V> Iterator for Iter<'a, K, V> {
     type Item = (&'a K, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let item = self.entries.get(self.index).copied();
-        self.index += usize::from(item.is_some());
-        item
+        while let Some(frame) = self.stack.pop() {
+            match frame {
+                IterFrame::Node(node) => match node {
+                    Node::Leaf { key, value, .. } => {
+                        self.remaining -= 1;
+                        return Some((key, value));
+                    }
+                    Node::Collision { entries, .. } => {
+                        self.stack.push(IterFrame::Collision(entries.iter()));
+                    }
+                    Node::Branch { children, .. } => {
+                        self.stack.push(IterFrame::Branch(children.iter()));
+                    }
+                },
+                IterFrame::Branch(mut children) => {
+                    if let Some(child) = children.next() {
+                        self.stack.push(IterFrame::Branch(children));
+                        self.stack.push(IterFrame::Node(child.as_ref()));
+                    }
+                }
+                IterFrame::Collision(mut entries) => {
+                    if let Some((key, value)) = entries.next() {
+                        self.stack.push(IterFrame::Collision(entries));
+                        self.remaining -= 1;
+                        return Some((key, value));
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = self.entries.len().saturating_sub(self.index);
-        (remaining, Some(remaining))
+        (self.remaining, Some(self.remaining))
     }
 }
 
@@ -919,20 +955,6 @@ where
     }
 }
 
-fn collect_entries<'a, K, V>(node: &'a Node<K, V>, entries: &mut Vec<(&'a K, &'a V)>) {
-    match node {
-        Node::Leaf { key, value, .. } => entries.push((key, value)),
-        Node::Collision {
-            entries: bucket, ..
-        } => entries.extend(bucket.iter().map(|(key, value)| (key, value))),
-        Node::Branch { children, .. } => {
-            for child in children.iter() {
-                collect_entries(child, entries);
-            }
-        }
-    }
-}
-
 fn leaf_entry<K, V>(node: Arc<Node<K, V>>) -> (K, V) {
     match Arc::try_unwrap(node) {
         Ok(Node::Leaf { key, value, .. }) => (key, value),
@@ -1021,6 +1043,32 @@ mod tests {
         assert_eq!(removed.get(&1), Some(&10));
         assert_eq!(removed.get(&2), None);
         assert_eq!(removed.get(&3), Some(&30));
+    }
+
+    #[test]
+    fn iterator_streams_entries_with_exact_remaining_count() {
+        let map: PersistentHashMap<i32, i32, ConstantState> =
+            PersistentHashMap::with_hasher(ConstantState::default())
+                .set_items((0..64).map(|value| (value, value * value)));
+        let mut iter = map.iter();
+        let mut seen = Vec::new();
+
+        for remaining in (1..=map.len()).rev() {
+            assert_eq!(iter.size_hint(), (remaining, Some(remaining)));
+            assert_eq!(iter.len(), remaining);
+            let (key, value) = iter.next().expect("iterator has remaining entries");
+            seen.push((*key, *value));
+        }
+
+        assert_eq!(iter.size_hint(), (0, Some(0)));
+        assert_eq!(iter.len(), 0);
+        assert_eq!(iter.next(), None);
+        assert_eq!(
+            seen,
+            (0..64)
+                .map(|value| (value, value * value))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]

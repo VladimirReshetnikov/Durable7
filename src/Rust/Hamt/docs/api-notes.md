@@ -31,10 +31,8 @@ Rust-specific differences:
 - duplicate insertion returns `Result<_, DuplicateKey>` rather than throwing;
 - lookups return references, and removal returns owned cloned values;
 - `shares_root_with` exposes root sharing for tests and diagnostics;
-- iteration currently materializes an internal traversal vector, so it does not claim the allocation-free enumerator
-  contract of the C# and C++ ports.
+- iteration streams trie order through an explicit traversal stack rather than materializing all entries up front.
 
 The hash contract is the standard Rust hash-map contract: keys that compare equal must hash equally under the
 chosen `BuildHasher`. The implementation truncates `Hasher::finish()` to 32 bits to match the repository HAMT
 shape.
-

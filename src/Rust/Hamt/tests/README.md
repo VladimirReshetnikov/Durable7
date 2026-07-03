@@ -17,6 +17,6 @@ Coverage groups:
 - root-sharing no-op behavior;
 - duplicate-key rejection;
 - equal-hash collision buckets;
+- streaming trie-order iteration and exact-size accounting;
 - last-wins replacement and original-key retention;
 - set algebra.
-
