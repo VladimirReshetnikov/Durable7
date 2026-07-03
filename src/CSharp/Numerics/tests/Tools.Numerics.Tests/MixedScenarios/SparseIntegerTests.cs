@@ -14,12 +14,25 @@ public sealed class SparseIntegerTests
     {
         SparseInteger zero = 0UL;
         SparseInteger one = 1UL;
+        SparseInteger two = 2UL;
+        SparseInteger three = one + two;
         SparseInteger fortyTwo = 42UL;
 
+        Assert.True(1UL == one);
         Assert.True(zero == 0UL);
         Assert.True(one != 0UL);
+        Assert.True(one != 2UL);
+        Assert.True(one < 2UL);
         Assert.True(one > zero);
         Assert.True(zero < fortyTwo);
+        Assert.True(three == 3UL);
+        Assert.True(three > 2UL);
+        Assert.False(three < 3UL);
+        Assert.True(one.Equals((object)(SparseInteger)1UL));
+        Assert.False(one.Equals((object)3UL));
+        Assert.False(one.Equals(null));
+        Assert.True(one.CompareTo(2UL) < 0);
+        Assert.True(three.CompareTo(two) > 0);
         Assert.Equal("42", fortyTwo.ToString());
         Assert.Equal("42", (string)fortyTwo);
         Assert.Equal(fortyTwo, SparseInteger.Parse("42"));
@@ -55,6 +68,21 @@ public sealed class SparseIntegerTests
         SparseInteger result = four.Power(exponent);
 
         Assert.Equal(BigInteger.One << 130, (BigInteger)result);
+    }
+
+    /// <summary>Verifies comparison remains stable for large values imported through <see cref="BigInteger"/>.</summary>
+    [Fact]
+    public void LargeBigIntegerConversions_CompareAgainstSmallValues()
+    {
+        SparseInteger two = 2UL;
+        BigInteger big = (BigInteger)decimal.MaxValue;
+        SparseInteger huge = (SparseInteger)(big * big);
+
+        Assert.True(huge.Equals(huge));
+        Assert.True(huge.Equals((object)huge));
+        Assert.Equal(0, huge.CompareTo(huge));
+        Assert.True(two.CompareTo(huge) < 0);
+        Assert.True(huge.CompareTo(two) > 0);
     }
 
     /// <summary>Verifies invalid logarithm and negative conversion inputs are rejected.</summary>
