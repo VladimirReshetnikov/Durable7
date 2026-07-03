@@ -38,10 +38,11 @@ tree with cached monoid
 measures at every node, so measure-guided split and locate operations can skip whole subtrees and split results
 share unchanged structure. `MeasuredRope<T, P>` now reuses that measured tree through an internal count-plus-user
 measure policy, so indexed splits, concatenation, point replacement, prefix measurement, and measure-guided locate
-share unchanged measured subtrees. Sorted bag/set/map, priority queue, and interval tree facades also compose the
-shared deque, so rank edits, queue meld/enqueue/dequeue, interval insertion/removal, and range extraction preserve
-unchanged subtree storage. These derived facades still do not claim the C#/C++ lazy measured-spine complexity or
-allocation profile for every operation.
+share unchanged measured subtrees. `PriorityQueue<T, P>` now reuses the measured tree through an internal
+minimum-priority measure, so peek/dequeue locate the first global-minimum entry by cached prefix measures while
+preserving equal-priority stability. Sorted bag/set/map and interval tree facades compose the shared deque, so rank
+edits, interval insertion/removal, and range extraction preserve unchanged subtree storage. These derived facades
+still do not claim the C#/C++ lazy measured-spine complexity or allocation profile for every operation.
 
 Future representation work should keep the Rust public names and result shapes stable while replacing the remaining
 semantic-checkpoint algorithms with lazy measured-spine equivalents where needed for asymptotic parity.

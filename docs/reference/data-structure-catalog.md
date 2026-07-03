@@ -71,8 +71,9 @@ the remaining lazy-spine parity boundary.
 ## Priority Queue
 
 Priority queues locate and remove the front priority entry according to each language's comparison
-policy. The mature C#/C++/C ports use measured finger-tree facades; the Rust checkpoint preserves the
-surface over shared tree storage while its API notes track the remaining lazy-spine parity boundary.
+policy. The mature C#/C++/C ports use measured finger-tree facades; the Rust checkpoint now uses
+cached minimum-priority measures over its measured tree while its API notes track the remaining
+lazy-spine parity boundary.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |

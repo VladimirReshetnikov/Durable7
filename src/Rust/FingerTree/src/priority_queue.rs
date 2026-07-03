@@ -1,4 +1,6 @@
-use crate::deque::PersistentDeque;
+use crate::measured::{FingerTree, MeasurePolicy};
+use std::fmt;
+use std::marker::PhantomData;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PriorityEntry<T, P> {
@@ -7,8 +9,77 @@ pub struct PriorityEntry<T, P> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PriorityQueue<T, P> {
-    entries: PersistentDeque<PriorityEntry<T, P>>,
+struct PriorityMeasure<T, P>(PhantomData<(T, P)>);
+
+impl<T, P> MeasurePolicy<PriorityEntry<T, P>> for PriorityMeasure<T, P>
+where
+    P: Ord + Clone,
+{
+    type Measure = Option<P>;
+
+    fn empty() -> Self::Measure {
+        None
+    }
+
+    fn measure(element: &PriorityEntry<T, P>) -> Self::Measure {
+        Some(element.priority.clone())
+    }
+
+    fn combine(left: &Self::Measure, right: &Self::Measure) -> Self::Measure {
+        match (left, right) {
+            (Some(left), Some(right)) => Some(left.min(right).clone()),
+            (Some(value), None) | (None, Some(value)) => Some(value.clone()),
+            (None, None) => None,
+        }
+    }
+}
+
+type PriorityTree<T, P> = FingerTree<PriorityEntry<T, P>, PriorityMeasure<T, P>>;
+type PrioritySplit<T, P> = (PriorityTree<T, P>, PriorityEntry<T, P>, PriorityTree<T, P>);
+
+pub struct PriorityQueue<T, P>
+where
+    P: Ord + Clone,
+{
+    entries: PriorityTree<T, P>,
+}
+
+impl<T, P> Clone for PriorityQueue<T, P>
+where
+    P: Ord + Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            entries: self.entries.clone(),
+        }
+    }
+}
+
+impl<T, P> fmt::Debug for PriorityQueue<T, P>
+where
+    T: fmt::Debug,
+    P: Ord + Clone + fmt::Debug,
+{
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_list().entries(self.entries.iter()).finish()
+    }
+}
+
+impl<T, P> PartialEq for PriorityQueue<T, P>
+where
+    T: PartialEq,
+    P: Ord + Clone + PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.entries.len() == other.entries.len() && self.entries.iter().eq(other.entries.iter())
+    }
+}
+
+impl<T, P> Eq for PriorityQueue<T, P>
+where
+    T: Eq,
+    P: Ord + Clone + Eq,
+{
 }
 
 impl<T, P> PriorityQueue<T, P>
@@ -19,7 +90,7 @@ where
     #[must_use]
     pub fn new() -> Self {
         Self {
-            entries: PersistentDeque::new(),
+            entries: PriorityTree::new(),
         }
     }
 
@@ -36,7 +107,7 @@ where
     #[must_use]
     pub fn enqueue(&self, value: T, priority: P) -> Self {
         Self {
-            entries: self.entries.push_back(PriorityEntry { value, priority }),
+            entries: self.entries.append(PriorityEntry { value, priority }),
         }
     }
 
@@ -72,12 +143,11 @@ where
 
     #[must_use]
     pub fn dequeue(&self) -> Option<(PriorityEntry<T, P>, Self)> {
-        let index = self.min_index()?;
-        let entry = self.entries.get(index)?.clone();
+        let (left, entry, right) = self.split_min()?;
         Some((
             entry,
             Self {
-                entries: self.entries.remove_at(index)?,
+                entries: left.concat(&right),
             },
         ))
     }
@@ -93,21 +163,17 @@ where
     }
 
     fn min_index(&self) -> Option<usize> {
-        let mut best: Option<usize> = None;
-        for (index, entry) in self.entries.iter().enumerate() {
-            if best.is_none_or(|best_index| {
-                entry.priority
-                    < self
-                        .entries
-                        .get(best_index)
-                        .expect("known best index is in range")
-                        .priority
-            }) {
-                best = Some(index);
-            }
-        }
+        let minimum = self.entries.measure().as_ref()?;
+        let located = self
+            .entries
+            .try_locate(|prefix_minimum| prefix_minimum.as_ref().is_some_and(|p| p == minimum));
+        located.item.map(|_| located.index)
+    }
 
-        best
+    fn split_min(&self) -> Option<PrioritySplit<T, P>> {
+        let minimum = self.entries.measure().as_ref()?;
+        self.entries
+            .try_split_find(|prefix_minimum| prefix_minimum.as_ref().is_some_and(|p| p == minimum))
     }
 }
 
@@ -152,7 +218,7 @@ mod tests {
     }
 
     #[test]
-    fn priority_queue_edits_share_underlying_deque_tree() {
+    fn priority_queue_uses_measured_tree_for_min_priority() {
         let queue = (0..256).fold(PriorityQueue::new(), |queue, value| {
             queue.enqueue(value, value)
         });
@@ -165,6 +231,7 @@ mod tests {
         assert_eq!(entry.value, 999);
         assert_eq!(dequeued.peek(), Some((&0, &0)));
         assert_eq!(melded.len(), 320);
+        assert_eq!(enqueued.entries.measure(), &Some(-1));
         assert!(queue.entries.shared_node_count_with(&enqueued.entries) > 100);
         assert!(queue.entries.shared_node_count_with(&melded.entries) > 100);
         assert!(enqueued.entries.shared_node_count_with(&dequeued.entries) > 100);
