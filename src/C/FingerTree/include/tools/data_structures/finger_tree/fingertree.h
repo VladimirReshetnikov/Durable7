@@ -123,10 +123,17 @@ typedef ft_tree ft_persistent_deque;
 #define ft_persistent_deque_remove_at ft_tree_remove_at
 #define ft_persistent_deque_visit ft_tree_visit
 
+typedef struct ft_reversible_deque_rep ft_reversible_deque_rep;
+
 typedef struct ft_reversible_deque {
-    ft_tree tree;
-    bool reversed;
+    const ft_tree_policy* policy;
+    ft_reversible_deque_rep* rep;
 } ft_reversible_deque;
+
+typedef struct ft_reversible_deque_split_result {
+    ft_reversible_deque left;
+    ft_reversible_deque right;
+} ft_reversible_deque_split_result;
 
 ft_status ft_reversible_deque_init(ft_reversible_deque* deque, const ft_tree_policy* policy);
 ft_status ft_reversible_deque_copy(const ft_reversible_deque* source, ft_reversible_deque* destination);
@@ -141,6 +148,26 @@ ft_status ft_reversible_deque_push_front(const ft_reversible_deque* deque, const
 ft_status ft_reversible_deque_push_back(const ft_reversible_deque* deque, const void* value, ft_reversible_deque* result);
 ft_status ft_reversible_deque_pop_front(const ft_reversible_deque* deque, void* value, ft_reversible_deque* rest);
 ft_status ft_reversible_deque_pop_back(const ft_reversible_deque* deque, void* value, ft_reversible_deque* rest);
+ft_status ft_reversible_deque_concat(
+    const ft_reversible_deque* left,
+    const ft_reversible_deque* right,
+    ft_reversible_deque* result);
+ft_status ft_reversible_deque_split_at(
+    const ft_reversible_deque* deque,
+    size_t index,
+    ft_reversible_deque_split_result* result);
+ft_status ft_reversible_deque_set_at(
+    const ft_reversible_deque* deque,
+    size_t index,
+    const void* value,
+    ft_reversible_deque* result);
+ft_status ft_reversible_deque_insert_at(
+    const ft_reversible_deque* deque,
+    size_t index,
+    const void* value,
+    ft_reversible_deque* result);
+ft_status ft_reversible_deque_remove_at(const ft_reversible_deque* deque, size_t index, ft_reversible_deque* result);
+ft_status ft_reversible_deque_visit(const ft_reversible_deque* deque, ft_visit_fn visitor, void* context);
 
 typedef struct ft_sorted_multiset {
     ft_tree tree;

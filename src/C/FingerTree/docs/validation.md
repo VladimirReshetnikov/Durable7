@@ -57,8 +57,8 @@ The executable covers:
 - lazy middle force paths through boundary pop, measure reads, indexing, traversal, split, concat, and disposal;
 - size-measure `locate` and measure-guided split behavior;
 - concurrent shared-snapshot copy/read/update/dispose behavior over atomic node and tree reference counts;
-- reversible-deque logical reversal, endpoint edits, index reads, and persistence. The public C reversible facade
-  has no concat/split surface; concat and split coverage belongs to `ft_tree`/`ft_persistent_deque`;
+- reversible-deque logical reversal, endpoint edits, index reads, traversal, mixed-orientation concat, split,
+  set/insert/remove, and persistence;
 - sorted set uniqueness, sorted multiset duplicates, rank access, removal, and traversal;
 - sorted map insert/set/remove, duplicate rejection, lookup, rank access, traversal, and persistence;
 - chunked rope construction across chunk boundaries, cumulative indexing, traversal, split/reconcat, insertion,

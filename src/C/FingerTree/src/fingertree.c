@@ -162,6 +162,61 @@ struct ft_middle {
     } as;
 };
 
+typedef enum ft_rev_element_kind {
+    FT_REV_ELEMENT_LEAF,
+    FT_REV_ELEMENT_NODE
+} ft_rev_element_kind;
+
+typedef struct ft_rev_element ft_rev_element;
+typedef struct ft_rev_node ft_rev_node;
+
+struct ft_rev_element {
+    ft_rev_element_kind kind;
+    size_t leaf_count;
+    union {
+        void* value;
+        ft_rev_node* node;
+    } as;
+};
+
+struct ft_rev_node {
+    ft_ref_count ref_count;
+    bool reversed;
+    size_t child_count;
+    size_t leaf_count;
+    ft_rev_element children[3];
+};
+
+typedef enum ft_rev_rep_kind {
+    FT_REV_REP_EMPTY,
+    FT_REV_REP_SINGLE,
+    FT_REV_REP_DEEP
+} ft_rev_rep_kind;
+
+struct ft_reversible_deque_rep {
+    ft_ref_count ref_count;
+    ft_rev_rep_kind kind;
+    bool reversed;
+    size_t leaf_count;
+    union {
+        ft_rev_element single;
+        struct {
+            size_t prefix_count;
+            ft_rev_element prefix[3];
+            ft_reversible_deque_rep* middle;
+            size_t suffix_count;
+            ft_rev_element suffix[3];
+        } deep;
+    } as;
+};
+
+typedef struct ft_rev_split_result {
+    ft_reversible_deque_rep* left;
+    ft_rev_element hit;
+    size_t index_in_hit;
+    ft_reversible_deque_rep* right;
+} ft_rev_split_result;
+
 typedef struct ft_index_scan {
     size_t index;
     bool found;
@@ -2275,33 +2330,1806 @@ ft_status ft_tree_visit(const ft_tree* tree, ft_visit_fn visitor, void* context)
     return ft_visit_rep(tree->policy, tree->rep, visitor, context);
 }
 
-ft_status ft_reversible_deque_init(ft_reversible_deque* deque, const ft_tree_policy* policy)
+static void ft_rev_rep_retain(ft_reversible_deque_rep* rep)
 {
-    if (deque == NULL) {
+    if (rep != NULL) {
+        ft_ref_retain(&rep->ref_count);
+    }
+}
+
+static void ft_rev_element_dispose(const ft_tree_policy* policy, ft_rev_element* element);
+static void ft_rev_rep_release(const ft_tree_policy* policy, ft_reversible_deque_rep* rep);
+static ft_status ft_rev_rep_cons(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* rep,
+    const ft_rev_element* value,
+    ft_reversible_deque_rep** result);
+static ft_status ft_rev_rep_snoc(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* rep,
+    const ft_rev_element* value,
+    ft_reversible_deque_rep** result);
+static ft_status ft_rev_rep_view_left(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* rep,
+    ft_rev_element* value,
+    ft_reversible_deque_rep** rest);
+static ft_status ft_rev_rep_view_right(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* rep,
+    ft_reversible_deque_rep** rest,
+    ft_rev_element* value);
+static ft_status ft_rev_rep_concat_with_middle(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* left,
+    const ft_rev_element* middle,
+    size_t middle_count,
+    const ft_reversible_deque_rep* right,
+    ft_reversible_deque_rep** result);
+
+static bool ft_reversible_deque_is_valid(const ft_reversible_deque* deque)
+{
+    return deque != NULL && deque->policy != NULL && deque->rep != NULL;
+}
+
+static void ft_rev_node_retain(ft_rev_node* node)
+{
+    if (node != NULL) {
+        ft_ref_retain(&node->ref_count);
+    }
+}
+
+static void ft_rev_node_release(const ft_tree_policy* policy, ft_rev_node* node)
+{
+    if (node == NULL) {
+        return;
+    }
+
+    if (!ft_ref_release(&node->ref_count)) {
+        return;
+    }
+
+    for (size_t index = 0; index != node->child_count; ++index) {
+        ft_rev_element_dispose(policy, &node->children[index]);
+    }
+
+    free(node);
+}
+
+static void ft_rev_elements_dispose(const ft_tree_policy* policy, ft_rev_element* elements, size_t count)
+{
+    for (size_t index = 0; index != count; ++index) {
+        ft_rev_element_dispose(policy, &elements[index]);
+    }
+}
+
+static ft_status ft_rev_element_clone(
+    const ft_tree_policy* policy,
+    const ft_rev_element* source,
+    ft_rev_element* destination)
+{
+    (void)memset(destination, 0, sizeof(*destination));
+    destination->kind = source->kind;
+    destination->leaf_count = source->leaf_count;
+    if (source->kind == FT_REV_ELEMENT_LEAF) {
+        destination->as.value = ft_allocate(policy->value.size);
+        if (destination->as.value == NULL) {
+            (void)memset(destination, 0, sizeof(*destination));
+            return FT_STATUS_NO_MEMORY;
+        }
+
+        ft_value_copy(&policy->value, destination->as.value, source->as.value);
+        return FT_STATUS_OK;
+    }
+
+    destination->as.node = source->as.node;
+    ft_rev_node_retain(destination->as.node);
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_rev_element_init_leaf(
+    const ft_tree_policy* policy,
+    const void* value,
+    ft_rev_element* destination)
+{
+    (void)memset(destination, 0, sizeof(*destination));
+    destination->kind = FT_REV_ELEMENT_LEAF;
+    destination->leaf_count = 1;
+    destination->as.value = ft_allocate(policy->value.size);
+    if (destination->as.value == NULL) {
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    ft_value_copy(&policy->value, destination->as.value, value);
+    return FT_STATUS_OK;
+}
+
+static void ft_rev_element_dispose(const ft_tree_policy* policy, ft_rev_element* element)
+{
+    if (element->kind == FT_REV_ELEMENT_LEAF) {
+        ft_value_destroy(&policy->value, element->as.value);
+        free(element->as.value);
+    } else if (element->kind == FT_REV_ELEMENT_NODE) {
+        ft_rev_node_release(policy, element->as.node);
+    }
+
+    (void)memset(element, 0, sizeof(*element));
+}
+
+static ft_status ft_rev_node_create(
+    const ft_tree_policy* policy,
+    const ft_rev_element* children,
+    size_t count,
+    bool reversed,
+    ft_rev_node** result)
+{
+    if (count < 2 || count > 3) {
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    ft_status status = ft_tree_init(&deque->tree, policy);
+    ft_rev_node* node = (ft_rev_node*)calloc(1, sizeof(*node));
+    if (node == NULL) {
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    ft_ref_init(&node->ref_count);
+    node->reversed = reversed;
+
+    ft_status status = FT_STATUS_OK;
+    for (size_t index = 0; index != count; ++index) {
+        status = ft_rev_element_clone(policy, &children[index], &node->children[index]);
+        if (status != FT_STATUS_OK) {
+            ft_rev_node_release(policy, node);
+            return status;
+        }
+
+        ++node->child_count;
+        if (ft_add_overflows(node->leaf_count, children[index].leaf_count, &node->leaf_count)) {
+            ft_rev_node_release(policy, node);
+            return FT_STATUS_OVERFLOW;
+        }
+    }
+
+    *result = node;
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_rev_element_init_node(
+    const ft_tree_policy* policy,
+    const ft_rev_element* children,
+    size_t count,
+    ft_rev_element* result)
+{
+    (void)memset(result, 0, sizeof(*result));
+    ft_rev_node* node = NULL;
+    ft_status status = ft_rev_node_create(policy, children, count, false, &node);
     if (status != FT_STATUS_OK) {
         return status;
     }
 
-    deque->reversed = false;
+    result->kind = FT_REV_ELEMENT_NODE;
+    result->leaf_count = node->leaf_count;
+    result->as.node = node;
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_rev_element_mirror(
+    const ft_tree_policy* policy,
+    const ft_rev_element* source,
+    ft_rev_element* destination)
+{
+    if (source->kind == FT_REV_ELEMENT_LEAF) {
+        return ft_rev_element_clone(policy, source, destination);
+    }
+
+    ft_rev_node* node = NULL;
+    ft_status status = ft_rev_node_create(
+        policy,
+        source->as.node->children,
+        source->as.node->child_count,
+        !source->as.node->reversed,
+        &node);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    destination->kind = FT_REV_ELEMENT_NODE;
+    destination->leaf_count = node->leaf_count;
+    destination->as.node = node;
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_rev_node_logical_child(
+    const ft_tree_policy* policy,
+    const ft_rev_node* node,
+    size_t index,
+    ft_rev_element* result)
+{
+    if (index >= node->child_count) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    const size_t physical = node->reversed ? node->child_count - 1 - index : index;
+    const ft_rev_element* child = &node->children[physical];
+    return node->reversed
+        ? ft_rev_element_mirror(policy, child, result)
+        : ft_rev_element_clone(policy, child, result);
+}
+
+static ft_status ft_rev_node_logical_children(
+    const ft_tree_policy* policy,
+    const ft_rev_node* node,
+    ft_rev_element* children,
+    size_t* count)
+{
+    *count = 0;
+    for (size_t index = 0; index != node->child_count; ++index) {
+        ft_status status = ft_rev_node_logical_child(policy, node, index, &children[*count]);
+        if (status != FT_STATUS_OK) {
+            ft_rev_elements_dispose(policy, children, *count);
+            *count = 0;
+            return status;
+        }
+
+        ++*count;
+    }
+
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_rev_count_elements(const ft_rev_element* elements, size_t count, size_t* leaf_count)
+{
+    *leaf_count = 0;
+    for (size_t index = 0; index != count; ++index) {
+        if (ft_add_overflows(*leaf_count, elements[index].leaf_count, leaf_count)) {
+            return FT_STATUS_OVERFLOW;
+        }
+    }
+
+    return FT_STATUS_OK;
+}
+
+static void ft_rev_rep_release(const ft_tree_policy* policy, ft_reversible_deque_rep* rep)
+{
+    if (rep == NULL) {
+        return;
+    }
+
+    if (!ft_ref_release(&rep->ref_count)) {
+        return;
+    }
+
+    if (rep->kind == FT_REV_REP_SINGLE) {
+        ft_rev_element_dispose(policy, &rep->as.single);
+    } else if (rep->kind == FT_REV_REP_DEEP) {
+        ft_rev_elements_dispose(policy, rep->as.deep.prefix, rep->as.deep.prefix_count);
+        ft_rev_rep_release(policy, rep->as.deep.middle);
+        ft_rev_elements_dispose(policy, rep->as.deep.suffix, rep->as.deep.suffix_count);
+    }
+
+    free(rep);
+}
+
+static ft_status ft_rev_rep_create_empty(ft_reversible_deque_rep** result)
+{
+    ft_reversible_deque_rep* rep = (ft_reversible_deque_rep*)calloc(1, sizeof(*rep));
+    if (rep == NULL) {
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    ft_ref_init(&rep->ref_count);
+    rep->kind = FT_REV_REP_EMPTY;
+    *result = rep;
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_rev_rep_create_single(
+    const ft_tree_policy* policy,
+    const ft_rev_element* element,
+    ft_reversible_deque_rep** result)
+{
+    ft_reversible_deque_rep* rep = (ft_reversible_deque_rep*)calloc(1, sizeof(*rep));
+    if (rep == NULL) {
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    ft_ref_init(&rep->ref_count);
+    rep->kind = FT_REV_REP_SINGLE;
+    rep->leaf_count = element->leaf_count;
+    ft_status status = ft_rev_element_clone(policy, element, &rep->as.single);
+    if (status != FT_STATUS_OK) {
+        free(rep);
+        return status;
+    }
+
+    *result = rep;
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_rev_rep_create_deep_ex(
+    const ft_tree_policy* policy,
+    const ft_rev_element* prefix,
+    size_t prefix_count,
+    ft_reversible_deque_rep* middle,
+    const ft_rev_element* suffix,
+    size_t suffix_count,
+    bool reversed,
+    ft_reversible_deque_rep** result)
+{
+    if (prefix_count == 0 || prefix_count > 3 || suffix_count == 0 || suffix_count > 3 || middle == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_reversible_deque_rep* rep = (ft_reversible_deque_rep*)calloc(1, sizeof(*rep));
+    if (rep == NULL) {
+        return FT_STATUS_NO_MEMORY;
+    }
+
+    ft_ref_init(&rep->ref_count);
+    rep->kind = FT_REV_REP_DEEP;
+    rep->reversed = reversed;
+    rep->as.deep.prefix_count = prefix_count;
+    rep->as.deep.suffix_count = suffix_count;
+
+    ft_status status = FT_STATUS_OK;
+    for (size_t index = 0; index != prefix_count; ++index) {
+        status = ft_rev_element_clone(policy, &prefix[index], &rep->as.deep.prefix[index]);
+        if (status != FT_STATUS_OK) {
+            rep->as.deep.prefix_count = index;
+            ft_rev_rep_release(policy, rep);
+            return status;
+        }
+    }
+
+    rep->as.deep.middle = middle;
+    ft_rev_rep_retain(middle);
+
+    for (size_t index = 0; index != suffix_count; ++index) {
+        status = ft_rev_element_clone(policy, &suffix[index], &rep->as.deep.suffix[index]);
+        if (status != FT_STATUS_OK) {
+            rep->as.deep.suffix_count = index;
+            ft_rev_rep_release(policy, rep);
+            return status;
+        }
+    }
+
+    size_t prefix_leaves = 0;
+    size_t suffix_leaves = 0;
+    size_t prefix_and_middle = 0;
+    status = ft_rev_count_elements(prefix, prefix_count, &prefix_leaves);
+    if (status != FT_STATUS_OK ||
+        ft_rev_count_elements(suffix, suffix_count, &suffix_leaves) != FT_STATUS_OK ||
+        ft_add_overflows(prefix_leaves, middle->leaf_count, &prefix_and_middle) ||
+        ft_add_overflows(prefix_and_middle, suffix_leaves, &rep->leaf_count)) {
+        ft_rev_rep_release(policy, rep);
+        return status == FT_STATUS_OK ? FT_STATUS_OVERFLOW : status;
+    }
+
+    *result = rep;
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_rev_rep_create_deep(
+    const ft_tree_policy* policy,
+    const ft_rev_element* prefix,
+    size_t prefix_count,
+    ft_reversible_deque_rep* middle,
+    const ft_rev_element* suffix,
+    size_t suffix_count,
+    ft_reversible_deque_rep** result)
+{
+    return ft_rev_rep_create_deep_ex(policy, prefix, prefix_count, middle, suffix, suffix_count, false, result);
+}
+
+static ft_status ft_rev_rep_mirror(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* source,
+    ft_reversible_deque_rep** result)
+{
+    if (source->kind == FT_REV_REP_EMPTY) {
+        ft_rev_rep_retain((ft_reversible_deque_rep*)source);
+        *result = (ft_reversible_deque_rep*)source;
+        return FT_STATUS_OK;
+    }
+
+    if (source->kind == FT_REV_REP_SINGLE) {
+        ft_rev_element element;
+        ft_status status = ft_rev_element_mirror(policy, &source->as.single, &element);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_rev_rep_create_single(policy, &element, result);
+        ft_rev_element_dispose(policy, &element);
+        return status;
+    }
+
+    return ft_rev_rep_create_deep_ex(
+        policy,
+        source->as.deep.prefix,
+        source->as.deep.prefix_count,
+        source->as.deep.middle,
+        source->as.deep.suffix,
+        source->as.deep.suffix_count,
+        !source->reversed,
+        result);
+}
+
+static ft_status ft_rev_mirror_reversed(
+    const ft_tree_policy* policy,
+    const ft_rev_element* source,
+    size_t count,
+    ft_rev_element* result)
+{
+    for (size_t index = 0; index != count; ++index) {
+        ft_status status = ft_rev_element_mirror(policy, &source[count - 1 - index], &result[index]);
+        if (status != FT_STATUS_OK) {
+            ft_rev_elements_dispose(policy, result, index);
+            return status;
+        }
+    }
+
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_rev_rep_logical_parts(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* rep,
+    ft_rev_element* prefix,
+    size_t* prefix_count,
+    ft_reversible_deque_rep** middle,
+    ft_rev_element* suffix,
+    size_t* suffix_count)
+{
+    if (rep->kind != FT_REV_REP_DEEP) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (rep->reversed) {
+        *prefix_count = rep->as.deep.suffix_count;
+        *suffix_count = rep->as.deep.prefix_count;
+
+        ft_status status = ft_rev_mirror_reversed(policy, rep->as.deep.suffix, *prefix_count, prefix);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_rev_rep_mirror(policy, rep->as.deep.middle, middle);
+        if (status != FT_STATUS_OK) {
+            ft_rev_elements_dispose(policy, prefix, *prefix_count);
+            return status;
+        }
+
+        status = ft_rev_mirror_reversed(policy, rep->as.deep.prefix, *suffix_count, suffix);
+        if (status != FT_STATUS_OK) {
+            ft_rev_rep_release(policy, *middle);
+            ft_rev_elements_dispose(policy, prefix, *prefix_count);
+            return status;
+        }
+
+        return FT_STATUS_OK;
+    }
+
+    *prefix_count = rep->as.deep.prefix_count;
+    *suffix_count = rep->as.deep.suffix_count;
+
+    for (size_t index = 0; index != *prefix_count; ++index) {
+        ft_status status = ft_rev_element_clone(policy, &rep->as.deep.prefix[index], &prefix[index]);
+        if (status != FT_STATUS_OK) {
+            ft_rev_elements_dispose(policy, prefix, index);
+            return status;
+        }
+    }
+
+    ft_rev_rep_retain(rep->as.deep.middle);
+    *middle = rep->as.deep.middle;
+
+    for (size_t index = 0; index != *suffix_count; ++index) {
+        ft_status status = ft_rev_element_clone(policy, &rep->as.deep.suffix[index], &suffix[index]);
+        if (status != FT_STATUS_OK) {
+            ft_rev_rep_release(policy, *middle);
+            ft_rev_elements_dispose(policy, prefix, *prefix_count);
+            ft_rev_elements_dispose(policy, suffix, index);
+            return status;
+        }
+    }
+
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_rev_rep_from_digit(
+    const ft_tree_policy* policy,
+    const ft_rev_element* elements,
+    size_t count,
+    ft_reversible_deque_rep** result)
+{
+    switch (count) {
+    case 0:
+        return ft_rev_rep_create_empty(result);
+    case 1:
+        return ft_rev_rep_create_single(policy, &elements[0], result);
+    default: {
+        ft_reversible_deque_rep* empty = NULL;
+        ft_status status = ft_rev_rep_create_empty(&empty);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_rev_rep_create_deep(policy, &elements[0], 1, empty, &elements[1], count - 1, result);
+        ft_rev_rep_release(policy, empty);
+        return status;
+    }
+    }
+}
+
+static ft_status ft_rev_deep_left(
+    const ft_tree_policy* policy,
+    const ft_rev_element* prefix,
+    size_t prefix_count,
+    ft_reversible_deque_rep* middle,
+    const ft_rev_element* suffix,
+    size_t suffix_count,
+    ft_reversible_deque_rep** result)
+{
+    if (prefix_count != 0) {
+        return ft_rev_rep_create_deep(policy, prefix, prefix_count, middle, suffix, suffix_count, result);
+    }
+
+    ft_rev_element node;
+    ft_reversible_deque_rep* rest = NULL;
+    ft_status status = ft_rev_rep_view_left(policy, middle, &node, &rest);
+    if (status == FT_STATUS_EMPTY) {
+        return ft_rev_rep_from_digit(policy, suffix, suffix_count, result);
+    }
+
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (node.kind != FT_REV_ELEMENT_NODE) {
+        ft_rev_element_dispose(policy, &node);
+        ft_rev_rep_release(policy, rest);
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_rev_element children[3];
+    size_t child_count = 0;
+    status = ft_rev_node_logical_children(policy, node.as.node, children, &child_count);
+    if (status == FT_STATUS_OK) {
+        status = ft_rev_rep_create_deep(policy, children, child_count, rest, suffix, suffix_count, result);
+        ft_rev_elements_dispose(policy, children, child_count);
+    }
+
+    ft_rev_element_dispose(policy, &node);
+    ft_rev_rep_release(policy, rest);
+    return status;
+}
+
+static ft_status ft_rev_deep_right(
+    const ft_tree_policy* policy,
+    const ft_rev_element* prefix,
+    size_t prefix_count,
+    ft_reversible_deque_rep* middle,
+    const ft_rev_element* suffix,
+    size_t suffix_count,
+    ft_reversible_deque_rep** result)
+{
+    if (suffix_count != 0) {
+        return ft_rev_rep_create_deep(policy, prefix, prefix_count, middle, suffix, suffix_count, result);
+    }
+
+    ft_reversible_deque_rep* rest = NULL;
+    ft_rev_element node;
+    ft_status status = ft_rev_rep_view_right(policy, middle, &rest, &node);
+    if (status == FT_STATUS_EMPTY) {
+        return ft_rev_rep_from_digit(policy, prefix, prefix_count, result);
+    }
+
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (node.kind != FT_REV_ELEMENT_NODE) {
+        ft_rev_rep_release(policy, rest);
+        ft_rev_element_dispose(policy, &node);
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_rev_element children[3];
+    size_t child_count = 0;
+    status = ft_rev_node_logical_children(policy, node.as.node, children, &child_count);
+    if (status == FT_STATUS_OK) {
+        status = ft_rev_rep_create_deep(policy, prefix, prefix_count, rest, children, child_count, result);
+        ft_rev_elements_dispose(policy, children, child_count);
+    }
+
+    ft_rev_rep_release(policy, rest);
+    ft_rev_element_dispose(policy, &node);
+    return status;
+}
+
+static ft_status ft_rev_element_copy_first(
+    const ft_tree_policy* policy,
+    const ft_rev_element* element,
+    void* destination)
+{
+    if (element->kind == FT_REV_ELEMENT_LEAF) {
+        ft_value_copy(&policy->value, destination, element->as.value);
+        return FT_STATUS_OK;
+    }
+
+    ft_rev_element child;
+    ft_status status = ft_rev_node_logical_child(policy, element->as.node, 0, &child);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_rev_element_copy_first(policy, &child, destination);
+    ft_rev_element_dispose(policy, &child);
+    return status;
+}
+
+static ft_status ft_rev_element_copy_last(
+    const ft_tree_policy* policy,
+    const ft_rev_element* element,
+    void* destination)
+{
+    if (element->kind == FT_REV_ELEMENT_LEAF) {
+        ft_value_copy(&policy->value, destination, element->as.value);
+        return FT_STATUS_OK;
+    }
+
+    ft_rev_element child;
+    ft_status status = ft_rev_node_logical_child(policy, element->as.node, element->as.node->child_count - 1, &child);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_rev_element_copy_last(policy, &child, destination);
+    ft_rev_element_dispose(policy, &child);
+    return status;
+}
+
+static ft_status ft_rev_rep_copy_first(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* rep,
+    void* destination)
+{
+    if (rep->kind == FT_REV_REP_EMPTY) {
+        return FT_STATUS_EMPTY;
+    }
+
+    if (rep->kind == FT_REV_REP_SINGLE) {
+        return ft_rev_element_copy_first(policy, &rep->as.single, destination);
+    }
+
+    return rep->reversed
+        ? ft_rev_element_copy_last(policy, &rep->as.deep.suffix[rep->as.deep.suffix_count - 1], destination)
+        : ft_rev_element_copy_first(policy, &rep->as.deep.prefix[0], destination);
+}
+
+static ft_status ft_rev_rep_copy_last(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* rep,
+    void* destination)
+{
+    if (rep->kind == FT_REV_REP_EMPTY) {
+        return FT_STATUS_EMPTY;
+    }
+
+    if (rep->kind == FT_REV_REP_SINGLE) {
+        return ft_rev_element_copy_last(policy, &rep->as.single, destination);
+    }
+
+    return rep->reversed
+        ? ft_rev_element_copy_first(policy, &rep->as.deep.prefix[0], destination)
+        : ft_rev_element_copy_last(policy, &rep->as.deep.suffix[rep->as.deep.suffix_count - 1], destination);
+}
+
+static ft_status ft_rev_element_get_leaf(
+    const ft_tree_policy* policy,
+    const ft_rev_element* element,
+    size_t index,
+    void* destination)
+{
+    if (index >= element->leaf_count) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    if (element->kind == FT_REV_ELEMENT_LEAF) {
+        ft_value_copy(&policy->value, destination, element->as.value);
+        return FT_STATUS_OK;
+    }
+
+    for (size_t child_index = 0; child_index != element->as.node->child_count; ++child_index) {
+        ft_rev_element child;
+        ft_status status = ft_rev_node_logical_child(policy, element->as.node, child_index, &child);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        if (index < child.leaf_count) {
+            status = ft_rev_element_get_leaf(policy, &child, index, destination);
+            ft_rev_element_dispose(policy, &child);
+            return status;
+        }
+
+        index -= child.leaf_count;
+        ft_rev_element_dispose(policy, &child);
+    }
+
+    return FT_STATUS_OUT_OF_RANGE;
+}
+
+static ft_status ft_rev_get_in_digit(
+    const ft_tree_policy* policy,
+    const ft_rev_element* elements,
+    size_t count,
+    size_t index,
+    void* destination)
+{
+    for (size_t element_index = 0; element_index != count; ++element_index) {
+        if (index < elements[element_index].leaf_count) {
+            return ft_rev_element_get_leaf(policy, &elements[element_index], index, destination);
+        }
+
+        index -= elements[element_index].leaf_count;
+    }
+
+    return FT_STATUS_OUT_OF_RANGE;
+}
+
+static ft_status ft_rev_rep_get_leaf(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* rep,
+    size_t index,
+    void* destination)
+{
+    if (index >= rep->leaf_count) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    if (rep->kind == FT_REV_REP_SINGLE) {
+        return ft_rev_element_get_leaf(policy, &rep->as.single, index, destination);
+    }
+
+    if (rep->kind != FT_REV_REP_DEEP) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    ft_rev_element prefix[3];
+    ft_rev_element suffix[3];
+    size_t prefix_count = 0;
+    size_t suffix_count = 0;
+    ft_reversible_deque_rep* middle = NULL;
+    ft_status status = ft_rev_rep_logical_parts(policy, rep, prefix, &prefix_count, &middle, suffix, &suffix_count);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    size_t prefix_size = 0;
+    (void)ft_rev_count_elements(prefix, prefix_count, &prefix_size);
+    if (index < prefix_size) {
+        status = ft_rev_get_in_digit(policy, prefix, prefix_count, index, destination);
+        goto done;
+    }
+
+    index -= prefix_size;
+    if (index < middle->leaf_count) {
+        status = ft_rev_rep_get_leaf(policy, middle, index, destination);
+        goto done;
+    }
+
+    index -= middle->leaf_count;
+    status = ft_rev_get_in_digit(policy, suffix, suffix_count, index, destination);
+
+done:
+    ft_rev_elements_dispose(policy, prefix, prefix_count);
+    ft_rev_elements_dispose(policy, suffix, suffix_count);
+    ft_rev_rep_release(policy, middle);
+    return status;
+}
+
+static ft_status ft_rev_element_set_leaf(
+    const ft_tree_policy* policy,
+    const ft_rev_element* element,
+    size_t index,
+    const void* value,
+    ft_rev_element* result)
+{
+    if (index >= element->leaf_count) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    if (element->kind == FT_REV_ELEMENT_LEAF) {
+        return ft_rev_element_init_leaf(policy, value, result);
+    }
+
+    ft_rev_element children[3];
+    size_t child_count = 0;
+    ft_status status = ft_rev_node_logical_children(policy, element->as.node, children, &child_count);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    for (size_t child_index = 0; child_index != child_count; ++child_index) {
+        if (index < children[child_index].leaf_count) {
+            ft_rev_element replacement;
+            status = ft_rev_element_set_leaf(policy, &children[child_index], index, value, &replacement);
+            if (status == FT_STATUS_OK) {
+                ft_rev_element_dispose(policy, &children[child_index]);
+                children[child_index] = replacement;
+                status = ft_rev_element_init_node(policy, children, child_count, result);
+            }
+
+            ft_rev_elements_dispose(policy, children, child_count);
+            return status;
+        }
+
+        index -= children[child_index].leaf_count;
+    }
+
+    ft_rev_elements_dispose(policy, children, child_count);
+    return FT_STATUS_OUT_OF_RANGE;
+}
+
+static ft_status ft_rev_replace_in_digit(
+    const ft_tree_policy* policy,
+    ft_rev_element* elements,
+    size_t count,
+    size_t index,
+    const void* value)
+{
+    for (size_t element_index = 0; element_index != count; ++element_index) {
+        if (index < elements[element_index].leaf_count) {
+            ft_rev_element replacement;
+            ft_status status = ft_rev_element_set_leaf(policy, &elements[element_index], index, value, &replacement);
+            if (status != FT_STATUS_OK) {
+                return status;
+            }
+
+            ft_rev_element_dispose(policy, &elements[element_index]);
+            elements[element_index] = replacement;
+            return FT_STATUS_OK;
+        }
+
+        index -= elements[element_index].leaf_count;
+    }
+
+    return FT_STATUS_OUT_OF_RANGE;
+}
+
+static ft_status ft_rev_rep_set_leaf(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* rep,
+    size_t index,
+    const void* value,
+    ft_reversible_deque_rep** result)
+{
+    if (index >= rep->leaf_count) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    if (rep->kind == FT_REV_REP_SINGLE) {
+        ft_rev_element replacement;
+        ft_status status = ft_rev_element_set_leaf(policy, &rep->as.single, index, value, &replacement);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_rev_rep_create_single(policy, &replacement, result);
+        ft_rev_element_dispose(policy, &replacement);
+        return status;
+    }
+
+    ft_rev_element prefix[3];
+    ft_rev_element suffix[3];
+    size_t prefix_count = 0;
+    size_t suffix_count = 0;
+    ft_reversible_deque_rep* middle = NULL;
+    ft_status status = ft_rev_rep_logical_parts(policy, rep, prefix, &prefix_count, &middle, suffix, &suffix_count);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    size_t prefix_size = 0;
+    (void)ft_rev_count_elements(prefix, prefix_count, &prefix_size);
+    if (index < prefix_size) {
+        status = ft_rev_replace_in_digit(policy, prefix, prefix_count, index, value);
+        if (status == FT_STATUS_OK) {
+            status = ft_rev_rep_create_deep(policy, prefix, prefix_count, middle, suffix, suffix_count, result);
+        }
+
+        goto done;
+    }
+
+    index -= prefix_size;
+    if (index < middle->leaf_count) {
+        ft_reversible_deque_rep* next_middle = NULL;
+        status = ft_rev_rep_set_leaf(policy, middle, index, value, &next_middle);
+        if (status == FT_STATUS_OK) {
+            status = ft_rev_rep_create_deep(policy, prefix, prefix_count, next_middle, suffix, suffix_count, result);
+            ft_rev_rep_release(policy, next_middle);
+        }
+
+        goto done;
+    }
+
+    index -= middle->leaf_count;
+    status = ft_rev_replace_in_digit(policy, suffix, suffix_count, index, value);
+    if (status == FT_STATUS_OK) {
+        status = ft_rev_rep_create_deep(policy, prefix, prefix_count, middle, suffix, suffix_count, result);
+    }
+
+done:
+    ft_rev_elements_dispose(policy, prefix, prefix_count);
+    ft_rev_elements_dispose(policy, suffix, suffix_count);
+    ft_rev_rep_release(policy, middle);
+    return status;
+}
+
+static ft_status ft_rev_rep_cons(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* rep,
+    const ft_rev_element* value,
+    ft_reversible_deque_rep** result)
+{
+    if (rep->kind == FT_REV_REP_EMPTY) {
+        return ft_rev_rep_create_single(policy, value, result);
+    }
+
+    if (rep->kind == FT_REV_REP_SINGLE) {
+        ft_reversible_deque_rep* empty = NULL;
+        ft_status status = ft_rev_rep_create_empty(&empty);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_rev_rep_create_deep(policy, value, 1, empty, &rep->as.single, 1, result);
+        ft_rev_rep_release(policy, empty);
+        return status;
+    }
+
+    ft_rev_element prefix[3];
+    ft_rev_element suffix[3];
+    size_t prefix_count = 0;
+    size_t suffix_count = 0;
+    ft_reversible_deque_rep* middle = NULL;
+    ft_status status = ft_rev_rep_logical_parts(policy, rep, prefix, &prefix_count, &middle, suffix, &suffix_count);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (prefix_count < 3) {
+        ft_rev_element next_prefix[3];
+        next_prefix[0] = *value;
+        for (size_t index = 0; index != prefix_count; ++index) {
+            next_prefix[index + 1] = prefix[index];
+        }
+
+        status = ft_rev_rep_create_deep(policy, next_prefix, prefix_count + 1, middle, suffix, suffix_count, result);
+        goto done;
+    }
+
+    ft_rev_element pushed;
+    status = ft_rev_element_init_node(policy, &prefix[1], 2, &pushed);
+    if (status != FT_STATUS_OK) {
+        goto done;
+    }
+
+    ft_reversible_deque_rep* next_middle = NULL;
+    status = ft_rev_rep_cons(policy, middle, &pushed, &next_middle);
+    ft_rev_element_dispose(policy, &pushed);
+    if (status != FT_STATUS_OK) {
+        goto done;
+    }
+
+    ft_rev_element next_prefix[2];
+    next_prefix[0] = *value;
+    next_prefix[1] = prefix[0];
+    status = ft_rev_rep_create_deep(policy, next_prefix, 2, next_middle, suffix, suffix_count, result);
+    ft_rev_rep_release(policy, next_middle);
+
+done:
+    ft_rev_elements_dispose(policy, prefix, prefix_count);
+    ft_rev_elements_dispose(policy, suffix, suffix_count);
+    ft_rev_rep_release(policy, middle);
+    return status;
+}
+
+static ft_status ft_rev_rep_snoc(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* rep,
+    const ft_rev_element* value,
+    ft_reversible_deque_rep** result)
+{
+    if (rep->kind == FT_REV_REP_EMPTY) {
+        return ft_rev_rep_create_single(policy, value, result);
+    }
+
+    if (rep->kind == FT_REV_REP_SINGLE) {
+        ft_reversible_deque_rep* empty = NULL;
+        ft_status status = ft_rev_rep_create_empty(&empty);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_rev_rep_create_deep(policy, &rep->as.single, 1, empty, value, 1, result);
+        ft_rev_rep_release(policy, empty);
+        return status;
+    }
+
+    ft_rev_element prefix[3];
+    ft_rev_element suffix[3];
+    size_t prefix_count = 0;
+    size_t suffix_count = 0;
+    ft_reversible_deque_rep* middle = NULL;
+    ft_status status = ft_rev_rep_logical_parts(policy, rep, prefix, &prefix_count, &middle, suffix, &suffix_count);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (suffix_count < 3) {
+        ft_rev_element next_suffix[3];
+        for (size_t index = 0; index != suffix_count; ++index) {
+            next_suffix[index] = suffix[index];
+        }
+
+        next_suffix[suffix_count] = *value;
+        status = ft_rev_rep_create_deep(policy, prefix, prefix_count, middle, next_suffix, suffix_count + 1, result);
+        goto done;
+    }
+
+    ft_rev_element pushed;
+    status = ft_rev_element_init_node(policy, suffix, 2, &pushed);
+    if (status != FT_STATUS_OK) {
+        goto done;
+    }
+
+    ft_reversible_deque_rep* next_middle = NULL;
+    status = ft_rev_rep_snoc(policy, middle, &pushed, &next_middle);
+    ft_rev_element_dispose(policy, &pushed);
+    if (status != FT_STATUS_OK) {
+        goto done;
+    }
+
+    ft_rev_element next_suffix[2];
+    next_suffix[0] = suffix[2];
+    next_suffix[1] = *value;
+    status = ft_rev_rep_create_deep(policy, prefix, prefix_count, next_middle, next_suffix, 2, result);
+    ft_rev_rep_release(policy, next_middle);
+
+done:
+    ft_rev_elements_dispose(policy, prefix, prefix_count);
+    ft_rev_elements_dispose(policy, suffix, suffix_count);
+    ft_rev_rep_release(policy, middle);
+    return status;
+}
+
+static ft_status ft_rev_rep_view_left(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* rep,
+    ft_rev_element* value,
+    ft_reversible_deque_rep** rest)
+{
+    if (rep->kind == FT_REV_REP_EMPTY) {
+        return FT_STATUS_EMPTY;
+    }
+
+    if (rep->kind == FT_REV_REP_SINGLE) {
+        ft_status status = ft_rev_element_clone(policy, &rep->as.single, value);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_rev_rep_create_empty(rest);
+        if (status != FT_STATUS_OK) {
+            ft_rev_element_dispose(policy, value);
+        }
+
+        return status;
+    }
+
+    ft_rev_element prefix[3];
+    ft_rev_element suffix[3];
+    size_t prefix_count = 0;
+    size_t suffix_count = 0;
+    ft_reversible_deque_rep* middle = NULL;
+    ft_status status = ft_rev_rep_logical_parts(policy, rep, prefix, &prefix_count, &middle, suffix, &suffix_count);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_rev_element_clone(policy, &prefix[0], value);
+    if (status == FT_STATUS_OK) {
+        if (prefix_count > 1) {
+            status = ft_rev_rep_create_deep(policy, &prefix[1], prefix_count - 1, middle, suffix, suffix_count, rest);
+        } else {
+            status = ft_rev_deep_left(policy, NULL, 0, middle, suffix, suffix_count, rest);
+        }
+
+        if (status != FT_STATUS_OK) {
+            ft_rev_element_dispose(policy, value);
+        }
+    }
+
+    ft_rev_elements_dispose(policy, prefix, prefix_count);
+    ft_rev_elements_dispose(policy, suffix, suffix_count);
+    ft_rev_rep_release(policy, middle);
+    return status;
+}
+
+static ft_status ft_rev_rep_view_right(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* rep,
+    ft_reversible_deque_rep** rest,
+    ft_rev_element* value)
+{
+    if (rep->kind == FT_REV_REP_EMPTY) {
+        return FT_STATUS_EMPTY;
+    }
+
+    if (rep->kind == FT_REV_REP_SINGLE) {
+        ft_status status = ft_rev_element_clone(policy, &rep->as.single, value);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_rev_rep_create_empty(rest);
+        if (status != FT_STATUS_OK) {
+            ft_rev_element_dispose(policy, value);
+        }
+
+        return status;
+    }
+
+    ft_rev_element prefix[3];
+    ft_rev_element suffix[3];
+    size_t prefix_count = 0;
+    size_t suffix_count = 0;
+    ft_reversible_deque_rep* middle = NULL;
+    ft_status status = ft_rev_rep_logical_parts(policy, rep, prefix, &prefix_count, &middle, suffix, &suffix_count);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_rev_element_clone(policy, &suffix[suffix_count - 1], value);
+    if (status == FT_STATUS_OK) {
+        if (suffix_count > 1) {
+            status = ft_rev_rep_create_deep(policy, prefix, prefix_count, middle, suffix, suffix_count - 1, rest);
+        } else {
+            status = ft_rev_deep_right(policy, prefix, prefix_count, middle, NULL, 0, rest);
+        }
+
+        if (status != FT_STATUS_OK) {
+            ft_rev_element_dispose(policy, value);
+        }
+    }
+
+    ft_rev_elements_dispose(policy, prefix, prefix_count);
+    ft_rev_elements_dispose(policy, suffix, suffix_count);
+    ft_rev_rep_release(policy, middle);
+    return status;
+}
+
+static ft_status ft_rev_rep_append_all(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* left,
+    const ft_rev_element* elements,
+    size_t count,
+    ft_reversible_deque_rep** result)
+{
+    ft_rev_rep_retain((ft_reversible_deque_rep*)left);
+    ft_reversible_deque_rep* current = (ft_reversible_deque_rep*)left;
+    for (size_t index = 0; index != count; ++index) {
+        ft_reversible_deque_rep* next = NULL;
+        ft_status status = ft_rev_rep_snoc(policy, current, &elements[index], &next);
+        ft_rev_rep_release(policy, current);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        current = next;
+    }
+
+    *result = current;
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_rev_rep_prepend_all(
+    const ft_tree_policy* policy,
+    const ft_rev_element* elements,
+    size_t count,
+    const ft_reversible_deque_rep* right,
+    ft_reversible_deque_rep** result)
+{
+    ft_rev_rep_retain((ft_reversible_deque_rep*)right);
+    ft_reversible_deque_rep* current = (ft_reversible_deque_rep*)right;
+    for (size_t offset = count; offset != 0; --offset) {
+        ft_reversible_deque_rep* next = NULL;
+        ft_status status = ft_rev_rep_cons(policy, current, &elements[offset - 1], &next);
+        ft_rev_rep_release(policy, current);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        current = next;
+    }
+
+    *result = current;
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_rev_nodes(
+    const ft_tree_policy* policy,
+    const ft_rev_element* elements,
+    size_t count,
+    ft_rev_element* nodes,
+    size_t* node_count)
+{
+    if (count < 2) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    *node_count = 0;
+    size_t index = 0;
+    ft_status status = FT_STATUS_OK;
+    while (count - index > 4) {
+        status = ft_rev_element_init_node(policy, &elements[index], 3, &nodes[*node_count]);
+        if (status != FT_STATUS_OK) {
+            goto fail;
+        }
+
+        ++*node_count;
+        index += 3;
+    }
+
+    switch (count - index) {
+    case 2:
+        status = ft_rev_element_init_node(policy, &elements[index], 2, &nodes[*node_count]);
+        break;
+    case 3:
+        status = ft_rev_element_init_node(policy, &elements[index], 3, &nodes[*node_count]);
+        break;
+    case 4:
+        status = ft_rev_element_init_node(policy, &elements[index], 2, &nodes[*node_count]);
+        if (status != FT_STATUS_OK) {
+            goto fail;
+        }
+
+        ++*node_count;
+        status = ft_rev_element_init_node(policy, &elements[index + 2], 2, &nodes[*node_count]);
+        break;
+    default:
+        status = FT_STATUS_INVALID_ARGUMENT;
+        goto fail;
+    }
+
+    if (status != FT_STATUS_OK) {
+        goto fail;
+    }
+
+    ++*node_count;
+    return FT_STATUS_OK;
+
+fail:
+    ft_rev_elements_dispose(policy, nodes, *node_count);
+    *node_count = 0;
+    return status;
+}
+
+static ft_status ft_rev_rep_concat_with_middle(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* left,
+    const ft_rev_element* middle,
+    size_t middle_count,
+    const ft_reversible_deque_rep* right,
+    ft_reversible_deque_rep** result)
+{
+    if (left->kind == FT_REV_REP_EMPTY) {
+        return ft_rev_rep_prepend_all(policy, middle, middle_count, right, result);
+    }
+
+    if (right->kind == FT_REV_REP_EMPTY) {
+        return ft_rev_rep_append_all(policy, left, middle, middle_count, result);
+    }
+
+    if (left->kind == FT_REV_REP_SINGLE) {
+        ft_reversible_deque_rep* prefixed = NULL;
+        ft_status status = ft_rev_rep_prepend_all(policy, middle, middle_count, right, &prefixed);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_rev_rep_cons(policy, prefixed, &left->as.single, result);
+        ft_rev_rep_release(policy, prefixed);
+        return status;
+    }
+
+    if (right->kind == FT_REV_REP_SINGLE) {
+        ft_reversible_deque_rep* appended = NULL;
+        ft_status status = ft_rev_rep_append_all(policy, left, middle, middle_count, &appended);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_rev_rep_snoc(policy, appended, &right->as.single, result);
+        ft_rev_rep_release(policy, appended);
+        return status;
+    }
+
+    ft_rev_element left_prefix[3];
+    ft_rev_element left_suffix[3];
+    ft_rev_element right_prefix[3];
+    ft_rev_element right_suffix[3];
+    size_t left_prefix_count = 0;
+    size_t left_suffix_count = 0;
+    size_t right_prefix_count = 0;
+    size_t right_suffix_count = 0;
+    ft_reversible_deque_rep* left_middle = NULL;
+    ft_reversible_deque_rep* right_middle = NULL;
+
+    ft_status status = ft_rev_rep_logical_parts(
+        policy,
+        left,
+        left_prefix,
+        &left_prefix_count,
+        &left_middle,
+        left_suffix,
+        &left_suffix_count);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_rev_rep_logical_parts(
+        policy,
+        right,
+        right_prefix,
+        &right_prefix_count,
+        &right_middle,
+        right_suffix,
+        &right_suffix_count);
+    if (status != FT_STATUS_OK) {
+        ft_rev_elements_dispose(policy, left_prefix, left_prefix_count);
+        ft_rev_elements_dispose(policy, left_suffix, left_suffix_count);
+        ft_rev_rep_release(policy, left_middle);
+        return status;
+    }
+
+    ft_rev_element combined[16];
+    size_t combined_count = 0;
+    for (size_t index = 0; index != left_suffix_count; ++index) {
+        combined[combined_count++] = left_suffix[index];
+    }
+
+    for (size_t index = 0; index != middle_count; ++index) {
+        combined[combined_count++] = middle[index];
+    }
+
+    for (size_t index = 0; index != right_prefix_count; ++index) {
+        combined[combined_count++] = right_prefix[index];
+    }
+
+    ft_rev_element bridge[8];
+    size_t bridge_count = 0;
+    status = ft_rev_nodes(policy, combined, combined_count, bridge, &bridge_count);
+    if (status == FT_STATUS_OK) {
+        ft_reversible_deque_rep* middle_result = NULL;
+        status = ft_rev_rep_concat_with_middle(
+            policy,
+            left_middle,
+            bridge,
+            bridge_count,
+            right_middle,
+            &middle_result);
+        if (status == FT_STATUS_OK) {
+            status = ft_rev_rep_create_deep(
+                policy,
+                left_prefix,
+                left_prefix_count,
+                middle_result,
+                right_suffix,
+                right_suffix_count,
+                result);
+            ft_rev_rep_release(policy, middle_result);
+        }
+
+        ft_rev_elements_dispose(policy, bridge, bridge_count);
+    }
+
+    ft_rev_elements_dispose(policy, left_prefix, left_prefix_count);
+    ft_rev_elements_dispose(policy, left_suffix, left_suffix_count);
+    ft_rev_elements_dispose(policy, right_prefix, right_prefix_count);
+    ft_rev_elements_dispose(policy, right_suffix, right_suffix_count);
+    ft_rev_rep_release(policy, left_middle);
+    ft_rev_rep_release(policy, right_middle);
+    return status;
+}
+
+static ft_status ft_rev_split_digit(
+    const ft_tree_policy* policy,
+    const ft_rev_element* elements,
+    size_t count,
+    size_t index,
+    ft_rev_element* before,
+    size_t* before_count,
+    ft_rev_element* hit,
+    size_t* index_in_hit,
+    ft_rev_element* after,
+    size_t* after_count)
+{
+    *before_count = 0;
+    *after_count = 0;
+    for (size_t element_index = 0; element_index != count; ++element_index) {
+        if (index < elements[element_index].leaf_count) {
+            ft_status status = ft_rev_element_clone(policy, &elements[element_index], hit);
+            if (status != FT_STATUS_OK) {
+                ft_rev_elements_dispose(policy, before, *before_count);
+                *before_count = 0;
+                return status;
+            }
+
+            *index_in_hit = index;
+            for (size_t rest = element_index + 1; rest != count; ++rest) {
+                status = ft_rev_element_clone(policy, &elements[rest], &after[*after_count]);
+                if (status != FT_STATUS_OK) {
+                    ft_rev_element_dispose(policy, hit);
+                    ft_rev_elements_dispose(policy, before, *before_count);
+                    ft_rev_elements_dispose(policy, after, *after_count);
+                    *before_count = 0;
+                    *after_count = 0;
+                    return status;
+                }
+
+                ++*after_count;
+            }
+
+            return FT_STATUS_OK;
+        }
+
+        ft_status status = ft_rev_element_clone(policy, &elements[element_index], &before[*before_count]);
+        if (status != FT_STATUS_OK) {
+            ft_rev_elements_dispose(policy, before, *before_count);
+            *before_count = 0;
+            return status;
+        }
+
+        ++*before_count;
+        index -= elements[element_index].leaf_count;
+    }
+
+    ft_rev_elements_dispose(policy, before, *before_count);
+    *before_count = 0;
+    return FT_STATUS_OUT_OF_RANGE;
+}
+
+static void ft_rev_split_result_dispose(const ft_tree_policy* policy, ft_rev_split_result* split)
+{
+    ft_rev_rep_release(policy, split->left);
+    ft_rev_element_dispose(policy, &split->hit);
+    ft_rev_rep_release(policy, split->right);
+    (void)memset(split, 0, sizeof(*split));
+}
+
+static ft_status ft_rev_rep_split_tree(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* rep,
+    size_t index,
+    ft_rev_split_result* result)
+{
+    (void)memset(result, 0, sizeof(*result));
+    if (index >= rep->leaf_count) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    if (rep->kind == FT_REV_REP_SINGLE) {
+        ft_status status = ft_rev_rep_create_empty(&result->left);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_rev_element_clone(policy, &rep->as.single, &result->hit);
+        if (status != FT_STATUS_OK) {
+            ft_rev_rep_release(policy, result->left);
+            return status;
+        }
+
+        status = ft_rev_rep_create_empty(&result->right);
+        if (status != FT_STATUS_OK) {
+            ft_rev_rep_release(policy, result->left);
+            ft_rev_element_dispose(policy, &result->hit);
+            return status;
+        }
+
+        result->index_in_hit = index;
+        return FT_STATUS_OK;
+    }
+
+    ft_rev_element prefix[3];
+    ft_rev_element suffix[3];
+    size_t prefix_count = 0;
+    size_t suffix_count = 0;
+    ft_reversible_deque_rep* middle = NULL;
+    ft_status status = ft_rev_rep_logical_parts(policy, rep, prefix, &prefix_count, &middle, suffix, &suffix_count);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    size_t prefix_size = 0;
+    (void)ft_rev_count_elements(prefix, prefix_count, &prefix_size);
+    if (index < prefix_size) {
+        ft_rev_element before[3];
+        ft_rev_element after[3];
+        size_t before_count = 0;
+        size_t after_count = 0;
+        status = ft_rev_split_digit(
+            policy,
+            prefix,
+            prefix_count,
+            index,
+            before,
+            &before_count,
+            &result->hit,
+            &result->index_in_hit,
+            after,
+            &after_count);
+        if (status == FT_STATUS_OK) {
+            status = ft_rev_rep_from_digit(policy, before, before_count, &result->left);
+        }
+
+        if (status == FT_STATUS_OK) {
+            status = ft_rev_deep_left(policy, after, after_count, middle, suffix, suffix_count, &result->right);
+        }
+
+        ft_rev_elements_dispose(policy, before, before_count);
+        ft_rev_elements_dispose(policy, after, after_count);
+        goto done;
+    }
+
+    index -= prefix_size;
+    if (index < middle->leaf_count) {
+        ft_rev_split_result middle_split;
+        status = ft_rev_rep_split_tree(policy, middle, index, &middle_split);
+        if (status == FT_STATUS_OK) {
+            if (middle_split.hit.kind != FT_REV_ELEMENT_NODE) {
+                ft_rev_split_result_dispose(policy, &middle_split);
+                status = FT_STATUS_INVALID_ARGUMENT;
+                goto done;
+            }
+
+            ft_rev_element children[3];
+            size_t child_count = 0;
+            status = ft_rev_node_logical_children(policy, middle_split.hit.as.node, children, &child_count);
+            if (status == FT_STATUS_OK) {
+                ft_rev_element before[3];
+                ft_rev_element after[3];
+                size_t before_count = 0;
+                size_t after_count = 0;
+                status = ft_rev_split_digit(
+                    policy,
+                    children,
+                    child_count,
+                    middle_split.index_in_hit,
+                    before,
+                    &before_count,
+                    &result->hit,
+                    &result->index_in_hit,
+                    after,
+                    &after_count);
+                if (status == FT_STATUS_OK) {
+                    status = ft_rev_deep_right(
+                        policy,
+                        prefix,
+                        prefix_count,
+                        middle_split.left,
+                        before,
+                        before_count,
+                        &result->left);
+                }
+
+                if (status == FT_STATUS_OK) {
+                    status = ft_rev_deep_left(
+                        policy,
+                        after,
+                        after_count,
+                        middle_split.right,
+                        suffix,
+                        suffix_count,
+                        &result->right);
+                }
+
+                ft_rev_elements_dispose(policy, before, before_count);
+                ft_rev_elements_dispose(policy, after, after_count);
+                ft_rev_elements_dispose(policy, children, child_count);
+            }
+
+            ft_rev_split_result_dispose(policy, &middle_split);
+        }
+
+        goto done;
+    }
+
+    index -= middle->leaf_count;
+    ft_rev_element before[3];
+    ft_rev_element after[3];
+    size_t before_count = 0;
+    size_t after_count = 0;
+    status = ft_rev_split_digit(
+        policy,
+        suffix,
+        suffix_count,
+        index,
+        before,
+        &before_count,
+        &result->hit,
+        &result->index_in_hit,
+        after,
+        &after_count);
+    if (status == FT_STATUS_OK) {
+        status = ft_rev_deep_right(policy, prefix, prefix_count, middle, before, before_count, &result->left);
+    }
+
+    if (status == FT_STATUS_OK) {
+        status = ft_rev_rep_from_digit(policy, after, after_count, &result->right);
+    }
+
+    ft_rev_elements_dispose(policy, before, before_count);
+    ft_rev_elements_dispose(policy, after, after_count);
+
+done:
+    ft_rev_elements_dispose(policy, prefix, prefix_count);
+    ft_rev_elements_dispose(policy, suffix, suffix_count);
+    ft_rev_rep_release(policy, middle);
+    if (status != FT_STATUS_OK) {
+        ft_rev_split_result_dispose(policy, result);
+    }
+
+    return status;
+}
+
+static ft_status ft_rev_rep_split_at(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* rep,
+    size_t index,
+    ft_reversible_deque_rep** left,
+    ft_reversible_deque_rep** right)
+{
+    if (index > rep->leaf_count) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    if (index == 0) {
+        ft_status status = ft_rev_rep_create_empty(left);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        ft_rev_rep_retain((ft_reversible_deque_rep*)rep);
+        *right = (ft_reversible_deque_rep*)rep;
+        return FT_STATUS_OK;
+    }
+
+    if (index == rep->leaf_count) {
+        ft_status status = ft_rev_rep_create_empty(right);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        ft_rev_rep_retain((ft_reversible_deque_rep*)rep);
+        *left = (ft_reversible_deque_rep*)rep;
+        return FT_STATUS_OK;
+    }
+
+    ft_rev_split_result split;
+    ft_status status = ft_rev_rep_split_tree(policy, rep, index, &split);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    ft_reversible_deque_rep* right_with_hit = NULL;
+    status = ft_rev_rep_cons(policy, split.right, &split.hit, &right_with_hit);
+    if (status == FT_STATUS_OK) {
+        *left = split.left;
+        *right = right_with_hit;
+        split.left = NULL;
+    }
+
+    ft_rev_split_result_dispose(policy, &split);
+    return status;
+}
+
+static ft_status ft_rev_element_visit(const ft_tree_policy* policy, const ft_rev_element* element, ft_visit_fn visitor, void* context)
+{
+    if (element->kind == FT_REV_ELEMENT_LEAF) {
+        visitor(element->as.value, context);
+        return FT_STATUS_OK;
+    }
+
+    for (size_t index = 0; index != element->as.node->child_count; ++index) {
+        ft_rev_element child;
+        ft_status status = ft_rev_node_logical_child(policy, element->as.node, index, &child);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_rev_element_visit(policy, &child, visitor, context);
+        ft_rev_element_dispose(policy, &child);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+    }
+
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_rev_rep_visit(
+    const ft_tree_policy* policy,
+    const ft_reversible_deque_rep* rep,
+    ft_visit_fn visitor,
+    void* context)
+{
+    if (rep->kind == FT_REV_REP_EMPTY) {
+        return FT_STATUS_OK;
+    }
+
+    if (rep->kind == FT_REV_REP_SINGLE) {
+        return ft_rev_element_visit(policy, &rep->as.single, visitor, context);
+    }
+
+    ft_rev_element prefix[3];
+    ft_rev_element suffix[3];
+    size_t prefix_count = 0;
+    size_t suffix_count = 0;
+    ft_reversible_deque_rep* middle = NULL;
+    ft_status status = ft_rev_rep_logical_parts(policy, rep, prefix, &prefix_count, &middle, suffix, &suffix_count);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    for (size_t index = 0; status == FT_STATUS_OK && index != prefix_count; ++index) {
+        status = ft_rev_element_visit(policy, &prefix[index], visitor, context);
+    }
+
+    if (status == FT_STATUS_OK) {
+        status = ft_rev_rep_visit(policy, middle, visitor, context);
+    }
+
+    for (size_t index = 0; status == FT_STATUS_OK && index != suffix_count; ++index) {
+        status = ft_rev_element_visit(policy, &suffix[index], visitor, context);
+    }
+
+    ft_rev_elements_dispose(policy, prefix, prefix_count);
+    ft_rev_elements_dispose(policy, suffix, suffix_count);
+    ft_rev_rep_release(policy, middle);
+    return status;
+}
+
+ft_status ft_reversible_deque_init(ft_reversible_deque* deque, const ft_tree_policy* policy)
+{
+    if (deque == NULL || policy == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_reversible_deque_rep* rep = NULL;
+    ft_status status = ft_rev_rep_create_empty(&rep);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    deque->policy = policy;
+    deque->rep = rep;
     return FT_STATUS_OK;
 }
 
 ft_status ft_reversible_deque_copy(const ft_reversible_deque* source, ft_reversible_deque* destination)
 {
-    if (source == NULL || destination == NULL) {
+    if (!ft_reversible_deque_is_valid(source) || destination == NULL) {
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    ft_status status = ft_tree_copy(&source->tree, &destination->tree);
-    if (status != FT_STATUS_OK) {
-        return status;
-    }
-
-    destination->reversed = source->reversed;
+    destination->policy = source->policy;
+    destination->rep = source->rep;
+    ft_rev_rep_retain(destination->rep);
     return FT_STATUS_OK;
 }
 
@@ -2311,135 +4139,321 @@ void ft_reversible_deque_dispose(ft_reversible_deque* deque)
         return;
     }
 
-    ft_tree_dispose(&deque->tree);
-    deque->reversed = false;
+    if (deque->policy != NULL && deque->rep != NULL) {
+        ft_rev_rep_release(deque->policy, deque->rep);
+    }
+
+    deque->policy = NULL;
+    deque->rep = NULL;
 }
 
 bool ft_reversible_deque_empty(const ft_reversible_deque* deque)
 {
-    return deque == NULL || ft_tree_empty(&deque->tree);
+    return !ft_reversible_deque_is_valid(deque) || deque->rep->leaf_count == 0;
 }
 
 size_t ft_reversible_deque_size(const ft_reversible_deque* deque)
 {
-    return deque == NULL ? 0 : ft_tree_size(&deque->tree);
+    return ft_reversible_deque_is_valid(deque) ? deque->rep->leaf_count : 0;
 }
 
 ft_status ft_reversible_deque_reverse(const ft_reversible_deque* deque, ft_reversible_deque* result)
 {
-    if (deque == NULL || result == NULL) {
+    if (!ft_reversible_deque_is_valid(deque) || result == NULL) {
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    ft_status status = ft_tree_copy(&deque->tree, &result->tree);
+    ft_reversible_deque_rep* rep = NULL;
+    ft_status status = ft_rev_rep_mirror(deque->policy, deque->rep, &rep);
     if (status != FT_STATUS_OK) {
         return status;
     }
 
-    result->reversed = !deque->reversed;
+    result->policy = deque->policy;
+    result->rep = rep;
     return FT_STATUS_OK;
 }
 
 ft_status ft_reversible_deque_at(const ft_reversible_deque* deque, size_t index, void* destination)
 {
-    if (deque == NULL) {
+    if (!ft_reversible_deque_is_valid(deque) || destination == NULL) {
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    const size_t size = ft_tree_size(&deque->tree);
+    const size_t size = deque->rep->leaf_count;
     if (index >= size) {
         return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
     }
 
-    const size_t physical = deque->reversed ? size - 1 - index : index;
-    return ft_tree_at(&deque->tree, physical, destination);
+    return ft_rev_rep_get_leaf(deque->policy, deque->rep, index, destination);
 }
 
 ft_status ft_reversible_deque_front(const ft_reversible_deque* deque, void* destination)
 {
-    return ft_reversible_deque_at(deque, 0, destination);
+    if (!ft_reversible_deque_is_valid(deque) || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    return ft_rev_rep_copy_first(deque->policy, deque->rep, destination);
 }
 
 ft_status ft_reversible_deque_back(const ft_reversible_deque* deque, void* destination)
 {
-    if (deque == NULL) {
+    if (!ft_reversible_deque_is_valid(deque) || destination == NULL) {
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    const size_t size = ft_tree_size(&deque->tree);
-    if (size == 0) {
-        return FT_STATUS_EMPTY;
-    }
-
-    return ft_reversible_deque_at(deque, size - 1, destination);
+    return ft_rev_rep_copy_last(deque->policy, deque->rep, destination);
 }
 
 ft_status ft_reversible_deque_push_front(const ft_reversible_deque* deque, const void* value, ft_reversible_deque* result)
 {
-    if (deque == NULL || result == NULL) {
+    if (!ft_reversible_deque_is_valid(deque) || value == NULL || result == NULL) {
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    ft_status status = deque->reversed
-        ? ft_tree_push_back(&deque->tree, value, &result->tree)
-        : ft_tree_push_front(&deque->tree, value, &result->tree);
+    ft_rev_element element;
+    ft_status status = ft_rev_element_init_leaf(deque->policy, value, &element);
     if (status != FT_STATUS_OK) {
         return status;
     }
 
-    result->reversed = deque->reversed;
+    ft_reversible_deque_rep* rep = NULL;
+    status = ft_rev_rep_cons(deque->policy, deque->rep, &element, &rep);
+    ft_rev_element_dispose(deque->policy, &element);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    result->policy = deque->policy;
+    result->rep = rep;
     return FT_STATUS_OK;
 }
 
 ft_status ft_reversible_deque_push_back(const ft_reversible_deque* deque, const void* value, ft_reversible_deque* result)
 {
-    if (deque == NULL || result == NULL) {
+    if (!ft_reversible_deque_is_valid(deque) || value == NULL || result == NULL) {
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    ft_status status = deque->reversed
-        ? ft_tree_push_front(&deque->tree, value, &result->tree)
-        : ft_tree_push_back(&deque->tree, value, &result->tree);
+    ft_rev_element element;
+    ft_status status = ft_rev_element_init_leaf(deque->policy, value, &element);
     if (status != FT_STATUS_OK) {
         return status;
     }
 
-    result->reversed = deque->reversed;
+    ft_reversible_deque_rep* rep = NULL;
+    status = ft_rev_rep_snoc(deque->policy, deque->rep, &element, &rep);
+    ft_rev_element_dispose(deque->policy, &element);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    result->policy = deque->policy;
+    result->rep = rep;
     return FT_STATUS_OK;
 }
 
 ft_status ft_reversible_deque_pop_front(const ft_reversible_deque* deque, void* value, ft_reversible_deque* rest)
 {
-    if (deque == NULL || rest == NULL) {
+    if (!ft_reversible_deque_is_valid(deque) || rest == NULL) {
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    ft_status status = deque->reversed
-        ? ft_tree_pop_back(&deque->tree, value, &rest->tree)
-        : ft_tree_pop_front(&deque->tree, value, &rest->tree);
+    ft_rev_element element;
+    ft_reversible_deque_rep* rep = NULL;
+    ft_status status = ft_rev_rep_view_left(deque->policy, deque->rep, &element, &rep);
     if (status != FT_STATUS_OK) {
         return status;
     }
 
-    rest->reversed = deque->reversed;
+    if (value != NULL) {
+        status = ft_rev_element_copy_first(deque->policy, &element, value);
+    }
+
+    ft_rev_element_dispose(deque->policy, &element);
+    if (status != FT_STATUS_OK) {
+        ft_rev_rep_release(deque->policy, rep);
+        return status;
+    }
+
+    rest->policy = deque->policy;
+    rest->rep = rep;
     return FT_STATUS_OK;
 }
 
 ft_status ft_reversible_deque_pop_back(const ft_reversible_deque* deque, void* value, ft_reversible_deque* rest)
 {
-    if (deque == NULL || rest == NULL) {
+    if (!ft_reversible_deque_is_valid(deque) || rest == NULL) {
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    ft_status status = deque->reversed
-        ? ft_tree_pop_front(&deque->tree, value, &rest->tree)
-        : ft_tree_pop_back(&deque->tree, value, &rest->tree);
+    ft_reversible_deque_rep* rep = NULL;
+    ft_rev_element element;
+    ft_status status = ft_rev_rep_view_right(deque->policy, deque->rep, &rep, &element);
     if (status != FT_STATUS_OK) {
         return status;
     }
 
-    rest->reversed = deque->reversed;
+    if (value != NULL) {
+        status = ft_rev_element_copy_last(deque->policy, &element, value);
+    }
+
+    ft_rev_element_dispose(deque->policy, &element);
+    if (status != FT_STATUS_OK) {
+        ft_rev_rep_release(deque->policy, rep);
+        return status;
+    }
+
+    rest->policy = deque->policy;
+    rest->rep = rep;
     return FT_STATUS_OK;
+}
+
+ft_status ft_reversible_deque_concat(
+    const ft_reversible_deque* left,
+    const ft_reversible_deque* right,
+    ft_reversible_deque* result)
+{
+    if (!ft_reversible_deque_is_valid(left) ||
+        !ft_reversible_deque_is_valid(right) ||
+        result == NULL ||
+        left->policy != right->policy) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    size_t combined = 0;
+    if (ft_add_overflows(left->rep->leaf_count, right->rep->leaf_count, &combined)) {
+        return FT_STATUS_OVERFLOW;
+    }
+
+    (void)combined;
+    ft_reversible_deque_rep* rep = NULL;
+    ft_status status = ft_rev_rep_concat_with_middle(left->policy, left->rep, NULL, 0, right->rep, &rep);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    result->policy = left->policy;
+    result->rep = rep;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_reversible_deque_split_at(
+    const ft_reversible_deque* deque,
+    size_t index,
+    ft_reversible_deque_split_result* result)
+{
+    if (!ft_reversible_deque_is_valid(deque) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_reversible_deque_rep* left = NULL;
+    ft_reversible_deque_rep* right = NULL;
+    ft_status status = ft_rev_rep_split_at(deque->policy, deque->rep, index, &left, &right);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    result->left.policy = deque->policy;
+    result->left.rep = left;
+    result->right.policy = deque->policy;
+    result->right.rep = right;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_reversible_deque_set_at(
+    const ft_reversible_deque* deque,
+    size_t index,
+    const void* value,
+    ft_reversible_deque* result)
+{
+    if (!ft_reversible_deque_is_valid(deque) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (index >= deque->rep->leaf_count) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    ft_reversible_deque_rep* rep = NULL;
+    ft_status status = ft_rev_rep_set_leaf(deque->policy, deque->rep, index, value, &rep);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    result->policy = deque->policy;
+    result->rep = rep;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_reversible_deque_insert_at(
+    const ft_reversible_deque* deque,
+    size_t index,
+    const void* value,
+    ft_reversible_deque* result)
+{
+    if (!ft_reversible_deque_is_valid(deque) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (index > deque->rep->leaf_count) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    ft_reversible_deque_split_result split;
+    ft_status status = ft_reversible_deque_split_at(deque, index, &split);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    ft_reversible_deque with_item;
+    status = ft_reversible_deque_push_back(&split.left, value, &with_item);
+    if (status == FT_STATUS_OK) {
+        status = ft_reversible_deque_concat(&with_item, &split.right, result);
+        ft_reversible_deque_dispose(&with_item);
+    }
+
+    ft_reversible_deque_dispose(&split.left);
+    ft_reversible_deque_dispose(&split.right);
+    return status;
+}
+
+ft_status ft_reversible_deque_remove_at(const ft_reversible_deque* deque, size_t index, ft_reversible_deque* result)
+{
+    if (!ft_reversible_deque_is_valid(deque) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (index >= deque->rep->leaf_count) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    ft_reversible_deque_split_result split;
+    ft_status status = ft_reversible_deque_split_at(deque, index, &split);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    ft_reversible_deque tail;
+    status = ft_reversible_deque_pop_front(&split.right, NULL, &tail);
+    if (status == FT_STATUS_OK) {
+        status = ft_reversible_deque_concat(&split.left, &tail, result);
+        ft_reversible_deque_dispose(&tail);
+    }
+
+    ft_reversible_deque_dispose(&split.left);
+    ft_reversible_deque_dispose(&split.right);
+    return status;
+}
+
+ft_status ft_reversible_deque_visit(const ft_reversible_deque* deque, ft_visit_fn visitor, void* context)
+{
+    if (!ft_reversible_deque_is_valid(deque) || visitor == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    return ft_rev_rep_visit(deque->policy, deque->rep, visitor, context);
 }
 
 static int ft_compare_values(const ft_sorted_multiset* set, const void* left, const void* right)

@@ -34,9 +34,9 @@ Implemented in this checkpoint:
   endpoint operations, indexing, traversal, lazy middle publication, lazy deep-measure publication, and atomic
   shared-snapshot reference counts;
 - size-measured persistent deque alias;
-- reversible deque facade with a logical orientation bit and persistent endpoint operations. The C facade does not
-  currently expose reversible-deque concat or split; those operations remain on `ft_tree`/`ft_persistent_deque`
-  where there is no logical orientation flag to preserve;
+- reversible deque with an orientation-aware immutable tree, O(1) reverse, persistent endpoint/index/edit
+  operations, concat, split, and traversal. Deep reps and grouping nodes carry reversal bits so mixed-orientation
+  concat/split paths keep tree shape instead of reifying the sequence;
 - persistent sorted set, sorted multiset, and sorted map wrappers using a runtime comparator;
 - generic persistent minimum-priority queue with caller-supplied value and priority copy policies;
 - generic closed-interval tree facade, plus a signed 64-bit convenience facade, with insertion, removal,

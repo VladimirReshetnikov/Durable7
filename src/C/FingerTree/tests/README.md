@@ -19,7 +19,8 @@ line information, and exits non-zero if any test increments the failure count. A
 
 - `concurrent snapshot refcounts` copies, reads, updates, and disposes shared immutable snapshots from multiple
   threads.
-- `reversible deque` checks logical reversal, endpoint edits, persistence, and traversal.
+- `reversible deque` checks logical reversal, endpoint edits, mixed-orientation concat, split/rejoin,
+  set/insert/remove, persistence, and traversal.
 - `tree endpoint/index/split/concat` covers the generic tree/deque surface.
 - `lazy middle force paths` exercises memoized middle publication through reads, pops, split, concat, traversal,
   and disposal.

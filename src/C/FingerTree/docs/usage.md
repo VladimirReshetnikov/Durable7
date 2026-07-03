@@ -134,8 +134,8 @@ found and the accumulated measure before that boundary.
 
 ## Reversible Deque
 
-Use `ft_reversible_deque` when O(1) logical reversal is part of the endpoint/index workflow. Reversal copies the
-shared `ft_tree` handle and toggles a logical orientation bit:
+Use `ft_reversible_deque` when O(1) logical reversal is part of the endpoint/index/concat workflow. Reversal
+mirrors the shared reversible tree root by flipping orientation bits:
 
 ```c
 ft_reversible_deque reversed;
@@ -143,8 +143,20 @@ ft_status status = ft_reversible_deque_reverse(&deque, &reversed);
 ```
 
 Dispose both handles if you keep both. Endpoint and index operations respect the logical orientation without
-reifying the sequence. This C facade intentionally does not expose `concat` or `split_at`; use
-`ft_persistent_deque`/`ft_tree` when catenation or split is the primary operation.
+reifying the sequence. Concatenation and split also operate through the logical orientation, including when either
+operand was previously reversed:
+
+```c
+ft_reversible_deque joined;
+status = ft_reversible_deque_concat(&reversed_left, &right, &joined);
+
+ft_reversible_deque_split_result split;
+status = ft_reversible_deque_split_at(&joined, 4, &split);
+
+ft_reversible_deque_dispose(&split.left);
+ft_reversible_deque_dispose(&split.right);
+ft_reversible_deque_dispose(&joined);
+```
 
 ## Sorted Set, Multiset, And Map
 

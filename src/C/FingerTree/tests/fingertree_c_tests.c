@@ -141,6 +141,64 @@ static void collect_int(const void* value, void* context)
     ++buffer->count;
 }
 
+static ft_status reversible_deque_from_range(
+    const ft_tree_policy* policy,
+    int start,
+    int count,
+    ft_reversible_deque* result)
+{
+    ft_status status = ft_reversible_deque_init(result, policy);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    for (int offset = 0; offset != count; ++offset) {
+        const int value = start + offset;
+        ft_reversible_deque next;
+        status = ft_reversible_deque_push_back(result, &value, &next);
+        if (status != FT_STATUS_OK) {
+            ft_reversible_deque_dispose(result);
+            return status;
+        }
+
+        ft_reversible_deque_dispose(result);
+        *result = next;
+    }
+
+    return FT_STATUS_OK;
+}
+
+static bool reversible_deque_matches(const ft_reversible_deque* deque, const int* expected, size_t count)
+{
+    if (ft_reversible_deque_size(deque) != count) {
+        return false;
+    }
+
+    for (size_t index = 0; index != count; ++index) {
+        int actual = 0;
+        if (ft_reversible_deque_at(deque, index, &actual) != FT_STATUS_OK || actual != expected[index]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool int_buffer_matches(const int_buffer* buffer, const int* expected, size_t count)
+{
+    if (buffer->count != count) {
+        return false;
+    }
+
+    for (size_t index = 0; index != count; ++index) {
+        if (buffer->values[index] != expected[index]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 static void collect_char(const void* value, void* context)
 {
     char_buffer* buffer = (char_buffer*)context;
@@ -287,22 +345,12 @@ static void test_reversible_deque(void)
     init_int_policy(&policy);
 
     ft_reversible_deque deque;
-    REQUIRE_STATUS(ft_reversible_deque_init(&deque, &policy), FT_STATUS_OK);
-    for (int value = 0; value != 5; ++value) {
-        ft_reversible_deque next;
-        REQUIRE_STATUS(ft_reversible_deque_push_back(&deque, &value, &next), FT_STATUS_OK);
-        ft_reversible_deque_dispose(&deque);
-        deque = next;
-    }
+    REQUIRE_STATUS(reversible_deque_from_range(&policy, 0, 5, &deque), FT_STATUS_OK);
 
     ft_reversible_deque reversed;
     REQUIRE_STATUS(ft_reversible_deque_reverse(&deque, &reversed), FT_STATUS_OK);
-    REQUIRE(ft_reversible_deque_size(&reversed) == 5);
-    for (int index = 0; index != 5; ++index) {
-        int actual = -1;
-        REQUIRE_STATUS(ft_reversible_deque_at(&reversed, (size_t)index, &actual), FT_STATUS_OK);
-        REQUIRE(actual == 4 - index);
-    }
+    const int reversed_expected[] = {4, 3, 2, 1, 0};
+    REQUIRE(reversible_deque_matches(&reversed, reversed_expected, 5));
 
     int pushed = 9;
     ft_reversible_deque extended;
@@ -321,6 +369,125 @@ static void test_reversible_deque(void)
     REQUIRE(ft_reversible_deque_size(&trimmed) == 5);
     REQUIRE(ft_reversible_deque_size(&reversed) == 5);
 
+    ft_reversible_deque left;
+    ft_reversible_deque right;
+    ft_reversible_deque reversed_left;
+    ft_reversible_deque reversed_right;
+    REQUIRE_STATUS(reversible_deque_from_range(&policy, 0, 4, &left), FT_STATUS_OK);
+    REQUIRE_STATUS(reversible_deque_from_range(&policy, 10, 3, &right), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_reversible_deque_reverse(&left, &reversed_left), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_reversible_deque_reverse(&right, &reversed_right), FT_STATUS_OK);
+
+    ft_reversible_deque ff;
+    ft_reversible_deque rf;
+    ft_reversible_deque fr;
+    ft_reversible_deque rr;
+    REQUIRE_STATUS(ft_reversible_deque_concat(&left, &right, &ff), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_reversible_deque_concat(&reversed_left, &right, &rf), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_reversible_deque_concat(&left, &reversed_right, &fr), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_reversible_deque_concat(&reversed_left, &reversed_right, &rr), FT_STATUS_OK);
+
+    const int ff_expected[] = {0, 1, 2, 3, 10, 11, 12};
+    const int rf_expected[] = {3, 2, 1, 0, 10, 11, 12};
+    const int fr_expected[] = {0, 1, 2, 3, 12, 11, 10};
+    const int rr_expected[] = {3, 2, 1, 0, 12, 11, 10};
+    REQUIRE(reversible_deque_matches(&ff, ff_expected, 7));
+    REQUIRE(reversible_deque_matches(&rf, rf_expected, 7));
+    REQUIRE(reversible_deque_matches(&fr, fr_expected, 7));
+    REQUIRE(reversible_deque_matches(&rr, rr_expected, 7));
+
+    int_buffer visit_buffer = {0};
+    REQUIRE_STATUS(ft_reversible_deque_visit(&rr, collect_int, &visit_buffer), FT_STATUS_OK);
+    REQUIRE(int_buffer_matches(&visit_buffer, rr_expected, 7));
+
+    ft_reversible_deque_split_result split;
+    REQUIRE_STATUS(ft_reversible_deque_split_at(&rr, 4, &split), FT_STATUS_OK);
+    const int split_left_expected[] = {3, 2, 1, 0};
+    const int split_right_expected[] = {12, 11, 10};
+    REQUIRE(reversible_deque_matches(&split.left, split_left_expected, 4));
+    REQUIRE(reversible_deque_matches(&split.right, split_right_expected, 3));
+
+    ft_reversible_deque rejoined;
+    REQUIRE_STATUS(ft_reversible_deque_concat(&split.left, &split.right, &rejoined), FT_STATUS_OK);
+    REQUIRE(reversible_deque_matches(&rejoined, rr_expected, 7));
+
+    ft_reversible_deque large_left;
+    ft_reversible_deque large_right;
+    ft_reversible_deque large_reversed_left;
+    ft_reversible_deque large_reversed_right;
+    ft_reversible_deque large_joined;
+    ft_reversible_deque_split_result large_split;
+    REQUIRE_STATUS(reversible_deque_from_range(&policy, 0, 40, &large_left), FT_STATUS_OK);
+    REQUIRE_STATUS(reversible_deque_from_range(&policy, 100, 35, &large_right), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_reversible_deque_reverse(&large_left, &large_reversed_left), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_reversible_deque_reverse(&large_right, &large_reversed_right), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_reversible_deque_concat(&large_reversed_left, &large_reversed_right, &large_joined), FT_STATUS_OK);
+    REQUIRE(ft_reversible_deque_size(&large_joined) == 75);
+    for (size_t index = 0; index != 40; ++index) {
+        int actual = 0;
+        REQUIRE_STATUS(ft_reversible_deque_at(&large_joined, index, &actual), FT_STATUS_OK);
+        REQUIRE(actual == 39 - (int)index);
+    }
+
+    for (size_t index = 0; index != 35; ++index) {
+        int actual = 0;
+        REQUIRE_STATUS(ft_reversible_deque_at(&large_joined, 40 + index, &actual), FT_STATUS_OK);
+        REQUIRE(actual == 134 - (int)index);
+    }
+
+    REQUIRE_STATUS(ft_reversible_deque_split_at(&large_joined, 40, &large_split), FT_STATUS_OK);
+    REQUIRE(ft_reversible_deque_size(&large_split.left) == 40);
+    REQUIRE(ft_reversible_deque_size(&large_split.right) == 35);
+    for (size_t index = 0; index != 40; ++index) {
+        int actual = 0;
+        REQUIRE_STATUS(ft_reversible_deque_at(&large_split.left, index, &actual), FT_STATUS_OK);
+        REQUIRE(actual == 39 - (int)index);
+    }
+
+    for (size_t index = 0; index != 35; ++index) {
+        int actual = 0;
+        REQUIRE_STATUS(ft_reversible_deque_at(&large_split.right, index, &actual), FT_STATUS_OK);
+        REQUIRE(actual == 134 - (int)index);
+    }
+
+    int ninety_nine = 99;
+    ft_reversible_deque set;
+    REQUIRE_STATUS(ft_reversible_deque_set_at(&reversed, 1, &ninety_nine, &set), FT_STATUS_OK);
+    const int set_expected[] = {4, 99, 2, 1, 0};
+    REQUIRE(reversible_deque_matches(&set, set_expected, 5));
+
+    int seventy_seven = 77;
+    ft_reversible_deque inserted;
+    REQUIRE_STATUS(ft_reversible_deque_insert_at(&reversed, 2, &seventy_seven, &inserted), FT_STATUS_OK);
+    const int inserted_expected[] = {4, 3, 77, 2, 1, 0};
+    REQUIRE(reversible_deque_matches(&inserted, inserted_expected, 6));
+
+    ft_reversible_deque removed_at;
+    REQUIRE_STATUS(ft_reversible_deque_remove_at(&reversed, 3, &removed_at), FT_STATUS_OK);
+    const int removed_at_expected[] = {4, 3, 2, 0};
+    REQUIRE(reversible_deque_matches(&removed_at, removed_at_expected, 4));
+
+    ft_reversible_deque_dispose(&removed_at);
+    ft_reversible_deque_dispose(&inserted);
+    ft_reversible_deque_dispose(&set);
+    ft_reversible_deque_dispose(&large_split.left);
+    ft_reversible_deque_dispose(&large_split.right);
+    ft_reversible_deque_dispose(&large_joined);
+    ft_reversible_deque_dispose(&large_reversed_right);
+    ft_reversible_deque_dispose(&large_reversed_left);
+    ft_reversible_deque_dispose(&large_right);
+    ft_reversible_deque_dispose(&large_left);
+    ft_reversible_deque_dispose(&rejoined);
+    ft_reversible_deque_dispose(&split.left);
+    ft_reversible_deque_dispose(&split.right);
+    ft_reversible_deque_dispose(&rr);
+    ft_reversible_deque_dispose(&fr);
+    ft_reversible_deque_dispose(&rf);
+    ft_reversible_deque_dispose(&ff);
+    ft_reversible_deque_dispose(&reversed_right);
+    ft_reversible_deque_dispose(&reversed_left);
+    ft_reversible_deque_dispose(&right);
+    ft_reversible_deque_dispose(&left);
     ft_reversible_deque_dispose(&trimmed);
     ft_reversible_deque_dispose(&extended);
     ft_reversible_deque_dispose(&reversed);
