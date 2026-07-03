@@ -57,8 +57,8 @@ represented without eagerly copying the sequence.
 
 Sorted collections expose immutable sorted bags/multisets, sets, and key-value maps with
 comparer-preserving behavior. The mature C#/C++/C ports use order-statistic measures over finger
-trees; the Rust checkpoint preserves the surface over shared tree storage while its API notes track
-the remaining lazy-spine parity boundary.
+trees; the Rust checkpoint now uses cached count plus last-key order-statistic measures over its
+measured tree while its API notes track the remaining lazy-spine parity boundary.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |

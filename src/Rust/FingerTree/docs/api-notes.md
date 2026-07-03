@@ -12,7 +12,8 @@ Current public families:
 
 - `PersistentDeque<T>` and `ReversibleDeque<T>`;
 - `FingerTree<T, P>` over `MeasurePolicy<T>`;
-- built-in policies `SizeMeasure`, `SumMeasure<T>`, `MaxMeasure`, and `MinMeasure`;
+- built-in policies `SizeMeasure`, `SumMeasure<T>`, `MaxMeasure`, `MinMeasure`, and
+  `OrderStatisticMeasure<T>` with `RankedKey<T>`;
 - `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>`;
 - `PriorityQueue<T, P>` and `PriorityEntry<T, P>`;
 - `Interval<T>` and `IntervalTree<T>`;
@@ -42,8 +43,9 @@ share unchanged measured subtrees. `PriorityQueue<T, P>` now reuses the measured
 minimum-priority measure, so peek/dequeue locate the first global-minimum entry by cached prefix measures while
 preserving equal-priority stability. `IntervalTree<T>` now reuses the measured tree through an internal maximum-high
 endpoint measure, so overlap and containment queries skip prefixes whose cached high endpoint cannot intersect the
-probe. Sorted bag/set/map facades compose the shared deque, so rank edits and range extraction preserve unchanged
-subtree storage. These derived facades still do not claim the C#/C++ lazy measured-spine complexity or allocation
+probe. Sorted bag/set/map facades now reuse the measured tree through cached order-statistic measures: rank and
+key-boundary operations locate by count plus last-key prefixes, while edits and range extraction preserve unchanged
+measured subtrees. These derived facades still do not claim the C#/C++ lazy measured-spine complexity or allocation
 profile for every operation.
 
 Future representation work should keep the Rust public names and result shapes stable while replacing the remaining

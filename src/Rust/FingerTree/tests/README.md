@@ -16,8 +16,9 @@ Coverage groups:
 - `deque.rs`: structurally shared persistent deque, model replay, subtree-sharing checks, and reversible deque
   orientation facade;
 - `measured.rs`: structurally shared measured sequence core, cached-measure validation, prefix locate, and built-in
-  measure policies;
-- `sorted.rs`: sorted bag, set, and map facades with shared-storage rank edits and ranges;
+  measure policies including order-statistic count plus last-key measures;
+- `sorted.rs`: sorted bag, set, and map facades with cached order-statistic measures, rank/key-boundary edits over
+  shared measured storage, and ranges;
 - `priority_queue.rs`: stable minimum-priority queue, meld, cached minimum-priority measures, and shared-storage
   updates;
 - `interval_tree.rs`: closed intervals, overlap queries, cached maximum-high measures, coalescing, and

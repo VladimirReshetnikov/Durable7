@@ -1,11 +1,50 @@
-use crate::deque::PersistentDeque;
+use crate::measured::{FingerTree, MeasurePolicy, MeasuredSplit, OrderStatisticMeasure, RankedKey};
+use std::marker::PhantomData;
+
+type SortedStorage<T> = FingerTree<T, OrderStatisticMeasure<T>>;
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct EntryMeasure<K, V>(PhantomData<(K, V)>);
+
+impl<K, V> MeasurePolicy<(K, V)> for EntryMeasure<K, V>
+where
+    K: Clone,
+{
+    type Measure = RankedKey<K>;
+
+    fn empty() -> Self::Measure {
+        RankedKey {
+            count: 0,
+            key: None,
+        }
+    }
+
+    fn measure(element: &(K, V)) -> Self::Measure {
+        RankedKey {
+            count: 1,
+            key: Some(element.0.clone()),
+        }
+    }
+
+    fn combine(left: &Self::Measure, right: &Self::Measure) -> Self::Measure {
+        RankedKey {
+            count: left.count + right.count,
+            key: right.key.clone().or_else(|| left.key.clone()),
+        }
+    }
+}
+
+type MapStorage<K, V> = FingerTree<(K, V), EntryMeasure<K, V>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DuplicateKeyError;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SortedBag<T> {
-    items: PersistentDeque<T>,
+pub struct SortedBag<T>
+where
+    T: Clone,
+{
+    items: SortedStorage<T>,
 }
 
 impl<T> SortedBag<T>
@@ -14,9 +53,7 @@ where
 {
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            items: PersistentDeque::new(),
-        }
+        Self::from_items(SortedStorage::new())
     }
 
     #[must_use]
@@ -66,13 +103,8 @@ where
 
     #[must_use]
     pub fn add(&self, value: T) -> Self {
-        let index = upper_bound(&self.items, &value);
-        Self {
-            items: self
-                .items
-                .insert_at(index, value)
-                .expect("computed insertion rank is valid"),
-        }
+        let split = split_above(&self.items, &value);
+        Self::from_items(split.left.append(value).concat(&split.right))
     }
 
     #[must_use]
@@ -90,39 +122,38 @@ where
 
     #[must_use]
     pub fn remove(&self, value: &T) -> Self {
-        let Some(index) = self.index_of_first(value) else {
-            return self.clone();
-        };
-
-        Self {
-            items: self
-                .items
-                .remove_at(index)
-                .expect("found item rank is valid"),
+        let split = split_at_least(&self.items, value);
+        if split.right.front().is_some_and(|item| item == value) {
+            let tail = split
+                .right
+                .split_at_index(1)
+                .expect("right split after found item is valid")
+                .right;
+            Self::from_items(split.left.concat(&tail))
+        } else {
+            self.clone()
         }
     }
 
     #[must_use]
     pub fn remove_all(&self, value: &T) -> Self {
-        let start = lower_bound(&self.items, value);
-        let end = upper_bound(&self.items, value);
-        if start == end {
+        let less_split = split_at_least(&self.items, value);
+        let greater_split = split_above(&less_split.right, value);
+        if greater_split.left.is_empty() {
             return self.clone();
         }
 
-        Self {
-            items: self
-                .items
-                .remove_range(start, end - start)
-                .expect("computed duplicate range is valid"),
-        }
+        Self::from_items(less_split.left.concat(&greater_split.right))
     }
 
     #[must_use]
     pub fn get_range(&self, start: usize, count: usize) -> Option<Self> {
-        self.items
-            .get_range(start, count)
-            .map(|items| Self { items })
+        self.items.split_at_index(start).and_then(|split| {
+            split
+                .right
+                .split_at_index(count)
+                .map(|range_split| Self::from_items(range_split.left))
+        })
     }
 
     #[must_use]
@@ -135,10 +166,8 @@ where
         self.items.shares_storage_with(&other.items)
     }
 
-    fn index_of_first(&self, value: &T) -> Option<usize> {
-        let index = lower_bound(&self.items, value);
-        (index < self.len() && self.items.get(index).is_some_and(|item| item == value))
-            .then_some(index)
+    fn from_items(items: SortedStorage<T>) -> Self {
+        Self { items }
     }
 }
 
@@ -158,15 +187,16 @@ where
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let mut values: Vec<T> = iter.into_iter().collect();
         values.sort();
-        Self {
-            items: PersistentDeque::from_vec(values),
-        }
+        Self::from_items(SortedStorage::from_vec(values))
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SortedSet<T> {
-    items: PersistentDeque<T>,
+pub struct SortedSet<T>
+where
+    T: Clone,
+{
+    items: SortedStorage<T>,
 }
 
 impl<T> SortedSet<T>
@@ -175,9 +205,7 @@ where
 {
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            items: PersistentDeque::new(),
-        }
+        Self::from_items(SortedStorage::new())
     }
 
     #[must_use]
@@ -219,17 +247,12 @@ where
 
     #[must_use]
     pub fn add(&self, value: T) -> Self {
-        let index = lower_bound(&self.items, &value);
-        if index < self.len() && self.items.get(index).is_some_and(|item| item == &value) {
+        let split = split_at_least(&self.items, &value);
+        if split.right.front().is_some_and(|item| item == &value) {
             return self.clone();
         }
 
-        Self {
-            items: self
-                .items
-                .insert_at(index, value)
-                .expect("computed insertion rank is valid"),
-        }
+        Self::from_items(split.left.append(value).concat(&split.right))
     }
 
     #[must_use]
@@ -247,15 +270,16 @@ where
 
     #[must_use]
     pub fn remove(&self, value: &T) -> Self {
-        let Some(index) = self.index_of(value) else {
-            return self.clone();
-        };
-
-        Self {
-            items: self
-                .items
-                .remove_at(index)
-                .expect("found item rank is valid"),
+        let split = split_at_least(&self.items, value);
+        if split.right.front().is_some_and(|item| item == value) {
+            let tail = split
+                .right
+                .split_at_index(1)
+                .expect("right split after found item is valid")
+                .right;
+            Self::from_items(split.left.concat(&tail))
+        } else {
+            self.clone()
         }
     }
 
@@ -283,9 +307,12 @@ where
 
     #[must_use]
     pub fn get_range(&self, start: usize, count: usize) -> Option<Self> {
-        self.items
-            .get_range(start, count)
-            .map(|items| Self { items })
+        self.items.split_at_index(start).and_then(|split| {
+            split
+                .right
+                .split_at_index(count)
+                .map(|range_split| Self::from_items(range_split.left))
+        })
     }
 
     #[must_use]
@@ -384,9 +411,11 @@ where
             }
         }
 
-        Self {
-            items: PersistentDeque::from_vec(next),
-        }
+        Self::from_items(SortedStorage::from_vec(next))
+    }
+
+    fn from_items(items: SortedStorage<T>) -> Self {
+        Self { items }
     }
 }
 
@@ -407,15 +436,16 @@ where
         let mut values: Vec<T> = iter.into_iter().collect();
         values.sort();
         values.dedup();
-        Self {
-            items: PersistentDeque::from_vec(values),
-        }
+        Self::from_items(SortedStorage::from_vec(values))
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SortedMap<K, V> {
-    entries: PersistentDeque<(K, V)>,
+pub struct SortedMap<K, V>
+where
+    K: Clone,
+{
+    entries: MapStorage<K, V>,
 }
 
 impl<K, V> SortedMap<K, V>
@@ -425,9 +455,7 @@ where
 {
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            entries: PersistentDeque::new(),
-        }
+        Self::from_entries(MapStorage::new())
     }
 
     #[must_use]
@@ -481,24 +509,20 @@ where
 
     #[must_use]
     pub fn set_item(&self, key: K, value: V) -> Self {
-        let index = lower_bound_by_key(&self.entries, &key);
-        if let Some((stored_key, _)) = self.entries.get(index)
+        let split = split_key_at_least(&self.entries, &key);
+        if let Some((stored_key, _)) = split.right.front()
             && stored_key == &key
         {
-            return Self {
-                entries: self
-                    .entries
-                    .set_item(index, (stored_key.clone(), value))
-                    .expect("found entry rank is valid"),
-            };
+            let replacement = (stored_key.clone(), value);
+            let tail = split
+                .right
+                .split_at_index(1)
+                .expect("right split after found entry is valid")
+                .right;
+            return Self::from_entries(split.left.append(replacement).concat(&tail));
         }
 
-        Self {
-            entries: self
-                .entries
-                .insert_at(index, (key, value))
-                .expect("computed insertion rank is valid"),
-        }
+        Self::from_entries(split.left.append((key, value)).concat(&split.right))
     }
 
     #[must_use]
@@ -517,40 +541,54 @@ where
 
     #[must_use]
     pub fn try_insert(&self, key: K, value: V) -> (Self, bool) {
-        if self.contains_key(&key) {
+        let split = split_key_at_least(&self.entries, &key);
+        if split
+            .right
+            .front()
+            .is_some_and(|(stored_key, _)| stored_key == &key)
+        {
             return (self.clone(), false);
         }
 
-        (self.set_item(key, value), true)
+        (
+            Self::from_entries(split.left.append((key, value)).concat(&split.right)),
+            true,
+        )
     }
 
     #[must_use]
     pub fn remove(&self, key: &K) -> Self {
-        let Some(index) = self.index_of_key(key) else {
-            return self.clone();
-        };
-
-        Self {
-            entries: self
-                .entries
-                .remove_at(index)
-                .expect("found entry rank is valid"),
+        let split = split_key_at_least(&self.entries, key);
+        if split
+            .right
+            .front()
+            .is_some_and(|(stored_key, _)| stored_key == key)
+        {
+            let tail = split
+                .right
+                .split_at_index(1)
+                .expect("right split after found entry is valid")
+                .right;
+            Self::from_entries(split.left.concat(&tail))
+        } else {
+            self.clone()
         }
     }
 
     #[must_use]
     pub fn try_remove(&self, key: &K) -> Option<(Self, V)> {
-        let index = self.index_of_key(key)?;
-        let value = self.entries.get(index)?.1.clone();
-        Some((
-            Self {
-                entries: self
-                    .entries
-                    .remove_at(index)
-                    .expect("found entry rank is valid"),
-            },
-            value,
-        ))
+        let split = split_key_at_least(&self.entries, key);
+        let (_, value) = split
+            .right
+            .front()
+            .filter(|(stored_key, _)| stored_key == key)?;
+        let value = value.clone();
+        let tail = split
+            .right
+            .split_at_index(1)
+            .expect("right split after found entry is valid")
+            .right;
+        Some((Self::from_entries(split.left.concat(&tail)), value))
     }
 
     #[must_use]
@@ -577,9 +615,12 @@ where
 
     #[must_use]
     pub fn get_range(&self, start: usize, count: usize) -> Option<Self> {
-        self.entries
-            .get_range(start, count)
-            .map(|entries| Self { entries })
+        self.entries.split_at_index(start).and_then(|split| {
+            split
+                .right
+                .split_at_index(count)
+                .map(|range_split| Self::from_entries(range_split.left))
+        })
     }
 
     #[must_use]
@@ -599,6 +640,10 @@ where
             .map(|(_, value)| value.clone())
             .collect()
     }
+
+    fn from_entries(entries: MapStorage<K, V>) -> Self {
+        Self { entries }
+    }
 }
 
 impl<K, V> Default for SortedMap<K, V>
@@ -617,91 +662,102 @@ where
     V: Clone,
 {
     fn from_iter<I: IntoIterator<Item = (K, V)>>(iter: I) -> Self {
-        let mut map = Self::new();
-        for (key, value) in iter {
-            map = map.set_item(key, value);
+        let mut entries: Vec<(K, V)> = iter.into_iter().collect();
+        entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+        let mut compacted = Vec::with_capacity(entries.len());
+        for entry in entries {
+            if let Some((last_key, last_value)) = compacted.last_mut()
+                && *last_key == entry.0
+            {
+                *last_value = entry.1;
+                continue;
+            }
+
+            compacted.push(entry);
         }
 
-        map
+        Self::from_entries(MapStorage::from_vec(compacted))
     }
 }
 
-fn lower_bound<T>(items: &PersistentDeque<T>, value: &T) -> usize
+fn split_at_least<T>(
+    items: &SortedStorage<T>,
+    value: &T,
+) -> MeasuredSplit<T, OrderStatisticMeasure<T>>
 where
-    T: Ord,
+    T: Ord + Clone,
 {
-    let mut low = 0;
-    let mut high = items.len();
-    while low < high {
-        let mid = low + (high - low) / 2;
-        if items.get(mid).expect("binary search midpoint is in range") < value {
-            low = mid + 1;
-        } else {
-            high = mid;
-        }
-    }
-
-    low
+    items.split(|measure| measure.key.as_ref().is_some_and(|key| key >= value))
 }
 
-fn upper_bound<T>(items: &PersistentDeque<T>, value: &T) -> usize
+fn split_above<T>(items: &SortedStorage<T>, value: &T) -> MeasuredSplit<T, OrderStatisticMeasure<T>>
 where
-    T: Ord,
+    T: Ord + Clone,
 {
-    let mut low = 0;
-    let mut high = items.len();
-    while low < high {
-        let mid = low + (high - low) / 2;
-        if items.get(mid).expect("binary search midpoint is in range") <= value {
-            low = mid + 1;
-        } else {
-            high = mid;
-        }
-    }
-
-    low
+    items.split(|measure| measure.key.as_ref().is_some_and(|key| key > value))
 }
 
-fn lower_bound_by_key<K, V>(entries: &PersistentDeque<(K, V)>, key: &K) -> usize
+fn lower_bound<T>(items: &SortedStorage<T>, value: &T) -> usize
 where
-    K: Ord,
+    T: Ord + Clone,
 {
-    let mut low = 0;
-    let mut high = entries.len();
-    while low < high {
-        let mid = low + (high - low) / 2;
-        let (entry_key, _) = entries
-            .get(mid)
-            .expect("binary search midpoint is in range");
-        if entry_key < key {
-            low = mid + 1;
-        } else {
-            high = mid;
-        }
-    }
-
-    low
+    items
+        .try_locate(|measure| measure.key.as_ref().is_some_and(|key| key >= value))
+        .index
 }
 
-fn upper_bound_by_key<K, V>(entries: &PersistentDeque<(K, V)>, key: &K) -> usize
+fn upper_bound<T>(items: &SortedStorage<T>, value: &T) -> usize
 where
-    K: Ord,
+    T: Ord + Clone,
 {
-    let mut low = 0;
-    let mut high = entries.len();
-    while low < high {
-        let mid = low + (high - low) / 2;
-        let (entry_key, _) = entries
-            .get(mid)
-            .expect("binary search midpoint is in range");
-        if entry_key <= key {
-            low = mid + 1;
-        } else {
-            high = mid;
-        }
-    }
+    items
+        .try_locate(|measure| measure.key.as_ref().is_some_and(|key| key > value))
+        .index
+}
 
-    low
+fn split_key_at_least<K, V>(
+    entries: &MapStorage<K, V>,
+    key: &K,
+) -> MeasuredSplit<(K, V), EntryMeasure<K, V>>
+where
+    K: Ord + Clone,
+{
+    entries.split(|measure| {
+        measure
+            .key
+            .as_ref()
+            .is_some_and(|entry_key| entry_key >= key)
+    })
+}
+
+fn lower_bound_by_key<K, V>(entries: &MapStorage<K, V>, key: &K) -> usize
+where
+    K: Ord + Clone,
+    V: Clone,
+{
+    entries
+        .try_locate(|measure| {
+            measure
+                .key
+                .as_ref()
+                .is_some_and(|entry_key| entry_key >= key)
+        })
+        .index
+}
+
+fn upper_bound_by_key<K, V>(entries: &MapStorage<K, V>, key: &K) -> usize
+where
+    K: Ord + Clone,
+    V: Clone,
+{
+    entries
+        .try_locate(|measure| {
+            measure
+                .key
+                .as_ref()
+                .is_some_and(|entry_key| entry_key > key)
+        })
+        .index
 }
 
 #[cfg(test)]
@@ -721,13 +777,27 @@ mod tests {
     }
 
     #[test]
-    fn sorted_bag_edits_share_underlying_deque_tree() {
+    fn sorted_bag_edits_share_order_statistic_tree() {
         let bag: SortedBag<_> = (0..256).collect();
         let added = bag.add(128);
         let removed = bag.remove(&100);
         let removed_all = added.remove_all(&128);
         let range = bag.get_range(80, 40).unwrap();
 
+        assert_eq!(
+            bag.items.measure(),
+            &RankedKey {
+                count: 256,
+                key: Some(255)
+            }
+        );
+        assert_eq!(
+            added.items.measure(),
+            &RankedKey {
+                count: 257,
+                key: Some(255)
+            }
+        );
         assert_eq!(added.count_of(&128), 2);
         assert_eq!(removed.count_of(&100), 0);
         assert_eq!(removed_all.count_of(&128), 0);
@@ -758,13 +828,27 @@ mod tests {
     }
 
     #[test]
-    fn sorted_set_edits_share_underlying_deque_tree() {
+    fn sorted_set_edits_share_order_statistic_tree() {
         let set: SortedSet<_> = (0..256).collect();
         let duplicate = set.add(128);
         let inserted = set.add(300);
         let removed = set.remove(&100);
         let range = set.get_range(80, 40).unwrap();
 
+        assert_eq!(
+            set.items.measure(),
+            &RankedKey {
+                count: 256,
+                key: Some(255)
+            }
+        );
+        assert_eq!(
+            inserted.items.measure(),
+            &RankedKey {
+                count: 257,
+                key: Some(300)
+            }
+        );
         assert!(set.shares_storage_with(&duplicate));
         assert!(inserted.contains(&300));
         assert!(!removed.contains(&100));
@@ -791,13 +875,27 @@ mod tests {
     }
 
     #[test]
-    fn sorted_map_edits_share_underlying_deque_tree() {
+    fn sorted_map_edits_share_order_statistic_tree() {
         let map: SortedMap<_, _> = (0..256).map(|value| (value, value * 10)).collect();
         let updated = map.set_item(128, -1);
         let inserted = map.set_item(300, -300);
         let removed = map.remove(&100);
         let range = map.get_range(80, 40).unwrap();
 
+        assert_eq!(
+            map.entries.measure(),
+            &RankedKey {
+                count: 256,
+                key: Some(255)
+            }
+        );
+        assert_eq!(
+            inserted.entries.measure(),
+            &RankedKey {
+                count: 257,
+                key: Some(300)
+            }
+        );
         assert_eq!(updated.get(&128), Some(&-1));
         assert_eq!(inserted.get(&300), Some(&-300));
         assert!(!removed.contains_key(&100));

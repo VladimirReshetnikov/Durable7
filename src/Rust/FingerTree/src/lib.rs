@@ -13,8 +13,8 @@ pub use deque::{
 };
 pub use interval_tree::{Interval, IntervalTree};
 pub use measured::{
-    FingerTree, LocateResult, MaxMeasure, MeasurePolicy, MeasuredSplit, MinMeasure, SizeMeasure,
-    SumMeasure,
+    FingerTree, LocateResult, MaxMeasure, MeasurePolicy, MeasuredSplit, MinMeasure,
+    OrderStatisticMeasure, RankedKey, SizeMeasure, SumMeasure,
 };
 pub use priority_queue::{PriorityEntry, PriorityQueue};
 pub use rope::{

@@ -1,3 +1,4 @@
+use std::fmt;
 use std::marker::PhantomData;
 use std::ops::Add;
 use std::sync::Arc;
@@ -26,6 +27,43 @@ impl<T> MeasurePolicy<T> for SizeMeasure {
 
     fn combine(left: &Self::Measure, right: &Self::Measure) -> Self::Measure {
         left + right
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RankedKey<T> {
+    pub count: usize,
+    pub key: Option<T>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OrderStatisticMeasure<T>(PhantomData<T>);
+
+impl<T> MeasurePolicy<T> for OrderStatisticMeasure<T>
+where
+    T: Clone,
+{
+    type Measure = RankedKey<T>;
+
+    fn empty() -> Self::Measure {
+        RankedKey {
+            count: 0,
+            key: None,
+        }
+    }
+
+    fn measure(element: &T) -> Self::Measure {
+        RankedKey {
+            count: 1,
+            key: Some(element.clone()),
+        }
+    }
+
+    fn combine(left: &Self::Measure, right: &Self::Measure) -> Self::Measure {
+        RankedKey {
+            count: left.count + right.count,
+            key: right.key.clone().or_else(|| left.key.clone()),
+        }
     }
 }
 
@@ -569,6 +607,33 @@ where
     }
 }
 
+impl<T, P> fmt::Debug for FingerTree<T, P>
+where
+    T: fmt::Debug,
+    P: MeasurePolicy<T>,
+{
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_list().entries(self.iter()).finish()
+    }
+}
+
+impl<T, P> PartialEq for FingerTree<T, P>
+where
+    T: PartialEq,
+    P: MeasurePolicy<T>,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.len() == other.len() && self.iter().eq(other.iter())
+    }
+}
+
+impl<T, P> Eq for FingerTree<T, P>
+where
+    T: Eq,
+    P: MeasurePolicy<T>,
+{
+}
+
 impl<T, P> FingerTree<T, P>
 where
     P: MeasurePolicy<T>,
@@ -917,6 +982,25 @@ mod tests {
         assert_eq!(min_tree.measure(), &Some(1));
         max_tree.validate_invariants();
         min_tree.validate_invariants();
+    }
+
+    #[test]
+    fn order_statistic_measure_tracks_count_and_last_key() {
+        let tree: FingerTree<_, OrderStatisticMeasure<i32>> = [1, 3, 3, 7].into_iter().collect();
+        let located = tree.try_locate(|measure| measure.key.as_ref().is_some_and(|key| *key >= 3));
+
+        assert_eq!(
+            tree.measure(),
+            &RankedKey {
+                count: 4,
+                key: Some(7)
+            }
+        );
+        assert_eq!(tree.prefix_measure(2).unwrap().count, 2);
+        assert_eq!(located.index, 1);
+        assert_eq!(located.measure_before.count, 1);
+        assert_eq!(located.item, Some(3));
+        tree.validate_invariants();
     }
 
     #[test]
