@@ -1,25 +1,25 @@
+use crate::deque::{Iter as DequeIter, PersistentDeque};
 use crate::measured::{FingerTree, MeasurePolicy};
 use std::marker::PhantomData;
-use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rope<T> {
-    items: Arc<Vec<T>>,
+    items: PersistentDeque<T>,
 }
 
 impl<T> Rope<T> {
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            items: Arc::new(Vec::new()),
-        }
+        Self::from_deque(PersistentDeque::new())
     }
 
     #[must_use]
     pub(crate) fn from_vec(items: Vec<T>) -> Self {
-        Self {
-            items: Arc::new(items),
-        }
+        Self::from_deque(PersistentDeque::from_vec(items))
+    }
+
+    fn from_deque(items: PersistentDeque<T>) -> Self {
+        Self { items }
     }
 
     #[must_use]
@@ -34,12 +34,12 @@ impl<T> Rope<T> {
 
     #[must_use]
     pub fn front(&self) -> Option<&T> {
-        self.items.first()
+        self.items.front()
     }
 
     #[must_use]
     pub fn back(&self) -> Option<&T> {
-        self.items.last()
+        self.items.back()
     }
 
     #[must_use]
@@ -47,13 +47,13 @@ impl<T> Rope<T> {
         self.items.get(index)
     }
 
-    pub fn iter(&self) -> std::slice::Iter<'_, T> {
+    pub fn iter(&self) -> DequeIter<'_, T> {
         self.items.iter()
     }
 
     #[must_use]
     pub fn shares_storage_with(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.items, &other.items)
+        self.items.shares_storage_with(&other.items)
     }
 }
 
@@ -75,44 +75,27 @@ where
 {
     #[must_use]
     pub fn to_vec(&self) -> Vec<T> {
-        self.items.as_ref().clone()
+        self.items.to_vec()
     }
 
     #[must_use]
     pub fn push_front(&self, item: T) -> Self {
-        let mut next = Vec::with_capacity(self.len() + 1);
-        next.push(item);
-        next.extend(self.items.iter().cloned());
-        Self::from_vec(next)
+        Self::from_deque(self.items.push_front(item))
     }
 
     #[must_use]
     pub fn push_back(&self, item: T) -> Self {
-        let mut next = self.to_vec();
-        next.push(item);
-        Self::from_vec(next)
+        Self::from_deque(self.items.push_back(item))
     }
 
     #[must_use]
     pub fn set_item(&self, index: usize, item: T) -> Option<Self> {
-        if index >= self.len() {
-            return None;
-        }
-
-        let mut next = self.to_vec();
-        next[index] = item;
-        Some(Self::from_vec(next))
+        self.items.set_item(index, item).map(Self::from_deque)
     }
 
     #[must_use]
     pub fn insert_at(&self, index: usize, item: T) -> Option<Self> {
-        if index > self.len() {
-            return None;
-        }
-
-        let mut next = self.to_vec();
-        next.insert(index, item);
-        Some(Self::from_vec(next))
+        self.items.insert_at(index, item).map(Self::from_deque)
     }
 
     #[must_use]
@@ -120,70 +103,33 @@ where
     where
         I: IntoIterator<Item = T>,
     {
-        if index > self.len() {
-            return None;
-        }
-
-        let inserted: Vec<T> = items.into_iter().collect();
-        let mut next = Vec::with_capacity(self.len() + inserted.len());
-        next.extend(self.items[..index].iter().cloned());
-        next.extend(inserted);
-        next.extend(self.items[index..].iter().cloned());
-        Some(Self::from_vec(next))
+        self.items.insert_range(index, items).map(Self::from_deque)
     }
 
     #[must_use]
     pub fn remove_at(&self, index: usize) -> Option<Self> {
-        if index >= self.len() {
-            return None;
-        }
-
-        let mut next = self.to_vec();
-        next.remove(index);
-        Some(Self::from_vec(next))
+        self.items.remove_at(index).map(Self::from_deque)
     }
 
     #[must_use]
     pub fn remove_range(&self, index: usize, count: usize) -> Option<Self> {
-        let end = checked_range_end(self.len(), index, count)?;
-        let mut next = Vec::with_capacity(self.len() - count);
-        next.extend(self.items[..index].iter().cloned());
-        next.extend(self.items[end..].iter().cloned());
-        Some(Self::from_vec(next))
+        self.items.remove_range(index, count).map(Self::from_deque)
     }
 
     #[must_use]
     pub fn slice(&self, index: usize, count: usize) -> Option<Self> {
-        let end = checked_range_end(self.len(), index, count)?;
-        Some(Self::from_vec(self.items[index..end].to_vec()))
+        self.items.get_range(index, count).map(Self::from_deque)
     }
 
     #[must_use]
     pub fn split_at(&self, index: usize) -> Option<(Self, Self)> {
-        if index > self.len() {
-            return None;
-        }
-
-        Some((
-            Self::from_vec(self.items[..index].to_vec()),
-            Self::from_vec(self.items[index..].to_vec()),
-        ))
+        let split = self.items.split_at(index)?;
+        Some((Self::from_deque(split.left), Self::from_deque(split.right)))
     }
 
     #[must_use]
     pub fn concat(&self, other: &Self) -> Self {
-        if self.is_empty() {
-            return other.clone();
-        }
-
-        if other.is_empty() {
-            return self.clone();
-        }
-
-        let mut next = Vec::with_capacity(self.len() + other.len());
-        next.extend(self.items.iter().cloned());
-        next.extend(other.items.iter().cloned());
-        Self::from_vec(next)
+        Self::from_deque(self.items.concat(&other.items))
     }
 
     #[must_use]
@@ -465,8 +411,9 @@ impl TextRope {
         }
 
         Some(
-            self.chars.items[..offset]
+            self.chars
                 .iter()
+                .take(offset)
                 .filter(|ch| **ch == '\n')
                 .count(),
         )
@@ -513,7 +460,7 @@ impl TextRope {
     pub fn get_line(&self, line: usize) -> Option<String> {
         let start = self.line_start_offset(line)?;
         let end = self.line_end_offset(line)?;
-        Some(self.chars.items[start..end].iter().collect())
+        Some(self.chars.iter().skip(start).take(end - start).collect())
     }
 
     #[must_use]
@@ -535,7 +482,7 @@ impl TextRope {
 
     fn line_end_offset(&self, line: usize) -> Option<usize> {
         let start = self.line_start_offset(line)?;
-        for (relative, ch) in self.chars.items[start..].iter().enumerate() {
+        for (relative, ch) in self.chars.iter().skip(start).enumerate() {
             if *ch == '\n' {
                 return Some(start + relative);
             }
@@ -589,11 +536,6 @@ impl RopeBuilder {
     }
 }
 
-fn checked_range_end(len: usize, index: usize, count: usize) -> Option<usize> {
-    let end = index.checked_add(count)?;
-    (index <= len && end <= len).then_some(end)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -607,6 +549,33 @@ mod tests {
         assert_eq!(rope.to_vec(), vec![1, 2, 3]);
         assert_eq!(edited.to_vec(), vec![1, 9, 2]);
         assert_eq!(rope.slice(1, 2).unwrap().to_vec(), vec![2, 3]);
+    }
+
+    #[test]
+    fn rope_edits_share_underlying_deque_tree() {
+        let rope: Rope<_> = (0..256).collect();
+        let split = rope.split_at(96).unwrap();
+        let joined = split.0.concat(&split.1);
+        let changed = rope.set_item(128, -1).unwrap();
+        let inserted = rope.insert_at(120, -2).unwrap();
+        let removed = rope.remove_range(96, 32).unwrap();
+
+        assert_eq!(joined.to_vec(), rope.to_vec());
+        assert_eq!(changed.get(128), Some(&-1));
+        assert_eq!(inserted.get(120), Some(&-2));
+        assert_eq!(removed.len(), 224);
+        assert!(rope.items.shared_node_count_with(&split.0.items) > 64);
+        assert!(rope.items.shared_node_count_with(&split.1.items) > 100);
+        assert!(rope.items.shared_node_count_with(&changed.items) > 100);
+        assert!(rope.items.shared_node_count_with(&inserted.items) > 100);
+        assert!(rope.items.shared_node_count_with(&removed.items) > 100);
+        assert!(rope.items.tree_depth() < 24);
+        split.0.items.validate_invariants();
+        split.1.items.validate_invariants();
+        joined.items.validate_invariants();
+        changed.items.validate_invariants();
+        inserted.items.validate_invariants();
+        removed.items.validate_invariants();
     }
 
     #[test]

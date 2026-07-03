@@ -62,8 +62,9 @@ FingerTree lineage:
    priority queue, intervals, ropes, and text helpers.
 5. [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) is the Rust semantic checkpoint for
    the same family names. It preserves immutable snapshot behavior now; its deque, reversible deque,
-   general measured tree, and measured rope use shared tree storage, while remaining checkpoint
-   facades document their representation boundary until the lazy measured spine is ported.
+   positional rope/text helpers, general measured tree, and measured rope use shared tree storage,
+   while remaining checkpoint facades document their representation boundary until the lazy measured
+   spine is ported.
 
 A port can still reveal a baseline bug. When that happens, fix or document the baseline contract
 first, then carry the corrected semantics through the sibling workspaces that expose the same

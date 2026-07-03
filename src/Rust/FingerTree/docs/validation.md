@@ -29,9 +29,9 @@ cover:
 - sorted bag/set/map rank, navigation, algebra, and duplicate handling;
 - stable priority dequeue and meld behavior;
 - closed interval overlap, containment, and coalescing;
-- positional rope edits, measured-rope cached-measure navigation and subtree sharing, text line helpers, and builder
-  output.
+- positional rope edits and subtree sharing, measured-rope cached-measure navigation and subtree sharing, text line
+  helpers, and builder output.
 
-The current validation proves the structurally shared Rust deque, reversible-deque, measured-tree, and measured-rope
-behavior, plus the checkpoint behavior of the remaining facades, not final C#/C++ lazy-spine asymptotic parity for
-the whole crate.
+The current validation proves the structurally shared Rust deque, reversible-deque, positional-rope, measured-tree,
+and measured-rope behavior, plus the checkpoint behavior of the remaining facades, not final C#/C++ lazy-spine
+asymptotic parity for the whole crate.

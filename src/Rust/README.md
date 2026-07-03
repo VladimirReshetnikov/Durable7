@@ -27,7 +27,7 @@ If Cargo is installed under the default rustup profile but not on `PATH`, use:
 ```
 
 The FingerTree crate intentionally starts as a semantic checkpoint rather than a final asymptotic
-parity port. Its deque, reversible deque, measured sequence, and measured rope now use shared tree
-storage, while several higher-level facades still rebuild shared snapshots instead of using the lazy
-finger-tree spine. Its README marks that boundary so future work can replace the remaining
-representations without changing the Rust-facing surface.
+parity port. Its deque, reversible deque, positional rope/text helpers, measured sequence, and
+measured rope now use shared tree storage, while several higher-level facades still rebuild shared
+snapshots instead of using the lazy finger-tree spine. Its README marks that boundary so future work
+can replace the remaining representations without changing the Rust-facing surface.

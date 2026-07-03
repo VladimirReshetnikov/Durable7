@@ -555,12 +555,12 @@ impl<T> PersistentDeque<T> {
     }
 
     #[cfg(test)]
-    fn tree_depth(&self) -> usize {
+    pub(crate) fn tree_depth(&self) -> usize {
         self.root.height() as usize
     }
 
     #[cfg(test)]
-    fn validate_invariants(&self) {
+    pub(crate) fn validate_invariants(&self) {
         let len = self
             .root
             .validate()
@@ -569,7 +569,7 @@ impl<T> PersistentDeque<T> {
     }
 
     #[cfg(test)]
-    fn shared_node_count_with(&self, other: &Self) -> usize {
+    pub(crate) fn shared_node_count_with(&self, other: &Self) -> usize {
         use std::collections::HashSet;
 
         fn collect<T>(tree: &Arc<DequeTree<T>>, seen: &mut HashSet<*const DequeTree<T>>) {

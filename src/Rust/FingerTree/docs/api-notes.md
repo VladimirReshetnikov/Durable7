@@ -31,14 +31,15 @@ snapshot behavior, stable observable ordering, rank/range semantics, priority st
 semantics, and text line navigation. `PersistentDeque<T>` has moved past the initial vector snapshot and now uses
 an `Arc`-shared balanced tree, so nontrivial splits, concatenations, range operations, and point updates share
 unchanged subtrees. `ReversibleDeque<T>` is now an orientation layer over that deque, so reversal and
-wrapper-preserving logical edits share the same underlying tree. The general `FingerTree<T, P>` now uses an
-`Arc`-shared measured tree with cached monoid
+wrapper-preserving logical edits share the same underlying tree. `Rope<T>` now also composes the shared deque, so
+positional edits, slices, splits, and concatenations share unchanged deque subtrees; `TextRope` inherits that
+storage for character offsets and line helpers. The general `FingerTree<T, P>` now uses an `Arc`-shared measured
+tree with cached monoid
 measures at every node, so measure-guided split and locate operations can skip whole subtrees and split results
 share unchanged structure. `MeasuredRope<T, P>` now reuses that measured tree through an internal count-plus-user
 measure policy, so indexed splits, concatenation, point replacement, prefix measurement, and measure-guided locate
-share unchanged measured subtrees. Positional `Rope<T>`/`TextRope` helpers and derived facades still use checkpoint
-storage and do not yet claim the C#/C++ lazy measured-spine complexity or allocation profile.
+share unchanged measured subtrees. Sorted, priority, and interval facades still use checkpoint storage and do not
+yet claim the C#/C++ lazy measured-spine complexity or allocation profile.
 
 Future representation work should keep the Rust public names and result shapes stable while replacing the remaining
-checkpoint internals of positional ropes/text helpers and the derived facades with structurally shared measured-tree
-nodes.
+checkpoint internals of sorted, priority, and interval facades with structurally shared measured-tree nodes.

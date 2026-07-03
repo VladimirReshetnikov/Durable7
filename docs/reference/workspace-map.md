@@ -74,8 +74,8 @@ FingerTree lineage:
 3. `src/C/FingerTree` starts from the C++ port and exposes a C11 API with explicit handles, ownership, and facade types.
 4. `src/Haskell/FingerTree` ports the family to Haskell with a general measured tree, deque/reversible deque, derived collections, intervals, ropes, and text helpers.
 5. `src/Rust/FingerTree` is a Rust semantic checkpoint for the same public family names; its deque, reversible
-   deque, measured tree, and measured rope now use structurally shared storage, and the workspace documents the
-   remaining lazy-spine asymptotic parity work locally.
+   deque, positional rope/text helpers, measured tree, and measured rope now use structurally shared storage, and
+   the workspace documents the remaining lazy-spine asymptotic parity work locally.
 
 When porting behavior across languages, prefer the managed workspace for the semantic contract, the adjacent
 native workspace for local idioms, and the local tests for the exact validation shape. Use the
