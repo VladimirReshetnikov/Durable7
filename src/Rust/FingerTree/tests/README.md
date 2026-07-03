@@ -17,7 +17,7 @@ Coverage groups:
   orientation facade;
 - `measured.rs`: structurally shared measured sequence core, cached-measure validation, prefix locate, and built-in
   measure policies;
-- `sorted.rs`: sorted bag, set, and map facades;
-- `priority_queue.rs`: stable minimum-priority queue and meld;
-- `interval_tree.rs`: closed intervals, overlap queries, and coalescing;
+- `sorted.rs`: sorted bag, set, and map facades with shared-storage rank edits and ranges;
+- `priority_queue.rs`: stable minimum-priority queue, meld, and shared-storage updates;
+- `interval_tree.rs`: closed intervals, overlap queries, coalescing, and shared-storage updates;
 - `rope.rs`: structurally shared positional and measured ropes, text helpers, and builder.

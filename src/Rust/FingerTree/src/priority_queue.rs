@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use crate::deque::PersistentDeque;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PriorityEntry<T, P> {
@@ -8,7 +8,7 @@ pub struct PriorityEntry<T, P> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PriorityQueue<T, P> {
-    entries: Arc<Vec<PriorityEntry<T, P>>>,
+    entries: PersistentDeque<PriorityEntry<T, P>>,
 }
 
 impl<T, P> PriorityQueue<T, P>
@@ -19,7 +19,7 @@ where
     #[must_use]
     pub fn new() -> Self {
         Self {
-            entries: Arc::new(Vec::new()),
+            entries: PersistentDeque::new(),
         }
     }
 
@@ -35,10 +35,8 @@ where
 
     #[must_use]
     pub fn enqueue(&self, value: T, priority: P) -> Self {
-        let mut next = self.entries.as_ref().clone();
-        next.push(PriorityEntry { value, priority });
         Self {
-            entries: Arc::new(next),
+            entries: self.entries.push_back(PriorityEntry { value, priority }),
         }
     }
 
@@ -52,47 +50,59 @@ where
             return self.clone();
         }
 
-        let mut next = Vec::with_capacity(self.len() + other.len());
-        next.extend(self.entries.iter().cloned());
-        next.extend(other.entries.iter().cloned());
         Self {
-            entries: Arc::new(next),
+            entries: self.entries.concat(&other.entries),
         }
     }
 
     #[must_use]
     pub fn peek_priority(&self) -> Option<&P> {
-        self.min_index().map(|index| &self.entries[index].priority)
+        self.min_index()
+            .and_then(|index| self.entries.get(index).map(|entry| &entry.priority))
     }
 
     #[must_use]
     pub fn peek(&self) -> Option<(&T, &P)> {
-        self.min_index()
-            .map(|index| (&self.entries[index].value, &self.entries[index].priority))
+        self.min_index().and_then(|index| {
+            self.entries
+                .get(index)
+                .map(|entry| (&entry.value, &entry.priority))
+        })
     }
 
     #[must_use]
     pub fn dequeue(&self) -> Option<(PriorityEntry<T, P>, Self)> {
         let index = self.min_index()?;
-        let mut next = self.entries.as_ref().clone();
-        let entry = next.remove(index);
+        let entry = self.entries.get(index)?.clone();
         Some((
             entry,
             Self {
-                entries: Arc::new(next),
+                entries: self.entries.remove_at(index)?,
             },
         ))
     }
 
     #[must_use]
     pub fn to_vec(&self) -> Vec<PriorityEntry<T, P>> {
-        self.entries.as_ref().clone()
+        self.entries.to_vec()
+    }
+
+    #[must_use]
+    pub fn shares_storage_with(&self, other: &Self) -> bool {
+        self.entries.shares_storage_with(&other.entries)
     }
 
     fn min_index(&self) -> Option<usize> {
         let mut best: Option<usize> = None;
         for (index, entry) in self.entries.iter().enumerate() {
-            if best.is_none_or(|best_index| entry.priority < self.entries[best_index].priority) {
+            if best.is_none_or(|best_index| {
+                entry.priority
+                    < self
+                        .entries
+                        .get(best_index)
+                        .expect("known best index is in range")
+                        .priority
+            }) {
                 best = Some(index);
             }
         }
@@ -139,5 +149,28 @@ mod tests {
         let (entry, rest) = melded.dequeue().unwrap();
         assert_eq!(entry.value, "a");
         assert_eq!(rest.dequeue().unwrap().0.value, "b");
+    }
+
+    #[test]
+    fn priority_queue_edits_share_underlying_deque_tree() {
+        let queue = (0..256).fold(PriorityQueue::new(), |queue, value| {
+            queue.enqueue(value, value)
+        });
+        let enqueued = queue.enqueue(999, -1);
+        let melded = queue.meld(&(256..320).fold(PriorityQueue::new(), |queue, value| {
+            queue.enqueue(value, value)
+        }));
+        let (entry, dequeued) = enqueued.dequeue().unwrap();
+
+        assert_eq!(entry.value, 999);
+        assert_eq!(dequeued.peek(), Some((&0, &0)));
+        assert_eq!(melded.len(), 320);
+        assert!(queue.entries.shared_node_count_with(&enqueued.entries) > 100);
+        assert!(queue.entries.shared_node_count_with(&melded.entries) > 100);
+        assert!(enqueued.entries.shared_node_count_with(&dequeued.entries) > 100);
+        assert!(queue.entries.tree_depth() < 24);
+        enqueued.entries.validate_invariants();
+        melded.entries.validate_invariants();
+        dequeued.entries.validate_invariants();
     }
 }

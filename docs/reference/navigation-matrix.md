@@ -43,7 +43,7 @@ patterns.
 | C FingerTree | [src/C/FingerTree/docs/usage.md](../../src/C/FingerTree/docs/usage.md) | C handle lifetime, policy setup, persistent updates, facades, text ropes |
 | C++ FingerTree | [src/Cpp/FingerTree/docs/usage.md](../../src/Cpp/FingerTree/docs/usage.md) | Aggregate include path, value semantics, persistent deque/tree facades, ropes/text, publication patterns |
 | Haskell FingerTree | [src/Haskell/FingerTree/README.md](../../src/Haskell/FingerTree/README.md) | General measured tree, deque, reversible deque, sorted facades, priority queue, intervals, ropes, and text helpers |
-| Rust FingerTree | [src/Rust/FingerTree/docs/api-notes.md](../../src/Rust/FingerTree/docs/api-notes.md) | Persistent deque, measured sequence, reversible deque, sorted facades, priority queue, intervals, ropes, and text helpers |
+| Rust FingerTree | [src/Rust/FingerTree/docs/api-notes.md](../../src/Rust/FingerTree/docs/api-notes.md) | Rust shared-storage checkpoint surfaces for deque, measured sequence, sorted collections, priority queue, intervals, ropes/text |
 
 ## API Contracts
 
@@ -75,6 +75,7 @@ Use these when behavior, complexity, allocation, ownership, or cross-language pa
 | C++ FingerTree | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | CMake build, CTest validation, stress controls, and benchmark-harness status |
 | Haskell | [Workspace README](../../src/Haskell/README.md) | `cabal test all` builds both Haskell packages and runs the HAMT/FingerTree executables |
 | Rust | [Workspace README](../../src/Rust/README.md) | `cargo test --workspace` builds both Rust crates and runs unit/doc tests |
+| Rust FingerTree | [Validation](../../src/Rust/FingerTree/docs/validation.md) | Cargo unit tests for shared storage and checkpoint semantics across deque, measured sequence, sorted, priority, interval, rope, and text helpers |
 | C# FingerTree benchmarks | [Benchmark notes](../../src/CSharp/FingerTree/docs/benchmarks.md) | Curated BenchmarkDotNet results and interpretation |
 | C# FingerTree samples | [Samples README](../../src/CSharp/FingerTree/samples/README.md) | Runnable tours covering text, measured-tree facades, and editor-grade text extras |
 | C# HAMT tests | [Tests README](../../src/CSharp/Hamt/tests/Tools.DataStructures.Hamt.Tests/README.md) | xUnit/CsCheck project, source-file grouping, filter commands, and property coverage |

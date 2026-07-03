@@ -21,9 +21,10 @@ crate tests. `PersistentDeque<T>` now uses structurally shared balanced tree sto
 `ReversibleDeque<T>` is an orientation layer over that shared deque, `Rope<T>` and `TextRope`
 compose the shared deque for positional storage, `FingerTree<T, P>` now uses structurally shared
 measured tree storage with cached monoid measures, and `MeasuredRope<T, P>` composes that measured
-core with a counted user measure. The crate still does not claim the C#/C++ lazy finger-tree
-asymptotic profile overall: sorted, priority, and interval facades remain checkpoint
-implementations until the lazy measured spine is ported under them.
+core with a counted user measure. Sorted, priority, and interval facades now use the shared deque
+storage as well. The crate still does not claim the C#/C++ lazy finger-tree asymptotic profile
+overall; derived algorithms remain semantic-checkpoint implementations until the lazy measured spine
+is ported through the whole family.
 
 See [API notes](docs/api-notes.md), [validation](docs/validation.md), and the
 [test map](tests/README.md) for the local contract, checkpoint boundary, and evidence entry points.

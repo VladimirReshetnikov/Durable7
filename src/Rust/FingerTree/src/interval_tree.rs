@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use crate::deque::PersistentDeque;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Interval<T> {
@@ -32,7 +32,7 @@ where
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IntervalTree<T> {
-    intervals: Arc<Vec<Interval<T>>>,
+    intervals: PersistentDeque<Interval<T>>,
 }
 
 impl<T> IntervalTree<T>
@@ -42,7 +42,7 @@ where
     #[must_use]
     pub fn new() -> Self {
         Self {
-            intervals: Arc::new(Vec::new()),
+            intervals: PersistentDeque::new(),
         }
     }
 
@@ -59,10 +59,11 @@ where
     #[must_use]
     pub fn insert(&self, interval: Interval<T>) -> Self {
         let index = upper_bound_interval(&self.intervals, &interval);
-        let mut next = self.intervals.as_ref().clone();
-        next.insert(index, interval);
         Self {
-            intervals: Arc::new(next),
+            intervals: self
+                .intervals
+                .insert_at(index, interval)
+                .expect("computed insertion rank is valid"),
         }
     }
 
@@ -77,10 +78,11 @@ where
             return self.clone();
         };
 
-        let mut next = self.intervals.as_ref().clone();
-        next.remove(index);
         Self {
-            intervals: Arc::new(next),
+            intervals: self
+                .intervals
+                .remove_at(index)
+                .expect("found interval rank is valid"),
         }
     }
 
@@ -90,11 +92,10 @@ where
             .intervals
             .iter()
             .position(|stored| stored == interval)?;
-        let mut next = self.intervals.as_ref().clone();
-        let removed = next.remove(index);
+        let removed = self.intervals.get(index)?.clone();
         Some((
             Self {
-                intervals: Arc::new(next),
+                intervals: self.intervals.remove_at(index)?,
             },
             removed,
         ))
@@ -153,13 +154,18 @@ where
         merged.push(current);
 
         Self {
-            intervals: Arc::new(merged),
+            intervals: PersistentDeque::from_vec(merged),
         }
     }
 
     #[must_use]
     pub fn to_vec(&self) -> Vec<Interval<T>> {
-        self.intervals.as_ref().clone()
+        self.intervals.to_vec()
+    }
+
+    #[must_use]
+    pub fn shares_storage_with(&self, other: &Self) -> bool {
+        self.intervals.shares_storage_with(&other.intervals)
     }
 }
 
@@ -186,7 +192,7 @@ where
     }
 }
 
-fn upper_bound_interval<T>(intervals: &[Interval<T>], value: &Interval<T>) -> usize
+fn upper_bound_interval<T>(intervals: &PersistentDeque<Interval<T>>, value: &Interval<T>) -> usize
 where
     T: Ord,
 {
@@ -194,7 +200,9 @@ where
     let mut high = intervals.len();
     while low < high {
         let mid = low + (high - low) / 2;
-        let current = &intervals[mid];
+        let current = intervals
+            .get(mid)
+            .expect("binary search midpoint is in range");
         if (&current.low, &current.high) <= (&value.low, &value.high) {
             low = mid + 1;
         } else {
@@ -239,5 +247,37 @@ mod tests {
             tree.coalesce().to_vec(),
             vec![Interval::new(1, 5), Interval::new(10, 13)]
         );
+    }
+
+    #[test]
+    fn interval_tree_edits_share_underlying_deque_tree() {
+        let tree: IntervalTree<_> = (0..256)
+            .map(|value| Interval::new(value * 3, value * 3 + 1))
+            .collect();
+        let inserted = tree.insert(Interval::new(1000, 1001));
+        let removed = inserted.remove(&Interval::new(300, 301));
+        let (try_removed, removed_interval) =
+            inserted.try_remove(&Interval::new(303, 304)).unwrap();
+
+        assert!(inserted.contains(&Interval::new(1000, 1001)));
+        assert!(!removed.contains(&Interval::new(300, 301)));
+        assert_eq!(removed_interval, Interval::new(303, 304));
+        assert!(tree.intervals.shared_node_count_with(&inserted.intervals) > 100);
+        assert!(
+            inserted
+                .intervals
+                .shared_node_count_with(&removed.intervals)
+                > 100
+        );
+        assert!(
+            inserted
+                .intervals
+                .shared_node_count_with(&try_removed.intervals)
+                > 100
+        );
+        assert!(tree.intervals.tree_depth() < 24);
+        inserted.intervals.validate_invariants();
+        removed.intervals.validate_invariants();
+        try_removed.intervals.validate_invariants();
     }
 }

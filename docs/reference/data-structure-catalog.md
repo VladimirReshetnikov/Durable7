@@ -55,8 +55,10 @@ represented without eagerly copying the sequence.
 
 ## Sorted Collections
 
-Sorted collections use order-statistic measures over finger trees. They expose immutable sorted
-bags/multisets, sets, and key-value maps with comparer-preserving behavior.
+Sorted collections expose immutable sorted bags/multisets, sets, and key-value maps with
+comparer-preserving behavior. The mature C#/C++/C ports use order-statistic measures over finger
+trees; the Rust checkpoint preserves the surface over shared tree storage while its API notes track
+the remaining lazy-spine parity boundary.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
@@ -68,8 +70,9 @@ bags/multisets, sets, and key-value maps with comparer-preserving behavior.
 
 ## Priority Queue
 
-Priority queues are measured finger-tree facades that locate and remove the front priority entry
-according to each language's comparison policy.
+Priority queues locate and remove the front priority entry according to each language's comparison
+policy. The mature C#/C++/C ports use measured finger-tree facades; the Rust checkpoint preserves the
+surface over shared tree storage while its API notes track the remaining lazy-spine parity boundary.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
@@ -81,8 +84,10 @@ according to each language's comparison policy.
 
 ## Interval Tree
 
-Interval trees store interval annotations in finger-tree measures so overlap queries can skip
-subtrees whose summary cannot intersect the probe.
+Interval trees store ordered interval collections for overlap and containment queries. The mature
+C#/C++/C ports use interval annotations in finger-tree measures so queries can skip subtrees whose
+summary cannot intersect the probe; the Rust checkpoint preserves the surface over shared tree
+storage while its API notes track the remaining lazy-spine parity boundary.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |

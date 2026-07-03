@@ -22,7 +22,7 @@ checks, and the workspace validation guides, which own local warning policy and 
 | [Haskell HAMT](../../src/Haskell/Hamt/README.md) | Cabal exit-code executable | `cabal test hamt-test` from `src/Haskell` | [Tests README](../../src/Haskell/Hamt/test/README.md) | Map/set unit checks for collision buckets, custom policies, key recovery, and set algebra |
 | [Haskell FingerTree](../../src/Haskell/FingerTree/README.md) | Cabal exit-code executable | `cabal test ft-test` from `src/Haskell` | [Tests README](../../src/Haskell/FingerTree/test/README.md) | Measured tree, deque, reversible deque, sorted facades, priority queue, intervals, ropes, and text helpers |
 | [Rust HAMT](../../src/Rust/Hamt/README.md) | Cargo unit tests | `cargo test -p tools-data-structures-hamt` from `src/Rust` | [Tests README](../../src/Rust/Hamt/tests/README.md) | Map/set unit checks for collisions, updates, iteration, and set algebra |
-| [Rust FingerTree](../../src/Rust/FingerTree/README.md) | Cargo unit tests inline across crate modules | `cargo test -p tools-data-structures-fingertree` | [Tests README](../../src/Rust/FingerTree/tests/README.md) | Structurally shared deque/reversible-deque/rope/measured-tree/measured-rope tests plus checkpoint tests for sorted collections, priority queue, intervals, and text helpers |
+| [Rust FingerTree](../../src/Rust/FingerTree/README.md) | Cargo unit tests inline across crate modules | `cargo test -p tools-data-structures-fingertree` | [Tests README](../../src/Rust/FingerTree/tests/README.md) | Structurally shared storage tests across deque, reversible deque, sorted collections, priority queue, intervals, ropes, measured tree, and text helpers |
 
 ## Stress And Duration Knobs
 

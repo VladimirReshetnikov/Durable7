@@ -26,12 +26,11 @@ cover:
   checks;
 - reversible-deque O(1) storage-sharing reversal and wrapper-preserving logical edits over the shared deque tree;
 - measured sequence size/sum/min/max policies;
-- sorted bag/set/map rank, navigation, algebra, and duplicate handling;
-- stable priority dequeue and meld behavior;
-- closed interval overlap, containment, and coalescing;
+- sorted bag/set/map rank, navigation, algebra, duplicate handling, and shared-storage edits/ranges;
+- stable priority dequeue, meld behavior, and shared-storage enqueue/meld/dequeue paths;
+- closed interval overlap, containment, coalescing, and shared-storage insert/remove paths;
 - positional rope edits and subtree sharing, measured-rope cached-measure navigation and subtree sharing, text line
   helpers, and builder output.
 
-The current validation proves the structurally shared Rust deque, reversible-deque, positional-rope, measured-tree,
-and measured-rope behavior, plus the checkpoint behavior of the remaining facades, not final C#/C++ lazy-spine
-asymptotic parity for the whole crate.
+The current validation proves structurally shared Rust storage across the public FingerTree-family facades and the
+observable semantic checkpoint behavior, not final C#/C++ lazy-spine asymptotic parity for the whole crate.

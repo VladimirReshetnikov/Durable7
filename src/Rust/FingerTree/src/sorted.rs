@@ -1,11 +1,11 @@
-use std::sync::Arc;
+use crate::deque::PersistentDeque;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DuplicateKeyError;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SortedBag<T> {
-    items: Arc<Vec<T>>,
+    items: PersistentDeque<T>,
 }
 
 impl<T> SortedBag<T>
@@ -15,7 +15,7 @@ where
     #[must_use]
     pub fn new() -> Self {
         Self {
-            items: Arc::new(Vec::new()),
+            items: PersistentDeque::new(),
         }
     }
 
@@ -31,12 +31,12 @@ where
 
     #[must_use]
     pub fn min(&self) -> Option<&T> {
-        self.items.first()
+        self.items.front()
     }
 
     #[must_use]
     pub fn max(&self) -> Option<&T> {
-        self.items.last()
+        self.items.back()
     }
 
     #[must_use]
@@ -67,10 +67,11 @@ where
     #[must_use]
     pub fn add(&self, value: T) -> Self {
         let index = upper_bound(&self.items, &value);
-        let mut next = self.items.as_ref().clone();
-        next.insert(index, value);
         Self {
-            items: Arc::new(next),
+            items: self
+                .items
+                .insert_at(index, value)
+                .expect("computed insertion rank is valid"),
         }
     }
 
@@ -93,10 +94,11 @@ where
             return self.clone();
         };
 
-        let mut next = self.items.as_ref().clone();
-        next.remove(index);
         Self {
-            items: Arc::new(next),
+            items: self
+                .items
+                .remove_at(index)
+                .expect("found item rank is valid"),
         }
     }
 
@@ -108,30 +110,35 @@ where
             return self.clone();
         }
 
-        let mut next = Vec::with_capacity(self.len() - (end - start));
-        next.extend(self.items[..start].iter().cloned());
-        next.extend(self.items[end..].iter().cloned());
         Self {
-            items: Arc::new(next),
+            items: self
+                .items
+                .remove_range(start, end - start)
+                .expect("computed duplicate range is valid"),
         }
     }
 
     #[must_use]
     pub fn get_range(&self, start: usize, count: usize) -> Option<Self> {
-        let end = start.checked_add(count)?;
-        (end <= self.len()).then(|| Self {
-            items: Arc::new(self.items[start..end].to_vec()),
-        })
+        self.items
+            .get_range(start, count)
+            .map(|items| Self { items })
     }
 
     #[must_use]
     pub fn to_vec(&self) -> Vec<T> {
-        self.items.as_ref().clone()
+        self.items.to_vec()
+    }
+
+    #[must_use]
+    pub fn shares_storage_with(&self, other: &Self) -> bool {
+        self.items.shares_storage_with(&other.items)
     }
 
     fn index_of_first(&self, value: &T) -> Option<usize> {
         let index = lower_bound(&self.items, value);
-        (index < self.len() && &self.items[index] == value).then_some(index)
+        (index < self.len() && self.items.get(index).is_some_and(|item| item == value))
+            .then_some(index)
     }
 }
 
@@ -152,14 +159,14 @@ where
         let mut values: Vec<T> = iter.into_iter().collect();
         values.sort();
         Self {
-            items: Arc::new(values),
+            items: PersistentDeque::from_vec(values),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SortedSet<T> {
-    items: Arc<Vec<T>>,
+    items: PersistentDeque<T>,
 }
 
 impl<T> SortedSet<T>
@@ -169,7 +176,7 @@ where
     #[must_use]
     pub fn new() -> Self {
         Self {
-            items: Arc::new(Vec::new()),
+            items: PersistentDeque::new(),
         }
     }
 
@@ -185,12 +192,12 @@ where
 
     #[must_use]
     pub fn min(&self) -> Option<&T> {
-        self.items.first()
+        self.items.front()
     }
 
     #[must_use]
     pub fn max(&self) -> Option<&T> {
-        self.items.last()
+        self.items.back()
     }
 
     #[must_use]
@@ -206,20 +213,22 @@ where
     #[must_use]
     pub fn index_of(&self, value: &T) -> Option<usize> {
         let index = lower_bound(&self.items, value);
-        (index < self.len() && &self.items[index] == value).then_some(index)
+        (index < self.len() && self.items.get(index).is_some_and(|item| item == value))
+            .then_some(index)
     }
 
     #[must_use]
     pub fn add(&self, value: T) -> Self {
         let index = lower_bound(&self.items, &value);
-        if index < self.len() && self.items[index] == value {
+        if index < self.len() && self.items.get(index).is_some_and(|item| item == &value) {
             return self.clone();
         }
 
-        let mut next = self.items.as_ref().clone();
-        next.insert(index, value);
         Self {
-            items: Arc::new(next),
+            items: self
+                .items
+                .insert_at(index, value)
+                .expect("computed insertion rank is valid"),
         }
     }
 
@@ -242,10 +251,11 @@ where
             return self.clone();
         };
 
-        let mut next = self.items.as_ref().clone();
-        next.remove(index);
         Self {
-            items: Arc::new(next),
+            items: self
+                .items
+                .remove_at(index)
+                .expect("found item rank is valid"),
         }
     }
 
@@ -273,10 +283,9 @@ where
 
     #[must_use]
     pub fn get_range(&self, start: usize, count: usize) -> Option<Self> {
-        let end = start.checked_add(count)?;
-        (end <= self.len()).then(|| Self {
-            items: Arc::new(self.items[start..end].to_vec()),
-        })
+        self.items
+            .get_range(start, count)
+            .map(|items| Self { items })
     }
 
     #[must_use]
@@ -321,7 +330,12 @@ where
 
     #[must_use]
     pub fn to_vec(&self) -> Vec<T> {
-        self.items.as_ref().clone()
+        self.items.to_vec()
+    }
+
+    #[must_use]
+    pub fn shares_storage_with(&self, other: &Self) -> bool {
+        self.items.shares_storage_with(&other.items)
     }
 
     fn merge<F>(&self, other: &Self, keep: F) -> Self
@@ -371,7 +385,7 @@ where
         }
 
         Self {
-            items: Arc::new(next),
+            items: PersistentDeque::from_vec(next),
         }
     }
 }
@@ -394,14 +408,14 @@ where
         values.sort();
         values.dedup();
         Self {
-            items: Arc::new(values),
+            items: PersistentDeque::from_vec(values),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SortedMap<K, V> {
-    entries: Arc<Vec<(K, V)>>,
+    entries: PersistentDeque<(K, V)>,
 }
 
 impl<K, V> SortedMap<K, V>
@@ -412,7 +426,7 @@ where
     #[must_use]
     pub fn new() -> Self {
         Self {
-            entries: Arc::new(Vec::new()),
+            entries: PersistentDeque::new(),
         }
     }
 
@@ -433,7 +447,8 @@ where
 
     #[must_use]
     pub fn get(&self, key: &K) -> Option<&V> {
-        self.index_of_key(key).map(|index| &self.entries[index].1)
+        self.index_of_key(key)
+            .and_then(|index| self.entries.get(index).map(|(_, value)| value))
     }
 
     #[must_use]
@@ -456,22 +471,39 @@ where
     #[must_use]
     pub fn index_of_key(&self, key: &K) -> Option<usize> {
         let index = lower_bound_by_key(&self.entries, key);
-        (index < self.len() && &self.entries[index].0 == key).then_some(index)
+        (index < self.len()
+            && self
+                .entries
+                .get(index)
+                .is_some_and(|(stored_key, _)| stored_key == key))
+        .then_some(index)
     }
 
     #[must_use]
     pub fn set_item(&self, key: K, value: V) -> Self {
         let index = lower_bound_by_key(&self.entries, &key);
-        let mut next = self.entries.as_ref().clone();
-        if index < next.len() && next[index].0 == key {
-            next[index].1 = value;
-        } else {
-            next.insert(index, (key, value));
+        if let Some((stored_key, _)) = self.entries.get(index)
+            && stored_key == &key
+        {
+            return Self {
+                entries: self
+                    .entries
+                    .set_item(index, (stored_key.clone(), value))
+                    .expect("found entry rank is valid"),
+            };
         }
 
         Self {
-            entries: Arc::new(next),
+            entries: self
+                .entries
+                .insert_at(index, (key, value))
+                .expect("computed insertion rank is valid"),
         }
+    }
+
+    #[must_use]
+    pub fn shares_storage_with(&self, other: &Self) -> bool {
+        self.entries.shares_storage_with(&other.entries)
     }
 
     pub fn insert(&self, key: K, value: V) -> Result<Self, DuplicateKeyError> {
@@ -498,18 +530,27 @@ where
             return self.clone();
         };
 
-        let mut next = self.entries.as_ref().clone();
-        next.remove(index);
         Self {
-            entries: Arc::new(next),
+            entries: self
+                .entries
+                .remove_at(index)
+                .expect("found entry rank is valid"),
         }
     }
 
     #[must_use]
     pub fn try_remove(&self, key: &K) -> Option<(Self, V)> {
         let index = self.index_of_key(key)?;
-        let value = self.entries[index].1.clone();
-        Some((self.remove(key), value))
+        let value = self.entries.get(index)?.1.clone();
+        Some((
+            Self {
+                entries: self
+                    .entries
+                    .remove_at(index)
+                    .expect("found entry rank is valid"),
+            },
+            value,
+        ))
     }
 
     #[must_use]
@@ -536,15 +577,14 @@ where
 
     #[must_use]
     pub fn get_range(&self, start: usize, count: usize) -> Option<Self> {
-        let end = start.checked_add(count)?;
-        (end <= self.len()).then(|| Self {
-            entries: Arc::new(self.entries[start..end].to_vec()),
-        })
+        self.entries
+            .get_range(start, count)
+            .map(|entries| Self { entries })
     }
 
     #[must_use]
     pub fn to_vec(&self) -> Vec<(K, V)> {
-        self.entries.as_ref().clone()
+        self.entries.to_vec()
     }
 
     #[must_use]
@@ -586,7 +626,7 @@ where
     }
 }
 
-fn lower_bound<T>(items: &[T], value: &T) -> usize
+fn lower_bound<T>(items: &PersistentDeque<T>, value: &T) -> usize
 where
     T: Ord,
 {
@@ -594,7 +634,7 @@ where
     let mut high = items.len();
     while low < high {
         let mid = low + (high - low) / 2;
-        if &items[mid] < value {
+        if items.get(mid).expect("binary search midpoint is in range") < value {
             low = mid + 1;
         } else {
             high = mid;
@@ -604,7 +644,7 @@ where
     low
 }
 
-fn upper_bound<T>(items: &[T], value: &T) -> usize
+fn upper_bound<T>(items: &PersistentDeque<T>, value: &T) -> usize
 where
     T: Ord,
 {
@@ -612,7 +652,7 @@ where
     let mut high = items.len();
     while low < high {
         let mid = low + (high - low) / 2;
-        if &items[mid] <= value {
+        if items.get(mid).expect("binary search midpoint is in range") <= value {
             low = mid + 1;
         } else {
             high = mid;
@@ -622,7 +662,7 @@ where
     low
 }
 
-fn lower_bound_by_key<K, V>(entries: &[(K, V)], key: &K) -> usize
+fn lower_bound_by_key<K, V>(entries: &PersistentDeque<(K, V)>, key: &K) -> usize
 where
     K: Ord,
 {
@@ -630,7 +670,10 @@ where
     let mut high = entries.len();
     while low < high {
         let mid = low + (high - low) / 2;
-        if &entries[mid].0 < key {
+        let (entry_key, _) = entries
+            .get(mid)
+            .expect("binary search midpoint is in range");
+        if entry_key < key {
             low = mid + 1;
         } else {
             high = mid;
@@ -640,7 +683,7 @@ where
     low
 }
 
-fn upper_bound_by_key<K, V>(entries: &[(K, V)], key: &K) -> usize
+fn upper_bound_by_key<K, V>(entries: &PersistentDeque<(K, V)>, key: &K) -> usize
 where
     K: Ord,
 {
@@ -648,7 +691,10 @@ where
     let mut high = entries.len();
     while low < high {
         let mid = low + (high - low) / 2;
-        if &entries[mid].0 <= key {
+        let (entry_key, _) = entries
+            .get(mid)
+            .expect("binary search midpoint is in range");
+        if entry_key <= key {
             low = mid + 1;
         } else {
             high = mid;
@@ -675,6 +721,30 @@ mod tests {
     }
 
     #[test]
+    fn sorted_bag_edits_share_underlying_deque_tree() {
+        let bag: SortedBag<_> = (0..256).collect();
+        let added = bag.add(128);
+        let removed = bag.remove(&100);
+        let removed_all = added.remove_all(&128);
+        let range = bag.get_range(80, 40).unwrap();
+
+        assert_eq!(added.count_of(&128), 2);
+        assert_eq!(removed.count_of(&100), 0);
+        assert_eq!(removed_all.count_of(&128), 0);
+        assert_eq!(range.min(), Some(&80));
+        assert_eq!(range.max(), Some(&119));
+        assert!(bag.items.shared_node_count_with(&added.items) > 100);
+        assert!(bag.items.shared_node_count_with(&removed.items) > 100);
+        assert!(added.items.shared_node_count_with(&removed_all.items) > 100);
+        assert!(bag.items.shared_node_count_with(&range.items) > 16);
+        assert!(bag.items.tree_depth() < 24);
+        added.items.validate_invariants();
+        removed.items.validate_invariants();
+        removed_all.items.validate_invariants();
+        range.items.validate_invariants();
+    }
+
+    #[test]
     fn sorted_set_navigation_and_algebra() {
         let left: SortedSet<_> = [1, 2, 4].into_iter().collect();
         let right: SortedSet<_> = [2, 3, 4].into_iter().collect();
@@ -688,6 +758,27 @@ mod tests {
     }
 
     #[test]
+    fn sorted_set_edits_share_underlying_deque_tree() {
+        let set: SortedSet<_> = (0..256).collect();
+        let duplicate = set.add(128);
+        let inserted = set.add(300);
+        let removed = set.remove(&100);
+        let range = set.get_range(80, 40).unwrap();
+
+        assert!(set.shares_storage_with(&duplicate));
+        assert!(inserted.contains(&300));
+        assert!(!removed.contains(&100));
+        assert_eq!(range.to_vec(), (80..120).collect::<Vec<_>>());
+        assert!(set.items.shared_node_count_with(&inserted.items) > 100);
+        assert!(set.items.shared_node_count_with(&removed.items) > 100);
+        assert!(set.items.shared_node_count_with(&range.items) > 16);
+        assert!(set.items.tree_depth() < 24);
+        inserted.items.validate_invariants();
+        removed.items.validate_invariants();
+        range.items.validate_invariants();
+    }
+
+    #[test]
     fn sorted_map_is_last_wins_for_ranges() {
         let map: SortedMap<_, _> = [(2, "b"), (1, "a"), (2, "bb")].into_iter().collect();
         let inserted = map.insert(3, "c").unwrap();
@@ -697,5 +788,29 @@ mod tests {
         assert_eq!(inserted.keys_to_vec(), vec![1, 2, 3]);
         assert!(matches!(duplicate, Err(DuplicateKeyError)));
         assert_eq!(inserted.floor_entry(&2), Some((&2, &"bb")));
+    }
+
+    #[test]
+    fn sorted_map_edits_share_underlying_deque_tree() {
+        let map: SortedMap<_, _> = (0..256).map(|value| (value, value * 10)).collect();
+        let updated = map.set_item(128, -1);
+        let inserted = map.set_item(300, -300);
+        let removed = map.remove(&100);
+        let range = map.get_range(80, 40).unwrap();
+
+        assert_eq!(updated.get(&128), Some(&-1));
+        assert_eq!(inserted.get(&300), Some(&-300));
+        assert!(!removed.contains_key(&100));
+        assert_eq!(range.min_entry(), Some((&80, &800)));
+        assert_eq!(range.max_entry(), Some((&119, &1190)));
+        assert!(map.entries.shared_node_count_with(&updated.entries) > 100);
+        assert!(map.entries.shared_node_count_with(&inserted.entries) > 100);
+        assert!(map.entries.shared_node_count_with(&removed.entries) > 100);
+        assert!(map.entries.shared_node_count_with(&range.entries) > 16);
+        assert!(map.entries.tree_depth() < 24);
+        updated.entries.validate_invariants();
+        inserted.entries.validate_invariants();
+        removed.entries.validate_invariants();
+        range.entries.validate_invariants();
     }
 }
