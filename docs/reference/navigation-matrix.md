@@ -14,7 +14,7 @@ routes a reader to the narrowest document that owns the question.
 | --- | --- | --- |
 | Understand repository layout | [Workspace map](workspace-map.md) | Root [README](../../README.md), [source index](../../src/README.md), [data-structure catalog](data-structure-catalog.md) |
 | Browse workspaces by language | [Source index](../../src/README.md) | [C](../../src/C/README.md), [C++](../../src/Cpp/README.md), [C#](../../src/CSharp/README.md), [Haskell](../../src/Haskell/README.md), [Rust](../../src/Rust/README.md) |
-| Choose a data structure across languages | [Data-structure catalog](data-structure-catalog.md) | The matching workspace usage guide and API specification or notes |
+| Choose a data structure or numerics surface across languages | [Data-structure catalog](data-structure-catalog.md) | The matching workspace usage guide and API specification or notes |
 | Plan a new derived structure or API extension | [Derived structure catalog](derived-structure-catalog.md) | [Porting and semantic parity](../guides/porting-and-semantic-parity.md), affected workspace API specs |
 | Use an existing collection | The relevant usage guide below | Source tests for executable examples when behavior is subtle |
 | Build or validate a workspace | [Build and validation](../guides/build-and-validation.md) | [Test suite map](test-suite-map.md), workspace validation docs, and workspace README |
@@ -34,6 +34,7 @@ patterns.
 
 | Workspace | Usage guide | Best for |
 | --- | --- | --- |
+| C# Numerics | [src/CSharp/Numerics/README.md](../../src/CSharp/Numerics/README.md) | Fixed-width integer types, sparse integers, binary conversion, and wide-integer maintenance entry points |
 | C# HAMT | [src/CSharp/Hamt/docs/usage.md](../../src/CSharp/Hamt/docs/usage.md) | `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` construction, comparers, persistent updates, set algebra |
 | C HAMT | [src/C/Hamt/docs/usage.md](../../src/C/Hamt/docs/usage.md) | `tds_hamt_map` / `tds_hamt_set` policies, borrowed versus owned pointers, status/cleanup patterns |
 | C++ HAMT | [src/Cpp/Hamt/docs/usage.md](../../src/Cpp/Hamt/docs/usage.md) | Header inclusion, value semantics, custom hash/equality policy objects, set algebra |
@@ -51,6 +52,7 @@ Use these when behavior, complexity, allocation, ownership, or cross-language pa
 
 | Workspace | Contract document | Notes |
 | --- | --- | --- |
+| C# Numerics | [API and behavior reference](../../src/CSharp/Numerics/docs/api-and-behavior-reference.md) | Normative fixed-width integer behavior, conversion, parse/format, and binary representation contract |
 | C# HAMT | [API specification](../../src/CSharp/Hamt/docs/api-specification.md) | Normative C# HAMT map/set contract |
 | C HAMT | [API specification](../../src/C/Hamt/docs/api-specification.md) | C API ownership, callback policy, and complexity contract |
 | C++ HAMT | [API specification](../../src/Cpp/Hamt/docs/api-specification.md) | C++ template API and C# parity notes |
@@ -67,6 +69,7 @@ Use these when behavior, complexity, allocation, ownership, or cross-language pa
 | Scope | Document | What it proves |
 | --- | --- | --- |
 | Whole repository | [Build and validation](../guides/build-and-validation.md) / [Test suite map](test-suite-map.md) | Canonical commands for C#, C, C++, CMake presets, Markdown checks, and test-suite entry points |
+| C# Numerics | [Validation](../../src/CSharp/Numerics/docs/validation.md) | .NET restore/build/test commands, XML-documentation warning gate, and xUnit wide-integer coverage |
 | C# HAMT | [Validation](../../src/CSharp/Hamt/docs/validation.md) | .NET restore/build/test commands, XML-documentation warning gate, and xUnit/CsCheck coverage |
 | C HAMT | [Validation](../../src/C/Hamt/docs/validation.md) | MSVC C17 build script, Debug/Release commands, warning policy, and native model tests |
 | C++ HAMT | [Validation](../../src/Cpp/Hamt/docs/validation.md) | MSVC C++20 build script, Debug/Release commands, warning policy, and native model tests |
@@ -78,6 +81,7 @@ Use these when behavior, complexity, allocation, ownership, or cross-language pa
 | Rust FingerTree | [Validation](../../src/Rust/FingerTree/docs/validation.md) | Cargo unit tests for shared storage and checkpoint semantics across deque, measured sequence, sorted, priority, interval, rope, and text helpers |
 | C# FingerTree benchmarks | [Benchmark notes](../../src/CSharp/FingerTree/docs/benchmarks.md) | Curated BenchmarkDotNet results and interpretation |
 | C# FingerTree samples | [Samples README](../../src/CSharp/FingerTree/samples/README.md) | Runnable tours covering text, measured-tree facades, and editor-grade text extras |
+| C# Numerics tests | [Tests README](../../src/CSharp/Numerics/tests/Tools.Numerics.Tests/README.md) | xUnit project covering fixed-width integer behavior, binary conversion, public API coverage, and declaration parity |
 | C# HAMT tests | [Tests README](../../src/CSharp/Hamt/tests/Tools.DataStructures.Hamt.Tests/README.md) | xUnit/CsCheck project, source-file grouping, filter commands, and property coverage |
 | C# FingerTree tests | [Tests README](../../src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/README.md) | xUnit/CsCheck project, source-file grouping, sample smoke hooks, stress controls, and model tests |
 | C HAMT tests | [Tests README](../../src/C/Hamt/tests/README.md) | C native HAMT executable, named test cases, direct executable path, and runner failure behavior |

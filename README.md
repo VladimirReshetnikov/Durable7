@@ -3,10 +3,10 @@
 - Status: Active standalone repository
 - Created (UTC): 2026-06-30T01:28:46Z
 - Repository HEAD: d8c6160a9d3ae266e310089bfa73d71cc76ed5c3
-- Audience: Maintainers and AI coding agents working on repository-owned data structures
+- Audience: Maintainers and AI coding agents working on repository-owned data structures and numerics
 - Scope: Repository layout, build entry points, and agent guidance
 
-This repository contains Vladimir Reshetnikov's standalone data-structure workspaces and design references. It was extracted from `C:\Tools0\src\DataStructures` / `VladimirReshetnikov/Tools` with path-local Git history preserved as precisely as practical. The Tools-side handoff is recorded by [`5fc4054da`](https://github.com/VladimirReshetnikov/Tools/commit/5fc4054da), which removes the former subtree and points the Tools indexes here.
+This repository contains Vladimir Reshetnikov's standalone data-structure and numerics workspaces and design references. It was extracted from `C:\Tools0\src\DataStructures` / `VladimirReshetnikov/Tools` with path-local Git history preserved as precisely as practical. The Tools-side handoff is recorded by [`5fc4054da`](https://github.com/VladimirReshetnikov/Tools/commit/5fc4054da), which removes the former subtree and points the Tools indexes here.
 
 This document is the canonical repository guidance for Vladimir and the AI coding agents that help him. `AGENTS.md` and `CLAUDE.md` point here, so keep shared project and agent instructions in this file.
 
@@ -65,6 +65,13 @@ This document is the canonical repository guidance for Vladimir and the AI codin
     │       └── tests/
     ├── CSharp/
     │   ├── README.md
+    │   ├── Numerics/
+    │   │   ├── Directory.Build.props
+    │   │   ├── Numerics.sln
+    │   │   ├── README.md
+    │   │   ├── docs/
+    │   │   ├── src/
+    │   │   └── tests/
     │   ├── Hamt/
     │   │   ├── Directory.Build.props
     │   │   ├── Hamt.sln
@@ -117,6 +124,7 @@ The [source index](src/README.md) and language indexes for [C](src/C/README.md),
 [C++](src/Cpp/README.md), [C#](src/CSharp/README.md), [Haskell](src/Haskell/README.md), and
 [Rust](src/Rust/README.md) are the quickest way to browse the language-first layout.
 
+- [src/CSharp/Numerics](src/CSharp/Numerics/README.md) is a .NET 10 fixed-width and sparse integer numerics library. It provides `UInt256`/`Int256`, `UInt512`/`Int512`, `UInt1024`/`Int1024`, `SparseInteger`, deterministic two's-complement and binary conversion semantics, declaration-parity guardrails, and xUnit tests.
 - [src/CSharp/Hamt](src/CSharp/Hamt/README.md) is a .NET 10 persistent hash-array mapped trie library. It provides `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` with bitmap-indexed 32-way branching, immutable equal-hash collision buckets, comparer-preserving factories, structural sharing across versions, and xUnit/CsCheck model tests against BCL dictionaries and sets.
 - [src/CSharp/FingerTree](src/CSharp/FingerTree/README.md) is a .NET 10 persistent finger-tree library: two engine cores (a tuned catenable deque and a general monoid-measured tree), a full collection family (sorted bag/set/dictionary, priority queue, interval tree, reversible deque), product/sum/built-in measures with a closure-free predicate API, and a rope family (positional, measured, and text). It ships a navigable design-notes document ([FingerTree-Design-Notes.pdf](src/CSharp/FingerTree/docs/FingerTree-Design-Notes.pdf), with `.tex` source and a rebuild script alongside), a BenchmarkDotNet harness, three runnable samples, and a three-tier (example + property + model-based command) test suite plus tearable-struct concurrency stress tests.
 - [src/C/Hamt](src/C/Hamt/README.md) is a C17 port of the persistent HAMT library. It provides type-erased
@@ -150,6 +158,11 @@ cd C:\DataStructures\src\CSharp\FingerTree
 dotnet restore
 dotnet build
 dotnet test .\FingerTree.sln
+
+cd C:\DataStructures\src\CSharp\Numerics
+dotnet restore
+dotnet build
+dotnet test .\Numerics.sln
 
 cd C:\DataStructures\src\CSharp\Hamt
 dotnet restore
@@ -201,7 +214,8 @@ Release configuration is required for meaningful benchmark numbers.
 - [docs/reference/README.md](docs/reference/README.md) indexes durable cross-workspace reference material.
 - [docs/reference/data-structure-catalog.md](docs/reference/data-structure-catalog.md) catalogs repository-owned data-structure families, public entry points, and primary references across C#, C, C++, Haskell, and Rust.
 - [docs/reference/navigation-matrix.md](docs/reference/navigation-matrix.md) maps common tasks to the right usage, API, validation, porting, history, and maintenance documents.
-- [docs/reference/workspace-map.md](docs/reference/workspace-map.md) explains the language-first, data-structure-second layout and port lineage.
+- [docs/reference/workspace-map.md](docs/reference/workspace-map.md) explains the language-first, library-family layout and port lineage.
+- [src/CSharp/Numerics/docs/README.md](src/CSharp/Numerics/docs/README.md) indexes the Numerics library's API and behavior reference, validation guide, maintainer guidance, and design notes.
 - [src/CSharp/Hamt/docs/README.md](src/CSharp/Hamt/docs/README.md) indexes the HAMT library's usage guide, API specification, validation guide, and implementation review.
 - [src/C/Hamt/docs/README.md](src/C/Hamt/docs/README.md) indexes the C HAMT port's usage guide, API specification, and validation guide.
 - [src/Cpp/Hamt/docs/README.md](src/Cpp/Hamt/docs/README.md) indexes the C++ HAMT port's usage

@@ -16,6 +16,7 @@ boundaries, use the [test suite map](../reference/test-suite-map.md).
 
 | Workspace | Primary command | Local validation guide | Test map | Coverage |
 | --- | --- | --- | --- | --- |
+| [`src/CSharp/Numerics`](../../src/CSharp/Numerics/README.md) | `dotnet test .\Numerics.sln` | [Validation](../../src/CSharp/Numerics/docs/validation.md) | [Tests](../../src/CSharp/Numerics/tests/Tools.Numerics.Tests/README.md) | .NET library build, XML-doc warning gate, xUnit wide/sparse-integer behavior tests, declaration parity guardrails |
 | [`src/CSharp/Hamt`](../../src/CSharp/Hamt/README.md) | `dotnet test .\Hamt.sln` | [Validation](../../src/CSharp/Hamt/docs/validation.md) | [Tests](../../src/CSharp/Hamt/tests/Tools.DataStructures.Hamt.Tests/README.md) | .NET library build, XML-doc warning gate, xUnit tests, CsCheck model tests |
 | [`src/CSharp/FingerTree`](../../src/CSharp/FingerTree/README.md) | `dotnet test .\FingerTree.sln` | [Validation](../../src/CSharp/FingerTree/docs/validation.md) | [Tests](../../src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/README.md) | .NET library, samples, benchmark project build, stress controls, xUnit/CsCheck suites |
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | `.\build.ps1 -RunTests` | [Validation](../../src/C/Hamt/docs/validation.md) | [Tests](../../src/C/Hamt/tests/README.md) | C17 build, warning policy, deterministic HAMT tests |
@@ -32,6 +33,9 @@ Markdown link check below and any build/test commands whose documented paths cha
 ## C# Workspaces
 
 ```powershell
+cd C:\DataStructures\src\CSharp\Numerics
+dotnet test .\Numerics.sln
+
 cd C:\DataStructures\src\CSharp\Hamt
 dotnet test .\Hamt.sln
 
@@ -43,6 +47,8 @@ The C# solutions target `net10.0` and use C# preview features. Treat public XML 
 as build-relevant: `CS1591` and `CS1573` are intentionally escalated in the C# workspaces. The local
 validation guides define test coverage and optional stress/benchmark boundaries:
 
+- [C# Numerics validation](../../src/CSharp/Numerics/docs/validation.md)
+- [C# Numerics tests](../../src/CSharp/Numerics/tests/Tools.Numerics.Tests/README.md)
 - [C# HAMT validation](../../src/CSharp/Hamt/docs/validation.md)
 - [C# HAMT tests](../../src/CSharp/Hamt/tests/Tools.DataStructures.Hamt.Tests/README.md)
 - [C# FingerTree validation](../../src/CSharp/FingerTree/docs/validation.md)

@@ -18,6 +18,11 @@ change may need to cross C#, C++, C, Haskell, and Rust workspaces.
 Use the real .NET SDK in the local Windows environment:
 
 ```powershell
+cd C:\DataStructures\src\CSharp\Numerics
+dotnet restore
+dotnet build
+dotnet test .\Numerics.sln
+
 cd C:\DataStructures\src\CSharp\FingerTree
 dotnet restore
 dotnet build

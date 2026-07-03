@@ -13,6 +13,7 @@ checks, and the workspace validation guides, which own local warning policy and 
 
 | Workspace | Runner shape | Routine command | Local test map | Notes |
 | --- | --- | --- | --- | --- |
+| [C# Numerics](../../src/CSharp/Numerics/README.md) | xUnit test project with declaration parity guardrails | `dotnet test .\Numerics.sln` | [Tests README](../../src/CSharp/Numerics/tests/Tools.Numerics.Tests/README.md) | Library build, XML-doc gate, fixed-width and sparse integer behavior, binary conversion, public API coverage, and declaration parity |
 | [C# HAMT](../../src/CSharp/Hamt/README.md) | xUnit test project with CsCheck generated histories | `dotnet test .\Hamt.sln` | [Tests README](../../src/CSharp/Hamt/tests/Tools.DataStructures.Hamt.Tests/README.md) | Library build, XML-doc gate, example tests, model histories, and set-algebra properties |
 | [C# FingerTree](../../src/CSharp/FingerTree/README.md) | xUnit test project with CsCheck, sample-smoke hooks, and default-duration stress tests | `dotnet test .\FingerTree.sln` | [Tests README](../../src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/README.md) | Library build, sample project build/smoke, model/property suites, and tearable concurrency stress |
 | [C HAMT](../../src/C/Hamt/README.md) | Dependency-free native executable built by `build.ps1` | `.\build.ps1 -RunTests` | [Tests README](../../src/C/Hamt/tests/README.md) | Deterministic map/set unit and model checks; fail-fast runner |

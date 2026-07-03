@@ -38,7 +38,8 @@ Put repository-wide task procedures under `docs/guides`, durable cross-workspace
 `docs/reference`, and extraction/history records under `docs/migration`.
 
 Put C# HAMT implementation, API, and validation documents under
-[src/CSharp/Hamt/docs](../src/CSharp/Hamt/docs/README.md), C HAMT port documents under
+[src/CSharp/Hamt/docs](../src/CSharp/Hamt/docs/README.md), C# Numerics API, validation, and maintainer
+documents under [src/CSharp/Numerics/docs](../src/CSharp/Numerics/docs/README.md), C HAMT port documents under
 [src/C/Hamt/docs](../src/C/Hamt/docs/README.md), and C++ HAMT port documents under
 [src/Cpp/Hamt/docs](../src/Cpp/Hamt/docs/README.md). Put C# FingerTree usage, implementation, API,
 validation, benchmark, and algorithm documents under

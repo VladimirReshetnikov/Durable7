@@ -2,15 +2,25 @@
 
 - Created (UTC): 2026-07-02T19:53:11Z
 - Repository HEAD: 1d90612aed11f273521046015c9d63bb7c993bba
-- Audience: Maintainers and AI agents comparing data-structure surfaces across languages
-- Scope: Repository-owned data-structure families, public entry points, and primary reference links
+- Audience: Maintainers and AI agents comparing data-structure and numerics surfaces across languages
+- Scope: Repository-owned data-structure families, adjacent numerics libraries, public entry points, and primary reference links
 
-This catalog is the cross-workspace orientation layer. It answers "which data structures exist in
+This catalog is the cross-workspace orientation layer. It answers "which public library surfaces exist in
 which language, and where do I start?" The workspace API specifications and headers remain the
 authoritative source for contracts, complexity, allocation behavior, and validation details.
 
 Use this together with the [workspace map](workspace-map.md): the map explains the language-first
-layout, while this catalog maps each data-structure family across that layout.
+layout, while this catalog maps each public library family across that layout.
+
+## Fixed-Width Integer Numerics
+
+`Tools.Numerics` is currently a C#-only workspace for fixed-width and sparse integer values. It provides
+deterministic two's-complement arithmetic, parse/format behavior, binary conversion APIs, and declaration-parity
+guardrails for the wide-integer family.
+
+| Language | Public entry points | Primary references |
+| --- | --- | --- |
+| C# | `UInt256`, `Int256`, `UInt512`, `Int512`, `UInt1024`, `Int1024`, `SparseInteger`, `BitConverterEx` | [Workspace](../../src/CSharp/Numerics/README.md), [API and behavior reference](../../src/CSharp/Numerics/docs/api-and-behavior-reference.md), [validation](../../src/CSharp/Numerics/docs/validation.md), [wide-integer guidance](../../src/CSharp/Numerics/docs/wide-integer-maintainer-guidance.md), [tests](../../src/CSharp/Numerics/tests/Tools.Numerics.Tests/README.md) |
 
 ## HAMT Map And Set
 

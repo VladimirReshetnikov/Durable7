@@ -5,7 +5,7 @@
 - Audience: Maintainers and AI agents navigating the repository
 - Scope: Repository organization, workspace roles, and documentation placement
 
-The repository is organized by programming language first and by data structure second:
+The repository is organized by programming language first and by library family second:
 
 ```text
 src/
@@ -21,7 +21,8 @@ src/
 ├── CSharp/
 │   ├── README.md
 │   ├── FingerTree/
-│   └── Hamt/
+│   ├── Hamt/
+│   └── Numerics/
 ├── Haskell/
 │   ├── README.md
 │   ├── FingerTree/
@@ -33,19 +34,20 @@ src/
 ```
 
 This makes language-local build systems, toolchains, include paths, and idioms easy to find while keeping
-the same data-structure families aligned across languages.
+related library families aligned across languages where ports exist.
 
 Use the [source index](../../src/README.md) when browsing by language, or jump directly to the
 [C](../../src/C/README.md), [C++](../../src/Cpp/README.md), [C#](../../src/CSharp/README.md),
 [Haskell](../../src/Haskell/README.md), or [Rust](../../src/Rust/README.md) language index.
 
-For the cross-language list of public data-structure surfaces, see the
+For the cross-language list of public library surfaces, see the
 [data structure catalog](data-structure-catalog.md).
 
 ## Workspace Roles
 
 | Workspace | Role | Main entry points | Local docs |
 | --- | --- | --- | --- |
+| [`src/CSharp/Numerics`](../../src/CSharp/Numerics/README.md) | Managed fixed-width and sparse integer numerics library | `Numerics.sln`, `src/Tools.Numerics/` | [`docs`](../../src/CSharp/Numerics/docs/README.md) |
 | [`src/CSharp/Hamt`](../../src/CSharp/Hamt/README.md) | Canonical managed HAMT library | `Hamt.sln`, `src/Tools.DataStructures.Hamt/` | [`docs`](../../src/CSharp/Hamt/docs/README.md) |
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | C17 HAMT port | `include/Tools/DataStructures/Hamt/hamt.h`, `build.ps1` | [`docs`](../../src/C/Hamt/docs/README.md) |
 | [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | C++20 HAMT port | `include/Tools/DataStructures/Hamt/*.hpp`, `build.ps1` | [`docs`](../../src/Cpp/Hamt/docs/README.md) |
@@ -77,6 +79,10 @@ FingerTree lineage:
    use structurally shared Rust tree storage, and the workspace documents the remaining lazy-spine asymptotic
    parity work locally.
 
+Numerics currently has a C# workspace only. `src/CSharp/Numerics` owns the fixed-width integer and sparse-integer
+contract, implementation, and tests; add future ports or generated variants as separate language-family workspaces
+only when they have their own toolchain and validation shape.
+
 When porting behavior across languages, prefer the managed workspace for the semantic contract, the adjacent
 native workspace for local idioms, and the local tests for the exact validation shape. Use the
 [porting and semantic parity guide](../guides/porting-and-semantic-parity.md) for the cross-language
@@ -101,6 +107,7 @@ Workspace-level docs live next to the code they describe:
 
 - Use `CSharp`, not `Cs`, for the managed language root.
 - Use `Cpp`, not `C++`, in paths so shell tooling and URLs stay simple.
+- Use `Numerics` for fixed-width and sparse integer numeric workspaces.
 - Use `Hamt` for hash-array mapped trie workspaces, matching the public project names.
 - Use `FingerTree` for the measured finger-tree family, including derived collections and ropes.
 - Write current paths in active documentation. Put historical paths only in explicit provenance or review reports.
