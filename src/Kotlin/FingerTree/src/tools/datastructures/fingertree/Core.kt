@@ -187,63 +187,374 @@ public class PersistentDeque<T> private constructor(
     override fun iterator(): Iterator<T> = items.iterator()
 }
 
+private const val ReversibleDequeLeafCapacity = 32
+
+private sealed class ReversibleDequeNode<T> {
+    abstract val size: Int
+    abstract val height: Int
+    abstract val storageToken: Any
+
+    val isEmpty: Boolean
+        get() = size == 0
+
+    abstract fun front(): T?
+    abstract fun back(): T?
+    abstract fun get(index: Int): T
+    abstract fun reverse(): ReversibleDequeNode<T>
+    abstract fun splitAt(index: Int): Pair<ReversibleDequeNode<T>, ReversibleDequeNode<T>>
+    abstract fun appendTo(destination: MutableList<T>)
+    abstract fun appendToReversed(destination: MutableList<T>)
+
+    open fun logicalParts(): Pair<ReversibleDequeNode<T>, ReversibleDequeNode<T>>? = null
+}
+
+private object EmptyReversibleDequeNode : ReversibleDequeNode<Nothing>() {
+    override val size: Int = 0
+    override val height: Int = 0
+    override val storageToken: Any = this
+
+    override fun front(): Nothing? = null
+
+    override fun back(): Nothing? = null
+
+    override fun get(index: Int): Nothing = throw IndexOutOfBoundsException(index.toString())
+
+    override fun reverse(): ReversibleDequeNode<Nothing> = this
+
+    override fun splitAt(index: Int): Pair<ReversibleDequeNode<Nothing>, ReversibleDequeNode<Nothing>> {
+        require(index == 0) { "Split index out of range." }
+        return this to this
+    }
+
+    override fun appendTo(destination: MutableList<Nothing>) {
+    }
+
+    override fun appendToReversed(destination: MutableList<Nothing>) {
+    }
+}
+
+private class ReversibleDequeLeafNode<T>(
+    private val values: List<T>,
+) : ReversibleDequeNode<T>() {
+    override val size: Int = values.size
+    override val height: Int = 1
+    override val storageToken: Any = values
+
+    override fun front(): T? = values.firstOrNull()
+
+    override fun back(): T? = values.lastOrNull()
+
+    override fun get(index: Int): T = values[index]
+
+    override fun reverse(): ReversibleDequeNode<T> =
+        if (size <= 1) this else ReversedReversibleDequeNode(this)
+
+    override fun splitAt(index: Int): Pair<ReversibleDequeNode<T>, ReversibleDequeNode<T>> {
+        require(index in 0..size) { "Split index out of range." }
+        if (index == 0) {
+            return emptyReversibleDequeNode<T>() to this
+        }
+
+        if (index == size) {
+            return this to emptyReversibleDequeNode<T>()
+        }
+
+        return reversibleNodeFromSmallList(values.subList(0, index)) to
+            reversibleNodeFromSmallList(values.subList(index, size))
+    }
+
+    override fun appendTo(destination: MutableList<T>) {
+        destination.addAll(values)
+    }
+
+    override fun appendToReversed(destination: MutableList<T>) {
+        for (index in values.indices.reversed()) {
+            destination.add(values[index])
+        }
+    }
+}
+
+private class ReversibleDequeConcatNode<T>(
+    private val left: ReversibleDequeNode<T>,
+    private val right: ReversibleDequeNode<T>,
+) : ReversibleDequeNode<T>() {
+    override val size: Int = left.size + right.size
+    override val height: Int = maxOf(left.height, right.height) + 1
+    override val storageToken: Any = this
+
+    override fun front(): T? = left.front()
+
+    override fun back(): T? = right.back()
+
+    override fun get(index: Int): T =
+        if (index < left.size) left.get(index) else right.get(index - left.size)
+
+    override fun reverse(): ReversibleDequeNode<T> = ReversedReversibleDequeNode(this)
+
+    override fun splitAt(index: Int): Pair<ReversibleDequeNode<T>, ReversibleDequeNode<T>> {
+        require(index in 0..size) { "Split index out of range." }
+        return when {
+            index == 0 -> emptyReversibleDequeNode<T>() to this
+            index == size -> this to emptyReversibleDequeNode()
+            index < left.size -> {
+                val split = left.splitAt(index)
+                split.first to concatReversibleDequeNodes(split.second, right)
+            }
+            index == left.size -> left to right
+            else -> {
+                val split = right.splitAt(index - left.size)
+                concatReversibleDequeNodes(left, split.first) to split.second
+            }
+        }
+    }
+
+    override fun appendTo(destination: MutableList<T>) {
+        left.appendTo(destination)
+        right.appendTo(destination)
+    }
+
+    override fun appendToReversed(destination: MutableList<T>) {
+        right.appendToReversed(destination)
+        left.appendToReversed(destination)
+    }
+
+    override fun logicalParts(): Pair<ReversibleDequeNode<T>, ReversibleDequeNode<T>> = left to right
+}
+
+private class ReversedReversibleDequeNode<T>(
+    private val source: ReversibleDequeNode<T>,
+) : ReversibleDequeNode<T>() {
+    override val size: Int = source.size
+    override val height: Int = source.height
+    override val storageToken: Any = source.storageToken
+
+    override fun front(): T? = source.back()
+
+    override fun back(): T? = source.front()
+
+    override fun get(index: Int): T = source.get(size - index - 1)
+
+    override fun reverse(): ReversibleDequeNode<T> = source
+
+    override fun splitAt(index: Int): Pair<ReversibleDequeNode<T>, ReversibleDequeNode<T>> {
+        require(index in 0..size) { "Split index out of range." }
+        val split = source.splitAt(size - index)
+        return split.second.reverse() to split.first.reverse()
+    }
+
+    override fun appendTo(destination: MutableList<T>) {
+        source.appendToReversed(destination)
+    }
+
+    override fun appendToReversed(destination: MutableList<T>) {
+        source.appendTo(destination)
+    }
+
+    override fun logicalParts(): Pair<ReversibleDequeNode<T>, ReversibleDequeNode<T>>? {
+        val parts = source.logicalParts() ?: return null
+        return parts.second.reverse() to parts.first.reverse()
+    }
+}
+
+@Suppress("UNCHECKED_CAST")
+private fun <T> emptyReversibleDequeNode(): ReversibleDequeNode<T> =
+    EmptyReversibleDequeNode as ReversibleDequeNode<T>
+
+private fun <T> reversibleNodeFromSmallList(values: List<T>): ReversibleDequeNode<T> =
+    if (values.isEmpty()) {
+        emptyReversibleDequeNode()
+    } else {
+        ReversibleDequeLeafNode(values.toList())
+    }
+
+private fun <T> reversibleNodeFromValues(values: Iterable<T>): ReversibleDequeNode<T> {
+    val nodes = mutableListOf<ReversibleDequeNode<T>>()
+    var chunk = ArrayList<T>(ReversibleDequeLeafCapacity)
+    for (value in values) {
+        chunk.add(value)
+        if (chunk.size == ReversibleDequeLeafCapacity) {
+            nodes.add(ReversibleDequeLeafNode(chunk.toList()))
+            chunk = ArrayList(ReversibleDequeLeafCapacity)
+        }
+    }
+
+    if (chunk.isNotEmpty()) {
+        nodes.add(ReversibleDequeLeafNode(chunk.toList()))
+    }
+
+    return buildBalancedReversibleDequeNodes(nodes, 0, nodes.size)
+}
+
+private fun <T> buildBalancedReversibleDequeNodes(
+    nodes: List<ReversibleDequeNode<T>>,
+    start: Int,
+    end: Int,
+): ReversibleDequeNode<T> =
+    when (end - start) {
+        0 -> emptyReversibleDequeNode()
+        1 -> nodes[start]
+        else -> {
+            val middle = start + (end - start) / 2
+            concatReversibleDequeNodes(
+                buildBalancedReversibleDequeNodes(nodes, start, middle),
+                buildBalancedReversibleDequeNodes(nodes, middle, end),
+            )
+        }
+    }
+
+private fun <T> concatReversibleDequeNodes(
+    left: ReversibleDequeNode<T>,
+    right: ReversibleDequeNode<T>,
+): ReversibleDequeNode<T> {
+    if (left.isEmpty) {
+        return right
+    }
+
+    if (right.isEmpty) {
+        return left
+    }
+
+    if (left.height > right.height + 1) {
+        val parts = left.logicalParts()
+        if (parts != null) {
+            return rebalanceReversibleDequeNodes(
+                parts.first,
+                concatReversibleDequeNodes(parts.second, right),
+            )
+        }
+    }
+
+    if (right.height > left.height + 1) {
+        val parts = right.logicalParts()
+        if (parts != null) {
+            return rebalanceReversibleDequeNodes(
+                concatReversibleDequeNodes(left, parts.first),
+                parts.second,
+            )
+        }
+    }
+
+    return makeReversibleDequeConcatNode(left, right)
+}
+
+private fun <T> makeReversibleDequeConcatNode(
+    left: ReversibleDequeNode<T>,
+    right: ReversibleDequeNode<T>,
+): ReversibleDequeNode<T> =
+    when {
+        left.isEmpty -> right
+        right.isEmpty -> left
+        else -> ReversibleDequeConcatNode(left, right)
+    }
+
+private fun <T> rebalanceReversibleDequeNodes(
+    left: ReversibleDequeNode<T>,
+    right: ReversibleDequeNode<T>,
+): ReversibleDequeNode<T> {
+    if (left.height > right.height + 1) {
+        val parts = left.logicalParts() ?: return makeReversibleDequeConcatNode(left, right)
+        val innerParts = parts.second.logicalParts()
+        if (innerParts != null && parts.second.height > parts.first.height) {
+            return makeReversibleDequeConcatNode(
+                makeReversibleDequeConcatNode(parts.first, innerParts.first),
+                makeReversibleDequeConcatNode(innerParts.second, right),
+            )
+        }
+
+        return makeReversibleDequeConcatNode(
+            parts.first,
+            makeReversibleDequeConcatNode(parts.second, right),
+        )
+    }
+
+    if (right.height > left.height + 1) {
+        val parts = right.logicalParts() ?: return makeReversibleDequeConcatNode(left, right)
+        val innerParts = parts.first.logicalParts()
+        if (innerParts != null && parts.first.height > parts.second.height) {
+            return makeReversibleDequeConcatNode(
+                makeReversibleDequeConcatNode(left, innerParts.first),
+                makeReversibleDequeConcatNode(innerParts.second, parts.second),
+            )
+        }
+
+        return makeReversibleDequeConcatNode(
+            makeReversibleDequeConcatNode(left, parts.first),
+            parts.second,
+        )
+    }
+
+    return makeReversibleDequeConcatNode(left, right)
+}
+
 public class ReversibleDeque<T> private constructor(
-    private val deque: PersistentDeque<T>,
-    private val reversed: Boolean,
+    private val root: ReversibleDequeNode<T>,
 ) : Iterable<T> {
     public companion object {
-        public fun <T> empty(): ReversibleDeque<T> = ReversibleDeque(PersistentDeque.empty(), false)
+        public fun <T> empty(): ReversibleDeque<T> = ReversibleDeque(emptyReversibleDequeNode())
 
         public fun <T> from(values: Iterable<T>): ReversibleDeque<T> =
-            ReversibleDeque(PersistentDeque.from(values), false)
+            ReversibleDeque(reversibleNodeFromValues(values))
     }
 
     public val size: Int
-        get() = deque.size
+        get() = root.size
 
     public val isEmpty: Boolean
-        get() = deque.isEmpty
+        get() = root.isEmpty
 
-    public fun front(): T? = if (reversed) deque.back() else deque.front()
+    public fun front(): T? = root.front()
 
-    public fun back(): T? = if (reversed) deque.front() else deque.back()
+    public fun back(): T? = root.back()
 
     public operator fun get(index: Int): T? =
-        if (index < 0 || index >= size) null else deque[if (reversed) size - index - 1 else index]
+        if (index < 0 || index >= size) null else root.get(index)
 
-    public fun reverse(): ReversibleDeque<T> = ReversibleDeque(deque, !reversed)
+    public fun reverse(): ReversibleDeque<T> = ReversibleDeque(root.reverse())
 
     public fun prepend(value: T): ReversibleDeque<T> =
-        ReversibleDeque(if (reversed) deque.append(value) else deque.prepend(value), reversed)
+        ReversibleDeque(concatReversibleDequeNodes(reversibleNodeFromSmallList(listOf(value)), root))
 
     public fun append(value: T): ReversibleDeque<T> =
-        ReversibleDeque(if (reversed) deque.prepend(value) else deque.append(value), reversed)
+        ReversibleDeque(concatReversibleDequeNodes(root, reversibleNodeFromSmallList(listOf(value))))
 
     public fun concat(other: ReversibleDeque<T>): ReversibleDeque<T> =
-        from(toList() + other.toList())
+        ReversibleDeque(concatReversibleDequeNodes(root, other.root))
 
     public fun splitAt(index: Int): Pair<ReversibleDeque<T>, ReversibleDeque<T>>? {
         if (index < 0 || index > size) {
             return null
         }
 
-        val values = toList()
-        return from(values.take(index)) to from(values.drop(index))
+        val split = root.splitAt(index)
+        return ReversibleDeque(split.first) to ReversibleDeque(split.second)
     }
 
-    public fun tryViewLeft(): Pair<T, ReversibleDeque<T>>? =
-        front()?.let { it to from(toList().drop(1)) }
+    public fun tryViewLeft(): Pair<T, ReversibleDeque<T>>? {
+        if (isEmpty) {
+            return null
+        }
 
-    public fun tryViewRight(): Pair<T, ReversibleDeque<T>>? =
-        back()?.let { it to from(toList().dropLast(1)) }
+        val split = root.splitAt(1)
+        return root.get(0) to ReversibleDeque(split.second)
+    }
+
+    public fun tryViewRight(): Pair<T, ReversibleDeque<T>>? {
+        if (isEmpty) {
+            return null
+        }
+
+        val split = root.splitAt(size - 1)
+        return root.get(size - 1) to ReversibleDeque(split.first)
+    }
 
     public fun toList(): List<T> {
-        val values = deque.toList()
-        return if (reversed) values.asReversed().toList() else values
+        val values = ArrayList<T>(size)
+        root.appendTo(values)
+        return values
     }
 
     public fun sharesStorageWith(other: ReversibleDeque<T>): Boolean =
-        deque.sharesStorageWith(other.deque)
+        root.storageToken === other.root.storageToken
 
     override fun iterator(): Iterator<T> = toList().iterator()
 }

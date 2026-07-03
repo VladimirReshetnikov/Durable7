@@ -17,6 +17,7 @@ previously reversed deque must not pay a hidden O(n) materialization cost.
 | C++ FingerTree | Port of the C# reversible tree over immutable `shared_ptr` storage. | Endpoint, index, set, insert/remove, split, and copy use logical accessors. | `concat` is reversal-aware and tested for all orientation combinations. |
 | C FingerTree | Orientation-aware C reversible tree: deep reps and grouping nodes carry reversal bits behind an opaque rep. | Endpoint, index, set, insert/remove, split, concat, and traversal use logical accessors. | Fixed in this checkpoint: public concat/split/edit/traversal preserve logical orientation without materializing either operand. |
 | Haskell FingerTree | Strict reversible tree: deep levels and grouping nodes carry a reversal bit. | Endpoint, index, append, and traversal use logical accessors. | Fixed in this checkpoint: mixed-orientation `append` now glues logical digits through the tree instead of `toList`/`fromList` reification. |
+| Kotlin FingerTree | Balanced orientation-aware immutable tree owned by `ReversibleDeque<T>`. | Endpoint views, index, prepend/append, split, concat, and materialization navigate logical nodes. | Fixed in this checkpoint: mixed-orientation `concat` joins roots and rebalances through logical parts instead of `toList`/`from` reification. |
 | Rust FingerTree | `DequeTree::Reversed` wraps a shared root and cancels double reverse. | Endpoint, index, set, insert/remove, split, concat, iteration, and materialization interpret mirrored nodes. | Fixed in this checkpoint: mixed-orientation concat/split/pop stay tree-based instead of `to_vec`/`from_vec` reification. |
 
 ## Evidence
@@ -66,6 +67,18 @@ Haskell:
   operands do not carry a deferred normalization step.
 - `src/Haskell/FingerTree/test/Main.hs` covers all four append orientation combinations plus a larger
   reverse/reverse append with endpoint, boundary-index, count, and round-trip checks.
+
+Kotlin:
+
+- `src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Core.kt` now gives `ReversibleDeque<T>` a private
+  balanced node tree with small leaves, concat nodes, and reversed root wrappers. `reverse()` wraps or unwraps
+  the root in O(1), and the reversed wrapper keeps the original storage token for sharing checks.
+- `concatReversibleDequeNodes` joins roots directly and descends through logical concat parts for balancing, so
+  joining previously reversed operands does not normalize either side into a list.
+- `front`, `back`, `get`, `splitAt`, `tryViewLeft`, `tryViewRight`, and `toList` use node operations that project
+  logical orientation. Only explicit materialization APIs allocate the full list.
+- `src/Kotlin/FingerTree/test/tools/datastructures/fingertree/FingerTreeTests.kt` covers all four concat
+  orientation combinations, split/rejoin, endpoint views, nullable elements, and larger mixed concat histories.
 
 Rust:
 

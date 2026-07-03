@@ -26,6 +26,12 @@ The Kotlin surface follows Kotlin/JVM conventions:
 - text offsets are Kotlin `Char` offsets, matching the repository's `Rope<char>` interpretation.
 
 This workspace is a semantic checkpoint, not the final lazy finger-tree representation. It preserves
-immutable snapshot behavior and the observable behavior covered by the executable tests. The current
+immutable snapshot behavior and the observable behavior covered by the executable tests. Most current
 facades use immutable Kotlin lists and comparator-guided algorithms, so future representation work can
 replace the internals with a lazy measured spine without changing the Kotlin-facing surface.
+
+`ReversibleDeque<T>` is the notable asymptotic exception in this checkpoint. It owns balanced
+orientation-aware immutable storage rather than delegating through the list-backed
+`PersistentDeque<T>` facade: `reverse()` wraps or unwraps a root in O(1), `concat` joins logical roots
+without materializing either operand, and endpoint views, indexing, and splits navigate the logical
+tree even when either operand was previously reversed.

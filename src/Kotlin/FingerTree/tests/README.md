@@ -15,7 +15,8 @@ root build script. Run them from `src/Kotlin`:
 Coverage groups:
 
 - `PersistentDeque` snapshot preservation, splitting, and endpoint edits;
-- `ReversibleDeque` logical orientation and split behavior;
+- `ReversibleDeque` logical orientation, storage sharing across whole-deque reverse, mixed-orientation
+  concatenation, split/rejoin behavior, endpoint views, and larger mixed concat histories;
 - `FingerTree` runtime measure policies, prefix measures, splits, and locate;
 - `SortedBag`, `SortedSet`, and `SortedMap` ordering, duplicate/range behavior, navigation, and
   duplicate insert rejection;

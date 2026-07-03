@@ -32,8 +32,93 @@ private fun reversibleDequeUsesLogicalOrientation() {
     checkEquals(listOf(4, 3, 2, 1, 0), deque.toList(), "reversed append/prepend")
     checkEquals(4, deque.front(), "front")
     checkEquals(0, deque.back(), "back")
+    check(deque.sharesStorageWith(deque.reverse()), "reverse shares storage")
     checkEquals(listOf(4, 3), deque.splitAt(2)?.first?.toList(), "split first")
     checkEquals(listOf(2, 1, 0), deque.splitAt(2)?.second?.toList(), "split second")
+}
+
+private fun reversibleDequeConcatenatesMixedOrientations() {
+    val left = ReversibleDeque.from(listOf(0, 1, 2, 3))
+    val right = ReversibleDeque.from(listOf(10, 11, 12))
+    val cases = listOf(
+        "forward/forward" to (left.concat(right) to listOf(0, 1, 2, 3, 10, 11, 12)),
+        "reverse/forward" to (left.reverse().concat(right) to listOf(3, 2, 1, 0, 10, 11, 12)),
+        "forward/reverse" to (left.concat(right.reverse()) to listOf(0, 1, 2, 3, 12, 11, 10)),
+        "reverse/reverse" to (left.reverse().concat(right.reverse()) to listOf(3, 2, 1, 0, 12, 11, 10)),
+    )
+
+    for ((name, pair) in cases) {
+        val actual = pair.first
+        val expected = pair.second
+        checkEquals(expected, actual.toList(), "$name concat")
+        checkEquals(expected.first(), actual.front(), "$name front")
+        checkEquals(expected.last(), actual.back(), "$name back")
+        checkEquals(expected[expected.size / 2], actual[expected.size / 2], "$name index")
+
+        val split = actual.splitAt(4) ?: throw AssertionError("$name split")
+        checkEquals(expected.take(4), split.first.toList(), "$name split first")
+        checkEquals(expected.drop(4), split.second.toList(), "$name split second")
+        checkEquals(expected, split.first.concat(split.second).toList(), "$name split rejoin")
+    }
+
+    val mixed = left.reverse().concat(right.reverse()).append(99).prepend(-1)
+    val mixedExpected = listOf(-1, 3, 2, 1, 0, 12, 11, 10, 99)
+    val leftView = mixed.tryViewLeft() ?: throw AssertionError("left view")
+    val rightView = mixed.tryViewRight() ?: throw AssertionError("right view")
+    checkEquals(-1, leftView.first, "left view value")
+    checkEquals(mixedExpected.drop(1), leftView.second.toList(), "left view rest")
+    checkEquals(99, rightView.first, "right view value")
+    checkEquals(mixedExpected.dropLast(1), rightView.second.toList(), "right view rest")
+
+    val nullable = ReversibleDeque.from(listOf<Int?>(null, 1)).concat(ReversibleDeque.from(listOf<Int?>(null)).reverse())
+    val nullableLeft = nullable.tryViewLeft() ?: throw AssertionError("nullable left view")
+    checkEquals(listOf(null, 1, null), nullable.toList(), "nullable elements")
+    checkEquals(null, nullableLeft.first, "nullable left value")
+    checkEquals(listOf(1, null), nullableLeft.second.toList(), "nullable left rest")
+}
+
+private fun reversibleDequeKeepsMixedConcatHistoriesNavigable() {
+    var actual = ReversibleDeque.empty<Int>()
+    var expected = emptyList<Int>()
+
+    for (chunkIndex in 0 until 96) {
+        val values = (0 until 5).map { chunkIndex * 5 + it }
+        val chunkValues = if (chunkIndex % 2 == 0) values else values.asReversed()
+        val chunk = if (chunkIndex % 2 == 0) {
+            ReversibleDeque.from(values)
+        } else {
+            ReversibleDeque.from(values).reverse()
+        }
+
+        when (chunkIndex % 3) {
+            0 -> {
+                actual = actual.concat(chunk)
+                expected = expected + chunkValues
+            }
+            1 -> {
+                actual = chunk.concat(actual)
+                expected = chunkValues + expected
+            }
+            else -> {
+                actual = actual.reverse().concat(chunk).reverse()
+                expected = (expected.asReversed() + chunkValues).asReversed()
+            }
+        }
+    }
+
+    checkEquals(expected.size, actual.size, "mixed history size")
+    checkEquals(expected.first(), actual.front(), "mixed history front")
+    checkEquals(expected.last(), actual.back(), "mixed history back")
+    checkEquals(expected[0], actual[0], "mixed history first index")
+    checkEquals(expected[expected.size / 2], actual[actual.size / 2], "mixed history middle index")
+    checkEquals(expected.last(), actual[actual.size - 1], "mixed history last index")
+    checkEquals(expected, actual.toList(), "mixed history snapshot")
+
+    val middle = actual.size / 2
+    val split = actual.splitAt(middle) ?: throw AssertionError("mixed history split")
+    checkEquals(expected.take(middle), split.first.toList(), "mixed history split first")
+    checkEquals(expected.drop(middle), split.second.toList(), "mixed history split second")
+    checkEquals(expected, split.first.concat(split.second).toList(), "mixed history split rejoin")
 }
 
 private fun measuredTreeSplitsAndLocatesByPrefix() {
@@ -139,6 +224,8 @@ public fun main() {
     val tests = listOf(
         "dequePreservesSnapshots" to ::dequePreservesSnapshots,
         "reversibleDequeUsesLogicalOrientation" to ::reversibleDequeUsesLogicalOrientation,
+        "reversibleDequeConcatenatesMixedOrientations" to ::reversibleDequeConcatenatesMixedOrientations,
+        "reversibleDequeKeepsMixedConcatHistoriesNavigable" to ::reversibleDequeKeepsMixedConcatHistoriesNavigable,
         "measuredTreeSplitsAndLocatesByPrefix" to ::measuredTreeSplitsAndLocatesByPrefix,
         "sortedCollectionsKeepOrderAndRelations" to ::sortedCollectionsKeepOrderAndRelations,
         "sortedMapIsLastWinsAndNavigable" to ::sortedMapIsLastWinsAndNavigable,
