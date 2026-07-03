@@ -514,6 +514,24 @@ where
     }
 
     #[must_use]
+    pub fn is_proper_subset_of<I>(&self, other: I) -> bool
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let probe = PersistentHashSet::with_hasher(self.map.hasher().clone()).union(other);
+        self.len() < probe.len() && self.iter().all(|value| probe.contains(value))
+    }
+
+    #[must_use]
+    pub fn is_proper_superset_of<I>(&self, other: I) -> bool
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let probe = PersistentHashSet::with_hasher(self.map.hasher().clone()).union(other);
+        self.len() > probe.len() && probe.iter().all(|value| self.contains(value))
+    }
+
+    #[must_use]
     pub fn overlaps<I>(&self, other: I) -> bool
     where
         I: IntoIterator<Item = T>,
@@ -1118,5 +1136,9 @@ mod tests {
 
         let symmetric = left.symmetric_except([3, 4]);
         assert!(symmetric.set_equals([1, 2, 4]));
+        assert!(intersection.is_proper_subset_of([1, 2, 3, 3]));
+        assert!(left.is_proper_superset_of([1, 3, 3]));
+        assert!(!left.is_proper_subset_of([1, 2, 3]));
+        assert!(!left.is_proper_superset_of([1, 2, 3]));
     }
 }

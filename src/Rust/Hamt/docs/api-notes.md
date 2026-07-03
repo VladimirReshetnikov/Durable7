@@ -24,6 +24,8 @@ The port follows the repository HAMT semantics:
 - duplicate `add`/`try_add` calls reject the key without changing the root;
 - replacing an existing key retains the originally stored key object;
 - bulk map construction is last-wins.
+- set algebra includes union, intersection, difference, symmetric difference, subset/superset, proper
+  subset/superset, overlap, and equality checks.
 
 Rust-specific differences:
 

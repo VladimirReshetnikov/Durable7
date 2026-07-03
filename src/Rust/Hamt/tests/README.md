@@ -19,4 +19,4 @@ Coverage groups:
 - equal-hash collision buckets;
 - streaming trie-order iteration and exact-size accounting;
 - last-wins replacement and original-key retention;
-- set algebra.
+- set algebra, equality, and proper subset/superset relations.
