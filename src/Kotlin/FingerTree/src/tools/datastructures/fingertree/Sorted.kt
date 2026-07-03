@@ -1,0 +1,468 @@
+package tools.datastructures.fingertree
+
+public class SortedDuplicateKeyException(message: String = "An equivalent key is already present.") :
+    IllegalArgumentException(message)
+
+public data class SortedMapEntry<K, V>(public val key: K, public val value: V)
+
+public data class SortedAddResult<T>(public val value: T, public val added: Boolean)
+
+public data class SortedMapRemoveResult<K, V>(
+    public val map: SortedMap<K, V>,
+    public val value: V,
+)
+
+internal fun <T : Comparable<T>> naturalComparator(): Comparator<T> = Comparator { left, right ->
+    left.compareTo(right)
+}
+
+private fun <T> compare(comparator: Comparator<in T>, left: T, right: T): Int =
+    comparator.compare(left, right)
+
+private fun <T> List<T>.lowerBound(value: T, comparator: Comparator<in T>): Int {
+    var low = 0
+    var high = size
+    while (low < high) {
+        val mid = (low + high) ushr 1
+        if (compare(comparator, this[mid], value) < 0) {
+            low = mid + 1
+        } else {
+            high = mid
+        }
+    }
+
+    return low
+}
+
+private fun <T> List<T>.upperBound(value: T, comparator: Comparator<in T>): Int {
+    var low = 0
+    var high = size
+    while (low < high) {
+        val mid = (low + high) ushr 1
+        if (compare(comparator, this[mid], value) <= 0) {
+            low = mid + 1
+        } else {
+            high = mid
+        }
+    }
+
+    return low
+}
+
+public class SortedBag<T> private constructor(
+    private val items: List<T>,
+    private val comparator: Comparator<in T>,
+) : Iterable<T> {
+    public companion object {
+        public fun <T : Comparable<T>> empty(): SortedBag<T> = SortedBag(emptyList(), naturalComparator())
+
+        public fun <T : Comparable<T>> from(values: Iterable<T>): SortedBag<T> =
+            empty<T>().addRange(values)
+
+        public fun <T> empty(comparator: Comparator<in T>): SortedBag<T> =
+            SortedBag(emptyList(), comparator)
+
+        public fun <T> from(values: Iterable<T>, comparator: Comparator<in T>): SortedBag<T> =
+            empty(comparator).addRange(values)
+    }
+
+    public val size: Int
+        get() = items.size
+
+    public val isEmpty: Boolean
+        get() = items.isEmpty()
+
+    public fun min(): T? = items.firstOrNull()
+
+    public fun max(): T? = items.lastOrNull()
+
+    public operator fun get(rank: Int): T? = items.getOrNull(rank)
+
+    public fun contains(value: T): Boolean = countOf(value) > 0
+
+    public fun countLessThan(value: T): Int = items.lowerBound(value, comparator)
+
+    public fun countAtMost(value: T): Int = items.upperBound(value, comparator)
+
+    public fun countOf(value: T): Int = countAtMost(value) - countLessThan(value)
+
+    public fun add(value: T): SortedBag<T> {
+        val index = countAtMost(value)
+        return SortedBag(items.take(index) + value + items.drop(index), comparator)
+    }
+
+    public fun addRange(values: Iterable<T>): SortedBag<T> {
+        var result = this
+        for (value in values) {
+            result = result.add(value)
+        }
+
+        return result
+    }
+
+    public fun remove(value: T): SortedBag<T> {
+        val index = countLessThan(value)
+        if (index == size || compare(comparator, items[index], value) != 0) {
+            return this
+        }
+
+        return SortedBag(items.take(index) + items.drop(index + 1), comparator)
+    }
+
+    public fun removeAll(value: T): SortedBag<T> {
+        val start = countLessThan(value)
+        val end = countAtMost(value)
+        if (start == end) {
+            return this
+        }
+
+        return SortedBag(items.take(start) + items.drop(end), comparator)
+    }
+
+    public fun getRange(start: Int, count: Int): SortedBag<T>? {
+        if (start < 0 || count < 0 || start + count > size) {
+            return null
+        }
+
+        return SortedBag(items.drop(start).take(count), comparator)
+    }
+
+    public fun getValueRange(low: T, high: T): SortedBag<T> {
+        if (compare(comparator, low, high) > 0) {
+            return SortedBag(emptyList(), comparator)
+        }
+
+        return SortedBag(items.drop(countLessThan(low)).take(countAtMost(high) - countLessThan(low)), comparator)
+    }
+
+    public fun toList(): List<T> = items.toList()
+
+    public fun sharesStorageWith(other: SortedBag<T>): Boolean = items === other.items
+
+    override fun iterator(): Iterator<T> = items.iterator()
+}
+
+public class SortedSet<T> private constructor(
+    private val items: List<T>,
+    private val comparator: Comparator<in T>,
+) : Iterable<T> {
+    public companion object {
+        public fun <T : Comparable<T>> empty(): SortedSet<T> = SortedSet(emptyList(), naturalComparator())
+
+        public fun <T : Comparable<T>> from(values: Iterable<T>): SortedSet<T> =
+            empty<T>().union(values)
+
+        public fun <T> empty(comparator: Comparator<in T>): SortedSet<T> =
+            SortedSet(emptyList(), comparator)
+
+        public fun <T> from(values: Iterable<T>, comparator: Comparator<in T>): SortedSet<T> =
+            empty(comparator).union(values)
+    }
+
+    public val size: Int
+        get() = items.size
+
+    public val isEmpty: Boolean
+        get() = items.isEmpty()
+
+    public fun min(): T? = items.firstOrNull()
+
+    public fun max(): T? = items.lastOrNull()
+
+    public operator fun get(rank: Int): T? = items.getOrNull(rank)
+
+    public fun contains(value: T): Boolean {
+        val index = items.lowerBound(value, comparator)
+        return index < size && compare(comparator, items[index], value) == 0
+    }
+
+    public fun indexOf(value: T): Int? {
+        val index = items.lowerBound(value, comparator)
+        return if (index < size && compare(comparator, items[index], value) == 0) index else null
+    }
+
+    public fun add(value: T): SortedSet<T> {
+        val index = items.lowerBound(value, comparator)
+        if (index < size && compare(comparator, items[index], value) == 0) {
+            return this
+        }
+
+        return SortedSet(items.take(index) + value + items.drop(index), comparator)
+    }
+
+    public fun union(values: Iterable<T>): SortedSet<T> {
+        var result = this
+        for (value in values) {
+            result = result.add(value)
+        }
+
+        return result
+    }
+
+    public fun remove(value: T): SortedSet<T> {
+        val index = indexOf(value) ?: return this
+        return SortedSet(items.take(index) + items.drop(index + 1), comparator)
+    }
+
+    public fun floor(value: T): T? {
+        val index = items.upperBound(value, comparator) - 1
+        return if (index >= 0) items[index] else null
+    }
+
+    public fun ceiling(value: T): T? {
+        val index = items.lowerBound(value, comparator)
+        return if (index < size) items[index] else null
+    }
+
+    public fun lower(value: T): T? {
+        val index = items.lowerBound(value, comparator) - 1
+        return if (index >= 0) items[index] else null
+    }
+
+    public fun higher(value: T): T? {
+        val index = items.upperBound(value, comparator)
+        return if (index < size) items[index] else null
+    }
+
+    public fun getRange(start: Int, count: Int): SortedSet<T>? {
+        if (start < 0 || count < 0 || start + count > size) {
+            return null
+        }
+
+        return SortedSet(items.drop(start).take(count), comparator)
+    }
+
+    public fun getValueRange(low: T, high: T): SortedSet<T> {
+        if (compare(comparator, low, high) > 0) {
+            return SortedSet(emptyList(), comparator)
+        }
+
+        val start = items.lowerBound(low, comparator)
+        val end = items.upperBound(high, comparator)
+        return SortedSet(items.drop(start).take(end - start), comparator)
+    }
+
+    public fun intersect(values: Iterable<T>): SortedSet<T> {
+        val other = from(values, comparator)
+        return SortedSet(items.filter { other.contains(it) }, comparator)
+    }
+
+    public fun except(values: Iterable<T>): SortedSet<T> {
+        val other = from(values, comparator)
+        return SortedSet(items.filterNot { other.contains(it) }, comparator)
+    }
+
+    public fun symmetricExcept(values: Iterable<T>): SortedSet<T> {
+        val other = from(values, comparator)
+        var result = empty(comparator)
+        for (value in this) {
+            if (!other.contains(value)) {
+                result = result.add(value)
+            }
+        }
+
+        for (value in other) {
+            if (!contains(value)) {
+                result = result.add(value)
+            }
+        }
+
+        return result
+    }
+
+    public fun isSubsetOf(values: Iterable<T>): Boolean {
+        val other = from(values, comparator)
+        return all { other.contains(it) }
+    }
+
+    public fun isSupersetOf(values: Iterable<T>): Boolean =
+        values.all { contains(it) }
+
+    public fun isProperSubsetOf(values: Iterable<T>): Boolean {
+        val other = from(values, comparator)
+        return size < other.size && all { other.contains(it) }
+    }
+
+    public fun isProperSupersetOf(values: Iterable<T>): Boolean {
+        val other = from(values, comparator)
+        return size > other.size && other.all { contains(it) }
+    }
+
+    public fun overlaps(values: Iterable<T>): Boolean =
+        values.any { contains(it) }
+
+    public fun setEquals(values: Iterable<T>): Boolean {
+        val other = from(values, comparator)
+        return size == other.size && all { other.contains(it) }
+    }
+
+    public fun toList(): List<T> = items.toList()
+
+    public fun sharesStorageWith(other: SortedSet<T>): Boolean = items === other.items
+
+    override fun iterator(): Iterator<T> = items.iterator()
+}
+
+public class SortedMap<K, V> private constructor(
+    private val entries: List<SortedMapEntry<K, V>>,
+    private val comparator: Comparator<in K>,
+) : Iterable<SortedMapEntry<K, V>> {
+    public companion object {
+        public fun <K : Comparable<K>, V> empty(): SortedMap<K, V> =
+            SortedMap(emptyList(), naturalComparator())
+
+        public fun <K : Comparable<K>, V> from(values: Iterable<Pair<K, V>>): SortedMap<K, V> {
+            var result = empty<K, V>()
+            for ((key, value) in values) {
+                result = result.setItem(key, value)
+            }
+
+            return result
+        }
+
+        public fun <K, V> empty(comparator: Comparator<in K>): SortedMap<K, V> =
+            SortedMap(emptyList(), comparator)
+    }
+
+    public val size: Int
+        get() = entries.size
+
+    public val isEmpty: Boolean
+        get() = entries.isEmpty()
+
+    public fun containsKey(key: K): Boolean = indexOfKey(key) != null
+
+    public operator fun get(key: K): V? {
+        val index = indexOfKey(key) ?: return null
+        return entries[index].value
+    }
+
+    public fun entryAt(rank: Int): SortedMapEntry<K, V>? = entries.getOrNull(rank)
+
+    public fun minEntry(): SortedMapEntry<K, V>? = entries.firstOrNull()
+
+    public fun maxEntry(): SortedMapEntry<K, V>? = entries.lastOrNull()
+
+    public fun indexOfKey(key: K): Int? {
+        val index = lowerBoundByKey(key)
+        return if (index < size && compare(comparator, entries[index].key, key) == 0) index else null
+    }
+
+    public fun setItem(key: K, value: V): SortedMap<K, V> {
+        val index = lowerBoundByKey(key)
+        if (index < size && compare(comparator, entries[index].key, key) == 0) {
+            if (entries[index].value == value) {
+                return this
+            }
+
+            val next = entries.toMutableList()
+            next[index] = SortedMapEntry(next[index].key, value)
+            return SortedMap(next.toList(), comparator)
+        }
+
+        return SortedMap(entries.take(index) + SortedMapEntry(key, value) + entries.drop(index), comparator)
+    }
+
+    public fun insert(key: K, value: V): SortedMap<K, V> {
+        val result = tryInsert(key, value)
+        if (!result.added) {
+            throw SortedDuplicateKeyException()
+        }
+
+        return result.value
+    }
+
+    public fun tryInsert(key: K, value: V): SortedAddResult<SortedMap<K, V>> {
+        if (containsKey(key)) {
+            return SortedAddResult(this, false)
+        }
+
+        return SortedAddResult(setItem(key, value), true)
+    }
+
+    public fun remove(key: K): SortedMap<K, V> = tryRemove(key)?.map ?: this
+
+    public fun tryRemove(key: K): SortedMapRemoveResult<K, V>? {
+        val index = indexOfKey(key) ?: return null
+        val value = entries[index].value
+        return SortedMapRemoveResult(SortedMap(entries.take(index) + entries.drop(index + 1), comparator), value)
+    }
+
+    public fun floorEntry(key: K): SortedMapEntry<K, V>? {
+        val index = upperBoundByKey(key) - 1
+        return if (index >= 0) entries[index] else null
+    }
+
+    public fun ceilingEntry(key: K): SortedMapEntry<K, V>? {
+        val index = lowerBoundByKey(key)
+        return entries.getOrNull(index)
+    }
+
+    public fun lowerEntry(key: K): SortedMapEntry<K, V>? {
+        val index = lowerBoundByKey(key) - 1
+        return if (index >= 0) entries[index] else null
+    }
+
+    public fun higherEntry(key: K): SortedMapEntry<K, V>? {
+        val index = upperBoundByKey(key)
+        return entries.getOrNull(index)
+    }
+
+    public fun getRange(start: Int, count: Int): SortedMap<K, V>? {
+        if (start < 0 || count < 0 || start + count > size) {
+            return null
+        }
+
+        return SortedMap(entries.drop(start).take(count), comparator)
+    }
+
+    public fun getKeyRange(low: K, high: K): SortedMap<K, V> {
+        if (compare(comparator, low, high) > 0) {
+            return SortedMap(emptyList(), comparator)
+        }
+
+        val start = lowerBoundByKey(low)
+        val end = upperBoundByKey(high)
+        return SortedMap(entries.drop(start).take(end - start), comparator)
+    }
+
+    public fun toList(): List<SortedMapEntry<K, V>> = entries.toList()
+
+    public fun keys(): List<K> = entries.map { it.key }
+
+    public fun values(): List<V> = entries.map { it.value }
+
+    public fun sharesStorageWith(other: SortedMap<K, V>): Boolean = entries === other.entries
+
+    override fun iterator(): Iterator<SortedMapEntry<K, V>> = entries.iterator()
+
+    private fun lowerBoundByKey(key: K): Int {
+        var low = 0
+        var high = entries.size
+        while (low < high) {
+            val mid = (low + high) ushr 1
+            if (compare(comparator, entries[mid].key, key) < 0) {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+
+        return low
+    }
+
+    private fun upperBoundByKey(key: K): Int {
+        var low = 0
+        var high = entries.size
+        while (low < high) {
+            val mid = (low + high) ushr 1
+            if (compare(comparator, entries[mid].key, key) <= 0) {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+
+        return low
+    }
+}

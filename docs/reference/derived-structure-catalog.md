@@ -60,7 +60,7 @@ exist, rank writes do not), and a floor/ceiling lookup in the C sorted-map port 
 
 ## Candidate Catalog
 
-Every shipped family carries ports across the four language workspaces (C#, C++, C, Haskell),
+Every shipped family carries ports across the language workspaces (C#, C++, C, Haskell, Kotlin, Rust),
 each with its own docs and tests, plus benchmark evidence for complexity and allocation claims
 where the parity guide requires it. That parity bill - not feasibility -
 is what separates many "plausible" verdicts from "strong": thin facades are often better shipped as

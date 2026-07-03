@@ -101,6 +101,21 @@ This document is the canonical repository guidance for Vladimir and the AI codin
     │       ├── tools-data-structures-fingertree.cabal
     │       ├── src/
     │       └── test/
+    ├── Kotlin/
+    │   ├── README.md
+    │   ├── build.ps1
+    │   ├── Hamt/
+    │   │   ├── README.md
+    │   │   ├── docs/
+    │   │   ├── src/
+    │   │   ├── test/
+    │   │   └── tests/
+    │   └── FingerTree/
+    │       ├── README.md
+    │       ├── docs/
+    │       ├── src/
+    │       ├── test/
+    │       └── tests/
     └── Rust/
         ├── Cargo.toml
         ├── README.md
@@ -121,8 +136,9 @@ This document is the canonical repository guidance for Vladimir and the AI codin
 ## Workspaces
 
 The [source index](src/README.md) and language indexes for [C](src/C/README.md),
-[C++](src/Cpp/README.md), [C#](src/CSharp/README.md), [Haskell](src/Haskell/README.md), and
-[Rust](src/Rust/README.md) are the quickest way to browse the language-first layout.
+[C++](src/Cpp/README.md), [C#](src/CSharp/README.md), [Haskell](src/Haskell/README.md),
+[Kotlin](src/Kotlin/README.md), and [Rust](src/Rust/README.md) are the quickest way to browse the
+language-first layout.
 
 - [src/CSharp/Numerics](src/CSharp/Numerics/README.md) is a .NET 10 fixed-width and sparse integer numerics library. It provides `UInt256`/`Int256`, `UInt512`/`Int512`, `UInt1024`/`Int1024`, `SparseInteger`, deterministic two's-complement and binary conversion semantics, declaration-parity guardrails, and xUnit tests.
 - [src/CSharp/Hamt](src/CSharp/Hamt/README.md) is a .NET 10 persistent hash-array mapped trie library. It provides `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` with bitmap-indexed 32-way branching, immutable equal-hash collision buckets, comparer-preserving factories, structural sharing across versions, and xUnit/CsCheck model tests against BCL dictionaries and sets.
@@ -139,6 +155,8 @@ The [source index](src/README.md) and language indexes for [C](src/C/README.md),
 - [src/Cpp/FingerTree](src/Cpp/FingerTree/README.md) is the native C++ port of the FingerTree workspace. It is a header-first CMake/Ninja library with the two engine cores, derived collections, ropes, text helpers, and CTest validation.
 - [src/Haskell/Hamt](src/Haskell/Hamt/README.md) is a Haskell port of the persistent HAMT library. It provides `HashMap` and `HashSet` values with bitmap-indexed 32-way branching, immutable collision buckets, policy-preserving factories, structural sharing, and dependency-free cabal tests.
 - [src/Haskell/FingerTree](src/Haskell/FingerTree/README.md) is a Haskell port of the FingerTree family. It provides a general measured tree, size-measured deque, reversible deque, sorted bag/set/map facades, stable meldable priority queue, interval tree, positional and measured ropes, and text helpers.
+- [src/Kotlin/Hamt](src/Kotlin/Hamt/README.md) is a Kotlin/JVM port of the persistent HAMT library. It provides `PersistentHashMap<K, V>` and `PersistentHashSet<T>` values with bitmap-indexed 32-way branching, immutable collision buckets, runtime hash/equality policies, structural sharing, and dependency-free executable tests.
+- [src/Kotlin/FingerTree](src/Kotlin/FingerTree/README.md) is a Kotlin/JVM semantic-checkpoint port of the FingerTree family. It exposes persistent deque, measured sequence, reversible deque, sorted bag/set/map, priority queue, interval tree, positional and measured ropes, and text helpers with immutable snapshot semantics.
 - [src/Rust/Hamt](src/Rust/Hamt/README.md) is a safe Rust persistent HAMT map/set crate. It provides
   `PersistentHashMap` and `PersistentHashSet` with bitmap-indexed trie nodes, immutable collision
   buckets, `Arc` structural sharing, `BuildHasher` hash policy support, and Cargo unit tests.
@@ -191,6 +209,9 @@ cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.
 
 cd C:\DataStructures\src\Haskell
 cabal test all
+
+cd C:\DataStructures\src\Kotlin
+.\build.ps1
 ```
 
 Run benchmarks from the benchmark project:
@@ -210,9 +231,9 @@ Release configuration is required for meaningful benchmark numbers.
 - [docs/guides/agent-workflows.md](docs/guides/agent-workflows.md) holds compact task-conditional workflow guidance.
 - [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) is the repository-wide validation matrix and command guide.
 - [docs/guides/documentation-maintenance.md](docs/guides/documentation-maintenance.md) defines documentation placement, writing standards, metadata, and validation.
-- [docs/guides/porting-and-semantic-parity.md](docs/guides/porting-and-semantic-parity.md) defines the workflow for keeping C#, C++, C, Haskell, and Rust data-structure surfaces semantically aligned.
+- [docs/guides/porting-and-semantic-parity.md](docs/guides/porting-and-semantic-parity.md) defines the workflow for keeping C#, C++, C, Haskell, Kotlin, and Rust data-structure surfaces semantically aligned.
 - [docs/reference/README.md](docs/reference/README.md) indexes durable cross-workspace reference material.
-- [docs/reference/data-structure-catalog.md](docs/reference/data-structure-catalog.md) catalogs repository-owned data-structure families, public entry points, and primary references across C#, C, C++, Haskell, and Rust.
+- [docs/reference/data-structure-catalog.md](docs/reference/data-structure-catalog.md) catalogs repository-owned data-structure families, public entry points, and primary references across C#, C, C++, Haskell, Kotlin, and Rust.
 - [docs/reference/navigation-matrix.md](docs/reference/navigation-matrix.md) maps common tasks to the right usage, API, validation, porting, history, and maintenance documents.
 - [docs/reference/workspace-map.md](docs/reference/workspace-map.md) explains the language-first, library-family layout and port lineage.
 - [src/CSharp/Numerics/docs/README.md](src/CSharp/Numerics/docs/README.md) indexes the Numerics library's API and behavior reference, validation guide, maintainer guidance, and design notes.
@@ -225,6 +246,9 @@ Release configuration is required for meaningful benchmark numbers.
 - [src/C/FingerTree/docs/README.md](src/C/FingerTree/docs/README.md) indexes the C usage guide, API notes, and validation guide.
 - [src/Haskell/README.md](src/Haskell/README.md) indexes the Haskell cabal packages.
 - [src/Haskell/Hamt/test/README.md](src/Haskell/Hamt/test/README.md) and [src/Haskell/FingerTree/test/README.md](src/Haskell/FingerTree/test/README.md) summarize the Haskell executable test coverage.
+- [src/Kotlin/README.md](src/Kotlin/README.md) indexes the Kotlin/JVM workspaces.
+- [src/Kotlin/Hamt/docs/README.md](src/Kotlin/Hamt/docs/README.md) indexes the Kotlin HAMT port's API notes and validation guide.
+- [src/Kotlin/FingerTree/docs/README.md](src/Kotlin/FingerTree/docs/README.md) indexes the Kotlin FingerTree-family API notes and validation guide.
 - [src/Rust/Hamt/docs/README.md](src/Rust/Hamt/docs/README.md) indexes the Rust HAMT port's API notes
   and validation guide.
 - [src/Rust/FingerTree/docs/README.md](src/Rust/FingerTree/docs/README.md) indexes the Rust
@@ -259,6 +283,8 @@ The expected local Windows environment includes:
   `Import-VisualCppEnvironment.ps1` helper when compiling from a plain PowerShell process.
 - `git-filter-repo` usable as `python -m git_filter_repo` when future history work is needed.
 - GHC 9.12 and cabal 3.16 or newer for the Haskell packages under `src/Haskell`.
+- A JVM is optional for Kotlin validation because `src/Kotlin/build.ps1` bootstraps a local JDK 21 and
+  Kotlin compiler under `src/Kotlin/build/tools` when Java 21+ is not already available.
 - Rust toolchain with Cargo for `src/Rust`; the local profile may expose Cargo as
   `$env:USERPROFILE\.cargo\bin\cargo.exe` even when it is not on `PATH`.
 

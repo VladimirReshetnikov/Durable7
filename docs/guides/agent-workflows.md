@@ -11,7 +11,7 @@ Use [the workspace map](../reference/workspace-map.md) for the language-first la
 and documentation placement rules. Use [the build and validation guide](build-and-validation.md) for
 the complete cross-repository validation matrix. Use
 [the porting and semantic parity guide](porting-and-semantic-parity.md) when a behavior or public API
-change may need to cross C#, C++, C, Haskell, and Rust workspaces.
+change may need to cross C#, C++, C, Haskell, Kotlin, and Rust workspaces.
 
 ## C# and .NET validation
 

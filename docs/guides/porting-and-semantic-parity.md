@@ -21,6 +21,7 @@ intentional differences are explicit in the local API notes.
 | --- | --- |
 | Managed API specs under `src/CSharp/*/docs` | Primary semantic contract for repository-owned collection behavior. |
 | Native API specs and public headers under `src/C/*` and `src/Cpp/*` | Idiomatic C and C++ surface shape, ownership model, and local divergences. |
+| Kotlin API notes under `src/Kotlin/*/docs` | Kotlin/JVM value semantics, null/result shapes, tool bootstrap, and checkpoint divergences. |
 | Rust API notes under `src/Rust/*/docs` | Rust value semantics, `Result`/`Option` shape, Cargo validation, and checkpoint divergences. |
 | [Data structure catalog](../reference/data-structure-catalog.md) | Cross-language inventory of public data-structure entry points. |
 | [Workspace map](../reference/workspace-map.md) | Port lineage, path conventions, and documentation placement. |
@@ -44,7 +45,9 @@ HAMT lineage:
    explicit policy callbacks, and clone/destroy lifetime management.
 4. [`src/Haskell/Hamt`](../../src/Haskell/Hamt/README.md) ports the HAMT contract to immutable
    Haskell values with a package-local `Hashable` class and optional runtime `HashPolicy`.
-5. [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) ports the HAMT contract to Rust value types,
+5. [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) ports the HAMT contract to Kotlin/JVM values,
+   runtime `HashPolicy` objects, JVM-reference structural sharing, and null/result-shaped miss paths.
+6. [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) ports the HAMT contract to Rust value types,
    `BuildHasher` hash policies, `Eq` key equality, `Arc` structural sharing, and `Result`/`Option`
    result shapes.
 
@@ -60,7 +63,9 @@ FingerTree lineage:
 4. [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) ports the family to Haskell
    with a general measured tree, size-measured deque, reversible deque, derived collections,
    priority queue, intervals, ropes, and text helpers.
-5. [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) is the Rust semantic checkpoint for
+5. [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) ports the family to Kotlin/JVM as
+   a semantic checkpoint with immutable snapshot behavior and runtime measure/comparator policies.
+6. [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) is the Rust semantic checkpoint for
    the same family names. It preserves immutable snapshot behavior now; the public facades use
    structurally shared Rust tree storage, while the workspace documents the remaining asymptotic
    boundary until the lazy measured spine is ported through the whole family.
@@ -80,7 +85,7 @@ Check these items before calling a cross-language change complete:
 | Policy preservation | Are hash, equality, comparison, measure, ownership, and callback policies preserved across derived versions? |
 | Ordering | Are enumeration, sorted order, tie-breaking, rank, interval, rope, and text-boundary semantics equivalent where exposed? |
 | Failure behavior | Do duplicate-key, absent-key, empty-collection, invalid-rank, allocation, and callback failures match the documented contract? |
-| Ownership and lifetime | Are C# references, C++ values/shared nodes, C handle clone/destroy rules, Haskell immutable values, and Rust owned values/borrows/`Arc` sharing all respected by examples and tests? |
+| Ownership and lifetime | Are C# references, C++ values/shared nodes, C handle clone/destroy rules, Haskell immutable values, Kotlin/JVM references, and Rust owned values/borrows/`Arc` sharing all respected by examples and tests? |
 | Complexity and allocation | Do docs and tests protect the promised asymptotic shape and hot-path allocation behavior? |
 | Concurrency | Are immutable publication and family-specific reference-counting rules documented without overstating guarantees? |
 | Validation | Do tests cover the affected behavior in every touched workspace, including model or property tests when those are the relevant evidence? |
@@ -100,6 +105,10 @@ Do not copy names mechanically. Preserve contracts while using each language's n
 | Errors | .NET exceptions and nullable annotations. | Standard exceptions or explicit optional/result objects. | Status codes and caller-owned output storage. | `Option` for absent/out-of-range, `Result` for duplicate-key or recoverable errors, panic only for invariant construction failures. |
 | Lifetime | Garbage-collected immutable objects. | RAII values over shared immutable nodes. | Explicit clone/dispose or create/destroy pairs. | Borrow-checked references, cloned owned values on removal, and `Arc` for shared immutable storage. |
 
+Kotlin ports should preserve the same observable contracts with idiomatic JVM shapes: immutable return
+values, `null` for miss paths, runtime policy/comparator objects when type-level policies would be
+unnatural, and explicit result records or exceptions for duplicate-key contracts.
+
 ## Change Workflow
 
 1. Locate the data-structure family in the [catalog](../reference/data-structure-catalog.md) and
@@ -118,12 +127,12 @@ Do not copy names mechanically. Preserve contracts while using each language's n
    [test suite map](../reference/test-suite-map.md) for coverage expectations, stress controls,
    sample-smoke hooks, benchmark boundaries, and exact evidence wording. Run repository-owned
    Markdown link and stale-path checks for docs changes.
-7. Commit only after the evidence matches the scope of the claim. A C# unit test does not prove a C
-   or Rust port is aligned; a successful build does not prove a changed ordering or allocation contract.
+7. Commit only after the evidence matches the scope of the claim. A C# unit test does not prove a C,
+   Kotlin, or Rust port is aligned; a successful build does not prove a changed ordering or allocation contract.
 
 ## HAMT-Specific Checks
 
-For map/set changes, verify these contracts across C#, C++, C, Haskell, and Rust where exposed:
+For map/set changes, verify these contracts across C#, C++, C, Haskell, Kotlin, and Rust where exposed:
 
 - 32-way bitmap-indexed trie shape over 32 hash bits.
 - Immutable equal-hash collision buckets with linear equality probing.
@@ -142,6 +151,7 @@ Primary semantic docs:
 - [C++ HAMT API specification](../../src/Cpp/Hamt/docs/api-specification.md)
 - [C HAMT API specification](../../src/C/Hamt/docs/api-specification.md)
 - [Haskell HAMT workspace](../../src/Haskell/Hamt/README.md)
+- [Kotlin HAMT API notes](../../src/Kotlin/Hamt/docs/api-notes.md)
 - [Rust HAMT API notes](../../src/Rust/Hamt/docs/api-notes.md)
 
 Validation guides:
@@ -150,11 +160,12 @@ Validation guides:
 - [C++ HAMT validation](../../src/Cpp/Hamt/docs/validation.md)
 - [C HAMT validation](../../src/C/Hamt/docs/validation.md)
 - [Haskell HAMT tests](../../src/Haskell/Hamt/test/README.md)
+- [Kotlin HAMT validation](../../src/Kotlin/Hamt/docs/validation.md)
 - [Rust HAMT validation](../../src/Rust/Hamt/docs/validation.md)
 
 ## FingerTree-Specific Checks
 
-For finger-tree-family changes, verify these contracts across the relevant C#, C++, C, Haskell, and Rust surfaces:
+For finger-tree-family changes, verify these contracts across the relevant C#, C++, C, Haskell, Kotlin, and Rust surfaces:
 
 - Tuned deque and general measured tree remain separate when the language exposes both.
 - Measure policies obey monoid identity and associativity assumptions used by split, locate, and
@@ -177,6 +188,7 @@ Primary semantic docs:
 - [C++ FingerTree implementation notes](../../src/Cpp/FingerTree/docs/implementation-notes.md)
 - [C FingerTree API notes](../../src/C/FingerTree/docs/api-notes.md)
 - [Haskell FingerTree workspace](../../src/Haskell/FingerTree/README.md)
+- [Kotlin FingerTree API notes](../../src/Kotlin/FingerTree/docs/api-notes.md)
 - [Rust FingerTree API notes](../../src/Rust/FingerTree/docs/api-notes.md)
 
 Validation guides:
@@ -185,6 +197,7 @@ Validation guides:
 - [C++ FingerTree validation](../../src/Cpp/FingerTree/docs/validation.md)
 - [C FingerTree validation](../../src/C/FingerTree/docs/validation.md)
 - [Haskell FingerTree tests](../../src/Haskell/FingerTree/test/README.md)
+- [Kotlin FingerTree validation](../../src/Kotlin/FingerTree/docs/validation.md)
 - [Rust FingerTree validation](../../src/Rust/FingerTree/docs/validation.md)
 
 ## Validation Evidence

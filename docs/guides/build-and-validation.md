@@ -21,10 +21,12 @@ boundaries, use the [test suite map](../reference/test-suite-map.md).
 | [`src/CSharp/FingerTree`](../../src/CSharp/FingerTree/README.md) | `dotnet test .\FingerTree.sln` | [Validation](../../src/CSharp/FingerTree/docs/validation.md) | [Tests](../../src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/README.md) | .NET library, samples, benchmark project build, stress controls, xUnit/CsCheck suites |
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | `.\build.ps1 -RunTests` | [Validation](../../src/C/Hamt/docs/validation.md) | [Tests](../../src/C/Hamt/tests/README.md) | C17 build, warning policy, deterministic HAMT tests |
 | [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | `.\build.ps1 -RunTests` | [Validation](../../src/Cpp/Hamt/docs/validation.md) | [Tests](../../src/Cpp/Hamt/tests/README.md) | C++20 build, warning policy, deterministic HAMT tests |
+| [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | `.\build.ps1 -Workspace Hamt` from `src/Kotlin` | [Validation](../../src/Kotlin/Hamt/docs/validation.md) | [Tests](../../src/Kotlin/Hamt/tests/README.md) | Kotlin/JVM HAMT build, tool bootstrap, deterministic trie and set-algebra tests |
 | [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | `cargo test -p tools-data-structures-hamt` | [Validation](../../src/Rust/Hamt/docs/validation.md) | [Tests](../../src/Rust/Hamt/tests/README.md) | Safe Rust crate, structural HAMT tests, collision and set-algebra coverage |
 | [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | Visual Studio `cmd.exe` CMake/CTest chain below | [Validation](../../src/C/FingerTree/docs/validation.md) | [Tests](../../src/C/FingerTree/tests/README.md) | C11 static library, tests, samples, benchmark harness entry points |
 | [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | Visual Studio `cmd.exe` CMake/CTest chain below | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | [Tests](../../src/Cpp/FingerTree/tests/README.md) | C++23 header-first library, CTest suite, stress controls, benchmark-harness status |
 | [`src/Haskell`](../../src/Haskell/README.md) | `cabal test all` | [Haskell README](../../src/Haskell/README.md) | [HAMT tests](../../src/Haskell/Hamt/test/README.md), [FingerTree tests](../../src/Haskell/FingerTree/test/README.md) | GHC/cabal build, dependency-light HAMT and FingerTree executable tests |
+| [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree` from `src/Kotlin` | [Validation](../../src/Kotlin/FingerTree/docs/validation.md) | [Tests](../../src/Kotlin/FingerTree/tests/README.md) | Kotlin/JVM semantic-checkpoint tests across deque, reversible deque, measured tree, sorted, priority, interval, rope, and text helpers |
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | `cargo test -p tools-data-structures-fingertree` | [Validation](../../src/Rust/FingerTree/docs/validation.md) | [Tests](../../src/Rust/FingerTree/tests/README.md) | Safe Rust checkpoint crate, structurally shared storage and cached-measure tests across deque, reversible deque, sorted, priority, interval, rope, measured tree, measured rope, and text helpers |
 
 For broad repository edits, run every row that could be affected. For documentation-only edits, run the
@@ -151,6 +153,25 @@ The cabal project builds both Haskell packages and runs the dependency-light tes
 
 - [Haskell HAMT tests](../../src/Haskell/Hamt/test/README.md)
 - [Haskell FingerTree tests](../../src/Haskell/FingerTree/test/README.md)
+
+## Kotlin Workspaces
+
+```powershell
+cd C:\DataStructures\src\Kotlin
+.\build.ps1
+.\build.ps1 -Workspace Hamt
+.\build.ps1 -Workspace FingerTree
+```
+
+The Kotlin build script compiles each workspace with the Kotlin command-line compiler and runs
+dependency-free executable tests. If no Java 21+ runtime is on `PATH`, it bootstraps a local Temurin
+JDK 21 under `src/Kotlin/build/tools`; it also downloads and verifies the Kotlin compiler archive.
+Local guides:
+
+- [Kotlin HAMT validation](../../src/Kotlin/Hamt/docs/validation.md)
+- [Kotlin HAMT tests](../../src/Kotlin/Hamt/tests/README.md)
+- [Kotlin FingerTree validation](../../src/Kotlin/FingerTree/docs/validation.md)
+- [Kotlin FingerTree tests](../../src/Kotlin/FingerTree/tests/README.md)
 
 ## Benchmarks
 

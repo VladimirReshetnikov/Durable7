@@ -14,7 +14,7 @@ Library-specific design and API documentation lives beside each workspace under 
 - [Agent workflows](guides/agent-workflows.md) - compact task-conditional workflow guidance inherited from the Tools repository where relevant.
 - [Build and validation](guides/build-and-validation.md) - repository-wide validation matrix, exact build/test commands, CMake cache notes, and Markdown checks.
 - [Documentation maintenance](guides/documentation-maintenance.md) - documentation placement, writing standards, metadata, and validation.
-- [Porting and semantic parity](guides/porting-and-semantic-parity.md) - workflow for carrying behavior and documentation changes across C#, C++, C, Haskell, and Rust workspaces.
+- [Porting and semantic parity](guides/porting-and-semantic-parity.md) - workflow for carrying behavior and documentation changes across C#, C++, C, Haskell, Kotlin, and Rust workspaces.
 
 ## Reference
 
@@ -46,6 +46,8 @@ validation, benchmark, and algorithm documents under
 [src/CSharp/FingerTree/docs](../src/CSharp/FingerTree/docs/README.md), with native FingerTree usage,
 API, port, and validation documents under [src/Cpp/FingerTree/docs](../src/Cpp/FingerTree/docs/README.md) and
 [src/C/FingerTree/docs](../src/C/FingerTree/docs/README.md), and Rust FingerTree-family documents under
-[src/Rust/FingerTree/docs](../src/Rust/FingerTree/docs/README.md). Put Haskell package entry points under
+[src/Rust/FingerTree/docs](../src/Rust/FingerTree/docs/README.md). Put Kotlin HAMT and FingerTree-family
+documents under [src/Kotlin/Hamt/docs](../src/Kotlin/Hamt/docs/README.md) and
+[src/Kotlin/FingerTree/docs](../src/Kotlin/FingerTree/docs/README.md). Put Haskell package entry points under
 [src/Haskell](../src/Haskell/README.md), with test coverage notes beside each package's cabal test
 executable.

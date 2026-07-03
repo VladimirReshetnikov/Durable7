@@ -13,7 +13,7 @@ routes a reader to the narrowest document that owns the question.
 | Task | Open first | Then inspect |
 | --- | --- | --- |
 | Understand repository layout | [Workspace map](workspace-map.md) | Root [README](../../README.md), [source index](../../src/README.md), [data-structure catalog](data-structure-catalog.md) |
-| Browse workspaces by language | [Source index](../../src/README.md) | [C](../../src/C/README.md), [C++](../../src/Cpp/README.md), [C#](../../src/CSharp/README.md), [Haskell](../../src/Haskell/README.md), [Rust](../../src/Rust/README.md) |
+| Browse workspaces by language | [Source index](../../src/README.md) | [C](../../src/C/README.md), [C++](../../src/Cpp/README.md), [C#](../../src/CSharp/README.md), [Haskell](../../src/Haskell/README.md), [Kotlin](../../src/Kotlin/README.md), [Rust](../../src/Rust/README.md) |
 | Choose a data structure or numerics surface across languages | [Data-structure catalog](data-structure-catalog.md) | The matching workspace usage guide and API specification or notes |
 | Plan a new derived structure or API extension | [Derived structure catalog](derived-structure-catalog.md) | [Porting and semantic parity](../guides/porting-and-semantic-parity.md), affected workspace API specs |
 | Use an existing collection | The relevant usage guide below | Source tests for executable examples when behavior is subtle |
@@ -39,11 +39,13 @@ patterns.
 | C HAMT | [src/C/Hamt/docs/usage.md](../../src/C/Hamt/docs/usage.md) | `tds_hamt_map` / `tds_hamt_set` policies, borrowed versus owned pointers, status/cleanup patterns |
 | C++ HAMT | [src/Cpp/Hamt/docs/usage.md](../../src/Cpp/Hamt/docs/usage.md) | Header inclusion, value semantics, custom hash/equality policy objects, set algebra |
 | Haskell HAMT | [src/Haskell/Hamt/README.md](../../src/Haskell/Hamt/README.md) | `HashMap`, `HashSet`, `HashPolicy`, package-local `Hashable`, and cabal validation |
+| Kotlin HAMT | [src/Kotlin/Hamt/docs/api-notes.md](../../src/Kotlin/Hamt/docs/api-notes.md) | `PersistentHashMap`, `PersistentHashSet`, runtime `HashPolicy`, and executable validation |
 | Rust HAMT | [src/Rust/Hamt/docs/api-notes.md](../../src/Rust/Hamt/docs/api-notes.md) | `PersistentHashMap`, `PersistentHashSet`, hash policies, and Cargo validation |
 | C# FingerTree | [src/CSharp/FingerTree/docs/usage.md](../../src/CSharp/FingerTree/docs/usage.md) | Deques, reversible deques, sorted collections, priority queues, intervals, ropes/text, raw measured trees |
 | C FingerTree | [src/C/FingerTree/docs/usage.md](../../src/C/FingerTree/docs/usage.md) | C handle lifetime, policy setup, persistent updates, facades, text ropes |
 | C++ FingerTree | [src/Cpp/FingerTree/docs/usage.md](../../src/Cpp/FingerTree/docs/usage.md) | Aggregate include path, value semantics, persistent deque/tree facades, ropes/text, publication patterns |
 | Haskell FingerTree | [src/Haskell/FingerTree/README.md](../../src/Haskell/FingerTree/README.md) | General measured tree, deque, reversible deque, sorted facades, priority queue, intervals, ropes, and text helpers |
+| Kotlin FingerTree | [src/Kotlin/FingerTree/docs/api-notes.md](../../src/Kotlin/FingerTree/docs/api-notes.md) | Kotlin semantic-checkpoint surfaces for deque, measured sequence, sorted collections, priority queue, intervals, ropes/text |
 | Rust FingerTree | [src/Rust/FingerTree/docs/api-notes.md](../../src/Rust/FingerTree/docs/api-notes.md) | Rust shared-storage checkpoint surfaces for deque, measured sequence, sorted collections, priority queue, intervals, ropes/text |
 
 ## API Contracts
@@ -57,11 +59,13 @@ Use these when behavior, complexity, allocation, ownership, or cross-language pa
 | C HAMT | [API specification](../../src/C/Hamt/docs/api-specification.md) | C API ownership, callback policy, and complexity contract |
 | C++ HAMT | [API specification](../../src/Cpp/Hamt/docs/api-specification.md) | C++ template API and C# parity notes |
 | Haskell HAMT | [Workspace README](../../src/Haskell/Hamt/README.md) and [source](../../src/Haskell/Hamt/src/Data/Structures/Hamt/HashMap.hs) | Haskell HAMT map/set API shape |
+| Kotlin HAMT | [API notes](../../src/Kotlin/Hamt/docs/api-notes.md) and [source](../../src/Kotlin/Hamt/src/tools/datastructures/hamt/PersistentHamt.kt) | Kotlin HAMT map/set API shape, runtime policy, and root-sharing diagnostics |
 | Rust HAMT | [API notes](../../src/Rust/Hamt/docs/api-notes.md) and [source](../../src/Rust/Hamt/src/lib.rs) | Rust value API, `BuildHasher`, `Arc` sharing, and trie-order iteration |
 | C# FingerTree | [API specification](../../src/CSharp/FingerTree/docs/api-specification.md) | Deque contract plus measured-tree, reversible-deque, rope, and related surface notes |
 | C FingerTree | [API notes](../../src/C/FingerTree/docs/api-notes.md) | C API shape, ownership rules, and C++ port differences |
 | C++ FingerTree | [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) | C++ conventions and active differences from the C# workspace |
 | Haskell FingerTree | [Workspace README](../../src/Haskell/FingerTree/README.md) and [source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Measured.hs) | Haskell measured tree and derived collection API shape |
+| Kotlin FingerTree | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md) and [source](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Core.kt) | Kotlin measured tree and derived collection API shape plus semantic-checkpoint boundary |
 | Rust FingerTree | [API notes](../../src/Rust/FingerTree/docs/api-notes.md) and [source](../../src/Rust/FingerTree/src/measured.rs) | Rust measured tree and derived collection API shape |
 
 ## Validation Entry Points
@@ -77,6 +81,9 @@ Use these when behavior, complexity, allocation, ownership, or cross-language pa
 | C FingerTree | [Validation](../../src/C/FingerTree/docs/validation.md) | CMake build, CTest validation, sample smoke tests, and benchmark harness entry points |
 | C++ FingerTree | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | CMake build, CTest validation, stress controls, and benchmark-harness status |
 | Haskell | [Workspace README](../../src/Haskell/README.md) | `cabal test all` builds both Haskell packages and runs the HAMT/FingerTree executables |
+| Kotlin | [Workspace README](../../src/Kotlin/README.md) | `.\build.ps1` builds both Kotlin workspaces and runs dependency-free executable tests |
+| Kotlin HAMT | [Validation](../../src/Kotlin/Hamt/docs/validation.md) | Kotlin compiler bootstrap and deterministic HAMT executable tests |
+| Kotlin FingerTree | [Validation](../../src/Kotlin/FingerTree/docs/validation.md) | Kotlin compiler bootstrap and semantic-checkpoint executable tests across collection facades |
 | Rust | [Workspace README](../../src/Rust/README.md) | `cargo test --workspace` builds both Rust crates and runs unit/doc tests |
 | Rust FingerTree | [Validation](../../src/Rust/FingerTree/docs/validation.md) | Cargo unit tests for shared storage and checkpoint semantics across deque, measured sequence, sorted, priority, interval, rope, and text helpers |
 | C# FingerTree benchmarks | [Benchmark notes](../../src/CSharp/FingerTree/docs/benchmarks.md) | Curated BenchmarkDotNet results and interpretation |
@@ -92,6 +99,8 @@ Use these when behavior, complexity, allocation, ownership, or cross-language pa
 | C++ FingerTree tests | [Tests README](../../src/Cpp/FingerTree/tests/README.md) | Native smoke runner source map, direct executable path, and tearable stress controls |
 | Haskell HAMT tests | [Tests README](../../src/Haskell/Hamt/test/README.md) | Cabal executable covering collision buckets, custom policies, key recovery, and set algebra |
 | Haskell FingerTree tests | [Tests README](../../src/Haskell/FingerTree/test/README.md) | Cabal executable covering measured tree, facades, intervals, ropes, and text helpers |
+| Kotlin HAMT tests | [Tests README](../../src/Kotlin/Hamt/tests/README.md) | Kotlin executable covering collisions, root sharing, replacement, iteration, and set algebra |
+| Kotlin FingerTree tests | [Tests README](../../src/Kotlin/FingerTree/tests/README.md) | Kotlin executable covering deque, measured tree, facades, intervals, ropes, and text helpers |
 | Rust HAMT tests | [Tests README](../../src/Rust/Hamt/tests/README.md) | Cargo unit tests covering collisions, updates, iteration, and set algebra |
 | Rust FingerTree tests | [Tests README](../../src/Rust/FingerTree/tests/README.md) | Cargo unit tests covering deque, measured tree, facades, intervals, ropes, and text helpers |
 
