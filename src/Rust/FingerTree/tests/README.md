@@ -1,0 +1,22 @@
+# Rust FingerTree Tests
+
+- Created (UTC): 2026-07-03T00:00:00Z
+- Repository HEAD: 3f49d1a1ba71390af95f5a9389b99d2e334c8beb
+- Audience: Maintainers navigating Rust FingerTree-family test coverage
+- Scope: Test location, command, and coverage map
+
+Tests currently live inline in the module files under [`../src`](../src). Run them from `src/Rust`:
+
+```powershell
+cargo test -p tools-data-structures-fingertree
+```
+
+Coverage groups:
+
+- `deque.rs`: persistent deque and reversible deque;
+- `measured.rs`: measured sequence core and built-in measure policies;
+- `sorted.rs`: sorted bag, set, and map facades;
+- `priority_queue.rs`: stable minimum-priority queue and meld;
+- `interval_tree.rs`: closed intervals, overlap queries, and coalescing;
+- `rope.rs`: positional ropes, measured ropes, text helpers, and builder.
+

@@ -22,7 +22,11 @@ src/
 │   ├── README.md
 │   ├── FingerTree/
 │   └── Hamt/
-└── Haskell/
+├── Haskell/
+│   ├── README.md
+│   ├── FingerTree/
+│   └── Hamt/
+└── Rust/
     ├── README.md
     ├── FingerTree/
     └── Hamt/
@@ -32,8 +36,8 @@ This makes language-local build systems, toolchains, include paths, and idioms e
 the same data-structure families aligned across languages.
 
 Use the [source index](../../src/README.md) when browsing by language, or jump directly to the
-[C](../../src/C/README.md), [C++](../../src/Cpp/README.md), [C#](../../src/CSharp/README.md), or
-[Haskell](../../src/Haskell/README.md) language index.
+[C](../../src/C/README.md), [C++](../../src/Cpp/README.md), [C#](../../src/CSharp/README.md),
+[Haskell](../../src/Haskell/README.md), or [Rust](../../src/Rust/README.md) language index.
 
 For the cross-language list of public data-structure surfaces, see the
 [data structure catalog](data-structure-catalog.md).
@@ -46,10 +50,12 @@ For the cross-language list of public data-structure surfaces, see the
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | C17 HAMT port | `include/Tools/DataStructures/Hamt/hamt.h`, `build.ps1` | [`docs`](../../src/C/Hamt/docs/README.md) |
 | [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | C++20 HAMT port | `include/Tools/DataStructures/Hamt/*.hpp`, `build.ps1` | [`docs`](../../src/Cpp/Hamt/docs/README.md) |
 | [`src/Haskell/Hamt`](../../src/Haskell/Hamt/README.md) | Haskell HAMT port | `tools-data-structures-hamt.cabal`, `src/Data/Structures/Hamt/` | [`README`](../../src/Haskell/Hamt/README.md) |
+| [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | Rust HAMT port | `Cargo.toml`, `src/lib.rs` | [`docs`](../../src/Rust/Hamt/docs/README.md) |
 | [`src/CSharp/FingerTree`](../../src/CSharp/FingerTree/README.md) | Canonical managed FingerTree library | `FingerTree.sln`, `src/Tools.DataStructures.FingerTree/` | [`docs`](../../src/CSharp/FingerTree/docs/README.md) |
 | [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | C++23 FingerTree port | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/Cpp/FingerTree/docs/README.md) |
 | [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | C11 FingerTree port | `include/tools/data_structures/finger_tree/fingertree.h`, `CMakePresets.json` | [`docs`](../../src/C/FingerTree/docs/README.md) |
 | [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) | Haskell FingerTree family port | `tools-data-structures-fingertree.cabal`, `src/Data/Structures/FingerTree/` | [`README`](../../src/Haskell/FingerTree/README.md) |
+| [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | Rust FingerTree family checkpoint port | `Cargo.toml`, `src/` | [`docs`](../../src/Rust/FingerTree/docs/README.md) |
 
 ## Port Lineage
 
@@ -59,6 +65,7 @@ HAMT lineage:
 2. `src/Cpp/Hamt` ports the HAMT semantics to C++ value types, templates, and `std::shared_ptr` node sharing.
 3. `src/C/Hamt` ports the same structure to a type-erased C API with explicit clone/destroy ownership.
 4. `src/Haskell/Hamt` ports the same persistent HAMT semantics to Haskell values, with a package-local `Hashable` class and optional runtime `HashPolicy`.
+5. `src/Rust/Hamt` ports the HAMT contract to Rust value types, `BuildHasher` hash policies, and `Arc` structural sharing.
 
 FingerTree lineage:
 
@@ -66,6 +73,7 @@ FingerTree lineage:
 2. `src/Cpp/FingerTree` ports the FingerTree family to a header-first C++23 library with CMake/CTest validation.
 3. `src/C/FingerTree` starts from the C++ port and exposes a C11 API with explicit handles, ownership, and facade types.
 4. `src/Haskell/FingerTree` ports the family to Haskell with a general measured tree, deque/reversible deque, derived collections, intervals, ropes, and text helpers.
+5. `src/Rust/FingerTree` is the Rust semantic checkpoint for the FingerTree family, with Rust API notes documenting remaining lazy-spine parity work.
 
 When porting behavior across languages, prefer the managed workspace for the semantic contract, the adjacent
 native workspace for local idioms, and the local tests for the exact validation shape. Use the

@@ -21,6 +21,8 @@ checks, and the workspace validation guides, which own local warning policy and 
 | [C++ FingerTree](../../src/Cpp/FingerTree/README.md) | CMake/CTest smoke executable with a local runner | Visual Studio CMake/CTest chain from the validation guide | [Tests README](../../src/Cpp/FingerTree/tests/README.md) | Header-first C++23 suite with tearable concurrency stress controls |
 | [Haskell HAMT](../../src/Haskell/Hamt/README.md) | Cabal exit-code executable | `cabal test hamt-test` from `src/Haskell` | [Tests README](../../src/Haskell/Hamt/test/README.md) | Map/set unit checks for collision buckets, custom policies, key recovery, and set algebra |
 | [Haskell FingerTree](../../src/Haskell/FingerTree/README.md) | Cabal exit-code executable | `cabal test ft-test` from `src/Haskell` | [Tests README](../../src/Haskell/FingerTree/test/README.md) | Measured tree, deque, reversible deque, sorted facades, priority queue, intervals, ropes, and text helpers |
+| [Rust HAMT](../../src/Rust/Hamt/README.md) | Cargo unit tests | `cargo test -p tools-data-structures-hamt` from `src/Rust` | [Tests README](../../src/Rust/Hamt/tests/README.md) | Map/set unit checks for collisions, updates, iteration, and set algebra |
+| [Rust FingerTree](../../src/Rust/FingerTree/README.md) | Cargo unit tests | `cargo test -p tools-data-structures-fingertree` from `src/Rust` | [Tests README](../../src/Rust/FingerTree/tests/README.md) | Deque, measured tree, reversible deque, sorted facades, priority queue, intervals, ropes, and text helpers |
 
 ## Stress And Duration Knobs
 

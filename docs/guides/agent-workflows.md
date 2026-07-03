@@ -11,7 +11,7 @@ Use [the workspace map](../reference/workspace-map.md) for the language-first la
 and documentation placement rules. Use [the build and validation guide](build-and-validation.md) for
 the complete cross-repository validation matrix. Use
 [the porting and semantic parity guide](porting-and-semantic-parity.md) when a behavior or public API
-change may need to cross C#, C++, C, and Haskell workspaces.
+change may need to cross C#, C++, C, Haskell, and Rust workspaces.
 
 ## C# and .NET validation
 
@@ -25,6 +25,21 @@ dotnet test .\FingerTree.sln
 ```
 
 Prefer deterministic tests for data-structure complexity claims. Do not replace operation-count or allocation guards with timing thresholds unless the task is explicitly benchmark-oriented.
+
+## Rust validation
+
+Use Cargo from the Rust language root:
+
+```powershell
+cd C:\DataStructures\src\Rust
+cargo test --workspace
+```
+
+If Cargo is installed under rustup but not on `PATH`, use:
+
+```powershell
+& $env:USERPROFILE\.cargo\bin\cargo.exe test --workspace
+```
 
 ## XML documentation
 

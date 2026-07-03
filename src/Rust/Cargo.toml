@@ -1,0 +1,13 @@
+[workspace]
+members = [
+    "Hamt",
+    "FingerTree",
+]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+license = "MIT-0"
+repository = "https://github.com/VladimirReshetnikov/DataStructures"
+rust-version = "1.96"
+

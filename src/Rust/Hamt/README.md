@@ -1,0 +1,34 @@
+# Rust HAMT
+
+- Created (UTC): 2026-07-03T00:00:00Z
+- Repository HEAD: 3f49d1a1ba71390af95f5a9389b99d2e334c8beb
+- Audience: Maintainers and reviewers of the Rust HAMT port
+- Scope: Public crate shape, semantic parity notes, and validation entry point
+
+`tools-data-structures-hamt` ports the repository HAMT map and set to safe Rust. It exposes
+`PersistentHashMap<K, V, S = RandomState>` and `PersistentHashSet<T, S = RandomState>`.
+
+The trie follows the existing ports:
+
+- 32-way logical branching over 32 truncated hash bits;
+- sparse branch nodes with a bitmap and compact child array;
+- immutable same-hash collision buckets;
+- `Arc`-shared nodes across persistent versions;
+- no-op replacement and absent removal reuse the existing root;
+- map bulk construction uses last-wins semantics.
+
+Rust-specific shape:
+
+- key equality is Rust's `Eq`; hash policy is supplied through `BuildHasher`;
+- updates return new values, while `shares_root_with` exposes structural sharing for validation;
+- duplicate inserts return `DuplicateKey` instead of throwing;
+- iteration is stable for an unchanged map but remains trie-order, not insertion or sorted order.
+
+See [API notes](docs/api-notes.md), [validation](docs/validation.md), and the
+[test map](tests/README.md) for the local contract and evidence entry points.
+
+Validate from `src/Rust`:
+
+```powershell
+cargo test -p tools-data-structures-hamt
+```

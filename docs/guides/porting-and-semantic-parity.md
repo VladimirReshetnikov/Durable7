@@ -21,6 +21,7 @@ intentional differences are explicit in the local API notes.
 | --- | --- |
 | Managed API specs under `src/CSharp/*/docs` | Primary semantic contract for repository-owned collection behavior. |
 | Native API specs and public headers under `src/C/*` and `src/Cpp/*` | Idiomatic C and C++ surface shape, ownership model, and local divergences. |
+| Rust API notes under `src/Rust/*/docs` | Rust value semantics, `Result`/`Option` shape, Cargo validation, and checkpoint divergences. |
 | [Data structure catalog](../reference/data-structure-catalog.md) | Cross-language inventory of public data-structure entry points. |
 | [Workspace map](../reference/workspace-map.md) | Port lineage, path conventions, and documentation placement. |
 | [Build and validation guide](build-and-validation.md) plus workspace validation guides | Commands that prove the affected workspaces still build and pass tests, and the local warning policy, coverage map, stress controls, benchmark boundary, and evidence wording for each workspace. |
@@ -43,6 +44,9 @@ HAMT lineage:
    explicit policy callbacks, and clone/destroy lifetime management.
 4. [`src/Haskell/Hamt`](../../src/Haskell/Hamt/README.md) ports the HAMT contract to immutable
    Haskell values with a package-local `Hashable` class and optional runtime `HashPolicy`.
+5. [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) ports the HAMT contract to Rust value types,
+   `BuildHasher` hash policies, `Eq` key equality, `Arc` structural sharing, and `Result`/`Option`
+   result shapes.
 
 FingerTree lineage:
 
@@ -56,6 +60,9 @@ FingerTree lineage:
 4. [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) ports the family to Haskell
    with a general measured tree, size-measured deque, reversible deque, derived collections,
    priority queue, intervals, ropes, and text helpers.
+5. [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) is the Rust semantic checkpoint for
+   the same family names. It preserves immutable snapshot behavior now and documents its representation
+   boundary until the lazy measured spine is ported through the whole family.
 
 A port can still reveal a baseline bug. When that happens, fix or document the baseline contract
 first, then carry the corrected semantics through the sibling workspaces that expose the same
@@ -72,7 +79,7 @@ Check these items before calling a cross-language change complete:
 | Policy preservation | Are hash, equality, comparison, measure, ownership, and callback policies preserved across derived versions? |
 | Ordering | Are enumeration, sorted order, tie-breaking, rank, interval, rope, and text-boundary semantics equivalent where exposed? |
 | Failure behavior | Do duplicate-key, absent-key, empty-collection, invalid-rank, allocation, and callback failures match the documented contract? |
-| Ownership and lifetime | Are C# references, C++ values/shared nodes, and C handle clone/destroy rules all respected by examples and tests? |
+| Ownership and lifetime | Are C# references, C++ values/shared nodes, C handle clone/destroy rules, Haskell immutable values, and Rust owned values/borrows/`Arc` sharing all respected by examples and tests? |
 | Complexity and allocation | Do docs and tests protect the promised asymptotic shape and hot-path allocation behavior? |
 | Concurrency | Are immutable publication and family-specific reference-counting rules documented without overstating guarantees? |
 | Validation | Do tests cover the affected behavior in every touched workspace, including model or property tests when those are the relevant evidence? |
@@ -82,15 +89,15 @@ Check these items before calling a cross-language change complete:
 
 Do not copy names mechanically. Preserve contracts while using each language's natural surface:
 
-| Concept | C# shape | C++ shape | C shape |
-| --- | --- | --- | --- |
-| Immutable update | Method returns a new reference-typed collection value. | Method returns a new value object sharing immutable nodes. | Function writes a new value struct or handle through an out parameter. |
-| Empty factory | Static `Empty` or `Create(...)`. | `empty()` or `create(...)`. | `*_create(...)` returning an initialized value. |
-| Bulk build | `CreateRange`, `SetItems`, `Union`, and sequence-based APIs. | `create_range`, range overloads, and result structs. | `*_create_range`, `*_set_many`, or `*_many` APIs over arrays/counts. |
-| Try pattern | `bool Try...(out value)` or result tuple-like APIs. | `std::optional`, pointer-on-hit, or named result structs. | Status code plus out parameters and boolean flags. |
-| Comparer/hash policy | `IEqualityComparer<T>`, `IComparer<T>`, static measure operations. | Template policies plus stored runtime comparators where needed. | Callback tables and context pointers that must outlive the collection. |
-| Errors | .NET exceptions and nullable annotations. | Standard exceptions or explicit optional/result objects. | Status codes and caller-owned output storage. |
-| Lifetime | Garbage-collected immutable objects. | RAII values over shared immutable nodes. | Explicit clone/dispose or create/destroy pairs. |
+| Concept | C# shape | C++ shape | C shape | Rust shape |
+| --- | --- | --- | --- | --- |
+| Immutable update | Method returns a new reference-typed collection value. | Method returns a new value object sharing immutable nodes. | Function writes a new value struct or handle through an out parameter. | Method returns a new owned value; unchanged internals may share `Arc` storage. |
+| Empty factory | Static `Empty` or `Create(...)`. | `empty()` or `create(...)`. | `*_create(...)` returning an initialized value. | `new()`, `Default`, and `FromIterator`. |
+| Bulk build | `CreateRange`, `SetItems`, `Union`, and sequence-based APIs. | `create_range`, range overloads, and result structs. | `*_create_range`, `*_set_many`, or `*_many` APIs over arrays/counts. | `FromIterator`, iterator-taking update methods, and Rust collection-style builders. |
+| Try pattern | `bool Try...(out value)` or result tuple-like APIs. | `std::optional`, pointer-on-hit, or named result structs. | Status code plus out parameters and boolean flags. | `Option`, `Result`, and named result structs. |
+| Comparer/hash policy | `IEqualityComparer<T>`, `IComparer<T>`, static measure operations. | Template policies plus stored runtime comparators where needed. | Callback tables and context pointers that must outlive the collection. | `Eq`/`Ord`, `BuildHasher`, and `MeasurePolicy<T>` traits. |
+| Errors | .NET exceptions and nullable annotations. | Standard exceptions or explicit optional/result objects. | Status codes and caller-owned output storage. | `Option` for absent/out-of-range, `Result` for duplicate-key or recoverable errors, panic only for invariant construction failures. |
+| Lifetime | Garbage-collected immutable objects. | RAII values over shared immutable nodes. | Explicit clone/dispose or create/destroy pairs. | Borrow-checked references, cloned owned values on removal, and `Arc` for shared immutable storage. |
 
 ## Change Workflow
 
@@ -111,11 +118,11 @@ Do not copy names mechanically. Preserve contracts while using each language's n
    sample-smoke hooks, benchmark boundaries, and exact evidence wording. Run repository-owned
    Markdown link and stale-path checks for docs changes.
 7. Commit only after the evidence matches the scope of the claim. A C# unit test does not prove a C
-   port is aligned; a successful build does not prove a changed ordering or allocation contract.
+   or Rust port is aligned; a successful build does not prove a changed ordering or allocation contract.
 
 ## HAMT-Specific Checks
 
-For map/set changes, verify these contracts across C#, C++, and C where exposed:
+For map/set changes, verify these contracts across C#, C++, C, Haskell, and Rust where exposed:
 
 - 32-way bitmap-indexed trie shape over 32 hash bits.
 - Immutable equal-hash collision buckets with linear equality probing.
@@ -134,6 +141,7 @@ Primary semantic docs:
 - [C++ HAMT API specification](../../src/Cpp/Hamt/docs/api-specification.md)
 - [C HAMT API specification](../../src/C/Hamt/docs/api-specification.md)
 - [Haskell HAMT workspace](../../src/Haskell/Hamt/README.md)
+- [Rust HAMT API notes](../../src/Rust/Hamt/docs/api-notes.md)
 
 Validation guides:
 
@@ -141,10 +149,11 @@ Validation guides:
 - [C++ HAMT validation](../../src/Cpp/Hamt/docs/validation.md)
 - [C HAMT validation](../../src/C/Hamt/docs/validation.md)
 - [Haskell HAMT tests](../../src/Haskell/Hamt/test/README.md)
+- [Rust HAMT validation](../../src/Rust/Hamt/docs/validation.md)
 
 ## FingerTree-Specific Checks
 
-For finger-tree-family changes, verify these contracts across the relevant C#, C++, and C surfaces:
+For finger-tree-family changes, verify these contracts across the relevant C#, C++, C, Haskell, and Rust surfaces:
 
 - Tuned deque and general measured tree remain separate when the language exposes both.
 - Measure policies obey monoid identity and associativity assumptions used by split, locate, and
@@ -167,6 +176,7 @@ Primary semantic docs:
 - [C++ FingerTree implementation notes](../../src/Cpp/FingerTree/docs/implementation-notes.md)
 - [C FingerTree API notes](../../src/C/FingerTree/docs/api-notes.md)
 - [Haskell FingerTree workspace](../../src/Haskell/FingerTree/README.md)
+- [Rust FingerTree API notes](../../src/Rust/FingerTree/docs/api-notes.md)
 
 Validation guides:
 
@@ -174,6 +184,7 @@ Validation guides:
 - [C++ FingerTree validation](../../src/Cpp/FingerTree/docs/validation.md)
 - [C FingerTree validation](../../src/C/FingerTree/docs/validation.md)
 - [Haskell FingerTree tests](../../src/Haskell/FingerTree/test/README.md)
+- [Rust FingerTree validation](../../src/Rust/FingerTree/docs/validation.md)
 
 ## Validation Evidence
 

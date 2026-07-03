@@ -29,6 +29,9 @@ packages/
 # BenchmarkDotNet
 BenchmarkDotNet.Artifacts/
 
+# Rust
+target/
+
 # Generated files
 Generated/
 *.g.cs

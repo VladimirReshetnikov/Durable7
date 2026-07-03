@@ -20,9 +20,11 @@ boundaries, use the [test suite map](../reference/test-suite-map.md).
 | [`src/CSharp/FingerTree`](../../src/CSharp/FingerTree/README.md) | `dotnet test .\FingerTree.sln` | [Validation](../../src/CSharp/FingerTree/docs/validation.md) | [Tests](../../src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/README.md) | .NET library, samples, benchmark project build, stress controls, xUnit/CsCheck suites |
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | `.\build.ps1 -RunTests` | [Validation](../../src/C/Hamt/docs/validation.md) | [Tests](../../src/C/Hamt/tests/README.md) | C17 build, warning policy, deterministic HAMT tests |
 | [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | `.\build.ps1 -RunTests` | [Validation](../../src/Cpp/Hamt/docs/validation.md) | [Tests](../../src/Cpp/Hamt/tests/README.md) | C++20 build, warning policy, deterministic HAMT tests |
+| [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | `cargo test -p tools-data-structures-hamt` | [Validation](../../src/Rust/Hamt/docs/validation.md) | [Tests](../../src/Rust/Hamt/tests/README.md) | Safe Rust crate, structural HAMT tests, collision and set-algebra coverage |
 | [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | Visual Studio `cmd.exe` CMake/CTest chain below | [Validation](../../src/C/FingerTree/docs/validation.md) | [Tests](../../src/C/FingerTree/tests/README.md) | C11 static library, tests, samples, benchmark harness entry points |
 | [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | Visual Studio `cmd.exe` CMake/CTest chain below | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | [Tests](../../src/Cpp/FingerTree/tests/README.md) | C++23 header-first library, CTest suite, stress controls, benchmark-harness status |
 | [`src/Haskell`](../../src/Haskell/README.md) | `cabal test all` | [Haskell README](../../src/Haskell/README.md) | [HAMT tests](../../src/Haskell/Hamt/test/README.md), [FingerTree tests](../../src/Haskell/FingerTree/test/README.md) | GHC/cabal build, dependency-light HAMT and FingerTree executable tests |
+| [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | `cargo test -p tools-data-structures-fingertree` | [Validation](../../src/Rust/FingerTree/docs/validation.md) | [Tests](../../src/Rust/FingerTree/tests/README.md) | Safe Rust checkpoint crate, persistent facade tests across deque, measured sequence, sorted, priority, interval, rope, and text helpers |
 
 For broad repository edits, run every row that could be affected. For documentation-only edits, run the
 Markdown link check below and any build/test commands whose documented paths changed.
@@ -45,6 +47,28 @@ validation guides define test coverage and optional stress/benchmark boundaries:
 - [C# HAMT tests](../../src/CSharp/Hamt/tests/Tools.DataStructures.Hamt.Tests/README.md)
 - [C# FingerTree validation](../../src/CSharp/FingerTree/docs/validation.md)
 - [C# FingerTree tests](../../src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/README.md)
+
+## Rust Workspaces
+
+```powershell
+cd C:\DataStructures\src\Rust
+cargo test --workspace
+```
+
+The Rust crates are safe Rust only (`#![forbid(unsafe_code)]`) and are validated through Cargo unit tests. If
+Cargo is installed under the default rustup profile but is not on `PATH`, use the explicit local tool:
+
+```powershell
+cd C:\DataStructures\src\Rust
+& $env:USERPROFILE\.cargo\bin\cargo.exe test --workspace
+```
+
+Local guides:
+
+- [Rust HAMT validation](../../src/Rust/Hamt/docs/validation.md)
+- [Rust HAMT tests](../../src/Rust/Hamt/tests/README.md)
+- [Rust FingerTree validation](../../src/Rust/FingerTree/docs/validation.md)
+- [Rust FingerTree tests](../../src/Rust/FingerTree/tests/README.md)
 
 ## HAMT Native Ports
 

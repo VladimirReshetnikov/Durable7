@@ -14,4 +14,4 @@ durable maps belong under [`../reference`](../reference/README.md).
 - [Agent workflows](agent-workflows.md) - compact task-conditional workflow guidance for AI agents and maintainers.
 - [Build and validation](build-and-validation.md) - repository-wide validation matrix, exact commands, CMake cache notes, and Markdown checks.
 - [Documentation maintenance](documentation-maintenance.md) - documentation placement, writing standards, metadata, and validation.
-- [Porting and semantic parity](porting-and-semantic-parity.md) - workflow for carrying behavior and documentation changes across C#, C++, C, and Haskell workspaces.
+- [Porting and semantic parity](porting-and-semantic-parity.md) - workflow for carrying behavior and documentation changes across C#, C++, C, Haskell, and Rust workspaces.
