@@ -136,10 +136,10 @@ The [source index](src/README.md) and language indexes for [C](src/C/README.md),
   buckets, `Arc` structural sharing, `BuildHasher` hash policy support, and Cargo unit tests.
 - [src/Rust/FingerTree](src/Rust/FingerTree/README.md) is the Rust checkpoint port of the FingerTree
   family. It exposes persistent deque, measured sequence, reversible deque, sorted bag/set/map,
-  priority queue, interval tree, rope, measured rope, and text helpers with immutable snapshot
-  semantics. The public FingerTree-family facades now use structurally shared Rust tree storage; the
-  current crate documents the remaining semantic-checkpoint boundary before final lazy measured-spine
-  asymptotic parity.
+  built-in/product measure policies, priority queue, interval tree, rope, measured rope, and text
+  helpers with immutable snapshot semantics. The public FingerTree-family facades now use
+  structurally shared Rust tree storage; the current crate documents the remaining
+  semantic-checkpoint boundary before final lazy measured-spine asymptotic parity.
 
 ## Build and test
 

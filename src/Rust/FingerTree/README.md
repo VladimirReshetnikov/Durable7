@@ -9,7 +9,8 @@
 family. It exposes Rust-native names for the same public families:
 
 - `PersistentDeque<T>`;
-- `FingerTree<T, P>` over a `MeasurePolicy<T>`;
+- `FingerTree<T, P>` over a `MeasurePolicy<T>`, including built-in size, sum, min/max, key,
+  order-statistic, and product-measure policies;
 - `ReversibleDeque<T>`;
 - `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>`;
 - `PriorityQueue<T, P>`;
@@ -21,13 +22,17 @@ crate tests. `PersistentDeque<T>` now uses structurally shared balanced tree sto
 `ReversibleDeque<T>` is an orientation layer over that shared deque, and `Rope<T>` now uses chunked
 length-measured storage over the shared measured tree. `TextRope` stores the same character content
 in a newline-measured rope for cached line navigation. `FingerTree<T, P>` now uses structurally
-shared measured tree storage with cached monoid measures, and `MeasuredRope<T, P>` uses chunked
-measured storage with cached count plus user-measure summaries. `PriorityQueue<T, P>` now composes the measured core with cached
-minimum-priority measures, and `IntervalTree<T>` uses cached maximum-high interval measures for overlap and
-containment entry points. `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>` now use
-order-statistic measured tree storage with cached count plus last-key measures. The crate still does
-not claim the C#/C++ lazy finger-tree asymptotic profile overall; derived algorithms remain
-semantic-checkpoint implementations until the lazy measured spine is ported through the whole family.
+shared measured tree storage with cached monoid measures. The measured core now includes
+`ProductMeasure<T, PFirst, PSecond>`, `MeasurePair<TFirst, TSecond>`, `KeyMeasure<T>`, and
+size+sum / size+min / size+max aliases with component-projected splits, bound splits,
+cumulative-weight selection, and positional priority helpers. `MeasuredRope<T, P>` uses chunked
+measured storage with cached count plus user-measure summaries. `PriorityQueue<T, P>` now composes
+the measured core with cached minimum-priority measures, and `IntervalTree<T>` uses cached
+maximum-high interval measures for overlap and containment entry points. `SortedBag<T>`,
+`SortedSet<T>`, and `SortedMap<K, V>` now use order-statistic measured tree storage with cached count
+plus last-key measures. The crate still does not claim the C#/C++ lazy finger-tree asymptotic
+profile overall; derived algorithms remain semantic-checkpoint implementations until the lazy
+measured spine is ported through the whole family.
 
 See [API notes](docs/api-notes.md), [validation](docs/validation.md), and the
 [test map](tests/README.md) for the local contract, checkpoint boundary, and evidence entry points.

@@ -22,10 +22,11 @@ cover:
 
 - persistent deque updates, subtree sharing, bounded-depth tree shape, splitting, concatenation, sorted search, and
   randomized model replay;
-- general measured tree cached-measure validation, subtree-sharing splits, and randomized prefix-measure locate
-  checks;
+- general measured tree cached-measure validation, subtree-sharing splits, randomized prefix-measure locate checks,
+  key lower/upper-bound splits, product-measure component splits, cumulative-weight selection, and min/max
+  extraction helpers;
 - reversible-deque O(1) storage-sharing reversal and wrapper-preserving logical edits over the shared deque tree;
-- measured sequence size/sum/min/max/order-statistic policies;
+- measured sequence size/sum/min/max/key/product/order-statistic policies;
 - sorted bag/set/map rank, navigation, algebra, duplicate handling, cached order-statistic measures, and
   shared-storage edits/ranges;
 - stable priority dequeue, meld behavior, cached minimum-priority measures, and shared-storage

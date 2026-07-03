@@ -12,7 +12,8 @@ Current public families:
 
 - `PersistentDeque<T>` and `ReversibleDeque<T>`;
 - `FingerTree<T, P>` over `MeasurePolicy<T>`;
-- built-in policies `SizeMeasure`, `SumMeasure<T>`, `MaxMeasure`, `MinMeasure`, and
+- built-in policies `SizeMeasure`, `SumMeasure<T>`, `MaxMeasure`, `MinMeasure`, `KeyMeasure<T>`,
+  `ProductMeasure<T, PFirst, PSecond>` with `MeasurePair<TFirst, TSecond>`, and
   `OrderStatisticMeasure<T>` with `RankedKey<T>`;
 - `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>`;
 - `PriorityQueue<T, P>` and `PriorityEntry<T, P>`;
@@ -25,6 +26,8 @@ The Rust surface follows Rust conventions:
 - duplicate sorted-map insertion returns `Result<_, DuplicateKeyError>`;
 - binary search returns `Result<usize, usize>`, matching Rust's insertion-index convention;
 - measure policies are ordinary traits with static functions for identity, element measure, and combine;
+- product-measured trees expose component-projected split and locate helpers, plus named size+sum and size+min/max
+  aliases for cumulative-weight and priority operations that also retain positional measures;
 - text offsets are character offsets, matching the repository's `Rope<char>` interpretation rather than UTF-8 byte offsets.
 
 This workspace is a semantic checkpoint, not the final lazy finger-tree representation. It preserves immutable
@@ -37,17 +40,20 @@ storage over the shared measured tree, so positional edits, slices, splits, and 
 chunks and measured subtrees; `TextRope` stores characters in `MeasuredRope<char, NewlineMeasure>` so line
 counts, line starts, and line/column navigation use cached newline measures. The general `FingerTree<T, P>` now
 uses an `Arc`-shared measured tree with cached monoid measures at every node, so measure-guided split and locate
-operations can skip whole subtrees and split results
-share unchanged structure. `MeasuredRope<T, P>` now uses measured chunks whose tree measure combines element
-count with the user measure, so indexed splits, concatenation, point replacement, prefix measurement, and
-measure-guided locate share unchanged chunks and measured subtrees. `PriorityQueue<T, P>` now reuses the measured
-tree through an internal minimum-priority measure, so peek/dequeue locate the first global-minimum entry by cached prefix measures while
-preserving equal-priority stability. `IntervalTree<T>` now reuses the measured tree through an internal maximum-high
-endpoint measure, so overlap and containment queries skip prefixes whose cached high endpoint cannot intersect the
-probe. Sorted bag/set/map facades now reuse the measured tree through cached order-statistic measures: rank and
-key-boundary operations locate by count plus last-key prefixes, while edits and range extraction preserve unchanged
-measured subtrees. These derived facades still do not claim the C#/C++ lazy measured-spine complexity or allocation
-profile for every operation.
+operations can skip whole subtrees and split results share unchanged structure. Built-in `KeyMeasure<T>` and
+`ProductMeasure<T, PFirst, PSecond>` policies now cover the C# headline measure compositions: lower/upper-bound
+splits over sorted key-measured trees; component-projected splits/finds/locates for arbitrary product measures;
+size+sum cumulative-weight splits/selection; and size+min/max peek/extract operations that preserve a positional
+count component. `MeasuredRope<T, P>` now uses measured chunks whose tree measure combines element count with the
+user measure, so indexed splits, concatenation, point replacement, prefix measurement, and measure-guided locate
+share unchanged chunks and measured subtrees. `PriorityQueue<T, P>` now reuses the measured tree through an
+internal minimum-priority measure, so peek/dequeue locate the first global-minimum entry by cached prefix measures
+while preserving equal-priority stability. `IntervalTree<T>` now reuses the measured tree through an internal
+maximum-high endpoint measure, so overlap and containment queries skip prefixes whose cached high endpoint cannot
+intersect the probe. Sorted bag/set/map facades now reuse the measured tree through cached order-statistic
+measures: rank and key-boundary operations locate by count plus last-key prefixes, while edits and range
+extraction preserve unchanged measured subtrees. These derived facades still do not claim the C#/C++ lazy
+measured-spine complexity or allocation profile for every operation.
 
 Future representation work should keep the Rust public names and result shapes stable while replacing the remaining
 semantic-checkpoint algorithms with lazy measured-spine equivalents where needed for asymptotic parity.

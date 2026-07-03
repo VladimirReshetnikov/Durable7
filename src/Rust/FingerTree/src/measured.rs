@@ -11,6 +11,12 @@ pub trait MeasurePolicy<T> {
     fn combine(left: &Self::Measure, right: &Self::Measure) -> Self::Measure;
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MeasurePair<TFirst, TSecond> {
+    pub first: TFirst,
+    pub second: TSecond,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SizeMeasure;
 
@@ -27,6 +33,38 @@ impl<T> MeasurePolicy<T> for SizeMeasure {
 
     fn combine(left: &Self::Measure, right: &Self::Measure) -> Self::Measure {
         left + right
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ProductMeasure<T, PFirst, PSecond>(PhantomData<(T, PFirst, PSecond)>);
+
+impl<T, PFirst, PSecond> MeasurePolicy<T> for ProductMeasure<T, PFirst, PSecond>
+where
+    PFirst: MeasurePolicy<T>,
+    PSecond: MeasurePolicy<T>,
+{
+    type Measure = MeasurePair<PFirst::Measure, PSecond::Measure>;
+
+    fn empty() -> Self::Measure {
+        MeasurePair {
+            first: PFirst::empty(),
+            second: PSecond::empty(),
+        }
+    }
+
+    fn measure(element: &T) -> Self::Measure {
+        MeasurePair {
+            first: PFirst::measure(element),
+            second: PSecond::measure(element),
+        }
+    }
+
+    fn combine(left: &Self::Measure, right: &Self::Measure) -> Self::Measure {
+        MeasurePair {
+            first: PFirst::combine(&left.first, &right.first),
+            second: PSecond::combine(&left.second, &right.second),
+        }
     }
 }
 
@@ -64,6 +102,28 @@ where
             count: left.count + right.count,
             key: right.key.clone().or_else(|| left.key.clone()),
         }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct KeyMeasure<T>(PhantomData<T>);
+
+impl<T> MeasurePolicy<T> for KeyMeasure<T>
+where
+    T: Clone,
+{
+    type Measure = Option<T>;
+
+    fn empty() -> Self::Measure {
+        None
+    }
+
+    fn measure(element: &T) -> Self::Measure {
+        Some(element.clone())
+    }
+
+    fn combine(left: &Self::Measure, right: &Self::Measure) -> Self::Measure {
+        right.clone().or_else(|| left.clone())
     }
 }
 
@@ -140,6 +200,10 @@ where
         }
     }
 }
+
+pub type SizeAndSumMeasure<T> = ProductMeasure<T, SizeMeasure, SumMeasure<T>>;
+pub type SizeAndMaxMeasure<T> = ProductMeasure<T, SizeMeasure, MaxMeasure>;
+pub type SizeAndMinMeasure<T> = ProductMeasure<T, SizeMeasure, MinMeasure>;
 
 pub struct FingerTree<T, P>
 where
@@ -907,6 +971,204 @@ where
     }
 }
 
+impl<T, PFirst, PSecond> FingerTree<T, ProductMeasure<T, PFirst, PSecond>>
+where
+    PFirst: MeasurePolicy<T>,
+    PSecond: MeasurePolicy<T>,
+{
+    #[must_use]
+    pub fn split_by_first<F>(
+        &self,
+        mut predicate: F,
+    ) -> MeasuredSplit<T, ProductMeasure<T, PFirst, PSecond>>
+    where
+        F: FnMut(&PFirst::Measure) -> bool,
+    {
+        self.split(|measure| predicate(&measure.first))
+    }
+
+    #[must_use]
+    pub fn split_by_second<F>(
+        &self,
+        mut predicate: F,
+    ) -> MeasuredSplit<T, ProductMeasure<T, PFirst, PSecond>>
+    where
+        F: FnMut(&PSecond::Measure) -> bool,
+    {
+        self.split(|measure| predicate(&measure.second))
+    }
+}
+
+impl<T, PFirst, PSecond> FingerTree<T, ProductMeasure<T, PFirst, PSecond>>
+where
+    T: Clone,
+    PFirst: MeasurePolicy<T>,
+    PSecond: MeasurePolicy<T>,
+{
+    #[must_use]
+    pub fn try_split_find_by_first<F>(&self, mut predicate: F) -> Option<(Self, T, Self)>
+    where
+        F: FnMut(&PFirst::Measure) -> bool,
+    {
+        self.try_split_find(|measure| predicate(&measure.first))
+    }
+
+    #[must_use]
+    pub fn try_split_find_by_second<F>(&self, mut predicate: F) -> Option<(Self, T, Self)>
+    where
+        F: FnMut(&PSecond::Measure) -> bool,
+    {
+        self.try_split_find(|measure| predicate(&measure.second))
+    }
+
+    #[must_use]
+    pub fn try_locate_by_first<F>(
+        &self,
+        mut predicate: F,
+    ) -> LocateResult<T, MeasurePair<PFirst::Measure, PSecond::Measure>>
+    where
+        F: FnMut(&PFirst::Measure) -> bool,
+    {
+        self.try_locate(|measure| predicate(&measure.first))
+    }
+
+    #[must_use]
+    pub fn try_locate_by_second<F>(
+        &self,
+        mut predicate: F,
+    ) -> LocateResult<T, MeasurePair<PFirst::Measure, PSecond::Measure>>
+    where
+        F: FnMut(&PSecond::Measure) -> bool,
+    {
+        self.try_locate(|measure| predicate(&measure.second))
+    }
+}
+
+impl<T> FingerTree<T, MaxMeasure>
+where
+    T: Clone + Ord,
+{
+    #[must_use]
+    pub fn try_peek_max(&self) -> Option<&T> {
+        self.measure().as_ref()
+    }
+
+    #[must_use]
+    pub fn try_extract_max(&self) -> Option<(T, Self)> {
+        let target = self.measure().as_ref()?;
+        let (left, found, right) =
+            self.try_split_find(|measure| measure.as_ref().is_some_and(|value| value >= target))?;
+        Some((found, left.concat(&right)))
+    }
+}
+
+impl<T> FingerTree<T, MinMeasure>
+where
+    T: Clone + Ord,
+{
+    #[must_use]
+    pub fn try_peek_min(&self) -> Option<&T> {
+        self.measure().as_ref()
+    }
+
+    #[must_use]
+    pub fn try_extract_min(&self) -> Option<(T, Self)> {
+        let target = self.measure().as_ref()?;
+        let (left, found, right) =
+            self.try_split_find(|measure| measure.as_ref().is_some_and(|value| value <= target))?;
+        Some((found, left.concat(&right)))
+    }
+}
+
+impl<T> FingerTree<T, KeyMeasure<T>>
+where
+    T: Clone + Ord,
+{
+    #[must_use]
+    pub fn split_by_lower_bound(&self, key: &T) -> MeasuredSplit<T, KeyMeasure<T>> {
+        self.split(|measure| measure.as_ref().is_some_and(|last_key| last_key >= key))
+    }
+
+    #[must_use]
+    pub fn split_by_upper_bound(&self, key: &T) -> MeasuredSplit<T, KeyMeasure<T>> {
+        self.split(|measure| measure.as_ref().is_some_and(|last_key| last_key > key))
+    }
+}
+
+impl<T> FingerTree<T, OrderStatisticMeasure<T>>
+where
+    T: Clone + Ord,
+{
+    #[must_use]
+    pub fn split_by_lower_bound(&self, key: &T) -> MeasuredSplit<T, OrderStatisticMeasure<T>> {
+        self.split(|measure| measure.key.as_ref().is_some_and(|last_key| last_key >= key))
+    }
+
+    #[must_use]
+    pub fn split_by_upper_bound(&self, key: &T) -> MeasuredSplit<T, OrderStatisticMeasure<T>> {
+        self.split(|measure| measure.key.as_ref().is_some_and(|last_key| last_key > key))
+    }
+}
+
+impl<T> FingerTree<T, SizeAndSumMeasure<T>>
+where
+    T: Add<Output = T> + Clone + Default + PartialOrd,
+{
+    #[must_use]
+    pub fn split_by_cumulative_weight(
+        &self,
+        threshold: &T,
+    ) -> MeasuredSplit<T, SizeAndSumMeasure<T>> {
+        self.split_by_second(|sum| sum > threshold)
+    }
+
+    #[must_use]
+    pub fn try_select_by_cumulative_weight(&self, threshold: &T) -> Option<(T, usize)> {
+        let located = self.try_locate_by_second(|sum| sum > threshold);
+        located
+            .item
+            .map(|item| (item, located.measure_before.first))
+    }
+}
+
+impl<T> FingerTree<T, SizeAndMaxMeasure<T>>
+where
+    T: Clone + Ord,
+{
+    #[must_use]
+    pub fn try_peek_max(&self) -> Option<&T> {
+        self.measure().second.as_ref()
+    }
+
+    #[must_use]
+    pub fn try_extract_max(&self) -> Option<(T, Self)> {
+        let target = self.measure().second.as_ref()?;
+        let (left, found, right) = self.try_split_find_by_second(|measure| {
+            measure.as_ref().is_some_and(|value| value >= target)
+        })?;
+        Some((found, left.concat(&right)))
+    }
+}
+
+impl<T> FingerTree<T, SizeAndMinMeasure<T>>
+where
+    T: Clone + Ord,
+{
+    #[must_use]
+    pub fn try_peek_min(&self) -> Option<&T> {
+        self.measure().second.as_ref()
+    }
+
+    #[must_use]
+    pub fn try_extract_min(&self) -> Option<(T, Self)> {
+        let target = self.measure().second.as_ref()?;
+        let (left, found, right) = self.try_split_find_by_second(|measure| {
+            measure.as_ref().is_some_and(|value| value <= target)
+        })?;
+        Some((found, left.concat(&right)))
+    }
+}
+
 pub struct Iter<'a, T, M> {
     stack: Vec<&'a MeasuredNode<T, M>>,
 }
@@ -1001,6 +1263,116 @@ mod tests {
         assert_eq!(located.measure_before.count, 1);
         assert_eq!(located.item, Some(3));
         tree.validate_invariants();
+    }
+
+    #[test]
+    fn key_measure_splits_sorted_sequences_by_bound() {
+        let tree: FingerTree<_, KeyMeasure<i32>> = [1, 2, 2, 4].into_iter().collect();
+        let lower = tree.split_by_lower_bound(&2);
+        let upper = tree.split_by_upper_bound(&2);
+
+        assert_eq!(tree.measure(), &Some(4));
+        assert_eq!(lower.left.to_vec(), vec![1]);
+        assert_eq!(lower.right.to_vec(), vec![2, 2, 4]);
+        assert_eq!(upper.left.to_vec(), vec![1, 2, 2]);
+        assert_eq!(upper.right.to_vec(), vec![4]);
+        lower.left.validate_invariants();
+        lower.right.validate_invariants();
+        upper.left.validate_invariants();
+        upper.right.validate_invariants();
+    }
+
+    #[test]
+    fn order_statistic_measure_exposes_bound_splits() {
+        let tree: FingerTree<_, OrderStatisticMeasure<i32>> = [1, 2, 2, 4].into_iter().collect();
+        let lower = tree.split_by_lower_bound(&2);
+        let upper = tree.split_by_upper_bound(&2);
+
+        assert_eq!(lower.left.measure().count, 1);
+        assert_eq!(lower.left.to_vec(), vec![1]);
+        assert_eq!(lower.right.to_vec(), vec![2, 2, 4]);
+        assert_eq!(upper.left.measure().count, 3);
+        assert_eq!(upper.left.to_vec(), vec![1, 2, 2]);
+        assert_eq!(upper.right.to_vec(), vec![4]);
+        lower.left.validate_invariants();
+        lower.right.validate_invariants();
+        upper.left.validate_invariants();
+        upper.right.validate_invariants();
+    }
+
+    #[test]
+    fn product_measure_composes_size_and_sum() {
+        let tree: FingerTree<_, SizeAndSumMeasure<i32>> = [5, 1, 4, 2].into_iter().collect();
+        let by_size = tree.split_by_first(|count| *count > 2);
+        let by_weight = tree.split_by_cumulative_weight(&6);
+        let selected = tree.try_select_by_cumulative_weight(&7);
+
+        assert_eq!(
+            tree.measure(),
+            &MeasurePair {
+                first: 4,
+                second: 12
+            }
+        );
+        assert_eq!(by_size.left.to_vec(), vec![5, 1]);
+        assert_eq!(by_size.right.to_vec(), vec![4, 2]);
+        assert_eq!(by_weight.left.to_vec(), vec![5, 1]);
+        assert_eq!(by_weight.right.to_vec(), vec![4, 2]);
+        assert_eq!(selected, Some((4, 2)));
+        assert_eq!(tree.prefix_measure(3).unwrap().second, 10);
+        by_size.left.validate_invariants();
+        by_size.right.validate_invariants();
+        by_weight.left.validate_invariants();
+        by_weight.right.validate_invariants();
+    }
+
+    #[test]
+    fn max_min_helpers_extract_first_extremum() {
+        let max_tree: FingerTree<_, MaxMeasure> = [3, 9, 1, 9, 4].into_iter().collect();
+        let min_tree: FingerTree<_, MinMeasure> = [3, 1, 4, 1, 5].into_iter().collect();
+
+        let (max, max_rest) = max_tree.try_extract_max().unwrap();
+        let (min, min_rest) = min_tree.try_extract_min().unwrap();
+
+        assert_eq!(max_tree.try_peek_max(), Some(&9));
+        assert_eq!(max, 9);
+        assert_eq!(max_rest.to_vec(), vec![3, 1, 9, 4]);
+        assert_eq!(max_rest.measure(), &Some(9));
+        assert_eq!(min_tree.try_peek_min(), Some(&1));
+        assert_eq!(min, 1);
+        assert_eq!(min_rest.to_vec(), vec![3, 4, 1, 5]);
+        assert_eq!(min_rest.measure(), &Some(1));
+        max_rest.validate_invariants();
+        min_rest.validate_invariants();
+    }
+
+    #[test]
+    fn product_priority_helpers_keep_positional_measure() {
+        let max_tree: FingerTree<_, SizeAndMaxMeasure<i32>> = [3, 9, 1, 9, 4].into_iter().collect();
+        let min_tree: FingerTree<_, SizeAndMinMeasure<i32>> = [3, 1, 4, 1, 5].into_iter().collect();
+
+        let (max, max_rest) = max_tree.try_extract_max().unwrap();
+        let (min, min_rest) = min_tree.try_extract_min().unwrap();
+
+        assert_eq!(max_tree.try_peek_max(), Some(&9));
+        assert_eq!(
+            max_tree.measure(),
+            &MeasurePair {
+                first: 5,
+                second: Some(9)
+            }
+        );
+        assert_eq!(max, 9);
+        assert_eq!(max_rest.to_vec(), vec![3, 1, 9, 4]);
+        assert_eq!(max_rest.measure().first, 4);
+        assert_eq!(max_rest.measure().second, Some(9));
+        assert_eq!(min_tree.try_peek_min(), Some(&1));
+        assert_eq!(min, 1);
+        assert_eq!(min_rest.to_vec(), vec![3, 4, 1, 5]);
+        assert_eq!(min_rest.measure().first, 4);
+        assert_eq!(min_rest.measure().second, Some(1));
+        max_rest.validate_invariants();
+        min_rest.validate_invariants();
     }
 
     #[test]

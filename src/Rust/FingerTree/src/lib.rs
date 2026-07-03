@@ -13,8 +13,9 @@ pub use deque::{
 };
 pub use interval_tree::{Interval, IntervalTree};
 pub use measured::{
-    FingerTree, LocateResult, MaxMeasure, MeasurePolicy, MeasuredSplit, MinMeasure,
-    OrderStatisticMeasure, RankedKey, SizeMeasure, SumMeasure,
+    FingerTree, KeyMeasure, LocateResult, MaxMeasure, MeasurePair, MeasurePolicy, MeasuredSplit,
+    MinMeasure, OrderStatisticMeasure, ProductMeasure, RankedKey, SizeAndMaxMeasure,
+    SizeAndMinMeasure, SizeAndSumMeasure, SizeMeasure, SumMeasure,
 };
 pub use priority_queue::{PriorityEntry, PriorityQueue};
 pub use rope::{
