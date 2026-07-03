@@ -59,7 +59,7 @@ Build and test validation was run after standalone guidance and path normalizati
 
 ```powershell
 cd C:\DataStructures\FingerTree
-dotnet test .\FingerTree.sln
+dotnet test .\DataStructures.sln
 ```
 
 Result: passed 346 tests, 0 failed, 0 skipped.
@@ -67,6 +67,6 @@ Result: passed 346 tests, 0 failed, 0 skipped.
 After the 2026-07 language-first repository reorganization, the equivalent validation command is:
 
 ```powershell
-cd C:\DataStructures\src\CSharp\FingerTree
-dotnet test .\FingerTree.sln
+cd C:\DataStructures\src\CSharp
+dotnet test .\DataStructures.sln
 ```

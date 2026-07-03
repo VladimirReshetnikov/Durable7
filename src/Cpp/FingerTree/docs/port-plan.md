@@ -53,7 +53,7 @@ Visual Studio developer environment or call the bundled tools by absolute path. 
 Recommended build entry points:
 
 ```powershell
-cd src\Cpp\FingerTree   # repository-relative; the C# workspace builds from C:\DataStructures\src\CSharp\FingerTree
+cd src\Cpp\FingerTree   # repository-relative; the C# workspace builds from C:\DataStructures\src\CSharp
 $vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
 $cmakeDir = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
 

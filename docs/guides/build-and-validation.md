@@ -16,15 +16,15 @@ boundaries, use the [test suite map](../reference/test-suite-map.md).
 
 | Workspace | Primary command | Local validation guide | Test map | Coverage |
 | --- | --- | --- | --- | --- |
-| [`src/CSharp/Numerics`](../../src/CSharp/Numerics/README.md) | `dotnet test .\Numerics.sln` | [Validation](../../src/CSharp/Numerics/docs/validation.md) | [Tests](../../src/CSharp/Numerics/tests/Tools.Numerics.Tests/README.md) | .NET library build, XML-doc warning gate, xUnit wide/sparse-integer behavior tests, declaration parity guardrails |
-| [`src/CSharp/Hamt`](../../src/CSharp/Hamt/README.md) | `dotnet test .\Hamt.sln` | [Validation](../../src/CSharp/Hamt/docs/validation.md) | [Tests](../../src/CSharp/Hamt/tests/Tools.DataStructures.Hamt.Tests/README.md) | .NET library build, XML-doc warning gate, xUnit tests, CsCheck model tests |
-| [`src/CSharp/FingerTree`](../../src/CSharp/FingerTree/README.md) | `dotnet test .\FingerTree.sln` | [Validation](../../src/CSharp/FingerTree/docs/validation.md) | [Tests](../../src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/README.md) | .NET library, samples, benchmark project build, stress controls, xUnit/CsCheck suites |
-| [`src/C/Hamt`](../../src/C/Hamt/README.md) | `.\build.ps1 -RunTests` | [Validation](../../src/C/Hamt/docs/validation.md) | [Tests](../../src/C/Hamt/tests/README.md) | C17 build, warning policy, deterministic HAMT tests |
-| [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | `.\build.ps1 -RunTests` | [Validation](../../src/Cpp/Hamt/docs/validation.md) | [Tests](../../src/Cpp/Hamt/tests/README.md) | C++20 build, warning policy, deterministic HAMT tests |
+| [C# Numerics](../../src/CSharp/docs/Numerics/overview.md) | `dotnet test .\DataStructures.sln` from `src/CSharp` | [Validation](../../src/CSharp/docs/Numerics/validation.md) | [Tests](../../src/CSharp/tests/Tools.Numerics.Tests/README.md) | .NET library build, XML-doc warning gate, xUnit wide/sparse-integer behavior tests, declaration parity guardrails |
+| [C# HAMT](../../src/CSharp/docs/Hamt/overview.md) | `dotnet test .\DataStructures.sln` from `src/CSharp` | [Validation](../../src/CSharp/docs/Hamt/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests/README.md) | .NET library build, XML-doc warning gate, xUnit tests, CsCheck model tests |
+| [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | `dotnet test .\DataStructures.sln` from `src/CSharp` | [Validation](../../src/CSharp/docs/FingerTree/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/README.md) | .NET library, samples, benchmark project build, stress controls, xUnit/CsCheck suites |
+| [`src/C/Hamt`](../../src/C/Hamt/README.md) | `.\build.ps1 -Workspace Hamt -RunTests` from `src/C` | [Validation](../../src/C/Hamt/docs/validation.md) | [Tests](../../src/C/Hamt/tests/README.md) | C17 build, warning policy, deterministic HAMT tests |
+| [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | `.\build.ps1 -Workspace Hamt -RunTests` from `src/Cpp` | [Validation](../../src/Cpp/Hamt/docs/validation.md) | [Tests](../../src/Cpp/Hamt/tests/README.md) | C++20 build, warning policy, deterministic HAMT tests |
 | [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | `.\build.ps1 -Workspace Hamt` from `src/Kotlin` | [Validation](../../src/Kotlin/Hamt/docs/validation.md) | [Tests](../../src/Kotlin/Hamt/tests/README.md) | Kotlin/JVM HAMT build, tool bootstrap, deterministic trie and set-algebra tests |
 | [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | `cargo test -p tools-data-structures-hamt` | [Validation](../../src/Rust/Hamt/docs/validation.md) | [Tests](../../src/Rust/Hamt/tests/README.md) | Safe Rust crate, structural HAMT tests, collision and set-algebra coverage |
-| [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | Visual Studio `cmd.exe` CMake/CTest chain below | [Validation](../../src/C/FingerTree/docs/validation.md) | [Tests](../../src/C/FingerTree/tests/README.md) | C11 static library, tests, samples, benchmark harness entry points |
-| [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | Visual Studio `cmd.exe` CMake/CTest chain below | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | [Tests](../../src/Cpp/FingerTree/tests/README.md) | C++23 header-first library, CTest suite, stress controls, benchmark-harness status |
+| [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree -RunTests` from `src/C` | [Validation](../../src/C/FingerTree/docs/validation.md) | [Tests](../../src/C/FingerTree/tests/README.md) | C11 static library, tests, samples, benchmark harness entry points |
+| [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree -RunTests` from `src/Cpp` | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | [Tests](../../src/Cpp/FingerTree/tests/README.md) | C++23 header-first library, CTest suite, stress controls, benchmark-harness status |
 | [`src/Haskell`](../../src/Haskell/README.md) | `cabal test all` | [Haskell README](../../src/Haskell/README.md) | [HAMT tests](../../src/Haskell/Hamt/test/README.md), [FingerTree tests](../../src/Haskell/FingerTree/test/README.md) | GHC/cabal build, dependency-light HAMT and FingerTree executable tests |
 | [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree` from `src/Kotlin` | [Validation](../../src/Kotlin/FingerTree/docs/validation.md) | [Tests](../../src/Kotlin/FingerTree/tests/README.md) | Kotlin/JVM semantic-checkpoint tests across deque, reversible deque, measured tree, sorted, priority, interval, rope, and text helpers |
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | `cargo test -p tools-data-structures-fingertree` | [Validation](../../src/Rust/FingerTree/docs/validation.md) | [Tests](../../src/Rust/FingerTree/tests/README.md) | Safe Rust checkpoint crate, structurally shared storage and cached-measure tests across deque, reversible deque, sorted, priority, interval, rope, measured tree, measured rope, and text helpers |
@@ -32,29 +32,23 @@ boundaries, use the [test suite map](../reference/test-suite-map.md).
 For broad repository edits, run every row that could be affected. For documentation-only edits, run the
 Markdown link check below and any build/test commands whose documented paths changed.
 
-## C# Workspaces
+## C# Workspace
 
 ```powershell
-cd C:\DataStructures\src\CSharp\Numerics
-dotnet test .\Numerics.sln
-
-cd C:\DataStructures\src\CSharp\Hamt
-dotnet test .\Hamt.sln
-
-cd C:\DataStructures\src\CSharp\FingerTree
-dotnet test .\FingerTree.sln
+cd C:\DataStructures\src\CSharp
+dotnet test .\DataStructures.sln
 ```
 
-The C# solutions target `net10.0` and use C# preview features. Treat public XML documentation warnings
-as build-relevant: `CS1591` and `CS1573` are intentionally escalated in the C# workspaces. The local
-validation guides define test coverage and optional stress/benchmark boundaries:
+The C# solution targets `net10.0` and uses C# preview features. Treat public XML documentation warnings
+as build-relevant: `CS1591` and `CS1573` are intentionally escalated in the C# workspace. The local
+validation guides define family-specific coverage and optional stress/benchmark boundaries:
 
-- [C# Numerics validation](../../src/CSharp/Numerics/docs/validation.md)
-- [C# Numerics tests](../../src/CSharp/Numerics/tests/Tools.Numerics.Tests/README.md)
-- [C# HAMT validation](../../src/CSharp/Hamt/docs/validation.md)
-- [C# HAMT tests](../../src/CSharp/Hamt/tests/Tools.DataStructures.Hamt.Tests/README.md)
-- [C# FingerTree validation](../../src/CSharp/FingerTree/docs/validation.md)
-- [C# FingerTree tests](../../src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/README.md)
+- [C# Numerics validation](../../src/CSharp/docs/Numerics/validation.md)
+- [C# Numerics tests](../../src/CSharp/tests/Tools.Numerics.Tests/README.md)
+- [C# HAMT validation](../../src/CSharp/docs/Hamt/validation.md)
+- [C# HAMT tests](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests/README.md)
+- [C# FingerTree validation](../../src/CSharp/docs/FingerTree/validation.md)
+- [C# FingerTree tests](../../src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/README.md)
 
 ## Rust Workspaces
 
@@ -81,16 +75,17 @@ Local guides:
 ## HAMT Native Ports
 
 ```powershell
-cd C:\DataStructures\src\C\Hamt
-.\build.ps1 -RunTests
-.\build.ps1 -Configuration Release -RunTests
+cd C:\DataStructures\src\C
+.\build.ps1 -Workspace Hamt -RunTests
+.\build.ps1 -Workspace Hamt -Configuration Release -RunTests
 
-cd C:\DataStructures\src\Cpp\Hamt
-.\build.ps1 -RunTests
-.\build.ps1 -Configuration Release -RunTests
+cd C:\DataStructures\src\Cpp
+.\build.ps1 -Workspace Hamt -RunTests
+.\build.ps1 -Workspace Hamt -Configuration Release -RunTests
 ```
 
-The HAMT native build scripts import the MSVC environment through Scriptorium. Build outputs are written
+The language-root scripts delegate to the HAMT native build scripts, which import the MSVC environment through
+Scriptorium. Build outputs are written
 under `build/<Configuration>/` and are ignored by the repository. The local guides define compiler flags,
 warning policy, generated outputs, and native model-test coverage:
 
@@ -100,6 +95,16 @@ warning policy, generated outputs, and native model-test coverage:
 - [C++ HAMT tests](../../src/Cpp/Hamt/tests/README.md)
 
 ## FingerTree Native Ports
+
+The C and C++ language-root scripts can build the FingerTree workspaces through their CMake presets:
+
+```powershell
+cd C:\DataStructures\src\C
+.\build.ps1 -Workspace FingerTree -RunTests
+
+cd C:\DataStructures\src\Cpp
+.\build.ps1 -Workspace FingerTree -RunTests
+```
 
 The FingerTree C and C++ workspaces use CMake presets with Visual Studio's bundled Ninja. The C++ workspace
 models the target as `CXX_STANDARD 23` and adds MSVC `/std:c++latest` explicitly. A plain PowerShell invocation
@@ -179,7 +184,7 @@ Benchmarks are not part of routine validation. Run them when changing complexity
 performance claims, or benchmark documentation.
 
 ```powershell
-cd C:\DataStructures\src\CSharp\FingerTree\benchmarks\Tools.DataStructures.FingerTree.Benchmarks
+cd C:\DataStructures\src\CSharp\benchmarks\Tools.DataStructures.FingerTree.Benchmarks
 dotnet run -c Release -- --filter * --job short
 ```
 
@@ -191,14 +196,14 @@ Use `rg` for stale path and accidental-rewrite scans. This current-state scan ex
 provenance, where old extraction paths are intentional historical evidence:
 
 ```powershell
-rg -n "C:\\DataStructures\\(Hamt|HamtC|HamtCpp|FingerTree|C\\FingerTree|Cpp\\FingerTree)|sr[s]rc|src[/\\]src|iladimi[r]|T[i]alue|MS[i]C|[i]ersion|docs/agent-workflows\\.md" README.md docs src --glob "!docs/migration/**" --glob "!src/CSharp/FingerTree/docs/external/**" --glob "!*.pdf"
+rg -n "C:\\DataStructures\\(Hamt|HamtC|HamtCpp|FingerTree|C\\FingerTree|Cpp\\FingerTree)|sr[s]rc|iladimi[r]|T[i]alue|MS[i]C|[i]ersion|docs/agent-workflows\\.md" README.md docs src --glob "!docs/migration/**" --glob "!src/CSharp/docs/FingerTree/external/**" --glob "!*.pdf"
 ```
 
 For repository-owned Markdown links:
 
 ```powershell
 $root = (Resolve-Path .).Path
-$files = rg --files -g '*.md' --glob '!src/CSharp/FingerTree/docs/external/**'
+$files = rg --files -g '*.md' --glob '!src/CSharp/docs/FingerTree/external/**'
 $missing = New-Object System.Collections.Generic.List[string]
 $linkPattern = '!{0,1}\[[^\]]*\]\((?<target>[^)]+)\)'
 foreach ($file in $files) {

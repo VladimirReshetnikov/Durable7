@@ -33,8 +33,8 @@ changed, with 351 insertions and 349 deletions.
 | `HamtC` | [`src/C/Hamt`](../../src/C/Hamt/README.md) | C17 HAMT port, PowerShell build script |
 | `Cpp/FingerTree` | [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | C++23 FingerTree port, CMake/CTest build |
 | `HamtCpp` | [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | C++20 HAMT port, PowerShell build script |
-| `FingerTree` | [`src/CSharp/FingerTree`](../../src/CSharp/FingerTree/README.md) | .NET FingerTree workspace, canonical semantic source |
-| `Hamt` | [`src/CSharp/Hamt`](../../src/CSharp/Hamt/README.md) | .NET HAMT workspace, canonical semantic source |
+| `FingerTree` | [`src/CSharp/FingerTree`](../../src/CSharp/docs/FingerTree/overview.md) | .NET FingerTree workspace, canonical semantic source |
+| `Hamt` | [`src/CSharp/Hamt`](../../src/CSharp/docs/Hamt/overview.md) | .NET HAMT workspace, canonical semantic source |
 
 Historical references to these old paths are valid only in migration records, review reports, and
 commit-history discussions. Active documentation should use the current paths.

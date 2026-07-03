@@ -1,0 +1,210 @@
+# FingerTree benchmarks
+
+- Created (UTC): 2026-06-13T00:00:00Z
+- Repository HEAD: a93058305d... (benchmark harness)
+- Audience: Maintainers and reviewers assessing the library's measured performance
+- Scope: Curated results from `benchmarks/Tools.DataStructures.FingerTree.Benchmarks`
+
+This document records representative results from the [BenchmarkDotNet harness](../../benchmarks/Tools.DataStructures.FingerTree.Benchmarks/README.md),
+which turns the library's asymptotic and constant-factor claims into measured evidence against the BCL's
+persistent collections. The harness — not these snapshots — is the source of truth; re-run it to refresh.
+
+## How to read this
+
+- **Environment:** BenchmarkDotNet 0.14.0, .NET 10, Windows 11, 13th Gen Intel Core i7-1355U. Numbers below are
+  from the **ShortRun job** (3 warmups, 3 iterations) used for a quick pass; absolute values carry meaningful
+  variance (see the harness for full-job runs), but the **orders of magnitude and the shapes of the curves**
+  across sizes are stable and are what the claims rest on.
+- **Caveat — micro-reads:** a benchmark whose body is a pure function of unchanging fields (e.g. one O(log n)
+  read of a fixed collection at a fixed index) can be hoisted out of the measurement loop by the JIT and report
+  an implausible sub-nanosecond time. Such rows are called out rather than taken at face value.
+
+## Headline: O(1) `Reverse`
+
+`ReversibleDeque.Reverse()` mirrors the root and flips a bit — constant work and a constant 72 bytes,
+**independent of size** — while every eager reverse is linear. This is the clearest result in the suite.
+
+| Size | `ReversibleDeque.Reverse` | `ImmutableList.Reverse` | `Array.Reverse` (copy) |
+|-----:|--------------------------:|------------------------:|-----------------------:|
+| 10,000 | ~19 ns · 72 B | 1,438,389 ns · 480 KB | 5,492 ns · 40 KB |
+| 1,000,000 | **19 ns · 72 B** | 346,476,750 ns · 48 MB | 1,000,009 ns · 4 MB |
+
+At 1,000,000 elements `ReversibleDeque.Reverse` is ~**18,000,000×** faster than `ImmutableList.Reverse` and
+~52,000× faster than copying and reversing a raw array — and its line is flat from 100 to 1,000,000.
+
+## Deque endpoints
+
+`FingerTreeDeque` endpoint operations are O(1) amortized; `ImmutableList` prepend (`Insert(0, …)`) and append
+(`Add`) are O(log n) with a large constant, and the ratio grows with size.
+
+| Operation (Size 100,000) | `FingerTreeDeque` | `ImmutableList` | Ratio (Immutable / ours) |
+|--------------------------|------------------:|----------------:|-------------------------:|
+| Prepend (`AddFirst` / `Insert(0)`) | 16 ns · 88 B | 296 ns · 888 B | ~18× |
+| Append (`AddLast` / `Add`) | 45 ns · 176 B | 200 ns · 840 B | ~4–12× |
+| Read first (`First` / `[0]`) | 0.3 ns · 0 B | — | O(1) worst case |
+| `RemoveFirst` | 23 ns · 136 B | — | — |
+
+The prepend ratio rises from ~10× at 1,000 elements to ~18× at 100,000 — the signature of O(1) versus a growing
+per-operation cost. `First` is a sub-nanosecond, zero-allocation read (O(1) worst case).
+
+## Deque indexing — O(log(distance from the nearer end))
+
+Finger-tree indexing is cheapest near either end and most expensive in the middle. The U-shape across positions
+is exactly the claimed O(log(min(i, n − i))).
+
+| Position (Size 100,000) | `FingerTreeDeque[i]` |
+|-------------------------|---------------------:|
+| Start (0)               | 2.7 ns |
+| Quarter (n/4)           | 310 ns |
+| Middle (n/2)            | 314 ns |
+| End (n−1)               | 6.5 ns |
+
+`ImmutableList`'s indexer is uniform O(log n) regardless of position (its per-position micro-reads here are in
+the hoisting-caveat regime, so only the *flatness* across positions is meaningful). The finger tree wins
+decisively near the ends and pays for the convenience in the middle.
+
+## Reversible deque — the price of O(1) reverse
+
+Reversibility costs a reversal-bit branch and orientation-aware accessors on every internal step. Measured
+against the plain deque (Size 100,000):
+
+| Operation | `FingerTreeDeque` | `ReversibleDeque` (forward) | `ReversibleDeque` (reversed) |
+|-----------|------------------:|----------------------------:|-----------------------------:|
+| `AddFirst` | 20 ns · 88 B | 43 ns · 136 B (~2×) | 290 ns · 1,136 B |
+| Index middle | ~600 ns | ~comparable | ~720 ns · 3,520 B |
+
+Forward-orientation operations carry roughly a 2× constant-factor overhead; the reversed path costs more
+(orientation-adjusted digit copies). This is the documented trade-off: choose `FingerTreeDeque` unless O(1)
+reverse is needed.
+
+## Meldable priority queue — O(log(min(n, m)))
+
+Two persistent priority queues join by tree concatenation, sharing structure. A binary heap (the BCL
+`PriorityQueue`) cannot merge — the only option is to rebuild, which is O(n + m). The fixed left queue has
+100,000 entries.
+
+| Right size | `PriorityQueue.Meld` (ours) | BCL rebuild-to-merge | Ratio |
+|-----------:|----------------------------:|---------------------:|------:|
+| 100        | 876 ns · 2.1 KB | 785,057 ns · 2.1 MB | **~900×** |
+| 100,000    | 2,027 ns · 4.9 KB | 1,507,583 ns · 4.2 MB | **~750×** |
+
+`Meld` grew only ~2.3× while the right operand grew 1,000× — O(log), not O(n). `TryPeekPriority` is ~1.5 ns
+(O(1)). Meld is the finger tree's structural advantage over a heap, and it is dramatic.
+
+## Fenwick weighted selection — O(log n) vs O(n)
+
+`SumMeasure`'s cumulative-weight selection descends the cached running sum; the obvious alternative scans a
+prefix sum. The query targets the midpoint of the total weight (worst case for the scan).
+
+| Size | `TrySelectByCumulativeWeight` | Naive prefix scan | Ratio |
+|-----:|------------------------------:|------------------:|------:|
+| 1,000 | 977 ns | 517 ns | 0.5× (scan wins at tiny n) |
+| 100,000 | **1,551 ns** | 48,983 ns | **~32×** |
+
+The tree's time grew only 1.6× for a 100× size increase (O(log n)); the scan grew ~95× (O(n)). The crossover is
+small, and the gap widens without bound as n grows.
+
+## Persistence robustness (branching use)
+
+The general measured tree's amortized bounds are claimed to hold under fully persistent (branching) histories,
+not merely ephemeral linear use — the payoff of its lazy-memoized spine. This is directly measurable:
+BenchmarkDotNet invokes each method many times against the single instance built in `[GlobalSetup]`, so every
+invocation branches off the *same retained version*. If the bounds held only ephemerally, repeatedly operating
+on a retained version would re-pay an O(log n) cascade each time and the cost would climb with size. Instead it
+is flat:
+
+| Op on a retained version | Size 100 | Size 10,000 | Size 1,000,000 |
+|--------------------------|---------:|------------:|---------------:|
+| `Prepend`                | 24.3 ns · 112 B | 23.5 ns · 112 B | 21.1 ns · 112 B |
+| `Append`                 | 22.4 ns · 128 B | 22.1 ns · 128 B | 22.8 ns · 128 B |
+
+A flat ~22 ns across four orders of magnitude is O(1) amortized under branching — the persistence-robustness
+the lazy spine was built for. The collections built on the same core inherit it: `SortedSet.Add` on a retained
+set stays O(log n) (~180–224 ns across the sizes), on par with the BCL's persistent `ImmutableSortedSet.Add`
+(~127–298 ns). (Reading the memoized `Measure` of a retained tree is O(1); see the
+[unit-test guards](../../tests/Tools.DataStructures.FingerTree.Tests/MeasuredFingerTreePersistenceTests.cs), which
+also pin branching correctness, 1,000,000-element stack safety, and concurrent convergence.)
+
+## Sorted collections — competitive, honest
+
+Our `SortedSet` is a persistent finger-tree sorted set with order-statistic indexing, ranking, and
+set-algebra-as-sorted-merge. The BCL `ImmutableSortedSet` is a mature, heavily optimized persistent collection
+that *also* offers O(log n) `Contains`, an O(log n) rank indexer (`IReadOnlyList<T>`), and `IndexOf` — so the
+order-statistic operations are **not unique to the finger tree**.
+
+The read paths were originally routed through `Split`, which rebuilt both result halves and so allocated ~1–2 KB
+per query. They now use a read-only `TryLocate` descent that finds the boundary element (and the measure before
+it) without reconstructing any subtree — and, supplied with a non-capturing **struct predicate** through the
+generic `TryLocate<TPredicate>` overload, the descent allocates nothing at all:
+
+| `SortedSet.Contains` (100,000) | Time | Allocated |
+|--------------------------------|-----:|----------:|
+| Original (`Split`)             | 2,612 ns | 2,400 B |
+| `TryLocate` + lambda predicate | 351 ns | 96 B (the closure) |
+| `TryLocate` + struct predicate | ~410 ns | **0 B** |
+
+So the reads went from ~2.4 KB per query to **zero** — BCL-parity allocation behavior — at comparable speed.
+Eliminating the tree rebuild gave the ~7× speedup; replacing the capturing lambda with a constrained value-type
+predicate (`KeyAtLeastPredicate<T>` etc.) removed the last per-read closure, which the
+[zero-allocation guard tests](../../tests/Tools.DataStructures.FingerTree.Tests/AllocationFreeReadTests.cs) pin
+across SortedSet/SortedBag/SortedDictionary/PriorityQueue/IntervalTree. The BCL's sub-nanosecond reads here are
+in the hoisting-caveat regime and are not literal. The finger-tree value proposition for sorted data is the
+**unified measure framework** — one core yielding multiset, set, map, interval tree, priority queue, and
+order-statistic tree — plus structural-sharing persistence; its reads are now allocation-free like the
+specialized BCL collection's.
+
+## Rope: editing a large sequence
+
+`Rope<T>` (a persistent chunked sequence) exists to edit a large sequence in O(log n) instead of O(n). The
+clearest demonstration is `Rope<char>` against `string` — the usual text-buffer baseline — for a buffer of
+1,000,000 characters:
+
+| Operation (1,000,000 chars) | `Rope<char>` | `string` | Speedup |
+|-----------------------------|-------------:|---------:|--------:|
+| insert a short run mid-buffer | 2,939 ns · 5.8 KB | 844,426 ns · 1,953 KB | ~287× |
+| remove a 1,000-char run mid-buffer | 2,217 ns · 7 KB | 507,297 ns · 1,951 KB | ~229× |
+| split in half and re-concatenate | 2,066 ns · 4 KB | 682,576 ns · 1,953 KB | ~330× |
+| build from a char array | 256,924 ns · 2.1 MB | (`ImmutableList`: 91,813,733 ns · 39 MB) | ~358× vs `ImmutableList` |
+
+The rope's edit times are **flat** from 100,000 to 1,000,000 elements (O(log n)) and allocate kilobytes, while
+`string` edits grow linearly and copy the whole megabyte-scale buffer each time. Building is dramatically faster
+than `ImmutableList` because the rope fills bulk chunks instead of inserting elements one at a time into a
+balanced tree.
+
+Honest counterpoints: for a *single-element* insert at one position, `ImmutableList<char>.Insert` (~806 ns) beats
+the rope (~3 µs) — the rope's split + chunk + coalesce carries more fixed overhead than a balanced-tree leaf
+insert; and `string` random indexing is O(1) versus the rope's O(log n). The rope wins on large-buffer editing
+versus `string`/`StringBuilder`, on build throughput, and on bulk range operations — which is exactly the
+text-editor / large-buffer workload it is meant for.
+
+### Line navigation (measured rope)
+
+`MeasuredRope<char, int, NewlineMeasure>` navigates by line in O(log n) by descending its cached newline measure,
+where a plain `string` must scan. For a document of 1,000,000 lines:
+
+| Line query (1,000,000 lines) | `MeasuredRope` | `string` scan | Speedup |
+|------------------------------|---------------:|--------------:|--------:|
+| offset → line index          | 1,012 ns | 3,493,972 ns | ~3,450× |
+| line → start offset          | 1,691 ns | 3,469,608 ns | ~2,050× |
+
+The rope's line lookups are flat across sizes (O(log n); ~0.3–2.7 µs from 10,000 to 1,000,000 lines) while the
+scans grow linearly (O(n)) — microseconds versus milliseconds. This is the measured-rope payoff: a line-aware
+text buffer that answers offset↔line queries on a million-line document in microseconds.
+
+## Takeaways
+
+- **O(1) `Reverse`** and **O(log(min)) `Meld`** are the standout structural wins (millions-fold and ~750–900×).
+- **Endpoint operations** and **weighted selection** show the expected O(1) / O(log n) advantage over the BCL's
+  O(log n) / O(n), with ratios that grow with size.
+- **Indexing** exhibits the predicted distance-from-nearer-end U-shape.
+- **Sorted-collection reads** route through the `TryLocate` descent with non-capturing struct predicates: ~7×
+  faster than the former `Split`-based reads and **zero allocation** (down from ~2.4 KB/query), matching the
+  BCL's allocation behavior.
+- **Persistence is robust**: operations on a retained version stay O(1)/O(log n) amortized — flat across sizes
+  from 100 to 1,000,000 — so the amortized bounds survive branching, and the derived collections inherit it.
+- **Rope editing** of a 1,000,000-element buffer is ~230–330× faster than `string` (and allocates kilobytes, not
+  megabytes), with edit times flat across sizes (O(log n)) — the persistent-text-buffer payoff.
+- **Measured-rope line navigation** answers offset↔line queries on a 1,000,000-line document in ~1–2 µs versus a
+  ~3.5 ms `string` scan (~2,000–3,450×), flat across sizes (O(log n)).
+- The finger tree trades a constant-factor read overhead for persistence, structural sharing, and a single
+  unified core behind a whole family of collections.

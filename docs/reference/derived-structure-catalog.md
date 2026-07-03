@@ -173,5 +173,5 @@ Wolfram semantics, lives in the Smithereens repository at
 - [Porting and semantic parity](../guides/porting-and-semantic-parity.md) - the parity workflow a
   shipped candidate must satisfy.
 - Workspace improvement proposals (for example the C# FingerTree enumerator-allocation and
-  rope-storage proposals under `src/CSharp/FingerTree/docs/`) - single-workspace API gaps listed
+  rope-storage proposals under `src/CSharp/docs/FingerTree/`) - single-workspace API gaps listed
   here should graduate into such proposals when scheduled.

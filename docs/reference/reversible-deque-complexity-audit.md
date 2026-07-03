@@ -24,13 +24,13 @@ previously reversed deque must not pay a hidden O(n) materialization cost.
 
 C#:
 
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/ReversibleDeque.cs` delegates `Reverse()` to
+- `src/CSharp/src/Tools.DataStructures.FingerTree/ReversibleDeque.cs` delegates `Reverse()` to
   `_root.Mirror()` and `Concat` to `RevTreeOps.Concat`.
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/Reversible/ReversibleTree.cs` makes deep
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Reversible/ReversibleTree.cs` makes deep
   `Mirror()` flip a bit and implements `Glue` through `LogicalPrefix`, `LogicalMiddle`, and `LogicalSuffix`.
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/Reversible/ReversibleElements.cs` gives
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Reversible/ReversibleElements.cs` gives
   internal nodes the same O(1) mirror bit and logical child access.
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/ReversibleDequeTests.cs` covers all four
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/ReversibleDequeTests.cs` covers all four
   concat orientation combinations, reversed split reconstruction, deep reversed-middle updates, and constant
   allocation for whole-deque reverse.
 

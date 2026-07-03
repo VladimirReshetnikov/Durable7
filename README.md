@@ -31,6 +31,7 @@ This document is the canonical repository guidance for Vladimir and the AI codin
     ├── README.md
     ├── C/
     │   ├── README.md
+    │   ├── build.ps1
     │   ├── Hamt/
     │   │   ├── build.ps1
     │   │   ├── README.md
@@ -50,6 +51,7 @@ This document is the canonical repository guidance for Vladimir and the AI codin
     │       └── tests/
     ├── Cpp/
     │   ├── README.md
+    │   ├── build.ps1
     │   ├── Hamt/
     │   │   ├── build.ps1
     │   │   ├── README.md
@@ -65,29 +67,26 @@ This document is the canonical repository guidance for Vladimir and the AI codin
     │       └── tests/
     ├── CSharp/
     │   ├── README.md
-    │   ├── Numerics/
-    │   │   ├── Directory.Build.props
-    │   │   ├── Numerics.sln
-    │   │   ├── README.md
-    │   │   ├── docs/
-    │   │   ├── src/
-    │   │   └── tests/
-    │   ├── Hamt/
-    │   │   ├── Directory.Build.props
-    │   │   ├── Hamt.sln
-    │   │   ├── README.md
-    │   │   ├── docs/
-    │   │   ├── src/
-    │   │   └── tests/
-    │   └── FingerTree/
-    │       ├── Directory.Build.props
-    │       ├── FingerTree.sln
-    │       ├── README.md
-    │       ├── benchmarks/
-    │       ├── docs/
-    │       ├── samples/
-    │       ├── src/
-    │       └── tests/
+    │   ├── DataStructures.sln
+    │   ├── Directory.Build.props
+    │   ├── benchmarks/
+    │   │   └── Tools.DataStructures.FingerTree.Benchmarks/
+    │   ├── docs/
+    │   │   ├── FingerTree/
+    │   │   ├── Hamt/
+    │   │   └── Numerics/
+    │   ├── samples/
+    │   │   ├── Tools.DataStructures.FingerTree.Editor/
+    │   │   ├── Tools.DataStructures.FingerTree.Showcase/
+    │   │   └── Tools.DataStructures.FingerTree.Tour/
+    │   ├── src/
+    │   │   ├── Tools.DataStructures.FingerTree/
+    │   │   ├── Tools.DataStructures.Hamt/
+    │   │   └── Tools.Numerics/
+    │   └── tests/
+    │       ├── Tools.DataStructures.FingerTree.Tests/
+    │       ├── Tools.DataStructures.Hamt.Tests/
+    │       └── Tools.Numerics.Tests/
     ├── Haskell/
     │   ├── README.md
     │   ├── cabal.project
@@ -140,9 +139,9 @@ The [source index](src/README.md) and language indexes for [C](src/C/README.md),
 [Kotlin](src/Kotlin/README.md), and [Rust](src/Rust/README.md) are the quickest way to browse the
 language-first layout.
 
-- [src/CSharp/Numerics](src/CSharp/Numerics/README.md) is a .NET 10 fixed-width and sparse integer numerics library. It provides `UInt256`/`Int256`, `UInt512`/`Int512`, `UInt1024`/`Int1024`, `SparseInteger`, deterministic two's-complement and binary conversion semantics, declaration-parity guardrails, and xUnit tests.
-- [src/CSharp/Hamt](src/CSharp/Hamt/README.md) is a .NET 10 persistent hash-array mapped trie library. It provides `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` with bitmap-indexed 32-way branching, immutable equal-hash collision buckets, comparer-preserving factories, structural sharing across versions, and xUnit/CsCheck model tests against BCL dictionaries and sets.
-- [src/CSharp/FingerTree](src/CSharp/FingerTree/README.md) is a .NET 10 persistent finger-tree library: two engine cores (a tuned catenable deque and a general monoid-measured tree), a full collection family (sorted bag/set/dictionary, priority queue, interval tree, reversible deque), product/sum/built-in measures with a closure-free predicate API, and a rope family (positional, measured, and text). It ships a navigable design-notes document ([FingerTree-Design-Notes.pdf](src/CSharp/FingerTree/docs/FingerTree-Design-Notes.pdf), with `.tex` source and a rebuild script alongside), a BenchmarkDotNet harness, three runnable samples, and a three-tier (example + property + model-based command) test suite plus tearable-struct concurrency stress tests.
+- [C# Numerics](src/CSharp/docs/Numerics/overview.md) is a .NET 10 fixed-width and sparse integer numerics library under [src/CSharp/src/Tools.Numerics](src/CSharp/src/Tools.Numerics/Tools.Numerics.csproj). It provides `UInt256`/`Int256`, `UInt512`/`Int512`, `UInt1024`/`Int1024`, `SparseInteger`, deterministic two's-complement and binary conversion semantics, declaration-parity guardrails, and xUnit tests.
+- [C# HAMT](src/CSharp/docs/Hamt/overview.md) is a .NET 10 persistent hash-array mapped trie library under [src/CSharp/src/Tools.DataStructures.Hamt](src/CSharp/src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj). It provides `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` with bitmap-indexed 32-way branching, immutable equal-hash collision buckets, comparer-preserving factories, structural sharing across versions, and xUnit/CsCheck model tests against BCL dictionaries and sets.
+- [C# FingerTree](src/CSharp/docs/FingerTree/overview.md) is a .NET 10 persistent finger-tree library under [src/CSharp/src/Tools.DataStructures.FingerTree](src/CSharp/src/Tools.DataStructures.FingerTree/Tools.DataStructures.FingerTree.csproj): two engine cores (a tuned catenable deque and a general monoid-measured tree), a full collection family (sorted bag/set/dictionary, priority queue, interval tree, reversible deque), product/sum/built-in measures with a closure-free predicate API, and a rope family (positional, measured, and text). It ships a navigable design-notes document ([FingerTree-Design-Notes.pdf](src/CSharp/docs/FingerTree/FingerTree-Design-Notes.pdf), with `.tex` source and a rebuild script alongside), a BenchmarkDotNet harness, three runnable samples, and a three-tier (example + property + model-based command) test suite plus tearable-struct concurrency stress tests.
 - [src/C/Hamt](src/C/Hamt/README.md) is a C17 port of the persistent HAMT library. It provides type-erased
   `tds_hamt_map` and `tds_hamt_set` value structs with callback-driven hash/equality/ownership
   policy, reference-counted immutable nodes, structural sharing across versions, and deterministic
@@ -169,43 +168,30 @@ language-first layout.
 
 ## Build and test
 
-Use [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) as the complete validation guide. In short, use the local .NET SDK toolchain for the C# workspaces, the local MSVC C17/C++20 toolchain for HAMT native ports, the Visual Studio-bundled CMake/Ninja presets for the C11 and C++23 FingerTree native ports, cabal for the Haskell packages, and Cargo for the Rust crates.
+Use [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) as the complete validation guide. In short, use the local .NET SDK toolchain for the C# workspace, the language-root MSVC build wrappers for C and C++, cabal for the Haskell packages, and Cargo for the Rust crates.
 
 ```powershell
-cd C:\DataStructures\src\CSharp\FingerTree
+cd C:\DataStructures\src\CSharp
 dotnet restore
 dotnet build
-dotnet test .\FingerTree.sln
+dotnet test .\DataStructures.sln
 
-cd C:\DataStructures\src\CSharp\Numerics
-dotnet restore
-dotnet build
-dotnet test .\Numerics.sln
+cd C:\DataStructures\src\C
+.\build.ps1 -Workspace Hamt -RunTests
+.\build.ps1 -Workspace Hamt -Configuration Release -RunTests
 
-cd C:\DataStructures\src\CSharp\Hamt
-dotnet restore
-dotnet build
-dotnet test .\Hamt.sln
-
-cd C:\DataStructures\src\C\Hamt
-.\build.ps1 -RunTests
-.\build.ps1 -Configuration Release -RunTests
-
-cd C:\DataStructures\src\Cpp\Hamt
-.\build.ps1 -RunTests
-.\build.ps1 -Configuration Release -RunTests
+cd C:\DataStructures\src\Cpp
+.\build.ps1 -Workspace Hamt -RunTests
+.\build.ps1 -Workspace Hamt -Configuration Release -RunTests
 
 cd C:\DataStructures\src\Rust
 cargo test --workspace
 
-$vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
-$cmakeDir = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
+cd C:\DataStructures\src\C
+.\build.ps1 -Workspace FingerTree -RunTests
 
-cd C:\DataStructures\src\C\FingerTree
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-debug && ""$cmakeDir\cmake.exe"" --build --preset msvc-debug && ""$cmakeDir\ctest.exe"" --preset msvc-debug --output-on-failure"
-
-cd C:\DataStructures\src\Cpp\FingerTree
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-debug && ""$cmakeDir\cmake.exe"" --build --preset msvc-debug && ""$cmakeDir\ctest.exe"" --preset msvc-debug --output-on-failure"
+cd C:\DataStructures\src\Cpp
+.\build.ps1 -Workspace FingerTree -RunTests
 
 cd C:\DataStructures\src\Haskell
 cabal test all
@@ -217,7 +203,7 @@ cd C:\DataStructures\src\Kotlin
 Run benchmarks from the benchmark project:
 
 ```powershell
-cd C:\DataStructures\src\CSharp\FingerTree\benchmarks\Tools.DataStructures.FingerTree.Benchmarks
+cd C:\DataStructures\src\CSharp\benchmarks\Tools.DataStructures.FingerTree.Benchmarks
 dotnet run -c Release -- --filter * --job short
 ```
 
@@ -236,12 +222,12 @@ Release configuration is required for meaningful benchmark numbers.
 - [docs/reference/data-structure-catalog.md](docs/reference/data-structure-catalog.md) catalogs repository-owned data-structure families, public entry points, and primary references across C#, C, C++, Haskell, Kotlin, and Rust.
 - [docs/reference/navigation-matrix.md](docs/reference/navigation-matrix.md) maps common tasks to the right usage, API, validation, porting, history, and maintenance documents.
 - [docs/reference/workspace-map.md](docs/reference/workspace-map.md) explains the language-first, library-family layout and port lineage.
-- [src/CSharp/Numerics/docs/README.md](src/CSharp/Numerics/docs/README.md) indexes the Numerics library's API and behavior reference, validation guide, maintainer guidance, and design notes.
-- [src/CSharp/Hamt/docs/README.md](src/CSharp/Hamt/docs/README.md) indexes the HAMT library's usage guide, API specification, validation guide, and implementation review.
+- [src/CSharp/docs/Numerics/README.md](src/CSharp/docs/Numerics/README.md) indexes the Numerics library's API and behavior reference, validation guide, maintainer guidance, and design notes.
+- [src/CSharp/docs/Hamt/README.md](src/CSharp/docs/Hamt/README.md) indexes the HAMT library's usage guide, API specification, validation guide, and implementation review.
 - [src/C/Hamt/docs/README.md](src/C/Hamt/docs/README.md) indexes the C HAMT port's usage guide, API specification, and validation guide.
 - [src/Cpp/Hamt/docs/README.md](src/Cpp/Hamt/docs/README.md) indexes the C++ HAMT port's usage
   guide, API specification, and validation guide.
-- [src/CSharp/FingerTree/docs/README.md](src/CSharp/FingerTree/docs/README.md) indexes the library's usage guide, specifications, validation guide, design notes, benchmark notes, and external references.
+- [src/CSharp/docs/FingerTree/README.md](src/CSharp/docs/FingerTree/README.md) indexes the library's usage guide, specifications, validation guide, design notes, benchmark notes, and external references.
 - [src/Cpp/FingerTree/docs/README.md](src/Cpp/FingerTree/docs/README.md) indexes the C++ usage guide, port plan, API notes, validation guide, implementation notes, and review reports.
 - [src/C/FingerTree/docs/README.md](src/C/FingerTree/docs/README.md) indexes the C usage guide, API notes, and validation guide.
 - [src/Haskell/README.md](src/Haskell/README.md) indexes the Haskell cabal packages.
@@ -267,7 +253,7 @@ Use `git rev-parse HEAD` for the repository HEAD. When creating reports where fi
 
 ## External reference material
 
-Files under [src/CSharp/FingerTree/docs/external](src/CSharp/FingerTree/docs/external/README.md) are external, pre-existing study material. They are not authored by this project and are not covered by this repository's MIT-0 license; each item keeps its own copyright and license.
+Files under [src/CSharp/docs/FingerTree/external](src/CSharp/docs/FingerTree/external/README.md) are external, pre-existing study material. They are not authored by this project and are not covered by this repository's MIT-0 license; each item keeps its own copyright and license.
 
 ## Local environment
 
@@ -296,7 +282,7 @@ Reusable automation (web mining, browser CDP capture, PDF/OCR, git/GitHub toolin
 control, agent-log processing, installers) lives in the sibling **Scriptorium** repo
 (`C:\Scriptorium`; <https://github.com/VladimirReshetnikov/Scriptorium>) — see its `TOOLS.md`
 index. **Before writing a new automation script, grep `..\Scriptorium\TOOLS.md`.** Repo-agnostic
-scripts are born there and called in place, never copied here. `src/CSharp/FingerTree/docs/build-design-notes.ps1` is a thin wrapper over Scriptorium's `render/Build-LatexDoc.ps1`.
+scripts are born there and called in place, never copied here. `src/CSharp/docs/FingerTree/build-design-notes.ps1` is a thin wrapper over Scriptorium's `render/Build-LatexDoc.ps1`.
 ## Agent working guidelines
 
 When starting on a task, read `AGENTS.md` first; in this repository it points to this file. Read the relevant workspace README and local docs before editing source.
@@ -320,4 +306,4 @@ Do not express estimates in calendar or person-time units. Use velocity-independ
 
 ## Licensing
 
-Unless a more specific license file is present, repository-owned content is licensed under MIT-0. External material under `src/CSharp/FingerTree/docs/external` retains its own copyright and license.
+Unless a more specific license file is present, repository-owned content is licensed under MIT-0. External material under `src/CSharp/docs/FingerTree/external` retains its own copyright and license.

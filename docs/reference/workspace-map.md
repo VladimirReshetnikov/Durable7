@@ -5,7 +5,9 @@
 - Audience: Maintainers and AI agents navigating the repository
 - Scope: Repository organization, workspace roles, and documentation placement
 
-The repository is organized by programming language first and by library family second:
+The repository is organized by programming language first. Native, Haskell, Kotlin, and Rust roots keep
+library-family directories directly under the language root. The C# root is a single managed solution
+with projects grouped by role:
 
 ```text
 src/
@@ -20,9 +22,19 @@ src/
 │   └── Hamt/
 ├── CSharp/
 │   ├── README.md
-│   ├── FingerTree/
-│   ├── Hamt/
-│   └── Numerics/
+│   ├── DataStructures.sln
+│   ├── Directory.Build.props
+│   ├── benchmarks/
+│   ├── docs/
+│   │   ├── FingerTree/
+│   │   ├── Hamt/
+│   │   └── Numerics/
+│   ├── samples/
+│   ├── src/
+│   │   ├── Tools.DataStructures.FingerTree/
+│   │   ├── Tools.DataStructures.Hamt/
+│   │   └── Tools.Numerics/
+│   └── tests/
 ├── Haskell/
 │   ├── README.md
 │   ├── FingerTree/
@@ -38,7 +50,9 @@ src/
 ```
 
 This makes language-local build systems, toolchains, include paths, and idioms easy to find while keeping
-related library families aligned across languages where ports exist.
+related library families aligned across languages where ports exist. In C#, the single solution keeps
+managed package boundaries intact while allowing one restore/build/test entry point for the whole managed
+surface.
 
 Use the [source index](../../src/README.md) when browsing by language, or jump directly to the
 [C](../../src/C/README.md), [C++](../../src/Cpp/README.md), [C#](../../src/CSharp/README.md),
@@ -52,14 +66,14 @@ For the cross-language list of public library surfaces, see the
 
 | Workspace | Role | Main entry points | Local docs |
 | --- | --- | --- | --- |
-| [`src/CSharp/Numerics`](../../src/CSharp/Numerics/README.md) | Managed fixed-width and sparse integer numerics library | `Numerics.sln`, `src/Tools.Numerics/` | [`docs`](../../src/CSharp/Numerics/docs/README.md) |
-| [`src/CSharp/Hamt`](../../src/CSharp/Hamt/README.md) | Canonical managed HAMT library | `Hamt.sln`, `src/Tools.DataStructures.Hamt/` | [`docs`](../../src/CSharp/Hamt/docs/README.md) |
+| [C# Numerics](../../src/CSharp/docs/Numerics/overview.md) | Managed fixed-width and sparse integer numerics library | `DataStructures.sln`, `src/Tools.Numerics/`, `tests/Tools.Numerics.Tests/` | [`docs`](../../src/CSharp/docs/Numerics/README.md) |
+| [C# HAMT](../../src/CSharp/docs/Hamt/overview.md) | Canonical managed HAMT library | `DataStructures.sln`, `src/Tools.DataStructures.Hamt/`, `tests/Tools.DataStructures.Hamt.Tests/` | [`docs`](../../src/CSharp/docs/Hamt/README.md) |
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | C17 HAMT port | `include/Tools/DataStructures/Hamt/hamt.h`, `build.ps1` | [`docs`](../../src/C/Hamt/docs/README.md) |
 | [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | C++20 HAMT port | `include/Tools/DataStructures/Hamt/*.hpp`, `build.ps1` | [`docs`](../../src/Cpp/Hamt/docs/README.md) |
 | [`src/Haskell/Hamt`](../../src/Haskell/Hamt/README.md) | Haskell HAMT port | `tools-data-structures-hamt.cabal`, `src/Data/Structures/Hamt/` | [`README`](../../src/Haskell/Hamt/README.md) |
 | [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | Kotlin/JVM HAMT port | `src/tools/datastructures/hamt/`, `test/tools/datastructures/hamt/` | [`docs`](../../src/Kotlin/Hamt/docs/README.md) |
 | [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | Rust HAMT port | `Cargo.toml`, `src/lib.rs` | [`docs`](../../src/Rust/Hamt/docs/README.md) |
-| [`src/CSharp/FingerTree`](../../src/CSharp/FingerTree/README.md) | Canonical managed FingerTree library | `FingerTree.sln`, `src/Tools.DataStructures.FingerTree/` | [`docs`](../../src/CSharp/FingerTree/docs/README.md) |
+| [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | Canonical managed FingerTree library | `DataStructures.sln`, `src/Tools.DataStructures.FingerTree/`, `tests/Tools.DataStructures.FingerTree.Tests/`, `samples/`, `benchmarks/` | [`docs`](../../src/CSharp/docs/FingerTree/README.md) |
 | [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | C++23 FingerTree port | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/Cpp/FingerTree/docs/README.md) |
 | [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | C11 FingerTree port | `include/tools/data_structures/finger_tree/fingertree.h`, `CMakePresets.json` | [`docs`](../../src/C/FingerTree/docs/README.md) |
 | [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) | Haskell FingerTree family port | `tools-data-structures-fingertree.cabal`, `src/Data/Structures/FingerTree/` | [`README`](../../src/Haskell/FingerTree/README.md) |
@@ -70,7 +84,7 @@ For the cross-language list of public library surfaces, see the
 
 HAMT lineage:
 
-1. `src/CSharp/Hamt` defines the managed public contract and model-test baseline.
+1. C# HAMT (`src/CSharp/src/Tools.DataStructures.Hamt`) defines the managed public contract and model-test baseline.
 2. `src/Cpp/Hamt` ports the HAMT semantics to C++ value types, templates, and `std::shared_ptr` node sharing.
 3. `src/C/Hamt` ports the same structure to a type-erased C API with explicit clone/destroy ownership.
 4. `src/Haskell/Hamt` ports the same persistent HAMT semantics to Haskell values, with a package-local `Hashable` class and optional runtime `HashPolicy`.
@@ -79,7 +93,7 @@ HAMT lineage:
 
 FingerTree lineage:
 
-1. `src/CSharp/FingerTree` is the broadest implementation and documentation source: tuned deque, general measured tree, derived sorted/priority/interval collections, ropes, text helpers, samples, benchmarks, and design notes.
+1. C# FingerTree (`src/CSharp/src/Tools.DataStructures.FingerTree`) is the broadest implementation and documentation source: tuned deque, general measured tree, derived sorted/priority/interval collections, ropes, text helpers, samples, benchmarks, and design notes.
 2. `src/Cpp/FingerTree` ports the FingerTree family to a header-first C++23 library with CMake/CTest validation.
 3. `src/C/FingerTree` starts from the C++ port and exposes a C11 API with explicit handles, ownership, and facade types.
 4. `src/Haskell/FingerTree` ports the family to Haskell with a general measured tree, deque/reversible deque, derived collections, intervals, ropes, and text helpers.
@@ -88,9 +102,10 @@ FingerTree lineage:
    use structurally shared Rust tree storage, and the workspace documents the remaining lazy-spine asymptotic
    parity work locally.
 
-Numerics currently has a C# workspace only. `src/CSharp/Numerics` owns the fixed-width integer and sparse-integer
-contract, implementation, and tests; add future ports or generated variants as separate language-family workspaces
-only when they have their own toolchain and validation shape.
+Numerics currently has a C# project only. `src/CSharp/src/Tools.Numerics` owns the fixed-width integer and
+sparse-integer contract and implementation, with tests under `src/CSharp/tests/Tools.Numerics.Tests`; add
+future ports or generated variants as separate language-family workspaces only when they have their own
+toolchain and validation shape.
 
 When porting behavior across languages, prefer the managed workspace for the semantic contract, the adjacent
 native workspace for local idioms, and the local tests for the exact validation shape. Use the
@@ -105,12 +120,15 @@ Repository-level docs live under `docs/`:
 - [`docs/reference`](README.md) holds durable maps and cross-workspace reference material.
 - [`docs/migration`](../migration/README.md) preserves extraction and history-filtering provenance.
 
-Workspace-level docs live next to the code they describe:
+Workspace-level docs live near the code they describe:
 
-- API contracts and library-specific design notes belong under the workspace's `docs/` directory.
-- Build entry points and quick orientation belong in the workspace `README.md`.
+- C# API contracts and library-specific design notes belong under `src/CSharp/docs/<Family>/`.
+- Other language API contracts and library-specific design notes belong under the family workspace's `docs/`
+  directory.
+- Build entry points and quick orientation belong in the language-root or family-root `README.md`, whichever owns
+  the build entry point.
 - Long-lived repository-wide reports belong under `docs/`, not inside one language workspace.
-- External study material remains segregated under [`src/CSharp/FingerTree/docs/external`](../../src/CSharp/FingerTree/docs/external/README.md).
+- External study material remains segregated under [`src/CSharp/docs/FingerTree/external`](../../src/CSharp/docs/FingerTree/external/README.md).
 
 ## Naming And Path Conventions
 

@@ -18,15 +18,15 @@ change may need to cross C#, C++, C, Haskell, Kotlin, and Rust workspaces.
 Use the real .NET SDK in the local Windows environment:
 
 ```powershell
-cd C:\DataStructures\src\CSharp\Numerics
+cd C:\DataStructures\src\CSharp
 dotnet restore
 dotnet build
-dotnet test .\Numerics.sln
+dotnet test .\DataStructures.sln
 
-cd C:\DataStructures\src\CSharp\FingerTree
+cd C:\DataStructures\src\CSharp
 dotnet restore
 dotnet build
-dotnet test .\FingerTree.sln
+dotnet test .\DataStructures.sln
 ```
 
 Prefer deterministic tests for data-structure complexity claims. Do not replace operation-count or allocation guards with timing thresholds unless the task is explicitly benchmark-oriented.
@@ -73,7 +73,7 @@ Every new long-lived document should include:
 
 ## External references
 
-`src/CSharp/FingerTree/docs/external` is external study material. Do not make substantive edits there unless the task explicitly concerns curation or provenance. Keep license and authorship distinctions visible.
+`src/CSharp/docs/FingerTree/external` is external study material. Do not make substantive edits there unless the task explicitly concerns curation or provenance. Keep license and authorship distinctions visible.
 
 ## History filtering
 

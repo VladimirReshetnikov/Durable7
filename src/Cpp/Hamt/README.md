@@ -6,7 +6,8 @@
 - Audience: Maintainers implementing and reviewing the native C++ HAMT port
 - Scope: Project layout and validation entry points for `src/Cpp/Hamt`
 
-`src/Cpp/Hamt` is the C++20 port of the C# `src/CSharp/Hamt` workspace. It provides immutable unordered
+`src/Cpp/Hamt` is the C++20 port of the C# HAMT project under `src/CSharp/src/Tools.DataStructures.Hamt`.
+It provides immutable unordered
 collections backed by a hash-array mapped trie:
 
 - `tools::data_structures::hamt::persistent_hash_map<Key, T, Hash, KeyEqual, ValueEqual>`

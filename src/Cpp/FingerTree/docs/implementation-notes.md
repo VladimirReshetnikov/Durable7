@@ -49,25 +49,25 @@ Validation:
 
 Compared C# source:
 
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Measures.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/BuiltInMeasures.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Comparisons.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/SumMeasure.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/ProductMeasure.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/MeasurePredicate.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/MeasurePredicates.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/PriorityQueue.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/IntervalTree.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Measures.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/BuiltInMeasures.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Comparisons.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/SumMeasure.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/ProductMeasure.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/MeasurePredicate.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/MeasurePredicates.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/PriorityQueue.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/IntervalTree.cs`
 
 Compared C# tests:
 
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/BuiltInMeasureTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/SumMeasureTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/ProductMeasureTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/CustomComparisonMeasureTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/PriorityQueueTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/IntervalTreeTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/ZeroClosureNamedOpTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/BuiltInMeasureTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/SumMeasureTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/ProductMeasureTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/CustomComparisonMeasureTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/PriorityQueueTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/IntervalTreeTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/ZeroClosureNamedOpTests.cs`
 
 Implemented:
 
@@ -119,7 +119,7 @@ Findings:
 
 - No runtime C# defect was found in the measure and predicate layer.
 - A narrow C# documentation wording defect was recorded in
-  [`src/CSharp/FingerTree/docs/interval-tree-strict-core-wording-defect-report.md`](../../../CSharp/FingerTree/docs/interval-tree-strict-core-wording-defect-report.md):
+  [`src/CSharp/docs/FingerTree/interval-tree-strict-core-wording-defect-report.md`](../../../CSharp/docs/FingerTree/interval-tree-strict-core-wording-defect-report.md):
   `IntervalTree<T>` refers to the underlying measured core as "strict" where the repository docs and implementation
   describe the lazy-memoized measured finger tree.
 
@@ -127,17 +127,17 @@ Findings:
 
 Compared C# source:
 
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/MiddleTree.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredMiddle.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/MiddleTree.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredMiddle.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
 - `src/Cpp/FingerTree/docs/port-plan.md`
 - `src/Cpp/FingerTree/docs/port-plan-editorial-notes.md`
 
 Compared C# tests and examples:
 
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/MeasuredFingerTreePersistenceTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/PersistenceConcurrencyExamplesTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/TearableConcurrencyStressTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/MeasuredFingerTreePersistenceTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/PersistenceConcurrencyExamplesTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/TearableConcurrencyStressTests.cs`
 
 Implemented:
 
@@ -185,8 +185,8 @@ Validation:
 
 Compared C# source:
 
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/TearableConcurrencyStressTests.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/TearableConcurrencyStressTests.cs`
 - `src/Cpp/FingerTree/docs/port-plan-editorial-notes.md`
 
 Implemented:
@@ -219,8 +219,8 @@ Validation:
 
 Compared C# source:
 
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredMiddle.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredMiddle.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
 - `src/Cpp/FingerTree/docs/port-plan.md`
 - `src/Cpp/FingerTree/docs/port-plan-editorial-notes.md`
 
@@ -256,26 +256,26 @@ Validation:
 
 Compared C# source:
 
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/FingerTreeDeque.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/FingerTreeDequeResults.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/TreeElement.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/Digit.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/Node.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/Tree.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/MiddleTree.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/TreeOperations.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/FingerTreeDeque.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/FingerTreeDequeResults.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/TreeElement.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Digit.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Node.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Tree.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/MiddleTree.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/TreeOperations.cs`
 
 Compared C# tests:
 
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeEndpointOperationTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeBranchingPersistenceTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeIndexingAndSplitTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeEnumerationAndCopyTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeSortedSearchTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeSortedSearchEdgeTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeComplexityGuardTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeRandomizedModelTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeEndpointOperationTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeBranchingPersistenceTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeIndexingAndSplitTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeEnumerationAndCopyTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeSortedSearchTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeSortedSearchEdgeTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeComplexityGuardTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeRandomizedModelTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
 
 Implemented:
 
@@ -353,20 +353,20 @@ Findings:
 
 Compared C# source:
 
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/FingerTree.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/MeasurePredicate.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredElements.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTree.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredMiddle.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/FingerTree.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/MeasurePredicate.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredElements.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTree.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredMiddle.cs`
 
 Compared C# tests:
 
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/MeasuredFingerTreeTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/MeasuredFingerTreePersistenceTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/TryLocateTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/AllocationFreeReadTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/MeasuredFingerTreeTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/MeasuredFingerTreePersistenceTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/TryLocateTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/AllocationFreeReadTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
 
 Implemented:
 
@@ -430,7 +430,7 @@ Validation:
 Findings:
 
 - A C# improvement proposal was recorded in
-  [`src/CSharp/FingerTree/docs/measured-fingertree-enumerator-allocation-improvement-proposal.md`](../../../CSharp/FingerTree/docs/measured-fingertree-enumerator-allocation-improvement-proposal.md).
+  [`src/CSharp/docs/FingerTree/measured-fingertree-enumerator-allocation-improvement-proposal.md`](../../../CSharp/docs/FingerTree/measured-fingertree-enumerator-allocation-improvement-proposal.md).
   The C# public general measured tree enumerator materializes a `List<TElement>` before yielding; this is documented
   behavior rather than a correctness bug, but it is an allocation/performance shortcoming relative to the tuned
   deque's stack enumerator.
@@ -439,15 +439,15 @@ Findings:
 
 Compared C# source:
 
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/PriorityQueue.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/MeasurePredicates.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/BuiltInMeasures.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/PriorityQueue.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/MeasurePredicates.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/BuiltInMeasures.cs`
 
 Compared C# tests:
 
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/PriorityQueueTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/BuiltInMeasureTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/CustomComparisonMeasureTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/PriorityQueueTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/BuiltInMeasureTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/CustomComparisonMeasureTests.cs`
 
 Implemented:
 
@@ -497,15 +497,15 @@ Findings:
 
 Compared C# source:
 
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/IntervalTree.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/BuiltInMeasures.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/MeasurePredicates.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/IntervalTree.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/BuiltInMeasures.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/MeasurePredicates.cs`
 
 Compared C# tests:
 
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/IntervalTreeTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/BuiltInMeasureTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/CustomComparisonMeasureTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/IntervalTreeTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/BuiltInMeasureTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/CustomComparisonMeasureTests.cs`
 
 Implemented:
 
@@ -571,7 +571,7 @@ Findings:
 - No new C# defect, flaw, or improvement proposal was found in the interval tree pass. The C# implementation and
   tests matched the measured interval-tree algorithms ported here.
 - The previously recorded C# wording defect for the interval tree still applies:
-  [`src/CSharp/FingerTree/docs/interval-tree-strict-core-wording-defect-report.md`](../../../CSharp/FingerTree/docs/interval-tree-strict-core-wording-defect-report.md).
+  [`src/CSharp/docs/FingerTree/interval-tree-strict-core-wording-defect-report.md`](../../../CSharp/docs/FingerTree/interval-tree-strict-core-wording-defect-report.md).
 
 ## Checkpoint: Non-Interactive MSVC Test Failures
 
@@ -591,21 +591,21 @@ Validation:
 
 Compared C# source:
 
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/SortedBag.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/SortedSet.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/SortedDictionary.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/BuiltInMeasures.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/MeasurePredicates.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/SortedBag.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/SortedSet.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/SortedDictionary.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/BuiltInMeasures.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/MeasurePredicates.cs`
 
 Compared C# tests:
 
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/SortedBagTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/SortedSetTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/SortedDictionaryTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/SortedCollectionPropertyTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/AllocationFreeReadTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/DerivedCollectionPersistenceTests.cs`
-- The sorted-set section of `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/SortedBagTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/SortedSetTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/SortedDictionaryTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/SortedCollectionPropertyTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/AllocationFreeReadTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/DerivedCollectionPersistenceTests.cs`
+- The sorted-set section of `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
 
 Implemented:
 
@@ -675,13 +675,13 @@ Findings:
 
 Compared C# source:
 
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/ReversibleDeque.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/Reversible/ReversibleTree.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/Reversible/ReversibleElements.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/ReversibleDeque.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Reversible/ReversibleTree.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Reversible/ReversibleElements.cs`
 
 Compared C# tests:
 
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/ReversibleDequeTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/ReversibleDequeTests.cs`
 
 Implemented:
 
@@ -744,15 +744,15 @@ Findings:
 
 Compared C# source:
 
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Rope.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/RopeChunk.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Rope.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/RopeChunk.cs`
 
 Compared C# tests:
 
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/RopeTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/RopeModelTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/RopePropertyTests.cs`
-- The rope section of `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/RopeTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/RopeModelTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/RopePropertyTests.cs`
+- The rope section of `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
 
 Implemented:
 
@@ -808,7 +808,7 @@ Validation:
 Findings:
 
 - A C# improvement proposal was recorded in
-  [`src/CSharp/FingerTree/docs/rope-fromchunks-immutable-storage-improvement-proposal.md`](../../../CSharp/FingerTree/docs/rope-fromchunks-immutable-storage-improvement-proposal.md).
+  [`src/CSharp/docs/FingerTree/rope-fromchunks-immutable-storage-improvement-proposal.md`](../../../CSharp/docs/FingerTree/rope-fromchunks-immutable-storage-improvement-proposal.md).
   `Rope<T>.FromChunks` imports `ReadOnlyMemory<T>` without copying; that is useful, but the backing storage may be
   externally mutable, so the immutable-storage precondition should be documented or reflected in the API name.
 
@@ -816,15 +816,15 @@ Findings:
 
 Compared C# source:
 
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/MeasuredRope.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/MeasuredRopeChunk.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Internal/RopeChunk.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/MeasuredRope.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/MeasuredRopeChunk.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/RopeChunk.cs`
 
 Compared C# tests:
 
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/MeasuredRopeTests.cs`
-- The measured-rope section of `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
-- The measured-rope property checks in `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/RopePropertyTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/MeasuredRopeTests.cs`
+- The measured-rope section of `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
+- The measured-rope property checks in `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/RopePropertyTests.cs`
 
 Implemented:
 
@@ -884,15 +884,15 @@ Findings:
 
 Compared C# source:
 
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/RopeText.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/RopeBuilder.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/RopeText.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/RopeBuilder.cs`
 
 Compared C# tests and samples:
 
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/RopeTextTests.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/RopeBuilderTests.cs`
-- The text-rope line-navigation property in `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/RopePropertyTests.cs`
-- The text-rope usage in `src/CSharp/FingerTree/samples/Tools.DataStructures.FingerTree.Tour/TourProgram.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/RopeTextTests.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/RopeBuilderTests.cs`
+- The text-rope line-navigation property in `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/RopePropertyTests.cs`
+- The text-rope usage in `src/CSharp/samples/Tools.DataStructures.FingerTree.Tour/TourProgram.cs`
 
 Implemented:
 
@@ -957,12 +957,12 @@ Compared review material:
 
 Compared C# source and tests:
 
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/FingerTree.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/FingerTreeMeasureExtensions.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/FingerTreeProductExtensions.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/SumMeasure.cs`
-- `src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/MeasuredRope.cs`
-- `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/TearableConcurrencyStressTests.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/FingerTree.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/FingerTreeMeasureExtensions.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/FingerTreeProductExtensions.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/SumMeasure.cs`
+- `src/CSharp/src/Tools.DataStructures.FingerTree/MeasuredRope.cs`
+- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/TearableConcurrencyStressTests.cs`
 
 Implemented:
 

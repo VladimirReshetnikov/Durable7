@@ -36,8 +36,8 @@ Documentation read:
 
 - `AGENTS.md` and repository `README.md`.
 - `docs/README.md` and `docs/guides/agent-workflows.md`.
-- `src/CSharp/FingerTree/README.md` and `src/CSharp/FingerTree/docs/README.md`.
-- `src/CSharp/FingerTree/docs/api-specification.md`, with targeted checks against C# source and tests.
+- `src/CSharp/docs/FingerTree/overview.md` and `src/CSharp/docs/FingerTree/README.md`.
+- `src/CSharp/docs/FingerTree/api-specification.md`, with targeted checks against C# source and tests.
 - `src/Cpp/FingerTree/README.md`.
 - `src/Cpp/FingerTree/docs/README.md`.
 - `src/Cpp/FingerTree/docs/port-plan.md`.
@@ -67,7 +67,7 @@ Experiments and validation:
 - Ran the documented C++ debug configure/build/test after initializing a Visual Studio developer environment.
 - Ran the documented C++ release configure/build/test.
 - Repeated the release native test executable 20 times with CTest's `--repeat until-fail:20`.
-- Ran the C# baseline `dotnet test .\FingerTree.sln`.
+- Ran the C# baseline `dotnet test .\DataStructures.sln`.
 - Compiled and ran a small out-of-tree C++ consumer using only the public aggregate header and `src/Cpp/FingerTree/include`.
 
 ## Validation Results
@@ -136,7 +136,7 @@ Total Test time (real) = 11.19 sec
 The C# baseline passed:
 
 ```powershell
-dotnet test .\FingerTree.sln
+dotnet test .\DataStructures.sln
 ```
 
 Result:

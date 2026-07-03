@@ -19,8 +19,8 @@ Use the narrowest layer that owns the information:
 | [`docs/reference`](../reference/README.md) | Durable cross-workspace maps and facts | Language/data-structure layout, port lineage, data-structure catalog, test-suite map |
 | [`docs/migration`](../migration/README.md) | Extraction, history filtering, and provenance records | Filter-repo notes, commit maps |
 | Workspace `README.md` | Workspace orientation and local entry points | Purpose, layout, primary build/test command |
-| Workspace `docs/` | API contracts, design notes, validation details, benchmark notes, review reports | `src/CSharp/FingerTree/docs/api-specification.md` |
-| Workspace `tests/` README | Local test runner shape, test-file grouping, direct executable path, filters, stress knobs | `src/CSharp/FingerTree/tests/Tools.DataStructures.FingerTree.Tests/README.md` |
+| Workspace `docs/` | API contracts, design notes, validation details, benchmark notes, review reports | `src/CSharp/docs/FingerTree/api-specification.md` |
+| Workspace `tests/` README | Local test runner shape, test-file grouping, direct executable path, filters, stress knobs | `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/README.md` |
 | Workspace `samples/` or `benchmarks/` README | Runnable sample programs, expected transcript markers, benchmark workloads, output shape | `src/C/FingerTree/samples/README.md` |
 | Workspace `docs/external/` | External study material and source snapshots | Papers, source snapshots, article copies |
 
@@ -97,7 +97,7 @@ from a content hash. Do this for review reports, defect reports, and generated a
 - Use the current language-first paths under `src/C`, `src/Cpp`, and `src/CSharp`.
 - Use `CSharp` and `Cpp` in paths; reserve `C#` and `C++` for prose.
 - Avoid ranges in Markdown links. Link to a file or an exact line only when the renderer supports it.
-- Exclude `src/CSharp/FingerTree/docs/external` from repository-owned link/content checks unless the
+- Exclude `src/CSharp/docs/FingerTree/external` from repository-owned link/content checks unless the
   task is explicitly about external material.
 
 ## Validation
@@ -106,7 +106,7 @@ For documentation-only changes, at minimum run this current-state scan, excludin
 provenance where old extraction paths are intentional:
 
 ```powershell
-rg -n "C:\\DataStructures\\(Hamt|HamtC|HamtCpp|FingerTree|C\\FingerTree|Cpp\\FingerTree)|sr[s]rc|src[/\\]src|iladimi[r]|T[i]alue|MS[i]C|[i]ersion|docs/agent-workflows\\.md" README.md docs src --glob "!docs/migration/**" --glob "!src/CSharp/FingerTree/docs/external/**" --glob "!*.pdf"
+rg -n "C:\\DataStructures\\(Hamt|HamtC|HamtCpp|FingerTree|C\\FingerTree|Cpp\\FingerTree)|sr[s]rc|iladimi[r]|T[i]alue|MS[i]C|[i]ersion|docs/agent-workflows\\.md" README.md docs src --glob "!docs/migration/**" --glob "!src/CSharp/docs/FingerTree/external/**" --glob "!*.pdf"
 git diff --check
 ```
 

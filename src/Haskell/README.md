@@ -7,7 +7,7 @@
 
 The Haskell root contains dependency-light ports of the repository-owned persistent data structures.
 The packages use idiomatic immutable Haskell values while preserving the observable contracts of the
-managed C# workspaces where the language surfaces line up.
+managed C# projects where the language surfaces line up.
 
 | Workspace | Package | Public modules |
 | --- | --- | --- |

@@ -37,7 +37,7 @@ same thing.
 
 HAMT lineage:
 
-1. [`src/CSharp/Hamt`](../../src/CSharp/Hamt/README.md) is the managed semantic baseline for maps,
+1. [C# HAMT](../../src/CSharp/docs/Hamt/overview.md) is the managed semantic baseline for maps,
    sets, comparer preservation, collision handling, no-op identity, and set algebra.
 2. [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) ports the HAMT contract to C++ value types,
    policy objects, `std::shared_ptr` structural sharing, and idiomatic result objects.
@@ -53,7 +53,7 @@ HAMT lineage:
 
 FingerTree lineage:
 
-1. [`src/CSharp/FingerTree`](../../src/CSharp/FingerTree/README.md) is the broadest semantic source:
+1. [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) is the broadest semantic source:
    tuned deque, general measured tree, derived collections, ropes, text helpers, samples,
    benchmarks, and design notes.
 2. [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) ports that family to a header-first
@@ -147,7 +147,7 @@ For map/set changes, verify these contracts across C#, C++, C, Haskell, Kotlin, 
 
 Primary semantic docs:
 
-- [C# HAMT API specification](../../src/CSharp/Hamt/docs/api-specification.md)
+- [C# HAMT API specification](../../src/CSharp/docs/Hamt/api-specification.md)
 - [C++ HAMT API specification](../../src/Cpp/Hamt/docs/api-specification.md)
 - [C HAMT API specification](../../src/C/Hamt/docs/api-specification.md)
 - [Haskell HAMT workspace](../../src/Haskell/Hamt/README.md)
@@ -156,7 +156,7 @@ Primary semantic docs:
 
 Validation guides:
 
-- [C# HAMT validation](../../src/CSharp/Hamt/docs/validation.md)
+- [C# HAMT validation](../../src/CSharp/docs/Hamt/validation.md)
 - [C++ HAMT validation](../../src/Cpp/Hamt/docs/validation.md)
 - [C HAMT validation](../../src/C/Hamt/docs/validation.md)
 - [Haskell HAMT tests](../../src/Haskell/Hamt/test/README.md)
@@ -182,8 +182,8 @@ For finger-tree-family changes, verify these contracts across the relevant C#, C
 
 Primary semantic docs:
 
-- [C# FingerTree API specification](../../src/CSharp/FingerTree/docs/api-specification.md)
-- [C# persistence and concurrency notes](../../src/CSharp/FingerTree/docs/persistence-and-concurrency.md)
+- [C# FingerTree API specification](../../src/CSharp/docs/FingerTree/api-specification.md)
+- [C# persistence and concurrency notes](../../src/CSharp/docs/FingerTree/persistence-and-concurrency.md)
 - [C++ FingerTree API notes](../../src/Cpp/FingerTree/docs/api-notes.md)
 - [C++ FingerTree implementation notes](../../src/Cpp/FingerTree/docs/implementation-notes.md)
 - [C FingerTree API notes](../../src/C/FingerTree/docs/api-notes.md)
@@ -193,7 +193,7 @@ Primary semantic docs:
 
 Validation guides:
 
-- [C# FingerTree validation](../../src/CSharp/FingerTree/docs/validation.md)
+- [C# FingerTree validation](../../src/CSharp/docs/FingerTree/validation.md)
 - [C++ FingerTree validation](../../src/Cpp/FingerTree/docs/validation.md)
 - [C FingerTree validation](../../src/C/FingerTree/docs/validation.md)
 - [Haskell FingerTree tests](../../src/Haskell/FingerTree/test/README.md)
