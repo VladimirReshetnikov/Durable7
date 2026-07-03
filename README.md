@@ -63,31 +63,44 @@ This document is the canonical repository guidance for Vladimir and the AI codin
     │       ├── docs/
     │       ├── include/
     │       └── tests/
-    └── CSharp/
+    ├── CSharp/
+    │   ├── README.md
+    │   ├── Hamt/
+    │   │   ├── Directory.Build.props
+    │   │   ├── Hamt.sln
+    │   │   ├── README.md
+    │   │   ├── docs/
+    │   │   ├── src/
+    │   │   └── tests/
+    │   └── FingerTree/
+    │       ├── Directory.Build.props
+    │       ├── FingerTree.sln
+    │       ├── README.md
+    │       ├── benchmarks/
+    │       ├── docs/
+    │       ├── samples/
+    │       ├── src/
+    │       └── tests/
+    └── Haskell/
         ├── README.md
+        ├── cabal.project
         ├── Hamt/
-        │   ├── Directory.Build.props
-        │   ├── Hamt.sln
         │   ├── README.md
-        │   ├── docs/
+        │   ├── tools-data-structures-hamt.cabal
         │   ├── src/
-        │   └── tests/
+        │   └── test/
         └── FingerTree/
-            ├── Directory.Build.props
-            ├── FingerTree.sln
             ├── README.md
-            ├── benchmarks/
-            ├── docs/
-            ├── samples/
+            ├── tools-data-structures-fingertree.cabal
             ├── src/
-            └── tests/
+            └── test/
 ```
 
 ## Workspaces
 
 The [source index](src/README.md) and language indexes for [C](src/C/README.md),
-[C++](src/Cpp/README.md), and [C#](src/CSharp/README.md) are the quickest way to browse the
-language-first layout.
+[C++](src/Cpp/README.md), [C#](src/CSharp/README.md), and [Haskell](src/Haskell/README.md) are the
+quickest way to browse the language-first layout.
 
 - [src/CSharp/Hamt](src/CSharp/Hamt/README.md) is a .NET 10 persistent hash-array mapped trie library. It provides `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` with bitmap-indexed 32-way branching, immutable equal-hash collision buckets, comparer-preserving factories, structural sharing across versions, and xUnit/CsCheck model tests against BCL dictionaries and sets.
 - [src/CSharp/FingerTree](src/CSharp/FingerTree/README.md) is a .NET 10 persistent finger-tree library: two engine cores (a tuned catenable deque and a general monoid-measured tree), a full collection family (sorted bag/set/dictionary, priority queue, interval tree, reversible deque), product/sum/built-in measures with a closure-free predicate API, and a rope family (positional, measured, and text). It ships a navigable design-notes document ([FingerTree-Design-Notes.pdf](src/CSharp/FingerTree/docs/FingerTree-Design-Notes.pdf), with `.tex` source and a rebuild script alongside), a BenchmarkDotNet harness, three runnable samples, and a three-tier (example + property + model-based command) test suite plus tearable-struct concurrency stress tests.
@@ -101,10 +114,12 @@ language-first layout.
   branching, immutable equal-hash collision buckets, custom hash/equality policy objects, structural
   sharing via immutable `std::shared_ptr` nodes, and deterministic native model tests.
 - [src/Cpp/FingerTree](src/Cpp/FingerTree/README.md) is the native C++ port of the FingerTree workspace. It is a header-first CMake/Ninja library with the two engine cores, derived collections, ropes, text helpers, and CTest validation.
+- [src/Haskell/Hamt](src/Haskell/Hamt/README.md) is a Haskell port of the persistent HAMT library. It provides `HashMap` and `HashSet` values with bitmap-indexed 32-way branching, immutable collision buckets, policy-preserving factories, structural sharing, and dependency-free cabal tests.
+- [src/Haskell/FingerTree](src/Haskell/FingerTree/README.md) is a Haskell port of the FingerTree family. It provides a general measured tree, size-measured deque, reversible deque, sorted bag/set/map facades, stable meldable priority queue, interval tree, positional and measured ropes, and text helpers.
 
 ## Build and test
 
-Use [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) as the complete validation guide. In short, use the local .NET SDK toolchain for the C# workspaces, the local MSVC C17/C++20 toolchain for HAMT native ports, and the Visual Studio-bundled CMake/Ninja presets for the C11 and C++23 FingerTree native ports.
+Use [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) as the complete validation guide. In short, use the local .NET SDK toolchain for the C# workspaces, the local MSVC C17/C++20 toolchain for HAMT native ports, the Visual Studio-bundled CMake/Ninja presets for the C11 and C++23 FingerTree native ports, and cabal for the Haskell packages.
 
 ```powershell
 cd C:\DataStructures\src\CSharp\FingerTree
@@ -133,6 +148,9 @@ cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.
 
 cd C:\DataStructures\src\Cpp\FingerTree
 cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-debug && ""$cmakeDir\cmake.exe"" --build --preset msvc-debug && ""$cmakeDir\ctest.exe"" --preset msvc-debug --output-on-failure"
+
+cd C:\DataStructures\src\Haskell
+cabal test all
 ```
 
 Run benchmarks from the benchmark project:
@@ -164,6 +182,8 @@ Release configuration is required for meaningful benchmark numbers.
 - [src/CSharp/FingerTree/docs/README.md](src/CSharp/FingerTree/docs/README.md) indexes the library's usage guide, specifications, validation guide, design notes, benchmark notes, and external references.
 - [src/Cpp/FingerTree/docs/README.md](src/Cpp/FingerTree/docs/README.md) indexes the C++ usage guide, port plan, API notes, validation guide, implementation notes, and review reports.
 - [src/C/FingerTree/docs/README.md](src/C/FingerTree/docs/README.md) indexes the C usage guide, API notes, and validation guide.
+- [src/Haskell/README.md](src/Haskell/README.md) indexes the Haskell cabal packages.
+- [src/Haskell/Hamt/test/README.md](src/Haskell/Hamt/test/README.md) and [src/Haskell/FingerTree/test/README.md](src/Haskell/FingerTree/test/README.md) summarize the Haskell executable test coverage.
 
 The large `TECHNICAL_DOCUMENTATION_STANDARD.md` and `XML_DOCUMENTATION_STANDARD.md` files from Tools are intentionally not part of this repository. Keep documentation thorough and current-state oriented, and write XML documentation in semantic terms: contracts, invariants, ordering, failure behavior, complexity, allocation behavior, and examples where they help.
 
@@ -193,6 +213,7 @@ The expected local Windows environment includes:
 - MSVC C17/C++20 toolchain for `src/C/Hamt` and `src/Cpp/Hamt`; use Scriptorium's
   `Import-VisualCppEnvironment.ps1` helper when compiling from a plain PowerShell process.
 - `git-filter-repo` usable as `python -m git_filter_repo` when future history work is needed.
+- GHC 9.12 and cabal 3.16 or newer for the Haskell packages under `src/Haskell`.
 
 Use `dotnet` directly for C# validation in this local environment.
 

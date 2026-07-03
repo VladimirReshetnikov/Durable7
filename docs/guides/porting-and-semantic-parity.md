@@ -41,6 +41,8 @@ HAMT lineage:
    policy objects, `std::shared_ptr` structural sharing, and idiomatic result objects.
 3. [`src/C/Hamt`](../../src/C/Hamt/README.md) ports the HAMT contract to type-erased value structs,
    explicit policy callbacks, and clone/destroy lifetime management.
+4. [`src/Haskell/Hamt`](../../src/Haskell/Hamt/README.md) ports the HAMT contract to immutable
+   Haskell values with a package-local `Hashable` class and optional runtime `HashPolicy`.
 
 FingerTree lineage:
 
@@ -51,6 +53,9 @@ FingerTree lineage:
    C++ library with local C++ naming, value semantics, and CTest validation.
 3. [`src/C/FingerTree`](../../src/C/FingerTree/README.md) follows the native design in C form with
    explicit handles, callback policies, and facade types.
+4. [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) ports the family to Haskell
+   with a general measured tree, size-measured deque, reversible deque, derived collections,
+   priority queue, intervals, ropes, and text helpers.
 
 A port can still reveal a baseline bug. When that happens, fix or document the baseline contract
 first, then carry the corrected semantics through the sibling workspaces that expose the same
@@ -128,12 +133,14 @@ Primary semantic docs:
 - [C# HAMT API specification](../../src/CSharp/Hamt/docs/api-specification.md)
 - [C++ HAMT API specification](../../src/Cpp/Hamt/docs/api-specification.md)
 - [C HAMT API specification](../../src/C/Hamt/docs/api-specification.md)
+- [Haskell HAMT workspace](../../src/Haskell/Hamt/README.md)
 
 Validation guides:
 
 - [C# HAMT validation](../../src/CSharp/Hamt/docs/validation.md)
 - [C++ HAMT validation](../../src/Cpp/Hamt/docs/validation.md)
 - [C HAMT validation](../../src/C/Hamt/docs/validation.md)
+- [Haskell HAMT tests](../../src/Haskell/Hamt/test/README.md)
 
 ## FingerTree-Specific Checks
 
@@ -159,12 +166,14 @@ Primary semantic docs:
 - [C++ FingerTree API notes](../../src/Cpp/FingerTree/docs/api-notes.md)
 - [C++ FingerTree implementation notes](../../src/Cpp/FingerTree/docs/implementation-notes.md)
 - [C FingerTree API notes](../../src/C/FingerTree/docs/api-notes.md)
+- [Haskell FingerTree workspace](../../src/Haskell/FingerTree/README.md)
 
 Validation guides:
 
 - [C# FingerTree validation](../../src/CSharp/FingerTree/docs/validation.md)
 - [C++ FingerTree validation](../../src/Cpp/FingerTree/docs/validation.md)
 - [C FingerTree validation](../../src/C/FingerTree/docs/validation.md)
+- [Haskell FingerTree tests](../../src/Haskell/FingerTree/test/README.md)
 
 ## Validation Evidence
 

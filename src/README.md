@@ -14,6 +14,7 @@ under it.
 | [C](C/README.md) | MSVC C builds; `build.ps1` for HAMT and CMake/CTest presets for FingerTree | [Hamt](C/Hamt/README.md), [FingerTree](C/FingerTree/README.md) |
 | [Cpp](Cpp/README.md) | MSVC C++ builds; `build.ps1` for HAMT and CMake/CTest presets for FingerTree | [Hamt](Cpp/Hamt/README.md), [FingerTree](Cpp/FingerTree/README.md) |
 | [CSharp](CSharp/README.md) | .NET 10 solutions and xUnit/CsCheck validation | [Hamt](CSharp/Hamt/README.md), [FingerTree](CSharp/FingerTree/README.md) |
+| [Haskell](Haskell/README.md) | GHC/cabal packages with dependency-light executable tests | [Hamt](Haskell/Hamt/README.md), [FingerTree](Haskell/FingerTree/README.md) |
 
 Use the repository [workspace map](../docs/reference/workspace-map.md) for layout rules and port lineage, the
 [data-structure catalog](../docs/reference/data-structure-catalog.md) for cross-language public surfaces, and the

@@ -19,6 +19,8 @@ checks, and the workspace validation guides, which own local warning policy and 
 | [C++ HAMT](../../src/Cpp/Hamt/README.md) | Dependency-free native executable built by `build.ps1` | `.\build.ps1 -RunTests` | [Tests README](../../src/Cpp/Hamt/tests/README.md) | Deterministic map/set unit and model checks; local registry runner |
 | [C FingerTree](../../src/C/FingerTree/README.md) | CMake/CTest core executable plus sample smoke tests | Visual Studio CMake/CTest chain from the validation guide | [Tests README](../../src/C/FingerTree/tests/README.md) | Core C API tests, sample smoke tests, and a separate benchmark executable |
 | [C++ FingerTree](../../src/Cpp/FingerTree/README.md) | CMake/CTest smoke executable with a local runner | Visual Studio CMake/CTest chain from the validation guide | [Tests README](../../src/Cpp/FingerTree/tests/README.md) | Header-first C++23 suite with tearable concurrency stress controls |
+| [Haskell HAMT](../../src/Haskell/Hamt/README.md) | Cabal exit-code executable | `cabal test hamt-test` from `src/Haskell` | [Tests README](../../src/Haskell/Hamt/test/README.md) | Map/set unit checks for collision buckets, custom policies, key recovery, and set algebra |
+| [Haskell FingerTree](../../src/Haskell/FingerTree/README.md) | Cabal exit-code executable | `cabal test ft-test` from `src/Haskell` | [Tests README](../../src/Haskell/FingerTree/test/README.md) | Measured tree, deque, reversible deque, sorted facades, priority queue, intervals, ropes, and text helpers |
 
 ## Stress And Duration Knobs
 

@@ -1,0 +1,8 @@
+packages:
+  Hamt
+  FingerTree
+
+package *
+  ghc-options:
+    -Wall
+    -Wcompat

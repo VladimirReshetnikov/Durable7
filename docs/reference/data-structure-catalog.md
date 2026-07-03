@@ -23,6 +23,7 @@ versions, and comparer/hash-policy preservation.
 | C# | `PersistentHashMap<TKey, TValue>`, `PersistentHashSet<T>` | [Workspace](../../src/CSharp/Hamt/README.md), [usage guide](../../src/CSharp/Hamt/docs/usage.md), [API spec](../../src/CSharp/Hamt/docs/api-specification.md), [map source](../../src/CSharp/Hamt/src/Tools.DataStructures.Hamt/PersistentHashMap.cs), [set source](../../src/CSharp/Hamt/src/Tools.DataStructures.Hamt/PersistentHashSet.cs) |
 | C | `tds_hamt_map`, `tds_hamt_set`, `tds_hamt_policy`, `tds_hamt_set_policy` | [Workspace](../../src/C/Hamt/README.md), [usage guide](../../src/C/Hamt/docs/usage.md), [API spec](../../src/C/Hamt/docs/api-specification.md), [public header](../../src/C/Hamt/include/Tools/DataStructures/Hamt/hamt.h) |
 | C++ | `persistent_hash_map<Key, T, Hash, KeyEqual, ValueEqual>`, `persistent_hash_set<T, Hash, KeyEqual>` | [Workspace](../../src/Cpp/Hamt/README.md), [usage guide](../../src/Cpp/Hamt/docs/usage.md), [API spec](../../src/Cpp/Hamt/docs/api-specification.md), [map header](../../src/Cpp/Hamt/include/Tools/DataStructures/Hamt/persistent_hash_map.hpp), [set header](../../src/Cpp/Hamt/include/Tools/DataStructures/Hamt/persistent_hash_set.hpp) |
+| Haskell | `HashMap k v`, `HashSet a`, `HashPolicy k`, `Hashable` | [Workspace](../../src/Haskell/Hamt/README.md), [map source](../../src/Haskell/Hamt/src/Data/Structures/Hamt/HashMap.hs), [set source](../../src/Haskell/Hamt/src/Data/Structures/Hamt/HashSet.hs), [tests](../../src/Haskell/Hamt/test/README.md) |
 
 ## Finger-Tree Core And Deque
 
@@ -35,6 +36,7 @@ position or measure, indexed access where exposed, and immutable structural shar
 | C# | `FingerTreeDeque<T>`, `FingerTree<TElement, TMeasure, TMeasureOps>` | [Workspace](../../src/CSharp/FingerTree/README.md), [usage guide](../../src/CSharp/FingerTree/docs/usage.md), [API spec](../../src/CSharp/FingerTree/docs/api-specification.md), [deque source](../../src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/FingerTreeDeque.cs), [measured tree source](../../src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/FingerTree.cs) |
 | C | `ft_tree`, `ft_tree_policy`, `ft_measure_policy`, `ft_persistent_deque` | [Workspace](../../src/C/FingerTree/README.md), [usage guide](../../src/C/FingerTree/docs/usage.md), [API notes](../../src/C/FingerTree/docs/api-notes.md), [public header](../../src/C/FingerTree/include/tools/data_structures/finger_tree/fingertree.h) |
 | C++ | `persistent_deque<T>`, `finger_tree<Element, MeasurePolicy>` | [Workspace](../../src/Cpp/FingerTree/README.md), [usage guide](../../src/Cpp/FingerTree/docs/usage.md), [API notes](../../src/Cpp/FingerTree/docs/api-notes.md), [aggregate header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/finger_tree.hpp), [deque header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/persistent_deque.hpp), [measured tree header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/measured_finger_tree.hpp) |
+| Haskell | `Deque a`, `FingerTree v a`, `Measured v a` | [Workspace](../../src/Haskell/FingerTree/README.md), [deque source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Deque.hs), [measured tree source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Measured.hs), [tests](../../src/Haskell/FingerTree/test/README.md) |
 
 ## Reversible Deque
 
@@ -46,6 +48,7 @@ represented without eagerly copying the sequence.
 | C# | `ReversibleDeque<T>` | [usage guide](../../src/CSharp/FingerTree/docs/usage.md), [source](../../src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/ReversibleDeque.cs), [API spec](../../src/CSharp/FingerTree/docs/api-specification.md) |
 | C | `ft_reversible_deque` | [usage guide](../../src/C/FingerTree/docs/usage.md), [public header](../../src/C/FingerTree/include/tools/data_structures/finger_tree/fingertree.h), [API notes](../../src/C/FingerTree/docs/api-notes.md) |
 | C++ | `reversible_deque<T>` | [usage guide](../../src/Cpp/FingerTree/docs/usage.md), [header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/reversible_deque.hpp), [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) |
+| Haskell | `ReversibleDeque a` | [source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/ReversibleDeque.hs), [tests](../../src/Haskell/FingerTree/test/README.md) |
 
 ## Sorted Collections
 
@@ -57,6 +60,7 @@ bags/multisets, sets, and key-value maps with comparer-preserving behavior.
 | C# | `SortedBag<T>`, `SortedSet<T>`, `SortedDictionary<TKey, TValue>` | [usage guide](../../src/CSharp/FingerTree/docs/usage.md), [bag](../../src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/SortedBag.cs), [set](../../src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/SortedSet.cs), [dictionary](../../src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/SortedDictionary.cs), [API spec](../../src/CSharp/FingerTree/docs/api-specification.md) |
 | C | `ft_sorted_multiset`, `ft_sorted_set`, `ft_sorted_map` | [usage guide](../../src/C/FingerTree/docs/usage.md), [public header](../../src/C/FingerTree/include/tools/data_structures/finger_tree/fingertree.h), [API notes](../../src/C/FingerTree/docs/api-notes.md) |
 | C++ | `sorted_bag<T, Less>`, `sorted_set<T, Less>`, `sorted_map<Key, T, Less>` | [usage guide](../../src/Cpp/FingerTree/docs/usage.md), [bag header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/sorted_bag.hpp), [set header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/sorted_set.hpp), [map header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/sorted_map.hpp), [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) |
+| Haskell | `SortedBag a`, `SortedSet a`, `SortedMap k v` | [bag source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/SortedBag.hs), [set source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/SortedSet.hs), [map source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/SortedMap.hs), [tests](../../src/Haskell/FingerTree/test/README.md) |
 
 ## Priority Queue
 
@@ -68,6 +72,7 @@ according to each language's comparison policy.
 | C# | `PriorityQueue<TElement, TPriority>` | [usage guide](../../src/CSharp/FingerTree/docs/usage.md), [source](../../src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/PriorityQueue.cs), [API spec](../../src/CSharp/FingerTree/docs/api-specification.md) |
 | C | `ft_priority_queue` | [usage guide](../../src/C/FingerTree/docs/usage.md), [public header](../../src/C/FingerTree/include/tools/data_structures/finger_tree/fingertree.h), [API notes](../../src/C/FingerTree/docs/api-notes.md) |
 | C++ | `priority_queue<Element, Priority, Comparison>` | [usage guide](../../src/Cpp/FingerTree/docs/usage.md), [header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/priority_queue.hpp), [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) |
+| Haskell | `PriorityQueue p a` | [source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/PriorityQueue.hs), [tests](../../src/Haskell/FingerTree/test/README.md) |
 
 ## Interval Tree
 
@@ -79,6 +84,7 @@ subtrees whose summary cannot intersect the probe.
 | C# | `IntervalTree<T>`, `Interval<T>`, `IntervalMeasure<T>` | [usage guide](../../src/CSharp/FingerTree/docs/usage.md), [source](../../src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/IntervalTree.cs), [API spec](../../src/CSharp/FingerTree/docs/api-specification.md) |
 | C | `ft_interval_tree`, `ft_interval_tree_i64`, `ft_interval_i64` | [usage guide](../../src/C/FingerTree/docs/usage.md), [public header](../../src/C/FingerTree/include/tools/data_structures/finger_tree/fingertree.h), [API notes](../../src/C/FingerTree/docs/api-notes.md) |
 | C++ | `interval_tree<T, Comparison>` | [usage guide](../../src/Cpp/FingerTree/docs/usage.md), [header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/interval_tree.hpp), [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) |
+| Haskell | `IntervalTree a`, `Interval a` | [source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/IntervalTree.hs), [tests](../../src/Haskell/FingerTree/test/README.md) |
 
 ## Ropes And Text
 
@@ -90,6 +96,7 @@ text ropes specialize the same machinery for newline-aware text navigation.
 | C# | `Rope<T>`, `MeasuredRope<T, TMeasure, TMeasureOps>`, `RopeText`, `RopeBuilder`, `NewlineMeasure`, `NewlineStyle` | [usage guide](../../src/CSharp/FingerTree/docs/usage.md), [rope](../../src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Rope.cs), [measured rope](../../src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/MeasuredRope.cs), [text](../../src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/RopeText.cs), [builder](../../src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/RopeBuilder.cs), [API spec](../../src/CSharp/FingerTree/docs/api-specification.md) |
 | C | `ft_rope`, `ft_measured_rope`, `ft_text_rope`, `ft_line_column` | [usage guide](../../src/C/FingerTree/docs/usage.md), [public header](../../src/C/FingerTree/include/tools/data_structures/finger_tree/fingertree.h), [API notes](../../src/C/FingerTree/docs/api-notes.md) |
 | C++ | `rope<T>`, `measured_rope<T, MeasurePolicy>`, `text_rope`, `rope_builder`, `newline_measure`, `line_column` | [usage guide](../../src/Cpp/FingerTree/docs/usage.md), [rope header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/rope.hpp), [measured rope header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/measured_rope.hpp), [text header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/rope_text.hpp), [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) |
+| Haskell | `Rope a`, `MeasuredRope v a`, `TextRope`, `NewlineMeasure` | [rope source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Rope.hs), [measured rope source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/MeasuredRope.hs), [text source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Rope/Text.hs), [tests](../../src/Haskell/FingerTree/test/README.md) |
 
 ## Measures, Comparisons, And Predicates
 
@@ -102,6 +109,7 @@ callbacks and context pointers.
 | C# | `IMonoid<TMeasure>`, `IMeasure<TElement, TMeasure>`, `IMeasurePredicate<TMeasure>`, `IComparison<T>`, `SizeMeasure<TElement>`, `SumMeasure<T>`, `ProductMeasure<...>`, `MaxMeasure<T>`, `MinMeasure<T>`, `KeyMeasure<T>`, `OrderStatisticMeasure<T>` | [usage guide](../../src/CSharp/FingerTree/docs/usage.md), [measures](../../src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Measures.cs), [predicates](../../src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/MeasurePredicate.cs), [comparisons](../../src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/Comparisons.cs), [built-ins](../../src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/BuiltInMeasures.cs) |
 | C | `ft_measure_policy`, `ft_measure_predicate_fn`, `ft_compare_fn`, `ft_value_type` | [usage guide](../../src/C/FingerTree/docs/usage.md), [public header](../../src/C/FingerTree/include/tools/data_structures/finger_tree/fingertree.h), [API notes](../../src/C/FingerTree/docs/api-notes.md) |
 | C++ | measure policies and predicates in `measures.hpp`, `built_in_measures.hpp`, `product_measure.hpp`, `sum_measure.hpp`, `comparisons.hpp`, and `measure_predicates.hpp` | [usage guide](../../src/Cpp/FingerTree/docs/usage.md), [measure headers](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/measures.hpp), [built-ins](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/built_in_measures.hpp), [predicates](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/measure_predicates.hpp), [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) |
+| Haskell | `Measured v a`, `Size`, `Elem`, `MeasurePair`, `Maximum`, `Minimum`; predicates are ordinary pure functions `v -> Bool` | [measured tree source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Measured.hs), [measures source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Measures.hs), [tests](../../src/Haskell/FingerTree/test/README.md) |
 
 ## Navigation Rules
 

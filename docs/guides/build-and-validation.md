@@ -22,6 +22,7 @@ boundaries, use the [test suite map](../reference/test-suite-map.md).
 | [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | `.\build.ps1 -RunTests` | [Validation](../../src/Cpp/Hamt/docs/validation.md) | [Tests](../../src/Cpp/Hamt/tests/README.md) | C++20 build, warning policy, deterministic HAMT tests |
 | [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | Visual Studio `cmd.exe` CMake/CTest chain below | [Validation](../../src/C/FingerTree/docs/validation.md) | [Tests](../../src/C/FingerTree/tests/README.md) | C11 static library, tests, samples, benchmark harness entry points |
 | [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | Visual Studio `cmd.exe` CMake/CTest chain below | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | [Tests](../../src/Cpp/FingerTree/tests/README.md) | C++23 header-first library, CTest suite, stress controls, benchmark-harness status |
+| [`src/Haskell`](../../src/Haskell/README.md) | `cabal test all` | [Haskell README](../../src/Haskell/README.md) | [HAMT tests](../../src/Haskell/Hamt/test/README.md), [FingerTree tests](../../src/Haskell/FingerTree/test/README.md) | GHC/cabal build, dependency-light HAMT and FingerTree executable tests |
 
 For broad repository edits, run every row that could be affected. For documentation-only edits, run the
 Markdown link check below and any build/test commands whose documented paths changed.
@@ -108,6 +109,18 @@ tests, and benchmark harness status:
 - [C FingerTree benchmarks](../../src/C/FingerTree/benchmarks/README.md)
 - [C++ FingerTree validation](../../src/Cpp/FingerTree/docs/validation.md)
 - [C++ FingerTree tests](../../src/Cpp/FingerTree/tests/README.md)
+
+## Haskell Workspaces
+
+```powershell
+cd C:\DataStructures\src\Haskell
+cabal test all
+```
+
+The cabal project builds both Haskell packages and runs the dependency-light test executables:
+
+- [Haskell HAMT tests](../../src/Haskell/Hamt/test/README.md)
+- [Haskell FingerTree tests](../../src/Haskell/FingerTree/test/README.md)
 
 ## Benchmarks
 

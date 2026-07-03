@@ -1,0 +1,29 @@
+cabal-version: 3.0
+name: tools-data-structures-hamt
+version: 0.1.0.0
+synopsis: Persistent HAMT map and set data structures
+description: Haskell port of the DataStructures repository HAMT map and set family.
+license: MIT-0
+author: Vladimir Reshetnikov
+maintainer: Vladimir Reshetnikov
+build-type: Simple
+
+library
+  exposed-modules:
+    Data.Structures.Hamt
+    Data.Structures.Hamt.Hashable
+    Data.Structures.Hamt.HashMap
+    Data.Structures.Hamt.HashSet
+  hs-source-dirs: src
+  build-depends:
+    base >=4.21 && <4.22
+  default-language: Haskell2010
+
+test-suite hamt-test
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  hs-source-dirs: test
+  build-depends:
+    base >=4.21 && <4.22,
+    tools-data-structures-hamt
+  default-language: Haskell2010

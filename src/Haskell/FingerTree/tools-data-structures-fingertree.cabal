@@ -1,0 +1,42 @@
+cabal-version: 3.0
+name: tools-data-structures-fingertree
+version: 0.1.0.0
+synopsis: Persistent finger-tree data structures and derived collections
+description: Haskell port of the DataStructures repository finger-tree family.
+license: MIT-0
+author: Vladimir Reshetnikov
+maintainer: Vladimir Reshetnikov
+build-type: Simple
+
+library
+  exposed-modules:
+    Data.Structures.FingerTree
+    Data.Structures.FingerTree.Deque
+    Data.Structures.FingerTree.IntervalTree
+    Data.Structures.FingerTree.Measured
+    Data.Structures.FingerTree.MeasuredRope
+    Data.Structures.FingerTree.Measures
+    Data.Structures.FingerTree.PriorityQueue
+    Data.Structures.FingerTree.ReversibleDeque
+    Data.Structures.FingerTree.Rope
+    Data.Structures.FingerTree.Rope.Text
+    Data.Structures.FingerTree.SortedBag
+    Data.Structures.FingerTree.SortedMap
+    Data.Structures.FingerTree.SortedSet
+  hs-source-dirs: src
+  build-depends:
+    base >=4.21 && <4.22,
+    containers >=0.7 && <0.8,
+    text >=2.1 && <2.2
+  default-language: Haskell2010
+
+test-suite ft-test
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  hs-source-dirs: test
+  build-depends:
+    base >=4.21 && <4.22,
+    containers >=0.7 && <0.8,
+    text >=2.1 && <2.2,
+    tools-data-structures-fingertree
+  default-language: Haskell2010
