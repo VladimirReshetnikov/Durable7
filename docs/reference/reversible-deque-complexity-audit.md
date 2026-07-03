@@ -1,13 +1,13 @@
 # Reversible Deque Complexity Audit
 
 - Created (UTC): 2026-07-03T17:22:56Z
-- Repository HEAD: 99da91c36c9be8f2f2e276590fb36cfd32d1befb
+- Repository HEAD: 315d9f19500953c69c2b60ccb430e779f1c4226d
 - Audience: Maintainers verifying cross-language reversible deque behavior
 - Scope: O(1) reverse, reversed-operation complexity, concat/split behavior, and known API limits
 
-This audit records the repository-owned reversible deque implementations as of the Rust port checkpoint. The
-property under review is stricter than sequence correctness: reversing a deque must be constant work, and later
-operations on a reversed or previously reversed deque must not pay a hidden O(n) materialization cost.
+This audit records the repository-owned reversible deque implementations. The property under review is stricter
+than sequence correctness: reversing a deque must be constant work, and later operations on a reversed or
+previously reversed deque must not pay a hidden O(n) materialization cost.
 
 ## Verdict
 
@@ -16,6 +16,7 @@ operations on a reversed or previously reversed deque must not pay a hidden O(n)
 | C# FingerTree | Full reversible tree: deep levels and nodes carry a reversal bit. | Endpoint, index, set, insert/remove, split, and copy use logical accessors. | `Concat` is reversal-aware and keeps the same finger-tree concat path for all orientation combinations. |
 | C++ FingerTree | Port of the C# reversible tree over immutable `shared_ptr` storage. | Endpoint, index, set, insert/remove, split, and copy use logical accessors. | `concat` is reversal-aware and tested for all orientation combinations. |
 | C FingerTree | Facade over `ft_tree` plus a logical `reversed` flag. | Index and endpoint operations map logical positions to the opposite physical end when reversed. | Not applicable: the public `ft_reversible_deque` facade does not expose concat or split. |
+| Haskell FingerTree | Strict reversible tree: deep levels and grouping nodes carry a reversal bit. | Endpoint, index, append, and traversal use logical accessors. | Fixed in this checkpoint: mixed-orientation `append` now glues logical digits through the tree instead of `toList`/`fromList` reification. |
 | Rust FingerTree | `DequeTree::Reversed` wraps a shared root and cancels double reverse. | Endpoint, index, set, insert/remove, split, concat, iteration, and materialization interpret mirrored nodes. | Fixed in this checkpoint: mixed-orientation concat/split/pop stay tree-based instead of `to_vec`/`from_vec` reification. |
 
 ## Evidence
@@ -51,6 +52,17 @@ C:
   and push/pop delegate to the corresponding physical endpoint.
 - `src/C/FingerTree/tests/fingertree_c_tests.c` covers reversal, logical indexing, endpoint edits, pop, and
   persistence. The C docs now state that reversible concat/split are not part of the public C facade.
+
+Haskell:
+
+- `src/Haskell/FingerTree/src/Data/Structures/FingerTree/ReversibleDeque.hs` now owns a strict reversible tree
+  with `Tree` and `Elem` reversal bits. `reverse` mirrors the root in O(1).
+- `append` delegates to `treeConcat`; its `glue` path combines logical suffix/middle/prefix digits and recurses
+  through `logicalMiddle`, matching the C#/C++ reversal-aware concat shape instead of flattening either operand.
+- `viewL`, `viewR`, `index`, and `toList` read through logical orientation helpers, so concatenated reversed
+  operands do not carry a deferred normalization step.
+- `src/Haskell/FingerTree/test/Main.hs` covers all four append orientation combinations plus a larger
+  reverse/reverse append with endpoint, boundary-index, count, and round-trip checks.
 
 Rust:
 

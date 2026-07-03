@@ -2,6 +2,7 @@ module Main (main) where
 
 import Prelude hiding (lines, null, reverse, splitAt)
 
+import qualified Data.List as List
 import Data.Monoid (Sum(..))
 
 import qualified Data.Structures.FingerTree.Deque as Deque
@@ -77,6 +78,27 @@ testReversibleDeque = do
   assertEqual "reverse cons" [0, 3, 2, 1] (ReversibleDeque.toList (ReversibleDeque.cons 0 reversed))
   assertEqual "reverse snoc" [3, 2, 1, 4] (ReversibleDeque.toList (ReversibleDeque.snoc reversed 4))
   assertEqual "double reverse" [1, 2, 3] (ReversibleDeque.toList (ReversibleDeque.reverse reversed))
+  let leftValues = [1 :: Int .. 6]
+      rightValues = [10 :: Int .. 15]
+      left = ReversibleDeque.fromList leftValues
+      right = ReversibleDeque.fromList rightValues
+      reversedLeftValues = List.reverse leftValues
+      reversedRightValues = List.reverse rightValues
+  assertEqual "append forward forward" (leftValues ++ rightValues) (ReversibleDeque.toList (ReversibleDeque.append left right))
+  assertEqual "append reverse forward" (reversedLeftValues ++ rightValues) (ReversibleDeque.toList (ReversibleDeque.append (ReversibleDeque.reverse left) right))
+  assertEqual "append forward reverse" (leftValues ++ reversedRightValues) (ReversibleDeque.toList (ReversibleDeque.append left (ReversibleDeque.reverse right)))
+  assertEqual "append reverse reverse" (reversedLeftValues ++ reversedRightValues) (ReversibleDeque.toList (ReversibleDeque.append (ReversibleDeque.reverse left) (ReversibleDeque.reverse right)))
+  let largeLeft = [1 :: Int .. 1024]
+      largeRight = [2001 :: Int .. 3024]
+      largeJoined = ReversibleDeque.append
+        (ReversibleDeque.reverse (ReversibleDeque.fromList largeLeft))
+        (ReversibleDeque.reverse (ReversibleDeque.fromList largeRight))
+      largeExpected = List.reverse largeLeft ++ List.reverse largeRight
+  assertEqual "large mixed append count" (length largeExpected) (ReversibleDeque.count largeJoined)
+  assertEqual "large mixed append first" (Just 1024) (ReversibleDeque.first largeJoined)
+  assertEqual "large mixed append last" (Just 2001) (ReversibleDeque.last largeJoined)
+  assertEqual "large mixed append boundary index" (Just 3024) (ReversibleDeque.index 1024 largeJoined)
+  assertEqual "large mixed append round-trip" largeExpected (ReversibleDeque.toList largeJoined)
 
 testSortedCollections :: IO ()
 testSortedCollections = do

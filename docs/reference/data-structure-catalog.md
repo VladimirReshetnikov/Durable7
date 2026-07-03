@@ -62,7 +62,7 @@ represented without eagerly copying the sequence.
 | C# | `ReversibleDeque<T>` | [usage guide](../../src/CSharp/FingerTree/docs/usage.md), [source](../../src/CSharp/FingerTree/src/Tools.DataStructures.FingerTree/ReversibleDeque.cs), [API spec](../../src/CSharp/FingerTree/docs/api-specification.md) |
 | C | `ft_reversible_deque` | [usage guide](../../src/C/FingerTree/docs/usage.md), [public header](../../src/C/FingerTree/include/tools/data_structures/finger_tree/fingertree.h), [API notes](../../src/C/FingerTree/docs/api-notes.md) |
 | C++ | `reversible_deque<T>` | [usage guide](../../src/Cpp/FingerTree/docs/usage.md), [header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/reversible_deque.hpp), [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) |
-| Haskell | `ReversibleDeque a` | [source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/ReversibleDeque.hs), [tests](../../src/Haskell/FingerTree/test/README.md) |
+| Haskell | `ReversibleDeque a` | [source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/ReversibleDeque.hs), [tests](../../src/Haskell/FingerTree/test/README.md), [complexity audit](reversible-deque-complexity-audit.md) |
 | Kotlin | `ReversibleDeque<T>` | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [source](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Core.kt) |
 | Rust | `ReversibleDeque<T>` | [API notes](../../src/Rust/FingerTree/docs/api-notes.md), [source](../../src/Rust/FingerTree/src/deque.rs) |
 
