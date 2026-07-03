@@ -537,9 +537,83 @@ where
     left.append(shrunk).concat(&right)
 }
 
-struct CountedMeasure<T, P>(PhantomData<(T, P)>);
+struct MeasuredRopeChunk<T, P>
+where
+    P: MeasurePolicy<T>,
+{
+    chunk: RopeChunk<T>,
+    measure: P::Measure,
+    _policy: PhantomData<P>,
+}
 
-impl<T, P> MeasurePolicy<T> for CountedMeasure<T, P>
+impl<T, P> Clone for MeasuredRopeChunk<T, P>
+where
+    P: MeasurePolicy<T>,
+{
+    fn clone(&self) -> Self {
+        Self {
+            chunk: self.chunk.clone(),
+            measure: self.measure.clone(),
+            _policy: PhantomData,
+        }
+    }
+}
+
+impl<T, P> MeasuredRopeChunk<T, P>
+where
+    P: MeasurePolicy<T>,
+{
+    fn new(items: Vec<T>) -> Self {
+        Self::from_chunk(RopeChunk::new(items))
+    }
+
+    fn from_chunk(chunk: RopeChunk<T>) -> Self {
+        let measure = measure_slice::<T, P>(chunk.as_slice());
+        Self {
+            chunk,
+            measure,
+            _policy: PhantomData,
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.chunk.len()
+    }
+
+    fn as_slice(&self) -> &[T] {
+        self.chunk.as_slice()
+    }
+
+    fn get(&self, offset: usize) -> Option<&T> {
+        self.chunk.get(offset)
+    }
+
+    fn slice(&self, offset: usize, len: usize) -> Self {
+        Self::from_chunk(self.chunk.slice(offset, len))
+    }
+
+    fn prefix_measure(&self, count: usize) -> P::Measure {
+        measure_slice::<T, P>(&self.as_slice()[..count])
+    }
+}
+
+impl<T, P> MeasuredRopeChunk<T, P>
+where
+    T: Clone,
+    P: MeasurePolicy<T>,
+{
+    fn set_at(&self, offset: usize, item: T) -> Self {
+        Self::from_chunk(self.chunk.set_at(offset, item))
+    }
+
+    fn insert_at(&self, offset: usize, item: T) -> Self {
+        Self::from_chunk(self.chunk.insert_at(offset, item))
+    }
+}
+
+struct MeasuredChunkMeasure<T, P>(PhantomData<(T, P)>);
+
+impl<T, P> MeasurePolicy<MeasuredRopeChunk<T, P>> for MeasuredChunkMeasure<T, P>
 where
     P: MeasurePolicy<T>,
 {
@@ -549,8 +623,8 @@ where
         (0, P::empty())
     }
 
-    fn measure(element: &T) -> Self::Measure {
-        (1, P::measure(element))
+    fn measure(element: &MeasuredRopeChunk<T, P>) -> Self::Measure {
+        (element.len(), element.measure.clone())
     }
 
     fn combine(left: &Self::Measure, right: &Self::Measure) -> Self::Measure {
@@ -558,7 +632,7 @@ where
     }
 }
 
-type MeasuredRopeTree<T, P> = FingerTree<T, CountedMeasure<T, P>>;
+type MeasuredRopeTree<T, P> = FingerTree<MeasuredRopeChunk<T, P>, MeasuredChunkMeasure<T, P>>;
 
 pub struct MeasuredRope<T, P>
 where
@@ -605,7 +679,7 @@ where
 
     #[must_use]
     pub(crate) fn from_vec(items: Vec<T>) -> Self {
-        Self::from_tree(items.into_iter().collect())
+        Self::from_tree(measured_tree_from_items::<T, P>(items))
     }
 
     fn from_tree(tree: MeasuredRopeTree<T, P>) -> Self {
@@ -614,7 +688,7 @@ where
 
     #[must_use]
     pub fn len(&self) -> usize {
-        self.tree.len()
+        self.tree.measure().0
     }
 
     #[must_use]
@@ -629,7 +703,13 @@ where
 
     #[must_use]
     pub fn get(&self, index: usize) -> Option<&T> {
-        self.tree.get(index)
+        if index >= self.len() {
+            return None;
+        }
+
+        let located = self.tree.try_locate(|measure| measure.0 > index);
+        let offset = index - located.measure_before.0;
+        self.tree.get(located.index)?.get(offset)
     }
 
     #[must_use]
@@ -639,7 +719,25 @@ where
 
     #[must_use]
     pub fn prefix_measure(&self, count: usize) -> Option<P::Measure> {
-        self.tree.prefix_measure(count).map(|measure| measure.1)
+        if count > self.len() {
+            return None;
+        }
+
+        if count == 0 {
+            return Some(P::empty());
+        }
+
+        if count == self.len() {
+            return Some(self.measure().clone());
+        }
+
+        let located = self.tree.try_locate(|measure| measure.0 >= count);
+        let chunk = self.tree.get(located.index)?;
+        let count_in_chunk = count - located.measure_before.0;
+        Some(P::combine(
+            &located.measure_before.1,
+            &chunk.prefix_measure(count_in_chunk),
+        ))
     }
 
     #[must_use]
@@ -652,10 +750,33 @@ where
     where
         F: FnMut(&P::Measure) -> bool,
     {
-        let split = self.tree.split(|measure| predicate(&measure.1));
+        let located = self.tree.try_locate(|measure| predicate(&measure.1));
+        let Some(chunk) = located.item else {
+            return MeasuredRopeSplit {
+                left: self.clone(),
+                right: Self::new(),
+            };
+        };
+
+        let mut prefix = located.measure_before.1.clone();
+        let mut offset = 0;
+        for item in chunk.as_slice() {
+            let next = P::combine(&prefix, &P::measure(item));
+            if predicate(&next) {
+                break;
+            }
+
+            prefix = next;
+            offset += 1;
+        }
+
+        let split = self
+            .tree
+            .split_at_index(located.index)
+            .expect("located chunk index is valid");
         MeasuredRopeSplit {
-            left: Self::from_tree(split.left),
-            right: Self::from_tree(split.right),
+            left: Self::from_tree(append_measured_prefix(split.left, &chunk, offset)),
+            right: Self::from_tree(prepend_measured_suffix(split.right, &chunk, offset)),
         }
     }
 
@@ -669,11 +790,53 @@ where
             return None;
         }
 
-        let split = self.tree.split(|measure| measure.0 > index);
+        if index == 0 {
+            return Some(MeasuredRopeSplit {
+                left: Self::new(),
+                right: self.clone(),
+            });
+        }
+
+        if index == self.len() {
+            return Some(MeasuredRopeSplit {
+                left: self.clone(),
+                right: Self::new(),
+            });
+        }
+
+        let (left, chunk, right) = self
+            .tree
+            .try_split_find(|measure| measure.0 > index)
+            .expect("validated index locates a measured rope chunk");
+        let offset = index - left.measure().0;
         Some(MeasuredRopeSplit {
-            left: Self::from_tree(split.left),
-            right: Self::from_tree(split.right),
+            left: Self::from_tree(append_measured_prefix(left, &chunk, offset)),
+            right: Self::from_tree(prepend_measured_suffix(right, &chunk, offset)),
         })
+    }
+
+    #[cfg(test)]
+    fn chunk_count(&self) -> usize {
+        self.tree.iter().count()
+    }
+
+    #[cfg(test)]
+    fn validate_chunk_invariants(&self)
+    where
+        P::Measure: PartialEq + std::fmt::Debug,
+    {
+        let mut total_len = 0;
+        let mut total_measure = P::empty();
+        for chunk in self.tree.iter() {
+            assert!(chunk.len() > 0);
+            assert!(chunk.len() <= MAX_CHUNK_SIZE);
+            total_len += chunk.len();
+            total_measure = P::combine(&total_measure, &chunk.measure);
+        }
+
+        assert_eq!(total_len, self.len());
+        assert_eq!(&total_measure, self.measure());
+        self.tree.validate_invariants();
     }
 }
 
@@ -702,12 +865,33 @@ where
 {
     #[must_use]
     pub fn to_vec(&self) -> Vec<T> {
-        self.tree.to_vec()
+        let mut items = Vec::with_capacity(self.len());
+        for chunk in self.tree.iter() {
+            items.extend_from_slice(chunk.as_slice());
+        }
+        items
     }
 
     #[must_use]
     pub fn push_back(&self, item: T) -> Self {
-        Self::from_tree(self.tree.append(item))
+        if self.is_empty() {
+            return Self::from_tree(
+                MeasuredRopeTree::new().append(MeasuredRopeChunk::new(vec![item])),
+            );
+        }
+
+        let (last, rest) = self
+            .tree
+            .try_view_right()
+            .expect("non-empty measured rope has a last chunk");
+        if last.len() < MAX_CHUNK_SIZE {
+            return Self::from_tree(rest.append(last.insert_at(last.len(), item)));
+        }
+
+        Self::from_tree(
+            self.tree
+                .concat(&MeasuredRopeTree::new().append(MeasuredRopeChunk::new(vec![item]))),
+        )
     }
 
     #[must_use]
@@ -716,14 +900,14 @@ where
             return None;
         }
 
-        let before = self
-            .split_at_count(index)
-            .expect("validated index splits measured rope");
-        let after = before
-            .right
-            .split_at_count(1)
-            .expect("validated index leaves an item to replace");
-        Some(before.left.push_back(item).concat(&after.right))
+        let (left, chunk, right) = self
+            .tree
+            .try_split_find(|measure| measure.0 > index)
+            .expect("validated index locates a measured rope chunk");
+        let offset = index - left.measure().0;
+        Some(Self::from_tree(
+            left.append(chunk.set_at(offset, item)).concat(&right),
+        ))
     }
 
     #[must_use]
@@ -732,11 +916,100 @@ where
         F: FnMut(&P::Measure) -> bool,
     {
         let located = self.tree.try_locate(|measure| predicate(&measure.1));
-        MeasuredRopeLocate {
-            index: located.index,
-            measure_before: located.measure_before.1,
-            value: located.item,
+        let Some(chunk) = self.tree.get(located.index) else {
+            return MeasuredRopeLocate {
+                index: self.len(),
+                measure_before: located.measure_before.1,
+                value: None,
+            };
+        };
+
+        let mut measure_before = located.measure_before.1;
+        for (index, item) in (located.measure_before.0..).zip(chunk.as_slice()) {
+            let next = P::combine(&measure_before, &P::measure(item));
+            if predicate(&next) {
+                return MeasuredRopeLocate {
+                    index,
+                    measure_before,
+                    value: Some(item.clone()),
+                };
+            }
+
+            measure_before = next;
         }
+
+        MeasuredRopeLocate {
+            index: self.len(),
+            measure_before,
+            value: None,
+        }
+    }
+}
+
+fn measure_slice<T, P>(items: &[T]) -> P::Measure
+where
+    P: MeasurePolicy<T>,
+{
+    let mut measure = P::empty();
+    for item in items {
+        measure = P::combine(&measure, &P::measure(item));
+    }
+
+    measure
+}
+
+fn measured_tree_from_items<T, P>(items: Vec<T>) -> MeasuredRopeTree<T, P>
+where
+    P: MeasurePolicy<T>,
+{
+    if items.is_empty() {
+        return MeasuredRopeTree::new();
+    }
+
+    let mut chunks = Vec::new();
+    let mut current = Vec::with_capacity(MAX_CHUNK_SIZE);
+    for item in items {
+        current.push(item);
+        if current.len() == MAX_CHUNK_SIZE {
+            chunks.push(MeasuredRopeChunk::new(current));
+            current = Vec::with_capacity(MAX_CHUNK_SIZE);
+        }
+    }
+
+    if !current.is_empty() {
+        chunks.push(MeasuredRopeChunk::new(current));
+    }
+
+    chunks.into_iter().collect()
+}
+
+fn append_measured_prefix<T, P>(
+    tree: MeasuredRopeTree<T, P>,
+    chunk: &MeasuredRopeChunk<T, P>,
+    count: usize,
+) -> MeasuredRopeTree<T, P>
+where
+    P: MeasurePolicy<T>,
+{
+    if count == 0 {
+        tree
+    } else {
+        tree.append(chunk.slice(0, count))
+    }
+}
+
+fn prepend_measured_suffix<T, P>(
+    tree: MeasuredRopeTree<T, P>,
+    chunk: &MeasuredRopeChunk<T, P>,
+    start: usize,
+) -> MeasuredRopeTree<T, P>
+where
+    P: MeasurePolicy<T>,
+{
+    if start == chunk.len() {
+        tree
+    } else {
+        tree.prepend(chunk.slice(start, chunk.len() - start))
     }
 }
 
@@ -993,37 +1266,42 @@ mod tests {
 
     #[test]
     fn measured_rope_uses_shared_measured_tree_storage() {
-        let rope: MeasuredRope<_, SumMeasure<i32>> = (1..=256).collect();
-        let split = rope.split_at(96).unwrap();
+        let rope: MeasuredRope<_, SumMeasure<i32>> = (1..=8192).collect();
+        let split = rope.split_at(3072).unwrap();
         let joined = split.left.concat(&split.right);
-        let changed = rope.set_item(128, 999).unwrap();
+        let changed = rope.set_item(4096, 99_999).unwrap();
         let by_measure = rope.split_by_measure(|sum| *sum >= 1_000);
 
         let mut prefix = 0;
-        let expected_measure_boundary = (1..=256)
+        let expected_measure_boundary = (1..=8192)
             .position(|value| {
                 prefix += value;
                 prefix >= 1_000
             })
             .unwrap();
 
-        assert_eq!(rope.get(42), Some(&43));
+        assert_eq!(rope.chunk_count(), 4);
+        assert_eq!(rope.get(4096), Some(&4097));
         assert_eq!(rope.prefix_measure(10), Some(55));
-        assert_eq!(rope.prefix_measure(300), None);
-        assert_eq!(split.left.len(), 96);
-        assert_eq!(split.right.get(0), Some(&97));
+        assert_eq!(rope.prefix_measure(4096), Some((4096 * 4097) / 2));
+        assert_eq!(rope.prefix_measure(9000), None);
+        assert_eq!(split.left.len(), 3072);
+        assert_eq!(split.right.get(0), Some(&3073));
         assert_eq!(joined.to_vec(), rope.to_vec());
-        assert_eq!(changed.get(128), Some(&999));
-        assert_eq!(changed.measure(), &(*rope.measure() - 129 + 999));
+        assert_eq!(changed.get(4096), Some(&99_999));
+        assert_eq!(changed.measure(), &(*rope.measure() - 4097 + 99_999));
         assert_eq!(by_measure.left.len(), expected_measure_boundary);
-        assert!(rope.tree.shared_node_count_with(&split.left.tree) > 64);
-        assert!(rope.tree.shared_node_count_with(&split.right.tree) > 100);
-        assert!(rope.tree.shared_node_count_with(&changed.tree) > 100);
-        assert!(rope.tree.tree_depth() < 24);
-        split.left.tree.validate_invariants();
-        split.right.tree.validate_invariants();
-        joined.tree.validate_invariants();
-        changed.tree.validate_invariants();
+        assert!(rope.tree.shared_node_count_with(&split.left.tree) > 0);
+        assert!(rope.tree.shared_node_count_with(&split.right.tree) > 0);
+        assert!(rope.tree.shared_node_count_with(&changed.tree) > 0);
+        assert!(rope.tree.shared_node_count_with(&by_measure.right.tree) > 0);
+        assert!(rope.tree.tree_depth() < 8);
+        split.left.validate_chunk_invariants();
+        split.right.validate_chunk_invariants();
+        joined.validate_chunk_invariants();
+        changed.validate_chunk_invariants();
+        by_measure.left.validate_chunk_invariants();
+        by_measure.right.validate_chunk_invariants();
     }
 
     #[test]

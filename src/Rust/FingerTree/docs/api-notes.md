@@ -38,10 +38,10 @@ chunks and measured subtrees; `TextRope` inherits that storage for character off
 `FingerTree<T, P>` now uses an `Arc`-shared measured
 tree with cached monoid
 measures at every node, so measure-guided split and locate operations can skip whole subtrees and split results
-share unchanged structure. `MeasuredRope<T, P>` now reuses that measured tree through an internal count-plus-user
-measure policy, so indexed splits, concatenation, point replacement, prefix measurement, and measure-guided locate
-share unchanged measured subtrees. `PriorityQueue<T, P>` now reuses the measured tree through an internal
-minimum-priority measure, so peek/dequeue locate the first global-minimum entry by cached prefix measures while
+share unchanged structure. `MeasuredRope<T, P>` now uses measured chunks whose tree measure combines element
+count with the user measure, so indexed splits, concatenation, point replacement, prefix measurement, and
+measure-guided locate share unchanged chunks and measured subtrees. `PriorityQueue<T, P>` now reuses the measured
+tree through an internal minimum-priority measure, so peek/dequeue locate the first global-minimum entry by cached prefix measures while
 preserving equal-priority stability. `IntervalTree<T>` now reuses the measured tree through an internal maximum-high
 endpoint measure, so overlap and containment queries skip prefixes whose cached high endpoint cannot intersect the
 probe. Sorted bag/set/map facades now reuse the measured tree through cached order-statistic measures: rank and

@@ -102,8 +102,8 @@ its measured tree while its API notes track the remaining lazy-spine parity boun
 
 Ropes provide persistent chunked sequences, measured ropes add custom split/locate measures, and
 text ropes specialize the same machinery for newline-aware text navigation. The Rust checkpoint now
-uses chunked length-measured storage for positional `Rope<T>` while its API notes track the remaining
-measured-rope lazy-spine parity boundary.
+uses chunked measured storage for both positional `Rope<T>` and custom-measured `MeasuredRope<T, P>`
+while its API notes track the remaining lazy-spine parity boundary.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
