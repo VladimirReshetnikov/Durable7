@@ -157,6 +157,13 @@ where
     }
 
     #[must_use]
+    pub fn get_value_range(&self, low: &T, high: &T) -> Self {
+        let at_least = split_at_least(&self.items, low);
+        let in_range = split_above(&at_least.right, high);
+        Self::from_items(in_range.left)
+    }
+
+    #[must_use]
     pub fn to_vec(&self) -> Vec<T> {
         self.items.to_vec()
     }
@@ -316,6 +323,13 @@ where
     }
 
     #[must_use]
+    pub fn get_value_range(&self, low: &T, high: &T) -> Self {
+        let at_least = split_at_least(&self.items, low);
+        let in_range = split_above(&at_least.right, high);
+        Self::from_items(in_range.left)
+    }
+
+    #[must_use]
     pub fn union(&self, other: &Self) -> Self {
         self.merge(other, |in_left, in_right| in_left || in_right)
     }
@@ -343,6 +357,16 @@ where
     #[must_use]
     pub fn is_superset_of(&self, other: &Self) -> bool {
         other.is_subset_of(self)
+    }
+
+    #[must_use]
+    pub fn is_proper_subset_of(&self, other: &Self) -> bool {
+        self.len() < other.len() && self.is_subset_of(other)
+    }
+
+    #[must_use]
+    pub fn is_proper_superset_of(&self, other: &Self) -> bool {
+        self.len() > other.len() && self.is_superset_of(other)
     }
 
     #[must_use]
@@ -624,6 +648,13 @@ where
     }
 
     #[must_use]
+    pub fn get_key_range(&self, low: &K, high: &K) -> Self {
+        let at_least = split_key_at_least(&self.entries, low);
+        let in_range = split_key_above(&at_least.right, high);
+        Self::from_entries(in_range.left)
+    }
+
+    #[must_use]
     pub fn to_vec(&self) -> Vec<(K, V)> {
         self.entries.to_vec()
     }
@@ -730,6 +761,21 @@ where
     })
 }
 
+fn split_key_above<K, V>(
+    entries: &MapStorage<K, V>,
+    key: &K,
+) -> MeasuredSplit<(K, V), EntryMeasure<K, V>>
+where
+    K: Ord + Clone,
+{
+    entries.split(|measure| {
+        measure
+            .key
+            .as_ref()
+            .is_some_and(|entry_key| entry_key > key)
+    })
+}
+
 fn lower_bound_by_key<K, V>(entries: &MapStorage<K, V>, key: &K) -> usize
 where
     K: Ord + Clone,
@@ -769,11 +815,15 @@ mod tests {
         let bag: SortedBag<_> = [3, 1, 2, 2, 4].into_iter().collect();
         let added = bag.add(2);
         let removed = added.remove(&2);
+        let value_range = added.get_value_range(&2, &3);
+        let empty_range = added.get_value_range(&4, &2);
 
         assert_eq!(bag.to_vec(), vec![1, 2, 2, 3, 4]);
         assert_eq!(added.count_of(&2), 3);
         assert_eq!(added.count_less_than(&3), 4);
         assert_eq!(removed.count_of(&2), 2);
+        assert_eq!(value_range.to_vec(), vec![2, 2, 2, 3]);
+        assert!(empty_range.is_empty());
     }
 
     #[test]
@@ -825,6 +875,10 @@ mod tests {
         assert_eq!(left.intersect(&right).to_vec(), vec![2, 4]);
         assert_eq!(left.except(&right).to_vec(), vec![1]);
         assert_eq!(left.symmetric_except(&right).to_vec(), vec![1, 3]);
+        assert_eq!(left.get_value_range(&2, &4).to_vec(), vec![2, 4]);
+        assert!(left.intersect(&right).is_proper_subset_of(&left));
+        assert!(left.is_proper_superset_of(&left.intersect(&right)));
+        assert!(!left.is_proper_subset_of(&left));
     }
 
     #[test]
@@ -867,11 +921,15 @@ mod tests {
         let map: SortedMap<_, _> = [(2, "b"), (1, "a"), (2, "bb")].into_iter().collect();
         let inserted = map.insert(3, "c").unwrap();
         let duplicate = inserted.insert(3, "cc");
+        let key_range = inserted.get_key_range(&2, &3);
+        let empty_range = inserted.get_key_range(&4, &2);
 
         assert_eq!(map.to_vec(), vec![(1, "a"), (2, "bb")]);
         assert_eq!(inserted.keys_to_vec(), vec![1, 2, 3]);
         assert!(matches!(duplicate, Err(DuplicateKeyError)));
         assert_eq!(inserted.floor_entry(&2), Some((&2, &"bb")));
+        assert_eq!(key_range.to_vec(), vec![(2, "bb"), (3, "c")]);
+        assert!(empty_range.is_empty());
     }
 
     #[test]

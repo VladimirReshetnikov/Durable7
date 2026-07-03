@@ -27,8 +27,8 @@ cover:
   extraction helpers;
 - reversible-deque O(1) storage-sharing reversal and wrapper-preserving logical edits over the shared deque tree;
 - measured sequence size/sum/min/max/key/product/order-statistic policies;
-- sorted bag/set/map rank, navigation, algebra, duplicate handling, cached order-statistic measures, and
-  shared-storage edits/ranges;
+- sorted bag/set/map rank, navigation, algebra, proper set relations, duplicate handling, inclusive value/key
+  ranges, cached order-statistic measures, and shared-storage edits/ranges;
 - stable priority dequeue, meld behavior, cached minimum-priority measures, and shared-storage
   enqueue/meld/dequeue paths;
 - closed interval overlap, containment, coalescing, cached maximum-high measures, and shared-storage

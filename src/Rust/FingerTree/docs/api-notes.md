@@ -51,9 +51,9 @@ internal minimum-priority measure, so peek/dequeue locate the first global-minim
 while preserving equal-priority stability. `IntervalTree<T>` now reuses the measured tree through an internal
 maximum-high endpoint measure, so overlap and containment queries skip prefixes whose cached high endpoint cannot
 intersect the probe. Sorted bag/set/map facades now reuse the measured tree through cached order-statistic
-measures: rank and key-boundary operations locate by count plus last-key prefixes, while edits and range
-extraction preserve unchanged measured subtrees. These derived facades still do not claim the C#/C++ lazy
-measured-spine complexity or allocation profile for every operation.
+measures: rank, inclusive value/key range, and key-boundary operations locate by count plus last-key prefixes,
+while edits and range extraction preserve unchanged measured subtrees. These derived facades still do not claim
+the C#/C++ lazy measured-spine complexity or allocation profile for every operation.
 
 Future representation work should keep the Rust public names and result shapes stable while replacing the remaining
 semantic-checkpoint algorithms with lazy measured-spine equivalents where needed for asymptotic parity.
