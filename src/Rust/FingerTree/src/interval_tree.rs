@@ -1,4 +1,6 @@
-use crate::deque::PersistentDeque;
+use crate::measured::{FingerTree, MeasurePolicy};
+use std::fmt;
+use std::marker::PhantomData;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Interval<T> {
@@ -31,8 +33,82 @@ where
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct IntervalTree<T> {
-    intervals: PersistentDeque<Interval<T>>,
+struct IntervalMeasure<T>(PhantomData<T>);
+
+impl<T> MeasurePolicy<Interval<T>> for IntervalMeasure<T>
+where
+    T: Ord + Clone,
+{
+    type Measure = Option<T>;
+
+    fn empty() -> Self::Measure {
+        None
+    }
+
+    fn measure(element: &Interval<T>) -> Self::Measure {
+        Some(element.high.clone())
+    }
+
+    fn combine(left: &Self::Measure, right: &Self::Measure) -> Self::Measure {
+        match (left, right) {
+            (Some(left), Some(right)) => Some(left.max(right).clone()),
+            (Some(value), None) | (None, Some(value)) => Some(value.clone()),
+            (None, None) => None,
+        }
+    }
+}
+
+type IntervalStorage<T> = FingerTree<Interval<T>, IntervalMeasure<T>>;
+
+pub struct IntervalTree<T>
+where
+    T: Ord + Clone,
+{
+    intervals: IntervalStorage<T>,
+}
+
+impl<T> Clone for IntervalTree<T>
+where
+    T: Ord + Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            intervals: self.intervals.clone(),
+        }
+    }
+}
+
+impl<T> fmt::Debug for IntervalTree<T>
+where
+    T: Ord + Clone + fmt::Debug,
+{
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_list()
+            .entries(self.intervals.iter())
+            .finish()
+    }
+}
+
+impl<T> PartialEq for IntervalTree<T>
+where
+    T: Ord + Clone + PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.intervals.len() == other.intervals.len()
+            && self.intervals.iter().eq(other.intervals.iter())
+    }
+}
+
+impl<T> Eq for IntervalTree<T> where T: Ord + Clone + Eq {}
+
+impl<T> IntervalTree<T>
+where
+    T: Ord + Clone,
+{
+    fn from_storage(intervals: IntervalStorage<T>) -> Self {
+        Self { intervals }
+    }
 }
 
 impl<T> IntervalTree<T>
@@ -41,9 +117,7 @@ where
 {
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            intervals: PersistentDeque::new(),
-        }
+        Self::from_storage(IntervalStorage::new())
     }
 
     #[must_use]
@@ -59,12 +133,11 @@ where
     #[must_use]
     pub fn insert(&self, interval: Interval<T>) -> Self {
         let index = upper_bound_interval(&self.intervals, &interval);
-        Self {
-            intervals: self
-                .intervals
-                .insert_at(index, interval)
-                .expect("computed insertion rank is valid"),
-        }
+        let split = self
+            .intervals
+            .split_at_index(index)
+            .expect("computed insertion rank is valid");
+        Self::from_storage(split.left.append(interval).concat(&split.right))
     }
 
     #[must_use]
@@ -78,12 +151,9 @@ where
             return self.clone();
         };
 
-        Self {
-            intervals: self
-                .intervals
-                .remove_at(index)
-                .expect("found interval rank is valid"),
-        }
+        self.remove_at_index(index)
+            .expect("found interval rank is valid")
+            .0
     }
 
     #[must_use]
@@ -92,33 +162,39 @@ where
             .intervals
             .iter()
             .position(|stored| stored == interval)?;
-        let removed = self.intervals.get(index)?.clone();
-        Some((
-            Self {
-                intervals: self.intervals.remove_at(index)?,
-            },
-            removed,
-        ))
+        self.remove_at_index(index)
     }
 
     #[must_use]
     pub fn find_overlap(&self, probe: &Interval<T>) -> Option<&Interval<T>> {
+        let index = self.first_possible_overlap_index(&probe.low)?;
         self.intervals
             .iter()
+            .skip(index)
+            .take_while(|interval| interval.low <= probe.high)
             .find(|interval| interval.overlaps(probe))
     }
 
     #[must_use]
     pub fn find_containing(&self, point: &T) -> Option<&Interval<T>> {
+        let index = self.first_possible_overlap_index(point)?;
         self.intervals
             .iter()
+            .skip(index)
+            .take_while(|interval| interval.low <= *point)
             .find(|interval| interval.contains_point(point))
     }
 
     #[must_use]
     pub fn find_overlaps(&self, probe: &Interval<T>) -> Vec<Interval<T>> {
+        let Some(index) = self.first_possible_overlap_index(&probe.low) else {
+            return Vec::new();
+        };
+
         self.intervals
             .iter()
+            .skip(index)
+            .take_while(|interval| interval.low <= probe.high)
             .filter(|interval| interval.overlaps(probe))
             .cloned()
             .collect()
@@ -126,8 +202,14 @@ where
 
     #[must_use]
     pub fn count_overlaps(&self, probe: &Interval<T>) -> usize {
+        let Some(index) = self.first_possible_overlap_index(&probe.low) else {
+            return 0;
+        };
+
         self.intervals
             .iter()
+            .skip(index)
+            .take_while(|interval| interval.low <= probe.high)
             .filter(|interval| interval.overlaps(probe))
             .count()
     }
@@ -153,9 +235,7 @@ where
         }
         merged.push(current);
 
-        Self {
-            intervals: PersistentDeque::from_vec(merged),
-        }
+        Self::from_storage(IntervalStorage::from_vec(merged))
     }
 
     #[must_use]
@@ -166,6 +246,20 @@ where
     #[must_use]
     pub fn shares_storage_with(&self, other: &Self) -> bool {
         self.intervals.shares_storage_with(&other.intervals)
+    }
+
+    fn first_possible_overlap_index(&self, low: &T) -> Option<usize> {
+        let located = self
+            .intervals
+            .try_locate(|max_high| max_high.as_ref().is_some_and(|high| high >= low));
+        located.item.map(|_| located.index)
+    }
+
+    fn remove_at_index(&self, index: usize) -> Option<(Self, Interval<T>)> {
+        let split = self.intervals.split_at_index(index)?;
+        let after = split.right.split_at_index(1)?;
+        let removed = after.left.front()?.clone();
+        Some((Self::from_storage(split.left.concat(&after.right)), removed))
     }
 }
 
@@ -192,9 +286,9 @@ where
     }
 }
 
-fn upper_bound_interval<T>(intervals: &PersistentDeque<Interval<T>>, value: &Interval<T>) -> usize
+fn upper_bound_interval<T>(intervals: &IntervalStorage<T>, value: &Interval<T>) -> usize
 where
-    T: Ord,
+    T: Ord + Clone,
 {
     let mut low = 0;
     let mut high = intervals.len();
@@ -233,6 +327,35 @@ mod tests {
     }
 
     #[test]
+    fn interval_queries_use_cached_max_high_measure() {
+        let tree: IntervalTree<_> = [
+            Interval::new(0, 2),
+            Interval::new(10, 15),
+            Interval::new(20, 30),
+            Interval::new(40, 50),
+        ]
+        .into_iter()
+        .collect();
+
+        assert_eq!(tree.intervals.measure(), &Some(50));
+        assert_eq!(tree.find_overlap(&Interval::new(16, 19)), None);
+        assert_eq!(
+            tree.find_overlap(&Interval::new(29, 41)),
+            Some(&Interval::new(20, 30))
+        );
+        assert_eq!(tree.find_containing(&45), Some(&Interval::new(40, 50)));
+        assert_eq!(
+            tree.find_overlaps(&Interval::new(14, 42)),
+            vec![
+                Interval::new(10, 15),
+                Interval::new(20, 30),
+                Interval::new(40, 50)
+            ]
+        );
+        tree.intervals.validate_invariants();
+    }
+
+    #[test]
     fn coalesce_merges_overlapping_intervals() {
         let tree: IntervalTree<_> = [
             Interval::new(1, 3),
@@ -250,7 +373,7 @@ mod tests {
     }
 
     #[test]
-    fn interval_tree_edits_share_underlying_deque_tree() {
+    fn interval_tree_edits_share_measured_tree_storage() {
         let tree: IntervalTree<_> = (0..256)
             .map(|value| Interval::new(value * 3, value * 3 + 1))
             .collect();
@@ -262,6 +385,7 @@ mod tests {
         assert!(inserted.contains(&Interval::new(1000, 1001)));
         assert!(!removed.contains(&Interval::new(300, 301)));
         assert_eq!(removed_interval, Interval::new(303, 304));
+        assert_eq!(inserted.intervals.measure(), &Some(1001));
         assert!(tree.intervals.shared_node_count_with(&inserted.intervals) > 100);
         assert!(
             inserted

@@ -20,5 +20,6 @@ Coverage groups:
 - `sorted.rs`: sorted bag, set, and map facades with shared-storage rank edits and ranges;
 - `priority_queue.rs`: stable minimum-priority queue, meld, cached minimum-priority measures, and shared-storage
   updates;
-- `interval_tree.rs`: closed intervals, overlap queries, coalescing, and shared-storage updates;
+- `interval_tree.rs`: closed intervals, overlap queries, cached maximum-high measures, coalescing, and
+  shared-storage updates;
 - `rope.rs`: structurally shared positional and measured ropes, text helpers, and builder.

@@ -87,8 +87,8 @@ lazy-spine parity boundary.
 
 Interval trees store ordered interval collections for overlap and containment queries. The mature
 C#/C++/C ports use interval annotations in finger-tree measures so queries can skip subtrees whose
-summary cannot intersect the probe; the Rust checkpoint preserves the surface over shared tree
-storage while its API notes track the remaining lazy-spine parity boundary.
+summary cannot intersect the probe; the Rust checkpoint now uses cached maximum-high measures over
+its measured tree while its API notes track the remaining lazy-spine parity boundary.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |

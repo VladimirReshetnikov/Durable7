@@ -40,9 +40,11 @@ share unchanged structure. `MeasuredRope<T, P>` now reuses that measured tree th
 measure policy, so indexed splits, concatenation, point replacement, prefix measurement, and measure-guided locate
 share unchanged measured subtrees. `PriorityQueue<T, P>` now reuses the measured tree through an internal
 minimum-priority measure, so peek/dequeue locate the first global-minimum entry by cached prefix measures while
-preserving equal-priority stability. Sorted bag/set/map and interval tree facades compose the shared deque, so rank
-edits, interval insertion/removal, and range extraction preserve unchanged subtree storage. These derived facades
-still do not claim the C#/C++ lazy measured-spine complexity or allocation profile for every operation.
+preserving equal-priority stability. `IntervalTree<T>` now reuses the measured tree through an internal maximum-high
+endpoint measure, so overlap and containment queries skip prefixes whose cached high endpoint cannot intersect the
+probe. Sorted bag/set/map facades compose the shared deque, so rank edits and range extraction preserve unchanged
+subtree storage. These derived facades still do not claim the C#/C++ lazy measured-spine complexity or allocation
+profile for every operation.
 
 Future representation work should keep the Rust public names and result shapes stable while replacing the remaining
 semantic-checkpoint algorithms with lazy measured-spine equivalents where needed for asymptotic parity.

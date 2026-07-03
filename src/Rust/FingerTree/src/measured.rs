@@ -662,6 +662,11 @@ where
     }
 
     #[must_use]
+    pub fn split_at_index(&self, index: usize) -> Option<MeasuredSplit<T, P>> {
+        (index <= self.len()).then(|| self.split_at_index_unchecked(index))
+    }
+
+    #[must_use]
     pub fn prefix_measure(&self, count: usize) -> Option<P::Measure> {
         (count <= self.len())
             .then(|| MeasuredNode::prefix_measure(&self.root, count, &P::empty(), &P::combine))
@@ -834,16 +839,6 @@ where
             ),
             item: self.root.get(index).cloned(),
         }
-    }
-}
-
-impl<T> FingerTree<T, SizeMeasure>
-where
-    T: Clone,
-{
-    #[must_use]
-    pub fn split_at_index(&self, index: usize) -> Option<MeasuredSplit<T, SizeMeasure>> {
-        (index <= self.len()).then(|| self.split_at_index_unchecked(index))
     }
 }
 

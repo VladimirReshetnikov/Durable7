@@ -22,7 +22,8 @@ crate tests. `PersistentDeque<T>` now uses structurally shared balanced tree sto
 compose the shared deque for positional storage, `FingerTree<T, P>` now uses structurally shared
 measured tree storage with cached monoid measures, and `MeasuredRope<T, P>` composes that measured
 core with a counted user measure. `PriorityQueue<T, P>` now composes the measured core with cached
-minimum-priority measures; sorted and interval facades use shared deque storage. The crate still does
+minimum-priority measures, and `IntervalTree<T>` uses cached maximum-high interval measures for
+overlap and containment entry points; sorted facades use shared deque storage. The crate still does
 not claim the C#/C++ lazy finger-tree asymptotic profile overall; derived algorithms remain
 semantic-checkpoint implementations until the lazy measured spine is ported through the whole family.
 

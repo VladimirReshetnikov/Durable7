@@ -29,7 +29,8 @@ cover:
 - sorted bag/set/map rank, navigation, algebra, duplicate handling, and shared-storage edits/ranges;
 - stable priority dequeue, meld behavior, cached minimum-priority measures, and shared-storage
   enqueue/meld/dequeue paths;
-- closed interval overlap, containment, coalescing, and shared-storage insert/remove paths;
+- closed interval overlap, containment, coalescing, cached maximum-high measures, and shared-storage
+  insert/remove paths;
 - positional rope edits and subtree sharing, measured-rope cached-measure navigation and subtree sharing, text line
   helpers, and builder output.
 
