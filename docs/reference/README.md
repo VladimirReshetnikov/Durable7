@@ -16,5 +16,6 @@ For language-level source browsing, start with the [`src` index](../../src/READM
 - [Derived structure catalog](derived-structure-catalog.md) - verified candidate structures buildable on the HAMT and FingerTree families, shared enabling API gaps, and composition design rules; candidates only, not shipped surface.
 - [Documentation navigation matrix](navigation-matrix.md) - task-oriented entry points across repository-level docs and workspace-owned docs.
 - [Reversible deque complexity audit](reversible-deque-complexity-audit.md) - cross-language verification of O(1) reverse and reversed-operation behavior.
+- [Semantic contracts](semantic-contracts.md) - shared behavior, ownership, policy, ordering, and documentation obligations across repository-owned numerics and data structures.
 - [Test suite map](test-suite-map.md) - cross-workspace map of test runners, local test READMEs, routine commands, stress knobs, samples, and benchmarks.
 - [Workspace map](workspace-map.md) - language-first layout, data-structure workspace roles, port lineage, and documentation placement rules.

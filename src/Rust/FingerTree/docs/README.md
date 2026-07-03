@@ -5,6 +5,28 @@
 - Audience: Maintainers and reviewers of `tools-data-structures-fingertree`
 - Scope: Documentation index for the Rust FingerTree-family workspace
 
-- [API notes](api-notes.md) describe the Rust public surface and checkpoint parity boundary.
-- [Validation](validation.md) records the Cargo command and coverage map.
+The Rust FingerTree crate is a safe Rust checkpoint for the repository FingerTree family. Its public
+facades use structurally shared Rust storage where implemented, preserve immutable snapshot behavior,
+and document the remaining lazy-spine asymptotic parity boundary.
 
+## Current Documents
+
+- [API notes](api-notes.md) describe `PersistentDeque<T>`, `ReversibleDeque<T>`,
+  `FingerTree<T, P>`, `MeasurePolicy<T>`, built-in and product measures, sorted facades, priority
+  queues, interval trees, ropes, measured ropes, text helpers, Rust result shapes, and checkpoint
+  limitations.
+- [Validation](validation.md) records the Cargo command, local rustup fallback path, safe-Rust boundary,
+  and coverage map for the checkpoint behavior.
+- [Tests README](../tests/README.md) maps unit coverage for deque operations, reversible orientation,
+  measured splits, sorted facades, priority queues, intervals, ropes, measured ropes, and text helpers.
+
+## Related Repository Docs
+
+- [Data-structure catalog](../../../../docs/reference/data-structure-catalog.md#finger-tree-core-and-deque)
+  lists the Rust FingerTree-family public surface beside the sibling ports.
+- [Semantic contracts](../../../../docs/reference/semantic-contracts.md#finger-tree-core) summarizes the
+  shared contracts for measured trees, facades, ropes, and text helpers.
+- [Reversible deque complexity audit](../../../../docs/reference/reversible-deque-complexity-audit.md)
+  records the cross-language orientation-aware deque checks.
+- [Porting and semantic parity](../../../../docs/guides/porting-and-semantic-parity.md#fingertree-specific-checks)
+  gives the cross-language checklist for FingerTree-family changes.

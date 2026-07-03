@@ -11,6 +11,7 @@ Library-specific design and API documentation lives beside each workspace under 
 ## Guides
 
 - [Guides index](guides/README.md) - task-oriented repository procedures.
+- [Repository onboarding](guides/repository-onboarding.md) - end-to-end orientation for choosing workspaces, task scope, documentation responsibilities, and validation evidence.
 - [Agent workflows](guides/agent-workflows.md) - compact task-conditional workflow guidance inherited from the Tools repository where relevant.
 - [Build and validation](guides/build-and-validation.md) - repository-wide validation matrix, exact build/test commands, CMake cache notes, and Markdown checks.
 - [Documentation maintenance](guides/documentation-maintenance.md) - documentation placement, writing standards, metadata, and validation.
@@ -22,6 +23,7 @@ Library-specific design and API documentation lives beside each workspace under 
 - [Data structure catalog](reference/data-structure-catalog.md) - cross-language catalog of repository-owned data-structure families, public entry points, and primary references.
 - [Derived structure catalog](reference/derived-structure-catalog.md) - verified candidate structures buildable on the shipped families, shared enabling API gaps, and composition design rules.
 - [Documentation navigation matrix](reference/navigation-matrix.md) - task-oriented entry points for usage, API, validation, porting, history, and maintenance work.
+- [Semantic contracts](reference/semantic-contracts.md) - shared behavior, ownership, policy, ordering, and documentation obligations across repository-owned numerics and data structures.
 - [Test suite map](reference/test-suite-map.md) - cross-workspace map of test runners, routine commands, stress knobs, sample smoke tests, and benchmark boundaries.
 - [Workspace map](reference/workspace-map.md) - language-first layout, data-structure workspace roles, port lineage, and documentation placement rules.
 

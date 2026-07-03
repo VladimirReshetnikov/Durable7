@@ -20,5 +20,6 @@ under `benchmarks/`, and family-specific documentation under `docs/<Family>/`.
 
 Use the parent [source index](../README.md) for the full language list, the repository
 [workspace map](../../docs/reference/workspace-map.md) for port lineage, and the
+[semantic contracts reference](../../docs/reference/semantic-contracts.md) plus the
 [porting guide](../../docs/guides/porting-and-semantic-parity.md) when changing semantics that should stay aligned
-with the native C and C++ ports.
+with sibling ports.

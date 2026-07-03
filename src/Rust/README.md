@@ -31,3 +31,8 @@ parity port. Its public families now use structurally shared Rust tree storage, 
 higher-level algorithms remain simpler Rust checkpoint implementations instead of the C#/C++ lazy
 finger-tree spine. Its README marks that boundary so future work can tune representations without
 changing the Rust-facing surface.
+
+Use the repository [semantic contracts reference](../../docs/reference/semantic-contracts.md) when
+checking which persistence, ordering, policy, and checkpoint obligations should align with sibling
+ports, and use the [porting guide](../../docs/guides/porting-and-semantic-parity.md) before changing
+shared behavior.

@@ -5,6 +5,25 @@
 - Audience: Maintainers and reviewers of `tools-data-structures-hamt`
 - Scope: Documentation index for the Rust HAMT workspace
 
-- [API notes](api-notes.md) describe the Rust public surface and semantic parity choices.
-- [Validation](validation.md) records the Cargo command and coverage map.
+The Rust HAMT crate ports the repository persistent HAMT map/set contract to safe Rust values backed by
+`Arc`-shared immutable nodes. Start here when reviewing Rust naming, `BuildHasher` policy behavior,
+borrowed lookup results, cloned removal results, or Cargo validation.
 
+## Current Documents
+
+- [API notes](api-notes.md) describe `PersistentHashMap<K, V, S>`, `PersistentHashSet<T, S>`,
+  `DuplicateKey`, `BuildHasher` policy preservation, collision buckets, root-sharing diagnostics,
+  iteration order, and Rust-specific result shapes.
+- [Validation](validation.md) records the Cargo command, local rustup fallback path, safe-Rust boundary,
+  and coverage map.
+- [Tests README](../tests/README.md) maps unit coverage for collisions, updates, iteration, set algebra,
+  and root-sharing behavior.
+
+## Related Repository Docs
+
+- [Data-structure catalog](../../../../docs/reference/data-structure-catalog.md#hamt-map-and-set) lists
+  the Rust HAMT public surface beside the sibling ports.
+- [Semantic contracts](../../../../docs/reference/semantic-contracts.md#hamt-map-and-set) summarizes the
+  shared HAMT obligations that the Rust crate preserves.
+- [Porting and semantic parity](../../../../docs/guides/porting-and-semantic-parity.md#hamt-specific-checks)
+  gives the cross-language checklist for HAMT changes.

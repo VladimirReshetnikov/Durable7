@@ -22,3 +22,8 @@ cabal test all
 
 The port intentionally depends only on packages bundled with the local GHC distribution (`base`,
 `containers`, and `text`), plus each package's own test executable.
+
+Use the repository [semantic contracts reference](../../docs/reference/semantic-contracts.md) when
+checking which persistence, ordering, policy, and checkpoint obligations should align with sibling
+ports, and use the [porting guide](../../docs/guides/porting-and-semantic-parity.md) before changing
+shared behavior.

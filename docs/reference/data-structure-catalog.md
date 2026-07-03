@@ -10,7 +10,9 @@ which language, and where do I start?" The workspace API specifications and head
 authoritative source for contracts, complexity, allocation behavior, and validation details.
 
 Use this together with the [workspace map](workspace-map.md): the map explains the language-first
-layout, while this catalog maps each public library family across that layout.
+layout, while this catalog maps each public library family across that layout. Use the
+[semantic contracts reference](semantic-contracts.md) when reviewing behavior that should remain
+recognizable across language ports.
 
 ## Fixed-Width Integer Numerics
 
@@ -150,6 +152,8 @@ callbacks and context pointers.
 
 - Start with this catalog when comparing data-structure availability across languages.
 - Use the [workspace map](workspace-map.md) when choosing the correct language/data-structure directory.
+- Use the [semantic contracts reference](semantic-contracts.md) when checking shared persistence,
+  ownership, policy, ordering, and failure-behavior obligations.
 - Use the [porting and semantic parity guide](../guides/porting-and-semantic-parity.md) when changing behavior that may cross language workspaces.
 - Use workspace API specs and public headers for normative contracts.
 - Keep new public data structures visible here when they become part of a long-lived workspace surface.

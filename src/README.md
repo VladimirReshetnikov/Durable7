@@ -19,9 +19,11 @@ projects grouped by role under `src/CSharp/src`, `tests`, `samples`, and `benchm
 | [Kotlin](Kotlin/README.md) | Kotlin/JVM command-line compiler with dependency-free executable tests bootstrapped by `build.ps1` | [Hamt](Kotlin/Hamt/README.md), [FingerTree](Kotlin/FingerTree/README.md) |
 | [Rust](Rust/README.md) | Cargo workspace with safe Rust crates and inline unit tests | [Hamt](Rust/Hamt/README.md), [FingerTree](Rust/FingerTree/README.md) |
 
-Use the repository [workspace map](../docs/reference/workspace-map.md) for layout rules and port lineage, the
-[data-structure catalog](../docs/reference/data-structure-catalog.md) for cross-language public surfaces, and the
-[navigation matrix](../docs/reference/navigation-matrix.md) for task-oriented documentation entry points.
+Use the repository [onboarding guide](../docs/guides/repository-onboarding.md) when starting work in an
+unfamiliar area, the [workspace map](../docs/reference/workspace-map.md) for layout rules and port lineage,
+the [data-structure catalog](../docs/reference/data-structure-catalog.md) for cross-language public surfaces,
+the [semantic contracts reference](../docs/reference/semantic-contracts.md) for shared behavior obligations,
+and the [navigation matrix](../docs/reference/navigation-matrix.md) for task-oriented documentation entry points.
 
 ## Placement Rules
 

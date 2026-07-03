@@ -12,14 +12,16 @@ routes a reader to the narrowest document that owns the question.
 
 | Task | Open first | Then inspect |
 | --- | --- | --- |
+| Start work in an unfamiliar part of the repository | [Repository onboarding](../guides/repository-onboarding.md) | [Workspace map](workspace-map.md), [catalog](data-structure-catalog.md), affected workspace README |
 | Understand repository layout | [Workspace map](workspace-map.md) | Root [README](../../README.md), [source index](../../src/README.md), [data-structure catalog](data-structure-catalog.md) |
 | Browse workspaces by language | [Source index](../../src/README.md) | [C](../../src/C/README.md), [C++](../../src/Cpp/README.md), [C#](../../src/CSharp/README.md), [Haskell](../../src/Haskell/README.md), [Kotlin](../../src/Kotlin/README.md), [Rust](../../src/Rust/README.md) |
 | Choose a data structure or numerics surface across languages | [Data-structure catalog](data-structure-catalog.md) | The matching workspace usage guide and API specification or notes |
+| Understand shared semantic contracts | [Semantic contracts](semantic-contracts.md) | Workspace API specs/notes, [porting guide](../guides/porting-and-semantic-parity.md), local tests |
 | Plan a new derived structure or API extension | [Derived structure catalog](derived-structure-catalog.md) | [Porting and semantic parity](../guides/porting-and-semantic-parity.md), affected workspace API specs |
 | Use an existing collection | The relevant usage guide below | Source tests for executable examples when behavior is subtle |
 | Build or validate a workspace | [Build and validation](../guides/build-and-validation.md) | [Test suite map](test-suite-map.md), workspace validation docs, and workspace README |
 | Understand test coverage | [Test suite map](test-suite-map.md) | Workspace tests README and validation guide |
-| Change public API or semantics | [Porting and semantic parity](../guides/porting-and-semantic-parity.md) | API specs/notes for all affected language workspaces, catalog rows, tests |
+| Change public API or semantics | [Porting and semantic parity](../guides/porting-and-semantic-parity.md) | [Semantic contracts](semantic-contracts.md), API specs/notes for all affected language workspaces, catalog rows, tests |
 | Update documentation | [Documentation maintenance](../guides/documentation-maintenance.md) | This matrix, the affected workspace docs index, and the catalog |
 | Investigate extraction history | [Migration index](../migration/README.md) | [Extraction provenance](../migration/extraction-provenance.md), [filter-repo commit map](../migration/filter-repo-commit-map.tsv) |
 | Translate a pre-`src` workspace path | [Language-first reorganization](../migration/language-first-reorganization.md) | [Workspace map](workspace-map.md), [source index](../../src/README.md), current validation docs |
@@ -51,6 +53,9 @@ patterns.
 ## API Contracts
 
 Use these when behavior, complexity, allocation, ownership, or cross-language parity matters.
+
+For a cross-family checklist before drilling into a local spec, start with the
+[semantic contracts reference](semantic-contracts.md).
 
 | Workspace | Contract document | Notes |
 | --- | --- | --- |

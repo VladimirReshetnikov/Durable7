@@ -10,7 +10,9 @@ shared repository guidance. Workspace-local README files remain the shortest ent
 library; this document is the cross-repository checklist. The workspace validation guides linked below
 own the local warning policy, generated-output locations, test coverage map, and evidence wording.
 For a cross-workspace view of test runners, local test READMEs, stress knobs, sample smoke tests, and benchmark
-boundaries, use the [test suite map](../reference/test-suite-map.md).
+boundaries, use the [test suite map](../reference/test-suite-map.md). If you are still deciding which
+workspace or evidence boundary applies, start with the
+[repository onboarding guide](repository-onboarding.md).
 
 ## Validation Matrix
 

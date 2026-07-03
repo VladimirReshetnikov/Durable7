@@ -28,3 +28,8 @@ each workspace and runs its dependency-free executable tests. The `build` direct
 The FingerTree workspace intentionally starts as a semantic checkpoint rather than a final lazy
 finger-tree representation. It preserves immutable snapshot behavior and the public family surfaces;
 its README and API notes mark the remaining asymptotic representation boundary.
+
+Use the repository [semantic contracts reference](../../docs/reference/semantic-contracts.md) when
+checking which persistence, ordering, policy, and checkpoint obligations should align with sibling
+ports, and use the [porting guide](../../docs/guides/porting-and-semantic-parity.md) before changing
+shared behavior.

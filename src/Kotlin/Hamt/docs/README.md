@@ -5,6 +5,25 @@
 - Audience: Maintainers and reviewers of the Kotlin HAMT workspace
 - Scope: Documentation index for `src/Kotlin/Hamt`
 
-- [API notes](api-notes.md) describe the Kotlin public shape, contracts, and intentional differences.
-- [Validation](validation.md) records the build/test command and coverage boundary.
-- [Tests README](../tests/README.md) maps deterministic executable test coverage.
+The Kotlin HAMT workspace ports the repository persistent HAMT map/set contract to idiomatic JVM
+values. Start here when reviewing Kotlin naming, runtime hash policies, immutable update behavior, or
+dependency-free validation.
+
+## Current Documents
+
+- [API notes](api-notes.md) describe `PersistentHashMap<K, V>`, `PersistentHashSet<T>`,
+  `HashPolicy<K>`, collision behavior, no-op sharing diagnostics, duplicate handling, null miss paths,
+  and intentional differences from the C# and native ports.
+- [Validation](validation.md) records the `src/Kotlin/build.ps1` command shape, JDK/Kotlin compiler
+  bootstrap behavior, generated-output locations, and the coverage boundary for the executable tests.
+- [Tests README](../tests/README.md) maps deterministic executable coverage for collisions, root sharing,
+  replacement, key retention, iteration, and set algebra.
+
+## Related Repository Docs
+
+- [Data-structure catalog](../../../../docs/reference/data-structure-catalog.md#hamt-map-and-set) lists
+  the Kotlin HAMT public surface beside the sibling ports.
+- [Semantic contracts](../../../../docs/reference/semantic-contracts.md#hamt-map-and-set) summarizes the
+  shared HAMT obligations that the Kotlin port preserves.
+- [Porting and semantic parity](../../../../docs/guides/porting-and-semantic-parity.md#hamt-specific-checks)
+  gives the cross-language checklist for HAMT changes.

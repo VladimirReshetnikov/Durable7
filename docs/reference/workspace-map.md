@@ -60,7 +60,9 @@ Use the [source index](../../src/README.md) when browsing by language, or jump d
 [Rust](../../src/Rust/README.md) language index.
 
 For the cross-language list of public library surfaces, see the
-[data structure catalog](data-structure-catalog.md).
+[data structure catalog](data-structure-catalog.md). For the shared behavior, ownership, policy,
+ordering, and documentation obligations that should remain recognizable across language ports, see the
+[semantic contracts reference](semantic-contracts.md).
 
 ## Workspace Roles
 

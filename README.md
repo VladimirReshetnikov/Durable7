@@ -10,6 +10,16 @@ This repository contains Vladimir Reshetnikov's standalone data-structure and nu
 
 This document is the canonical repository guidance for Vladimir and the AI coding agents that help him. `AGENTS.md` and `CLAUDE.md` point here, so keep shared project and agent instructions in this file.
 
+## Where to start
+
+| Goal | Start with | Then open |
+| --- | --- | --- |
+| Get oriented in the repository | [Repository onboarding](docs/guides/repository-onboarding.md) | [Workspace map](docs/reference/workspace-map.md), [source index](src/README.md), [navigation matrix](docs/reference/navigation-matrix.md) |
+| Choose or compare a collection family | [Data-structure catalog](docs/reference/data-structure-catalog.md) | Relevant workspace usage guide and API specification or notes |
+| Preserve behavior across ports | [Semantic contracts](docs/reference/semantic-contracts.md) | [Porting guide](docs/guides/porting-and-semantic-parity.md), sibling workspace API docs, test READMEs |
+| Build or validate changes | [Build and validation](docs/guides/build-and-validation.md) | [Test suite map](docs/reference/test-suite-map.md), affected workspace validation guide |
+| Update documentation | [Documentation maintenance](docs/guides/documentation-maintenance.md) | Affected docs index, [navigation matrix](docs/reference/navigation-matrix.md), repository-owned Markdown checks |
+
 ## Top-level structure
 
 ```text
@@ -214,6 +224,7 @@ Release configuration is required for meaningful benchmark numbers.
 - [docs/README.md](docs/README.md) indexes repository-level documentation and migration provenance.
 - [src/README.md](src/README.md) indexes language-level source workspaces.
 - [docs/guides/README.md](docs/guides/README.md) indexes task-oriented repository procedures.
+- [docs/guides/repository-onboarding.md](docs/guides/repository-onboarding.md) is the end-to-end orientation guide for choosing workspaces, task scope, documentation responsibilities, and validation evidence.
 - [docs/guides/agent-workflows.md](docs/guides/agent-workflows.md) holds compact task-conditional workflow guidance.
 - [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) is the repository-wide validation matrix and command guide.
 - [docs/guides/documentation-maintenance.md](docs/guides/documentation-maintenance.md) defines documentation placement, writing standards, metadata, and validation.
@@ -221,6 +232,7 @@ Release configuration is required for meaningful benchmark numbers.
 - [docs/reference/README.md](docs/reference/README.md) indexes durable cross-workspace reference material.
 - [docs/reference/data-structure-catalog.md](docs/reference/data-structure-catalog.md) catalogs repository-owned data-structure families, public entry points, and primary references across C#, C, C++, Haskell, Kotlin, and Rust.
 - [docs/reference/navigation-matrix.md](docs/reference/navigation-matrix.md) maps common tasks to the right usage, API, validation, porting, history, and maintenance documents.
+- [docs/reference/semantic-contracts.md](docs/reference/semantic-contracts.md) summarizes shared behavior, ownership, policy, ordering, and documentation obligations for repository-owned numerics and data structures.
 - [docs/reference/workspace-map.md](docs/reference/workspace-map.md) explains the language-first, library-family layout and port lineage.
 - [src/CSharp/docs/Numerics/README.md](src/CSharp/docs/Numerics/README.md) indexes the Numerics library's API and behavior reference, validation guide, maintainer guidance, and design notes.
 - [src/CSharp/docs/Hamt/README.md](src/CSharp/docs/Hamt/README.md) indexes the HAMT library's usage guide, API specification, validation guide, and implementation review.

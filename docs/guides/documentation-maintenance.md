@@ -71,6 +71,26 @@ Write docs as contracts and maps, not as narration of what a command happens to 
 - Do not include secrets, access tokens, machine-local credentials, or transient absolute paths except
   for intentional local environment guidance such as `C:\DataStructures` or toolchain locations.
 
+## Completeness Criteria
+
+For long-lived API, usage, validation, and workspace documents, make sure a reader can answer:
+
+| Concern | Documentation expectation |
+| --- | --- |
+| Entry points | Namespaces, modules, headers, packages, crates, and the first public types to import or include. |
+| Construction | Empty, singleton, range/bulk, builder, custom policy, and default policy creation paths. |
+| Persistence | Which operations return new versions, which mutate builders or handles, and what happens to retained old versions. |
+| Ordering | Enumeration order, sorted order, priority order, interval ordering, rank/index behavior, and text offset rules. |
+| Failure behavior | Duplicate input, missing input, empty structures, invalid ranges, invalid intervals, allocation failure, callback failure, and exception/status/result shapes. |
+| Ownership | Borrowed versus retained values, callback lifetimes, returned references, copied values, builder snapshots, and cleanup obligations. |
+| Complexity | Contractual asymptotic behavior, allocation behavior, and any checkpoint limitation that intentionally trails the canonical implementation. |
+| Validation | Exact command, local test map, stress knobs, sample smoke tests, benchmark boundary, and what each command proves. |
+| Cross-links | Links to the workspace README, docs index, repository catalog, semantic contracts, validation guide, and sibling ports when relevant. |
+
+Short index pages can be concise, but they should still say what each linked document owns. Prefer
+"API notes describe Rust `BuildHasher` policy preservation, collision behavior, and root-sharing
+diagnostics" over "API notes".
+
 ## Metadata
 
 Every new long-lived document should start with:

@@ -11,6 +11,7 @@ durable maps belong under [`../reference`](../reference/README.md).
 
 ## Current Guides
 
+- [Repository onboarding](repository-onboarding.md) - end-to-end orientation for choosing workspaces, task scope, documentation responsibilities, and validation evidence.
 - [Agent workflows](agent-workflows.md) - compact task-conditional workflow guidance for AI agents and maintainers.
 - [Build and validation](build-and-validation.md) - repository-wide validation matrix, exact commands, CMake cache notes, and Markdown checks.
 - [Documentation maintenance](documentation-maintenance.md) - documentation placement, writing standards, metadata, and validation.
