@@ -551,6 +551,19 @@ static void test_tree_endpoint_index_split_and_concat(void)
         REQUIRE(actual == expected);
     }
 
+    int replacement = 111;
+    ft_tree replaced;
+    REQUIRE_STATUS(ft_tree_set_at(&joined, 11, &replacement, &replaced), FT_STATUS_OK);
+    int replaced_value = -1;
+    int original_value = -1;
+    REQUIRE_STATUS(ft_tree_at(&replaced, 11, &replaced_value), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_tree_at(&joined, 11, &original_value), FT_STATUS_OK);
+    REQUIRE(replaced_value == 111);
+    REQUIRE(original_value == 11);
+    measure = 0;
+    REQUIRE_STATUS(ft_tree_measure(&replaced, &measure), FT_STATUS_OK);
+    REQUIRE(measure == 24);
+
     int removed_front = -1;
     ft_tree without_front;
     REQUIRE_STATUS(ft_tree_pop_front(&joined, &removed_front, &without_front), FT_STATUS_OK);
@@ -571,6 +584,7 @@ static void test_tree_endpoint_index_split_and_concat(void)
 
     ft_tree_dispose(&without_both);
     ft_tree_dispose(&without_front);
+    ft_tree_dispose(&replaced);
     ft_tree_dispose(&joined);
     ft_tree_dispose(&split.left);
     ft_tree_dispose(&split.right);
@@ -694,6 +708,38 @@ static void test_measure_locate_and_split(void)
     REQUIRE(measure_before == 8);
     REQUIRE(found_value == -1);
 
+    ft_value_type int_type;
+    ft_value_type_init(&int_type, sizeof(int));
+    ft_measure_policy sum_measure;
+    init_int_sum_measure(&sum_measure);
+    ft_tree_policy sum_policy;
+    sum_policy.value = int_type;
+    sum_policy.measure = sum_measure;
+
+    ft_tree sum_tree;
+    REQUIRE_STATUS(ft_tree_init(&sum_tree, &sum_policy), FT_STATUS_OK);
+    for (int value = 1; value != 6; ++value) {
+        ft_tree next;
+        REQUIRE_STATUS(ft_tree_push_back(&sum_tree, &value, &next), FT_STATUS_OK);
+        ft_tree_dispose(&sum_tree);
+        sum_tree = next;
+    }
+
+    int sum = 0;
+    REQUIRE_STATUS(ft_tree_measure(&sum_tree, &sum), FT_STATUS_OK);
+    REQUIRE(sum == 15);
+    int large = 30;
+    ft_tree changed_sum;
+    REQUIRE_STATUS(ft_tree_set_at(&sum_tree, 2, &large, &changed_sum), FT_STATUS_OK);
+    sum = 0;
+    REQUIRE_STATUS(ft_tree_measure(&changed_sum, &sum), FT_STATUS_OK);
+    REQUIRE(sum == 42);
+    int changed_value = -1;
+    REQUIRE_STATUS(ft_tree_at(&changed_sum, 2, &changed_value), FT_STATUS_OK);
+    REQUIRE(changed_value == 30);
+
+    ft_tree_dispose(&changed_sum);
+    ft_tree_dispose(&sum_tree);
     ft_tree_dispose(&left);
     ft_tree_dispose(&right);
     ft_tree_dispose(&tree);

@@ -21,7 +21,7 @@ line information, and exits non-zero if any test increments the failure count. A
   threads.
 - `reversible deque` checks logical reversal, endpoint edits, mixed-orientation concat, split/rejoin,
   set/insert/remove, persistence, and traversal.
-- `tree endpoint/index/split/concat` covers the generic tree/deque surface.
+- `tree endpoint/index/split/concat` covers the generic tree/deque surface, including indexed replacement.
 - `lazy middle force paths` exercises memoized middle publication through reads, pops, split, concat, traversal,
   and disposal.
 - `measure locate and split` covers size and custom measure-guided navigation.

@@ -1640,6 +1640,221 @@ static ft_status ft_element_copy_leaf_at(
     return FT_STATUS_OUT_OF_RANGE;
 }
 
+static void ft_elements_dispose(const ft_tree_policy* policy, ft_element* elements, size_t count)
+{
+    for (size_t index = 0; index != count; ++index) {
+        ft_element_dispose(policy, &elements[index]);
+    }
+}
+
+static ft_status ft_element_set_leaf(
+    const ft_tree_policy* policy,
+    const ft_element* element,
+    size_t index,
+    const void* value,
+    ft_element* result)
+{
+    if (index >= element->leaf_count) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    if (element->kind == FT_ELEMENT_LEAF) {
+        return ft_element_init_leaf(policy, value, result);
+    }
+
+    ft_element children[3];
+    size_t child_count = 0;
+    for (size_t child = 0; child != element->as.node->child_count; ++child) {
+        ft_status status = ft_element_clone(policy, &element->as.node->children[child], &children[child_count]);
+        if (status != FT_STATUS_OK) {
+            ft_elements_dispose(policy, children, child_count);
+            return status;
+        }
+
+        ++child_count;
+    }
+
+    for (size_t child = 0; child != child_count; ++child) {
+        if (index < children[child].leaf_count) {
+            ft_element replacement;
+            ft_status status = ft_element_set_leaf(policy, &children[child], index, value, &replacement);
+            if (status == FT_STATUS_OK) {
+                ft_element_dispose(policy, &children[child]);
+                children[child] = replacement;
+                status = ft_element_init_node(policy, children, child_count, result);
+            }
+
+            ft_elements_dispose(policy, children, child_count);
+            return status;
+        }
+
+        index -= children[child].leaf_count;
+    }
+
+    ft_elements_dispose(policy, children, child_count);
+    return FT_STATUS_OUT_OF_RANGE;
+}
+
+static ft_status ft_clone_elements(
+    const ft_tree_policy* policy,
+    const ft_element* source,
+    size_t count,
+    ft_element* destination)
+{
+    for (size_t index = 0; index != count; ++index) {
+        ft_status status = ft_element_clone(policy, &source[index], &destination[index]);
+        if (status != FT_STATUS_OK) {
+            ft_elements_dispose(policy, destination, index);
+            return status;
+        }
+    }
+
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_replace_leaf_in_elements(
+    const ft_tree_policy* policy,
+    ft_element* elements,
+    size_t count,
+    size_t index,
+    const void* value)
+{
+    for (size_t element_index = 0; element_index != count; ++element_index) {
+        if (index < elements[element_index].leaf_count) {
+            ft_element replacement;
+            ft_status status = ft_element_set_leaf(policy, &elements[element_index], index, value, &replacement);
+            if (status != FT_STATUS_OK) {
+                return status;
+            }
+
+            ft_element_dispose(policy, &elements[element_index]);
+            elements[element_index] = replacement;
+            return FT_STATUS_OK;
+        }
+
+        index -= elements[element_index].leaf_count;
+    }
+
+    return FT_STATUS_OUT_OF_RANGE;
+}
+
+static ft_status ft_rep_set_leaf(
+    const ft_tree_policy* policy,
+    const ft_tree_rep* rep,
+    size_t index,
+    const void* value,
+    ft_tree_rep** result)
+{
+    if (index >= rep->leaf_count) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    if (rep->kind == FT_REP_SINGLE) {
+        ft_element replacement;
+        ft_status status = ft_element_set_leaf(policy, &rep->as.single, index, value, &replacement);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_rep_create_single(policy, &replacement, result);
+        ft_element_dispose(policy, &replacement);
+        return status;
+    }
+
+    if (rep->kind != FT_REP_DEEP) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    size_t offset = index;
+    size_t prefix_leaf_count = 0;
+    ft_status status = ft_count_element_array(rep->as.deep.prefix, rep->as.deep.prefix_count, &prefix_leaf_count);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (offset < prefix_leaf_count) {
+        ft_element prefix[4];
+        status = ft_clone_elements(policy, rep->as.deep.prefix, rep->as.deep.prefix_count, prefix);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_replace_leaf_in_elements(policy, prefix, rep->as.deep.prefix_count, offset, value);
+        if (status == FT_STATUS_OK) {
+            status = ft_rep_create_deep_with_middle(
+                policy,
+                prefix,
+                rep->as.deep.prefix_count,
+                rep->as.deep.middle,
+                rep->as.deep.suffix,
+                rep->as.deep.suffix_count,
+                result);
+        }
+
+        ft_elements_dispose(policy, prefix, rep->as.deep.prefix_count);
+        return status;
+    }
+
+    offset -= prefix_leaf_count;
+    const size_t middle_leaf_count = rep->as.deep.middle->leaf_count;
+    if (offset < middle_leaf_count) {
+        ft_tree_rep* middle = NULL;
+        status = ft_middle_force(policy, rep->as.deep.middle, &middle);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        ft_tree_rep* next_middle = NULL;
+        status = ft_rep_set_leaf(policy, middle, offset, value, &next_middle);
+        if (status == FT_STATUS_OK) {
+            status = ft_rep_create_deep(
+                policy,
+                rep->as.deep.prefix,
+                rep->as.deep.prefix_count,
+                next_middle,
+                rep->as.deep.suffix,
+                rep->as.deep.suffix_count,
+                result);
+            ft_rep_release(policy, next_middle);
+        }
+
+        ft_rep_release(policy, middle);
+        return status;
+    }
+
+    offset -= middle_leaf_count;
+    size_t suffix_leaf_count = 0;
+    status = ft_count_element_array(rep->as.deep.suffix, rep->as.deep.suffix_count, &suffix_leaf_count);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (offset < suffix_leaf_count) {
+        ft_element suffix[4];
+        status = ft_clone_elements(policy, rep->as.deep.suffix, rep->as.deep.suffix_count, suffix);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_replace_leaf_in_elements(policy, suffix, rep->as.deep.suffix_count, offset, value);
+        if (status == FT_STATUS_OK) {
+            status = ft_rep_create_deep_with_middle(
+                policy,
+                rep->as.deep.prefix,
+                rep->as.deep.prefix_count,
+                rep->as.deep.middle,
+                suffix,
+                rep->as.deep.suffix_count,
+                result);
+        }
+
+        ft_elements_dispose(policy, suffix, rep->as.deep.suffix_count);
+        return status;
+    }
+
+    return FT_STATUS_OUT_OF_RANGE;
+}
+
 static ft_status ft_rep_copy_leaf_at(
     const ft_tree_policy* policy,
     const ft_tree_rep* rep,
@@ -2176,6 +2391,27 @@ ft_status ft_tree_split_at(const ft_tree* tree, size_t index, ft_tree_split_resu
 
     result->left = left;
     result->right = rest;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_tree_set_at(const ft_tree* tree, size_t index, const void* value, ft_tree* result)
+{
+    if (!ft_tree_is_valid(tree) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (index >= tree->rep->leaf_count) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    ft_tree_rep* rep = NULL;
+    ft_status status = ft_rep_set_leaf(tree->policy, tree->rep, index, value, &rep);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    result->policy = tree->policy;
+    result->rep = rep;
     return FT_STATUS_OK;
 }
 

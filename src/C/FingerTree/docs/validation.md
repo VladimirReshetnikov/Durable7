@@ -53,7 +53,7 @@ The bootstrap test executable `fingertree_c_tests` is registered as `fingertree_
 
 The executable covers:
 
-- endpoint, index, split, concat, and persistence behavior for the generic tree/deque surface;
+- endpoint, index, indexed replacement, split, concat, and persistence behavior for the generic tree/deque surface;
 - lazy middle force paths through boundary pop, measure reads, indexing, traversal, split, concat, and disposal;
 - size-measure `locate` and measure-guided split behavior;
 - concurrent shared-snapshot copy/read/update/dispose behavior over atomic node and tree reference counts;

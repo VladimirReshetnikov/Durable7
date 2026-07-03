@@ -13,7 +13,8 @@ finger-tree core.
 The C workspace is intentionally dependency-light: the library is ordinary C, builds as a static library, and uses
 a small local C test executable registered with CTest. The core preserves immutable structural sharing through
 atomic reference-counted tree reps, shared lazy middle cells, lazy deep-measure publication, digits, 2/3 nodes,
-concatenation, split, locate, and endpoint operations. The related C-facing surfaces currently included are:
+concatenation, split, locate, indexed replacement, and endpoint operations. The related C-facing surfaces currently
+included are:
 
 - `ft_persistent_deque`, an alias over the size-measured tree;
 - `ft_reversible_deque`, an orientation-aware persistent deque with O(1) `reverse`, concat, split, and indexed

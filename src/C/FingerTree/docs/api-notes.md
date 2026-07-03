@@ -21,8 +21,8 @@ rather than C++ templates:
   resulting middle measure without forcing; pop cells force only when a later operation needs the repaired
   middle or its measure.
 
-`ft_tree` is immutable. Operations such as `ft_tree_push_back`, `ft_tree_concat`, `ft_tree_insert_at`, and
-`ft_tree_remove_at` return new handles and leave their inputs valid. Handles must be released with
+`ft_tree` is immutable. Operations such as `ft_tree_push_back`, `ft_tree_concat`, `ft_tree_set_at`,
+`ft_tree_insert_at`, and `ft_tree_remove_at` return new handles and leave their inputs valid. Handles must be released with
 `ft_tree_dispose`. Related wrappers (`ft_sorted_set`, `ft_sorted_multiset`, and `ft_text_rope`) follow the same
 persistent-update convention.
 
@@ -31,8 +31,8 @@ persistent-update convention.
 Implemented in this checkpoint:
 
 - generic measured-tree core with reference-counted immutable reps, digits, 2/3 nodes, split, locate, concat,
-  endpoint operations, indexing, traversal, lazy middle publication, lazy deep-measure publication, and atomic
-  shared-snapshot reference counts;
+  endpoint operations, indexing, indexed replacement, traversal, lazy middle publication, lazy deep-measure
+  publication, and atomic shared-snapshot reference counts;
 - size-measured persistent deque alias;
 - reversible deque with an orientation-aware immutable tree, O(1) reverse, persistent endpoint/index/edit
   operations, concat, split, and traversal. Deep reps and grouping nodes carry reversal bits so mixed-orientation

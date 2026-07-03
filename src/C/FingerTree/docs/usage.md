@@ -124,7 +124,14 @@ for (int value = 0; value != 4; ++value) {
 
 int second = 0;
 status = ft_persistent_deque_at(&deque, 1, &second);
+
+int replacement = 42;
+ft_persistent_deque updated;
+status = ft_persistent_deque_set_at(&deque, 1, &replacement, &updated);
 ft_persistent_deque_dispose(&deque);
+if (status == FT_STATUS_OK) {
+    ft_persistent_deque_dispose(&updated);
+}
 return status;
 ```
 

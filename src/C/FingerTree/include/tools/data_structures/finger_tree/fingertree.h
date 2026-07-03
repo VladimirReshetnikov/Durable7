@@ -81,6 +81,7 @@ ft_status ft_tree_pop_front(const ft_tree* tree, void* value, ft_tree* rest);
 ft_status ft_tree_pop_back(const ft_tree* tree, void* value, ft_tree* rest);
 ft_status ft_tree_concat(const ft_tree* left, const ft_tree* right, ft_tree* result);
 ft_status ft_tree_split_at(const ft_tree* tree, size_t index, ft_tree_split_result* result);
+ft_status ft_tree_set_at(const ft_tree* tree, size_t index, const void* value, ft_tree* result);
 ft_status ft_tree_insert_at(const ft_tree* tree, size_t index, const void* value, ft_tree* result);
 ft_status ft_tree_remove_at(const ft_tree* tree, size_t index, ft_tree* result);
 
@@ -119,6 +120,7 @@ typedef ft_tree ft_persistent_deque;
 #define ft_persistent_deque_pop_back ft_tree_pop_back
 #define ft_persistent_deque_concat ft_tree_concat
 #define ft_persistent_deque_split_at ft_tree_split_at
+#define ft_persistent_deque_set_at ft_tree_set_at
 #define ft_persistent_deque_insert_at ft_tree_insert_at
 #define ft_persistent_deque_remove_at ft_tree_remove_at
 #define ft_persistent_deque_visit ft_tree_visit
