@@ -32,8 +32,8 @@ cover:
   enqueue/meld/dequeue paths;
 - closed interval overlap, containment, coalescing, cached maximum-high measures, and shared-storage
   insert/remove paths;
-- positional rope edits and subtree sharing, measured-rope cached-measure navigation and subtree sharing, text line
-  helpers, and builder output.
+- chunked positional rope edits, cached length measures, chunk/subtree sharing, measured-rope cached-measure
+  navigation and subtree sharing, text line helpers, and builder output.
 
 The current validation proves structurally shared Rust storage across the public FingerTree-family facades and the
 observable semantic checkpoint behavior, not final C#/C++ lazy-spine asymptotic parity for the whole crate.

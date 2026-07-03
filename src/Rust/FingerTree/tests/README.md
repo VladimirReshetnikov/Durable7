@@ -23,4 +23,5 @@ Coverage groups:
   updates;
 - `interval_tree.rs`: closed intervals, overlap queries, cached maximum-high measures, coalescing, and
   shared-storage updates;
-- `rope.rs`: structurally shared positional and measured ropes, text helpers, and builder.
+- `rope.rs`: chunked positional rope storage over measured-tree length caches, measured ropes, text helpers, and
+  builder.
