@@ -147,6 +147,22 @@ tests, and benchmark harness status:
 - [C++ FingerTree validation](../../src/Cpp/FingerTree/docs/validation.md)
 - [C++ FingerTree tests](../../src/Cpp/FingerTree/tests/README.md)
 
+Both FingerTree native workspaces also provide host-agnostic `ninja-debug`, `ninja-release`, and
+`ninja-asan` presets. On hosts with `cmake`, `ninja`, and a GCC/Clang-style sanitizer-capable compiler on
+`PATH`, use `ninja-asan` to catch lifetime and undefined-behavior issues:
+
+```powershell
+cd C:\DataStructures\src\C\FingerTree
+cmake --preset ninja-asan
+cmake --build --preset ninja-asan
+ctest --preset ninja-asan --output-on-failure
+
+cd C:\DataStructures\src\Cpp\FingerTree
+cmake --preset ninja-asan
+cmake --build --preset ninja-asan
+ctest --preset ninja-asan --output-on-failure
+```
+
 ## Haskell Workspaces
 
 ```powershell
@@ -169,8 +185,9 @@ cd C:\DataStructures\src\Kotlin
 ```
 
 The Kotlin build script compiles each workspace with the Kotlin command-line compiler and runs
-dependency-free executable tests. If no Java 21+ runtime is on `PATH`, it bootstraps a local Temurin
-JDK 21 under `src/Kotlin/build/tools`; it also downloads and verifies the Kotlin compiler archive.
+dependency-free executable tests. If no Java 21+ runtime is on `PATH` on Windows, it bootstraps a local Temurin
+JDK 21 under `src/Kotlin/build/tools`; on non-Windows hosts, provide Java 21+ through `PATH` or `JAVA_HOME`.
+It also downloads and verifies the Kotlin compiler archive.
 Local guides:
 
 - [Kotlin HAMT validation](../../src/Kotlin/Hamt/docs/validation.md)

@@ -1028,14 +1028,14 @@ public readonly struct Int1024 :
         overflow = false;
         if ((style & NumberStyles.AllowHexSpecifier) != 0)
             return TryParseHex(text, style, out value, out overflow);
-        if (style != NumberStyles.Integer)
+        if (!NumericParseHelpers.TryNormalizeDecimalText(text, style, out text))
             return false;
 
-        text = text.Trim();
         if (text.IsEmpty) return false;
         bool neg = false;
 
-        if (NumericParseHelpers.TryStripLeadingSign(
+        if ((style & NumberStyles.AllowLeadingSign) != 0 &&
+            NumericParseHelpers.TryStripLeadingSign(
                 text,
                 NumberFormatInfo.GetInstance(provider),
                 out ReadOnlySpan<char> unsigned,
@@ -1046,7 +1046,7 @@ public readonly struct Int1024 :
         }
 
         if (text.IsEmpty) return false;
-        if (!UInt1024.TryParse(text, NumberStyles.Integer, provider, out UInt1024 u))
+        if (!UInt1024.TryParse(text, NumberStyles.None, provider, out UInt1024 u))
         {
             overflow = IsAllDecimalDigits(text);
             return false;
@@ -1112,9 +1112,8 @@ public readonly struct Int1024 :
     {
         value = Zero;
         overflow = false;
-        if ((style & ~NumberStyles.AllowHexSpecifier) != 0)
+        if (!NumericParseHelpers.TryNormalizeHexText(text, style, out text))
             return false;
-        text = text.Trim();
         if (text.IsEmpty) return false;
         if (text.Length > 256)
         {

@@ -1,5 +1,8 @@
 package tools.datastructures.fingertree
 
+internal fun isValidRange(start: Int, count: Int, size: Int): Boolean =
+    start >= 0 && count >= 0 && start <= size && count <= size - start
+
 public interface MeasurePolicy<T, M> {
     public val empty: M
     public fun measure(element: T): M
@@ -133,7 +136,7 @@ public class PersistentDeque<T> private constructor(
     }
 
     public fun splitRange(start: Int, count: Int): DequeRangeSplit<T>? {
-        if (start < 0 || count < 0 || start + count > size) {
+        if (!isValidRange(start, count, size)) {
             return null
         }
 

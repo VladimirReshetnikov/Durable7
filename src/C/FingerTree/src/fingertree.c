@@ -5138,6 +5138,12 @@ static ft_status ft_sorted_map_prepare_result(const ft_sorted_map* map, ft_sorte
         map->compare_context);
 }
 
+static void ft_sorted_map_rebind(ft_sorted_map* map)
+{
+    map->policy.value.context = map->entry_context;
+    map->tree.policy = &map->policy;
+}
+
 ft_status ft_sorted_map_init(
     ft_sorted_map* map,
     const ft_value_type* key_type,
@@ -5184,8 +5190,19 @@ ft_status ft_sorted_map_copy(const ft_sorted_map* source, ft_sorted_map* destina
         return status;
     }
 
-    destination->tree.policy = &destination->policy;
+    ft_sorted_map_rebind(destination);
     return FT_STATUS_OK;
+}
+
+void ft_sorted_map_move(ft_sorted_map* destination, ft_sorted_map* source)
+{
+    if (destination == NULL || source == NULL || destination == source) {
+        return;
+    }
+
+    *destination = *source;
+    ft_sorted_map_rebind(destination);
+    (void)memset(source, 0, sizeof(*source));
 }
 
 void ft_sorted_map_dispose(ft_sorted_map* map)
@@ -5373,7 +5390,7 @@ ft_status ft_sorted_map_set(
         return status;
     }
 
-    result->tree.policy = &result->policy;
+    ft_sorted_map_rebind(result);
     return FT_STATUS_OK;
 }
 
@@ -5419,7 +5436,7 @@ ft_status ft_sorted_map_try_insert(
         return status;
     }
 
-    result->tree.policy = &result->policy;
+    ft_sorted_map_rebind(result);
     *inserted = true;
     return FT_STATUS_OK;
 }
@@ -5476,7 +5493,7 @@ ft_status ft_sorted_map_remove(
         return status;
     }
 
-    result->tree.policy = &result->policy;
+    ft_sorted_map_rebind(result);
     return FT_STATUS_OK;
 }
 
@@ -5653,6 +5670,12 @@ static ft_status ft_rope_wrap_tree(const ft_rope* source, ft_tree tree, ft_rope*
     return FT_STATUS_OK;
 }
 
+static void ft_rope_rebind(ft_rope* rope)
+{
+    rope->policy.value.context = rope->chunk_context;
+    rope->tree.policy = &rope->policy;
+}
+
 static bool ft_rope_length_reaches(const void* measure, void* context)
 {
     return *(const size_t*)measure >= *(const size_t*)context;
@@ -5748,8 +5771,19 @@ ft_status ft_rope_copy(const ft_rope* source, ft_rope* destination)
         return status;
     }
 
-    destination->tree.policy = &destination->policy;
+    ft_rope_rebind(destination);
     return FT_STATUS_OK;
+}
+
+void ft_rope_move(ft_rope* destination, ft_rope* source)
+{
+    if (destination == NULL || source == NULL || destination == source) {
+        return;
+    }
+
+    *destination = *source;
+    ft_rope_rebind(destination);
+    (void)memset(source, 0, sizeof(*source));
 }
 
 void ft_rope_dispose(ft_rope* rope)
@@ -5977,7 +6011,7 @@ ft_status ft_rope_concat(const ft_rope* left, const ft_rope* right, ft_rope* res
         return status;
     }
 
-    result->tree.policy = &result->policy;
+    ft_rope_rebind(result);
     result->tree.rep = rep;
     return FT_STATUS_OK;
 }
@@ -6383,6 +6417,13 @@ static ft_status ft_measured_rope_wrap_tree(
     return FT_STATUS_OK;
 }
 
+static void ft_measured_rope_rebind(ft_measured_rope* rope)
+{
+    rope->policy.value.context = rope->chunk_context;
+    rope->policy.measure.context = rope->chunk_context;
+    rope->tree.policy = &rope->policy;
+}
+
 static bool ft_measured_rope_count_reaches(const void* measure, void* context)
 {
     return *ft_measured_rope_pair_length_const(measure) >= *(const size_t*)context;
@@ -6499,8 +6540,19 @@ ft_status ft_measured_rope_copy(const ft_measured_rope* source, ft_measured_rope
         return status;
     }
 
-    destination->tree.policy = &destination->policy;
+    ft_measured_rope_rebind(destination);
     return FT_STATUS_OK;
+}
+
+void ft_measured_rope_move(ft_measured_rope* destination, ft_measured_rope* source)
+{
+    if (destination == NULL || source == NULL || destination == source) {
+        return;
+    }
+
+    *destination = *source;
+    ft_measured_rope_rebind(destination);
+    (void)memset(source, 0, sizeof(*source));
 }
 
 void ft_measured_rope_dispose(ft_measured_rope* rope)
@@ -6830,7 +6882,7 @@ ft_status ft_measured_rope_concat(
         return status;
     }
 
-    result->tree.policy = &result->policy;
+    ft_measured_rope_rebind(result);
     result->tree.rep = rep;
     return FT_STATUS_OK;
 }
@@ -7206,6 +7258,12 @@ static ft_status ft_priority_queue_configure(
     return FT_STATUS_OK;
 }
 
+static void ft_priority_queue_rebind(ft_priority_queue* queue)
+{
+    queue->policy.value.context = queue->entry_context;
+    queue->tree.policy = &queue->policy;
+}
+
 static ft_status ft_priority_queue_upper_bound(const ft_priority_queue* queue, const ft_priority_entry* value, size_t* index)
 {
     ft_priority_entry current;
@@ -7283,9 +7341,20 @@ ft_status ft_priority_queue_copy(const ft_priority_queue* source, ft_priority_qu
         return status;
     }
 
-    destination->tree.policy = &destination->policy;
+    ft_priority_queue_rebind(destination);
     destination->next_ordinal = source->next_ordinal;
     return FT_STATUS_OK;
+}
+
+void ft_priority_queue_move(ft_priority_queue* destination, ft_priority_queue* source)
+{
+    if (destination == NULL || source == NULL || destination == source) {
+        return;
+    }
+
+    *destination = *source;
+    ft_priority_queue_rebind(destination);
+    (void)memset(source, 0, sizeof(*source));
 }
 
 void ft_priority_queue_dispose(ft_priority_queue* queue)
@@ -7356,7 +7425,7 @@ ft_status ft_priority_queue_push(
         return status;
     }
 
-    result->tree.policy = &result->policy;
+    ft_priority_queue_rebind(result);
     result->next_ordinal = queue->next_ordinal + 1;
     return FT_STATUS_OK;
 }
@@ -7433,7 +7502,7 @@ ft_status ft_priority_queue_try_pop(
         return status;
     }
 
-    rest->tree.policy = &rest->policy;
+    ft_priority_queue_rebind(rest);
     rest->next_ordinal = queue->next_ordinal;
     return FT_STATUS_OK;
 }
@@ -7453,6 +7522,11 @@ static int ft_interval_i64_compare(const void* left, const void* right, void* co
 static bool ft_interval_i64_valid(ft_interval_i64 interval)
 {
     return interval.low <= interval.high;
+}
+
+static void ft_interval_tree_i64_rebind(ft_interval_tree_i64* tree)
+{
+    tree->intervals.tree.policy = &tree->policy;
 }
 
 static bool ft_interval_i64_overlaps(ft_interval_i64 left, ft_interval_i64 right)
@@ -7489,8 +7563,19 @@ ft_status ft_interval_tree_i64_copy(const ft_interval_tree_i64* source, ft_inter
         return status;
     }
 
-    destination->intervals.tree.policy = &destination->policy;
+    ft_interval_tree_i64_rebind(destination);
     return FT_STATUS_OK;
+}
+
+void ft_interval_tree_i64_move(ft_interval_tree_i64* destination, ft_interval_tree_i64* source)
+{
+    if (destination == NULL || source == NULL || destination == source) {
+        return;
+    }
+
+    *destination = *source;
+    ft_interval_tree_i64_rebind(destination);
+    (void)memset(source, 0, sizeof(*source));
 }
 
 void ft_interval_tree_i64_dispose(ft_interval_tree_i64* tree)
@@ -7532,7 +7617,7 @@ ft_status ft_interval_tree_i64_insert(
         return status;
     }
 
-    result->intervals.tree.policy = &result->policy;
+    ft_interval_tree_i64_rebind(result);
     return FT_STATUS_OK;
 }
 
@@ -7556,7 +7641,7 @@ ft_status ft_interval_tree_i64_remove_one(
         return status;
     }
 
-    result->intervals.tree.policy = &result->policy;
+    ft_interval_tree_i64_rebind(result);
     return FT_STATUS_OK;
 }
 
@@ -7766,6 +7851,13 @@ static ft_status ft_interval_tree_prepare_result(const ft_interval_tree* source,
         source->compare_context);
 }
 
+static void ft_interval_tree_rebind(ft_interval_tree* tree)
+{
+    tree->policy.value.context = tree->interval_context;
+    tree->intervals.tree.policy = &tree->policy;
+    tree->intervals.compare_context = tree->interval_context;
+}
+
 ft_status ft_interval_tree_init(
     ft_interval_tree* tree,
     const ft_value_type* endpoint_type,
@@ -7814,9 +7906,19 @@ ft_status ft_interval_tree_copy(const ft_interval_tree* source, ft_interval_tree
         return status;
     }
 
-    destination->intervals.tree.policy = &destination->policy;
-    destination->intervals.compare_context = destination->interval_context;
+    ft_interval_tree_rebind(destination);
     return FT_STATUS_OK;
+}
+
+void ft_interval_tree_move(ft_interval_tree* destination, ft_interval_tree* source)
+{
+    if (destination == NULL || source == NULL || destination == source) {
+        return;
+    }
+
+    *destination = *source;
+    ft_interval_tree_rebind(destination);
+    (void)memset(source, 0, sizeof(*source));
 }
 
 void ft_interval_tree_dispose(ft_interval_tree* tree)
@@ -7870,8 +7972,7 @@ ft_status ft_interval_tree_insert(
         return status;
     }
 
-    result->intervals.tree.policy = &result->policy;
-    result->intervals.compare_context = result->interval_context;
+    ft_interval_tree_rebind(result);
     return FT_STATUS_OK;
 }
 
@@ -7901,8 +8002,7 @@ ft_status ft_interval_tree_remove_one(
         return status;
     }
 
-    result->intervals.tree.policy = &result->policy;
-    result->intervals.compare_context = result->interval_context;
+    ft_interval_tree_rebind(result);
     return FT_STATUS_OK;
 }
 
@@ -8079,6 +8179,15 @@ ft_status ft_text_rope_copy(const ft_text_rope* source, ft_text_rope* destinatio
     }
 
     return ft_rope_copy(&source->rope, &destination->rope);
+}
+
+void ft_text_rope_move(ft_text_rope* destination, ft_text_rope* source)
+{
+    if (destination == NULL || source == NULL || destination == source) {
+        return;
+    }
+
+    ft_rope_move(&destination->rope, &source->rope);
 }
 
 void ft_text_rope_dispose(ft_text_rope* rope)

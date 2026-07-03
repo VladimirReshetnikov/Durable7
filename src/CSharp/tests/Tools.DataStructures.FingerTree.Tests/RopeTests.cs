@@ -207,6 +207,10 @@ public sealed class RopeTests
         Assert.Throws<ArgumentOutOfRangeException>(() => rope[3]);
         Assert.Throws<ArgumentOutOfRangeException>(() => rope.Insert(4, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => rope.RemoveRange(2, 5));
+        Assert.Throws<ArgumentOutOfRangeException>(() => rope.RemoveRange(2, int.MaxValue));
+        Assert.Throws<ArgumentOutOfRangeException>(() => rope.Slice(2, int.MaxValue));
+        Assert.Throws<ArgumentOutOfRangeException>(() => rope.GetRange(2, int.MaxValue));
+        Assert.Throws<ArgumentOutOfRangeException>(() => rope.CopyTo(2, new int[2]));
         Assert.Throws<ArgumentNullException>(() => rope.Concat(null!));
         Assert.Throws<ArgumentNullException>(() => rope.InsertRange(0, (IEnumerable<int>)null!));
 

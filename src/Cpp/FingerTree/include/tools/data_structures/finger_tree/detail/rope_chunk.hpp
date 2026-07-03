@@ -41,7 +41,8 @@ public:
             throw std::invalid_argument("rope chunk storage cannot be null");
         }
 
-        return rope_chunk{std::move(storage), 0, storage->size()};
+        auto size = storage->size();
+        return rope_chunk{std::move(storage), 0, size};
     }
 
     [[nodiscard]] static rope_chunk from_storage(storage_pointer storage, size_type offset, size_type length)

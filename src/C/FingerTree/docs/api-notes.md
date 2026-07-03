@@ -22,9 +22,17 @@ rather than C++ templates:
   middle or its measure.
 
 `ft_tree` is immutable. Operations such as `ft_tree_push_back`, `ft_tree_concat`, `ft_tree_set_at`,
-`ft_tree_insert_at`, and `ft_tree_remove_at` return new handles and leave their inputs valid. Handles must be released with
-`ft_tree_dispose`. Related wrappers (`ft_sorted_set`, `ft_sorted_multiset`, and `ft_text_rope`) follow the same
-persistent-update convention.
+`ft_tree_insert_at`, and `ft_tree_remove_at` return new handles and leave their inputs valid. Handles must be
+released with `ft_tree_dispose`. Wrappers that reference caller-owned policies (`ft_sorted_set` and
+`ft_sorted_multiset`) follow the same value-handle convention as long as the external policy outlives all handles.
+Self-owned facades (`ft_sorted_map`, `ft_rope`, `ft_measured_rope`, `ft_priority_queue`,
+`ft_interval_tree_i64`, `ft_interval_tree`, and `ft_text_rope`) embed policy state referenced by their nested
+tree handles; use their `ft_*_move` helpers when relocating an initialized value into another variable.
+
+Most allocation failures are reported as `FT_STATUS_NO_MEMORY`. The current `ft_copy_fn` callback contract is
+void-returning, so allocations performed inside library-provided deep-copy callbacks for compound facade values
+cannot be reported through `ft_status`; those callbacks terminate the process on allocation failure. Caller-supplied
+copy callbacks should either complete successfully or apply their own fatal/allocation policy consistently.
 
 ## Current Scope
 

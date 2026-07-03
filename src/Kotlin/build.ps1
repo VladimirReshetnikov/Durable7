@@ -11,6 +11,8 @@ $Root = $PSScriptRoot
 $BuildRoot = Join-Path $Root "build"
 $ToolsRoot = Join-Path $BuildRoot "tools"
 $DownloadsRoot = Join-Path $ToolsRoot "downloads"
+$IsWindowsHost = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+    [System.Runtime.InteropServices.OSPlatform]::Windows)
 
 New-Item -ItemType Directory -Force $DownloadsRoot | Out-Null
 
@@ -67,6 +69,10 @@ function Get-JavaToolchain {
         return @{ Java = $java.Source; JavaHome = $null }
     }
 
+    if (-not $IsWindowsHost) {
+        throw "Java 21+ was not found on PATH. Install a JDK 21+ runtime or set PATH/JAVA_HOME before running this script on non-Windows hosts."
+    }
+
     $jdkZip = Join-Path $DownloadsRoot "temurin-jdk-21-windows-x64.zip"
     $jdkRoot = Join-Path $ToolsRoot "jdk"
     Invoke-Download "https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jdk/hotspot/normal/eclipse" $jdkZip
@@ -88,6 +94,9 @@ function Get-KotlinCompiler {
 
     $compilerZip = Join-Path $DownloadsRoot "kotlin-compiler-$KotlinVersion.zip"
     $compilerRoot = Join-Path $ToolsRoot "kotlin"
+    $compilerCommand = if ($IsWindowsHost) { "kotlinc.bat" } else { "kotlinc" }
+    $compilerBin = Join-Path (Join-Path $compilerRoot "kotlinc") "bin"
+    $compilerPath = Join-Path $compilerBin $compilerCommand
     Invoke-Download "https://github.com/JetBrains/kotlin/releases/download/v$KotlinVersion/kotlin-compiler-$KotlinVersion.zip" $compilerZip
 
     $actualHash = (Get-FileHash -LiteralPath $compilerZip -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -95,11 +104,10 @@ function Get-KotlinCompiler {
         throw "Unexpected Kotlin compiler SHA256: $actualHash"
     }
 
-    Expand-ZipIfMissing $compilerZip $compilerRoot (Join-Path $compilerRoot "kotlinc\bin\kotlinc.bat")
+    Expand-ZipIfMissing $compilerZip $compilerRoot $compilerPath
 
-    $kotlinc = Join-Path $compilerRoot "kotlinc\bin\kotlinc.bat"
-    if (-not (Test-Path -LiteralPath $kotlinc)) {
-        throw "Kotlin compiler was not found at $kotlinc"
+    if (-not (Test-Path -LiteralPath $compilerPath)) {
+        throw "Kotlin compiler was not found at $compilerPath"
     }
 
     if ($JavaHome) {
@@ -107,7 +115,7 @@ function Get-KotlinCompiler {
         $env:PATH = "$(Join-Path $JavaHome "bin");$env:PATH"
     }
 
-    return $kotlinc
+    return $compilerPath
 }
 
 function Invoke-KotlinWorkspaceTests {

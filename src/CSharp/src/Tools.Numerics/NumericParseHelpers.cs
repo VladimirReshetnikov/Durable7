@@ -14,6 +14,88 @@ namespace Tools.Numerics;
 /// </remarks>
 internal static class NumericParseHelpers
 {
+    private const NumberStyles SupportedDecimalStyles =
+        NumberStyles.AllowLeadingWhite |
+        NumberStyles.AllowTrailingWhite |
+        NumberStyles.AllowLeadingSign;
+
+    private const NumberStyles SupportedHexStyles =
+        NumberStyles.AllowLeadingWhite |
+        NumberStyles.AllowTrailingWhite |
+        NumberStyles.AllowHexSpecifier;
+
+    /// <summary>
+    /// Applies the supported decimal whitespace policy for fixed-width integer parsing.
+    /// </summary>
+    /// <param name="text">The input text.</param>
+    /// <param name="style">The requested parse style.</param>
+    /// <param name="normalized">The span after any allowed whitespace was trimmed.</param>
+    /// <returns><see langword="true"/> when <paramref name="style"/> contains only supported decimal flags.</returns>
+    public static bool TryNormalizeDecimalText(
+        ReadOnlySpan<char> text,
+        NumberStyles style,
+        out ReadOnlySpan<char> normalized)
+    {
+        if ((style & ~SupportedDecimalStyles) != 0)
+        {
+            normalized = default;
+            return false;
+        }
+
+        normalized = TrimByStyle(text, style);
+        return true;
+    }
+
+    /// <summary>
+    /// Applies the supported hexadecimal whitespace policy for fixed-width integer parsing.
+    /// </summary>
+    /// <param name="text">The input text.</param>
+    /// <param name="style">The requested parse style.</param>
+    /// <param name="normalized">The span after any allowed whitespace was trimmed.</param>
+    /// <returns>
+    /// <see langword="true"/> when <paramref name="style"/> includes
+    /// <see cref="NumberStyles.AllowHexSpecifier"/> and no unsupported flags.
+    /// </returns>
+    public static bool TryNormalizeHexText(
+        ReadOnlySpan<char> text,
+        NumberStyles style,
+        out ReadOnlySpan<char> normalized)
+    {
+        if ((style & NumberStyles.AllowHexSpecifier) == 0 || (style & ~SupportedHexStyles) != 0)
+        {
+            normalized = default;
+            return false;
+        }
+
+        normalized = TrimByStyle(text, style);
+        return true;
+    }
+
+    private static ReadOnlySpan<char> TrimByStyle(ReadOnlySpan<char> text, NumberStyles style)
+    {
+        if ((style & NumberStyles.AllowLeadingWhite) != 0)
+            text = TrimStart(text);
+        if ((style & NumberStyles.AllowTrailingWhite) != 0)
+            text = TrimEnd(text);
+        return text;
+    }
+
+    private static ReadOnlySpan<char> TrimStart(ReadOnlySpan<char> text)
+    {
+        var start = 0;
+        while (start < text.Length && char.IsWhiteSpace(text[start]))
+            start++;
+        return text[start..];
+    }
+
+    private static ReadOnlySpan<char> TrimEnd(ReadOnlySpan<char> text)
+    {
+        var end = text.Length;
+        while (end > 0 && char.IsWhiteSpace(text[end - 1]))
+            end--;
+        return text[..end];
+    }
+
     /// <summary>
     /// Removes a culture-specific leading sign token when present.
     /// </summary>

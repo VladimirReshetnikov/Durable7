@@ -25,6 +25,35 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_MAKE_PROGRAM": "C:/Program Files/Microsoft Visual Studio/18/Insiders/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe"
       }
+    },
+    {
+      "name": "ninja-debug",
+      "displayName": "Ninja debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/ninja-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "ninja-release",
+      "displayName": "Ninja release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/ninja-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "ninja-asan",
+      "displayName": "Ninja ASan/UBSan debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/ninja-asan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
+      }
     }
   ],
   "buildPresets": [
@@ -35,6 +64,18 @@
     {
       "name": "msvc-release",
       "configurePreset": "msvc-release"
+    },
+    {
+      "name": "ninja-debug",
+      "configurePreset": "ninja-debug"
+    },
+    {
+      "name": "ninja-release",
+      "configurePreset": "ninja-release"
+    },
+    {
+      "name": "ninja-asan",
+      "configurePreset": "ninja-asan"
     }
   ],
   "testPresets": [
@@ -48,6 +89,27 @@
     {
       "name": "msvc-release",
       "configurePreset": "msvc-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "ninja-debug",
+      "configurePreset": "ninja-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "ninja-release",
+      "configurePreset": "ninja-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "ninja-asan",
+      "configurePreset": "ninja-asan",
       "output": {
         "outputOnFailure": true
       }

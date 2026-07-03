@@ -873,15 +873,15 @@ public readonly struct UInt512 :
         if ((style & NumberStyles.AllowHexSpecifier) != 0)
             return TryParseHex(text, style, out value, out overflow);
 
-        if (style != NumberStyles.Integer)
+        if (!NumericParseHelpers.TryNormalizeDecimalText(text, style, out text))
             return false;
 
         NumberFormatInfo numberFormat = NumberFormatInfo.GetInstance(provider);
-        text = text.Trim();
         if (text.IsEmpty) return false;
 
         bool isNegative = false;
-        if (NumericParseHelpers.TryStripLeadingSign(text, numberFormat, out ReadOnlySpan<char> unsigned, out isNegative))
+        if ((style & NumberStyles.AllowLeadingSign) != 0 &&
+            NumericParseHelpers.TryStripLeadingSign(text, numberFormat, out ReadOnlySpan<char> unsigned, out isNegative))
         {
             text = unsigned;
         }
@@ -932,9 +932,8 @@ public readonly struct UInt512 :
     {
         value = Zero;
         overflow = false;
-        if ((style & ~NumberStyles.AllowHexSpecifier) != 0)
+        if (!NumericParseHelpers.TryNormalizeHexText(text, style, out text))
             return false;
-        text = text.Trim();
         if (text.IsEmpty)
             return false;
 

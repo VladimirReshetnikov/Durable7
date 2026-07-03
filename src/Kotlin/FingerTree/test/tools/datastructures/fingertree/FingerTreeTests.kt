@@ -220,6 +220,24 @@ private fun ropesEditAndNavigateText() {
     checkEquals("xy\nz", builder.toTextRope().asString(), "builder")
 }
 
+private fun overflowingRangesAreRejected() {
+    val deque = PersistentDeque.from(listOf(1, 2, 3))
+    checkEquals(null, deque.splitRange(2, Int.MAX_VALUE), "deque overflow range")
+
+    val rope = Rope.from(listOf(1, 2, 3))
+    checkEquals(null, rope.removeRange(2, Int.MAX_VALUE), "rope overflow remove")
+    checkEquals(null, rope.slice(2, Int.MAX_VALUE), "rope overflow slice")
+
+    val bag = SortedBag.from(listOf(1, 2, 3))
+    checkEquals(null, bag.getRange(2, Int.MAX_VALUE), "bag overflow range")
+
+    val set = SortedSet.from(listOf(1, 2, 3))
+    checkEquals(null, set.getRange(2, Int.MAX_VALUE), "set overflow range")
+
+    val map = SortedMap.from(listOf(1 to "a", 2 to "b", 3 to "c"))
+    checkEquals(null, map.getRange(2, Int.MAX_VALUE), "map overflow range")
+}
+
 public fun main() {
     val tests = listOf(
         "dequePreservesSnapshots" to ::dequePreservesSnapshots,
@@ -232,6 +250,7 @@ public fun main() {
         "priorityQueueDequeuesStably" to ::priorityQueueDequeuesStably,
         "intervalTreeUsesClosedOverlapAndCoalesces" to ::intervalTreeUsesClosedOverlapAndCoalesces,
         "ropesEditAndNavigateText" to ::ropesEditAndNavigateText,
+        "overflowingRangesAreRejected" to ::overflowingRangesAreRejected,
     )
 
     for ((name, test) in tests) {

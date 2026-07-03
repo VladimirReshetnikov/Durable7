@@ -12,7 +12,8 @@ validation, stress, API, or benchmark-status claims. For API shape and practical
 
 ## Build Model
 
-The workspace uses CMake presets with Visual Studio's bundled Ninja. `CMakeLists.txt` defines the
+The workspace uses CMake presets. The `msvc-*` presets use Visual Studio's bundled Ninja by absolute path;
+the `ninja-*` presets use `cmake` and `ninja` from `PATH` for host-agnostic validation. `CMakeLists.txt` defines the
 header-first interface library `tools_data_structures_finger_tree` and registers the test executable
 `tests/fingertree_smoke_tests` when `FINGERTREE_BUILD_TESTS` is enabled.
 
@@ -56,6 +57,23 @@ can raise the value without editing source.
 
 The checked-in `vcpkg.json` is intentionally dependency-free today. Later milestones may add Catch2 through vcpkg
 once the dependency manager is intentionally introduced and wired into CMake.
+
+## Portable And Sanitizer Presets
+
+Use the portable Ninja presets on hosts with a suitable C++23 compiler and `ninja` on `PATH`:
+
+```powershell
+cmake --preset ninja-debug
+cmake --build --preset ninja-debug
+ctest --preset ninja-debug --output-on-failure
+
+cmake --preset ninja-asan
+cmake --build --preset ninja-asan
+ctest --preset ninja-asan --output-on-failure
+```
+
+`ninja-asan` enables AddressSanitizer and UndefinedBehaviorSanitizer flags for compilers that support the GCC-style
+sanitizer options. Prefer it for changes to ownership, persistent sharing, ropes, and lazy publication paths.
 
 ## Current Coverage
 

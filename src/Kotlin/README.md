@@ -20,10 +20,10 @@ Run the full Kotlin validation from this directory:
 .\build.ps1
 ```
 
-The build script bootstraps a local JDK 21 and the Kotlin 2.4.0 command-line compiler into
-`src/Kotlin/build/tools` when a suitable Java 21+ runtime is not already available, then compiles each
-workspace and runs its dependency-free executable tests. The `build` directory is ignored by the
-repository.
+The build script bootstraps a local Windows JDK 21 when a suitable Java 21+ runtime is not already available.
+On non-Windows hosts, put Java 21+ on `PATH` or set `JAVA_HOME` before running the script. The verified Kotlin
+2.4.0 command-line compiler is bootstrapped into `src/Kotlin/build/tools` on every host, then the script compiles
+each workspace and runs its dependency-free executable tests. The `build` directory is ignored by the repository.
 
 The FingerTree workspace intentionally starts as a semantic checkpoint rather than a final lazy
 finger-tree representation. It preserves immutable snapshot behavior and the public family surfaces;

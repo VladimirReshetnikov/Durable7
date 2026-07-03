@@ -12,7 +12,8 @@ with the [API notes](api-notes.md) and [usage guide](usage.md).
 
 ## Build Model
 
-The workspace uses CMake presets with Visual Studio's bundled Ninja. `CMakeLists.txt` builds the
+The workspace uses CMake presets. The `msvc-*` presets use Visual Studio's bundled Ninja by absolute path;
+the `ninja-*` presets use `cmake` and `ninja` from `PATH` for host-agnostic validation. `CMakeLists.txt` builds the
 `tools_data_structures_finger_tree_c` static library from `src/fingertree.c`, with these options enabled by
 default:
 
@@ -87,7 +88,21 @@ root after a release build:
 
 See the benchmark [README](../benchmarks/README.md) for workload names, output shape, and timing caveats.
 
-Both `msvc-debug` and `msvc-release` are expected to build warning-free under `/W4 /WX`.
+Both `msvc-debug` and `msvc-release` are expected to build warning-free under `/W4 /WX`. On hosts with
+GCC or Clang available through CMake, run the portable presets as an additional check:
+
+```powershell
+cmake --preset ninja-debug
+cmake --build --preset ninja-debug
+ctest --preset ninja-debug --output-on-failure
+
+cmake --preset ninja-asan
+cmake --build --preset ninja-asan
+ctest --preset ninja-asan --output-on-failure
+```
+
+`ninja-asan` enables AddressSanitizer and UndefinedBehaviorSanitizer flags for compilers that support the GCC-style
+sanitizer options. Prefer it when changing handle lifetime, copy/dispose paths, or persistent update code.
 
 ## Evidence To Record
 

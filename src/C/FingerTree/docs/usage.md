@@ -49,6 +49,25 @@ ft_tree_dispose(&tree);
 tree = next;
 ```
 
+Self-owned facade structs such as `ft_sorted_map`, `ft_rope`, `ft_measured_rope`,
+`ft_priority_queue`, `ft_interval_tree_i64`, `ft_interval_tree`, and `ft_text_rope`
+embed callback policy state that the nested tree points at. When replacing one of those facade
+variables with a successful update result, dispose the old value and use the matching `ft_*_move`
+helper instead of plain C assignment:
+
+```c
+ft_priority_queue next;
+status = ft_priority_queue_push(&queue, &value, &priority, &next);
+if (status == FT_STATUS_OK) {
+    ft_priority_queue_dispose(&queue);
+    ft_priority_queue_move(&queue, &next);
+}
+```
+
+The move helper transfers ownership to the destination, rebases the internal policy pointers, and
+zeros the source so accidental later disposal of the moved-from value is harmless. The destination
+should be uninitialized or already disposed before the move.
+
 If you want to retain both versions, copy or keep both handles and dispose both later:
 
 ```c
@@ -222,7 +241,7 @@ ft_priority_queue next;
 status = ft_priority_queue_push(&queue, &value, &priority, &next);
 if (status == FT_STATUS_OK) {
     ft_priority_queue_dispose(&queue);
-    queue = next;
+    ft_priority_queue_move(&queue, &next);
 }
 
 bool found = false;
@@ -235,7 +254,7 @@ if (status == FT_STATUS_OK) {
 
 if (status == FT_STATUS_OK && found) {
     ft_priority_queue_dispose(&queue);
-    queue = rest;
+    ft_priority_queue_move(&queue, &rest);
 }
 
 ft_priority_queue_dispose(&queue);
@@ -258,7 +277,7 @@ ft_interval_tree_i64 next;
 status = ft_interval_tree_i64_insert(&intervals, interval, &next);
 if (status == FT_STATUS_OK) {
     ft_interval_tree_i64_dispose(&intervals);
-    intervals = next;
+    ft_interval_tree_i64_move(&intervals, &next);
 }
 
 ft_interval_i64 query = { .low = 6, .high = 7 };
@@ -297,7 +316,7 @@ if (status == FT_STATUS_OK) {
 
 if (status == FT_STATUS_OK) {
     ft_text_rope_dispose(&rope);
-    rope = edited;
+    ft_text_rope_move(&rope, &edited);
 }
 
 ft_text_rope_dispose(&rope);

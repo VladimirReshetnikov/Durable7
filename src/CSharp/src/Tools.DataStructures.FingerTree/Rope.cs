@@ -209,8 +209,7 @@ public sealed partial class Rope<T> : IReadOnlyList<T>
     /// <exception cref="ArgumentOutOfRangeException">The range is outside <c>0 .. Count</c>.</exception>
     public Rope<T> RemoveRange(int index, int count)
     {
-        if (index < 0 || count < 0 || index + count > Count)
-            throw RangeError(index, count);
+        CheckRange(index, count);
         if (count == 0)
             return this;
         var (left, rest) = Split(index);
@@ -224,8 +223,7 @@ public sealed partial class Rope<T> : IReadOnlyList<T>
     /// <exception cref="ArgumentOutOfRangeException">The range is outside <c>0 .. Count</c>.</exception>
     public Rope<T> Slice(int index, int count)
     {
-        if (index < 0 || count < 0 || index + count > Count)
-            throw RangeError(index, count);
+        CheckRange(index, count);
         if (count == 0)
             return EmptyInstance;
         if (index == 0 && count == Count)
@@ -245,8 +243,7 @@ public sealed partial class Rope<T> : IReadOnlyList<T>
     /// <exception cref="ArgumentOutOfRangeException">The range is outside <c>0 .. Count</c>.</exception>
     public T[] GetRange(int index, int count)
     {
-        if (index < 0 || count < 0 || index + count > Count)
-            throw RangeError(index, count);
+        CheckRange(index, count);
         var array = new T[count];
         CopyTo(index, array);
         return array;
@@ -305,8 +302,7 @@ public sealed partial class Rope<T> : IReadOnlyList<T>
     /// <exception cref="ArgumentOutOfRangeException">The requested range is outside <c>0 .. Count</c>.</exception>
     public void CopyTo(int index, Span<T> destination)
     {
-        if (index < 0 || index + destination.Length > Count)
-            throw RangeError(index, destination.Length);
+        CheckRange(index, destination.Length);
         if (destination.IsEmpty)
             return;
         var source = Slice(index, destination.Length);
@@ -467,6 +463,14 @@ public sealed partial class Rope<T> : IReadOnlyList<T>
 
     private static ArgumentOutOfRangeException IndexError(int index) =>
         new(nameof(index), index, "Index is outside the rope's range.");
+
+    private void CheckRange(int index, int count)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(index);
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        if ((uint)index > (uint)Count || count > Count - index)
+            throw RangeError(index, count);
+    }
 
     private static ArgumentOutOfRangeException RangeError(int index, int count) =>
         new(nameof(index), (index, count), "The requested range is outside the rope's bounds.");

@@ -190,7 +190,7 @@ All index parameters are zero-based.
 
 `RemoveAt` accepts `index` in the range `0..Count - 1` and removes exactly that element.
 
-`GetRange(index, count)` returns exactly `count` elements starting at `index`. `RemoveRange(index, count)` removes exactly that range. `SplitRange(index, count)` returns the prefix before the range, the range itself, and the suffix after it. These methods throw `ArgumentOutOfRangeException` when `index < 0`, `count < 0`, or `index + count > Count`. The implementation must avoid signed-integer overflow in this validation.
+`GetRange(index, count)` returns exactly `count` elements starting at `index`. `RemoveRange(index, count)` removes exactly that range. `SplitRange(index, count)` returns the prefix before the range, the range itself, and the suffix after it. These methods throw `ArgumentOutOfRangeException` when `index < 0`, `count < 0`, `index > Count`, or `count > Count - index`, using the subtraction form to avoid signed-integer overflow.
 
 ## Split Semantics
 

@@ -231,6 +231,7 @@ ft_status ft_sorted_map_init(
     ft_compare_fn compare_key,
     void* compare_context);
 ft_status ft_sorted_map_copy(const ft_sorted_map* source, ft_sorted_map* destination);
+void ft_sorted_map_move(ft_sorted_map* destination, ft_sorted_map* source);
 void ft_sorted_map_dispose(ft_sorted_map* map);
 bool ft_sorted_map_empty(const ft_sorted_map* map);
 size_t ft_sorted_map_size(const ft_sorted_map* map);
@@ -294,6 +295,7 @@ ft_status ft_rope_from_array(
     const void* values,
     size_t count);
 ft_status ft_rope_copy(const ft_rope* source, ft_rope* destination);
+void ft_rope_move(ft_rope* destination, ft_rope* source);
 void ft_rope_dispose(ft_rope* rope);
 bool ft_rope_empty(const ft_rope* rope);
 size_t ft_rope_size(const ft_rope* rope);
@@ -332,6 +334,7 @@ ft_status ft_measured_rope_from_array(
     const void* values,
     size_t count);
 ft_status ft_measured_rope_copy(const ft_measured_rope* source, ft_measured_rope* destination);
+void ft_measured_rope_move(ft_measured_rope* destination, ft_measured_rope* source);
 void ft_measured_rope_dispose(ft_measured_rope* rope);
 bool ft_measured_rope_empty(const ft_measured_rope* rope);
 size_t ft_measured_rope_size(const ft_measured_rope* rope);
@@ -388,6 +391,7 @@ ft_status ft_priority_queue_init(
     ft_compare_fn compare_priority,
     void* compare_context);
 ft_status ft_priority_queue_copy(const ft_priority_queue* source, ft_priority_queue* destination);
+void ft_priority_queue_move(ft_priority_queue* destination, ft_priority_queue* source);
 void ft_priority_queue_dispose(ft_priority_queue* queue);
 bool ft_priority_queue_empty(const ft_priority_queue* queue);
 size_t ft_priority_queue_size(const ft_priority_queue* queue);
@@ -420,6 +424,7 @@ typedef struct ft_interval_tree_i64 {
 
 ft_status ft_interval_tree_i64_init(ft_interval_tree_i64* tree);
 ft_status ft_interval_tree_i64_copy(const ft_interval_tree_i64* source, ft_interval_tree_i64* destination);
+void ft_interval_tree_i64_move(ft_interval_tree_i64* destination, ft_interval_tree_i64* source);
 void ft_interval_tree_i64_dispose(ft_interval_tree_i64* tree);
 bool ft_interval_tree_i64_empty(const ft_interval_tree_i64* tree);
 size_t ft_interval_tree_i64_size(const ft_interval_tree_i64* tree);
@@ -457,6 +462,7 @@ ft_status ft_interval_tree_init(
     ft_compare_fn compare_endpoint,
     void* compare_context);
 ft_status ft_interval_tree_copy(const ft_interval_tree* source, ft_interval_tree* destination);
+void ft_interval_tree_move(ft_interval_tree* destination, ft_interval_tree* source);
 void ft_interval_tree_dispose(ft_interval_tree* tree);
 bool ft_interval_tree_empty(const ft_interval_tree* tree);
 size_t ft_interval_tree_size(const ft_interval_tree* tree);
@@ -500,6 +506,7 @@ typedef struct ft_line_column {
 ft_status ft_text_rope_init(ft_text_rope* rope);
 ft_status ft_text_rope_from_cstr(const char* text, ft_text_rope* rope);
 ft_status ft_text_rope_copy(const ft_text_rope* source, ft_text_rope* destination);
+void ft_text_rope_move(ft_text_rope* destination, ft_text_rope* source);
 void ft_text_rope_dispose(ft_text_rope* rope);
 size_t ft_text_rope_size(const ft_text_rope* rope);
 ft_status ft_text_rope_at(const ft_text_rope* rope, size_t index, char* value);

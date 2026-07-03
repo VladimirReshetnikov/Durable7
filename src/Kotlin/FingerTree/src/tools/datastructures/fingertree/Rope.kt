@@ -27,7 +27,7 @@ public class Rope<T> private constructor(
     public operator fun get(index: Int): T? = items.getOrNull(index)
 
     public fun copyTo(index: Int, destination: MutableList<in T>): Boolean {
-        if (index < 0 || index + destination.size > size) {
+        if (!isValidRange(index, destination.size, size)) {
             return false
         }
 
@@ -81,7 +81,7 @@ public class Rope<T> private constructor(
     }
 
     public fun removeRange(index: Int, count: Int): Rope<T>? {
-        if (index < 0 || count < 0 || index + count > size) {
+        if (!isValidRange(index, count, size)) {
             return null
         }
 
@@ -89,7 +89,7 @@ public class Rope<T> private constructor(
     }
 
     public fun slice(index: Int, count: Int): Rope<T>? {
-        if (index < 0 || count < 0 || index + count > size) {
+        if (!isValidRange(index, count, size)) {
             return null
         }
 
@@ -171,7 +171,7 @@ public class MeasuredRope<T, M> private constructor(
     }
 
     public fun copyTo(index: Int, destination: MutableList<in T>): Boolean {
-        if (index < 0 || index + destination.size > size) {
+        if (!isValidRange(index, destination.size, size)) {
             return false
         }
 

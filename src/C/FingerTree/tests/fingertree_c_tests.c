@@ -822,7 +822,7 @@ static void test_priority_queue(void)
         ft_priority_queue next;
         REQUIRE_STATUS(ft_priority_queue_push(&queue, &values[index], &priorities[index], &next), FT_STATUS_OK);
         ft_priority_queue_dispose(&queue);
-        queue = next;
+        ft_priority_queue_move(&queue, &next);
     }
 
     REQUIRE(ft_priority_queue_size(&queue) == 4);
@@ -845,7 +845,7 @@ static void test_priority_queue(void)
         REQUIRE(value == expected_values[index]);
         REQUIRE(priority == expected_priorities[index]);
         ft_priority_queue_dispose(&queue);
-        queue = rest;
+        ft_priority_queue_move(&queue, &rest);
     }
 
     REQUIRE(ft_priority_queue_empty(&queue));
@@ -866,7 +866,7 @@ static void test_sorted_map(void)
         ft_sorted_map next;
         REQUIRE_STATUS(ft_sorted_map_insert(&map, &keys[index], &values[index], &next), FT_STATUS_OK);
         ft_sorted_map_dispose(&map);
-        map = next;
+        ft_sorted_map_move(&map, &next);
     }
 
     REQUIRE(ft_sorted_map_size(&map) == 3);
@@ -1003,8 +1003,12 @@ static void test_rope(void)
     REQUIRE(ft_rope_size(&pushed_rope) == 3001);
     REQUIRE_STATUS(ft_rope_at(&pushed_rope, 3000, &actual), FT_STATUS_OK);
     REQUIRE(actual == pushed);
+    ft_rope_dispose(&removed);
+    ft_rope_move(&removed, &pushed_rope);
+    REQUIRE(ft_rope_size(&removed) == 3001);
+    REQUIRE_STATUS(ft_rope_at(&removed, 3000, &actual), FT_STATUS_OK);
+    REQUIRE(actual == pushed);
 
-    ft_rope_dispose(&pushed_rope);
     ft_rope_dispose(&removed);
     ft_rope_dispose(&inserted);
     ft_rope_dispose(&joined);
@@ -1099,8 +1103,11 @@ static void test_measured_rope(void)
     REQUIRE_STATUS(ft_measured_rope_push_back(&removed, &pushed, &pushed_rope), FT_STATUS_OK);
     REQUIRE_STATUS(ft_measured_rope_measure(&pushed_rope, &measure), FT_STATUS_OK);
     REQUIRE(measure == expected_sum + pushed);
+    ft_measured_rope_dispose(&removed);
+    ft_measured_rope_move(&removed, &pushed_rope);
+    REQUIRE_STATUS(ft_measured_rope_measure(&removed, &measure), FT_STATUS_OK);
+    REQUIRE(measure == expected_sum + pushed);
 
-    ft_measured_rope_dispose(&pushed_rope);
     ft_measured_rope_dispose(&removed);
     ft_measured_rope_dispose(&inserted);
     ft_measured_rope_dispose(&joined);
@@ -1124,7 +1131,7 @@ static void test_interval_tree(void)
         ft_interval_tree_i64 next;
         REQUIRE_STATUS(ft_interval_tree_i64_insert(&tree, intervals[index], &next), FT_STATUS_OK);
         ft_interval_tree_i64_dispose(&tree);
-        tree = next;
+        ft_interval_tree_i64_move(&tree, &next);
     }
 
     REQUIRE(ft_interval_tree_i64_size(&tree) == 3);
@@ -1166,7 +1173,7 @@ static void test_generic_interval_tree(void)
         ft_interval_tree next;
         REQUIRE_STATUS(ft_interval_tree_insert(&tree, &lows[index], &highs[index], &next), FT_STATUS_OK);
         ft_interval_tree_dispose(&tree);
-        tree = next;
+        ft_interval_tree_move(&tree, &next);
     }
 
     REQUIRE(ft_interval_tree_size(&tree) == 3);
@@ -1230,15 +1237,17 @@ static void test_text_rope(void)
     ft_text_rope removed;
     REQUIRE_STATUS(ft_text_rope_remove_at(&inserted, 2, &removed), FT_STATUS_OK);
     REQUIRE(ft_text_rope_size(&removed) == 6);
+    ft_text_rope_dispose(&inserted);
+    ft_text_rope_move(&inserted, &removed);
+    REQUIRE(ft_text_rope_size(&inserted) == 6);
 
     char_buffer chars;
     chars.count = 0;
-    REQUIRE_STATUS(ft_text_rope_visit(&removed, collect_char, &chars), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_text_rope_visit(&inserted, collect_char, &chars), FT_STATUS_OK);
     REQUIRE(chars.count == 6);
     chars.values[chars.count] = '\0';
     REQUIRE(strcmp(chars.values, "ab\ncd\n") == 0);
 
-    ft_text_rope_dispose(&removed);
     ft_text_rope_dispose(&inserted);
     ft_text_rope_dispose(&rope);
 }

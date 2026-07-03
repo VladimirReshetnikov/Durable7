@@ -36,7 +36,7 @@ static int run_priority_queue(void)
         }
 
         ft_priority_queue_dispose(&queue);
-        queue = next;
+        ft_priority_queue_move(&queue, &next);
     }
 
     printf("priority:");
@@ -52,7 +52,7 @@ static int run_priority_queue(void)
 
         printf(" %d@%d", value, priority);
         ft_priority_queue_dispose(&queue);
-        queue = rest;
+        ft_priority_queue_move(&queue, &rest);
     }
 
     printf("\n");
@@ -116,7 +116,7 @@ static int run_intervals(void)
         }
 
         ft_interval_tree_i64_dispose(&intervals);
-        intervals = next;
+        ft_interval_tree_i64_move(&intervals, &next);
     }
 
     const ft_interval_i64 query = {6, 7};

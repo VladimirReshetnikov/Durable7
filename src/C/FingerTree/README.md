@@ -45,11 +45,13 @@ $cmakeDir = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\Co
 cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-debug && ""$cmakeDir\cmake.exe"" --build --preset msvc-debug && ""$cmakeDir\ctest.exe"" --preset msvc-debug --output-on-failure"
 ```
 
-Use `msvc-release` for the optimized configuration. The presets use Visual Studio's bundled Ninja by absolute
-path, so CMake and Ninja do not need to be on `PATH`. Keep the Visual Studio environment setup, configure, build,
-and CTest run in one `cmd.exe` chain when starting from plain PowerShell; invoking `VsDevCmd.bat` directly from
-PowerShell does not persist its environment changes in that process. For release commands, benchmark entry points,
-warning policy, and generated-output locations, see the [validation guide](docs/validation.md).
+Use `msvc-release` for the optimized configuration. The `msvc-*` presets use Visual Studio's bundled Ninja by
+absolute path, so CMake and Ninja do not need to be on `PATH` for that route. Keep the Visual Studio environment
+setup, configure, build, and CTest run in one `cmd.exe` chain when starting from plain PowerShell; invoking
+`VsDevCmd.bat` directly from PowerShell does not persist its environment changes in that process. Host-agnostic
+`ninja-debug`, `ninja-release`, and `ninja-asan` presets are also available when CMake, Ninja, and a suitable
+compiler are on `PATH`. For release commands, sanitizer validation, benchmark entry points, warning policy, and
+generated-output locations, see the [validation guide](docs/validation.md).
 
 ## Layout
 

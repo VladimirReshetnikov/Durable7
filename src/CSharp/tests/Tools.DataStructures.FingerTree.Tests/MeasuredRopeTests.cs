@@ -51,6 +51,18 @@ public sealed class MeasuredRopeTests
         AssertSequence(model, left.Concat(right));
     }
 
+    /// <summary>Verifies range validation rejects overflowing lengths before allocating or slicing.</summary>
+    [Fact]
+    public void RangeValidation_RejectsOverflowingLengths()
+    {
+        var rope = MeasuredRope<int, int, SumMeasure<int>>.Create(1, 2, 3);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => rope.RemoveRange(2, int.MaxValue));
+        Assert.Throws<ArgumentOutOfRangeException>(() => rope.Slice(2, int.MaxValue));
+        Assert.Throws<ArgumentOutOfRangeException>(() => rope.GetRange(2, int.MaxValue));
+        Assert.Throws<ArgumentOutOfRangeException>(() => rope.CopyTo(2, new int[2]));
+    }
+
     /// <summary>Verifies PrefixMeasure equals the running sum of the first k elements, at every k.</summary>
     [Fact]
     public void PrefixMeasure_MatchesRunningSum()

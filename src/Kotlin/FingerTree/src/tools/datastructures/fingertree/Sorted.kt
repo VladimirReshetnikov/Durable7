@@ -120,7 +120,7 @@ public class SortedBag<T> private constructor(
     }
 
     public fun getRange(start: Int, count: Int): SortedBag<T>? {
-        if (start < 0 || count < 0 || start + count > size) {
+        if (!isValidRange(start, count, size)) {
             return null
         }
 
@@ -225,7 +225,7 @@ public class SortedSet<T> private constructor(
     }
 
     public fun getRange(start: Int, count: Int): SortedSet<T>? {
-        if (start < 0 || count < 0 || start + count > size) {
+        if (!isValidRange(start, count, size)) {
             return null
         }
 
@@ -409,7 +409,7 @@ public class SortedMap<K, V> private constructor(
     }
 
     public fun getRange(start: Int, count: Int): SortedMap<K, V>? {
-        if (start < 0 || count < 0 || start + count > size) {
+        if (!isValidRange(start, count, size)) {
             return null
         }
 
