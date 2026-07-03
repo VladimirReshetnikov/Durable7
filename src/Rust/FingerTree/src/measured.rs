@@ -607,6 +607,11 @@ where
         self.root.last()
     }
 
+    #[must_use]
+    pub fn get(&self, index: usize) -> Option<&T> {
+        (index < self.len()).then(|| self.root.get(index)).flatten()
+    }
+
     pub fn iter(&self) -> Iter<'_, T, P::Measure> {
         Iter::new(&self.root)
     }
@@ -656,6 +661,12 @@ where
         self.split_at_index_unchecked(index)
     }
 
+    #[must_use]
+    pub fn prefix_measure(&self, count: usize) -> Option<P::Measure> {
+        (count <= self.len())
+            .then(|| MeasuredNode::prefix_measure(&self.root, count, &P::empty(), &P::combine))
+    }
+
     fn split_at_index_unchecked(&self, index: usize) -> MeasuredSplit<T, P> {
         let (left, right) = MeasuredNode::split_at(&self.root, index, &P::combine);
         MeasuredSplit {
@@ -672,12 +683,12 @@ where
     }
 
     #[cfg(test)]
-    fn tree_depth(&self) -> usize {
+    pub(crate) fn tree_depth(&self) -> usize {
         self.root.height() as usize
     }
 
     #[cfg(test)]
-    fn validate_invariants(&self)
+    pub(crate) fn validate_invariants(&self)
     where
         P::Measure: PartialEq + std::fmt::Debug,
     {
@@ -690,7 +701,7 @@ where
     }
 
     #[cfg(test)]
-    fn shared_node_count_with(&self, other: &Self) -> usize {
+    pub(crate) fn shared_node_count_with(&self, other: &Self) -> usize {
         use std::collections::HashSet;
 
         fn collect<T, M>(
@@ -878,6 +889,9 @@ mod tests {
 
         assert_eq!(*tree.measure(), 3);
         assert_eq!(*appended.measure(), 4);
+        assert_eq!(tree.get(1), Some(&20));
+        assert_eq!(tree.prefix_measure(2), Some(2));
+        assert_eq!(tree.prefix_measure(4), None);
         assert_eq!(tree.to_vec(), vec![10, 20, 30]);
         tree.validate_invariants();
         appended.validate_invariants();
@@ -891,6 +905,7 @@ mod tests {
 
         assert_eq!(split.left.to_vec(), vec![2, 3]);
         assert_eq!(split.right.to_vec(), vec![5, 7]);
+        assert_eq!(tree.prefix_measure(3), Some(10));
         assert_eq!(located.index, 2);
         assert_eq!(located.measure_before, 5);
         assert_eq!(located.item, Some(5));

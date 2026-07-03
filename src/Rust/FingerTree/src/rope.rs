@@ -1,4 +1,4 @@
-use crate::measured::MeasurePolicy;
+use crate::measured::{FingerTree, MeasurePolicy};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -192,13 +192,34 @@ where
     }
 }
 
+struct CountedMeasure<T, P>(PhantomData<(T, P)>);
+
+impl<T, P> MeasurePolicy<T> for CountedMeasure<T, P>
+where
+    P: MeasurePolicy<T>,
+{
+    type Measure = (usize, P::Measure);
+
+    fn empty() -> Self::Measure {
+        (0, P::empty())
+    }
+
+    fn measure(element: &T) -> Self::Measure {
+        (1, P::measure(element))
+    }
+
+    fn combine(left: &Self::Measure, right: &Self::Measure) -> Self::Measure {
+        (left.0 + right.0, P::combine(&left.1, &right.1))
+    }
+}
+
+type MeasuredRopeTree<T, P> = FingerTree<T, CountedMeasure<T, P>>;
+
 pub struct MeasuredRope<T, P>
 where
     P: MeasurePolicy<T>,
 {
-    items: Arc<Vec<T>>,
-    measure: P::Measure,
-    _policy: PhantomData<P>,
+    tree: MeasuredRopeTree<T, P>,
 }
 
 #[derive(Clone)]
@@ -223,9 +244,7 @@ where
 {
     fn clone(&self) -> Self {
         Self {
-            items: Arc::clone(&self.items),
-            measure: self.measure.clone(),
-            _policy: PhantomData,
+            tree: self.tree.clone(),
         }
     }
 }
@@ -236,41 +255,80 @@ where
 {
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            items: Arc::new(Vec::new()),
-            measure: P::empty(),
-            _policy: PhantomData,
-        }
+        Self::from_tree(MeasuredRopeTree::new())
     }
 
     #[must_use]
     pub(crate) fn from_vec(items: Vec<T>) -> Self {
-        let measure = measure_slice::<T, P>(&items);
-        Self {
-            items: Arc::new(items),
-            measure,
-            _policy: PhantomData,
-        }
+        Self::from_tree(items.into_iter().collect())
+    }
+
+    fn from_tree(tree: MeasuredRopeTree<T, P>) -> Self {
+        Self { tree }
     }
 
     #[must_use]
     pub fn len(&self) -> usize {
-        self.items.len()
+        self.tree.len()
     }
 
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.items.is_empty()
+        self.tree.is_empty()
     }
 
     #[must_use]
     pub fn measure(&self) -> &P::Measure {
-        &self.measure
+        &self.tree.measure().1
     }
 
     #[must_use]
     pub fn get(&self, index: usize) -> Option<&T> {
-        self.items.get(index)
+        self.tree.get(index)
+    }
+
+    #[must_use]
+    pub fn shares_storage_with(&self, other: &Self) -> bool {
+        self.tree.shares_storage_with(&other.tree)
+    }
+
+    #[must_use]
+    pub fn prefix_measure(&self, count: usize) -> Option<P::Measure> {
+        self.tree.prefix_measure(count).map(|measure| measure.1)
+    }
+
+    #[must_use]
+    pub fn split_at(&self, index: usize) -> Option<MeasuredRopeSplit<T, P>> {
+        self.split_at_count(index)
+    }
+
+    #[must_use]
+    pub fn split_by_measure<F>(&self, mut predicate: F) -> MeasuredRopeSplit<T, P>
+    where
+        F: FnMut(&P::Measure) -> bool,
+    {
+        let split = self.tree.split(|measure| predicate(&measure.1));
+        MeasuredRopeSplit {
+            left: Self::from_tree(split.left),
+            right: Self::from_tree(split.right),
+        }
+    }
+
+    #[must_use]
+    pub fn concat(&self, other: &Self) -> Self {
+        Self::from_tree(self.tree.concat(&other.tree))
+    }
+
+    fn split_at_count(&self, index: usize) -> Option<MeasuredRopeSplit<T, P>> {
+        if index > self.len() {
+            return None;
+        }
+
+        let split = self.tree.split(|measure| measure.0 > index);
+        Some(MeasuredRopeSplit {
+            left: Self::from_tree(split.left),
+            right: Self::from_tree(split.right),
+        })
     }
 }
 
@@ -299,23 +357,12 @@ where
 {
     #[must_use]
     pub fn to_vec(&self) -> Vec<T> {
-        self.items.as_ref().clone()
-    }
-
-    #[must_use]
-    pub fn prefix_measure(&self, count: usize) -> Option<P::Measure> {
-        if count > self.len() {
-            return None;
-        }
-
-        Some(measure_slice::<T, P>(&self.items[..count]))
+        self.tree.to_vec()
     }
 
     #[must_use]
     pub fn push_back(&self, item: T) -> Self {
-        let mut next = self.to_vec();
-        next.push(item);
-        Self::from_vec(next)
+        Self::from_tree(self.tree.append(item))
     }
 
     #[must_use]
@@ -324,33 +371,14 @@ where
             return None;
         }
 
-        let mut next = self.to_vec();
-        next[index] = item;
-        Some(Self::from_vec(next))
-    }
-
-    #[must_use]
-    pub fn split_at(&self, index: usize) -> Option<MeasuredRopeSplit<T, P>> {
-        if index > self.len() {
-            return None;
-        }
-
-        Some(MeasuredRopeSplit {
-            left: Self::from_vec(self.items[..index].to_vec()),
-            right: Self::from_vec(self.items[index..].to_vec()),
-        })
-    }
-
-    #[must_use]
-    pub fn split_by_measure<F>(&self, predicate: F) -> MeasuredRopeSplit<T, P>
-    where
-        F: FnMut(&P::Measure) -> bool,
-    {
-        let index = self.boundary_index(predicate).unwrap_or(self.len());
-        MeasuredRopeSplit {
-            left: Self::from_vec(self.items[..index].to_vec()),
-            right: Self::from_vec(self.items[index..].to_vec()),
-        }
+        let before = self
+            .split_at_count(index)
+            .expect("validated index splits measured rope");
+        let after = before
+            .right
+            .split_at_count(1)
+            .expect("validated index leaves an item to replace");
+        Some(before.left.push_back(item).concat(&after.right))
     }
 
     #[must_use]
@@ -358,47 +386,12 @@ where
     where
         F: FnMut(&P::Measure) -> bool,
     {
-        let mut before = P::empty();
-        for (index, item) in self.items.iter().enumerate() {
-            let next = P::combine(&before, &P::measure(item));
-            if predicate(&next) {
-                return MeasuredRopeLocate {
-                    index,
-                    measure_before: before,
-                    value: Some(item.clone()),
-                };
-            }
-
-            before = next;
-        }
-
+        let located = self.tree.try_locate(|measure| predicate(&measure.1));
         MeasuredRopeLocate {
-            index: self.len(),
-            measure_before: before,
-            value: None,
+            index: located.index,
+            measure_before: located.measure_before.1,
+            value: located.item,
         }
-    }
-
-    #[must_use]
-    pub fn concat(&self, other: &Self) -> Self {
-        let mut next = self.to_vec();
-        next.extend(other.items.iter().cloned());
-        Self::from_vec(next)
-    }
-
-    fn boundary_index<F>(&self, mut predicate: F) -> Option<usize>
-    where
-        F: FnMut(&P::Measure) -> bool,
-    {
-        let mut prefix = P::empty();
-        for (index, item) in self.items.iter().enumerate() {
-            prefix = P::combine(&prefix, &P::measure(item));
-            if predicate(&prefix) {
-                return Some(index);
-            }
-        }
-
-        None
     }
 }
 
@@ -596,15 +589,6 @@ impl RopeBuilder {
     }
 }
 
-fn measure_slice<T, P>(items: &[T]) -> P::Measure
-where
-    P: MeasurePolicy<T>,
-{
-    items.iter().fold(P::empty(), |measure, item| {
-        P::combine(&measure, &P::measure(item))
-    })
-}
-
 fn checked_range_end(len: usize, index: usize, count: usize) -> Option<usize> {
     let end = index.checked_add(count)?;
     (index <= len && end <= len).then_some(end)
@@ -635,6 +619,41 @@ mod tests {
         assert_eq!(located.index, 1);
         assert_eq!(located.measure_before, 2);
         assert_eq!(located.value, Some(4));
+    }
+
+    #[test]
+    fn measured_rope_uses_shared_measured_tree_storage() {
+        let rope: MeasuredRope<_, SumMeasure<i32>> = (1..=256).collect();
+        let split = rope.split_at(96).unwrap();
+        let joined = split.left.concat(&split.right);
+        let changed = rope.set_item(128, 999).unwrap();
+        let by_measure = rope.split_by_measure(|sum| *sum >= 1_000);
+
+        let mut prefix = 0;
+        let expected_measure_boundary = (1..=256)
+            .position(|value| {
+                prefix += value;
+                prefix >= 1_000
+            })
+            .unwrap();
+
+        assert_eq!(rope.get(42), Some(&43));
+        assert_eq!(rope.prefix_measure(10), Some(55));
+        assert_eq!(rope.prefix_measure(300), None);
+        assert_eq!(split.left.len(), 96);
+        assert_eq!(split.right.get(0), Some(&97));
+        assert_eq!(joined.to_vec(), rope.to_vec());
+        assert_eq!(changed.get(128), Some(&999));
+        assert_eq!(changed.measure(), &(*rope.measure() - 129 + 999));
+        assert_eq!(by_measure.left.len(), expected_measure_boundary);
+        assert!(rope.tree.shared_node_count_with(&split.left.tree) > 64);
+        assert!(rope.tree.shared_node_count_with(&split.right.tree) > 100);
+        assert!(rope.tree.shared_node_count_with(&changed.tree) > 100);
+        assert!(rope.tree.tree_depth() < 24);
+        split.left.tree.validate_invariants();
+        split.right.tree.validate_invariants();
+        joined.tree.validate_invariants();
+        changed.tree.validate_invariants();
     }
 
     #[test]
