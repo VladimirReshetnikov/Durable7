@@ -1032,9 +1032,8 @@ impl MeasurePolicy<char> for NewlineMeasure {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TextRope {
-    chars: Rope<char>,
+    chars: MeasuredRope<char, NewlineMeasure>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1046,7 +1045,9 @@ pub struct LineColumn {
 impl TextRope {
     #[must_use]
     pub fn new() -> Self {
-        Self { chars: Rope::new() }
+        Self {
+            chars: MeasuredRope::new(),
+        }
     }
 
     #[must_use]
@@ -1068,46 +1069,31 @@ impl TextRope {
 
     #[must_use]
     pub fn as_string(&self) -> String {
-        self.chars.iter().collect()
+        self.chars.to_vec().into_iter().collect()
     }
 
     #[must_use]
     pub fn line_count(&self) -> usize {
-        self.chars.iter().filter(|ch| **ch == '\n').count() + 1
+        *self.chars.measure() + 1
     }
 
     #[must_use]
     pub fn line_of_offset(&self, offset: usize) -> Option<usize> {
-        if offset > self.len() {
-            return None;
-        }
-
-        Some(
-            self.chars
-                .iter()
-                .take(offset)
-                .filter(|ch| **ch == '\n')
-                .count(),
-        )
+        self.chars.prefix_measure(offset)
     }
 
     #[must_use]
     pub fn line_start_offset(&self, line: usize) -> Option<usize> {
+        if line > *self.chars.measure() {
+            return None;
+        }
+
         if line == 0 {
             return Some(0);
         }
 
-        let mut seen = 0;
-        for (index, ch) in self.chars.iter().enumerate() {
-            if *ch == '\n' {
-                seen += 1;
-                if seen == line {
-                    return Some(index + 1);
-                }
-            }
-        }
-
-        None
+        let located = self.chars.locate_by_measure(|newlines| *newlines >= line);
+        located.value.map(|_| located.index + 1)
     }
 
     #[must_use]
@@ -1132,7 +1118,14 @@ impl TextRope {
     pub fn get_line(&self, line: usize) -> Option<String> {
         let start = self.line_start_offset(line)?;
         let end = self.line_end_offset(line)?;
-        Some(self.chars.iter().skip(start).take(end - start).collect())
+        Some(
+            self.chars
+                .to_vec()
+                .into_iter()
+                .skip(start)
+                .take(end - start)
+                .collect(),
+        )
     }
 
     #[must_use]
@@ -1144,25 +1137,53 @@ impl TextRope {
 
     #[must_use]
     pub fn to_char_rope(&self) -> Rope<char> {
-        self.chars.clone()
+        self.chars.to_vec().into_iter().collect()
     }
 
     #[must_use]
     pub fn to_measured_rope(&self) -> MeasuredRope<char, NewlineMeasure> {
-        self.chars.iter().cloned().collect()
+        self.chars.clone()
     }
 
     fn line_end_offset(&self, line: usize) -> Option<usize> {
-        let start = self.line_start_offset(line)?;
-        for (relative, ch) in self.chars.iter().skip(start).enumerate() {
-            if *ch == '\n' {
-                return Some(start + relative);
-            }
+        if line > *self.chars.measure() {
+            return None;
+        }
+
+        if line < *self.chars.measure() {
+            return self
+                .line_start_offset(line + 1)
+                .and_then(|offset| offset.checked_sub(1));
         }
 
         Some(self.len())
     }
 }
+
+impl Clone for TextRope {
+    fn clone(&self) -> Self {
+        Self {
+            chars: self.chars.clone(),
+        }
+    }
+}
+
+impl fmt::Debug for TextRope {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_tuple("TextRope")
+            .field(&self.as_string())
+            .finish()
+    }
+}
+
+impl PartialEq for TextRope {
+    fn eq(&self, other: &Self) -> bool {
+        self.chars.to_vec() == other.chars.to_vec()
+    }
+}
+
+impl Eq for TextRope {}
 
 impl Default for TextRope {
     fn default() -> Self {
@@ -1305,9 +1326,10 @@ mod tests {
     }
 
     #[test]
-    fn text_rope_uses_character_offsets_and_editor_line_count() {
+    fn text_rope_uses_newline_measured_navigation() {
         let text = TextRope::from_text("alpha\nbeta\n");
 
+        assert_eq!(text.chars.measure(), &2);
         assert_eq!(text.line_count(), 3);
         assert_eq!(
             text.line_column_of(7),
@@ -1317,6 +1339,11 @@ mod tests {
         assert_eq!(text.get_line(0).unwrap(), "alpha");
         assert_eq!(text.get_line(2).unwrap(), "");
         assert_eq!(text.lines(), vec!["alpha", "beta", ""]);
+        assert_eq!(text.to_measured_rope().prefix_measure(10), Some(1));
+        assert_eq!(
+            text.to_char_rope().to_vec(),
+            text.as_string().chars().collect::<Vec<_>>()
+        );
     }
 
     #[test]

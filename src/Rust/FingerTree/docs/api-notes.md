@@ -34,10 +34,10 @@ an `Arc`-shared balanced tree, so nontrivial splits, concatenations, range opera
 unchanged subtrees. `ReversibleDeque<T>` is now an orientation layer over that deque, so reversal and
 wrapper-preserving logical edits share the same underlying tree. `Rope<T>` now uses chunked length-measured
 storage over the shared measured tree, so positional edits, slices, splits, and concatenations share unchanged
-chunks and measured subtrees; `TextRope` inherits that storage for character offsets and line helpers. The general
-`FingerTree<T, P>` now uses an `Arc`-shared measured
-tree with cached monoid
-measures at every node, so measure-guided split and locate operations can skip whole subtrees and split results
+chunks and measured subtrees; `TextRope` stores characters in `MeasuredRope<char, NewlineMeasure>` so line
+counts, line starts, and line/column navigation use cached newline measures. The general `FingerTree<T, P>` now
+uses an `Arc`-shared measured tree with cached monoid measures at every node, so measure-guided split and locate
+operations can skip whole subtrees and split results
 share unchanged structure. `MeasuredRope<T, P>` now uses measured chunks whose tree measure combines element
 count with the user measure, so indexed splits, concatenation, point replacement, prefix measurement, and
 measure-guided locate share unchanged chunks and measured subtrees. `PriorityQueue<T, P>` now reuses the measured
