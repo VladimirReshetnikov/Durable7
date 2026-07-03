@@ -256,12 +256,51 @@ where
     T: Clone,
 {
     #[must_use]
+    pub fn from_chunks<I, C>(chunks: I) -> Self
+    where
+        I: IntoIterator<Item = C>,
+        C: AsRef<[T]>,
+    {
+        Self::from_tree(tree_from_chunks(chunks))
+    }
+
+    #[must_use]
     pub fn to_vec(&self) -> Vec<T> {
         let mut items = Vec::with_capacity(self.len());
         for chunk in self.chunks.iter() {
             items.extend_from_slice(chunk.as_slice());
         }
         items
+    }
+
+    pub fn copy_to(&self, index: usize, destination: &mut [T]) -> Option<()> {
+        if index > self.len() || destination.len() > self.len() - index {
+            return None;
+        }
+
+        let mut chunk_start = 0;
+        let mut written = 0;
+        for chunk in self.chunks.iter() {
+            let chunk_end = chunk_start + chunk.len();
+            if chunk_end <= index {
+                chunk_start = chunk_end;
+                continue;
+            }
+
+            let start_in_chunk = index.saturating_sub(chunk_start);
+            let available = chunk.len() - start_in_chunk;
+            let take = available.min(destination.len() - written);
+            destination[written..written + take]
+                .clone_from_slice(&chunk.as_slice()[start_in_chunk..start_in_chunk + take]);
+            written += take;
+            if written == destination.len() {
+                return Some(());
+            }
+
+            chunk_start = chunk_end;
+        }
+
+        Some(())
     }
 
     #[must_use]
@@ -494,6 +533,24 @@ fn tree_from_items<T>(items: Vec<T>) -> RopeTree<T> {
     }
 
     chunks.into_iter().collect()
+}
+
+fn tree_from_chunks<T, I, C>(chunks: I) -> RopeTree<T>
+where
+    T: Clone,
+    I: IntoIterator<Item = C>,
+    C: AsRef<[T]>,
+{
+    let mut tree = RopeTree::new();
+    for chunk in chunks {
+        for block in chunk.as_ref().chunks(MAX_CHUNK_SIZE) {
+            if !block.is_empty() {
+                tree = tree.append(RopeChunk::new(block.to_vec()));
+            }
+        }
+    }
+
+    tree
 }
 
 fn join_grown<T>(left: RopeTree<T>, grown: RopeChunk<T>, right: RopeTree<T>) -> RopeTree<T>
@@ -864,12 +921,51 @@ where
     P: MeasurePolicy<T>,
 {
     #[must_use]
+    pub fn from_chunks<I, C>(chunks: I) -> Self
+    where
+        I: IntoIterator<Item = C>,
+        C: AsRef<[T]>,
+    {
+        Self::from_tree(measured_tree_from_chunks::<T, P, I, C>(chunks))
+    }
+
+    #[must_use]
     pub fn to_vec(&self) -> Vec<T> {
         let mut items = Vec::with_capacity(self.len());
         for chunk in self.tree.iter() {
             items.extend_from_slice(chunk.as_slice());
         }
         items
+    }
+
+    pub fn copy_to(&self, index: usize, destination: &mut [T]) -> Option<()> {
+        if index > self.len() || destination.len() > self.len() - index {
+            return None;
+        }
+
+        let mut chunk_start = 0;
+        let mut written = 0;
+        for chunk in self.tree.iter() {
+            let chunk_end = chunk_start + chunk.len();
+            if chunk_end <= index {
+                chunk_start = chunk_end;
+                continue;
+            }
+
+            let start_in_chunk = index.saturating_sub(chunk_start);
+            let available = chunk.len() - start_in_chunk;
+            let take = available.min(destination.len() - written);
+            destination[written..written + take]
+                .clone_from_slice(&chunk.as_slice()[start_in_chunk..start_in_chunk + take]);
+            written += take;
+            if written == destination.len() {
+                return Some(());
+            }
+
+            chunk_start = chunk_end;
+        }
+
+        Some(())
     }
 
     #[must_use]
@@ -981,6 +1077,25 @@ where
     }
 
     chunks.into_iter().collect()
+}
+
+fn measured_tree_from_chunks<T, P, I, C>(chunks: I) -> MeasuredRopeTree<T, P>
+where
+    T: Clone,
+    P: MeasurePolicy<T>,
+    I: IntoIterator<Item = C>,
+    C: AsRef<[T]>,
+{
+    let mut tree = MeasuredRopeTree::new();
+    for chunk in chunks {
+        for block in chunk.as_ref().chunks(MAX_CHUNK_SIZE) {
+            if !block.is_empty() {
+                tree = tree.append(MeasuredRopeChunk::new(block.to_vec()));
+            }
+        }
+    }
+
+    tree
 }
 
 fn append_measured_prefix<T, P>(
@@ -1191,6 +1306,36 @@ impl Default for TextRope {
     }
 }
 
+impl From<&str> for TextRope {
+    fn from(value: &str) -> Self {
+        Self::from_text(value)
+    }
+}
+
+impl From<String> for TextRope {
+    fn from(value: String) -> Self {
+        Self::from_text(&value)
+    }
+}
+
+impl From<&str> for Rope<char> {
+    fn from(value: &str) -> Self {
+        value.chars().collect()
+    }
+}
+
+impl From<String> for Rope<char> {
+    fn from(value: String) -> Self {
+        value.chars().collect()
+    }
+}
+
+impl fmt::Display for TextRope {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.as_string())
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RopeBuilder {
     text: String,
@@ -1202,8 +1347,28 @@ impl RopeBuilder {
         Self::default()
     }
 
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.text.chars().count()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.text.is_empty()
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.text
+    }
+
     pub fn append(&mut self, text: &str) -> &mut Self {
         self.text.push_str(text);
+        self
+    }
+
+    pub fn append_char(&mut self, value: char) -> &mut Self {
+        self.text.push(value);
         self
     }
 
@@ -1229,6 +1394,12 @@ impl RopeBuilder {
     }
 }
 
+impl fmt::Display for RopeBuilder {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.text)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1242,6 +1413,22 @@ mod tests {
         assert_eq!(rope.to_vec(), vec![1, 2, 3]);
         assert_eq!(edited.to_vec(), vec![1, 9, 2]);
         assert_eq!(rope.slice(1, 2).unwrap().to_vec(), vec![2, 3]);
+    }
+
+    #[test]
+    fn rope_from_chunks_and_copy_to_preserve_immutable_storage() {
+        let first = vec![1, 2];
+        let second = vec![3, 4, 5];
+        let rope = Rope::from_chunks([first.as_slice(), &[], second.as_slice()]);
+        let mut copied = vec![0; 3];
+
+        assert_eq!(rope.to_vec(), vec![1, 2, 3, 4, 5]);
+        assert_eq!(rope.copy_to(1, &mut copied), Some(()));
+        assert_eq!(copied, vec![2, 3, 4]);
+        assert_eq!(rope.copy_to(4, &mut copied), None);
+        assert_eq!(rope.copy_to(5, &mut []), Some(()));
+        assert_eq!(rope.chunk_count(), 2);
+        rope.validate_chunk_invariants();
     }
 
     #[test]
@@ -1277,12 +1464,19 @@ mod tests {
     fn measured_rope_locates_by_user_measure() {
         let rope: MeasuredRope<_, SumMeasure<i32>> = [2, 4, 8].into_iter().collect();
         let located = rope.locate_by_measure(|sum| *sum > 5);
+        let chunked = MeasuredRope::<_, SumMeasure<i32>>::from_chunks([&[2, 4][..], &[8][..]]);
+        let mut copied = vec![0; 2];
 
         assert_eq!(rope.measure(), &14);
         assert_eq!(rope.prefix_measure(2), Some(6));
         assert_eq!(located.index, 1);
         assert_eq!(located.measure_before, 2);
         assert_eq!(located.value, Some(4));
+        assert_eq!(chunked.measure(), &14);
+        assert_eq!(chunked.copy_to(1, &mut copied), Some(()));
+        assert_eq!(copied, vec![4, 8]);
+        assert_eq!(chunked.copy_to(3, &mut [0]), None);
+        chunked.validate_chunk_invariants();
     }
 
     #[test]
@@ -1327,7 +1521,8 @@ mod tests {
 
     #[test]
     fn text_rope_uses_newline_measured_navigation() {
-        let text = TextRope::from_text("alpha\nbeta\n");
+        let text = TextRope::from("alpha\nbeta\n");
+        let char_rope = Rope::<char>::from(String::from("alpha\nbeta\n"));
 
         assert_eq!(text.chars.measure(), &2);
         assert_eq!(text.line_count(), 3);
@@ -1344,14 +1539,25 @@ mod tests {
             text.to_char_rope().to_vec(),
             text.as_string().chars().collect::<Vec<_>>()
         );
+        assert_eq!(char_rope.to_vec(), text.to_char_rope().to_vec());
+        assert_eq!(text.to_string(), "alpha\nbeta\n");
     }
 
     #[test]
     fn builder_creates_char_and_text_ropes() {
         let mut builder = RopeBuilder::new();
-        builder.append("hello").append_line(" world");
+        assert!(builder.is_empty());
+        builder
+            .append("hello")
+            .append_char(' ')
+            .append_line("world");
 
+        assert_eq!(builder.len(), 12);
+        assert_eq!(builder.as_str(), "hello world\n");
+        assert_eq!(builder.to_string(), "hello world\n");
         assert_eq!(builder.to_rope().to_vec().len(), 12);
         assert_eq!(builder.to_text_rope().as_string(), "hello world\n");
+        assert!(builder.clear().is_empty());
+        assert_eq!(builder.as_str(), "");
     }
 }
