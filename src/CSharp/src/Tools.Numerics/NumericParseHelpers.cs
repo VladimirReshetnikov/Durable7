@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 
 using System;
+using System.Buffers;
 using System.Globalization;
+using System.Text;
 
 namespace Tools.Numerics;
 
@@ -14,6 +16,16 @@ namespace Tools.Numerics;
 /// </remarks>
 internal static class NumericParseHelpers
 {
+    public delegate T Utf16ParseFunc<T>(ReadOnlySpan<char> text, NumberStyles style, IFormatProvider? provider);
+
+    public delegate bool Utf16TryParseFunc<T>(
+        ReadOnlySpan<char> text,
+        NumberStyles style,
+        IFormatProvider? provider,
+        out T result);
+
+    private const int StackCharBufferLimit = 256;
+
     private const NumberStyles SupportedDecimalStyles =
         NumberStyles.AllowLeadingWhite |
         NumberStyles.AllowTrailingWhite |
@@ -23,6 +35,80 @@ internal static class NumericParseHelpers
         NumberStyles.AllowLeadingWhite |
         NumberStyles.AllowTrailingWhite |
         NumberStyles.AllowHexSpecifier;
+
+    /// <summary>
+    /// Parses UTF-8 text through a temporary character span without allocating a string.
+    /// </summary>
+    /// <typeparam name="T">The result type.</typeparam>
+    /// <param name="utf8Text">The UTF-8 input text.</param>
+    /// <param name="style">The requested parse style.</param>
+    /// <param name="provider">The format provider.</param>
+    /// <param name="parse">The UTF-16 parser that owns the type-specific parse logic.</param>
+    /// <returns>The parsed value.</returns>
+    public static T ParseUtf8<T>(
+        ReadOnlySpan<byte> utf8Text,
+        NumberStyles style,
+        IFormatProvider? provider,
+        Utf16ParseFunc<T> parse)
+    {
+        int charCount = Encoding.UTF8.GetCharCount(utf8Text);
+        if (charCount <= StackCharBufferLimit)
+        {
+            Span<char> buffer = stackalloc char[charCount];
+            Encoding.UTF8.GetChars(utf8Text, buffer);
+            return parse(buffer, style, provider);
+        }
+
+        char[] rented = ArrayPool<char>.Shared.Rent(charCount);
+        try
+        {
+            Span<char> buffer = rented.AsSpan(0, charCount);
+            Encoding.UTF8.GetChars(utf8Text, buffer);
+            return parse(buffer, style, provider);
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(rented);
+        }
+    }
+
+    /// <summary>
+    /// Attempts to parse UTF-8 text through a temporary character span without allocating a string.
+    /// </summary>
+    /// <typeparam name="T">The result type.</typeparam>
+    /// <param name="utf8Text">The UTF-8 input text.</param>
+    /// <param name="style">The requested parse style.</param>
+    /// <param name="provider">The format provider.</param>
+    /// <param name="parse">The UTF-16 parser that owns the type-specific parse logic.</param>
+    /// <param name="result">The parsed value when parsing succeeds; otherwise, the type default.</param>
+    /// <returns><see langword="true"/> when parsing succeeds; otherwise, <see langword="false"/>.</returns>
+    public static bool TryParseUtf8<T>(
+        ReadOnlySpan<byte> utf8Text,
+        NumberStyles style,
+        IFormatProvider? provider,
+        Utf16TryParseFunc<T> parse,
+        out T result)
+    {
+        int charCount = Encoding.UTF8.GetCharCount(utf8Text);
+        if (charCount <= StackCharBufferLimit)
+        {
+            Span<char> buffer = stackalloc char[charCount];
+            Encoding.UTF8.GetChars(utf8Text, buffer);
+            return parse(buffer, style, provider, out result);
+        }
+
+        char[] rented = ArrayPool<char>.Shared.Rent(charCount);
+        try
+        {
+            Span<char> buffer = rented.AsSpan(0, charCount);
+            Encoding.UTF8.GetChars(utf8Text, buffer);
+            return parse(buffer, style, provider, out result);
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(rented);
+        }
+    }
 
     /// <summary>
     /// Applies the supported decimal whitespace policy for fixed-width integer parsing.
@@ -54,7 +140,8 @@ internal static class NumericParseHelpers
     /// <param name="normalized">The span after any allowed whitespace was trimmed.</param>
     /// <returns>
     /// <see langword="true"/> when <paramref name="style"/> includes
-    /// <see cref="NumberStyles.AllowHexSpecifier"/> and no unsupported flags.
+    /// <see cref="NumberStyles.AllowHexSpecifier"/> and no unsupported flags. Leading and trailing whitespace are
+    /// permitted only when the corresponding whitespace flags are set.
     /// </returns>
     public static bool TryNormalizeHexText(
         ReadOnlySpan<char> text,

@@ -36,6 +36,11 @@ policies can provide:
 - retain and release callbacks for keys, values, or set items;
 - one opaque context pointer passed to every callback.
 
+Retain callbacks are value-returning and cannot report allocation failure separately from the
+payload they return. A retain callback that allocates must either complete successfully or apply a
+caller-defined fatal/error-transfer policy consistently; returning `NULL` is treated as the retained
+payload value and is not interpreted as `TDS_HAMT_OUT_OF_MEMORY`.
+
 `try_remove` reports the removed value pointer as stored in the source map. That pointer remains
 valid according to the source map's lifetime and policy; the call does not transfer ownership.
 

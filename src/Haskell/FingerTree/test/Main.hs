@@ -65,6 +65,7 @@ testDeque = do
   assertEqual "deque insertAt" (Just [1, 2, 9, 3, 4, 5]) (Deque.toList <$> Deque.insertAt 2 9 deque)
   assertEqual "deque deleteAt" (Just [1, 2, 4, 5]) (Deque.toList <$> Deque.deleteAt 2 deque)
   assertEqual "deque slice" (Just [2, 3, 4]) (Deque.toList <$> Deque.slice 1 3 deque)
+  assertEqual "deque overflowing slice rejected" Nothing (Deque.slice 1 maxBound deque)
   assertEqual "deque lower bound" 1 (Deque.sortedLowerBound 2 (Deque.fromList [1 :: Int, 2, 2, 4]))
   assertEqual "deque upper bound" 3 (Deque.sortedUpperBound 2 (Deque.fromList [1 :: Int, 2, 2, 4]))
   assertEqual "deque binary search" (Deque.Found 1) (Deque.sortedBinarySearch 2 (Deque.fromList [1 :: Int, 2, 2, 4]))
@@ -107,15 +108,18 @@ testSortedCollections = do
   assertEqual "bag countOf" 2 (SortedBag.countOf 2 bag)
   assertEqual "bag index" (Just 2) (SortedBag.index 2 bag)
   assertEqual "bag slice" (Just [1, 2, 2]) (SortedBag.toList <$> SortedBag.slice 1 3 bag)
+  assertEqual "bag overflowing slice rejected" Nothing (SortedBag.slice 1 maxBound bag)
   let set = SortedSet.fromList [3 :: Int, 1, 2]
   assertEqual "set floor" (Just 2) (SortedSet.floor 2 set)
   assertEqual "set higher" (Just 3) (SortedSet.higher 2 set)
   assertEqual "set index" (Just 2) (SortedSet.index 1 set)
+  assertEqual "set overflowing slice rejected" Nothing (SortedSet.slice 1 maxBound set)
   assertBool "set algebra" (SortedSet.setEquals (SortedSet.union set (SortedSet.singleton 4)) (SortedSet.fromList [1 :: Int, 2, 3, 4]))
   let dict = SortedMap.fromList [(2 :: Int, "b"), (1, "a"), (2, "bb")]
   assertEqual "map last wins" (Just "bb") (SortedMap.lookup 2 dict)
   assertEqual "map entryAt" (Just (2, "bb")) (SortedMap.index 1 dict)
   assertEqual "map floor" (Just (2, "bb")) (SortedMap.floorEntry 2 dict)
+  assertEqual "map overflowing slice rejected" Nothing (SortedMap.slice 1 maxBound dict)
 
 testPriorityQueue :: IO ()
 testPriorityQueue = do
@@ -154,10 +158,13 @@ testRopes = do
   assertEqual "rope index" (Just 65) (Rope.index 64 rope)
   assertEqual "rope insert" (Just [1, 99, 2]) (take 3 . Rope.toList <$> Rope.insertAt 1 99 (Rope.fromList [1 :: Int, 2]))
   assertEqual "rope split" (Just ([1, 2], [3, 4])) (pairToLists <$> Rope.splitAt 2 (Rope.fromList [1 :: Int .. 4]))
+  assertEqual "rope overflowing slice rejected" Nothing (Rope.slice 1 maxBound rope)
+  assertEqual "rope overflowing removal rejected" Nothing (Rope.removeRange 1 maxBound rope)
   let measured = MeasuredRope.fromListWith Sum [1 :: Int, 2, 3]
   assertEqual "measured rope total" (Sum 6) (MeasuredRope.measure measured)
   assertEqual "measured rope prefix" (Just (Sum 3)) (MeasuredRope.prefixMeasure 2 measured)
   assertEqual "measured rope locate" (Just (1, Sum 1, 2)) (MeasuredRope.locateByMeasure (\(Sum value) -> value >= 3) measured)
+  assertEqual "measured rope overflowing slice rejected" Nothing (MeasuredRope.toList <$> MeasuredRope.slice 1 maxBound measured)
   where
     pairToLists (left, right) = (Rope.toList left, Rope.toList right)
 

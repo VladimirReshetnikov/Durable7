@@ -56,6 +56,36 @@ public sealed class WideIntegerNumberStylesTests
         Assert.False(TryParse(type, "1,000", NumberStyles.Integer | NumberStyles.AllowThousands, out _));
     }
 
+    /// <summary>
+    /// Verifies UTF-8 parsing follows the same supported style combinations as UTF-16 parsing.
+    /// </summary>
+    [Fact]
+    public void Utf8Parse_AcceptsSupportedDecimalAndHexCombinations()
+    {
+        Assert.Equal((UInt256)42, UInt256.Parse(" 2A "u8, NumberStyles.HexNumber, CultureInfo.InvariantCulture));
+        Assert.Equal((UInt512)42, UInt512.Parse(" 2A "u8, NumberStyles.HexNumber, CultureInfo.InvariantCulture));
+        Assert.Equal((UInt1024)42, UInt1024.Parse(" 2A "u8, NumberStyles.HexNumber, CultureInfo.InvariantCulture));
+
+        Assert.Equal((Int256)(-42), Int256.Parse(" -42 "u8, NumberStyles.Integer, CultureInfo.InvariantCulture));
+        Assert.Equal((Int512)(-42), Int512.Parse(" -42 "u8, NumberStyles.Integer, CultureInfo.InvariantCulture));
+        Assert.Equal((Int1024)(-42), Int1024.Parse(" -42 "u8, NumberStyles.Integer, CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
+    /// Verifies UTF-8 parsing rejects unsupported style flags and disallowed syntactic elements.
+    /// </summary>
+    [Fact]
+    public void Utf8TryParse_RejectsDisallowedStyleElements()
+    {
+        Assert.False(UInt256.TryParse("+42"u8, NumberStyles.None, CultureInfo.InvariantCulture, out _));
+        Assert.False(UInt512.TryParse("+42"u8, NumberStyles.None, CultureInfo.InvariantCulture, out _));
+        Assert.False(UInt1024.TryParse("+42"u8, NumberStyles.None, CultureInfo.InvariantCulture, out _));
+
+        Assert.False(Int256.TryParse("+2A"u8, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _));
+        Assert.False(Int512.TryParse("+2A"u8, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _));
+        Assert.False(Int1024.TryParse("+2A"u8, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _));
+    }
+
     private static object Parse(Type type, string text, NumberStyles style)
     {
         var method = type.GetMethod(

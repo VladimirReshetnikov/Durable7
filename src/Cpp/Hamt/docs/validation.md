@@ -41,6 +41,21 @@ From `src/Cpp/Hamt`:
 Use the first command when you only need a compile gate. Use the `-RunTests` forms before committing
 behavior changes, public API changes, policy-object changes, or documentation that claims the tests pass.
 
+## Portable Sanitizer Check
+
+On hosts with GCC or Clang on `PATH`, the header-only HAMT test executable can also be built directly
+with AddressSanitizer and UndefinedBehaviorSanitizer. This is an optional cross-toolchain lane, but it
+is valuable for policy-object, collision-bucket, and structural-sharing changes:
+
+```powershell
+New-Item -ItemType Directory -Force build | Out-Null
+g++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined -fno-omit-frame-pointer `
+    -Iinclude tests/persistent_hamt_tests.cpp -o build/persistent_hamt_tests_asan
+./build/persistent_hamt_tests_asan
+```
+
+Use an equivalent `clang++` command when Clang is the available sanitizer-capable compiler.
+
 ## Test Coverage
 
 `tests/persistent_hamt_tests.cpp` is a deterministic native test executable with a small local test

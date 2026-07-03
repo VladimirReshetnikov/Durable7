@@ -94,6 +94,9 @@ warning policy, generated outputs, and native model-test coverage:
 - [C++ HAMT validation](../../src/Cpp/Hamt/docs/validation.md)
 - [C++ HAMT tests](../../src/Cpp/Hamt/tests/README.md)
 
+The C and C++ HAMT validation guides also include optional direct GCC/Clang ASan/UBSan commands for
+hosts with sanitizer-capable native compilers on `PATH`.
+
 ## FingerTree Native Ports
 
 The C and C++ language-root scripts can build the FingerTree workspaces through their CMake presets:

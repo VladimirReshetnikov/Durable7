@@ -308,7 +308,7 @@ public readonly struct UInt1024 :
         NumberStyles style = NumberStyles.Integer,
         IFormatProvider? provider = null)
     {
-        return ParseCore(Encoding.UTF8.GetString(utf8Text), style, provider);
+        return NumericParseHelpers.ParseUtf8(utf8Text, style, provider, ParseCore);
     }
 
     /// <summary>
@@ -425,7 +425,7 @@ public readonly struct UInt1024 :
         NumberStyles style,
         IFormatProvider? provider,
         out UInt1024 result) =>
-        TryParse(Encoding.UTF8.GetString(utf8Text), style, provider, out result);
+        NumericParseHelpers.TryParseUtf8(utf8Text, style, provider, TryParseCore, out result);
 
     #endregion
 
@@ -920,7 +920,7 @@ public readonly struct UInt1024 :
     /// </summary>
     /// <param name="text">The hexadecimal input text.</param>
     /// <param name="style">
-    /// The accepted style flags, which must only include <see cref="NumberStyles.AllowHexSpecifier"/>.
+    /// The accepted hexadecimal style flags.
     /// </param>
     /// <param name="value">
     /// When this method returns <see langword="true"/>, contains the parsed value; otherwise, contains

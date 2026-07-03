@@ -116,8 +116,11 @@ For signed types:
 ### Parse/format invariants
 
 - `Parse` and `TryParse` families must remain behaviorally aligned for success/failure classification (`TryParse == false` for any `Parse` exception path).
-- UTF-8 parse/format pathways must match UTF-16 semantics for equivalent textual data.
-- Culture-aware sign token handling is centralized through shared helper logic.
+- UTF-8 parse/format pathways must match UTF-16 semantics for equivalent textual data. Fixed-width integer
+  UTF-8 parsers transcode through temporary spans rather than allocating intermediate strings.
+- Culture-aware sign token handling and supported `NumberStyles` flag validation are centralized through shared
+  helper logic. Decimal parsing supports leading/trailing whitespace and leading signs; hexadecimal parsing
+  requires `AllowHexSpecifier` and supports leading/trailing whitespace when the corresponding flags are set.
 
 ### Byte conversion invariants (`BitConverterEx`)
 

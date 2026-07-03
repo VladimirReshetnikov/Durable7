@@ -98,8 +98,12 @@ indexOf value (SortedSet values) = Set.lookupIndex value values
 
 slice :: Ord a => Int -> Int -> SortedSet a -> Maybe (SortedSet a)
 slice position lengthValue setValue
-  | position < 0 || lengthValue < 0 || position + lengthValue > count setValue = Nothing
+  | not (isValidRange position lengthValue (count setValue)) = Nothing
   | otherwise = Just (fromList (take lengthValue (drop position (toList setValue))))
+
+isValidRange :: Int -> Int -> Int -> Bool
+isValidRange position lengthValue total =
+  position >= 0 && lengthValue >= 0 && position <= total && lengthValue <= total - position
 
 union :: Ord a => SortedSet a -> SortedSet a -> SortedSet a
 union (SortedSet left) (SortedSet right) = SortedSet (Set.union left right)

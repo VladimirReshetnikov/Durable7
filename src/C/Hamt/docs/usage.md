@@ -85,7 +85,9 @@ policy.value_equal = int_equal;
 Use retain/release callbacks when keys, values, or set items need owned lifetime management. With
 null retain/release callbacks, the collection stores the pointer values it is given and does not free
 or copy pointed-to data. Any callback context pointer must remain valid for every map or set version
-created with that policy.
+created with that policy. Retain callbacks cannot report allocation failure through
+`TDS_HAMT_OUT_OF_MEMORY`; if they allocate, they must either succeed or use a caller-defined fatal or
+non-local error policy. Returning `NULL` stores `NULL` as the retained payload.
 
 Hash/equality callbacks must obey the normal hash-table contract: equivalent keys or items must
 produce equal 32-bit hash values.

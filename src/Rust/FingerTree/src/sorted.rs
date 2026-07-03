@@ -833,6 +833,7 @@ mod tests {
         let removed = bag.remove(&100);
         let removed_all = added.remove_all(&128);
         let range = bag.get_range(80, 40).unwrap();
+        assert!(bag.get_range(1, usize::MAX).is_none());
 
         assert_eq!(
             bag.items.measure(),
@@ -888,6 +889,7 @@ mod tests {
         let inserted = set.add(300);
         let removed = set.remove(&100);
         let range = set.get_range(80, 40).unwrap();
+        assert!(set.get_range(1, usize::MAX).is_none());
 
         assert_eq!(
             set.items.measure(),
@@ -939,6 +941,7 @@ mod tests {
         let inserted = map.set_item(300, -300);
         let removed = map.remove(&100);
         let range = map.get_range(80, 40).unwrap();
+        assert!(map.get_range(1, usize::MAX).is_none());
 
         assert_eq!(
             map.entries.measure(),

@@ -53,7 +53,7 @@ impl<T> RopeChunk<T> {
     }
 
     fn slice(&self, offset: usize, len: usize) -> Self {
-        debug_assert!(offset + len <= self.len);
+        debug_assert!(offset <= self.len && len <= self.len - offset);
         Self {
             data: Arc::clone(&self.data),
             start: self.start + offset,
@@ -1413,6 +1413,8 @@ mod tests {
         assert_eq!(rope.to_vec(), vec![1, 2, 3]);
         assert_eq!(edited.to_vec(), vec![1, 9, 2]);
         assert_eq!(rope.slice(1, 2).unwrap().to_vec(), vec![2, 3]);
+        assert!(rope.slice(1, usize::MAX).is_none());
+        assert!(rope.remove_range(1, usize::MAX).is_none());
     }
 
     #[test]
@@ -1476,6 +1478,8 @@ mod tests {
         assert_eq!(chunked.copy_to(1, &mut copied), Some(()));
         assert_eq!(copied, vec![4, 8]);
         assert_eq!(chunked.copy_to(3, &mut [0]), None);
+        let mut single = [0];
+        assert_eq!(chunked.copy_to(usize::MAX, &mut single), None);
         chunked.validate_chunk_invariants();
     }
 

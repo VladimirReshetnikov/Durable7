@@ -109,12 +109,12 @@ splitAt position rope
 
 slice :: Int -> Int -> Rope a -> Maybe (Rope a)
 slice position lengthValue rope
-  | position < 0 || lengthValue < 0 || position + lengthValue > count rope = Nothing
+  | not (isValidRange position lengthValue (count rope)) = Nothing
   | otherwise = Just (fromList (take lengthValue (drop position (toList rope))))
 
 removeRange :: Int -> Int -> Rope a -> Maybe (Rope a)
 removeRange position lengthValue rope
-  | position < 0 || lengthValue < 0 || position + lengthValue > count rope = Nothing
+  | not (isValidRange position lengthValue (count rope)) = Nothing
   | otherwise = Just (fromList (prefix ++ drop lengthValue suffix))
   where
     (prefix, suffix) = P.splitAt position (toList rope)
@@ -132,3 +132,7 @@ replaceAt :: Int -> a -> [a] -> [a]
 replaceAt 0 value (_ : rest) = value : rest
 replaceAt position value (x : rest) = x : replaceAt (position - 1) value rest
 replaceAt _ _ [] = []
+
+isValidRange :: Int -> Int -> Int -> Bool
+isValidRange position lengthValue total =
+  position >= 0 && lengthValue >= 0 && position <= total && lengthValue <= total - position

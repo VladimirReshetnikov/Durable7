@@ -101,7 +101,7 @@ indexOfKey key (SortedMap values) = Map.lookupIndex key values
 
 slice :: Ord k => Int -> Int -> SortedMap k v -> Maybe (SortedMap k v)
 slice position lengthValue mapValue
-  | position < 0 || lengthValue < 0 || position + lengthValue > count mapValue = Nothing
+  | not (isValidRange position lengthValue (count mapValue)) = Nothing
   | otherwise = Just (fromList (take lengthValue (drop position (toList mapValue))))
 
 keys :: SortedMap k v -> [k]
@@ -109,3 +109,7 @@ keys = fmap fst . toList
 
 elems :: SortedMap k v -> [v]
 elems = fmap snd . toList
+
+isValidRange :: Int -> Int -> Int -> Bool
+isValidRange position lengthValue total =
+  position >= 0 && lengthValue >= 0 && position <= total && lengthValue <= total - position

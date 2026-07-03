@@ -105,5 +105,9 @@ index position bag
 
 slice :: Ord a => Int -> Int -> SortedBag a -> Maybe (SortedBag a)
 slice position lengthValue bag
-  | position < 0 || lengthValue < 0 || position + lengthValue > count bag = Nothing
+  | not (isValidRange position lengthValue (count bag)) = Nothing
   | otherwise = Just (fromList (take lengthValue (drop position (toList bag))))
+
+isValidRange :: Int -> Int -> Int -> Bool
+isValidRange position lengthValue total =
+  position >= 0 && lengthValue >= 0 && position <= total && lengthValue <= total - position
