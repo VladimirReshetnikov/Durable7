@@ -38,13 +38,13 @@ namespace Tools.DataStructures.FingerTree;
 /// var (head, tail) = edited.Split(5);                               // "hello" | ", there!"
 /// </code>
 /// </example>
-public sealed class Rope<T> : IReadOnlyList<T>
+public sealed partial class Rope<T> : IReadOnlyList<T>
 {
     // Chunk-size policy. Chunks never exceed MaxChunkSize (so within-chunk work is bounded); on shrink/concat a
     // chunk below MinChunkSize is coalesced with a neighbour when they fit, keeping the chunk count ~ n/Target
     // and the tree depth O(log n). Bulk construction targets MaxChunkSize chunks.
-    private const int MinChunkSize = 256;
-    private const int MaxChunkSize = 2048;
+    private const int MinChunkSize = RopeChunking.MinChunkSize;
+    private const int MaxChunkSize = RopeChunking.MaxChunkSize;
 
     private static readonly Rope<T> EmptyInstance = new(FingerTree<Chunk<T>, int, ChunkLengthMeasure<T>>.Empty);
 
@@ -54,6 +54,14 @@ public sealed class Rope<T> : IReadOnlyList<T>
 
     /// <summary>Gets the empty rope.</summary>
     public static Rope<T> Empty => EmptyInstance;
+
+    /// <summary>Creates an empty mutable builder for incrementally appending elements.</summary>
+    /// <returns>A mutable builder whose first snapshot is <see cref="Empty"/>.</returns>
+    public static Builder CreateBuilder() => new(EmptyInstance);
+
+    /// <summary>Creates a mutable append-only builder initialized with this rope as its frozen prefix. O(1).</summary>
+    /// <returns>A builder containing this rope's elements.</returns>
+    public Builder ToBuilder() => new(this);
 
     /// <summary>Gets the number of elements. O(1).</summary>
     public int Count => _tree.Measure;
@@ -322,14 +330,9 @@ public sealed class Rope<T> : IReadOnlyList<T>
     {
         if (elements.IsEmpty)
             return EmptyInstance;
-        var tree = FingerTree<Chunk<T>, int, ChunkLengthMeasure<T>>.Empty;
-        for (var start = 0; start < elements.Length; start += MaxChunkSize)
-        {
-            var length = Math.Min(MaxChunkSize, elements.Length - start);
-            tree = tree.Append(new Chunk<T>(elements.Slice(start, length).ToArray()));
-        }
-
-        return new Rope<T>(tree);
+        var builder = new ChunkBuilder<T>();
+        builder.Add(elements);
+        return FromFrozenChunks(builder.FreezeChunks());
     }
 
     /// <summary>Creates a rope from an enumerable source, enumerated once. O(n).</summary>
@@ -340,8 +343,19 @@ public sealed class Rope<T> : IReadOnlyList<T>
         ArgumentNullException.ThrowIfNull(elements);
         if (elements is Rope<T> rope)
             return rope;
-        var array = elements as T[] ?? [.. elements];
-        return Create(array);
+
+        var builder = new ChunkBuilder<T>();
+        if (elements is T[] array)
+        {
+            builder.Add(array);
+        }
+        else
+        {
+            foreach (var element in elements)
+                builder.Add(element);
+        }
+
+        return FromFrozenChunks(builder.FreezeChunks());
     }
 
     /// <summary>Creates a rope from existing memory blocks, copying them into rope-owned chunks. O(total length).</summary>
@@ -354,15 +368,15 @@ public sealed class Rope<T> : IReadOnlyList<T>
     public static Rope<T> FromChunks(params ReadOnlyMemory<T>[] chunks)
     {
         ArgumentNullException.ThrowIfNull(chunks);
-        var tree = FingerTree<Chunk<T>, int, ChunkLengthMeasure<T>>.Empty;
+        var builder = new ChunkBuilder<T>();
         foreach (var chunk in chunks)
         {
             if (chunk.Length == 0)
                 continue;
-            tree = AppendCopied(tree, chunk);
+            builder.Add(chunk.Span);
         }
 
-        return tree.IsEmpty ? EmptyInstance : new Rope<T>(tree);
+        return FromFrozenChunks(builder.FreezeChunks());
     }
 
     /// <summary>Returns an enumerator over the elements in order.</summary>
@@ -403,6 +417,21 @@ public sealed class Rope<T> : IReadOnlyList<T>
     private static Rope<T> Wrap(FingerTree<Chunk<T>, int, ChunkLengthMeasure<T>> tree) =>
         tree.IsEmpty ? EmptyInstance : new Rope<T>(tree);
 
+    internal static Rope<T> FromFrozenChunks(Chunk<T>[] chunks)
+    {
+        var tree = FingerTree<Chunk<T>, int, ChunkLengthMeasure<T>>.Empty;
+        foreach (var chunk in chunks)
+        {
+            if (chunk.Length == 0)
+                continue;
+            if (chunk.Length > MaxChunkSize)
+                throw new InvalidOperationException($"Rope invariant violated: a frozen chunk of length {chunk.Length} exceeds the maximum {MaxChunkSize}.");
+            tree = tree.Append(chunk);
+        }
+
+        return Wrap(tree);
+    }
+
     /// <summary>Reattaches a chunk that grew, splitting it in two when it exceeds the maximum size.</summary>
     private static FingerTree<Chunk<T>, int, ChunkLengthMeasure<T>> JoinGrown(
         FingerTree<Chunk<T>, int, ChunkLengthMeasure<T>> left,
@@ -432,19 +461,6 @@ public sealed class Rope<T> : IReadOnlyList<T>
             return left.Append(Chunk<T>.Concat(shrunk, firstRight)).Concat(rightRest);
 
         return left.Append(shrunk).Concat(right);
-    }
-
-    private static FingerTree<Chunk<T>, int, ChunkLengthMeasure<T>> AppendCopied(
-        FingerTree<Chunk<T>, int, ChunkLengthMeasure<T>> tree,
-        ReadOnlyMemory<T> block)
-    {
-        for (var start = 0; start < block.Length; start += MaxChunkSize)
-        {
-            var length = Math.Min(MaxChunkSize, block.Length - start);
-            tree = tree.Append(new Chunk<T>(block.Slice(start, length).ToArray()));
-        }
-
-        return tree;
     }
 
     private static InvalidOperationException EmptyError() => new("The rope is empty.");

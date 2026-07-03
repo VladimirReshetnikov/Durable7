@@ -163,6 +163,23 @@ var range = map.GetRange(1, 2);
 Pass an `IComparer<T>` or `IComparer<TKey>` through `Create` or `CreateRange` when the default order
 is not the desired order.
 
+For large batches of sorted-set or sorted-dictionary edits followed by a snapshot, use the nested builders:
+
+```csharp
+var builder = Tools.DataStructures.FingerTree.SortedSet<int>.CreateBuilder();
+builder.UnionWith(new[] { 5, 1, 3 });
+builder.Remove(1);
+var frozenSet = builder.ToImmutable();
+
+var mapBuilder = map.ToBuilder();
+mapBuilder.SetItem(3, "three");
+mapBuilder.Remove(1);
+var frozenMap = mapBuilder.ToImmutable();
+```
+
+The sorted builders are staging builders: a dirty `ToImmutable()` rebuilds the immutable value. For small
+batches into a large existing collection, persistent `Add`/`Remove`/`SetItem` remains the better default.
+
 ## Priority Queue
 
 `PriorityQueue<TElement, TPriority>` is a persistent minimum-priority queue. Equal priorities drain
@@ -260,6 +277,21 @@ var charRope = builder.ToRope();
 var textRope = builder.ToTextRope();
 ```
 
+For element-generic append staging, use the nested rope builders. They adopt an existing rope as a frozen
+prefix, freeze only the newly appended tail, and cache clean snapshots:
+
+```csharp
+var ints = Rope<int>.Create(1, 2).ToBuilder();
+ints.Add(3);
+ints.AddRange(new[] { 4, 5 });
+var frozenInts = ints.ToImmutable();
+
+var measured = MeasuredRope<int, int, SumMeasure<int>>.CreateBuilder();
+measured.AddRange(new[] { 5, 1, 4 });
+var total = measured.Measure; // 10
+var frozenMeasured = measured.ToImmutable();
+```
+
 The editor-grade extras cover code-point and grapheme addressing, newline-style detection, and
 CRLF-aware line text:
 
@@ -310,11 +342,15 @@ problem; use the raw measured tree when your measure is the primary design.
 | Custom monoid measure, measure-guided locate, or split | `FingerTree<TElement, TMeasure, TMeasureOps>` |
 | Sorted values with duplicates | `SortedBag<T>` |
 | Unique sorted values and set algebra | `SortedSet<T>` |
+| Batched sorted-set edits before one snapshot | `SortedSet<T>.Builder` |
 | Sorted key/value lookup and rank access | `SortedDictionary<TKey, TValue>` |
+| Batched sorted-dictionary edits before one snapshot | `SortedDictionary<TKey, TValue>.Builder` |
 | Minimum-priority draining and meld | `PriorityQueue<TElement, TPriority>` |
 | Closed-interval overlap and containment queries | `IntervalTree<T>` |
 | Chunked persistent positional sequence | `Rope<T>` |
+| Incremental generic append construction | `Rope<T>.Builder` |
 | Chunked sequence with cumulative measure navigation | `MeasuredRope<T, TMeasure, TMeasureOps>` |
+| Incremental measured append construction | `MeasuredRope<T, TMeasure, TMeasureOps>.Builder` |
 | Newline-aware text content | `MeasuredRope<char, int, NewlineMeasure>` and `RopeText` helpers |
 | Incremental text construction | `RopeBuilder` |
 

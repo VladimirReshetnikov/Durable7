@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Tools.DataStructures.FingerTree;
@@ -35,7 +36,7 @@ namespace Tools.DataStructures.FingerTree;
 /// var small = primes.GetRange(3, 8);         // { 3, 5, 7 }
 /// </code>
 /// </example>
-public sealed class SortedSet<T> : IReadOnlyCollection<T>
+public sealed partial class SortedSet<T> : IReadOnlyCollection<T>
 {
     private static readonly SortedSet<T> EmptyDefault = new(
         FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>>.Empty,
@@ -52,6 +53,15 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
 
     /// <summary>Gets the empty set ordered by <see cref="Comparer{T}.Default"/>.</summary>
     public static SortedSet<T> Empty => EmptyDefault;
+
+    /// <summary>Creates an empty mutable builder ordered by the supplied comparer.</summary>
+    /// <param name="comparer">Order to maintain, or <see langword="null"/> for <see cref="Comparer{T}.Default"/>.</param>
+    /// <returns>A mutable builder whose first snapshot is equivalent to <see cref="Create(IComparer{T}?)"/>.</returns>
+    public static Builder CreateBuilder(IComparer<T>? comparer = null) => new(comparer ?? Comparer<T>.Default);
+
+    /// <summary>Creates a mutable builder containing this set's elements and comparer. O(n log n).</summary>
+    /// <returns>A mutable builder initialized with this set.</returns>
+    public Builder ToBuilder() => new(this);
 
     /// <summary>Creates an empty set with the given comparer (or the default comparer when null).</summary>
     /// <param name="comparer">Order to maintain, or <see langword="null"/> for <see cref="Comparer{T}.Default"/>.</param>
@@ -82,7 +92,7 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
             hasPrevious = true;
         }
 
-        return new(tree, order);
+        return Wrap(tree, order);
     }
 
     /// <summary>Gets the number of elements. O(1).</summary>
@@ -329,6 +339,42 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
+    internal static SortedSet<T> FromSortedDistinct(IEnumerable<T> sorted, IComparer<T> comparer)
+    {
+        ArgumentNullException.ThrowIfNull(sorted);
+        ArgumentNullException.ThrowIfNull(comparer);
+
+        var tree = FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>>.Empty;
+        var hasPrevious = false;
+        var previous = default(T);
+        foreach (var item in sorted)
+        {
+            Debug.Assert(!hasPrevious || comparer.Compare(previous!, item) < 0, "Input must be strictly ordered and comparer-distinct.");
+            tree = tree.Append(item);
+            previous = item;
+            hasPrevious = true;
+        }
+
+        return Wrap(tree, comparer);
+    }
+
+    internal void ValidateInvariants()
+    {
+        var actualCount = _tree.ValidateAndCount();
+        if (actualCount != Count)
+            throw new InvalidOperationException($"SortedSet invariant violated: tree leaf count {actualCount} does not equal Count {Count}.");
+
+        var hasPrevious = false;
+        var previous = default(T);
+        foreach (var item in this)
+        {
+            if (hasPrevious && _comparer.Compare(previous!, item) >= 0)
+                throw new InvalidOperationException("SortedSet invariant violated: elements are not strictly ordered by the comparer.");
+            previous = item;
+            hasPrevious = true;
+        }
+    }
+
     /// <summary>Reads the element at rank <paramref name="rank"/> without reconstructing a subtree. O(log n).</summary>
     /// <param name="rank">A zero-based rank known to be in <c>0 .. Count - 1</c>.</param>
     private T ElementAt(int rank)
@@ -450,7 +496,10 @@ public sealed class SortedSet<T> : IReadOnlyCollection<T>
     // Collapse to the shared empty singleton only when the tree is empty AND the default comparer is in use;
     // a non-default-comparer set must keep its own comparer when it becomes empty.
     private SortedSet<T> Wrap(FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree) =>
-        tree.IsEmpty && ReferenceEquals(_comparer, Comparer<T>.Default) ? EmptyDefault : new(tree, _comparer);
+        Wrap(tree, _comparer);
+
+    private static SortedSet<T> Wrap(FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree, IComparer<T> comparer) =>
+        tree.IsEmpty && ReferenceEquals(comparer, Comparer<T>.Default) ? EmptyDefault : new(tree, comparer);
 
     private static InvalidOperationException EmptyError() => new("The sorted set is empty.");
 }

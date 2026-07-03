@@ -24,6 +24,9 @@ internal interface IMeasuredElement<TElement, TMeasure>
     /// <param name="block">The nested block when this element groups children; otherwise <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when this element is a leaf; otherwise <see langword="false"/>.</returns>
     bool TryGetLeaf(out TElement leaf, out IEnumerationBlock<TElement>? block);
+
+    /// <summary>Validates this element's cached metadata and returns its stored leaf count.</summary>
+    int ValidateAndCount();
 }
 
 /// <summary>
@@ -53,6 +56,15 @@ internal readonly struct MeasuredLeaf<TElement, TMeasure, TMeasureOps>(TElement 
         leaf = Value;
         block = null;
         return true;
+    }
+
+    /// <inheritdoc/>
+    public int ValidateAndCount()
+    {
+        var expected = TMeasureOps.Measure(Value);
+        if (!EqualityComparer<TMeasure>.Default.Equals(expected, Measure))
+            throw new InvalidOperationException("Measured finger-tree invariant violated: a leaf's cached measure is stale.");
+        return 1;
     }
 }
 
@@ -111,4 +123,26 @@ internal sealed class MeasuredNode<TElement, TChild, TMeasure, TMonoid>
     /// <inheritdoc/>
     public bool TryGetChild(int index, out TElement leaf, out IEnumerationBlock<TElement>? block) =>
         Children[index].TryGetLeaf(out leaf, out block);
+
+    /// <inheritdoc/>
+    public int ValidateAndCount()
+    {
+        if (Children.Length is < 2 or > 3)
+            throw new InvalidOperationException($"Measured finger-tree invariant violated: a node has arity {Children.Length}.");
+
+        var count = 0;
+        var measure = Children[0].Measure;
+        for (var i = 0; i < Children.Length; i++)
+        {
+            var child = Children[i];
+            count += child.ValidateAndCount();
+            if (i > 0)
+                measure = TMonoid.Combine(measure, child.Measure);
+        }
+
+        if (!EqualityComparer<TMeasure>.Default.Equals(measure, Measure))
+            throw new InvalidOperationException("Measured finger-tree invariant violated: a node's cached measure is stale.");
+
+        return count;
+    }
 }

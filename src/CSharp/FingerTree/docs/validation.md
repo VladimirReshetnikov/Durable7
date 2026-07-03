@@ -77,10 +77,10 @@ The suite covers:
   branching-persistence, randomized model, and complexity-guard behavior;
 - the general measured tree, built-in measures, custom comparisons, product measures, sum measures, zero-closure
   named operations, and `TryLocate`/`TrySplitFind` equivalence;
-- derived sorted bag/set/dictionary, priority queue, interval tree, and reversible deque behavior against BCL or
-  brute-force models where appropriate;
+- derived sorted bag/set/dictionary, sorted mutable builders, priority queue, interval tree, and reversible deque
+  behavior against BCL or brute-force models where appropriate;
 - `Rope<T>`, `MeasuredRope<T, TMeasure, TMeasureOps>`, text helpers, editor-grade Unicode/newline helpers,
-  and `RopeBuilder`;
+  `RopeBuilder`, and nested append-only rope builders;
 - runnable sample smoke tests for Tour, Showcase, and Editor;
 - persistence/concurrency examples and tearable-struct stress tests;
 - CsCheck property tests and model-based command-sequence tests that shrink operation histories rather than only

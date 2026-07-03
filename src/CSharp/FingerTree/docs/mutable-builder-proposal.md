@@ -1,11 +1,11 @@
 # Proposal: Mutable Builders For FingerTree Collections
 
-- Status: Proposed
+- Status: Partially implemented (A1, B1, and B2 landed; A2 and deferred builders remain deferred)
 - Created (UTC): 2026-07-01T18:14:04Z
-- Revised (UTC): 2026-07-01T20:14:30Z
-- Repository HEAD: b1913bf759823ab78b1208ad94a9bd9a9839a8f5
+- Revised (UTC): 2026-07-03T15:48:11Z
+- Repository HEAD: 3f49d1a1ba71390af95f5a9389b99d2e334c8beb
 - Repository HEAD at creation: 8a0104880d57bcf77daeff761b74f352b14ce906
-- Repository HEAD at revision: b1913bf759823ab78b1208ad94a9bd9a9839a8f5
+- Repository HEAD at revision: 3f49d1a1ba71390af95f5a9389b99d2e334c8beb
 - Audience: Maintainers designing bulk construction and builder APIs for the C# FingerTree workspace
 - Scope: Applicability of `System.Collections.Immutable`-style builders; internal bulk-construction machinery;
   public builder API shape, semantic contracts, and complexity; validation, benchmarks, and rollout order
@@ -48,6 +48,17 @@ Equally important is what this proposal does **not** deliver, stated up front ra
   is already served by one-pass `CreateRange` factories and, for text, by the existing `RopeBuilder`. Builders
   for `SortedBag<T>`, `PriorityQueue<TElement, TPriority>`, `IntervalTree<T>`, `FingerTreeDeque<T>`, the raw
   measured tree, and indexed rope editing are all explicitly deferred, each with its recorded reason.
+
+## Implementation Status
+
+The first implementation branch lands the unconditional A1 machinery plus public B1 and B2 builders:
+measured-core validation hooks, trust-sorted sorted-set/dictionary freeze paths, rope chunk staging, the
+`RopeBuilder` freeze reroute, mutable builders for `SortedSet<T>` and
+`SortedDictionary<TKey, TValue>`, and append-only frozen-prefix builders for `Rope<T>` and
+`MeasuredRope<T, TMeasure, TMeasureOps>`.
+
+A2 bottom-up packers remain intentionally unimplemented until a benchmark-gated prototype clears this
+document's acceptance criteria. The deferred builder families listed below remain deferred.
 
 ## Motivation: What Construction Costs Today
 

@@ -22,11 +22,13 @@ reasonable oracle.
   `CustomComparisonMeasureTests.cs`, `ProductMeasureTests.cs`, `SumMeasureTests.cs`, `TryLocateTests.cs`,
   `ZeroClosureNamedOpTests.cs`, and `AllocationFreeReadTests.cs` cover the measured core, measure families,
   closure-free predicates, product/sum operations, locate/split equivalence, and zero-allocation read paths.
-- `SortedBagTests.cs`, `SortedSetTests.cs`, `SortedDictionaryTests.cs`, `PriorityQueueTests.cs`,
-  `IntervalTreeTests.cs`, `ReversibleDequeTests.cs`, and `DerivedCollectionPersistenceTests.cs` cover derived
-  collection facades against BCL or brute-force model behavior.
+- `SortedBagTests.cs`, `SortedSetTests.cs`, `SortedDictionaryTests.cs`, `SortedBuilderTests.cs`,
+  `PriorityQueueTests.cs`, `IntervalTreeTests.cs`, `ReversibleDequeTests.cs`, and
+  `DerivedCollectionPersistenceTests.cs` cover derived collection facades and mutable sorted builders against
+  BCL or brute-force model behavior.
 - `RopeTests.cs`, `RopeModelTests.cs`, `MeasuredRopeTests.cs`, `RopeTextTests.cs`, `RopeTextExtrasTests.cs`, and
-  `RopeBuilderTests.cs` cover chunked ropes, measured ropes, text helpers, Unicode/newline extras, and builders.
+  `RopeBuilderTests.cs` / `RopeAppendBuilderTests.cs` cover chunked ropes, measured ropes, text helpers,
+  Unicode/newline extras, and builders.
 - `SampleSmokeTests.cs` captures the Tour, Showcase, and Editor sample output contracts.
 - `PersistenceConcurrencyExamplesTests.cs` and `TearableConcurrencyStressTests.cs` cover structural-sharing
   examples, atomic publication, concurrent reads, and tearable-value stress.

@@ -368,6 +368,14 @@ public sealed class FingerTree<TElement, TMeasure, TMeasureOps>
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
+    internal static FingerTree<TElement, TMeasure, TMeasureOps> WrapRoot(
+        MeasuredTree<TElement, MeasuredLeaf<TElement, TMeasure, TMeasureOps>, TMeasure, TMeasureOps> root) =>
+        Wrap(root);
+
+    internal void ValidateInvariants() => _root.ValidateAndCount();
+
+    internal int ValidateAndCount() => _root.ValidateAndCount();
+
     private static FingerTree<TElement, TMeasure, TMeasureOps> Wrap(
         MeasuredTree<TElement, MeasuredLeaf<TElement, TMeasure, TMeasureOps>, TMeasure, TMeasureOps> root) =>
         root.IsEmpty ? EmptyInstance : new(root);

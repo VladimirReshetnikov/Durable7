@@ -33,7 +33,7 @@ internal readonly struct MeasuredChunk<T, TMeasure, TMeasureOps>
     {
     }
 
-    private MeasuredChunk(Chunk<T> chunk, TMeasure measure)
+    internal MeasuredChunk(Chunk<T> chunk, TMeasure measure)
     {
         Chunk = chunk;
         Measure = measure;

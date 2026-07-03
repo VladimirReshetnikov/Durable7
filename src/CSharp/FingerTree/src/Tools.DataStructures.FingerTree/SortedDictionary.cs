@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Tools.DataStructures.FingerTree;
@@ -58,7 +59,7 @@ public readonly struct EntryMeasure<TKey, TValue> : IMeasure<KeyValuePair<TKey, 
 /// var firstByKey = map.EntryAt(0);           // (1, "one")
 /// </code>
 /// </example>
-public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, TValue>
+public sealed partial class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, TValue>
 {
     private static readonly SortedDictionary<TKey, TValue> EmptyDefault = new(
         FingerTree<KeyValuePair<TKey, TValue>, RankedKey<TKey>, EntryMeasure<TKey, TValue>>.Empty,
@@ -77,6 +78,15 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
 
     /// <summary>Gets the empty dictionary ordered by <see cref="Comparer{TKey}.Default"/>.</summary>
     public static SortedDictionary<TKey, TValue> Empty => EmptyDefault;
+
+    /// <summary>Creates an empty mutable builder ordered by the supplied key comparer.</summary>
+    /// <param name="comparer">Key order, or <see langword="null"/> for <see cref="Comparer{TKey}.Default"/>.</param>
+    /// <returns>A mutable builder whose first snapshot is equivalent to <see cref="Create(IComparer{TKey}?)"/>.</returns>
+    public static Builder CreateBuilder(IComparer<TKey>? comparer = null) => new(comparer ?? Comparer<TKey>.Default);
+
+    /// <summary>Creates a mutable builder containing this dictionary's entries and comparer. O(n log n).</summary>
+    /// <returns>A mutable builder initialized with this dictionary.</returns>
+    public Builder ToBuilder() => new(this);
 
     /// <summary>Creates an empty dictionary with the given key comparer (or the default when null).</summary>
     /// <param name="comparer">Key order, or <see langword="null"/> for <see cref="Comparer{TKey}.Default"/>.</param>
@@ -110,7 +120,7 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
             tree = tree.Append(sorted[i]);
         }
 
-        return new(tree, order);
+        return Wrap(tree, order);
     }
 
     /// <summary>Gets the number of entries. O(1).</summary>
@@ -330,6 +340,44 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
+    internal static SortedDictionary<TKey, TValue> FromSortedDistinctKeys(
+        IEnumerable<KeyValuePair<TKey, TValue>> sorted,
+        IComparer<TKey> comparer)
+    {
+        ArgumentNullException.ThrowIfNull(sorted);
+        ArgumentNullException.ThrowIfNull(comparer);
+
+        var tree = FingerTree<KeyValuePair<TKey, TValue>, RankedKey<TKey>, EntryMeasure<TKey, TValue>>.Empty;
+        var hasPrevious = false;
+        var previous = default(TKey);
+        foreach (var entry in sorted)
+        {
+            Debug.Assert(!hasPrevious || comparer.Compare(previous!, entry.Key) < 0, "Input must be strictly ordered by distinct keys.");
+            tree = tree.Append(entry);
+            previous = entry.Key;
+            hasPrevious = true;
+        }
+
+        return Wrap(tree, comparer);
+    }
+
+    internal void ValidateInvariants()
+    {
+        var actualCount = _tree.ValidateAndCount();
+        if (actualCount != Count)
+            throw new InvalidOperationException($"SortedDictionary invariant violated: tree leaf count {actualCount} does not equal Count {Count}.");
+
+        var hasPrevious = false;
+        var previous = default(TKey);
+        foreach (var entry in this)
+        {
+            if (hasPrevious && _comparer.Compare(previous!, entry.Key) >= 0)
+                throw new InvalidOperationException("SortedDictionary invariant violated: keys are not strictly ordered by the comparer.");
+            previous = entry.Key;
+            hasPrevious = true;
+        }
+    }
+
     private (FingerTree<KeyValuePair<TKey, TValue>, RankedKey<TKey>, EntryMeasure<TKey, TValue>> Less,
         FingerTree<KeyValuePair<TKey, TValue>, RankedKey<TKey>, EntryMeasure<TKey, TValue>> AtLeast)
         SplitAtLeast(TKey key) =>
@@ -358,7 +406,12 @@ public sealed class SortedDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, T
     // a non-default-comparer dictionary must keep its own comparer when it becomes empty.
     private SortedDictionary<TKey, TValue> Wrap(
         FingerTree<KeyValuePair<TKey, TValue>, RankedKey<TKey>, EntryMeasure<TKey, TValue>> tree) =>
-        tree.IsEmpty && ReferenceEquals(_comparer, Comparer<TKey>.Default) ? EmptyDefault : new(tree, _comparer);
+        Wrap(tree, _comparer);
+
+    private static SortedDictionary<TKey, TValue> Wrap(
+        FingerTree<KeyValuePair<TKey, TValue>, RankedKey<TKey>, EntryMeasure<TKey, TValue>> tree,
+        IComparer<TKey> comparer) =>
+        tree.IsEmpty && ReferenceEquals(comparer, Comparer<TKey>.Default) ? EmptyDefault : new(tree, comparer);
 
     private static InvalidOperationException EmptyError() => new("The sorted dictionary is empty.");
 }

@@ -40,11 +40,11 @@ namespace Tools.DataStructures.FingerTree;
 /// text.TryLocateByMeasure(newlines =&gt; newlines &gt;= 2, out var idx, out _, out _);  // idx = index of the 2nd '\n'
 /// </code>
 /// </example>
-public sealed class MeasuredRope<T, TMeasure, TMeasureOps> : IReadOnlyList<T>
+public sealed partial class MeasuredRope<T, TMeasure, TMeasureOps> : IReadOnlyList<T>
     where TMeasureOps : IMeasure<T, TMeasure>
 {
-    private const int MinChunkSize = 256;
-    private const int MaxChunkSize = 2048;
+    private const int MinChunkSize = RopeChunking.MinChunkSize;
+    private const int MaxChunkSize = RopeChunking.MaxChunkSize;
 
     private static readonly MeasuredRope<T, TMeasure, TMeasureOps> EmptyInstance =
         new(FingerTree<MeasuredChunk<T, TMeasure, TMeasureOps>, MeasurePair<int, TMeasure>, MeasuredChunkMeasure<T, TMeasure, TMeasureOps>>.Empty);
@@ -56,6 +56,14 @@ public sealed class MeasuredRope<T, TMeasure, TMeasureOps> : IReadOnlyList<T>
 
     /// <summary>Gets the empty rope.</summary>
     public static MeasuredRope<T, TMeasure, TMeasureOps> Empty => EmptyInstance;
+
+    /// <summary>Creates an empty mutable builder for incrementally appending elements.</summary>
+    /// <returns>A mutable builder whose first snapshot is <see cref="Empty"/>.</returns>
+    public static Builder CreateBuilder() => new(EmptyInstance);
+
+    /// <summary>Creates a mutable append-only builder initialized with this rope as its frozen prefix. O(1).</summary>
+    /// <returns>A builder containing this rope's elements and measure.</returns>
+    public Builder ToBuilder() => new(this);
 
     /// <summary>Gets the number of elements. O(1).</summary>
     public int Count => _tree.Measure.First;
@@ -403,14 +411,9 @@ public sealed class MeasuredRope<T, TMeasure, TMeasureOps> : IReadOnlyList<T>
     {
         if (elements.IsEmpty)
             return EmptyInstance;
-        var tree = FingerTree<MeasuredChunk<T, TMeasure, TMeasureOps>, MeasurePair<int, TMeasure>, MeasuredChunkMeasure<T, TMeasure, TMeasureOps>>.Empty;
-        for (var start = 0; start < elements.Length; start += MaxChunkSize)
-        {
-            var length = Math.Min(MaxChunkSize, elements.Length - start);
-            tree = tree.Append(new MeasuredChunk<T, TMeasure, TMeasureOps>(elements.Slice(start, length).ToArray()));
-        }
-
-        return new MeasuredRope<T, TMeasure, TMeasureOps>(tree);
+        var builder = new MeasuredChunkBuilder<T, TMeasure, TMeasureOps>();
+        builder.Add(elements);
+        return FromFrozenChunks(builder.FreezeChunks());
     }
 
     /// <summary>Creates a rope from an enumerable source, enumerated once. O(n).</summary>
@@ -421,8 +424,19 @@ public sealed class MeasuredRope<T, TMeasure, TMeasureOps> : IReadOnlyList<T>
         ArgumentNullException.ThrowIfNull(elements);
         if (elements is MeasuredRope<T, TMeasure, TMeasureOps> rope)
             return rope;
-        var array = elements as T[] ?? [.. elements];
-        return Create(array);
+
+        var builder = new MeasuredChunkBuilder<T, TMeasure, TMeasureOps>();
+        if (elements is T[] array)
+        {
+            builder.Add(array);
+        }
+        else
+        {
+            foreach (var element in elements)
+                builder.Add(element);
+        }
+
+        return FromFrozenChunks(builder.FreezeChunks());
     }
 
     /// <summary>Returns an enumerator over the elements in order.</summary>
@@ -474,6 +488,32 @@ public sealed class MeasuredRope<T, TMeasure, TMeasureOps> : IReadOnlyList<T>
     private static MeasuredRope<T, TMeasure, TMeasureOps> Wrap(
         FingerTree<MeasuredChunk<T, TMeasure, TMeasureOps>, MeasurePair<int, TMeasure>, MeasuredChunkMeasure<T, TMeasure, TMeasureOps>> tree) =>
         tree.IsEmpty ? EmptyInstance : new MeasuredRope<T, TMeasure, TMeasureOps>(tree);
+
+    internal static MeasuredRope<T, TMeasure, TMeasureOps> FromFrozenChunks(Chunk<T>[] chunks)
+    {
+        if (chunks.Length == 0)
+            return EmptyInstance;
+
+        var measured = new MeasuredChunk<T, TMeasure, TMeasureOps>[chunks.Length];
+        for (var i = 0; i < chunks.Length; i++)
+            measured[i] = new MeasuredChunk<T, TMeasure, TMeasureOps>(chunks[i]);
+        return FromFrozenChunks(measured);
+    }
+
+    internal static MeasuredRope<T, TMeasure, TMeasureOps> FromFrozenChunks(MeasuredChunk<T, TMeasure, TMeasureOps>[] chunks)
+    {
+        var tree = FingerTree<MeasuredChunk<T, TMeasure, TMeasureOps>, MeasurePair<int, TMeasure>, MeasuredChunkMeasure<T, TMeasure, TMeasureOps>>.Empty;
+        foreach (var chunk in chunks)
+        {
+            if (chunk.Length == 0)
+                continue;
+            if (chunk.Length > MaxChunkSize)
+                throw new InvalidOperationException($"MeasuredRope invariant violated: a frozen chunk of length {chunk.Length} exceeds the maximum {MaxChunkSize}.");
+            tree = tree.Append(chunk);
+        }
+
+        return Wrap(tree);
+    }
 
     // Scans a chunk for the first offset at which the accumulated measure (starting from accBefore) satisfies the
     // predicate; that element is the split boundary. The caller guarantees some element in the chunk flips it.

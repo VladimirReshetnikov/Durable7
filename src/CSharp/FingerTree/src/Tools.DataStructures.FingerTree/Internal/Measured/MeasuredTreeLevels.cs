@@ -57,6 +57,9 @@ internal sealed class EmptyMeasuredTree<TElement, TChild, TMeasure, TMonoid>
     }
 
     /// <inheritdoc/>
+    public override int ValidateAndCount() => 0;
+
+    /// <inheritdoc/>
     public override int ChildCount => 0;
 
     /// <inheritdoc/>
@@ -128,6 +131,15 @@ internal sealed class SingleMeasuredTree<TElement, TChild, TMeasure, TMonoid>(TC
 
     /// <inheritdoc/>
     public override void Flatten(ICollection<TElement> sink) => Element.Flatten(sink);
+
+    /// <inheritdoc/>
+    public override int ValidateAndCount()
+    {
+        var count = Element.ValidateAndCount();
+        if (!EqualityComparer<TMeasure>.Default.Equals(Element.Measure, Measure))
+            throw new InvalidOperationException("Measured finger-tree invariant violated: a single tree's cached measure is stale.");
+        return count;
+    }
 
     /// <inheritdoc/>
     public override int ChildCount => 1;
@@ -314,6 +326,38 @@ internal sealed class DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>
         ForceMiddle().Flatten(sink);
         foreach (var child in Suffix)
             child.Flatten(sink);
+    }
+
+    /// <inheritdoc/>
+    public override int ValidateAndCount()
+    {
+        if (Prefix.Length is < 1 or > 4)
+            throw new InvalidOperationException($"Measured finger-tree invariant violated: a deep prefix has arity {Prefix.Length}.");
+        if (Suffix.Length is < 1 or > 4)
+            throw new InvalidOperationException($"Measured finger-tree invariant violated: a deep suffix has arity {Suffix.Length}.");
+
+        var count = 0;
+        var expected = TMonoid.Empty;
+        foreach (var child in Prefix)
+        {
+            count += child.ValidateAndCount();
+            expected = TMonoid.Combine(expected, child.Measure);
+        }
+
+        var middle = ForceMiddle();
+        count += middle.ValidateAndCount();
+        expected = TMonoid.Combine(expected, middle.Measure);
+
+        foreach (var child in Suffix)
+        {
+            count += child.ValidateAndCount();
+            expected = TMonoid.Combine(expected, child.Measure);
+        }
+
+        if (!EqualityComparer<TMeasure>.Default.Equals(expected, Measure))
+            throw new InvalidOperationException("Measured finger-tree invariant violated: a deep tree's cached measure is stale.");
+
+        return count;
     }
 
     /// <inheritdoc/>

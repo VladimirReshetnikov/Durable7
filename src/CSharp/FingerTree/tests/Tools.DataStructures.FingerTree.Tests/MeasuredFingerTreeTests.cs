@@ -40,6 +40,7 @@ public sealed class MeasuredFingerTreeTests
     {
         var empty = FingerTree<int, int, SizeMeasure<int>>.Empty;
 
+        empty.ValidateInvariants();
         Assert.True(empty.IsEmpty);
         Assert.Equal(0, empty.Measure);
         Assert.Throws<InvalidOperationException>(() => empty.First);
@@ -65,6 +66,7 @@ public sealed class MeasuredFingerTreeTests
         for (var i = 0; i < 100; i++)
             tree = i % 2 == 0 ? tree.Append(i) : tree.Prepend(i);
 
+        tree.ValidateInvariants();
         Assert.Equal(100, tree.Measure);
         Assert.Equal(100, tree.ToArray().Length);
     }
@@ -79,6 +81,7 @@ public sealed class MeasuredFingerTreeTests
         const int size = 1 << 15;
         var tree = FingerTree<int, int, SizeMeasure<int>>.CreateRange(Enumerable.Range(0, size));
 
+        tree.ValidateInvariants();
         Assert.Equal(Enumerable.Range(0, size), tree);
 
         // Warm up JIT and the exact first-yield path outside the measured window.
@@ -106,14 +109,19 @@ public sealed class MeasuredFingerTreeTests
         {
             var values = Enumerable.Range(0, size).ToArray();
             var tree = FingerTree<int, int, SizeMeasure<int>>.CreateRange(values);
+            tree.ValidateInvariants();
             Assert.Equal(values, tree.ToArray());
 
             for (var index = 0; index <= size; index++)
             {
                 var (left, right) = tree.Split(measured => measured > index);
+                left.ValidateInvariants();
+                right.ValidateInvariants();
                 Assert.Equal(values.Take(index), left.ToArray());
                 Assert.Equal(values.Skip(index), right.ToArray());
-                Assert.Equal(values, left.Concat(right).ToArray());
+                var rejoined = left.Concat(right);
+                rejoined.ValidateInvariants();
+                Assert.Equal(values, rejoined.ToArray());
             }
         }
     }
@@ -138,6 +146,8 @@ public sealed class MeasuredFingerTreeTests
 
                     var left = ta.Concat(tb).Concat(tc);
                     var right = ta.Concat(tb.Concat(tc));
+                    left.ValidateInvariants();
+                    right.ValidateInvariants();
 
                     var expected = Enumerable.Range(0, a)
                         .Concat(Enumerable.Range(100, b))
@@ -164,6 +174,7 @@ public sealed class MeasuredFingerTreeTests
         var values = Enumerable.Range(0, 200).Select(_ => random.Next(1000)).ToArray();
         var queue = FingerTree<int, int, MaxMeasure>.CreateRange(values);
 
+        queue.ValidateInvariants();
         Assert.Equal(values.Max(), queue.Measure);
 
         var extracted = new List<int>();
@@ -174,6 +185,7 @@ public sealed class MeasuredFingerTreeTests
             Assert.Equal(max, found);
             extracted.Add(found);
             queue = before.Concat(after);
+            queue.ValidateInvariants();
         }
 
         var expected = values.OrderByDescending(v => v).ToArray();
@@ -190,11 +202,14 @@ public sealed class MeasuredFingerTreeTests
         var sorted = Enumerable.Range(0, 300).Select(v => v * 2).ToArray();
         var tree = FingerTree<int, SumKey, LastKeyMeasure>.CreateRange(sorted);
 
+        tree.ValidateInvariants();
         Assert.Equal(sorted.Length, tree.Measure.Count);
         Assert.Equal(sorted[^1], tree.Measure.LastKey);
 
         // Order-statistic: split by the count component to get a positional split.
         var (firstTen, rest) = tree.Split(m => m.Count > 10);
+        firstTen.ValidateInvariants();
+        rest.ValidateInvariants();
         Assert.Equal(sorted.Take(10), firstTen.ToArray());
         Assert.Equal(sorted.Skip(10), rest.ToArray());
 
@@ -206,6 +221,8 @@ public sealed class MeasuredFingerTreeTests
                 expectedIndex = sorted.Length;
 
             var (less, greaterOrEqual) = tree.Split(m => m.LastKey >= target);
+            less.ValidateInvariants();
+            greaterOrEqual.ValidateInvariants();
             Assert.Equal(sorted.Take(expectedIndex), less.ToArray());
             Assert.Equal(sorted.Skip(expectedIndex), greaterOrEqual.ToArray());
         }
@@ -257,6 +274,7 @@ public sealed class MeasuredFingerTreeTests
 
             Assert.Equal(model.Count, tree.Measure);
             Assert.Equal(model, tree.ToArray());
+            tree.ValidateInvariants();
         }
     }
 }

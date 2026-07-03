@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 
 namespace Tools.DataStructures.FingerTree;
@@ -6,8 +7,10 @@ namespace Tools.DataStructures.FingerTree;
 /// A fluent builder for character ropes. Appends accumulate into a <see cref="StringBuilder"/> (which is highly
 /// optimized for append-only growth), and <see cref="ToRope"/> / <see cref="ToTextRope"/> materialize the result
 /// into a properly chunked rope in one O(n) pass. Use this to <em>construct</em> a large character sequence; use
-/// the rope's own edit operations once you need to mutate or share it.
+/// the rope's own edit operations once you need to mutate or share it. For element-generic append staging, use
+/// <see cref="Rope{T}.Builder"/>.
 /// </summary>
+/// <seealso cref="Rope{T}.Builder"/>
 /// <example>
 /// <code>
 /// var rope = new RopeBuilder()
@@ -76,19 +79,37 @@ public sealed class RopeBuilder
     }
 
     /// <summary>Builds a positional character rope from the accumulated text. O(n).</summary>
-    public Rope<char> ToRope() => Rope<char>.Create(BuildArray());
+    public Rope<char> ToRope() => Rope<char>.FromFrozenChunks(BuildChunks());
 
     /// <summary>Builds a line-aware text rope (measured by newline count) from the accumulated text. O(n).</summary>
     public MeasuredRope<char, int, NewlineMeasure> ToTextRope() =>
-        MeasuredRope<char, int, NewlineMeasure>.Create(BuildArray());
+        MeasuredRope<char, int, NewlineMeasure>.FromFrozenChunks(BuildChunks());
 
     /// <summary>Returns the accumulated text as a string.</summary>
     public override string ToString() => _builder.ToString();
 
-    private char[] BuildArray()
+    private Chunk<char>[] BuildChunks()
     {
-        var characters = new char[_builder.Length];
-        _builder.CopyTo(0, characters, 0, _builder.Length);
-        return characters;
+        if (_builder.Length == 0)
+            return [];
+
+        var chunks = new ChunkBuilder<char>();
+        var rented = ArrayPool<char>.Shared.Rent(Math.Min(_builder.Length, RopeChunking.MaxChunkSize));
+        try
+        {
+            for (var offset = 0; offset < _builder.Length;)
+            {
+                var count = Math.Min(rented.Length, _builder.Length - offset);
+                _builder.CopyTo(offset, rented, 0, count);
+                chunks.Add(rented.AsSpan(0, count));
+                offset += count;
+            }
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(rented);
+        }
+
+        return chunks.FreezeChunks();
     }
 }

@@ -78,6 +78,9 @@ internal abstract class MeasuredTree<TElement, TChild, TMeasure, TMonoid> : IEnu
     /// <param name="sink">Destination collection.</param>
     public abstract void Flatten(ICollection<TElement> sink);
 
+    /// <summary>Validates tree shape and cached measures, returning the stored leaf count.</summary>
+    public abstract int ValidateAndCount();
+
     /// <inheritdoc/>
     public abstract int ChildCount { get; }
 
