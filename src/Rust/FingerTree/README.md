@@ -19,7 +19,8 @@ family. It exposes Rust-native names for the same public families:
 
 This checkpoint preserves immutable snapshot semantics and the observable behavior covered by the
 crate tests. `PersistentDeque<T>` now uses structurally shared balanced tree storage,
-`ReversibleDeque<T>` is an orientation layer over that shared deque, and `Rope<T>` now uses chunked
+`ReversibleDeque<T>` uses O(1) mirrored tree views over that shared deque, including tree-based
+mixed-orientation concat, split, and endpoint operations after reverse, and `Rope<T>` now uses chunked
 length-measured storage over the shared measured tree. `TextRope` stores the same character content
 in a newline-measured rope for cached line navigation. `FingerTree<T, P>` now uses structurally
 shared measured tree storage with cached monoid measures. The measured core now includes

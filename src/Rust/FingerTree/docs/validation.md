@@ -25,7 +25,8 @@ cover:
 - general measured tree cached-measure validation, subtree-sharing splits, randomized prefix-measure locate checks,
   key lower/upper-bound splits, product-measure component splits, cumulative-weight selection, and min/max
   extraction helpers;
-- reversible-deque O(1) storage-sharing reversal and wrapper-preserving logical edits over the shared deque tree;
+- reversible-deque O(1) storage-sharing reversal, wrapper-preserving logical edits, and mixed-orientation
+  concat/split/pop paths over the shared deque tree;
 - measured sequence size/sum/min/max/key/product/order-statistic policies;
 - sorted bag/set/map rank, navigation, algebra, proper set relations, duplicate handling, inclusive value/key
   ranges, cached order-statistic measures, and shared-storage edits/ranges;

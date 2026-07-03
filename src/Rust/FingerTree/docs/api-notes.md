@@ -34,8 +34,9 @@ This workspace is a semantic checkpoint, not the final lazy finger-tree represen
 snapshot behavior, stable observable ordering, rank/range semantics, priority stability, closed-interval overlap
 semantics, and text line navigation. `PersistentDeque<T>` has moved past the initial vector snapshot and now uses
 an `Arc`-shared balanced tree, so nontrivial splits, concatenations, range operations, and point updates share
-unchanged subtrees. `ReversibleDeque<T>` is now an orientation layer over that deque, so reversal and
-wrapper-preserving logical edits share the same underlying tree. `Rope<T>` now uses chunked length-measured
+unchanged subtrees. `ReversibleDeque<T>` is now an O(1) mirrored-tree view over that deque: reverse wraps or
+cancels a shared tree view, and reversed/mixed-orientation endpoint operations, splits, and concatenations stay on
+the tree path instead of materializing vectors. `Rope<T>` now uses chunked length-measured
 storage over the shared measured tree, so chunk construction, `copy_to`, positional edits, slices, splits, and
 concatenations share unchanged chunks and measured subtrees; `MeasuredRope<T, P>` exposes the same chunk-copy
 interop while preserving cached user measures. `TextRope` stores characters in `MeasuredRope<char, NewlineMeasure>`

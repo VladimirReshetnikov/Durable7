@@ -49,6 +49,11 @@ enum DequeTree<T> {
         len: usize,
         height: u8,
     },
+    Reversed {
+        inner: Arc<DequeTree<T>>,
+        len: usize,
+        height: u8,
+    },
 }
 
 impl<T> DequeTree<T> {
@@ -75,7 +80,7 @@ impl<T> DequeTree<T> {
         match self {
             Self::Empty => 0,
             Self::Leaf(_) => 1,
-            Self::Node { len, .. } => *len,
+            Self::Node { len, .. } | Self::Reversed { len, .. } => *len,
         }
     }
 
@@ -83,7 +88,30 @@ impl<T> DequeTree<T> {
         match self {
             Self::Empty => 0,
             Self::Leaf(_) => 1,
-            Self::Node { height, .. } => *height,
+            Self::Node { height, .. } | Self::Reversed { height, .. } => *height,
+        }
+    }
+
+    fn mirror(tree: &Arc<Self>) -> Arc<Self> {
+        match tree.as_ref() {
+            Self::Empty | Self::Leaf(_) => Arc::clone(tree),
+            Self::Reversed { inner, .. } => Arc::clone(inner),
+            _ => Arc::new(Self::Reversed {
+                inner: Arc::clone(tree),
+                len: tree.len(),
+                height: tree.height(),
+            }),
+        }
+    }
+
+    fn logical_children(tree: &Arc<Self>) -> Option<(Arc<Self>, Arc<Self>)> {
+        match tree.as_ref() {
+            Self::Node { left, right, .. } => Some((Arc::clone(left), Arc::clone(right))),
+            Self::Reversed { inner, .. } => match inner.as_ref() {
+                Self::Node { left, right, .. } => Some((Self::mirror(right), Self::mirror(left))),
+                _ => None,
+            },
+            _ => None,
         }
     }
 
@@ -118,25 +146,17 @@ impl<T> DequeTree<T> {
         let left_height = left.height();
         let right_height = right.height();
         if left_height > right_height + 1
-            && let Self::Node {
-                left: left_left,
-                right: left_right,
-                ..
-            } = left.as_ref()
+            && let Some((left_left, left_right)) = Self::logical_children(&left)
         {
-            let joined = Self::concat(Arc::clone(left_right), right);
-            return Self::balance(Arc::clone(left_left), joined);
+            let joined = Self::concat(Arc::clone(&left_right), right);
+            return Self::balance(Arc::clone(&left_left), joined);
         }
 
         if right_height > left_height + 1
-            && let Self::Node {
-                left: right_left,
-                right: right_right,
-                ..
-            } = right.as_ref()
+            && let Some((right_left, right_right)) = Self::logical_children(&right)
         {
-            let joined = Self::concat(left, Arc::clone(right_left));
-            return Self::balance(joined, Arc::clone(right_right));
+            let joined = Self::concat(left, Arc::clone(&right_left));
+            return Self::balance(joined, Arc::clone(&right_right));
         }
 
         Self::balance(left, right)
@@ -150,55 +170,37 @@ impl<T> DequeTree<T> {
         let left_height = left.height();
         let right_height = right.height();
         if left_height > right_height + 1
-            && let Self::Node {
-                left: left_left,
-                right: left_right,
-                ..
-            } = left.as_ref()
+            && let Some((left_left, left_right)) = Self::logical_children(&left)
         {
             if left_left.height() >= left_right.height() {
                 return Self::make_node(
-                    Arc::clone(left_left),
-                    Self::make_node(Arc::clone(left_right), right),
+                    Arc::clone(&left_left),
+                    Self::make_node(Arc::clone(&left_right), right),
                 );
             }
 
-            if let Self::Node {
-                left: middle_left,
-                right: middle_right,
-                ..
-            } = left_right.as_ref()
-            {
+            if let Some((middle_left, middle_right)) = Self::logical_children(&left_right) {
                 return Self::make_node(
-                    Self::make_node(Arc::clone(left_left), Arc::clone(middle_left)),
-                    Self::make_node(Arc::clone(middle_right), right),
+                    Self::make_node(Arc::clone(&left_left), Arc::clone(&middle_left)),
+                    Self::make_node(Arc::clone(&middle_right), right),
                 );
             }
         }
 
         if right_height > left_height + 1
-            && let Self::Node {
-                left: right_left,
-                right: right_right,
-                ..
-            } = right.as_ref()
+            && let Some((right_left, right_right)) = Self::logical_children(&right)
         {
             if right_right.height() >= right_left.height() {
                 return Self::make_node(
-                    Self::make_node(left, Arc::clone(right_left)),
-                    Arc::clone(right_right),
+                    Self::make_node(left, Arc::clone(&right_left)),
+                    Arc::clone(&right_right),
                 );
             }
 
-            if let Self::Node {
-                left: middle_left,
-                right: middle_right,
-                ..
-            } = right_left.as_ref()
-            {
+            if let Some((middle_left, middle_right)) = Self::logical_children(&right_left) {
                 return Self::make_node(
-                    Self::make_node(left, Arc::clone(middle_left)),
-                    Self::make_node(Arc::clone(middle_right), Arc::clone(right_right)),
+                    Self::make_node(left, Arc::clone(&middle_left)),
+                    Self::make_node(Arc::clone(&middle_right), Arc::clone(&right_right)),
                 );
             }
         }
@@ -220,6 +222,10 @@ impl<T> DequeTree<T> {
             Self::Leaf(_) => {
                 debug_assert_eq!(index, 0);
                 (Self::empty(), Arc::clone(tree))
+            }
+            Self::Reversed { inner, len, .. } => {
+                let (before, after) = Self::split_at(inner, len - index);
+                (Self::mirror(&after), Self::mirror(&before))
             }
             Self::Node { left, right, .. } => {
                 let left_len = left.len();
@@ -243,6 +249,7 @@ impl<T> DequeTree<T> {
             Self::Empty => None,
             Self::Leaf(item) => Some(item),
             Self::Node { left, .. } => left.first(),
+            Self::Reversed { inner, .. } => inner.last(),
         }
     }
 
@@ -251,6 +258,7 @@ impl<T> DequeTree<T> {
             Self::Empty => None,
             Self::Leaf(item) => Some(item),
             Self::Node { right, .. } => right.last(),
+            Self::Reversed { inner, .. } => inner.first(),
         }
     }
 
@@ -258,6 +266,7 @@ impl<T> DequeTree<T> {
         match self {
             Self::Empty => None,
             Self::Leaf(item) => (index == 0).then_some(item),
+            Self::Reversed { inner, len, .. } => inner.get(len - 1 - index),
             Self::Node { left, right, .. } => {
                 let left_len = left.len();
                 if index < left_len {
@@ -273,6 +282,9 @@ impl<T> DequeTree<T> {
         match tree.as_ref() {
             Self::Empty => None,
             Self::Leaf(_) => (index == 0).then(|| Self::leaf(item)),
+            Self::Reversed { inner, len, .. } => {
+                Some(Self::mirror(&Self::set(inner, len - 1 - index, item)?))
+            }
             Self::Node { left, right, .. } => {
                 let left_len = left.len();
                 if index < left_len {
@@ -297,6 +309,23 @@ impl<T> DequeTree<T> {
         match self {
             Self::Empty => 0,
             Self::Leaf(item) => usize::from(!predicate(item)),
+            Self::Reversed { inner, .. } => match inner.as_ref() {
+                Self::Empty => 0,
+                Self::Leaf(item) => usize::from(!predicate(item)),
+                Self::Node { left, right, .. } => {
+                    let logical_left = Self::mirror(right);
+                    let logical_right = Self::mirror(left);
+                    let left_last = logical_left
+                        .last()
+                        .expect("non-empty left child has a last leaf");
+                    if predicate(left_last) {
+                        logical_left.bound_index(predicate)
+                    } else {
+                        logical_left.len() + logical_right.bound_index(predicate)
+                    }
+                }
+                Self::Reversed { inner, .. } => inner.bound_index(predicate),
+            },
             Self::Node { left, right, .. } => {
                 let left_last = left.last().expect("non-empty left child has a last leaf");
                 if predicate(left_last) {
@@ -315,9 +344,25 @@ impl<T> DequeTree<T> {
         match self {
             Self::Empty => {}
             Self::Leaf(item) => destination.push(item.clone()),
+            Self::Reversed { inner, .. } => inner.copy_to_vec_reversed(destination),
             Self::Node { left, right, .. } => {
                 left.copy_to_vec(destination);
                 right.copy_to_vec(destination);
+            }
+        }
+    }
+
+    fn copy_to_vec_reversed(&self, destination: &mut Vec<T>)
+    where
+        T: Clone,
+    {
+        match self {
+            Self::Empty => {}
+            Self::Leaf(item) => destination.push(item.clone()),
+            Self::Reversed { inner, .. } => inner.copy_to_vec(destination),
+            Self::Node { left, right, .. } => {
+                right.copy_to_vec_reversed(destination);
+                left.copy_to_vec_reversed(destination);
             }
         }
     }
@@ -327,6 +372,23 @@ impl<T> DequeTree<T> {
         match self {
             Self::Empty => Ok(0),
             Self::Leaf(_) => Ok(1),
+            Self::Reversed { inner, len, height } => {
+                let inner_len = inner.validate()?;
+                if inner_len != *len {
+                    return Err(format!(
+                        "reversed node cached length {len} disagrees with inner total {inner_len}"
+                    ));
+                }
+
+                if inner.height() != *height {
+                    return Err(format!(
+                        "reversed node cached height {height} disagrees with inner height {}",
+                        inner.height()
+                    ));
+                }
+
+                Ok(inner_len)
+            }
             Self::Node {
                 left,
                 right,
@@ -409,7 +471,26 @@ impl<T> PersistentDeque<T> {
 
     #[must_use]
     pub fn shares_storage_with(&self, other: &Self) -> bool {
-        (self.is_empty() && other.is_empty()) || Arc::ptr_eq(&self.root, &other.root)
+        fn shares_root<T>(left: &Arc<DequeTree<T>>, right: &Arc<DequeTree<T>>) -> bool {
+            if Arc::ptr_eq(left, right) {
+                return true;
+            }
+
+            match (left.as_ref(), right.as_ref()) {
+                (DequeTree::Reversed { inner, .. }, _) => shares_root(inner, right),
+                (_, DequeTree::Reversed { inner, .. }) => shares_root(left, inner),
+                _ => false,
+            }
+        }
+
+        (self.is_empty() && other.is_empty()) || shares_root(&self.root, &other.root)
+    }
+
+    #[must_use]
+    fn reversed_view(&self) -> Self {
+        Self {
+            root: DequeTree::mirror(&self.root),
+        }
     }
 
     #[must_use]
@@ -580,6 +661,8 @@ impl<T> PersistentDeque<T> {
             if let DequeTree::Node { left, right, .. } = tree.as_ref() {
                 collect(left, seen);
                 collect(right, seen);
+            } else if let DequeTree::Reversed { inner, .. } = tree.as_ref() {
+                collect(inner, seen);
             }
         }
 
@@ -588,6 +671,8 @@ impl<T> PersistentDeque<T> {
             if let DequeTree::Node { left, right, .. } = tree.as_ref() {
                 total += count(left, seen);
                 total += count(right, seen);
+            } else if let DequeTree::Reversed { inner, .. } = tree.as_ref() {
+                total += count(inner, seen);
             }
 
             total
@@ -749,13 +834,13 @@ impl<T> PersistentDeque<T> {
 }
 
 pub struct Iter<'a, T> {
-    stack: Vec<&'a DequeTree<T>>,
+    stack: Vec<(&'a DequeTree<T>, bool)>,
 }
 
 impl<'a, T> Iter<'a, T> {
     fn new(root: &'a Arc<DequeTree<T>>) -> Self {
         Self {
-            stack: vec![root.as_ref()],
+            stack: vec![(root.as_ref(), false)],
         }
     }
 }
@@ -764,13 +849,21 @@ impl<'a, T> Iterator for Iter<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(tree) = self.stack.pop() {
+        while let Some((tree, reversed)) = self.stack.pop() {
             match tree {
                 DequeTree::Empty => {}
                 DequeTree::Leaf(item) => return Some(item),
+                DequeTree::Reversed { inner, .. } => {
+                    self.stack.push((inner.as_ref(), !reversed));
+                }
                 DequeTree::Node { left, right, .. } => {
-                    self.stack.push(right);
-                    self.stack.push(left);
+                    if reversed {
+                        self.stack.push((left, true));
+                        self.stack.push((right, true));
+                    } else {
+                        self.stack.push((right, false));
+                        self.stack.push((left, false));
+                    }
                 }
             }
         }
@@ -786,7 +879,6 @@ impl<'a, T> Iterator for Iter<'a, T> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReversibleDeque<T> {
     items: PersistentDeque<T>,
-    reversed: bool,
 }
 
 impl<T> ReversibleDeque<T> {
@@ -794,7 +886,6 @@ impl<T> ReversibleDeque<T> {
     pub fn new() -> Self {
         Self {
             items: PersistentDeque::new(),
-            reversed: false,
         }
     }
 
@@ -804,10 +895,7 @@ impl<T> ReversibleDeque<T> {
     }
 
     fn from_deque(items: PersistentDeque<T>) -> Self {
-        Self {
-            items,
-            reversed: false,
-        }
+        Self { items }
     }
 
     #[must_use]
@@ -823,8 +911,7 @@ impl<T> ReversibleDeque<T> {
     #[must_use]
     pub fn reverse(&self) -> Self {
         Self {
-            items: self.items.clone(),
-            reversed: !self.reversed,
+            items: self.items.reversed_view(),
         }
     }
 
@@ -849,24 +936,7 @@ impl<T> ReversibleDeque<T> {
             return None;
         }
 
-        let physical = self.physical_index(index);
-        self.items.get(physical)
-    }
-
-    fn physical_index(&self, logical: usize) -> usize {
-        if self.reversed {
-            self.len() - 1 - logical
-        } else {
-            logical
-        }
-    }
-
-    fn physical_insert_index(&self, logical: usize) -> usize {
-        if self.reversed {
-            self.len() - logical
-        } else {
-            logical
-        }
+        self.items.get(index)
     }
 }
 
@@ -888,68 +958,27 @@ where
 {
     #[must_use]
     pub fn to_vec(&self) -> Vec<T> {
-        let mut result = self.items.to_vec();
-        if self.reversed {
-            result.reverse();
-        }
-
-        result
+        self.items.to_vec()
     }
 
     #[must_use]
     pub fn push_front(&self, item: T) -> Self {
-        let items = if self.reversed {
-            self.items.push_back(item)
-        } else {
-            self.items.push_front(item)
-        };
-        Self {
-            items,
-            reversed: self.reversed,
-        }
+        Self::from_deque(self.items.push_front(item))
     }
 
     #[must_use]
     pub fn push_back(&self, item: T) -> Self {
-        let items = if self.reversed {
-            self.items.push_front(item)
-        } else {
-            self.items.push_back(item)
-        };
-        Self {
-            items,
-            reversed: self.reversed,
-        }
+        Self::from_deque(self.items.push_back(item))
     }
 
     #[must_use]
     pub fn pop_front(&self) -> Option<DequePop<T>> {
-        if !self.reversed {
-            return self.items.pop_first();
-        }
-
-        let value = self.front()?.clone();
-        let mut rest = self.to_vec();
-        rest.remove(0);
-        Some(DequePop {
-            value,
-            rest: PersistentDeque::from_vec(rest),
-        })
+        self.items.pop_first()
     }
 
     #[must_use]
     pub fn pop_back(&self) -> Option<DequePop<T>> {
-        if !self.reversed {
-            return self.items.pop_last();
-        }
-
-        let value = self.back()?.clone();
-        let mut rest = self.to_vec();
-        rest.pop();
-        Some(DequePop {
-            value,
-            rest: PersistentDeque::from_vec(rest),
-        })
+        self.items.pop_last()
     }
 
     #[must_use]
@@ -958,10 +987,7 @@ where
             return None;
         }
 
-        Some(Self {
-            items: self.items.set_item(self.physical_index(index), item)?,
-            reversed: self.reversed,
-        })
+        Some(Self::from_deque(self.items.set_item(index, item)?))
     }
 
     #[must_use]
@@ -970,12 +996,7 @@ where
             return None;
         }
 
-        Some(Self {
-            items: self
-                .items
-                .insert_at(self.physical_insert_index(index), item)?,
-            reversed: self.reversed,
-        })
+        Some(Self::from_deque(self.items.insert_at(index, item)?))
     }
 
     #[must_use]
@@ -984,30 +1005,17 @@ where
             return None;
         }
 
-        Some(Self {
-            items: self.items.remove_at(self.physical_index(index))?,
-            reversed: self.reversed,
-        })
+        Some(Self::from_deque(self.items.remove_at(index)?))
     }
 
     #[must_use]
     pub fn split_at(&self, index: usize) -> Option<DequeSplit<T>> {
-        if self.reversed {
-            return PersistentDeque::from_vec(self.to_vec()).split_at(index);
-        }
-
         self.items.split_at(index)
     }
 
     #[must_use]
     pub fn concat(&self, other: &Self) -> Self {
-        if !self.reversed && !other.reversed {
-            return Self::from_deque(self.items.concat(&other.items));
-        }
-
-        let mut next = self.to_vec();
-        next.extend(other.to_vec());
-        Self::from_vec(next)
+        Self::from_deque(self.items.concat(&other.items))
     }
 }
 
@@ -1208,5 +1216,52 @@ mod tests {
         inserted.items.validate_invariants();
         removed.items.validate_invariants();
         pushed.items.validate_invariants();
+    }
+
+    #[test]
+    fn reversible_mixed_orientation_concat_split_and_pop_stay_tree_based() {
+        let left: ReversibleDeque<_> = (0..512).collect();
+        let right: ReversibleDeque<_> = (1000..1512).collect();
+        let left_reversed = left.reverse();
+        let right_reversed = right.reverse();
+        let joined = left_reversed.concat(&right_reversed);
+
+        let expected = (0..512).rev().chain((1000..1512).rev()).collect::<Vec<_>>();
+        assert_eq!(joined.to_vec(), expected);
+        assert!(left_reversed.items.shared_node_count_with(&joined.items) > 0);
+        assert!(right_reversed.items.shared_node_count_with(&joined.items) > 0);
+
+        let popped_front = left_reversed.pop_front().unwrap();
+        let popped_back = left_reversed.pop_back().unwrap();
+        assert_eq!(popped_front.value, 511);
+        assert_eq!(popped_back.value, 0);
+        assert!(
+            left_reversed
+                .items
+                .shared_node_count_with(&popped_front.rest)
+                > 0
+        );
+        assert!(
+            left_reversed
+                .items
+                .shared_node_count_with(&popped_back.rest)
+                > 0
+        );
+
+        let split = joined.split_at(400).unwrap();
+        assert_eq!(split.left.len(), 400);
+        assert_eq!(split.left.get(0), Some(&511));
+        assert_eq!(split.right.get(0), Some(&111));
+        assert!(joined.items.shared_node_count_with(&split.left) > 0);
+        assert!(joined.items.shared_node_count_with(&split.right) > 0);
+
+        let reversed_again = joined.reverse();
+        assert!(joined.shares_storage_with(&reversed_again));
+        joined.items.validate_invariants();
+        popped_front.rest.validate_invariants();
+        popped_back.rest.validate_invariants();
+        split.left.validate_invariants();
+        split.right.validate_invariants();
+        reversed_again.items.validate_invariants();
     }
 }
