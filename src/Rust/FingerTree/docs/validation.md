@@ -24,7 +24,7 @@ cover:
   randomized model replay;
 - general measured tree cached-measure validation, subtree-sharing splits, and randomized prefix-measure locate
   checks;
-- reversible-deque O(1) storage-sharing reversal;
+- reversible-deque O(1) storage-sharing reversal and wrapper-preserving logical edits over the shared deque tree;
 - measured sequence size/sum/min/max policies;
 - sorted bag/set/map rank, navigation, algebra, and duplicate handling;
 - stable priority dequeue and meld behavior;
@@ -32,5 +32,6 @@ cover:
 - positional rope edits, measured-rope cached-measure navigation and subtree sharing, text line helpers, and builder
   output.
 
-The current validation proves the structurally shared Rust deque, measured-tree, and measured-rope behavior, plus the
-checkpoint behavior of the remaining facades, not final C#/C++ lazy-spine asymptotic parity for the whole crate.
+The current validation proves the structurally shared Rust deque, reversible-deque, measured-tree, and measured-rope
+behavior, plus the checkpoint behavior of the remaining facades, not final C#/C++ lazy-spine asymptotic parity for
+the whole crate.

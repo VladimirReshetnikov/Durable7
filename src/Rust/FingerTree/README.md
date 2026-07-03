@@ -18,11 +18,11 @@ family. It exposes Rust-native names for the same public families:
 
 This checkpoint preserves immutable snapshot semantics and the observable behavior covered by the
 crate tests. `PersistentDeque<T>` now uses structurally shared balanced tree storage,
-`FingerTree<T, P>` now uses structurally shared measured tree storage with cached monoid measures,
-and `MeasuredRope<T, P>` composes that measured core with a counted user measure. The crate still
-does not claim the C#/C++ lazy finger-tree asymptotic profile overall: reversible deque, positional
-ropes and text helpers, and derived facades remain checkpoint implementations until the lazy
-measured spine is ported under them.
+`ReversibleDeque<T>` is an orientation layer over that shared deque, `FingerTree<T, P>` now uses
+structurally shared measured tree storage with cached monoid measures, and `MeasuredRope<T, P>`
+composes that measured core with a counted user measure. The crate still does not claim the C#/C++
+lazy finger-tree asymptotic profile overall: positional ropes and text helpers, plus derived
+facades, remain checkpoint implementations until the lazy measured spine is ported under them.
 
 See [API notes](docs/api-notes.md), [validation](docs/validation.md), and the
 [test map](tests/README.md) for the local contract, checkpoint boundary, and evidence entry points.

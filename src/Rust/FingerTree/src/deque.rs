@@ -785,7 +785,7 @@ impl<'a, T> Iterator for Iter<'a, T> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReversibleDeque<T> {
-    items: Arc<Vec<T>>,
+    items: PersistentDeque<T>,
     reversed: bool,
 }
 
@@ -793,15 +793,19 @@ impl<T> ReversibleDeque<T> {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            items: Arc::new(Vec::new()),
+            items: PersistentDeque::new(),
             reversed: false,
         }
     }
 
     #[must_use]
     pub(crate) fn from_vec(items: Vec<T>) -> Self {
+        Self::from_deque(PersistentDeque::from_vec(items))
+    }
+
+    fn from_deque(items: PersistentDeque<T>) -> Self {
         Self {
-            items: Arc::new(items),
+            items,
             reversed: false,
         }
     }
@@ -819,14 +823,14 @@ impl<T> ReversibleDeque<T> {
     #[must_use]
     pub fn reverse(&self) -> Self {
         Self {
-            items: Arc::clone(&self.items),
+            items: self.items.clone(),
             reversed: !self.reversed,
         }
     }
 
     #[must_use]
     pub fn shares_storage_with(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.items, &other.items)
+        self.items.shares_storage_with(&other.items)
     }
 
     #[must_use]
@@ -856,6 +860,14 @@ impl<T> ReversibleDeque<T> {
             logical
         }
     }
+
+    fn physical_insert_index(&self, logical: usize) -> usize {
+        if self.reversed {
+            self.len() - logical
+        } else {
+            logical
+        }
+    }
 }
 
 impl<T> Default for ReversibleDeque<T> {
@@ -876,46 +888,67 @@ where
 {
     #[must_use]
     pub fn to_vec(&self) -> Vec<T> {
+        let mut result = self.items.to_vec();
         if self.reversed {
-            self.items.iter().rev().cloned().collect()
-        } else {
-            self.items.as_ref().clone()
+            result.reverse();
         }
+
+        result
     }
 
     #[must_use]
     pub fn push_front(&self, item: T) -> Self {
-        let mut next = self.to_vec();
-        next.insert(0, item);
-        Self::from_vec(next)
+        let items = if self.reversed {
+            self.items.push_back(item)
+        } else {
+            self.items.push_front(item)
+        };
+        Self {
+            items,
+            reversed: self.reversed,
+        }
     }
 
     #[must_use]
     pub fn push_back(&self, item: T) -> Self {
-        let mut next = self.to_vec();
-        next.push(item);
-        Self::from_vec(next)
+        let items = if self.reversed {
+            self.items.push_front(item)
+        } else {
+            self.items.push_back(item)
+        };
+        Self {
+            items,
+            reversed: self.reversed,
+        }
     }
 
     #[must_use]
     pub fn pop_front(&self) -> Option<DequePop<T>> {
+        if !self.reversed {
+            return self.items.pop_first();
+        }
+
         let value = self.front()?.clone();
-        let mut next = self.to_vec();
-        next.remove(0);
+        let mut rest = self.to_vec();
+        rest.remove(0);
         Some(DequePop {
             value,
-            rest: PersistentDeque::from_vec(next),
+            rest: PersistentDeque::from_vec(rest),
         })
     }
 
     #[must_use]
     pub fn pop_back(&self) -> Option<DequePop<T>> {
+        if !self.reversed {
+            return self.items.pop_last();
+        }
+
         let value = self.back()?.clone();
-        let mut next = self.to_vec();
-        next.pop();
+        let mut rest = self.to_vec();
+        rest.pop();
         Some(DequePop {
             value,
-            rest: PersistentDeque::from_vec(next),
+            rest: PersistentDeque::from_vec(rest),
         })
     }
 
@@ -925,9 +958,10 @@ where
             return None;
         }
 
-        let mut next = self.to_vec();
-        next[index] = item;
-        Some(Self::from_vec(next))
+        Some(Self {
+            items: self.items.set_item(self.physical_index(index), item)?,
+            reversed: self.reversed,
+        })
     }
 
     #[must_use]
@@ -936,9 +970,12 @@ where
             return None;
         }
 
-        let mut next = self.to_vec();
-        next.insert(index, item);
-        Some(Self::from_vec(next))
+        Some(Self {
+            items: self
+                .items
+                .insert_at(self.physical_insert_index(index), item)?,
+            reversed: self.reversed,
+        })
     }
 
     #[must_use]
@@ -947,18 +984,27 @@ where
             return None;
         }
 
-        let mut next = self.to_vec();
-        next.remove(index);
-        Some(Self::from_vec(next))
+        Some(Self {
+            items: self.items.remove_at(self.physical_index(index))?,
+            reversed: self.reversed,
+        })
     }
 
     #[must_use]
     pub fn split_at(&self, index: usize) -> Option<DequeSplit<T>> {
-        PersistentDeque::from_vec(self.to_vec()).split_at(index)
+        if self.reversed {
+            return PersistentDeque::from_vec(self.to_vec()).split_at(index);
+        }
+
+        self.items.split_at(index)
     }
 
     #[must_use]
     pub fn concat(&self, other: &Self) -> Self {
+        if !self.reversed && !other.reversed {
+            return Self::from_deque(self.items.concat(&other.items));
+        }
+
         let mut next = self.to_vec();
         next.extend(other.to_vec());
         Self::from_vec(next)
@@ -1135,5 +1181,32 @@ mod tests {
         assert_eq!(reversed.to_vec(), vec![3, 2, 1]);
         assert_eq!(restored.to_vec(), vec![1, 2, 3]);
         assert!(deque.shares_storage_with(&reversed));
+    }
+
+    #[test]
+    fn reversible_edits_share_underlying_deque_tree() {
+        let deque: ReversibleDeque<_> = (0..256).collect();
+        let reversed = deque.reverse();
+        let changed = reversed.set_item(100, -1).unwrap();
+        let inserted = reversed.insert_at(120, -2).unwrap();
+        let removed = reversed.remove_at(80).unwrap();
+        let pushed = reversed.push_front(-3).push_back(-4);
+
+        assert_eq!(reversed.get(0), Some(&255));
+        assert_eq!(changed.get(100), Some(&-1));
+        assert_eq!(inserted.get(120), Some(&-2));
+        assert_eq!(removed.len(), 255);
+        assert_eq!(pushed.front(), Some(&-3));
+        assert_eq!(pushed.back(), Some(&-4));
+        assert!(deque.shares_storage_with(&reversed));
+        assert!(reversed.items.shared_node_count_with(&changed.items) > 100);
+        assert!(reversed.items.shared_node_count_with(&inserted.items) > 100);
+        assert!(reversed.items.shared_node_count_with(&removed.items) > 100);
+        assert!(reversed.items.shared_node_count_with(&pushed.items) > 100);
+        assert!(reversed.items.tree_depth() < 24);
+        changed.items.validate_invariants();
+        inserted.items.validate_invariants();
+        removed.items.validate_invariants();
+        pushed.items.validate_invariants();
     }
 }

@@ -13,7 +13,8 @@ cargo test -p tools-data-structures-fingertree
 
 Coverage groups:
 
-- `deque.rs`: structurally shared persistent deque, model replay, subtree-sharing checks, and reversible deque;
+- `deque.rs`: structurally shared persistent deque, model replay, subtree-sharing checks, and reversible deque
+  orientation facade;
 - `measured.rs`: structurally shared measured sequence core, cached-measure validation, prefix locate, and built-in
   measure policies;
 - `sorted.rs`: sorted bag, set, and map facades;
