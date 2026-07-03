@@ -17,9 +17,11 @@ family. It exposes Rust-native names for the same public families:
 - `Rope<T>`, `MeasuredRope<T, P>`, `TextRope`, and `RopeBuilder`.
 
 This checkpoint preserves immutable snapshot semantics and the observable behavior covered by the
-crate tests. It does not yet claim the C#/C++ lazy finger-tree asymptotic profile: several facades
-currently rebuild `Arc`-shared vectors for updates. That makes the Rust surface useful and testable
-now while leaving a clean replacement path for the real lazy measured spine.
+crate tests. `PersistentDeque<T>` now uses structurally shared balanced tree storage, so splits,
+concats, ranges, and point updates share unchanged subtrees. The crate still does not claim the
+C#/C++ lazy finger-tree asymptotic profile overall: the general measured tree, reversible deque,
+ropes, and derived facades remain checkpoint implementations until the lazy measured spine is ported
+under them.
 
 See [API notes](docs/api-notes.md), [validation](docs/validation.md), and the
 [test map](tests/README.md) for the local contract, checkpoint boundary, and evidence entry points.

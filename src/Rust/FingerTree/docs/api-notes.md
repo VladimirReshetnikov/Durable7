@@ -28,11 +28,11 @@ The Rust surface follows Rust conventions:
 
 This workspace is a semantic checkpoint, not the final lazy finger-tree representation. It preserves immutable
 snapshot behavior, stable observable ordering, rank/range semantics, priority stability, closed-interval overlap
-semantics, and text line navigation. Several update paths currently rebuild `Arc`-shared vectors instead of using
-the C#/C++ lazy measured spine, so this crate does not claim the sharper finger-tree complexity or allocation
-profile yet.
+semantics, and text line navigation. `PersistentDeque<T>` has moved past the initial vector snapshot and now uses
+an `Arc`-shared balanced tree, so nontrivial splits, concatenations, range operations, and point updates share
+unchanged subtrees. The general `FingerTree<T, P>`, `ReversibleDeque<T>`, ropes, and derived facades still use
+checkpoint storage and do not yet claim the C#/C++ lazy measured-spine complexity or allocation profile.
 
-Future representation work should keep the Rust public names and result shapes stable while replacing the internals
-of `PersistentDeque`, `FingerTree`, `MeasuredRope`, and the derived facades with structurally shared measured-tree
-nodes.
-
+Future representation work should keep the Rust public names and result shapes stable while replacing the remaining
+checkpoint internals of `FingerTree`, `ReversibleDeque`, `MeasuredRope`, and the derived facades with structurally
+shared measured-tree nodes.

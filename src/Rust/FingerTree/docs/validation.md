@@ -20,7 +20,8 @@ If Cargo is available under rustup but not on `PATH`, use:
 The crate uses `#![forbid(unsafe_code)]`. Unit tests are inline in the module files under `FingerTree/src/` and
 cover:
 
-- persistent deque updates, splitting, concatenation, and sorted search;
+- persistent deque updates, subtree sharing, bounded-depth tree shape, splitting, concatenation, sorted search, and
+  randomized model replay;
 - reversible-deque O(1) storage-sharing reversal;
 - measured sequence size/sum/min/max policies, split, and locate;
 - sorted bag/set/map rank, navigation, algebra, and duplicate handling;
@@ -28,5 +29,5 @@ cover:
 - closed interval overlap, containment, and coalescing;
 - positional rope edits, measured-rope navigation, text line helpers, and builder output.
 
-The current validation proves checkpoint behavior, not final C#/C++ asymptotic parity.
-
+The current validation proves the structurally shared Rust deque behavior and the checkpoint behavior of the
+remaining facades, not final C#/C++ lazy-spine asymptotic parity for the whole crate.
