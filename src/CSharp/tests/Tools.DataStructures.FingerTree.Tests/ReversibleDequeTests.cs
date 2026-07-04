@@ -15,6 +15,7 @@ public sealed class ReversibleDequeTests
         Assert.Equal(expected.Count, actual.Count);
         Assert.Equal(expected.Count == 0, actual.IsEmpty);
         Assert.Equal(expected, actual.ToArray());
+        Assert.Equal(expected, actual);
         actual.ValidateInvariants();
         for (var i = 0; i < expected.Count; i++)
             Assert.Equal(expected[i], actual[i]);
@@ -135,6 +136,30 @@ public sealed class ReversibleDequeTests
         for (var i = 0; i < size; i += 137)
             Assert.Equal(expected[i], deque[i]);
         Assert.Equal(expected, deque.ToArray());
+        Assert.Equal(expected, deque);
+    }
+
+    /// <summary>Verifies enumeration streams through reversed nodes without materializing the full sequence.</summary>
+    [Fact]
+    public void Enumeration_StreamsReversedDequeWithoutMaterializingArray()
+    {
+        const int size = 1 << 16;
+        var deque = ReversibleDeque<int>.CreateRange(Enumerable.Range(0, size)).Reverse();
+        var expectedSum = ((long)(size - 1) * size) / 2;
+
+        var warmupSum = 0L;
+        foreach (var item in deque)
+            warmupSum += item;
+        Assert.Equal(expectedSum, warmupSum);
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var sum = 0L;
+        foreach (var item in deque)
+            sum += item;
+        var bytes = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.Equal(expectedSum, sum);
+        Assert.InRange(bytes, 1, 16_384);
     }
 
     /// <summary>

@@ -84,6 +84,28 @@ internal abstract class RevTree<T>
 
     /// <summary>Gets the deep-level depth. Test-only; O(log n).</summary>
     public abstract int Depth { get; }
+
+    /// <summary>Gets the number of direct children exposed to the stack enumerator.</summary>
+    public abstract int EnumerationChildCount { get; }
+
+    /// <summary>
+    /// Reads a direct child for stack enumeration, carrying a mirrored-view bit instead of materializing a
+    /// reversed tree or digit.
+    /// </summary>
+    /// <param name="index">Zero-based direct-child index in the requested logical orientation.</param>
+    /// <param name="mirrored">Whether this tree should be viewed through an additional mirror.</param>
+    /// <param name="leaf">The leaf value when the child is a leaf; otherwise <see langword="default"/>.</param>
+    /// <param name="tree">The child tree when the child is a nested middle tree; otherwise <see langword="null"/>.</param>
+    /// <param name="node">The child node when the child is not a leaf or tree; otherwise <see langword="null"/>.</param>
+    /// <param name="childMirrored">Whether the child tree or node should be viewed through an additional mirror.</param>
+    /// <returns><see langword="true"/> when the child is a leaf; otherwise <see langword="false"/>.</returns>
+    public abstract bool TryGetEnumerationChild(
+        int index,
+        bool mirrored,
+        out T leaf,
+        out RevTree<T>? tree,
+        out RevNode<T>? node,
+        out bool childMirrored);
 }
 
 /// <summary>The empty reversible level.</summary>
@@ -154,6 +176,19 @@ internal sealed class RevEmptyTree<T> : RevTree<T>
 
     /// <inheritdoc/>
     public override int Depth => 0;
+
+    /// <inheritdoc/>
+    public override int EnumerationChildCount => 0;
+
+    /// <inheritdoc/>
+    public override bool TryGetEnumerationChild(
+        int index,
+        bool mirrored,
+        out T leaf,
+        out RevTree<T>? tree,
+        out RevNode<T>? node,
+        out bool childMirrored) =>
+        throw Empty();
 
     private static InvalidOperationException Empty() => new("Internal invariant violation: access on an empty reversible level.");
 }
@@ -226,6 +261,22 @@ internal sealed class RevSingleTree<T>(RevElem<T> element) : RevTree<T>
 
     /// <inheritdoc/>
     public override int Depth => 0;
+
+    /// <inheritdoc/>
+    public override int EnumerationChildCount => 1;
+
+    /// <inheritdoc/>
+    public override bool TryGetEnumerationChild(
+        int index,
+        bool mirrored,
+        out T leaf,
+        out RevTree<T>? tree,
+        out RevNode<T>? node,
+        out bool childMirrored)
+    {
+        tree = null;
+        return RevTreeOps.TryGetEnumerationChild(Element, mirrored, out leaf, out node, out childMirrored);
+    }
 }
 
 /// <summary>A deep reversible level with a reversal bit and a cached total leaf count.</summary>
@@ -431,6 +482,68 @@ internal sealed class RevDeepTree<T> : RevTree<T>
 
     /// <inheritdoc/>
     public override int Depth => 1 + LogicalMiddle().Depth;
+
+    /// <inheritdoc/>
+    public override int EnumerationChildCount => _prefix.Length + 1 + _suffix.Length;
+
+    /// <inheritdoc/>
+    public override bool TryGetEnumerationChild(
+        int index,
+        bool mirrored,
+        out T leaf,
+        out RevTree<T>? tree,
+        out RevNode<T>? node,
+        out bool childMirrored)
+    {
+        var viewReversed = _reversed ^ mirrored;
+        leaf = default!;
+        tree = null;
+        node = null;
+        childMirrored = false;
+
+        if (!viewReversed)
+        {
+            if (index < _prefix.Length)
+                return RevTreeOps.TryGetEnumerationChild(_prefix[index], mirrored: false, out leaf, out node, out childMirrored);
+
+            if (index == _prefix.Length)
+            {
+                tree = _middle;
+                return false;
+            }
+
+            return RevTreeOps.TryGetEnumerationChild(
+                _suffix[index - _prefix.Length - 1],
+                mirrored: false,
+                out leaf,
+                out node,
+                out childMirrored);
+        }
+
+        if (index < _suffix.Length)
+        {
+            return RevTreeOps.TryGetEnumerationChild(
+                _suffix[_suffix.Length - 1 - index],
+                mirrored: true,
+                out leaf,
+                out node,
+                out childMirrored);
+        }
+
+        if (index == _suffix.Length)
+        {
+            tree = _middle;
+            childMirrored = true;
+            return false;
+        }
+
+        return RevTreeOps.TryGetEnumerationChild(
+            _prefix[_prefix.Length - 1 - (index - _suffix.Length - 1)],
+            mirrored: true,
+            out leaf,
+            out node,
+            out childMirrored);
+    }
 }
 
 /// <summary>Level-spanning helpers for the reversible tree: digit operations, smart constructors, and glue.</summary>
@@ -457,6 +570,38 @@ internal static class RevTreeOps
         for (var i = 0; i < n; i++)
             result[i] = elements[n - 1 - i].Mirror();
         return result;
+    }
+
+    /// <summary>
+    /// Classifies an element child for stack enumeration, carrying a mirrored-view bit for nodes instead of
+    /// constructing <see cref="RevElem{T}.Mirror"/> wrappers.
+    /// </summary>
+    /// <typeparam name="T">Stored leaf element type.</typeparam>
+    /// <param name="element">Element to classify.</param>
+    /// <param name="mirrored">Whether the element should be viewed through an additional mirror.</param>
+    /// <param name="leaf">The leaf value when <paramref name="element"/> is a leaf; otherwise <see langword="default"/>.</param>
+    /// <param name="node">The node when <paramref name="element"/> is not a leaf; otherwise <see langword="null"/>.</param>
+    /// <param name="childMirrored">Whether <paramref name="node"/> should be viewed through an additional mirror.</param>
+    /// <returns><see langword="true"/> when <paramref name="element"/> is a leaf; otherwise <see langword="false"/>.</returns>
+    public static bool TryGetEnumerationChild<T>(
+        RevElem<T> element,
+        bool mirrored,
+        out T leaf,
+        out RevNode<T>? node,
+        out bool childMirrored)
+    {
+        if (element is RevLeaf<T> leafElement)
+        {
+            leaf = leafElement.Value;
+            node = null;
+            childMirrored = false;
+            return true;
+        }
+
+        leaf = default!;
+        node = (RevNode<T>)element;
+        childMirrored = mirrored;
+        return false;
     }
 
     /// <summary>Builds a forward deep tree, computing its size from the parts. O(1).</summary>

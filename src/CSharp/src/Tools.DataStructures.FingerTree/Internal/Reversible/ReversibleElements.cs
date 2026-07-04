@@ -117,6 +117,9 @@ internal sealed class RevNode<T> : RevElem<T>
     /// <summary>Gets the number of children (two or three).</summary>
     public int Count => _children.Length;
 
+    /// <summary>Gets the number of direct children exposed to the stack enumerator.</summary>
+    public int EnumerationChildCount => Count;
+
     /// <inheritdoc/>
     public override int Size => _size;
 
@@ -133,6 +136,28 @@ internal sealed class RevNode<T> : RevElem<T>
     /// <param name="index">Zero-based logical child position.</param>
     public RevElem<T> LogicalChild(int index) =>
         _reversed ? _children[Count - 1 - index].Mirror() : _children[index];
+
+    /// <summary>
+    /// Reads a direct child for stack enumeration, carrying a mirrored-view bit instead of allocating a
+    /// mirrored wrapper for reversed children.
+    /// </summary>
+    /// <param name="index">Zero-based direct-child index in the requested logical orientation.</param>
+    /// <param name="mirrored">Whether this node should be viewed through an additional mirror.</param>
+    /// <param name="leaf">The leaf value when the child is a leaf; otherwise <see langword="default"/>.</param>
+    /// <param name="node">The child node when the child is not a leaf; otherwise <see langword="null"/>.</param>
+    /// <param name="childMirrored">Whether the child node should be viewed through an additional mirror.</param>
+    /// <returns><see langword="true"/> when the child is a leaf; otherwise <see langword="false"/>.</returns>
+    public bool TryGetEnumerationChild(
+        int index,
+        bool mirrored,
+        out T leaf,
+        out RevNode<T>? node,
+        out bool childMirrored)
+    {
+        var viewReversed = _reversed ^ mirrored;
+        var child = viewReversed ? _children[Count - 1 - index] : _children[index];
+        return RevTreeOps.TryGetEnumerationChild(child, viewReversed, out leaf, out node, out childMirrored);
+    }
 
     /// <summary>Returns the children in logical order. O(child count).</summary>
     public RevElem<T>[] LogicalChildren()

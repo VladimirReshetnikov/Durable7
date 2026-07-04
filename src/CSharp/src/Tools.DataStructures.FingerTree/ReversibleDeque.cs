@@ -262,8 +262,10 @@ public sealed class ReversibleDeque<T> : IReadOnlyList<T>
 
     /// <summary>Returns an enumerator over the elements in order.</summary>
     /// <returns>An enumerator yielding elements front to back.</returns>
-    /// <remarks>Materializes the elements once, in O(n) time and space, then yields them.</remarks>
-    public IEnumerator<T> GetEnumerator() => ((IEnumerable<T>)ToArray()).GetEnumerator();
+    /// <remarks>Enumeration is O(n) total with O(1) amortized cost per yielded element and an O(log n) stack.</remarks>
+    public Enumerator GetEnumerator() => new(_root);
+
+    IEnumerator<T> IEnumerable<T>.GetEnumerator() => GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
@@ -290,4 +292,136 @@ public sealed class ReversibleDeque<T> : IReadOnlyList<T>
 
     private static OverflowException OverflowError() =>
         new("The operation would create a deque with more than Int32.MaxValue elements.");
+
+    /// <summary>
+    /// Enumerates a <see cref="ReversibleDeque{T}"/> without materializing the sequence.
+    /// </summary>
+    /// <remarks>
+    /// The traversal carries an orientation bit on each stack frame, so reversed trees and nodes are read in
+    /// logical order without allocating mirrored wrappers. The enumerator observes the immutable snapshot it
+    /// was created from.
+    /// </remarks>
+    public struct Enumerator : IEnumerator<T>
+    {
+        private Frame[]? _stack;
+        private int _depth;
+        private T _current;
+
+        internal Enumerator(RevTree<T> root)
+        {
+            _stack = null;
+            _depth = 0;
+            _current = default!;
+            if (!root.IsEmpty)
+                Push(root, mirrored: false);
+        }
+
+        /// <summary>Gets the current element.</summary>
+        /// <remarks>Undefined before the first call to <see cref="MoveNext"/> and after enumeration ends.</remarks>
+        public readonly T Current => _current;
+
+        readonly object? IEnumerator.Current => Current;
+
+        /// <summary>Releases resources held by the enumerator.</summary>
+        public void Dispose()
+        {
+        }
+
+        /// <summary>Advances to the next element.</summary>
+        /// <returns><see langword="true"/> when the enumerator advanced to an element; otherwise <see langword="false"/>.</returns>
+        public bool MoveNext()
+        {
+            while (_depth > 0)
+            {
+                ref var frame = ref _stack![_depth - 1];
+                if (frame.NextChild == frame.ChildCount)
+                {
+                    frame = default;
+                    _depth--;
+                    continue;
+                }
+
+                var childIndex = frame.NextChild++;
+                if (frame.TryGetChild(
+                    childIndex,
+                    out var leaf,
+                    out var tree,
+                    out var node,
+                    out var childMirrored))
+                {
+                    _current = leaf;
+                    return true;
+                }
+
+                if (tree is not null)
+                    Push(tree, childMirrored);
+                else
+                    Push(node!, childMirrored);
+            }
+
+            _current = default!;
+            return false;
+        }
+
+        /// <summary>Not supported; create a new enumerator instead.</summary>
+        /// <exception cref="NotSupportedException">Always thrown.</exception>
+        void IEnumerator.Reset() => throw new NotSupportedException();
+
+        private void Push(RevTree<T> tree, bool mirrored)
+        {
+            _stack ??= new Frame[8];
+            if (_depth == _stack.Length)
+                Array.Resize(ref _stack, _depth * 2);
+            _stack[_depth++] = new Frame(tree, mirrored);
+        }
+
+        private void Push(RevNode<T> node, bool mirrored)
+        {
+            _stack ??= new Frame[8];
+            if (_depth == _stack.Length)
+                Array.Resize(ref _stack, _depth * 2);
+            _stack[_depth++] = new Frame(node, mirrored);
+        }
+
+        private struct Frame
+        {
+            private readonly RevTree<T>? _tree;
+            private readonly RevNode<T>? _node;
+            private readonly bool _mirrored;
+
+            public int NextChild;
+
+            public Frame(RevTree<T> tree, bool mirrored)
+            {
+                _tree = tree;
+                _node = null;
+                _mirrored = mirrored;
+                NextChild = 0;
+            }
+
+            public Frame(RevNode<T> node, bool mirrored)
+            {
+                _tree = null;
+                _node = node;
+                _mirrored = mirrored;
+                NextChild = 0;
+            }
+
+            public readonly int ChildCount => _tree?.EnumerationChildCount ?? _node!.EnumerationChildCount;
+
+            public readonly bool TryGetChild(
+                int index,
+                out T leaf,
+                out RevTree<T>? tree,
+                out RevNode<T>? node,
+                out bool childMirrored)
+            {
+                if (_tree is not null)
+                    return _tree.TryGetEnumerationChild(index, _mirrored, out leaf, out tree, out node, out childMirrored);
+
+                tree = null;
+                return _node!.TryGetEnumerationChild(index, _mirrored, out leaf, out node, out childMirrored);
+            }
+        }
+    }
 }
