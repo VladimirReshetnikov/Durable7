@@ -15,9 +15,20 @@
 #include <vector>
 
 namespace ft = tools::data_structures::finger_tree;
+namespace detail = tools::data_structures::finger_tree::detail;
 using namespace tools::data_structures::finger_tree::tests;
 
 namespace {
+
+[[nodiscard]] detail::deque_element<int> deque_leaf(const int value)
+{
+    return detail::deque_element<int>::leaf(value);
+}
+
+[[nodiscard]] detail::deque_tree<int> deque_middle_node_tree(const int first, const int second)
+{
+    return detail::deque_tree<int>::single(detail::deque_element<int>::node2(deque_leaf(first), deque_leaf(second)));
+}
 
 template <class T>
 void require_sequence_equal(
@@ -104,6 +115,28 @@ void add_persistent_deque_tests_impl(suite& tests)
         FT_REQUIRE_EQUAL(back.value, std::string{"right"});
         require_sequence_equal(back.rest, {"left", "middle"});
         require_sequence_equal(three, {"left", "middle", "right"});
+    });
+
+    tests.add("persistent deque deep rebalance helpers size middle before move", [] {
+        const auto prefix = detail::deque_digit<int>{deque_leaf(1)};
+        const auto suffix = detail::deque_digit<int>{deque_leaf(4)};
+        const auto expected = std::vector<int>{1, 2, 3, 4};
+
+        const auto from_left = detail::deque_deep_left(prefix, deque_middle_node_tree(2, 3), suffix);
+        FT_REQUIRE_EQUAL(from_left.size(), expected.size());
+        FT_REQUIRE_EQUAL(from_left.validate_and_count(), expected.size());
+
+        auto left_values = std::vector<int>{};
+        from_left.copy_leaves_to(left_values);
+        FT_REQUIRE(left_values == expected);
+
+        const auto from_right = detail::deque_deep_right(prefix, deque_middle_node_tree(2, 3), suffix);
+        FT_REQUIRE_EQUAL(from_right.size(), expected.size());
+        FT_REQUIRE_EQUAL(from_right.validate_and_count(), expected.size());
+
+        auto right_values = std::vector<int>{};
+        from_right.copy_leaves_to(right_values);
+        FT_REQUIRE(right_values == expected);
     });
 
     tests.add("persistent deque throws and returns null optional values on empty reads", [] {

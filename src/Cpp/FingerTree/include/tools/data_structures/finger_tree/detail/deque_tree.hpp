@@ -1757,11 +1757,12 @@ template <class T>
 deque_tree<T> deque_deep_left(const deque_digit<T>& prefix, deque_tree<T> middle, const deque_digit<T>& suffix)
 {
     if (prefix.length() > 0) {
+        const auto total_size = checked_add(checked_add(prefix.size(), middle.size()), suffix.size());
         return deque_tree<T>::deep_computed(
             prefix,
             std::move(middle),
             suffix,
-            checked_add(checked_add(prefix.size(), middle.size()), suffix.size()));
+            total_size);
     }
 
     return middle.size() == 0 ? deque_from_digit(suffix) : deque_pull_left(std::move(middle), suffix);
@@ -1771,11 +1772,12 @@ template <class T>
 deque_tree<T> deque_deep_right(const deque_digit<T>& prefix, deque_tree<T> middle, const deque_digit<T>& suffix)
 {
     if (suffix.length() > 0) {
+        const auto total_size = checked_add(checked_add(prefix.size(), middle.size()), suffix.size());
         return deque_tree<T>::deep_computed(
             prefix,
             std::move(middle),
             suffix,
-            checked_add(checked_add(prefix.size(), middle.size()), suffix.size()));
+            total_size);
     }
 
     return middle.size() == 0 ? deque_from_digit(prefix) : deque_pull_right(prefix, std::move(middle));
