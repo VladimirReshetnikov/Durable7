@@ -26,6 +26,18 @@ The project is C11 (`C_STANDARD 11`, required, extensions off). MSVC targets bui
 `/W4`, `/WX`, `/external:anglebrackets`, and `/external:W0`; non-MSVC targets use `-Wall -Wextra
 -Wpedantic -Werror`. Generated files live under `out/build/<preset>/`, which is ignored by the repository.
 
+## Compiler Matrix Policy
+
+For changes to C FingerTree source, headers, tests, samples, benchmarks, or behavior documentation, compile and
+run tests under all three supported compiler lanes:
+
+- MSVC Debug and Release through `msvc-debug` and `msvc-release`.
+- GCC/MinGW in a separate CMake/Ninja build directory.
+- LLVM/Clang in a separate CMake/Ninja build directory.
+
+Each lane must run CTest against the binaries from its own build directory. Do not reuse `out/build/msvc-*`
+binaries as evidence for GCC or Clang.
+
 ## Debug Build And Tests
 
 ```powershell
@@ -46,6 +58,32 @@ cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.
 
 A plain PowerShell invocation of `VsDevCmd.bat` does not persist its environment changes in the current
 PowerShell process; keep configure/build/test in one `cmd.exe` chain when starting from an uninitialized shell.
+
+## GCC Build And Tests
+
+Use the WinLibs compiler, CMake, Ninja, and CTest directly when they are not on the current `PATH`:
+
+```powershell
+$mingw = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin"
+
+& "$mingw\cmake.exe" -S . -B out\build\gcc-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER="$mingw\gcc.exe" -DCMAKE_MAKE_PROGRAM="$mingw\ninja.exe"
+& "$mingw\cmake.exe" --build out\build\gcc-debug
+& "$mingw\ctest.exe" --test-dir out\build\gcc-debug --output-on-failure
+```
+
+## Clang Build And Tests
+
+Use the Visual Studio developer environment when Clang targets the MSVC ABI:
+
+```powershell
+$vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
+$cmake = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
+$ctest = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe"
+$ninja = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
+$clang = "C:\Program Files\LLVM\bin\clang.exe"
+
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmake"" -S . -B out\build\clang-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=""$clang"" -DCMAKE_MAKE_PROGRAM=""$ninja"" && ""$cmake"" --build out\build\clang-debug && ""$ctest"" --test-dir out\build\clang-debug --output-on-failure"
+```
 
 ## Current Coverage
 
@@ -89,7 +127,7 @@ root after a release build:
 See the benchmark [README](../benchmarks/README.md) for workload names, output shape, and timing caveats.
 
 Both `msvc-debug` and `msvc-release` are expected to build warning-free under `/W4 /WX`. On hosts with
-GCC or Clang available through CMake, run the portable presets as an additional check:
+GCC or Clang available through CMake, the portable presets are also available:
 
 ```powershell
 cmake --preset ninja-debug

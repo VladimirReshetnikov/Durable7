@@ -232,9 +232,8 @@ headers carry Doxygen-style contract comments), but these two files are the most
 for a reader to get right without re-deriving it from the C# source: the asymmetric
 amortized-vs-worst-case complexity of `measure()` (O(1) amortized, never worst-case, because a pop
 suspension must force) is exactly the kind of subtlety the project's own docs flag as a recurring
-historical failure mode on the C# side (see the `api-specification-defect-report-complexity-guarantees.md`
-report on the C# repository, which documents a real, adjudicated defect of over-claiming worst-case
-bounds in a complexity table). The C++ implementation gets the *behavior* right — I confirmed
+historical failure mode on the C# side; the C# API specification was amended after an adjudicated defect
+found over-claimed worst-case bounds in a complexity table. The C++ implementation gets the *behavior* right — I confirmed
 `measure()` routes through `atomic_box::get_or_compute` (amortized) while `front()`/`back()` read
 the prefix/suffix digits directly without ever touching the lazy middle (worst-case O(1)) — but
 nothing in the header states this contract for a future maintainer or consumer to rely on. The

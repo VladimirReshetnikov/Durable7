@@ -41,20 +41,46 @@ From `src/Cpp/Hamt`:
 Use the first command when you only need a compile gate. Use the `-RunTests` forms before committing
 behavior changes, public API changes, policy-object changes, or documentation that claims the tests pass.
 
-## Portable Sanitizer Check
+## Compiler Matrix Policy
 
-On hosts with GCC or Clang on `PATH`, the header-only HAMT test executable can also be built directly
-with AddressSanitizer and UndefinedBehaviorSanitizer. This is an optional cross-toolchain lane, but it
-is valuable for policy-object, collision-bucket, and structural-sharing changes:
+For changes to C++ HAMT public headers, tests, examples, or behavior documentation, compile and run tests under
+all three supported compiler lanes:
+
+- MSVC Debug and Release through `build.ps1`.
+- GCC/MinGW with `-std=c++20 -Wall -Wextra -Wpedantic -Werror`.
+- LLVM/Clang with `-std=c++20 -Wall -Wextra -Wpedantic -Werror`.
+
+Each non-MSVC lane must run the executable it just produced. Keep generated binaries under `build/` or
+`build/portable/`, which is ignored by the repository.
+
+Typical direct GCC lane:
 
 ```powershell
-New-Item -ItemType Directory -Force build | Out-Null
+New-Item -ItemType Directory -Force build\portable | Out-Null
+g++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -Iinclude tests\persistent_hamt_tests.cpp `
+    -o build\portable\persistent_hamt_tests_gcc.exe
+.\build\portable\persistent_hamt_tests_gcc.exe
+```
+
+Typical Clang lane on Windows, using the Visual Studio developer environment for MSVC ABI headers and libraries:
+
+```powershell
+$vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
+$clangxx = "C:\Program Files\LLVM\bin\clang++.exe"
+
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$clangxx"" -std=c++20 -Wall -Wextra -Wpedantic -Werror -Iinclude tests\persistent_hamt_tests.cpp -o build\portable\persistent_hamt_tests_clang.exe && build\portable\persistent_hamt_tests_clang.exe"
+```
+
+## Portable Sanitizer Check
+
+On hosts with GCC or Clang supporting AddressSanitizer and UndefinedBehaviorSanitizer, add a sanitizer run for
+policy-object, collision-bucket, and structural-sharing changes:
+
+```powershell
 g++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined -fno-omit-frame-pointer `
     -Iinclude tests/persistent_hamt_tests.cpp -o build/persistent_hamt_tests_asan
 ./build/persistent_hamt_tests_asan
 ```
-
-Use an equivalent `clang++` command when Clang is the available sanitizer-capable compiler.
 
 ## Test Coverage
 

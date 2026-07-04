@@ -277,6 +277,13 @@ The expected local Windows environment includes:
 - `python` for ad hoc tooling.
 - .NET SDK 10.0 or newer with the .NET 10 targeting packs.
 - Visual Studio native C/C++ toolchain, including C++23 `/std:c++latest` support for `src/Cpp/FingerTree`, plus the bundled CMake and Ninja used by the `src/C/FingerTree` and `src/Cpp/FingerTree` presets.
+- LLVM/Clang for native portability validation. The local Windows installation normally exposes
+  `C:\Program Files\LLVM\bin\clang.exe` and `C:\Program Files\LLVM\bin\clang++.exe`; use the Visual Studio
+  developer environment when targeting the MSVC ABI.
+- GCC/MinGW for native portability validation. The local Windows installation uses WinLibs through winget and
+  provides `gcc.exe`, `g++.exe`, `cmake.exe`, `ninja.exe`, and `ctest.exe`; if the current shell has not picked up
+  the new `PATH`, use the binaries under
+  `%LOCALAPPDATA%\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin`.
 - MSVC C17/C++20 toolchain for `src/C/Hamt` and `src/Cpp/Hamt`; use Scriptorium's
   `Import-VisualCppEnvironment.ps1` helper when compiling from a plain PowerShell process.
 - `git-filter-repo` usable as `python -m git_filter_repo` when future history work is needed.

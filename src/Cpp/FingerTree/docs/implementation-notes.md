@@ -118,10 +118,9 @@ Validation:
 Findings:
 
 - No runtime C# defect was found in the measure and predicate layer.
-- A narrow C# documentation wording defect was recorded in
-  [`src/CSharp/docs/FingerTree/interval-tree-strict-core-wording-defect-report.md`](../../../CSharp/docs/FingerTree/interval-tree-strict-core-wording-defect-report.md):
-  `IntervalTree<T>` refers to the underlying measured core as "strict" where the repository docs and implementation
-  describe the lazy-memoized measured finger tree.
+- A narrow C# documentation wording defect was found and later incorporated into the XML documentation:
+  `IntervalTree<T>` had referred to the underlying measured core as "strict" where the repository docs and
+  implementation describe the lazy-memoized measured finger tree.
 
 ## Checkpoint: Atomic Lazy Cell
 
@@ -570,8 +569,7 @@ Findings:
 
 - No new C# defect, flaw, or improvement proposal was found in the interval tree pass. The C# implementation and
   tests matched the measured interval-tree algorithms ported here.
-- The previously recorded C# wording defect for the interval tree still applies:
-  [`src/CSharp/docs/FingerTree/interval-tree-strict-core-wording-defect-report.md`](../../../CSharp/docs/FingerTree/interval-tree-strict-core-wording-defect-report.md).
+- The previously recorded C# wording defect for the interval tree was incorporated into the XML documentation.
 
 ## Checkpoint: Non-Interactive MSVC Test Failures
 

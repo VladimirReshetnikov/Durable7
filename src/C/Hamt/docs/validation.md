@@ -42,20 +42,46 @@ From `src/C/Hamt`:
 Use the first command when you only need a compile gate. Use the `-RunTests` forms before committing
 behavior changes, public API changes, ownership-policy changes, or documentation that claims the tests pass.
 
-## Portable Sanitizer Check
+## Compiler Matrix Policy
 
-On hosts with GCC or Clang on `PATH`, the HAMT test executable can also be built directly with
-AddressSanitizer and UndefinedBehaviorSanitizer. This is an optional cross-toolchain lane, but it is
-valuable for ownership-policy and collision-bucket changes:
+For changes to C HAMT source, headers, tests, examples, or behavior documentation, compile and run tests under
+all three supported compiler lanes:
+
+- MSVC Debug and Release through `build.ps1`.
+- GCC/MinGW with `-std=c17 -Wall -Wextra -Wpedantic -Werror`.
+- LLVM/Clang with `-std=c17 -Wall -Wextra -Wpedantic -Werror`.
+
+Each non-MSVC lane must run the executable it just produced. Keep generated binaries under `build/` or
+`build/portable/`, which is ignored by the repository.
+
+Typical direct GCC lane:
 
 ```powershell
-New-Item -ItemType Directory -Force build | Out-Null
+New-Item -ItemType Directory -Force build\portable | Out-Null
+gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -Iinclude src\hamt.c tests\hamt_tests.c `
+    -o build\portable\hamt_tests_gcc.exe
+.\build\portable\hamt_tests_gcc.exe
+```
+
+Typical Clang lane on Windows, using the Visual Studio developer environment for MSVC ABI headers and libraries:
+
+```powershell
+$vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
+$clang = "C:\Program Files\LLVM\bin\clang.exe"
+
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$clang"" -std=c17 -Wall -Wextra -Wpedantic -Werror -Iinclude src\hamt.c tests\hamt_tests.c -o build\portable\hamt_tests_clang.exe && build\portable\hamt_tests_clang.exe"
+```
+
+## Portable Sanitizer Check
+
+On hosts with GCC or Clang supporting AddressSanitizer and UndefinedBehaviorSanitizer, add a sanitizer run for
+ownership-policy and collision-bucket changes:
+
+```powershell
 gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined -fno-omit-frame-pointer `
     -Iinclude src/hamt.c tests/hamt_tests.c -o build/hamt_tests_asan
 ./build/hamt_tests_asan
 ```
-
-Use an equivalent `clang` command when Clang is the available sanitizer-capable compiler.
 
 ## Test Coverage
 

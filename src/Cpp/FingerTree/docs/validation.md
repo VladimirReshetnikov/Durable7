@@ -22,6 +22,17 @@ The public interface advertises `cxx_std_23`. MSVC targets also receive `/std:c+
 `CXX_STANDARD 23`, disable extensions, and build with `/W4 /WX`; non-MSVC targets use `-Wall -Wextra
 -Wpedantic -Werror`. Generated files live under `out/build/<preset>/`, which is ignored by the repository.
 
+## Compiler Matrix Policy
+
+For changes to C++ FingerTree public headers, tests, or behavior documentation, MSVC Debug and Release are the
+mandatory supported compiler lanes. Each lane must run CTest against the binaries from its own `out/build/msvc-*`
+directory.
+
+The workspace exposes host-agnostic Ninja presets for suitable C++23 GCC/Clang installations, but those lanes are
+currently investigation lanes rather than the commit gate. When you try them, use separate build directories and
+record the exact compiler, command, and CTest outcome. Promote a GCC or Clang lane to the mandatory matrix only
+after the workspace is warning-clean and test-clean under that compiler.
+
 ## Debug Build And Tests
 
 ```powershell
