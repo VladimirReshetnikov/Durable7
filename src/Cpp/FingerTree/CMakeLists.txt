@@ -59,6 +59,14 @@ function(fingertree_configure_target target)
                 -Wpedantic
                 -Werror
         )
+        if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            # The smoke tests observe replacement new/delete; GCC allocation-DCE can erase those side effects.
+            target_compile_options(
+                ${target}
+                PRIVATE
+                    -fno-allocation-dce
+            )
+        endif()
     endif()
 endfunction()
 

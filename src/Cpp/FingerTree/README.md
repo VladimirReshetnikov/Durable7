@@ -33,10 +33,11 @@ cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.
 
 Use `msvc-release` for the optimized configuration. Keep the Visual Studio environment setup, configure, build,
 and CTest run in one `cmd.exe` chain when starting from plain PowerShell; invoking `VsDevCmd.bat` directly from
-PowerShell does not persist its environment changes in that process. Host-agnostic `ninja-debug`,
-`ninja-release`, and `ninja-asan` presets are also available when CMake, Ninja, and a suitable C++23 compiler are
-on `PATH`. For release commands, sanitizer validation, stress controls, warning policy, and generated-output
-locations, see the [validation guide](docs/validation.md).
+PowerShell does not persist its environment changes in that process. The validation matrix also covers GCC/MinGW
+and Clang Debug/Release CTest lanes in separate `out/build/<compiler>-<configuration>` directories.
+Host-agnostic `ninja-debug`, `ninja-release`, and `ninja-asan` presets are available when CMake, Ninja, and a
+suitable C++23 compiler are on `PATH`. For release commands, sanitizer validation, stress controls, warning
+policy, and generated-output locations, see the [validation guide](docs/validation.md).
 
 ## Layout
 

@@ -26,7 +26,7 @@ workspace or evidence boundary applies, start with the
 | [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | `.\build.ps1 -Workspace Hamt` from `src/Kotlin` | [Validation](../../src/Kotlin/Hamt/docs/validation.md) | [Tests](../../src/Kotlin/Hamt/tests/README.md) | Kotlin/JVM HAMT build, tool bootstrap, deterministic trie and set-algebra tests |
 | [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | `cargo test -p tools-data-structures-hamt` | [Validation](../../src/Rust/Hamt/docs/validation.md) | [Tests](../../src/Rust/Hamt/tests/README.md) | Safe Rust crate, structural HAMT tests, collision and set-algebra coverage |
 | [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree -RunTests` from `src/C` | [Validation](../../src/C/FingerTree/docs/validation.md) | [Tests](../../src/C/FingerTree/tests/README.md) | C11 MSVC, GCC, and Clang builds; tests, samples, benchmark harness entry points |
-| [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree -RunTests` from `src/Cpp` | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | [Tests](../../src/Cpp/FingerTree/tests/README.md) | C++23 header-first library, CTest suite, stress controls, benchmark-harness status |
+| [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree -RunTests` from `src/Cpp` | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | [Tests](../../src/Cpp/FingerTree/tests/README.md) | C++23 MSVC, GCC, and Clang CTest lanes; stress controls; benchmark-harness status |
 | [`src/Haskell`](../../src/Haskell/README.md) | `cabal test all` | [Haskell README](../../src/Haskell/README.md) | [HAMT tests](../../src/Haskell/Hamt/test/README.md), [FingerTree tests](../../src/Haskell/FingerTree/test/README.md) | GHC/cabal build, dependency-light HAMT and FingerTree executable tests |
 | [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree` from `src/Kotlin` | [Validation](../../src/Kotlin/FingerTree/docs/validation.md) | [Tests](../../src/Kotlin/FingerTree/tests/README.md) | Kotlin/JVM semantic-checkpoint tests across deque, reversible deque, measured tree, sorted, priority, interval, rope, and text helpers |
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | `cargo test -p tools-data-structures-fingertree` | [Validation](../../src/Rust/FingerTree/docs/validation.md) | [Tests](../../src/Rust/FingerTree/tests/README.md) | Safe Rust checkpoint crate, structurally shared storage and cached-measure tests across deque, reversible deque, sorted, priority, interval, rope, measured tree, measured rope, and text helpers |
@@ -173,7 +173,7 @@ tests, and benchmark harness status:
 - [C++ FingerTree validation](../../src/Cpp/FingerTree/docs/validation.md)
 - [C++ FingerTree tests](../../src/Cpp/FingerTree/tests/README.md)
 
-For C FingerTree source, header, test, sample, benchmark, or behavior-documentation changes, run the MSVC
+For C or C++ FingerTree source, header, test, sample, benchmark, or behavior-documentation changes, run the MSVC
 Debug/Release commands above and run separate GCC and Clang CMake build directories, followed by CTest in each
 directory. Do not reuse the MSVC `out/build/msvc-*` binaries as evidence for GCC or Clang.
 
@@ -193,10 +193,9 @@ cmake --build --preset ninja-asan
 ctest --preset ninja-asan --output-on-failure
 ```
 
-For C++ FingerTree, the current mandatory lane remains MSVC Debug/Release because the port depends on the
-installed Visual Studio C++23 latest mode. Treat GCC/Clang C++23 CMake builds as investigation lanes until the
-workspace validation guide promotes them; if you try them, report the exact compiler, build directory, command,
-and failure or success.
+For C++ FingerTree, the workspace validation guide owns the exact MSVC, GCC, and Clang commands. On Windows, run
+Clang's MSVC-targeting `clang++.exe` from a Visual Studio developer environment and keep every compiler/configuration
+pair in its own `out/build/<compiler>-<configuration>` directory.
 
 ## Haskell Workspaces
 

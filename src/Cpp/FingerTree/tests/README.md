@@ -31,7 +31,8 @@ basic aggregate-header and test-support checks, and then calls each domain-speci
 - `atomic_box_tests.cpp` and `tearable_concurrency_tests.cpp` cover lock-free publication helpers and structure-level
   tearable-value stress tests.
 - `test_support/` holds the local runner, deterministic command-history diagnostics, allocation counting, and
-  operation-count helpers used across the suite.
+  operation-count helpers used across the suite. The allocation counter replaces all standard throwing, nothrow,
+  and aligned global allocation forms used by the test binary.
 
 ## Build And Run
 
@@ -66,3 +67,5 @@ Remove-Item Env:\FINGERTREE_STRESS_SECONDS
 
 Use the workspace [validation guide](../docs/validation.md) for Release validation, warning policy, generated-output
 locations, and benchmark-harness status.
+GNU builds intentionally disable allocation-DCE for the test target, because several smoke tests assert observable
+global replacement `new`/`delete` side effects.

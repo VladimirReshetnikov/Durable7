@@ -21,19 +21,16 @@ The public interface advertises `cxx_std_23`. MSVC targets also receive `/std:c+
 `/permissive-`, `/Zc:__cplusplus`, `/external:anglebrackets`, and `/external:W0`. Test targets require
 `CXX_STANDARD 23`, disable extensions, and build with `/W4 /WX`; non-MSVC targets use `-Wall -Wextra
 -Wpedantic -Werror`. Generated files live under `out/build/<preset>/`, which is ignored by the repository.
+GNU test targets also receive `-fno-allocation-dce`, because the smoke suite intentionally observes global
+replacement `new`/`delete` side effects through the allocation counter.
 
 ## Compiler Matrix Policy
 
-For changes to C++ FingerTree public headers, tests, or behavior documentation, MSVC Debug and Release are the
-mandatory supported compiler lanes. Each lane must run CTest against the binaries from its own `out/build/msvc-*`
-directory.
+For changes to C++ FingerTree public headers, tests, or behavior documentation, run Debug and Release CTest lanes
+for MSVC, GCC/MinGW, and Clang. Each lane must run CTest against the binaries from its own
+`out/build/<compiler>-<configuration>` directory; do not reuse another compiler's build output as evidence.
 
-The workspace exposes host-agnostic Ninja presets for suitable C++23 GCC/Clang installations, but those lanes are
-currently investigation lanes rather than the commit gate. When you try them, use separate build directories and
-record the exact compiler, command, and CTest outcome. Promote a GCC or Clang lane to the mandatory matrix only
-after the workspace is warning-clean and test-clean under that compiler.
-
-## Debug Build And Tests
+## MSVC Debug Build And Tests
 
 ```powershell
 $vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
@@ -48,13 +45,45 @@ new enough for that mode. A plain PowerShell invocation of `VsDevCmd.bat` does n
 changes in the current PowerShell process; keep configure/build/test in one `cmd.exe` chain when starting from
 an uninitialized shell.
 
-## Release Build
+## MSVC Release Build
 
 ```powershell
 $vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
 $cmakeDir = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
 
 cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-release && ""$cmakeDir\cmake.exe"" --build --preset msvc-release && ""$cmakeDir\ctest.exe"" --preset msvc-release --output-on-failure"
+```
+
+## GCC Build And Tests
+
+Use the WinLibs toolchain directly when the current shell has not reloaded `PATH` after installation:
+
+```powershell
+$mingw = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin"
+
+& "$mingw\cmake.exe" -S . -B out\build\gcc-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER="$mingw\g++.exe" -DCMAKE_MAKE_PROGRAM="$mingw\ninja.exe"
+& "$mingw\cmake.exe" --build out\build\gcc-debug
+& "$mingw\ctest.exe" --test-dir out\build\gcc-debug --output-on-failure
+
+& "$mingw\cmake.exe" -S . -B out\build\gcc-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER="$mingw\g++.exe" -DCMAKE_MAKE_PROGRAM="$mingw\ninja.exe"
+& "$mingw\cmake.exe" --build out\build\gcc-release
+& "$mingw\ctest.exe" --test-dir out\build\gcc-release --output-on-failure
+```
+
+## Clang Build And Tests
+
+The local LLVM installation provides an MSVC-targeting `clang++.exe`, so configure and link it from a Visual
+Studio developer environment:
+
+```powershell
+$vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
+$cmake = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
+$ctest = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe"
+$ninja = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
+$clang = "C:\Program Files\LLVM\bin\clang++.exe"
+
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmake"" -S . -B out\build\clang-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=""$clang"" -DCMAKE_MAKE_PROGRAM=""$ninja"" && ""$cmake"" --build out\build\clang-debug && ""$ctest"" --test-dir out\build\clang-debug --output-on-failure"
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmake"" -S . -B out\build\clang-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=""$clang"" -DCMAKE_MAKE_PROGRAM=""$ninja"" && ""$cmake"" --build out\build\clang-release && ""$ctest"" --test-dir out\build\clang-release --output-on-failure"
 ```
 
 ## Test Policy

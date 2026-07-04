@@ -1,7 +1,12 @@
 #include "test_support/allocation_counter.hpp"
 
+#include <cstddef>
 #include <cstdlib>
 #include <new>
+
+#ifdef _WIN32
+#include <malloc.h>
+#endif
 
 namespace tools::data_structures::finger_tree::tests {
 namespace {
@@ -83,11 +88,76 @@ std::size_t allocation_counting_scope::bytes_allocated() const noexcept
 
 } // namespace tools::data_structures::finger_tree::tests
 
-void* operator new(const std::size_t size)
+namespace {
+
+[[nodiscard]] std::size_t actual_allocation_size(const std::size_t size) noexcept
 {
-    const auto actual_size = size == 0 ? std::size_t{1} : size;
+    return size == 0 ? std::size_t{1} : size;
+}
+
+[[nodiscard]] void* allocate_unaligned_nothrow(const std::size_t size) noexcept
+{
+    const auto actual_size = actual_allocation_size(size);
     if (void* const memory = std::malloc(actual_size)) {
         tools::data_structures::finger_tree::tests::record_test_allocation(actual_size);
+        return memory;
+    }
+
+    return nullptr;
+}
+
+void deallocate_unaligned(void* const memory) noexcept
+{
+    if (memory != nullptr) {
+        tools::data_structures::finger_tree::tests::record_test_deallocation();
+    }
+
+    std::free(memory);
+}
+
+[[nodiscard]] void* allocate_aligned_nothrow(
+    const std::size_t size,
+    const std::align_val_t alignment) noexcept
+{
+    const auto actual_size = actual_allocation_size(size);
+    auto actual_alignment = static_cast<std::size_t>(alignment);
+    if (actual_alignment < alignof(void*)) {
+        actual_alignment = alignof(void*);
+    }
+
+#ifdef _WIN32
+    void* const memory = _aligned_malloc(actual_size, actual_alignment);
+#else
+    void* memory = nullptr;
+    if (posix_memalign(&memory, actual_alignment, actual_size) != 0) {
+        memory = nullptr;
+    }
+#endif
+    if (memory != nullptr) {
+        tools::data_structures::finger_tree::tests::record_test_allocation(actual_size);
+    }
+
+    return memory;
+}
+
+void deallocate_aligned(void* const memory) noexcept
+{
+    if (memory != nullptr) {
+        tools::data_structures::finger_tree::tests::record_test_deallocation();
+    }
+
+#ifdef _WIN32
+    _aligned_free(memory);
+#else
+    std::free(memory);
+#endif
+}
+
+} // namespace
+
+void* operator new(const std::size_t size)
+{
+    if (void* const memory = allocate_unaligned_nothrow(size)) {
         return memory;
     }
 
@@ -99,12 +169,49 @@ void* operator new[](const std::size_t size)
     return ::operator new(size);
 }
 
+void* operator new(const std::size_t size, const std::nothrow_t&) noexcept
+{
+    return allocate_unaligned_nothrow(size);
+}
+
+void* operator new[](const std::size_t size, const std::nothrow_t&) noexcept
+{
+    return ::operator new(size, std::nothrow);
+}
+
+void* operator new(const std::size_t size, const std::align_val_t alignment)
+{
+    if (void* const memory = allocate_aligned_nothrow(size, alignment)) {
+        return memory;
+    }
+
+    throw std::bad_alloc();
+}
+
+void* operator new[](const std::size_t size, const std::align_val_t alignment)
+{
+    return ::operator new(size, alignment);
+}
+
+void* operator new(
+    const std::size_t size,
+    const std::align_val_t alignment,
+    const std::nothrow_t&) noexcept
+{
+    return allocate_aligned_nothrow(size, alignment);
+}
+
+void* operator new[](
+    const std::size_t size,
+    const std::align_val_t alignment,
+    const std::nothrow_t&) noexcept
+{
+    return ::operator new(size, alignment, std::nothrow);
+}
+
 void operator delete(void* const memory) noexcept
 {
-    if (memory != nullptr) {
-        tools::data_structures::finger_tree::tests::record_test_deallocation();
-    }
-    std::free(memory);
+    deallocate_unaligned(memory);
 }
 
 void operator delete[](void* const memory) noexcept
@@ -115,6 +222,52 @@ void operator delete[](void* const memory) noexcept
 void operator delete(void* const memory, std::size_t) noexcept
 {
     ::operator delete(memory);
+}
+
+void operator delete(void* const memory, const std::nothrow_t&) noexcept
+{
+    ::operator delete(memory);
+}
+
+void operator delete[](void* const memory, const std::nothrow_t&) noexcept
+{
+    ::operator delete(memory);
+}
+
+void operator delete(void* const memory, const std::align_val_t) noexcept
+{
+    deallocate_aligned(memory);
+}
+
+void operator delete[](void* const memory, const std::align_val_t alignment) noexcept
+{
+    ::operator delete(memory, alignment);
+}
+
+void operator delete(void* const memory, std::size_t, const std::align_val_t alignment) noexcept
+{
+    ::operator delete(memory, alignment);
+}
+
+void operator delete[](void* const memory, std::size_t, const std::align_val_t alignment) noexcept
+{
+    ::operator delete(memory, alignment);
+}
+
+void operator delete(
+    void* const memory,
+    const std::align_val_t alignment,
+    const std::nothrow_t&) noexcept
+{
+    ::operator delete(memory, alignment);
+}
+
+void operator delete[](
+    void* const memory,
+    const std::align_val_t alignment,
+    const std::nothrow_t&) noexcept
+{
+    ::operator delete(memory, alignment);
 }
 
 void operator delete[](void* const memory, std::size_t) noexcept

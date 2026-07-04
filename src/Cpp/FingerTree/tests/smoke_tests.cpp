@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <new>
 #include <string_view>
 #include <vector>
 
@@ -116,6 +117,23 @@ int main()
         FT_REQUIRE_EQUAL(values.capacity(), static_cast<std::size_t>(32));
         FT_REQUIRE(scope.allocations() > 0);
         FT_REQUIRE(scope.bytes_allocated() >= 32 * sizeof(int));
+    });
+
+    tests.add("allocation counter covers nothrow and aligned global allocation paths", [] {
+        allocation_counting_scope scope;
+
+        void* const nothrow_memory = ::operator new(64, std::nothrow);
+        FT_REQUIRE(nothrow_memory != nullptr);
+        ::operator delete(nothrow_memory);
+
+        constexpr auto alignment = std::align_val_t{64};
+        void* const aligned_memory = ::operator new(64, alignment, std::nothrow);
+        FT_REQUIRE(aligned_memory != nullptr);
+        FT_REQUIRE_EQUAL(reinterpret_cast<std::uintptr_t>(aligned_memory) % 64, std::uintptr_t{0});
+        ::operator delete(aligned_memory, alignment);
+
+        FT_REQUIRE_EQUAL(scope.allocations(), static_cast<std::size_t>(2));
+        FT_REQUIRE_EQUAL(scope.deallocations(), static_cast<std::size_t>(2));
     });
 
     add_measure_tests(tests);

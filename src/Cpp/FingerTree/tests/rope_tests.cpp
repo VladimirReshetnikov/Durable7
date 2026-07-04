@@ -108,8 +108,11 @@ void add_rope_tests_impl(suite& tests)
         const auto model = iota_vector(6000);
         const auto rope = ft::rope<int>::from_range(model);
 
-        auto inserted = model;
-        inserted.insert(inserted.begin() + 3000, -1);
+        auto inserted = std::vector<int>{};
+        inserted.reserve(model.size() + 1);
+        inserted.insert(inserted.end(), model.begin(), model.begin() + 3000);
+        inserted.push_back(-1);
+        inserted.insert(inserted.end(), model.begin() + 3000, model.end());
         require_sequence_equal(rope.insert_at(3000, -1), inserted);
 
         auto removed = model;
