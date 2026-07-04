@@ -32,6 +32,7 @@ The executable registers these cases:
 - `Structure_UpdateSharesUntouchedSiblingSubtrees`
 - `Enumerator_CopiedIteratorAdvancesIndependently`
 - `RandomHistory_MatchesUnorderedMapAndPreservesSnapshots`
+- `ScriptedCollisionSnapshotStory_MatchesModel`
 - `RandomHistory_WithCollidingHashes_MatchesUnorderedMap`
 - `Set_AddRemoveContainsAndPersistence`
 - `Set_TryAddAndTryRemove_ReportWhetherMembershipChanged`

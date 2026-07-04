@@ -99,6 +99,7 @@ The suite covers:
 - no-op root reuse and structural sharing shape checks;
 - independent iterator copies;
 - randomized map histories checked against an in-memory model, including retained snapshots;
+- a long scripted collision and deep-prefix scenario with retained snapshots and no-op root reuse checks;
 - randomized histories with deliberately colliding hashes;
 - set add/remove/contains persistence;
 - set algebra against model sets, including duplicate treatment for symmetric difference.

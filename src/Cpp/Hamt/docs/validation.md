@@ -98,6 +98,7 @@ The suite covers:
 - no-op root reuse and structural sharing shape checks;
 - iteration and value materialization;
 - randomized map histories checked against `std::unordered_map`, including retained snapshots;
+- a long scripted collision and deep-prefix scenario with retained snapshots and no-op root reuse checks;
 - randomized histories with deliberately colliding hashes;
 - set add/remove/contains persistence;
 - set algebra against `std::unordered_set`, including duplicate treatment for symmetric difference.

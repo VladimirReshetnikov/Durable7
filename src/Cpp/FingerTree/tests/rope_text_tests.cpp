@@ -148,6 +148,57 @@ void add_rope_text_tests_impl(suite& tests)
         FT_REQUIRE_EQUAL(position.column, static_cast<std::size_t>(2));
     });
 
+    tests.add("rope text long edit script preserves snapshots and navigation", [] {
+        auto text = std::string{};
+        for (auto line = 0; line != 240; ++line) {
+            text += "line-";
+            text += std::to_string(line);
+            text += ':';
+            text.push_back(static_cast<char>('a' + (line % 26)));
+            text.push_back(static_cast<char>('A' + ((line * 7) % 26)));
+            text.push_back(static_cast<char>('0' + (line % 10)));
+            text.push_back('\n');
+        }
+
+        auto rope = ft::to_text_rope(text);
+        const auto snapshot = rope;
+        const auto snapshot_text = text;
+        require_text_model(text);
+
+        for (auto step = 0; step != 180; ++step) {
+            if (step % 5 == 1 && !text.empty()) {
+                const auto index = (static_cast<std::size_t>(step) * 53U + 17U) % text.size();
+                const auto count = std::min<std::size_t>((step % 4) + 1, text.size() - index);
+                rope = rope.remove_range(index, count);
+                text.erase(index, count);
+            } else {
+                const auto index = (static_cast<std::size_t>(step) * 97U + 11U) % (text.size() + 1);
+                auto inserted = std::string{};
+                if (step % 5 == 0) {
+                    inserted = "\nsection-" + std::to_string(step) + "\n";
+                } else {
+                    inserted.push_back(static_cast<char>('!' + (step % 57)));
+                    inserted.push_back(static_cast<char>('0' + (step % 10)));
+                }
+
+                rope = rope.insert_range(index, inserted);
+                text.insert(index, inserted);
+            }
+
+            if (step % 17 == 0) {
+                FT_REQUIRE(ft::as_string(rope) == text);
+                require_text_model(text);
+                FT_REQUIRE(ft::as_string(snapshot) == snapshot_text);
+                require_text_model(snapshot_text);
+            }
+        }
+
+        FT_REQUIRE(ft::as_string(rope) == text);
+        require_text_model(text);
+        FT_REQUIRE(ft::as_string(snapshot) == snapshot_text);
+        require_text_model(snapshot_text);
+    });
+
     tests.add("rope text argument validation", [] {
         const auto rope = ft::to_text_rope("a\nb");
         FT_REQUIRE_THROWS(std::out_of_range, ft::line_start_offset(rope, 3));

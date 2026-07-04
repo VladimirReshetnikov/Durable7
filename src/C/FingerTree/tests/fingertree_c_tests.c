@@ -81,6 +81,12 @@ typedef struct char_buffer {
     size_t count;
 } char_buffer;
 
+typedef struct char_span_buffer {
+    char* values;
+    size_t count;
+    size_t capacity;
+} char_span_buffer;
+
 typedef struct map_buffer {
     int keys[128];
     int values[128];
@@ -206,6 +212,15 @@ static void collect_char(const void* value, void* context)
     ++buffer->count;
 }
 
+static void collect_char_span(const void* value, void* context)
+{
+    char_span_buffer* buffer = (char_span_buffer*)context;
+    if (buffer->count < buffer->capacity) {
+        buffer->values[buffer->count] = *(const char*)value;
+    }
+    ++buffer->count;
+}
+
 static void collect_map_entry(const void* key, const void* value, void* context)
 {
     map_buffer* buffer = (map_buffer*)context;
@@ -231,6 +246,99 @@ static bool size_reaches(const void* measure, void* context)
 static bool int_sum_reaches(const void* measure, void* context)
 {
     return *(const int*)measure >= *(const int*)context;
+}
+
+static size_t model_line_count(const char* text, size_t length)
+{
+    size_t count = 1;
+    for (size_t index = 0; index != length; ++index) {
+        if (text[index] == '\n') {
+            ++count;
+        }
+    }
+
+    return count;
+}
+
+static ft_line_column model_line_column_of(const char* text, size_t offset)
+{
+    ft_line_column result;
+    result.line = 0;
+    result.column = 0;
+    for (size_t index = 0; index != offset; ++index) {
+        if (text[index] == '\n') {
+            ++result.line;
+            result.column = 0;
+        } else {
+            ++result.column;
+        }
+    }
+
+    return result;
+}
+
+static void model_insert_char(char* text, size_t* length, size_t index, char value)
+{
+    memmove(text + index + 1, text + index, *length - index + 1);
+    text[index] = value;
+    *length += 1;
+}
+
+static void model_remove_at(char* text, size_t* length, size_t index)
+{
+    memmove(text + index, text + index + 1, *length - index);
+    *length -= 1;
+}
+
+static bool text_rope_matches_model(const ft_text_rope* rope, const char* model, size_t length)
+{
+    if (ft_text_rope_size(rope) != length || ft_text_rope_line_count(rope) != model_line_count(model, length)) {
+        return false;
+    }
+
+    for (size_t index = 0; index != length; ++index) {
+        char actual = '\0';
+        if (ft_text_rope_at(rope, index, &actual) != FT_STATUS_OK || actual != model[index]) {
+            return false;
+        }
+    }
+
+    char visited[8192];
+    char_span_buffer buffer;
+    buffer.values = visited;
+    buffer.count = 0;
+    buffer.capacity = sizeof(visited);
+    if (ft_text_rope_visit(rope, collect_char_span, &buffer) != FT_STATUS_OK ||
+        buffer.count != length ||
+        memcmp(visited, model, length) != 0) {
+        return false;
+    }
+
+    for (size_t offset = 0; offset <= length; offset += 37) {
+        ft_line_column actual;
+        if (ft_text_rope_line_column_of(rope, offset, &actual) != FT_STATUS_OK) {
+            return false;
+        }
+
+        const ft_line_column expected = model_line_column_of(model, offset);
+        if (actual.line != expected.line || actual.column != expected.column) {
+            return false;
+        }
+    }
+
+    if (length % 37 != 0) {
+        ft_line_column actual;
+        if (ft_text_rope_line_column_of(rope, length, &actual) != FT_STATUS_OK) {
+            return false;
+        }
+
+        const ft_line_column expected = model_line_column_of(model, length);
+        if (actual.line != expected.line || actual.column != expected.column) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 typedef struct concurrent_tree_context {
@@ -1252,6 +1360,67 @@ static void test_text_rope(void)
     ft_text_rope_dispose(&rope);
 }
 
+static void test_text_rope_long_edit_script(void)
+{
+    enum { capacity = 8192 };
+    char model[capacity];
+    char snapshot_model[capacity];
+    size_t length = 0;
+
+    for (int line = 0; line != 240; ++line) {
+        const int written = snprintf(
+            model + length,
+            (size_t)capacity - length,
+            "line-%03d:%c%c%c\n",
+            line,
+            (char)('a' + (line % 26)),
+            (char)('A' + ((line * 7) % 26)),
+            (char)('0' + (line % 10)));
+        REQUIRE(written > 0);
+        REQUIRE(length + (size_t)written < (size_t)capacity);
+        length += (size_t)written;
+    }
+
+    memcpy(snapshot_model, model, length + 1);
+    const size_t snapshot_length = length;
+
+    ft_text_rope rope;
+    REQUIRE_STATUS(ft_text_rope_from_cstr(model, &rope), FT_STATUS_OK);
+    ft_text_rope snapshot;
+    REQUIRE_STATUS(ft_text_rope_copy(&rope, &snapshot), FT_STATUS_OK);
+    REQUIRE(text_rope_matches_model(&rope, model, length));
+
+    for (int step = 0; step != 180; ++step) {
+        if (step % 5 == 1 && length > 0) {
+            const size_t index = ((size_t)step * 53u + 17u) % length;
+            ft_text_rope next;
+            REQUIRE_STATUS(ft_text_rope_remove_at(&rope, index, &next), FT_STATUS_OK);
+            model_remove_at(model, &length, index);
+            ft_text_rope_dispose(&rope);
+            ft_text_rope_move(&rope, &next);
+        } else {
+            const size_t index = ((size_t)step * 97u + 11u) % (length + 1u);
+            const char value = step % 5 == 0 ? '\n' : (char)('!' + (step % 57));
+            ft_text_rope next;
+            REQUIRE_STATUS(ft_text_rope_insert_char(&rope, index, value, &next), FT_STATUS_OK);
+            model_insert_char(model, &length, index, value);
+            ft_text_rope_dispose(&rope);
+            ft_text_rope_move(&rope, &next);
+        }
+
+        if (step % 17 == 0) {
+            REQUIRE(text_rope_matches_model(&rope, model, length));
+            REQUIRE(text_rope_matches_model(&snapshot, snapshot_model, snapshot_length));
+        }
+    }
+
+    REQUIRE(text_rope_matches_model(&rope, model, length));
+    REQUIRE(text_rope_matches_model(&snapshot, snapshot_model, snapshot_length));
+
+    ft_text_rope_dispose(&snapshot);
+    ft_text_rope_dispose(&rope);
+}
+
 static void run_test(const char* name, void (*test)(void))
 {
     const int before = g_failures;
@@ -1280,6 +1449,7 @@ int main(void)
     run_test("interval tree", test_interval_tree);
     run_test("generic interval tree", test_generic_interval_tree);
     run_test("text rope", test_text_rope);
+    run_test("text rope long edit script", test_text_rope_long_edit_script);
 
     if (g_failures != 0) {
         (void)fprintf(stderr, "%d failure(s)\n", g_failures);

@@ -660,6 +660,64 @@ typedef struct map_snapshot {
     int values[81];
 } map_snapshot;
 
+typedef struct explicit_map_snapshot {
+    bool active;
+    tds_hamt_map map;
+    bool present[96];
+    int values[96];
+} explicit_map_snapshot;
+
+static void assert_explicit_model_matches(
+    const explicit_hash_key keys[96],
+    const bool present[96],
+    const int values[96],
+    const tds_hamt_map *map) {
+    size_t expected_count = 0;
+    for (int id = 0; id != 96; ++id) {
+        const void *actual = NULL;
+        if (present[id]) {
+            ++expected_count;
+            CHECK(tds_hamt_map_try_get(map, &keys[id], &actual));
+            CHECK(actual != NULL);
+            CHECK(*(const int *)actual == values[id]);
+        } else {
+            CHECK(!tds_hamt_map_contains_key(map, &keys[id]));
+        }
+    }
+
+    CHECK(tds_hamt_map_count(map) == expected_count);
+
+    size_t enumerated = 0;
+    tds_hamt_map_iterator iterator;
+    tds_hamt_map_iterator_init(map, &iterator);
+    const void *key = NULL;
+    const void *value = NULL;
+    while (tds_hamt_map_iterator_next(&iterator, &key, &value)) {
+        const int id = ((const explicit_hash_key *)key)->id;
+        CHECK(id >= 0 && id < 96);
+        CHECK(present[id]);
+        CHECK(*(const int *)value == values[id]);
+        ++enumerated;
+    }
+
+    CHECK(enumerated == expected_count);
+}
+
+static void capture_explicit_snapshot(
+    explicit_map_snapshot *snapshot,
+    const tds_hamt_map *map,
+    const bool present[96],
+    const int values[96]) {
+    if (snapshot->active) {
+        tds_hamt_map_destroy(&snapshot->map);
+    }
+
+    snapshot->active = true;
+    snapshot->map = tds_hamt_map_clone(map);
+    memcpy(snapshot->present, present, 96 * sizeof(bool));
+    memcpy(snapshot->values, values, 96 * sizeof(int));
+}
+
 static void test_random_history_matches_model_and_preserves_snapshots(void) {
     tds_hamt_policy policy = int_map_policy(int_hash);
     uint32_t rng = 0xC0FFEEu;
@@ -750,6 +808,115 @@ static void test_random_history_matches_model_and_preserves_snapshots(void) {
         }
         tds_hamt_map_destroy(&map);
     }
+}
+
+static void test_scripted_collision_snapshot_story(void) {
+    tds_hamt_policy policy = explicit_map_policy();
+    explicit_hash_key keys[96];
+    bool present[96] = { false };
+    int values[96] = { 0 };
+    explicit_map_snapshot snapshots[4];
+    memset(snapshots, 0, sizeof(snapshots));
+
+    for (int id = 0; id != 96; ++id) {
+        keys[id].id = id;
+        if (id < 32) {
+            keys[id].hash = 0x00ABCDEFu;
+        } else if (id < 64) {
+            keys[id].hash = (uint32_t)((id - 32) << 25);
+        } else {
+            keys[id].hash = 0x00000410u | (uint32_t)((id & 7) << 15) | (uint32_t)((id & 3) << 5);
+        }
+    }
+
+    tds_hamt_map map = tds_hamt_map_create(&policy);
+
+    for (int step = 0; step != 96; ++step) {
+        const int id = (step * 37) % 96;
+        const int value = id - 500;
+        tds_hamt_map next;
+        CHECK_STATUS(tds_hamt_map_set(&map, &keys[id], int_value(value), &next));
+        tds_hamt_map_destroy(&map);
+        map = next;
+        present[id] = true;
+        values[id] = value;
+
+        if (step == 23 || step == 47 || step == 71) {
+            capture_explicit_snapshot(&snapshots[(size_t)step / 24u], &map, present, values);
+        }
+    }
+
+    assert_explicit_model_matches(keys, present, values, &map);
+
+    for (int id = 5; id < 96; id += 11) {
+        tds_hamt_map same;
+        CHECK_STATUS(tds_hamt_map_set(&map, &keys[id], int_value(values[id]), &same));
+        CHECK(tds_hamt_map_shares_root(&map, &same));
+        tds_hamt_map_destroy(&same);
+    }
+
+    for (int id = 2; id < 96; id += 5) {
+        const int value = 400 - id;
+        tds_hamt_map next;
+        CHECK_STATUS(tds_hamt_map_set(&map, &keys[id], int_value(value), &next));
+        tds_hamt_map_destroy(&map);
+        map = next;
+        values[id] = value;
+    }
+
+    capture_explicit_snapshot(&snapshots[3], &map, present, values);
+
+    for (int id = 0; id < 96; ++id) {
+        if (id % 7 == 0 || id % 13 == 0) {
+            tds_hamt_map next;
+            CHECK_STATUS(tds_hamt_map_remove(&map, &keys[id], &next));
+            tds_hamt_map_destroy(&map);
+            map = next;
+            present[id] = false;
+        }
+    }
+
+    for (int id = 0; id < 96; id += 9) {
+        bool added = true;
+        tds_hamt_map next;
+        const int value = 700 - id;
+        CHECK_STATUS(tds_hamt_map_try_add(&map, &keys[id], int_value(value), &next, &added));
+        CHECK(added == !present[id]);
+        tds_hamt_map_destroy(&map);
+        map = next;
+        if (added) {
+            present[id] = true;
+            values[id] = value;
+        }
+    }
+
+    for (int id = 1; id < 96; id += 10) {
+        if (present[id]) {
+            bool added = true;
+            tds_hamt_map same;
+            CHECK_STATUS(tds_hamt_map_try_add(&map, &keys[id], int_value(-900), &same, &added));
+            CHECK(!added);
+            CHECK(tds_hamt_map_shares_root(&map, &same));
+            tds_hamt_map_destroy(&same);
+        }
+    }
+
+    assert_explicit_model_matches(keys, present, values, &map);
+    for (size_t slot = 0; slot != 4; ++slot) {
+        CHECK(snapshots[slot].active);
+        assert_explicit_model_matches(keys, snapshots[slot].present, snapshots[slot].values, &snapshots[slot].map);
+    }
+
+    tds_hamt_map cleared;
+    CHECK_STATUS(tds_hamt_map_clear(&map, &cleared));
+    CHECK(tds_hamt_map_is_empty(&cleared));
+    CHECK(!tds_hamt_map_is_empty(&map));
+    tds_hamt_map_destroy(&cleared);
+
+    for (size_t slot = 0; slot != 4; ++slot) {
+        tds_hamt_map_destroy(&snapshots[slot].map);
+    }
+    tds_hamt_map_destroy(&map);
 }
 
 static void test_random_history_with_colliding_hashes_matches_model(void) {
@@ -1012,6 +1179,7 @@ static const test_case tests[] = {
     { "structure root shape and sharing", test_structure_root_shape_and_sharing },
     { "iterator copy advances independently", test_iterator_copy_advances_independently },
     { "random history matches model and preserves snapshots", test_random_history_matches_model_and_preserves_snapshots },
+    { "scripted collision snapshot story", test_scripted_collision_snapshot_story },
     { "random history with colliding hashes matches model", test_random_history_with_colliding_hashes_matches_model },
     { "set add remove contains and persistence", test_set_add_remove_contains_and_persistence },
     { "set custom comparer retains first item", test_set_custom_comparer_retains_first_item },

@@ -29,6 +29,7 @@ The executable registers these cases:
 - `structure root shape and sharing`
 - `iterator copy advances independently`
 - `random history matches model and preserves snapshots`
+- `scripted collision snapshot story`
 - `random history with colliding hashes matches model`
 - `set add remove contains and persistence`
 - `set custom comparer retains first item`

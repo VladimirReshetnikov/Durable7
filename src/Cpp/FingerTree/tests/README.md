@@ -27,7 +27,8 @@ basic aggregate-header and test-support checks, and then calls each domain-speci
 - `priority_queue_tests.cpp` covers ordering, duplicate priorities, stability, and command-model behavior.
 - `interval_tree_tests.cpp` covers insertion, overlap, containment, coalescing, removal, and sweep-model checks.
 - `rope_tests.cpp`, `measured_rope_tests.cpp`, and `rope_text_tests.cpp` cover chunked sequence editing, measured
-  searches, text interop, line navigation, and randomized vector/string-model histories.
+  searches, text interop, line navigation, retained text snapshots, long edit scripts, and randomized
+  vector/string-model histories.
 - `atomic_box_tests.cpp` and `tearable_concurrency_tests.cpp` cover lock-free publication helpers and structure-level
   tearable-value stress tests.
 - `test_support/` holds the local runner, deterministic command-history diagnostics, allocation counting, and

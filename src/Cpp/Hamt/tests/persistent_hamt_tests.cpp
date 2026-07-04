@@ -610,6 +610,95 @@ TEST(RandomHistory_MatchesUnorderedMapAndPreservesSnapshots) {
     }
 }
 
+TEST(ScriptedCollisionSnapshotStory_MatchesModel) {
+    using map_type = persistent_hash_map<explicit_hash_key, int, explicit_hash, explicit_equal>;
+    using model_type = std::unordered_map<explicit_hash_key, int, explicit_hash, explicit_equal>;
+
+    auto keys = std::vector<explicit_hash_key>{};
+    keys.reserve(96);
+    for (int id = 0; id != 96; ++id) {
+        auto hash = std::uint32_t{};
+        if (id < 32) {
+            hash = 0x00ABCDEFu;
+        } else if (id < 64) {
+            hash = static_cast<std::uint32_t>(id - 32) << 25;
+        } else {
+            hash = 0x00000410u |
+                (static_cast<std::uint32_t>(id & 7) << 15) |
+                (static_cast<std::uint32_t>(id & 3) << 5);
+        }
+
+        keys.push_back(explicit_hash_key{id, hash});
+    }
+
+    auto map = map_type::create(explicit_hash{}, explicit_equal{});
+    auto model = model_type(0, explicit_hash{}, explicit_equal{});
+    auto snapshots = std::vector<std::pair<map_type, model_type>>{};
+
+    for (int step = 0; step != 96; ++step) {
+        const auto id = (step * 37) % 96;
+        const auto value = id - 500;
+        map = map.set_item(keys[static_cast<std::size_t>(id)], value);
+        model[keys[static_cast<std::size_t>(id)]] = value;
+
+        if (step == 23 || step == 47 || step == 71) {
+            snapshots.push_back({map, model});
+        }
+    }
+
+    assert_matches(model, map);
+
+    for (int id = 5; id < 96; id += 11) {
+        CHECK(map.set_item(keys[static_cast<std::size_t>(id)], model.at(keys[static_cast<std::size_t>(id)]))
+                  .shares_root_with(map));
+    }
+
+    for (int id = 2; id < 96; id += 5) {
+        const auto value = 400 - id;
+        map = map.set_item(keys[static_cast<std::size_t>(id)], value);
+        model[keys[static_cast<std::size_t>(id)]] = value;
+    }
+
+    snapshots.push_back({map, model});
+
+    for (int id = 0; id < 96; ++id) {
+        if (id % 7 == 0 || id % 13 == 0) {
+            map = map.remove(keys[static_cast<std::size_t>(id)]);
+            model.erase(keys[static_cast<std::size_t>(id)]);
+        }
+    }
+
+    for (int id = 0; id < 96; id += 9) {
+        const auto key = keys[static_cast<std::size_t>(id)];
+        const auto value = 700 - id;
+        const auto expected_added = model.find(key) == model.end();
+        const auto [next, added] = map.try_add(key, value);
+        CHECK_EQ(expected_added, added);
+        map = next;
+        if (added) {
+            model[key] = value;
+        }
+    }
+
+    for (int id = 1; id < 96; id += 10) {
+        const auto key = keys[static_cast<std::size_t>(id)];
+        if (model.find(key) != model.end()) {
+            const auto [same, added] = map.try_add(key, -900);
+            CHECK(!added);
+            CHECK(same.shares_root_with(map));
+        }
+    }
+
+    assert_matches(model, map);
+    for (const auto& [snapshot, snapshot_model] : snapshots) {
+        assert_matches(snapshot_model, snapshot);
+    }
+
+    const auto cleared = map.clear();
+    CHECK(cleared.is_empty());
+    CHECK(!map.is_empty());
+}
+
 TEST(RandomHistory_WithCollidingHashes_MatchesUnorderedMap) {
     using map_type = persistent_hash_map<int, int, few_buckets_hash>;
     using model_type = std::unordered_map<int, int, few_buckets_hash>;

@@ -34,6 +34,8 @@ line information, and exits non-zero if any test increments the failure count. A
 - `interval tree` covers the signed 64-bit closed-interval facade.
 - `generic interval tree` covers caller-supplied endpoint policies and invalid interval rejection.
 - `text rope` covers construction, editing, indexing, line count, line/column navigation, and traversal.
+- `text rope long edit script` covers retained snapshots and repeated edits across a multi-line document, comparing
+  indexing, traversal, line counts, and line/column navigation against a plain C string model.
 
 ## Build And Run
 

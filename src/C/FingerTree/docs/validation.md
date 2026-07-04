@@ -109,6 +109,8 @@ The executable covers:
 - generic endpoint interval insertion, ordering, containment, removal, invalid interval rejection, first-overlap,
   overlap counting, and persistence;
 - text rope construction, editing, indexing, line count, line/column navigation, and traversal.
+- long text-rope edit scripts over retained snapshots, with model checks for indexing, traversal, line counts, and
+  line/column navigation.
 
 The sample executables are registered as CTest smoke tests:
 

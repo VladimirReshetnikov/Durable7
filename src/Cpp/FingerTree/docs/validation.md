@@ -131,7 +131,8 @@ The suite covers:
 - sorted bag/set/map ranking, navigation, range, custom order, set algebra, and randomized model checks;
 - priority queue ordering, stability, and command-model behavior;
 - interval tree insertion, overlap, containment, coalescing, removal, and model comparisons;
-- `rope<T>`, measured rope, text rope, line navigation, chunked mutations, and randomized vector-model histories;
+- `rope<T>`, measured rope, text rope, line navigation, chunked mutations, retained text snapshots, long edit
+  scripts, and randomized vector-model histories;
 - atomic-box/lazy-publication helpers, allocation counters, operation counters, and command-model support;
 - tearable-struct concurrency stress tests for measured trees, measured ropes, lock-free rope publication, and
   branching histories over retained shared bases.
