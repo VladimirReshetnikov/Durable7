@@ -764,10 +764,10 @@ where
     T: Clone,
 {
     type Item = T;
-    type IntoIter = std::vec::IntoIter<T>;
+    type IntoIter = IntoIter<T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.to_vec().into_iter()
+        IntoIter::new(self.root)
     }
 }
 
@@ -779,6 +779,60 @@ impl<'a, T> IntoIterator for &'a PersistentDeque<T> {
         self.iter()
     }
 }
+
+pub struct IntoIter<T> {
+    stack: Vec<(Arc<DequeTree<T>>, bool)>,
+    remaining: usize,
+}
+
+impl<T> IntoIter<T> {
+    fn new(root: Arc<DequeTree<T>>) -> Self {
+        let remaining = root.len();
+        Self {
+            stack: vec![(root, false)],
+            remaining,
+        }
+    }
+}
+
+impl<T> Iterator for IntoIter<T>
+where
+    T: Clone,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some((tree, reversed)) = self.stack.pop() {
+            match tree.as_ref() {
+                DequeTree::Empty => {}
+                DequeTree::Leaf(item) => {
+                    self.remaining -= 1;
+                    return Some(item.clone());
+                }
+                DequeTree::Reversed { inner, .. } => {
+                    self.stack.push((inner.clone(), !reversed));
+                }
+                DequeTree::Node { left, right, .. } => {
+                    if reversed {
+                        self.stack.push((left.clone(), true));
+                        self.stack.push((right.clone(), true));
+                    } else {
+                        self.stack.push((right.clone(), false));
+                        self.stack.push((left.clone(), false));
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.remaining, Some(self.remaining))
+    }
+}
+
+impl<T> ExactSizeIterator for IntoIter<T> where T: Clone {}
 
 impl<T> PersistentDeque<T>
 where

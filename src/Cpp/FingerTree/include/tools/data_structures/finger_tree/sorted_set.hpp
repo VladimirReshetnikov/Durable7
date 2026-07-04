@@ -309,74 +309,89 @@ private:
         const bool emit_both,
         const bool emit_only_other) const
     {
-        const auto left = to_vector();
-        const auto right = other.to_vector();
-        auto output = std::vector<value_type>{};
-        output.reserve(checked_add(left.size(), right.size()));
+        auto left_tree = tree_;
+        auto right_tree = other.tree_;
+        auto left_view = left_tree.try_view_left();
+        auto right_view = right_tree.try_view_left();
 
-        auto left_index = size_type{0};
-        auto right_index = size_type{0};
-        while (left_index < left.size() && right_index < right.size()) {
-            const auto order = compare_with(less_, left[left_index], right[right_index]);
+        auto output = tree_type{};
+        auto emit = [&output](const value_type& value) {
+            output = output.append(value);
+        };
+
+        while (left_view.has_value() && right_view.has_value()) {
+            const auto order = compare_with(less_, left_view->item, right_view->item);
             if (order < 0) {
                 if (emit_only_this) {
-                    output.push_back(left[left_index]);
+                    emit(left_view->item);
                 }
-                ++left_index;
+                left_tree = std::move(left_view->right);
+                left_view = left_tree.try_view_left();
             } else if (order > 0) {
                 if (emit_only_other) {
-                    output.push_back(right[right_index]);
+                    emit(right_view->item);
                 }
-                ++right_index;
+                right_tree = std::move(right_view->right);
+                right_view = right_tree.try_view_left();
             } else {
                 if (emit_both) {
-                    output.push_back(left[left_index]);
+                    emit(left_view->item);
                 }
-                ++left_index;
-                ++right_index;
+                left_tree = std::move(left_view->right);
+                right_tree = std::move(right_view->right);
+                left_view = left_tree.try_view_left();
+                right_view = right_tree.try_view_left();
             }
         }
 
         if (emit_only_this) {
-            for (; left_index < left.size(); ++left_index) {
-                output.push_back(left[left_index]);
+            while (left_view.has_value()) {
+                emit(left_view->item);
+                left_tree = std::move(left_view->right);
+                left_view = left_tree.try_view_left();
             }
         }
 
         if (emit_only_other) {
-            for (; right_index < right.size(); ++right_index) {
-                output.push_back(right[right_index]);
+            while (right_view.has_value()) {
+                emit(right_view->item);
+                right_tree = std::move(right_view->right);
+                right_view = right_tree.try_view_left();
             }
         }
 
-        return from_sorted_unique_values(output, less_);
+        return wrap(std::move(output));
     }
 
     [[nodiscard]] merge_count_result merge_counts(const sorted_set& other) const
     {
-        const auto left = to_vector();
-        const auto right = other.to_vector();
+        auto left_tree = tree_;
+        auto right_tree = other.tree_;
+        auto left_view = left_tree.try_view_left();
+        auto right_view = right_tree.try_view_left();
         auto counts = merge_count_result{};
 
-        auto left_index = size_type{0};
-        auto right_index = size_type{0};
-        while (left_index < left.size() && right_index < right.size()) {
-            const auto order = compare_with(less_, left[left_index], right[right_index]);
+        while (left_view.has_value() && right_view.has_value()) {
+            const auto order = compare_with(less_, left_view->item, right_view->item);
             if (order < 0) {
                 ++counts.only_this;
-                ++left_index;
+                left_tree = std::move(left_view->right);
+                left_view = left_tree.try_view_left();
             } else if (order > 0) {
                 ++counts.only_other;
-                ++right_index;
+                right_tree = std::move(right_view->right);
+                right_view = right_tree.try_view_left();
             } else {
                 ++counts.both;
-                ++left_index;
-                ++right_index;
+                left_tree = std::move(left_view->right);
+                right_tree = std::move(right_view->right);
+                left_view = left_tree.try_view_left();
+                right_view = right_tree.try_view_left();
             }
         }
 
-        counts.only_this += left.size() - left_index;
-        counts.only_other += right.size() - right_index;
+        counts.only_this += left_tree.measure().count;
+        counts.only_other += right_tree.measure().count;
         return counts;
     }
 

@@ -698,6 +698,14 @@ where
     tree: MeasuredRopeTree<T, P>,
 }
 
+pub struct MeasuredRopeIter<'a, T, P>
+where
+    P: MeasurePolicy<T>,
+{
+    chunks: crate::measured::Iter<'a, MeasuredRopeChunk<T, P>, (usize, P::Measure)>,
+    current: Option<std::slice::Iter<'a, T>>,
+}
+
 #[derive(Clone)]
 pub struct MeasuredRopeSplit<T, P>
 where
@@ -767,6 +775,13 @@ where
         let located = self.tree.try_locate(|measure| measure.0 > index);
         let offset = index - located.measure_before.0;
         self.tree.get(located.index)?.get(offset)
+    }
+
+    pub fn iter(&self) -> MeasuredRopeIter<'_, T, P> {
+        MeasuredRopeIter {
+            chunks: self.tree.iter(),
+            current: None,
+        }
     }
 
     #[must_use]
@@ -894,6 +909,26 @@ where
         assert_eq!(total_len, self.len());
         assert_eq!(&total_measure, self.measure());
         self.tree.validate_invariants();
+    }
+}
+
+impl<'a, T, P> Iterator for MeasuredRopeIter<'a, T, P>
+where
+    P: MeasurePolicy<T>,
+{
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(current) = &mut self.current
+                && let Some(item) = current.next()
+            {
+                return Some(item);
+            }
+
+            let chunk = self.chunks.next()?;
+            self.current = Some(chunk.as_slice().iter());
+        }
     }
 }
 
@@ -1184,7 +1219,7 @@ impl TextRope {
 
     #[must_use]
     pub fn as_string(&self) -> String {
-        self.chars.to_vec().into_iter().collect()
+        self.chars.iter().copied().collect()
     }
 
     #[must_use]
@@ -1235,10 +1270,10 @@ impl TextRope {
         let end = self.line_end_offset(line)?;
         Some(
             self.chars
-                .to_vec()
-                .into_iter()
+                .iter()
                 .skip(start)
                 .take(end - start)
+                .copied()
                 .collect(),
         )
     }
@@ -1252,7 +1287,7 @@ impl TextRope {
 
     #[must_use]
     pub fn to_char_rope(&self) -> Rope<char> {
-        self.chars.to_vec().into_iter().collect()
+        self.chars.iter().copied().collect()
     }
 
     #[must_use]
@@ -1294,7 +1329,7 @@ impl fmt::Debug for TextRope {
 
 impl PartialEq for TextRope {
     fn eq(&self, other: &Self) -> bool {
-        self.chars.to_vec() == other.chars.to_vec()
+        self.chars.iter().eq(other.chars.iter())
     }
 }
 

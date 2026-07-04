@@ -56,14 +56,22 @@ struct line_column final {
 
 [[nodiscard]] inline std::string as_string(const rope<char>& rope)
 {
-    auto values = rope.to_vector();
-    return std::string{values.begin(), values.end()};
+    auto result = std::string{};
+    result.reserve(rope.size());
+    rope.for_each([&result](const char value) {
+        result.push_back(value);
+    });
+    return result;
 }
 
 [[nodiscard]] inline std::string as_string(const text_rope& rope)
 {
-    auto values = rope.to_vector();
-    return std::string{values.begin(), values.end()};
+    auto result = std::string{};
+    result.reserve(rope.size());
+    rope.for_each([&result](const char value) {
+        result.push_back(value);
+    });
+    return result;
 }
 
 [[nodiscard]] inline std::size_t line_count(const text_rope& rope)
@@ -119,8 +127,9 @@ struct line_column final {
 {
     const auto start = line_start_offset(rope, line);
     const auto end = line < rope.measure() ? line_start_offset(rope, line + 1) - 1 : rope.size();
-    auto values = rope.get_range(start, end - start);
-    return std::string{values.begin(), values.end()};
+    auto result = std::string(end - start, '\0');
+    rope.copy_to(start, std::span<char>{result.data(), result.size()});
+    return result;
 }
 
 [[nodiscard]] inline std::vector<std::string> lines(const text_rope& rope)
@@ -129,14 +138,14 @@ struct line_column final {
     result.reserve(line_count(rope));
 
     auto current = std::string{};
-    for (const auto value : rope.to_vector()) {
+    rope.for_each([&result, &current](const char value) {
         if (value == '\n') {
             result.push_back(std::move(current));
             current = std::string{};
         } else {
             current.push_back(value);
         }
-    }
+    });
 
     result.push_back(std::move(current));
     return result;

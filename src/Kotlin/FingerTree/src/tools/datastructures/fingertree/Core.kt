@@ -207,6 +207,8 @@ private sealed class ReversibleDequeNode<T> {
     abstract fun splitAt(index: Int): Pair<ReversibleDequeNode<T>, ReversibleDequeNode<T>>
     abstract fun appendTo(destination: MutableList<T>)
     abstract fun appendToReversed(destination: MutableList<T>)
+    abstract fun iterator(): Iterator<T>
+    abstract fun reversedIterator(): Iterator<T>
 
     open fun logicalParts(): Pair<ReversibleDequeNode<T>, ReversibleDequeNode<T>>? = null
 }
@@ -234,6 +236,10 @@ private object EmptyReversibleDequeNode : ReversibleDequeNode<Nothing>() {
 
     override fun appendToReversed(destination: MutableList<Nothing>) {
     }
+
+    override fun iterator(): Iterator<Nothing> = emptyList<Nothing>().iterator()
+
+    override fun reversedIterator(): Iterator<Nothing> = emptyList<Nothing>().iterator()
 }
 
 private class ReversibleDequeLeafNode<T>(
@@ -275,6 +281,10 @@ private class ReversibleDequeLeafNode<T>(
             destination.add(values[index])
         }
     }
+
+    override fun iterator(): Iterator<T> = values.iterator()
+
+    override fun reversedIterator(): Iterator<T> = values.asReversed().iterator()
 }
 
 private class ReversibleDequeConcatNode<T>(
@@ -321,6 +331,16 @@ private class ReversibleDequeConcatNode<T>(
         left.appendToReversed(destination)
     }
 
+    override fun iterator(): Iterator<T> = sequence {
+        yieldAll(left.iterator())
+        yieldAll(right.iterator())
+    }.iterator()
+
+    override fun reversedIterator(): Iterator<T> = sequence {
+        yieldAll(right.reversedIterator())
+        yieldAll(left.reversedIterator())
+    }.iterator()
+
     override fun logicalParts(): Pair<ReversibleDequeNode<T>, ReversibleDequeNode<T>> = left to right
 }
 
@@ -352,6 +372,10 @@ private class ReversedReversibleDequeNode<T>(
     override fun appendToReversed(destination: MutableList<T>) {
         source.appendTo(destination)
     }
+
+    override fun iterator(): Iterator<T> = source.reversedIterator()
+
+    override fun reversedIterator(): Iterator<T> = source.iterator()
 
     override fun logicalParts(): Pair<ReversibleDequeNode<T>, ReversibleDequeNode<T>>? {
         val parts = source.logicalParts() ?: return null
@@ -559,7 +583,7 @@ public class ReversibleDeque<T> private constructor(
     public fun sharesStorageWith(other: ReversibleDeque<T>): Boolean =
         root.storageToken === other.root.storageToken
 
-    override fun iterator(): Iterator<T> = toList().iterator()
+    override fun iterator(): Iterator<T> = root.iterator()
 }
 
 public data class MeasuredSplit<T, M>(

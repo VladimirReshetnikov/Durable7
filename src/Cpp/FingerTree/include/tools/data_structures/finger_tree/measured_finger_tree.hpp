@@ -202,13 +202,20 @@ public:
         return result;
     }
 
+    template <class Function>
+        requires std::invocable<Function&, const value_type&>
+    void for_each(Function function) const
+    {
+        root_.for_each(function);
+    }
+
     template <std::output_iterator<const value_type&> OutputIterator>
     void copy_to(OutputIterator output) const
     {
-        const auto values = to_vector();
-        for (const auto& value : values) {
+        auto write = [&output](const value_type& value) {
             *output++ = value;
-        }
+        };
+        root_.for_each(write);
     }
 
 private:

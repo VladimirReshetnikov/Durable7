@@ -254,9 +254,10 @@ public:
     [[nodiscard]] std::vector<key_type> keys_to_vector() const
     {
         auto keys = std::vector<key_type>{};
-        for (const auto& entry : to_vector()) {
+        keys.reserve(size());
+        tree_.for_each([&keys](const entry_type& entry) {
             keys.push_back(entry.first);
-        }
+        });
 
         return keys;
     }
@@ -264,9 +265,10 @@ public:
     [[nodiscard]] std::vector<mapped_type> values_to_vector() const
     {
         auto values = std::vector<mapped_type>{};
-        for (const auto& entry : to_vector()) {
+        values.reserve(size());
+        tree_.for_each([&values](const entry_type& entry) {
             values.push_back(entry.second);
-        }
+        });
 
         return values;
     }

@@ -12,6 +12,14 @@ private fun <T> checkEquals(expected: T, actual: T, message: String) {
     }
 }
 
+private fun <T> iterated(values: Iterable<T>): List<T> {
+    val result = ArrayList<T>()
+    for (value in values) {
+        result.add(value)
+    }
+    return result
+}
+
 private fun dequePreservesSnapshots() {
     val empty = PersistentDeque.empty<Int>()
     val one = empty.append(1)
@@ -30,6 +38,7 @@ private fun reversibleDequeUsesLogicalOrientation() {
     val deque = ReversibleDeque.from(listOf(1, 2, 3)).reverse().append(0).prepend(4)
 
     checkEquals(listOf(4, 3, 2, 1, 0), deque.toList(), "reversed append/prepend")
+    checkEquals(listOf(4, 3, 2, 1, 0), iterated(deque), "reversed iterator")
     checkEquals(4, deque.front(), "front")
     checkEquals(0, deque.back(), "back")
     check(deque.sharesStorageWith(deque.reverse()), "reverse shares storage")
@@ -113,6 +122,7 @@ private fun reversibleDequeKeepsMixedConcatHistoriesNavigable() {
     checkEquals(expected[expected.size / 2], actual[actual.size / 2], "mixed history middle index")
     checkEquals(expected.last(), actual[actual.size - 1], "mixed history last index")
     checkEquals(expected, actual.toList(), "mixed history snapshot")
+    checkEquals(expected, iterated(actual), "mixed history iterator")
 
     val middle = actual.size / 2
     val split = actual.splitAt(middle) ?: throw AssertionError("mixed history split")

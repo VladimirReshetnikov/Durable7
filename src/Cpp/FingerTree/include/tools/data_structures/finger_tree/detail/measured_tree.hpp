@@ -131,6 +131,9 @@ public:
 
     void flatten(std::vector<element_type>& sink) const;
 
+    template <class Function>
+    void for_each(Function& function) const;
+
 private:
     struct leaf_storage final {
         element_type value;
@@ -191,6 +194,14 @@ public:
         }
     }
 
+    template <class Function>
+    void for_each(Function& function) const
+    {
+        for (const auto& child : children_) {
+            child.for_each(function);
+        }
+    }
+
 private:
     [[nodiscard]] static measure_type combine_all(const buffer_type& children)
     {
@@ -248,6 +259,18 @@ void measured_element<Element, MeasurePolicy>::flatten(std::vector<Element>& sin
     }
 
     node_value().flatten(sink);
+}
+
+template <class Element, class MeasurePolicy>
+template <class Function>
+void measured_element<Element, MeasurePolicy>::for_each(Function& function) const
+{
+    if (is_leaf()) {
+        std::invoke(function, value());
+        return;
+    }
+
+    node_value().for_each(function);
 }
 
 template <class Element, class MeasurePolicy>
@@ -414,6 +437,9 @@ public:
     [[nodiscard]] std::optional<measured_view_result<Element, MeasurePolicy>> try_view_right() const;
 
     void flatten(std::vector<Element>& sink) const;
+
+    template <class Function>
+    void for_each(Function& function) const;
 
     template <class Predicate>
     [[nodiscard]] measured_split_result<Element, MeasurePolicy> split_tree(
@@ -945,6 +971,32 @@ template <class Element, class MeasurePolicy>
 void measured_tree<Element, MeasurePolicy>::flatten(std::vector<Element>& sink) const
 {
     rep_->flatten(sink);
+}
+
+template <class Element, class MeasurePolicy>
+template <class Function>
+void measured_tree<Element, MeasurePolicy>::for_each(Function& function) const
+{
+    switch (kind()) {
+    case measured_tree_kind::empty:
+        return;
+    case measured_tree_kind::single:
+        first_element().for_each(function);
+        return;
+    case measured_tree_kind::deep:
+        for (const auto& child : deep_prefix()) {
+            child.for_each(function);
+        }
+
+        force_middle().for_each(function);
+
+        for (const auto& child : deep_suffix()) {
+            child.for_each(function);
+        }
+        return;
+    }
+
+    throw std::logic_error("unknown measured tree kind");
 }
 
 template <class Element, class MeasurePolicy>

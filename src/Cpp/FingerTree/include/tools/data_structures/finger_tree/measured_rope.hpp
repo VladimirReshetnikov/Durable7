@@ -5,7 +5,9 @@
 #include <tools/data_structures/finger_tree/measure_predicates.hpp>
 #include <tools/data_structures/finger_tree/measured_finger_tree.hpp>
 
+#include <concepts>
 #include <cstddef>
+#include <functional>
 #include <initializer_list>
 #include <iterator>
 #include <optional>
@@ -392,11 +394,22 @@ public:
     {
         auto result = std::vector<value_type>{};
         result.reserve(size());
-        for (const auto& chunk : tree_.to_vector()) {
+        tree_.for_each([&result](const chunk_type& chunk) {
             chunk.copy_to(result);
-        }
+        });
 
         return result;
+    }
+
+    template <class Function>
+        requires std::invocable<Function&, const value_type&>
+    void for_each(Function function) const
+    {
+        tree_.for_each([&function](const chunk_type& chunk) {
+            for (const auto& value : chunk.view()) {
+                std::invoke(function, value);
+            }
+        });
     }
 
     [[nodiscard]] std::vector<value_type> get_range(const size_type index, const size_type count) const
@@ -413,10 +426,10 @@ public:
 
         auto source = slice(index, destination.size());
         auto offset = size_type{0};
-        for (const auto& chunk : source.tree_.to_vector()) {
+        source.tree_.for_each([&destination, &offset](const chunk_type& chunk) {
             chunk.copy_to(destination.subspan(offset, chunk.length()));
             offset += chunk.length();
-        }
+        });
     }
 
     [[nodiscard]] measured_rope compact() const
@@ -429,7 +442,7 @@ public:
     {
         auto total = size_type{0};
         auto total_measure = measure_policy::empty();
-        for (const auto& chunk : tree_.to_vector()) {
+        tree_.for_each([&total, &total_measure](const chunk_type& chunk) {
             if (chunk.length() == 0) {
                 throw std::logic_error("measured_rope invariant violated: empty chunk");
             }
@@ -444,7 +457,7 @@ public:
 
             total = checked_add(total, chunk.length());
             total_measure = measure_policy::combine(total_measure, chunk.measure());
-        }
+        });
 
         if (total != size()) {
             throw std::logic_error("measured_rope invariant violated: cached size mismatch");
@@ -457,7 +470,11 @@ public:
 
     [[nodiscard]] size_type chunk_count() const
     {
-        return tree_.to_vector().size();
+        auto count = size_type{0};
+        tree_.for_each([&count](const chunk_type&) {
+            ++count;
+        });
+        return count;
     }
 
 private:

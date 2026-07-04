@@ -180,26 +180,30 @@ public:
 
     [[nodiscard]] interval_tree coalesce() const
     {
-        auto values = to_vector();
-        if (values.empty()) {
+        if (empty()) {
             return *this;
         }
 
         auto merged = std::vector<interval_type>{};
-        auto current = values.front();
-        for (std::size_t index = 1; index < values.size(); ++index) {
-            const auto& item = values[index];
-            if (comparison_type::compare(item.low, current.high) <= 0) {
-                if (comparison_type::compare(item.high, current.high) > 0) {
-                    current.high = item.high;
+        auto current = std::optional<interval_type>{};
+
+        tree_.for_each([&merged, &current](const interval_type& item) {
+            if (!current.has_value()) {
+                current = item;
+                return;
+            }
+
+            if (comparison_type::compare(item.low, current->high) <= 0) {
+                if (comparison_type::compare(item.high, current->high) > 0) {
+                    current->high = item.high;
                 }
             } else {
-                merged.push_back(current);
+                merged.push_back(*current);
                 current = item;
             }
-        }
+        });
 
-        merged.push_back(current);
+        merged.push_back(*current);
         auto rebuilt = tree_type{};
         for (const auto& item : merged) {
             rebuilt = rebuilt.append(item);
