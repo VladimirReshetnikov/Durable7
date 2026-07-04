@@ -319,7 +319,7 @@ static void test_concurrent_snapshot_refcounts(void)
     }
 
     const DWORD wait_result = WaitForMultipleObjects(thread_count, threads, TRUE, INFINITE);
-    REQUIRE(wait_result >= WAIT_OBJECT_0 && wait_result < WAIT_OBJECT_0 + thread_count);
+    REQUIRE(wait_result == WAIT_OBJECT_0);
     for (DWORD index = 0; index != thread_count; ++index) {
         CloseHandle(threads[index]);
     }
