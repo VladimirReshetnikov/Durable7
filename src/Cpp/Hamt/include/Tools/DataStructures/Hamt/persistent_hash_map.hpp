@@ -13,6 +13,12 @@
 #include <utility>
 #include <vector>
 
+#if defined(__clang__) && defined(_MSC_VER)
+#define TOOLS_DATA_STRUCTURES_HAMT_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
+#else
+#define TOOLS_DATA_STRUCTURES_HAMT_NO_UNIQUE_ADDRESS [[no_unique_address]]
+#endif
+
 namespace tools::data_structures::hamt {
 
 enum class persistent_hamt_node_kind {
@@ -890,9 +896,11 @@ private:
 
     node_ptr root_;
     size_type count_ = 0;
-    [[no_unique_address]] Hash hash_{};
-    [[no_unique_address]] KeyEqual key_equal_{};
-    [[no_unique_address]] ValueEqual value_equal_{};
+    TOOLS_DATA_STRUCTURES_HAMT_NO_UNIQUE_ADDRESS Hash hash_{};
+    TOOLS_DATA_STRUCTURES_HAMT_NO_UNIQUE_ADDRESS KeyEqual key_equal_{};
+    TOOLS_DATA_STRUCTURES_HAMT_NO_UNIQUE_ADDRESS ValueEqual value_equal_{};
 };
 
 } // namespace tools::data_structures::hamt
+
+#undef TOOLS_DATA_STRUCTURES_HAMT_NO_UNIQUE_ADDRESS

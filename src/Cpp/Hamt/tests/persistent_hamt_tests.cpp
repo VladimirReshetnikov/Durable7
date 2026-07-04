@@ -332,6 +332,18 @@ TEST(KeysAndValues_AlignWithPairEnumeration) {
     CHECK_EQ(enumerated_values, map.values());
 }
 
+TEST(HelperKeyComparisons_AreExercisedForPortableWarningBuilds) {
+    CHECK(collision_key{1} == collision_key{1});
+    CHECK(!(collision_key{1} == collision_key{2}));
+    CHECK(collision_key{1} < collision_key{2});
+    CHECK(!(collision_key{2} < collision_key{1}));
+
+    CHECK((explicit_hash_key{1, 0x10} == explicit_hash_key{1, 0x20}));
+    CHECK(!(explicit_hash_key{1, 0x10} == explicit_hash_key{2, 0x10}));
+    CHECK((explicit_hash_key{1, 0x20} < explicit_hash_key{2, 0x10}));
+    CHECK(!(explicit_hash_key{2, 0x10} < explicit_hash_key{1, 0x20}));
+}
+
 TEST(EqualHashCollisionBucket_PreservesEveryKey) {
     using map_type = persistent_hash_map<collision_key, int, collision_key_hash, collision_key_equal>;
     using model_type = std::unordered_map<collision_key, int, collision_key_hash, collision_key_equal>;

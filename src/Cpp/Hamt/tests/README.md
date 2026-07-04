@@ -22,6 +22,7 @@ The executable registers these cases:
 - `RemoveAndTryRemove_DeletePresentKeys`
 - `CreateRange_LastWinsAndRetainsFirstEquivalentKey`
 - `KeysAndValues_AlignWithPairEnumeration`
+- `HelperKeyComparisons_AreExercisedForPortableWarningBuilds`
 - `EqualHashCollisionBucket_PreservesEveryKey`
 - `DeepSharedHashPrefixes_LookupAndRemoveCorrectly`
 - `CollisionBucket_SplitsWhenDifferentHashKeyArrives`
