@@ -42,6 +42,16 @@ This document is the canonical repository guidance for Vladimir and the AI codin
     ├── C/
     │   ├── README.md
     │   ├── build.ps1
+    │   ├── FingerTree/
+    │   │   ├── CMakeLists.txt
+    │   │   ├── CMakePresets.json
+    │   │   ├── README.md
+    │   │   ├── benchmarks/
+    │   │   ├── docs/
+    │   │   ├── include/
+    │   │   ├── samples/
+    │   │   ├── src/
+    │   │   └── tests/
     │   ├── Hamt/
     │   │   ├── build.ps1
     │   │   ├── README.md
@@ -49,30 +59,33 @@ This document is the canonical repository guidance for Vladimir and the AI codin
     │   │   ├── include/
     │   │   ├── src/
     │   │   └── tests/
-    │   └── FingerTree/
+    │   └── Wolfram/
     │       ├── CMakeLists.txt
     │       ├── CMakePresets.json
     │       ├── README.md
-    │       ├── benchmarks/
-    │       ├── docs/
     │       ├── include/
-    │       ├── samples/
     │       ├── src/
     │       └── tests/
     ├── Cpp/
     │   ├── README.md
     │   ├── build.ps1
+    │   ├── FingerTree/
+    │   │   ├── CMakeLists.txt
+    │   │   ├── CMakePresets.json
+    │   │   ├── README.md
+    │   │   ├── docs/
+    │   │   ├── include/
+    │   │   └── tests/
     │   ├── Hamt/
     │   │   ├── build.ps1
     │   │   ├── README.md
     │   │   ├── docs/
     │   │   ├── include/
     │   │   └── tests/
-    │   └── FingerTree/
+    │   └── Wolfram/
     │       ├── CMakeLists.txt
     │       ├── CMakePresets.json
     │       ├── README.md
-    │       ├── docs/
     │       ├── include/
     │       └── tests/
     ├── CSharp/
@@ -103,31 +116,40 @@ This document is the canonical repository guidance for Vladimir and the AI codin
     ├── Haskell/
     │   ├── README.md
     │   ├── cabal.project
+    │   ├── FingerTree/
+    │   │   ├── README.md
+    │   │   ├── tools-data-structures-fingertree.cabal
+    │   │   ├── src/
+    │   │   └── test/
     │   ├── Hamt/
     │   │   ├── README.md
     │   │   ├── tools-data-structures-hamt.cabal
     │   │   ├── src/
     │   │   └── test/
-    │   └── FingerTree/
+    │   └── Wolfram/
     │       ├── README.md
-    │       ├── tools-data-structures-fingertree.cabal
+    │       ├── tools-data-structures-wolfram.cabal
     │       ├── src/
     │       └── test/
     ├── Kotlin/
     │   ├── README.md
     │   ├── build.ps1
+    │   ├── FingerTree/
+    │   │   ├── README.md
+    │   │   ├── docs/
+    │   │   ├── src/
+    │   │   ├── test/
+    │   │   └── tests/
     │   ├── Hamt/
     │   │   ├── README.md
     │   │   ├── docs/
     │   │   ├── src/
     │   │   ├── test/
     │   │   └── tests/
-    │   └── FingerTree/
+    │   └── Wolfram/
     │       ├── README.md
-    │       ├── docs/
     │       ├── src/
-    │       ├── test/
-    │       └── tests/
+    │       └── test/
     └── Rust/
         ├── Cargo.toml
         ├── README.md
@@ -137,12 +159,16 @@ This document is the canonical repository guidance for Vladimir and the AI codin
         │   ├── docs/
         │   ├── src/
         │   └── tests/
-        └── FingerTree/
+        ├── FingerTree/
+        │   ├── Cargo.toml
+        │   ├── README.md
+        │   ├── docs/
+        │   ├── src/
+        │   └── tests/
+        └── Wolfram/
             ├── Cargo.toml
             ├── README.md
-            ├── docs/
-            ├── src/
-            └── tests/
+            └── src/
 ```
 
 ## Workspaces
@@ -155,21 +181,25 @@ language-first layout.
 - [C# Numerics](src/CSharp/docs/Numerics/overview.md) is a .NET 10 fixed-width and sparse integer numerics library under [src/CSharp/src/Tools.Numerics](src/CSharp/src/Tools.Numerics/Tools.Numerics.csproj). It provides `UInt256`/`Int256`, `UInt512`/`Int512`, `UInt1024`/`Int1024`, `SparseInteger`, deterministic two's-complement and binary conversion semantics, declaration-parity guardrails, and xUnit tests.
 - [C# HAMT](src/CSharp/docs/Hamt/overview.md) is a .NET 10 persistent hash-array mapped trie library under [src/CSharp/src/Tools.DataStructures.Hamt](src/CSharp/src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj). It provides `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` with bitmap-indexed 32-way branching, immutable equal-hash collision buckets, comparer-preserving factories, structural sharing across versions, and xUnit/CsCheck model tests against BCL dictionaries and sets.
 - [C# FingerTree](src/CSharp/docs/FingerTree/overview.md) is a .NET 10 persistent finger-tree library under [src/CSharp/src/Tools.DataStructures.FingerTree](src/CSharp/src/Tools.DataStructures.FingerTree/Tools.DataStructures.FingerTree.csproj): two engine cores (a tuned catenable deque and a general monoid-measured tree), a full collection family (sorted bag/set/dictionary, priority queue, interval tree, reversible deque), product/sum/built-in measures with a closure-free predicate API, and a rope family (positional, measured, and text). It ships a navigable design-notes document ([FingerTree-Design-Notes.pdf](src/CSharp/docs/FingerTree/FingerTree-Design-Notes.pdf), with `.tex` source and a rebuild script alongside), a BenchmarkDotNet harness, three runnable samples, and a three-tier (example + property + model-based command) test suite plus tearable-struct concurrency stress tests.
-- [C# Wolfram collections](src/CSharp/docs/Wolfram/overview.md) is a .NET 10 library under [src/CSharp/src/Tools.DataStructures.Wolfram](src/CSharp/src/Tools.DataStructures.Wolfram/Tools.DataStructures.Wolfram.csproj) composing the HAMT and FingerTree families into persistent collections with Wolfram Language semantics: `PersistentList<T>` (the `List` operation vocabulary over the catenable deque) and `PersistentAssociation<TKey, TValue>` (an insertion-ordered map with keyed and positional access following the kernel-verified `Association` ordering rules). The primary external client is the Tungsten engine in the Smithereens repository; the C# implementation is the reference for future language ports.
+- [C# Wolfram collections](src/CSharp/docs/Wolfram/overview.md) is a .NET 10 library under [src/CSharp/src/Tools.DataStructures.Wolfram](src/CSharp/src/Tools.DataStructures.Wolfram/Tools.DataStructures.Wolfram.csproj) composing the HAMT and FingerTree families into persistent collections with Wolfram Language semantics: `PersistentList<T>` (the `List` operation vocabulary over the catenable deque) and `PersistentAssociation<TKey, TValue>` (an insertion-ordered map with keyed and positional access following the kernel-verified `Association` ordering rules). The primary external client is the Tungsten engine in the Smithereens repository; the C# implementation is the semantic reference for sibling language ports.
 - [src/C/Hamt](src/C/Hamt/README.md) is a C17 port of the persistent HAMT library. It provides type-erased
   `tds_hamt_map` and `tds_hamt_set` value structs with callback-driven hash/equality/ownership
   policy, reference-counted immutable nodes, structural sharing across versions, and deterministic
   native model tests.
 - [src/C/FingerTree](src/C/FingerTree/README.md) is the C11 port from the C++ workspace. It provides a generic measured-tree core with shared lazy middle publication, size-measured deque alias, reversible deque facade, sorted set/multiset/map wrappers, generic priority queue, generic and signed-64-bit interval tree facades, generic chunked and measured ropes, text-rope facade, CTest validation, sample smoke tests, and a dependency-light benchmark harness.
+- [src/C/Wolfram](src/C/Wolfram/README.md) is the C17 port of the Wolfram collections. It provides type-erased `tds_wolfram_list` and `tds_wolfram_association` value structs, composing the C FingerTree deque, C HAMT, and an internal ref-counted AVL stamp sequence for C#-parity keyed and positional Association operations.
 - [src/Cpp/Hamt](src/Cpp/Hamt/README.md) is a C++20 port of the persistent HAMT library. It provides
   header-only `persistent_hash_map` and `persistent_hash_set` templates with bitmap-indexed
   branching, immutable equal-hash collision buckets, custom hash/equality policy objects, structural
   sharing via immutable `std::shared_ptr` nodes, and deterministic native model tests.
 - [src/Cpp/FingerTree](src/Cpp/FingerTree/README.md) is the native C++ port of the FingerTree workspace. It is a header-first CMake/Ninja library with the two engine cores, derived collections, ropes, text helpers, and CTest validation.
+- [src/Cpp/Wolfram](src/Cpp/Wolfram/README.md) is the C++23 header-first Wolfram-collections port. It provides `persistent_list<T>` and `persistent_association<Key, T, Hash, KeyEqual, ValueEqual>` over the C++ FingerTree and HAMT substrates, with CTest coverage for the Wolfram ordering rules and relabel path.
 - [src/Haskell/Hamt](src/Haskell/Hamt/README.md) is a Haskell port of the persistent HAMT library. It provides `HashMap` and `HashSet` values with bitmap-indexed 32-way branching, immutable collision buckets, policy-preserving factories, structural sharing, and dependency-free cabal tests.
 - [src/Haskell/FingerTree](src/Haskell/FingerTree/README.md) is a Haskell port of the FingerTree family. It provides a general measured tree, size-measured deque, reversible deque, sorted bag/set/map facades, stable meldable priority queue, interval tree, positional and measured ropes, and text helpers.
+- [src/Haskell/Wolfram](src/Haskell/Wolfram/README.md) is a Haskell port of the Wolfram collections. It provides `PersistentList` and `PersistentAssociation` modules over the Haskell FingerTree and HAMT packages, with a balanced stamp sequence for ordered Association operations.
 - [src/Kotlin/Hamt](src/Kotlin/Hamt/README.md) is a Kotlin/JVM port of the persistent HAMT library. It provides `PersistentHashMap<K, V>` and `PersistentHashSet<T>` values with bitmap-indexed 32-way branching, immutable collision buckets, runtime hash/equality policies, structural sharing, and dependency-free executable tests.
 - [src/Kotlin/FingerTree](src/Kotlin/FingerTree/README.md) is a Kotlin/JVM semantic-checkpoint port of the FingerTree family. It exposes persistent deque, measured sequence, reversible deque, sorted bag/set/map, priority queue, interval tree, positional and measured ropes, and text helpers with immutable snapshot semantics.
+- [src/Kotlin/Wolfram](src/Kotlin/Wolfram/README.md) is the Kotlin/JVM Wolfram-collections port. It exposes `PersistentList<T>` and `PersistentAssociation<K, V>` with immutable snapshots, runtime `HashPolicy` support, sparse stamps, and generated-history executable tests.
 - [src/Rust/Hamt](src/Rust/Hamt/README.md) is a safe Rust persistent HAMT map/set crate. It provides
   `PersistentHashMap` and `PersistentHashSet` with bitmap-indexed trie nodes, immutable collision
   buckets, `Arc` structural sharing, `BuildHasher` hash policy support, and Cargo unit tests.
@@ -179,6 +209,9 @@ language-first layout.
   helpers with immutable snapshot semantics. The public FingerTree-family facades now use
   structurally shared Rust tree storage; the current crate documents the remaining
   semantic-checkpoint boundary before final lazy measured-spine asymptotic parity.
+- [src/Rust/Wolfram](src/Rust/Wolfram/README.md) is the safe Rust Wolfram-collections crate. It exposes
+  `PersistentList<T>` and `PersistentAssociation<K, V, S>` over the Rust FingerTree and HAMT crates,
+  preserving the Wolfram Association ordering rules, slicing, sorting, and relabel behavior.
 
 ## Build and test
 
@@ -193,10 +226,13 @@ dotnet test .\DataStructures.sln
 cd C:\DataStructures\src\C
 .\build.ps1 -Workspace Hamt -RunTests
 .\build.ps1 -Workspace Hamt -Configuration Release -RunTests
+.\build.ps1 -Workspace Wolfram -RunTests
+.\build.ps1 -Workspace Wolfram -Configuration Release -RunTests
 
 cd C:\DataStructures\src\Cpp
 .\build.ps1 -Workspace Hamt -RunTests
 .\build.ps1 -Workspace Hamt -Configuration Release -RunTests
+.\build.ps1 -Workspace Wolfram -RunTests
 
 cd C:\DataStructures\src\Rust
 cargo test --workspace
@@ -245,6 +281,11 @@ Release configuration is required for meaningful benchmark numbers.
   guide, API specification, and validation guide.
 - [src/CSharp/docs/FingerTree/README.md](src/CSharp/docs/FingerTree/README.md) indexes the library's usage guide, specifications, validation guide, design notes, benchmark notes, and external references.
 - [src/CSharp/docs/Wolfram/README.md](src/CSharp/docs/Wolfram/README.md) indexes the Wolfram-collections library's overview, usage guide, API specification, and validation guide.
+- [src/C/Wolfram/README.md](src/C/Wolfram/README.md) indexes the C Wolfram-collections port.
+- [src/Cpp/Wolfram/README.md](src/Cpp/Wolfram/README.md) indexes the C++ Wolfram-collections port.
+- [src/Haskell/Wolfram/README.md](src/Haskell/Wolfram/README.md) indexes the Haskell Wolfram-collections port.
+- [src/Kotlin/Wolfram/README.md](src/Kotlin/Wolfram/README.md) indexes the Kotlin Wolfram-collections port.
+- [src/Rust/Wolfram/README.md](src/Rust/Wolfram/README.md) indexes the Rust Wolfram-collections port.
 - [src/Cpp/FingerTree/docs/README.md](src/Cpp/FingerTree/docs/README.md) indexes the C++ usage guide, port plan, API notes, validation guide, implementation notes, and review reports.
 - [src/C/FingerTree/docs/README.md](src/C/FingerTree/docs/README.md) indexes the C usage guide, API notes, and validation guide.
 - [src/Haskell/README.md](src/Haskell/README.md) indexes the Haskell cabal packages.

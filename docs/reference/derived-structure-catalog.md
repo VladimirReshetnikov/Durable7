@@ -77,12 +77,12 @@ API additions plus samples than as families.
 
 `PersistentOrderedMap` fixes the HAMT's biggest documented ergonomic limitation (unspecified
 enumeration order) and is what the Tungsten case study's `Association` design specializes.
-*Shipped 2026-07-07*: the Wolfram-collections C# workspace
-([`Tools.DataStructures.Wolfram`](../../src/CSharp/docs/Wolfram/overview.md)) instantiates this
-pattern's values-in-both variant as `PersistentAssociation<TKey, TValue>` (plus the
-`PersistentList<T>` sequence facade); its authoritative description now lives in the
-[data-structure catalog](data-structure-catalog.md). The generic values-in-HAMT-only variant and
-the other candidates below remain unshipped. The
+*Shipped 2026-07-07*: the Wolfram-collections workspaces instantiate this pattern's
+values-in-both variant as `PersistentAssociation` (plus the `PersistentList` sequence facade), with
+the C# workspace ([`Tools.DataStructures.Wolfram`](../../src/CSharp/docs/Wolfram/overview.md)) as
+the semantic reference and C, C++, Haskell, Kotlin, and Rust ports linked from the
+[data-structure catalog](data-structure-catalog.md#wolfram-collections). The generic
+values-in-HAMT-only variant and the other candidates below remain unshipped. The
 structural diff feature is the one candidate that cannot be built by composition - the node layer
 is internal - and the one that upgrades the most other candidates from "store versions" to "reason
 about versions".

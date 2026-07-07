@@ -12,12 +12,12 @@ projects grouped by role under `src/CSharp/src`, `tests`, `samples`, and `benchm
 
 | Language root | Toolchain model | Workspaces |
 | --- | --- | --- |
-| [C](C/README.md) | MSVC C builds; `build.ps1` for HAMT and CMake/CTest presets for FingerTree | [Hamt](C/Hamt/README.md), [FingerTree](C/FingerTree/README.md) |
-| [Cpp](Cpp/README.md) | MSVC C++ builds; `build.ps1` for HAMT and CMake/CTest presets for FingerTree | [Hamt](Cpp/Hamt/README.md), [FingerTree](Cpp/FingerTree/README.md) |
+| [C](C/README.md) | MSVC C builds; `build.ps1` for HAMT and CMake/CTest presets for FingerTree and Wolfram | [Hamt](C/Hamt/README.md), [FingerTree](C/FingerTree/README.md), [Wolfram](C/Wolfram/README.md) |
+| [Cpp](Cpp/README.md) | MSVC C++ builds; `build.ps1` for HAMT and CMake/CTest presets for FingerTree and Wolfram | [Hamt](Cpp/Hamt/README.md), [FingerTree](Cpp/FingerTree/README.md), [Wolfram](Cpp/Wolfram/README.md) |
 | [CSharp](CSharp/README.md) | One .NET 10 solution with xUnit/CsCheck validation | [Numerics](CSharp/docs/Numerics/overview.md), [HAMT](CSharp/docs/Hamt/overview.md), [FingerTree](CSharp/docs/FingerTree/overview.md), [Wolfram](CSharp/docs/Wolfram/overview.md) |
-| [Haskell](Haskell/README.md) | GHC/cabal packages with dependency-light executable tests | [Hamt](Haskell/Hamt/README.md), [FingerTree](Haskell/FingerTree/README.md) |
-| [Kotlin](Kotlin/README.md) | Kotlin/JVM command-line compiler with dependency-free executable tests bootstrapped by `build.ps1` | [Hamt](Kotlin/Hamt/README.md), [FingerTree](Kotlin/FingerTree/README.md) |
-| [Rust](Rust/README.md) | Cargo workspace with safe Rust crates and inline unit tests | [Hamt](Rust/Hamt/README.md), [FingerTree](Rust/FingerTree/README.md) |
+| [Haskell](Haskell/README.md) | GHC/cabal packages with dependency-light executable tests | [Hamt](Haskell/Hamt/README.md), [FingerTree](Haskell/FingerTree/README.md), [Wolfram](Haskell/Wolfram/README.md) |
+| [Kotlin](Kotlin/README.md) | Kotlin/JVM command-line compiler with dependency-free executable tests bootstrapped by `build.ps1` | [Hamt](Kotlin/Hamt/README.md), [FingerTree](Kotlin/FingerTree/README.md), [Wolfram](Kotlin/Wolfram/README.md) |
+| [Rust](Rust/README.md) | Cargo workspace with safe Rust crates and inline unit tests | [Hamt](Rust/Hamt/README.md), [FingerTree](Rust/FingerTree/README.md), [Wolfram](Rust/Wolfram/README.md) |
 
 Use the repository [onboarding guide](../docs/guides/repository-onboarding.md) when starting work in an
 unfamiliar area, the [workspace map](../docs/reference/workspace-map.md) for layout rules and port lineage,

@@ -13,6 +13,7 @@ managed C# projects where the language surfaces line up.
 | --- | --- | --- |
 | [Hamt](Hamt/README.md) | `tools-data-structures-hamt` | `Data.Structures.Hamt`, `Data.Structures.Hamt.HashMap`, `Data.Structures.Hamt.HashSet` |
 | [FingerTree](FingerTree/README.md) | `tools-data-structures-fingertree` | `Data.Structures.FingerTree`, deque, measured tree, sorted collections, priority queue, intervals, ropes, and text helpers |
+| [Wolfram](Wolfram/README.md) | `tools-data-structures-wolfram` | `Data.Structures.Wolfram`, `Data.Structures.Wolfram.List`, `Data.Structures.Wolfram.Association` |
 
 Build and test both packages from this directory:
 
@@ -20,8 +21,8 @@ Build and test both packages from this directory:
 cabal test all
 ```
 
-The port intentionally depends only on packages bundled with the local GHC distribution (`base`,
-`containers`, and `text`), plus each package's own test executable.
+The port intentionally depends only on packages bundled with the local GHC distribution and sibling
+workspace packages, plus each package's own test executable.
 
 Use the repository [semantic contracts reference](../../docs/reference/semantic-contracts.md) when
 checking which persistence, ordering, policy, and checkpoint obligations should align with sibling

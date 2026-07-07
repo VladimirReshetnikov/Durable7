@@ -13,6 +13,7 @@ contracts of the C# baseline where the current implementation exposes equivalent
 | --- | --- | --- | --- |
 | [Hamt](Hamt/README.md) | Persistent HAMT map/set port with 32-way bitmap-indexed trie nodes and `Arc` structural sharing | `tools_data_structures_hamt::{PersistentHashMap, PersistentHashSet}` | `cargo test -p tools-data-structures-hamt` |
 | [FingerTree](FingerTree/README.md) | Rust checkpoint for the FingerTree family: persistent deque, measured sequence with built-in and product policies, reversible deque, sorted collections, priority queue, intervals, ropes, and text helpers | `tools_data_structures_fingertree::*` | `cargo test -p tools-data-structures-fingertree` |
+| [Wolfram](Wolfram/README.md) | Wolfram `List` and `Association` collection port over Rust persistent substrates | `tools_data_structures_wolfram::{PersistentList, PersistentAssociation}` | `cargo test -p tools-data-structures-wolfram` |
 
 Run the full Rust validation from this directory:
 

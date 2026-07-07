@@ -15,11 +15,13 @@ src/
 ├── C/
 │   ├── README.md
 │   ├── FingerTree/
-│   └── Hamt/
+│   ├── Hamt/
+│   └── Wolfram/
 ├── Cpp/
 │   ├── README.md
 │   ├── FingerTree/
-│   └── Hamt/
+│   ├── Hamt/
+│   └── Wolfram/
 ├── CSharp/
 │   ├── README.md
 │   ├── DataStructures.sln
@@ -28,25 +30,30 @@ src/
 │   ├── docs/
 │   │   ├── FingerTree/
 │   │   ├── Hamt/
-│   │   └── Numerics/
+│   │   ├── Numerics/
+│   │   └── Wolfram/
 │   ├── samples/
 │   ├── src/
 │   │   ├── Tools.DataStructures.FingerTree/
 │   │   ├── Tools.DataStructures.Hamt/
+│   │   ├── Tools.DataStructures.Wolfram/
 │   │   └── Tools.Numerics/
 │   └── tests/
 ├── Haskell/
 │   ├── README.md
 │   ├── FingerTree/
-│   └── Hamt/
+│   ├── Hamt/
+│   └── Wolfram/
 ├── Kotlin/
 │   ├── README.md
 │   ├── FingerTree/
-│   └── Hamt/
+│   ├── Hamt/
+│   └── Wolfram/
 └── Rust/
     ├── README.md
     ├── FingerTree/
-    └── Hamt/
+    ├── Hamt/
+    └── Wolfram/
 ```
 
 This makes language-local build systems, toolchains, include paths, and idioms easy to find while keeping
@@ -82,6 +89,11 @@ ordering, and documentation obligations that should remain recognizable across l
 | [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | Kotlin/JVM FingerTree family semantic checkpoint | `src/tools/datastructures/fingertree/`, `test/tools/datastructures/fingertree/` | [`docs`](../../src/Kotlin/FingerTree/docs/README.md) |
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | Rust FingerTree family checkpoint port | `Cargo.toml`, `src/` | [`docs`](../../src/Rust/FingerTree/docs/README.md) |
 | [C# Wolfram collections](../../src/CSharp/docs/Wolfram/overview.md) | Canonical managed Wolfram-semantics collections (list facade and insertion-ordered association) composed from the HAMT and FingerTree families | `DataStructures.sln`, `src/Tools.DataStructures.Wolfram/`, `tests/Tools.DataStructures.Wolfram.Tests/` | [`docs`](../../src/CSharp/docs/Wolfram/README.md) |
+| [`src/C/Wolfram`](../../src/C/Wolfram/README.md) | C17 Wolfram `List` and `Association` port | `include/tools/data_structures/wolfram/wolfram.h`, `CMakePresets.json` | [`README`](../../src/C/Wolfram/README.md) |
+| [`src/Cpp/Wolfram`](../../src/Cpp/Wolfram/README.md) | C++23 Wolfram `List` and `Association` port | `include/tools/data_structures/wolfram/`, `CMakePresets.json` | [`README`](../../src/Cpp/Wolfram/README.md) |
+| [`src/Haskell/Wolfram`](../../src/Haskell/Wolfram/README.md) | Haskell Wolfram `List` and `Association` port | `tools-data-structures-wolfram.cabal`, `src/Data/Structures/Wolfram/` | [`README`](../../src/Haskell/Wolfram/README.md) |
+| [`src/Kotlin/Wolfram`](../../src/Kotlin/Wolfram/README.md) | Kotlin/JVM Wolfram `List` and `Association` port | `src/tools/datastructures/wolfram/`, `test/tools/datastructures/wolfram/` | [`README`](../../src/Kotlin/Wolfram/README.md) |
+| [`src/Rust/Wolfram`](../../src/Rust/Wolfram/README.md) | Safe Rust Wolfram `List` and `Association` crate | `Cargo.toml`, `src/lib.rs` | [`README`](../../src/Rust/Wolfram/README.md) |
 
 ## Port Lineage
 
@@ -111,8 +123,11 @@ Wolfram collections lineage:
    contract: `PersistentList<T>` over the FingerTree deque and `PersistentAssociation<TKey, TValue>`
    composed per the [derived structure catalog](derived-structure-catalog.md)'s
    `PersistentOrderedMap` pattern, with the kernel-verified Wolfram ordering rules as the fidelity
-   spec. Ports to the other language workspaces are planned; each language already ships both
-   substrate families.
+   spec.
+2. `src/Cpp/Wolfram`, `src/C/Wolfram`, `src/Haskell/Wolfram`, `src/Kotlin/Wolfram`, and
+   `src/Rust/Wolfram` port the same public family to their language-local ownership and policy
+   models while preserving the substrate composition, sparse-stamp relabel behavior, and
+   average/worst-case operation bounds.
 
 Numerics currently has a C# project only. `src/CSharp/src/Tools.Numerics` owns the fixed-width integer and
 sparse-integer contract and implementation, with tests under `src/CSharp/tests/Tools.Numerics.Tests`; add

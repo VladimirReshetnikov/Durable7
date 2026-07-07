@@ -70,6 +70,19 @@ FingerTree lineage:
    structurally shared Rust tree storage, while the workspace documents the remaining asymptotic
    boundary until the lazy measured spine is ported through the whole family.
 
+Wolfram collections lineage:
+
+1. [C# Wolfram collections](../../src/CSharp/docs/Wolfram/overview.md) are the semantic baseline
+   for the `PersistentList<T>` facade and kernel-verified `PersistentAssociation<TKey, TValue>`
+   ordering rules.
+2. [`src/Cpp/Wolfram`](../../src/Cpp/Wolfram/README.md) ports the family to C++23 value types over
+   the C++ HAMT and FingerTree substrates.
+3. [`src/C/Wolfram`](../../src/C/Wolfram/README.md) ports the family to type-erased C value structs
+   with explicit clone/dispose ownership, C HAMT lookup, and an internal stamp-ordered AVL sequence.
+4. [`src/Haskell/Wolfram`](../../src/Haskell/Wolfram/README.md), [`src/Kotlin/Wolfram`](../../src/Kotlin/Wolfram/README.md),
+   and [`src/Rust/Wolfram`](../../src/Rust/Wolfram/README.md) port the same behavior to their
+   language-local immutable value, policy, and test-runner shapes.
+
 A port can still reveal a baseline bug. When that happens, fix or document the baseline contract
 first, then carry the corrected semantics through the sibling workspaces that expose the same
 capability.

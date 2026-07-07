@@ -218,7 +218,7 @@ Shared obligations:
 
 ## Wolfram Collections
 
-Wolfram collections compose the HAMT and finger-tree families into a persistent sequence facade
+Wolfram collections compose HAMT keyed lookup with persistent ordered storage into a sequence facade
 (`PersistentList`) and an insertion-ordered map (`PersistentAssociation`) whose ordering behavior
 matches the kernel-verified Wolfram Language rules.
 
@@ -236,8 +236,9 @@ Shared obligations:
 - Key equality is the factory-supplied comparer; derived associations preserve it, and stored-key
   retention follows the HAMT contract (in-place updates keep the stored key instance; re-adds
   store the supplied instance).
-- Observably unchanged writes return the same instance (no-op identity), composing with the
-  substrate contracts.
+- Observably unchanged writes preserve identity or root sharing where that is part of the local
+  language contract; in value-shaped ports, they must remain semantically unchanged without
+  weakening persistence.
 - Order-maintenance labels (stamps) are an implementation detail; ports must reproduce the honest
   cost contract — gap-exhaustion relabeling is per produced version and not amortized under
   branching persistence — without exposing labels in the API.
@@ -277,4 +278,3 @@ Then update:
 - the [data-structure catalog](data-structure-catalog.md) if the public family surface changed;
 - the [navigation matrix](navigation-matrix.md) if the new doc is a better first stop for a task;
 - the [test suite map](test-suite-map.md) if tests, samples, benchmarks, or stress controls changed.
-

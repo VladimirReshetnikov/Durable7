@@ -156,13 +156,18 @@ facade with the Wolfram `List` operation vocabulary, and an insertion-ordered ma
 positional access following the kernel-verified `Association` ordering rules (in-place update,
 move-on-`Append`/`Prepend`, first-position/last-value construction, positional slicing, stable
 sorts). The primary external client is the Tungsten engine in the Smithereens repository; the C#
-implementation is the reference for future language ports (see the
+implementation is the semantic reference for sibling language ports (see the
 [derived structure catalog](derived-structure-catalog.md) for the verified composition it
 instantiates).
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
 | C# | `PersistentList<T>`, `PersistentAssociation<TKey, TValue>` | [Workspace](../../src/CSharp/docs/Wolfram/overview.md), [usage guide](../../src/CSharp/docs/Wolfram/usage.md), [API spec](../../src/CSharp/docs/Wolfram/api-specification.md), [list source](../../src/CSharp/src/Tools.DataStructures.Wolfram/PersistentList.cs), [association source](../../src/CSharp/src/Tools.DataStructures.Wolfram/PersistentAssociation.cs) |
+| C | `tds_wolfram_list`, `tds_wolfram_association`, `tds_wolfram_association_policy` | [Workspace](../../src/C/Wolfram/README.md), [public header](../../src/C/Wolfram/include/tools/data_structures/wolfram/wolfram.h), [implementation](../../src/C/Wolfram/src/wolfram.c), [tests](../../src/C/Wolfram/tests/wolfram_c_tests.c) |
+| C++ | `persistent_list<T>`, `persistent_association<Key, T, Hash, KeyEqual, ValueEqual>` | [Workspace](../../src/Cpp/Wolfram/README.md), [aggregate header](../../src/Cpp/Wolfram/include/tools/data_structures/wolfram/wolfram.hpp), [list header](../../src/Cpp/Wolfram/include/tools/data_structures/wolfram/persistent_list.hpp), [association header](../../src/Cpp/Wolfram/include/tools/data_structures/wolfram/persistent_association.hpp), [tests](../../src/Cpp/Wolfram/tests/wolfram_tests.cpp) |
+| Haskell | `PersistentList a`, `PersistentAssociation k v` | [Workspace](../../src/Haskell/Wolfram/README.md), [list source](../../src/Haskell/Wolfram/src/Data/Structures/Wolfram/List.hs), [association source](../../src/Haskell/Wolfram/src/Data/Structures/Wolfram/Association.hs), [tests](../../src/Haskell/Wolfram/test/Main.hs) |
+| Kotlin | `PersistentList<T>`, `PersistentAssociation<K, V>` | [Workspace](../../src/Kotlin/Wolfram/README.md), [source](../../src/Kotlin/Wolfram/src/tools/datastructures/wolfram/PersistentWolfram.kt), [tests](../../src/Kotlin/Wolfram/test/tools/datastructures/wolfram/WolframTests.kt) |
+| Rust | `PersistentList<T>`, `PersistentAssociation<K, V, S>` | [Workspace](../../src/Rust/Wolfram/README.md), [source](../../src/Rust/Wolfram/src/lib.rs) |
 
 ## Navigation Rules
 

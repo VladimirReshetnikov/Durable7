@@ -50,6 +50,7 @@ patterns.
 | Kotlin FingerTree | [src/Kotlin/FingerTree/docs/api-notes.md](../../src/Kotlin/FingerTree/docs/api-notes.md) | Kotlin semantic-checkpoint surfaces for deque, measured sequence, sorted collections, priority queue, intervals, ropes/text |
 | Rust FingerTree | [src/Rust/FingerTree/docs/api-notes.md](../../src/Rust/FingerTree/docs/api-notes.md) | Rust shared-storage checkpoint surfaces for deque, measured sequence, sorted collections, priority queue, intervals, ropes/text |
 | C# Wolfram collections | [src/CSharp/docs/Wolfram/usage.md](../../src/CSharp/docs/Wolfram/usage.md) | `PersistentList<T>` and `PersistentAssociation<TKey, TValue>` with the Wolfram operation correspondence |
+| C/C++/Haskell/Kotlin/Rust Wolfram collections | [data-structure catalog](data-structure-catalog.md#wolfram-collections) | Language-local Wolfram `List` and `Association` entry points, README links, tests, and substrate notes |
 
 ## API Contracts
 
@@ -71,6 +72,9 @@ For a cross-family checklist before drilling into a local spec, start with the
 | C FingerTree | [API notes](../../src/C/FingerTree/docs/api-notes.md) | C API shape, ownership rules, and C++ port differences |
 | C++ FingerTree | [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) | C++ conventions and active differences from the C# workspace |
 | C# Wolfram collections | [API specification](../../src/CSharp/docs/Wolfram/api-specification.md) | List facade and association contracts, kernel-verified ordering rules, complexity and no-op identity tables |
+| C Wolfram collections | [Workspace README](../../src/C/Wolfram/README.md) and [public header](../../src/C/Wolfram/include/tools/data_structures/wolfram/wolfram.h) | C value-struct API, explicit lifetime, policy callbacks, and stamp-sequence representation |
+| C++ Wolfram collections | [Workspace README](../../src/Cpp/Wolfram/README.md) and [aggregate header](../../src/Cpp/Wolfram/include/tools/data_structures/wolfram/wolfram.hpp) | C++ value API and header-first List/Association templates |
+| Haskell/Kotlin/Rust Wolfram collections | [catalog rows](data-structure-catalog.md#wolfram-collections) | Language-local README and source entry points for Wolfram `List` and `Association` ports |
 | Haskell FingerTree | [Workspace README](../../src/Haskell/FingerTree/README.md) and [source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Measured.hs) | Haskell measured tree and derived collection API shape |
 | Kotlin FingerTree | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md) and [source](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Core.kt) | Kotlin measured tree and derived collection API shape plus semantic-checkpoint boundary |
 | Rust FingerTree | [API notes](../../src/Rust/FingerTree/docs/api-notes.md) and [source](../../src/Rust/FingerTree/src/measured.rs) | Rust measured tree and derived collection API shape |
@@ -88,8 +92,10 @@ For a cross-family checklist before drilling into a local spec, start with the
 | C FingerTree | [Validation](../../src/C/FingerTree/docs/validation.md) | CMake build, CTest validation, sample smoke tests, and benchmark harness entry points |
 | C++ FingerTree | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | CMake build, CTest validation, stress controls, and benchmark-harness status |
 | C# Wolfram collections | [Validation](../../src/CSharp/docs/Wolfram/validation.md) | .NET build/test commands, kernel-verified semantics coverage, model histories, relabel stress |
-| Haskell | [Workspace README](../../src/Haskell/README.md) | `cabal test all` builds both Haskell packages and runs the HAMT/FingerTree executables |
-| Kotlin | [Workspace README](../../src/Kotlin/README.md) | `.\build.ps1` builds both Kotlin workspaces and runs dependency-free executable tests |
+| C Wolfram collections | [Workspace README](../../src/C/Wolfram/README.md) | `.\build.ps1 -Workspace Wolfram -RunTests` and Release validation for the C CTest executable |
+| C++ Wolfram collections | [Workspace README](../../src/Cpp/Wolfram/README.md) | `.\build.ps1 -Workspace Wolfram -RunTests` for the C++ CTest executable |
+| Haskell | [Workspace README](../../src/Haskell/README.md) | `cabal test all` builds all Haskell packages and runs the HAMT/FingerTree/Wolfram executables |
+| Kotlin | [Workspace README](../../src/Kotlin/README.md) | `.\build.ps1` builds all Kotlin workspaces and runs dependency-free executable tests |
 | Kotlin HAMT | [Validation](../../src/Kotlin/Hamt/docs/validation.md) | Kotlin compiler bootstrap and deterministic HAMT executable tests |
 | Kotlin FingerTree | [Validation](../../src/Kotlin/FingerTree/docs/validation.md) | Kotlin compiler bootstrap and semantic-checkpoint executable tests across collection facades |
 | Rust | [Workspace README](../../src/Rust/README.md) | `cargo test --workspace` builds both Rust crates and runs unit/doc tests |
@@ -100,6 +106,8 @@ For a cross-family checklist before drilling into a local spec, start with the
 | C# HAMT tests | [Tests README](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests/README.md) | xUnit/CsCheck project, source-file grouping, filter commands, and property coverage |
 | C# FingerTree tests | [Tests README](../../src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/README.md) | xUnit/CsCheck project, source-file grouping, sample smoke hooks, stress controls, and model tests |
 | C# Wolfram collections tests | [Tests README](../../src/CSharp/tests/Tools.DataStructures.Wolfram.Tests/README.md) | xUnit/CsCheck project covering kernel-verified ordering examples, ordered-model histories, and relabel stress |
+| C Wolfram tests | [Test source](../../src/C/Wolfram/tests/wolfram_c_tests.c) | CTest executable covering list operations, Association ordering examples, policies, relabel stress, and generated histories |
+| C++ Wolfram tests | [Test source](../../src/Cpp/Wolfram/tests/wolfram_tests.cpp) | CTest executable covering list operations, Association ordering examples, policies, relabel stress, and generated histories |
 | C HAMT tests | [Tests README](../../src/C/Hamt/tests/README.md) | C native HAMT executable, named test cases, direct executable path, and runner failure behavior |
 | C++ HAMT tests | [Tests README](../../src/Cpp/Hamt/tests/README.md) | C++ native HAMT executable, named test cases, direct executable path, and runner failure behavior |
 | C FingerTree tests | [Tests README](../../src/C/FingerTree/tests/README.md) | Core CTest executable, named test cases, direct executable path, and runner failure behavior |
@@ -108,10 +116,13 @@ For a cross-family checklist before drilling into a local spec, start with the
 | C++ FingerTree tests | [Tests README](../../src/Cpp/FingerTree/tests/README.md) | Native smoke runner source map, direct executable path, and tearable stress controls |
 | Haskell HAMT tests | [Tests README](../../src/Haskell/Hamt/test/README.md) | Cabal executable covering collision buckets, custom policies, key recovery, and set algebra |
 | Haskell FingerTree tests | [Tests README](../../src/Haskell/FingerTree/test/README.md) | Cabal executable covering measured tree, facades, intervals, ropes, and text helpers |
+| Haskell Wolfram tests | [Test source](../../src/Haskell/Wolfram/test/Main.hs) | Cabal executable covering list operations, Association ordering examples, policies, relabel stress, and generated histories |
 | Kotlin HAMT tests | [Tests README](../../src/Kotlin/Hamt/tests/README.md) | Kotlin executable covering collisions, root sharing, replacement, iteration, and set algebra |
 | Kotlin FingerTree tests | [Tests README](../../src/Kotlin/FingerTree/tests/README.md) | Kotlin executable covering deque, measured tree, facades, intervals, ropes, and text helpers |
+| Kotlin Wolfram tests | [Test source](../../src/Kotlin/Wolfram/test/tools/datastructures/wolfram/WolframTests.kt) | Kotlin executable covering list operations, Association ordering examples, policies, relabel stress, and generated histories |
 | Rust HAMT tests | [Tests README](../../src/Rust/Hamt/tests/README.md) | Cargo unit tests covering collisions, updates, iteration, and set algebra |
 | Rust FingerTree tests | [Tests README](../../src/Rust/FingerTree/tests/README.md) | Cargo unit tests covering deque, measured tree, facades, intervals, ropes, and text helpers |
+| Rust Wolfram tests | [Source tests](../../src/Rust/Wolfram/src/lib.rs) | Cargo unit tests covering list operations, Association ordering examples, relabel stress, and generated histories |
 
 ## Historical And External Material
 
