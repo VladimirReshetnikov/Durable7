@@ -7,13 +7,13 @@
 
 The C root contains type-erased, explicit-lifetime ports of repository-owned persistent data structures.
 The root `build.ps1` delegates to the family-local build systems: the HAMT C17 script and the FingerTree
-and Wolfram CMake/CTest presets.
+and Tungsten CMake/CTest presets.
 
 | Workspace | Role | Primary entry points | Validation |
 | --- | --- | --- | --- |
 | [Hamt](Hamt/README.md) | C17 persistent HAMT map/set port | [public header](Hamt/include/Tools/DataStructures/Hamt/hamt.h), [usage](Hamt/docs/usage.md), [API spec](Hamt/docs/api-specification.md) | `.\build.ps1 -Workspace Hamt -RunTests`; see [validation](Hamt/docs/validation.md) and [tests](Hamt/tests/README.md) |
 | [FingerTree](FingerTree/README.md) | C11 measured-tree, deque, sorted/priority/interval, rope, and text-rope port | [public header](FingerTree/include/tools/data_structures/finger_tree/fingertree.h), [usage](FingerTree/docs/usage.md), [API notes](FingerTree/docs/api-notes.md) | `.\build.ps1 -Workspace FingerTree -RunTests`; see [validation](FingerTree/docs/validation.md), [tests](FingerTree/tests/README.md), [samples](FingerTree/samples/README.md), and [benchmarks](FingerTree/benchmarks/README.md) |
-| [Wolfram](Wolfram/README.md) | C17 Wolfram `List` and `Association` collection port | [public header](Wolfram/include/tools/data_structures/wolfram/wolfram.h), [tests](Wolfram/tests/wolfram_c_tests.c) | `.\build.ps1 -Workspace Wolfram -RunTests`; also run Release for native parity work |
+| [Tungsten](Tungsten/README.md) | C17 Tungsten `List` and `Association` collection port | [public header](Tungsten/include/tools/data_structures/tungsten/tungsten.h), [tests](Tungsten/tests/tungsten_c_tests.c) | `.\build.ps1 -Workspace Tungsten -RunTests`; also run Release for native parity work |
 
 Use the parent [source index](../README.md) for the full language list, the repository
 [workspace map](../../docs/reference/workspace-map.md) for cross-language port lineage, and the

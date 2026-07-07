@@ -1,0 +1,16 @@
+[package]
+name = "tools-data-structures-tungsten"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Persistent Tungsten List and Association-shaped collections for Rust."
+
+[lib]
+name = "tools_data_structures_tungsten"
+path = "src/lib.rs"
+
+[dependencies]
+tools-data-structures-fingertree = { path = "../FingerTree" }
+tools-data-structures-hamt = { path = "../Hamt" }

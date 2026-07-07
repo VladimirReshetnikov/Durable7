@@ -148,11 +148,11 @@ callbacks and context pointers.
 | Kotlin | `MeasurePolicy<T, M>`, `SizeMeasure<T>`, `IntSumMeasure`, `MaxMeasure<T>`, `MinMeasure<T>`, `ProductMeasure<T, A, B>`, `MeasurePair<A, B>`, `NewlineMeasure` | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [measures](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Core.kt), [newline measure](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Rope.kt) |
 | Rust | `MeasurePolicy<T>`, `SizeMeasure`, `SumMeasure<T>`, `MaxMeasure`, `MinMeasure`, `KeyMeasure<T>`, `ProductMeasure<T, PFirst, PSecond>`, `MeasurePair<TFirst, TSecond>`, `SizeAndSumMeasure<T>`, `SizeAndMaxMeasure<T>`, `SizeAndMinMeasure<T>`, `OrderStatisticMeasure<T>`, `RankedKey<T>`, `NewlineMeasure` | [API notes](../../src/Rust/FingerTree/docs/api-notes.md), [measures](../../src/Rust/FingerTree/src/measured.rs), [newline measure](../../src/Rust/FingerTree/src/rope.rs) |
 
-## Wolfram Collections
+## Tungsten Collections
 
-The Wolfram-collections workspace composes the HAMT and FingerTree families into persistent
-collections shaped for Wolfram Language `List` and `Association` semantics: an ordered-sequence
-facade with the Wolfram `List` operation vocabulary, and an insertion-ordered map with keyed and
+The Tungsten-collections workspace composes the HAMT and FingerTree families into persistent
+collections shaped for Tungsten Language `List` and `Association` semantics: an ordered-sequence
+facade with the Tungsten `List` operation vocabulary, and an insertion-ordered map with keyed and
 positional access following the kernel-verified `Association` ordering rules (in-place update,
 move-on-`Append`/`Prepend`, first-position/last-value construction, positional slicing, stable
 sorts). The primary external client is the Tungsten engine in the Smithereens repository; the C#
@@ -162,12 +162,12 @@ instantiates).
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
-| C# | `PersistentList<T>`, `PersistentAssociation<TKey, TValue>` | [Workspace](../../src/CSharp/docs/Wolfram/overview.md), [usage guide](../../src/CSharp/docs/Wolfram/usage.md), [API spec](../../src/CSharp/docs/Wolfram/api-specification.md), [list source](../../src/CSharp/src/Tools.DataStructures.Wolfram/PersistentList.cs), [association source](../../src/CSharp/src/Tools.DataStructures.Wolfram/PersistentAssociation.cs) |
-| C | `tds_wolfram_list`, `tds_wolfram_association`, `tds_wolfram_association_policy` | [Workspace](../../src/C/Wolfram/README.md), [public header](../../src/C/Wolfram/include/tools/data_structures/wolfram/wolfram.h), [implementation](../../src/C/Wolfram/src/wolfram.c), [tests](../../src/C/Wolfram/tests/wolfram_c_tests.c) |
-| C++ | `persistent_list<T>`, `persistent_association<Key, T, Hash, KeyEqual, ValueEqual>` | [Workspace](../../src/Cpp/Wolfram/README.md), [aggregate header](../../src/Cpp/Wolfram/include/tools/data_structures/wolfram/wolfram.hpp), [list header](../../src/Cpp/Wolfram/include/tools/data_structures/wolfram/persistent_list.hpp), [association header](../../src/Cpp/Wolfram/include/tools/data_structures/wolfram/persistent_association.hpp), [tests](../../src/Cpp/Wolfram/tests/wolfram_tests.cpp) |
-| Haskell | `PersistentList a`, `PersistentAssociation k v` | [Workspace](../../src/Haskell/Wolfram/README.md), [list source](../../src/Haskell/Wolfram/src/Data/Structures/Wolfram/List.hs), [association source](../../src/Haskell/Wolfram/src/Data/Structures/Wolfram/Association.hs), [tests](../../src/Haskell/Wolfram/test/Main.hs) |
-| Kotlin | `PersistentList<T>`, `PersistentAssociation<K, V>` | [Workspace](../../src/Kotlin/Wolfram/README.md), [source](../../src/Kotlin/Wolfram/src/tools/datastructures/wolfram/PersistentWolfram.kt), [tests](../../src/Kotlin/Wolfram/test/tools/datastructures/wolfram/WolframTests.kt) |
-| Rust | `PersistentList<T>`, `PersistentAssociation<K, V, S>` | [Workspace](../../src/Rust/Wolfram/README.md), [source](../../src/Rust/Wolfram/src/lib.rs) |
+| C# | `PersistentList<T>`, `PersistentAssociation<TKey, TValue>` | [Workspace](../../src/CSharp/docs/Tungsten/overview.md), [usage guide](../../src/CSharp/docs/Tungsten/usage.md), [API spec](../../src/CSharp/docs/Tungsten/api-specification.md), [list source](../../src/CSharp/src/Tools.DataStructures.Tungsten/PersistentList.cs), [association source](../../src/CSharp/src/Tools.DataStructures.Tungsten/PersistentAssociation.cs) |
+| C | `tds_tungsten_list`, `tds_tungsten_association`, `tds_tungsten_association_policy` | [Workspace](../../src/C/Tungsten/README.md), [public header](../../src/C/Tungsten/include/tools/data_structures/tungsten/tungsten.h), [implementation](../../src/C/Tungsten/src/tungsten.c), [tests](../../src/C/Tungsten/tests/tungsten_c_tests.c) |
+| C++ | `persistent_list<T>`, `persistent_association<Key, T, Hash, KeyEqual, ValueEqual>` | [Workspace](../../src/Cpp/Tungsten/README.md), [aggregate header](../../src/Cpp/Tungsten/include/tools/data_structures/tungsten/tungsten.hpp), [list header](../../src/Cpp/Tungsten/include/tools/data_structures/tungsten/persistent_list.hpp), [association header](../../src/Cpp/Tungsten/include/tools/data_structures/tungsten/persistent_association.hpp), [tests](../../src/Cpp/Tungsten/tests/tungsten_tests.cpp) |
+| Haskell | `PersistentList a`, `PersistentAssociation k v` | [Workspace](../../src/Haskell/Tungsten/README.md), [list source](../../src/Haskell/Tungsten/src/Data/Structures/Tungsten/List.hs), [association source](../../src/Haskell/Tungsten/src/Data/Structures/Tungsten/Association.hs), [tests](../../src/Haskell/Tungsten/test/Main.hs) |
+| Kotlin | `PersistentList<T>`, `PersistentAssociation<K, V>` | [Workspace](../../src/Kotlin/Tungsten/README.md), [source](../../src/Kotlin/Tungsten/src/tools/datastructures/tungsten/PersistentTungsten.kt), [tests](../../src/Kotlin/Tungsten/test/tools/datastructures/tungsten/TungstenTests.kt) |
+| Rust | `PersistentList<T>`, `PersistentAssociation<K, V, S>` | [Workspace](../../src/Rust/Tungsten/README.md), [source](../../src/Rust/Tungsten/src/lib.rs) |
 
 ## Navigation Rules
 

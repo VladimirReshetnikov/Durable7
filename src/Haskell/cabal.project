@@ -1,7 +1,7 @@
 packages:
   Hamt
   FingerTree
-  Wolfram
+  Tungsten
 
 package *
   ghc-options:

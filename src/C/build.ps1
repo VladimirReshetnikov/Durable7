@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('All', 'Hamt', 'FingerTree', 'Wolfram')]
+    [ValidateSet('All', 'Hamt', 'FingerTree', 'Tungsten')]
     [string[]] $Workspace = @('All'),
 
     [ValidateSet('Debug', 'Release')]
@@ -55,7 +55,7 @@ function Invoke-FingerTreeBuild {
     }
 }
 
-function Invoke-WolframBuild {
+function Invoke-TungstenBuild {
     $preset = if ($Configuration -eq 'Release') { 'msvc-release' } else { 'msvc-debug' }
     $steps = @(
         "call `"$VisualStudioDevCmd`" -arch=x64 -host_arch=x64",
@@ -67,11 +67,11 @@ function Invoke-WolframBuild {
         $steps += "`"$CTest`" --preset $preset --output-on-failure"
     }
 
-    Push-Location -LiteralPath (Join-Path $PSScriptRoot 'Wolfram')
+    Push-Location -LiteralPath (Join-Path $PSScriptRoot 'Tungsten')
     try {
         & cmd.exe /d /c ($steps -join ' && ')
         if ($LASTEXITCODE -ne 0) {
-            throw "C Wolfram build failed with exit code $LASTEXITCODE."
+            throw "C Tungsten build failed with exit code $LASTEXITCODE."
         }
     }
     finally {
@@ -79,12 +79,12 @@ function Invoke-WolframBuild {
     }
 }
 
-$selected = if ($Workspace -contains 'All') { @('Hamt', 'FingerTree', 'Wolfram') } else { $Workspace }
+$selected = if ($Workspace -contains 'All') { @('Hamt', 'FingerTree', 'Tungsten') } else { $Workspace }
 
 foreach ($item in $selected) {
     switch ($item) {
         'Hamt' { Invoke-HamtBuild }
         'FingerTree' { Invoke-FingerTreeBuild }
-        'Wolfram' { Invoke-WolframBuild }
+        'Tungsten' { Invoke-TungstenBuild }
     }
 }

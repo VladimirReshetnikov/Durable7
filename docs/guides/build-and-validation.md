@@ -21,9 +21,9 @@ workspace or evidence boundary applies, start with the
 | [C# Numerics](../../src/CSharp/docs/Numerics/overview.md) | `dotnet test .\DataStructures.sln` from `src/CSharp` | [Validation](../../src/CSharp/docs/Numerics/validation.md) | [Tests](../../src/CSharp/tests/Tools.Numerics.Tests/README.md) | .NET library build, XML-doc warning gate, xUnit wide/sparse-integer behavior tests, declaration parity guardrails |
 | [C# HAMT](../../src/CSharp/docs/Hamt/overview.md) | `dotnet test .\DataStructures.sln` from `src/CSharp` | [Validation](../../src/CSharp/docs/Hamt/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests/README.md) | .NET library build, XML-doc warning gate, xUnit tests, CsCheck model tests |
 | [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | `dotnet test .\DataStructures.sln` from `src/CSharp` | [Validation](../../src/CSharp/docs/FingerTree/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/README.md) | .NET library, samples, benchmark project build, stress controls, xUnit/CsCheck suites |
-| [C# Wolfram collections](../../src/CSharp/docs/Wolfram/overview.md) | `dotnet test .\DataStructures.sln` from `src/CSharp` | [Validation](../../src/CSharp/docs/Wolfram/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.Wolfram.Tests/README.md) | .NET library build, XML-doc warning gate, kernel-verified ordering examples, CsCheck ordered-model histories |
-| [`src/C/Wolfram`](../../src/C/Wolfram/README.md) | `.\build.ps1 -Workspace Wolfram -RunTests` from `src/C` | [README](../../src/C/Wolfram/README.md) | [Tests](../../src/C/Wolfram/tests/wolfram_c_tests.c) | C17 MSVC Debug/Release CTest executable, list examples, Association ordering rules, custom policies, relabel stress, generated histories |
-| [`src/Cpp/Wolfram`](../../src/Cpp/Wolfram/README.md) | `.\build.ps1 -Workspace Wolfram -RunTests` from `src/Cpp` | [README](../../src/Cpp/Wolfram/README.md) | [Tests](../../src/Cpp/Wolfram/tests/wolfram_tests.cpp) | C++23 CTest executable, examples, policy tests, relabel stress, generated histories |
+| [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) | `dotnet test .\DataStructures.sln` from `src/CSharp` | [Validation](../../src/CSharp/docs/Tungsten/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.Tungsten.Tests/README.md) | .NET library build, XML-doc warning gate, kernel-verified ordering examples, CsCheck ordered-model histories |
+| [`src/C/Tungsten`](../../src/C/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten -RunTests` from `src/C` | [README](../../src/C/Tungsten/README.md) | [Tests](../../src/C/Tungsten/tests/tungsten_c_tests.c) | C17 MSVC Debug/Release CTest executable, list examples, Association ordering rules, custom policies, relabel stress, generated histories |
+| [`src/Cpp/Tungsten`](../../src/Cpp/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten -RunTests` from `src/Cpp` | [README](../../src/Cpp/Tungsten/README.md) | [Tests](../../src/Cpp/Tungsten/tests/tungsten_tests.cpp) | C++23 CTest executable, examples, policy tests, relabel stress, generated histories |
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | `.\build.ps1 -Workspace Hamt -RunTests` from `src/C` | [Validation](../../src/C/Hamt/docs/validation.md) | [Tests](../../src/C/Hamt/tests/README.md) | C17 MSVC, GCC, and Clang builds; warning policy; deterministic HAMT tests |
 | [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | `.\build.ps1 -Workspace Hamt -RunTests` from `src/Cpp` | [Validation](../../src/Cpp/Hamt/docs/validation.md) | [Tests](../../src/Cpp/Hamt/tests/README.md) | C++20 MSVC, GCC, and Clang builds; warning policy; deterministic HAMT tests |
 | [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | `.\build.ps1 -Workspace Hamt` from `src/Kotlin` | [Validation](../../src/Kotlin/Hamt/docs/validation.md) | [Tests](../../src/Kotlin/Hamt/tests/README.md) | Kotlin/JVM HAMT build, tool bootstrap, deterministic trie and set-algebra tests |
@@ -33,8 +33,8 @@ workspace or evidence boundary applies, start with the
 | [`src/Haskell`](../../src/Haskell/README.md) | `cabal test all` | [Haskell README](../../src/Haskell/README.md) | [HAMT tests](../../src/Haskell/Hamt/test/README.md), [FingerTree tests](../../src/Haskell/FingerTree/test/README.md) | GHC/cabal build, dependency-light HAMT and FingerTree executable tests |
 | [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree` from `src/Kotlin` | [Validation](../../src/Kotlin/FingerTree/docs/validation.md) | [Tests](../../src/Kotlin/FingerTree/tests/README.md) | Kotlin/JVM semantic-checkpoint tests across deque, reversible deque, measured tree, sorted, priority, interval, rope, and text helpers |
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | `cargo test -p tools-data-structures-fingertree` | [Validation](../../src/Rust/FingerTree/docs/validation.md) | [Tests](../../src/Rust/FingerTree/tests/README.md) | Safe Rust checkpoint crate, structurally shared storage and cached-measure tests across deque, reversible deque, sorted, priority, interval, rope, measured tree, measured rope, and text helpers |
-| [`src/Kotlin/Wolfram`](../../src/Kotlin/Wolfram/README.md) | `.\build.ps1 -Workspace Wolfram` from `src/Kotlin` | [README](../../src/Kotlin/Wolfram/README.md) | [Tests](../../src/Kotlin/Wolfram/test/tools/datastructures/wolfram/WolframTests.kt) | Kotlin/JVM executable tests for Wolfram list and association semantics |
-| [`src/Rust/Wolfram`](../../src/Rust/Wolfram/README.md) | `cargo test -p tools-data-structures-wolfram` | [README](../../src/Rust/Wolfram/README.md) | [Source tests](../../src/Rust/Wolfram/src/lib.rs) | Safe Rust crate tests for Wolfram list and association semantics |
+| [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten` from `src/Kotlin` | [README](../../src/Kotlin/Tungsten/README.md) | [Tests](../../src/Kotlin/Tungsten/test/tools/datastructures/tungsten/TungstenTests.kt) | Kotlin/JVM executable tests for Tungsten list and association semantics |
+| [`src/Rust/Tungsten`](../../src/Rust/Tungsten/README.md) | `cargo test -p tools-data-structures-tungsten` | [README](../../src/Rust/Tungsten/README.md) | [Source tests](../../src/Rust/Tungsten/src/lib.rs) | Safe Rust crate tests for Tungsten list and association semantics |
 
 For broad repository edits, run every row that could be affected. For documentation-only edits, run the
 Markdown link check below and any build/test commands whose documented paths changed.
@@ -75,8 +75,8 @@ validation guides define family-specific coverage and optional stress/benchmark 
 - [C# HAMT tests](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests/README.md)
 - [C# FingerTree validation](../../src/CSharp/docs/FingerTree/validation.md)
 - [C# FingerTree tests](../../src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/README.md)
-- [C# Wolfram collections validation](../../src/CSharp/docs/Wolfram/validation.md)
-- [C# Wolfram collections tests](../../src/CSharp/tests/Tools.DataStructures.Wolfram.Tests/README.md)
+- [C# Tungsten collections validation](../../src/CSharp/docs/Tungsten/validation.md)
+- [C# Tungsten collections tests](../../src/CSharp/tests/Tools.DataStructures.Tungsten.Tests/README.md)
 
 ## Rust Workspaces
 
@@ -99,7 +99,7 @@ Local guides:
 - [Rust HAMT tests](../../src/Rust/Hamt/tests/README.md)
 - [Rust FingerTree validation](../../src/Rust/FingerTree/docs/validation.md)
 - [Rust FingerTree tests](../../src/Rust/FingerTree/tests/README.md)
-- [Rust Wolfram README](../../src/Rust/Wolfram/README.md)
+- [Rust Tungsten README](../../src/Rust/Tungsten/README.md)
 
 ## HAMT Native Ports
 
@@ -128,18 +128,18 @@ GCC and Clang and execute each compiler's produced test binary. Use the workspac
 commands; a typical Windows direct lane uses the installed compiler paths explicitly when the current shell has
 not reloaded `PATH`.
 
-## Wolfram Native Ports
+## Tungsten Native Ports
 
 ```powershell
 cd C:\DataStructures\src\C
-.\build.ps1 -Workspace Wolfram -RunTests
-.\build.ps1 -Workspace Wolfram -Configuration Release -RunTests
+.\build.ps1 -Workspace Tungsten -RunTests
+.\build.ps1 -Workspace Tungsten -Configuration Release -RunTests
 
 cd C:\DataStructures\src\Cpp
-.\build.ps1 -Workspace Wolfram -RunTests
+.\build.ps1 -Workspace Tungsten -RunTests
 ```
 
-The Wolfram native workspaces use CMake presets and CTest. The C port links the existing C HAMT and
+The Tungsten native workspaces use CMake presets and CTest. The C port links the existing C HAMT and
 C FingerTree implementations and validates both Debug and Release MSVC lanes for parity-sensitive changes.
 The C++ port is header-first and shares the C++ HAMT/FingerTree substrates.
 
@@ -231,7 +231,7 @@ The cabal project builds both Haskell packages and runs the dependency-light tes
 
 - [Haskell HAMT tests](../../src/Haskell/Hamt/test/README.md)
 - [Haskell FingerTree tests](../../src/Haskell/FingerTree/test/README.md)
-- [Haskell Wolfram README](../../src/Haskell/Wolfram/README.md)
+- [Haskell Tungsten README](../../src/Haskell/Tungsten/README.md)
 
 ## Kotlin Workspaces
 
@@ -240,7 +240,7 @@ cd C:\DataStructures\src\Kotlin
 .\build.ps1
 .\build.ps1 -Workspace Hamt
 .\build.ps1 -Workspace FingerTree
-.\build.ps1 -Workspace Wolfram
+.\build.ps1 -Workspace Tungsten
 ```
 
 The Kotlin build script compiles each workspace with the Kotlin command-line compiler and runs
@@ -253,7 +253,7 @@ Local guides:
 - [Kotlin HAMT tests](../../src/Kotlin/Hamt/tests/README.md)
 - [Kotlin FingerTree validation](../../src/Kotlin/FingerTree/docs/validation.md)
 - [Kotlin FingerTree tests](../../src/Kotlin/FingerTree/tests/README.md)
-- [Kotlin Wolfram README](../../src/Kotlin/Wolfram/README.md)
+- [Kotlin Tungsten README](../../src/Kotlin/Tungsten/README.md)
 
 ## Benchmarks
 

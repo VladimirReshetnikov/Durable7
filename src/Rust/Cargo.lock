@@ -11,7 +11,7 @@ name = "tools-data-structures-hamt"
 version = "0.1.0"
 
 [[package]]
-name = "tools-data-structures-wolfram"
+name = "tools-data-structures-tungsten"
 version = "0.1.0"
 dependencies = [
  "tools-data-structures-fingertree",

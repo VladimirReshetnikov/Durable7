@@ -13,7 +13,7 @@ managed C# projects where the language surfaces line up.
 | --- | --- | --- |
 | [Hamt](Hamt/README.md) | `tools-data-structures-hamt` | `Data.Structures.Hamt`, `Data.Structures.Hamt.HashMap`, `Data.Structures.Hamt.HashSet` |
 | [FingerTree](FingerTree/README.md) | `tools-data-structures-fingertree` | `Data.Structures.FingerTree`, deque, measured tree, sorted collections, priority queue, intervals, ropes, and text helpers |
-| [Wolfram](Wolfram/README.md) | `tools-data-structures-wolfram` | `Data.Structures.Wolfram`, `Data.Structures.Wolfram.List`, `Data.Structures.Wolfram.Association` |
+| [Tungsten](Tungsten/README.md) | `tools-data-structures-tungsten` | `Data.Structures.Tungsten`, `Data.Structures.Tungsten.List`, `Data.Structures.Tungsten.Association` |
 
 Build and test both packages from this directory:
 

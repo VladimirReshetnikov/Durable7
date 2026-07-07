@@ -16,12 +16,12 @@ src/
 │   ├── README.md
 │   ├── FingerTree/
 │   ├── Hamt/
-│   └── Wolfram/
+│   └── Tungsten/
 ├── Cpp/
 │   ├── README.md
 │   ├── FingerTree/
 │   ├── Hamt/
-│   └── Wolfram/
+│   └── Tungsten/
 ├── CSharp/
 │   ├── README.md
 │   ├── DataStructures.sln
@@ -31,29 +31,29 @@ src/
 │   │   ├── FingerTree/
 │   │   ├── Hamt/
 │   │   ├── Numerics/
-│   │   └── Wolfram/
+│   │   └── Tungsten/
 │   ├── samples/
 │   ├── src/
 │   │   ├── Tools.DataStructures.FingerTree/
 │   │   ├── Tools.DataStructures.Hamt/
-│   │   ├── Tools.DataStructures.Wolfram/
+│   │   ├── Tools.DataStructures.Tungsten/
 │   │   └── Tools.Numerics/
 │   └── tests/
 ├── Haskell/
 │   ├── README.md
 │   ├── FingerTree/
 │   ├── Hamt/
-│   └── Wolfram/
+│   └── Tungsten/
 ├── Kotlin/
 │   ├── README.md
 │   ├── FingerTree/
 │   ├── Hamt/
-│   └── Wolfram/
+│   └── Tungsten/
 └── Rust/
     ├── README.md
     ├── FingerTree/
     ├── Hamt/
-    └── Wolfram/
+    └── Tungsten/
 ```
 
 This makes language-local build systems, toolchains, include paths, and idioms easy to find while keeping
@@ -88,12 +88,12 @@ ordering, and documentation obligations that should remain recognizable across l
 | [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) | Haskell FingerTree family port | `tools-data-structures-fingertree.cabal`, `src/Data/Structures/FingerTree/` | [`README`](../../src/Haskell/FingerTree/README.md) |
 | [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | Kotlin/JVM FingerTree family semantic checkpoint | `src/tools/datastructures/fingertree/`, `test/tools/datastructures/fingertree/` | [`docs`](../../src/Kotlin/FingerTree/docs/README.md) |
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | Rust FingerTree family checkpoint port | `Cargo.toml`, `src/` | [`docs`](../../src/Rust/FingerTree/docs/README.md) |
-| [C# Wolfram collections](../../src/CSharp/docs/Wolfram/overview.md) | Canonical managed Wolfram-semantics collections (list facade and insertion-ordered association) composed from the HAMT and FingerTree families | `DataStructures.sln`, `src/Tools.DataStructures.Wolfram/`, `tests/Tools.DataStructures.Wolfram.Tests/` | [`docs`](../../src/CSharp/docs/Wolfram/README.md) |
-| [`src/C/Wolfram`](../../src/C/Wolfram/README.md) | C17 Wolfram `List` and `Association` port | `include/tools/data_structures/wolfram/wolfram.h`, `CMakePresets.json` | [`README`](../../src/C/Wolfram/README.md) |
-| [`src/Cpp/Wolfram`](../../src/Cpp/Wolfram/README.md) | C++23 Wolfram `List` and `Association` port | `include/tools/data_structures/wolfram/`, `CMakePresets.json` | [`README`](../../src/Cpp/Wolfram/README.md) |
-| [`src/Haskell/Wolfram`](../../src/Haskell/Wolfram/README.md) | Haskell Wolfram `List` and `Association` port | `tools-data-structures-wolfram.cabal`, `src/Data/Structures/Wolfram/` | [`README`](../../src/Haskell/Wolfram/README.md) |
-| [`src/Kotlin/Wolfram`](../../src/Kotlin/Wolfram/README.md) | Kotlin/JVM Wolfram `List` and `Association` port | `src/tools/datastructures/wolfram/`, `test/tools/datastructures/wolfram/` | [`README`](../../src/Kotlin/Wolfram/README.md) |
-| [`src/Rust/Wolfram`](../../src/Rust/Wolfram/README.md) | Safe Rust Wolfram `List` and `Association` crate | `Cargo.toml`, `src/lib.rs` | [`README`](../../src/Rust/Wolfram/README.md) |
+| [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) | Canonical managed Tungsten-semantics collections (list facade and insertion-ordered association) composed from the HAMT and FingerTree families | `DataStructures.sln`, `src/Tools.DataStructures.Tungsten/`, `tests/Tools.DataStructures.Tungsten.Tests/` | [`docs`](../../src/CSharp/docs/Tungsten/README.md) |
+| [`src/C/Tungsten`](../../src/C/Tungsten/README.md) | C17 Tungsten `List` and `Association` port | `include/tools/data_structures/tungsten/tungsten.h`, `CMakePresets.json` | [`README`](../../src/C/Tungsten/README.md) |
+| [`src/Cpp/Tungsten`](../../src/Cpp/Tungsten/README.md) | C++23 Tungsten `List` and `Association` port | `include/tools/data_structures/tungsten/`, `CMakePresets.json` | [`README`](../../src/Cpp/Tungsten/README.md) |
+| [`src/Haskell/Tungsten`](../../src/Haskell/Tungsten/README.md) | Haskell Tungsten `List` and `Association` port | `tools-data-structures-tungsten.cabal`, `src/Data/Structures/Tungsten/` | [`README`](../../src/Haskell/Tungsten/README.md) |
+| [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md) | Kotlin/JVM Tungsten `List` and `Association` port | `src/tools/datastructures/tungsten/`, `test/tools/datastructures/tungsten/` | [`README`](../../src/Kotlin/Tungsten/README.md) |
+| [`src/Rust/Tungsten`](../../src/Rust/Tungsten/README.md) | Safe Rust Tungsten `List` and `Association` crate | `Cargo.toml`, `src/lib.rs` | [`README`](../../src/Rust/Tungsten/README.md) |
 
 ## Port Lineage
 
@@ -117,15 +117,15 @@ FingerTree lineage:
    use structurally shared Rust tree storage, and the workspace documents the remaining lazy-spine asymptotic
    parity work locally.
 
-Wolfram collections lineage:
+Tungsten collections lineage:
 
-1. C# Wolfram collections (`src/CSharp/src/Tools.DataStructures.Wolfram`) define the managed public
+1. C# Tungsten collections (`src/CSharp/src/Tools.DataStructures.Tungsten`) define the managed public
    contract: `PersistentList<T>` over the FingerTree deque and `PersistentAssociation<TKey, TValue>`
    composed per the [derived structure catalog](derived-structure-catalog.md)'s
-   `PersistentOrderedMap` pattern, with the kernel-verified Wolfram ordering rules as the fidelity
+   `PersistentOrderedMap` pattern, with the kernel-verified Tungsten ordering rules as the fidelity
    spec.
-2. `src/Cpp/Wolfram`, `src/C/Wolfram`, `src/Haskell/Wolfram`, `src/Kotlin/Wolfram`, and
-   `src/Rust/Wolfram` port the same public family to their language-local ownership and policy
+2. `src/Cpp/Tungsten`, `src/C/Tungsten`, `src/Haskell/Tungsten`, `src/Kotlin/Tungsten`, and
+   `src/Rust/Tungsten` port the same public family to their language-local ownership and policy
    models while preserving the substrate composition, sparse-stamp relabel behavior, and
    average/worst-case operation bounds.
 

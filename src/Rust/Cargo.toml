@@ -2,7 +2,7 @@
 members = [
     "Hamt",
     "FingerTree",
-    "Wolfram",
+    "Tungsten",
 ]
 resolver = "3"
 

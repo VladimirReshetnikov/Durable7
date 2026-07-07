@@ -13,7 +13,7 @@ where the language surfaces line up.
 | --- | --- | --- | --- |
 | [Hamt](Hamt/README.md) | Persistent HAMT map/set port with 32-way bitmap-indexed trie nodes and immutable collision buckets | `tools.datastructures.hamt.PersistentHashMap`, `PersistentHashSet` | `.\build.ps1 -Workspace Hamt` |
 | [FingerTree](FingerTree/README.md) | Kotlin semantic checkpoint for the FingerTree family: persistent deque, measured sequence, reversible deque, sorted collections, priority queue, intervals, ropes, and text helpers | `tools.datastructures.fingertree.*` | `.\build.ps1 -Workspace FingerTree` |
-| [Wolfram](Wolfram/README.md) | Wolfram `List` and `Association` collection port over Kotlin persistent substrates | `tools.datastructures.wolfram.PersistentList`, `PersistentAssociation` | `.\build.ps1 -Workspace Wolfram` |
+| [Tungsten](Tungsten/README.md) | Tungsten `List` and `Association` collection port over Kotlin persistent substrates | `tools.datastructures.tungsten.PersistentList`, `PersistentAssociation` | `.\build.ps1 -Workspace Tungsten` |
 
 Run the full Kotlin validation from this directory:
 

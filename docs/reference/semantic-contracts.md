@@ -216,15 +216,15 @@ Shared obligations:
 - Builders must document mutation, snapshot publication, and whether later builder changes can affect
   previously produced immutable ropes.
 
-## Wolfram Collections
+## Tungsten Collections
 
-Wolfram collections compose HAMT keyed lookup with persistent ordered storage into a sequence facade
+Tungsten collections compose HAMT keyed lookup with persistent ordered storage into a sequence facade
 (`PersistentList`) and an insertion-ordered map (`PersistentAssociation`) whose ordering behavior
-matches the kernel-verified Wolfram Language rules.
+matches the kernel-verified Tungsten Language rules.
 
 Shared obligations:
 
-- Indexing is zero-based; every documented Wolfram correspondence names the one-based operation it
+- Indexing is zero-based; every documented Tungsten correspondence names the one-based operation it
   mirrors.
 - The association's ordering rules are normative and test-locked: duplicate construction keys keep
   first position with last value; `SetItem` updates in place; `Append`/`Prepend` move an existing

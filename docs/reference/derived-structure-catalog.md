@@ -20,9 +20,9 @@ Findings come from two multi-agent design surveys run on 2026-07-02 and 2026-07-
    consolidated to 18, each adversarially verified against the actual C# workspace sources
    (claims were checked at file/line granularity against `PersistentHashMap.cs`, `FingerTree.cs`,
    `BuiltInMeasures.cs`, `ProductMeasure.cs`, and related files).
-2. A consumer case study: replacement designs for Wolfram Language `List` and `Association` for
+2. A consumer case study: replacement designs for Tungsten Language `List` and `Association` for
    the Tungsten engine (`C:\Smithereens\src\Tungsten`), with the target semantics verified against
-   a local Wolfram Engine 14.3 kernel and the designs verified against `Rope.cs`,
+   a local Tungsten Engine 14.3 kernel and the designs verified against `Rope.cs`,
    `FingerTreeDeque.cs`, `ReversibleDeque.cs`, and `SortedDictionary.cs`.
 
 Complexity notation: HAMT point operations are written `O(w + c)` where `w` is the trie depth
@@ -46,7 +46,7 @@ portable to the C model (callback + context pointer) unless noted.
 | Gap | Surface | What it unblocks |
 | --- | --- | --- |
 | `Update(key, func)` / `GetOrAdd` | HAMT map and set | Halves every read-modify-write (currently `TryGetValue` + `SetItem` = two trie walks). Consumers: bag increments, multimap inner updates, graph edge ops, union-find compression, interning, `Counts`/`Merge`-style aggregation. |
-| Builder / transient bulk construction | HAMT map and set | Bulk construction is `O(n * update)` with per-insert path allocation today. Consumers: every facade's `CreateRange`, table batch writes, association construction (the largest constant-factor loss vs the Wolfram kernel in the case study). |
+| Builder / transient bulk construction | HAMT map and set | Bulk construction is `O(n * update)` with per-insert path allocation today. Consumers: every facade's `CreateRange`, table batch writes, association construction (the largest constant-factor loss vs the Tungsten kernel in the case study). |
 | Structural diff / equality / 3-way merge / set-vs-set algebra | HAMT node layer (not composable from outside) | The single highest-leverage addition found. Reference-equality-pruned lockstep traversal gives `O(divergence)` comparison of versions sharing ancestry. Unblocks: MVCC change events, delta-CRDT extraction, graph/table/workspace diffing, overlay flattening, Merkle sync, and fixes set algebra's `O(m)` probe-set materialization. |
 | Value-comparer parameter for no-op identity | HAMT factories | `SetItem`'s equal-value no-op check hardcodes `EqualityComparer<TValue>.Default`; a factory-supplied value comparer would let structural value equality trigger the identity short-circuit. |
 | Reverse support | `Rope<T>` and `FingerTreeDeque<T>` | A reversal bit or reverse enumerator. `ReversibleDeque` exists but lacks the sorted adapter and range operations, materializes an `O(n)` array per enumeration, and its amortized bounds are documented for single-threaded linear use only - facades keep rejecting it. |
@@ -77,11 +77,11 @@ API additions plus samples than as families.
 
 `PersistentOrderedMap` fixes the HAMT's biggest documented ergonomic limitation (unspecified
 enumeration order) and is what the Tungsten case study's `Association` design specializes.
-*Shipped 2026-07-07*: the Wolfram-collections workspaces instantiate this pattern's
+*Shipped 2026-07-07*: the Tungsten-collections workspaces instantiate this pattern's
 values-in-both variant as `PersistentAssociation` (plus the `PersistentList` sequence facade), with
-the C# workspace ([`Tools.DataStructures.Wolfram`](../../src/CSharp/docs/Wolfram/overview.md)) as
+the C# workspace ([`Tools.DataStructures.Tungsten`](../../src/CSharp/docs/Tungsten/overview.md)) as
 the semantic reference and C, C++, Haskell, Kotlin, and Rust ports linked from the
-[data-structure catalog](data-structure-catalog.md#wolfram-collections). The generic
+[data-structure catalog](data-structure-catalog.md#tungsten-collections). The generic
 values-in-HAMT-only variant and the other candidates below remain unshipped. The
 structural diff feature is the one candidate that cannot be built by composition - the node layer
 is internal - and the one that upgrades the most other candidates from "store versions" to "reason
@@ -130,7 +130,7 @@ Cross-cutting findings that adversarial review kept re-deriving:
    gapped-label relabeling, compaction thresholds - do not automatically inherit that robustness.
    Document linear-history bounds honestly and give the worst case.
 3. **Values-in-both for dual-access structures.** When both `by-key` and `by-position` reads are
-   hot (caches with recency order, Wolfram-style associations where `Keys`/`Values`/`Normal`
+   hot (caches with recency order, Tungsten-style associations where `Keys`/`Values`/`Normal`
    dominate), store values in both the HAMT and the tree: one extra reference per entry buys
    allocation-free key reads and hash-free ordered reads, at the price of updates touching both
    structures. When ordered reads are rare, commit values to the HAMT only - the verified
@@ -153,7 +153,7 @@ Cross-cutting findings that adversarial review kept re-deriving:
 
 ## Consumer Case Study: Tungsten
 
-The Tungsten engine (`C:\Smithereens\src\Tungsten`, a kernel-free Wolfram Language engine)
+The Tungsten engine (`C:\Smithereens\src\Tungsten`, a kernel-free Tungsten Language engine)
 provided an external requirements source: replacement designs for `List` (the argument sequence of
 every expression) and `Association` (an insertion-ordered map with both key and positional
 access).
@@ -161,19 +161,19 @@ access).
 Both map onto this repository's structures directly - `List` onto a size-adaptive
 array / `Rope<Expr>` / packed `Rope<double>` tiering, `Association` onto the
 `PersistentOrderedMap` pattern with a stamp-sorted `FingerTreeDeque` and values in both
-structures - and in most operations beat the reference Wolfram implementation asymptotically
+structures - and in most operations beat the reference Tungsten implementation asymptotically
 (append loops, functional single-element replacement, slicing, `O(1)` reverse). The study
-kernel-verified the target semantics against Wolfram Engine 14.3 and adversarially verified the
+kernel-verified the target semantics against Tungsten Engine 14.3 and adversarially verified the
 designs against this repository's sources; its corrections are folded into the gaps and rules
 above (measure-refold costs, reversal-vs-directional-hash soundness, staged-tail amortization
 limits, `ReversibleDeque` rejection reasons).
 
 The full study, including the operation-by-operation mapping tables and the kernel-verified
-Wolfram semantics, lives in the Smithereens repository at
+Tungsten semantics, lives in the Smithereens repository at
 `src/Tungsten/docs/reports/2026-07-03-list-association-persistent-backends.md`.
 
 The library-side outcome shipped on 2026-07-07 as the
-[C# Wolfram-collections workspace](../../src/CSharp/docs/Wolfram/overview.md): the
+[C# Tungsten-collections workspace](../../src/CSharp/docs/Tungsten/overview.md): the
 `Association` composite as specified here (stamp-sorted deque + HAMT, values in both, gapped
 labels with honest relabel contract), and the `List` facade over the finger-tree deque without
 the engine-level small/packed tiers (those stay behind the client's expression surface).
