@@ -76,7 +76,13 @@ API additions plus samples than as families.
 | `PersistentBiMap<TKey, TValue>` | Forward `K -> V` + inverse `V -> K` HAMTs behind a bijection-enforcing facade | No-op identity must be pre-checked via `inverse.TryGetKey` (the map's internal check hardcodes the default value comparer). Honest 2x memory: every pair stored in both tries. |
 
 `PersistentOrderedMap` fixes the HAMT's biggest documented ergonomic limitation (unspecified
-enumeration order) and is what the Tungsten case study's `Association` design specializes. The
+enumeration order) and is what the Tungsten case study's `Association` design specializes.
+*Shipped 2026-07-07*: the Wolfram-collections C# workspace
+([`Tools.DataStructures.Wolfram`](../../src/CSharp/docs/Wolfram/overview.md)) instantiates this
+pattern's values-in-both variant as `PersistentAssociation<TKey, TValue>` (plus the
+`PersistentList<T>` sequence facade); its authoritative description now lives in the
+[data-structure catalog](data-structure-catalog.md). The generic values-in-HAMT-only variant and
+the other candidates below remain unshipped. The
 structural diff feature is the one candidate that cannot be built by composition - the node layer
 is internal - and the one that upgrades the most other candidates from "store versions" to "reason
 about versions".
@@ -165,6 +171,12 @@ limits, `ReversibleDeque` rejection reasons).
 The full study, including the operation-by-operation mapping tables and the kernel-verified
 Wolfram semantics, lives in the Smithereens repository at
 `src/Tungsten/docs/reports/2026-07-03-list-association-persistent-backends.md`.
+
+The library-side outcome shipped on 2026-07-07 as the
+[C# Wolfram-collections workspace](../../src/CSharp/docs/Wolfram/overview.md): the
+`Association` composite as specified here (stamp-sorted deque + HAMT, values in both, gapped
+labels with honest relabel contract), and the `List` facade over the finger-tree deque without
+the engine-level small/packed tiers (those stay behind the client's expression surface).
 
 ## Relationship To Other Documents
 

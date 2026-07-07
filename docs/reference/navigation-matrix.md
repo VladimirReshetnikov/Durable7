@@ -49,6 +49,7 @@ patterns.
 | Haskell FingerTree | [src/Haskell/FingerTree/README.md](../../src/Haskell/FingerTree/README.md) | General measured tree, deque, reversible deque, sorted facades, priority queue, intervals, ropes, and text helpers |
 | Kotlin FingerTree | [src/Kotlin/FingerTree/docs/api-notes.md](../../src/Kotlin/FingerTree/docs/api-notes.md) | Kotlin semantic-checkpoint surfaces for deque, measured sequence, sorted collections, priority queue, intervals, ropes/text |
 | Rust FingerTree | [src/Rust/FingerTree/docs/api-notes.md](../../src/Rust/FingerTree/docs/api-notes.md) | Rust shared-storage checkpoint surfaces for deque, measured sequence, sorted collections, priority queue, intervals, ropes/text |
+| C# Wolfram collections | [src/CSharp/docs/Wolfram/usage.md](../../src/CSharp/docs/Wolfram/usage.md) | `PersistentList<T>` and `PersistentAssociation<TKey, TValue>` with the Wolfram operation correspondence |
 
 ## API Contracts
 
@@ -69,6 +70,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | C# FingerTree | [API specification](../../src/CSharp/docs/FingerTree/api-specification.md) | Deque contract plus measured-tree, reversible-deque, rope, and related surface notes |
 | C FingerTree | [API notes](../../src/C/FingerTree/docs/api-notes.md) | C API shape, ownership rules, and C++ port differences |
 | C++ FingerTree | [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) | C++ conventions and active differences from the C# workspace |
+| C# Wolfram collections | [API specification](../../src/CSharp/docs/Wolfram/api-specification.md) | List facade and association contracts, kernel-verified ordering rules, complexity and no-op identity tables |
 | Haskell FingerTree | [Workspace README](../../src/Haskell/FingerTree/README.md) and [source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Measured.hs) | Haskell measured tree and derived collection API shape |
 | Kotlin FingerTree | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md) and [source](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Core.kt) | Kotlin measured tree and derived collection API shape plus semantic-checkpoint boundary |
 | Rust FingerTree | [API notes](../../src/Rust/FingerTree/docs/api-notes.md) and [source](../../src/Rust/FingerTree/src/measured.rs) | Rust measured tree and derived collection API shape |
@@ -85,6 +87,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | C# FingerTree | [Validation](../../src/CSharp/docs/FingerTree/validation.md) | .NET restore/build/test commands, sample smoke coverage, benchmark boundary, stress controls, and xUnit/CsCheck coverage |
 | C FingerTree | [Validation](../../src/C/FingerTree/docs/validation.md) | CMake build, CTest validation, sample smoke tests, and benchmark harness entry points |
 | C++ FingerTree | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | CMake build, CTest validation, stress controls, and benchmark-harness status |
+| C# Wolfram collections | [Validation](../../src/CSharp/docs/Wolfram/validation.md) | .NET build/test commands, kernel-verified semantics coverage, model histories, relabel stress |
 | Haskell | [Workspace README](../../src/Haskell/README.md) | `cabal test all` builds both Haskell packages and runs the HAMT/FingerTree executables |
 | Kotlin | [Workspace README](../../src/Kotlin/README.md) | `.\build.ps1` builds both Kotlin workspaces and runs dependency-free executable tests |
 | Kotlin HAMT | [Validation](../../src/Kotlin/Hamt/docs/validation.md) | Kotlin compiler bootstrap and deterministic HAMT executable tests |
@@ -96,6 +99,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | C# Numerics tests | [Tests README](../../src/CSharp/tests/Tools.Numerics.Tests/README.md) | xUnit project covering fixed-width integer behavior, binary conversion, public API coverage, and declaration parity |
 | C# HAMT tests | [Tests README](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests/README.md) | xUnit/CsCheck project, source-file grouping, filter commands, and property coverage |
 | C# FingerTree tests | [Tests README](../../src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/README.md) | xUnit/CsCheck project, source-file grouping, sample smoke hooks, stress controls, and model tests |
+| C# Wolfram collections tests | [Tests README](../../src/CSharp/tests/Tools.DataStructures.Wolfram.Tests/README.md) | xUnit/CsCheck project covering kernel-verified ordering examples, ordered-model histories, and relabel stress |
 | C HAMT tests | [Tests README](../../src/C/Hamt/tests/README.md) | C native HAMT executable, named test cases, direct executable path, and runner failure behavior |
 | C++ HAMT tests | [Tests README](../../src/Cpp/Hamt/tests/README.md) | C++ native HAMT executable, named test cases, direct executable path, and runner failure behavior |
 | C FingerTree tests | [Tests README](../../src/C/FingerTree/tests/README.md) | Core CTest executable, named test cases, direct executable path, and runner failure behavior |

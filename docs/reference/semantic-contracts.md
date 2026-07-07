@@ -216,6 +216,34 @@ Shared obligations:
 - Builders must document mutation, snapshot publication, and whether later builder changes can affect
   previously produced immutable ropes.
 
+## Wolfram Collections
+
+Wolfram collections compose the HAMT and finger-tree families into a persistent sequence facade
+(`PersistentList`) and an insertion-ordered map (`PersistentAssociation`) whose ordering behavior
+matches the kernel-verified Wolfram Language rules.
+
+Shared obligations:
+
+- Indexing is zero-based; every documented Wolfram correspondence names the one-based operation it
+  mirrors.
+- The association's ordering rules are normative and test-locked: duplicate construction keys keep
+  first position with last value; `SetItem` updates in place; `Append`/`Prepend` move an existing
+  key to the end/front; `Insert` of an existing key wins position and value with the index read
+  before the old occurrence is removed; `Join` keeps the receiver's positions with the argument's
+  values; `Sort`/`KeySort` are stable and produce ordinary associations.
+- Keyed and ordered reads are both first-class: keyed lookup must not enumerate, and ordered
+  enumeration must not hash.
+- Key equality is the factory-supplied comparer; derived associations preserve it, and stored-key
+  retention follows the HAMT contract (in-place updates keep the stored key instance; re-adds
+  store the supplied instance).
+- Observably unchanged writes return the same instance (no-op identity), composing with the
+  substrate contracts.
+- Order-maintenance labels (stamps) are an implementation detail; ports must reproduce the honest
+  cost contract — gap-exhaustion relabeling is per produced version and not amortized under
+  branching persistence — without exposing labels in the API.
+- Absent-key reads are exceptions or `false`/miss results, never sentinel entries; mapping absence
+  to `Missing[...]`-style values is a client concern.
+
 ## Ownership And Lifetime By Language
 
 | Language | Ownership model | Documentation focus |

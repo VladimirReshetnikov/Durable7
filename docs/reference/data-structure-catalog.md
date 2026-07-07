@@ -148,6 +148,22 @@ callbacks and context pointers.
 | Kotlin | `MeasurePolicy<T, M>`, `SizeMeasure<T>`, `IntSumMeasure`, `MaxMeasure<T>`, `MinMeasure<T>`, `ProductMeasure<T, A, B>`, `MeasurePair<A, B>`, `NewlineMeasure` | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [measures](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Core.kt), [newline measure](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Rope.kt) |
 | Rust | `MeasurePolicy<T>`, `SizeMeasure`, `SumMeasure<T>`, `MaxMeasure`, `MinMeasure`, `KeyMeasure<T>`, `ProductMeasure<T, PFirst, PSecond>`, `MeasurePair<TFirst, TSecond>`, `SizeAndSumMeasure<T>`, `SizeAndMaxMeasure<T>`, `SizeAndMinMeasure<T>`, `OrderStatisticMeasure<T>`, `RankedKey<T>`, `NewlineMeasure` | [API notes](../../src/Rust/FingerTree/docs/api-notes.md), [measures](../../src/Rust/FingerTree/src/measured.rs), [newline measure](../../src/Rust/FingerTree/src/rope.rs) |
 
+## Wolfram Collections
+
+The Wolfram-collections workspace composes the HAMT and FingerTree families into persistent
+collections shaped for Wolfram Language `List` and `Association` semantics: an ordered-sequence
+facade with the Wolfram `List` operation vocabulary, and an insertion-ordered map with keyed and
+positional access following the kernel-verified `Association` ordering rules (in-place update,
+move-on-`Append`/`Prepend`, first-position/last-value construction, positional slicing, stable
+sorts). The primary external client is the Tungsten engine in the Smithereens repository; the C#
+implementation is the reference for future language ports (see the
+[derived structure catalog](derived-structure-catalog.md) for the verified composition it
+instantiates).
+
+| Language | Public entry points | Primary references |
+| --- | --- | --- |
+| C# | `PersistentList<T>`, `PersistentAssociation<TKey, TValue>` | [Workspace](../../src/CSharp/docs/Wolfram/overview.md), [usage guide](../../src/CSharp/docs/Wolfram/usage.md), [API spec](../../src/CSharp/docs/Wolfram/api-specification.md), [list source](../../src/CSharp/src/Tools.DataStructures.Wolfram/PersistentList.cs), [association source](../../src/CSharp/src/Tools.DataStructures.Wolfram/PersistentAssociation.cs) |
+
 ## Navigation Rules
 
 - Start with this catalog when comparing data-structure availability across languages.

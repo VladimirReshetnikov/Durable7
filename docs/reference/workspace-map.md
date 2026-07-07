@@ -81,6 +81,7 @@ ordering, and documentation obligations that should remain recognizable across l
 | [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) | Haskell FingerTree family port | `tools-data-structures-fingertree.cabal`, `src/Data/Structures/FingerTree/` | [`README`](../../src/Haskell/FingerTree/README.md) |
 | [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | Kotlin/JVM FingerTree family semantic checkpoint | `src/tools/datastructures/fingertree/`, `test/tools/datastructures/fingertree/` | [`docs`](../../src/Kotlin/FingerTree/docs/README.md) |
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | Rust FingerTree family checkpoint port | `Cargo.toml`, `src/` | [`docs`](../../src/Rust/FingerTree/docs/README.md) |
+| [C# Wolfram collections](../../src/CSharp/docs/Wolfram/overview.md) | Canonical managed Wolfram-semantics collections (list facade and insertion-ordered association) composed from the HAMT and FingerTree families | `DataStructures.sln`, `src/Tools.DataStructures.Wolfram/`, `tests/Tools.DataStructures.Wolfram.Tests/` | [`docs`](../../src/CSharp/docs/Wolfram/README.md) |
 
 ## Port Lineage
 
@@ -103,6 +104,15 @@ FingerTree lineage:
 6. `src/Rust/FingerTree` is a Rust semantic checkpoint for the same public family names; its public facades now
    use structurally shared Rust tree storage, and the workspace documents the remaining lazy-spine asymptotic
    parity work locally.
+
+Wolfram collections lineage:
+
+1. C# Wolfram collections (`src/CSharp/src/Tools.DataStructures.Wolfram`) define the managed public
+   contract: `PersistentList<T>` over the FingerTree deque and `PersistentAssociation<TKey, TValue>`
+   composed per the [derived structure catalog](derived-structure-catalog.md)'s
+   `PersistentOrderedMap` pattern, with the kernel-verified Wolfram ordering rules as the fidelity
+   spec. Ports to the other language workspaces are planned; each language already ships both
+   substrate families.
 
 Numerics currently has a C# project only. `src/CSharp/src/Tools.Numerics` owns the fixed-width integer and
 sparse-integer contract and implementation, with tests under `src/CSharp/tests/Tools.Numerics.Tests`; add

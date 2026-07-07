@@ -21,6 +21,7 @@ workspace or evidence boundary applies, start with the
 | [C# Numerics](../../src/CSharp/docs/Numerics/overview.md) | `dotnet test .\DataStructures.sln` from `src/CSharp` | [Validation](../../src/CSharp/docs/Numerics/validation.md) | [Tests](../../src/CSharp/tests/Tools.Numerics.Tests/README.md) | .NET library build, XML-doc warning gate, xUnit wide/sparse-integer behavior tests, declaration parity guardrails |
 | [C# HAMT](../../src/CSharp/docs/Hamt/overview.md) | `dotnet test .\DataStructures.sln` from `src/CSharp` | [Validation](../../src/CSharp/docs/Hamt/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests/README.md) | .NET library build, XML-doc warning gate, xUnit tests, CsCheck model tests |
 | [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | `dotnet test .\DataStructures.sln` from `src/CSharp` | [Validation](../../src/CSharp/docs/FingerTree/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/README.md) | .NET library, samples, benchmark project build, stress controls, xUnit/CsCheck suites |
+| [C# Wolfram collections](../../src/CSharp/docs/Wolfram/overview.md) | `dotnet test .\DataStructures.sln` from `src/CSharp` | [Validation](../../src/CSharp/docs/Wolfram/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.Wolfram.Tests/README.md) | .NET library build, XML-doc warning gate, kernel-verified ordering examples, CsCheck ordered-model histories |
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | `.\build.ps1 -Workspace Hamt -RunTests` from `src/C` | [Validation](../../src/C/Hamt/docs/validation.md) | [Tests](../../src/C/Hamt/tests/README.md) | C17 MSVC, GCC, and Clang builds; warning policy; deterministic HAMT tests |
 | [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | `.\build.ps1 -Workspace Hamt -RunTests` from `src/Cpp` | [Validation](../../src/Cpp/Hamt/docs/validation.md) | [Tests](../../src/Cpp/Hamt/tests/README.md) | C++20 MSVC, GCC, and Clang builds; warning policy; deterministic HAMT tests |
 | [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | `.\build.ps1 -Workspace Hamt` from `src/Kotlin` | [Validation](../../src/Kotlin/Hamt/docs/validation.md) | [Tests](../../src/Kotlin/Hamt/tests/README.md) | Kotlin/JVM HAMT build, tool bootstrap, deterministic trie and set-algebra tests |
@@ -70,6 +71,8 @@ validation guides define family-specific coverage and optional stress/benchmark 
 - [C# HAMT tests](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests/README.md)
 - [C# FingerTree validation](../../src/CSharp/docs/FingerTree/validation.md)
 - [C# FingerTree tests](../../src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/README.md)
+- [C# Wolfram collections validation](../../src/CSharp/docs/Wolfram/validation.md)
+- [C# Wolfram collections tests](../../src/CSharp/tests/Tools.DataStructures.Wolfram.Tests/README.md)
 
 ## Rust Workspaces
 

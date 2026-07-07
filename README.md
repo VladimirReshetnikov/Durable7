@@ -84,7 +84,8 @@ This document is the canonical repository guidance for Vladimir and the AI codin
     │   ├── docs/
     │   │   ├── FingerTree/
     │   │   ├── Hamt/
-    │   │   └── Numerics/
+    │   │   ├── Numerics/
+    │   │   └── Wolfram/
     │   ├── samples/
     │   │   ├── Tools.DataStructures.FingerTree.Editor/
     │   │   ├── Tools.DataStructures.FingerTree.Showcase/
@@ -92,10 +93,12 @@ This document is the canonical repository guidance for Vladimir and the AI codin
     │   ├── src/
     │   │   ├── Tools.DataStructures.FingerTree/
     │   │   ├── Tools.DataStructures.Hamt/
+    │   │   ├── Tools.DataStructures.Wolfram/
     │   │   └── Tools.Numerics/
     │   └── tests/
     │       ├── Tools.DataStructures.FingerTree.Tests/
     │       ├── Tools.DataStructures.Hamt.Tests/
+    │       ├── Tools.DataStructures.Wolfram.Tests/
     │       └── Tools.Numerics.Tests/
     ├── Haskell/
     │   ├── README.md
@@ -152,6 +155,7 @@ language-first layout.
 - [C# Numerics](src/CSharp/docs/Numerics/overview.md) is a .NET 10 fixed-width and sparse integer numerics library under [src/CSharp/src/Tools.Numerics](src/CSharp/src/Tools.Numerics/Tools.Numerics.csproj). It provides `UInt256`/`Int256`, `UInt512`/`Int512`, `UInt1024`/`Int1024`, `SparseInteger`, deterministic two's-complement and binary conversion semantics, declaration-parity guardrails, and xUnit tests.
 - [C# HAMT](src/CSharp/docs/Hamt/overview.md) is a .NET 10 persistent hash-array mapped trie library under [src/CSharp/src/Tools.DataStructures.Hamt](src/CSharp/src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj). It provides `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` with bitmap-indexed 32-way branching, immutable equal-hash collision buckets, comparer-preserving factories, structural sharing across versions, and xUnit/CsCheck model tests against BCL dictionaries and sets.
 - [C# FingerTree](src/CSharp/docs/FingerTree/overview.md) is a .NET 10 persistent finger-tree library under [src/CSharp/src/Tools.DataStructures.FingerTree](src/CSharp/src/Tools.DataStructures.FingerTree/Tools.DataStructures.FingerTree.csproj): two engine cores (a tuned catenable deque and a general monoid-measured tree), a full collection family (sorted bag/set/dictionary, priority queue, interval tree, reversible deque), product/sum/built-in measures with a closure-free predicate API, and a rope family (positional, measured, and text). It ships a navigable design-notes document ([FingerTree-Design-Notes.pdf](src/CSharp/docs/FingerTree/FingerTree-Design-Notes.pdf), with `.tex` source and a rebuild script alongside), a BenchmarkDotNet harness, three runnable samples, and a three-tier (example + property + model-based command) test suite plus tearable-struct concurrency stress tests.
+- [C# Wolfram collections](src/CSharp/docs/Wolfram/overview.md) is a .NET 10 library under [src/CSharp/src/Tools.DataStructures.Wolfram](src/CSharp/src/Tools.DataStructures.Wolfram/Tools.DataStructures.Wolfram.csproj) composing the HAMT and FingerTree families into persistent collections with Wolfram Language semantics: `PersistentList<T>` (the `List` operation vocabulary over the catenable deque) and `PersistentAssociation<TKey, TValue>` (an insertion-ordered map with keyed and positional access following the kernel-verified `Association` ordering rules). The primary external client is the Tungsten engine in the Smithereens repository; the C# implementation is the reference for future language ports.
 - [src/C/Hamt](src/C/Hamt/README.md) is a C17 port of the persistent HAMT library. It provides type-erased
   `tds_hamt_map` and `tds_hamt_set` value structs with callback-driven hash/equality/ownership
   policy, reference-counted immutable nodes, structural sharing across versions, and deterministic
@@ -240,6 +244,7 @@ Release configuration is required for meaningful benchmark numbers.
 - [src/Cpp/Hamt/docs/README.md](src/Cpp/Hamt/docs/README.md) indexes the C++ HAMT port's usage
   guide, API specification, and validation guide.
 - [src/CSharp/docs/FingerTree/README.md](src/CSharp/docs/FingerTree/README.md) indexes the library's usage guide, specifications, validation guide, design notes, benchmark notes, and external references.
+- [src/CSharp/docs/Wolfram/README.md](src/CSharp/docs/Wolfram/README.md) indexes the Wolfram-collections library's overview, usage guide, API specification, and validation guide.
 - [src/Cpp/FingerTree/docs/README.md](src/Cpp/FingerTree/docs/README.md) indexes the C++ usage guide, port plan, API notes, validation guide, implementation notes, and review reports.
 - [src/C/FingerTree/docs/README.md](src/C/FingerTree/docs/README.md) indexes the C usage guide, API notes, and validation guide.
 - [src/Haskell/README.md](src/Haskell/README.md) indexes the Haskell cabal packages.
