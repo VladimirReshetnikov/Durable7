@@ -1,6 +1,7 @@
 packages:
   Hamt
   FingerTree
+  Wolfram
 
 package *
   ghc-options:
