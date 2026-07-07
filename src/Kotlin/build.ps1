@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("All", "Hamt", "FingerTree")]
+    [ValidateSet("All", "Hamt", "FingerTree", "Wolfram")]
     [string]$Workspace = "All"
 )
 
@@ -123,14 +123,15 @@ function Invoke-KotlinWorkspaceTests {
         [string]$Name,
         [string]$RelativePath,
         [string]$Kotlinc,
-        [string]$Java
+        [string]$Java,
+        [string[]]$AdditionalSourceRoots = @()
     )
 
     $workspaceRoot = Join-Path $Root $RelativePath
     $sourceRoots = @(
         Join-Path $workspaceRoot "src"
         Join-Path $workspaceRoot "test"
-    )
+    ) + ($AdditionalSourceRoots | ForEach-Object { Join-Path $Root $_ })
     $sources = @($sourceRoots | ForEach-Object {
         Get-ChildItem -Path $_ -Recurse -Filter "*.kt" | Sort-Object FullName | ForEach-Object FullName
     })
@@ -165,4 +166,8 @@ if ($Workspace -eq "All" -or $Workspace -eq "Hamt") {
 
 if ($Workspace -eq "All" -or $Workspace -eq "FingerTree") {
     Invoke-KotlinWorkspaceTests "FingerTree" "FingerTree" $kotlinc $javaToolchain.Java
+}
+
+if ($Workspace -eq "All" -or $Workspace -eq "Wolfram") {
+    Invoke-KotlinWorkspaceTests "Wolfram" "Wolfram" $kotlinc $javaToolchain.Java @("Hamt/src")
 }
