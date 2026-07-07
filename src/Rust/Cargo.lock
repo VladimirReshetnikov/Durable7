@@ -9,3 +9,11 @@ version = "0.1.0"
 [[package]]
 name = "tools-data-structures-hamt"
 version = "0.1.0"
+
+[[package]]
+name = "tools-data-structures-wolfram"
+version = "0.1.0"
+dependencies = [
+ "tools-data-structures-fingertree",
+ "tools-data-structures-hamt",
+]

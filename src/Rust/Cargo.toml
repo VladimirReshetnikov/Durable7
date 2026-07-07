@@ -2,6 +2,7 @@
 members = [
     "Hamt",
     "FingerTree",
+    "Wolfram",
 ]
 resolver = "3"
 
@@ -10,4 +11,3 @@ edition = "2024"
 license = "MIT-0"
 repository = "https://github.com/VladimirReshetnikov/DataStructures"
 rust-version = "1.96"
-
