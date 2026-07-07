@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('All', 'Hamt', 'FingerTree')]
+    [ValidateSet('All', 'Hamt', 'FingerTree', 'Wolfram')]
     [string[]] $Workspace = @('All'),
 
     [ValidateSet('Debug', 'Release')]
@@ -55,11 +55,36 @@ function Invoke-FingerTreeBuild {
     }
 }
 
-$selected = if ($Workspace -contains 'All') { @('Hamt', 'FingerTree') } else { $Workspace }
+function Invoke-WolframBuild {
+    $preset = if ($Configuration -eq 'Release') { 'msvc-release' } else { 'msvc-debug' }
+    $steps = @(
+        "call `"$VisualStudioDevCmd`" -arch=x64 -host_arch=x64",
+        "`"$CMake`" --preset $preset",
+        "`"$CMake`" --build --preset $preset"
+    )
+
+    if ($RunTests) {
+        $steps += "`"$CTest`" --preset $preset --output-on-failure"
+    }
+
+    Push-Location -LiteralPath (Join-Path $PSScriptRoot 'Wolfram')
+    try {
+        & cmd.exe /d /c ($steps -join ' && ')
+        if ($LASTEXITCODE -ne 0) {
+            throw "C Wolfram build failed with exit code $LASTEXITCODE."
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+$selected = if ($Workspace -contains 'All') { @('Hamt', 'FingerTree', 'Wolfram') } else { $Workspace }
 
 foreach ($item in $selected) {
     switch ($item) {
         'Hamt' { Invoke-HamtBuild }
         'FingerTree' { Invoke-FingerTreeBuild }
+        'Wolfram' { Invoke-WolframBuild }
     }
 }
