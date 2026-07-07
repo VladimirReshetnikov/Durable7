@@ -896,6 +896,7 @@ fn try_pick_stamp<K, V>(entries: &PersistentDeque<Entry<K, V>>, insert_at: usize
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::thread;
 
     fn assert_assoc_eq<K, V, S>(assoc: &PersistentAssociation<K, V, S>, expected: &[(K, V)])
     where
@@ -1232,6 +1233,46 @@ mod tests {
 
         for (snapshot, expected) in snapshots {
             assert_assoc_eq(&snapshot, &expected);
+        }
+    }
+
+    fn assert_send_sync<T: Send + Sync>() {}
+
+    #[test]
+    fn snapshots_are_send_sync_when_contents_are() {
+        assert_send_sync::<PersistentList<i32>>();
+        assert_send_sync::<PersistentAssociation<i32, i32>>();
+    }
+
+    #[test]
+    fn concurrent_readers_share_retained_snapshots() {
+        let expected_list = (0..256).collect::<Vec<_>>();
+        let list: PersistentList<_> = expected_list.iter().copied().collect();
+        let expected_assoc = (0..128).map(|key| (key, -key)).collect::<Vec<_>>();
+        let association: PersistentAssociation<_, _> = expected_assoc.iter().copied().collect();
+
+        let mut handles = Vec::new();
+        for _ in 0..8 {
+            let expected_list = expected_list.clone();
+            let expected_assoc = expected_assoc.clone();
+            let list = list.clone();
+            let association = association.clone();
+            handles.push(thread::spawn(move || {
+                for _ in 0..128 {
+                    assert_eq!(list.len(), 256);
+                    assert_eq!(list.get(128), Some(&128));
+                    assert_eq!(list.to_vec(), expected_list);
+
+                    assert_eq!(association.len(), 128);
+                    assert_eq!(association.get(&96), Some(&-96));
+                    assert_eq!(association.index_of_key(&96), Some(96));
+                    assert_assoc_eq(&association, &expected_assoc);
+                }
+            }));
+        }
+
+        for handle in handles {
+            handle.join().expect("reader thread failed");
         }
     }
 }

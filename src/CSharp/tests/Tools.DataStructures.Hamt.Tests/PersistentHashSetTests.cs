@@ -231,6 +231,28 @@ public sealed class PersistentHashSetTests
         AssertEqualSet(new[] { 2, 3 }, set.SymmetricExcept(new[] { 1, 1, 3, 3 }));
     }
 
+    /// <summary>Verifies retained immutable set snapshots are safe for concurrent readers.</summary>
+    [Fact]
+    public void ConcurrentReaders_ObserveConsistentRetainedSnapshot()
+    {
+        var set = IntSet.Empty;
+        for (var value = 0; value < 512; value++)
+            set = set.Add(value);
+
+        Parallel.For(0, Environment.ProcessorCount * 4, _ =>
+        {
+            for (var pass = 0; pass < 64; pass++)
+            {
+                Assert.Equal(512, set.Count);
+                for (var value = 0; value < 512; value += 17)
+                    Assert.True(set.Contains(value));
+
+                Assert.Equal(Enumerable.Range(0, 512), set.OrderBy(value => value).ToArray());
+                Assert.True(set.SetEquals(Enumerable.Range(0, 512)));
+            }
+        });
+    }
+
     private static void AssertEqualSet(IEnumerable<int> expected, IntSet actual) =>
         Assert.Equal(expected.OrderBy(x => x).ToArray(), actual.OrderBy(x => x).ToArray());
 }

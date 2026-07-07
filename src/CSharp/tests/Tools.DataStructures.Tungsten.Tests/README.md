@@ -14,13 +14,15 @@ library. It targets the workspace defaults from `Directory.Build.props`, referen
 
 - `PersistentListTests.cs` covers the Tungsten-List operation surface of `PersistentList<T>`:
   construction, end and positional edits, ranges and splits, reverse, map, membership,
-  enumeration, persistence across retained versions, no-op identity, and argument validation.
+  enumeration, persistence across retained versions, concurrent snapshot readers, immutable-version
+  publication, no-op identity, and argument validation.
 - `PersistentAssociationTests.cs` covers `PersistentAssociation<TKey, TValue>` with the
   kernel-verified Tungsten Association ordering semantics as the fidelity spec: duplicate-key
   construction, in-place `SetItem`, move-to-end `Append` and move-to-front `Prepend`,
   position-winning `Insert`, `Join`, keyed and positional removal, slicing, `Reverse`,
   stable `KeySort`/`Sort`, `KeyTake`, comparer preservation and stored-key retention, no-op
-  identity, relabeling stress (repeated same-point inserts), and argument validation.
+  identity, relabeling stress (repeated same-point inserts), concurrent snapshot readers,
+  immutable-version publication, and argument validation.
 - `PersistentListPropertyTests.cs` uses CsCheck generated edit histories against a `List<T>`
   model, including retained snapshots for persistence.
 - `PersistentAssociationPropertyTests.cs` uses CsCheck generated histories against an ordered

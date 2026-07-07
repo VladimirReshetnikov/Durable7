@@ -20,4 +20,5 @@ Coverage groups:
 - equal-hash collision buckets through a constant `HashPolicy`;
 - streaming trie-order iteration;
 - last-wins replacement and original-key retention through an equivalence policy;
-- set algebra, equality, and proper subset/superset relations.
+- set algebra, equality, and proper subset/superset relations;
+- JVM concurrent readers over shared immutable map/set snapshots.

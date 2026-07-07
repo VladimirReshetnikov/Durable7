@@ -2,6 +2,9 @@ module Main (main) where
 
 import Prelude hiding (lines, null, reverse, splitAt)
 
+import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
+import Control.Exception (SomeException, try)
+import Control.Monad (forM_, replicateM)
 import qualified Data.List as List
 import Data.Monoid (Sum(..))
 
@@ -29,6 +32,7 @@ main = do
   testIntervalTree
   testRopes
   testTextRope
+  testConcurrentReads
   putStrLn "tools-data-structures-fingertree tests passed"
 
 testMeasuredTree :: IO ()
@@ -177,6 +181,42 @@ testTextRope = do
   assertEqual "text line column" (Just (1, 1)) (RopeText.lineColumnOf 3 text)
   assertEqual "text offset" (Just 4) (RopeText.offsetOf 1 2 text)
   assertEqual "text get trailing line" (Just "") (RopeText.getLine 2 text)
+
+testConcurrentReads :: IO ()
+testConcurrentReads = do
+  let expectedDeque = [0 :: Int .. 511]
+      deque = Deque.fromList expectedDeque
+      reversible = ReversibleDeque.reverse (ReversibleDeque.fromList expectedDeque)
+      expectedReverse = List.reverse expectedDeque
+      rope = Rope.fromList expectedDeque
+      measuredValues = [1 :: Int .. 128]
+      measured = MeasuredRope.fromListWith Sum measuredValues
+  runConcurrent "fingertree concurrent reads" 8 $ do
+    forM_ [1 :: Int .. 128] $ \_ -> do
+      assertEqual "concurrent deque count" 512 (Deque.count deque)
+      assertEqual "concurrent deque index" (Just 255) (Deque.index 255 deque)
+      assertEqual "concurrent deque contents" expectedDeque (Deque.toList deque)
+      assertEqual "concurrent reversible contents" expectedReverse (ReversibleDeque.toList reversible)
+      assertEqual "concurrent rope count" 512 (Rope.count rope)
+      assertEqual "concurrent rope index" (Just 255) (Rope.index 255 rope)
+      assertEqual "concurrent rope contents" expectedDeque (Rope.toList rope)
+      assertEqual "concurrent measured count" 128 (MeasuredRope.count measured)
+      assertEqual "concurrent measured total" (Sum (sum measuredValues)) (MeasuredRope.measure measured)
+      assertEqual "concurrent measured index" (Just 64) (MeasuredRope.index 63 measured)
+
+runConcurrent :: String -> Int -> IO () -> IO ()
+runConcurrent label workerCount action = do
+  boxes <- replicateM workerCount newEmptyMVar
+  forM_ boxes $ \box -> do
+    _ <- forkIO $ do
+      result <- try action :: IO (Either SomeException ())
+      putMVar box result
+    pure ()
+  results <- mapM takeMVar boxes
+  forM_ results $ \result ->
+    case result of
+      Right () -> pure ()
+      Left exception -> fail (label ++ ": worker failed: " ++ show exception)
 
 assertEqual :: (Eq a, Show a) => String -> a -> a -> IO ()
 assertEqual label expected actual

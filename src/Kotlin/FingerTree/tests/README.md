@@ -23,4 +23,6 @@ Coverage groups:
 - `PriorityQueue` stable minimum-priority dequeue and meld;
 - `IntervalTree` closed overlap, containment, removal, and coalescing;
 - `Rope`, `MeasuredRope`, `TextRope`, and `RopeBuilder` positional edits, copies, measure-guided
-  navigation, line/column mapping, and string conversion.
+  navigation, line/column mapping, and string conversion;
+- JVM concurrent readers over shared immutable deque, reversible deque, rope, and measured-rope
+  snapshots.

@@ -34,6 +34,7 @@ The executable registers these cases:
 - `RandomHistory_MatchesUnorderedMapAndPreservesSnapshots`
 - `ScriptedCollisionSnapshotStory_MatchesModel`
 - `RandomHistory_WithCollidingHashes_MatchesUnorderedMap`
+- `ConcurrentReaders_ObserveConsistentRetainedSnapshots`
 - `Set_AddRemoveContainsAndPersistence`
 - `Set_TryAddAndTryRemove_ReportWhetherMembershipChanged`
 - `Set_CustomComparerDefinesEqualityAndRetainsFirstItem`

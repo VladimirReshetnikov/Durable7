@@ -20,4 +20,5 @@ cargo test -p tools-data-structures-tungsten
 ```
 
 The crate tests cover list operations, Association ordering examples, custom hash/equality policy
-behavior through hash builders, relabel stress, and deterministic generated histories.
+behavior through hash builders, relabel stress, deterministic generated histories, `Send`/`Sync`
+assertions, and spawned-thread readers over shared immutable snapshots.

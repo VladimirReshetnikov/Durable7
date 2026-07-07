@@ -19,4 +19,5 @@ Coverage groups:
 - equal-hash collision buckets;
 - streaming trie-order iteration and exact-size accounting;
 - last-wins replacement and original-key retention;
-- set algebra, equality, and proper subset/superset relations.
+- set algebra, equality, and proper subset/superset relations;
+- `Send`/`Sync` assertions and spawned-thread readers over shared immutable snapshots.

@@ -35,6 +35,7 @@ The executable registers these cases:
 - `set custom comparer retains first item`
 - `set algebra matches model`
 - `set symmetric_except treats duplicates as one item`
+- `concurrent retained snapshot reads`
 
 ## Build And Run
 

@@ -207,6 +207,50 @@ public sealed class PersistentListTests
         }
     }
 
+    /// <summary>Verifies retained immutable list snapshots are safe for concurrent readers.</summary>
+    [Fact]
+    public void ConcurrentReaders_ObserveConsistentRetainedSnapshot()
+    {
+        var list = PersistentList.CreateRange(Enumerable.Range(0, 512));
+
+        Parallel.For(0, Environment.ProcessorCount * 4, _ =>
+        {
+            for (var pass = 0; pass < 64; pass++)
+                AssertContiguousSnapshot(list, 512);
+        });
+    }
+
+    /// <summary>Verifies lock-free publication of immutable list versions exposes only valid snapshots.</summary>
+    [Fact]
+    public async Task ConcurrentPublication_ReadersSeeValidSnapshots()
+    {
+        var published = PersistentList<int>.Empty;
+        var done = 0;
+        var readers = Enumerable.Range(0, Environment.ProcessorCount * 2)
+            .Select(_ => Task.Run(() =>
+            {
+                while (Volatile.Read(ref done) == 0)
+                    AssertContiguousSnapshot(Volatile.Read(ref published), 256);
+
+                AssertContiguousSnapshot(Volatile.Read(ref published), 256);
+            }))
+            .ToArray();
+
+        var writer = Task.Run(() =>
+        {
+            var list = PersistentList<int>.Empty;
+            for (var value = 0; value < 256; value++)
+            {
+                list = list.Append(value);
+                Volatile.Write(ref published, list);
+            }
+
+            Volatile.Write(ref done, 1);
+        });
+
+        await Task.WhenAll(readers.Append(writer));
+    }
+
     /// <summary>Verifies range, null, and empty-state failures throw the documented exceptions.</summary>
     [Fact]
     public void OutOfRangeAndNullArguments_Throw()
@@ -226,5 +270,14 @@ public sealed class PersistentListTests
         Assert.Throws<ArgumentNullException>(() => PersistentList<int>.CreateRange(null!));
         Assert.Throws<InvalidOperationException>(() => PersistentList<int>.Empty.First);
         Assert.Throws<InvalidOperationException>(() => PersistentList<int>.Empty.RemoveLast());
+    }
+
+    private static void AssertContiguousSnapshot(PersistentList<int> list, int maxCount)
+    {
+        Assert.InRange(list.Count, 0, maxCount);
+        for (var index = 0; index < list.Count; index++)
+            Assert.Equal(index, list[index]);
+
+        Assert.Equal(Enumerable.Range(0, list.Count), list.ToArray());
     }
 }

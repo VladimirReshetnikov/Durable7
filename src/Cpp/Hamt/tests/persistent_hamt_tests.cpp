@@ -2,15 +2,18 @@
 #include <Tools/DataStructures/Hamt/persistent_hash_set.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cstdint>
 #include <exception>
 #include <initializer_list>
 #include <iostream>
+#include <mutex>
 #include <random>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -759,6 +762,79 @@ TEST(RandomHistory_WithCollidingHashes_MatchesUnorderedMap) {
         }
 
         assert_matches(model, map);
+    }
+}
+
+TEST(ConcurrentReaders_ObserveConsistentRetainedSnapshots) {
+    using map_type = persistent_hash_map<int, int>;
+    using set_type = persistent_hash_set<int>;
+
+    auto map = map_type::empty();
+    auto set = set_type::empty();
+    for (int value = 0; value != 256; ++value) {
+        map = map.set_item(value, value * 3 - 100);
+        set = set.add(value);
+    }
+
+    std::atomic<int> failures{0};
+    std::mutex failure_mutex;
+    std::vector<std::string> failure_messages;
+    std::vector<std::thread> threads;
+    threads.reserve(8);
+    for (int worker = 0; worker != 8; ++worker) {
+        threads.emplace_back([&] {
+            try {
+                for (int pass = 0; pass != 256; ++pass) {
+                    CHECK_EQ(std::size_t{256}, map.count());
+                    CHECK_EQ(std::size_t{256}, set.count());
+
+                    for (int value = 0; value < 256; value += 11) {
+                        const auto* actual = map.try_get(value);
+                        CHECK(actual != nullptr);
+                        CHECK_EQ(value * 3 - 100, *actual);
+                        CHECK(set.contains(value));
+                    }
+
+                    std::size_t enumerated = 0;
+                    for (const auto& [key, value] : map) {
+                        CHECK(key >= 0);
+                        CHECK(key < 256);
+                        CHECK_EQ(key * 3 - 100, value);
+                        ++enumerated;
+                    }
+
+                    CHECK_EQ(std::size_t{256}, enumerated);
+                    const auto sorted_values = sorted(set.to_vector());
+                    CHECK_EQ(std::size_t{256}, sorted_values.size());
+                    CHECK_EQ(std::vector<int>({0, 1, 2, 3, 4}), std::vector<int>(
+                        sorted_values.begin(),
+                        sorted_values.begin() + 5));
+                }
+            } catch (const std::exception& ex) {
+                {
+                    const std::lock_guard<std::mutex> lock(failure_mutex);
+                    failure_messages.push_back(ex.what());
+                }
+
+                failures.fetch_add(1, std::memory_order_relaxed);
+            } catch (...) {
+                {
+                    const std::lock_guard<std::mutex> lock(failure_mutex);
+                    failure_messages.push_back("non-standard exception");
+                }
+
+                failures.fetch_add(1, std::memory_order_relaxed);
+            }
+        });
+    }
+
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    if (failures.load(std::memory_order_relaxed) != 0) {
+        const std::lock_guard<std::mutex> lock(failure_mutex);
+        fail_message(__FILE__, __LINE__, failure_messages.empty() ? "worker failed" : failure_messages.front());
     }
 }
 

@@ -24,4 +24,5 @@ Build and test from `src/C`:
 
 The dependency-free CTest executable in [`tests`](tests/tungsten_c_tests.c) covers list operations,
 Tungsten Association ordering rules, custom key policies, relabel stress, and deterministic generated
-histories against an ordered-pair model.
+histories against an ordered-pair model, plus retained-snapshot reader threads on Windows with a
+sequential fallback on other C targets.

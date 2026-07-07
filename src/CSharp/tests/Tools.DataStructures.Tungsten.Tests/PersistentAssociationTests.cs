@@ -295,6 +295,52 @@ public sealed class PersistentAssociationTests
         }
     }
 
+    /// <summary>Verifies retained immutable Association snapshots are safe for concurrent readers.</summary>
+    [Fact]
+    public void ConcurrentReaders_ObserveConsistentRetainedSnapshot()
+    {
+        var assoc = PersistentAssociation<int, int>.Empty;
+        for (var key = 0; key < 512; key++)
+            assoc = assoc.SetItem(key, -key);
+
+        Parallel.For(0, Environment.ProcessorCount * 4, _ =>
+        {
+            for (var pass = 0; pass < 64; pass++)
+                AssertContiguousAssociationSnapshot(assoc, 512);
+        });
+    }
+
+    /// <summary>Verifies lock-free publication of immutable Association versions exposes only valid snapshots.</summary>
+    [Fact]
+    public async Task ConcurrentPublication_ReadersSeeValidSnapshots()
+    {
+        var published = PersistentAssociation<int, int>.Empty;
+        var done = 0;
+        var readers = Enumerable.Range(0, Environment.ProcessorCount * 2)
+            .Select(_ => Task.Run(() =>
+            {
+                while (Volatile.Read(ref done) == 0)
+                    AssertContiguousAssociationSnapshot(Volatile.Read(ref published), 256);
+
+                AssertContiguousAssociationSnapshot(Volatile.Read(ref published), 256);
+            }))
+            .ToArray();
+
+        var writer = Task.Run(() =>
+        {
+            var assoc = PersistentAssociation<int, int>.Empty;
+            for (var key = 0; key < 256; key++)
+            {
+                assoc = assoc.SetItem(key, -key);
+                Volatile.Write(ref published, assoc);
+            }
+
+            Volatile.Write(ref done, 1);
+        });
+
+        await Task.WhenAll(readers.Append(writer));
+    }
+
     /// <summary>Verifies order and lookups survive stamp-gap exhaustion and full relabels.</summary>
     [Fact]
     public void RepeatedSamePointInserts_SurviveRelabeling()
@@ -338,5 +384,30 @@ public sealed class PersistentAssociationTests
         Assert.Throws<InvalidOperationException>(() => PersistentAssociation<string, int>.Empty.First);
         Assert.Throws<InvalidOperationException>(() => PersistentAssociation<string, int>.Empty.RemoveFirst());
         Assert.Throws<InvalidOperationException>(() => PersistentAssociation<string, int>.Empty.RemoveLast());
+    }
+
+    private static void AssertContiguousAssociationSnapshot(PersistentAssociation<int, int> assoc, int maxCount)
+    {
+        Assert.InRange(assoc.Count, 0, maxCount);
+        Assert.Equal(Enumerable.Range(0, assoc.Count), assoc.Keys);
+        Assert.Equal(Enumerable.Range(0, assoc.Count).Select(key => -key), assoc.Values);
+
+        for (var index = 0; index < assoc.Count; index++)
+        {
+            Assert.Equal(KeyValuePair.Create(index, -index), assoc.GetAt(index));
+            Assert.Equal(index, assoc.IndexOfKey(index));
+            Assert.True(assoc.TryGetValue(index, out var value));
+            Assert.Equal(-index, value);
+        }
+
+        var enumerated = 0;
+        foreach (var (key, value) in assoc)
+        {
+            Assert.Equal(enumerated, key);
+            Assert.Equal(-key, value);
+            enumerated++;
+        }
+
+        Assert.Equal(assoc.Count, enumerated);
     }
 }

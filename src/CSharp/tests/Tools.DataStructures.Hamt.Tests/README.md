@@ -12,7 +12,7 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
 ## Source Map
 
 - `PersistentHashMapTests.cs` covers construction, lookup, insertion, replacement, removal, no-op behavior,
-  comparer preservation, and value materialization.
+  comparer preservation, value materialization, concurrent snapshot readers, and immutable-version publication.
 - `PersistentHashMapEnumeratorTests.cs` covers allocation-free struct enumerators, copied enumerator independence,
   and key/value/pair enumeration.
 - `PersistentHashMapCollisionTests.cs` covers equal-hash buckets, deep shared hash prefixes, collision splitting,
@@ -22,7 +22,7 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
 - `PersistentHashMapPropertyTests.cs` uses CsCheck generated histories against dictionary-style model state,
   including retained snapshots and deliberately colliding hashes.
 - `PersistentHashSetTests.cs` covers set membership, add/remove, try-add/try-remove, custom equality, set algebra,
-  `IReadOnlySet<T>` behavior, and generated set-algebra checks.
+  `IReadOnlySet<T>` behavior, generated set-algebra checks, and concurrent snapshot readers.
 
 ## Build And Run
 

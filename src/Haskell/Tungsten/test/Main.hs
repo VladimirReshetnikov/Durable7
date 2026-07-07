@@ -2,7 +2,9 @@ module Main (main) where
 
 import Prelude hiding (drop, last, lookup, null, reverse, take)
 
-import Control.Monad (foldM_)
+import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
+import Control.Exception (SomeException, try)
+import Control.Monad (foldM_, forM_, replicateM)
 import Data.Char (toLower)
 import qualified Data.List as List
 import Data.Maybe (fromMaybe)
@@ -19,6 +21,7 @@ main = do
   testAssociationCustomPolicy
   testAssociationRelabelStress
   testAssociationGeneratedHistory
+  testConcurrentReads
   putStrLn "tools-data-structures-tungsten tests passed"
 
 testListExamples :: IO ()
@@ -114,6 +117,37 @@ testAssociationGeneratedHistory =
                  in (sliced, List.take lengthValue (List.drop start model))
       assertEqual ("association generated command " ++ show command) model' (Association.toList association')
       pure (association', model')
+
+testConcurrentReads :: IO ()
+testConcurrentReads = do
+  let expectedList = [0 :: Int .. 255]
+      values = TungstenList.fromList expectedList
+      expectedAssociation = [(key, -key) | key <- [0 :: Int .. 127]]
+      association = Association.fromList expectedAssociation
+  runConcurrent "tungsten concurrent reads" 8 $ do
+    forM_ [1 :: Int .. 128] $ \_ -> do
+      assertEqual "concurrent list count" 256 (TungstenList.count values)
+      assertEqual "concurrent list index" (Just 128) (TungstenList.index 128 values)
+      assertEqual "concurrent list contents" expectedList (TungstenList.toList values)
+      assertEqual "concurrent association count" 128 (Association.count association)
+      assertEqual "concurrent association keys" (fmap fst expectedAssociation) (Association.keys association)
+      assertEqual "concurrent association contents" expectedAssociation (Association.toList association)
+      assertEqual "concurrent association lookup" (Just (-96)) (Association.lookup 96 association)
+      assertEqual "concurrent association index" (Just 96) (Association.indexOfKey 96 association)
+
+runConcurrent :: String -> Int -> IO () -> IO ()
+runConcurrent label workerCount action = do
+  boxes <- replicateM workerCount newEmptyMVar
+  forM_ boxes $ \box -> do
+    _ <- forkIO $ do
+      result <- try action :: IO (Either SomeException ())
+      putMVar box result
+    pure ()
+  results <- mapM takeMVar boxes
+  forM_ results $ \result ->
+    case result of
+      Right () -> pure ()
+      Left exception -> fail (label ++ ": worker failed: " ++ show exception)
 
 modelSet :: Eq k => k -> v -> [(k, v)] -> [(k, v)]
 modelSet key value [] = [(key, value)]

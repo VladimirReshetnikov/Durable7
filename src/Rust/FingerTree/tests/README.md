@@ -27,3 +27,5 @@ Coverage groups:
 - `rope.rs`: chunked positional and measured rope storage over cached count/user-measure summaries, chunk-copy
   construction, caller-supplied copy targets, cached-newline text helpers, Rust string/display conversions, and
   builder conveniences.
+- `lib.rs`: public `Send`/`Sync` assertions and spawned-thread readers over shared immutable deque,
+  reversible deque, rope, and measured-rope snapshots.

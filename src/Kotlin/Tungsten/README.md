@@ -20,4 +20,5 @@ Build and test from `src/Kotlin`:
 ```
 
 The dependency-free executable tests cover list examples, Association ordering rules, custom
-`HashPolicy` behavior, relabel stress, and generated histories against ordered models.
+`HashPolicy` behavior, relabel stress, generated histories against ordered models, and JVM
+concurrent readers over shared immutable snapshots.

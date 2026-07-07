@@ -1,5 +1,7 @@
 package tools.datastructures.fingertree
 
+import java.util.Collections
+
 private fun check(value: Boolean, message: String) {
     if (!value) {
         throw AssertionError(message)
@@ -9,6 +11,25 @@ private fun check(value: Boolean, message: String) {
 private fun <T> checkEquals(expected: T, actual: T, message: String) {
     if (expected != actual) {
         throw AssertionError("$message Expected <$expected>, actual <$actual>.")
+    }
+}
+
+private fun runConcurrent(name: String, workerCount: Int = 8, action: (Int) -> Unit) {
+    val failures = Collections.synchronizedList(mutableListOf<Throwable>())
+    val threads = (0 until workerCount).map { worker ->
+        Thread {
+            try {
+                action(worker)
+            } catch (error: Throwable) {
+                failures.add(error)
+            }
+        }.apply { this.name = "$name-$worker" }
+    }
+
+    threads.forEach { it.start() }
+    threads.forEach { it.join() }
+    if (failures.isNotEmpty()) {
+        throw AssertionError("$name had ${failures.size} worker failure(s)", failures.first())
     }
 }
 
@@ -248,6 +269,30 @@ private fun overflowingRangesAreRejected() {
     checkEquals(null, map.getRange(2, Int.MAX_VALUE), "map overflow range")
 }
 
+private fun concurrentReadersObserveConsistentSnapshots() {
+    val expected = (0 until 256).toList()
+    val deque = PersistentDeque.from(expected)
+    val reversible = ReversibleDeque.from(expected).reverse()
+    val rope = Rope.from(expected)
+    val measuredValues = (1..128).toList()
+    val measured = MeasuredRope.from(measuredValues, IntSumMeasure)
+
+    runConcurrent("fingertree-readers") {
+        repeat(128) {
+            checkEquals(256, deque.size, "concurrent deque size")
+            checkEquals(128, deque[128], "concurrent deque index")
+            checkEquals(expected, deque.toList(), "concurrent deque contents")
+            checkEquals(expected.asReversed(), reversible.toList(), "concurrent reversible contents")
+            checkEquals(256, rope.size, "concurrent rope size")
+            checkEquals(128, rope[128], "concurrent rope index")
+            checkEquals(expected, rope.toList(), "concurrent rope contents")
+            checkEquals(128, measured.size, "concurrent measured size")
+            checkEquals(measuredValues.sum(), measured.measure(), "concurrent measured total")
+            checkEquals(64, measured[63], "concurrent measured index")
+        }
+    }
+}
+
 public fun main() {
     val tests = listOf(
         "dequePreservesSnapshots" to ::dequePreservesSnapshots,
@@ -261,6 +306,7 @@ public fun main() {
         "intervalTreeUsesClosedOverlapAndCoalesces" to ::intervalTreeUsesClosedOverlapAndCoalesces,
         "ropesEditAndNavigateText" to ::ropesEditAndNavigateText,
         "overflowingRangesAreRejected" to ::overflowingRangesAreRejected,
+        "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,
     )
 
     for ((name, test) in tests) {

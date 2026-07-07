@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Xunit;
 using Map = Tools.DataStructures.Hamt.PersistentHashMap<int, string>;
 
@@ -189,5 +190,90 @@ public sealed class PersistentHashMapTests
             new KeyValuePair<int, string>(1, "new"),
             new KeyValuePair<int, string>(2, "two"),
         }, map.OrderBy(kv => kv.Key).ToArray());
+    }
+
+    /// <summary>Verifies retained immutable snapshots are safe for concurrent readers.</summary>
+    [Fact]
+    public void ConcurrentReaders_ObserveConsistentRetainedSnapshot()
+    {
+        var map = Map.Empty;
+        for (var key = 0; key < 512; key++)
+            map = map.SetItem(key, $"v{key}");
+
+        Parallel.For(0, Environment.ProcessorCount * 4, _ =>
+        {
+            for (var pass = 0; pass < 64; pass++)
+            {
+                Assert.Equal(512, map.Count);
+                for (var key = 0; key < 512; key += 17)
+                {
+                    Assert.True(map.TryGetValue(key, out var value));
+                    Assert.Equal($"v{key}", value);
+                }
+
+                var enumerated = 0;
+                foreach (var (key, value) in map)
+                {
+                    Assert.Equal($"v{key}", value);
+                    enumerated++;
+                }
+
+                Assert.Equal(512, enumerated);
+            }
+        });
+    }
+
+    /// <summary>Verifies lock-free publication of immutable versions exposes only valid snapshots.</summary>
+    [Fact]
+    public async Task ConcurrentPublication_ReadersSeeValidSnapshots()
+    {
+        var published = Map.Empty;
+        var done = 0;
+        var failures = new ConcurrentQueue<Exception>();
+
+        var readers = Enumerable.Range(0, Environment.ProcessorCount * 2)
+            .Select(_ => Task.Run(() =>
+            {
+                try
+                {
+                    while (Volatile.Read(ref done) == 0)
+                        AssertContiguousSnapshot(Volatile.Read(ref published));
+
+                    AssertContiguousSnapshot(Volatile.Read(ref published));
+                }
+                catch (Exception ex)
+                {
+                    failures.Enqueue(ex);
+                }
+            }))
+            .ToArray();
+
+        var writer = Task.Run(() =>
+        {
+            var map = Map.Empty;
+            for (var key = 0; key < 256; key++)
+            {
+                map = map.SetItem(key, $"v{key}");
+                Volatile.Write(ref published, map);
+            }
+
+            Volatile.Write(ref done, 1);
+        });
+
+        await Task.WhenAll(readers.Append(writer));
+        Assert.Empty(failures);
+    }
+
+    private static void AssertContiguousSnapshot(Map map)
+    {
+        Assert.InRange(map.Count, 0, 256);
+        for (var key = 0; key < map.Count; key++)
+            Assert.Equal($"v{key}", map[key]);
+
+        foreach (var (key, value) in map)
+        {
+            Assert.InRange(key, 0, map.Count - 1);
+            Assert.Equal($"v{key}", value);
+        }
     }
 }

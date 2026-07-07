@@ -21,4 +21,5 @@ Build and test from `src/Cpp`:
 ```
 
 The CTest executable in [`tests`](tests/tungsten_tests.cpp) covers examples, custom equality/hash
-policies, relabel stress, and generated histories against ordered list/map models.
+policies, relabel stress, generated histories against ordered list/map models, and retained-snapshot
+reader threads.

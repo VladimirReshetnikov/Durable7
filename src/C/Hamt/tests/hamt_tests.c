@@ -6,6 +6,39 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+typedef volatile LONG test_atomic_long;
+
+static void test_atomic_long_init(test_atomic_long *value, long initial_value) {
+    *value = initial_value;
+}
+
+static void test_atomic_long_increment(test_atomic_long *value) {
+    (void)InterlockedIncrement(value);
+}
+
+static long test_atomic_long_read(test_atomic_long *value) {
+    return InterlockedCompareExchange(value, 0, 0);
+}
+#else
+#include <stdatomic.h>
+typedef atomic_long test_atomic_long;
+
+static void test_atomic_long_init(test_atomic_long *value, long initial_value) {
+    atomic_init(value, initial_value);
+}
+
+static void test_atomic_long_increment(test_atomic_long *value) {
+    (void)atomic_fetch_add_explicit(value, 1, memory_order_relaxed);
+}
+
+static long test_atomic_long_read(test_atomic_long *value) {
+    return atomic_load_explicit(value, memory_order_relaxed);
+}
+#endif
+
 typedef void (*test_fn)(void);
 
 typedef struct test_case {
@@ -155,6 +188,81 @@ static void assert_set_model_matches(const bool present[61], const tds_hamt_set 
 
     CHECK(enumerated == expected_count);
 }
+
+typedef struct concurrent_retained_context {
+    const tds_hamt_map *map;
+    const tds_hamt_set *set;
+    const void *const *probe_keys;
+    const int *probe_values;
+    size_t probe_count;
+    test_atomic_long failures;
+} concurrent_retained_context;
+
+static void record_concurrent_failure(concurrent_retained_context *context) {
+    test_atomic_long_increment(&context->failures);
+}
+
+static void concurrent_retained_worker(concurrent_retained_context *context) {
+    for (int pass = 0; pass != 256; ++pass) {
+        if (tds_hamt_map_count(context->map) != 128 || tds_hamt_set_count(context->set) != 128) {
+            record_concurrent_failure(context);
+            return;
+        }
+
+        for (size_t index = 0; index != context->probe_count; ++index) {
+            const int key = context->probe_values[index];
+            const void *actual = NULL;
+            if (!tds_hamt_map_try_get(context->map, context->probe_keys[index], &actual) ||
+                actual == NULL ||
+                *(const int *)actual != key * 3 - 200 ||
+                !tds_hamt_set_contains(context->set, context->probe_keys[index])) {
+                record_concurrent_failure(context);
+                return;
+            }
+        }
+
+        tds_hamt_map_iterator map_iterator;
+        tds_hamt_map_iterator_init(context->map, &map_iterator);
+        const void *key_ptr = NULL;
+        const void *value_ptr = NULL;
+        size_t map_count = 0;
+        while (tds_hamt_map_iterator_next(&map_iterator, &key_ptr, &value_ptr)) {
+            const int key = *(const int *)key_ptr;
+            if (key < 0 || key >= 128 || *(const int *)value_ptr != key * 3 - 200) {
+                record_concurrent_failure(context);
+                return;
+            }
+
+            ++map_count;
+        }
+
+        tds_hamt_set_iterator set_iterator;
+        tds_hamt_set_iterator_init(context->set, &set_iterator);
+        const void *item = NULL;
+        size_t set_count = 0;
+        while (tds_hamt_set_iterator_next(&set_iterator, &item)) {
+            const int value = *(const int *)item;
+            if (value < 0 || value >= 128) {
+                record_concurrent_failure(context);
+                return;
+            }
+
+            ++set_count;
+        }
+
+        if (map_count != 128 || set_count != 128) {
+            record_concurrent_failure(context);
+            return;
+        }
+    }
+}
+
+#ifdef _WIN32
+static DWORD WINAPI concurrent_retained_thread_proc(void *parameter) {
+    concurrent_retained_worker((concurrent_retained_context *)parameter);
+    return 0;
+}
+#endif
 
 static uint32_t ci_hash(const void *item, void *context) {
     (void)context;
@@ -1165,6 +1273,65 @@ static void test_set_symmetric_except_treats_duplicates_as_one_item(void) {
     tds_hamt_set_destroy(&set);
 }
 
+static void test_concurrent_retained_snapshot_reads(void) {
+    tds_hamt_policy map_policy = int_map_policy(int_hash);
+    tds_hamt_set_policy set_policy = int_set_policy(int_hash);
+    tds_hamt_map map = tds_hamt_map_create(&map_policy);
+    tds_hamt_set set = tds_hamt_set_create(&set_policy);
+
+    for (int key = 0; key != 128; ++key) {
+        tds_hamt_map next_map;
+        CHECK_STATUS(tds_hamt_map_set(&map, int_key(key), int_value(key * 3 - 200), &next_map));
+        tds_hamt_map_destroy(&map);
+        map = next_map;
+
+        tds_hamt_set next_set;
+        CHECK_STATUS(tds_hamt_set_add(&set, int_key(key), &next_set));
+        tds_hamt_set_destroy(&set);
+        set = next_set;
+    }
+
+    concurrent_retained_context context;
+    const void *probe_keys[19];
+    int probe_values[19];
+    size_t probe_count = 0;
+    for (int key = 0; key < 128; key += 7) {
+        probe_keys[probe_count] = int_key(key);
+        probe_values[probe_count] = key;
+        ++probe_count;
+    }
+
+    context.map = &map;
+    context.set = &set;
+    context.probe_keys = probe_keys;
+    context.probe_values = probe_values;
+    context.probe_count = probe_count;
+    test_atomic_long_init(&context.failures, 0);
+
+#ifdef _WIN32
+    enum { thread_count = 8 };
+    HANDLE threads[thread_count];
+    for (DWORD index = 0; index != thread_count; ++index) {
+        threads[index] = CreateThread(NULL, 0, concurrent_retained_thread_proc, &context, 0, NULL);
+        CHECK(threads[index] != NULL);
+    }
+
+    const DWORD wait_result = WaitForMultipleObjects(thread_count, threads, TRUE, INFINITE);
+    CHECK(wait_result == WAIT_OBJECT_0);
+    for (DWORD index = 0; index != thread_count; ++index) {
+        CloseHandle(threads[index]);
+    }
+#else
+    for (int index = 0; index != 8; ++index) {
+        concurrent_retained_worker(&context);
+    }
+#endif
+
+    CHECK(test_atomic_long_read(&context.failures) == 0);
+    tds_hamt_set_destroy(&set);
+    tds_hamt_map_destroy(&map);
+}
+
 static const test_case tests[] = {
     { "empty map has no entries", test_empty_map_has_no_entries },
     { "set item adds replaces and preserves old versions", test_set_adds_replaces_and_preserves_old_versions },
@@ -1184,7 +1351,8 @@ static const test_case tests[] = {
     { "set add remove contains and persistence", test_set_add_remove_contains_and_persistence },
     { "set custom comparer retains first item", test_set_custom_comparer_retains_first_item },
     { "set algebra matches model", test_set_algebra_matches_model },
-    { "set symmetric_except treats duplicates as one item", test_set_symmetric_except_treats_duplicates_as_one_item }
+    { "set symmetric_except treats duplicates as one item", test_set_symmetric_except_treats_duplicates_as_one_item },
+    { "concurrent retained snapshot reads", test_concurrent_retained_snapshot_reads }
 };
 
 int main(void) {

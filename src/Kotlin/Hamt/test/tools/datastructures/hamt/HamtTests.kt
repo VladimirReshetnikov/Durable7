@@ -1,5 +1,7 @@
 package tools.datastructures.hamt
 
+import java.util.Collections
+
 private class ConstantPolicy<T> : HashPolicy<T> {
     override fun hash(key: T): Int = 0
     override fun equivalent(left: T, right: T): Boolean = left == right
@@ -21,6 +23,25 @@ private fun check(value: Boolean, message: String) {
 private fun <T> checkEquals(expected: T, actual: T, message: String) {
     if (expected != actual) {
         throw AssertionError("$message Expected <$expected>, actual <$actual>.")
+    }
+}
+
+private fun runConcurrent(name: String, workerCount: Int = 8, action: (Int) -> Unit) {
+    val failures = Collections.synchronizedList(mutableListOf<Throwable>())
+    val threads = (0 until workerCount).map { worker ->
+        Thread {
+            try {
+                action(worker)
+            } catch (error: Throwable) {
+                failures.add(error)
+            }
+        }.apply { this.name = "$name-$worker" }
+    }
+
+    threads.forEach { it.start() }
+    threads.forEach { it.join() }
+    if (failures.isNotEmpty()) {
+        throw AssertionError("$name had ${failures.size} worker failure(s)", failures.first())
     }
 }
 
@@ -116,6 +137,27 @@ private fun setAlgebraUsesSetMembership() {
     check(!left.isProperSupersetOf(listOf(1, 2, 3)), "non-proper superset")
 }
 
+private fun concurrentReadersObserveConsistentSnapshots() {
+    val expectedMap = (0 until 256).map { it to it * 3 - 100 }
+    val map = PersistentHashMap.empty<Int, Int>().setItems(expectedMap)
+    val set = PersistentHashSet.from(0 until 256)
+
+    runConcurrent("hamt-readers") {
+        repeat(128) {
+            checkEquals(256, map.size, "concurrent map size")
+            checkEquals(284, map[128], "concurrent map lookup")
+            checkEquals(
+                expectedMap,
+                map.entries().map { it.key to it.value }.toList().sortedBy { it.first },
+                "concurrent map contents",
+            )
+            checkEquals(256, set.size, "concurrent set size")
+            check(set.contains(200), "concurrent set membership")
+            check(set.setEquals(0 until 256), "concurrent set equality")
+        }
+    }
+}
+
 public fun main() {
     val tests = listOf(
         "mapUpdatesPreserveOldVersions" to ::mapUpdatesPreserveOldVersions,
@@ -125,6 +167,7 @@ public fun main() {
         "iterationStreamsTrieOrder" to ::iterationStreamsTrieOrder,
         "setItemsAreLastWinsAndRetainOriginalKey" to ::setItemsAreLastWinsAndRetainOriginalKey,
         "setAlgebraUsesSetMembership" to ::setAlgebraUsesSetMembership,
+        "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,
     )
 
     for ((name, test) in tests) {

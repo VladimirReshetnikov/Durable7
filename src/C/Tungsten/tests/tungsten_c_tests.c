@@ -6,6 +6,45 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+typedef volatile LONG test_atomic_long;
+
+static void test_atomic_long_init(test_atomic_long* value, long initial_value)
+{
+    *value = initial_value;
+}
+
+static void test_atomic_long_increment(test_atomic_long* value)
+{
+    (void)InterlockedIncrement(value);
+}
+
+static long test_atomic_long_read(test_atomic_long* value)
+{
+    return InterlockedCompareExchange(value, 0, 0);
+}
+#else
+#include <stdatomic.h>
+typedef atomic_long test_atomic_long;
+
+static void test_atomic_long_init(test_atomic_long* value, long initial_value)
+{
+    atomic_init(value, initial_value);
+}
+
+static void test_atomic_long_increment(test_atomic_long* value)
+{
+    (void)atomic_fetch_add_explicit(value, 1, memory_order_relaxed);
+}
+
+static long test_atomic_long_read(test_atomic_long* value)
+{
+    return atomic_load_explicit(value, memory_order_relaxed);
+}
+#endif
+
 static int g_failures = 0;
 
 static void fail_at(const char* file, int line, const char* expression)
@@ -205,6 +244,45 @@ static bool assoc_matches(const tds_tungsten_association* association, const int
 
     return true;
 }
+
+typedef struct concurrent_tungsten_context {
+    const tds_tungsten_list* list;
+    const int* list_values;
+    size_t list_count;
+    const tds_tungsten_association* association;
+    const int* association_keys;
+    const int* association_values;
+    size_t association_count;
+    test_atomic_long failures;
+} concurrent_tungsten_context;
+
+static void record_concurrent_failure(concurrent_tungsten_context* context)
+{
+    test_atomic_long_increment(&context->failures);
+}
+
+static void concurrent_tungsten_worker(concurrent_tungsten_context* context)
+{
+    for (int pass = 0; pass != 256; ++pass) {
+        if (!list_matches(context->list, context->list_values, context->list_count) ||
+            !assoc_matches(
+                context->association,
+                context->association_keys,
+                context->association_values,
+                context->association_count)) {
+            record_concurrent_failure(context);
+            return;
+        }
+    }
+}
+
+#ifdef _WIN32
+static DWORD WINAPI concurrent_tungsten_thread_proc(void* parameter)
+{
+    concurrent_tungsten_worker((concurrent_tungsten_context*)parameter);
+    return 0;
+}
+#endif
 
 static void double_int(void* destination, const void* source, void* context)
 {
@@ -628,6 +706,68 @@ static void test_association_generated_history(void)
     tds_tungsten_association_dispose(&association);
 }
 
+static void test_concurrent_retained_snapshot_reads(void)
+{
+    ft_value_type int_type;
+    init_int_type(&int_type);
+
+    int list_values[128];
+    for (int index = 0; index != 128; ++index) {
+        list_values[index] = index;
+    }
+
+    tds_tungsten_list list;
+    REQUIRE_STATUS(tds_tungsten_list_from_array(&list, &int_type, list_values, 128));
+
+    tds_tungsten_association_policy policy;
+    init_assoc_policy(&policy);
+
+    int keys[64];
+    int values[64];
+    tds_tungsten_assoc_pair pairs[64];
+    for (int index = 0; index != 64; ++index) {
+        keys[index] = index;
+        values[index] = -index;
+        pairs[index] = pair_of(&keys[index], &values[index]);
+    }
+
+    tds_tungsten_association association;
+    REQUIRE_STATUS(tds_tungsten_association_from_pairs(&association, &policy, pairs, 64));
+
+    concurrent_tungsten_context context;
+    context.list = &list;
+    context.list_values = list_values;
+    context.list_count = 128;
+    context.association = &association;
+    context.association_keys = keys;
+    context.association_values = values;
+    context.association_count = 64;
+    test_atomic_long_init(&context.failures, 0);
+
+#ifdef _WIN32
+    enum { thread_count = 8 };
+    HANDLE threads[thread_count];
+    for (DWORD index = 0; index != thread_count; ++index) {
+        threads[index] = CreateThread(NULL, 0, concurrent_tungsten_thread_proc, &context, 0, NULL);
+        REQUIRE(threads[index] != NULL);
+    }
+
+    const DWORD wait_result = WaitForMultipleObjects(thread_count, threads, TRUE, INFINITE);
+    REQUIRE(wait_result == WAIT_OBJECT_0);
+    for (DWORD index = 0; index != thread_count; ++index) {
+        CloseHandle(threads[index]);
+    }
+#else
+    for (int index = 0; index != 8; ++index) {
+        concurrent_tungsten_worker(&context);
+    }
+#endif
+
+    REQUIRE(test_atomic_long_read(&context.failures) == 0);
+    tds_tungsten_association_dispose(&association);
+    tds_tungsten_list_dispose(&list);
+}
+
 static void run_test(const char* name, void (*test)(void))
 {
     const int before = g_failures;
@@ -648,6 +788,7 @@ int main(void)
     run_test("association custom policy", test_association_custom_policy);
     run_test("association relabel stress", test_association_relabel_stress);
     run_test("association generated history", test_association_generated_history);
+    run_test("concurrent retained snapshot reads", test_concurrent_retained_snapshot_reads);
 
     if (g_failures != 0) {
         (void)fprintf(stderr, "%d failure(s)\n", g_failures);

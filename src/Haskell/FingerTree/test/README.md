@@ -14,4 +14,5 @@ cabal test ft-test
 The dependency-free executable covers measured-tree split/view semantics, deque indexing and sorted
 search, reversible deque orientation plus all mixed-orientation append combinations, sorted
 bag/set/map facades, stable priority dequeue, interval queries and coalescing, positional ropes,
-measured ropes, and newline-aware text helpers.
+measured ropes, newline-aware text helpers, and `forkIO` concurrent readers over shared immutable
+snapshots.

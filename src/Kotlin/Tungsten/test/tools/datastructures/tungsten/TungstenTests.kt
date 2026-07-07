@@ -1,6 +1,7 @@
 package tools.datastructures.tungsten
 
 import tools.datastructures.hamt.HashPolicy
+import java.util.Collections
 
 private fun check(value: Boolean, message: String) {
     if (!value) {
@@ -11,6 +12,25 @@ private fun check(value: Boolean, message: String) {
 private fun <T> checkEquals(expected: T, actual: T, message: String) {
     if (expected != actual) {
         throw AssertionError("$message Expected <$expected>, actual <$actual>.")
+    }
+}
+
+private fun runConcurrent(name: String, workerCount: Int = 8, action: (Int) -> Unit) {
+    val failures = Collections.synchronizedList(mutableListOf<Throwable>())
+    val threads = (0 until workerCount).map { worker ->
+        Thread {
+            try {
+                action(worker)
+            } catch (error: Throwable) {
+                failures.add(error)
+            }
+        }.apply { this.name = "$name-$worker" }
+    }
+
+    threads.forEach { it.start() }
+    threads.forEach { it.join() }
+    if (failures.isNotEmpty()) {
+        throw AssertionError("$name had ${failures.size} worker failure(s)", failures.first())
     }
 }
 
@@ -329,6 +349,24 @@ private fun associationGeneratedHistoriesMatchOrderedModelAndSnapshots() {
     }
 }
 
+private fun concurrentReadersObserveConsistentSnapshots() {
+    val expectedList = (0 until 256).toList()
+    val list = PersistentList.from(expectedList)
+    val expectedAssociation = (0 until 128).map { it to -it }
+    val association = PersistentAssociation.from(expectedAssociation)
+
+    runConcurrent("tungsten-readers") {
+        repeat(128) {
+            checkEquals(256, list.size, "concurrent list size")
+            checkEquals(128, list[128], "concurrent list index")
+            checkEquals(expectedList, list.toList(), "concurrent list contents")
+            checkAssociation(expectedAssociation, association, "concurrent association")
+            checkEquals(-96, association[96], "concurrent association lookup")
+            checkEquals(96, association.indexOfKey(96), "concurrent association index")
+        }
+    }
+}
+
 public fun main() {
     val tests = listOf(
         "listExamplesMatchTungstenSurface" to ::listExamplesMatchTungstenSurface,
@@ -338,6 +376,7 @@ public fun main() {
         "associationCustomPolicyRecoversStoredKeys" to ::associationCustomPolicyRecoversStoredKeys,
         "associationRelabelStressPreservesPositionsAndLookups" to ::associationRelabelStressPreservesPositionsAndLookups,
         "associationGeneratedHistoriesMatchOrderedModelAndSnapshots" to ::associationGeneratedHistoriesMatchOrderedModelAndSnapshots,
+        "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,
     )
 
     for ((name, test) in tests) {

@@ -21,4 +21,5 @@ cabal test tools-data-structures-tungsten
 ```
 
 The `tungsten-test` executable covers list examples, Association ordering rules, custom `HashPolicy`
-behavior, relabel stress, and deterministic generated histories against an ordered-pair model.
+behavior, relabel stress, deterministic generated histories against an ordered-pair model, and
+`forkIO` concurrent readers over shared immutable snapshots.

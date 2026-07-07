@@ -996,6 +996,7 @@ fn sparse_index(bitmap: u32, bit: u32) -> usize {
 mod tests {
     use super::*;
     use std::hash::{BuildHasherDefault, Hasher};
+    use std::thread;
 
     #[derive(Default)]
     struct ConstantHasher;
@@ -1140,5 +1141,51 @@ mod tests {
         assert!(left.is_proper_superset_of([1, 3, 3]));
         assert!(!left.is_proper_subset_of([1, 2, 3]));
         assert!(!left.is_proper_superset_of([1, 2, 3]));
+    }
+
+    fn assert_send_sync<T: Send + Sync>() {}
+
+    #[test]
+    fn snapshots_are_send_sync_when_contents_are() {
+        assert_send_sync::<PersistentHashMap<i32, i32>>();
+        assert_send_sync::<PersistentHashSet<i32>>();
+    }
+
+    #[test]
+    fn concurrent_readers_share_retained_snapshots() {
+        let map = PersistentHashMap::new().set_items((0..256).map(|key| (key, key * 3 - 100)));
+        let set: PersistentHashSet<_> = (0..256).collect();
+        let expected_map = (0..256)
+            .map(|key| (key, key * 3 - 100))
+            .collect::<Vec<_>>();
+
+        let mut handles = Vec::new();
+        for _ in 0..8 {
+            let map = map.clone();
+            let set = set.clone();
+            let expected_map = expected_map.clone();
+            handles.push(thread::spawn(move || {
+                for _ in 0..128 {
+                    assert_eq!(map.len(), 256);
+                    assert_eq!(map.get(&128), Some(&284));
+                    let mut entries = map
+                        .iter()
+                        .map(|(key, value)| (*key, *value))
+                        .collect::<Vec<_>>();
+                    entries.sort_unstable();
+                    assert_eq!(entries, expected_map);
+
+                    assert_eq!(set.len(), 256);
+                    assert!(set.contains(&200));
+                    let mut values = set.iter().copied().collect::<Vec<_>>();
+                    values.sort_unstable();
+                    assert_eq!(values, (0..256).collect::<Vec<_>>());
+                }
+            }));
+        }
+
+        for handle in handles {
+            handle.join().expect("reader thread failed");
+        }
     }
 }

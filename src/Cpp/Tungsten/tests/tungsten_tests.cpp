@@ -3,12 +3,14 @@
 #include "../../FingerTree/tests/test_support/test_runner.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cstdint>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -521,6 +523,50 @@ void add_persistent_association_tests(suite& tests)
         for (const auto& [snapshot, expected] : snapshots) {
             require_association_equal(snapshot, expected);
         }
+    });
+
+    tests.add("persistent list and association snapshots tolerate concurrent readers", [] {
+        auto expected_list = std::vector<int>{};
+        expected_list.reserve(256);
+        auto list = wf::persistent_list<int>{};
+        auto assoc = wf::persistent_association<int, int>{};
+        auto expected_assoc = std::vector<std::pair<int, int>>{};
+        expected_assoc.reserve(128);
+
+        for (auto value = 0; value != 256; ++value) {
+            expected_list.push_back(value);
+            list = list.append(value);
+        }
+
+        for (auto key = 0; key != 128; ++key) {
+            expected_assoc.push_back({key, -key});
+            assoc = assoc.set_item(key, -key);
+        }
+
+        auto failures = std::atomic<int>{0};
+        auto threads = std::vector<std::thread>{};
+        threads.reserve(8);
+        for (auto worker = 0; worker != 8; ++worker) {
+            threads.emplace_back([&] {
+                try {
+                    for (auto pass = 0; pass != 256; ++pass) {
+                        require_vector_equal(list.to_vector(), expected_list);
+                        FT_REQUIRE_EQUAL(list.front(), 0);
+                        FT_REQUIRE_EQUAL(list.back(), 255);
+                        FT_REQUIRE_EQUAL(list[127], 127);
+                        require_association_equal(assoc, expected_assoc);
+                    }
+                } catch (...) {
+                    failures.fetch_add(1, std::memory_order_relaxed);
+                }
+            });
+        }
+
+        for (auto& thread : threads) {
+            thread.join();
+        }
+
+        FT_REQUIRE_EQUAL(failures.load(std::memory_order_relaxed), 0);
     });
 }
 

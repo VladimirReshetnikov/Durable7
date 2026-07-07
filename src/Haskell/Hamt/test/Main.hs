@@ -2,6 +2,9 @@ module Main (main) where
 
 import Prelude hiding (lookup, null)
 
+import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
+import Control.Exception (SomeException, try)
+import Control.Monad (forM_, replicateM)
 import Data.Char (toLower)
 import Data.List (sort)
 
@@ -16,6 +19,7 @@ main = do
   testCollisionPolicy
   testActualKeyPreservation
   testSetAlgebra
+  testConcurrentReads
   putStrLn "tools-data-structures-hamt tests passed"
 
 testMapBasics :: IO ()
@@ -57,6 +61,35 @@ testSetAlgebra = do
   assertBool "subset relation" (HashSet.isSubsetOf (HashSet.fromList [1 :: Int, 2]) left)
   assertBool "overlap relation" (HashSet.overlaps left right)
   assertBool "set equality ignores duplicates" (HashSet.setEquals left (HashSet.fromList [3 :: Int, 2, 1, 2]))
+
+testConcurrentReads :: IO ()
+testConcurrentReads = do
+  let mapValues = HashMap.fromList [(key, key * 3 - 100) | key <- [0 :: Int .. 255]]
+      setValues = HashSet.fromList [0 :: Int .. 255]
+      expectedMap = [(key, key * 3 - 100) | key <- [0 :: Int .. 255]]
+      expectedSet = [0 :: Int .. 255]
+  runConcurrent "hamt concurrent reads" 8 $ do
+    forM_ [1 :: Int .. 128] $ \_ -> do
+      assertEqual "concurrent map size" 256 (HashMap.size mapValues)
+      assertEqual "concurrent map lookup" (Just 284) (HashMap.lookup 128 mapValues)
+      assertEqual "concurrent map contents" expectedMap (sort (HashMap.toList mapValues))
+      assertEqual "concurrent set size" 256 (HashSet.size setValues)
+      assertBool "concurrent set membership" (HashSet.member 200 setValues)
+      assertEqual "concurrent set contents" expectedSet (sort (HashSet.toList setValues))
+
+runConcurrent :: String -> Int -> IO () -> IO ()
+runConcurrent label workerCount action = do
+  boxes <- replicateM workerCount newEmptyMVar
+  forM_ boxes $ \box -> do
+    _ <- forkIO $ do
+      result <- try action :: IO (Either SomeException ())
+      putMVar box result
+    pure ()
+  results <- mapM takeMVar boxes
+  forM_ results $ \result ->
+    case result of
+      Right () -> pure ()
+      Left exception -> fail (label ++ ": worker failed: " ++ show exception)
 
 assertEqual :: (Eq a, Show a) => String -> a -> a -> IO ()
 assertEqual label expected actual

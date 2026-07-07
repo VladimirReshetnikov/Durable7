@@ -12,4 +12,5 @@ cabal test hamt-test
 ```
 
 The dependency-free executable covers map last-wins construction, duplicate rejection, explicit
-collision buckets, custom hash/equality policy behavior, original-key recovery, and set algebra.
+collision buckets, custom hash/equality policy behavior, original-key recovery, set algebra, and
+`forkIO` concurrent readers over shared immutable snapshots.
