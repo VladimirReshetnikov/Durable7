@@ -250,10 +250,16 @@ public sealed class PersistentAssociationTests
         var appended = assoc.Append("ALPHA", 9);
         Assert.Equal("ALPHA", appended.GetAt(1).Key);
 
+        // KeyTake presents the stored key instances, not the requested ones.
+        var taken = assoc.KeyTake(["ALPHA"]);
+        Assert.Equal("Alpha", taken.GetAt(0).Key);
+        Assert.Equal(1, taken["alpha"]);
+
         // Derived associations keep the comparer.
         Assert.Same(StringComparer.OrdinalIgnoreCase, assoc.Reverse().Comparer);
         Assert.Same(StringComparer.OrdinalIgnoreCase, assoc.Take(1).Comparer);
         Assert.Same(StringComparer.OrdinalIgnoreCase, assoc.Remove("BETA").Comparer);
+        Assert.Same(StringComparer.OrdinalIgnoreCase, taken.Comparer);
     }
 
     /// <summary>Verifies pattern-based and interface enumeration yield pairs in association order.</summary>

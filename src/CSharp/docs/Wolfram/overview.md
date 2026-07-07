@@ -64,7 +64,7 @@ PersistentAssociation<TKey, TValue>
 Association stamps are gapped order-maintenance labels with gap `G = 2^20`: appends take
 `last + G`, prepends `first - G`, positional inserts the midpoint of their neighbors' labels.
 When a midpoint no longer exists (at least 20 consecutive same-point inserts after a fresh
-labeling), the association relabels wholesale in `O(n (w + log n))`. Because the entry sequence
+labeling), the association relabels wholesale in `O(n (w + c))`. Because the entry sequence
 is stamp-sorted, any key's position is recovered from its stamp by the deque's sorted-search
 signposts in `O(log n)` - this is how keyed removal, in-place update, and `IndexOfKey` avoid
 linear scans.

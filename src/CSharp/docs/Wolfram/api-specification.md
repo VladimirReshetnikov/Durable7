@@ -48,10 +48,10 @@ bounds and hold under branching persistence via memoized suspensions.
 | `Append`, `Prepend` | `Append`, `Prepend` | O(1) amortized, O(log n) worst | |
 | `AddRange` | `Join` | O(k); O(log min) for a persistent list argument | |
 | `Join` | `Join` | O(log min(n1, n2)) | empty operand returns the other instance |
-| `Insert`, `InsertRange` | `Insert` | O(log n), O(log n + k) | index `Count` appends |
-| `RemoveAt`, `RemoveRange` | `Delete` | O(log n) | |
+| `Insert`, `InsertRange` | `Insert` | O(log min(i + 1, n - i)) amortized, O(log n + k) | index `Count` appends |
+| `RemoveAt`, `RemoveRange` | `Delete` | O(log min(i + 1, n - i)) amortized, O(log n) | |
 | `RemoveFirst`, `RemoveLast` | `Rest`, `Most` | O(1) amortized | `InvalidOperationException` when empty |
-| `SetItem`, `UpdateAt` | `ReplacePart`, `MapAt` | O(log n) | `UpdateAt` invokes the updater exactly once |
+| `SetItem`, `UpdateAt` | `ReplacePart`, `MapAt` | O(log min(i + 1, n - i)) amortized | `UpdateAt` invokes the updater exactly once |
 | `GetRange`, `Take`, `TakeLast`, `Drop`, `DropLast` | `Part` span, `Take`, `Drop` | O(log n) | results share structure |
 | `SplitAt` | - | O(log n) | both halves share structure |
 | `Reverse` | `Reverse` | O(n) | deliberate: no direction dispatch on other operations |
@@ -69,7 +69,7 @@ Composition: `PersistentHashMap<TKey, (long Stamp, TValue Value)>` keyed index p
 `FingerTreeDeque<(long Stamp, TKey Key, TValue Value)>` order sequence sorted by strictly
 ascending stamp; values are stored in both. Stamps are gapped order-maintenance labels
 (gap `G = 2^20`): append `last + G`, prepend `first - G`, positional insert the neighbor
-midpoint, wholesale relabel (`O(n (w + log n))`) when the local gap - or, after ~2^43 end
+midpoint, wholesale relabel (`O(n (w + c))`) when the local gap - or, after ~2^43 end
 insertions, the `long` label range - is exhausted. Relabel cost is per produced version and is
 not amortized under branching persistence. Only `Insert` (and astronomically remote end-insertion
 overflow) can relabel.
@@ -100,7 +100,7 @@ overflow) can relabel.
 | Member | Wolfram | Complexity | Notes |
 | --- | --- | --- | --- |
 | `Empty`, `Create(comparer)` | `<\|\|>` | O(1) | default comparer collapses to shared `Empty` |
-| `CreateRange(pairs, comparer)` | association literal | O(n (w + log n)) | rule 1 |
+| `CreateRange(pairs, comparer)` | association literal | O(n (w + c)) for distinct keys; each duplicate adds O(log n) | rule 1 |
 | `Count`, `IsEmpty`, `Comparer` | `Length` / - / - | O(1) | |
 | `this[TKey]`, `TryGetValue` | `assoc[k]`, `Lookup` | O(w + c), allocation-free | indexer throws `KeyNotFoundException`; Wolfram would return `Missing["KeyAbsent", k]` |
 | `ContainsKey`, `TryGetKey` | `KeyExistsQ` / - | O(w + c) | `TryGetKey` recovers the stored key instance |
@@ -109,15 +109,15 @@ overflow) can relabel.
 | `IndexOfKey` | - | O(w + c + log n) | -1 when absent |
 | `Keys`, `Values`, enumeration, `ToArray` | `Keys`, `Values`, `Normal` | O(n) | association order, no hashing; struct enumerator |
 | `SetItem` | `AssociateTo`, `a[k] = v` | O(w + c + log n); new-key append O(w + c) amortized | rule 3; no-op identity on default-equal value |
-| `SetItems`, `Join` | `Join` | O(m (w + log n)) | rules 1/6; small-into-large never rebuilds the large side |
+| `SetItems`, `Join` | `Join` | O(m (w + c)) for new keys; O(m (w + c + log n)) worst-case | rules 1/6; small-into-large never rebuilds the large side |
 | `Append`, `Prepend` | `Append`, `Prepend` | O(w + c + log n) | rule 2 |
-| `Insert` | `Insert` | O(w + c + log n); O(n (w + log n)) on relabel | rule 5 |
+| `Insert` | `Insert` | O(w + c + log n); O(n (w + c)) on relabel | rule 5 |
 | `Remove`, `TryRemove`, `RemoveRange` | `KeyDrop` | O(w + c + log n) per key | absent keys are no-ops |
-| `KeyTake` | `KeyTake` | O(m (w + log m)) | rule 8 |
-| `RemoveAt`, `RemoveFirst`, `RemoveLast` | `Delete`, `Rest`, `Most` | O(w + c + log n) | surviving entries shared: `Rest`-recursion is linearithmic |
+| `KeyTake` | `KeyTake` | O(m (w + c)) | rule 8; never searches the order structure |
+| `RemoveAt`, `RemoveFirst`, `RemoveLast` | `Delete`, `Rest`, `Most` | O(w + c + log min(i + 1, n - i)) amortized; ends O(w + c) | surviving entries shared: `Rest`-recursion is O(n (w + c)) total |
 | `GetRange`, `Take`, `Drop` | `Part` span, `Take`, `Drop` | O(log n + min(kept, removed) (w + c)) | index reconciled from the smaller side |
-| `Reverse` | `Reverse` | O(n (w + log n)) | fresh labels; no reversal bit by design |
-| `KeySort(comparer?)`, `Sort(comparer?)` | `KeySort`, `Sort` | O(n (w + log n)) | rule 7; stable via stamp tiebreak |
+| `Reverse` | `Reverse` | O(n (w + c)) | fresh labels; no reversal bit by design |
+| `KeySort(comparer?)`, `Sort(comparer?)` | `KeySort`, `Sort` | O(n log n) comparisons + O(n (w + c)) rebuild | rule 7; stable via stamp tiebreak |
 
 ### Divergences from Wolfram, by design
 

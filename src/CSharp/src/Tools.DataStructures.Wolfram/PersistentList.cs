@@ -119,14 +119,14 @@ public sealed class PersistentList<T> : IReadOnlyList<T>
     /// </summary>
     /// <remarks>O(1) worst-case.</remarks>
     /// <exception cref="InvalidOperationException">The list is empty.</exception>
-    public T First => _items.First;
+    public T First => IsEmpty ? throw EmptyError() : _items.First;
 
     /// <summary>
     /// Gets the last element. Wolfram: <c>Last</c>.
     /// </summary>
     /// <remarks>O(1) worst-case.</remarks>
     /// <exception cref="InvalidOperationException">The list is empty.</exception>
-    public T Last => _items.Last;
+    public T Last => IsEmpty ? throw EmptyError() : _items.Last;
 
     /// <summary>
     /// Gets the element at a zero-based index. Wolfram: <c>Part</c> (one-based there).
@@ -223,7 +223,7 @@ public sealed class PersistentList<T> : IReadOnlyList<T>
     /// <param name="index">Zero-based insertion index; <see cref="Count"/> appends at the back.</param>
     /// <param name="item">Element to insert.</param>
     /// <returns>A new list; the source is unchanged.</returns>
-    /// <remarks>O(log n).</remarks>
+    /// <remarks>O(log(min(index, Count - index) + 1)) amortized — logarithmic in the distance from the nearer end; O(log n) worst-case for a single call.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is negative or &gt; <see cref="Count"/>.</exception>
     public PersistentList<T> Insert(int index, T item) => Wrap(_items.InsertAt(index, item));
 
@@ -245,7 +245,7 @@ public sealed class PersistentList<T> : IReadOnlyList<T>
     /// </summary>
     /// <param name="index">Zero-based element index.</param>
     /// <returns>A new list one element shorter; the source is unchanged.</returns>
-    /// <remarks>O(log n).</remarks>
+    /// <remarks>O(log min(index + 1, Count - index)) amortized; O(log n) worst-case for a single call.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is negative or ≥ <see cref="Count"/>.</exception>
     public PersistentList<T> RemoveAt(int index) => Wrap(_items.RemoveAt(index));
 
@@ -266,7 +266,8 @@ public sealed class PersistentList<T> : IReadOnlyList<T>
     /// <returns>A new list one element shorter; the source is unchanged.</returns>
     /// <remarks>O(1) amortized, O(log n) worst-case.</remarks>
     /// <exception cref="InvalidOperationException">The list is empty.</exception>
-    public PersistentList<T> RemoveFirst() => Wrap(_items.RemoveFirst());
+    public PersistentList<T> RemoveFirst() =>
+        IsEmpty ? throw EmptyError() : Wrap(_items.RemoveFirst());
 
     /// <summary>
     /// Returns a list with the last element removed. Wolfram: <c>Most</c>.
@@ -274,7 +275,8 @@ public sealed class PersistentList<T> : IReadOnlyList<T>
     /// <returns>A new list one element shorter; the source is unchanged.</returns>
     /// <remarks>O(1) amortized, O(log n) worst-case.</remarks>
     /// <exception cref="InvalidOperationException">The list is empty.</exception>
-    public PersistentList<T> RemoveLast() => Wrap(_items.RemoveLast());
+    public PersistentList<T> RemoveLast() =>
+        IsEmpty ? throw EmptyError() : Wrap(_items.RemoveLast());
 
     /// <summary>
     /// Returns a list with the element at a zero-based index replaced. Wolfram:
@@ -283,7 +285,7 @@ public sealed class PersistentList<T> : IReadOnlyList<T>
     /// <param name="index">Zero-based element index.</param>
     /// <param name="value">Replacement element.</param>
     /// <returns>A new list; the source is unchanged.</returns>
-    /// <remarks>O(log n).</remarks>
+    /// <remarks>O(log min(index + 1, Count - index)) amortized; replacing an endpoint element is O(1) worst-case.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is negative or ≥ <see cref="Count"/>.</exception>
     public PersistentList<T> SetItem(int index, T value) => Replace(_items.SetItem(index, value));
 
@@ -295,8 +297,8 @@ public sealed class PersistentList<T> : IReadOnlyList<T>
     /// <param name="updater">Pure function from the current element to its replacement.</param>
     /// <returns>A new list; the source is unchanged.</returns>
     /// <remarks>
-    /// O(log n). <paramref name="updater"/> is invoked exactly once; exceptions it throws
-    /// propagate and leave the source unchanged.
+    /// O(log min(index + 1, Count - index)) amortized. <paramref name="updater"/> is invoked
+    /// exactly once; exceptions it throws propagate and leave the source unchanged.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is negative or ≥ <see cref="Count"/>.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="updater"/> is <see langword="null"/>.</exception>
@@ -470,4 +472,6 @@ public sealed class PersistentList<T> : IReadOnlyList<T>
     IEnumerator<T> IEnumerable<T>.GetEnumerator() => GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+    private static InvalidOperationException EmptyError() => new("The list is empty.");
 }

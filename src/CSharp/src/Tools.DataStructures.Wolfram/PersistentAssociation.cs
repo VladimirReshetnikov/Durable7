@@ -54,7 +54,7 @@ public static class PersistentAssociation
     /// several times keeps its first occurrence's position with its last occurrence's value,
     /// matching Wolfram <c>Association</c> construction.
     /// </returns>
-    /// <remarks>O(n (w + log n)) for n pairs, where w ≤ 7 is the hash-trie depth.</remarks>
+    /// <remarks>O(n (w + c)) for n distinct keys, where w ≤ 7 is the hash-trie depth and c the equal-hash collision-bucket scan; each duplicate key adds an O(log n) in-place update.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="pairs"/> is <see langword="null"/>.</exception>
     public static PersistentAssociation<TKey, TValue> CreateRange<TKey, TValue>(
         IEnumerable<KeyValuePair<TKey, TValue>> pairs,
@@ -114,7 +114,7 @@ public static class PersistentAssociation
 /// <para>
 /// Association order is maintained with gapped stamp labels shared by both internal structures.
 /// End insertions consume one label step each; a positional <see cref="Insert"/> takes the
-/// midpoint of its neighbors' labels and triggers a full O(n (w + log n)) relabel of the
+/// midpoint of its neighbors' labels and triggers a full O(n (w + c)) relabel of the
 /// association only when the local gap is exhausted (at least 20 consecutive same-point inserts
 /// after a fresh labeling). The relabel cost is per produced version and is not amortized under
 /// branching persistence: re-branching repeatedly from the same pre-relabel version re-pays it.
@@ -204,14 +204,16 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     /// </summary>
     /// <remarks>O(1) worst-case.</remarks>
     /// <exception cref="InvalidOperationException">The association is empty.</exception>
-    public KeyValuePair<TKey, TValue> First => _entries.First.ToPair();
+    public KeyValuePair<TKey, TValue> First =>
+        IsEmpty ? throw EmptyError() : _entries.First.ToPair();
 
     /// <summary>
     /// Gets the last entry in association order. Wolfram: <c>Last</c> (which returns the value; take <c>.Value</c>).
     /// </summary>
     /// <remarks>O(1) worst-case.</remarks>
     /// <exception cref="InvalidOperationException">The association is empty.</exception>
-    public KeyValuePair<TKey, TValue> Last => _entries.Last.ToPair();
+    public KeyValuePair<TKey, TValue> Last =>
+        IsEmpty ? throw EmptyError() : _entries.Last.ToPair();
 
     /// <summary>
     /// Gets the keys in association order. Wolfram: <c>Keys</c>.
@@ -279,7 +281,7 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     /// several times keeps its first occurrence's position with its last occurrence's value,
     /// matching Wolfram <c>Association</c> construction.
     /// </returns>
-    /// <remarks>O(n (w + log n)) for n pairs.</remarks>
+    /// <remarks>O(n (w + c)) for n distinct keys; each duplicate key adds an O(log n) in-place update.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="pairs"/> is <see langword="null"/>.</exception>
     public static PersistentAssociation<TKey, TValue> CreateRange(
         IEnumerable<KeyValuePair<TKey, TValue>> pairs,
@@ -367,11 +369,13 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
         if (EqualityComparer<TValue>.Default.Equals(slot.Value, value))
             return this;
 
+        // UpdateAt fuses the fetch and the replacement into one tree walk, and the hash map
+        // retains its originally stored key instance on SetItem by contract, so neither side
+        // needs a separate stored-key fetch.
         var position = IndexOfStamp(slot.Stamp);
-        var stored = _entries[position];
         return new(
-            _entries.SetItem(position, new Entry(slot.Stamp, stored.Key, value)),
-            _index.SetItem(stored.Key, new Slot(slot.Stamp, value)));
+            _entries.UpdateAt(position, stored => new Entry(stored.Stamp, stored.Key, value)),
+            _index.SetItem(key, new Slot(slot.Stamp, value)));
     }
 
     /// <summary>
@@ -383,7 +387,7 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     /// last supplied value; new keys append in first-occurrence order. Returns the same instance
     /// when nothing changes.
     /// </returns>
-    /// <remarks>O(m (w + log n)) for m pairs; the source association is never rebuilt wholesale.</remarks>
+    /// <remarks>O(m (w + c)) for m pairs when the keys are new (appends); each pair whose key already exists costs O(w + c + log n). The source association is never rebuilt wholesale.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="pairs"/> is <see langword="null"/>.</exception>
     public PersistentAssociation<TKey, TValue> SetItems(IEnumerable<KeyValuePair<TKey, TValue>> pairs)
     {
@@ -405,9 +409,9 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     /// in <paramref name="other"/>'s order. Returns the same instance when nothing changes.
     /// </returns>
     /// <remarks>
-    /// O(m (w + log n)) for m entries in <paramref name="other"/> — small-into-large never
-    /// touches the large side's untouched entries. Key equality uses this association's
-    /// <see cref="Comparer"/>.
+    /// O(m (w + c + log n)) worst-case and O(m (w + c)) for all-new keys, for m entries in
+    /// <paramref name="other"/> — small-into-large never touches the large side's untouched
+    /// entries. Key equality uses this association's <see cref="Comparer"/>.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="other"/> is <see langword="null"/>.</exception>
     public PersistentAssociation<TKey, TValue> Join(PersistentAssociation<TKey, TValue> other)
@@ -485,7 +489,7 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     /// kernel-verified Wolfram rule.
     /// </returns>
     /// <remarks>
-    /// O(w + c + log n) while the local stamp gap lasts; O(n (w + log n)) when the gap between
+    /// O(w + c + log n) while the local stamp gap lasts; O(n (w + c)) when the gap between
     /// the insertion point's neighbors is exhausted and the association relabels (at least 20
     /// consecutive same-point inserts after a fresh labeling; see the class remarks).
     /// </remarks>
@@ -572,7 +576,7 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     /// are skipped and a key repeated in <paramref name="keys"/> keeps its first requested
     /// position.</param>
     /// <returns>A new association with the requested entries; the source is unchanged.</returns>
-    /// <remarks>O(m (w + log m)) for m requested keys; never touches unrequested entries.</remarks>
+    /// <remarks>O(m (w + c)) for m requested keys; never touches unrequested entries and never searches the order structure.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="keys"/> is <see langword="null"/>.</exception>
     public PersistentAssociation<TKey, TValue> KeyTake(IEnumerable<TKey> keys)
     {
@@ -581,7 +585,12 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
         foreach (var key in keys)
         {
             if (_index.TryGetValue(key, out var slot) && !result.ContainsKey(key))
-                result = result.AppendNew(_entries[IndexOfStamp(slot.Stamp)].Key, slot.Value);
+            {
+                // The result presents the stored key instances; TryGetKey recovers one in a
+                // hash probe instead of a stamp search over the order structure.
+                _index.TryGetKey(key, out var storedKey);
+                result = result.AppendNew(storedKey, slot.Value);
+            }
         }
         return result;
     }
@@ -592,7 +601,7 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     /// </summary>
     /// <param name="index">Zero-based position.</param>
     /// <returns>A new association one entry shorter; the source is unchanged.</returns>
-    /// <remarks>O(w + c + log n).</remarks>
+    /// <remarks>O(w + c + log min(index + 1, Count - index)) amortized.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is negative or ≥ <see cref="Count"/>.</exception>
     public PersistentAssociation<TKey, TValue> RemoveAt(int index)
     {
@@ -608,7 +617,7 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     /// Returns the association without its first entry. Wolfram: <c>Rest</c>.
     /// </summary>
     /// <returns>A new association one entry shorter; the source is unchanged.</returns>
-    /// <remarks>O(w + c + log n); the surviving entries are shared, so Rest-driven recursion over an association is linearithmic, not quadratic.</remarks>
+    /// <remarks>O(w + c) amortized — the ends of the order structure are O(1) amortized — and the surviving entries are shared, so Rest-driven recursion over an association costs O(n (w + c)) total, not quadratic.</remarks>
     /// <exception cref="InvalidOperationException">The association is empty.</exception>
     public PersistentAssociation<TKey, TValue> RemoveFirst() =>
         IsEmpty ? throw EmptyError() : RemoveAt(0);
@@ -617,7 +626,7 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     /// Returns the association without its last entry. Wolfram: <c>Most</c>.
     /// </summary>
     /// <returns>A new association one entry shorter; the source is unchanged.</returns>
-    /// <remarks>O(w + c + log n).</remarks>
+    /// <remarks>O(w + c) amortized; O(w + c + log n) worst-case for a single call.</remarks>
     /// <exception cref="InvalidOperationException">The association is empty.</exception>
     public PersistentAssociation<TKey, TValue> RemoveLast() =>
         IsEmpty ? throw EmptyError() : RemoveAt(Count - 1);
@@ -636,7 +645,8 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     /// <exception cref="ArgumentOutOfRangeException">The range does not lie within the association.</exception>
     public PersistentAssociation<TKey, TValue> GetRange(int index, int count)
     {
-        var kept = _entries.GetRange(index, count);
+        var split = _entries.SplitRange(index, count);
+        var kept = split.Range;
         if (kept.Count == Count)
             return this;
         if (kept.IsEmpty)
@@ -653,7 +663,6 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
         else
         {
             indexSide = _index;
-            var split = _entries.SplitRange(index, count);
             foreach (var entry in split.Before)
                 indexSide = indexSide.Remove(entry.Key);
             foreach (var entry in split.After)
@@ -687,7 +696,7 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     /// </summary>
     /// <returns>A new association with freshly labeled entries; the source is unchanged.</returns>
     /// <remarks>
-    /// O(n (w + log n)), matching the reference Wolfram cost. An O(1) reversal bit was considered
+    /// O(n (w + c)), matching the reference Wolfram cost. An O(1) reversal bit was considered
     /// and rejected: it inverts the stamp-ascending invariant that keyed position lookups rely
     /// on, taxing every other operation with direction dispatch (see the design provenance note
     /// at the top of this file).
@@ -710,7 +719,7 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     /// stable, and the result is an ordinary association that does not stay sorted under later
     /// writes.
     /// </returns>
-    /// <remarks>O(n (w + log n)). Exceptions thrown by the comparer — including the default comparer's failure for incomparable key types — propagate and leave the source unchanged.</remarks>
+    /// <remarks>O(n log n) comparer calls plus an O(n (w + c)) rebuild. Exceptions thrown by the comparer — including the default comparer's failure for incomparable key types — propagate and leave the source unchanged.</remarks>
     public PersistentAssociation<TKey, TValue> KeySort(IComparer<TKey>? comparer = null) =>
         SortedBy(entry => entry.Key, comparer ?? System.Collections.Generic.Comparer<TKey>.Default);
 
@@ -723,7 +732,7 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     /// stable, and the result is an ordinary association that does not stay sorted under later
     /// writes.
     /// </returns>
-    /// <remarks>O(n (w + log n)). Exceptions thrown by the comparer — including the default comparer's failure for incomparable value types — propagate and leave the source unchanged.</remarks>
+    /// <remarks>O(n log n) comparer calls plus an O(n (w + c)) rebuild. Exceptions thrown by the comparer — including the default comparer's failure for incomparable value types — propagate and leave the source unchanged.</remarks>
     public PersistentAssociation<TKey, TValue> Sort(IComparer<TValue>? comparer = null) =>
         SortedBy(entry => entry.Value, comparer ?? System.Collections.Generic.Comparer<TValue>.Default);
 
