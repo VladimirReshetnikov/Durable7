@@ -37,8 +37,11 @@ uses the low 32 bits to match the C# implementation's hash width. Equivalent key
 
 Enumeration order follows trie bitmap order and collision-bucket order. It is stable for an
 unchanged version but is not insertion order or sorted order. Iterators keep at most seven inline
-branch frames and do not allocate heap storage while traversing; copied iterators advance
-independently.
+branch frames, retain the trie root (so an iterator obtained from a temporary map value stays
+valid), yield references to the stored entries without copying keys or values, and do not allocate
+heap storage while traversing; copied iterators advance independently. Pointers returned by
+`try_get`/`try_get_key` do not retain the trie: they stay valid only while some map value holding
+the containing version is alive.
 
 ## Map Contract
 

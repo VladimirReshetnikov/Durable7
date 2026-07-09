@@ -2,6 +2,7 @@
 
 #include <array>
 #include <bit>
+#include <cassert>
 #include <cstdint>
 #include <functional>
 #include <initializer_list>
@@ -13,7 +14,9 @@
 #include <utility>
 #include <vector>
 
-#if defined(__clang__) && defined(_MSC_VER)
+// Plain MSVC accepts standard [[no_unique_address]] but ignores it for ABI
+// stability; the effective spelling there is [[msvc::no_unique_address]].
+#if defined(_MSC_VER)
 #define TOOLS_DATA_STRUCTURES_HAMT_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
 #else
 #define TOOLS_DATA_STRUCTURES_HAMT_NO_UNIQUE_ADDRESS [[no_unique_address]]
@@ -49,16 +52,6 @@ private:
     using node_ptr = std::shared_ptr<const node>;
     using hash_node_ptr = std::shared_ptr<const hash_node>;
     using leaf_node_ptr = std::shared_ptr<const leaf_node>;
-
-    struct entry {
-        Key key;
-        T value;
-
-        entry(Key entry_key, T entry_value)
-            : key(std::move(entry_key)),
-              value(std::move(entry_value)) {
-        }
-    };
 
 public:
     using key_type = Key;
@@ -133,12 +126,17 @@ public:
         return try_get(key) != nullptr;
     }
 
+    // The returned pointer aims into this map's shared nodes: it stays valid
+    // while any map value retaining the containing version is alive, and in
+    // particular does NOT outlive a temporary receiver
+    // (get_map().try_get(k) dangles once the full expression ends).
     [[nodiscard]] const T* try_get(const Key& key) const {
         const Key* actual_key = nullptr;
         const T* value = nullptr;
         return try_get_entry(key, actual_key, value) ? value : nullptr;
     }
 
+    // Same lifetime contract as try_get.
     [[nodiscard]] const Key* try_get_key(const Key& equal_key) const {
         const Key* actual_key = nullptr;
         const T* value = nullptr;
@@ -292,7 +290,7 @@ public:
         }
 
         pointer operator->() const {
-            return std::addressof(*current_);
+            return current_;
         }
 
         const_iterator& operator++() {
@@ -325,13 +323,14 @@ public:
     private:
         friend class persistent_hash_map;
 
-        explicit const_iterator(const node* root)
-            : next_(root),
+        explicit const_iterator(node_ptr root)
+            : root_(std::move(root)),
+              next_(root_.get()),
               at_end_(false) {
             at_end_ = !move_next();
         }
 
-        bool move_next() {
+        bool move_next() noexcept {
             if (move_next_collision_entry()) {
                 return true;
             }
@@ -342,7 +341,7 @@ public:
             while (true) {
                 if (current_node == nullptr) {
                     if (depth_ == 0) {
-                        current_.reset();
+                        current_ = nullptr;
                         return false;
                     }
 
@@ -355,31 +354,32 @@ public:
                     current_node = (*top.children)[top.index++].get();
                 }
 
-                if (const auto* leaf = dynamic_cast<const leaf_node*>(current_node)) {
-                    current_.emplace(leaf->key_, leaf->value_);
+                switch (current_node->kind()) {
+                case persistent_hamt_node_kind::leaf:
+                    current_ = std::addressof(static_cast<const leaf_node*>(current_node)->entry_);
                     return true;
-                }
-
-                if (const auto* collision = dynamic_cast<const collision_node*>(current_node)) {
-                    collision_entries_ = std::addressof(collision->entries_);
+                case persistent_hamt_node_kind::collision:
+                    collision_entries_ = std::addressof(
+                        static_cast<const collision_node*>(current_node)->entries_);
                     collision_index_ = 0;
                     return move_next_collision_entry();
+                default: {
+                    const auto* branch = static_cast<const bitmap_indexed_node*>(current_node);
+                    frames_[depth_++] = frame{std::addressof(branch->children_), 0};
+                    current_node = nullptr;
+                    break;
                 }
-
-                const auto* branch = static_cast<const bitmap_indexed_node*>(current_node);
-                frames_[depth_++] = frame{std::addressof(branch->children_), 0};
-                current_node = nullptr;
+                }
             }
         }
 
-        bool move_next_collision_entry() {
+        bool move_next_collision_entry() noexcept {
             if (collision_entries_ == nullptr) {
                 return false;
             }
 
             if (collision_index_ < collision_entries_->size()) {
-                const auto& collision_entry = (*collision_entries_)[collision_index_++];
-                current_.emplace(collision_entry.key, collision_entry.value);
+                current_ = std::addressof((*collision_entries_)[collision_index_++]);
                 return true;
             }
 
@@ -388,17 +388,18 @@ public:
             return false;
         }
 
+        node_ptr root_;
         const node* next_ = nullptr;
         std::array<frame, max_depth> frames_{};
         std::size_t depth_ = 0;
-        const std::vector<entry>* collision_entries_ = nullptr;
+        const std::vector<value_type>* collision_entries_ = nullptr;
         std::size_t collision_index_ = 0;
-        std::optional<value_type> current_;
+        const value_type* current_ = nullptr;
         bool at_end_ = true;
     };
 
     [[nodiscard]] const_iterator begin() const {
-        return const_iterator(root_.get());
+        return const_iterator(root_);
     }
 
     [[nodiscard]] std::default_sentinel_t end() const noexcept {
@@ -457,10 +458,11 @@ public:
 
     [[nodiscard]] std::vector<const void*> debug_root_child_identities() const {
         std::vector<const void*> children;
-        const auto* branch = dynamic_cast<const bitmap_indexed_node*>(root_.get());
-        if (branch == nullptr) {
+        if (kind_of(root_.get()) != persistent_hamt_node_kind::bitmap_indexed) {
             return children;
         }
+
+        const auto* branch = static_cast<const bitmap_indexed_node*>(root_.get());
 
         children.reserve(branch->children_.size());
         for (const auto& child : branch->children_) {
@@ -518,19 +520,7 @@ private:
     }
 
     static persistent_hamt_node_kind kind_of(const node* candidate) noexcept {
-        if (candidate == nullptr) {
-            return persistent_hamt_node_kind::empty;
-        }
-
-        if (dynamic_cast<const leaf_node*>(candidate) != nullptr) {
-            return persistent_hamt_node_kind::leaf;
-        }
-
-        if (dynamic_cast<const collision_node*>(candidate) != nullptr) {
-            return persistent_hamt_node_kind::collision;
-        }
-
-        return persistent_hamt_node_kind::bitmap_indexed;
+        return candidate == nullptr ? persistent_hamt_node_kind::empty : candidate->kind();
     }
 
     bool try_get_entry(
@@ -544,7 +534,8 @@ private:
 
         const auto hash = get_hash(key);
         auto shift = 0;
-        while (const auto* branch = dynamic_cast<const bitmap_indexed_node*>(current_node)) {
+        while (current_node->kind() == persistent_hamt_node_kind::bitmap_indexed) {
+            const auto* branch = static_cast<const bitmap_indexed_node*>(current_node);
             const auto selected_bit = bit(index(hash, shift));
             if ((branch->bitmap_ & selected_bit) == 0) {
                 return false;
@@ -554,10 +545,11 @@ private:
             shift += bits_per_level;
         }
 
-        if (const auto* leaf = dynamic_cast<const leaf_node*>(current_node)) {
-            if (leaf->hash_ == hash && std::invoke(key_equal_, leaf->key_, key)) {
-                actual_key = std::addressof(leaf->key_);
-                value = std::addressof(leaf->value_);
+        if (current_node->kind() == persistent_hamt_node_kind::leaf) {
+            const auto* leaf = static_cast<const leaf_node*>(current_node);
+            if (leaf->hash_ == hash && std::invoke(key_equal_, leaf->entry_.first, key)) {
+                actual_key = std::addressof(leaf->entry_.first);
+                value = std::addressof(leaf->entry_.second);
                 return true;
             }
 
@@ -570,9 +562,9 @@ private:
         }
 
         for (const auto& collision_entry : collision->entries_) {
-            if (std::invoke(key_equal_, collision_entry.key, key)) {
-                actual_key = std::addressof(collision_entry.key);
-                value = std::addressof(collision_entry.value);
+            if (std::invoke(key_equal_, collision_entry.first, key)) {
+                actual_key = std::addressof(collision_entry.first);
+                value = std::addressof(collision_entry.second);
                 return true;
             }
         }
@@ -616,6 +608,8 @@ private:
     struct node : std::enable_shared_from_this<node> {
         virtual ~node() = default;
 
+        [[nodiscard]] virtual persistent_hamt_node_kind kind() const noexcept = 0;
+
         [[nodiscard]] virtual node_ptr set(
             const Key& key,
             const T& value,
@@ -650,8 +644,11 @@ private:
     struct leaf_node final : hash_node {
         leaf_node(std::uint32_t hash, Key key, T value)
             : hash_node(hash),
-              key_(std::move(key)),
-              value_(std::move(value)) {
+              entry_(std::move(key), std::move(value)) {
+        }
+
+        [[nodiscard]] persistent_hamt_node_kind kind() const noexcept override {
+            return persistent_hamt_node_kind::leaf;
         }
 
         [[nodiscard]] node_ptr set(
@@ -663,13 +660,13 @@ private:
             const ValueEqual& values_equal,
             bool overwrite,
             bool& added) const override {
-            if (this->hash_ == hash && std::invoke(equal, key_, key)) {
+            if (this->hash_ == hash && std::invoke(equal, entry_.first, key)) {
                 added = false;
-                if (!overwrite || std::invoke(values_equal, value_, value)) {
+                if (!overwrite || std::invoke(values_equal, entry_.second, value)) {
                     return this->shared_from_this();
                 }
 
-                return make_leaf(this->hash_, key_, value);
+                return make_leaf(this->hash_, entry_.first, value);
             }
 
             added = true;
@@ -686,9 +683,9 @@ private:
             const KeyEqual& equal,
             bool& removed,
             std::optional<T>& value) const override {
-            if (this->hash_ == hash && std::invoke(equal, key_, key)) {
+            if (this->hash_ == hash && std::invoke(equal, entry_.first, key)) {
                 removed = true;
-                value = value_;
+                value = entry_.second;
                 return nullptr;
             }
 
@@ -696,27 +693,32 @@ private:
             return this->shared_from_this();
         }
 
-        Key key_;
-        T value_;
+        value_type entry_;
     };
 
     struct collision_node final : hash_node {
-        collision_node(std::uint32_t hash, std::vector<entry> entries)
+        collision_node(std::uint32_t hash, std::vector<value_type> entries)
             : hash_node(hash),
               entries_(std::move(entries)) {
         }
 
-        static std::shared_ptr<const collision_node> create(hash_node_ptr left, leaf_node_ptr right) {
-            std::vector<entry> entries;
-            if (const auto collision = std::dynamic_pointer_cast<const collision_node>(left)) {
-                entries = collision->entries_;
-                entries.emplace_back(right->key_, right->value_);
-            } else {
-                const auto leaf = std::static_pointer_cast<const leaf_node>(left);
-                entries.emplace_back(leaf->key_, leaf->value_);
-                entries.emplace_back(right->key_, right->value_);
-            }
+        [[nodiscard]] persistent_hamt_node_kind kind() const noexcept override {
+            return persistent_hamt_node_kind::collision;
+        }
 
+        // Precondition: an equal-hash merge only ever combines two leaves whose
+        // keys differ under the map's comparer. Equal-hash inserts into an
+        // existing collision node are handled inside collision_node::set, so
+        // appending right without a duplicate-key scan is safe only under that
+        // precondition (mirrors the C# reference's Debug.Assert).
+        static std::shared_ptr<const collision_node> create(hash_node_ptr left, leaf_node_ptr right) {
+            assert(left->kind() == persistent_hamt_node_kind::leaf
+                && "Equal-hash merges must combine two leaves.");
+            const auto leaf = std::static_pointer_cast<const leaf_node>(left);
+            std::vector<value_type> entries;
+            entries.reserve(2);
+            entries.emplace_back(leaf->entry_);
+            entries.emplace_back(right->entry_);
             return std::make_shared<collision_node>(left->hash_, std::move(entries));
         }
 
@@ -738,17 +740,17 @@ private:
             }
 
             for (std::size_t i = 0; i < entries_.size(); ++i) {
-                if (!std::invoke(equal, entries_[i].key, key)) {
+                if (!std::invoke(equal, entries_[i].first, key)) {
                     continue;
                 }
 
                 added = false;
-                if (!overwrite || std::invoke(values_equal, entries_[i].value, value)) {
+                if (!overwrite || std::invoke(values_equal, entries_[i].second, value)) {
                     return this->shared_from_this();
                 }
 
                 auto replaced = entries_;
-                replaced[i] = entry(entries_[i].key, value);
+                replaced[i] = value_type(entries_[i].first, value);
                 return std::make_shared<collision_node>(this->hash_, std::move(replaced));
             }
 
@@ -771,20 +773,22 @@ private:
             }
 
             for (std::size_t i = 0; i < entries_.size(); ++i) {
-                if (!std::invoke(equal, entries_[i].key, key)) {
+                if (!std::invoke(equal, entries_[i].first, key)) {
                     continue;
                 }
 
                 removed = true;
-                value = entries_[i].value;
+                value = entries_[i].second;
 
                 if (entries_.size() == 2) {
                     const auto& remaining = entries_[1 - i];
-                    return make_leaf(this->hash_, remaining.key, remaining.value);
+                    return make_leaf(this->hash_, remaining.first, remaining.second);
                 }
 
-                auto entries = entries_;
-                entries.erase(entries.begin() + static_cast<std::ptrdiff_t>(i));
+                std::vector<value_type> entries;
+                entries.reserve(entries_.size() - 1);
+                entries.insert(entries.end(), entries_.begin(), entries_.begin() + static_cast<std::ptrdiff_t>(i));
+                entries.insert(entries.end(), entries_.begin() + static_cast<std::ptrdiff_t>(i) + 1, entries_.end());
                 return std::make_shared<collision_node>(this->hash_, std::move(entries));
             }
 
@@ -792,13 +796,17 @@ private:
             return this->shared_from_this();
         }
 
-        std::vector<entry> entries_;
+        std::vector<value_type> entries_;
     };
 
     struct bitmap_indexed_node final : node {
         bitmap_indexed_node(std::uint32_t bitmap, std::vector<node_ptr> children)
             : bitmap_(bitmap),
               children_(std::move(children)) {
+        }
+
+        [[nodiscard]] persistent_hamt_node_kind kind() const noexcept override {
+            return persistent_hamt_node_kind::bitmap_indexed;
         }
 
         [[nodiscard]] node_ptr set(
@@ -814,10 +822,11 @@ private:
             const auto selected_slot = slot(bitmap_, selected_bit);
 
             if ((bitmap_ & selected_bit) == 0) {
-                auto children = children_;
-                children.insert(
-                    children.begin() + static_cast<std::ptrdiff_t>(selected_slot),
-                    make_leaf(hash, key, value));
+                std::vector<node_ptr> children;
+                children.reserve(children_.size() + 1);
+                children.insert(children.end(), children_.begin(), children_.begin() + static_cast<std::ptrdiff_t>(selected_slot));
+                children.push_back(make_leaf(hash, key, value));
+                children.insert(children.end(), children_.begin() + static_cast<std::ptrdiff_t>(selected_slot), children_.end());
                 added = true;
                 return std::make_shared<bitmap_indexed_node>(bitmap_ | selected_bit, std::move(children));
             }
@@ -872,8 +881,10 @@ private:
                     return nullptr;
                 }
 
-                auto children = children_;
-                children.erase(children.begin() + static_cast<std::ptrdiff_t>(selected_slot));
+                std::vector<node_ptr> children;
+                children.reserve(children_.size() - 1);
+                children.insert(children.end(), children_.begin(), children_.begin() + static_cast<std::ptrdiff_t>(selected_slot));
+                children.insert(children.end(), children_.begin() + static_cast<std::ptrdiff_t>(selected_slot) + 1, children_.end());
                 return rebuild(bitmap_ ^ selected_bit, std::move(children));
             }
 
@@ -883,7 +894,8 @@ private:
         }
 
         static node_ptr rebuild(std::uint32_t bitmap, std::vector<node_ptr> children) {
-            if (children.size() == 1 && dynamic_cast<const hash_node*>(children[0].get()) != nullptr) {
+            if (children.size() == 1
+                && children[0]->kind() != persistent_hamt_node_kind::bitmap_indexed) {
                 return std::move(children[0]);
             }
 

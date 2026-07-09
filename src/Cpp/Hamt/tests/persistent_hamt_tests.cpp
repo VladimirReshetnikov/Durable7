@@ -8,6 +8,7 @@
 #include <exception>
 #include <initializer_list>
 #include <iostream>
+#include <iterator>
 #include <mutex>
 #include <random>
 #include <sstream>
@@ -540,6 +541,28 @@ TEST(Enumerator_CopiedIteratorAdvancesIndependently) {
 
     CHECK_EQ(expected, from_original);
     CHECK_EQ(expected, from_copy);
+}
+
+TEST(Enumerator_RetainsTheTrieBeyondTheSourceMapValue) {
+    using map_type = persistent_hash_map<int, std::string>;
+
+    // The iterator must own the trie root: obtaining it from a map value that
+    // is destroyed before iteration finishes must remain valid.
+    auto iterator = [] {
+        const auto local = map_type::empty()
+            .set_item(0, "zero")
+            .set_item(1, "one")
+            .set_item(33, "thirty-three");
+        return local.begin();
+    }();
+
+    std::vector<int> keys;
+    for (; iterator != std::default_sentinel; ++iterator) {
+        keys.push_back(iterator->first);
+    }
+
+    std::sort(keys.begin(), keys.end());
+    CHECK_EQ((std::vector<int>{0, 1, 33}), keys);
 }
 
 TEST(RandomHistory_MatchesUnorderedMapAndPreservesSnapshots) {
