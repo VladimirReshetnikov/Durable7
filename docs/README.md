@@ -27,6 +27,10 @@ Library-specific design and API documentation lives beside each workspace under 
 - [Test suite map](reference/test-suite-map.md) - cross-workspace map of test runners, routine commands, stress knobs, sample smoke tests, and benchmark boundaries.
 - [Workspace map](reference/workspace-map.md) - language-first layout, data-structure workspace roles, port lineage, and documentation placement rules.
 
+## Proposals
+
+- [Next data structures (2026-07-09)](proposals/new-data-structures-2026-07-09.md) - prioritized slate of new structures and API additions building on the derived-structure catalog: HAMT update/builder/diff, insertion-ordered set, hash bag, cursor/zipper, Patricia trie family, and numerics extensions.
+
 ## Reviews
 
 - [C# and Rust implementation review (2026-07-09)](reviews/csharp-rust-implementation-review-2026-07-09.md) - full-depth correctness, parity, and API-quality review of the C# reference libraries and Rust ports: findings, applied fixes, verified-sound areas, and deferred follow-ups.
@@ -41,8 +45,8 @@ Library-specific design and API documentation lives beside each workspace under 
 ## Placement
 
 Put repository-wide task procedures under `docs/guides`, durable cross-workspace maps under
-`docs/reference`, point-in-time review reports under `docs/reviews`, and extraction/history
-records under `docs/migration`.
+`docs/reference`, forward-looking design proposals under `docs/proposals`, point-in-time review
+reports under `docs/reviews`, and extraction/history records under `docs/migration`.
 
 Put C# HAMT implementation, API, and validation documents under
 [src/CSharp/docs/Hamt](../src/CSharp/docs/Hamt/README.md), C# Numerics API, validation, and maintainer
