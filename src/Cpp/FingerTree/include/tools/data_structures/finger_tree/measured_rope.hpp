@@ -300,7 +300,7 @@ public:
 
     [[nodiscard]] measured_rope_split<value_type, measure_policy> split_at(const size_type index) const
     {
-        throw_if_insert_index_out_of_range(index, size());
+        throw_if_split_index_out_of_range(index, size());
         if (index == 0) {
             return measured_rope_split<value_type, measure_policy>{measured_rope{}, *this};
         }
@@ -339,7 +339,7 @@ public:
 
     [[nodiscard]] user_measure_type prefix_measure(const size_type count) const
     {
-        throw_if_insert_index_out_of_range(count, size());
+        throw_if_count_out_of_range(count, size());
         if (count == 0) {
             return measure_policy::empty();
         }

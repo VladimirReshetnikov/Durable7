@@ -695,19 +695,22 @@ struct deep_measured_tree_rep final : measured_tree_rep<Element, MeasurePolicy> 
 
         auto pushed = child_type::node3(prefix[1], prefix[2], prefix[3]);
         auto forced_middle = force_middle();
-        auto source_measure = forced_middle.measure();
-        auto pushed_measure = pushed.measure();
         auto next_prefix = buffer_type{};
         next_prefix.reserve(2);
         next_prefix.push_back(std::move(value));
         next_prefix.push_back(prefix[0]);
 
+        // The middle's measure is read inside the probe, not eagerly here:
+        // constructing a deep node must not run the user combine chain (or
+        // surface its exceptions) unless a measure is actually queried,
+        // matching the C# PendingMeasuredPushFront contract.
         auto suspended = measured_lazy_cell<tree_type>::defer(
-            [forced_middle = std::move(forced_middle), pushed] {
+            [forced_middle, pushed] {
                 return forced_middle.cons(pushed);
             },
-            [source_measure = std::move(source_measure), pushed_measure = std::move(pushed_measure)] {
-                return std::optional<measure_type>{MeasurePolicy::combine(pushed_measure, source_measure)};
+            [forced_middle, pushed_measure = pushed.measure()] {
+                return std::optional<measure_type>{
+                    MeasurePolicy::combine(pushed_measure, forced_middle.measure())};
             });
 
         return tree_type::deep(std::move(next_prefix), std::move(suspended), suffix);
@@ -723,19 +726,19 @@ struct deep_measured_tree_rep final : measured_tree_rep<Element, MeasurePolicy> 
 
         auto pushed = child_type::node3(suffix[0], suffix[1], suffix[2]);
         auto forced_middle = force_middle();
-        auto source_measure = forced_middle.measure();
-        auto pushed_measure = pushed.measure();
         auto next_suffix = buffer_type{};
         next_suffix.reserve(2);
         next_suffix.push_back(suffix[3]);
         next_suffix.push_back(std::move(value));
 
+        // See cons: the middle's measure is deferred into the probe.
         auto suspended = measured_lazy_cell<tree_type>::defer(
-            [forced_middle = std::move(forced_middle), pushed] {
+            [forced_middle, pushed] {
                 return forced_middle.snoc(pushed);
             },
-            [source_measure = std::move(source_measure), pushed_measure = std::move(pushed_measure)] {
-                return std::optional<measure_type>{MeasurePolicy::combine(source_measure, pushed_measure)};
+            [forced_middle, pushed_measure = pushed.measure()] {
+                return std::optional<measure_type>{
+                    MeasurePolicy::combine(forced_middle.measure(), pushed_measure)};
             });
 
         return tree_type::deep(prefix, std::move(suspended), std::move(next_suffix));

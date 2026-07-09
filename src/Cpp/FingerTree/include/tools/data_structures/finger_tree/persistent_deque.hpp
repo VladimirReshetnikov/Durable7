@@ -515,11 +515,14 @@ public:
 
         friend bool operator==(const const_iterator& left, const const_iterator& right) noexcept
         {
+            // Compare (exhausted, position), not leaf addresses: persistent
+            // trees share subtrees, so two distinct positions can reference
+            // the same leaf object (e.g. after concat of a deque with itself).
             if (left.current_ == nullptr || right.current_ == nullptr) {
                 return left.current_ == right.current_;
             }
 
-            return left.current_ == right.current_;
+            return left.position_ == right.position_;
         }
 
         friend bool operator!=(const const_iterator& left, const const_iterator& right) noexcept
@@ -591,6 +594,10 @@ public:
 
         void advance()
         {
+            if (current_ != nullptr) {
+                ++position_;
+            }
+
             current_ = nullptr;
             while (!stack_.empty()) {
                 auto& top = stack_.back();
@@ -618,6 +625,7 @@ public:
 
         std::vector<frame> stack_;
         const T* current_ = nullptr;
+        size_type position_ = 0;
     };
 
 private:

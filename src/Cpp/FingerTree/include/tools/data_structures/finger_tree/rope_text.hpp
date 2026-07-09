@@ -81,6 +81,7 @@ struct line_column final {
 
 [[nodiscard]] inline std::size_t line_of_offset(const text_rope& rope, const std::size_t offset)
 {
+    throw_if_offset_out_of_range(offset, rope.size());
     return rope.prefix_measure(offset);
 }
 
@@ -116,8 +117,12 @@ struct line_column final {
     const std::size_t column)
 {
     const auto start = line_start_offset(rope, line);
-    if (column > rope.size() - start) {
-        throw std::out_of_range("column is outside the text rope bounds");
+    // Validate against the end of the requested line, not the end of the
+    // rope; a column equal to the line length addresses the terminating
+    // newline (or the end of the rope for the last line).
+    const auto end = line < rope.measure() ? line_start_offset(rope, line + 1) - 1 : rope.size();
+    if (column > end - start) {
+        throw std::out_of_range("column is outside the line bounds");
     }
 
     return start + column;

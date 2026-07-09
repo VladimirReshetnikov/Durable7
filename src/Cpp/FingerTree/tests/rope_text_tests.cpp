@@ -206,6 +206,19 @@ void add_rope_text_tests_impl(suite& tests)
         FT_REQUIRE_THROWS(std::out_of_range, ft::offset_of(rope, 1, 100));
         FT_REQUIRE_THROWS(std::out_of_range, ft::get_line(rope, 3));
     });
+
+    tests.add("rope text offset_of validates the column against the line end", [] {
+        const auto rope = ft::to_text_rope("ab\ncd");
+
+        FT_REQUIRE(ft::offset_of(rope, 0, 0) == 0);
+        FT_REQUIRE(ft::offset_of(rope, 0, 2) == 2);   // the newline terminating line 0
+        FT_REQUIRE(ft::offset_of(rope, 1, 2) == 5);   // end of the rope on the last line
+
+        // Columns past the line end must throw, not silently address line 1.
+        FT_REQUIRE_THROWS(std::out_of_range, ft::offset_of(rope, 0, 3));
+        FT_REQUIRE_THROWS(std::out_of_range, ft::offset_of(rope, 0, 4));
+        FT_REQUIRE_THROWS(std::out_of_range, ft::offset_of(rope, 1, 3));
+    });
 }
 
 } // namespace

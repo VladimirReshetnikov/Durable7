@@ -286,6 +286,25 @@ void add_persistent_deque_tests_impl(suite& tests)
         FT_REQUIRE_EQUAL(push_allocations(small), push_allocations(large));
     });
 
+    tests.add("persistent deque iterator equality tracks positions under structural sharing", [] {
+        const auto deque = ft::persistent_deque<int>{1, 2, 3};
+        const auto doubled = deque.concat(deque);
+
+        // Positions 0 and 3 dereference the same shared leaf object; the
+        // iterators must still compare unequal.
+        auto first = doubled.begin();
+        auto second = doubled.begin();
+        std::advance(second, 3);
+        FT_REQUIRE_EQUAL(*first, *second);
+        FT_REQUIRE(first != second);
+
+        auto same = doubled.begin();
+        FT_REQUIRE(first == same);
+        ++first;
+        ++same;
+        FT_REQUIRE(first == same);
+    });
+
     tests.add("persistent deque sorted search follows lower and upper bound semantics", [] {
         const auto deque = ft::persistent_deque<int>{1, 3, 3, 3, 7, 9, 9, 12};
 

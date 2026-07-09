@@ -80,6 +80,11 @@ public:
 
     [[nodiscard]] std::span<const value_type> view() const noexcept
     {
+        // A default-constructed chunk has no storage; keep noexcept honest.
+        if (storage_ == nullptr) {
+            return {};
+        }
+
         return std::span<const value_type>{storage_->data() + offset_, length_};
     }
 

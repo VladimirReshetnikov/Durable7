@@ -287,7 +287,7 @@ public:
 
     [[nodiscard]] rope_split<value_type> split_at(const size_type index) const
     {
-        throw_if_insert_index_out_of_range(index, size());
+        throw_if_split_index_out_of_range(index, size());
         if (index == 0) {
             return rope_split<value_type>{rope{}, *this};
         }
