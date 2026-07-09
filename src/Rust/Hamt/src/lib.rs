@@ -2,20 +2,42 @@
 #![doc = "Persistent hash-array mapped trie map and set."]
 
 use std::collections::hash_map::RandomState;
+use std::fmt;
 use std::hash::{BuildHasher, Hash};
+use std::iter::FusedIterator;
+use std::ops::Index;
 use std::sync::Arc;
 
 const BITS_PER_LEVEL: u32 = 5;
 const BRANCH_MASK: u32 = 0x1f;
+/// Deepest shift at which a `Branch` node can appear (32-bit hash, 5 bits per level).
+const MAX_BRANCH_SHIFT: u32 = 30;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DuplicateKey;
 
-#[derive(Clone)]
+impl fmt::Display for DuplicateKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("an entry with the same key already exists")
+    }
+}
+
+impl std::error::Error for DuplicateKey {}
+
 pub struct PersistentHashMap<K, V, S = RandomState> {
     root: Option<Arc<Node<K, V>>>,
     len: usize,
     hasher: S,
+}
+
+impl<K, V, S: Clone> Clone for PersistentHashMap<K, V, S> {
+    fn clone(&self) -> Self {
+        Self {
+            root: self.root.clone(),
+            len: self.len,
+            hasher: self.hasher.clone(),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -44,27 +66,18 @@ struct InsertResult<K, V> {
 
 struct RemoveResult<K, V> {
     node: Option<Arc<Node<K, V>>>,
-    removed: Option<V>,
+    removed: Option<(K, V)>,
     changed: bool,
 }
 
-impl<K, V> PersistentHashMap<K, V, RandomState>
-where
-    K: Eq + Hash + Clone,
-    V: Clone + PartialEq,
-{
+impl<K, V> PersistentHashMap<K, V, RandomState> {
     #[must_use]
     pub fn new() -> Self {
         Self::with_hasher(RandomState::new())
     }
 }
 
-impl<K, V, S> PersistentHashMap<K, V, S>
-where
-    K: Eq + Hash + Clone,
-    V: Clone + PartialEq,
-    S: BuildHasher + Clone,
-{
+impl<K, V, S> PersistentHashMap<K, V, S> {
     #[must_use]
     pub fn with_hasher(hasher: S) -> Self {
         Self {
@@ -99,6 +112,48 @@ where
     }
 
     #[must_use]
+    pub fn iter(&self) -> Iter<'_, K, V> {
+        let mut stack = Vec::new();
+        if let Some(root) = self.root.as_deref() {
+            stack.push(IterFrame::Node(root));
+        }
+
+        Iter {
+            stack,
+            remaining: self.len,
+        }
+    }
+
+    pub fn keys(&self) -> impl Iterator<Item = &K> {
+        self.iter().map(|(key, _)| key)
+    }
+
+    pub fn values(&self) -> impl Iterator<Item = &V> {
+        self.iter().map(|(_, value)| value)
+    }
+}
+
+impl<K, V, S: Clone> PersistentHashMap<K, V, S> {
+    #[must_use]
+    pub fn clear(&self) -> Self {
+        if self.is_empty() {
+            return self.clone();
+        }
+
+        Self {
+            root: None,
+            len: 0,
+            hasher: self.hasher.clone(),
+        }
+    }
+}
+
+impl<K, V, S> PersistentHashMap<K, V, S>
+where
+    K: Eq + Hash,
+    S: BuildHasher,
+{
+    #[must_use]
     pub fn contains_key(&self, key: &K) -> bool {
         self.get(key).is_some()
     }
@@ -116,6 +171,58 @@ where
             .and_then(|node| get_in_node(node, hash, key, 0))
     }
 
+    fn hash_key(&self, key: &K) -> u32 {
+        self.hasher.hash_one(key) as u32
+    }
+}
+
+impl<K, V, S> PersistentHashMap<K, V, S>
+where
+    K: Eq + Hash + Clone,
+    V: Clone,
+    S: BuildHasher + Clone,
+{
+    #[must_use]
+    pub fn remove(&self, key: &K) -> Self {
+        self.try_remove(key)
+            .map_or_else(|| self.clone(), |(map, _)| map)
+    }
+
+    #[must_use]
+    pub fn try_remove(&self, key: &K) -> Option<(Self, V)> {
+        self.try_remove_entry(key)
+            .map(|(map, _, value)| (map, value))
+    }
+
+    #[must_use]
+    pub fn try_remove_entry(&self, key: &K) -> Option<(Self, K, V)> {
+        let root = self.root.as_ref()?;
+        let hash = self.hash_key(key);
+        let result = remove_node(root, hash, key, 0);
+        if !result.changed {
+            return None;
+        }
+
+        let (removed_key, removed_value) =
+            result.removed.expect("changed removal must carry an entry");
+        Some((
+            Self {
+                root: result.node,
+                len: self.len - 1,
+                hasher: self.hasher.clone(),
+            },
+            removed_key,
+            removed_value,
+        ))
+    }
+}
+
+impl<K, V, S> PersistentHashMap<K, V, S>
+where
+    K: Eq + Hash + Clone,
+    V: Clone + PartialEq,
+    S: BuildHasher + Clone,
+{
     #[must_use]
     pub fn insert(&self, key: K, value: V) -> Self {
         let hash = self.hash_key(&key);
@@ -183,98 +290,26 @@ where
 
         map
     }
-
-    #[must_use]
-    pub fn remove(&self, key: &K) -> Self {
-        self.try_remove(key)
-            .map_or_else(|| self.clone(), |(map, _)| map)
-    }
-
-    #[must_use]
-    pub fn try_remove(&self, key: &K) -> Option<(Self, V)> {
-        let root = self.root.as_ref()?;
-        let hash = self.hash_key(key);
-        let result = remove_node(root, hash, key, 0);
-        if !result.changed {
-            return None;
-        }
-
-        Some((
-            Self {
-                root: result.node,
-                len: self.len - 1,
-                hasher: self.hasher.clone(),
-            },
-            result.removed.expect("changed removal must carry a value"),
-        ))
-    }
-
-    #[must_use]
-    pub fn clear(&self) -> Self {
-        if self.is_empty() {
-            return self.clone();
-        }
-
-        Self {
-            root: None,
-            len: 0,
-            hasher: self.hasher.clone(),
-        }
-    }
-
-    #[must_use]
-    pub fn iter(&self) -> Iter<'_, K, V> {
-        let mut stack = Vec::new();
-        if let Some(root) = self.root.as_deref() {
-            stack.push(IterFrame::Node(root));
-        }
-
-        Iter {
-            stack,
-            remaining: self.len,
-        }
-    }
-
-    pub fn keys(&self) -> impl Iterator<Item = &K> {
-        self.iter().map(|(key, _)| key)
-    }
-
-    pub fn values(&self) -> impl Iterator<Item = &V> {
-        self.iter().map(|(_, value)| value)
-    }
-
-    fn hash_key(&self, key: &K) -> u32 {
-        self.hasher.hash_one(key) as u32
-    }
 }
 
-impl<K, V, S> Default for PersistentHashMap<K, V, S>
-where
-    K: Eq + Hash + Clone,
-    V: Clone + PartialEq,
-    S: BuildHasher + Clone + Default,
-{
+impl<K, V, S: Default> Default for PersistentHashMap<K, V, S> {
     fn default() -> Self {
         Self::with_hasher(S::default())
     }
 }
 
-impl<K, V> FromIterator<(K, V)> for PersistentHashMap<K, V, RandomState>
+impl<K, V, S> FromIterator<(K, V)> for PersistentHashMap<K, V, S>
 where
     K: Eq + Hash + Clone,
     V: Clone + PartialEq,
+    S: BuildHasher + Clone + Default,
 {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
-        PersistentHashMap::new().set_items(iter)
+        Self::with_hasher(S::default()).set_items(iter)
     }
 }
 
-impl<'a, K, V, S> IntoIterator for &'a PersistentHashMap<K, V, S>
-where
-    K: Eq + Hash + Clone,
-    V: Clone + PartialEq,
-    S: BuildHasher + Clone,
-{
+impl<'a, K, V, S> IntoIterator for &'a PersistentHashMap<K, V, S> {
     type Item = (&'a K, &'a V);
     type IntoIter = Iter<'a, K, V>;
 
@@ -283,15 +318,78 @@ where
     }
 }
 
+impl<K, V, S> fmt::Debug for PersistentHashMap<K, V, S>
+where
+    K: fmt::Debug,
+    V: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_map().entries(self.iter()).finish()
+    }
+}
+
+impl<K, V, S> PartialEq for PersistentHashMap<K, V, S>
+where
+    K: Eq + Hash,
+    V: PartialEq,
+    S: BuildHasher,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.len == other.len
+            && self
+                .iter()
+                .all(|(key, value)| other.get(key) == Some(value))
+    }
+}
+
+impl<K, V, S> Eq for PersistentHashMap<K, V, S>
+where
+    K: Eq + Hash,
+    V: Eq,
+    S: BuildHasher,
+{
+}
+
+impl<K, V, S> Index<&K> for PersistentHashMap<K, V, S>
+where
+    K: Eq + Hash,
+    S: BuildHasher,
+{
+    type Output = V;
+
+    fn index(&self, key: &K) -> &V {
+        self.get(key).expect("no entry found for key")
+    }
+}
+
 pub struct Iter<'a, K, V> {
     stack: Vec<IterFrame<'a, K, V>>,
     remaining: usize,
+}
+
+impl<K, V> Clone for Iter<'_, K, V> {
+    fn clone(&self) -> Self {
+        Self {
+            stack: self.stack.clone(),
+            remaining: self.remaining,
+        }
+    }
 }
 
 enum IterFrame<'a, K, V> {
     Node(&'a Node<K, V>),
     Branch(std::slice::Iter<'a, Arc<Node<K, V>>>),
     Collision(std::slice::Iter<'a, (K, V)>),
+}
+
+impl<K, V> Clone for IterFrame<'_, K, V> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Node(node) => Self::Node(node),
+            Self::Branch(children) => Self::Branch(children.clone()),
+            Self::Collision(entries) => Self::Collision(entries.clone()),
+        }
+    }
 }
 
 impl<'a, K, V> Iterator for Iter<'a, K, V> {
@@ -338,15 +436,21 @@ impl<'a, K, V> Iterator for Iter<'a, K, V> {
 
 impl<K, V> ExactSizeIterator for Iter<'_, K, V> {}
 
-#[derive(Clone)]
+impl<K, V> FusedIterator for Iter<'_, K, V> {}
+
 pub struct PersistentHashSet<T, S = RandomState> {
     map: PersistentHashMap<T, (), S>,
 }
 
-impl<T> PersistentHashSet<T, RandomState>
-where
-    T: Eq + Hash + Clone,
-{
+impl<T, S: Clone> Clone for PersistentHashSet<T, S> {
+    fn clone(&self) -> Self {
+        Self {
+            map: self.map.clone(),
+        }
+    }
+}
+
+impl<T> PersistentHashSet<T, RandomState> {
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -355,11 +459,7 @@ where
     }
 }
 
-impl<T, S> PersistentHashSet<T, S>
-where
-    T: Eq + Hash + Clone,
-    S: BuildHasher + Clone,
-{
+impl<T, S> PersistentHashSet<T, S> {
     #[must_use]
     pub fn with_hasher(hasher: S) -> Self {
         Self {
@@ -378,10 +478,37 @@ where
     }
 
     #[must_use]
+    pub fn hasher(&self) -> &S {
+        self.map.hasher()
+    }
+
+    #[must_use]
     pub fn shares_root_with(&self, other: &Self) -> bool {
         self.map.shares_root_with(&other.map)
     }
 
+    #[must_use]
+    pub fn iter(&self) -> SetIter<'_, T> {
+        SetIter {
+            inner: self.map.iter(),
+        }
+    }
+}
+
+impl<T, S: Clone> PersistentHashSet<T, S> {
+    #[must_use]
+    pub fn clear(&self) -> Self {
+        Self {
+            map: self.map.clear(),
+        }
+    }
+}
+
+impl<T, S> PersistentHashSet<T, S>
+where
+    T: Eq + Hash,
+    S: BuildHasher,
+{
     #[must_use]
     pub fn contains(&self, value: &T) -> bool {
         self.map.contains_key(value)
@@ -391,7 +518,13 @@ where
     pub fn get(&self, value: &T) -> Option<&T> {
         self.map.get_key_value(value).map(|(key, _)| key)
     }
+}
 
+impl<T, S> PersistentHashSet<T, S>
+where
+    T: Eq + Hash + Clone,
+    S: BuildHasher + Clone,
+{
     #[must_use]
     pub fn insert(&self, value: T) -> Self {
         Self {
@@ -418,15 +551,8 @@ where
 
     #[must_use]
     pub fn try_remove(&self, value: &T) -> Option<(Self, T)> {
-        let actual = self.get(value)?.clone();
-        Some((self.remove(value), actual))
-    }
-
-    #[must_use]
-    pub fn clear(&self) -> Self {
-        Self {
-            map: self.map.clear(),
-        }
+        let (map, actual, ()) = self.map.try_remove_entry(value)?;
+        Some((Self { map }, actual))
     }
 
     #[must_use]
@@ -463,12 +589,9 @@ where
     where
         I: IntoIterator<Item = T>,
     {
-        let probe = PersistentHashSet::with_hasher(self.map.hasher().clone()).union(other);
-        let mut result = Self::with_hasher(self.map.hasher().clone());
-        for value in self.iter() {
-            if !probe.contains(value) {
-                result = result.insert(value.clone());
-            }
+        let mut result = self.clone();
+        for value in other {
+            result = result.remove(&value);
         }
 
         result
@@ -479,18 +602,14 @@ where
     where
         I: IntoIterator<Item = T>,
     {
-        let other_set = PersistentHashSet::with_hasher(self.map.hasher().clone()).union(other);
-        let mut result = Self::with_hasher(self.map.hasher().clone());
-        for value in self.iter() {
-            if !other_set.contains(value) {
-                result = result.insert(value.clone());
-            }
-        }
-
-        for value in other_set.iter() {
-            if !self.contains(value) {
-                result = result.insert(value.clone());
-            }
+        let distinct = Self::with_hasher(self.map.hasher().clone()).union(other);
+        let mut result = self.clone();
+        for value in distinct.iter() {
+            result = if result.contains(value) {
+                result.remove(value)
+            } else {
+                result.insert(value.clone())
+            };
         }
 
         result
@@ -547,30 +666,86 @@ where
         let other_set = PersistentHashSet::with_hasher(self.map.hasher().clone()).union(other);
         self.len() == other_set.len() && self.iter().all(|value| other_set.contains(value))
     }
-
-    pub fn iter(&self) -> impl Iterator<Item = &T> {
-        self.map.iter().map(|(key, _)| key)
-    }
 }
 
-impl<T, S> Default for PersistentHashSet<T, S>
-where
-    T: Eq + Hash + Clone,
-    S: BuildHasher + Clone + Default,
-{
+impl<T, S: Default> Default for PersistentHashSet<T, S> {
     fn default() -> Self {
         Self::with_hasher(S::default())
     }
 }
 
-impl<T> FromIterator<T> for PersistentHashSet<T, RandomState>
+impl<T, S> FromIterator<T> for PersistentHashSet<T, S>
 where
     T: Eq + Hash + Clone,
+    S: BuildHasher + Clone + Default,
 {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-        PersistentHashSet::new().union(iter)
+        Self::with_hasher(S::default()).union(iter)
     }
 }
+
+impl<'a, T, S> IntoIterator for &'a PersistentHashSet<T, S> {
+    type Item = &'a T;
+    type IntoIter = SetIter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl<T, S> fmt::Debug for PersistentHashSet<T, S>
+where
+    T: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_set().entries(self.iter()).finish()
+    }
+}
+
+impl<T, S> PartialEq for PersistentHashSet<T, S>
+where
+    T: Eq + Hash,
+    S: BuildHasher,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.len() == other.len() && self.iter().all(|value| other.contains(value))
+    }
+}
+
+impl<T, S> Eq for PersistentHashSet<T, S>
+where
+    T: Eq + Hash,
+    S: BuildHasher,
+{
+}
+
+pub struct SetIter<'a, T> {
+    inner: Iter<'a, T, ()>,
+}
+
+impl<T> Clone for SetIter<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+impl<'a, T> Iterator for SetIter<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next().map(|(key, ())| key)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
+impl<T> ExactSizeIterator for SetIter<'_, T> {}
+
+impl<T> FusedIterator for SetIter<'_, T> {}
 
 fn get_in_node<'a, K, V>(
     node: &'a Node<K, V>,
@@ -805,7 +980,7 @@ where
             if *leaf_hash == hash && leaf_key == key {
                 RemoveResult {
                     node: None,
-                    removed: Some(value.clone()),
+                    removed: Some((leaf_key.clone(), value.clone())),
                     changed: true,
                 }
             } else {
@@ -836,7 +1011,7 @@ where
                 };
             };
 
-            let removed = entries[index].1.clone();
+            let removed = entries[index].clone();
             let mut next = entries.to_vec();
             next.remove(index);
             let node = match next.as_slice() {
@@ -920,6 +1095,10 @@ where
     K: Clone,
     V: Clone,
 {
+    debug_assert!(
+        shift <= MAX_BRANCH_SHIFT,
+        "branch nodes only exist at shifts 0..=30 for 32-bit hashes",
+    );
     if left_hash == right_hash {
         let mut entries = Vec::new();
         collect_owned_entries(&left, &mut entries);
@@ -1141,6 +1320,94 @@ mod tests {
         assert!(left.is_proper_superset_of([1, 3, 3]));
         assert!(!left.is_proper_subset_of([1, 2, 3]));
         assert!(!left.is_proper_superset_of([1, 2, 3]));
+    }
+
+    #[test]
+    fn except_and_symmetric_except_preserve_untouched_roots() {
+        let set: PersistentHashSet<i32> = (0..64).collect();
+
+        let except_nothing = set.except(std::iter::empty());
+        assert!(set.shares_root_with(&except_nothing));
+
+        let symmetric_nothing = set.symmetric_except(std::iter::empty());
+        assert!(set.shares_root_with(&symmetric_nothing));
+
+        let except = set.except([1, 63, 100]);
+        assert_eq!(except.len(), 62);
+        assert!(!except.contains(&1));
+        assert!(!except.contains(&63));
+
+        let symmetric = set.symmetric_except([0, 1, 64, 65]);
+        assert_eq!(symmetric.len(), 64);
+        assert!(!symmetric.contains(&0));
+        assert!(symmetric.contains(&64));
+        assert!(symmetric.contains(&65));
+    }
+
+    #[test]
+    fn set_supports_into_iterator_and_debug_and_equality() {
+        let set: PersistentHashSet<i32> = (0..8).collect();
+        let mut collected = Vec::new();
+        for value in &set {
+            collected.push(*value);
+        }
+        collected.sort_unstable();
+        assert_eq!(collected, (0..8).collect::<Vec<_>>());
+
+        let same: PersistentHashSet<i32> = (0..8).rev().collect();
+        assert_eq!(set, same);
+        let different: PersistentHashSet<i32> = (0..9).collect();
+        assert_ne!(set, different);
+
+        let printed = format!("{:?}", PersistentHashSet::new().insert(5));
+        assert_eq!(printed, "{5}");
+    }
+
+    #[test]
+    fn map_supports_index_debug_and_equality() {
+        let map = PersistentHashMap::new().insert("a", 1).insert("b", 2);
+        assert_eq!(map[&"a"], 1);
+
+        let same = PersistentHashMap::new().insert("b", 2).insert("a", 1);
+        assert_eq!(map, same);
+        assert_ne!(map, same.insert("a", 3));
+        assert_ne!(map, same.remove(&"a"));
+
+        let printed = format!("{:?}", PersistentHashMap::new().insert("a", 1));
+        assert_eq!(printed, "{\"a\": 1}");
+    }
+
+    #[test]
+    fn read_only_operations_do_not_require_value_bounds() {
+        // Box<dyn Fn> is neither Clone nor PartialEq; construction, length,
+        // lookup, and iteration must still work.
+        let map: PersistentHashMap<&str, Box<dyn Fn() -> i32>> = PersistentHashMap::new();
+        assert!(map.is_empty());
+        assert!(map.get(&"missing").is_none());
+        assert_eq!(map.iter().count(), 0);
+    }
+
+    #[test]
+    fn from_iterator_supports_custom_default_hashers() {
+        let map: PersistentHashMap<i32, i32, ConstantState> =
+            (0..16).map(|value| (value, value)).collect();
+        assert_eq!(map.len(), 16);
+
+        let set: PersistentHashSet<i32, ConstantState> = (0..16).collect();
+        assert_eq!(set.len(), 16);
+        assert_eq!(set.hasher().hash_one(42), 0);
+    }
+
+    #[test]
+    fn duplicate_key_error_propagates() {
+        fn try_it() -> Result<(), Box<dyn std::error::Error>> {
+            let map = PersistentHashMap::new().insert("a", 1);
+            let _ = map.add("a", 2)?;
+            Ok(())
+        }
+
+        let error = try_it().unwrap_err();
+        assert_eq!(error.to_string(), "an entry with the same key already exists");
     }
 
     fn assert_send_sync<T: Send + Sync>() {}

@@ -27,13 +27,31 @@ The port follows the repository HAMT semantics:
 - set algebra includes union, intersection, difference, symmetric difference, subset/superset, proper
   subset/superset, overlap, and equality checks.
 
+Set difference removes each probe element from the receiver, and symmetric difference toggles the
+distinct probe elements on the receiver, so subtrees untouched by the probe stay structurally shared
+and an empty probe preserves the existing root — matching the C# `Except`/`SymmetricExcept`
+complexity contract of O(m) single-element updates.
+
 Rust-specific differences:
 
 - key equivalence is Rust `Eq`; the hash policy is supplied through `BuildHasher`;
-- duplicate insertion returns `Result<_, DuplicateKey>` rather than throwing;
-- lookups return references, and removal returns owned cloned values;
+- duplicate insertion returns `Result<_, DuplicateKey>` rather than throwing; `DuplicateKey`
+  implements `Display` and `std::error::Error`;
+- lookups return references, and removal returns owned cloned values; `try_remove_entry` also
+  surfaces the stored key;
 - `shares_root_with` exposes root sharing for tests and diagnostics;
-- iteration streams trie order through an explicit traversal stack rather than materializing all entries up front.
+- iteration streams trie order through an explicit traversal stack rather than materializing all
+  entries up front; map iteration yields `Iter` and set iteration yields `SetIter`, both `Clone` +
+  `ExactSizeIterator` + `FusedIterator`, and `&map` / `&set` implement `IntoIterator`;
+- trait bounds are per-operation: construction, length, sharing probes, and iteration require no
+  bounds; lookups require `K: Eq + Hash, S: BuildHasher`; removal additionally requires
+  `K: Clone, V: Clone, S: Clone`; only the insert family requires `V: PartialEq` (for the
+  no-op value check). The C# reference imposes no compile-time constraints, so relaxed bounds are
+  the closest Rust analogue;
+- both collections implement content-based `PartialEq`/`Eq` (the C# reference uses reference
+  equality and makes no value-equality claim), `Debug`, and `Default` for any `S: Default`;
+  `FromIterator` is available for any default-constructible hasher policy; the map implements
+  `Index<&K>` which panics on a missing key.
 
 The hash contract is the standard Rust hash-map contract: keys that compare equal must hash equally under the
 chosen `BuildHasher`. The implementation truncates `Hasher::finish()` to 32 bits to match the repository HAMT
