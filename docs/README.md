@@ -35,6 +35,7 @@ Library-specific design and API documentation lives beside each workspace under 
 
 - [C# and Rust implementation review (2026-07-09)](reviews/csharp-rust-implementation-review-2026-07-09.md) - full-depth correctness, parity, and API-quality review of the C# reference libraries and Rust ports: findings, applied fixes, verified-sound areas, and deferred follow-ups.
 - [C and C++ implementation review (2026-07-09)](reviews/c-cpp-implementation-review-2026-07-09.md) - companion review of the C and C++ ports: error-path memory-safety fixes, cross-port parity fixes (interval tie order, rule-2 fast path, offset_of), Windows atomics, and the documented C FingerTree complexity checkpoint.
+- [Haskell and Kotlin implementation review (2026-07-09)](reviews/haskell-kotlin-implementation-review-2026-07-09.md) - final installment completing all six languages: the recurring-bug checklist results (four of five classes present), extensional Eq/Ord law fixes, AVL join fixes, strictness/space-leak fixes, and the undocumented Haskell rope complexity gap.
 
 ## Migration
 
