@@ -537,7 +537,9 @@ where
         if let Some((stored_key, _)) = split.right.front()
             && stored_key == &key
         {
-            let replacement = (stored_key.clone(), value);
+            // The C# reference (SortedDictionary.SetItem) stores the supplied
+            // key instance, not the previously stored one.
+            let replacement = (key, value);
             let tail = split
                 .right
                 .split_at_index(1)
@@ -809,6 +811,48 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cmp::Ordering;
+
+    #[test]
+    fn set_item_stores_the_supplied_key_instance() {
+        // Key type whose ordering ignores the label, mirroring a
+        // comparer-equal-but-distinct key in the C# reference.
+        #[derive(Clone, Debug)]
+        struct Key {
+            id: i32,
+            label: &'static str,
+        }
+
+        impl PartialEq for Key {
+            fn eq(&self, other: &Self) -> bool {
+                self.id == other.id
+            }
+        }
+
+        impl Eq for Key {}
+
+        impl PartialOrd for Key {
+            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+                Some(self.cmp(other))
+            }
+        }
+
+        impl Ord for Key {
+            fn cmp(&self, other: &Self) -> Ordering {
+                self.id.cmp(&other.id)
+            }
+        }
+
+        let map = SortedMap::new().set_item(Key { id: 1, label: "old" }, 10);
+        let updated = map.set_item(Key { id: 1, label: "new" }, 20);
+
+        assert_eq!(updated.len(), 1);
+        let (stored_key, value) = updated.min_entry().unwrap();
+        assert_eq!(stored_key.label, "new");
+        assert_eq!(*value, 20);
+        // The original snapshot keeps the original key.
+        assert_eq!(map.min_entry().unwrap().0.label, "old");
+    }
 
     #[test]
     fn sorted_bag_keeps_duplicates_and_rank_counts() {

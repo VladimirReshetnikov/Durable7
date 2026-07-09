@@ -128,8 +128,7 @@ where
 
     #[must_use]
     pub fn peek_priority(&self) -> Option<&P> {
-        self.min_index()
-            .and_then(|index| self.entries.get(index).map(|entry| &entry.priority))
+        self.entries.measure().as_ref()
     }
 
     #[must_use]

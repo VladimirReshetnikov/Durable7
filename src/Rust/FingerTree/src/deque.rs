@@ -889,12 +889,14 @@ impl<T> PersistentDeque<T> {
 
 pub struct Iter<'a, T> {
     stack: Vec<(&'a DequeTree<T>, bool)>,
+    remaining: usize,
 }
 
 impl<'a, T> Iter<'a, T> {
     fn new(root: &'a Arc<DequeTree<T>>) -> Self {
         Self {
             stack: vec![(root.as_ref(), false)],
+            remaining: root.len(),
         }
     }
 }
@@ -906,7 +908,10 @@ impl<'a, T> Iterator for Iter<'a, T> {
         while let Some((tree, reversed)) = self.stack.pop() {
             match tree {
                 DequeTree::Empty => {}
-                DequeTree::Leaf(item) => return Some(item),
+                DequeTree::Leaf(item) => {
+                    self.remaining -= 1;
+                    return Some(item);
+                }
                 DequeTree::Reversed { inner, .. } => {
                     self.stack.push((inner.as_ref(), !reversed));
                 }
@@ -926,9 +931,11 @@ impl<'a, T> Iterator for Iter<'a, T> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (0, Some(usize::MAX))
+        (self.remaining, Some(self.remaining))
     }
 }
+
+impl<T> ExactSizeIterator for Iter<'_, T> {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReversibleDeque<T> {

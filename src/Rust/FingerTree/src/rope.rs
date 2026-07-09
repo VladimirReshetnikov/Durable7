@@ -822,15 +822,15 @@ where
     where
         F: FnMut(&P::Measure) -> bool,
     {
-        let located = self.tree.try_locate(|measure| predicate(&measure.1));
-        let Some(chunk) = located.item else {
+        let Some((left, chunk, right)) = self.tree.try_split_find(|measure| predicate(&measure.1))
+        else {
             return MeasuredRopeSplit {
                 left: self.clone(),
                 right: Self::new(),
             };
         };
 
-        let mut prefix = located.measure_before.1.clone();
+        let mut prefix = left.measure().1.clone();
         let mut offset = 0;
         for item in chunk.as_slice() {
             let next = P::combine(&prefix, &P::measure(item));
@@ -842,13 +842,9 @@ where
             offset += 1;
         }
 
-        let split = self
-            .tree
-            .split_at_index(located.index)
-            .expect("located chunk index is valid");
         MeasuredRopeSplit {
-            left: Self::from_tree(append_measured_prefix(split.left, &chunk, offset)),
-            right: Self::from_tree(prepend_measured_suffix(split.right, &chunk, offset)),
+            left: Self::from_tree(append_measured_prefix(left, &chunk, offset)),
+            right: Self::from_tree(prepend_measured_suffix(right, &chunk, offset)),
         }
     }
 
@@ -1545,6 +1541,14 @@ mod tests {
         assert_eq!(changed.get(4096), Some(&99_999));
         assert_eq!(changed.measure(), &(*rope.measure() - 4097 + 99_999));
         assert_eq!(by_measure.left.len(), expected_measure_boundary);
+        assert_eq!(
+            by_measure.left.len() + by_measure.right.len(),
+            rope.len(),
+            "split_by_measure halves must partition the rope"
+        );
+        let mut recombined = by_measure.left.to_vec();
+        recombined.extend(by_measure.right.to_vec());
+        assert_eq!(recombined, rope.to_vec());
         assert!(rope.tree.shared_node_count_with(&split.left.tree) > 0);
         assert!(rope.tree.shared_node_count_with(&split.right.tree) > 0);
         assert!(rope.tree.shared_node_count_with(&changed.tree) > 0);
@@ -1556,6 +1560,35 @@ mod tests {
         changed.validate_chunk_invariants();
         by_measure.left.validate_chunk_invariants();
         by_measure.right.validate_chunk_invariants();
+    }
+
+    #[test]
+    fn measured_rope_split_by_measure_partitions_the_rope() {
+        let rope: MeasuredRope<i32, SumMeasure<i32>> = [2, 4, 8].into_iter().collect();
+        let split = rope.split_by_measure(|sum| *sum > 5);
+        assert_eq!(split.left.to_vec(), vec![2]);
+        assert_eq!(split.right.to_vec(), vec![4, 8]);
+
+        let never = rope.split_by_measure(|_| false);
+        assert_eq!(never.left.to_vec(), vec![2, 4, 8]);
+        assert!(never.right.is_empty());
+
+        let always = rope.split_by_measure(|_| true);
+        assert!(always.left.is_empty());
+        assert_eq!(always.right.to_vec(), vec![2, 4, 8]);
+
+        // Exercise boundaries interior to a chunk across several chunk shapes.
+        for total in [1_usize, 5, 300, 700, 2049] {
+            let rope: MeasuredRope<i32, SumMeasure<i32>> =
+                (1..=total as i32).map(|_| 1).collect();
+            for boundary in [0, 1, total / 2, total.saturating_sub(1), total] {
+                let split = rope.split_by_measure(|sum| *sum > boundary as i32);
+                assert_eq!(split.left.len(), boundary);
+                assert_eq!(split.right.len(), total - boundary);
+                split.left.validate_chunk_invariants();
+                split.right.validate_chunk_invariants();
+            }
+        }
     }
 
     #[test]

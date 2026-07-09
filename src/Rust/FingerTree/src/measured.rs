@@ -1171,12 +1171,19 @@ where
 
 pub struct Iter<'a, T, M> {
     stack: Vec<&'a MeasuredNode<T, M>>,
+    remaining: usize,
 }
 
 impl<'a, T, M> Iter<'a, T, M> {
     fn new(root: &'a Arc<MeasuredNode<T, M>>) -> Self {
+        let remaining = match root.as_ref() {
+            MeasuredNode::Empty => 0,
+            MeasuredNode::Leaf { .. } => 1,
+            MeasuredNode::Node { len, .. } => *len,
+        };
         Self {
             stack: vec![root.as_ref()],
+            remaining,
         }
     }
 }
@@ -1188,7 +1195,10 @@ impl<'a, T, M> Iterator for Iter<'a, T, M> {
         while let Some(tree) = self.stack.pop() {
             match tree {
                 MeasuredNode::Empty => {}
-                MeasuredNode::Leaf { item, .. } => return Some(item),
+                MeasuredNode::Leaf { item, .. } => {
+                    self.remaining -= 1;
+                    return Some(item);
+                }
                 MeasuredNode::Node { left, right, .. } => {
                     self.stack.push(right);
                     self.stack.push(left);
@@ -1198,7 +1208,13 @@ impl<'a, T, M> Iterator for Iter<'a, T, M> {
 
         None
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.remaining, Some(self.remaining))
+    }
 }
+
+impl<T, M> ExactSizeIterator for Iter<'_, T, M> {}
 
 #[cfg(test)]
 mod tests {

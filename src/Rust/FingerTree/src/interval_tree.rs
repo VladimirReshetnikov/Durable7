@@ -130,9 +130,13 @@ where
         self.intervals.is_empty()
     }
 
+    /// Inserts before every stored interval whose low endpoint is greater
+    /// than or equal to the new interval's low endpoint, matching the C#
+    /// reference (`IntervalTree<T>.Insert` splits on "last low at least
+    /// `interval.Low`"), so a new interval precedes existing equal-low ones.
     #[must_use]
     pub fn insert(&self, interval: Interval<T>) -> Self {
-        let index = upper_bound_interval(&self.intervals, &interval);
+        let index = lower_bound_by_low(&self.intervals, &interval.low);
         let split = self
             .intervals
             .split_at_index(index)
@@ -142,27 +146,39 @@ where
 
     #[must_use]
     pub fn contains(&self, interval: &Interval<T>) -> bool {
-        self.intervals.iter().any(|stored| stored == interval)
+        self.index_of(interval).is_some()
     }
 
     #[must_use]
     pub fn remove(&self, interval: &Interval<T>) -> Self {
-        let Some(index) = self.intervals.iter().position(|stored| stored == interval) else {
-            return self.clone();
-        };
-
-        self.remove_at_index(index)
-            .expect("found interval rank is valid")
-            .0
+        self.try_remove(interval)
+            .map_or_else(|| self.clone(), |(tree, _)| tree)
     }
 
     #[must_use]
     pub fn try_remove(&self, interval: &Interval<T>) -> Option<(Self, Interval<T>)> {
-        let index = self
-            .intervals
-            .iter()
-            .position(|stored| stored == interval)?;
+        let index = self.index_of(interval)?;
         self.remove_at_index(index)
+    }
+
+    /// Rank of the first stored interval matching both endpoints: a binary
+    /// search on the low endpoint plus a scan over the equal-low run,
+    /// mirroring the C# `Contains`/`TryRemove` complexity contract.
+    fn index_of(&self, interval: &Interval<T>) -> Option<usize> {
+        let mut index = lower_bound_by_low(&self.intervals, &interval.low);
+        while let Some(stored) = self.intervals.get(index) {
+            if stored.low != interval.low {
+                return None;
+            }
+
+            if stored.high == interval.high {
+                return Some(index);
+            }
+
+            index += 1;
+        }
+
+        None
     }
 
     #[must_use]
@@ -286,7 +302,7 @@ where
     }
 }
 
-fn upper_bound_interval<T>(intervals: &IntervalStorage<T>, value: &Interval<T>) -> usize
+fn lower_bound_by_low<T>(intervals: &IntervalStorage<T>, value: &T) -> usize
 where
     T: Ord + Clone,
 {
@@ -297,7 +313,7 @@ where
         let current = intervals
             .get(mid)
             .expect("binary search midpoint is in range");
-        if (&current.low, &current.high) <= (&value.low, &value.high) {
+        if current.low < *value {
             low = mid + 1;
         } else {
             high = mid;
@@ -370,6 +386,49 @@ mod tests {
             tree.coalesce().to_vec(),
             vec![Interval::new(1, 5), Interval::new(10, 13)]
         );
+    }
+
+    #[test]
+    fn insert_places_new_intervals_before_existing_equal_low_ones() {
+        // Matches the C# reference: Insert splits at the first interval whose
+        // low endpoint is >= the new low, so newer equal-low intervals come first.
+        let tree = IntervalTree::new()
+            .insert(Interval::new(1, 3))
+            .insert(Interval::new(1, 5));
+        assert_eq!(
+            tree.to_vec(),
+            vec![Interval::new(1, 5), Interval::new(1, 3)]
+        );
+
+        let tree = tree.insert(Interval::new(1, 4)).insert(Interval::new(0, 9));
+        assert_eq!(
+            tree.to_vec(),
+            vec![
+                Interval::new(0, 9),
+                Interval::new(1, 4),
+                Interval::new(1, 5),
+                Interval::new(1, 3),
+            ]
+        );
+    }
+
+    #[test]
+    fn contains_and_remove_handle_equal_low_runs() {
+        let tree: IntervalTree<_> = (0..64)
+            .map(|high| Interval::new(10, high + 100))
+            .chain((0..16).map(|value| Interval::new(value, value + 1)))
+            .collect();
+
+        assert!(tree.contains(&Interval::new(10, 163)));
+        assert!(!tree.contains(&Interval::new(10, 99)));
+        assert!(!tree.contains(&Interval::new(9, 100)));
+
+        let (removed, interval) = tree.try_remove(&Interval::new(10, 130)).unwrap();
+        assert_eq!(interval, Interval::new(10, 130));
+        assert_eq!(removed.len(), tree.len() - 1);
+        assert!(!removed.contains(&Interval::new(10, 130)));
+        assert!(removed.contains(&Interval::new(10, 131)));
+        assert!(tree.try_remove(&Interval::new(10, 99)).is_none());
     }
 
     #[test]
