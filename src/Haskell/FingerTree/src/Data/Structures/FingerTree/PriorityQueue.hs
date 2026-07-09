@@ -18,6 +18,7 @@ module Data.Structures.FingerTree.PriorityQueue
 
 import Prelude hiding (null)
 
+import qualified Data.List as List
 import qualified Data.Structures.FingerTree.Measured as FT
 import Data.Structures.FingerTree.Measured (Measured(..))
 
@@ -42,7 +43,14 @@ instance Ord p => FT.Measured (PrioritySummary p) (Entry p a) where
   measure (Entry priority _) = PrioritySummary 1 (Just priority)
 
 newtype PriorityQueue p a = PriorityQueue (FT.FingerTree (PrioritySummary p) (Entry p a))
-  deriving (Eq, Ord, Read, Show)
+  deriving (Show)
+
+-- Extensional equality over the entry sequence in queue (insertion) order.
+instance (Ord p, Eq a) => Eq (PriorityQueue p a) where
+  left == right = count left == count right && toList left == toList right
+
+instance (Ord p, Ord a) => Ord (PriorityQueue p a) where
+  compare left right = compare (toList left) (toList right)
 
 empty :: PriorityQueue p a
 empty = PriorityQueue FT.empty
@@ -51,7 +59,7 @@ singleton :: Ord p => p -> a -> PriorityQueue p a
 singleton priority value = enqueue priority value empty
 
 fromList :: Ord p => [(p, a)] -> PriorityQueue p a
-fromList = foldl (\queue (priority, value) -> enqueue priority value queue) empty
+fromList = List.foldl' (\queue (priority, value) -> enqueue priority value queue) empty
 
 toList :: Ord p => PriorityQueue p a -> [(p, a)]
 toList (PriorityQueue tree) = map unwrap (FT.toList tree)

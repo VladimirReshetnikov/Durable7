@@ -57,12 +57,6 @@ data Slot v = Slot !Int v
 data Entry k v = Entry !Int k v
   deriving (Read, Show)
 
-instance Eq (Entry k v) where
-  Entry left _ _ == Entry right _ _ = left == right
-
-instance Ord (Entry k v) where
-  compare (Entry left _ _) (Entry right _ _) = compare left right
-
 data SeqTree a
   = Empty
   | Node !Int !Int (SeqTree a) a (SeqTree a)
@@ -76,10 +70,10 @@ empty = emptyWith HM.defaultPolicy
 emptyWith :: HashPolicy k -> PersistentAssociation k v
 emptyWith hashPolicy = PersistentAssociation Empty (HM.emptyWith hashPolicy)
 
-fromList :: (Eq k, Hashable k) => [(k, v)] -> PersistentAssociation k v
+fromList :: (Eq k, Hashable k, Eq v) => [(k, v)] -> PersistentAssociation k v
 fromList = fromListWith HM.defaultPolicy
 
-fromListWith :: HashPolicy k -> [(k, v)] -> PersistentAssociation k v
+fromListWith :: Eq v => HashPolicy k -> [(k, v)] -> PersistentAssociation k v
 fromListWith hashPolicy = setItems (emptyWith hashPolicy)
 
 toList :: PersistentAssociation k v -> [(k, v)]
@@ -118,13 +112,16 @@ getAt position (PersistentAssociation entries _) = entryPair <$> treeIndex posit
 indexOfKey :: k -> PersistentAssociation k v -> Maybe Int
 indexOfKey key (PersistentAssociation entries index) =
   case HM.lookup key index of
-    Just (Slot stamp _) -> treeBinarySearch (Entry stamp undefined undefined) entries
+    Just (Slot stamp _) -> treeSearchStamp stamp entries
     Nothing -> Nothing
 
-setItem :: k -> v -> PersistentAssociation k v -> PersistentAssociation k v
+setItem :: Eq v => k -> v -> PersistentAssociation k v -> PersistentAssociation k v
 setItem key value association@(PersistentAssociation entries index) =
   case HM.lookup key index of
     Nothing -> appendNew key value association
+    -- Equal-value update returns the receiver (spec: no-op identity for the
+    -- association's SetItem, test-locked in the C# reference).
+    Just (Slot _ storedValue) | storedValue == value -> association
     Just (Slot stamp _) ->
       let position = expectStamp stamp entries
           Entry _ storedKey _ = expectIndex position entries
@@ -132,31 +129,41 @@ setItem key value association@(PersistentAssociation entries index) =
           index' = HM.insert key (Slot stamp value) index
        in PersistentAssociation entries' index'
 
-setItems :: PersistentAssociation k v -> [(k, v)] -> PersistentAssociation k v
+setItems :: Eq v => PersistentAssociation k v -> [(k, v)] -> PersistentAssociation k v
 setItems = List.foldl' (\association (key, value) -> setItem key value association)
 
-join :: PersistentAssociation k v -> PersistentAssociation k v -> PersistentAssociation k v
+join :: Eq v => PersistentAssociation k v -> PersistentAssociation k v -> PersistentAssociation k v
 join association other = setItems association (toList other)
 
-append :: k -> v -> PersistentAssociation k v -> PersistentAssociation k v
+append :: Eq v => k -> v -> PersistentAssociation k v -> PersistentAssociation k v
 append key value association@(PersistentAssociation entries index) =
   case HM.lookup key index of
     Nothing -> appendNew key value association
-    Just (Slot stamp _) ->
+    Just (Slot stamp storedValue) ->
       let position = expectStamp stamp entries
-          entries' = expectTree (treeDelete position entries)
-          index' = HM.delete key index
-       in insertEntry entries' index' (treeSize entries') key value association
+       in -- Rule-2 terminal no-op fast path (matches the C# reference): a key
+          -- already last with an equal value returns the receiver, keeping
+          -- the stored key instance and consuming no stamp.
+          if position == treeSize entries - 1 && storedValue == value
+            then association
+            else
+              let entries' = expectTree (treeDelete position entries)
+                  index' = HM.delete key index
+               in insertEntry entries' index' (treeSize entries') key value association
 
-prepend :: k -> v -> PersistentAssociation k v -> PersistentAssociation k v
+prepend :: Eq v => k -> v -> PersistentAssociation k v -> PersistentAssociation k v
 prepend key value association@(PersistentAssociation entries index) =
   case HM.lookup key index of
     Nothing -> insertEntry entries index 0 key value association
-    Just (Slot stamp _) ->
+    Just (Slot stamp storedValue) ->
       let position = expectStamp stamp entries
-          entries' = expectTree (treeDelete position entries)
-          index' = HM.delete key index
-       in insertEntry entries' index' 0 key value association
+       in -- Rule-2 terminal no-op fast path; see append.
+          if position == 0 && storedValue == value
+            then association
+            else
+              let entries' = expectTree (treeDelete position entries)
+                  index' = HM.delete key index
+               in insertEntry entries' index' 0 key value association
 
 insertAt :: Int -> k -> v -> PersistentAssociation k v -> Maybe (PersistentAssociation k v)
 insertAt position key value association@(PersistentAssociation entries index)
@@ -344,7 +351,7 @@ entryPair (Entry _ key value) = (key, value)
 
 expectStamp :: Int -> SeqTree (Entry k v) -> Int
 expectStamp stamp entries =
-  case treeBinarySearch (Entry stamp undefined undefined) entries of
+  case treeSearchStamp stamp entries of
     Just position -> position
     Nothing -> error "association stamp recorded in index is absent from order tree"
 
@@ -494,12 +501,15 @@ treeFromList values = fst (build (length values) values)
               let (right, remaining) = build rightCount afterValue
                in (treeNode left value right, remaining)
 
-treeBinarySearch :: Ord a => a -> SeqTree a -> Maybe Int
-treeBinarySearch target = go 0
+-- Searches the stamp-ascending entry tree by stamp directly, avoiding the
+-- previous sentinel entries with undefined key/value fields (and the
+-- stamp-only Eq/Ord instances they required).
+treeSearchStamp :: Int -> SeqTree (Entry k v) -> Maybe Int
+treeSearchStamp stamp = go 0
   where
     go _ Empty = Nothing
     go offset (Node _ _ left value right) =
-      case compare target value of
+      case compare stamp (entryStamp value) of
         LT -> go offset left
         EQ -> Just (offset + treeSize left)
         GT -> go (offset + treeSize left + 1) right

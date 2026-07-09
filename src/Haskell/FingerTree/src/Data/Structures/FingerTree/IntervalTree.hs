@@ -20,6 +20,7 @@ module Data.Structures.FingerTree.IntervalTree
 
 import Prelude hiding (null)
 
+import qualified Data.List as List
 import qualified Data.Map.Strict as Map
 
 data Interval a = Interval
@@ -43,7 +44,7 @@ singleton :: Ord a => Interval a -> IntervalTree a
 singleton interval = insert interval empty
 
 fromList :: Ord a => [Interval a] -> IntervalTree a
-fromList = foldl (flip insert) empty
+fromList = List.foldl' (flip insert) empty
 
 toList :: IntervalTree a -> [Interval a]
 toList (IntervalTree _ values) = concat (Map.elems values)
@@ -60,7 +61,9 @@ insert interval@(Interval lowValue highValue) (IntervalTree total values)
   | otherwise = IntervalTree (total + 1) (Map.alter add lowValue values)
   where
     add Nothing = Just [interval]
-    add (Just bucket) = Just (bucket ++ [interval])
+    -- A new interval precedes existing equal-low ones, matching the C#
+    -- reference (Insert splits at the first stored low >= the new low).
+    add (Just bucket) = Just (interval : bucket)
 
 delete :: Ord a => Interval a -> IntervalTree a -> IntervalTree a
 delete interval@(Interval lowValue _) tree@(IntervalTree total values) =

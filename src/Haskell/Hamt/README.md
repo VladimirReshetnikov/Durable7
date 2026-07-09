@@ -19,3 +19,7 @@ cabal test hamt-test
 ```
 
 The local [test README](test/README.md) lists the deterministic coverage areas.
+
+Enumeration follows trie bitmap order and collision-bucket order: stable for an unchanged
+version, but neither insertion order nor sorted order (matching the C# reference's documented
+contract).

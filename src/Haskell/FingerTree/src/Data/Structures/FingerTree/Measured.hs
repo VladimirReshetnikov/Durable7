@@ -29,6 +29,8 @@ module Data.Structures.FingerTree.Measured
 
 import Prelude hiding (head, last, null)
 
+import qualified Data.List as List
+
 class Monoid v => Measured v a where
   measure :: a -> v
 
@@ -47,7 +49,11 @@ data Node v a
 data FingerTree v a
   = Empty
   | Single a
-  | Deep !v !(Digit a) !(FingerTree v (Node v a)) !(Digit a)
+  -- The middle spine is deliberately lazy: cons/snoc overflow suspends the
+  -- middle push, which is what gives the Hinze-Paterson deque its amortized
+  -- O(1) endpoint bounds under persistent reuse (the C# reference memoizes
+  -- the same suspensions). The cached measure and digits stay strict.
+  | Deep !v !(Digit a) (FingerTree v (Node v a)) !(Digit a)
   deriving (Eq, Ord, Read, Show)
 
 data ViewL v a
@@ -99,7 +105,7 @@ append :: Measured v a => FingerTree v a -> FingerTree v a -> FingerTree v a
 append left right = app3 left [] right
 
 fromList :: Measured v a => [a] -> FingerTree v a
-fromList = foldl snoc Empty
+fromList = List.foldl' snoc Empty
 
 toList :: Measured v a => FingerTree v a -> [a]
 toList tree =

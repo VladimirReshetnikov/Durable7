@@ -32,6 +32,7 @@ module Data.Structures.FingerTree.SortedSet
 
 import Prelude hiding (ceiling, floor, null)
 
+import qualified Data.List as List
 import qualified Data.Set as Set
 
 newtype SortedSet a = SortedSet (Set.Set a)
@@ -44,7 +45,7 @@ singleton :: a -> SortedSet a
 singleton value = SortedSet (Set.singleton value)
 
 fromList :: Ord a => [a] -> SortedSet a
-fromList values = SortedSet (Set.fromList values)
+fromList = List.foldl' (flip insert) empty
 
 toList :: SortedSet a -> [a]
 toList (SortedSet values) = Set.toAscList values
@@ -58,8 +59,13 @@ null (SortedSet values) = Set.null values
 member :: Ord a => a -> SortedSet a -> Bool
 member value (SortedSet values) = Set.member value values
 
+-- First stored instance wins: adding a comparer-equal element leaves the set
+-- unchanged, matching the C# reference (Set.insert would replace the stored
+-- element with the supplied equal one).
 insert :: Ord a => a -> SortedSet a -> SortedSet a
-insert value (SortedSet values) = SortedSet (Set.insert value values)
+insert value set@(SortedSet values)
+  | Set.member value values = set
+  | otherwise = SortedSet (Set.insert value values)
 
 delete :: Ord a => a -> SortedSet a -> SortedSet a
 delete value (SortedSet values) = SortedSet (Set.delete value values)

@@ -35,7 +35,15 @@ data Chunk a = Chunk
   deriving (Eq, Ord, Read, Show)
 
 data Rope a = Rope !Int !(Deque.Deque (Chunk a))
-  deriving (Eq, Ord, Read, Show)
+  deriving (Show)
+
+-- Extensional equality: chunk layout is an implementation detail, so two
+-- ropes are equal exactly when their element sequences are.
+instance Eq a => Eq (Rope a) where
+  left == right = count left == count right && toList left == toList right
+
+instance Ord a => Ord (Rope a) where
+  compare left right = compare (toList left) (toList right)
 
 maxChunkSize :: Int
 maxChunkSize = 64
@@ -49,10 +57,16 @@ singleton value = fromList [value]
 fromList :: [a] -> Rope a
 fromList values = fromChunks (chunkify values)
 
+-- Imported chunks are re-chunked so no stored chunk exceeds maxChunkSize,
+-- preserving the module's chunk invariant for arbitrary caller layouts.
 fromChunks :: [[a]] -> Rope a
 fromChunks sourceChunks = Rope total (Deque.fromList ownedChunks)
   where
-    ownedChunks = [Chunk (length chunk) chunk | chunk <- sourceChunks, not (P.null chunk)]
+    ownedChunks =
+      [ Chunk (length chunk) chunk
+      | source <- sourceChunks
+      , chunk <- chunkify source
+      ]
     total = sum (map chunkLength ownedChunks)
 
 chunks :: Rope a -> [[a]]

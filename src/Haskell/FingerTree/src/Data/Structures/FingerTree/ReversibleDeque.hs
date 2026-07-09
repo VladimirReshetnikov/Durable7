@@ -22,7 +22,15 @@ import Prelude hiding (last, null, reverse)
 import qualified Data.List as List
 
 newtype ReversibleDeque a = ReversibleDeque (Tree a)
-  deriving (Eq, Ord, Read, Show)
+  deriving (Show)
+
+-- Extensional equality: orientation flags and tree shape are implementation
+-- details, so equality compares the logical element sequences.
+instance Eq a => Eq (ReversibleDeque a) where
+  left == right = count left == count right && toList left == toList right
+
+instance Ord a => Ord (ReversibleDeque a) where
+  compare left right = compare (toList left) (toList right)
 
 data Tree a
   = Empty

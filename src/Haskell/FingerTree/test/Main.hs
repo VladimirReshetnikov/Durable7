@@ -124,6 +124,16 @@ testSortedCollections = do
   assertEqual "map entryAt" (Just (2, "bb")) (SortedMap.index 1 dict)
   assertEqual "map floor" (Just (2, "bb")) (SortedMap.floorEntry 2 dict)
   assertEqual "map overflowing slice rejected" Nothing (SortedMap.slice 1 maxBound dict)
+  -- Comparer-equal-but-distinct elements: the set keeps the first stored
+  -- instance, and the bag retains every instance (new after existing).
+  let firstWins = SortedSet.insert (Keyed 1 "new") (SortedSet.fromList [Keyed (1 :: Int) "old"])
+  assertEqual "set first instance wins" ["old"] (map keyedLabel (SortedSet.toList firstWins))
+  let instanceBag = SortedBag.insert (Keyed 1 "b") (SortedBag.singleton (Keyed (1 :: Int) "a"))
+  assertEqual "bag retains instances in order" ["a", "b"] (map keyedLabel (SortedBag.toList instanceBag))
+  assertEqual
+    "bag deleteOne removes the first instance"
+    ["b"]
+    (map keyedLabel (SortedBag.toList (SortedBag.deleteOne (Keyed 1 "a") instanceBag)))
 
 testPriorityQueue :: IO ()
 testPriorityQueue = do
@@ -148,6 +158,16 @@ testIntervalTree = do
   let d = mustInterval 8 9
       coalesced = IntervalTree.coalesce (IntervalTree.fromList [a, c, d])
   assertEqual "interval coalesce" [IntervalTree.Interval 1 6, d] (IntervalTree.toList coalesced)
+  -- New equal-low intervals precede existing ones (C# reference tie order).
+  let ties = IntervalTree.fromList [mustInterval (1 :: Int) 3, mustInterval 1 5, mustInterval 1 4, mustInterval 0 9]
+  assertEqual
+    "interval equal-low tie order"
+    [IntervalTree.Interval 0 9, IntervalTree.Interval 1 4, IntervalTree.Interval 1 5, IntervalTree.Interval 1 3]
+    (IntervalTree.toList ties)
+  assertEqual
+    "interval delete within equal-low run"
+    [IntervalTree.Interval 0 9, IntervalTree.Interval 1 4, IntervalTree.Interval 1 3]
+    (IntervalTree.toList (IntervalTree.delete (IntervalTree.Interval 1 5) ties))
   where
     mustInterval low high =
       case IntervalTree.mkInterval low high of
@@ -217,6 +237,20 @@ runConcurrent label workerCount action = do
     case result of
       Right () -> pure ()
       Left exception -> fail (label ++ ": worker failed: " ++ show exception)
+
+-- An element whose ordering ignores the label, standing in for
+-- comparer-equal-but-distinct instances.
+data Keyed = Keyed Int String
+  deriving (Show)
+
+instance Eq Keyed where
+  Keyed left _ == Keyed right _ = left == right
+
+instance Ord Keyed where
+  compare (Keyed left _) (Keyed right _) = compare left right
+
+keyedLabel :: Keyed -> String
+keyedLabel (Keyed _ label) = label
 
 assertEqual :: (Eq a, Show a) => String -> a -> a -> IO ()
 assertEqual label expected actual

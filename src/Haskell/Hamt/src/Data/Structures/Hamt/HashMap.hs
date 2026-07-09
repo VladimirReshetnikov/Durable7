@@ -33,6 +33,7 @@ module Data.Structures.Hamt.HashMap
 import Prelude hiding (lookup, null)
 
 import Data.Bits (Bits((.&.), xor), popCount, shiftL, shiftR)
+import qualified Data.List as List
 import Data.Word (Word32)
 
 import Data.Structures.Hamt.Hashable (Hashable(..))
@@ -78,7 +79,7 @@ fromList :: (Eq k, Hashable k) => [(k, v)] -> HashMap k v
 fromList = fromListWith defaultPolicy
 
 fromListWith :: HashPolicy k -> [(k, v)] -> HashMap k v
-fromListWith hashPolicy = foldl (\m (k, v) -> insert k v m) (emptyWith hashPolicy)
+fromListWith hashPolicy = List.foldl' (\m (k, v) -> insert k v m) (emptyWith hashPolicy)
 
 size :: HashMap k v -> Int
 size (HashMap _ count _) = count

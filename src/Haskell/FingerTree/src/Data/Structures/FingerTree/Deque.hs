@@ -41,7 +41,16 @@ import Data.Structures.FingerTree.Measured (ViewL(..), ViewR(..))
 import Data.Structures.FingerTree.Measures (Elem(..), Size(..))
 
 newtype Deque a = Deque (FT.FingerTree Size (Elem a))
-  deriving (Eq, Ord, Read, Show)
+  deriving (Show)
+
+-- Extensional equality: two deques are equal exactly when they contain the
+-- same element sequence, regardless of internal tree shape (a derived
+-- structural instance distinguishes shape-different equal sequences).
+instance Eq a => Eq (Deque a) where
+  left == right = count left == count right && toList left == toList right
+
+instance Ord a => Ord (Deque a) where
+  compare left right = compare (toList left) (toList right)
 
 data SearchResult
   = Found !Int

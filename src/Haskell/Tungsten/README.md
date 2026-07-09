@@ -23,3 +23,10 @@ cabal test tools-data-structures-tungsten
 The `tungsten-test` executable covers list examples, Association ordering rules, custom `HashPolicy`
 behavior, relabel stress, deterministic generated histories against an ordered-pair model, and
 `forkIO` concurrent readers over shared immutable snapshots.
+
+## Platform note
+
+Association stamps are `Int` (matching the package's dependency-free style). The gapped-label
+scheme assumes a 64-bit `Int`; on a 32-bit GHC the relabel multiplication (`position * 2^20`)
+would wrap for associations beyond ~2 000 entries and corrupt the stamp-ascent invariant. The
+repository's supported toolchain (GHC 9.12 on x64) satisfies this.

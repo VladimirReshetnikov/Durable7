@@ -44,6 +44,11 @@ testListExamples = do
   assertEqual "list indexOf" (Just 3) (TungstenList.indexOf (==) 4 values)
   assertBool "list member" (TungstenList.member (==) 5 values)
   assertEqual "list bad slice rejected" Nothing (TungstenList.slice 4 2 values)
+  -- Equality is extensional: equal sequences compare equal regardless of the
+  -- internal tree shapes their construction histories produced.
+  assertBool
+    "list extensional equality"
+    (TungstenList.fromList [1 :: Int, 2, 3] == TungstenList.cons 1 (TungstenList.fromList [2, 3]))
 
 testAssociationOrderingExamples :: IO ()
 testAssociationOrderingExamples = do
@@ -53,6 +58,10 @@ testAssociationOrderingExamples = do
   assertEqual "association setItem appends new key" [("a", 3), ("b", 2), ("c", 4)] (Association.toList (Association.setItem "c" 4 duplicates))
   assertEqual "association append moves existing key" [("b", 2), ("a", 9)] (Association.toList (Association.append "a" 9 duplicates))
   assertEqual "association prepend moves existing key" [("b", 9), ("a", 3)] (Association.toList (Association.prepend "b" 9 duplicates))
+  -- Rule-2 terminal no-op fast paths: an already-terminal key with an equal
+  -- value leaves the association unchanged (order and stamps included).
+  assertEqual "association append terminal no-op" [("a", 3), ("b", 2)] (Association.toList (Association.append "b" 2 duplicates))
+  assertEqual "association prepend terminal no-op" [("a", 3), ("b", 2)] (Association.toList (Association.prepend "a" 3 duplicates))
 
   let joined = Association.join (Association.fromList [("a", 1 :: Int), ("b", 2)]) (Association.fromList [("a", 3 :: Int), ("c", 4)])
   assertEqual "association join keeps receiver positions" [("a", 3), ("b", 2), ("c", 4)] (Association.toList joined)

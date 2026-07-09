@@ -38,7 +38,15 @@ import qualified Data.List as List
 import qualified Data.Structures.FingerTree.Deque as Deque
 
 newtype PersistentList a = PersistentList (Deque.Deque a)
-  deriving (Eq, Ord, Read, Show)
+  deriving (Show)
+
+-- Extensional equality: two lists are equal exactly when they contain the
+-- same element sequence, regardless of internal tree shape.
+instance Eq a => Eq (PersistentList a) where
+  left == right = count left == count right && toList left == toList right
+
+instance Ord a => Ord (PersistentList a) where
+  compare left right = compare (toList left) (toList right)
 
 empty :: PersistentList a
 empty = PersistentList Deque.empty
