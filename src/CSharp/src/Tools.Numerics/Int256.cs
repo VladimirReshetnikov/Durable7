@@ -1060,6 +1060,12 @@ public readonly struct Int256 :
         if (!NumericParseHelpers.TryNormalizeHexText(text, style, out text))
             return false;
         if (text.IsEmpty) return false;
+
+        // Redundant leading zeros do not count against the digit budget (BCL parity).
+        text = text.TrimStart('0');
+        if (text.IsEmpty)
+            return true;
+
         if (text.Length > 64)
         {
             overflow = true;

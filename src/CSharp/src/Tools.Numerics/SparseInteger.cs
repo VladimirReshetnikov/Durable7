@@ -309,10 +309,10 @@ namespace Tools.Numerics
             var positionsNew = ArrayHelpers.RemoveElement(this.positions, (SparseInteger) 0, out bool removed);
 
             return removed
-                // the bit was not set, set it
+                // the lowest bit was set: clear it and carry into bit 1 (adding 2 propagates further carries)
                 ? new SparseInteger(positionsNew) + 2
 
-                // the bit was set, carry to the next position
+                // the lowest bit was not set: set it
                 : new SparseInteger(ArrayHelpers.InsertElement(positionsNew, (SparseInteger) 0));
         }
 
@@ -354,8 +354,11 @@ namespace Tools.Numerics
                 var xPositionsNew = ArrayHelpers.RemoveElement(xPositions, position, out bool removed);
 
                 var x1 = position.PlusOne();
+                // The carry sum must be materialized through the Positions property: reading the
+                // private positions field would yield null whenever the intermediate sum fits into
+                // ulong, silently discarding every bit accumulated so far.
                 xPositions = removed
-                    ? (new SparseInteger(xPositionsNew) + x1.Exp2()).positions
+                    ? (new SparseInteger(xPositionsNew) + x1.Exp2()).Positions
                     : ArrayHelpers.InsertElement(xPositions, position);
             }
 

@@ -86,6 +86,29 @@ public sealed class WideIntegerNumberStylesTests
         Assert.False(Int1024.TryParse("+2A"u8, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _));
     }
 
+    /// <summary>
+    /// Verifies redundant leading zeros in hexadecimal input do not count against the digit budget,
+    /// matching the built-in integer parsers, while significant digits past the budget still overflow.
+    /// </summary>
+    /// <param name="type">The fixed-width integer type to validate.</param>
+    [Theory]
+    [MemberData(nameof(WideIntegerTypes))]
+    public void Parse_HexIgnoresRedundantLeadingZeros(Type type)
+    {
+        int hexDigits = type.Name.Contains("1024") ? 256 : type.Name.Contains("512") ? 128 : 64;
+
+        Assert.Equal("255", Parse(type, new string('0', hexDigits) + "FF", NumberStyles.HexNumber).ToString());
+        Assert.Equal("0", Parse(type, new string('0', hexDigits + 8), NumberStyles.HexNumber).ToString());
+
+        // A significant digit beyond the budget still overflows.
+        Assert.False(TryParse(type, "1" + new string('0', hexDigits), NumberStyles.HexNumber, out _));
+
+        // Leading zeros do not change the two's-complement reinterpretation of full-width patterns.
+        string fullWidth = new string('F', hexDigits);
+        string expected = Parse(type, fullWidth, NumberStyles.HexNumber).ToString()!;
+        Assert.Equal(expected, Parse(type, "00" + fullWidth, NumberStyles.HexNumber).ToString());
+    }
+
     private static object Parse(Type type, string text, NumberStyles style)
     {
         var method = type.GetMethod(

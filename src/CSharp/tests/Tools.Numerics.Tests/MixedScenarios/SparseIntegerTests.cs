@@ -92,4 +92,66 @@ public sealed class SparseIntegerTests
         Assert.Throws<InvalidOperationException>(() => ((SparseInteger)3UL).Log2());
         Assert.Throws<OverflowException>(() => (SparseInteger)new BigInteger(-1));
     }
+
+    /// <summary>
+    /// Verifies carry cascades where a dense low value meets scattered high bits. This shape used to
+    /// lose the accumulated partial sum when an intermediate carry sum fit into <see cref="ulong"/>.
+    /// </summary>
+    [Fact]
+    public void Addition_CarryAcrossSmallBoundary_MatchesBigInteger()
+    {
+        BigInteger twoTo64 = BigInteger.One << 64;
+
+        SparseInteger left = 7UL;
+        SparseInteger right = (SparseInteger)(twoTo64 + 1);
+        Assert.Equal(twoTo64 + 8, (BigInteger)(left + right));
+
+        Assert.Equal(
+            (twoTo64 << 1) + 16,
+            (BigInteger)((SparseInteger)13UL + (SparseInteger)((twoTo64 << 1) + 3)));
+    }
+
+    /// <summary>
+    /// Verifies addition, multiplication, and comparison against a <see cref="BigInteger"/> model over
+    /// randomized operands biased toward carry-heavy shapes (dense low bits plus scattered high bits).
+    /// </summary>
+    [Fact]
+    public void RandomizedArithmetic_MatchesBigIntegerModel()
+    {
+        var random = new Random(20260709);
+
+        for (int iteration = 0; iteration < 2_000; iteration++)
+        {
+            BigInteger leftModel = NextOperand(random);
+            BigInteger rightModel = NextOperand(random);
+            SparseInteger left = (SparseInteger)leftModel;
+            SparseInteger right = (SparseInteger)rightModel;
+
+            Assert.Equal(leftModel + rightModel, (BigInteger)(left + right));
+            Assert.Equal(leftModel.CompareTo(rightModel), Math.Sign(left.CompareTo(right)));
+
+            // Keep products convertible to BigInteger: multiply a full operand by a small sparse one.
+            BigInteger sparseModel = (BigInteger.One << random.Next(0, 130)) + (ulong)random.Next(0, 4);
+            Assert.Equal(leftModel * sparseModel, (BigInteger)(left * (SparseInteger)sparseModel));
+        }
+    }
+
+    private static BigInteger NextOperand(Random random)
+    {
+        // Dense low word.
+        BigInteger result = (ulong)random.NextInt64();
+        if (random.Next(2) == 0)
+        {
+            result = (ulong)random.Next(0, 64);
+        }
+
+        // A few scattered high bits, straddling the 2^64 small-value boundary.
+        int highBits = random.Next(0, 4);
+        for (int i = 0; i < highBits; i++)
+        {
+            result += BigInteger.One << random.Next(60, 200);
+        }
+
+        return result;
+    }
 }
