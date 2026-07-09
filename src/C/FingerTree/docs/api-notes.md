@@ -60,5 +60,36 @@ Deferred from the C++ port:
 
 - allocator customization and typed macro-generation helpers.
 
-The core now carries the C++ port's shared lazy-middle shape in C form. Remaining follow-up work is mostly API
-ergonomics and allocator/tooling polish rather than the central persistent-amortization mechanism.
+The core now carries the C++ port's shared lazy-middle shape in C form.
+
+## Known Complexity Gaps (2026-07-09 review)
+
+The 2026-07-09 cross-language review confirmed the memory-safety and lazy-middle concurrency design
+of the core, but recorded that the generic tree's structural search machinery was never ported and
+several facades inherit that gap. These are complexity divergences from the C++/C# references, not
+behavioral bugs — results match the sibling ports:
+
+- `ft_tree_split_at` pops and re-appends elements one at a time (O(index) with per-element deep
+  copies) instead of the references' digit/node split descent, and `ft_tree_locate`/`ft_tree_split`
+  scan every leaf (with a per-leaf measure allocation) instead of pruning against cached subtree
+  measures. Everything built on them — sorted set/multiset/map insertion and removal, priority-queue
+  push, interval insertion/removal, rope indexing and splitting — is O(n) where the sibling ports
+  are O(log n). The reversible deque has the proper O(log n) split machinery
+  (`ft_rev_rep_split_tree`); porting that shape to the generic tree is the top follow-up.
+- The ropes never merge undersized chunks: single-element inserts create one-element chunks that are
+  never coalesced on remove/concat, so edit-heavy workloads fragment toward one element per chunk.
+- `ft_text_rope` wraps the unmeasured rope, so `line_count`/`line_column_of` are O(n) character
+  scans; the C++/C#/Rust text facades ride a newline measure (O(1) line count, O(log n) navigation)
+  and additionally expose `line_of_offset`/`line_start_offset`/`offset_of`, which the C facade
+  lacks entirely.
+- `ft_measured_rope_prefix_measure` re-locates per element (O(count log n)) instead of splitting
+  once and reading the left tree's cached measure.
+- Interval overlap queries scan the low-sorted sequence with an early exit once `low > query.high`;
+  the references answer first-overlap in O(log n) via a cached max-high annotation. Adding a
+  `(count, lastLow, maxHigh)` product measure is the follow-up here.
+- `ft_tree_locate` reports "not found" through its `found` flag with the total measure in
+  `measure_before`; the C++ reference instead returns the last element as the hit. This is an
+  intentional API difference — porters translating C++ callers must not assume an element is always
+  produced.
+- `ft_tree_concat` (and the reversible deque's concat) require policy *pointer* identity between
+  operands, not just structural compatibility.

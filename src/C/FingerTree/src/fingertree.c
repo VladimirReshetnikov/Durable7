@@ -8,7 +8,9 @@
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-typedef volatile LONG ft_ref_count;
+/* 64-bit count: matches the POSIX build's atomic_size_t width so >2^31
+ * retains of one shared node cannot wrap the count on 64-bit Windows. */
+typedef volatile LONG64 ft_ref_count;
 typedef PVOID volatile ft_atomic_ptr;
 
 static void ft_ref_init(ft_ref_count* count)
@@ -18,12 +20,12 @@ static void ft_ref_init(ft_ref_count* count)
 
 static void ft_ref_retain(ft_ref_count* count)
 {
-    (void)InterlockedIncrement(count);
+    (void)InterlockedIncrement64(count);
 }
 
 static bool ft_ref_release(ft_ref_count* count)
 {
-    return InterlockedDecrement(count) == 0;
+    return InterlockedDecrement64(count) == 0;
 }
 
 static void ft_atomic_ptr_init(ft_atomic_ptr* target, void* value)
@@ -33,7 +35,10 @@ static void ft_atomic_ptr_init(ft_atomic_ptr* target, void* value)
 
 static void* ft_atomic_ptr_load(ft_atomic_ptr* target)
 {
-    return InterlockedCompareExchangePointer(target, NULL, NULL);
+    /* Acquire load without a locked RMW: reading an already-published cached
+     * measure or forced middle must not dirty the cache line, or concurrent
+     * readers of a shared snapshot serialize on it. */
+    return ReadPointerAcquire(target);
 }
 
 static bool ft_atomic_ptr_compare_exchange(ft_atomic_ptr* target, void** expected, void* desired)
@@ -2446,6 +2451,13 @@ ft_status ft_tree_remove_at(const ft_tree* tree, size_t index, ft_tree* result)
 {
     if (!ft_tree_is_valid(tree) || result == NULL) {
         return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (index >= ft_tree_size(tree)) {
+        /* Report a bad index directly instead of surfacing the internal
+         * pop-on-empty as FT_STATUS_EMPTY (matches ft_tree_at/set_at and the
+         * reversible deque). */
+        return FT_STATUS_OUT_OF_RANGE;
     }
 
     ft_tree_split_result split;
@@ -5896,8 +5908,8 @@ ft_status ft_rope_split_at(const ft_rope* rope, size_t index, ft_rope_split_resu
 
     const size_t threshold = index + 1;
     bool found = false;
-    ft_tree left_tree;
-    ft_tree right_tree;
+    ft_tree left_tree = {0};
+    ft_tree right_tree = {0};
     ft_rope_chunk hit;
     ft_status status = ft_tree_split(
         &rope->tree,
@@ -6748,8 +6760,8 @@ ft_status ft_measured_rope_split_at(
 
     const size_t threshold = index + 1;
     bool found = false;
-    ft_tree left_tree;
-    ft_tree right_tree;
+    ft_tree left_tree = {0};
+    ft_tree right_tree = {0};
     ft_measured_rope_chunk hit;
     ft_status status = ft_tree_split(
         &rope->tree,
@@ -7445,8 +7457,10 @@ ft_status ft_priority_queue_try_peek(
         return FT_STATUS_OK;
     }
 
+    /* The minimum lives at the front; read it through the O(1) digit access
+     * instead of a root-to-leaf indexed descent. */
     ft_priority_entry entry;
-    ft_status status = ft_tree_at(&queue->tree, 0, &entry);
+    ft_status status = ft_tree_front(&queue->tree, &entry);
     if (status != FT_STATUS_OK) {
         return status;
     }
@@ -7597,6 +7611,73 @@ size_t ft_interval_tree_i64_size(const ft_interval_tree_i64* tree)
     return tree == NULL ? 0 : ft_sorted_multiset_size(&tree->intervals);
 }
 
+/* Rank of the first stored interval whose low endpoint is >= low. Intervals
+ * are kept sorted by low only; the order among equal lows is insertion
+ * history (new intervals precede existing equal-low ones), matching the C#
+ * reference, so (low, high)-lexicographic binary searches must not be used. */
+static ft_status ft_interval_tree_i64_lower_bound_low(
+    const ft_interval_tree_i64* tree,
+    int64_t low,
+    size_t* index)
+{
+    size_t lower = 0;
+    size_t upper = ft_sorted_multiset_size(&tree->intervals);
+    while (lower < upper) {
+        const size_t middle = lower + (upper - lower) / 2u;
+        ft_interval_i64 current;
+        const ft_status status = ft_sorted_multiset_at(&tree->intervals, middle, &current);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        if (current.low < low) {
+            lower = middle + 1u;
+        } else {
+            upper = middle;
+        }
+    }
+
+    *index = lower;
+    return FT_STATUS_OK;
+}
+
+/* Rank of the first stored interval matching both endpoints: a low-endpoint
+ * binary search plus a scan over the equal-low run. */
+static ft_status ft_interval_tree_i64_index_of(
+    const ft_interval_tree_i64* tree,
+    ft_interval_i64 interval,
+    bool* found,
+    size_t* index)
+{
+    *found = false;
+    size_t position = 0;
+    ft_status status = ft_interval_tree_i64_lower_bound_low(tree, interval.low, &position);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    const size_t count = ft_sorted_multiset_size(&tree->intervals);
+    for (; position != count; ++position) {
+        ft_interval_i64 current;
+        status = ft_sorted_multiset_at(&tree->intervals, position, &current);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        if (current.low != interval.low) {
+            break;
+        }
+
+        if (current.high == interval.high) {
+            *found = true;
+            *index = position;
+            break;
+        }
+    }
+
+    return FT_STATUS_OK;
+}
+
 ft_status ft_interval_tree_i64_insert(
     const ft_interval_tree_i64* tree,
     ft_interval_i64 interval,
@@ -7606,17 +7687,27 @@ ft_status ft_interval_tree_i64_insert(
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    ft_status status = ft_interval_tree_i64_init(result);
+    /* Insert before every stored interval with low >= interval.low, matching
+     * the C# reference: a new interval precedes existing equal-low ones. */
+    size_t position = 0;
+    ft_status status = ft_interval_tree_i64_lower_bound_low(tree, interval.low, &position);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_interval_tree_i64_init(result);
     if (status != FT_STATUS_OK) {
         return status;
     }
 
     ft_sorted_multiset_dispose(&result->intervals);
-    status = ft_sorted_multiset_add(&tree->intervals, &interval, &result->intervals);
+    status = ft_tree_insert_at(&tree->intervals.tree, position, &interval, &result->intervals.tree);
     if (status != FT_STATUS_OK) {
         return status;
     }
 
+    result->intervals.compare = tree->intervals.compare;
+    result->intervals.compare_context = tree->intervals.compare_context;
     ft_interval_tree_i64_rebind(result);
     return FT_STATUS_OK;
 }
@@ -7630,13 +7721,27 @@ ft_status ft_interval_tree_i64_remove_one(
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    ft_status status = ft_interval_tree_i64_init(result);
+    bool found = false;
+    size_t position = 0;
+    ft_status status = ft_interval_tree_i64_index_of(tree, interval, &found, &position);
     if (status != FT_STATUS_OK) {
         return status;
     }
 
+    ft_status init_status = ft_interval_tree_i64_init(result);
+    if (init_status != FT_STATUS_OK) {
+        return init_status;
+    }
+
     ft_sorted_multiset_dispose(&result->intervals);
-    status = ft_sorted_multiset_remove_one(&tree->intervals, &interval, &result->intervals);
+    if (!found) {
+        status = ft_sorted_multiset_copy(&tree->intervals, &result->intervals);
+    } else {
+        status = ft_tree_remove_at(&tree->intervals.tree, position, &result->intervals.tree);
+        result->intervals.compare = tree->intervals.compare;
+        result->intervals.compare_context = tree->intervals.compare_context;
+    }
+
     if (status != FT_STATUS_OK) {
         return status;
     }
@@ -7651,7 +7756,13 @@ bool ft_interval_tree_i64_contains(const ft_interval_tree_i64* tree, ft_interval
         return false;
     }
 
-    return ft_sorted_multiset_contains(&tree->intervals, &interval);
+    bool found = false;
+    size_t position = 0;
+    if (ft_interval_tree_i64_index_of(tree, interval, &found, &position) != FT_STATUS_OK) {
+        return false;
+    }
+
+    return found;
 }
 
 ft_status ft_interval_tree_i64_try_find_overlap(
@@ -7671,6 +7782,11 @@ ft_status ft_interval_tree_i64_try_find_overlap(
         ft_status status = ft_sorted_multiset_at(&tree->intervals, index, &current);
         if (status != FT_STATUS_OK) {
             return status;
+        }
+
+        if (current.low > query.high) {
+            /* Sorted by low: nothing later can overlap the query. */
+            break;
         }
 
         if (ft_interval_i64_overlaps(current, query)) {
@@ -7698,6 +7814,11 @@ size_t ft_interval_tree_i64_count_overlaps(const ft_interval_tree_i64* tree, ft_
         ft_interval_i64 current;
         if (ft_sorted_multiset_at(&tree->intervals, index, &current) != FT_STATUS_OK) {
             return overlaps;
+        }
+
+        if (current.low > query.high) {
+            /* Sorted by low: nothing later can overlap the query. */
+            break;
         }
 
         if (ft_interval_i64_overlaps(current, query)) {
@@ -7942,6 +8063,76 @@ size_t ft_interval_tree_size(const ft_interval_tree* tree)
     return tree == NULL ? 0 : ft_sorted_multiset_size(&tree->intervals);
 }
 
+/* Rank of the first stored interval whose low endpoint is >= low; see the
+ * i64 counterpart for the ordering contract. */
+static ft_status ft_interval_tree_lower_bound_low(
+    const ft_interval_tree* tree,
+    const void* low,
+    size_t* index)
+{
+    size_t lower = 0;
+    size_t upper = ft_interval_tree_size(tree);
+    while (lower < upper) {
+        const size_t middle = lower + (upper - lower) / 2u;
+        ft_interval_entry current;
+        const ft_status status = ft_sorted_multiset_at(&tree->intervals, middle, &current);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        const int comparison = ft_interval_endpoint_compare(tree->interval_context, current.low, low);
+        ft_interval_entry_destroy_value(tree->interval_context, &current);
+        if (comparison < 0) {
+            lower = middle + 1u;
+        } else {
+            upper = middle;
+        }
+    }
+
+    *index = lower;
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_interval_tree_index_of(
+    const ft_interval_tree* tree,
+    const void* low,
+    const void* high,
+    bool* found,
+    size_t* index)
+{
+    *found = false;
+    size_t position = 0;
+    ft_status status = ft_interval_tree_lower_bound_low(tree, low, &position);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    const size_t count = ft_interval_tree_size(tree);
+    for (; position != count; ++position) {
+        ft_interval_entry current;
+        status = ft_sorted_multiset_at(&tree->intervals, position, &current);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        const bool same_low = ft_interval_endpoint_compare(tree->interval_context, current.low, low) == 0;
+        const bool same_high =
+            same_low && ft_interval_endpoint_compare(tree->interval_context, current.high, high) == 0;
+        ft_interval_entry_destroy_value(tree->interval_context, &current);
+        if (!same_low) {
+            break;
+        }
+
+        if (same_high) {
+            *found = true;
+            *index = position;
+            break;
+        }
+    }
+
+    return FT_STATUS_OK;
+}
+
 ft_status ft_interval_tree_insert(
     const ft_interval_tree* tree,
     const void* low,
@@ -7953,8 +8144,16 @@ ft_status ft_interval_tree_insert(
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
+    /* Insert before every stored interval with low >= new low, matching the
+     * C# reference: a new interval precedes existing equal-low ones. */
+    size_t position = 0;
+    ft_status status = ft_interval_tree_lower_bound_low(tree, low, &position);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
     ft_interval_entry entry;
-    ft_status status = ft_interval_entry_init(tree, low, high, &entry);
+    status = ft_interval_entry_init(tree, low, high, &entry);
     if (status != FT_STATUS_OK) {
         return status;
     }
@@ -7965,13 +8164,15 @@ ft_status ft_interval_tree_insert(
         return status;
     }
 
-    status = ft_sorted_multiset_add(&tree->intervals, &entry, &result->intervals);
+    status = ft_tree_insert_at(&tree->intervals.tree, position, &entry, &result->intervals.tree);
     ft_interval_entry_destroy_value(tree->interval_context, &entry);
     if (status != FT_STATUS_OK) {
         ft_interval_tree_dispose(result);
         return status;
     }
 
+    result->intervals.compare = tree->intervals.compare;
+    result->intervals.compare_context = tree->intervals.compare_context;
     ft_interval_tree_rebind(result);
     return FT_STATUS_OK;
 }
@@ -7987,16 +8188,26 @@ ft_status ft_interval_tree_remove_one(
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    ft_interval_entry key;
-    key.low = (void*)low;
-    key.high = (void*)high;
-
-    ft_status status = ft_interval_tree_prepare_result(tree, result);
+    bool found = false;
+    size_t position = 0;
+    ft_status status = ft_interval_tree_index_of(tree, low, high, &found, &position);
     if (status != FT_STATUS_OK) {
         return status;
     }
 
-    status = ft_sorted_multiset_remove_one(&tree->intervals, &key, &result->intervals);
+    status = ft_interval_tree_prepare_result(tree, result);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (!found) {
+        status = ft_sorted_multiset_copy(&tree->intervals, &result->intervals);
+    } else {
+        status = ft_tree_remove_at(&tree->intervals.tree, position, &result->intervals.tree);
+        result->intervals.compare = tree->intervals.compare;
+        result->intervals.compare_context = tree->intervals.compare_context;
+    }
+
     if (status != FT_STATUS_OK) {
         ft_interval_tree_dispose(result);
         return status;
@@ -8013,10 +8224,13 @@ bool ft_interval_tree_contains(const ft_interval_tree* tree, const void* low, co
         return false;
     }
 
-    ft_interval_entry key;
-    key.low = (void*)low;
-    key.high = (void*)high;
-    return ft_sorted_multiset_contains(&tree->intervals, &key);
+    bool found = false;
+    size_t position = 0;
+    if (ft_interval_tree_index_of(tree, low, high, &found, &position) != FT_STATUS_OK) {
+        return false;
+    }
+
+    return found;
 }
 
 ft_status ft_interval_tree_try_find_overlap(
@@ -8039,6 +8253,12 @@ ft_status ft_interval_tree_try_find_overlap(
         ft_status status = ft_sorted_multiset_at(&tree->intervals, index, &current);
         if (status != FT_STATUS_OK) {
             return status;
+        }
+
+        if (ft_interval_endpoint_compare(tree->interval_context, current.low, query_high) > 0) {
+            /* Sorted by low: nothing later can overlap the query. */
+            ft_interval_entry_destroy_value(tree->interval_context, &current);
+            break;
         }
 
         if (ft_interval_entry_overlaps(tree->interval_context, &current, query_low, query_high)) {
@@ -8077,6 +8297,12 @@ size_t ft_interval_tree_count_overlaps(
         ft_interval_entry current;
         if (ft_sorted_multiset_at(&tree->intervals, index, &current) != FT_STATUS_OK) {
             return overlaps;
+        }
+
+        if (ft_interval_endpoint_compare(tree->interval_context, current.low, query_high) > 0) {
+            /* Sorted by low: nothing later can overlap the query. */
+            ft_interval_entry_destroy_value(tree->interval_context, &current);
+            break;
         }
 
         if (ft_interval_entry_overlaps(tree->interval_context, &current, query_low, query_high)) {

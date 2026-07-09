@@ -1267,6 +1267,55 @@ static void test_interval_tree(void)
     ft_interval_tree_i64_dispose(&tree);
 }
 
+static void test_interval_tree_equal_low_tie_order(void)
+{
+    /* Matches the C# reference: insert splits at the first stored interval
+     * whose low >= the new low, so newer equal-low intervals come first. */
+    ft_interval_tree_i64 tree;
+    REQUIRE_STATUS(ft_interval_tree_i64_init(&tree), FT_STATUS_OK);
+
+    const ft_interval_i64 script[] = {
+        {1, 3},
+        {1, 5},
+        {1, 4},
+        {0, 9}
+    };
+    for (size_t index = 0; index != sizeof(script) / sizeof(script[0]); ++index) {
+        ft_interval_tree_i64 next;
+        REQUIRE_STATUS(ft_interval_tree_i64_insert(&tree, script[index], &next), FT_STATUS_OK);
+        ft_interval_tree_i64_dispose(&tree);
+        ft_interval_tree_i64_move(&tree, &next);
+    }
+
+    const ft_interval_i64 expected[] = {
+        {0, 9},
+        {1, 4},
+        {1, 5},
+        {1, 3}
+    };
+    for (size_t index = 0; index != sizeof(expected) / sizeof(expected[0]); ++index) {
+        ft_interval_i64 current;
+        REQUIRE_STATUS(ft_interval_tree_i64_at(&tree, index, &current), FT_STATUS_OK);
+        REQUIRE(current.low == expected[index].low);
+        REQUIRE(current.high == expected[index].high);
+    }
+
+    /* Membership and removal must search the equal-low run, not rely on a
+     * (low, high)-sorted order. */
+    REQUIRE(ft_interval_tree_i64_contains(&tree, (ft_interval_i64){1, 5}));
+    REQUIRE(!ft_interval_tree_i64_contains(&tree, (ft_interval_i64){1, 6}));
+
+    ft_interval_tree_i64 removed;
+    REQUIRE_STATUS(ft_interval_tree_i64_remove_one(&tree, (ft_interval_i64){1, 5}, &removed), FT_STATUS_OK);
+    REQUIRE(ft_interval_tree_i64_size(&removed) == 3);
+    REQUIRE(!ft_interval_tree_i64_contains(&removed, (ft_interval_i64){1, 5}));
+    REQUIRE(ft_interval_tree_i64_contains(&removed, (ft_interval_i64){1, 4}));
+    REQUIRE(ft_interval_tree_i64_contains(&removed, (ft_interval_i64){1, 3}));
+
+    ft_interval_tree_i64_dispose(&removed);
+    ft_interval_tree_i64_dispose(&tree);
+}
+
 static void test_generic_interval_tree(void)
 {
     ft_value_type int_type;
@@ -1447,6 +1496,7 @@ int main(void)
     run_test("measured rope", test_measured_rope);
     run_test("priority queue", test_priority_queue);
     run_test("interval tree", test_interval_tree);
+    run_test("interval tree equal-low tie order", test_interval_tree_equal_low_tie_order);
     run_test("generic interval tree", test_generic_interval_tree);
     run_test("text rope", test_text_rope);
     run_test("text rope long edit script", test_text_rope_long_edit_script);
