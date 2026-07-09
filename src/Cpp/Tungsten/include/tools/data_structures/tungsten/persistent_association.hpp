@@ -46,9 +46,12 @@ private:
     struct slot_equal final {
         ValueEqual equal{};
 
+        // Compares the stamp too: the HAMT's set_item short-circuits on slot
+        // equality, and a value-only comparison would silently keep a stale
+        // stamp if a caller ever re-stamped a present key via index_.set_item.
         [[nodiscard]] bool operator()(const slot& left, const slot& right) const
         {
-            return std::invoke(equal, left.value, right.value);
+            return left.stamp == right.stamp && std::invoke(equal, left.value, right.value);
         }
     };
 
@@ -294,7 +297,10 @@ public:
         }
 
         auto entries = entries_.remove_at(position);
-        return with_entry_inserted(std::move(entries), index_.remove(key), entries.size(), key, value);
+        // Hoisted before the call: argument evaluations are indeterminately
+        // sequenced, so entries.size() must not race the move of entries.
+        const auto insert_at = entries.size();
+        return with_entry_inserted(std::move(entries), index_.remove(key), insert_at, key, value);
     }
 
     [[nodiscard]] persistent_association prepend(const Key& key, const T& value) const
@@ -383,7 +389,9 @@ public:
 
     [[nodiscard]] persistent_association remove_at(const size_type index) const
     {
-        const auto removed = entries_.at(index);
+        // Persistence keeps the reference valid across remove_at: the entry
+        // lives in this instance's retained tree, not in the derived one.
+        const auto& removed = entries_.at(index);
         auto entries = entries_.remove_at(index);
         auto trimmed_index = index_.remove(removed.key_ref());
         return entries.empty()

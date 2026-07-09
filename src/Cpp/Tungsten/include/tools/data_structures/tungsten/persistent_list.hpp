@@ -7,6 +7,7 @@
 #include <functional>
 #include <initializer_list>
 #include <iterator>
+#include <limits>
 #include <ranges>
 #include <stdexcept>
 #include <type_traits>
@@ -142,7 +143,13 @@ public:
     template <std::ranges::input_range Range>
     [[nodiscard]] persistent_list add_range(Range&& items) const
     {
-        return wrap(items_.add_range(std::ranges::begin(items), std::ranges::end(items)));
+        // An rvalue persistent_list binds to this template in preference to
+        // the const& overload; keep the O(log min) join fast path for it.
+        if constexpr (std::same_as<std::remove_cvref_t<Range>, persistent_list>) {
+            return join(items);
+        } else {
+            return wrap(items_.add_range(std::ranges::begin(items), std::ranges::end(items)));
+        }
     }
 
     [[nodiscard]] persistent_list insert(const size_type index, value_type item) const
