@@ -36,13 +36,19 @@ policies can provide:
 - retain and release callbacks for keys, values, or set items;
 - one opaque context pointer passed to every callback.
 
-Retain callbacks are value-returning and cannot report allocation failure separately from the
-payload they return. A retain callback that allocates must either complete successfully or apply a
-caller-defined fatal/error-transfer policy consistently; returning `NULL` is treated as the retained
-payload value and is not interpreted as `TDS_HAMT_OUT_OF_MEMORY`.
+Retain callbacks are value-returning: an allocating retain callback reports failure by returning
+`NULL` for a non-`NULL` input, which the library maps to `TDS_HAMT_OUT_OF_MEMORY` and unwinds
+(already-retained payloads on the failed path are released; no partially retained node is
+published). Retaining a `NULL` key or value yields `NULL` and is not an error.
 
-`try_remove` reports the removed value pointer as stored in the source map. That pointer remains
-valid according to the source map's lifetime and policy; the call does not transfer ownership.
+`try_remove` reports the removed value pointer as stored in the source map. The pointer is valid
+only while the source map value itself remains alive (not destroyed): the call performs no retain
+on the caller's behalf, and with a copying retain policy the payload is owned by the source's
+nodes, so destroying the source frees it even when the result map still contains sibling entries.
+
+Every operation's `result` may alias the source map or set: the library releases the overwritten
+version's root before publishing the new one, so `tds_hamt_map_set(&map, k, v, &map)`-style
+in-place updates are safe (the previous version is no longer reachable afterwards).
 
 ## Hash Trie Shape
 
@@ -75,9 +81,11 @@ source map or set remains alive.
   on miss.
 - `tds_hamt_map_clear` returns an empty map preserving the current policy.
 
-When replacing an existing key, the originally stored key pointer is retained. When the existing
-value compares equal under the value equality callback, the root is reused and the stored value
-pointer is retained.
+When replacing an existing key, the originally stored key is re-retained through the policy: with
+identity or reference-counting retain callbacks the stored key *pointer* is preserved (matching the
+C# reference's key-instance retention), while a copying retain callback necessarily produces a
+fresh copy. When the existing value compares equal under the value equality callback, the root is
+reused and the stored value pointer is retained.
 
 ## Set Contract
 
@@ -88,7 +96,9 @@ pointer is retained.
   sets.
 - `is_subset_of_many`, `is_proper_subset_of_many`, `is_superset_of_many`,
   `is_proper_superset_of_many`, `overlaps_many`, and `equals_many` interpret equality through the
-  set's policy callbacks.
+  set's policy callbacks. They report the relation through a `bool *result` out-parameter and
+  return `tds_hamt_status`, so an allocation failure while materializing the internal probe set is
+  distinguishable from a genuine negative answer.
 
 Set operations that need distinct right-side membership materialize their argument into a temporary
 `tds_hamt_set` using the receiver's policy. Superset and overlap checks stream their argument.

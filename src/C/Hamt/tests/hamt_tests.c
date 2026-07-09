@@ -1241,15 +1241,19 @@ static void test_set_algebra_matches_model(void) {
             overlaps = overlaps || (left_model[i] && right_model[i]);
         }
 
-        CHECK(tds_hamt_set_is_subset_of_many(&set, right_items, right_count) == subset);
-        CHECK(tds_hamt_set_is_proper_subset_of_many(&set, right_items, right_count) ==
-              (subset && left_distinct < right_distinct));
-        CHECK(tds_hamt_set_is_superset_of_many(&set, right_items, right_count) == superset);
-        CHECK(tds_hamt_set_is_proper_superset_of_many(&set, right_items, right_count) ==
-              (superset && left_distinct > right_distinct));
-        CHECK(tds_hamt_set_overlaps_many(&set, right_items, right_count) == overlaps);
-        CHECK(tds_hamt_set_equals_many(&set, right_items, right_count) ==
-              (left_distinct == right_distinct && subset));
+        bool relation = false;
+        CHECK_STATUS(tds_hamt_set_is_subset_of_many(&set, right_items, right_count, &relation));
+        CHECK(relation == subset);
+        CHECK_STATUS(tds_hamt_set_is_proper_subset_of_many(&set, right_items, right_count, &relation));
+        CHECK(relation == (subset && left_distinct < right_distinct));
+        CHECK_STATUS(tds_hamt_set_is_superset_of_many(&set, right_items, right_count, &relation));
+        CHECK(relation == superset);
+        CHECK_STATUS(tds_hamt_set_is_proper_superset_of_many(&set, right_items, right_count, &relation));
+        CHECK(relation == (superset && left_distinct > right_distinct));
+        CHECK_STATUS(tds_hamt_set_overlaps_many(&set, right_items, right_count, &relation));
+        CHECK(relation == overlaps);
+        CHECK_STATUS(tds_hamt_set_equals_many(&set, right_items, right_count, &relation));
+        CHECK(relation == (left_distinct == right_distinct && subset));
 
         tds_hamt_set_destroy(&set);
     }
@@ -1332,6 +1336,81 @@ static void test_concurrent_retained_snapshot_reads(void) {
     tds_hamt_map_destroy(&map);
 }
 
+typedef struct counting_policy_state {
+    long key_retains;
+    long key_releases;
+    long value_retains;
+    long value_releases;
+} counting_policy_state;
+
+static void *counting_retain_key(const void *key, void *context) {
+    counting_policy_state *state = (counting_policy_state *)context;
+    if (key != NULL) {
+        ++state->key_retains;
+    }
+    return (void *)key;
+}
+
+static void counting_release_key(void *key, void *context) {
+    counting_policy_state *state = (counting_policy_state *)context;
+    if (key != NULL) {
+        ++state->key_releases;
+    }
+}
+
+static void *counting_retain_value(const void *value, void *context) {
+    counting_policy_state *state = (counting_policy_state *)context;
+    if (value != NULL) {
+        ++state->value_retains;
+    }
+    return (void *)value;
+}
+
+static void counting_release_value(void *value, void *context) {
+    counting_policy_state *state = (counting_policy_state *)context;
+    if (value != NULL) {
+        ++state->value_releases;
+    }
+}
+
+static void test_counting_policy_stays_balanced_and_aliasing_updates_are_safe(void) {
+    counting_policy_state state = { 0, 0, 0, 0 };
+    tds_hamt_policy policy = int_map_policy(int_hash);
+    policy.retain_key = counting_retain_key;
+    policy.release_key = counting_release_key;
+    policy.retain_value = counting_retain_value;
+    policy.release_value = counting_release_value;
+    policy.context = &state;
+
+    tds_hamt_map map = tds_hamt_map_create(&policy);
+    tds_hamt_map snapshot;
+
+    /* In-place (aliased result) updates: mixed history including collisions,
+     * replaces, no-op replaces, and removals. */
+    for (int i = 0; i < 64; ++i) {
+        CHECK_STATUS(tds_hamt_map_set(&map, int_key(i % 32), int_value(i), &map));
+    }
+    CHECK(tds_hamt_map_count(&map) == 32);
+
+    /* A retained snapshot, then more aliased edits on the main line. */
+    snapshot = tds_hamt_map_clone(&map);
+    for (int i = 0; i < 16; ++i) {
+        CHECK_STATUS(tds_hamt_map_remove(&map, int_key(i), &map));
+    }
+    CHECK(tds_hamt_map_count(&map) == 16);
+    CHECK(tds_hamt_map_count(&snapshot) == 32);
+
+    /* No-op replace through the aliased path must not unbalance refcounts. */
+    CHECK_STATUS(tds_hamt_map_set(&map, int_key(20), int_value(52), &map));
+
+    tds_hamt_map_destroy(&snapshot);
+    tds_hamt_map_destroy(&map);
+
+    CHECK(state.key_retains == state.key_releases);
+    CHECK(state.value_retains == state.value_releases);
+    CHECK(state.key_retains > 0);
+}
+
 static const test_case tests[] = {
     { "empty map has no entries", test_empty_map_has_no_entries },
     { "set item adds replaces and preserves old versions", test_set_adds_replaces_and_preserves_old_versions },
@@ -1352,7 +1431,9 @@ static const test_case tests[] = {
     { "set custom comparer retains first item", test_set_custom_comparer_retains_first_item },
     { "set algebra matches model", test_set_algebra_matches_model },
     { "set symmetric_except treats duplicates as one item", test_set_symmetric_except_treats_duplicates_as_one_item },
-    { "concurrent retained snapshot reads", test_concurrent_retained_snapshot_reads }
+    { "concurrent retained snapshot reads", test_concurrent_retained_snapshot_reads },
+    { "counting policy stays balanced and aliasing updates are safe",
+      test_counting_policy_stays_balanced_and_aliasing_updates_are_safe }
 };
 
 int main(void) {

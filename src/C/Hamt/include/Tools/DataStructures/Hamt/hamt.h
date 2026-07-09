@@ -203,30 +203,40 @@ tds_hamt_status tds_hamt_set_symmetric_except_many(
     size_t item_count,
     tds_hamt_set *result);
 
-bool tds_hamt_set_is_subset_of_many(
+/* The relation predicates report their answer through *result and return a
+ * status so an allocation failure while building the internal probe set is
+ * distinguishable from a genuine negative answer. *result is written false
+ * before any fallible work. */
+tds_hamt_status tds_hamt_set_is_subset_of_many(
     const tds_hamt_set *set,
     const void *const *items,
-    size_t item_count);
-bool tds_hamt_set_is_proper_subset_of_many(
+    size_t item_count,
+    bool *result);
+tds_hamt_status tds_hamt_set_is_proper_subset_of_many(
     const tds_hamt_set *set,
     const void *const *items,
-    size_t item_count);
-bool tds_hamt_set_is_superset_of_many(
+    size_t item_count,
+    bool *result);
+tds_hamt_status tds_hamt_set_is_superset_of_many(
     const tds_hamt_set *set,
     const void *const *items,
-    size_t item_count);
-bool tds_hamt_set_is_proper_superset_of_many(
+    size_t item_count,
+    bool *result);
+tds_hamt_status tds_hamt_set_is_proper_superset_of_many(
     const tds_hamt_set *set,
     const void *const *items,
-    size_t item_count);
-bool tds_hamt_set_overlaps_many(
+    size_t item_count,
+    bool *result);
+tds_hamt_status tds_hamt_set_overlaps_many(
     const tds_hamt_set *set,
     const void *const *items,
-    size_t item_count);
-bool tds_hamt_set_equals_many(
+    size_t item_count,
+    bool *result);
+tds_hamt_status tds_hamt_set_equals_many(
     const tds_hamt_set *set,
     const void *const *items,
-    size_t item_count);
+    size_t item_count,
+    bool *result);
 
 void tds_hamt_set_iterator_init(const tds_hamt_set *set, tds_hamt_set_iterator *iterator);
 bool tds_hamt_set_iterator_next(tds_hamt_set_iterator *iterator, const void **item);

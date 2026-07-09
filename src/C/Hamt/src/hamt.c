@@ -259,6 +259,11 @@ tds_hamt_status tds_hamt_map_set(
         return status;
     }
 
+    if (result == map) {
+        /* In-place update: drop the reference the source owned so the
+         * overwritten root is not leaked. */
+        tds_hamt_node_release(&map->policy, map->root);
+    }
     result->root = new_root;
     result->count = map->count + (added ? 1u : 0u);
     result->policy = map->policy;
@@ -287,6 +292,9 @@ tds_hamt_status tds_hamt_map_set_many(
         current = next;
     }
 
+    if (result == map) {
+        tds_hamt_node_release(&map->policy, map->root);
+    }
     *result = current;
     return TDS_HAMT_OK;
 }
@@ -320,6 +328,10 @@ tds_hamt_status tds_hamt_map_try_add(
         return TDS_HAMT_INVALID_ARGUMENT;
     }
 
+    if (added != NULL) {
+        *added = false;
+    }
+
     const uint32_t hash = tds_hamt_get_hash(map, key);
     tds_hamt_node *new_root = NULL;
     bool local_added = false;
@@ -345,6 +357,9 @@ tds_hamt_status tds_hamt_map_try_add(
         return status;
     }
 
+    if (result == map) {
+        tds_hamt_node_release(&map->policy, map->root);
+    }
     result->root = new_root;
     result->count = map->count + (local_added ? 1u : 0u);
     result->policy = map->policy;
@@ -374,6 +389,13 @@ tds_hamt_status tds_hamt_map_try_remove(
         return TDS_HAMT_INVALID_ARGUMENT;
     }
 
+    if (removed != NULL) {
+        *removed = false;
+    }
+    if (removed_value != NULL) {
+        *removed_value = NULL;
+    }
+
     if (map->root == NULL) {
         *result = tds_hamt_map_clone(map);
         if (removed != NULL) {
@@ -401,6 +423,9 @@ tds_hamt_status tds_hamt_map_try_remove(
         return status;
     }
 
+    if (result == map) {
+        tds_hamt_node_release(&map->policy, map->root);
+    }
     result->root = new_root;
     result->count = map->count - (local_removed ? 1u : 0u);
     result->policy = map->policy;
@@ -422,6 +447,9 @@ tds_hamt_status tds_hamt_map_clear(const tds_hamt_map *map, tds_hamt_map *result
     if (map->count == 0) {
         *result = tds_hamt_map_clone(map);
     } else {
+        if (result == map) {
+            tds_hamt_node_release(&map->policy, map->root);
+        }
         result->root = NULL;
         result->count = 0;
         result->policy = map->policy;
@@ -645,6 +673,9 @@ tds_hamt_status tds_hamt_set_try_add(
     tds_hamt_map map;
     const tds_hamt_status status = tds_hamt_map_try_add(&set->map, item, NULL, &map, added);
     if (status == TDS_HAMT_OK) {
+        if (result == set) {
+            tds_hamt_node_release(&set->map.policy, set->map.root);
+        }
         result->map = map;
     }
 
@@ -668,6 +699,10 @@ tds_hamt_status tds_hamt_set_try_remove(
         return TDS_HAMT_INVALID_ARGUMENT;
     }
 
+    if (removed != NULL) {
+        *removed = false;
+    }
+
     tds_hamt_map map;
     bool local_removed = false;
     const void *removed_value = NULL;
@@ -678,6 +713,9 @@ tds_hamt_status tds_hamt_set_try_remove(
         &local_removed,
         &removed_value);
     if (status == TDS_HAMT_OK) {
+        if (result == set) {
+            tds_hamt_node_release(&set->map.policy, set->map.root);
+        }
         result->map = map;
         if (removed != NULL) {
             *removed = local_removed;
@@ -717,6 +755,9 @@ tds_hamt_status tds_hamt_set_union_many(
         current = next;
     }
 
+    if (result == set) {
+        tds_hamt_node_release(&set->map.policy, set->map.root);
+    }
     *result = current;
     return TDS_HAMT_OK;
 }
@@ -765,6 +806,9 @@ tds_hamt_status tds_hamt_set_intersect_many(
     }
 
     tds_hamt_set_destroy(&probe);
+    if (result == set) {
+        tds_hamt_node_release(&set->map.policy, set->map.root);
+    }
     *result = intersection;
     return TDS_HAMT_OK;
 }
@@ -791,6 +835,9 @@ tds_hamt_status tds_hamt_set_except_many(
         current = next;
     }
 
+    if (result == set) {
+        tds_hamt_node_release(&set->map.policy, set->map.root);
+    }
     *result = current;
     return TDS_HAMT_OK;
 }
@@ -837,18 +884,19 @@ tds_hamt_status tds_hamt_set_symmetric_except_many(
     }
 
     tds_hamt_set_destroy(&toggles);
+    if (result == set) {
+        tds_hamt_node_release(&set->map.policy, set->map.root);
+    }
     *result = current;
     return TDS_HAMT_OK;
 }
 
-bool tds_hamt_set_is_subset_of_many(
+/* Builds the deduplicating probe set the relation predicates compare against. */
+static tds_hamt_status tds_hamt_set_build_probe(
     const tds_hamt_set *set,
     const void *const *items,
-    size_t item_count) {
-    if (set == NULL || (item_count != 0 && items == NULL)) {
-        return false;
-    }
-
+    size_t item_count,
+    tds_hamt_set *probe) {
     tds_hamt_set_policy policy = tds_hamt_normalize_set_policy(&(tds_hamt_set_policy){
         set->map.policy.hash,
         set->map.policy.key_equal,
@@ -856,61 +904,15 @@ bool tds_hamt_set_is_subset_of_many(
         set->map.policy.release_key,
         set->map.policy.context
     });
-    tds_hamt_set probe;
-    if (tds_hamt_set_create_range(&policy, items, item_count, &probe) != TDS_HAMT_OK) {
-        return false;
-    }
+    return tds_hamt_set_create_range(&policy, items, item_count, probe);
+}
 
-    bool is_subset = true;
+static bool tds_hamt_set_contains_all_of(const tds_hamt_set *container, const tds_hamt_set *contained) {
     tds_hamt_set_iterator iterator;
-    tds_hamt_set_iterator_init(set, &iterator);
+    tds_hamt_set_iterator_init(contained, &iterator);
     const void *item = NULL;
     while (tds_hamt_set_iterator_next(&iterator, &item)) {
-        if (!tds_hamt_set_contains(&probe, item)) {
-            is_subset = false;
-            break;
-        }
-    }
-
-    tds_hamt_set_destroy(&probe);
-    return is_subset;
-}
-
-bool tds_hamt_set_is_proper_subset_of_many(
-    const tds_hamt_set *set,
-    const void *const *items,
-    size_t item_count) {
-    if (set == NULL || (item_count != 0 && items == NULL)) {
-        return false;
-    }
-
-    tds_hamt_set_policy policy = tds_hamt_normalize_set_policy(&(tds_hamt_set_policy){
-        set->map.policy.hash,
-        set->map.policy.key_equal,
-        set->map.policy.retain_key,
-        set->map.policy.release_key,
-        set->map.policy.context
-    });
-    tds_hamt_set probe;
-    if (tds_hamt_set_create_range(&policy, items, item_count, &probe) != TDS_HAMT_OK) {
-        return false;
-    }
-
-    const bool proper_by_count = tds_hamt_set_count(set) < tds_hamt_set_count(&probe);
-    tds_hamt_set_destroy(&probe);
-    return proper_by_count && tds_hamt_set_is_subset_of_many(set, items, item_count);
-}
-
-bool tds_hamt_set_is_superset_of_many(
-    const tds_hamt_set *set,
-    const void *const *items,
-    size_t item_count) {
-    if (set == NULL || (item_count != 0 && items == NULL)) {
-        return false;
-    }
-
-    for (size_t i = 0; i < item_count; ++i) {
-        if (!tds_hamt_set_contains(set, items[i])) {
+        if (!tds_hamt_set_contains(container, item)) {
             return false;
         }
     }
@@ -918,82 +920,131 @@ bool tds_hamt_set_is_superset_of_many(
     return true;
 }
 
-bool tds_hamt_set_is_proper_superset_of_many(
+tds_hamt_status tds_hamt_set_is_subset_of_many(
     const tds_hamt_set *set,
     const void *const *items,
-    size_t item_count) {
-    if (set == NULL || (item_count != 0 && items == NULL)) {
-        return false;
+    size_t item_count,
+    bool *result) {
+    if (set == NULL || result == NULL || (item_count != 0 && items == NULL)) {
+        return TDS_HAMT_INVALID_ARGUMENT;
     }
 
-    tds_hamt_set_policy policy = tds_hamt_normalize_set_policy(&(tds_hamt_set_policy){
-        set->map.policy.hash,
-        set->map.policy.key_equal,
-        set->map.policy.retain_key,
-        set->map.policy.release_key,
-        set->map.policy.context
-    });
+    *result = false;
     tds_hamt_set probe;
-    if (tds_hamt_set_create_range(&policy, items, item_count, &probe) != TDS_HAMT_OK) {
-        return false;
+    const tds_hamt_status status = tds_hamt_set_build_probe(set, items, item_count, &probe);
+    if (status != TDS_HAMT_OK) {
+        return status;
     }
 
-    const bool smaller = tds_hamt_set_count(&probe) < tds_hamt_set_count(set);
-    bool contains_all = true;
-    tds_hamt_set_iterator iterator;
-    tds_hamt_set_iterator_init(&probe, &iterator);
-    const void *item = NULL;
-    while (tds_hamt_set_iterator_next(&iterator, &item)) {
-        if (!tds_hamt_set_contains(set, item)) {
-            contains_all = false;
+    *result = tds_hamt_set_contains_all_of(&probe, set);
+    tds_hamt_set_destroy(&probe);
+    return TDS_HAMT_OK;
+}
+
+tds_hamt_status tds_hamt_set_is_proper_subset_of_many(
+    const tds_hamt_set *set,
+    const void *const *items,
+    size_t item_count,
+    bool *result) {
+    if (set == NULL || result == NULL || (item_count != 0 && items == NULL)) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    *result = false;
+    tds_hamt_set probe;
+    const tds_hamt_status status = tds_hamt_set_build_probe(set, items, item_count, &probe);
+    if (status != TDS_HAMT_OK) {
+        return status;
+    }
+
+    *result = tds_hamt_set_count(set) < tds_hamt_set_count(&probe)
+        && tds_hamt_set_contains_all_of(&probe, set);
+    tds_hamt_set_destroy(&probe);
+    return TDS_HAMT_OK;
+}
+
+tds_hamt_status tds_hamt_set_is_superset_of_many(
+    const tds_hamt_set *set,
+    const void *const *items,
+    size_t item_count,
+    bool *result) {
+    if (set == NULL || result == NULL || (item_count != 0 && items == NULL)) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    *result = true;
+    for (size_t i = 0; i < item_count; ++i) {
+        if (!tds_hamt_set_contains(set, items[i])) {
+            *result = false;
             break;
         }
     }
 
-    tds_hamt_set_destroy(&probe);
-    return smaller && contains_all;
+    return TDS_HAMT_OK;
 }
 
-bool tds_hamt_set_overlaps_many(
+tds_hamt_status tds_hamt_set_is_proper_superset_of_many(
     const tds_hamt_set *set,
     const void *const *items,
-    size_t item_count) {
-    if (set == NULL || (item_count != 0 && items == NULL)) {
-        return false;
+    size_t item_count,
+    bool *result) {
+    if (set == NULL || result == NULL || (item_count != 0 && items == NULL)) {
+        return TDS_HAMT_INVALID_ARGUMENT;
     }
 
+    *result = false;
+    tds_hamt_set probe;
+    const tds_hamt_status status = tds_hamt_set_build_probe(set, items, item_count, &probe);
+    if (status != TDS_HAMT_OK) {
+        return status;
+    }
+
+    *result = tds_hamt_set_count(&probe) < tds_hamt_set_count(set)
+        && tds_hamt_set_contains_all_of(set, &probe);
+    tds_hamt_set_destroy(&probe);
+    return TDS_HAMT_OK;
+}
+
+tds_hamt_status tds_hamt_set_overlaps_many(
+    const tds_hamt_set *set,
+    const void *const *items,
+    size_t item_count,
+    bool *result) {
+    if (set == NULL || result == NULL || (item_count != 0 && items == NULL)) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    *result = false;
     for (size_t i = 0; i < item_count; ++i) {
         if (tds_hamt_set_contains(set, items[i])) {
-            return true;
+            *result = true;
+            break;
         }
     }
 
-    return false;
+    return TDS_HAMT_OK;
 }
 
-bool tds_hamt_set_equals_many(
+tds_hamt_status tds_hamt_set_equals_many(
     const tds_hamt_set *set,
     const void *const *items,
-    size_t item_count) {
-    if (set == NULL || (item_count != 0 && items == NULL)) {
-        return false;
+    size_t item_count,
+    bool *result) {
+    if (set == NULL || result == NULL || (item_count != 0 && items == NULL)) {
+        return TDS_HAMT_INVALID_ARGUMENT;
     }
 
-    tds_hamt_set_policy policy = tds_hamt_normalize_set_policy(&(tds_hamt_set_policy){
-        set->map.policy.hash,
-        set->map.policy.key_equal,
-        set->map.policy.retain_key,
-        set->map.policy.release_key,
-        set->map.policy.context
-    });
+    *result = false;
     tds_hamt_set probe;
-    if (tds_hamt_set_create_range(&policy, items, item_count, &probe) != TDS_HAMT_OK) {
-        return false;
+    const tds_hamt_status status = tds_hamt_set_build_probe(set, items, item_count, &probe);
+    if (status != TDS_HAMT_OK) {
+        return status;
     }
 
-    const bool same_count = tds_hamt_set_count(set) == tds_hamt_set_count(&probe);
+    *result = tds_hamt_set_count(set) == tds_hamt_set_count(&probe)
+        && tds_hamt_set_contains_all_of(&probe, set);
     tds_hamt_set_destroy(&probe);
-    return same_count && tds_hamt_set_is_subset_of_many(set, items, item_count);
+    return TDS_HAMT_OK;
 }
 
 void tds_hamt_set_iterator_init(const tds_hamt_set *set, tds_hamt_set_iterator *iterator) {
@@ -1021,11 +1072,14 @@ tds_hamt_node_kind tds_hamt_set_debug_root_kind(const tds_hamt_set *set) {
 
 static uint32_t tds_hamt_pointer_hash(const void *item, void *context) {
     (void)context;
-    uintptr_t value = (uintptr_t)item;
+    /* Widen before mixing: on 32-bit targets a `uintptr_t >> 33` would be a
+     * shift past the type width (undefined behavior) and the 64-bit Murmur3
+     * finalizer constants would silently truncate. */
+    uint64_t value = (uint64_t)(uintptr_t)item;
     value ^= value >> 33;
-    value *= (uintptr_t)0xff51afd7ed558ccdull;
+    value *= 0xff51afd7ed558ccdull;
     value ^= value >> 33;
-    value *= (uintptr_t)0xc4ceb9fe1a85ec53ull;
+    value *= 0xc4ceb9fe1a85ec53ull;
     value ^= value >> 33;
     return (uint32_t)value;
 }
@@ -1174,6 +1228,25 @@ static void *tds_hamt_retain_value(const tds_hamt_policy *policy, const void *va
     return policy->retain_value(value, policy->context);
 }
 
+/* An allocating retain callback reports failure by returning NULL for a
+ * non-NULL input; storing that NULL with TDS_HAMT_OK would surface much later
+ * as a NULL key/value reaching the user callbacks. */
+static tds_hamt_status tds_hamt_checked_retain_key(
+    const tds_hamt_policy *policy,
+    const void *key,
+    void **retained) {
+    *retained = tds_hamt_retain_key(policy, key);
+    return (*retained == NULL && key != NULL) ? TDS_HAMT_OUT_OF_MEMORY : TDS_HAMT_OK;
+}
+
+static tds_hamt_status tds_hamt_checked_retain_value(
+    const tds_hamt_policy *policy,
+    const void *value,
+    void **retained) {
+    *retained = tds_hamt_retain_value(policy, value);
+    return (*retained == NULL && value != NULL) ? TDS_HAMT_OUT_OF_MEMORY : TDS_HAMT_OK;
+}
+
 static void tds_hamt_release_key(const tds_hamt_policy *policy, void *key) {
     if (policy->release_key != NULL) {
         policy->release_key(key, policy->context);
@@ -1214,9 +1287,17 @@ static tds_hamt_status tds_hamt_leaf_create(
     const void *key,
     const void *value,
     tds_hamt_node **result) {
-    void *retained_key = tds_hamt_retain_key(policy, key);
-    void *retained_value = tds_hamt_retain_value(policy, value);
-    const tds_hamt_status status = tds_hamt_leaf_create_from_retained(hash, retained_key, retained_value, result);
+    void *retained_key = NULL;
+    void *retained_value = NULL;
+    tds_hamt_status status = tds_hamt_checked_retain_key(policy, key, &retained_key);
+    if (status == TDS_HAMT_OK) {
+        status = tds_hamt_checked_retain_value(policy, value, &retained_value);
+    }
+    if (status == TDS_HAMT_OK) {
+        status = tds_hamt_leaf_create_from_retained(hash, retained_key, retained_value, result);
+    } else {
+        *result = NULL;
+    }
     if (status != TDS_HAMT_OK) {
         tds_hamt_release_key(policy, retained_key);
         tds_hamt_release_value(policy, retained_value);
@@ -1245,6 +1326,39 @@ static tds_hamt_status tds_hamt_leaf_create_from_retained(
     return TDS_HAMT_OK;
 }
 
+static tds_hamt_status tds_hamt_collision_write_entry(
+    const tds_hamt_policy *policy,
+    tds_hamt_collision_node *collision,
+    size_t *written,
+    const void *key,
+    const void *value) {
+    void *retained_key = NULL;
+    void *retained_value = NULL;
+    tds_hamt_status status = tds_hamt_checked_retain_key(policy, key, &retained_key);
+    if (status == TDS_HAMT_OK) {
+        status = tds_hamt_checked_retain_value(policy, value, &retained_value);
+        if (status != TDS_HAMT_OK) {
+            tds_hamt_release_key(policy, retained_key);
+        }
+    }
+
+    if (status != TDS_HAMT_OK) {
+        return status;
+    }
+
+    collision->entries[*written].key = retained_key;
+    collision->entries[*written].value = retained_value;
+    ++(*written);
+    return TDS_HAMT_OK;
+}
+
+/* Precondition (mirrors the C# reference's Debug.Assert): equal-hash merges
+ * only ever combine two leaves whose keys differ under the policy, because
+ * equal-hash inserts into an existing collision node are handled inside the
+ * collision branch of tds_hamt_node_set. The collision-left handling below is
+ * defensively retained but is unreachable from the current call graph; note
+ * that it appends `right` without a duplicate-key scan, which is only safe
+ * under that precondition. */
 static tds_hamt_status tds_hamt_collision_create(
     const tds_hamt_policy *policy,
     tds_hamt_node *left,
@@ -1271,24 +1385,32 @@ static tds_hamt_status tds_hamt_collision_create(
     collision->hash = hash;
     collision->count = total_count;
 
+    tds_hamt_status status = TDS_HAMT_OK;
     size_t written = 0;
     if (left->kind == TDS_HAMT_NODE_COLLISION) {
         const tds_hamt_collision_node *source = (const tds_hamt_collision_node *)left;
-        for (size_t i = 0; i < source->count; ++i) {
-            collision->entries[written].key = tds_hamt_retain_key(policy, source->entries[i].key);
-            collision->entries[written].value = tds_hamt_retain_value(policy, source->entries[i].value);
-            ++written;
+        for (size_t i = 0; status == TDS_HAMT_OK && i < source->count; ++i) {
+            status = tds_hamt_collision_write_entry(
+                policy, collision, &written, source->entries[i].key, source->entries[i].value);
         }
     } else {
         const tds_hamt_leaf_node *leaf = (const tds_hamt_leaf_node *)left;
-        collision->entries[written].key = tds_hamt_retain_key(policy, leaf->key);
-        collision->entries[written].value = tds_hamt_retain_value(policy, leaf->value);
-        ++written;
+        status = tds_hamt_collision_write_entry(policy, collision, &written, leaf->key, leaf->value);
     }
 
-    const tds_hamt_leaf_node *right_leaf = (const tds_hamt_leaf_node *)right;
-    collision->entries[written].key = tds_hamt_retain_key(policy, right_leaf->key);
-    collision->entries[written].value = tds_hamt_retain_value(policy, right_leaf->value);
+    if (status == TDS_HAMT_OK) {
+        const tds_hamt_leaf_node *right_leaf = (const tds_hamt_leaf_node *)right;
+        status = tds_hamt_collision_write_entry(policy, collision, &written, right_leaf->key, right_leaf->value);
+    }
+
+    if (status != TDS_HAMT_OK) {
+        collision->count = written;
+        tds_hamt_node_release(policy, &collision->base);
+        tds_hamt_node_release(policy, left);
+        tds_hamt_node_release(policy, right);
+        *result = NULL;
+        return status;
+    }
 
     tds_hamt_node_release(policy, left);
     tds_hamt_node_release(policy, right);
@@ -1403,10 +1525,17 @@ static tds_hamt_status tds_hamt_node_set(
                 return TDS_HAMT_OK;
             }
 
-            void *retained_key = tds_hamt_retain_key(policy, leaf->key);
-            void *retained_value = tds_hamt_retain_value(policy, value);
-            const tds_hamt_status status =
-                tds_hamt_leaf_create_from_retained(leaf->hash, retained_key, retained_value, result);
+            void *retained_key = NULL;
+            void *retained_value = NULL;
+            tds_hamt_status status = tds_hamt_checked_retain_key(policy, leaf->key, &retained_key);
+            if (status == TDS_HAMT_OK) {
+                status = tds_hamt_checked_retain_value(policy, value, &retained_value);
+            }
+            if (status == TDS_HAMT_OK) {
+                status = tds_hamt_leaf_create_from_retained(leaf->hash, retained_key, retained_value, result);
+            } else {
+                *result = NULL;
+            }
             if (status != TDS_HAMT_OK) {
                 tds_hamt_release_key(policy, retained_key);
                 tds_hamt_release_value(policy, retained_value);
@@ -1461,11 +1590,21 @@ static tds_hamt_status tds_hamt_node_set(
             replaced->base.ref_count = 1;
             replaced->hash = collision->hash;
             replaced->count = collision->count;
-            for (size_t j = 0; j < collision->count; ++j) {
-                replaced->entries[j].key = tds_hamt_retain_key(policy, collision->entries[j].key);
-                replaced->entries[j].value = tds_hamt_retain_value(
+            tds_hamt_status status = TDS_HAMT_OK;
+            size_t written = 0;
+            for (size_t j = 0; status == TDS_HAMT_OK && j < collision->count; ++j) {
+                status = tds_hamt_collision_write_entry(
                     policy,
+                    replaced,
+                    &written,
+                    collision->entries[j].key,
                     j == i ? value : collision->entries[j].value);
+            }
+            if (status != TDS_HAMT_OK) {
+                replaced->count = written;
+                tds_hamt_node_release(policy, &replaced->base);
+                *result = NULL;
+                return status;
             }
             *result = &replaced->base;
             return TDS_HAMT_OK;
@@ -1482,12 +1621,21 @@ static tds_hamt_status tds_hamt_node_set(
         expanded->base.ref_count = 1;
         expanded->hash = collision->hash;
         expanded->count = collision->count + 1u;
-        for (size_t i = 0; i < collision->count; ++i) {
-            expanded->entries[i].key = tds_hamt_retain_key(policy, collision->entries[i].key);
-            expanded->entries[i].value = tds_hamt_retain_value(policy, collision->entries[i].value);
+        tds_hamt_status status = TDS_HAMT_OK;
+        size_t written = 0;
+        for (size_t i = 0; status == TDS_HAMT_OK && i < collision->count; ++i) {
+            status = tds_hamt_collision_write_entry(
+                policy, expanded, &written, collision->entries[i].key, collision->entries[i].value);
         }
-        expanded->entries[collision->count].key = tds_hamt_retain_key(policy, key);
-        expanded->entries[collision->count].value = tds_hamt_retain_value(policy, value);
+        if (status == TDS_HAMT_OK) {
+            status = tds_hamt_collision_write_entry(policy, expanded, &written, key, value);
+        }
+        if (status != TDS_HAMT_OK) {
+            expanded->count = written;
+            tds_hamt_node_release(policy, &expanded->base);
+            *result = NULL;
+            return status;
+        }
         *added = true;
         *result = &expanded->base;
         return TDS_HAMT_OK;
@@ -1616,10 +1764,20 @@ static tds_hamt_status tds_hamt_node_remove(
             *removed_value = collision->entries[i].value;
             if (collision->count == 2) {
                 const size_t remaining = 1u - i;
-                void *retained_key = tds_hamt_retain_key(policy, collision->entries[remaining].key);
-                void *retained_value = tds_hamt_retain_value(policy, collision->entries[remaining].value);
-                const tds_hamt_status status =
-                    tds_hamt_leaf_create_from_retained(collision->hash, retained_key, retained_value, result);
+                void *retained_key = NULL;
+                void *retained_value = NULL;
+                tds_hamt_status status =
+                    tds_hamt_checked_retain_key(policy, collision->entries[remaining].key, &retained_key);
+                if (status == TDS_HAMT_OK) {
+                    status = tds_hamt_checked_retain_value(
+                        policy, collision->entries[remaining].value, &retained_value);
+                }
+                if (status == TDS_HAMT_OK) {
+                    status = tds_hamt_leaf_create_from_retained(
+                        collision->hash, retained_key, retained_value, result);
+                } else {
+                    *result = NULL;
+                }
                 if (status != TDS_HAMT_OK) {
                     tds_hamt_release_key(policy, retained_key);
                     tds_hamt_release_value(policy, retained_value);
@@ -1638,13 +1796,20 @@ static tds_hamt_status tds_hamt_node_remove(
             shrunk->base.ref_count = 1;
             shrunk->hash = collision->hash;
             shrunk->count = collision->count - 1u;
-            for (size_t source = 0, target = 0; source < collision->count; ++source) {
+            tds_hamt_status status = TDS_HAMT_OK;
+            size_t written = 0;
+            for (size_t source = 0; status == TDS_HAMT_OK && source < collision->count; ++source) {
                 if (source == i) {
                     continue;
                 }
-                shrunk->entries[target].key = tds_hamt_retain_key(policy, collision->entries[source].key);
-                shrunk->entries[target].value = tds_hamt_retain_value(policy, collision->entries[source].value);
-                ++target;
+                status = tds_hamt_collision_write_entry(
+                    policy, shrunk, &written, collision->entries[source].key, collision->entries[source].value);
+            }
+            if (status != TDS_HAMT_OK) {
+                shrunk->count = written;
+                tds_hamt_node_release(policy, &shrunk->base);
+                *result = NULL;
+                return status;
             }
 
             *result = &shrunk->base;
