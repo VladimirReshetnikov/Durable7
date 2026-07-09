@@ -74,6 +74,28 @@ public sealed class RopeTextTests
         Assert.Equal(lines, rope.Lines().ToArray());
     }
 
+    /// <summary>
+    /// Verifies OffsetOf accepts columns up to the line length (the newline / end-of-rope position)
+    /// and rejects columns past the line's end rather than silently addressing a later line.
+    /// </summary>
+    [Fact]
+    public void OffsetOf_ValidatesColumnAgainstTheLineEnd()
+    {
+        var rope = "alpha\nbeta\n".ToTextRope();
+
+        Assert.Equal(0, rope.OffsetOf(0, 0));
+        Assert.Equal(5, rope.OffsetOf(0, 5));      // the newline terminating line 0
+        Assert.Equal(8, rope.OffsetOf(1, 2));
+        Assert.Equal(10, rope.OffsetOf(1, 4));     // the newline terminating line 1
+        Assert.Equal(11, rope.OffsetOf(2, 0));     // trailing empty line, end of rope
+
+        // Offsets 6..7 are on line 1; a column past line 0's end must not reach them.
+        Assert.Throws<ArgumentOutOfRangeException>("column", () => rope.OffsetOf(0, 6));
+        Assert.Throws<ArgumentOutOfRangeException>("column", () => rope.OffsetOf(0, 7));
+        Assert.Throws<ArgumentOutOfRangeException>("column", () => rope.OffsetOf(2, 1));
+        Assert.Throws<ArgumentOutOfRangeException>("column", () => rope.OffsetOf(0, -1));
+    }
+
     /// <summary>Verifies the TextReader adapter reads exactly the rope's characters, with working Peek.</summary>
     [Theory]
     [MemberData(nameof(Texts))]

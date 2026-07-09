@@ -262,6 +262,43 @@ public sealed class PersistentAssociationTests
         Assert.Same(StringComparer.OrdinalIgnoreCase, taken.Comparer);
     }
 
+    /// <summary>
+    /// Locks the rule-2 no-op fast path: Append/Prepend of a key that is already terminal with an
+    /// equal value returns the receiver, so the stored key instance is retained even when the
+    /// supplied instance is comparer-equal but distinct. A different value (or a non-terminal key)
+    /// installs the supplied instance.
+    /// </summary>
+    [Fact]
+    public void AppendPrepend_TerminalNoOp_KeepsStoredKeyInstance()
+    {
+        var assoc = PersistentAssociation<string, int>.Create(StringComparer.OrdinalIgnoreCase)
+            .Append("first", 1)
+            .Append("last", 2);
+
+        var appendNoOp = assoc.Append("LAST", 2);
+        Assert.Same(assoc, appendNoOp);
+        Assert.Equal("last", appendNoOp.GetAt(1).Key);
+
+        var prependNoOp = assoc.Prepend("FIRST", 1);
+        Assert.Same(assoc, prependNoOp);
+        Assert.Equal("first", prependNoOp.GetAt(0).Key);
+
+        // A changed value defeats the fast path and installs the supplied key instance.
+        Assert.Equal("LAST", assoc.Append("LAST", 3).GetAt(1).Key);
+        Assert.Equal("FIRST", assoc.Prepend("FIRST", 3).GetAt(0).Key);
+    }
+
+    /// <summary>
+    /// Verifies the derived slicers report the offending argument by its own parameter name.
+    /// </summary>
+    [Fact]
+    public void Slicers_ReportCountArgumentFailures()
+    {
+        var assoc = Assoc(("a", 1), ("b", 2));
+        Assert.Throws<ArgumentOutOfRangeException>("count", () => assoc.Drop(-1));
+        Assert.Throws<ArgumentOutOfRangeException>("count", () => assoc.Drop(3));
+    }
+
     /// <summary>Verifies pattern-based and interface enumeration yield pairs in association order.</summary>
     [Fact]
     public void Enumeration_YieldsPairsInAssociationOrder()

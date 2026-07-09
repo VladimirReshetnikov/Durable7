@@ -142,13 +142,17 @@ public static class RopeText
     /// <summary>Returns the character offset of the given zero-based (line, column) position. O(log n).</summary>
     /// <param name="rope">The text rope.</param>
     /// <param name="line">Zero-based line index.</param>
-    /// <param name="column">Zero-based column within the line.</param>
+    /// <param name="column">
+    /// Zero-based column within the line, in <c>0 .. line length</c>; the line length itself addresses the
+    /// position of the line's terminating newline (or the end of the rope for the last line).
+    /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="rope"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException">The position is outside the rope.</exception>
     public static int OffsetOf(this MeasuredRope<char, int, NewlineMeasure> rope, int line, int column)
     {
-        var start = rope.LineStartOffset(line);
-        if (column < 0 || (long)start + column > rope.Count)   // widen so a huge column cannot overflow the check
+        var start = rope.LineStartOffset(line);   // validates line
+        var end = line < rope.Measure ? rope.LineStartOffset(line + 1) - 1 : rope.Count;
+        if (column < 0 || (long)start + column > end)   // widen so a huge column cannot overflow the check
             throw new ArgumentOutOfRangeException(nameof(column), column, "Column is outside the line.");
         return start + column;
     }

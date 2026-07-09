@@ -261,9 +261,10 @@ public sealed class PersistentListTests
         Assert.Throws<ArgumentOutOfRangeException>(() => list.Insert(4, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => list.RemoveAt(3));
         Assert.Throws<ArgumentOutOfRangeException>(() => list.Take(4));
-        Assert.Throws<ArgumentOutOfRangeException>(() => list.Drop(-1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => list.TakeLast(4));
-        Assert.Throws<ArgumentOutOfRangeException>(() => list.DropLast(4));
+        Assert.Throws<ArgumentOutOfRangeException>("count", () => list.Drop(-1));
+        Assert.Throws<ArgumentOutOfRangeException>("count", () => list.TakeLast(4));
+        Assert.Throws<ArgumentOutOfRangeException>("count", () => list.DropLast(4));
+        Assert.Throws<ArgumentOutOfRangeException>("count", () => list.TakeLast(int.MinValue));
         Assert.Throws<ArgumentNullException>(() => list.AddRange(null!));
         Assert.Throws<ArgumentNullException>(() => list.Join(null!));
         Assert.Throws<ArgumentNullException>(() => list.Map<int>(null!));

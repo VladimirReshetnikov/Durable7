@@ -27,8 +27,12 @@ bounds and hold under branching persistence via memoized suspensions.
   default comparer return it.
 - **No-op identity.** Operations whose result is observably identical to the receiver return the
   receiver instance: full-range slices, empty-argument bulk edits, `Remove` of an absent key,
-  `SetItem` with a default-equal value, `Append`/`Prepend` of an already-terminal equal entry,
-  trivial `Reverse`. Test-locked.
+  the association's `SetItem` with a default-equal value, `Append`/`Prepend` of an
+  already-terminal equal entry, trivial `Reverse`. Test-locked. The list's `SetItem` is
+  deliberately excluded: it always produces a new instance, even for a default-equal value
+  (the deque unconditionally replaces the stored element). `Insert` of an existing key is also
+  excluded: it always re-stamps and returns a new instance, even when the observable content is
+  unchanged.
 - **Thread safety.** Instances are safe for concurrent readers without synchronization. Struct
   enumerators must not be shared across threads.
 - **Null policy.** Sequence/function arguments are null-checked (`ArgumentNullException`).
@@ -87,7 +91,7 @@ overflow) can relabel.
 | # | Rule |
 | --- | --- |
 | 1 | Construction (`CreateRange`, `SetItems`): a duplicate key keeps its first occurrence's position with its last value |
-| 2 | `Append`/`Prepend` on an existing key remove the old entry and re-add at the end/front (with the supplied key instance) |
+| 2 | `Append`/`Prepend` on an existing key remove the old entry and re-add at the end/front (with the supplied key instance), except that the no-op fast path — key already terminal with a default-equal value — returns the receiver and therefore keeps the stored key instance |
 | 3 | `SetItem` updates an existing key in place (keeping the stored key instance); new keys append at the end |
 | 4 | `GetAt`, `Take`, `Drop`, `GetRange`, `RemoveAt`, `RemoveFirst`, `RemoveLast`, `Reverse` act on association order |
 | 5 | `Insert` of an existing key wins position and value; the index is interpreted against the entries before the old occurrence is removed |

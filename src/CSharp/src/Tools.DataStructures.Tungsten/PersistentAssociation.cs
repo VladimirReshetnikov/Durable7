@@ -431,7 +431,8 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     /// A new association ending with the pair; the source is unchanged. An existing key is
     /// removed from its old position and re-added at the end with the supplied key instance and
     /// value, matching the kernel-verified Tungsten rule. Returns the same instance when the key
-    /// is already last with an equal value.
+    /// is already last with an equal value; on that fast path the stored key instance is
+    /// retained even when it is comparer-equal but distinct from the supplied one.
     /// </returns>
     /// <remarks>O(w + c + log n).</remarks>
     public PersistentAssociation<TKey, TValue> Append(TKey key, TValue value)
@@ -456,7 +457,8 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     /// A new association starting with the pair; the source is unchanged. An existing key is
     /// removed from its old position and re-added at the front with the supplied key instance
     /// and value, matching the kernel-verified Tungsten rule. Returns the same instance when the
-    /// key is already first with an equal value.
+    /// key is already first with an equal value; on that fast path the stored key instance is
+    /// retained even when it is comparer-equal but distinct from the supplied one.
     /// </returns>
     /// <remarks>O(w + c + log n).</remarks>
     public PersistentAssociation<TKey, TValue> Prepend(TKey key, TValue value)
@@ -689,7 +691,12 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     /// <returns>A new association; the source is unchanged.</returns>
     /// <remarks>Cost of <see cref="GetRange"/>.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative or &gt; <see cref="Count"/>.</exception>
-    public PersistentAssociation<TKey, TValue> Drop(int count) => GetRange(count, Count - count);
+    public PersistentAssociation<TKey, TValue> Drop(int count)
+    {
+        if ((uint)count > (uint)Count)
+            throw new ArgumentOutOfRangeException(nameof(count), count, "Count must lie within 0 .. Count.");
+        return GetRange(count, Count - count);
+    }
 
     /// <summary>
     /// Returns the association with entry order reversed. Tungsten: <c>Reverse</c>.

@@ -130,7 +130,7 @@ public sealed class IntervalTree<T> : IEnumerable<Interval<T>>
     /// <summary>Gets a value indicating whether the tree has no intervals. O(1).</summary>
     public bool IsEmpty => _tree.IsEmpty;
 
-    /// <summary>Gets the number of intervals. O(1).</summary>
+    /// <summary>Gets the number of intervals. O(1) amortized; the first read of a fresh spine may force memoized deferred work.</summary>
     public int Count => _tree.Measure.Count;
 
     /// <summary>Builds an interval tree from a sequence of intervals. O(n log n).</summary>

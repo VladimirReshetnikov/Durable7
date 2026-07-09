@@ -725,21 +725,16 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
 
         internal static CollisionNode Create(HashNode left, LeafNode right)
         {
-            Entry[] entries;
-            if (left is CollisionNode collision)
-            {
-                var source = collision.Entries;
-                entries = new Entry[source.Length + 1];
-                Array.Copy(source, entries, source.Length);
-            }
-            else
-            {
-                var leaf = (LeafNode)left;
-                entries = new Entry[2];
-                entries[0] = new Entry(leaf.Key, leaf.Value);
-            }
-
-            entries[^1] = new Entry(right.Key, right.Value);
+            // Precondition: left is a LeafNode whose key differs from right's under the map's
+            // comparer. Equal-hash inserts into an existing collision node are handled inside
+            // CollisionNode.Set, so MergeHashNodes only reaches this equal-hash path with two
+            // leaves; appending right without a duplicate-key scan is safe only under that
+            // precondition.
+            Debug.Assert(left is LeafNode, "Equal-hash merges must combine two leaves.");
+            var leaf = (LeafNode)left;
+            var entries = new Entry[2];
+            entries[0] = new Entry(leaf.Key, leaf.Value);
+            entries[1] = new Entry(right.Key, right.Value);
             return new CollisionNode(left.Hash, entries);
         }
 

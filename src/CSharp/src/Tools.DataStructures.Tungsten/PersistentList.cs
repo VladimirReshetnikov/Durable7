@@ -333,7 +333,11 @@ public sealed class PersistentList<T> : IReadOnlyList<T>
     /// <returns>A new list of length <paramref name="count"/>; the source is unchanged.</returns>
     /// <remarks>O(log n); the result shares structure with the source.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative or &gt; <see cref="Count"/>.</exception>
-    public PersistentList<T> TakeLast(int count) => GetRange(Count - count, count);
+    public PersistentList<T> TakeLast(int count)
+    {
+        CheckCount(count);
+        return GetRange(Count - count, count);
+    }
 
     /// <summary>
     /// Returns the list without its first <paramref name="count"/> elements. Tungsten:
@@ -343,7 +347,11 @@ public sealed class PersistentList<T> : IReadOnlyList<T>
     /// <returns>A new list of length <c>Count - count</c>; the source is unchanged.</returns>
     /// <remarks>O(log n); the result shares structure with the source.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative or &gt; <see cref="Count"/>.</exception>
-    public PersistentList<T> Drop(int count) => GetRange(count, Count - count);
+    public PersistentList<T> Drop(int count)
+    {
+        CheckCount(count);
+        return GetRange(count, Count - count);
+    }
 
     /// <summary>
     /// Returns the list without its last <paramref name="count"/> elements. Tungsten:
@@ -353,7 +361,17 @@ public sealed class PersistentList<T> : IReadOnlyList<T>
     /// <returns>A new list of length <c>Count - count</c>; the source is unchanged.</returns>
     /// <remarks>O(log n); the result shares structure with the source.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative or &gt; <see cref="Count"/>.</exception>
-    public PersistentList<T> DropLast(int count) => GetRange(0, Count - count);
+    public PersistentList<T> DropLast(int count)
+    {
+        CheckCount(count);
+        return GetRange(0, Count - count);
+    }
+
+    private void CheckCount(int count)
+    {
+        if ((uint)count > (uint)Count)
+            throw new ArgumentOutOfRangeException(nameof(count), count, "Count must lie within 0 .. Count.");
+    }
 
     /// <summary>
     /// Splits the list before a zero-based index.

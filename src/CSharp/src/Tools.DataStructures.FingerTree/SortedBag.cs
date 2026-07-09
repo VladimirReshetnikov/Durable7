@@ -82,7 +82,7 @@ public sealed class SortedBag<T> : IReadOnlyCollection<T>
         return new(tree, order);
     }
 
-    /// <summary>Gets the number of elements. O(1).</summary>
+    /// <summary>Gets the number of elements. O(1) amortized; the first read of a fresh spine may force memoized deferred work.</summary>
     public int Count => _tree.Measure.Count;
 
     /// <summary>Gets a value indicating whether the bag is empty. O(1).</summary>

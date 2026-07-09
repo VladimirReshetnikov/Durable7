@@ -107,7 +107,7 @@ public sealed class PriorityQueue<TElement, TPriority> : IReadOnlyCollection<(TE
         return Wrap(tree);
     }
 
-    /// <summary>Gets the number of entries. O(1).</summary>
+    /// <summary>Gets the number of entries. O(1) amortized; the first read of a fresh spine may force memoized deferred work.</summary>
     public int Count => _tree.Measure.Count;
 
     /// <summary>Gets a value indicating whether the queue is empty. O(1).</summary>
@@ -120,7 +120,7 @@ public sealed class PriorityQueue<TElement, TPriority> : IReadOnlyCollection<(TE
     public PriorityQueue<TElement, TPriority> Enqueue(TElement element, TPriority priority) =>
         new(_tree.Append((element, priority)));
 
-    /// <summary>Reads the least priority present without removing anything. O(1).</summary>
+    /// <summary>Reads the least priority present without removing anything. O(1) amortized; the first read of a fresh spine may force memoized deferred work.</summary>
     /// <param name="priority">The least priority when non-empty; otherwise <see langword="default"/>.</param>
     /// <returns><see langword="true"/> when the queue is non-empty; otherwise <see langword="false"/>.</returns>
     public bool TryPeekPriority([MaybeNullWhen(false)] out TPriority priority)

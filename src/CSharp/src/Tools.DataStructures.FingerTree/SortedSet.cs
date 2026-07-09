@@ -95,7 +95,7 @@ public sealed partial class SortedSet<T> : IReadOnlyCollection<T>
         return Wrap(tree, order);
     }
 
-    /// <summary>Gets the number of elements. O(1).</summary>
+    /// <summary>Gets the number of elements. O(1) amortized; the first read of a fresh spine may force memoized deferred work.</summary>
     public int Count => _tree.Measure.Count;
 
     /// <summary>Gets a value indicating whether the set is empty. O(1).</summary>
@@ -445,7 +445,7 @@ public sealed partial class SortedSet<T> : IReadOnlyCollection<T>
                 hasOther = otherItems.MoveNext();
             }
 
-        return new(result, _comparer);
+        return Wrap(result);
     }
 
     private (int OnlyThis, int Both, int OnlyOther) MergeCounts(SortedSet<T> other)

@@ -65,13 +65,13 @@ public sealed partial class MeasuredRope<T, TMeasure, TMeasureOps> : IReadOnlyLi
     /// <returns>A builder containing this rope's elements and measure.</returns>
     public Builder ToBuilder() => new(this);
 
-    /// <summary>Gets the number of elements. O(1).</summary>
+    /// <summary>Gets the number of elements. O(1) amortized; the first read of a fresh spine may force memoized deferred work.</summary>
     public int Count => _tree.Measure.First;
 
     /// <summary>Gets a value indicating whether the rope has no elements. O(1).</summary>
     public bool IsEmpty => _tree.IsEmpty;
 
-    /// <summary>Gets the combined user measure of all elements. O(1).</summary>
+    /// <summary>Gets the combined user measure of all elements. O(1) amortized; the first read of a fresh spine may force memoized deferred work.</summary>
     public TMeasure Measure => _tree.Measure.Second;
 
     /// <summary>Gets the first element. O(1).</summary>
@@ -299,7 +299,7 @@ public sealed partial class MeasuredRope<T, TMeasure, TMeasureOps> : IReadOnlyLi
     public TMeasure PrefixMeasure(int count)
     {
         if ((uint)count > (uint)Count)
-            throw IndexError(count);
+            throw new ArgumentOutOfRangeException(nameof(count), count, "Count is outside the rope's range.");
         if (count == 0)
             return TMeasureOps.Empty;
         if (count == Count)
@@ -575,10 +575,9 @@ public sealed partial class MeasuredRope<T, TMeasure, TMeasureOps> : IReadOnlyLi
     {
         ArgumentOutOfRangeException.ThrowIfNegative(index);
         ArgumentOutOfRangeException.ThrowIfNegative(count);
-        if ((uint)index > (uint)Count || count > Count - index)
-            throw RangeError(index, count);
+        if ((uint)index > (uint)Count)
+            throw IndexError(index);
+        if (count > Count - index)
+            throw new ArgumentOutOfRangeException(nameof(count), count, "The range extends past the end of the rope.");
     }
-
-    private static ArgumentOutOfRangeException RangeError(int index, int count) =>
-        new(nameof(index), (index, count), "The requested range is outside the rope's bounds.");
 }
