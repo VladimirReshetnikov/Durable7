@@ -485,9 +485,13 @@ tds_tungsten_status tds_tungsten_list_remove_range(
     size_t count,
     tds_tungsten_list* result)
 {
-    if (!tds_tungsten_list_is_valid(list) || result == NULL || index > ft_persistent_deque_size(&list->items) ||
-        count > ft_persistent_deque_size(&list->items) - index) {
+    if (!tds_tungsten_list_is_valid(list) || result == NULL) {
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
+    }
+
+    if (index > ft_persistent_deque_size(&list->items) ||
+        count > ft_persistent_deque_size(&list->items) - index) {
+        return TDS_TUNGSTEN_OUT_OF_RANGE;
     }
 
     ft_tree_split_result split_left;
@@ -553,9 +557,13 @@ tds_tungsten_status tds_tungsten_list_slice(
     size_t count,
     tds_tungsten_list* result)
 {
-    if (!tds_tungsten_list_is_valid(list) || result == NULL || index > ft_persistent_deque_size(&list->items) ||
-        count > ft_persistent_deque_size(&list->items) - index) {
+    if (!tds_tungsten_list_is_valid(list) || result == NULL) {
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
+    }
+
+    if (index > ft_persistent_deque_size(&list->items) ||
+        count > ft_persistent_deque_size(&list->items) - index) {
+        return TDS_TUNGSTEN_OUT_OF_RANGE;
     }
 
     ft_tree_split_result split_left;
@@ -1248,6 +1256,44 @@ static tds_tungsten_status tds_tungsten_tree_concat(
     return status;
 }
 
+/* Joins two AVL trees of arbitrary height difference around a middle entry,
+ * descending the taller side like tds_tungsten_tree_concat. A single
+ * tds_tungsten_tree_balance handles only a height difference of at most two,
+ * which is insufficient for the subtrees produced by a recursive split. */
+static tds_tungsten_status tds_tungsten_tree_join(
+    const struct tds_tungsten_assoc_context* context,
+    struct tds_tungsten_assoc_node* left,
+    const tds_tungsten_assoc_entry* entry,
+    struct tds_tungsten_assoc_node* right,
+    struct tds_tungsten_assoc_node** result)
+{
+    if (tds_tungsten_node_height(left) > tds_tungsten_node_height(right) + 1) {
+        struct tds_tungsten_assoc_node* joined = NULL;
+        tds_tungsten_status status = tds_tungsten_tree_join(context, left->right, entry, right, &joined);
+        if (status != TDS_TUNGSTEN_OK) {
+            return status;
+        }
+
+        status = tds_tungsten_tree_balance(context, left->left, &left->entry, joined, result);
+        tds_tungsten_node_release(context, joined);
+        return status;
+    }
+
+    if (tds_tungsten_node_height(right) > tds_tungsten_node_height(left) + 1) {
+        struct tds_tungsten_assoc_node* joined = NULL;
+        tds_tungsten_status status = tds_tungsten_tree_join(context, left, entry, right->left, &joined);
+        if (status != TDS_TUNGSTEN_OK) {
+            return status;
+        }
+
+        status = tds_tungsten_tree_balance(context, joined, &right->entry, right->right, result);
+        tds_tungsten_node_release(context, joined);
+        return status;
+    }
+
+    return tds_tungsten_tree_balance(context, left, entry, right, result);
+}
+
 static tds_tungsten_status tds_tungsten_tree_split(
     const struct tds_tungsten_assoc_context* context,
     struct tds_tungsten_assoc_node* node,
@@ -1271,7 +1317,7 @@ static tds_tungsten_status tds_tungsten_tree_split(
         }
 
         struct tds_tungsten_assoc_node* new_right = NULL;
-        status = tds_tungsten_tree_balance(context, after, &node->entry, node->right, &new_right);
+        status = tds_tungsten_tree_join(context, after, &node->entry, node->right, &new_right);
         tds_tungsten_node_release(context, after);
         if (status != TDS_TUNGSTEN_OK) {
             tds_tungsten_node_release(context, before);
@@ -1284,7 +1330,7 @@ static tds_tungsten_status tds_tungsten_tree_split(
     }
 
     if (index == left_size + 1u) {
-        tds_tungsten_status status = tds_tungsten_tree_balance(context, node->left, &node->entry, NULL, left);
+        tds_tungsten_status status = tds_tungsten_tree_join(context, node->left, &node->entry, NULL, left);
         if (status != TDS_TUNGSTEN_OK) {
             return status;
         }
@@ -1301,7 +1347,7 @@ static tds_tungsten_status tds_tungsten_tree_split(
     }
 
     struct tds_tungsten_assoc_node* new_left = NULL;
-    status = tds_tungsten_tree_balance(context, node->left, &node->entry, before, &new_left);
+    status = tds_tungsten_tree_join(context, node->left, &node->entry, before, &new_left);
     tds_tungsten_node_release(context, before);
     if (status != TDS_TUNGSTEN_OK) {
         tds_tungsten_node_release(context, after);
@@ -1662,7 +1708,9 @@ static tds_tungsten_status tds_tungsten_pick_stamp(
         return TDS_TUNGSTEN_OUT_OF_RANGE;
     }
 
-    const uint64_t gap = (uint64_t)(right->stamp - left->stamp);
+    /* Subtract in uint64_t: the signed difference can exceed INT64_MAX for
+     * spans straddling the label range (matches the C# unchecked cast). */
+    const uint64_t gap = (uint64_t)right->stamp - (uint64_t)left->stamp;
     if (gap < 2u) {
         *picked = false;
     } else {
@@ -1927,6 +1975,11 @@ tds_tungsten_status tds_tungsten_association_entry_at(
     if (!tds_tungsten_association_valid(association)) {
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
     }
+    if (index >= tds_tungsten_node_size(association->root)) {
+        /* Distinguish a bad index from an empty association (C# GetAt throws
+         * ArgumentOutOfRangeException; front/back keep the EMPTY status). */
+        return TDS_TUNGSTEN_OUT_OF_RANGE;
+    }
     return tds_tungsten_association_copy_entry(association, tds_tungsten_tree_at(association->root, index), key, value);
 }
 
@@ -2061,6 +2114,13 @@ tds_tungsten_status tds_tungsten_association_join(
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
     }
 
+    /* The join copies right's raw key/value bytes under left's type policy;
+     * mismatched payload sizes would read out of bounds. */
+    if (left->context->policy.key_type.size != right->context->policy.key_type.size ||
+        left->context->policy.value_type.size != right->context->policy.value_type.size) {
+        return TDS_TUNGSTEN_INVALID_ARGUMENT;
+    }
+
     const size_t count = tds_tungsten_association_size(right);
     if (count == 0) {
         return tds_tungsten_association_copy(left, result);
@@ -2112,6 +2172,8 @@ static tds_tungsten_status tds_tungsten_remove_existing_for_insert(
     status = tds_tungsten_from_hamt(tds_hamt_map_remove(&association->index, key, index));
     if (status != TDS_TUNGSTEN_OK) {
         tds_tungsten_node_release(association->context, *root);
+        /* Null the released pointer: callers release *root unconditionally. */
+        *root = NULL;
         return status;
     }
 
@@ -2129,8 +2191,28 @@ tds_tungsten_status tds_tungsten_association_append(
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
     }
 
+    /* Rule-2 no-op fast path (matches the C# reference and its spec): a key
+     * that is already last with an equal value returns the receiver, keeping
+     * the stored key payload and consuming no stamp. */
+    const void* existing_slot = NULL;
+    if (tds_hamt_map_try_get(&association->index, key, &existing_slot)) {
+        const tds_tungsten_slot* slot = (const tds_tungsten_slot*)existing_slot;
+        size_t position = 0;
+        const size_t size = tds_tungsten_node_size(association->root);
+        if (tds_tungsten_tree_index_of_stamp(association->root, slot->stamp, &position) &&
+            position + 1u == size &&
+            tds_tungsten_value_equal(
+                &association->context->policy.value_type,
+                association->context->policy.value_equal,
+                association->context->policy.context,
+                slot->value,
+                value)) {
+            return tds_tungsten_association_copy(association, result);
+        }
+    }
+
     struct tds_tungsten_assoc_node* root = NULL;
-    tds_hamt_map index;
+    tds_hamt_map index = {0};
     size_t adjusted = 0;
     tds_tungsten_status status = tds_tungsten_remove_existing_for_insert(
         association,
@@ -2157,8 +2239,26 @@ tds_tungsten_status tds_tungsten_association_prepend(
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
     }
 
+    /* Rule-2 no-op fast path: a key already first with an equal value
+     * returns the receiver (see append). */
+    const void* existing_slot = NULL;
+    if (tds_hamt_map_try_get(&association->index, key, &existing_slot)) {
+        const tds_tungsten_slot* slot = (const tds_tungsten_slot*)existing_slot;
+        size_t position = 0;
+        if (tds_tungsten_tree_index_of_stamp(association->root, slot->stamp, &position) &&
+            position == 0 &&
+            tds_tungsten_value_equal(
+                &association->context->policy.value_type,
+                association->context->policy.value_equal,
+                association->context->policy.context,
+                slot->value,
+                value)) {
+            return tds_tungsten_association_copy(association, result);
+        }
+    }
+
     struct tds_tungsten_assoc_node* root = NULL;
-    tds_hamt_map index;
+    tds_hamt_map index = {0};
     size_t adjusted = 0;
     tds_tungsten_status status =
         tds_tungsten_remove_existing_for_insert(association, key, 0, &root, &index, &adjusted);
@@ -2186,7 +2286,7 @@ tds_tungsten_status tds_tungsten_association_insert_at(
     }
 
     struct tds_tungsten_assoc_node* root = NULL;
-    tds_hamt_map index_side;
+    tds_hamt_map index_side = {0};
     size_t adjusted = 0;
     tds_tungsten_status status =
         tds_tungsten_remove_existing_for_insert(association, key, index, &root, &index_side, &adjusted);
@@ -2305,6 +2405,12 @@ tds_tungsten_status tds_tungsten_association_key_take(
     }
 
     for (size_t index = 0; index != count; ++index) {
+        /* A NULL requested key can never be stored (every keyed entry point
+         * rejects NULL keys); skip it before it reaches the hash callback. */
+        if (keys[index] == NULL) {
+            continue;
+        }
+
         if (tds_tungsten_association_contains_key(result, keys[index])) {
             continue;
         }
@@ -2399,10 +2505,13 @@ tds_tungsten_status tds_tungsten_association_slice(
     size_t count,
     tds_tungsten_association* result)
 {
-    if (!tds_tungsten_association_valid(association) || result == NULL ||
-        index > tds_tungsten_node_size(association->root) ||
-        count > tds_tungsten_node_size(association->root) - index) {
+    if (!tds_tungsten_association_valid(association) || result == NULL) {
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
+    }
+
+    if (index > tds_tungsten_node_size(association->root) ||
+        count > tds_tungsten_node_size(association->root) - index) {
+        return TDS_TUNGSTEN_OUT_OF_RANGE;
     }
 
     if (count == tds_tungsten_node_size(association->root)) {
@@ -2465,8 +2574,12 @@ tds_tungsten_status tds_tungsten_association_drop(
     size_t count,
     tds_tungsten_association* result)
 {
-    if (!tds_tungsten_association_valid(association) || count > tds_tungsten_node_size(association->root)) {
+    if (!tds_tungsten_association_valid(association)) {
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
+    }
+
+    if (count > tds_tungsten_node_size(association->root)) {
+        return TDS_TUNGSTEN_OUT_OF_RANGE;
     }
 
     return tds_tungsten_association_slice(

@@ -503,6 +503,23 @@ static void test_association_custom_policy(void)
     const int append_values[] = {2, 1};
     REQUIRE(assoc_matches(&appended, append_keys, append_values, 2));
 
+    /* Rule-2 no-op fast path: a key already terminal with an equal value
+     * returns the receiver's content and keeps the stored key payload. */
+    int k22 = 22;
+    tds_tungsten_association append_noop;
+    REQUIRE_STATUS(tds_tungsten_association_append(&set, &k22, &v2, &append_noop));
+    REQUIRE(assoc_matches(&append_noop, set_keys, set_values, 2));
+    REQUIRE(tds_tungsten_association_try_get_key(&append_noop, &k22, &actual_key));
+    REQUIRE(actual_key == 12);
+
+    tds_tungsten_association prepend_noop;
+    REQUIRE_STATUS(tds_tungsten_association_prepend(&set, &k21, &v3, &prepend_noop));
+    REQUIRE(assoc_matches(&prepend_noop, set_keys, set_values, 2));
+    REQUIRE(tds_tungsten_association_try_get_key(&prepend_noop, &k21, &actual_key));
+    REQUIRE(actual_key == 11);
+
+    tds_tungsten_association_dispose(&prepend_noop);
+    tds_tungsten_association_dispose(&append_noop);
     tds_tungsten_association_dispose(&appended);
     tds_tungsten_association_dispose(&set);
     tds_tungsten_association_dispose(&association);
