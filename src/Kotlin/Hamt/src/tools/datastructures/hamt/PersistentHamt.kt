@@ -25,6 +25,11 @@ public data class MapRemoveResult<K, V>(
     public val value: V,
 )
 
+public data class MapRemoveEntryResult<K, V>(
+    public val map: PersistentHashMap<K, V>,
+    public val entry: HamtEntry<K, V>,
+)
+
 public data class SetRemoveResult<T>(
     public val set: PersistentHashSet<T>,
     public val value: T,
@@ -60,7 +65,7 @@ private data class InsertResult<K, V>(
 
 private data class RemoveResult<K, V>(
     val node: Node<K, V>?,
-    val removed: V?,
+    val removed: HamtEntry<K, V>?,
     val changed: Boolean,
 )
 
@@ -144,14 +149,20 @@ public class PersistentHashMap<K, V> private constructor(
     public fun remove(key: K): PersistentHashMap<K, V> = tryRemove(key)?.map ?: this
 
     public fun tryRemove(key: K): MapRemoveResult<K, V>? {
+        val entry = tryRemoveEntry(key) ?: return null
+        return MapRemoveResult(entry.map, entry.entry.value)
+    }
+
+    /** Like [tryRemove], but also surfaces the stored entry (key and value). */
+    public fun tryRemoveEntry(key: K): MapRemoveEntryResult<K, V>? {
         val current = root ?: return null
         val result = removeNode(current, policy.hash(key), key, 0, policy)
         if (!result.changed) {
             return null
         }
 
-        @Suppress("UNCHECKED_CAST")
-        return MapRemoveResult(PersistentHashMap(result.node, size - 1, policy), result.removed as V)
+        val removed = checkNotNull(result.removed) { "changed removal must carry the removed entry" }
+        return MapRemoveEntryResult(PersistentHashMap(result.node, size - 1, policy), removed)
     }
 
     public fun clear(): PersistentHashMap<K, V> =
@@ -209,8 +220,10 @@ public class PersistentHashSet<T> private constructor(
     public fun remove(value: T): PersistentHashSet<T> = PersistentHashSet(map.remove(value))
 
     public fun tryRemove(value: T): SetRemoveResult<T>? {
-        val stored = get(value) ?: return null
-        return SetRemoveResult(remove(value), stored)
+        // Route through the map's removal entry so a stored null element is
+        // distinguishable from absence (and the trie is walked only once).
+        val removed = map.tryRemoveEntry(value) ?: return null
+        return SetRemoveResult(PersistentHashSet(removed.map), removed.entry.key)
     }
 
     public fun clear(): PersistentHashSet<T> = PersistentHashSet(map.clear())
@@ -237,30 +250,24 @@ public class PersistentHashSet<T> private constructor(
     }
 
     public fun except(values: Iterable<T>): PersistentHashSet<T> {
-        val probe = empty<T>(policy).union(values)
-        var result = empty<T>(policy)
-        for (value in this) {
-            if (!probe.contains(value)) {
-                result = result.put(value)
-            }
+        // Fold removals over the receiver (matching the C# reference) so
+        // untouched subtrees stay structurally shared and an empty argument
+        // preserves the existing root.
+        var result = this
+        for (value in values) {
+            result = result.remove(value)
         }
 
         return result
     }
 
     public fun symmetricExcept(values: Iterable<T>): PersistentHashSet<T> {
-        val other = empty<T>(policy).union(values)
-        var result = empty<T>(policy)
-        for (value in this) {
-            if (!other.contains(value)) {
-                result = result.put(value)
-            }
-        }
-
-        for (value in other) {
-            if (!contains(value)) {
-                result = result.put(value)
-            }
+        // Toggle the distinct argument elements on the receiver (matching
+        // the C# reference) instead of rebuilding from both directions.
+        val distinct = empty<T>(policy).union(values)
+        var result = this
+        for (value in distinct) {
+            result = if (result.contains(value)) result.remove(value) else result.put(value)
         }
 
         return result
@@ -449,7 +456,7 @@ private fun <K, V> removeNode(
 ): RemoveResult<K, V> =
     when (node) {
         is Leaf -> if (node.hash == hash && policy.equivalent(node.key, key)) {
-            RemoveResult(null, node.value, changed = true)
+            RemoveResult(null, HamtEntry(node.key, node.value), changed = true)
         } else {
             RemoveResult(node, null, changed = false)
         }
@@ -473,7 +480,7 @@ private fun <K, V> removeFromCollision(
         return RemoveResult(node, null, changed = false)
     }
 
-    val removed = node.entries[index].value
+    val removed = node.entries[index]
     val next = node.entries.toMutableList()
     next.removeAt(index)
     val nextNode = when (next.size) {

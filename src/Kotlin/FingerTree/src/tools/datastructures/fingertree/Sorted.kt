@@ -351,12 +351,10 @@ public class SortedMap<K, V> private constructor(
     public fun setItem(key: K, value: V): SortedMap<K, V> {
         val index = lowerBoundByKey(key)
         if (index < size && compare(comparator, entries[index].key, key) == 0) {
-            if (entries[index].value == value) {
-                return this
-            }
-
+            // The C# reference (SortedDictionary.SetItem) stores the supplied
+            // key instance, not the previously stored comparer-equal one.
             val next = entries.toMutableList()
-            next[index] = SortedMapEntry(next[index].key, value)
+            next[index] = SortedMapEntry(key, value)
             return SortedMap(next.toList(), comparator)
         }
 

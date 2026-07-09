@@ -66,6 +66,27 @@ private fun <T> buildBalanced(values: List<T>, start: Int, end: Int): SeqNode<T>
         }
     }
 
+/**
+ * Joins two AVL trees of arbitrary height difference around a middle value by
+ * descending the taller side. A single [balance] call only repairs a height
+ * difference of at most two, which is insufficient for the subtrees a
+ * recursive split produces.
+ */
+private fun <T> joinNodes(left: SeqNode<T>?, value: T, right: SeqNode<T>?): SeqNode<T> =
+    when {
+        nodeHeight(left) > nodeHeight(right) + 1 -> {
+            val tall = left!!
+            balance(makeNode(tall.left, tall.value, joinNodes(tall.right, value, right)))
+        }
+
+        nodeHeight(right) > nodeHeight(left) + 1 -> {
+            val tall = right!!
+            balance(makeNode(joinNodes(left, value, tall.left), tall.value, tall.right))
+        }
+
+        else -> makeNode(left, value, right)
+    }
+
 private fun <T> concatNodes(left: SeqNode<T>?, right: SeqNode<T>?): SeqNode<T>? {
     if (left == null) {
         return right
@@ -75,16 +96,8 @@ private fun <T> concatNodes(left: SeqNode<T>?, right: SeqNode<T>?): SeqNode<T>? 
         return left
     }
 
-    if (nodeHeight(left) > nodeHeight(right) + 1) {
-        return balance(makeNode(left.left, left.value, concatNodes(left.right, right)))
-    }
-
-    if (nodeHeight(right) > nodeHeight(left) + 1) {
-        return balance(makeNode(concatNodes(left, right.left), right.value, right.right))
-    }
-
     val removed = removeFirstNode(right)
-    return balance(makeNode(left, removed.first, removed.second))
+    return joinNodes(left, removed.first, removed.second)
 }
 
 private fun <T> splitNode(node: SeqNode<T>?, index: Int): Pair<SeqNode<T>?, SeqNode<T>?> {
@@ -93,16 +106,12 @@ private fun <T> splitNode(node: SeqNode<T>?, index: Int): Pair<SeqNode<T>?, SeqN
     }
 
     val leftSize = nodeSize(node.left)
-    return when {
-        index <= leftSize -> {
-            val split = splitNode(node.left, index)
-            split.first to concatNodes(split.second, makeNode(null, node.value, node.right))
-        }
-        index == leftSize + 1 -> makeNode(node.left, node.value, null) to node.right
-        else -> {
-            val split = splitNode(node.right, index - leftSize - 1)
-            concatNodes(makeNode(node.left, node.value, null), split.first) to split.second
-        }
+    return if (index <= leftSize) {
+        val split = splitNode(node.left, index)
+        split.first to joinNodes(split.second, node.value, node.right)
+    } else {
+        val split = splitNode(node.right, index - leftSize - 1)
+        joinNodes(node.left, node.value, split.first) to split.second
     }
 }
 
@@ -136,7 +145,9 @@ private fun <T> setNode(node: SeqNode<T>, index: Int, value: T): SeqNode<T> {
     val leftSize = nodeSize(node.left)
     return when {
         index < leftSize -> balance(makeNode(setNode(node.left!!, index, value), node.value, node.right))
-        index == leftSize -> if (node.value == value) node else makeNode(node.left, value, node.right)
+        // Always replace: the spec excludes the list's setItem from no-op
+        // identity ("the deque unconditionally replaces the stored element").
+        index == leftSize -> makeNode(node.left, value, node.right)
         else -> balance(makeNode(node.left, node.value, setNode(node.right!!, index - leftSize - 1, value)))
     }
 }
@@ -193,17 +204,12 @@ private class SeqTree<T> private constructor(
         }
 
         val split = splitNode(root, index)
-        return SeqTree(concatNodes(concatNodes(split.first, makeNode(null, value, null)), split.second))
+        return SeqTree(joinNodes(split.first, value, split.second))
     }
 
     fun setItem(index: Int, value: T): SeqTree<T>? {
         if (index < 0 || index >= size) {
             return null
-        }
-
-        val current = get(index)
-        if (current == value) {
-            return this
         }
 
         return SeqTree(setNode(root!!, index, value))
@@ -329,7 +335,14 @@ public class PersistentList<T> private constructor(
     public fun setItem(index: Int, value: T): PersistentList<T>? = items.setItem(index, value)?.let(::PersistentList)
 
     public fun updateAt(index: Int, updater: (T) -> T): PersistentList<T>? {
-        val current = get(index) ?: return null
+        // Bounds-check explicitly: a stored null element must reach the
+        // updater, not read as index-out-of-range.
+        if (index < 0 || index >= size) {
+            return null
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        val current = get(index) as T
         return setItem(index, updater(current))
     }
 
@@ -470,8 +483,15 @@ public class PersistentAssociation<K, V> private constructor(
         return result
     }
 
-    public fun join(other: PersistentAssociation<K, V>): PersistentAssociation<K, V> =
-        setItems(other)
+    public fun join(other: PersistentAssociation<K, V>): PersistentAssociation<K, V> {
+        // Empty-receiver fast path (matches C#): adopt the argument instead
+        // of replaying its entries with fresh stamps.
+        if (isEmpty && policy === other.policy) {
+            return other
+        }
+
+        return setItems(other)
+    }
 
     public fun append(key: K, value: V): PersistentAssociation<K, V> {
         val slot = index[key] ?: return appendNew(key, value)
@@ -601,22 +621,32 @@ public class PersistentAssociation<K, V> private constructor(
         return keySortWith { left, right -> (left as Comparable<K>).compareTo(right) }
     }
 
-    public fun keySortWith(comparator: Comparator<in K>): PersistentAssociation<K, V> =
-        rebuilt(entries.toList().sortedWith { left, right ->
+    public fun keySortWith(comparator: Comparator<in K>): PersistentAssociation<K, V> {
+        if (size <= 1) {
+            return this
+        }
+
+        return rebuilt(entries.toList().sortedWith { left, right ->
             val byKey = comparator.compare(left.key(), right.key())
             if (byKey != 0) byKey else left.stamp.compareTo(right.stamp)
         })
+    }
 
     public fun sort(): PersistentAssociation<K, V> {
         @Suppress("UNCHECKED_CAST")
         return sortWith { left, right -> (left as Comparable<V>).compareTo(right) }
     }
 
-    public fun sortWith(comparator: Comparator<in V>): PersistentAssociation<K, V> =
-        rebuilt(entries.toList().sortedWith { left, right ->
+    public fun sortWith(comparator: Comparator<in V>): PersistentAssociation<K, V> {
+        if (size <= 1) {
+            return this
+        }
+
+        return rebuilt(entries.toList().sortedWith { left, right ->
             val byValue = comparator.compare(left.value(), right.value())
             if (byValue != 0) byValue else left.stamp.compareTo(right.stamp)
         })
+    }
 
     public fun keys(): List<K> = entries.map { it.key() }
 
@@ -714,6 +744,9 @@ public class PersistentAssociation<K, V> private constructor(
             return null
         }
 
-        return ((left.toBigInteger() + right.toBigInteger()) / 2.toBigInteger()).toLong()
+        // Floor midpoint via the unsigned gap, matching the C# reference
+        // (left + (gap >> 1)); a truncating (left + right) / 2 rounds toward
+        // zero for negative sums and desynchronizes relabel timing.
+        return left + ((right - left).toULong() shr 1).toLong()
     }
 }

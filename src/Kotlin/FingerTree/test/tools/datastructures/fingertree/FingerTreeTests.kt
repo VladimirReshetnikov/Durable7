@@ -197,6 +197,39 @@ private fun sortedMapIsLastWinsAndNavigable() {
     check(map.sharesStorageWith(duplicate.value), "duplicate insert keeps storage")
 }
 
+private fun sortedMapSetItemStoresTheSuppliedKey() {
+    // Ordering compares case-insensitively, so the keys are comparer-equal
+    // but distinct; the C# reference stores the supplied key on setItem.
+    val map = SortedMap.empty<String, Int>(String.CASE_INSENSITIVE_ORDER)
+        .setItem("key", 1)
+        .setItem("KEY", 2)
+
+    checkEquals(1, map.size, "comparer-equal keys occupy one entry")
+    checkEquals(SortedMapEntry("KEY", 2), map.entryAt(0), "setItem stores the supplied key and value")
+}
+
+private fun intervalTreeInsertsNewEqualLowIntervalsFirst() {
+    // Matches the C# reference: insert splits at the first stored interval
+    // with low >= the new low, so newer equal-low intervals come first.
+    val tree = IntervalTree.empty<Int>()
+        .insert(Interval(1, 3))
+        .insert(Interval(1, 5))
+        .insert(Interval(1, 4))
+        .insert(Interval(0, 9))
+
+    checkEquals(
+        listOf(Interval(0, 9), Interval(1, 4), Interval(1, 5), Interval(1, 3)),
+        tree.toList(),
+        "equal-low tie order",
+    )
+
+    check(tree.contains(Interval(1, 5)), "membership within the equal-low run")
+    check(!tree.contains(Interval(1, 6)), "absent interval")
+    val removed = tree.remove(Interval(1, 5))
+    checkEquals(3, removed.size, "removal within the equal-low run")
+    check(removed.contains(Interval(1, 4)) && removed.contains(Interval(1, 3)), "survivors intact")
+}
+
 private fun priorityQueueDequeuesStably() {
     val queue = PriorityQueue.empty<String, Int>()
         .enqueue("first", 2)
@@ -302,8 +335,10 @@ public fun main() {
         "measuredTreeSplitsAndLocatesByPrefix" to ::measuredTreeSplitsAndLocatesByPrefix,
         "sortedCollectionsKeepOrderAndRelations" to ::sortedCollectionsKeepOrderAndRelations,
         "sortedMapIsLastWinsAndNavigable" to ::sortedMapIsLastWinsAndNavigable,
+        "sortedMapSetItemStoresTheSuppliedKey" to ::sortedMapSetItemStoresTheSuppliedKey,
         "priorityQueueDequeuesStably" to ::priorityQueueDequeuesStably,
         "intervalTreeUsesClosedOverlapAndCoalesces" to ::intervalTreeUsesClosedOverlapAndCoalesces,
+        "intervalTreeInsertsNewEqualLowIntervalsFirst" to ::intervalTreeInsertsNewEqualLowIntervalsFirst,
         "ropesEditAndNavigateText" to ::ropesEditAndNavigateText,
         "overflowingRangesAreRejected" to ::overflowingRangesAreRejected,
         "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,

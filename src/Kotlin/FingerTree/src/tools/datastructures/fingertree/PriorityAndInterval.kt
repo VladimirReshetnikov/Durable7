@@ -31,12 +31,16 @@ public class PriorityQueue<T, P> private constructor(
     public fun enqueue(value: T, priority: P): PriorityQueue<T, P> =
         PriorityQueue(entries + PriorityEntry(value, priority), comparator)
 
-    public fun meld(other: PriorityQueue<T, P>): PriorityQueue<T, P> =
-        when {
+    public fun meld(other: PriorityQueue<T, P>): PriorityQueue<T, P> {
+        require(comparator === other.comparator || comparator == other.comparator) {
+            "Cannot meld priority queues with different comparators."
+        }
+        return when {
             isEmpty -> other
             other.isEmpty -> this
             else -> PriorityQueue(entries + other.entries, comparator)
         }
+    }
 
     public fun peekEntry(): PriorityEntry<T, P>? = minIndex()?.let { entries[it] }
 
@@ -115,21 +119,61 @@ public class IntervalTree<T : Comparable<T>> private constructor(
         get() = intervals.isEmpty()
 
     public fun insert(interval: Interval<T>): IntervalTree<T> {
-        val next = intervals + interval
-        return IntervalTree(next.sortedWith(compareBy<Interval<T>> { it.low }.thenBy { it.high }))
+        // Matches the C# reference: intervals are ordered by low endpoint
+        // only, and a new interval goes before every existing equal-low one.
+        val index = lowerBoundByLow(interval.low)
+        return IntervalTree(intervals.take(index) + interval + intervals.drop(index))
     }
 
-    public fun contains(interval: Interval<T>): Boolean = intervals.contains(interval)
+    public fun contains(interval: Interval<T>): Boolean = indexOf(interval) >= 0
 
     public fun remove(interval: Interval<T>): IntervalTree<T> = tryRemove(interval)?.tree ?: this
 
     public fun tryRemove(interval: Interval<T>): IntervalRemoveResult<T>? {
-        val index = intervals.indexOf(interval)
+        val index = indexOf(interval)
         if (index < 0) {
             return null
         }
 
         return IntervalRemoveResult(IntervalTree(intervals.take(index) + intervals.drop(index + 1)), intervals[index])
+    }
+
+    private fun lowerBoundByLow(low: T): Int {
+        var lower = 0
+        var upper = intervals.size
+        while (lower < upper) {
+            val middle = (lower + upper) ushr 1
+            if (intervals[middle].low < low) {
+                lower = middle + 1
+            } else {
+                upper = middle
+            }
+        }
+
+        return lower
+    }
+
+    /**
+     * Rank of the first stored interval whose endpoints both compare equal to
+     * [interval]'s (matching the C# reference, which matches by comparison,
+     * not [equals]) — a low-endpoint search plus a scan over the equal-low run.
+     */
+    private fun indexOf(interval: Interval<T>): Int {
+        var index = lowerBoundByLow(interval.low)
+        while (index < intervals.size) {
+            val current = intervals[index]
+            if (current.low.compareTo(interval.low) != 0) {
+                return -1
+            }
+
+            if (current.high.compareTo(interval.high) == 0) {
+                return index
+            }
+
+            index += 1
+        }
+
+        return -1
     }
 
     public fun findOverlap(probe: Interval<T>): Interval<T>? =

@@ -158,10 +158,39 @@ private fun concurrentReadersObserveConsistentSnapshots() {
     }
 }
 
+private fun exceptAndSymmetricExceptPreserveUntouchedRoots() {
+    val set = PersistentHashSet.from((0..63).toList())
+
+    val exceptNothing = set.except(emptyList())
+    check(set.sharesRootWith(exceptNothing), "except of nothing should preserve the root")
+
+    val symmetricNothing = set.symmetricExcept(emptyList())
+    check(set.sharesRootWith(symmetricNothing), "symmetricExcept of nothing should preserve the root")
+
+    val except = set.except(listOf(1, 63, 100))
+    checkEquals(62, except.size, "except should remove present values only")
+    check(!except.contains(1) && !except.contains(63), "except should remove the requested values")
+
+    val symmetric = set.symmetricExcept(listOf(0, 1, 64, 65))
+    checkEquals(64, symmetric.size, "symmetricExcept should toggle membership")
+    check(!symmetric.contains(0) && symmetric.contains(64) && symmetric.contains(65), "toggle results")
+}
+
+private fun setTryRemoveDistinguishesStoredNull() {
+    val set = PersistentHashSet.from(listOf<String?>(null, "a"))
+    check(set.contains(null), "the set should contain the stored null element")
+
+    val removed = set.tryRemove(null) ?: throw AssertionError("a stored null element must be removable")
+    checkEquals(1, removed.set.size, "removal should drop exactly the null element")
+    check(!removed.set.contains(null), "null should be gone after removal")
+}
+
 public fun main() {
     val tests = listOf(
         "mapUpdatesPreserveOldVersions" to ::mapUpdatesPreserveOldVersions,
         "noOpUpdateAndAbsentRemoveShareRoots" to ::noOpUpdateAndAbsentRemoveShareRoots,
+        "exceptAndSymmetricExceptPreserveUntouchedRoots" to ::exceptAndSymmetricExceptPreserveUntouchedRoots,
+        "setTryRemoveDistinguishesStoredNull" to ::setTryRemoveDistinguishesStoredNull,
         "addRejectsDuplicates" to ::addRejectsDuplicates,
         "collisionsAreStoredAndRemoved" to ::collisionsAreStoredAndRemoved,
         "iterationStreamsTrieOrder" to ::iterationStreamsTrieOrder,

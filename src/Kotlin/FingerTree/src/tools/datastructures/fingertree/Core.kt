@@ -13,6 +13,11 @@ public class SizeMeasure<T> : MeasurePolicy<T, Int> {
     override val empty: Int = 0
     override fun measure(element: T): Int = 1
     override fun combine(left: Int, right: Int): Int = left + right
+
+    // Stateless: two instances are interchangeable, so concat's policy
+    // compatibility check must accept distinct instances.
+    override fun equals(other: Any?): Boolean = other is SizeMeasure<*>
+    override fun hashCode(): Int = SizeMeasure::class.hashCode()
 }
 
 public object IntSumMeasure : MeasurePolicy<Int, Int> {
@@ -31,6 +36,9 @@ public class MaxMeasure<T : Comparable<T>> : MeasurePolicy<T, T?> {
             left >= right -> left
             else -> right
         }
+
+    override fun equals(other: Any?): Boolean = other is MaxMeasure<*>
+    override fun hashCode(): Int = MaxMeasure::class.hashCode()
 }
 
 public class MinMeasure<T : Comparable<T>> : MeasurePolicy<T, T?> {
@@ -43,6 +51,9 @@ public class MinMeasure<T : Comparable<T>> : MeasurePolicy<T, T?> {
             left <= right -> left
             else -> right
         }
+
+    override fun equals(other: Any?): Boolean = other is MinMeasure<*>
+    override fun hashCode(): Int = MinMeasure::class.hashCode()
 }
 
 public data class MeasurePair<A, B>(public val first: A, public val second: B)
@@ -58,6 +69,11 @@ public class ProductMeasure<T, A, B>(
 
     override fun combine(left: MeasurePair<A, B>, right: MeasurePair<A, B>): MeasurePair<A, B> =
         MeasurePair(first.combine(left.first, right.first), second.combine(left.second, right.second))
+
+    override fun equals(other: Any?): Boolean =
+        other is ProductMeasure<*, *, *> && first == other.first && second == other.second
+
+    override fun hashCode(): Int = 31 * first.hashCode() + second.hashCode()
 }
 
 public data class DequeSplit<T>(
@@ -160,10 +176,8 @@ public class PersistentDeque<T> private constructor(
             return null
         }
 
-        if (items[index] == value) {
-            return this
-        }
-
+        // Always store the supplied element (the C# reference replaces
+        // unconditionally, even for an equal value).
         val next = items.toMutableList()
         next[index] = value
         return PersistentDeque(next.toList())
@@ -699,10 +713,8 @@ public class FingerTree<T, M> private constructor(
             return null
         }
 
-        if (items[index] == value) {
-            return this
-        }
-
+        // Always store the supplied element (the C# reference replaces
+        // unconditionally, even for an equal value).
         val next = items.toMutableList()
         next[index] = value
         return FingerTree(next.toList(), policy)

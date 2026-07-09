@@ -47,10 +47,8 @@ public class Rope<T> private constructor(
             return null
         }
 
-        if (items[index] == value) {
-            return this
-        }
-
+        // Always store the supplied element (the C# reference replaces
+        // unconditionally, even for an equal value).
         val next = items.toMutableList()
         next[index] = value
         return Rope(next.toList())
@@ -189,10 +187,8 @@ public class MeasuredRope<T, M> private constructor(
             return null
         }
 
-        if (items[index] == value) {
-            return this
-        }
-
+        // Always store the supplied element (the C# reference replaces
+        // unconditionally, even for an equal value).
         val next = items.toMutableList()
         next[index] = value
         return MeasuredRope(next.toList(), policy)
@@ -317,8 +313,10 @@ public class TextRope private constructor(
 
         val start = lineStartOffset(line) ?: return null
         val end = lineEndOffset(line) ?: return null
-        val offset = start + column
-        return if (offset <= end) offset else null
+        // Widen so a huge column cannot overflow the check and pass as a
+        // negative offset (matches the C# reference's (long)start + column).
+        val offset = start.toLong() + column
+        return if (offset <= end) offset.toInt() else null
     }
 
     public fun getLine(line: Int): String? {
