@@ -15,10 +15,19 @@ pub struct PersistentList<T> {
     items: PersistentDeque<T>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct PersistentListSplit<T> {
     pub left: PersistentList<T>,
     pub right: PersistentList<T>,
+}
+
+impl<T> Clone for PersistentListSplit<T> {
+    fn clone(&self) -> Self {
+        Self {
+            left: self.left.clone(),
+            right: self.right.clone(),
+        }
+    }
 }
 
 impl<T> PersistentList<T> {
@@ -555,7 +564,9 @@ where
         let mut insert_at = index;
         if let Some(found) = index_side.get(&key) {
             let old_position = self.index_of_stamp(found.stamp);
-            entries = entries.remove_at(old_position)?;
+            entries = entries
+                .remove_at(old_position)
+                .expect("stamp recorded in the index refers to a valid position");
             index_side = index_side.remove(&key);
             if old_position < insert_at {
                 insert_at -= 1;
@@ -886,11 +897,14 @@ fn try_pick_stamp<K, V>(entries: &PersistentDeque<Entry<K, V>>, insert_at: usize
 
     let left = entries.get(insert_at - 1)?.stamp;
     let right = entries.get(insert_at)?.stamp;
-    if left.checked_add(1).map_or(true, |next| next >= right) {
+    if left.checked_add(1).is_none_or(|next| next >= right) {
         return None;
     }
 
-    Some(((left as i128 + right as i128) / 2) as i64)
+    // Floor midpoint, matching the C# reference (left + (gap >> 1)); a
+    // truncating (left + right) / 2 would round toward zero for negative
+    // sums and desynchronize relabel timing across ports.
+    Some((left as i128 + ((right as i128 - left as i128) >> 1)) as i64)
 }
 
 #[cfg(test)]
@@ -942,7 +956,7 @@ mod tests {
 
     #[test]
     fn list_generated_histories_preserve_snapshots() {
-        let mut state = 0x51A7_E57_u64;
+        let mut state = 0x051A_7E57_u64;
         let mut list = PersistentList::new();
         let mut model = Vec::new();
         let mut snapshots = Vec::new();
@@ -1136,7 +1150,7 @@ mod tests {
 
     #[test]
     fn association_generated_histories_match_ordered_model_and_snapshots() {
-        let mut state = 0xA550_C1A7_10B_u64;
+        let mut state = 0x0A55_0C1A_710B_u64;
         let mut assoc = PersistentAssociation::new();
         let mut model: Vec<(i32, i32)> = Vec::new();
         let mut snapshots = Vec::new();
