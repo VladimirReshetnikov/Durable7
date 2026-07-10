@@ -843,8 +843,20 @@ mod tests {
             }
         }
 
-        let map = SortedMap::new().set_item(Key { id: 1, label: "old" }, 10);
-        let updated = map.set_item(Key { id: 1, label: "new" }, 20);
+        let map = SortedMap::new().set_item(
+            Key {
+                id: 1,
+                label: "old",
+            },
+            10,
+        );
+        let updated = map.set_item(
+            Key {
+                id: 1,
+                label: "new",
+            },
+            20,
+        );
 
         assert_eq!(updated.len(), 1);
         let (stored_key, value) = updated.min_entry().unwrap();

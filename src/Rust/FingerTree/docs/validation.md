@@ -20,13 +20,14 @@ If Cargo is available under rustup but not on `PATH`, use:
 The crate uses `#![forbid(unsafe_code)]`. Unit tests are inline in the module files under `FingerTree/src/` and
 cover:
 
-- persistent deque updates, subtree sharing, bounded-depth tree shape, splitting, concatenation, sorted search, and
-  randomized model replay;
+- persistent deque updates, subtree sharing, bounded-depth tree shape, splitting, concatenation, cached endpoint
+  signposts, logarithmic sorted bounds, sorted lower/upper/equal-range splits, insertion/removal, custom ordering,
+  and randomized model replay;
 - general measured tree cached-measure validation, subtree-sharing splits, randomized prefix-measure locate checks,
   key lower/upper-bound splits, product-measure component splits, cumulative-weight selection, and min/max
   extraction helpers;
-- reversible-deque O(1) storage-sharing reversal, wrapper-preserving logical edits, and mixed-orientation
-  concat/split/pop paths over the shared deque tree;
+- reversible-deque O(1) storage-sharing reversal, reversible-typed split/pop results, borrowed/owned logical
+  iteration, wrapper-preserving logical edits, and mixed-orientation concat/split/pop paths over the shared tree;
 - measured sequence size/sum/min/max/key/product/order-statistic policies;
 - sorted bag/set/map rank, navigation, algebra, proper set relations, duplicate handling, inclusive value/key
   ranges, cached order-statistic measures, and shared-storage edits/ranges;
@@ -35,8 +36,11 @@ cover:
 - closed interval overlap, containment, coalescing, cached maximum-high measures, and shared-storage
   insert/remove paths;
 - chunked positional rope construction from chunks, caller-supplied copy targets, edits, cached length measures,
-  chunk/subtree sharing, measured-rope cached count-plus-user measures, measure navigation, and subtree sharing,
-  cached-newline text line helpers, Rust string/display conversions, and builder output.
+  and chunk/subtree sharing;
+- measured-rope cached count-plus-user measures, measure navigation, persistent point/range insertion and removal,
+  slicing, deterministic vector-model replay, subtree sharing, and append-builder snapshot isolation;
+- cached-newline text line helpers, Rust string/display conversions, Unicode scalar and UAX #29 extended-grapheme
+  addressing, LF/CRLF/CR/mixed detection, CRLF-aware line text, and builder output.
 
 The current validation proves structurally shared Rust storage across the public FingerTree-family facades and the
 observable semantic checkpoint behavior, not final C#/C++ lazy-spine asymptotic parity for the whole crate.

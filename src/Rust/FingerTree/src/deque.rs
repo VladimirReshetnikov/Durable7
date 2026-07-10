@@ -40,17 +40,33 @@ pub struct DequePop<T> {
     pub rest: PersistentDeque<T>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReversibleDequeSplit<T> {
+    pub left: ReversibleDeque<T>,
+    pub right: ReversibleDeque<T>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReversibleDequePop<T> {
+    pub value: T,
+    pub rest: ReversibleDeque<T>,
+}
+
 enum DequeTree<T> {
     Empty,
     Leaf(T),
     Node {
         left: Arc<DequeTree<T>>,
         right: Arc<DequeTree<T>>,
+        first: Arc<DequeTree<T>>,
+        last: Arc<DequeTree<T>>,
         len: usize,
         height: u8,
     },
     Reversed {
         inner: Arc<DequeTree<T>>,
+        first: Arc<DequeTree<T>>,
+        last: Arc<DequeTree<T>>,
         len: usize,
         height: u8,
     },
@@ -98,6 +114,8 @@ impl<T> DequeTree<T> {
             Self::Reversed { inner, .. } => Arc::clone(inner),
             _ => Arc::new(Self::Reversed {
                 inner: Arc::clone(tree),
+                first: Self::last_leaf(tree),
+                last: Self::first_leaf(tree),
                 len: tree.len(),
                 height: tree.height(),
             }),
@@ -126,12 +144,32 @@ impl<T> DequeTree<T> {
 
         let len = left.len() + right.len();
         let height = left.height().max(right.height()) + 1;
+        let first = Self::first_leaf(&left);
+        let last = Self::last_leaf(&right);
         Arc::new(Self::Node {
             left,
             right,
+            first,
+            last,
             len,
             height,
         })
+    }
+
+    fn first_leaf(tree: &Arc<Self>) -> Arc<Self> {
+        match tree.as_ref() {
+            Self::Leaf(_) => Arc::clone(tree),
+            Self::Node { first, .. } | Self::Reversed { first, .. } => Arc::clone(first),
+            Self::Empty => unreachable!("empty trees do not have endpoint signposts"),
+        }
+    }
+
+    fn last_leaf(tree: &Arc<Self>) -> Arc<Self> {
+        match tree.as_ref() {
+            Self::Leaf(_) => Arc::clone(tree),
+            Self::Node { last, .. } | Self::Reversed { last, .. } => Arc::clone(last),
+            Self::Empty => unreachable!("empty trees do not have endpoint signposts"),
+        }
     }
 
     fn concat(left: Arc<Self>, right: Arc<Self>) -> Arc<Self> {
@@ -248,8 +286,10 @@ impl<T> DequeTree<T> {
         match self {
             Self::Empty => None,
             Self::Leaf(item) => Some(item),
-            Self::Node { left, .. } => left.first(),
-            Self::Reversed { inner, .. } => inner.last(),
+            Self::Node { first, .. } | Self::Reversed { first, .. } => match first.as_ref() {
+                Self::Leaf(item) => Some(item),
+                _ => unreachable!("endpoint signposts always reference leaves"),
+            },
         }
     }
 
@@ -257,8 +297,10 @@ impl<T> DequeTree<T> {
         match self {
             Self::Empty => None,
             Self::Leaf(item) => Some(item),
-            Self::Node { right, .. } => right.last(),
-            Self::Reversed { inner, .. } => inner.first(),
+            Self::Node { last, .. } | Self::Reversed { last, .. } => match last.as_ref() {
+                Self::Leaf(item) => Some(item),
+                _ => unreachable!("endpoint signposts always reference leaves"),
+            },
         }
     }
 
@@ -306,32 +348,34 @@ impl<T> DequeTree<T> {
     where
         F: FnMut(&T) -> bool,
     {
+        self.bound_index_oriented(false, predicate)
+    }
+
+    fn bound_index_oriented<F>(&self, reversed: bool, predicate: &mut F) -> usize
+    where
+        F: FnMut(&T) -> bool,
+    {
         match self {
             Self::Empty => 0,
             Self::Leaf(item) => usize::from(!predicate(item)),
-            Self::Reversed { inner, .. } => match inner.as_ref() {
-                Self::Empty => 0,
-                Self::Leaf(item) => usize::from(!predicate(item)),
-                Self::Node { left, right, .. } => {
-                    let logical_left = Self::mirror(right);
-                    let logical_right = Self::mirror(left);
-                    let left_last = logical_left
-                        .last()
-                        .expect("non-empty left child has a last leaf");
-                    if predicate(left_last) {
-                        logical_left.bound_index(predicate)
-                    } else {
-                        logical_left.len() + logical_right.bound_index(predicate)
-                    }
-                }
-                Self::Reversed { inner, .. } => inner.bound_index(predicate),
-            },
+            Self::Reversed { inner, .. } => inner.bound_index_oriented(!reversed, predicate),
             Self::Node { left, right, .. } => {
-                let left_last = left.last().expect("non-empty left child has a last leaf");
-                if predicate(left_last) {
-                    left.bound_index(predicate)
+                if reversed {
+                    let left_last = right
+                        .first()
+                        .expect("non-empty reversed-left child has a last leaf");
+                    if predicate(left_last) {
+                        right.bound_index_oriented(true, predicate)
+                    } else {
+                        right.len() + left.bound_index_oriented(true, predicate)
+                    }
                 } else {
-                    left.len() + right.bound_index(predicate)
+                    let left_last = left.last().expect("non-empty left child has a last leaf");
+                    if predicate(left_last) {
+                        left.bound_index_oriented(false, predicate)
+                    } else {
+                        left.len() + right.bound_index_oriented(false, predicate)
+                    }
                 }
             }
         }
@@ -372,7 +416,13 @@ impl<T> DequeTree<T> {
         match self {
             Self::Empty => Ok(0),
             Self::Leaf(_) => Ok(1),
-            Self::Reversed { inner, len, height } => {
+            Self::Reversed {
+                inner,
+                first,
+                last,
+                len,
+                height,
+            } => {
                 let inner_len = inner.validate()?;
                 if inner_len != *len {
                     return Err(format!(
@@ -387,11 +437,21 @@ impl<T> DequeTree<T> {
                     ));
                 }
 
+                if !Arc::ptr_eq(first, &Self::last_leaf(inner))
+                    || !Arc::ptr_eq(last, &Self::first_leaf(inner))
+                {
+                    return Err(
+                        "reversed node endpoint signposts disagree with its inner tree".into(),
+                    );
+                }
+
                 Ok(inner_len)
             }
             Self::Node {
                 left,
                 right,
+                first,
+                last,
                 len,
                 height,
             } => {
@@ -417,6 +477,12 @@ impl<T> DequeTree<T> {
                         left.height(),
                         right.height()
                     ));
+                }
+
+                if !Arc::ptr_eq(first, &Self::first_leaf(left))
+                    || !Arc::ptr_eq(last, &Self::last_leaf(right))
+                {
+                    return Err("node endpoint signposts disagree with its children".into());
                 }
 
                 Ok(expected_len)
@@ -865,6 +931,31 @@ where
     pub fn sorted_contains(&self, item: &T) -> bool {
         self.sorted_binary_search(item).is_ok()
     }
+
+    #[must_use]
+    pub fn split_at_sorted_lower_bound(&self, item: &T) -> DequeSplit<T> {
+        self.split_at_sorted_lower_bound_by(item, T::cmp)
+    }
+
+    #[must_use]
+    pub fn split_at_sorted_upper_bound(&self, item: &T) -> DequeSplit<T> {
+        self.split_at_sorted_upper_bound_by(item, T::cmp)
+    }
+
+    #[must_use]
+    pub fn split_at_sorted_equal_range(&self, item: &T) -> DequeRangeSplit<T> {
+        self.split_at_sorted_equal_range_by(item, T::cmp)
+    }
+
+    #[must_use]
+    pub fn insert_sorted(&self, item: T) -> Self {
+        self.insert_sorted_by(item, T::cmp)
+    }
+
+    #[must_use]
+    pub fn remove_all_sorted(&self, item: &T) -> Self {
+        self.remove_all_sorted_by(item, T::cmp)
+    }
 }
 
 impl<T> PersistentDeque<T> {
@@ -873,12 +964,82 @@ impl<T> PersistentDeque<T> {
     where
         F: FnMut(&T, &T) -> Ordering,
     {
-        let mut predicate = |value: &T| compare(value, item) != Ordering::Less;
-        self.root.bound_index(&mut predicate)
+        self.sorted_lower_bound_with(item, &mut compare)
     }
 
     #[must_use]
     pub fn sorted_upper_bound_by<F>(&self, item: &T, mut compare: F) -> usize
+    where
+        F: FnMut(&T, &T) -> Ordering,
+    {
+        self.sorted_upper_bound_with(item, &mut compare)
+    }
+
+    #[must_use]
+    pub fn split_at_sorted_lower_bound_by<F>(&self, item: &T, mut compare: F) -> DequeSplit<T>
+    where
+        F: FnMut(&T, &T) -> Ordering,
+    {
+        let index = self.sorted_lower_bound_with(item, &mut compare);
+        self.split_at(index)
+            .expect("a computed lower bound is always a valid split index")
+    }
+
+    #[must_use]
+    pub fn split_at_sorted_upper_bound_by<F>(&self, item: &T, mut compare: F) -> DequeSplit<T>
+    where
+        F: FnMut(&T, &T) -> Ordering,
+    {
+        let index = self.sorted_upper_bound_with(item, &mut compare);
+        self.split_at(index)
+            .expect("a computed upper bound is always a valid split index")
+    }
+
+    #[must_use]
+    pub fn split_at_sorted_equal_range_by<F>(&self, item: &T, mut compare: F) -> DequeRangeSplit<T>
+    where
+        F: FnMut(&T, &T) -> Ordering,
+    {
+        let lower = self.sorted_lower_bound_with(item, &mut compare);
+        let upper = self.sorted_upper_bound_with(item, &mut compare);
+        self.split_range(lower, upper - lower)
+            .expect("computed sorted bounds always describe a valid range")
+    }
+
+    #[must_use]
+    pub fn insert_sorted_by<F>(&self, item: T, mut compare: F) -> Self
+    where
+        F: FnMut(&T, &T) -> Ordering,
+    {
+        let index = self.sorted_upper_bound_with(&item, &mut compare);
+        self.insert_at(index, item)
+            .expect("a computed upper bound is always a valid insertion index")
+    }
+
+    #[must_use]
+    pub fn remove_all_sorted_by<F>(&self, item: &T, mut compare: F) -> Self
+    where
+        F: FnMut(&T, &T) -> Ordering,
+    {
+        let lower = self.sorted_lower_bound_with(item, &mut compare);
+        let upper = self.sorted_upper_bound_with(item, &mut compare);
+        if lower == upper {
+            self.clone()
+        } else {
+            self.remove_range(lower, upper - lower)
+                .expect("computed sorted bounds always describe a valid range")
+        }
+    }
+
+    fn sorted_lower_bound_with<F>(&self, item: &T, compare: &mut F) -> usize
+    where
+        F: FnMut(&T, &T) -> Ordering,
+    {
+        let mut predicate = |value: &T| compare(value, item) != Ordering::Less;
+        self.root.bound_index(&mut predicate)
+    }
+
+    fn sorted_upper_bound_with<F>(&self, item: &T, compare: &mut F) -> usize
     where
         F: FnMut(&T, &T) -> Ordering,
     {
@@ -999,6 +1160,49 @@ impl<T> ReversibleDeque<T> {
 
         self.items.get(index)
     }
+
+    pub fn iter(&self) -> Iter<'_, T> {
+        self.items.iter()
+    }
+
+    #[must_use]
+    pub fn push_front(&self, item: T) -> Self {
+        Self::from_deque(self.items.push_front(item))
+    }
+
+    #[must_use]
+    pub fn push_back(&self, item: T) -> Self {
+        Self::from_deque(self.items.push_back(item))
+    }
+
+    #[must_use]
+    pub fn set_item(&self, index: usize, item: T) -> Option<Self> {
+        Some(Self::from_deque(self.items.set_item(index, item)?))
+    }
+
+    #[must_use]
+    pub fn insert_at(&self, index: usize, item: T) -> Option<Self> {
+        Some(Self::from_deque(self.items.insert_at(index, item)?))
+    }
+
+    #[must_use]
+    pub fn remove_at(&self, index: usize) -> Option<Self> {
+        Some(Self::from_deque(self.items.remove_at(index)?))
+    }
+
+    #[must_use]
+    pub fn split_at(&self, index: usize) -> Option<ReversibleDequeSplit<T>> {
+        let split = self.items.split_at(index)?;
+        Some(ReversibleDequeSplit {
+            left: Self::from_deque(split.left),
+            right: Self::from_deque(split.right),
+        })
+    }
+
+    #[must_use]
+    pub fn concat(&self, other: &Self) -> Self {
+        Self::from_deque(self.items.concat(&other.items))
+    }
 }
 
 impl<T> Default for ReversibleDeque<T> {
@@ -1013,6 +1217,27 @@ impl<T> FromIterator<T> for ReversibleDeque<T> {
     }
 }
 
+impl<T> IntoIterator for ReversibleDeque<T>
+where
+    T: Clone,
+{
+    type Item = T;
+    type IntoIter = IntoIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.items.into_iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a ReversibleDeque<T> {
+    type Item = &'a T;
+    type IntoIter = Iter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 impl<T> ReversibleDeque<T>
 where
     T: Clone,
@@ -1023,60 +1248,21 @@ where
     }
 
     #[must_use]
-    pub fn push_front(&self, item: T) -> Self {
-        Self::from_deque(self.items.push_front(item))
+    pub fn pop_front(&self) -> Option<ReversibleDequePop<T>> {
+        let popped = self.items.pop_first()?;
+        Some(ReversibleDequePop {
+            value: popped.value,
+            rest: Self::from_deque(popped.rest),
+        })
     }
 
     #[must_use]
-    pub fn push_back(&self, item: T) -> Self {
-        Self::from_deque(self.items.push_back(item))
-    }
-
-    #[must_use]
-    pub fn pop_front(&self) -> Option<DequePop<T>> {
-        self.items.pop_first()
-    }
-
-    #[must_use]
-    pub fn pop_back(&self) -> Option<DequePop<T>> {
-        self.items.pop_last()
-    }
-
-    #[must_use]
-    pub fn set_item(&self, index: usize, item: T) -> Option<Self> {
-        if index >= self.len() {
-            return None;
-        }
-
-        Some(Self::from_deque(self.items.set_item(index, item)?))
-    }
-
-    #[must_use]
-    pub fn insert_at(&self, index: usize, item: T) -> Option<Self> {
-        if index > self.len() {
-            return None;
-        }
-
-        Some(Self::from_deque(self.items.insert_at(index, item)?))
-    }
-
-    #[must_use]
-    pub fn remove_at(&self, index: usize) -> Option<Self> {
-        if index >= self.len() {
-            return None;
-        }
-
-        Some(Self::from_deque(self.items.remove_at(index)?))
-    }
-
-    #[must_use]
-    pub fn split_at(&self, index: usize) -> Option<DequeSplit<T>> {
-        self.items.split_at(index)
-    }
-
-    #[must_use]
-    pub fn concat(&self, other: &Self) -> Self {
-        Self::from_deque(self.items.concat(&other.items))
+    pub fn pop_back(&self) -> Option<ReversibleDequePop<T>> {
+        let popped = self.items.pop_last()?;
+        Some(ReversibleDequePop {
+            value: popped.value,
+            rest: Self::from_deque(popped.rest),
+        })
     }
 }
 
@@ -1166,6 +1352,64 @@ mod tests {
         assert_eq!(deque.sorted_upper_bound(&2), 4);
         assert_eq!(deque.sorted_binary_search(&2), Ok(1));
         assert_eq!(deque.sorted_binary_search(&4), Err(4));
+    }
+
+    #[test]
+    fn sorted_split_insert_and_remove_cover_equal_ranges_and_custom_order() {
+        let deque: PersistentDeque<_> = [1, 3, 3, 3, 7, 9, 9, 12].into_iter().collect();
+
+        let lower = deque.split_at_sorted_lower_bound(&3);
+        assert_eq!(lower.left.to_vec(), vec![1]);
+        assert_eq!(lower.right.to_vec(), vec![3, 3, 3, 7, 9, 9, 12]);
+
+        let upper = deque.split_at_sorted_upper_bound(&3);
+        assert_eq!(upper.left.to_vec(), vec![1, 3, 3, 3]);
+        assert_eq!(upper.right.to_vec(), vec![7, 9, 9, 12]);
+
+        let equal = deque.split_at_sorted_equal_range(&3);
+        assert_eq!(equal.before.to_vec(), vec![1]);
+        assert_eq!(equal.range.to_vec(), vec![3, 3, 3]);
+        assert_eq!(equal.after.to_vec(), vec![7, 9, 9, 12]);
+        assert_eq!(
+            deque.insert_sorted(3).to_vec(),
+            vec![1, 3, 3, 3, 3, 7, 9, 9, 12]
+        );
+        assert_eq!(deque.remove_all_sorted(&3).to_vec(), vec![1, 7, 9, 9, 12]);
+        assert!(deque.shares_storage_with(&deque.remove_all_sorted(&4)));
+
+        fn descending(left: &i32, right: &i32) -> Ordering {
+            right.cmp(left)
+        }
+
+        let descending_deque: PersistentDeque<_> = [9, 7, 3, 3, 1].into_iter().collect();
+        assert_eq!(descending_deque.sorted_lower_bound_by(&3, descending), 2);
+        assert_eq!(
+            descending_deque.insert_sorted_by(3, descending).to_vec(),
+            vec![9, 7, 3, 3, 3, 1]
+        );
+        assert_eq!(
+            descending_deque
+                .remove_all_sorted_by(&3, descending)
+                .to_vec(),
+            vec![9, 7, 1]
+        );
+    }
+
+    #[test]
+    fn cached_endpoint_signposts_support_logarithmic_search_through_reversal() {
+        let deque: PersistentDeque<_> = (0..4096).collect();
+        let reversed = deque.reversed_view();
+        let mut comparisons = 0;
+        let index = reversed.sorted_lower_bound_by(&2048, |left, right| {
+            comparisons += 1;
+            right.cmp(left)
+        });
+
+        assert_eq!(index, 2047);
+        assert!(comparisons < 64, "search made {comparisons} comparisons");
+        assert_eq!(reversed.front(), Some(&4095));
+        assert_eq!(reversed.back(), Some(&0));
+        reversed.validate_invariants();
     }
 
     #[test]
@@ -1299,13 +1543,13 @@ mod tests {
         assert!(
             left_reversed
                 .items
-                .shared_node_count_with(&popped_front.rest)
+                .shared_node_count_with(&popped_front.rest.items)
                 > 0
         );
         assert!(
             left_reversed
                 .items
-                .shared_node_count_with(&popped_back.rest)
+                .shared_node_count_with(&popped_back.rest.items)
                 > 0
         );
 
@@ -1313,16 +1557,21 @@ mod tests {
         assert_eq!(split.left.len(), 400);
         assert_eq!(split.left.get(0), Some(&511));
         assert_eq!(split.right.get(0), Some(&111));
-        assert!(joined.items.shared_node_count_with(&split.left) > 0);
-        assert!(joined.items.shared_node_count_with(&split.right) > 0);
+        assert!(joined.items.shared_node_count_with(&split.left.items) > 0);
+        assert!(joined.items.shared_node_count_with(&split.right.items) > 0);
+
+        let iterated = joined.iter().copied().collect::<Vec<_>>();
+        assert_eq!(iterated, expected);
+        assert_eq!((&joined).into_iter().count(), joined.len());
+        assert_eq!(joined.clone().into_iter().collect::<Vec<_>>(), expected);
 
         let reversed_again = joined.reverse();
         assert!(joined.shares_storage_with(&reversed_again));
         joined.items.validate_invariants();
-        popped_front.rest.validate_invariants();
-        popped_back.rest.validate_invariants();
-        split.left.validate_invariants();
-        split.right.validate_invariants();
+        popped_front.rest.items.validate_invariants();
+        popped_back.rest.items.validate_invariants();
+        split.left.items.validate_invariants();
+        split.right.items.validate_invariants();
         reversed_again.items.validate_invariants();
     }
 }

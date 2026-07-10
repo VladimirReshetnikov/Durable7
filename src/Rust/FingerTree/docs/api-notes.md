@@ -18,17 +18,30 @@ Current public families:
 - `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>`;
 - `PriorityQueue<T, P>` and `PriorityEntry<T, P>`;
 - `Interval<T>` and `IntervalTree<T>`;
-- `Rope<T>`, `MeasuredRope<T, P>`, `TextRope`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
+- `Rope<T>`, `MeasuredRope<T, P>`, `MeasuredRopeBuilder<T, P>`, `TextRope`, `RopeBuilder`,
+  `NewlineMeasure`, `NewlineStyle`, and `LineColumn`.
 
 The Rust surface follows Rust conventions:
 
 - fallible indexed operations return `Option` instead of throwing;
 - duplicate sorted-map insertion returns `Result<_, DuplicateKeyError>`;
 - binary search returns `Result<usize, usize>`, matching Rust's insertion-index convention;
+- sorted deques expose lower/upper/equal-range splits plus stable upper-bound insertion and complete
+  equal-range removal, with `_by` variants for custom orderings;
+- reversible-deque `split_at` and `pop_front`/`pop_back` return `ReversibleDequeSplit<T>` and
+  `ReversibleDequePop<T>`, so subsequent reversal and orientation-aware edits remain available;
 - measure policies are ordinary traits with static functions for identity, element measure, and combine;
 - product-measured trees expose component-projected split and locate helpers, plus named size+sum and size+min/max
   aliases for cumulative-weight and priority operations that also retain positional measures;
-- text offsets are character offsets, matching the repository's `Rope<char>` interpretation rather than UTF-8 byte offsets.
+- text offsets are Unicode-scalar `char` offsets, matching the repository's `Rope<char>`
+  interpretation rather than UTF-8 byte offsets; code-point indexes therefore map directly to
+  character offsets, while grapheme helpers return UAX #29 extended-cluster boundaries in those
+  same offsets;
+- character-offset-to-grapheme-index conversion returns the number of cluster starts strictly
+  before the offset: an exact boundary maps to that cluster's index, an interior offset counts the
+  containing cluster's start, and the end boundary maps to the grapheme count, matching the C#
+  contract;
+- out-of-range positional rope edits and text offset conversions return `None`.
 
 This workspace is a semantic checkpoint, not the final lazy finger-tree representation. It preserves immutable
 snapshot behavior, stable observable ordering, rank/range semantics, priority stability, closed-interval overlap
@@ -36,12 +49,20 @@ semantics, and text line navigation. `PersistentDeque<T>` has moved past the ini
 an `Arc`-shared balanced tree, so nontrivial splits, concatenations, range operations, and point updates share
 unchanged subtrees. `ReversibleDeque<T>` is now an O(1) mirrored-tree view over that deque: reverse wraps or
 cancels a shared tree view, and reversed/mixed-orientation endpoint operations, splits, and concatenations stay on
-the tree path instead of materializing vectors. `Rope<T>` now uses chunked length-measured
+the tree path instead of materializing vectors. Split/pop results preserve that wrapper, and `iter`, borrowed
+`IntoIterator`, and owned `IntoIterator` enumerate in logical order. Deque nodes cache endpoint leaf signposts;
+sorted bounds therefore descend once in O(log n) node visits, and the sorted split/equal-range/insert/remove
+operations reuse those bounds while preserving shared subtrees. `Rope<T>` now uses chunked length-measured
 storage over the shared measured tree, so chunk construction, `copy_to`, positional edits, slices, splits, and
-concatenations share unchanged chunks and measured subtrees; `MeasuredRope<T, P>` exposes the same chunk-copy
-interop while preserving cached user measures. `TextRope` stores characters in `MeasuredRope<char, NewlineMeasure>`
-so line counts, line starts, and line/column navigation use cached newline measures, with Rust-native string
-conversion and display helpers. The general `FingerTree<T, P>` now
+concatenations share unchanged chunks and measured subtrees; `MeasuredRope<T, P>` now provides the same
+positional insert/remove/range/slice vocabulary while preserving cached user measures. Its mutable append builder
+keeps an immutable measured-rope prefix plus one staged chunk: freezing publishes that chunk, and later appends
+share rather than mutate earlier snapshots. `TextRope` stores characters in
+`MeasuredRope<char, NewlineMeasure>` so line counts, line starts, and line/column navigation use cached newline
+measures, with Rust-native string conversion and display helpers. Character ropes and text ropes additionally
+classify LF/CRLF/CR/mixed newline input, strip the CR from CRLF-aware line text, stream Unicode scalar values,
+and materialize only for standards-compliant extended-grapheme segmentation via `unicode-segmentation`. The
+general `FingerTree<T, P>` now
 uses an `Arc`-shared measured tree with cached monoid measures at every node, so measure-guided split and locate
 operations can skip whole subtrees and split results share unchanged structure. Built-in `KeyMeasure<T>` and
 `ProductMeasure<T, PFirst, PSecond>` policies now cover the C# headline measure compositions: lower/upper-bound
@@ -59,3 +80,9 @@ the C#/C++ lazy measured-spine complexity or allocation profile for every operat
 
 Future representation work should keep the Rust public names and result shapes stable while replacing the remaining
 semantic-checkpoint algorithms with lazy measured-spine equivalents where needed for asymptotic parity.
+
+## External dependency
+
+Extended-grapheme segmentation uses `unicode-segmentation` 1.13.3, licensed `MIT OR Apache-2.0`.
+Cargo resolves and pins that crate in the repository's `src/Rust/Cargo.lock`; its source is fetched
+from crates.io and is not vendored into this repository.

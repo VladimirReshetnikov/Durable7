@@ -5,6 +5,9 @@ version = 4
 [[package]]
 name = "tools-data-structures-fingertree"
 version = "0.1.0"
+dependencies = [
+ "unicode-segmentation",
+]
 
 [[package]]
 name = "tools-data-structures-hamt"
@@ -17,3 +20,9 @@ dependencies = [
  "tools-data-structures-fingertree",
  "tools-data-structures-hamt",
 ]
+
+[[package]]
+name = "unicode-segmentation"
+version = "1.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"

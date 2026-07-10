@@ -7,7 +7,9 @@ repository.workspace = true
 rust-version.workspace = true
 description = "Persistent FingerTree-family data structures for Rust."
 
+[dependencies]
+unicode-segmentation = "1.13.3"
+
 [lib]
 name = "tools_data_structures_fingertree"
 path = "src/lib.rs"
-

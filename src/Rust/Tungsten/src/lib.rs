@@ -442,17 +442,23 @@ where
 
     #[must_use]
     pub fn first(&self) -> Option<(&K, &V)> {
-        self.entries.front().map(|entry| (entry.key(), entry.value()))
+        self.entries
+            .front()
+            .map(|entry| (entry.key(), entry.value()))
     }
 
     #[must_use]
     pub fn last(&self) -> Option<(&K, &V)> {
-        self.entries.back().map(|entry| (entry.key(), entry.value()))
+        self.entries
+            .back()
+            .map(|entry| (entry.key(), entry.value()))
     }
 
     #[must_use]
     pub fn get_at(&self, index: usize) -> Option<(&K, &V)> {
-        self.entries.get(index).map(|entry| (entry.key(), entry.value()))
+        self.entries
+            .get(index)
+            .map(|entry| (entry.key(), entry.value()))
     }
 
     #[must_use]
@@ -508,11 +514,9 @@ where
             return self.clone();
         }
 
-        other
-            .iter()
-            .fold(self.clone(), |current, (key, value)| {
-                current.set_item(key.clone(), value.clone())
-            })
+        other.iter().fold(self.clone(), |current, (key, value)| {
+            current.set_item(key.clone(), value.clone())
+        })
     }
 
     #[must_use]
@@ -919,7 +923,13 @@ mod tests {
         S: BuildHasher + Clone,
     {
         assert_eq!(assoc.to_vec(), expected);
-        assert_eq!(assoc.keys(), expected.iter().map(|(key, _)| key.clone()).collect::<Vec<_>>());
+        assert_eq!(
+            assoc.keys(),
+            expected
+                .iter()
+                .map(|(key, _)| key.clone())
+                .collect::<Vec<_>>()
+        );
         assert_eq!(
             assoc.values(),
             expected
@@ -1026,14 +1036,18 @@ mod tests {
 
     #[test]
     fn association_tungsten_ordering_examples() {
-        let assoc: PersistentAssociation<_, _> =
-            [("a".to_string(), 1), ("b".to_string(), 2), ("a".to_string(), 3)]
-                .into_iter()
-                .collect();
+        let assoc: PersistentAssociation<_, _> = [
+            ("a".to_string(), 1),
+            ("b".to_string(), 2),
+            ("a".to_string(), 3),
+        ]
+        .into_iter()
+        .collect();
         assert_assoc_eq(&assoc, &[("a".to_string(), 3), ("b".to_string(), 2)]);
 
-        let assoc: PersistentAssociation<_, _> =
-            [("a".to_string(), 1), ("b".to_string(), 2)].into_iter().collect();
+        let assoc: PersistentAssociation<_, _> = [("a".to_string(), 1), ("b".to_string(), 2)]
+            .into_iter()
+            .collect();
         assert_assoc_eq(
             &assoc.set_item("a".to_string(), 5),
             &[("a".to_string(), 5), ("b".to_string(), 2)],
@@ -1064,10 +1078,13 @@ mod tests {
 
     #[test]
     fn association_insert_remove_slice_sort_and_key_take() {
-        let assoc: PersistentAssociation<_, _> =
-            [("a".to_string(), 1), ("b".to_string(), 2), ("c".to_string(), 3)]
-                .into_iter()
-                .collect();
+        let assoc: PersistentAssociation<_, _> = [
+            ("a".to_string(), 1),
+            ("b".to_string(), 2),
+            ("c".to_string(), 3),
+        ]
+        .into_iter()
+        .collect();
 
         assert_assoc_eq(
             &assoc.insert(2, "a".to_string(), 9).unwrap(),
@@ -1102,14 +1119,22 @@ mod tests {
             ],
         );
         assert_assoc_eq(
-            &assoc.key_take(["c".to_string(), "missing".to_string(), "a".to_string(), "c".to_string()]),
+            &assoc.key_take([
+                "c".to_string(),
+                "missing".to_string(),
+                "a".to_string(),
+                "c".to_string(),
+            ]),
             &[("c".to_string(), 3), ("a".to_string(), 1)],
         );
 
-        let unsorted: PersistentAssociation<_, _> =
-            [("b".to_string(), 2), ("c".to_string(), 0), ("a".to_string(), 1)]
-                .into_iter()
-                .collect();
+        let unsorted: PersistentAssociation<_, _> = [
+            ("b".to_string(), 2),
+            ("c".to_string(), 0),
+            ("a".to_string(), 1),
+        ]
+        .into_iter()
+        .collect();
         assert_assoc_eq(
             &unsorted.key_sort(),
             &[
@@ -1227,7 +1252,10 @@ mod tests {
                         .set_item(key + 1, value + 1);
                     assoc = assoc.join(&other);
                     for (other_key, other_value) in other.to_vec() {
-                        if let Some(found) = model.iter().position(|(candidate, _)| *candidate == other_key) {
+                        if let Some(found) = model
+                            .iter()
+                            .position(|(candidate, _)| *candidate == other_key)
+                        {
                             model[found] = (other_key, other_value);
                         } else {
                             model.push((other_key, other_value));

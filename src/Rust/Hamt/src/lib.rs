@@ -1407,7 +1407,10 @@ mod tests {
         }
 
         let error = try_it().unwrap_err();
-        assert_eq!(error.to_string(), "an entry with the same key already exists");
+        assert_eq!(
+            error.to_string(),
+            "an entry with the same key already exists"
+        );
     }
 
     fn assert_send_sync<T: Send + Sync>() {}
@@ -1422,9 +1425,7 @@ mod tests {
     fn concurrent_readers_share_retained_snapshots() {
         let map = PersistentHashMap::new().set_items((0..256).map(|key| (key, key * 3 - 100)));
         let set: PersistentHashSet<_> = (0..256).collect();
-        let expected_map = (0..256)
-            .map(|key| (key, key * 3 - 100))
-            .collect::<Vec<_>>();
+        let expected_map = (0..256).map(|key| (key, key * 3 - 100)).collect::<Vec<_>>();
 
         let mut handles = Vec::new();
         for _ in 0..8 {

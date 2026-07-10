@@ -7,9 +7,11 @@ mod measured;
 mod priority_queue;
 mod rope;
 mod sorted;
+mod text_extras;
 
 pub use deque::{
     DequeItemSplit, DequePop, DequeRangeSplit, DequeSplit, PersistentDeque, ReversibleDeque,
+    ReversibleDequePop, ReversibleDequeSplit,
 };
 pub use interval_tree::{Interval, IntervalTree};
 pub use measured::{
@@ -19,10 +21,11 @@ pub use measured::{
 };
 pub use priority_queue::{PriorityEntry, PriorityQueue};
 pub use rope::{
-    LineColumn, MeasuredRope, MeasuredRopeLocate, MeasuredRopeSplit, NewlineMeasure, Rope,
-    RopeBuilder, TextRope,
+    LineColumn, MeasuredRope, MeasuredRopeBuilder, MeasuredRopeLocate, MeasuredRopeSplit,
+    NewlineMeasure, Rope, RopeBuilder, TextRope,
 };
 pub use sorted::{DuplicateKeyError, SortedBag, SortedMap, SortedSet};
+pub use text_extras::NewlineStyle;
 
 #[cfg(test)]
 mod concurrency_tests {
@@ -43,7 +46,11 @@ mod concurrency_tests {
     fn concurrent_readers_share_public_snapshots() {
         let expected = (0..256).collect::<Vec<_>>();
         let deque: PersistentDeque<_> = expected.iter().copied().collect();
-        let reversible: ReversibleDeque<_> = expected.iter().copied().collect::<ReversibleDeque<_>>().reverse();
+        let reversible: ReversibleDeque<_> = expected
+            .iter()
+            .copied()
+            .collect::<ReversibleDeque<_>>()
+            .reverse();
         let reverse_expected = expected.iter().rev().copied().collect::<Vec<_>>();
         let rope: Rope<_> = expected.iter().copied().collect();
         let measured_values = (1..=128).collect::<Vec<_>>();
