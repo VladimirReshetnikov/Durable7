@@ -50,3 +50,15 @@ Because the array length is exactly `64`, the slice is always empty, so the trai
 - Increase the destination buffer size (for example, `new byte[80]`).
 - Continue writing to `target.AsSpan()`.
 - Assert the first 64 bytes match expected output and bytes `[64..]` remain at the sentinel value.
+
+## Resolution addendum — 2026-07-10
+
+Both reported test defects are resolved in
+`BitWidth512/Shared/BitConverter512Tests.cs`:
+
+- the short-destination and short-input cases use the exact 63-byte near boundary for 64-byte
+  `UInt512` / `Int512` payloads; and
+- `TryWriteBytes_WritesAtBeginningAndReturnsLengthContract` writes into an 80-byte sentinel-filled
+  destination, checks the first 64 bytes, and verifies that the 16-byte suffix is unchanged.
+
+The current `Tools.Numerics.Tests` project passes 286/286 tests, including these boundary checks.

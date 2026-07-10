@@ -219,3 +219,16 @@ comparer over enumeration plus a `TryGetValue` retention check.
 | Tests (extended) | `PersistentHashMapTests.cs`, `PersistentHashSetTests.cs`, `PersistentHashMapCollisionTests.cs`, `PersistentHashMapPropertyTests.cs` |
 | Tests (new) | `PersistentHashMapEnumeratorTests.cs`, `PersistentHamtStructureTests.cs` |
 | Documentation | `docs/api-specification.md`, `README.md`, this report |
+
+## Resolution addendum — 2026-07-10
+
+The remaining live coverage gap is closed by `PersistentHashSetEnumeratorTests.cs`. Four focused
+tests now pin the set wrapper's default, before-first, active, exhausted, copied, interface, and
+`Reset` states independently of the map enumerator tests. The C# HAMT project now passes 54/54 tests
+as part of the 772-test `DataStructures.sln` gate.
+
+The items under **Declined and deferred findings** remain deliberate, evidence-based design
+decisions rather than unresolved defects: comparer devirtualization and a transient builder remain
+benchmark-gated; strict duplicate `Add`, iterator-backed key/value views, and the documented bulk
+operation vocabulary remain the selected public contracts. No correctness or undocumented behavior
+finding from this report remains open.

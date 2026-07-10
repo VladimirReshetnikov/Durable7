@@ -309,3 +309,62 @@ Ranked; none are correctness bugs in shipped behavior.
   Numerics 266, Hamt 50, Tungsten 48).
 - New regression tests added in this review: 13 (6 Rust, 7 C#), including two randomized
   model-based suites (SparseInteger vs `BigInteger`; measured-rope split partitioning).
+
+## Resolution addendum — 2026-07-10
+
+All seven deferred follow-up groups above are resolved. This addendum records the current state
+without rewriting the review's original findings or contemporaneous evidence.
+
+### Rust FingerTree completion
+
+- `PersistentDeque<T>` now exposes sorted lower/upper/equal-range splits, stable upper-bound
+  insertion, complete equal-range removal, and custom-ordering variants. Balanced deque nodes cache
+  first/last leaf signposts, including mirrored views, so `bound_index` descends in O(log n) node
+  visits rather than recursively rediscovering subtree endpoints.
+- `ReversibleDeque<T>` now has borrowed and owned logical-order iteration. `split_at` and endpoint
+  pops return `ReversibleDequeSplit<T>` / `ReversibleDequePop<T>`, preserving reversal and
+  orientation-aware operations on every result.
+- `MeasuredRope<T, P>` now provides persistent point/range insertion and removal plus slicing, with
+  deterministic vector-model and structural-sharing coverage. `MeasuredRopeBuilder<T, P>` stages one
+  measured chunk behind an immutable prefix and publishes isolated, prefix-sharing snapshots.
+- Character and text ropes now expose Rust-native Unicode-scalar addressing, UAX #29 extended
+  grapheme enumeration and offset conversion, LF/CRLF/CR/mixed newline classification, and
+  CRLF-aware line text. `unicode-segmentation` 1.13.3 is pinned in `src/Rust/Cargo.lock`; active docs
+  record its non-vendored `MIT OR Apache-2.0` licensing.
+
+The balanced-tree/lazy-spine complexity boundary remains an intentional, actively documented port
+choice; the previously *undocumented* functional and signpost gaps are closed.
+
+### C# Numerics contracts
+
+- All six wide integers accept `D`/`N`/`X` precision formats and the documented thousands/fractional
+  zero parsing styles. They implement `IParsable<T>`, `ISpanParsable<T>`, `IMinMaxValue<T>`, and
+  `IUtf8SpanFormattable`; active API docs explicitly state that the full `INumber<T>` /
+  `IBinaryInteger<T>` surface is not claimed rather than implying generic-math parity.
+- Explicit `float`, `double`, and `decimal` conversions now follow probed .NET 10 `Int128`/`UInt128`
+  checked and unchecked behavior, including fractional truncation, non-finite values, and finite
+  boundaries. Direct 512↔128 and 1024↔256/128 conversions complete the skipped-width matrix; adjacent
+  declaration parity remains guarded separately.
+- `GetShortestBitLength` / `GetByteCount` now follow built-in conventions. Every signed width throws
+  for `MinValue / -1` even outside a checked context, unsigned `Log2(0)` returns zero, and signed
+  `Log2` rejects negatives while handling non-negative inputs consistently.
+
+### Coverage and minor findings
+
+- New C# coverage pins comparer-equal but instance-distinct values across the sorted facades and
+  interval tree, duplicate-low interval runs, rope split/re-coalescing boundaries, text-reader
+  `Peek`/`Read` interleaving, Tungsten association `GetRange`/`KeyTake`/stable `Sort` properties, and
+  every HAMT set-wrapper enumerator state.
+- `MeasuredChunkBuilder.Add(ReadOnlySpan<T>)` now bulk-copies each staged span while folding its
+  measure. Sorted-dictionary builder key/value views capture versions when enumeration starts.
+  `Digit.ChildAt` rejects invalid positions in Release, and both empty C# engine cores report
+  impossible enumerator descent as `InvalidOperationException` invariant failures.
+
+### Replacement validation evidence
+
+- `dotnet test .\DataStructures.sln` (`src/CSharp`): 772 passed, 0 failed, 0 skipped — FingerTree
+  381, Numerics 286, HAMT 54, Tungsten 51.
+- `cargo test --workspace` (`src/Rust`): 78 passed — FingerTree 55, HAMT 15, Tungsten 8 — with all
+  doc-tests passing.
+- `cargo fmt --all -- --check` and
+  `cargo clippy --workspace --all-targets -- -D warnings` both pass.
