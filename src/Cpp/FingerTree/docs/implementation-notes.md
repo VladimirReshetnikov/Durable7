@@ -995,7 +995,7 @@ Validation:
 - Configured and built `msvc-release` with `/W4 /WX`.
 - Ran `ctest --preset msvc-release --output-on-failure`; all tests passed.
 
-Remaining review work:
+Review status at this checkpoint:
 
 - See the later review-remediation checkpoints for Milestone 8, command-sequence shrinking, packaging, CI, and
   expanded multi-compiler validation.

@@ -22,7 +22,7 @@ checks, and the workspace validation guides, which own local warning policy and 
 | [C HAMT](../../src/C/Hamt/README.md) | Dependency-free native executable built by `build.ps1` | `.\build.ps1 -Workspace Hamt -RunTests` from `src/C` | [Tests README](../../src/C/Hamt/tests/README.md) | Deterministic map/set unit and model checks, plus retained-snapshot reader threads on Windows; fail-fast runner |
 | [C++ HAMT](../../src/Cpp/Hamt/README.md) | Dependency-free native executable built by `build.ps1` | `.\build.ps1 -Workspace Hamt -RunTests` from `src/Cpp` | [Tests README](../../src/Cpp/Hamt/tests/README.md) | Deterministic map/set unit and model checks plus retained-snapshot reader threads; local registry runner |
 | [C FingerTree](../../src/C/FingerTree/README.md) | CMake/CTest core executable plus sample smoke tests | `.\build.ps1 -Workspace FingerTree -RunTests` from `src/C` | [Tests README](../../src/C/FingerTree/tests/README.md) | Core C API tests, sample smoke tests, and a separate benchmark executable |
-| [C++ FingerTree](../../src/Cpp/FingerTree/README.md) | CMake/CTest smoke executable with a local runner | `.\build.ps1 -Workspace FingerTree -RunTests` from `src/Cpp` | [Tests README](../../src/Cpp/FingerTree/tests/README.md) | Header-first C++23 suite with tearable concurrency stress controls |
+| [C++ FingerTree](../../src/Cpp/FingerTree/README.md) | Local runner exposed as 16 subsystem CTests plus sample and installed-consumer integration | `.\build.ps1 -Workspace FingerTree -RunTests` from `src/Cpp` | [Tests README](../../src/Cpp/FingerTree/tests/README.md) | Header-first C++23 suite with replay/shrinking, complexity guards, tearable concurrency, samples, and package relocation |
 | [Haskell HAMT](../../src/Haskell/Hamt/README.md) | Cabal exit-code executable | `.\test.ps1 -Workspace Hamt` from `src/Haskell` | [Tests README](../../src/Haskell/Hamt/test/README.md) | Map/set behavior, collision shrink, strict mapping, one-pass adjust, receiver-policy relations, 100,000-entry construction, and `forkIO` readers |
 | [Haskell FingerTree](../../src/Haskell/FingerTree/README.md) | Cabal exit-code executable | `.\test.ps1 -Workspace FingerTree` from `src/Haskell` | [Tests README](../../src/Haskell/FingerTree/test/README.md) | Measured/deque families, 200,000-entry construction, mixed reversal, max-high intervals, structurally shared ropes/measured text, and `forkIO` readers |
 | [Haskell Tungsten](../../src/Haskell/Tungsten/README.md) | Cabal exit-code executable | `.\test.ps1 -Workspace Tungsten` from `src/Haskell` | [Test source](../../src/Haskell/Tungsten/test/Main.hs) | List examples, Association ordering rules, custom `HashPolicy`, relabel stress, generated histories, and `forkIO` concurrent readers |
@@ -38,7 +38,7 @@ checks, and the workspace validation guides, which own local warning policy and 
 | Scope | Control | Default use | Longer-run command shape |
 | --- | --- | --- | --- |
 | C# FingerTree tearable concurrency stress | `FINGERTREE_STRESS_SECONDS` | Short enough for ordinary `.\test.ps1` | Set the variable, run `.\test.ps1 -Filter FullyQualifiedName~TearableConcurrencyStressTests`, then remove the variable |
-| C++ FingerTree tearable concurrency stress | `FINGERTREE_STRESS_SECONDS` | Short enough for ordinary CTest | Set the variable, run CTest with `-R "^fingertree\.smoke$"`, then remove the variable |
+| C++ FingerTree tearable concurrency stress | `FINGERTREE_STRESS_SECONDS` | Short enough for ordinary CTest | Set the variable, run CTest with `-R "^fingertree\.concurrency$"`, then remove the variable |
 
 Raise duration knobs when changing lazy memoization, atomic publication, structural sharing under concurrent reads,
 or tearable element/measure paths. Record the variable value in validation evidence.
@@ -51,7 +51,7 @@ or tearable element/measure paths. Record the variable value in validation evide
 | C# FingerTree benchmarks | [Benchmark notes](../../src/CSharp/docs/FingerTree/benchmarks.md) and [benchmark project README](../../src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/README.md) | Run only for performance-sensitive code, benchmark changes, or performance claims |
 | C FingerTree samples | [Samples README](../../src/C/FingerTree/samples/README.md) | Sample executables are registered as CTest smoke tests |
 | C FingerTree benchmarks | [Benchmarks README](../../src/C/FingerTree/benchmarks/README.md) | Dependency-light timing harness; run for local sanity checks or benchmark-doc changes |
-| C++ FingerTree samples and benchmarks | [C++ validation guide](../../src/Cpp/FingerTree/docs/validation.md#benchmark-harness-status) | Not currently checked in; Milestone 8 remains future work |
+| C++ FingerTree samples and benchmarks | [C++ validation guide](../../src/Cpp/FingerTree/docs/validation.md#benchmark-harness-status) | Deterministic samples are CTest-smoked; the dependency-free Release harness covers the Milestone 8 families and branching-flatness guard |
 
 ## Coverage Change Rules
 
