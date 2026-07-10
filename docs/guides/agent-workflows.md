@@ -40,14 +40,11 @@ Use Cargo from the Rust language root:
 
 ```powershell
 cd C:\DataStructures\src\Rust
-cargo test --workspace
+.\test.ps1
 ```
 
-If Cargo is installed under rustup but not on `PATH`, use:
-
-```powershell
-& $env:USERPROFILE\.cargo\bin\cargo.exe test --workspace
-```
+The wrapper locates Cargo on `PATH` or under the default rustup profile and enables inherited,
+non-interactive Windows error handling before test binaries start.
 
 ## XML documentation
 

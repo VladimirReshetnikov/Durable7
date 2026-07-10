@@ -5,6 +5,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "..\..\eng\Enable-HeadlessTestMode.ps1")
+$null = Enable-HeadlessTestMode
+
 $KotlinVersion = "2.4.0"
 $KotlinCompilerSha256 = "ba1b9e6eb6ddc3275079224f2e9ea4a2b02eef7d59ce2d38404f04b22613c20a"
 $Root = $PSScriptRoot
@@ -151,7 +154,7 @@ function Invoke-KotlinWorkspaceTests {
     }
 
     Write-Host "Running $Name Kotlin tests"
-    & $Java "-jar" $jar
+    & $Java "-Djava.awt.headless=true" "-jar" $jar
     if ($LASTEXITCODE -ne 0) {
         throw "$Name Kotlin tests failed"
     }

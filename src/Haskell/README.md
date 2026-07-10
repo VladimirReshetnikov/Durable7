@@ -15,11 +15,16 @@ managed C# projects where the language surfaces line up.
 | [FingerTree](FingerTree/README.md) | `tools-data-structures-fingertree` | `Data.Structures.FingerTree`, genuine measured-tree deque/core, count-measured structurally shared ropes, newline-measured text helpers, max-high interval tree, sorted collections, and priority queue |
 | [Tungsten](Tungsten/README.md) | `tools-data-structures-tungsten` | `Data.Structures.Tungsten`, `Data.Structures.Tungsten.List`, `Data.Structures.Tungsten.Association` |
 
-Build and test both packages from this directory:
+Build and test all three packages from this directory:
 
 ```powershell
-cabal test all
+.\test.ps1
 ```
+
+Use `-Workspace Hamt`, `-Workspace FingerTree`, or `-Workspace Tungsten` for a focused run. The wrapper
+invokes Cabal after enabling inherited non-interactive Windows error handling, so assertion, runtime,
+loader, and crash failures stay on the console and return a nonzero exit instead of opening modal UI.
+Additional Cabal options can be passed with `-CabalArguments`.
 
 The port intentionally depends only on packages bundled with the local GHC distribution and sibling
 workspace packages, plus each package's own test executable.

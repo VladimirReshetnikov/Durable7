@@ -94,11 +94,11 @@ For a cross-family checklist before drilling into a local spec, start with the
 | C# Tungsten collections | [Validation](../../src/CSharp/docs/Tungsten/validation.md) | .NET build/test commands, kernel-verified semantics coverage, model histories, relabel stress |
 | C Tungsten collections | [Workspace README](../../src/C/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten -RunTests` and Release validation for the C CTest executable |
 | C++ Tungsten collections | [Workspace README](../../src/Cpp/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten -RunTests` for the C++ CTest executable |
-| Haskell | [Workspace README](../../src/Haskell/README.md) | `cabal test all` builds all Haskell packages and runs the HAMT/FingerTree/Tungsten executables |
+| Haskell | [Workspace README](../../src/Haskell/README.md) | `.\test.ps1` builds all Haskell packages and runs the HAMT/FingerTree/Tungsten executables without Windows failure dialogs |
 | Kotlin | [Workspace README](../../src/Kotlin/README.md) | `.\build.ps1` builds all Kotlin workspaces and runs dependency-free executable tests |
 | Kotlin HAMT | [Validation](../../src/Kotlin/Hamt/docs/validation.md) | Kotlin compiler bootstrap and deterministic HAMT executable tests |
 | Kotlin FingerTree | [Validation](../../src/Kotlin/FingerTree/docs/validation.md) | Kotlin compiler bootstrap, measured-AVL invariants, generated histories, large construction, and executable facade tests |
-| Rust | [Workspace README](../../src/Rust/README.md) | `cargo test --workspace` builds both Rust crates and runs unit/doc tests |
+| Rust | [Workspace README](../../src/Rust/README.md) | `.\test.ps1` builds all Rust crates and runs unit/doc tests without Windows failure dialogs |
 | Rust FingerTree | [Validation](../../src/Rust/FingerTree/docs/validation.md) | Cargo unit tests for shared storage and checkpoint semantics across deque, measured sequence, sorted, priority, interval, rope, and text helpers |
 | C# FingerTree benchmarks | [Benchmark notes](../../src/CSharp/docs/FingerTree/benchmarks.md) | Curated BenchmarkDotNet results and interpretation |
 | C# FingerTree samples | [Samples README](../../src/CSharp/samples/README.md) | Runnable tours covering text, measured-tree facades, and editor-grade text extras |

@@ -30,5 +30,5 @@ See [API notes](docs/api-notes.md), [validation](docs/validation.md), and the
 Validate from `src/Rust`:
 
 ```powershell
-cargo test -p tools-data-structures-hamt
+.\test.ps1 -Workspace Hamt
 ```

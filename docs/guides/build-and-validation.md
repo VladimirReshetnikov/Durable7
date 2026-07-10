@@ -14,6 +14,20 @@ boundaries, use the [test suite map](../reference/test-suite-map.md). If you are
 workspace or evidence boundary applies, start with the
 [repository onboarding guide](repository-onboarding.md).
 
+## Non-Interactive Test Failure Policy
+
+On Windows, run tests through the repository's language-root PowerShell entry points. Each entry point
+dot-sources [`eng/Enable-HeadlessTestMode.ps1`](../../eng/Enable-HeadlessTestMode.ps1), which preserves the
+caller's existing process error mode while enabling `SEM_FAILCRITICALERRORS`,
+`SEM_NOGPFAULTERRORBOX`, and `SEM_NOOPENFILEERRORBOX`. Child processes inherit those flags, so loader
+failures, native crashes, assertion failures, and Windows Error Reporting remain console-visible failures
+with nonzero exits instead of opening modal desktop dialogs before a language runtime reaches `main`.
+
+The Kotlin launcher additionally starts each test JVM with `-Djava.awt.headless=true`. On non-Windows
+hosts the shared helper is an intentional no-op and the same entry points retain their ordinary console
+behavior. Keep direct low-level compiler, CTest, Cabal, or Cargo commands for diagnosis; use the documented
+entry points for unattended validation.
+
 ## Validation Matrix
 
 | Workspace | Primary command | Local validation guide | Test map | Coverage |
@@ -27,14 +41,14 @@ workspace or evidence boundary applies, start with the
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | `.\build.ps1 -Workspace Hamt -RunTests` from `src/C` | [Validation](../../src/C/Hamt/docs/validation.md) | [Tests](../../src/C/Hamt/tests/README.md) | C17 MSVC, GCC, and Clang builds; warning policy; deterministic HAMT tests |
 | [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | `.\build.ps1 -Workspace Hamt -RunTests` from `src/Cpp` | [Validation](../../src/Cpp/Hamt/docs/validation.md) | [Tests](../../src/Cpp/Hamt/tests/README.md) | C++20 MSVC, GCC, and Clang builds; warning policy; deterministic HAMT tests |
 | [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | `.\build.ps1 -Workspace Hamt` from `src/Kotlin` | [Validation](../../src/Kotlin/Hamt/docs/validation.md) | [Tests](../../src/Kotlin/Hamt/tests/README.md) | Kotlin/JVM HAMT build, tool bootstrap, deterministic trie and set-algebra tests |
-| [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | `cargo test -p tools-data-structures-hamt` | [Validation](../../src/Rust/Hamt/docs/validation.md) | [Tests](../../src/Rust/Hamt/tests/README.md) | Safe Rust crate, structural HAMT tests, collision and set-algebra coverage |
+| [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | `.\test.ps1 -Workspace Hamt` from `src/Rust` | [Validation](../../src/Rust/Hamt/docs/validation.md) | [Tests](../../src/Rust/Hamt/tests/README.md) | Safe Rust crate, structural HAMT tests, collision and set-algebra coverage |
 | [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree -RunTests` from `src/C` | [Validation](../../src/C/FingerTree/docs/validation.md) | [Tests](../../src/C/FingerTree/tests/README.md) | C11 MSVC, GCC, and Clang builds; tests, samples, benchmark harness entry points |
 | [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree -RunTests` from `src/Cpp` | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | [Tests](../../src/Cpp/FingerTree/tests/README.md) | C++23 MSVC, GCC, and Clang CTest lanes; stress controls; benchmark-harness status |
-| [`src/Haskell`](../../src/Haskell/README.md) | `cabal test all` | [Haskell README](../../src/Haskell/README.md) | [HAMT tests](../../src/Haskell/Hamt/test/README.md), [FingerTree tests](../../src/Haskell/FingerTree/test/README.md) | GHC/cabal build, dependency-light HAMT and FingerTree executable tests |
+| [`src/Haskell`](../../src/Haskell/README.md) | `.\test.ps1` from `src/Haskell` | [Haskell README](../../src/Haskell/README.md) | [HAMT tests](../../src/Haskell/Hamt/test/README.md), [FingerTree tests](../../src/Haskell/FingerTree/test/README.md) | GHC/cabal build, dependency-light HAMT, FingerTree, and Tungsten executable tests |
 | [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree` from `src/Kotlin` | [Validation](../../src/Kotlin/FingerTree/docs/validation.md) | [Tests](../../src/Kotlin/FingerTree/tests/README.md) | Kotlin/JVM measured-tree tests across deque, reversible deque, sorted, cached priority, max-high interval, rope/text, AVL/share invariants, and generated/large stress |
-| [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | `cargo test -p tools-data-structures-fingertree` | [Validation](../../src/Rust/FingerTree/docs/validation.md) | [Tests](../../src/Rust/FingerTree/tests/README.md) | Safe Rust checkpoint crate, structurally shared storage and cached-measure tests across deque, reversible deque, sorted, priority, interval, rope, measured tree, measured rope, and text helpers |
+| [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | `.\test.ps1 -Workspace FingerTree` from `src/Rust` | [Validation](../../src/Rust/FingerTree/docs/validation.md) | [Tests](../../src/Rust/FingerTree/tests/README.md) | Safe Rust checkpoint crate, structurally shared storage and cached-measure tests across deque, reversible deque, sorted, priority, interval, rope, measured tree, measured rope, and text helpers |
 | [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten` from `src/Kotlin` | [README](../../src/Kotlin/Tungsten/README.md) | [Tests](../../src/Kotlin/Tungsten/test/tools/datastructures/tungsten/TungstenTests.kt) | Kotlin/JVM executable tests for Tungsten list and association semantics |
-| [`src/Rust/Tungsten`](../../src/Rust/Tungsten/README.md) | `cargo test -p tools-data-structures-tungsten` | [README](../../src/Rust/Tungsten/README.md) | [Source tests](../../src/Rust/Tungsten/src/lib.rs) | Safe Rust crate tests for Tungsten list and association semantics |
+| [`src/Rust/Tungsten`](../../src/Rust/Tungsten/README.md) | `.\test.ps1 -Workspace Tungsten` from `src/Rust` | [README](../../src/Rust/Tungsten/README.md) | [Source tests](../../src/Rust/Tungsten/src/lib.rs) | Safe Rust crate tests for Tungsten list and association semantics |
 
 For broad repository edits, run every row that could be affected. For documentation-only edits, run the
 Markdown link check below and any build/test commands whose documented paths changed.
@@ -82,16 +96,12 @@ validation guides define family-specific coverage and optional stress/benchmark 
 
 ```powershell
 cd C:\DataStructures\src\Rust
-cargo test --workspace
+.\test.ps1
 ```
 
-The Rust crates are safe Rust only (`#![forbid(unsafe_code)]`) and are validated through Cargo unit tests. If
-Cargo is installed under the default rustup profile but is not on `PATH`, use the explicit local tool:
-
-```powershell
-cd C:\DataStructures\src\Rust
-& $env:USERPROFILE\.cargo\bin\cargo.exe test --workspace
-```
+The Rust crates are safe Rust only (`#![forbid(unsafe_code)]`) and are validated through Cargo unit tests.
+The wrapper finds Cargo on `PATH` or under the default rustup profile, applies non-interactive Windows error
+handling before Cargo starts any test binary, and preserves Cargo's failure exit.
 
 Local guides:
 
@@ -224,10 +234,13 @@ pair in its own `out/build/<compiler>-<configuration>` directory.
 
 ```powershell
 cd C:\DataStructures\src\Haskell
-cabal test all
+.\test.ps1
 ```
 
-The cabal project builds both Haskell packages and runs the dependency-light test executables:
+The wrapper applies non-interactive Windows error handling before Cabal starts a test executable. Use
+`-Workspace Hamt`, `-Workspace FingerTree`, or `-Workspace Tungsten` for a focused run, and pass additional
+Cabal options through `-CabalArguments`. The cabal project builds three Haskell packages and runs their
+dependency-light test executables:
 
 - [Haskell HAMT tests](../../src/Haskell/Hamt/test/README.md)
 - [Haskell FingerTree tests](../../src/Haskell/FingerTree/test/README.md)
@@ -246,7 +259,8 @@ cd C:\DataStructures\src\Kotlin
 The Kotlin build script compiles each workspace with the Kotlin command-line compiler and runs
 dependency-free executable tests. If no Java 21+ runtime is on `PATH` on Windows, it bootstraps a local Temurin
 JDK 21 under `src/Kotlin/build/tools`; on non-Windows hosts, provide Java 21+ through `PATH` or `JAVA_HOME`.
-It also downloads and verifies the Kotlin compiler archive.
+It also downloads and verifies the Kotlin compiler archive. On Windows the script enables inherited
+non-interactive OS error handling before tool bootstrap, and every test JVM runs in AWT headless mode.
 Local guides:
 
 - [Kotlin HAMT validation](../../src/Kotlin/Hamt/docs/validation.md)

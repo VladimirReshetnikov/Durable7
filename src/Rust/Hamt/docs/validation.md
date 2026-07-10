@@ -8,14 +8,11 @@
 Run from `src/Rust`:
 
 ```powershell
-cargo test -p tools-data-structures-hamt
+.\test.ps1 -Workspace Hamt
 ```
 
-If Cargo is available under rustup but not on `PATH`, use:
-
-```powershell
-& $env:USERPROFILE\.cargo\bin\cargo.exe test -p tools-data-structures-hamt
-```
+The wrapper locates Cargo on `PATH` or under the default rustup profile and applies inherited,
+non-interactive Windows error handling before Cargo starts the test executable.
 
 The crate uses `#![forbid(unsafe_code)]`. The unit tests are inline in `Hamt/src/lib.rs` and cover:
 

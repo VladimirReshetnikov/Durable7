@@ -11,21 +11,21 @@ contracts of the C# baseline where the current implementation exposes equivalent
 
 | Workspace | Role | Primary entry points | Validation |
 | --- | --- | --- | --- |
-| [Hamt](Hamt/README.md) | Persistent HAMT map/set port with 32-way bitmap-indexed trie nodes and `Arc` structural sharing | `tools_data_structures_hamt::{PersistentHashMap, PersistentHashSet}` | `cargo test -p tools-data-structures-hamt` |
-| [FingerTree](FingerTree/README.md) | Rust checkpoint for the FingerTree family: persistent deque, measured sequence with built-in and product policies, reversible deque, sorted collections, priority queue, intervals, ropes, and text helpers | `tools_data_structures_fingertree::*` | `cargo test -p tools-data-structures-fingertree` |
-| [Tungsten](Tungsten/README.md) | Tungsten `List` and `Association` collection port over Rust persistent substrates | `tools_data_structures_tungsten::{PersistentList, PersistentAssociation}` | `cargo test -p tools-data-structures-tungsten` |
+| [Hamt](Hamt/README.md) | Persistent HAMT map/set port with 32-way bitmap-indexed trie nodes and `Arc` structural sharing | `tools_data_structures_hamt::{PersistentHashMap, PersistentHashSet}` | `.\test.ps1 -Workspace Hamt` |
+| [FingerTree](FingerTree/README.md) | Rust checkpoint for the FingerTree family: persistent deque, measured sequence with built-in and product policies, reversible deque, sorted collections, priority queue, intervals, ropes, and text helpers | `tools_data_structures_fingertree::*` | `.\test.ps1 -Workspace FingerTree` |
+| [Tungsten](Tungsten/README.md) | Tungsten `List` and `Association` collection port over Rust persistent substrates | `tools_data_structures_tungsten::{PersistentList, PersistentAssociation}` | `.\test.ps1 -Workspace Tungsten` |
 
 Run the full Rust validation from this directory:
 
 ```powershell
-cargo test --workspace
+.\test.ps1
 ```
 
-If Cargo is installed under the default rustup profile but not on `PATH`, use:
-
-```powershell
-& $env:USERPROFILE\.cargo\bin\cargo.exe test --workspace
-```
+The wrapper finds Cargo on `PATH` or under the default rustup profile. On Windows it enables inherited
+non-interactive OS error handling before Cargo starts a test binary, so assertion, panic, loader, and crash
+failures remain console diagnostics with nonzero exits instead of opening modal UI. Use `-Workspace Hamt`,
+`-Workspace FingerTree`, or `-Workspace Tungsten` for focused runs; `-Release` selects the release profile,
+and `-CargoArguments` forwards additional Cargo or test-harness options.
 
 The FingerTree crate intentionally starts as a semantic checkpoint rather than a final asymptotic
 parity port. Its public families now use structurally shared Rust tree storage, while some

@@ -15,7 +15,7 @@ dependencies while keeping the public shape close to Haskell's `containers` styl
 
 ```powershell
 cd src\Haskell
-cabal test hamt-test
+.\test.ps1 -Workspace Hamt
 ```
 
 The local [test README](test/README.md) lists the deterministic coverage areas.

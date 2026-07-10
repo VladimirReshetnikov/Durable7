@@ -8,7 +8,7 @@
 Tests currently live inline in the module files under [`../src`](../src). Run them from `src/Rust`:
 
 ```powershell
-cargo test -p tools-data-structures-fingertree
+.\test.ps1 -Workspace FingerTree
 ```
 
 Coverage groups:

@@ -37,7 +37,7 @@ of returned elements.
 
 ```powershell
 cd src\Haskell
-cabal test ft-test
+.\test.ps1 -Workspace FingerTree
 ```
 
 The local [test README](test/README.md) lists the deterministic coverage areas.

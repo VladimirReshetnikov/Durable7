@@ -8,7 +8,7 @@
 Run from `src/Haskell`:
 
 ```powershell
-cabal test hamt-test
+.\test.ps1 -Workspace Hamt
 ```
 
 The dependency-free executable covers map last-wins construction, duplicate rejection, explicit

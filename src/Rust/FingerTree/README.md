@@ -49,7 +49,7 @@ See [API notes](docs/api-notes.md), [validation](docs/validation.md), and the
 Validate from `src/Rust`:
 
 ```powershell
-cargo test -p tools-data-structures-fingertree
+.\test.ps1 -Workspace FingerTree
 ```
 
 Unicode extended-grapheme segmentation uses the non-vendored `unicode-segmentation` 1.13.3 crate

@@ -25,6 +25,9 @@ The build script bootstraps a local Windows JDK 21 when a suitable Java 21+ runt
 On non-Windows hosts, put Java 21+ on `PATH` or set `JAVA_HOME` before running the script. The verified Kotlin
 2.4.0 command-line compiler is bootstrapped into `src/Kotlin/build/tools` on every host, then the script compiles
 each workspace and runs its dependency-free executable tests. The `build` directory is ignored by the repository.
+On Windows, the script enables inherited non-interactive OS error handling before launching build tools or tests,
+and starts every test JVM with `-Djava.awt.headless=true`. Assertion, exception, loader, and crash failures therefore
+remain console diagnostics with nonzero exits instead of opening modal UI.
 
 The FingerTree workspace uses immutable measured AVL sequence nodes throughout the public family.
 Cached size and monoidal measures drive logarithmic indexed edits, splits, prefix location, priority,

@@ -17,7 +17,7 @@ dependency-light Haskell modules:
 Build and test from `src/Haskell`:
 
 ```powershell
-cabal test tools-data-structures-tungsten
+.\test.ps1 -Workspace Tungsten
 ```
 
 The `tungsten-test` executable covers list examples, Association ordering rules, custom `HashPolicy`

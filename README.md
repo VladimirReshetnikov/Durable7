@@ -116,6 +116,7 @@ This document is the canonical repository guidance for Vladimir and the AI codin
     ├── Haskell/
     │   ├── README.md
     │   ├── cabal.project
+    │   ├── test.ps1
     │   ├── FingerTree/
     │   │   ├── README.md
     │   │   ├── tools-data-structures-fingertree.cabal
@@ -153,6 +154,7 @@ This document is the canonical repository guidance for Vladimir and the AI codin
     └── Rust/
         ├── Cargo.toml
         ├── README.md
+        ├── test.ps1
         ├── Hamt/
         │   ├── Cargo.toml
         │   ├── README.md
@@ -235,7 +237,7 @@ cd C:\DataStructures\src\Cpp
 .\build.ps1 -Workspace Tungsten -RunTests
 
 cd C:\DataStructures\src\Rust
-cargo test --workspace
+.\test.ps1
 
 cd C:\DataStructures\src\C
 .\build.ps1 -Workspace FingerTree -RunTests
@@ -244,7 +246,7 @@ cd C:\DataStructures\src\Cpp
 .\build.ps1 -Workspace FingerTree -RunTests
 
 cd C:\DataStructures\src\Haskell
-cabal test all
+.\test.ps1
 
 cd C:\DataStructures\src\Kotlin
 .\build.ps1

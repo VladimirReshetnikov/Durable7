@@ -16,7 +16,7 @@ Rust:
 Build and test from `src/Rust`:
 
 ```powershell
-cargo test -p tools-data-structures-tungsten
+.\test.ps1 -Workspace Tungsten
 ```
 
 The crate tests cover list operations, Association ordering examples, custom hash/equality policy

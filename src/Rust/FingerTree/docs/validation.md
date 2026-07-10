@@ -8,14 +8,11 @@
 Run from `src/Rust`:
 
 ```powershell
-cargo test -p tools-data-structures-fingertree
+.\test.ps1 -Workspace FingerTree
 ```
 
-If Cargo is available under rustup but not on `PATH`, use:
-
-```powershell
-& $env:USERPROFILE\.cargo\bin\cargo.exe test -p tools-data-structures-fingertree
-```
+The wrapper locates Cargo on `PATH` or under the default rustup profile and applies inherited,
+non-interactive Windows error handling before Cargo starts the test executable.
 
 The crate uses `#![forbid(unsafe_code)]`. Unit tests are inline in the module files under `FingerTree/src/` and
 cover:

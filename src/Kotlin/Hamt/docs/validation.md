@@ -16,6 +16,8 @@ test executable. If no Java 21+ runtime is available on `PATH` on Windows, the s
 JDK 21 under `src/Kotlin/build/tools`; on non-Windows hosts, provide Java 21+ through `PATH` or `JAVA_HOME`.
 It also downloads and verifies the Kotlin 2.4.0 compiler archive before compilation. All generated files stay
 under the ignored `build` directory.
+On Windows the script enables inherited non-interactive OS error handling before tool startup, and it launches
+the test JVM in AWT headless mode so failures stay on the console and return a nonzero exit.
 
 The test executable covers map persistence, no-op root sharing, duplicate-key rejection, equal-hash
 collision buckets, trie-order iteration, last-wins replacement with original-key retention, and set

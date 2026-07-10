@@ -8,7 +8,7 @@
 Tests currently live inline in [`../src/lib.rs`](../src/lib.rs). Run them from `src/Rust`:
 
 ```powershell
-cargo test -p tools-data-structures-hamt
+.\test.ps1 -Workspace Hamt
 ```
 
 Coverage groups:

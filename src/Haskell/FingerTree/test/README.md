@@ -8,7 +8,7 @@
 Run from `src/Haskell`:
 
 ```powershell
-cabal test ft-test
+.\test.ps1 -Workspace FingerTree
 ```
 
 The dependency-free executable covers measured-tree split/view semantics, deque indexing and sorted
