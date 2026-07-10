@@ -163,6 +163,13 @@ Parse and format behavior should remain as close as practical to .NET built-in i
 
 - Widening conversions should be implicit where safe and unambiguous.
 - Narrowing conversions should be explicit; checked variants must throw on range violations.
+- Direct non-adjacent conversions are part of the matrix: 512-bit values interoperate with 128-bit primitives,
+  and 1024-bit values interoperate with 256- and 128-bit values. Unchecked narrowing returns the low bits;
+  checked narrowing validates the full source value.
+- Binary floating-point source conversions match .NET 10 `Int128`/`UInt128`: fractions truncate toward zero;
+  unchecked NaN becomes zero and unchecked out-of-range/infinite values clamp to the destination bound; checked
+  non-finite or out-of-range values throw. Decimal conversions truncate fractions and unsigned destinations reject
+  negative values. Wide-to-float/double uses normal IEEE rounding; wide-to-decimal throws outside decimal range.
 
 ### `BigInteger` conversions
 

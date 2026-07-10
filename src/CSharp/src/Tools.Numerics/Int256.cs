@@ -1174,6 +1174,43 @@ public readonly struct Int256 :
         return ReadFullLittleEndian(bytes);
     }
 
+    /// <summary>Converts the value to double-precision floating point.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator double(Int256 value) => (double)value.ToBigInteger();
+
+    /// <summary>Converts the value to single-precision floating point.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator float(Int256 value) => (float)value.ToBigInteger();
+
+    /// <summary>Converts the value to decimal floating point.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is outside the <see cref="decimal"/> range.</exception>
+    public static explicit operator decimal(Int256 value) => (decimal)value.ToBigInteger();
+
+    /// <summary>Converts a double-precision value by truncating and clamping to the signed range.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator Int256(double value) =>
+        (Int256)NumericConversionHelpers.FromFloatingPoint(value, s_bigMinValue, s_bigMaxValue, isChecked: false);
+
+    /// <summary>Converts a double-precision value and throws when it is outside the signed range.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is non-finite or outside the representable range.</exception>
+    public static explicit operator checked Int256(double value) =>
+        (Int256)NumericConversionHelpers.FromFloatingPoint(value, s_bigMinValue, s_bigMaxValue, isChecked: true);
+
+    /// <summary>Converts a single-precision value by truncating and clamping to the signed range.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator Int256(float value) => (Int256)(double)value;
+
+    /// <summary>Converts a single-precision value and throws when it is outside the signed range.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is non-finite or outside the representable range.</exception>
+    public static explicit operator checked Int256(float value) => checked((Int256)(double)value);
+
+    /// <summary>Converts a decimal value by truncating its fractional component.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator Int256(decimal value) => (Int256)(BigInteger)value;
+
     #endregion
 
     #region Conversions (built-in integral types)

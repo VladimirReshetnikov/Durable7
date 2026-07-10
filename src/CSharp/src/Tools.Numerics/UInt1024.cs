@@ -1159,6 +1159,45 @@ public readonly struct UInt1024 :
         return ReadFullLittleEndian(bytes);
     }
 
+    /// <summary>Converts the value to double-precision floating point.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator double(UInt1024 value) => (double)value.ToBigInteger();
+
+    /// <summary>Converts the value to single-precision floating point.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator float(UInt1024 value) => (float)value.ToBigInteger();
+
+    /// <summary>Converts the value to decimal floating point.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is outside the <see cref="decimal"/> range.</exception>
+    public static explicit operator decimal(UInt1024 value) => (decimal)value.ToBigInteger();
+
+    /// <summary>Converts a double-precision value by truncating and clamping to the unsigned range.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator UInt1024(double value) =>
+        (UInt1024)NumericConversionHelpers.FromFloatingPoint(value, BigInteger.Zero, s_bigMaxValue, isChecked: false);
+
+    /// <summary>Converts a double-precision value and throws when it is outside the unsigned range.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is non-finite, negative, or too large.</exception>
+    public static explicit operator checked UInt1024(double value) =>
+        (UInt1024)NumericConversionHelpers.FromFloatingPoint(value, BigInteger.Zero, s_bigMaxValue, isChecked: true);
+
+    /// <summary>Converts a single-precision value by truncating and clamping to the unsigned range.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator UInt1024(float value) => (UInt1024)(double)value;
+
+    /// <summary>Converts a single-precision value and throws when it is outside the unsigned range.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is non-finite, negative, or too large.</exception>
+    public static explicit operator checked UInt1024(float value) => checked((UInt1024)(double)value);
+
+    /// <summary>Converts a decimal value by truncating its fractional component.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is negative.</exception>
+    public static explicit operator UInt1024(decimal value) =>
+        value < 0 ? throw new OverflowException() : (UInt1024)(BigInteger)value;
+
     #endregion
 
     #region Conversions (built-in integral types)
@@ -1179,9 +1218,80 @@ public readonly struct UInt1024 :
     /// <param name="value">The operand value for the operation.</param>
     public static implicit operator UInt1024(ulong value) => new(0, value);
 
+    /// <summary>Converts a 128-bit unsigned value to <see cref="UInt1024"/>.</summary>
+    /// <param name="value">The operand value for the operation.</param>
+    public static implicit operator UInt1024(UInt128 value) => new(0, (UInt512)value);
+
+    /// <summary>Converts a 256-bit unsigned value to <see cref="UInt1024"/>.</summary>
+    /// <param name="value">The operand value for the operation.</param>
+    public static implicit operator UInt1024(UInt256 value) => new(0, (UInt512)value);
+
     /// <summary>Converts a 512-bit unsigned value to <see cref="UInt1024"/>.</summary>
     /// <param name="value">The operand value for the operation.</param>
     public static implicit operator UInt1024(UInt512 value) => new(0, value);
+
+    /// <summary>Converts an 8-bit signed value with unchecked fixed-width semantics.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator UInt1024(sbyte value) => (UInt1024)(BigInteger)value;
+
+    /// <summary>Converts an 8-bit signed value with range checking.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is negative.</exception>
+    public static explicit operator checked UInt1024(sbyte value) => checked((UInt1024)(BigInteger)value);
+
+    /// <summary>Converts a 16-bit signed value with unchecked fixed-width semantics.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator UInt1024(short value) => (UInt1024)(BigInteger)value;
+
+    /// <summary>Converts a 16-bit signed value with range checking.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is negative.</exception>
+    public static explicit operator checked UInt1024(short value) => checked((UInt1024)(BigInteger)value);
+
+    /// <summary>Converts a 32-bit signed value with unchecked fixed-width semantics.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator UInt1024(int value) => (UInt1024)(BigInteger)value;
+
+    /// <summary>Converts a 32-bit signed value with range checking.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is negative.</exception>
+    public static explicit operator checked UInt1024(int value) => checked((UInt1024)(BigInteger)value);
+
+    /// <summary>Converts a 64-bit signed value with unchecked fixed-width semantics.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator UInt1024(long value) => (UInt1024)(BigInteger)value;
+
+    /// <summary>Converts a 64-bit signed value with range checking.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is negative.</exception>
+    public static explicit operator checked UInt1024(long value) => checked((UInt1024)(BigInteger)value);
+
+    /// <summary>Converts a 128-bit signed value with unchecked fixed-width semantics.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator UInt1024(Int128 value) => (UInt1024)(BigInteger)value;
+
+    /// <summary>Converts a 128-bit signed value with range checking.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is negative.</exception>
+    public static explicit operator checked UInt1024(Int128 value) => checked((UInt1024)(BigInteger)value);
+
+    /// <summary>Converts a 256-bit signed value with unchecked fixed-width semantics.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator UInt1024(Int256 value) => (UInt1024)(BigInteger)value;
+
+    /// <summary>Converts a 256-bit signed value with range checking.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is negative.</exception>
+    public static explicit operator checked UInt1024(Int256 value) => checked((UInt1024)(BigInteger)value);
+
+    /// <summary>Converts a 512-bit signed value with unchecked fixed-width semantics.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator UInt1024(Int512 value) => (UInt1024)(BigInteger)value;
+
+    /// <summary>Converts a 512-bit signed value with range checking.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is negative.</exception>
+    public static explicit operator checked UInt1024(Int512 value) => checked((UInt1024)(BigInteger)value);
 
     /// <summary>Converts a signed 1024-bit value to <see cref="UInt1024"/> by reinterpreting its bit pattern.</summary>
     /// <param name="value">The operand value for the operation.</param>
@@ -1249,6 +1359,26 @@ public readonly struct UInt1024 :
             ? value._lower
             : throw new OverflowException();
 
+    /// <summary>Converts a <see cref="UInt1024"/> value to a 256-bit unsigned integer by returning the low bits.</summary>
+    /// <param name="value">The operand value for the operation.</param>
+    public static explicit operator UInt256(UInt1024 value) => (UInt256)value._lower;
+
+    /// <summary>Converts a <see cref="UInt1024"/> value to a 256-bit unsigned integer in a checked context.</summary>
+    /// <param name="value">The operand value for the operation.</param>
+    /// <exception cref="OverflowException">The value is outside the range of <see cref="UInt256"/>.</exception>
+    public static explicit operator checked UInt256(UInt1024 value) =>
+        value._upper == 0 ? checked((UInt256)value._lower) : throw new OverflowException();
+
+    /// <summary>Converts a <see cref="UInt1024"/> value to a 128-bit unsigned integer by returning the low bits.</summary>
+    /// <param name="value">The operand value for the operation.</param>
+    public static explicit operator UInt128(UInt1024 value) => (UInt128)value._lower;
+
+    /// <summary>Converts a <see cref="UInt1024"/> value to a 128-bit unsigned integer in a checked context.</summary>
+    /// <param name="value">The operand value for the operation.</param>
+    /// <exception cref="OverflowException">The value is outside the range of <see cref="UInt128"/>.</exception>
+    public static explicit operator checked UInt128(UInt1024 value) =>
+        value._upper == 0 ? checked((UInt128)value._lower) : throw new OverflowException();
+
     /// <summary>Converts a <see cref="UInt1024"/> value to an 8-bit signed integer.</summary>
     /// <param name="value">The operand value for the operation.</param>
     public static explicit operator sbyte(UInt1024 value) => (sbyte)value._lower;
@@ -1295,6 +1425,26 @@ public readonly struct UInt1024 :
     /// <param name="value">The operand value for the operation.</param>
     /// <exception cref="OverflowException">The value is outside the range of <see cref="Int512"/>.</exception>
     public static explicit operator checked Int512(UInt1024 value) => checked((Int512)(UInt512)value);
+
+    /// <summary>Converts a <see cref="UInt1024"/> value to a 256-bit signed integer by returning the low bits.</summary>
+    /// <param name="value">The operand value for the operation.</param>
+    public static explicit operator Int256(UInt1024 value) => (Int256)value._lower;
+
+    /// <summary>Converts a <see cref="UInt1024"/> value to a 256-bit signed integer in a checked context.</summary>
+    /// <param name="value">The operand value for the operation.</param>
+    /// <exception cref="OverflowException">The value is outside the range of <see cref="Int256"/>.</exception>
+    public static explicit operator checked Int256(UInt1024 value) =>
+        value._upper == 0 ? checked((Int256)value._lower) : throw new OverflowException();
+
+    /// <summary>Converts a <see cref="UInt1024"/> value to a 128-bit signed integer by returning the low bits.</summary>
+    /// <param name="value">The operand value for the operation.</param>
+    public static explicit operator Int128(UInt1024 value) => (Int128)value._lower;
+
+    /// <summary>Converts a <see cref="UInt1024"/> value to a 128-bit signed integer in a checked context.</summary>
+    /// <param name="value">The operand value for the operation.</param>
+    /// <exception cref="OverflowException">The value is outside the range of <see cref="Int128"/>.</exception>
+    public static explicit operator checked Int128(UInt1024 value) =>
+        value._upper == 0 ? checked((Int128)value._lower) : throw new OverflowException();
 
     #endregion
 

@@ -1111,6 +1111,45 @@ public readonly struct UInt256 :
         return ReadFullLittleEndian(bytes);
     }
 
+    /// <summary>Converts the value to double-precision floating point.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator double(UInt256 value) => (double)value.ToBigInteger();
+
+    /// <summary>Converts the value to single-precision floating point.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator float(UInt256 value) => (float)value.ToBigInteger();
+
+    /// <summary>Converts the value to decimal floating point.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is outside the <see cref="decimal"/> range.</exception>
+    public static explicit operator decimal(UInt256 value) => (decimal)value.ToBigInteger();
+
+    /// <summary>Converts a double-precision value by truncating and clamping to the unsigned range.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator UInt256(double value) =>
+        (UInt256)NumericConversionHelpers.FromFloatingPoint(value, BigInteger.Zero, s_bigMaxValue, isChecked: false);
+
+    /// <summary>Converts a double-precision value and throws when it is outside the unsigned range.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is non-finite, negative, or too large.</exception>
+    public static explicit operator checked UInt256(double value) =>
+        (UInt256)NumericConversionHelpers.FromFloatingPoint(value, BigInteger.Zero, s_bigMaxValue, isChecked: true);
+
+    /// <summary>Converts a single-precision value by truncating and clamping to the unsigned range.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator UInt256(float value) => (UInt256)(double)value;
+
+    /// <summary>Converts a single-precision value and throws when it is outside the unsigned range.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is non-finite, negative, or too large.</exception>
+    public static explicit operator checked UInt256(float value) => checked((UInt256)(double)value);
+
+    /// <summary>Converts a decimal value by truncating its fractional component.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is negative.</exception>
+    public static explicit operator UInt256(decimal value) =>
+        value < 0 ? throw new OverflowException() : (UInt256)(BigInteger)value;
+
     #endregion
 
     #region Conversions (built-in integral types)
@@ -1134,6 +1173,51 @@ public readonly struct UInt256 :
     /// <summary>Converts a 128-bit unsigned value to <see cref="UInt256"/>.</summary>
     /// <param name="value">The operand value for the operation.</param>
     public static implicit operator UInt256(UInt128 value) => new(0, value);
+
+    /// <summary>Converts an 8-bit signed value with unchecked fixed-width semantics.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator UInt256(sbyte value) => (UInt256)(BigInteger)value;
+
+    /// <summary>Converts an 8-bit signed value with range checking.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is negative.</exception>
+    public static explicit operator checked UInt256(sbyte value) => checked((UInt256)(BigInteger)value);
+
+    /// <summary>Converts a 16-bit signed value with unchecked fixed-width semantics.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator UInt256(short value) => (UInt256)(BigInteger)value;
+
+    /// <summary>Converts a 16-bit signed value with range checking.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is negative.</exception>
+    public static explicit operator checked UInt256(short value) => checked((UInt256)(BigInteger)value);
+
+    /// <summary>Converts a 32-bit signed value with unchecked fixed-width semantics.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator UInt256(int value) => (UInt256)(BigInteger)value;
+
+    /// <summary>Converts a 32-bit signed value with range checking.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is negative.</exception>
+    public static explicit operator checked UInt256(int value) => checked((UInt256)(BigInteger)value);
+
+    /// <summary>Converts a 64-bit signed value with unchecked fixed-width semantics.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator UInt256(long value) => (UInt256)(BigInteger)value;
+
+    /// <summary>Converts a 64-bit signed value with range checking.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is negative.</exception>
+    public static explicit operator checked UInt256(long value) => checked((UInt256)(BigInteger)value);
+
+    /// <summary>Converts a 128-bit signed value with unchecked fixed-width semantics.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator UInt256(Int128 value) => (UInt256)(BigInteger)value;
+
+    /// <summary>Converts a 128-bit signed value with range checking.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is negative.</exception>
+    public static explicit operator checked UInt256(Int128 value) => checked((UInt256)(BigInteger)value);
 
     /// <summary>Converts a signed 256-bit value to <see cref="UInt256"/> by reinterpreting its bit pattern.</summary>
     /// <param name="value">The operand value for the operation.</param>

@@ -1195,6 +1195,43 @@ public readonly struct Int512 :
         return ReadFullLittleEndian(bytes);
     }
 
+    /// <summary>Converts the value to double-precision floating point.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator double(Int512 value) => (double)value.ToBigInteger();
+
+    /// <summary>Converts the value to single-precision floating point.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator float(Int512 value) => (float)value.ToBigInteger();
+
+    /// <summary>Converts the value to decimal floating point.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is outside the <see cref="decimal"/> range.</exception>
+    public static explicit operator decimal(Int512 value) => (decimal)value.ToBigInteger();
+
+    /// <summary>Converts a double-precision value by truncating and clamping to the signed range.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator Int512(double value) =>
+        (Int512)NumericConversionHelpers.FromFloatingPoint(value, s_bigMinValue, s_bigMaxValue, isChecked: false);
+
+    /// <summary>Converts a double-precision value and throws when it is outside the signed range.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is non-finite or outside the representable range.</exception>
+    public static explicit operator checked Int512(double value) =>
+        (Int512)NumericConversionHelpers.FromFloatingPoint(value, s_bigMinValue, s_bigMaxValue, isChecked: true);
+
+    /// <summary>Converts a single-precision value by truncating and clamping to the signed range.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator Int512(float value) => (Int512)(double)value;
+
+    /// <summary>Converts a single-precision value and throws when it is outside the signed range.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <exception cref="OverflowException"><paramref name="value"/> is non-finite or outside the representable range.</exception>
+    public static explicit operator checked Int512(float value) => checked((Int512)(double)value);
+
+    /// <summary>Converts a decimal value by truncating its fractional component.</summary>
+    /// <param name="value">The value to convert.</param>
+    public static explicit operator Int512(decimal value) => (Int512)(BigInteger)value;
+
     #endregion
 
     #region Conversions (built-in integral types)
@@ -1230,6 +1267,15 @@ public readonly struct Int512 :
     /// <summary>Converts a 64-bit unsigned value to <see cref="Int512"/>.</summary>
     /// <param name="value">The operand value for the operation.</param>
     public static implicit operator Int512(ulong value) => new(0, value);
+
+    /// <summary>Converts a 128-bit signed value to <see cref="Int512"/>.</summary>
+    /// <param name="value">The operand value for the operation.</param>
+    public static implicit operator Int512(Int128 value) =>
+        new(value < 0 ? UInt256.MaxValue : UInt256.Zero, (UInt256)(Int256)value);
+
+    /// <summary>Converts a 128-bit unsigned value to <see cref="Int512"/>.</summary>
+    /// <param name="value">The operand value for the operation.</param>
+    public static implicit operator Int512(UInt128 value) => new(0, (UInt256)value);
 
     /// <summary>Converts a 256-bit signed value to <see cref="Int512"/>.</summary>
     /// <param name="value">The operand value for the operation.</param>
@@ -1302,6 +1348,16 @@ public readonly struct Int512 :
             ? value._lower
             : throw new OverflowException();
 
+    /// <summary>Converts an <see cref="Int512"/> value to a 128-bit unsigned integer by returning the low bits.</summary>
+    /// <param name="value">The operand value for the operation.</param>
+    public static explicit operator UInt128(Int512 value) => (UInt128)value._lower;
+
+    /// <summary>Converts an <see cref="Int512"/> value to a 128-bit unsigned integer in a checked context.</summary>
+    /// <param name="value">The operand value for the operation.</param>
+    /// <exception cref="OverflowException">The value is outside the range of <see cref="UInt128"/>.</exception>
+    public static explicit operator checked UInt128(Int512 value) =>
+        checked((UInt128)checked((UInt256)value));
+
     /// <summary>Converts a <see cref="Int512"/> value to an 8-bit signed integer.</summary>
     /// <param name="value">The operand value for the operation.</param>
     public static explicit operator sbyte(Int512 value) => (sbyte)value._lower;
@@ -1355,6 +1411,16 @@ public readonly struct Int512 :
             ? lower
             : throw new OverflowException();
     }
+
+    /// <summary>Converts an <see cref="Int512"/> value to a 128-bit signed integer by returning the low bits.</summary>
+    /// <param name="value">The operand value for the operation.</param>
+    public static explicit operator Int128(Int512 value) => (Int128)value._lower;
+
+    /// <summary>Converts an <see cref="Int512"/> value to a 128-bit signed integer in a checked context.</summary>
+    /// <param name="value">The operand value for the operation.</param>
+    /// <exception cref="OverflowException">The value is outside the range of <see cref="Int128"/>.</exception>
+    public static explicit operator checked Int128(Int512 value) =>
+        checked((Int128)checked((Int256)value));
 
     #endregion
 

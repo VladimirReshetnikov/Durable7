@@ -115,6 +115,12 @@ Wide-integer types expose width-aware helpers including:
 - Implicit and explicit conversion operators are provided between built-in primitives and corresponding wide types.
 - Explicit conversions are available to/from `BigInteger`.
 - Checked conversion paths enforce strict range compatibility.
+- `float`/`double` conversions follow .NET 10 `Int128`/`UInt128` policy: unchecked source conversions truncate and
+  clamp (with NaN mapped to zero), while checked source conversions reject non-finite and out-of-range values.
+  Decimal source conversions truncate and reject negative values for unsigned destinations; wide-to-decimal
+  conversion throws when the value exceeds the decimal range.
+- Non-adjacent fixed-width conversions cover 512↔128 and 1024↔256/128 directly, with unchecked low-bit
+  truncation and checked range enforcement.
 
 ## Binary conversion model (`BitConverterEx`)
 

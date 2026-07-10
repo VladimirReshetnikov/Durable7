@@ -35,6 +35,8 @@ This test project is organized by **bit width** and **signedness quadrant** so c
   - `SparseIntegerTests.cs` covers the sparse non-negative integer representation, including conversion, comparison, sparse powers, arithmetic, and invalid inputs.
   - `WideIntegerNumberStylesTests.cs` covers style combinations, precision/grouping formats, redundant hexadecimal
     zeroes, and generic parsing/min-max interface conformance across all six fixed-width types.
+  - `WideIntegerConversionParityTests.cs` covers binary/decimal floating-point conversions and the direct
+    512↔128 and 1024↔256/128 conversion matrix.
   - Mixed tests are explicitly labeled in class/method names and XML docs so asymmetry is intentional and discoverable.
 - `Infrastructure/`
   - Shared deterministic test helpers (random generators, normalization helpers, and reference-model utilities).

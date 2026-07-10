@@ -54,7 +54,7 @@ The suite covers:
 - checked and unchecked overflow behavior;
 - decimal and hexadecimal parsing/formatting across UTF-16 and UTF-8 paths, including `NumberStyles.Number`,
   standard-format precision, and generic parsing interfaces;
-- primitive and `BigInteger` conversions;
+- primitive, floating-point, cross-width, and `BigInteger` conversions, including checked/non-finite boundaries;
 - fixed-width binary conversion through `BitConverterEx`;
 - sparse non-negative integer conversion, arithmetic, and power/logarithm behavior;
 - dynamic binding, comparison, hashing, public API coverage, and declaration parity guardrails.

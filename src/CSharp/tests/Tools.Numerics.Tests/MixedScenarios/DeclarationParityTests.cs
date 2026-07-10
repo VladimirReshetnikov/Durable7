@@ -234,7 +234,7 @@ public sealed partial class DeclarationParityTests
 
     private static IReadOnlyList<string> NormalizeUnsigned512Declarations(IReadOnlyList<DeclarationShape> declarations) =>
         NormalizeDeclarations(declarations,
-            static _ => true,
+            static declaration => IsAdjacentWidthDeclaration(declaration, "UInt128", "Int128"),
             ("UInt512", "TYPE"),
             ("UInt256", "HALF_TYPE"),
             ("Int512", "SIGNED_TYPE"),
@@ -262,7 +262,7 @@ public sealed partial class DeclarationParityTests
 
     private static IReadOnlyList<string> NormalizeSigned512Declarations(IReadOnlyList<DeclarationShape> declarations) =>
         NormalizeDeclarations(declarations,
-            static _ => true,
+            static declaration => IsAdjacentWidthDeclaration(declaration, "UInt128", "Int128"),
             ("Int512", "TYPE"),
             ("Int256", "TYPE"),
             ("UInt512", "UNSIGNED_TYPE"),
@@ -278,7 +278,7 @@ public sealed partial class DeclarationParityTests
 
     private static IReadOnlyList<string> NormalizeUnsigned1024Declarations(IReadOnlyList<DeclarationShape> declarations) =>
         NormalizeDeclarations(declarations,
-            static _ => true,
+            static declaration => IsAdjacentWidthDeclaration(declaration, "UInt128", "Int128", "UInt256", "Int256"),
             ("UInt1024", "TYPE"),
             ("UInt512", "HALF_TYPE"),
             ("Int1024", "SIGNED_TYPE"),
@@ -290,7 +290,7 @@ public sealed partial class DeclarationParityTests
 
     private static IReadOnlyList<string> NormalizeSigned1024Declarations(IReadOnlyList<DeclarationShape> declarations) =>
         NormalizeDeclarations(declarations,
-            static _ => true,
+            static declaration => IsAdjacentWidthDeclaration(declaration, "UInt128", "Int128", "UInt256", "Int256"),
             ("Int1024", "TYPE"),
             ("Int512", "TYPE"),
             ("UInt1024", "UNSIGNED_TYPE"),
@@ -448,6 +448,13 @@ public sealed partial class DeclarationParityTests
 
         return !hasUnsignedOnly;
     }
+
+    // The carbon-copy guard models each type in terms of its immediately smaller and larger widths.
+    // Direct conversions that deliberately skip one or more widths are validated separately by
+    // WideIntegerConversionParityTests and must not disturb this adjacent-width comparison.
+    private static bool IsAdjacentWidthDeclaration(string declaration, params string[] nonAdjacentTypes) =>
+        !declaration.Contains("operator", StringComparison.Ordinal)
+        || !nonAdjacentTypes.Any(declaration.Contains);
 
     private static string NormalizeTokens(string value, params (string Source, string Target)[] replacements)
     {
