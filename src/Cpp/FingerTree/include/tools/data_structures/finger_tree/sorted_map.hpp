@@ -50,6 +50,7 @@ public:
     using comparison_type = Less;
     using tree_type = finger_tree<entry_type, sorted_map_entry_measure<key_type, mapped_type>>;
     using size_type = std::size_t;
+    using const_iterator = typename tree_type::const_iterator;
 
     sorted_map() = default;
 
@@ -272,6 +273,17 @@ public:
 
         return values;
     }
+
+    template <std::output_iterator<const entry_type&> OutputIterator>
+    void copy_to(OutputIterator output) const
+    {
+        tree_.copy_to(std::move(output));
+    }
+
+    [[nodiscard]] const_iterator begin() const { return tree_.begin(); }
+    [[nodiscard]] const_iterator end() const noexcept { return tree_.end(); }
+    [[nodiscard]] const_iterator cbegin() const { return begin(); }
+    [[nodiscard]] const_iterator cend() const noexcept { return end(); }
 
 private:
     using split_type = finger_tree_split<entry_type, sorted_map_entry_measure<key_type, mapped_type>>;

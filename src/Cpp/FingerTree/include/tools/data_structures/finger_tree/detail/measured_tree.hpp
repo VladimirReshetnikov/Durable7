@@ -42,6 +42,9 @@ template <class Element, class MeasurePolicy>
 struct measured_locate_result;
 
 template <class Element, class MeasurePolicy>
+struct measured_enumeration_child;
+
+template <class Element, class MeasurePolicy>
 using measured_buffer = std::vector<measured_element<Element, MeasurePolicy>>;
 
 template <class Element, class MeasurePolicy>
@@ -316,6 +319,8 @@ enum class measured_tree_kind {
 
 template <class Element, class MeasurePolicy>
 struct measured_split_result final {
+    // The hit is retained separately so callers can choose whether it belongs
+    // to the left, right, or neither persistent result without re-searching.
     measured_tree<Element, MeasurePolicy> left;
     measured_element<Element, MeasurePolicy> hit;
     measured_tree<Element, MeasurePolicy> right;
@@ -335,6 +340,7 @@ struct measured_locate_result final {
 
 template <class Element, class MeasurePolicy>
 struct measured_locate_reference_result final {
+    // `hit` points into immutable storage owned by the searched tree.
     typename MeasurePolicy::measure_type measure_before;
     const measured_element<Element, MeasurePolicy>* hit;
 };
@@ -412,6 +418,10 @@ template <class Element, class MeasurePolicy, class Predicate>
 }
 
 template <class Element, class MeasurePolicy>
+// Type-erased recursive core. Values are immutable shared handles; deep
+// middles and aggregate measures publish only fully constructed immutable
+// objects. Structural endpoint/update costs are amortized where forcing a
+// pending middle is possible, never silently promoted to worst-case claims.
 class measured_tree final {
 public:
     using element_type = Element;
@@ -471,6 +481,21 @@ public:
     template <class Function>
     void for_each(Function& function) const;
 
+    // Exposes one logical traversal level without flattening it. The public
+    // iterator owns returned tree/node handles, so pointers to leaf values
+    // remain valid independently of the originating facade object's lifetime.
+    [[nodiscard]] std::size_t enumeration_child_count() const;
+
+    [[nodiscard]] measured_enumeration_child<Element, MeasurePolicy> enumeration_child(
+        std::size_t index) const;
+
+    [[nodiscard]] std::size_t enumeration_depth() const;
+
+    [[nodiscard]] const void* identity() const noexcept
+    {
+        return rep_.get();
+    }
+
     template <class Predicate>
     [[nodiscard]] measured_split_result<Element, MeasurePolicy> split_tree(
         Predicate& predicate,
@@ -506,6 +531,20 @@ private:
     }
 
     std::shared_ptr<const measured_tree_rep<Element, MeasurePolicy>> rep_;
+};
+
+template <class Element, class MeasurePolicy>
+struct measured_enumeration_child final {
+    enum class child_kind {
+        leaf,
+        tree,
+        node,
+    };
+
+    child_kind kind;
+    const Element* leaf = nullptr;
+    measured_tree<Element, MeasurePolicy> tree;
+    typename measured_element<Element, MeasurePolicy>::node_pointer node;
 };
 
 template <class Element, class MeasurePolicy>
@@ -1061,6 +1100,93 @@ void measured_tree<Element, MeasurePolicy>::for_each(Function& function) const
             child.for_each(function);
         }
         return;
+    }
+
+    throw std::logic_error("unknown measured tree kind");
+}
+
+template <class Element, class MeasurePolicy>
+std::size_t measured_tree<Element, MeasurePolicy>::enumeration_child_count() const
+{
+    switch (kind()) {
+    case measured_tree_kind::empty:
+        return 0;
+    case measured_tree_kind::single:
+        return 1;
+    case measured_tree_kind::deep:
+        return checked_add(
+            checked_add(deep_prefix().size(), std::size_t{1}),
+            deep_suffix().size());
+    }
+
+    throw std::logic_error("unknown measured tree kind");
+}
+
+template <class Element, class MeasurePolicy>
+measured_enumeration_child<Element, MeasurePolicy>
+measured_tree<Element, MeasurePolicy>::enumeration_child(const std::size_t index) const
+{
+    using result_type = measured_enumeration_child<Element, MeasurePolicy>;
+    using child_kind = typename result_type::child_kind;
+    auto classify = [](const child_type& element) -> result_type {
+        if (element.is_leaf()) {
+            return result_type{
+                child_kind::leaf,
+                &element.value(),
+                measured_tree{},
+                {}};
+        }
+
+        return result_type{
+            child_kind::node,
+            nullptr,
+            measured_tree{},
+            element.node_ptr()};
+    };
+
+    switch (kind()) {
+    case measured_tree_kind::empty:
+        throw std::logic_error("enumeration child access on an empty measured tree");
+    case measured_tree_kind::single:
+        if (index != 0) {
+            throw std::out_of_range("single measured tree has only one enumeration child");
+        }
+        return classify(single_element());
+    case measured_tree_kind::deep: {
+        const auto& prefix = deep_prefix();
+        if (index < prefix.size()) {
+            return classify(prefix[index]);
+        }
+
+        if (index == prefix.size()) {
+            return result_type{
+                child_kind::tree,
+                nullptr,
+                force_middle(),
+                {}};
+        }
+
+        const auto suffix_index = index - prefix.size() - 1;
+        const auto& suffix = deep_suffix();
+        if (suffix_index >= suffix.size()) {
+            throw std::out_of_range("measured tree enumeration child index is out of range");
+        }
+        return classify(suffix[suffix_index]);
+    }
+    }
+
+    throw std::logic_error("unknown measured tree kind");
+}
+
+template <class Element, class MeasurePolicy>
+std::size_t measured_tree<Element, MeasurePolicy>::enumeration_depth() const
+{
+    switch (kind()) {
+    case measured_tree_kind::empty:
+    case measured_tree_kind::single:
+        return 0;
+    case measured_tree_kind::deep:
+        return checked_add(std::size_t{1}, force_middle().enumeration_depth());
     }
 
     throw std::logic_error("unknown measured tree kind");

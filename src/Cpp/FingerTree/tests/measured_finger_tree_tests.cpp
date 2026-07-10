@@ -5,9 +5,13 @@
 #include "test_support/test_runner.hpp"
 
 #include <algorithm>
+#include <concepts>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
+#include <iterator>
 #include <limits>
+#include <ranges>
 #include <source_location>
 #include <sstream>
 #include <stdexcept>
@@ -17,6 +21,27 @@ namespace ft = tools::data_structures::finger_tree;
 using namespace tools::data_structures::finger_tree::tests;
 
 namespace {
+
+using size_tree = ft::finger_tree<int, ft::size_measure<int>>;
+
+static_assert(std::forward_iterator<size_tree::const_iterator>);
+static_assert(std::ranges::forward_range<const size_tree>);
+
+struct non_equality_value final {
+    int value;
+};
+
+template <class T>
+concept has_equality = requires(const T& left, const T& right) {
+    { left == right } -> std::convertible_to<bool>;
+};
+
+using non_equality_tree = ft::finger_tree<non_equality_value, ft::size_measure<non_equality_value>>;
+static_assert(std::ranges::forward_range<const non_equality_tree>);
+static_assert(!has_equality<ft::finger_tree_split<non_equality_value, ft::size_measure<non_equality_value>>>);
+static_assert(!has_equality<ft::finger_tree_item_split<non_equality_value, ft::size_measure<non_equality_value>>>);
+static_assert(!has_equality<ft::finger_tree_extract_result<non_equality_value, ft::size_measure<non_equality_value>>>);
+static_assert(!has_equality<ft::finger_tree_locate_reference_result<int, ft::size_measure<int>>>);
 
 struct int_max_measure {
     using measure_type = int;
@@ -348,6 +373,101 @@ void add_measured_finger_tree_tests_impl(suite& tests)
 
         FT_REQUIRE(sink > 0);
         FT_REQUIRE_EQUAL(allocations.allocations(), static_cast<std::size_t>(0));
+    });
+
+    tests.add("measured finger tree forward iterator is multipass lifetime safe and allocation free after construction", [] {
+        const auto values = iota_vector(4'096);
+        const auto tree = size_tree::from_range(values);
+
+        auto first = tree.begin();
+        auto same = first;
+        FT_REQUIRE(first == same);
+        FT_REQUIRE_EQUAL(*first, values.front());
+        ++first;
+        FT_REQUIRE(first != same);
+        FT_REQUIRE_EQUAL(*first, values[1]);
+        ++same;
+        FT_REQUIRE(first == same);
+
+        const auto sharing_snapshot = tree;
+        FT_REQUIRE(tree.begin() == sharing_snapshot.begin());
+        const auto independently_built = size_tree::from_range(values);
+        FT_REQUIRE(tree.begin() != independently_built.begin());
+
+        auto surviving = [] {
+            const auto local = size_tree::from_range(iota_vector(4'096));
+            return local.begin();
+        }();
+        auto survived_values = std::vector<int>{};
+        survived_values.reserve(values.size());
+        while (surviving != size_tree::const_iterator{}) {
+            survived_values.push_back(*surviving);
+            ++surviving;
+        }
+        require_vector_equal(survived_values, values);
+
+#ifndef FINGERTREE_DISABLE_ALLOCATION_TRACKING
+        // Force lazy middle publication before measuring iterator bookkeeping.
+        tree.for_each([](const int&) {});
+        auto iterator = tree.begin();
+        const auto end = tree.end();
+        auto checksum = std::uint64_t{0};
+        auto iteration_allocations = std::size_t{0};
+        {
+            allocation_counting_scope allocations;
+            while (iterator != end) {
+                checksum += static_cast<std::uint64_t>(*iterator);
+                ++iterator;
+            }
+            iteration_allocations = allocations.allocations();
+        }
+        FT_REQUIRE(checksum > 0);
+        FT_REQUIRE_EQUAL(iteration_allocations, static_cast<std::size_t>(0));
+
+        auto copied = std::vector<int>(values.size());
+        auto copy_allocations = std::size_t{0};
+        {
+            allocation_counting_scope allocations;
+            tree.copy_to(copied.begin());
+            copy_allocations = allocations.allocations();
+        }
+        require_vector_equal(copied, values);
+        FT_REQUIRE_EQUAL(copy_allocations, static_cast<std::size_t>(0));
+#endif
+    });
+
+    tests.add("measured finger tree result carriers compare by public value", [] {
+        const auto values = iota_vector(128);
+        const auto first_tree = size_tree::from_range(values);
+        const auto second_tree = size_tree::from_range(values);
+
+        const auto first_split = first_tree.split([](const std::size_t count) { return count > 48; });
+        const auto second_split = second_tree.split([](const std::size_t count) { return count > 48; });
+        FT_REQUIRE(first_split == second_split);
+
+        const auto different_split = second_tree.split([](const std::size_t count) { return count > 49; });
+        FT_REQUIRE(first_split != different_split);
+
+        const auto first_view = first_tree.try_view_left();
+        const auto second_view = second_tree.try_view_left();
+        FT_REQUIRE(first_view.has_value());
+        FT_REQUIRE(second_view.has_value());
+        FT_REQUIRE(*first_view == *second_view);
+
+        const auto first_extract = ft::finger_tree_extract_result<int, ft::size_measure<int>>{7, first_tree};
+        const auto equal_extract = ft::finger_tree_extract_result<int, ft::size_measure<int>>{7, second_tree};
+        const auto different_extract = ft::finger_tree_extract_result<int, ft::size_measure<int>>{8, second_tree};
+        FT_REQUIRE(first_extract == equal_extract);
+        FT_REQUIRE(first_extract != different_extract);
+
+        const auto generic = non_equality_tree::from_range(
+            std::vector<non_equality_value>{{1}, {2}, {3}});
+        FT_REQUIRE_EQUAL(generic.measure(), static_cast<std::size_t>(3));
+        auto count = std::size_t{0};
+        for ([[maybe_unused]] const auto& value : generic) {
+            ++count;
+        }
+        FT_REQUIRE_EQUAL(count, static_cast<std::size_t>(3));
     });
 
     tests.add("measured finger tree randomized branching history matches model", [] {

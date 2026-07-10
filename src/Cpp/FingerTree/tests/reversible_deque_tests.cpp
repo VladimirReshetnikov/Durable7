@@ -5,7 +5,10 @@
 #include "test_support/test_runner.hpp"
 
 #include <algorithm>
+#include <concepts>
 #include <cstddef>
+#include <iterator>
+#include <ranges>
 #include <source_location>
 #include <sstream>
 #include <vector>
@@ -14,6 +17,24 @@ namespace ft = tools::data_structures::finger_tree;
 using namespace tools::data_structures::finger_tree::tests;
 
 namespace {
+
+static_assert(std::input_iterator<ft::reversible_deque<int>::const_iterator>);
+static_assert(!std::forward_iterator<ft::reversible_deque<int>::const_iterator>);
+static_assert(std::ranges::input_range<const ft::reversible_deque<int>>);
+static_assert(!std::ranges::forward_range<const ft::reversible_deque<int>>);
+
+struct non_equality_value final {
+    int value;
+};
+
+template <class T>
+concept has_equality = requires(const T& left, const T& right) {
+    { left == right } -> std::convertible_to<bool>;
+};
+
+static_assert(std::ranges::input_range<const ft::reversible_deque<non_equality_value>>);
+static_assert(!has_equality<ft::reversible_deque_split<non_equality_value>>);
+static_assert(!has_equality<ft::reversible_deque_pop<non_equality_value>>);
 
 template <class T>
 void require_sequence_equal(
@@ -168,6 +189,41 @@ void add_reversible_deque_tests_impl(suite& tests)
         }
 
         require_sequence_equal(deque, expected);
+    });
+
+    tests.add("reversible deque input iterator streams logical orientation and retains source lifetime", [] {
+        const auto values = iota_vector(1'500);
+        const auto deque = ft::reversible_deque<int>::from_range(values).reverse();
+        const auto expected = reversed(values);
+
+        auto iterated = std::vector<int>{};
+        iterated.reserve(expected.size());
+        for (const auto& value : deque) {
+            iterated.push_back(value);
+        }
+        FT_REQUIRE(iterated == expected);
+
+        auto surviving = [] {
+            return ft::reversible_deque<int>::from_range(iota_vector(1'500)).reverse().begin();
+        }();
+        iterated.clear();
+        while (surviving != ft::reversible_deque<int>::const_iterator{}) {
+            iterated.push_back(*surviving);
+            ++surviving;
+        }
+        FT_REQUIRE(iterated == expected);
+
+        auto copied = std::vector<int>{};
+        copied.reserve(expected.size());
+        deque.copy_to(std::back_inserter(copied));
+        FT_REQUIRE(copied == expected);
+
+        const auto independent = ft::reversible_deque<int>::from_range(values).reverse();
+        FT_REQUIRE(deque.begin() != independent.begin());
+        FT_REQUIRE(deque.split_at(733) == independent.split_at(733));
+        FT_REQUIRE(deque.split_at(733) != independent.split_at(734));
+        FT_REQUIRE(deque.try_pop_front() == independent.try_pop_front());
+        FT_REQUIRE(deque.try_pop_back() == independent.try_pop_back());
     });
 
     tests.add("reversible deque reverse allocation count is independent of size", [] {

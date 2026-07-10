@@ -7,6 +7,11 @@
 
 namespace tools::data_structures::finger_tree {
 
+/// Static policy for a monoid annotation. The concept checks the callable
+/// surface; callers remain responsible for the monoid laws (`empty` is a
+/// two-sided identity and `combine` is associative), deterministic results,
+/// and any thread-safety required by concurrent readers. Policy exceptions are
+/// propagated and are never published as cached measures.
 template <class Policy>
 concept monoid_policy = requires(
     const typename Policy::measure_type& left,
@@ -16,6 +21,9 @@ concept monoid_policy = requires(
     { Policy::combine(left, right) } -> std::same_as<typename Policy::measure_type>;
 };
 
+/// A monoid policy that additionally maps each stored element to its leaf
+/// annotation. `measure(element)` must remain stable for the immutable value;
+/// mutating aliased state observed by the policy violates tree invariants.
 template <class Policy, class Element>
 concept measure_policy =
     monoid_policy<Policy>

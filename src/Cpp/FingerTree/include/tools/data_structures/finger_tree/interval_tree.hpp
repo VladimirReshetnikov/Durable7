@@ -26,6 +26,7 @@ public:
     using annotation_type = typename measure_type::measure_type;
     using tree_type = finger_tree<interval_type, measure_type>;
     using size_type = std::size_t;
+    using const_iterator = typename tree_type::const_iterator;
 
     interval_tree() = default;
 
@@ -127,7 +128,21 @@ public:
 
     [[nodiscard]] size_type count_overlaps(const interval_type& query) const
     {
-        return find_overlaps(query).size();
+        auto count = size_type{0};
+        auto candidate_split = tree_.split(last_low_above{query.high});
+        auto candidates = candidate_split.left;
+
+        for (;;) {
+            auto split = candidates.try_split_find(max_high_at_least{query.low});
+            if (!split.has_value()) {
+                break;
+            }
+
+            count = checked_add(count, size_type{1});
+            candidates = std::move(split->right);
+        }
+
+        return count;
     }
 
     [[nodiscard]] bool contains(const interval_type& item) const
@@ -184,10 +199,10 @@ public:
             return *this;
         }
 
-        auto merged = std::vector<interval_type>{};
+        auto rebuilt = tree_type{};
         auto current = std::optional<interval_type>{};
 
-        tree_.for_each([&merged, &current](const interval_type& item) {
+        tree_.for_each([&rebuilt, &current](const interval_type& item) {
             if (!current.has_value()) {
                 current = item;
                 return;
@@ -198,16 +213,12 @@ public:
                     current->high = item.high;
                 }
             } else {
-                merged.push_back(*current);
+                rebuilt = rebuilt.append(std::move(*current));
                 current = item;
             }
         });
 
-        merged.push_back(*current);
-        auto rebuilt = tree_type{};
-        for (const auto& item : merged) {
-            rebuilt = rebuilt.append(item);
-        }
+        rebuilt = rebuilt.append(std::move(*current));
 
         return interval_tree{std::move(rebuilt)};
     }
@@ -216,6 +227,17 @@ public:
     {
         return tree_.to_vector();
     }
+
+    template <std::output_iterator<const interval_type&> OutputIterator>
+    void copy_to(OutputIterator output) const
+    {
+        tree_.copy_to(std::move(output));
+    }
+
+    [[nodiscard]] const_iterator begin() const { return tree_.begin(); }
+    [[nodiscard]] const_iterator end() const noexcept { return tree_.end(); }
+    [[nodiscard]] const_iterator cbegin() const { return begin(); }
+    [[nodiscard]] const_iterator cend() const noexcept { return end(); }
 
 private:
     struct last_low_at_least final {

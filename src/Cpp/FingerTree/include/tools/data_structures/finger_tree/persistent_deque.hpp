@@ -467,6 +467,9 @@ public:
         return const_iterator{};
     }
 
+    [[nodiscard]] const_iterator cbegin() const { return begin(); }
+    [[nodiscard]] const_iterator cend() const noexcept { return end(); }
+
     void validate_invariants() const
     {
         const auto computed = root_.validate_and_count();
@@ -482,13 +485,36 @@ public:
 
     class const_iterator final {
     public:
-        using iterator_category = std::input_iterator_tag;
+        using iterator_concept = std::forward_iterator_tag;
+        using iterator_category = std::forward_iterator_tag;
         using value_type = T;
         using difference_type = std::ptrdiff_t;
         using pointer = const T*;
         using reference = const T&;
 
         const_iterator() = default;
+
+        const_iterator(const const_iterator& other)
+            : root_owner_(other.root_owner_)
+            , current_(other.current_)
+            , owner_(other.owner_)
+            , position_(other.position_)
+        {
+            stack_.reserve(other.stack_.capacity());
+            stack_.insert(stack_.end(), other.stack_.begin(), other.stack_.end());
+        }
+
+        const_iterator& operator=(const const_iterator& other)
+        {
+            if (this != &other) {
+                auto copy = other;
+                *this = std::move(copy);
+            }
+            return *this;
+        }
+
+        const_iterator(const_iterator&&) noexcept = default;
+        const_iterator& operator=(const_iterator&&) noexcept = default;
 
         [[nodiscard]] reference operator*() const
         {
@@ -522,7 +548,7 @@ public:
                 return left.current_ == right.current_;
             }
 
-            return left.position_ == right.position_;
+            return left.owner_ == right.owner_ && left.position_ == right.position_;
         }
 
         friend bool operator!=(const const_iterator& left, const const_iterator& right) noexcept
@@ -585,8 +611,15 @@ public:
         };
 
         explicit const_iterator(detail::deque_tree<T> root)
+            : root_owner_(root)
+            , owner_(root.identity())
         {
             if (root.size() != 0) {
+                const auto depth = root.depth();
+                // A traversal owns at most one tree frame and one node frame
+                // per level, plus root/terminal frames. Reserve the complete
+                // bound up front so prefix increment never grows the stack.
+                stack_.reserve(checked_add(checked_add(depth, depth), size_type{2}));
                 stack_.push_back(frame{std::move(root)});
                 advance();
             }
@@ -623,8 +656,10 @@ public:
             }
         }
 
+        detail::deque_tree<T> root_owner_;
         std::vector<frame> stack_;
         const T* current_ = nullptr;
+        const void* owner_ = nullptr;
         size_type position_ = 0;
     };
 
@@ -685,5 +720,38 @@ private:
 
     detail::deque_tree<T> root_;
 };
+
+template <class T>
+    requires equality_comparable_value<T>
+[[nodiscard]] bool operator==(const deque_split<T>& left, const deque_split<T>& right)
+{
+    return detail::sequence_equal(left.left, right.left)
+        && detail::sequence_equal(left.right, right.right);
+}
+
+template <class T>
+    requires equality_comparable_value<T>
+[[nodiscard]] bool operator==(const deque_item_split<T>& left, const deque_item_split<T>& right)
+{
+    return detail::sequence_equal(left.left, right.left)
+        && left.item == right.item
+        && detail::sequence_equal(left.right, right.right);
+}
+
+template <class T>
+    requires equality_comparable_value<T>
+[[nodiscard]] bool operator==(const deque_range_split<T>& left, const deque_range_split<T>& right)
+{
+    return detail::sequence_equal(left.before, right.before)
+        && detail::sequence_equal(left.range, right.range)
+        && detail::sequence_equal(left.after, right.after);
+}
+
+template <class T>
+    requires equality_comparable_value<T>
+[[nodiscard]] bool operator==(const deque_pop<T>& left, const deque_pop<T>& right)
+{
+    return left.value == right.value && detail::sequence_equal(left.rest, right.rest);
+}
 
 } // namespace tools::data_structures::finger_tree

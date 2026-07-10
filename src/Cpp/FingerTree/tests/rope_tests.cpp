@@ -1,12 +1,16 @@
 #include <tools/data_structures/finger_tree/finger_tree.hpp>
 
+#include "test_support/allocation_counter.hpp"
 #include "test_support/command_model.hpp"
 #include "test_support/test_runner.hpp"
 
 #include <algorithm>
+#include <concepts>
 #include <cstddef>
+#include <cstdint>
 #include <iterator>
 #include <memory>
+#include <ranges>
 #include <source_location>
 #include <span>
 #include <sstream>
@@ -17,6 +21,21 @@ namespace ft = tools::data_structures::finger_tree;
 using namespace tools::data_structures::finger_tree::tests;
 
 namespace {
+
+static_assert(std::forward_iterator<ft::rope<int>::const_iterator>);
+static_assert(std::ranges::forward_range<const ft::rope<int>>);
+
+struct non_equality_value final {
+    int value;
+};
+
+template <class T>
+concept has_equality = requires(const T& left, const T& right) {
+    { left == right } -> std::convertible_to<bool>;
+};
+
+static_assert(std::ranges::forward_range<const ft::rope<non_equality_value>>);
+static_assert(!has_equality<ft::rope_split<non_equality_value>>);
 
 template <class T>
 void require_sequence_equal(
@@ -154,6 +173,74 @@ void add_rope_tests_impl(suite& tests)
         auto copied = std::vector<int>(2000);
         rope.copy_to(1500, std::span<int>{copied.data(), copied.size()});
         FT_REQUIRE(copied == vector_slice(model, 1500, 2000));
+    });
+
+    tests.add("rope forward iterator streams chunks with multipass and retained lifetime semantics", [] {
+        const auto values = iota_vector(6'000);
+        const auto rope = ft::rope<int>::from_range(values);
+
+        auto first = rope.begin();
+        auto same = first;
+        FT_REQUIRE(first == same);
+        FT_REQUIRE_EQUAL(*first, 0);
+        ++first;
+        FT_REQUIRE(first != same);
+        ++same;
+        FT_REQUIRE(first == same);
+
+        const auto independent = ft::rope<int>::from_range(values);
+        FT_REQUIRE(rope.begin() != independent.begin());
+
+        auto surviving = [] {
+            return ft::rope<int>::from_range(iota_vector(6'000)).begin();
+        }();
+        auto iterated = std::vector<int>{};
+        iterated.reserve(values.size());
+        while (surviving != ft::rope<int>::const_iterator{}) {
+            iterated.push_back(*surviving);
+            ++surviving;
+        }
+        FT_REQUIRE(iterated == values);
+
+#ifndef FINGERTREE_DISABLE_ALLOCATION_TRACKING
+        rope.for_each([](const int&) {});
+        auto iterator = rope.begin();
+        const auto end = rope.end();
+        auto checksum = std::uint64_t{0};
+        auto iteration_allocations = std::size_t{0};
+        {
+            allocation_counting_scope allocations;
+            while (iterator != end) {
+                checksum += static_cast<std::uint64_t>(*iterator);
+                ++iterator;
+            }
+            iteration_allocations = allocations.allocations();
+        }
+        FT_REQUIRE(checksum > 0);
+        FT_REQUIRE_EQUAL(iteration_allocations, static_cast<std::size_t>(0));
+
+        auto copied = std::vector<int>(4'000);
+        auto copy_allocations = std::size_t{0};
+        {
+            allocation_counting_scope allocations;
+            rope.copy_to(997, std::span<int>{copied.data(), copied.size()});
+            copy_allocations = allocations.allocations();
+        }
+        FT_REQUIRE(copied == vector_slice(values, 997, copied.size()));
+        FT_REQUIRE(copy_allocations < copied.size() / 16);
+#endif
+    });
+
+    tests.add("rope same-type insertion avoids forwarding recursion and split results have value equality", [] {
+        const auto source = ft::rope<int>{1, 2, 5, 6};
+        const auto middle = ft::rope<int>{3, 4};
+        require_sequence_equal(source.insert_range(2, middle), {1, 2, 3, 4, 5, 6});
+        require_sequence_equal(source.insert_range(2, ft::rope<int>{3, 4}), {1, 2, 3, 4, 5, 6});
+
+        const auto first = ft::rope<int>::from_range(iota_vector(4'096));
+        const auto second = ft::rope<int>::from_range(iota_vector(4'096));
+        FT_REQUIRE(first.split_at(1'337) == second.split_at(1'337));
+        FT_REQUIRE(first.split_at(1'337) != second.split_at(1'338));
     });
 
     tests.add("rope concat handles empty and boundary coalescing cases", [] {

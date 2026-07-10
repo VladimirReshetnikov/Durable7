@@ -13,6 +13,7 @@
 #include <ranges>
 #include <span>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -35,6 +36,8 @@ public:
     using reference = const value_type&;
     using const_reference = const value_type&;
     using chunk_storage = std::shared_ptr<const std::vector<value_type>>;
+
+    class const_iterator;
 
     static constexpr size_type min_chunk_size = 256;
     static constexpr size_type max_chunk_size = 2048;
@@ -218,7 +221,8 @@ public:
     }
 
     template <std::ranges::input_range Range>
-        requires std::convertible_to<std::ranges::range_reference_t<Range>, value_type>
+        requires(!std::same_as<std::remove_cvref_t<Range>, rope>)
+            && std::convertible_to<std::ranges::range_reference_t<Range>, value_type>
     [[nodiscard]] rope insert_range(const size_type index, Range&& values) const
     {
         throw_if_insert_index_out_of_range(index, size());
@@ -365,6 +369,95 @@ public:
             offset += chunk.length();
         });
     }
+
+    [[nodiscard]] const_iterator begin() const
+    {
+        return const_iterator{tree_};
+    }
+
+    [[nodiscard]] const_iterator end() const noexcept
+    {
+        return const_iterator{};
+    }
+
+    [[nodiscard]] const_iterator cbegin() const { return begin(); }
+    [[nodiscard]] const_iterator cend() const noexcept { return end(); }
+
+    class const_iterator final {
+    public:
+        using iterator_concept = std::forward_iterator_tag;
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = T;
+        using difference_type = std::ptrdiff_t;
+        using pointer = const T*;
+        using reference = const T&;
+
+        const_iterator() = default;
+
+        [[nodiscard]] reference operator*() const
+        {
+            return (*chunk_)[offset_];
+        }
+
+        [[nodiscard]] pointer operator->() const
+        {
+            return &(**this);
+        }
+
+        const_iterator& operator++()
+        {
+            ++offset_;
+            if (offset_ == chunk_->length()) {
+                ++chunk_;
+                offset_ = 0;
+                skip_empty_chunks();
+            }
+            return *this;
+        }
+
+        const_iterator operator++(int)
+        {
+            auto copy = *this;
+            ++*this;
+            return copy;
+        }
+
+        friend bool operator==(const const_iterator& left, const const_iterator& right) noexcept
+        {
+            const auto left_end = left.chunk_ == left.chunk_end_;
+            const auto right_end = right.chunk_ == right.chunk_end_;
+            if (left_end || right_end) {
+                return left_end == right_end;
+            }
+
+            return left.chunk_ == right.chunk_ && left.offset_ == right.offset_;
+        }
+
+    private:
+        friend class rope;
+
+        using chunk_type = detail::rope_chunk<T>;
+        using chunk_tree_type = finger_tree<chunk_type, detail::rope_chunk_length_measure<T>>;
+        using chunk_iterator = typename chunk_tree_type::const_iterator;
+
+        explicit const_iterator(const chunk_tree_type& tree)
+            : chunk_(tree.begin())
+            , chunk_end_(tree.end())
+        {
+            skip_empty_chunks();
+        }
+
+        void skip_empty_chunks()
+        {
+            while (chunk_ != chunk_end_ && chunk_->empty()) {
+                ++chunk_;
+            }
+        }
+
+        chunk_iterator chunk_;
+        chunk_iterator chunk_end_;
+        size_type offset_ = 0;
+    };
 
     [[nodiscard]] rope compact() const
     {
@@ -523,5 +616,13 @@ private:
 
     tree_type tree_;
 };
+
+template <class T>
+    requires equality_comparable_value<T>
+[[nodiscard]] bool operator==(const rope_split<T>& left, const rope_split<T>& right)
+{
+    return detail::sequence_equal(left.left, right.left)
+        && detail::sequence_equal(left.right, right.right);
+}
 
 } // namespace tools::data_structures::finger_tree

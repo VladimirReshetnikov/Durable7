@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <concepts>
 #include <limits>
+#include <ranges>
 #include <stdexcept>
 #include <string_view>
 #include <type_traits>
@@ -59,6 +60,34 @@ template <class T>
 concept equality_comparable_value = requires(const T& left, const T& right) {
     { left == right } -> std::convertible_to<bool>;
 };
+
+namespace detail {
+
+template <std::ranges::input_range LeftRange, std::ranges::input_range RightRange>
+    requires requires(
+        std::ranges::range_reference_t<LeftRange> left,
+        std::ranges::range_reference_t<RightRange> right) {
+        { left == right } -> std::convertible_to<bool>;
+    }
+[[nodiscard]] constexpr bool sequence_equal(LeftRange&& left, RightRange&& right)
+{
+    auto left_iterator = std::ranges::begin(left);
+    const auto left_end = std::ranges::end(left);
+    auto right_iterator = std::ranges::begin(right);
+    const auto right_end = std::ranges::end(right);
+
+    while (left_iterator != left_end && right_iterator != right_end) {
+        if (!(*left_iterator == *right_iterator)) {
+            return false;
+        }
+        ++left_iterator;
+        ++right_iterator;
+    }
+
+    return left_iterator == left_end && right_iterator == right_end;
+}
+
+} // namespace detail
 
 template <class T>
 [[nodiscard]] constexpr T checked_add(const T left, const T right)

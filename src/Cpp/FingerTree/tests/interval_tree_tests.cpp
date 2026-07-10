@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <cstddef>
 #include <functional>
+#include <iterator>
+#include <ranges>
 #include <source_location>
 #include <sstream>
 #include <vector>
@@ -14,6 +16,9 @@ namespace ft = tools::data_structures::finger_tree;
 using namespace tools::data_structures::finger_tree::tests;
 
 namespace {
+
+static_assert(std::forward_iterator<ft::interval_tree<int>::const_iterator>);
+static_assert(std::ranges::forward_range<const ft::interval_tree<int>>);
 
 template <class T>
 void require_vector_equal(
@@ -112,6 +117,16 @@ void add_interval_tree_tests_impl(suite& tests)
         for (std::size_t index = 1; index < values.size(); ++index) {
             FT_REQUIRE(values[index - 1].low <= values[index].low);
         }
+
+        auto iterated = std::vector<ft::interval<int>>{};
+        for (const auto& interval : tree) {
+            iterated.push_back(interval);
+        }
+        FT_REQUIRE(iterated == values);
+
+        auto copied = std::vector<ft::interval<int>>{};
+        tree.copy_to(std::back_inserter(copied));
+        FT_REQUIRE(copied == values);
     });
 
     tests.add("interval tree single overlap agrees with brute force", [] {

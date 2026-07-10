@@ -9,6 +9,7 @@
 #include <iterator>
 #include <map>
 #include <optional>
+#include <ranges>
 #include <set>
 #include <source_location>
 #include <sstream>
@@ -105,6 +106,12 @@ void add_sorted_collection_tests_impl(suite& tests)
     static_assert(std::is_same_v<
         decltype(std::declval<const ft::sorted_map<int, int>&>().entry_at(0)),
         const std::pair<int, int>&>);
+    static_assert(std::forward_iterator<ft::sorted_bag<int>::const_iterator>);
+    static_assert(std::forward_iterator<ft::sorted_set<int>::const_iterator>);
+    static_assert(std::forward_iterator<ft::sorted_map<int, int>::const_iterator>);
+    static_assert(std::ranges::forward_range<const ft::sorted_bag<int>>);
+    static_assert(std::ranges::forward_range<const ft::sorted_set<int>>);
+    static_assert(std::ranges::forward_range<const ft::sorted_map<int, int>>);
 
     tests.add("sorted bag construction preserves duplicates and sorted order", [] {
         const auto bag = ft::sorted_bag<int>::from_range(std::vector{5, 1, 3, 3, 9, 1});
@@ -113,6 +120,28 @@ void add_sorted_collection_tests_impl(suite& tests)
         require_vector_equal(bag.to_vector(), std::vector{1, 1, 3, 3, 5, 9});
         FT_REQUIRE_EQUAL(bag.min(), 1);
         FT_REQUIRE_EQUAL(bag.max(), 9);
+    });
+
+    tests.add("sorted collection facades stream ordered values through forward ranges", [] {
+        const auto bag = ft::sorted_bag<int>::from_range(std::vector{5, 1, 3, 3, 9, 1});
+        const auto set = ft::sorted_set<int>::from_range(std::vector{5, 1, 3, 3, 9, 1});
+        const auto map = ft::sorted_map<int, int>::from_range(
+            std::vector<std::pair<int, int>>{{5, 50}, {1, 10}, {3, 30}});
+
+        auto bag_values = std::vector<int>{};
+        bag.copy_to(std::back_inserter(bag_values));
+        FT_REQUIRE(bag_values == bag.to_vector());
+        FT_REQUIRE((std::vector<int>{bag.begin(), bag.end()} == bag_values));
+
+        auto set_values = std::vector<int>{};
+        set.copy_to(std::back_inserter(set_values));
+        FT_REQUIRE(set_values == set.to_vector());
+        FT_REQUIRE((std::vector<int>{set.begin(), set.end()} == set_values));
+
+        auto map_values = std::vector<std::pair<int, int>>{};
+        map.copy_to(std::back_inserter(map_values));
+        FT_REQUIRE(map_values == map.to_vector());
+        FT_REQUIRE((std::vector<std::pair<int, int>>{map.begin(), map.end()} == map_values));
     });
 
     tests.add("sorted bag ranks counts indexing and removals match sorted vector model", [] {

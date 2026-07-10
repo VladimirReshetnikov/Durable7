@@ -23,26 +23,36 @@ class finger_tree;
 
 template <class Element, class MeasurePolicy>
 struct finger_tree_split final {
+    /// Elements before the first prefix for which the split predicate holds.
     finger_tree<Element, MeasurePolicy> left;
+    /// The boundary element, when present, and every following element.
     finger_tree<Element, MeasurePolicy> right;
 };
 
 template <class Element, class MeasurePolicy>
 struct finger_tree_item_split final {
+    /// Elements strictly before the located boundary element.
     finger_tree<Element, MeasurePolicy> left;
+    /// A value copy of the located boundary element.
     Element item;
+    /// Elements strictly after the located boundary element.
     finger_tree<Element, MeasurePolicy> right;
 };
 
 template <class Element, class MeasurePolicy>
 struct finger_tree_extract_result final {
+    /// A value copy of the extracted element.
     Element item;
+    /// The persistent remainder; it may share immutable storage with the source.
     finger_tree<Element, MeasurePolicy> rest;
 };
 
 template <class Element, class MeasurePolicy>
 struct finger_tree_locate_result final {
+    /// The measure of elements strictly before `item`, or the whole-tree
+    /// measure when no item is found.
     typename MeasurePolicy::measure_type measure_before;
+    /// A value copy of the boundary element, or empty when no prefix matches.
     std::optional<Element> item;
 
     [[nodiscard]] bool has_value() const noexcept
@@ -55,23 +65,58 @@ struct finger_tree_locate_result final {
 
 template <class Element, class MeasurePolicy>
 struct finger_tree_locate_reference_result final {
+    /// The measure of elements strictly before `item`, or the whole-tree
+    /// measure when no item is found.
     typename MeasurePolicy::measure_type measure_before;
+    /// The canonical stored boundary element, or null when no prefix matches.
+    /// It remains valid while the source tree or a sharing persistent snapshot
+    /// remains alive.
     const Element* item;
 
     [[nodiscard]] bool has_value() const noexcept
     {
         return item != nullptr;
     }
+
+    // Intentionally no equality: pointer equality would expose storage-sharing
+    // identity, while pointee equality would misstate this reference-lifetime API.
 };
 
 template <class Element, class MeasurePolicy>
     requires measure_policy<MeasurePolicy, Element>
+/// An immutable, catenable sequence annotated by an application-defined monoid.
+///
+/// Every update returns a new value and path-copies only changed structure;
+/// existing snapshots remain unchanged and may share all untouched nodes. The
+/// lazy middle spine and cached measures use atomic immutable publication, so
+/// concurrent reads of the same snapshot are safe provided the element,
+/// measure-policy, predicate, and comparator operations invoked by those reads
+/// are themselves safe for concurrent use.
+///
+/// `front()` and `back()` are structural worst-case O(1) reads. `measure()`,
+/// `prepend()`, and `append()` have amortized O(1) structural cost, not a hard
+/// worst-case O(1) guarantee: they may force and publish a pending middle-spine
+/// operation. Measure/predicate/copy costs are additional. Prefix search is
+/// logarithmic in sequence length when the predicate is monotone over prefix
+/// measures and policy operations are constant-time.
+///
+/// Operations provide the strong persistence guarantee: if element copying,
+/// allocation, measure-policy code, or a predicate throws, the source snapshot
+/// is unchanged. A failed lazy computation is not published and may be retried.
+/// Streaming iterators are multipass forward iterators. They retain the
+/// immutable root they traverse, so stored-element references do not dangle
+/// when the facade object used to create the iterator is destroyed.
 class finger_tree final {
 public:
     using value_type = Element;
     using measure_policy = MeasurePolicy;
     using measure_type = typename measure_policy::measure_type;
     using size_type = std::size_t;
+    using difference_type = std::ptrdiff_t;
+    using reference = const value_type&;
+    using const_reference = const value_type&;
+
+    class const_iterator;
 
     finger_tree() = default;
 
@@ -102,33 +147,46 @@ public:
         return root_.is_empty();
     }
 
+    /// Returns the monoidal annotation of the whole sequence.
+    /// Structural cost is amortized O(1); this call may force a pending spine.
     [[nodiscard]] measure_type measure() const
     {
         return root_.measure();
     }
 
+    /// Returns the first stored element in worst-case O(1) structural time.
+    /// The reference follows the lifetime of this snapshot or sharing storage.
     [[nodiscard]] const value_type& front() const
     {
         throw_if_empty();
         return root_.first_element().value();
     }
 
+    /// Returns the last stored element in worst-case O(1) structural time.
+    /// The reference follows the lifetime of this snapshot or sharing storage.
     [[nodiscard]] const value_type& back() const
     {
         throw_if_empty();
         return root_.last_element().value();
     }
 
+    /// Returns a snapshot with `value` at the front. Structural cost is
+    /// amortized O(1); no existing snapshot is mutated.
     [[nodiscard]] finger_tree prepend(value_type value) const
     {
         return finger_tree{root_.cons(detail::measured_element<Element, MeasurePolicy>::leaf(std::move(value)))};
     }
 
+    /// Returns a snapshot with `value` at the back. Structural cost is
+    /// amortized O(1); no existing snapshot is mutated.
     [[nodiscard]] finger_tree append(value_type value) const
     {
         return finger_tree{root_.snoc(detail::measured_element<Element, MeasurePolicy>::leaf(std::move(value)))};
     }
 
+    /// Catenates two snapshots while retaining untouched storage from both.
+    /// Work follows the involved middle spines; this does not enumerate either
+    /// input or materialize an intermediate sequence.
     [[nodiscard]] finger_tree concat(const finger_tree& other) const
     {
         if (other.empty()) {
@@ -162,6 +220,8 @@ public:
 
     template <class Predicate>
         requires std::predicate<Predicate&, const measure_type&>
+    /// Splits before the first element whose inclusive prefix measure makes the
+    /// monotone predicate true. If it never becomes true, `left` is this tree.
     [[nodiscard]] finger_tree_split<Element, MeasurePolicy> split(Predicate predicate) const
     {
         if (root_.is_empty() || !std::invoke(predicate, root_.measure())) {
@@ -191,6 +251,8 @@ public:
 
     template <class Predicate>
         requires std::predicate<Predicate&, const measure_type&>
+    /// Locates the first element whose inclusive prefix measure satisfies the
+    /// monotone predicate without rebuilding either side of the boundary.
     [[nodiscard]] finger_tree_locate_result<Element, MeasurePolicy> try_locate(Predicate predicate) const
     {
         if (root_.is_empty()) {
@@ -228,6 +290,8 @@ public:
             &located.hit->value()};
     }
 
+    /// Materializes all values in logical order. Prefer iteration, `for_each`,
+    /// or `copy_to` when an owning contiguous result is not required.
     [[nodiscard]] std::vector<value_type> to_vector() const
     {
         auto result = std::vector<value_type>{};
@@ -250,6 +314,208 @@ public:
         };
         root_.for_each(write);
     }
+
+    /// Creates a forward traversal cursor. Construction retains the immutable
+    /// root and prepares O(log n) traversal state; prefix increment performs no
+    /// iterator-bookkeeping allocations.
+    [[nodiscard]] const_iterator begin() const
+    {
+        return const_iterator{root_};
+    }
+
+    [[nodiscard]] const_iterator end() const noexcept
+    {
+        return const_iterator{};
+    }
+
+    [[nodiscard]] const_iterator cbegin() const
+    {
+        return begin();
+    }
+
+    [[nodiscard]] const_iterator cend() const noexcept
+    {
+        return end();
+    }
+
+    class const_iterator final {
+    public:
+        using iterator_concept = std::forward_iterator_tag;
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = Element;
+        using difference_type = std::ptrdiff_t;
+        using pointer = const Element*;
+        using reference = const Element&;
+
+        const_iterator() = default;
+
+        const_iterator(const const_iterator& other)
+            : root_owner_(other.root_owner_)
+            , current_(other.current_)
+            , owner_(other.owner_)
+            , position_(other.position_)
+        {
+            stack_.reserve(other.stack_.capacity());
+            stack_.insert(stack_.end(), other.stack_.begin(), other.stack_.end());
+        }
+
+        const_iterator& operator=(const const_iterator& other)
+        {
+            if (this != &other) {
+                auto copy = other;
+                *this = std::move(copy);
+            }
+            return *this;
+        }
+
+        const_iterator(const_iterator&&) noexcept = default;
+        const_iterator& operator=(const_iterator&&) noexcept = default;
+
+        [[nodiscard]] reference operator*() const
+        {
+            return *current_;
+        }
+
+        [[nodiscard]] pointer operator->() const
+        {
+            return current_;
+        }
+
+        const_iterator& operator++()
+        {
+            advance();
+            return *this;
+        }
+
+        const_iterator operator++(int)
+        {
+            auto copy = *this;
+            advance();
+            return copy;
+        }
+
+        friend bool operator==(const const_iterator& left, const const_iterator& right) noexcept
+        {
+            if (left.current_ == nullptr || right.current_ == nullptr) {
+                return left.current_ == right.current_;
+            }
+
+            return left.owner_ == right.owner_ && left.position_ == right.position_;
+        }
+
+    private:
+        friend class finger_tree;
+
+        using tree_type = detail::measured_tree<Element, MeasurePolicy>;
+        using element_type = detail::measured_element<Element, MeasurePolicy>;
+        using node_pointer = typename element_type::node_pointer;
+        using child_type = detail::measured_enumeration_child<Element, MeasurePolicy>;
+        using child_kind = typename child_type::child_kind;
+
+        struct frame final {
+            enum class frame_kind {
+                tree,
+                node,
+            };
+
+            explicit frame(tree_type value)
+                : kind(frame_kind::tree)
+                , tree(std::move(value))
+            {
+            }
+
+            explicit frame(node_pointer value)
+                : kind(frame_kind::node)
+                , node(std::move(value))
+            {
+            }
+
+            frame_kind kind;
+            tree_type tree;
+            node_pointer node;
+            size_type next_child = 0;
+
+            [[nodiscard]] size_type child_count() const
+            {
+                return kind == frame_kind::tree ? tree.enumeration_child_count() : node->children().size();
+            }
+
+            [[nodiscard]] child_type child(const size_type index) const
+            {
+                if (kind == frame_kind::tree) {
+                    return tree.enumeration_child(index);
+                }
+
+                const auto& element = node->children()[index];
+                if (element.is_leaf()) {
+                    return child_type{
+                        child_kind::leaf,
+                        &element.value(),
+                        tree_type{},
+                        {}};
+                }
+
+                return child_type{
+                    child_kind::node,
+                    nullptr,
+                    tree_type{},
+                    element.node_ptr()};
+            }
+        };
+
+        explicit const_iterator(tree_type root)
+            : root_owner_(root)
+            , owner_(root.identity())
+        {
+            if (!root.is_empty()) {
+                const auto depth = root.enumeration_depth();
+                // At most one tree frame per middle-spine level and one node
+                // frame per descent level can be live at once, plus the root
+                // and terminal frames. Reserving this proven bound makes
+                // prefix increment allocation-free after begin().
+                stack_.reserve(checked_add(checked_add(depth, depth), size_type{2}));
+                stack_.push_back(frame{std::move(root)});
+                advance();
+            }
+        }
+
+        void advance()
+        {
+            if (current_ != nullptr) {
+                ++position_;
+            }
+
+            current_ = nullptr;
+            while (!stack_.empty()) {
+                auto& top = stack_.back();
+                if (top.next_child == top.child_count()) {
+                    stack_.pop_back();
+                    continue;
+                }
+
+                auto child = top.child(top.next_child++);
+                switch (child.kind) {
+                case child_kind::leaf:
+                    current_ = child.leaf;
+                    return;
+                case child_kind::tree:
+                    if (!child.tree.is_empty()) {
+                        stack_.push_back(frame{std::move(child.tree)});
+                    }
+                    break;
+                case child_kind::node:
+                    stack_.push_back(frame{std::move(child.node)});
+                    break;
+                }
+            }
+        }
+
+        tree_type root_owner_;
+        std::vector<frame> stack_;
+        const Element* current_ = nullptr;
+        const void* owner_ = nullptr;
+        size_type position_ = 0;
+    };
 
 private:
     using root_type = detail::measured_tree<Element, MeasurePolicy>;
@@ -284,5 +550,35 @@ private:
 
     root_type root_;
 };
+
+template <class Element, class MeasurePolicy>
+    requires measure_policy<MeasurePolicy, Element> && equality_comparable_value<Element>
+[[nodiscard]] bool operator==(
+    const finger_tree_split<Element, MeasurePolicy>& left,
+    const finger_tree_split<Element, MeasurePolicy>& right)
+{
+    return detail::sequence_equal(left.left, right.left)
+        && detail::sequence_equal(left.right, right.right);
+}
+
+template <class Element, class MeasurePolicy>
+    requires measure_policy<MeasurePolicy, Element> && equality_comparable_value<Element>
+[[nodiscard]] bool operator==(
+    const finger_tree_item_split<Element, MeasurePolicy>& left,
+    const finger_tree_item_split<Element, MeasurePolicy>& right)
+{
+    return detail::sequence_equal(left.left, right.left)
+        && left.item == right.item
+        && detail::sequence_equal(left.right, right.right);
+}
+
+template <class Element, class MeasurePolicy>
+    requires measure_policy<MeasurePolicy, Element> && equality_comparable_value<Element>
+[[nodiscard]] bool operator==(
+    const finger_tree_extract_result<Element, MeasurePolicy>& left,
+    const finger_tree_extract_result<Element, MeasurePolicy>& right)
+{
+    return left.item == right.item && detail::sequence_equal(left.rest, right.rest);
+}
 
 } // namespace tools::data_structures::finger_tree

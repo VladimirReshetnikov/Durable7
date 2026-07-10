@@ -32,6 +32,8 @@ public:
     using reference = const value_type&;
     using const_reference = const value_type&;
 
+    class const_iterator;
+
     reversible_deque() = default;
 
     reversible_deque(std::initializer_list<value_type> items)
@@ -162,6 +164,96 @@ public:
         root_.copy_leaves(result);
         return result;
     }
+
+    template <std::output_iterator<const value_type&> OutputIterator>
+    void copy_to(OutputIterator output) const
+    {
+        for (const auto& value : *this) {
+            *output++ = value;
+        }
+    }
+
+    [[nodiscard]] const_iterator begin() const
+    {
+        return const_iterator{root_};
+    }
+
+    [[nodiscard]] const_iterator end() const noexcept
+    {
+        return const_iterator{};
+    }
+
+    [[nodiscard]] const_iterator cbegin() const { return begin(); }
+    [[nodiscard]] const_iterator cend() const noexcept { return end(); }
+
+    class const_iterator final {
+    public:
+        // Logical descent through a reversed node returns values, not stable
+        // references into physical storage. Keep the honest single-pass
+        // category even though iterator objects themselves are copyable.
+        using iterator_concept = std::input_iterator_tag;
+        using iterator_category = std::input_iterator_tag;
+        using value_type = T;
+        using difference_type = std::ptrdiff_t;
+        using pointer = const T*;
+        using reference = const T&;
+
+        const_iterator() = default;
+
+        [[nodiscard]] reference operator*() const
+        {
+            return *current_;
+        }
+
+        [[nodiscard]] pointer operator->() const
+        {
+            return &*current_;
+        }
+
+        const_iterator& operator++()
+        {
+            ++position_;
+            if (position_ == root_.size()) {
+                current_.reset();
+            } else {
+                current_ = root_.get_leaf(position_);
+            }
+            return *this;
+        }
+
+        const_iterator operator++(int)
+        {
+            auto copy = *this;
+            ++*this;
+            return copy;
+        }
+
+        friend bool operator==(const const_iterator& left, const const_iterator& right) noexcept
+        {
+            if (!left.current_.has_value() || !right.current_.has_value()) {
+                return left.current_.has_value() == right.current_.has_value();
+            }
+
+            return left.owner_ == right.owner_ && left.position_ == right.position_;
+        }
+
+    private:
+        friend class reversible_deque;
+
+        explicit const_iterator(detail::rev_tree<T> root)
+            : root_(std::move(root))
+            , owner_(root_.identity())
+        {
+            if (root_.size() != 0) {
+                current_ = root_.get_leaf(0);
+            }
+        }
+
+        detail::rev_tree<T> root_;
+        std::optional<T> current_;
+        const void* owner_ = nullptr;
+        size_type position_ = 0;
+    };
 
     void validate_invariants() const
     {
@@ -309,6 +401,25 @@ reversible_deque_split<T> reversible_deque<T>::split_at(const size_type index) c
     return reversible_deque_split<T>{
         reversible_deque{std::move(split.left)},
         reversible_deque{split.right.cons(std::move(split.hit))}};
+}
+
+template <class T>
+    requires equality_comparable_value<T>
+[[nodiscard]] bool operator==(
+    const reversible_deque_split<T>& left,
+    const reversible_deque_split<T>& right)
+{
+    return detail::sequence_equal(left.left, right.left)
+        && detail::sequence_equal(left.right, right.right);
+}
+
+template <class T>
+    requires equality_comparable_value<T>
+[[nodiscard]] bool operator==(
+    const reversible_deque_pop<T>& left,
+    const reversible_deque_pop<T>& right)
+{
+    return left.value == right.value && detail::sequence_equal(left.rest, right.rest);
 }
 
 } // namespace tools::data_structures::finger_tree

@@ -4,9 +4,12 @@
 #include "test_support/test_runner.hpp"
 
 #include <algorithm>
+#include <concepts>
 #include <cstddef>
 #include <functional>
+#include <iterator>
 #include <queue>
+#include <ranges>
 #include <source_location>
 #include <sstream>
 #include <string>
@@ -17,6 +20,21 @@ namespace ft = tools::data_structures::finger_tree;
 using namespace tools::data_structures::finger_tree::tests;
 
 namespace {
+
+using string_queue = ft::priority_queue<std::string, int>;
+static_assert(std::forward_iterator<string_queue::const_iterator>);
+static_assert(std::ranges::forward_range<const string_queue>);
+
+struct non_equality_element final {
+    int value;
+};
+
+template <class T>
+concept has_equality = requires(const T& left, const T& right) {
+    { left == right } -> std::convertible_to<bool>;
+};
+
+static_assert(!has_equality<ft::priority_queue_dequeue<non_equality_element, int>>);
 
 template <class T>
 void require_vector_equal(
@@ -162,6 +180,34 @@ void add_priority_queue_tests_impl(suite& tests)
         FT_REQUIRE_EQUAL(next->element, std::string{"b"});
         FT_REQUIRE_EQUAL(original.size(), static_cast<std::size_t>(3));
         FT_REQUIRE_EQUAL(next->rest.size(), static_cast<std::size_t>(2));
+    });
+
+    tests.add("priority queue streams insertion order and dequeue results have value equality", [] {
+        const auto first = string_queue{}
+            .enqueue("a", 3)
+            .enqueue("b", 1)
+            .enqueue("c", 2);
+        const auto second = string_queue::from_range(first.to_vector());
+
+        auto iterated = std::vector<string_queue::entry_type>{};
+        for (const auto& entry : first) {
+            iterated.push_back(entry);
+        }
+        FT_REQUIRE(iterated == first.to_vector());
+
+        auto copied = std::vector<string_queue::entry_type>{};
+        first.copy_to(std::back_inserter(copied));
+        FT_REQUIRE(copied == iterated);
+
+        const auto first_dequeue = first.try_dequeue();
+        const auto second_dequeue = second.try_dequeue();
+        FT_REQUIRE(first_dequeue.has_value());
+        FT_REQUIRE(second_dequeue.has_value());
+        FT_REQUIRE(*first_dequeue == *second_dequeue);
+
+        const auto different = second.enqueue("extra", 9).try_dequeue();
+        FT_REQUIRE(different.has_value());
+        FT_REQUIRE(*first_dequeue != *different);
     });
 
     tests.add("priority queue reversed comparison acts as max queue", [] {

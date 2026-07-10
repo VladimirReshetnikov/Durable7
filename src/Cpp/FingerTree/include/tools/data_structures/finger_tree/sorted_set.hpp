@@ -26,6 +26,7 @@ public:
     using comparison_type = Less;
     using tree_type = finger_tree<value_type, order_statistic_measure<value_type>>;
     using size_type = std::size_t;
+    using const_iterator = typename tree_type::const_iterator;
 
     sorted_set() = default;
 
@@ -254,6 +255,17 @@ public:
         return tree_.to_vector();
     }
 
+    template <std::output_iterator<const value_type&> OutputIterator>
+    void copy_to(OutputIterator output) const
+    {
+        tree_.copy_to(std::move(output));
+    }
+
+    [[nodiscard]] const_iterator begin() const { return tree_.begin(); }
+    [[nodiscard]] const_iterator end() const noexcept { return tree_.end(); }
+    [[nodiscard]] const_iterator cbegin() const { return begin(); }
+    [[nodiscard]] const_iterator cend() const noexcept { return end(); }
+
 private:
     struct merge_count_result final {
         size_type only_this = 0;
@@ -316,7 +328,7 @@ private:
 
         auto reordered_other = std::optional<sorted_set>{};
         if (!comparators_compatible(other)) {
-            reordered_other.emplace(from_range(other.to_vector(), less_));
+            reordered_other.emplace(from_range(other, less_));
         }
         const auto& right_set = reordered_other.has_value() ? *reordered_other : other;
 
@@ -348,54 +360,48 @@ private:
             return wrap(tree_type{});
         }
 
-        auto left_tree = tree_;
-        auto right_tree = right_set.tree_;
-        auto left_view = left_tree.try_view_left();
-        auto right_view = right_tree.try_view_left();
+        auto left = begin();
+        const auto left_end = end();
+        auto right = right_set.begin();
+        const auto right_end = right_set.end();
 
         auto output = tree_type{};
         auto emit = [&output](const value_type& value) {
             output = output.append(value);
         };
 
-        while (left_view.has_value() && right_view.has_value()) {
-            const auto order = compare_with(less_, left_view->item, right_view->item);
+        while (left != left_end && right != right_end) {
+            const auto order = compare_with(less_, *left, *right);
             if (order < 0) {
                 if (emit_only_this) {
-                    emit(left_view->item);
+                    emit(*left);
                 }
-                left_tree = std::move(left_view->right);
-                left_view = left_tree.try_view_left();
+                ++left;
             } else if (order > 0) {
                 if (emit_only_other) {
-                    emit(right_view->item);
+                    emit(*right);
                 }
-                right_tree = std::move(right_view->right);
-                right_view = right_tree.try_view_left();
+                ++right;
             } else {
                 if (emit_both) {
-                    emit(left_view->item);
+                    emit(*left);
                 }
-                left_tree = std::move(left_view->right);
-                right_tree = std::move(right_view->right);
-                left_view = left_tree.try_view_left();
-                right_view = right_tree.try_view_left();
+                ++left;
+                ++right;
             }
         }
 
         if (emit_only_this) {
-            while (left_view.has_value()) {
-                emit(left_view->item);
-                left_tree = std::move(left_view->right);
-                left_view = left_tree.try_view_left();
+            while (left != left_end) {
+                emit(*left);
+                ++left;
             }
         }
 
         if (emit_only_other) {
-            while (right_view.has_value()) {
-                emit(right_view->item);
-                right_tree = std::move(right_view->right);
-                right_view = right_tree.try_view_left();
+            while (right != right_end) {
+                emit(*right);
+                ++right;
             }
         }
 
@@ -410,7 +416,7 @@ private:
 
         auto reordered_other = std::optional<sorted_set>{};
         if (!comparators_compatible(other)) {
-            reordered_other.emplace(from_range(other.to_vector(), less_));
+            reordered_other.emplace(from_range(other, less_));
         }
         const auto& right_set = reordered_other.has_value() ? *reordered_other : other;
 
@@ -427,33 +433,35 @@ private:
             return merge_count_result{size(), 0, right_set.size()};
         }
 
-        auto left_tree = tree_;
-        auto right_tree = right_set.tree_;
-        auto left_view = left_tree.try_view_left();
-        auto right_view = right_tree.try_view_left();
+        auto left = begin();
+        const auto left_end = end();
+        auto right = right_set.begin();
+        const auto right_end = right_set.end();
         auto counts = merge_count_result{};
 
-        while (left_view.has_value() && right_view.has_value()) {
-            const auto order = compare_with(less_, left_view->item, right_view->item);
+        while (left != left_end && right != right_end) {
+            const auto order = compare_with(less_, *left, *right);
             if (order < 0) {
-                ++counts.only_this;
-                left_tree = std::move(left_view->right);
-                left_view = left_tree.try_view_left();
+                counts.only_this = checked_add(counts.only_this, size_type{1});
+                ++left;
             } else if (order > 0) {
-                ++counts.only_other;
-                right_tree = std::move(right_view->right);
-                right_view = right_tree.try_view_left();
+                counts.only_other = checked_add(counts.only_other, size_type{1});
+                ++right;
             } else {
-                ++counts.both;
-                left_tree = std::move(left_view->right);
-                right_tree = std::move(right_view->right);
-                left_view = left_tree.try_view_left();
-                right_view = right_tree.try_view_left();
+                counts.both = checked_add(counts.both, size_type{1});
+                ++left;
+                ++right;
             }
         }
 
-        counts.only_this += left_tree.measure().count;
-        counts.only_other += right_tree.measure().count;
+        while (left != left_end) {
+            counts.only_this = checked_add(counts.only_this, size_type{1});
+            ++left;
+        }
+        while (right != right_end) {
+            counts.only_other = checked_add(counts.only_other, size_type{1});
+            ++right;
+        }
         return counts;
     }
 

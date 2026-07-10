@@ -40,6 +40,7 @@ public:
     using aggregate_type = typename measure_type::measure_type;
     using tree_type = finger_tree<entry_type, measure_type>;
     using size_type = std::size_t;
+    using const_iterator = typename tree_type::const_iterator;
 
     priority_queue() = default;
 
@@ -131,6 +132,17 @@ public:
         return tree_.to_vector();
     }
 
+    template <std::output_iterator<const entry_type&> OutputIterator>
+    void copy_to(OutputIterator output) const
+    {
+        tree_.copy_to(std::move(output));
+    }
+
+    [[nodiscard]] const_iterator begin() const { return tree_.begin(); }
+    [[nodiscard]] const_iterator end() const noexcept { return tree_.end(); }
+    [[nodiscard]] const_iterator cbegin() const { return begin(); }
+    [[nodiscard]] const_iterator cend() const noexcept { return end(); }
+
 private:
     struct front_predicate final {
         priority_type target;
@@ -163,5 +175,18 @@ private:
 
     tree_type tree_;
 };
+
+template <class Element, class Priority, class Comparison>
+    requires static_comparison_policy<Comparison, Priority>
+        && equality_comparable_value<Element>
+        && equality_comparable_value<Priority>
+[[nodiscard]] bool operator==(
+    const priority_queue_dequeue<Element, Priority, Comparison>& left,
+    const priority_queue_dequeue<Element, Priority, Comparison>& right)
+{
+    return left.element == right.element
+        && left.priority == right.priority
+        && detail::sequence_equal(left.rest, right.rest);
+}
 
 } // namespace tools::data_structures::finger_tree

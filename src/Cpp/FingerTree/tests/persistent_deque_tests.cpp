@@ -6,8 +6,11 @@
 #include "test_support/test_runner.hpp"
 
 #include <algorithm>
+#include <concepts>
 #include <cstddef>
+#include <cstdint>
 #include <iterator>
+#include <ranges>
 #include <source_location>
 #include <sstream>
 #include <stdexcept>
@@ -19,6 +22,24 @@ namespace detail = tools::data_structures::finger_tree::detail;
 using namespace tools::data_structures::finger_tree::tests;
 
 namespace {
+
+static_assert(std::forward_iterator<ft::persistent_deque<int>::const_iterator>);
+static_assert(std::ranges::forward_range<const ft::persistent_deque<int>>);
+
+struct non_equality_value final {
+    int value;
+};
+
+template <class T>
+concept has_equality = requires(const T& left, const T& right) {
+    { left == right } -> std::convertible_to<bool>;
+};
+
+static_assert(std::ranges::forward_range<const ft::persistent_deque<non_equality_value>>);
+static_assert(!has_equality<ft::deque_split<non_equality_value>>);
+static_assert(!has_equality<ft::deque_item_split<non_equality_value>>);
+static_assert(!has_equality<ft::deque_range_split<non_equality_value>>);
+static_assert(!has_equality<ft::deque_pop<non_equality_value>>);
 
 [[nodiscard]] detail::deque_element<int> deque_leaf(const int value)
 {
@@ -303,6 +324,85 @@ void add_persistent_deque_tests_impl(suite& tests)
         ++first;
         ++same;
         FT_REQUIRE(first == same);
+
+        const auto independent = ft::persistent_deque<int>{1, 2, 3, 1, 2, 3};
+        FT_REQUIRE(doubled.begin() != independent.begin());
+    });
+
+    tests.add("persistent deque forward iterator is multipass lifetime safe and allocation free after construction", [] {
+        const auto deque = make_deque(4'096);
+        auto first = deque.begin();
+        auto same = first;
+        FT_REQUIRE(first == same);
+        FT_REQUIRE_EQUAL(*first, 0);
+        ++first;
+        FT_REQUIRE(first != same);
+        FT_REQUIRE_EQUAL(*first, 1);
+        ++same;
+        FT_REQUIRE(first == same);
+
+        auto surviving = [] {
+            return make_deque(4'096).begin();
+        }();
+        auto expected = 0;
+        while (surviving != ft::persistent_deque<int>::const_iterator{}) {
+            FT_REQUIRE_EQUAL(*surviving, expected);
+            ++surviving;
+            ++expected;
+        }
+        FT_REQUIRE_EQUAL(expected, 4'096);
+
+#ifndef FINGERTREE_DISABLE_ALLOCATION_TRACKING
+        // Force delayed middle nodes before isolating iterator bookkeeping.
+        const auto warmed = deque.to_vector();
+        FT_REQUIRE_EQUAL(warmed.size(), deque.size());
+        auto iterator = deque.begin();
+        const auto end = deque.end();
+        auto checksum = std::uint64_t{0};
+        auto iteration_allocations = std::size_t{0};
+        {
+            allocation_counting_scope allocations;
+            while (iterator != end) {
+                checksum += static_cast<std::uint64_t>(*iterator);
+                ++iterator;
+            }
+            iteration_allocations = allocations.allocations();
+        }
+        FT_REQUIRE(checksum > 0);
+        FT_REQUIRE_EQUAL(iteration_allocations, static_cast<std::size_t>(0));
+
+        auto copied = std::vector<int>(deque.size());
+        auto copy_allocations = std::size_t{0};
+        {
+            allocation_counting_scope allocations;
+            deque.copy_to(copied.begin());
+            copy_allocations = allocations.allocations();
+        }
+        FT_REQUIRE(copied == warmed);
+        // copy_to owns logarithmic traversal state, never a sequence-sized
+        // materialization buffer. MSVC Debug also counts checked-iterator
+        // vector proxies for the internally constructed begin/end cursors.
+        FT_REQUIRE(copy_allocations <= 2 * deque.tree_depth() + 3);
+#endif
+    });
+
+    tests.add("persistent deque result carriers compare by public value and generic invariants need no equality", [] {
+        const auto first = make_deque(32);
+        const auto second = ft::persistent_deque<int>::from_range(first);
+
+        FT_REQUIRE(first.split_at(12) == second.split_at(12));
+        FT_REQUIRE(first.split_at(12) != second.split_at(13));
+        FT_REQUIRE(first.split_item_at(12) == second.split_item_at(12));
+        FT_REQUIRE(first.split_range(7, 11) == second.split_range(7, 11));
+        FT_REQUIRE(first.pop_first() == second.pop_first());
+        FT_REQUIRE(first.pop_last() == second.pop_last());
+
+        const auto generic = ft::persistent_deque<non_equality_value>::from_range(
+            std::vector<non_equality_value>{{1}, {2}, {3}, {4}});
+        generic.validate_invariants();
+        FT_REQUIRE_EQUAL(generic.size(), static_cast<std::size_t>(4));
+        FT_REQUIRE_EQUAL(generic.front().value, 1);
+        FT_REQUIRE_EQUAL(generic.back().value, 4);
     });
 
     tests.add("persistent deque sorted search follows lower and upper bound semantics", [] {

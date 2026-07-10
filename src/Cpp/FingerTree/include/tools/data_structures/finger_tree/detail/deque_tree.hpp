@@ -449,7 +449,7 @@ public:
         , first_(std::move(first))
         , second_(std::move(second))
         , size_(checked_add(first_.size(), second_.size()))
-        , last_leaf_(second_.last_leaf())
+        , last_leaf_(std::addressof(second_.last_leaf()))
     {
     }
 
@@ -459,9 +459,14 @@ public:
         , second_(std::move(second))
         , third_(std::move(third))
         , size_(checked_add(checked_add(first_.size(), second_.size()), third_->size()))
-        , last_leaf_(third_->last_leaf())
+        , last_leaf_(std::addressof(third_->last_leaf()))
     {
     }
+
+    deque_node(const deque_node&) = delete;
+    deque_node& operator=(const deque_node&) = delete;
+    deque_node(deque_node&&) = delete;
+    deque_node& operator=(deque_node&&) = delete;
 
     [[nodiscard]] std::size_t child_count() const noexcept
     {
@@ -515,7 +520,7 @@ public:
 
     [[nodiscard]] const T& last_leaf() const noexcept
     {
-        return last_leaf_;
+        return *last_leaf_;
     }
 
     [[nodiscard]] const T& get_leaf(std::size_t index) const
@@ -596,10 +601,8 @@ public:
             throw std::logic_error("deque node cached size disagrees with recomputed child total");
         }
 
-        if constexpr (equality_comparable_value<T>) {
-            if (!(last_leaf_ == child_at(child_count_ - 1).last_leaf())) {
-                throw std::logic_error("deque node cached rightmost leaf disagrees with its last child");
-            }
+        if (last_leaf_ != std::addressof(child_at(child_count_ - 1).last_leaf())) {
+            throw std::logic_error("deque node cached rightmost leaf disagrees with its last child");
         }
 
         return computed;
@@ -644,7 +647,7 @@ private:
     deque_element<T> second_;
     std::optional<deque_element<T>> third_;
     std::size_t size_;
-    T last_leaf_;
+    const T* last_leaf_;
 };
 
 template <class T>
@@ -830,6 +833,11 @@ public:
     [[nodiscard]] std::size_t enumeration_child_count() const;
 
     [[nodiscard]] deque_enumeration_child<T> enumeration_child(std::size_t index) const;
+
+    [[nodiscard]] const void* identity() const noexcept
+    {
+        return rep_.get();
+    }
 
     [[nodiscard]] const deque_element<T>& single_element() const;
 

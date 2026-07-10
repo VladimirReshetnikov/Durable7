@@ -419,6 +419,11 @@ public:
 
     [[nodiscard]] std::size_t depth() const noexcept;
 
+    [[nodiscard]] const void* identity() const noexcept
+    {
+        return rep_.get();
+    }
+
 private:
     template <class U>
     friend rev_tree<U> rev_concat_with_middle(rev_tree<U> left, const rev_digit<U>& middle, rev_tree<U> right);

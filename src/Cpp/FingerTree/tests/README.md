@@ -2,8 +2,8 @@
 
 - Created (UTC): 2026-07-02T21:06:57Z
 - Repository HEAD: 399710816b9007dde1374aef2043f118beddc225
-- Updated (UTC): 2026-07-10T19:58:06Z
-- Updated Repository HEAD: 82a19b89405110255d76b848e6dff8a8f8d73bee
+- Updated (UTC): 2026-07-10T20:20:56Z
+- Updated Repository HEAD: 18f23de9cb90ac47234bfdeea097da2cedff6f9f
 - Audience: Maintainers validating the C++ FingerTree port
 - Scope: Native test executable, source grouping, and stress controls under `src/Cpp/FingerTree/tests`
 
@@ -24,22 +24,26 @@ listing, and replay-seed selection.
 - `measure_tests.cpp` covers measure contracts, lower/upper-bound predicates, named min/max/key/order/sum/product
   operations, component projection, and allocation guards.
 - `persistent_deque_tests.cpp` covers endpoint updates, indexing, split/concat, sorted search, retained versions,
-  randomized command histories, allocation counters, and operation counters.
+  forward-iterator concepts/equality/multipass/lifetime/allocation behavior, generic signpost validation, semantic
+  result equality, randomized command histories, allocation counters, and operation counters.
 - `measured_finger_tree_tests.cpp`, `lazy_cell_tests.cpp`, and `measured_lazy_cell_tests.cpp` cover the measured
-  tree core, reference-locate lifetime under structural sharing, lazy publication helpers, and computed-cell
-  allocation guards.
-- `reversible_deque_tests.cpp` covers reverse orientation, mixed-orientation updates, random histories, and
-  O(1)-reverse allocation checks.
+  tree core, retained forward streaming and copy behavior, constrained result equality, reference-locate lifetime
+  under structural sharing, lazy publication helpers, and computed-cell allocation guards.
+- `reversible_deque_tests.cpp` covers reverse orientation, mixed-orientation updates, retained input-iterator
+  logical order, result equality, random histories, and O(1)-reverse allocation checks.
 - `command_sequence_tests.cpp` instantiates the stateful command recorder against the measured tree, tuned deque,
   reversible deque, positional rope, measured rope, and sorted set. Five default seeds exercise retained-version
   branching; failures are replayed and delta-debugged to a deletion-minimal operation program. The same unit
   covers exhaustive sizes 0 through 24, empty sorted-search behavior, and non-group locate/split-find equivalence.
 - `sorted_collection_tests.cpp` covers sorted bag, sorted set, and sorted map ranking, canonical stored-reference
-  access, navigation, range queries, runtime comparator-state normalization, persistence-aware set algebra, and
-  randomized model checks.
-- `priority_queue_tests.cpp` covers ordering, duplicate priorities, stability, and command-model behavior.
-- `interval_tree_tests.cpp` covers insertion, overlap, containment, coalescing, removal, and sweep-model checks.
-- `rope_tests.cpp`, `measured_rope_tests.cpp`, and `rope_text_tests.cpp` cover chunked sequence editing, measured
+  access, forward-range/copy traversal, navigation, range queries, runtime comparator-state normalization,
+  persistence-aware set algebra, and randomized model checks.
+- `priority_queue_tests.cpp` covers ordering, duplicate priorities, stability, forward traversal/copy, semantic
+  dequeue-result equality, and command-model behavior.
+- `interval_tree_tests.cpp` covers insertion, forward traversal/copy, overlap, containment, streaming coalescing,
+  removal, and sweep-model checks.
+- `rope_tests.cpp`, `measured_rope_tests.cpp`, and `rope_text_tests.cpp` cover chunked sequence editing, retained
+  chunk-aware forward traversal, bounded nonmaterializing copy, same-type insertion regression guards, measured
   searches, text interop, line navigation, retained text snapshots, long edit scripts, and randomized
   vector/string-model histories.
 - `atomic_box_tests.cpp` and `tearable_concurrency_tests.cpp` cover lock-free publication helpers and structure-level

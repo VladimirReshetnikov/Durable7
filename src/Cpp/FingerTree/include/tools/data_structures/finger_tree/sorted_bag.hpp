@@ -25,6 +25,7 @@ public:
     using comparison_type = Less;
     using tree_type = finger_tree<value_type, order_statistic_measure<value_type>>;
     using size_type = std::size_t;
+    using const_iterator = typename tree_type::const_iterator;
 
     sorted_bag() = default;
 
@@ -172,6 +173,17 @@ public:
     {
         return tree_.to_vector();
     }
+
+    template <std::output_iterator<const value_type&> OutputIterator>
+    void copy_to(OutputIterator output) const
+    {
+        tree_.copy_to(std::move(output));
+    }
+
+    [[nodiscard]] const_iterator begin() const { return tree_.begin(); }
+    [[nodiscard]] const_iterator end() const noexcept { return tree_.end(); }
+    [[nodiscard]] const_iterator cbegin() const { return begin(); }
+    [[nodiscard]] const_iterator cend() const noexcept { return end(); }
 
 private:
     explicit sorted_bag(tree_type tree, Less less = Less{})
