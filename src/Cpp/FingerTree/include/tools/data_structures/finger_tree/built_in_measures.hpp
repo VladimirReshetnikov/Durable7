@@ -234,6 +234,11 @@ struct interval final {
 
     [[nodiscard]] constexpr bool operator==(const interval&) const = default;
 
+    /// Tests closed-interval membership under `Comparison`, which defaults to
+    /// `default_comparison<T>` and is NOT inferred from any owning tree: an
+    /// interval returned by an `interval_tree` with a custom comparison policy
+    /// must be queried with that same policy passed explicitly, or the answer
+    /// can contradict the tree's own queries.
     template <class Comparison = default_comparison<T>>
         requires static_comparison_policy<Comparison, T>
     [[nodiscard]] constexpr bool contains(const T& point) const
@@ -241,6 +246,9 @@ struct interval final {
         return Comparison::compare(low, point) <= 0 && Comparison::compare(point, high) <= 0;
     }
 
+    /// Tests closed-interval overlap under `Comparison`; the same explicit-policy
+    /// caveat as `contains` applies when the interval came from a tree with a
+    /// non-default comparison policy.
     template <class Comparison = default_comparison<T>>
         requires static_comparison_policy<Comparison, T>
     [[nodiscard]] constexpr bool overlaps(const interval& other) const

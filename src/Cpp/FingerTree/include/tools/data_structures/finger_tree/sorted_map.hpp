@@ -174,7 +174,9 @@ public:
     [[nodiscard]] sorted_map insert(key_type key, mapped_type value) const
     {
         auto split = split_at_least(key);
-        if (auto view = split.right.try_view_left(); view.has_value() && equivalent_key(view->item.first, key)) {
+        // A front() peek is worst-case O(1) and never forces the spine; a left view
+        // would rebuild the whole rest tree only to be discarded on both branches.
+        if (!split.right.empty() && equivalent_key(split.right.front().first, key)) {
             throw std::invalid_argument("sorted_map key already exists");
         }
 
@@ -184,7 +186,7 @@ public:
     [[nodiscard]] std::optional<sorted_map> try_insert(key_type key, mapped_type value) const
     {
         auto split = split_at_least(key);
-        if (auto view = split.right.try_view_left(); view.has_value() && equivalent_key(view->item.first, key)) {
+        if (!split.right.empty() && equivalent_key(split.right.front().first, key)) {
             return std::nullopt;
         }
 

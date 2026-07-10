@@ -118,7 +118,9 @@ public:
     [[nodiscard]] sorted_set add(value_type item) const
     {
         auto split = tree_.split(key_at_least_predicate<value_type, Less>{item, less_});
-        if (auto view = split.right.try_view_left(); view.has_value() && equivalent(view->item, item)) {
+        // A front() peek is worst-case O(1) and never forces the spine; a left view
+        // would rebuild the whole rest tree only to be discarded on both branches.
+        if (!split.right.empty() && equivalent(split.right.front(), item)) {
             return *this;
         }
 
