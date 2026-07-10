@@ -62,6 +62,155 @@ public sealed class WideIntegerNumberStylesTests
         Assert.False(TryParse(type, "1,234.50", NumberStyles.Number, out _));
     }
 
+    /// <summary>
+    /// Verifies invalid <see cref="NumberStyles"/> combinations throw <see cref="ArgumentException"/> from
+    /// <c>Parse</c> and <c>TryParse</c> alike, matching every BCL numeric type.
+    /// </summary>
+    /// <param name="type">The fixed-width integer type to validate.</param>
+    [Theory]
+    [MemberData(nameof(WideIntegerTypes))]
+    public void Parse_And_TryParse_ThrowArgumentException_ForInvalidStyleCombinations(Type type)
+    {
+        NumberStyles[] invalidStyles =
+        {
+            NumberStyles.AllowHexSpecifier | NumberStyles.AllowLeadingSign,
+            NumberStyles.AllowHexSpecifier | NumberStyles.AllowThousands,
+            NumberStyles.AllowHexSpecifier | NumberStyles.AllowBinarySpecifier,
+            NumberStyles.AllowBinarySpecifier | NumberStyles.AllowLeadingSign,
+            (NumberStyles)0x800,
+        };
+
+        foreach (NumberStyles style in invalidStyles)
+        {
+            AssertThrowsThroughReflection<ArgumentException>(() => Parse(type, "42", style));
+            AssertThrowsThroughReflection<ArgumentException>(() => TryParse(type, "42", style, out _));
+        }
+    }
+
+    /// <summary>
+    /// Verifies every UTF-16 and UTF-8 <c>Parse</c>/<c>TryParse</c> overload of the 256-bit types throws
+    /// <see cref="ArgumentException"/> for an invalid style combination instead of reporting an input failure.
+    /// </summary>
+    [Fact]
+    public void ParseAndTryParseOverloads_ThrowArgumentException_ForInvalidStyles_UInt256AndInt256()
+    {
+        const NumberStyles invalid = NumberStyles.AllowHexSpecifier | NumberStyles.AllowLeadingSign;
+        CultureInfo culture = CultureInfo.InvariantCulture;
+
+        Assert.Throws<ArgumentException>("style", () => UInt256.Parse("42", invalid, culture));
+        Assert.Throws<ArgumentException>("style", () => UInt256.Parse("42".AsSpan(), invalid, culture));
+        Assert.Throws<ArgumentException>("style", () => UInt256.Parse("42"u8, invalid, culture));
+        Assert.Throws<ArgumentException>("style", () => UInt256.TryParse("42", invalid, culture, out _));
+        Assert.Throws<ArgumentException>("style", () => UInt256.TryParse("42".AsSpan(), invalid, culture, out _));
+        Assert.Throws<ArgumentException>("style", () => UInt256.TryParse("42"u8, invalid, culture, out _));
+
+        Assert.Throws<ArgumentException>("style", () => Int256.Parse("42", invalid, culture));
+        Assert.Throws<ArgumentException>("style", () => Int256.Parse("42".AsSpan(), invalid, culture));
+        Assert.Throws<ArgumentException>("style", () => Int256.Parse("42"u8, invalid, culture));
+        Assert.Throws<ArgumentException>("style", () => Int256.TryParse("42", invalid, culture, out _));
+        Assert.Throws<ArgumentException>("style", () => Int256.TryParse("42".AsSpan(), invalid, culture, out _));
+        Assert.Throws<ArgumentException>("style", () => Int256.TryParse("42"u8, invalid, culture, out _));
+    }
+
+    /// <summary>
+    /// Verifies <see cref="NumberStyles.Any"/> subsets parse currency, exponent, and parenthesized-negative input,
+    /// with parenthesized negatives overflowing the unsigned types.
+    /// </summary>
+    /// <param name="type">The fixed-width integer type to validate.</param>
+    [Theory]
+    [MemberData(nameof(WideIntegerTypes))]
+    public void Parse_SupportsNumberStylesAny(Type type)
+    {
+        Assert.Equal("1234", Parse(type, " ¤1,234.00 ", NumberStyles.Any).ToString());
+        Assert.Equal("1000", Parse(type, "1E+3", NumberStyles.AllowExponent).ToString());
+
+        if (type.Name.StartsWith("Int", StringComparison.Ordinal))
+        {
+            Assert.Equal("-42", Parse(type, "(42)", NumberStyles.Any).ToString());
+        }
+        else
+        {
+            Assert.False(TryParse(type, "(42)", NumberStyles.Any, out _));
+            AssertThrowsThroughReflection<OverflowException>(() => Parse(type, "(42)", NumberStyles.Any));
+        }
+    }
+
+    /// <summary>
+    /// Verifies parenthesized negatives round-trip sign and width at the signed boundaries: the exact minimum
+    /// magnitude parses to <see cref="Int256.MinValue"/> and one past it is classified as overflow.
+    /// </summary>
+    [Fact]
+    public void Parse_NumberStylesAny_ParenthesizedNegatives_RoundTripSignAndWidth()
+    {
+        CultureInfo culture = CultureInfo.InvariantCulture;
+        BigInteger minMagnitude = BigInteger.One << 255;
+
+        Assert.Equal(Int256.MinValue, Int256.Parse($"({minMagnitude})", NumberStyles.Any, culture));
+        Assert.Equal((Int256)(-12345), Int256.Parse("(12,345.00)", NumberStyles.Any, culture));
+        Assert.False(Int256.TryParse($"({minMagnitude + 1})", NumberStyles.Any, culture, out _));
+        Assert.Throws<OverflowException>(() => Int256.Parse($"({minMagnitude + 1})", NumberStyles.Any, culture));
+
+        Assert.False(UInt256.TryParse("(1)", NumberStyles.Any, culture, out _));
+        Assert.Throws<OverflowException>(() => UInt256.Parse("(1)", NumberStyles.Any, culture));
+
+        Int256 parsed = Int256.Parse("(98765)", NumberStyles.Any, culture);
+        Assert.Equal(parsed, Int256.Parse(parsed.ToString(), NumberStyles.Any, culture));
+    }
+
+    /// <summary>
+    /// Verifies <see cref="NumberStyles.AllowBinarySpecifier"/> is treated as a valid but unsupported style:
+    /// parsing fails as an input error rather than an argument error.
+    /// </summary>
+    /// <param name="type">The fixed-width integer type to validate.</param>
+    [Theory]
+    [MemberData(nameof(WideIntegerTypes))]
+    public void Parse_And_TryParse_TreatBinarySpecifierAsUnsupported(Type type)
+    {
+        Assert.False(TryParse(type, "101", NumberStyles.BinaryNumber, out _));
+        AssertThrowsThroughReflection<FormatException>(() => Parse(type, "101", NumberStyles.BinaryNumber));
+    }
+
+    /// <summary>
+    /// Verifies the <c>G</c> format rejects a precision specifier with <see cref="FormatException"/> instead of
+    /// silently ignoring it, while the bare specifier keeps producing round-trip decimal digits.
+    /// </summary>
+    /// <param name="type">The fixed-width integer type to validate.</param>
+    [Theory]
+    [MemberData(nameof(WideIntegerTypes))]
+    public void Formatting_GeneralFormat_RejectsPrecisionSpecifier(Type type)
+    {
+        object value = Parse(type, "12345", NumberStyles.Integer);
+        MethodInfo? method = type.GetMethod("ToString", new[] { typeof(string), typeof(IFormatProvider) });
+        Assert.NotNull(method);
+
+        Assert.Equal("12345", method.Invoke(value, new object?[] { "G", CultureInfo.InvariantCulture }));
+        Assert.Equal("12345", method.Invoke(value, new object?[] { "g", CultureInfo.InvariantCulture }));
+        AssertThrowsThroughReflection<FormatException>(
+            () => method.Invoke(value, new object?[] { "G3", CultureInfo.InvariantCulture }));
+        AssertThrowsThroughReflection<FormatException>(
+            () => method.Invoke(value, new object?[] { "g2", CultureInfo.InvariantCulture }));
+        AssertThrowsThroughReflection<FormatException>(
+            () => method.Invoke(value, new object?[] { "G0", CultureInfo.InvariantCulture }));
+    }
+
+    /// <summary>
+    /// Verifies the UTF-16 and UTF-8 <c>TryFormat</c> overloads propagate the <c>G</c>-precision rejection.
+    /// </summary>
+    [Fact]
+    public void TryFormat_GeneralFormatWithPrecision_ThrowsFormatException()
+    {
+        Assert.Throws<FormatException>(() =>
+        {
+            Span<char> buffer = stackalloc char[128];
+            ((UInt256)12345).TryFormat(buffer, out _, "G3", CultureInfo.InvariantCulture);
+        });
+        Assert.Throws<FormatException>(() =>
+        {
+            Span<byte> buffer = stackalloc byte[128];
+            ((Int256)12345).TryFormat(buffer, out _, "G3", CultureInfo.InvariantCulture);
+        });
+    }
+
     /// <summary>Verifies precision and numeric-grouping format specifiers across all six wide types.</summary>
     /// <param name="type">The fixed-width integer type to validate.</param>
     [Theory]
@@ -168,6 +317,13 @@ public sealed class WideIntegerNumberStylesTests
         var parsed = (bool)method.Invoke(null, arguments)!;
         value = arguments[3];
         return parsed;
+    }
+
+    private static void AssertThrowsThroughReflection<TException>(Action action)
+        where TException : Exception
+    {
+        var exception = Assert.Throws<TargetInvocationException>(action);
+        Assert.IsType<TException>(exception.InnerException);
     }
 
     private static void AssertGenericInterfaces<T>()

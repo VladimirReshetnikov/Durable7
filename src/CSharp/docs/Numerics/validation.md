@@ -52,8 +52,9 @@ The suite covers:
 
 - 256-bit, 512-bit, and 1024-bit signed/unsigned arithmetic;
 - checked and unchecked overflow behavior;
-- decimal and hexadecimal parsing/formatting across UTF-16 and UTF-8 paths, including `NumberStyles.Number`,
-  standard-format precision, and generic parsing interfaces;
+- decimal and hexadecimal parsing/formatting across UTF-16 and UTF-8 paths, including `NumberStyles.Any` subsets,
+  `ArgumentException` classification for invalid style combinations, standard-format precision (with `G`-precision
+  rejection), and generic parsing interfaces;
 - primitive, floating-point, cross-width, and `BigInteger` conversions, including checked/non-finite boundaries;
 - fixed-width binary conversion through `BitConverterEx`;
 - sparse non-negative integer conversion, arithmetic, and power/logarithm behavior;

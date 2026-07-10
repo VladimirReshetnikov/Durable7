@@ -411,7 +411,6 @@ public sealed partial class DeclarationParityTests
             "operator checked -(",
             " Abs(",
             " Sign(",
-            "IsAllDecimalDigits",
             "GetUnsignedMagnitude",
             "GetLowerSignedIfSignExtended",
             "BigMulUnsigned",

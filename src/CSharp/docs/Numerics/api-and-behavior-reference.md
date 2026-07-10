@@ -122,16 +122,25 @@ For signed types:
 
 ### Parse/format invariants
 
-- `Parse` and `TryParse` families must remain behaviorally aligned for success/failure classification (`TryParse == false` for any `Parse` exception path).
+- `Parse` and `TryParse` families must remain behaviorally aligned for input-driven success/failure classification
+  (`TryParse == false` for any `FormatException`/`OverflowException` path of `Parse`). Invalid `NumberStyles`
+  combinations are argument errors, not input errors: both `Parse` and `TryParse` throw `ArgumentException` for
+  undefined style flags or for `AllowHexSpecifier`/`AllowBinarySpecifier` combined with flags outside the
+  corresponding `HexNumber`/`BinaryNumber` combination, matching the BCL numeric types.
 - UTF-8 parse/format pathways must match UTF-16 semantics for equivalent textual data. Fixed-width integer
   UTF-8 parsers transcode through temporary spans rather than allocating intermediate strings.
-- Supported `NumberStyles` validation is centralized through shared helper logic. Decimal parsing accepts the
-  `NumberStyles.Number` family: leading/trailing whitespace and signs, trailing signs, culture-specific group
-  separators, and decimal points whose fractional digits are all zero. Hexadecimal parsing requires
-  `AllowHexSpecifier` and supports leading/trailing whitespace when the corresponding flags are set.
-- Formatting supports `G`/`D`/`N`/`X` (and lowercase forms), including minimum-digit or fractional precision
-  components such as `D5`, `N0`, and `X8`. One-character `G`/`D` stays on the specialized limb formatter;
-  precision/grouping cases use the `BigInteger` interop boundary for BCL-compatible standard formatting.
+- `NumberStyles` validation is centralized through shared helper logic. Decimal parsing delegates to `BigInteger`
+  and accepts every subset of `NumberStyles.Any`: leading/trailing whitespace and signs, trailing signs,
+  parenthesized negatives, culture-specific currency symbols, group separators, exponents, and decimal points whose
+  fractional digits are all zero. Hexadecimal parsing requires `AllowHexSpecifier` and supports leading/trailing
+  whitespace when the corresponding flags are set. `AllowBinarySpecifier` is a valid style but is not supported:
+  binary input fails parsing (`FormatException` from `Parse`, `false` from `TryParse`).
+- Formatting supports `G`/`D`/`N`/`X` (and lowercase forms). `D`, `N`, and `X` accept minimum-digit or fractional
+  precision components such as `D5`, `N0`, and `X8`; precision/grouping cases use the `BigInteger` interop boundary
+  for BCL-compatible standard formatting, while one-character `G`/`D` stays on the specialized limb formatter.
+  `G`/`g` accepts no precision component: `BigInteger` formatting ignores `G` precision instead of applying
+  `Int128`-style rounding/scientific notation, so a `G` format with a precision specifier (for example `G3`) is
+  rejected with `FormatException` rather than silently diverging from the built-in integer types.
 - `GetShortestBitLength()` and `GetByteCount()` follow integral-interface conventions: the former reports zero for
   zero and otherwise the BCL signed/unsigned shortest bit length; the latter reports the fixed 32/64/128-byte width.
 

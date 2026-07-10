@@ -88,9 +88,12 @@ This keeps carry/borrow and shift behavior explicit while avoiding arbitrary-pre
 
 - `Parse` / `TryParse` overloads are available for UTF-16 (`string`, `ReadOnlySpan<char>`) and UTF-8 (`ReadOnlySpan<byte>`) inputs.
 - Formatting supports `ToString`, `TryFormat`, and UTF-8 formatting paths, including `G`, `D`, `N`, and `X`
-  standard formats with precision specifiers such as `D5`, `N0`, and `X8`.
-- Decimal parsing supports the `NumberStyles.Number` flag family, including culture-aware signs, group separators,
-  and an all-zero fractional component; hexadecimal parsing preserves fixed-width two's-complement semantics.
+  standard formats. `D`, `N`, and `X` accept precision specifiers such as `D5`, `N0`, and `X8`; `G` takes no
+  precision and rejects one (for example `G3`) with `FormatException`.
+- Decimal parsing supports every `NumberStyles.Any` subset, including culture-aware signs, parenthesized negatives,
+  currency symbols, group separators, exponents, and an all-zero fractional component; hexadecimal parsing preserves
+  fixed-width two's-complement semantics. Invalid style combinations throw `ArgumentException` from both `Parse` and
+  `TryParse`; `NumberStyles.AllowBinarySpecifier` is valid but unsupported and fails parsing.
 - All six types implement `IParsable<T>`, `ISpanParsable<T>`, `IMinMaxValue<T>`, and
   `IUtf8SpanFormattable`. They intentionally do not yet claim `INumber<T>` or `IBinaryInteger<T>`: those interfaces
   require a substantially larger cross-type conversion and endian-operation surface that should be introduced from

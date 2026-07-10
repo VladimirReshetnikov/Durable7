@@ -11,8 +11,8 @@ namespace Tools.Numerics;
 /// Shared parsing helpers for fixed-width numeric types in this assembly.
 /// </summary>
 /// <remarks>
-/// The helpers are shared by both 256-bit and 512-bit integer implementations to keep culture-sensitive sign-token
-/// handling behavior consistent across parse entry points.
+/// The helpers are shared by all fixed-width integer implementations to keep style validation and
+/// culture-sensitive sign-token handling behavior consistent across parse entry points.
 /// </remarks>
 internal static class NumericParseHelpers
 {
@@ -26,12 +26,52 @@ internal static class NumericParseHelpers
 
     private const int StackCharBufferLimit = 256;
 
-    private const NumberStyles SupportedDecimalStyles = NumberStyles.Number;
-
     private const NumberStyles SupportedHexStyles =
         NumberStyles.AllowLeadingWhite |
         NumberStyles.AllowTrailingWhite |
         NumberStyles.AllowHexSpecifier;
+
+    private const NumberStyles InvalidStyles = ~(
+        NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite |
+        NumberStyles.AllowLeadingSign | NumberStyles.AllowTrailingSign |
+        NumberStyles.AllowParentheses | NumberStyles.AllowDecimalPoint |
+        NumberStyles.AllowThousands | NumberStyles.AllowExponent |
+        NumberStyles.AllowCurrencySymbol | NumberStyles.AllowHexSpecifier |
+        NumberStyles.AllowBinarySpecifier);
+
+    /// <summary>
+    /// Validates a <see cref="NumberStyles"/> combination using the same rules as the built-in integer parsers.
+    /// </summary>
+    /// <param name="style">The style flags to validate.</param>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="style"/> contains undefined flags, or combines <see cref="NumberStyles.AllowHexSpecifier"/>
+    /// or <see cref="NumberStyles.AllowBinarySpecifier"/> with flags outside the corresponding
+    /// <see cref="NumberStyles.HexNumber"/> or <see cref="NumberStyles.BinaryNumber"/> combination.
+    /// </exception>
+    /// <remarks>
+    /// Both <c>Parse</c> and <c>TryParse</c> call this validation and therefore throw for invalid style
+    /// combinations, matching every BCL numeric type; <c>TryParse</c> returns <see langword="false"/> only for
+    /// input-driven failures.
+    /// </remarks>
+    public static void ValidateStyle(NumberStyles style)
+    {
+        if ((style & InvalidStyles) != 0)
+            throw new ArgumentException("An undefined NumberStyles value is being used.", nameof(style));
+
+        if ((style & NumberStyles.AllowHexSpecifier) != 0 && (style & ~NumberStyles.HexNumber) != 0)
+            throw new ArgumentException(
+                "With the AllowHexSpecifier or AllowBinarySpecifier bit set in the enum bit field, the only other "
+                + "valid bits that can be combined into the enum value must be a subset of those in HexNumber or "
+                + "BinaryNumber.",
+                nameof(style));
+
+        if ((style & NumberStyles.AllowBinarySpecifier) != 0 && (style & ~NumberStyles.BinaryNumber) != 0)
+            throw new ArgumentException(
+                "With the AllowHexSpecifier or AllowBinarySpecifier bit set in the enum bit field, the only other "
+                + "valid bits that can be combined into the enum value must be a subset of those in HexNumber or "
+                + "BinaryNumber.",
+                nameof(style));
+    }
 
     /// <summary>
     /// Parses UTF-8 text through a temporary character span without allocating a string.
@@ -105,28 +145,6 @@ internal static class NumericParseHelpers
         {
             ArrayPool<char>.Shared.Return(rented);
         }
-    }
-
-    /// <summary>
-    /// Applies the supported decimal whitespace policy for fixed-width integer parsing.
-    /// </summary>
-    /// <param name="text">The input text.</param>
-    /// <param name="style">The requested parse style.</param>
-    /// <param name="normalized">The span after any allowed whitespace was trimmed.</param>
-    /// <returns><see langword="true"/> when <paramref name="style"/> contains only supported decimal flags.</returns>
-    public static bool TryNormalizeDecimalText(
-        ReadOnlySpan<char> text,
-        NumberStyles style,
-        out ReadOnlySpan<char> normalized)
-    {
-        if ((style & ~SupportedDecimalStyles) != 0)
-        {
-            normalized = default;
-            return false;
-        }
-
-        normalized = TrimByStyle(text, style);
-        return true;
     }
 
     /// <summary>

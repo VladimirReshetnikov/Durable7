@@ -162,8 +162,9 @@ public readonly struct UInt256 :
     /// using the specified format and culture-specific format information.
     /// </summary>
     /// <param name="format">
-    /// A standard numeric format specifier with optional precision (for example <c>G</c>, <c>D5</c>, <c>N0</c>,
-    /// or <c>X8</c>) that selects the textual representation.
+    /// A standard numeric format specifier that selects the textual representation. <c>D</c>, <c>N</c>, and
+    /// <c>X</c> accept an optional precision (for example <c>D5</c>, <c>N0</c>, or <c>X8</c>); <c>G</c> accepts
+    /// no precision and rejects a precision specifier with <see cref="FormatException"/>.
     /// </param>
     /// <param name="formatProvider">
     /// An object that supplies culture-specific formatting information used for decimal/general formatting tokens.
@@ -178,8 +179,9 @@ public readonly struct UInt256 :
     /// When this method returns, contains the number of characters written to <paramref name="destination"/>.
     /// </param>
     /// <param name="format">
-    /// A standard numeric format specifier with optional precision (for example <c>G</c>, <c>D5</c>, <c>N0</c>,
-    /// or <c>X8</c>) that selects the textual representation.
+    /// A standard numeric format specifier that selects the textual representation. <c>D</c>, <c>N</c>, and
+    /// <c>X</c> accept an optional precision (for example <c>D5</c>, <c>N0</c>, or <c>X8</c>); <c>G</c> accepts
+    /// no precision and rejects a precision specifier with <see cref="FormatException"/>.
     /// </param>
     /// <param name="provider">
     /// An object that supplies culture-specific formatting information used for decimal/general formatting tokens.
@@ -212,8 +214,9 @@ public readonly struct UInt256 :
     /// When this method returns, contains the number of bytes written to <paramref name="utf8Destination"/>.
     /// </param>
     /// <param name="format">
-    /// A standard numeric format specifier with optional precision (for example <c>G</c>, <c>D5</c>, <c>N0</c>,
-    /// or <c>X8</c>) that selects the textual representation.
+    /// A standard numeric format specifier that selects the textual representation. <c>D</c>, <c>N</c>, and
+    /// <c>X</c> accept an optional precision (for example <c>D5</c>, <c>N0</c>, or <c>X8</c>); <c>G</c> accepts
+    /// no precision and rejects a precision specifier with <see cref="FormatException"/>.
     /// </param>
     /// <param name="provider">
     /// An object that supplies culture-specific formatting information used for decimal/general formatting tokens.
@@ -266,10 +269,18 @@ public readonly struct UInt256 :
     /// <param name="s">A string that contains the number to convert.</param>
     /// <param name="style">
     /// A bitwise combination of <see cref="NumberStyles"/> values that specifies permitted syntactic elements.
+    /// Every subset of <see cref="NumberStyles.Any"/> is supported for decimal text, and hexadecimal text accepts
+    /// subsets of <see cref="NumberStyles.HexNumber"/>; <see cref="NumberStyles.AllowBinarySpecifier"/> is not
+    /// supported and fails parsing instead of throwing <see cref="ArgumentException"/>.
     /// </param>
     /// <param name="provider">An object that supplies culture-specific parsing information.</param>
     /// <returns>The parsed unsigned 256-bit value represented by <paramref name="s"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="s"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="style"/> contains undefined <see cref="NumberStyles"/> flags, or combines
+    /// <see cref="NumberStyles.AllowHexSpecifier"/> or <see cref="NumberStyles.AllowBinarySpecifier"/> with flags
+    /// outside <see cref="NumberStyles.HexNumber"/> or <see cref="NumberStyles.BinaryNumber"/> respectively.
+    /// </exception>
     /// <exception cref="FormatException">
     /// <paramref name="s"/> is empty or does not represent a valid value under <paramref name="style"/>.
     /// </exception>
@@ -288,9 +299,17 @@ public readonly struct UInt256 :
     /// <param name="s">A character span that contains the number to convert.</param>
     /// <param name="style">
     /// A bitwise combination of <see cref="NumberStyles"/> values that specifies permitted syntactic elements.
+    /// Every subset of <see cref="NumberStyles.Any"/> is supported for decimal text, and hexadecimal text accepts
+    /// subsets of <see cref="NumberStyles.HexNumber"/>; <see cref="NumberStyles.AllowBinarySpecifier"/> is not
+    /// supported and fails parsing instead of throwing <see cref="ArgumentException"/>.
     /// </param>
     /// <param name="provider">An object that supplies culture-specific parsing information.</param>
     /// <returns>The parsed unsigned 256-bit value represented by <paramref name="s"/>.</returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="style"/> contains undefined <see cref="NumberStyles"/> flags, or combines
+    /// <see cref="NumberStyles.AllowHexSpecifier"/> or <see cref="NumberStyles.AllowBinarySpecifier"/> with flags
+    /// outside <see cref="NumberStyles.HexNumber"/> or <see cref="NumberStyles.BinaryNumber"/> respectively.
+    /// </exception>
     /// <exception cref="FormatException">
     /// <paramref name="s"/> is empty or does not represent a valid value under <paramref name="style"/>.
     /// </exception>
@@ -311,9 +330,17 @@ public readonly struct UInt256 :
     /// <param name="utf8Text">A UTF-8 byte span that contains the number to convert.</param>
     /// <param name="style">
     /// A bitwise combination of <see cref="NumberStyles"/> values that specifies permitted syntactic elements.
+    /// Every subset of <see cref="NumberStyles.Any"/> is supported for decimal text, and hexadecimal text accepts
+    /// subsets of <see cref="NumberStyles.HexNumber"/>; <see cref="NumberStyles.AllowBinarySpecifier"/> is not
+    /// supported and fails parsing instead of throwing <see cref="ArgumentException"/>.
     /// </param>
     /// <param name="provider">An object that supplies culture-specific parsing information.</param>
     /// <returns>The parsed unsigned 256-bit value represented by <paramref name="utf8Text"/>.</returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="style"/> contains undefined <see cref="NumberStyles"/> flags, or combines
+    /// <see cref="NumberStyles.AllowHexSpecifier"/> or <see cref="NumberStyles.AllowBinarySpecifier"/> with flags
+    /// outside <see cref="NumberStyles.HexNumber"/> or <see cref="NumberStyles.BinaryNumber"/> respectively.
+    /// </exception>
     /// <exception cref="FormatException">
     /// <paramref name="utf8Text"/> is empty or does not represent a valid value under <paramref name="style"/>.
     /// </exception>
@@ -349,6 +376,9 @@ public readonly struct UInt256 :
     /// <param name="s">A string that contains the number to convert.</param>
     /// <param name="style">
     /// A bitwise combination of <see cref="NumberStyles"/> values that specifies permitted syntactic elements.
+    /// Every subset of <see cref="NumberStyles.Any"/> is supported for decimal text, and hexadecimal text accepts
+    /// subsets of <see cref="NumberStyles.HexNumber"/>; <see cref="NumberStyles.AllowBinarySpecifier"/> is not
+    /// supported and fails parsing instead of throwing <see cref="ArgumentException"/>.
     /// </param>
     /// <param name="provider">An object that supplies culture-specific parsing information.</param>
     /// <param name="result">
@@ -358,6 +388,11 @@ public readonly struct UInt256 :
     /// <returns>
     /// <see langword="true"/> if parsing succeeds and the value is within range; otherwise, <see langword="false"/>.
     /// </returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="style"/> contains undefined <see cref="NumberStyles"/> flags, or combines
+    /// <see cref="NumberStyles.AllowHexSpecifier"/> or <see cref="NumberStyles.AllowBinarySpecifier"/> with flags
+    /// outside <see cref="NumberStyles.HexNumber"/> or <see cref="NumberStyles.BinaryNumber"/> respectively.
+    /// </exception>
     public static bool TryParse(
         [NotNullWhen(true)] string? s,
         NumberStyles style,
@@ -391,6 +426,9 @@ public readonly struct UInt256 :
     /// <param name="s">A character span that contains the number to convert.</param>
     /// <param name="style">
     /// A bitwise combination of <see cref="NumberStyles"/> values that specifies permitted syntactic elements.
+    /// Every subset of <see cref="NumberStyles.Any"/> is supported for decimal text, and hexadecimal text accepts
+    /// subsets of <see cref="NumberStyles.HexNumber"/>; <see cref="NumberStyles.AllowBinarySpecifier"/> is not
+    /// supported and fails parsing instead of throwing <see cref="ArgumentException"/>.
     /// </param>
     /// <param name="provider">An object that supplies culture-specific parsing information.</param>
     /// <param name="result">
@@ -400,6 +438,11 @@ public readonly struct UInt256 :
     /// <returns>
     /// <see langword="true"/> if parsing succeeds and the value is within range; otherwise, <see langword="false"/>.
     /// </returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="style"/> contains undefined <see cref="NumberStyles"/> flags, or combines
+    /// <see cref="NumberStyles.AllowHexSpecifier"/> or <see cref="NumberStyles.AllowBinarySpecifier"/> with flags
+    /// outside <see cref="NumberStyles.HexNumber"/> or <see cref="NumberStyles.BinaryNumber"/> respectively.
+    /// </exception>
     public static bool TryParse(
         ReadOnlySpan<char> s,
         NumberStyles style,
@@ -428,6 +471,9 @@ public readonly struct UInt256 :
     /// <param name="utf8Text">A UTF-8 byte span that contains the number to convert.</param>
     /// <param name="style">
     /// A bitwise combination of <see cref="NumberStyles"/> values that specifies permitted syntactic elements.
+    /// Every subset of <see cref="NumberStyles.Any"/> is supported for decimal text, and hexadecimal text accepts
+    /// subsets of <see cref="NumberStyles.HexNumber"/>; <see cref="NumberStyles.AllowBinarySpecifier"/> is not
+    /// supported and fails parsing instead of throwing <see cref="ArgumentException"/>.
     /// </param>
     /// <param name="provider">An object that supplies culture-specific parsing information.</param>
     /// <param name="result">
@@ -437,6 +483,11 @@ public readonly struct UInt256 :
     /// <returns>
     /// <see langword="true"/> if parsing succeeds and the value is within range; otherwise, <see langword="false"/>.
     /// </returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="style"/> contains undefined <see cref="NumberStyles"/> flags, or combines
+    /// <see cref="NumberStyles.AllowHexSpecifier"/> or <see cref="NumberStyles.AllowBinarySpecifier"/> with flags
+    /// outside <see cref="NumberStyles.HexNumber"/> or <see cref="NumberStyles.BinaryNumber"/> respectively.
+    /// </exception>
     public static bool TryParse(
         ReadOnlySpan<byte> utf8Text,
         NumberStyles style,
@@ -729,7 +780,8 @@ public readonly struct UInt256 :
     /// <param name="value">The value to format.</param>
     /// <param name="format">
     /// The requested format. Supported standard specifiers are <c>G</c>/<c>g</c>, <c>D</c>/<c>d</c>,
-    /// <c>N</c>/<c>n</c>, and <c>X</c>/<c>x</c>, optionally followed by a non-negative decimal precision.
+    /// <c>N</c>/<c>n</c>, and <c>X</c>/<c>x</c>. <c>D</c>, <c>N</c>, and <c>X</c> may carry a non-negative
+    /// decimal precision; <c>G</c>/<c>g</c> accepts no precision component.
     /// A <see langword="null"/> or empty value defaults to decimal formatting.
     /// </param>
     /// <param name="provider">
@@ -748,7 +800,8 @@ public readonly struct UInt256 :
         return spec switch
         {
             'G' or 'g' or 'D' or 'd' when format.Length == 1 => FormatDecimal(value, provider),
-            'G' or 'g' or 'D' or 'd' or 'N' or 'n' => value.ToBigInteger().ToString(format, provider),
+            'G' or 'g' => throw new FormatException(),
+            'D' or 'd' or 'N' or 'n' => value.ToBigInteger().ToString(format, provider),
             'X' or 'x' => NumericFormatHelpers.ApplyHexPrecision(FormatHex(value, spec == 'x'), format),
             _ => throw new FormatException()
         };
@@ -839,6 +892,9 @@ public readonly struct UInt256 :
     /// The format provider that supplies culture-specific sign tokens used while parsing decimal input.
     /// </param>
     /// <returns>The parsed value.</returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="style"/> is not a valid <see cref="NumberStyles"/> combination.
+    /// </exception>
     /// <exception cref="FormatException">
     /// Thrown when <paramref name="text"/> is syntactically invalid for the provided <paramref name="style"/>.
     /// </exception>
@@ -885,14 +941,18 @@ public readonly struct UInt256 :
     /// numerically out of range.
     /// </param>
     /// <returns><see langword="true"/> when parsing succeeds; otherwise, <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="style"/> is not a valid <see cref="NumberStyles"/> combination.
+    /// </exception>
     private static bool TryParseCore(ReadOnlySpan<char> text, NumberStyles style, IFormatProvider? provider, out UInt256 value, out bool overflow)
     {
+        NumericParseHelpers.ValidateStyle(style);
         value = Zero;
         overflow = false;
         if ((style & NumberStyles.AllowHexSpecifier) != 0)
             return TryParseHex(text, style, out value, out overflow);
 
-        if (!NumericParseHelpers.TryNormalizeDecimalText(text, style, out text) ||
+        if ((style & NumberStyles.AllowBinarySpecifier) != 0 ||
             !BigInteger.TryParse(text, style, provider, out BigInteger parsed))
             return false;
 
