@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -97,6 +98,50 @@ typedef struct int_summary {
     long long sum;
     size_t count;
 } int_summary;
+
+typedef struct structural_costs {
+    size_t value_copies;
+    size_t measure_combines;
+} structural_costs;
+
+static void counted_int_copy(void* destination, const void* source, void* context)
+{
+    structural_costs* costs = (structural_costs*)context;
+    ++costs->value_copies;
+    *(int*)destination = *(const int*)source;
+}
+
+static void counted_size_identity(void* destination, void* context)
+{
+    (void)context;
+    *(size_t*)destination = 0;
+}
+
+static void counted_size_measure(void* destination, const void* value, void* context)
+{
+    (void)value;
+    (void)context;
+    *(size_t*)destination = 1;
+}
+
+static void counted_size_combine(void* destination, const void* left, const void* right, void* context)
+{
+    structural_costs* costs = (structural_costs*)context;
+    ++costs->measure_combines;
+    *(size_t*)destination = *(const size_t*)left + *(const size_t*)right;
+}
+
+static void init_counted_int_policy(ft_tree_policy* policy, structural_costs* costs)
+{
+    ft_value_type_init(&policy->value, sizeof(int));
+    policy->value.copy = counted_int_copy;
+    policy->value.context = costs;
+    policy->measure.size = sizeof(size_t);
+    policy->measure.identity = counted_size_identity;
+    policy->measure.measure = counted_size_measure;
+    policy->measure.combine = counted_size_combine;
+    policy->measure.context = costs;
+}
 
 static void init_int_policy(ft_tree_policy* policy)
 {
@@ -853,6 +898,110 @@ static void test_measure_locate_and_split(void)
     ft_tree_dispose(&tree);
 }
 
+static void test_structural_split_and_locate_costs(void)
+{
+    structural_costs costs = { 0, 0 };
+    ft_tree_policy policy;
+    init_counted_int_policy(&policy, &costs);
+
+    ft_tree tree;
+    REQUIRE_STATUS(ft_tree_init(&tree, &policy), FT_STATUS_OK);
+    for (int value = 0; value != 4096; ++value) {
+        ft_tree next;
+        REQUIRE_STATUS(ft_tree_push_back(&tree, &value, &next), FT_STATUS_OK);
+        ft_tree_dispose(&tree);
+        tree = next;
+    }
+
+    for (size_t index = 0; index <= 4096; index += 37) {
+        ft_tree_split_result checked;
+        REQUIRE_STATUS(ft_tree_split_at(&tree, index, &checked), FT_STATUS_OK);
+        REQUIRE(ft_tree_size(&checked.left) == index);
+        REQUIRE(ft_tree_size(&checked.right) == 4096 - index);
+        if (index != 0) {
+            int last_left = -1;
+            REQUIRE_STATUS(ft_tree_back(&checked.left, &last_left), FT_STATUS_OK);
+            REQUIRE(last_left == (int)index - 1);
+        }
+
+        if (index != 4096) {
+            int first_right = -1;
+            REQUIRE_STATUS(ft_tree_front(&checked.right, &first_right), FT_STATUS_OK);
+            REQUIRE(first_right == (int)index);
+        }
+
+        ft_tree_dispose(&checked.left);
+        ft_tree_dispose(&checked.right);
+    }
+
+    ft_tree_split_result at_end;
+    REQUIRE_STATUS(ft_tree_split_at(&tree, 4096, &at_end), FT_STATUS_OK);
+    REQUIRE(ft_tree_size(&at_end.left) == 4096);
+    REQUIRE(ft_tree_empty(&at_end.right));
+    ft_tree_dispose(&at_end.left);
+    ft_tree_dispose(&at_end.right);
+
+    for (size_t expected = 1; expected <= 4096; expected += 31) {
+        size_t threshold = expected;
+        size_t before = SIZE_MAX;
+        int actual = -1;
+        bool found = false;
+        REQUIRE_STATUS(ft_tree_locate(&tree, size_reaches, &threshold, &found, &before, &actual), FT_STATUS_OK);
+        REQUIRE(found);
+        REQUIRE(before == expected - 1);
+        REQUIRE(actual == (int)expected - 1);
+    }
+
+    costs.value_copies = 0;
+    costs.measure_combines = 0;
+    ft_tree_split_result split;
+    REQUIRE_STATUS(ft_tree_split_at(&tree, 3072, &split), FT_STATUS_OK);
+    REQUIRE(ft_tree_size(&split.left) == 3072);
+    REQUIRE(ft_tree_size(&split.right) == 1024);
+    REQUIRE(costs.value_copies < 64);
+    REQUIRE(costs.measure_combines < 256);
+
+    int boundary = -1;
+    REQUIRE_STATUS(ft_tree_front(&split.right, &boundary), FT_STATUS_OK);
+    REQUIRE(boundary == 3072);
+    ft_tree_dispose(&split.left);
+    ft_tree_dispose(&split.right);
+
+    costs.value_copies = 0;
+    costs.measure_combines = 0;
+    size_t threshold = 3001;
+    size_t measure_before = 0;
+    int located = -1;
+    bool found = false;
+    REQUIRE_STATUS(
+        ft_tree_locate(&tree, size_reaches, &threshold, &found, &measure_before, &located),
+        FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(measure_before == 3000);
+    REQUIRE(located == 3000);
+    REQUIRE(costs.value_copies == 1);
+    REQUIRE(costs.measure_combines < 64);
+
+    costs.value_copies = 0;
+    costs.measure_combines = 0;
+    ft_tree left;
+    ft_tree right;
+    int hit = -1;
+    REQUIRE_STATUS(
+        ft_tree_split(&tree, size_reaches, &threshold, &found, &left, &hit, &right),
+        FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(hit == 3000);
+    REQUIRE(ft_tree_size(&left) == 3000);
+    REQUIRE(ft_tree_size(&right) == 1095);
+    REQUIRE(costs.value_copies < 64);
+    REQUIRE(costs.measure_combines < 320);
+
+    ft_tree_dispose(&left);
+    ft_tree_dispose(&right);
+    ft_tree_dispose(&tree);
+}
+
 static void test_sorted_set_and_multiset(void)
 {
     ft_tree_policy policy;
@@ -1490,6 +1639,7 @@ int main(void)
     run_test("tree endpoint/index/split/concat", test_tree_endpoint_index_split_and_concat);
     run_test("lazy middle force paths", test_lazy_middle_force_paths);
     run_test("measure locate and split", test_measure_locate_and_split);
+    run_test("structural split and locate costs", test_structural_split_and_locate_costs);
     run_test("sorted set and multiset", test_sorted_set_and_multiset);
     run_test("sorted map", test_sorted_map);
     run_test("rope", test_rope);

@@ -95,6 +95,8 @@ The executable covers:
 - endpoint, index, indexed replacement, split, concat, and persistence behavior for the generic tree/deque surface;
 - lazy middle force paths through boundary pop, measure reads, indexing, traversal, split, concat, and disposal;
 - size-measure `locate` and measure-guided split behavior;
+- exhaustive structural split/locate boundary checks plus operation-count ceilings over a 4,096-element tree,
+  guarding the O(log n) cached-subtree descent against leaf-by-leaf regressions;
 - concurrent shared-snapshot copy/read/update/dispose behavior over atomic node and tree reference counts;
 - reversible-deque logical reversal, endpoint edits, index reads, traversal, mixed-orientation concat, split,
   set/insert/remove, and persistence;

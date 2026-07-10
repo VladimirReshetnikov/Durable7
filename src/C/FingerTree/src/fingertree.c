@@ -222,16 +222,21 @@ typedef struct ft_rev_split_result {
     ft_reversible_deque_rep* right;
 } ft_rev_split_result;
 
-typedef struct ft_index_scan {
+typedef struct ft_split_result {
+    ft_tree_rep* left;
+    ft_element hit;
+    size_t index_in_hit;
+    ft_tree_rep* right;
+} ft_split_result;
+
+typedef struct ft_locate_state {
     size_t index;
-    bool found;
     const ft_tree_policy* policy;
     ft_measure_predicate_fn predicate;
     void* predicate_context;
     void* accumulator;
-    void* measure_before;
-    void* value;
-} ft_index_scan;
+    const ft_element* hit;
+} ft_locate_state;
 
 static bool ft_add_overflows(size_t left, size_t right, size_t* result)
 {
@@ -1970,51 +1975,390 @@ static ft_status ft_visit_rep(const ft_tree_policy* policy, const ft_tree_rep* r
     return FT_STATUS_OK;
 }
 
-static ft_status ft_scan_leaf(ft_index_scan* scan, const ft_element* leaf)
+static ft_status ft_rep_from_digit(
+    const ft_tree_policy* policy,
+    const ft_element* elements,
+    size_t count,
+    ft_tree_rep** result)
 {
-    if (scan->found) {
-        return FT_STATUS_OK;
+    switch (count) {
+    case 0:
+        return ft_rep_create_empty(policy, result);
+    case 1:
+        return ft_rep_create_single(policy, &elements[0], result);
+    default: {
+        ft_tree_rep* empty = NULL;
+        ft_status status = ft_rep_create_empty(policy, &empty);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_rep_create_deep(policy, &elements[0], 1, empty, &elements[1], count - 1, result);
+        ft_rep_release(policy, empty);
+        return status;
+    }
+    }
+}
+
+static ft_status ft_deep_left(
+    const ft_tree_policy* policy,
+    const ft_element* prefix,
+    size_t prefix_count,
+    ft_tree_rep* middle,
+    const ft_element* suffix,
+    size_t suffix_count,
+    ft_tree_rep** result)
+{
+    if (prefix_count != 0) {
+        return ft_rep_create_deep(policy, prefix, prefix_count, middle, suffix, suffix_count, result);
     }
 
-    void* next = NULL;
-    ft_status status = ft_measure_new_combine(&scan->policy->measure, scan->accumulator, leaf->measure, &next);
+    ft_element node;
+    ft_tree_rep* rest = NULL;
+    ft_status status = ft_rep_view_left(policy, middle, &node, &rest);
+    if (status == FT_STATUS_EMPTY) {
+        return ft_rep_from_digit(policy, suffix, suffix_count, result);
+    }
+
     if (status != FT_STATUS_OK) {
         return status;
     }
 
-    if (scan->predicate(next, scan->predicate_context)) {
-        if (scan->measure_before != NULL) {
-            (void)memcpy(scan->measure_before, scan->accumulator, scan->policy->measure.size);
+    if (node.kind != FT_ELEMENT_NODE) {
+        ft_element_dispose(policy, &node);
+        ft_rep_release(policy, rest);
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    status = ft_rep_create_deep(
+        policy,
+        node.as.node->children,
+        node.as.node->child_count,
+        rest,
+        suffix,
+        suffix_count,
+        result);
+    ft_element_dispose(policy, &node);
+    ft_rep_release(policy, rest);
+    return status;
+}
+
+static ft_status ft_deep_right(
+    const ft_tree_policy* policy,
+    const ft_element* prefix,
+    size_t prefix_count,
+    ft_tree_rep* middle,
+    const ft_element* suffix,
+    size_t suffix_count,
+    ft_tree_rep** result)
+{
+    if (suffix_count != 0) {
+        return ft_rep_create_deep(policy, prefix, prefix_count, middle, suffix, suffix_count, result);
+    }
+
+    ft_tree_rep* rest = NULL;
+    ft_element node;
+    ft_status status = ft_rep_view_right(policy, middle, &node, &rest);
+    if (status == FT_STATUS_EMPTY) {
+        return ft_rep_from_digit(policy, prefix, prefix_count, result);
+    }
+
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (node.kind != FT_ELEMENT_NODE) {
+        ft_element_dispose(policy, &node);
+        ft_rep_release(policy, rest);
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    status = ft_rep_create_deep(
+        policy,
+        prefix,
+        prefix_count,
+        rest,
+        node.as.node->children,
+        node.as.node->child_count,
+        result);
+    ft_element_dispose(policy, &node);
+    ft_rep_release(policy, rest);
+    return status;
+}
+
+static ft_status ft_split_digit_at(
+    const ft_tree_policy* policy,
+    const ft_element* elements,
+    size_t count,
+    size_t index,
+    ft_element* before,
+    size_t* before_count,
+    ft_element* hit,
+    size_t* index_in_hit,
+    ft_element* after,
+    size_t* after_count)
+{
+    *before_count = 0;
+    *after_count = 0;
+    for (size_t element_index = 0; element_index != count; ++element_index) {
+        if (index < elements[element_index].leaf_count) {
+            ft_status status = ft_element_clone(policy, &elements[element_index], hit);
+            if (status != FT_STATUS_OK) {
+                ft_elements_dispose(policy, before, *before_count);
+                *before_count = 0;
+                return status;
+            }
+
+            *index_in_hit = index;
+            for (size_t rest = element_index + 1; rest != count; ++rest) {
+                status = ft_element_clone(policy, &elements[rest], &after[*after_count]);
+                if (status != FT_STATUS_OK) {
+                    ft_element_dispose(policy, hit);
+                    ft_elements_dispose(policy, before, *before_count);
+                    ft_elements_dispose(policy, after, *after_count);
+                    *before_count = 0;
+                    *after_count = 0;
+                    return status;
+                }
+
+                ++*after_count;
+            }
+
+            return FT_STATUS_OK;
         }
 
-        if (scan->value != NULL) {
-            ft_value_copy(&scan->policy->value, scan->value, leaf->as.value);
+        ft_status status = ft_element_clone(policy, &elements[element_index], &before[*before_count]);
+        if (status != FT_STATUS_OK) {
+            ft_elements_dispose(policy, before, *before_count);
+            *before_count = 0;
+            return status;
         }
 
-        scan->found = true;
+        ++*before_count;
+        index -= elements[element_index].leaf_count;
+    }
+
+    ft_elements_dispose(policy, before, *before_count);
+    *before_count = 0;
+    return FT_STATUS_OUT_OF_RANGE;
+}
+
+static void ft_split_result_dispose(const ft_tree_policy* policy, ft_split_result* split)
+{
+    ft_rep_release(policy, split->left);
+    ft_element_dispose(policy, &split->hit);
+    ft_rep_release(policy, split->right);
+    (void)memset(split, 0, sizeof(*split));
+}
+
+static ft_status ft_rep_split_tree_at(
+    const ft_tree_policy* policy,
+    const ft_tree_rep* rep,
+    size_t index,
+    ft_split_result* result)
+{
+    (void)memset(result, 0, sizeof(*result));
+    if (index >= rep->leaf_count) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    if (rep->kind == FT_REP_SINGLE) {
+        ft_status status = ft_rep_create_empty(policy, &result->left);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_element_clone(policy, &rep->as.single, &result->hit);
+        if (status != FT_STATUS_OK) {
+            ft_rep_release(policy, result->left);
+            result->left = NULL;
+            return status;
+        }
+
+        status = ft_rep_create_empty(policy, &result->right);
+        if (status != FT_STATUS_OK) {
+            ft_split_result_dispose(policy, result);
+            return status;
+        }
+
+        result->index_in_hit = index;
+        return FT_STATUS_OK;
+    }
+
+    size_t prefix_size = 0;
+    for (size_t element_index = 0; element_index != rep->as.deep.prefix_count; ++element_index) {
+        prefix_size += rep->as.deep.prefix[element_index].leaf_count;
+    }
+
+    ft_tree_rep* middle = NULL;
+    ft_status status = ft_middle_force(policy, rep->as.deep.middle, &middle);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (index < prefix_size) {
+        ft_element before[4];
+        ft_element after[4];
+        size_t before_count = 0;
+        size_t after_count = 0;
+        status = ft_split_digit_at(
+            policy,
+            rep->as.deep.prefix,
+            rep->as.deep.prefix_count,
+            index,
+            before,
+            &before_count,
+            &result->hit,
+            &result->index_in_hit,
+            after,
+            &after_count);
+        if (status == FT_STATUS_OK) {
+            status = ft_rep_from_digit(policy, before, before_count, &result->left);
+        }
+
+        if (status == FT_STATUS_OK) {
+            status = ft_deep_left(
+                policy,
+                after,
+                after_count,
+                middle,
+                rep->as.deep.suffix,
+                rep->as.deep.suffix_count,
+                &result->right);
+        }
+
+        ft_elements_dispose(policy, before, before_count);
+        ft_elements_dispose(policy, after, after_count);
+    } else if ((index -= prefix_size) < middle->leaf_count) {
+        ft_split_result middle_split;
+        status = ft_rep_split_tree_at(policy, middle, index, &middle_split);
+        if (status == FT_STATUS_OK) {
+            if (middle_split.hit.kind != FT_ELEMENT_NODE) {
+                ft_split_result_dispose(policy, &middle_split);
+                status = FT_STATUS_INVALID_ARGUMENT;
+            } else {
+                ft_element before[3];
+                ft_element after[3];
+                size_t before_count = 0;
+                size_t after_count = 0;
+                status = ft_split_digit_at(
+                    policy,
+                    middle_split.hit.as.node->children,
+                    middle_split.hit.as.node->child_count,
+                    middle_split.index_in_hit,
+                    before,
+                    &before_count,
+                    &result->hit,
+                    &result->index_in_hit,
+                    after,
+                    &after_count);
+                if (status == FT_STATUS_OK) {
+                    status = ft_deep_right(
+                        policy,
+                        rep->as.deep.prefix,
+                        rep->as.deep.prefix_count,
+                        middle_split.left,
+                        before,
+                        before_count,
+                        &result->left);
+                }
+
+                if (status == FT_STATUS_OK) {
+                    status = ft_deep_left(
+                        policy,
+                        after,
+                        after_count,
+                        middle_split.right,
+                        rep->as.deep.suffix,
+                        rep->as.deep.suffix_count,
+                        &result->right);
+                }
+
+                ft_elements_dispose(policy, before, before_count);
+                ft_elements_dispose(policy, after, after_count);
+                ft_split_result_dispose(policy, &middle_split);
+            }
+        }
+    } else {
+        index -= middle->leaf_count;
+        ft_element before[4];
+        ft_element after[4];
+        size_t before_count = 0;
+        size_t after_count = 0;
+        status = ft_split_digit_at(
+            policy,
+            rep->as.deep.suffix,
+            rep->as.deep.suffix_count,
+            index,
+            before,
+            &before_count,
+            &result->hit,
+            &result->index_in_hit,
+            after,
+            &after_count);
+        if (status == FT_STATUS_OK) {
+            status = ft_deep_right(
+                policy,
+                rep->as.deep.prefix,
+                rep->as.deep.prefix_count,
+                middle,
+                before,
+                before_count,
+                &result->left);
+        }
+
+        if (status == FT_STATUS_OK) {
+            status = ft_rep_from_digit(policy, after, after_count, &result->right);
+        }
+
+        ft_elements_dispose(policy, before, before_count);
+        ft_elements_dispose(policy, after, after_count);
+    }
+
+    ft_rep_release(policy, middle);
+    if (status != FT_STATUS_OK) {
+        ft_split_result_dispose(policy, result);
+    }
+
+    return status;
+}
+
+static ft_status ft_locate_consider(ft_locate_state* state, const void* measure, size_t leaf_count, bool* selected)
+{
+    void* next = NULL;
+    ft_status status = ft_measure_new_combine(&state->policy->measure, state->accumulator, measure, &next);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    *selected = state->predicate(next, state->predicate_context);
+    if (*selected) {
         free(next);
         return FT_STATUS_OK;
     }
 
-    free(scan->accumulator);
-    scan->accumulator = next;
-    ++scan->index;
+    free(state->accumulator);
+    state->accumulator = next;
+    state->index += leaf_count;
     return FT_STATUS_OK;
 }
 
-static ft_status ft_scan_element(ft_index_scan* scan, const ft_element* element)
+static ft_status ft_locate_element(ft_locate_state* state, const ft_element* element)
 {
-    if (scan->found) {
-        return FT_STATUS_OK;
+    bool selected = false;
+    ft_status status = ft_locate_consider(state, element->measure, element->leaf_count, &selected);
+    if (status != FT_STATUS_OK || !selected) {
+        return status;
     }
 
     if (element->kind == FT_ELEMENT_LEAF) {
-        return ft_scan_leaf(scan, element);
+        state->hit = element;
+        return FT_STATUS_OK;
     }
 
-    for (size_t index = 0; index != element->as.node->child_count; ++index) {
-        ft_status status = ft_scan_element(scan, &element->as.node->children[index]);
-        if (status != FT_STATUS_OK || scan->found) {
+    for (size_t child = 0; child != element->as.node->child_count && state->hit == NULL; ++child) {
+        status = ft_locate_element(state, &element->as.node->children[child]);
+        if (status != FT_STATUS_OK) {
             return status;
         }
     }
@@ -2022,38 +2366,55 @@ static ft_status ft_scan_element(ft_index_scan* scan, const ft_element* element)
     return FT_STATUS_OK;
 }
 
-static ft_status ft_scan_rep(ft_index_scan* scan, const ft_tree_rep* rep)
+static ft_status ft_locate_rep(ft_locate_state* state, const ft_tree_rep* rep)
 {
-    if (scan->found || rep->kind == FT_REP_EMPTY) {
+    if (rep->kind == FT_REP_EMPTY) {
         return FT_STATUS_OK;
     }
 
     if (rep->kind == FT_REP_SINGLE) {
-        return ft_scan_element(scan, &rep->as.single);
+        return ft_locate_element(state, &rep->as.single);
     }
 
-    for (size_t index = 0; index != rep->as.deep.prefix_count; ++index) {
-        ft_status status = ft_scan_element(scan, &rep->as.deep.prefix[index]);
-        if (status != FT_STATUS_OK || scan->found) {
+    ft_status status = FT_STATUS_OK;
+    for (size_t index = 0; index != rep->as.deep.prefix_count && state->hit == NULL; ++index) {
+        status = ft_locate_element(state, &rep->as.deep.prefix[index]);
+        if (status != FT_STATUS_OK) {
             return status;
         }
     }
 
-    ft_tree_rep* middle = NULL;
-    ft_status status = ft_middle_force(scan->policy, rep->as.deep.middle, &middle);
+    if (state->hit != NULL) {
+        return FT_STATUS_OK;
+    }
+
+    const void* middle_measure = NULL;
+    status = ft_middle_get_measure(state->policy, rep->as.deep.middle, &middle_measure);
     if (status != FT_STATUS_OK) {
         return status;
     }
 
-    status = ft_scan_rep(scan, middle);
-    ft_rep_release(scan->policy, middle);
-    if (status != FT_STATUS_OK || scan->found) {
+    bool selected = false;
+    status = ft_locate_consider(state, middle_measure, rep->as.deep.middle->leaf_count, &selected);
+    if (status != FT_STATUS_OK) {
         return status;
     }
 
-    for (size_t index = 0; index != rep->as.deep.suffix_count; ++index) {
-        status = ft_scan_element(scan, &rep->as.deep.suffix[index]);
-        if (status != FT_STATUS_OK || scan->found) {
+    if (selected) {
+        ft_tree_rep* middle = NULL;
+        status = ft_middle_force(state->policy, rep->as.deep.middle, &middle);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_locate_rep(state, middle);
+        ft_rep_release(state->policy, middle);
+        return status;
+    }
+
+    for (size_t index = 0; index != rep->as.deep.suffix_count && state->hit == NULL; ++index) {
+        status = ft_locate_element(state, &rep->as.deep.suffix[index]);
+        if (status != FT_STATUS_OK) {
             return status;
         }
     }
@@ -2353,50 +2714,52 @@ ft_status ft_tree_split_at(const ft_tree* tree, size_t index, ft_tree_split_resu
         return FT_STATUS_OUT_OF_RANGE;
     }
 
-    ft_tree left;
-    ft_status status = ft_tree_init(&left, tree->policy);
+    if (index == 0) {
+        ft_status status = ft_tree_init(&result->left, tree->policy);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_tree_copy(tree, &result->right);
+        if (status != FT_STATUS_OK) {
+            ft_tree_dispose(&result->left);
+        }
+
+        return status;
+    }
+
+    if (index == tree->rep->leaf_count) {
+        ft_status status = ft_tree_copy(tree, &result->left);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_tree_init(&result->right, tree->policy);
+        if (status != FT_STATUS_OK) {
+            ft_tree_dispose(&result->left);
+        }
+
+        return status;
+    }
+
+    ft_split_result split;
+    ft_status status = ft_rep_split_tree_at(tree->policy, tree->rep, index, &split);
     if (status != FT_STATUS_OK) {
         return status;
     }
 
-    ft_tree rest;
-    status = ft_tree_copy(tree, &rest);
-    if (status != FT_STATUS_OK) {
-        ft_tree_dispose(&left);
-        return status;
+    ft_tree_rep* right_with_hit = NULL;
+    status = ft_rep_cons(tree->policy, split.right, &split.hit, &right_with_hit);
+    if (status == FT_STATUS_OK) {
+        result->left.policy = tree->policy;
+        result->left.rep = split.left;
+        result->right.policy = tree->policy;
+        result->right.rep = right_with_hit;
+        split.left = NULL;
     }
 
-    for (size_t position = 0; position != index; ++position) {
-        ft_element hit;
-        ft_tree_rep* rest_rep = NULL;
-        status = ft_rep_view_left(tree->policy, rest.rep, &hit, &rest_rep);
-        if (status != FT_STATUS_OK) {
-            ft_tree_dispose(&left);
-            ft_tree_dispose(&rest);
-            return status;
-        }
-
-        ft_tree_rep* left_rep = NULL;
-        status = ft_rep_snoc(tree->policy, left.rep, &hit, &left_rep);
-        ft_element_dispose(tree->policy, &hit);
-        if (status != FT_STATUS_OK) {
-            ft_rep_release(tree->policy, rest_rep);
-            ft_tree_dispose(&left);
-            ft_tree_dispose(&rest);
-            return status;
-        }
-
-        ft_tree_dispose(&left);
-        ft_tree_dispose(&rest);
-        left.policy = tree->policy;
-        left.rep = left_rep;
-        rest.policy = tree->policy;
-        rest.rep = rest_rep;
-    }
-
-    result->left = left;
-    result->right = rest;
-    return FT_STATUS_OK;
+    ft_split_result_dispose(tree->policy, &split);
+    return status;
 }
 
 ft_status ft_tree_set_at(const ft_tree* tree, size_t index, const void* value, ft_tree* result)
@@ -2493,26 +2856,37 @@ ft_status ft_tree_locate(
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    ft_index_scan scan;
-    (void)memset(&scan, 0, sizeof(scan));
-    scan.policy = tree->policy;
-    scan.predicate = predicate;
-    scan.predicate_context = predicate_context;
-    scan.measure_before = measure_before;
-    scan.value = value;
+    ft_locate_state state;
+    (void)memset(&state, 0, sizeof(state));
+    state.policy = tree->policy;
+    state.predicate = predicate;
+    state.predicate_context = predicate_context;
 
-    ft_status status = ft_measure_new_identity(&tree->policy->measure, &scan.accumulator);
+    ft_status status = ft_measure_new_identity(&tree->policy->measure, &state.accumulator);
     if (status != FT_STATUS_OK) {
         return status;
     }
 
-    status = ft_scan_rep(&scan, tree->rep);
-    if (status == FT_STATUS_OK && !scan.found && measure_before != NULL) {
-        (void)memcpy(measure_before, scan.accumulator, tree->policy->measure.size);
+    const void* total = NULL;
+    status = ft_rep_get_measure(tree->policy, tree->rep, &total);
+    if (status == FT_STATUS_OK && predicate(total, predicate_context)) {
+        status = ft_locate_rep(&state, tree->rep);
+    } else if (status == FT_STATUS_OK) {
+        free(state.accumulator);
+        state.accumulator = NULL;
+        status = ft_measure_new_copy(&tree->policy->measure, total, &state.accumulator);
     }
 
-    *found = scan.found;
-    free(scan.accumulator);
+    if (status == FT_STATUS_OK && measure_before != NULL) {
+        (void)memcpy(measure_before, state.accumulator, tree->policy->measure.size);
+    }
+
+    if (status == FT_STATUS_OK && state.hit != NULL && value != NULL) {
+        ft_value_copy(&tree->policy->value, value, state.hit->as.value);
+    }
+
+    *found = state.hit != NULL;
+    free(state.accumulator);
     return status;
 }
 
@@ -2529,30 +2903,35 @@ ft_status ft_tree_split(
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    ft_index_scan scan;
-    (void)memset(&scan, 0, sizeof(scan));
-    scan.policy = tree->policy;
-    scan.predicate = predicate;
-    scan.predicate_context = predicate_context;
+    ft_locate_state state;
+    (void)memset(&state, 0, sizeof(state));
+    state.policy = tree->policy;
+    state.predicate = predicate;
+    state.predicate_context = predicate_context;
 
-    ft_status status = ft_measure_new_identity(&tree->policy->measure, &scan.accumulator);
+    ft_status status = ft_measure_new_identity(&tree->policy->measure, &state.accumulator);
     if (status != FT_STATUS_OK) {
         return status;
     }
 
-    status = ft_scan_rep(&scan, tree->rep);
-    free(scan.accumulator);
+    const void* total = NULL;
+    status = ft_rep_get_measure(tree->policy, tree->rep, &total);
+    if (status == FT_STATUS_OK && predicate(total, predicate_context)) {
+        status = ft_locate_rep(&state, tree->rep);
+    }
+
+    free(state.accumulator);
     if (status != FT_STATUS_OK) {
         return status;
     }
 
-    *found = scan.found;
-    if (!scan.found) {
+    *found = state.hit != NULL;
+    if (state.hit == NULL) {
         return FT_STATUS_OK;
     }
 
     ft_tree_split_result split;
-    status = ft_tree_split_at(tree, scan.index, &split);
+    status = ft_tree_split_at(tree, state.index, &split);
     if (status != FT_STATUS_OK) {
         return status;
     }

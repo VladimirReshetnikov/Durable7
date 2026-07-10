@@ -25,6 +25,8 @@ line information, and exits non-zero if any test increments the failure count. A
 - `lazy middle force paths` exercises memoized middle publication through reads, pops, split, concat, traversal,
   and disposal.
 - `measure locate and split` covers size and custom measure-guided navigation.
+- `structural split and locate costs` checks deep-tree split/locate boundaries and enforces logarithmic
+  value-copy/measure-combine ceilings over 4,096 elements.
 - `sorted set and multiset` covers uniqueness, duplicates, rank access, removal, and traversal.
 - `sorted map` covers insert, set, duplicate rejection, lookup, rank access, traversal, and persistence.
 - `rope` covers chunked positional construction, indexing, traversal, split/reconcat, insertion, removal, append,

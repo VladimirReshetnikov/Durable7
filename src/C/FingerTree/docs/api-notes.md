@@ -62,20 +62,21 @@ Deferred from the C++ port:
 
 The core now carries the C++ port's shared lazy-middle shape in C form.
 
-## Known Complexity Gaps (2026-07-09 review)
+## Structural Search Complexity
 
-The 2026-07-09 cross-language review confirmed the memory-safety and lazy-middle concurrency design
-of the core, but recorded that the generic tree's structural search machinery was never ported and
-several facades inherit that gap. These are complexity divergences from the C++/C# references, not
-behavioral bugs — results match the sibling ports:
+The generic tree uses cached subtree leaf counts and measures for structural descent. `ft_tree_split_at`
+rebuilds only the digit/node path containing the boundary, while `ft_tree_locate` prunes whole subtrees by
+testing their cached aggregate measures; `ft_tree_split` composes those two paths. For a monotone measure
+predicate, all three operations take O(log n) time and allocate O(log n) structural storage. Split results
+share untouched nodes with the source snapshot.
 
-- `ft_tree_split_at` pops and re-appends elements one at a time (O(index) with per-element deep
-  copies) instead of the references' digit/node split descent, and `ft_tree_locate`/`ft_tree_split`
-  scan every leaf (with a per-leaf measure allocation) instead of pruning against cached subtree
-  measures. Everything built on them — sorted set/multiset/map insertion and removal, priority-queue
-  push, interval insertion/removal, rope indexing and splitting — is O(n) where the sibling ports
-  are O(log n). The reversible deque has the proper O(log n) split machinery
-  (`ft_rev_rep_split_tree`); porting that shape to the generic tree is the top follow-up.
+This restores the sibling ports' O(log n) search/edit foundation for sorted containers, priority queues,
+interval trees, and both rope facades. The native suite includes operation-count guards over a 4,096-element
+tree so a return to leaf-by-leaf split or locate fails deterministically.
+
+## Remaining Complexity Gaps
+
+The remaining gaps are facade-level shape or annotation differences rather than generic-tree descent:
 - The ropes never merge undersized chunks: single-element inserts create one-element chunks that are
   never coalesced on remove/concat, so edit-heavy workloads fragment toward one element per chunk.
 - `ft_text_rope` wraps the unmeasured rope, so `line_count`/`line_column_of` are O(n) character
