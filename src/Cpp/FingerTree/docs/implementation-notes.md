@@ -3,6 +3,8 @@
 - Status: Living implementation notes
 - Created (UTC): 2026-06-30T17:20:17Z
 - Repository HEAD: d140fb07d8ae21726e96b9ad916154c3bf87411d
+- Updated (UTC): 2026-07-10T20:20:56Z
+- Updated against repository HEAD: 18f23de9cb90ac47234bfdeea097da2cedff6f9f
 - Audience: Maintainers and AI agents implementing or reviewing the C++ port
 - Scope: Implementation decisions, C# parity checks, justified divergences, validation observations, and defect-report links
 
@@ -431,8 +433,8 @@ Findings:
 - A C# improvement proposal was recorded in
   [`src/CSharp/docs/FingerTree/measured-fingertree-enumerator-allocation-improvement-proposal.md`](../../../CSharp/docs/FingerTree/measured-fingertree-enumerator-allocation-improvement-proposal.md).
   The C# public general measured tree enumerator materializes a `List<TElement>` before yielding; this is documented
-  behavior rather than a correctness bug, but it is an allocation/performance shortcoming relative to the tuned
-  deque's stack enumerator.
+  behavior rather than a correctness bug. The later C++ streaming-traversal checkpoint deliberately improves on
+  that behavior with a retained forward iterator rather than inheriting the materialization cost.
 
 ## Checkpoint: Priority Queue Wrapper
 
@@ -532,10 +534,9 @@ Parity notes:
 - `contains` and `try_remove` were checked against the C# comparer-equality regression: an endpoint type can order
   by one field while value equality distinguishes another field, and the tree still finds/removes by comparer
   equality.
-- `coalesce` currently materializes the interval order into a `std::vector` before the sweep. This does not regress
-  relative to the current C# public interval tree, because C# `foreach` over the public general measured tree also
-  materializes before yielding, as recorded in the measured-tree enumerator improvement proposal. Once the C++
-  measured tree gains a streaming iterator, `coalesce` can switch to it without changing semantics.
+- `coalesce` originally materialized interval order into a `std::vector`, matching the C# traversal cost at that
+  checkpoint. The later streaming-traversal checkpoint replaces that temporary with a direct forward-iterator
+  sweep, and `count_overlaps` similarly counts without building the public overlap vector.
 
 Justified divergences:
 
@@ -647,8 +648,9 @@ Justified divergences:
 - Missing ranks and navigation/lookup/update misses use `std::optional`; C# uses `-1`, `bool` plus out parameters,
   or throwing indexers depending on the member.
 - Counts and ranks use `std::size_t`, continuing the C++ count policy.
-- C++ exposes `to_vector`, `keys_to_vector`, and `values_to_vector` in this checkpoint instead of C# collection
-  interfaces. Lazy iterators remain a follow-up on the measured-tree iterator work.
+- This checkpoint initially exposed `to_vector`, `keys_to_vector`, and `values_to_vector` instead of C# collection
+  interfaces. The later streaming-traversal checkpoint adds retained forward iterators and `copy_to` to all three
+  wrappers while preserving those explicit materialization helpers.
 
 Validation:
 
@@ -721,8 +723,10 @@ Justified divergences:
   `concat`, `reverse`).
 - `try_pop_front` and `try_pop_back` return `std::optional<reversible_deque_pop<T>>` instead of C# `bool` plus out
   parameters.
-- The public C++ checkpoint exposes `to_vector` rather than a lazy iterator. This is not a regression relative to
-  C# `ReversibleDeque<T>`, whose enumerator explicitly materializes `ToArray()` before yielding.
+- This checkpoint initially exposed `to_vector` rather than a lazy iterator, which was not a regression relative
+  to C# `ReversibleDeque<T>`'s materializing enumerator. The later streaming checkpoint adds an honest input
+  iterator whose current logical value is iterator-owned, avoiding whole-sequence materialization without
+  overclaiming stable-reference forward semantics.
 
 Validation:
 
@@ -790,9 +794,8 @@ Justified divergences:
   of using `Create`/`CreateRange` rather than C# `FromChunks` for ordinary mutable arrays.
 - Public names follow the C++ spellings already used by the deque wrappers (`size`, `empty`, `front`, `back`,
   `insert_at`, `remove_at`, `split_at`, `to_vector`) while preserving the C# operation families.
-- The first checkpoint exposes vector materialization rather than a chunk-aware iterator. This temporarily trails
-  the C# `IReadOnlyList<T>`/enumerator surface, but does not affect the indexed/editing semantics or asymptotic
-  update behavior. A streaming iterator should be added with the measured-tree traversal follow-up.
+- The first checkpoint exposed vector materialization rather than a chunk-aware iterator. The later streaming
+  checkpoint completes that follow-up with a retained forward iterator that walks measured-tree chunks directly.
 
 Validation:
 
@@ -862,8 +865,8 @@ Justified divergences:
   so no separate public strategy interface is needed.
 - Absent measure-locate results use `std::optional` rather than `bool` plus out parameters.
 - Counts and indices use `std::size_t`, continuing the C++ count policy.
-- The first checkpoint exposes vector materialization rather than a chunk-aware iterator, matching the positional
-  rope follow-up.
+- The first checkpoint exposed vector materialization rather than a chunk-aware iterator. The later streaming
+  checkpoint completes the same retained chunk-aware forward traversal as the positional rope.
 
 Validation:
 
@@ -975,8 +978,9 @@ Implemented:
 - Added the named-operation free-function layer: max/min peek/extract, key/order-statistic lower/upper/index
   splits, product first/second component split/find, product size+max/size+min peek/extract, and pure/product
   cumulative-weight split/select helpers.
-- Added structure-level tearable concurrency stress tests for measured finger trees, measured ropes, lock-free rope
-  publication, and branching histories over retained rope snapshots. The tests honor `FINGERTREE_STRESS_SECONDS`.
+- Added structure-level tearable concurrency stress tests for measured finger trees, measured ropes, atomic
+  data-race-safe rope publication, and branching histories over retained rope snapshots. The tests honor
+  `FINGERTREE_STRESS_SECONDS`; they do not claim `atomic<shared_ptr>` is lock-free.
 - Added allocation/complexity guards for measured-tree hot reads, tuned-deque hot reads and branch pushes, and
   reversible-deque `reverse()` allocation flatness.
 - Renamed the misleading private `throw_if_not_empty` helpers to `throw_if_empty` and restored checked size
@@ -993,6 +997,117 @@ Validation:
 
 Remaining review work:
 
-- Milestone 8 samples and benchmarks remain unstarted.
-- The stateful command-sequence-with-shrinking tier remains future work.
-- Install/export packaging, CI, and multi-compiler/ThreadSanitizer coverage remain future work.
+- See the later review-remediation checkpoints for Milestone 8, command-sequence shrinking, packaging, CI, and
+  expanded multi-compiler validation.
+
+## Checkpoint: Milestone 8 And Production Packaging
+
+Updated (UTC): 2026-07-10T19:40:22Z
+
+Updated against repository HEAD: `82a19b89405110255d76b848e6dff8a8f8d73bee`
+
+Implemented samples:
+
+- Added the deterministic `showcase.cpp` sample across the priority queue, cumulative-weight selection, sorted
+  set/map, interval tree, and reversible deque.
+- Added `persistent_snapshots.cpp` as the concrete measured-rope text-buffer tour: retained undo/redo history,
+  logarithmic newline-measure navigation, and bounded atomic `shared_ptr` publication from one writer to a
+  concurrent reader.
+- The sample promises data-race-safe publication without an application mutex, not lock-free progress;
+  `atomic<shared_ptr>` may serialize internally on MSVC or libstdc++.
+- Kept the substantive sample entry points reusable as `run(std::ostream&)` and made both `main()` functions thin
+  `std::cout` forwarders.
+- Added `fingertree.samples`, which captures each sample twice, proves transcript determinism, and checks the
+  major story markers under the repository headless native-test launcher.
+
+Implemented benchmarks:
+
+- Added a dependency-free Release harness with short mode, validated filters, CSV-shaped observations, and
+  anti-elision checksums.
+- Made persistence/branching flatness the normative case: branch from one retained, fully forced deque at sizes
+  100, 10,000, and 1,000,000; record allocations and bytes per operation; and fail when allocation cost changes
+  materially with size.
+- Covered deque endpoint updates, endpoint/index reads, and catenation; cumulative-weight selection; sorted
+  search; priority meld; interval overlap queries; rope insert/split/slice and measured navigation versus a linear
+  scan; O(1) reverse; and direct reversible-versus-ordinary deque endpoint/catenation comparisons.
+- Documented that a persistent operation retains its input version and therefore is not semantically equivalent
+  to an in-place mutable baseline.
+
+Implemented packaging and portability:
+
+- Added install rules for public headers, an export set, package config/version files, and the installed imported
+  target `tools::data_structures::finger_tree` discovered through
+  `find_package(ToolsDataStructuresFingerTree CONFIG)`.
+- Marked the header-only package architecture-independent and installed the repository's MIT-0 license alongside
+  the package artifacts.
+- Added the headless `fingertree.installed-consumer` integration test. It installs to a private prefix, configures
+  a fresh project with repository tests/samples/benchmarks explicitly disabled, builds only against the installed
+  package, verifies the package resolved from that prefix and no source include appears in `compile_commands.json`,
+  and runs a public-aggregate-header consumer.
+- Added a general headless CTest command wrapper so pre-`main` loader failures in nested configure/build/test
+  processes inherit the same Windows no-dialog error mode as direct native tests.
+- Removed the inert dependency-free `vcpkg.json`; a manifest should return only with a real, wired dependency.
+- Removed the machine-specific Visual Studio Insiders Ninja path from checked-in presets. Presets now resolve
+  Ninja through an initialized developer environment or `PATH`.
+- Added a focused GitHub Actions workflow with MSVC, GCC, and Clang Debug/Release jobs; separate Linux Clang
+  ASan+UBSan and TSan jobs with allocation interposition disabled; full CTest (including the installed consumer);
+  a warning-as-error Clang static-analyzer pass over the aggregate public-header consumer; and
+  Release branching-flatness benchmark sanity probes.
+
+Validation evidence is recorded in the current [validation guide](validation.md) and in the historical-review
+resolution addenda after the full remediation batch is green.
+
+## Checkpoint: Streaming Traversal, Generic Validation, And Result Semantics
+
+Updated (UTC): 2026-07-10T20:17:23Z
+
+Implemented traversal:
+
+- Added a retained multipass forward iterator to the public general measured `finger_tree`. The cursor performs a
+  logical depth-first walk over tree and node children, stores only O(log n) frames, and keeps the immutable root
+  alive so references remain valid after destruction of the originating facade.
+- Upgraded `persistent_deque::const_iterator` to the same forward-iterator contract. Equality uses immutable-root
+  identity plus logical position, so independently built containers do not compare equal and repeated shared leaf
+  addresses within one catenated snapshot do not collapse distinct positions. Value-initialized/exhausted
+  iterators compare as ends.
+- Reserved the complete tree/node frame bound during iterator construction. Prefix increments reuse that storage;
+  tests prove zero traversal-stack allocations after cursor construction on forced 4,096-element snapshots.
+- Added streaming `begin`/`end`/`cbegin`/`cend` and `copy_to` surfaces to sorted bag/set/map, priority queue,
+  interval tree, rope, and measured rope. Rope cursors traverse measured-tree chunks and then immutable chunk
+  storage without flattening either layer.
+- Added a retained input iterator to `reversible_deque`. Orientation-aware descent produces value copies, so the
+  implementation intentionally does not claim the stable-reference semantics required of a forward iterator.
+  It retains the root and current logical value and avoids whole-sequence materialization.
+- Reworked sorted-set merge/algebra walks to consume forward iterators, rewrote interval coalescing as a streaming
+  sweep, and made overlap counting direct. Explicit `to_vector`/range-returning APIs remain the owning
+  materialization boundary.
+
+Implemented contracts and low-level corrections:
+
+- Added public measured-tree and measure-policy documentation for monoid laws, policy/element stability,
+  persistence, exception guarantees, concurrency preconditions, lazy forcing, and the distinction between
+  amortized endpoint/measure costs and worst-case endpoint reads.
+- Added constrained semantic equality for pure public split/pop/extract/dequeue result carriers. Sequence fields
+  compare by logical contents, not shared-storage identity; carriers remain instantiable for element types without
+  equality because the operators participate only when their public value components support equality.
+- Made the tuned deque node's cached rightmost-leaf signpost a pointer into its immutable child storage. Generic
+  invariant validation now checks canonical reference identity for every element type instead of skipping the
+  check when `operator==` is unavailable; node objects are correspondingly immovable.
+- Constrained rope and measured-rope forwarding `insert_range` overloads so same-type lvalue and rvalue insertion
+  select the persistent-tree overload. This prevents forwarding recursion while preserving `from_range(existing)`.
+- Preserved checked size addition through sorted-set streaming merge counts. Comparator-compatible operands no
+  longer require temporary vectors; incompatible runtime comparator state still deliberately rebuilds/sorts the
+  right operand under the receiver's order before streaming the normalized result.
+
+Validation coverage:
+
+- Compile-time checks establish forward-range conformance for the general tree, tuned deque, sorted wrappers,
+  priority/interval wrappers, rope, and measured rope; the reversible cursor is checked as input-only.
+- Runtime checks cover multipass copies, cross-container equality, shared-node positions, lazy middle spines,
+  retained iterator lifetime after source destruction, logical reversed order, facade copy order, and allocation
+  bounds that distinguish logarithmic traversal state from sequence-sized materialization.
+- Result equality is exercised across independently built but logically equal snapshots and unequal boundaries;
+  non-equality element types instantiate and validate the underlying generic containers without exposing result
+  equality.
+- Same-type positional and measured-rope insertion is covered for lvalues and temporaries, guarding the prior
+  stack-overflow regression.

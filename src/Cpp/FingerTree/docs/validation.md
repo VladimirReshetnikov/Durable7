@@ -3,8 +3,10 @@
 - Status: Current validation guide
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
+- Updated (UTC): 2026-07-10T19:58:06Z
+- Updated Repository HEAD: 82a19b89405110255d76b848e6dff8a8f8d73bee
 - Audience: Maintainers validating the C++ port
-- Scope: Local build, test, stress, warning-policy, generated-output, and benchmark-harness-status guidance
+- Scope: Local/CI build, test, stress, sample, packaging, sanitizer, and benchmark guidance
 
 Use this guide when changing the C++ FingerTree public headers, tests, or documentation that makes build,
 validation, stress, API, or benchmark-status claims. For API shape and practical examples, pair it with the
@@ -12,10 +14,13 @@ validation, stress, API, or benchmark-status claims. For API shape and practical
 
 ## Build Model
 
-The workspace uses CMake presets. The `msvc-*` presets use Visual Studio's bundled Ninja by absolute path;
-the `ninja-*` presets use `cmake` and `ninja` from `PATH` for host-agnostic validation. `CMakeLists.txt` defines the
-header-first interface library `tools_data_structures_finger_tree` and registers the test executable
-`tests/fingertree_smoke_tests` when `FINGERTREE_BUILD_TESTS` is enabled.
+The workspace uses CMake/Ninja presets without checked-in machine-specific tool paths. The `msvc-*` presets select
+the local configuration after a Visual Studio developer environment has put the toolchain and Ninja on `PATH`;
+the `ninja-*` presets use the compiler, CMake, and Ninja from the host environment. `CMakeLists.txt` defines the
+header-first interface library `tools_data_structures_finger_tree` and its
+`tools::data_structures::finger_tree` alias. Tests, deterministic samples, and the benchmark harness build by
+default and can be disabled independently with `FINGERTREE_BUILD_TESTS`, `FINGERTREE_BUILD_SAMPLES`, and
+`FINGERTREE_BUILD_BENCHMARKS`.
 
 The public interface advertises `cxx_std_23`. MSVC targets also receive `/std:c++latest`,
 `/permissive-`, `/Zc:__cplusplus`, `/external:anglebrackets`, and `/external:W0`. Test targets require
@@ -88,15 +93,20 @@ cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmake"" -S . -B
 
 ## Test Policy
 
-Each randomized test must print a replay seed on failure. Complexity and concurrency tests should use deterministic
-operation counters, allocation counters, and duration environment variables rather than timing thresholds.
+Each randomized test must print a replay seed on failure. `deterministic_rng` captures and flushes every effective
+seed before randomized work begins, preserving it even if a native assertion or process fault bypasses C++
+exception handling; the local runner repeats captured seeds when it catches a test failure. Use
+`--seed <decimal-or-0x-hex>` on the native executable or set `FINGERTREE_REPLAY_SEED` for CTest replay. The
+command-model group runs five checked-in seeds by default and shrinks a failing stateful program to a
+deletion-minimal replay log. Complexity and concurrency tests should use deterministic operation counters,
+allocation counters, and duration environment variables rather than timing thresholds.
 
 The current bootstrap tests are self-contained CTest executables. Structure-level tearable concurrency stress tests
 honor `FINGERTREE_STRESS_SECONDS`; unset runs use a short default suitable for ordinary `ctest`, while soak runs
 can raise the value without editing source.
 
-The checked-in `vcpkg.json` is intentionally dependency-free today. Later milestones may add Catch2 through vcpkg
-once the dependency manager is intentionally introduced and wired into CMake.
+The workspace has no package-manager manifest and no third-party build/test dependency. Introduce a manifest only
+when a real dependency is intentionally wired into CMake and this validation matrix.
 
 ## Portable And Sanitizer Presets
 
@@ -110,21 +120,35 @@ ctest --preset ninja-debug --output-on-failure
 cmake --preset ninja-asan
 cmake --build --preset ninja-asan
 ctest --preset ninja-asan --output-on-failure
+
+cmake --preset ninja-tsan
+cmake --build --preset ninja-tsan
+ctest --preset ninja-tsan --output-on-failure
 ```
 
 `ninja-asan` enables AddressSanitizer and UndefinedBehaviorSanitizer flags for compilers that support the GCC-style
-sanitizer options. Prefer it for changes to ownership, persistent sharing, ropes, and lazy publication paths.
+sanitizer options. `ninja-tsan` is a separate ThreadSanitizer build; do not combine TSan with ASan. Both sanitizer
+presets disable global allocation interposition, and benchmark targets are omitted because sanitizer timing is not
+performance evidence. Prefer ASan+UBSan for ownership, persistent sharing, ropes, and lazy publication changes;
+run TSan on a Linux Clang runtime for atomic publication or concurrent-read changes. The Windows Clang/MSVC-ABI
+lane does not provide a viable TSan runtime.
 
 ## Current Coverage
 
-CTest currently registers one executable, `fingertree.smoke`, backed by `tests/fingertree_smoke_tests`.
-It is a local test-runner binary rather than a Catch2/GoogleTest target. See the
-[tests README](../tests/README.md) for the source map, direct executable path, and stress-control notes.
+CTest registers 18 cases: 16 subsystem cases backed by `tests/fingertree_smoke_tests`, from `fingertree.atomic-box` through
+`fingertree.support`. Each case invokes the same local runner with an exact `--group` filter through the repository
+headless launcher, so a subsystem failure is isolated without introducing Catch2/GoogleTest or duplicating test
+execution. `fingertree.samples` checks two deterministic transcripts, and `fingertree.installed-consumer` performs
+the staged package integration test. All 18 carry the `fingertree` label and all Windows invocations—including the
+nested install/configure/build/test command—inherit the no-dialog error mode. Use
+`ctest --test-dir out/build/msvc-debug -N -L fingertree` to list the cases, or `-R` with one exact case name for a
+focused run. See the [tests README](../tests/README.md) for the complete group list, direct runner options,
+replay-seed controls, shrinking contract, and stress notes.
 
 The suite covers:
 
-- `persistent_deque<T>` endpoint, indexing, splitting, concatenation, sorted-search, randomized branching
-  histories, allocation counters, and operation counters;
+- `persistent_deque<T>` endpoint, indexing, splitting, concatenation, sorted-search including the empty case,
+  randomized branching histories, allocation counters, and operation counters;
 - the general measured finger tree, lazy cells, measured lazy cells, measure predicates, product/sum/order
   measures, and named operations;
 - reversible deque reversal, mixed-orientation operations, random histories, and O(1)-reverse allocation guards;
@@ -134,13 +158,59 @@ The suite covers:
 - `rope<T>`, measured rope, text rope, line navigation, chunked mutations, retained text snapshots, long edit
   scripts, and randomized vector-model histories;
 - atomic-box/lazy-publication helpers, allocation counters, operation counters, and command-model support;
-- tearable-struct concurrency stress tests for measured trees, measured ropes, lock-free rope publication, and
-  branching histories over retained shared bases.
+- tearable-struct concurrency stress tests for measured trees, measured ropes, atomic data-race-safe rope
+  publication, and branching histories over retained shared bases. These tests make no lock-free progress claim;
+  `atomic<shared_ptr>` may serialize internally;
+- stateful command programs over the measured tree, tuned deque, reversible deque, positional/measured ropes, and
+  sorted set, including five default seeds, retained versions, invariant checks after every command, automatic
+  failure shrinking, exhaustive size-0-through-24 checks, and non-group locate/split-find equivalence.
 
 ## Benchmark Harness Status
 
-No native benchmark target is currently checked in. Milestone 8 still needs the planned persistence, catenation,
-reversal, priority, interval, and rope benchmark harnesses.
+Build and run the dependency-free harness in Release configuration:
+
+```powershell
+cmake --build --preset msvc-release --target fingertree_benchmarks
+.\out\build\msvc-release\benchmarks\fingertree_benchmarks.exe --short
+.\out\build\msvc-release\benchmarks\fingertree_benchmarks.exe --filter=persistence_branching
+```
+
+`--short` is the required sanity tier. It reduces repetitions while retaining the 100/10k/1M branching ladder.
+The branching case counts allocations and fails when marginal allocation cost is not size-flat. The remaining
+cases cover endpoint updates and endpoint/index reads, ordinary and reversible catenation/endpoint overhead,
+O(1) reverse, sorted search, weighted selection, rope insert/split/slice, measured navigation versus a linear
+scan, priority meld, and interval overlap queries. A nonempty `--filter` that matches no case is an error. See the
+[benchmark guide](../benchmarks/README.md) for the complete contract.
+
+## Samples And Installed Consumer
+
+The ordinary build compiles `fingertree_showcase` and `fingertree_persistent_snapshots`. Their reusable
+`run(std::ostream&)` seams are captured by the sample test:
+
+```powershell
+ctest --preset msvc-debug -R '^fingertree\.samples$' --output-on-failure
+```
+
+The packaging test performs a real installation to a configuration-specific private prefix, then configures a
+fresh project with `FINGERTREE_BUILD_TESTS`, `FINGERTREE_BUILD_SAMPLES`, and
+`FINGERTREE_BUILD_BENCHMARKS` all off. The consumer uses only
+`find_package(ToolsDataStructuresFingerTree CONFIG)`, the exported
+`tools::data_structures::finger_tree` target, and installed headers:
+
+```powershell
+ctest --preset msvc-debug -R '^fingertree\.installed-consumer$' --output-on-failure
+```
+
+## Continuous Integration
+
+`.github/workflows/cpp-fingertree.yml` runs Debug/Release CTest lanes for MSVC, GCC, and Clang. Separate Linux
+Clang jobs run ASan+UBSan and TSan with allocation tracking disabled. Release MSVC and GCC jobs also run the short
+persistence-branching probe. The Clang Debug lane additionally runs the Clang static analyzer with warnings as
+errors over the aggregate public-header consumer. This is the deliberate practical static-analysis gate: it
+covers the aggregate include and representative deque/measure/rope instantiations, not every possible template
+specialization. MSVC `/analyze` remains a complementary local probe when viable. Because the installed consumer
+is an ordinary CTest entry, every compiler lane proves the package export and relocation path rather than merely
+compiling against the source-tree include directory.
 
 ## Evidence To Record
 
@@ -154,3 +224,9 @@ If a docs-only change only updates links or wording and does not alter commands,
 or benchmark-status claims, the repository-wide Markdown checks from
 [`docs/guides/build-and-validation.md`](../../../../docs/guides/build-and-validation.md#documentation-checks)
 are usually the relevant evidence.
+
+For a focused stateful replay, record both the CTest case and explicit seed, for example:
+
+```text
+src/Cpp/FingerTree> out/build/msvc-debug/tests/fingertree_smoke_tests.exe --group command-model --seed 0x123456789abcdef
+```

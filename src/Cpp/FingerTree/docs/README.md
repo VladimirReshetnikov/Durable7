@@ -3,6 +3,8 @@
 - Status: Informational
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
+- Updated (UTC): 2026-07-10T19:40:22Z
+- Updated against repository HEAD: 82a19b89405110255d76b848e6dff8a8f8d73bee
 - Audience: Maintainers and AI agents implementing the C++ port
 - Scope: C++ port documentation under `src/Cpp/FingerTree/docs`
 
@@ -20,6 +22,8 @@
   benchmark-harness-status guidance for this workspace.
 - [Tests README](../tests/README.md) maps the native smoke runner, domain test files, direct executable path, and
   tearable concurrency stress control.
+- [Samples README](../samples/README.md) describes the deterministic showcase and measured-rope snapshot tour.
+- [Benchmarks README](../benchmarks/README.md) catalogs the dependency-free Milestone 8 performance cases.
 
 ## Independent Reviews
 
@@ -31,12 +35,15 @@ no shared context). They originally converged on the same top findings:
 - structure-level tree/rope concurrency stress tests were absent;
 - Milestone 8 samples and benchmarks were still missing.
 
-The first correction pass is recorded in
+The review corrections are recorded in
 [`implementation-notes.md`](implementation-notes.md#checkpoint-independent-review-corrections): the locate result
 shape is now total, the named-operation layer is present, and structure-level tearable concurrency stress tests are
-part of `fingertree.smoke`. The current active gap is Milestone 8: no C++ `samples/` or `benchmarks/` directory is
-checked in yet. Stateful command-sequence shrinking, install/export packaging, CI, and multi-compiler or
-ThreadSanitizer coverage also remain future validation work.
+part of the native suite. Milestone 8 is now complete: deterministic samples are CTest-smoked, the Release
+benchmark harness covers the port-plan families (including allocation-flat branching at 100/10k/1M), and an
+installed consumer validates the namespaced CMake target without source-tree include paths. CMake presets are
+host-portable, the inert dependency manifest is gone, and the focused GitHub Actions workflow exercises MSVC and
+GCC and Clang Debug/Release builds plus separate Linux Clang ASan+UBSan and ThreadSanitizer lanes. The local
+Windows Clang lane targets the MSVC ABI and cannot supply TSan, so the Linux job owns that evidence.
 
 The review reports are historical snapshots. Keep them intact as evidence of the review process, and use the
 current [API notes](api-notes.md), [usage guide](usage.md), [validation guide](validation.md), and correction

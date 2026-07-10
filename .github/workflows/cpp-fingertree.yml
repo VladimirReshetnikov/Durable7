@@ -1,0 +1,168 @@
+name: C++ FingerTree
+
+on:
+  push:
+    paths:
+      - ".github/workflows/cpp-fingertree.yml"
+      - "eng/**"
+      - "src/test_support/**"
+      - "src/Cpp/FingerTree/**"
+  pull_request:
+    paths:
+      - ".github/workflows/cpp-fingertree.yml"
+      - "eng/**"
+      - "src/test_support/**"
+      - "src/Cpp/FingerTree/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cpp-fingertree-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  msvc:
+    name: MSVC ${{ matrix.configuration }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure, build, and test headlessly
+        shell: pwsh
+        run: |
+          . ./eng/Enable-HeadlessTestMode.ps1
+          $null = Enable-HeadlessTestMode
+          $build = "src/Cpp/FingerTree/out/build/ci-msvc-${{ matrix.configuration }}"
+          cmake -S src/Cpp/FingerTree -B $build -G Ninja `
+            -DCMAKE_BUILD_TYPE=${{ matrix.configuration }}
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build $build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir $build --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run benchmark sanity probe
+        if: matrix.configuration == 'Release'
+        shell: pwsh
+        run: |
+          . ./eng/Enable-HeadlessTestMode.ps1
+          $null = Enable-HeadlessTestMode
+          & "src/Cpp/FingerTree/out/build/ci-msvc-Release/benchmarks/fingertree_benchmarks.exe" `
+            --short --filter=persistence_branching
+          exit $LASTEXITCODE
+
+  gcc:
+    name: GCC ${{ matrix.configuration }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure, build, and test
+        shell: bash
+        run: |
+          set -euo pipefail
+          build="src/Cpp/FingerTree/out/build/ci-gcc-${{ matrix.configuration }}"
+          cmake -S src/Cpp/FingerTree -B "$build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.configuration }} \
+            -DCMAKE_CXX_COMPILER=g++
+          cmake --build "$build"
+          ctest --test-dir "$build" --output-on-failure
+
+      - name: Run benchmark sanity probe
+        if: matrix.configuration == 'Release'
+        shell: bash
+        run: |
+          set -euo pipefail
+          src/Cpp/FingerTree/out/build/ci-gcc-Release/benchmarks/fingertree_benchmarks \
+            --short --filter=persistence_branching
+
+  clang:
+    name: Clang ${{ matrix.configuration }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure, build, and test
+        shell: bash
+        run: |
+          set -euo pipefail
+          build="src/Cpp/FingerTree/out/build/ci-clang-${{ matrix.configuration }}"
+          cmake -S src/Cpp/FingerTree -B "$build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.configuration }} \
+            -DCMAKE_CXX_COMPILER=/usr/bin/clang++
+          cmake --build "$build"
+          ctest --test-dir "$build" --output-on-failure
+
+      - name: Run Clang static analyzer on the aggregate public-header surface
+        if: matrix.configuration == 'Debug'
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/clang++ --analyze -Xanalyzer -analyzer-output=text \
+            -std=c++23 -pthread -Wall -Wextra -Wpedantic -Werror \
+            -I src/Cpp/FingerTree/include \
+            src/Cpp/FingerTree/tests/installed_consumer/main.cpp
+
+  sanitizers:
+    name: Clang ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ASan + UBSan
+            slug: asan-ubsan
+            compile_flags: -fsanitize=address,undefined -fno-omit-frame-pointer
+            link_flags: -fsanitize=address,undefined
+            runtime_environment: ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
+          - name: TSan
+            slug: tsan
+            compile_flags: -fsanitize=thread -fno-omit-frame-pointer
+            link_flags: -fsanitize=thread
+            runtime_environment: TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure and build
+        shell: bash
+        run: |
+          set -euo pipefail
+          build="src/Cpp/FingerTree/out/build/ci-${{ matrix.slug }}"
+          cmake -S src/Cpp/FingerTree -B "$build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+            -DFINGERTREE_ENABLE_ALLOCATION_TRACKING=OFF \
+            -DFINGERTREE_BUILD_BENCHMARKS=OFF \
+            "-DCMAKE_CXX_FLAGS=${{ matrix.compile_flags }}" \
+            "-DCMAKE_EXE_LINKER_FLAGS=${{ matrix.link_flags }}"
+          cmake --build "$build"
+
+      - name: Run sanitizer tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          env ${{ matrix.runtime_environment }} \
+            ctest --test-dir "src/Cpp/FingerTree/out/build/ci-${{ matrix.slug }}" --output-on-failure

@@ -4,6 +4,8 @@
 - Created (UTC): 2026-06-30T02:52:50Z
 - Reviewed (UTC): 2026-06-30T16:54:50Z
 - Repository HEAD: c9aef9636783ee5d4be6cee7819bb9a4ad70fb5a
+- Updated (UTC): 2026-07-10T19:40:22Z
+- Updated against repository HEAD: 82a19b89405110255d76b848e6dff8a8f8d73bee
 - Audience: Maintainers and AI agents implementing the C++ port of the FingerTree workspace
 - Scope: Directory layout, toolchain choice, architecture, implementation sequence, and validation strategy
 - Companion: [`port-plan-editorial-notes.md`](port-plan-editorial-notes.md) records the non-obvious C#→C++
@@ -64,9 +66,9 @@ A direct PowerShell invocation of `VsDevCmd.bat` does not persist its environmen
 PowerShell process; keep developer-environment setup and the CMake/CTest commands in one `cmd.exe` chain when the
 shell is not already initialized.
 
-The repository may install additional tooling. If dependency management is needed, prefer bootstrapping `vcpkg`
-for stable open-source C++ libraries. Keep the core implementation dependency-light; use third-party packages
-primarily for tests and benchmarks.
+The repository may install additional tooling. If dependency management becomes necessary, prefer bootstrapping
+`vcpkg` for stable open-source C++ libraries. Do not retain an empty manifest: keep the core, tests, and benchmark
+harness dependency-free until a concrete third-party package is intentionally wired into CMake and validation.
 
 ## Workspace Layout
 
@@ -78,8 +80,8 @@ src/
     └── FingerTree/
         ├── CMakeLists.txt
         ├── CMakePresets.json
-        ├── vcpkg.json
         ├── README.md
+        ├── cmake/
         ├── docs/
         │   ├── README.md
         │   ├── api-notes.md
@@ -146,15 +148,17 @@ src/
         │   └── persistence_concurrency_tests.cpp
         ├── benchmarks/
         │   ├── CMakeLists.txt
-        │   ├── deque_benchmarks.cpp
-        │   ├── measured_tree_benchmarks.cpp
-        │   ├── sorted_collection_benchmarks.cpp
-        │   ├── priority_queue_benchmarks.cpp
-        │   └── rope_benchmarks.cpp
+        │   ├── README.md
+        │   ├── benchmark_allocation.cpp
+        │   ├── benchmark_allocation.hpp
+        │   └── fingertree_benchmarks.cpp
         └── samples/
             ├── CMakeLists.txt
+            ├── README.md
             ├── showcase.cpp
-            └── persistent_snapshots.cpp
+            ├── persistent_snapshots.cpp
+            ├── thin executable entry points
+            └── deterministic transcript smoke test
 ```
 
 The public include namespace should be `tools::data_structures::finger_tree`. Internal implementation should
@@ -176,7 +180,8 @@ Core library:
 
 Tests:
 
-- Prefer Catch2 through `vcpkg`.
+- Keep the repository-owned runner while it provides replay, reduction, grouped CTest, and headless failure
+  behavior without dependencies; introduce Catch2 only if it supplies a concrete missing capability.
 - Use deterministic randomized model tests against `std::vector`, `std::multiset`, `std::set`, and `std::map`.
 - Stateful command-sequence tests are required, not optional. Start with a small local `test_support` command-model
   harness that can replay and reduce operation sequences; use RapidCheck or another property library only if it
@@ -184,7 +189,8 @@ Tests:
 
 Benchmarks:
 
-- Use Google Benchmark through `vcpkg`.
+- Use the dependency-free repository harness for the required complexity probes. Introduce Google Benchmark only
+  if statistically richer measurement needs justify a real package dependency.
 - Compare against `std::vector`, `std::deque`, `std::set`, `std::map`, and `std::priority_queue` where those are
   sensible baselines, while documenting mutability and persistence differences.
 
@@ -729,13 +735,13 @@ Create the C++ workspace:
 
 - `src/Cpp/FingerTree/CMakeLists.txt`
 - `CMakePresets.json`
-- `vcpkg.json`
 - basic README and docs index
 - one header-first library target (`INTERFACE` until a non-template `src/` helper is actually needed)
 - one smoke-test target registered with CTest
 - warning policy wired through target helpers: `/permissive-`, `/Zc:__cplusplus`, `/W4`, `/WX`, and external-header
   warning suppression for STL/vcpkg headers
-- Visual Studio/Ninja presets that work when `cmake.exe` and `ninja.exe` are not on `PATH`
+- portable Ninja presets without checked-in machine-specific tool paths; initialize a Visual Studio developer
+  environment for MSVC, or provide CMake/Ninja/compiler through `PATH`
 - test-support instrumentation used from Milestone 3 on: a counting global `operator new`/`delete` (or an
   instrumented allocator) and an operation/comparison counter, so the complexity-guard tests can observe
   allocation and comparer-call counts
@@ -801,9 +807,10 @@ Validation:
 - A **tearable concurrent-first-read** test (the C++ analogue of the C# `TearableConcurrencyStressTests`): a
   multi-word struct with an `is_intact()` tear detector used as **both element and measure**, with (a) many-thread
   reads of one immutable tree, (b) concurrent *first* reads of a fresh, never-forced tree validating the forced
-  spine measure **and** every element are intact (this exercises the atomic measure-box publication), (c) lock-free
-  single-producer/multi-consumer publication over an atomic `shared_ptr`, and (d) a branching+reading soak off a
-  retained base validated against a model.
+  spine measure **and** every element are intact (this exercises the atomic measure-box publication), (c) atomic,
+  data-race-safe single-producer/multi-consumer publication over an atomic `shared_ptr`, and (d) a branching+reading
+  soak off a retained base validated against a model. This is not a lock-free progress claim:
+  `std::atomic<std::shared_ptr<T>>` may serialize internally.
 - A stateful/command-sequence model test that generates *operation sequences* and shrinks to a minimal failing
   program (the analogue of the C# `ModelBasedCommandTests`), replayed against a `std::vector` model.
 
@@ -905,14 +912,19 @@ Validation:
 
 ### Milestone 8: Samples And Benchmarks
 
+Status: Complete. The checked-in sample smoke test and dependency-free benchmark harness implement the contracts
+below; see the [samples](../samples/README.md) and [benchmark](../benchmarks/README.md) guides.
+
 Add samples (the C# ships three — Tour, Showcase, Editor; Editor is dropped because the editor-grade text
 extras are out of scope):
 
 - `showcase.cpp`: priority queue, sorted collections, interval queries, weighted selection, reversible deque.
 - `persistent_snapshots.cpp`: concretely the C# **Tour** — a `rope<char>`/`measured_rope<char, newline_measure>`
-  text buffer demonstrating (a) undo/redo as a cursor over O(1) structurally-shared snapshots, (b) lock-free
-  single-writer/concurrent-reader snapshot publication over an atomic `shared_ptr`, and (c) O(log n) line/column
-  navigation via the newline measure. (Not element-agnostic — rope/measured_rope are in scope.)
+  text buffer demonstrating (a) undo/redo as a cursor over O(1) structurally-shared snapshots, (b) atomic,
+  data-race-safe single-writer/concurrent-reader snapshot publication over an atomic `shared_ptr`, and (c) O(log n)
+  line/column navigation via the newline measure. The sample must disclose that `atomic<shared_ptr>` can serialize
+  internally and carries no lock-free throughput guarantee. (Not element-agnostic — rope/measured_rope are in
+  scope.)
 - Do not port the C# Editor sample in the first wave; it exists to demonstrate Unicode scalar, grapheme, and
   newline-style extras that are intentionally out of scope.
 - Each sample exposes a testable `run(std::ostream&)` seam with `main()` a thin wrapper over `std::cout`, and is
@@ -957,7 +969,9 @@ Before treating the C++ port as usable:
 - Run concurrency tests under a duration environment variable similar to `FINGERTREE_STRESS_SECONDS`.
 - Run the sample smoke tests (each sample's `run()` captured into a string and checked against expected
   deterministic transcript markers) so the samples cannot silently rot.
-- Run static analysis available from MSVC where practical.
+- Run a concrete static-analysis CI gate. The current practical gate is Clang's analyzer with warnings as errors
+  over the aggregate public-header consumer; it covers representative instantiations, not every possible
+  template specialization. Run MSVC `/analyze` as a complementary local probe when viable.
 - Build at least one consumer smoke project that includes only public headers and links against the installed or
   exported target, so internal include paths do not leak into the public API.
 

@@ -3,18 +3,37 @@
 - Status: Current API notes
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
+- Updated (UTC): 2026-07-10T20:20:56Z
+- Updated against repository HEAD: 18f23de9cb90ac47234bfdeea097da2cedff6f9f
 - Audience: Maintainers implementing and reviewing public C++ APIs
 - Scope: C++ naming, contracts, and intentional differences from the C# workspace
 
 The public namespace is `tools::data_structures::finger_tree`. For practical construction,
 update, and snapshot examples, start with the [usage guide](usage.md).
 
+## CMake Package
+
+Source-tree and installed consumers use the same namespaced target:
+
+```cmake
+find_package(ToolsDataStructuresFingerTree 0.1 CONFIG REQUIRED)
+target_link_libraries(my_target PRIVATE tools::data_structures::finger_tree)
+```
+
+The target publishes the public include directory and the C++23 language requirement. MSVC-specific dialect
+options remain compiler-guarded generator expressions in the export, so an installed package generated on one
+compiler does not inject those flags into another compiler. Package versions are compatible within major version
+0 only when CMake's `SameMajorVersion` rule accepts them; consumers that require an exact pre-1.0 surface should
+request `EXACT`.
+
 The C++ port follows the repository's C# semantics, but it uses idiomatic C++ spelling:
 
 - collection observers use `empty`, `size`, `front`, `back`, `at`, and `operator[]`;
 - persistent updates return new values and do not mutate existing snapshots;
 - absent ranks use `std::optional<std::size_t>` rather than a `-1` sentinel;
-- multi-value returns use named result structs with structural equality;
+- pure-value multi-value returns use named result structs with semantic equality when their public element/value
+  components are equality comparable; persistent collection fields compare by logical sequence rather than
+  storage identity. The identity-bearing `finger_tree_locate_reference_result` intentionally has no equality;
 - container types deliberately do not define pointer-based default equality;
 - runtime comparators are stored by the sorted collection wrappers, while priority and interval measures use
   compile-time comparison policy state;
@@ -48,7 +67,10 @@ Notable C++ differences from C#:
 - try-peek/get operations return nullable pointers instead of using out parameters;
 - construction uses initializer-list, iterator, and range APIs rather than C# `params ReadOnlySpan<T>` and
   `IEnumerable<T>` overloads;
-- runtime sorted-search comparers are `std::less`-style callables where `compare(a, b)` means `a < b`.
+- runtime sorted-search comparers are `std::less`-style callables where `compare(a, b)` means `a < b`;
+- `const_iterator` is a multipass forward iterator. It retains the immutable root, so its references remain valid
+  after the facade object that created it is destroyed. Construction owns O(log n) traversal state; increment
+  reuses that state instead of growing a sequence-sized buffer, and `copy_to` streams through the same traversal.
 
 ## `finger_tree<T, MeasurePolicy>`
 
@@ -62,7 +84,8 @@ Primary operations:
 - endpoint updates/views: `prepend`, `append`, `try_view_left`, `try_view_right`;
 - catenation: `concat`;
 - measure-guided search: `split`, `try_split_find`, `try_locate`, `try_locate_reference`;
-- materialization/copy: `to_vector`, `copy_to`.
+- streaming traversal/copy: `begin`, `end`, `cbegin`, `cend`, `for_each`, `copy_to`;
+- explicit materialization: `to_vector`.
 
 Notable C++ differences from C#:
 
@@ -75,9 +98,13 @@ Notable C++ differences from C#:
   found, the whole-tree measure on a miss, and the identity for an empty tree;
 - `try_locate_reference` has the same total-result boundary semantics but returns a pointer to the stored element
   instead of copying it. The pointer remains valid while the source tree, or another persistent snapshot sharing
-  the located node, remains alive;
-- enumeration is exposed through `to_vector`/`copy_to` in this checkpoint. A streaming iterator can be added on top
-  of the same tree/node block traversal used by the deque without changing tree semantics.
+  the located node, remains alive. Its result carrier deliberately has no `operator==`: raw pointer equality would
+  expose sharing identity, while pointee equality would misrepresent an API whose purpose is canonical-reference
+  access and whose pointer validity is tied to a sharing snapshot lifetime;
+- `const_iterator` is a multipass forward iterator that retains the immutable root. It descends tree and node
+  blocks directly, does not flatten the sequence, and returns references to stored elements. Construction owns
+  O(log n) traversal state; prefix increment reuses its reserved stack. `for_each` and `copy_to` stream directly
+  without an intermediate sequence container.
 
 ## Named Measure Operations
 
@@ -101,7 +128,8 @@ Primary operations:
 - endpoint updates: `push_front`, `push_back`, `remove_first`, `remove_last`, `try_pop_front`, and `try_pop_back`;
 - indexed updates: `set_item`, `set_at`, `insert_at`, and `remove_at`;
 - slicing and catenation: `split_at`, `concat`, and `reverse`;
-- materialization and test support: `to_vector`, `validate_invariants`, and `tree_depth`.
+- streaming traversal/copy: `begin`, `end`, `cbegin`, `cend`, and `copy_to`;
+- explicit materialization and test support: `to_vector`, `validate_invariants`, and `tree_depth`.
 
 Notable C++ differences from C#:
 
@@ -111,8 +139,9 @@ Notable C++ differences from C#:
 - counts and indices use `std::size_t`, continuing the port-wide count policy;
 - construction uses initializer-list, iterator, and range APIs rather than C# `params ReadOnlySpan<T>` and
   `IEnumerable<T>` overloads;
-- traversal is exposed through vector materialization in this checkpoint, matching the C# reversible deque's
-  documented materialize-then-enumerate behavior.
+- logical reversal can only expose values produced during orientation-aware descent, so `const_iterator` is
+  intentionally an input iterator rather than claiming stable-reference forward semantics. It retains the root
+  and one current value, streams without whole-sequence materialization, and `copy_to` uses that logical order.
 
 ## `rope<T>`
 
@@ -125,7 +154,8 @@ Primary operations:
 - endpoint updates: `push_front`, `push_back`, `add_first`, `add_last`, `remove_first`, and `remove_last`;
 - indexed and range updates: `set_item`, `set_at`, `insert_at`, `insert_range`, `remove_at`, and `remove_range`;
 - slicing and catenation: `slice`, `split_at`, and `concat`;
-- copying/materialization: `to_vector`, `get_range`, `copy_to`, and `compact`;
+- streaming traversal/copy: `begin`, `end`, `cbegin`, `cend`, and indexed-span `copy_to`;
+- explicit materialization: `to_vector`, `get_range`, and `compact`;
 - test/diagnostic support: `validate_invariants` and `chunk_count`.
 
 Notable C++ differences from C#:
@@ -138,8 +168,8 @@ Notable C++ differences from C#:
   storage;
 - chunks store `shared_ptr<const std::vector<T>>` plus offset/length instead of `ReadOnlyMemory<T>`. Slices share
   backing vectors, and `compact()` rebuilds fresh chunks to release oversized retained backing storage;
-- traversal is exposed through vector materialization in this checkpoint. A chunk-aware iterator remains a follow-up
-  once the general measured tree grows streaming traversal.
+- `const_iterator` is a multipass, chunk-aware forward iterator. Its underlying measured-tree cursor retains the
+  chunk tree and backing storage, so references survive destruction of the facade that produced the iterator.
 
 ## `measured_rope<T, MeasurePolicy>`
 
@@ -165,8 +195,8 @@ Notable C++ differences from C#:
   a miss;
 - measure navigation descends by the second component of the tree measure, then scans within the isolated chunk to
   find the exact boundary element and measure-before value. The scan is bounded by `max_chunk_size`;
-- traversal is exposed through vector materialization in this checkpoint, matching the positional rope follow-up
-  plan for streaming traversal.
+- traversal uses the same retained, chunk-aware forward-iterator contract as `rope<T>`; `to_vector` remains the
+  explicit owning materialization operation.
 
 ## Text Rope Helpers
 
@@ -194,7 +224,8 @@ Primary bag operations:
 - observers: `empty`, `size`, `comparison`, `min`, `max`, `at`, `operator[]`;
 - updates: `add`, `add_range`, `try_remove`, `remove`, `remove_all`;
 - queries: `contains`, `count_less_than`, `count_at_most`, `count_of`, `get_range`;
-- materialization: `to_vector`.
+- streaming traversal/copy: `begin`, `end`, `cbegin`, `cend`, `copy_to`;
+- explicit materialization: `to_vector`.
 
 Primary set operations:
 
@@ -203,7 +234,8 @@ Primary set operations:
 - navigation: `try_floor`, `try_ceiling`, `try_lower`, `try_higher`, `get_range`;
 - algebra and relations: `union_with`, `intersect`, `except`, `symmetric_except`, subset/superset predicates,
   `overlaps`, and `set_equals`;
-- materialization: `to_vector`.
+- streaming traversal/copy: `begin`, `end`, `cbegin`, `cend`, `copy_to`;
+- explicit materialization: `to_vector`.
 
 Primary map operations:
 
@@ -211,7 +243,8 @@ Primary map operations:
   `index_of_key`;
 - lookup and updates: `contains_key`, `try_get`, `set_item`, `insert`, `try_insert`, `try_remove`, `remove`;
 - navigation: `try_floor_entry`, `try_ceiling_entry`, `try_lower_entry`, `try_higher_entry`, `get_range`;
-- materialization: `to_vector`, `keys_to_vector`, `values_to_vector`.
+- streaming traversal/copy: `begin`, `end`, `cbegin`, `cend`, `copy_to`;
+- explicit materialization: `to_vector`, `keys_to_vector`, `values_to_vector`.
 
 Notable C++ differences from C#:
 
@@ -227,8 +260,10 @@ Notable C++ differences from C#:
 - set algebra reuses the receiver, empty, or disjoint tree directly when comparator state is compatible. When two
   values have the same `Less` type but incompatible runtime state, the right operand is normalized under the
   receiver's comparator before algebra or relation evaluation;
-- traversal is exposed through vector materialization in this checkpoint. Lazy sorted-wrapper iterators can be
-  added after the general measured tree grows a streaming iterator.
+- all three wrappers expose the measured tree's retained multipass forward iterator and streaming `copy_to`.
+  Set-algebra merge walks stream comparator-compatible operands without temporary operand vectors. Incompatible
+  runtime comparator state still requires rebuilding and sorting the right operand under the receiver's order
+  before that streaming merge.
 
 ## `priority_queue<T, Priority, Comparison>`
 
@@ -239,7 +274,8 @@ Primary operations:
 
 - observers: `empty`, `size`, `try_peek_priority`, `try_peek`;
 - updates: `enqueue`, `try_dequeue`, `meld`;
-- materialization: `to_vector`.
+- streaming traversal/copy: `begin`, `end`, `cbegin`, `cend`, `copy_to`;
+- explicit materialization: `to_vector`.
 
 Notable C++ differences from C#:
 
@@ -247,7 +283,8 @@ Notable C++ differences from C#:
   matches the measure layer's compile-time comparison regime and still supports max-queue behavior through
   `reverse_comparison<Priority>`;
 - absent peek/dequeue results use `std::optional`;
-- `to_vector` returns entries in insertion/tree order, matching the C# queue's unspecified enumeration order.
+- iteration, `copy_to`, and `to_vector` expose insertion/tree order, matching the C# queue's unspecified
+  enumeration order.
 
 ## `interval_tree<T, Comparison>`
 
@@ -261,7 +298,8 @@ Primary operations:
 - construction: default construction, initializer-list construction, iterator construction, and `from_range`;
 - updates: `insert`, `try_remove`, `remove`, `coalesce`;
 - queries: `try_find_overlap`, `try_find_containing`, `find_overlaps`, `count_overlaps`, `contains`;
-- materialization: `to_vector`.
+- streaming traversal/copy: `begin`, `end`, `cbegin`, `cend`, `copy_to`;
+- explicit materialization: `to_vector`.
 
 Notable C++ differences from C#:
 
@@ -272,4 +310,6 @@ Notable C++ differences from C#:
 - `size()` returns `std::size_t`;
 - `find_overlaps` returns `std::vector<interval<T>>` in nondecreasing low-endpoint order;
 - `contains` and `try_remove` match endpoints by the configured comparison policy, not by `operator==`, matching
-  the C# comparer-equality contract.
+  the C# comparer-equality contract;
+- iteration and `copy_to` stream nondecreasing low-endpoint order. `count_overlaps` counts directly, and
+  `coalesce` sweeps the iterator into a rebuilt tree without first materializing all source intervals.

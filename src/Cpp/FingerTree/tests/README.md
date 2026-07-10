@@ -46,8 +46,9 @@ listing, and replay-seed selection.
   chunk-aware forward traversal, bounded nonmaterializing copy, same-type insertion regression guards, measured
   searches, text interop, line navigation, retained text snapshots, long edit scripts, and randomized
   vector/string-model histories.
-- `atomic_box_tests.cpp` and `tearable_concurrency_tests.cpp` cover lock-free publication helpers and structure-level
-  tearable-value stress tests.
+- `atomic_box_tests.cpp` and `tearable_concurrency_tests.cpp` cover atomic, data-race-safe publication helpers and
+  structure-level tearable-value stress tests. `atomic<shared_ptr>` may serialize internally and is not promised
+  lock-free.
 - `test_support/` holds the local runner, replay-seed capture, the stateful command recorder and shrinker,
   allocation counting, and operation-count helpers used across the suite. The allocation counter replaces all
   standard throwing, nothrow, and aligned global allocation forms used by the test binary.

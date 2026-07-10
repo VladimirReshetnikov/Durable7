@@ -77,7 +77,7 @@ provides. Plan §"Lazy Memoization And Thread Safety" now states this explicitly
 ### 1.3 A plain `std::shared_ptr` is **not** safe to race on (H)
 
 The whole C# concurrency story rests on the CLR guarantee that **reference reads/writes are atomic**: the
-publication doc's lock-free patterns use `Volatile.Write(ref cell[0], current)` / `Volatile.Read`
+publication doc's atomic publication patterns use `Volatile.Write(ref cell[0], current)` / `Volatile.Read`
 ([`persistence-and-concurrency.md:88-123`](../../../CSharp/docs/FingerTree/persistence-and-concurrency.md)), and the
 suspension cells use `Volatile.Read` + `Interlocked.CompareExchange` on `object` references.
 
@@ -89,6 +89,8 @@ measure box, and the publication cell in the `persistent_snapshots` sample / con
 `std::atomic<std::shared_ptr<T>>` (C++20) or accessed only through `std::atomic_load`/`atomic_store`. A plain
 `shared_ptr` field is safe to copy concurrently only *after* a happens-before publication and never *while* it is
 being reassigned. The C# `Volatile.Write`/`Volatile.Read` cell maps to an atomic `shared_ptr`, not a plain one.
+That mapping is data-race-safe but does not inherit a lock-free progress guarantee: the C++ specialization may
+serialize internally.
 
 ### 1.4 Memory ordering must be acquire/release, never relaxed (M)
 
@@ -426,9 +428,11 @@ allocation, and complexity-guard families. The plan's validation lists are light
 - **Tearable concurrent-first-read test (H-adjacent).** Milestone 3 says only "concurrent first-force read tests."
   Replace with an explicit `Tearable` analogue: a multi-word struct with an `is_intact()` tear detector used as
   *both element and measure*, with (a) many-thread reads of one immutable tree, (b) concurrent *first* reads of a
-  fresh, never-forced tree validating the forced spine measure **and** every element are intact, (c) lock-free
-  single-producer/multi-consumer publication over an atomic `shared_ptr`, and (d) a branching+reading soak off a
-  retained base ([`TearableConcurrencyStressTests.cs`](../../../CSharp/tests/Tools.DataStructures.FingerTree.Tests/TearableConcurrencyStressTests.cs)).
+  fresh, never-forced tree validating the forced spine measure **and** every element are intact, (c) atomic,
+  data-race-safe single-producer/multi-consumer publication over an atomic `shared_ptr`, and (d) a branching+reading
+  soak off a retained base
+  ([`TearableConcurrencyStressTests.cs`](../../../CSharp/tests/Tools.DataStructures.FingerTree.Tests/TearableConcurrencyStressTests.cs)).
+  This does not establish lock-free progress because `atomic<shared_ptr>` may serialize internally.
   This is the only test that exercises §1's atomic-measure-publication and tear-freedom invariants.
 - **Model-based command tests.** `ModelBasedCommandTests` generates *sequences of operations* and shrinks to a
   minimal failing *program* — the most powerful tier and the one most likely to surface lazy-spine reconstruction
@@ -449,8 +453,9 @@ allocation, and complexity-guard families. The plan's validation lists are light
   benchmark.
 - **Samples:** C# ships three (Tour, Showcase, Editor). Editor is correctly dropped (text extras). But Tour ≠ the
   plan's abstract `persistent_snapshots`: Tour is a rope/measured-rope text-buffer persistence-and-concurrency
-  demonstration (undo/redo cursor, line/column navigation, lock-free snapshotting), and rope/measured_rope are in
-  scope. Make `persistent_snapshots.cpp` concretely the Tour. Each sample should expose a testable
+  demonstration (undo/redo cursor, line/column navigation, atomic data-race-safe snapshot publication), and
+  rope/measured_rope are in scope. Make `persistent_snapshots.cpp` concretely the Tour while disclosing possible
+  internal serialization. Each sample should expose a testable
   `run(std::ostream&)` seam smoke-tested via CTest ([`SampleSmokeTests.cs`](../../../CSharp/tests/Tools.DataStructures.FingerTree.Tests/SampleSmokeTests.cs)).
 
 ---

@@ -440,3 +440,25 @@ in `CMakePresets.json`). None of those contradict anything in this review; they 
 worth folding into the same fix list, particularly the complexity/allocation-flatness guards, which
 pair naturally with this review's H3 (both are "the behavior is correct, but nothing protects it
 from regressing").
+
+## Resolution Addendum (2026-07-10)
+
+This report remains an accurate historical snapshot; its actionable gaps are now resolved in the remediation
+worktree. Locate is total on misses, named measure operations and structural result equality are present, and the
+collection family has forward streaming traversal/copy paths. The native suite now has 16 headless subsystem CTest
+entries, replay seeds printed before randomized work and on caught failure, six-family stateful command programs
+with five default seeds and deletion-minimal shrinking, non-group locate/split equivalence, exhaustive small-size
+coverage, complexity guards, and structure-level tearable concurrency tests.
+
+Milestone 8 now ships deterministic `showcase` and persistent text-snapshot samples with captured-output smoke
+tests plus a dependency-free benchmark harness. The short harness covers all planned families; retained branching
+measured exactly 4.00 allocations / 472 bytes per operation at sizes 100, 10,000, and 1,000,000. Install/export
+rules provide the architecture-independent `tools::data_structures::finger_tree` CMake target, version metadata,
+public headers, and MIT-0 license. The headless installed-consumer test requires the staged package, disables
+registries and repository developer targets, and rejects source-include leakage.
+
+The inert vcpkg manifest and machine-specific preset path are gone. Focused CI covers MSVC/GCC/Clang
+Debug/Release, Clang static analysis of the aggregate consumer, separate ASan+UBSan and TSan jobs, all CTests, and
+Release branching probes. Fresh local MSVC Debug and Release runs each passed all 18 CTests; the Release build was
+clean under `/W4 /WX`. Snapshot publication is now described precisely as atomic and data-race-safe—not guaranteed
+lock-free, because `atomic<shared_ptr>` may serialize internally.

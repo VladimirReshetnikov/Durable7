@@ -43,7 +43,7 @@ entry points for unattended validation.
 | [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | `.\build.ps1 -Workspace Hamt` from `src/Kotlin` | [Validation](../../src/Kotlin/Hamt/docs/validation.md) | [Tests](../../src/Kotlin/Hamt/tests/README.md) | Kotlin/JVM HAMT build, tool bootstrap, deterministic trie and set-algebra tests |
 | [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | `.\test.ps1 -Workspace Hamt` from `src/Rust` | [Validation](../../src/Rust/Hamt/docs/validation.md) | [Tests](../../src/Rust/Hamt/tests/README.md) | Safe Rust crate, structural HAMT tests, collision and set-algebra coverage |
 | [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree -RunTests` from `src/C` | [Validation](../../src/C/FingerTree/docs/validation.md) | [Tests](../../src/C/FingerTree/tests/README.md) | C11 MSVC, GCC, and Clang builds; tests, samples, benchmark harness entry points |
-| [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree -RunTests` from `src/Cpp` | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | [Tests](../../src/Cpp/FingerTree/tests/README.md) | C++23 MSVC, GCC, and Clang CTest lanes; stress controls; benchmark-harness status |
+| [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree -RunTests` from `src/Cpp` | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | [Tests](../../src/Cpp/FingerTree/tests/README.md) | C++23 MSVC, GCC, and Clang CTest lanes; stress controls; deterministic samples; dependency-free benchmarks; installed-package consumer |
 | [`src/Haskell`](../../src/Haskell/README.md) | `.\test.ps1` from `src/Haskell` | [Haskell README](../../src/Haskell/README.md) | [HAMT tests](../../src/Haskell/Hamt/test/README.md), [FingerTree tests](../../src/Haskell/FingerTree/test/README.md) | GHC/cabal build, dependency-light HAMT, FingerTree, and Tungsten executable tests |
 | [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree` from `src/Kotlin` | [Validation](../../src/Kotlin/FingerTree/docs/validation.md) | [Tests](../../src/Kotlin/FingerTree/tests/README.md) | Kotlin/JVM measured-tree tests across deque, reversible deque, sorted, cached priority, max-high interval, rope/text, AVL/share invariants, and generated/large stress |
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | `.\test.ps1 -Workspace FingerTree` from `src/Rust` | [Validation](../../src/Rust/FingerTree/docs/validation.md) | [Tests](../../src/Rust/FingerTree/tests/README.md) | Safe Rust checkpoint crate, structurally shared storage and cached-measure tests across deque, reversible deque, sorted, priority, interval, rope, measured tree, measured rope, and text helpers |
@@ -167,7 +167,8 @@ cd C:\DataStructures\src\Cpp
 .\build.ps1 -Workspace FingerTree -RunTests
 ```
 
-The FingerTree C and C++ workspaces use CMake presets with Visual Studio's bundled Ninja. The C++ workspace
+The FingerTree C and C++ workspaces use CMake/Ninja presets. The C++ presets do not pin a Visual Studio path:
+Ninja is resolved from the initialized developer environment or `PATH`. The C++ workspace
 models the target as `CXX_STANDARD 23` and adds MSVC `/std:c++latest` explicitly. A plain PowerShell invocation
 of `VsDevCmd.bat` does not persist environment changes in the current PowerShell process, so use a single
 `cmd.exe` chain when starting from an uninitialized shell.
@@ -207,6 +208,8 @@ tests, and benchmark harness status:
 - [C FingerTree benchmarks](../../src/C/FingerTree/benchmarks/README.md)
 - [C++ FingerTree validation](../../src/Cpp/FingerTree/docs/validation.md)
 - [C++ FingerTree tests](../../src/Cpp/FingerTree/tests/README.md)
+- [C++ FingerTree samples](../../src/Cpp/FingerTree/samples/README.md)
+- [C++ FingerTree benchmarks](../../src/Cpp/FingerTree/benchmarks/README.md)
 
 For C or C++ FingerTree source, header, test, sample, benchmark, or behavior-documentation changes, run the MSVC
 Debug/Release commands above and run separate GCC and Clang CMake build directories, followed by CTest in each
@@ -279,6 +282,10 @@ performance claims, or benchmark documentation.
 ```powershell
 cd C:\DataStructures\src\CSharp\benchmarks\Tools.DataStructures.FingerTree.Benchmarks
 dotnet run -c Release -- --filter * --job short
+
+cd C:\DataStructures\src\Cpp\FingerTree
+cmake --build --preset msvc-release --target fingertree_benchmarks
+.\out\build\msvc-release\benchmarks\fingertree_benchmarks.exe --short
 ```
 
 Release configuration is required for meaningful benchmark numbers.

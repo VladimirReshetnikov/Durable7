@@ -1,0 +1,23 @@
+add_executable(
+    fingertree_benchmarks
+    fingertree_benchmarks.cpp
+    benchmark_allocation.cpp
+)
+target_link_libraries(
+    fingertree_benchmarks
+    PRIVATE
+        tools::data_structures::finger_tree
+)
+target_include_directories(
+    fingertree_benchmarks
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+if(NOT FINGERTREE_ENABLE_ALLOCATION_TRACKING)
+    target_compile_definitions(
+        fingertree_benchmarks
+        PRIVATE
+            FINGERTREE_DISABLE_ALLOCATION_TRACKING=1
+    )
+endif()
+fingertree_configure_target(fingertree_benchmarks)

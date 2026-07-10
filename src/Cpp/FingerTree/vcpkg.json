@@ -1,6 +1,0 @@
-{
-  "name": "tools-data-structures-finger-tree-cpp",
-  "version-string": "0.1.0",
-  "description": "Header-first C++ port of Tools.DataStructures.FingerTree.",
-  "dependencies": []
-}
