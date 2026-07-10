@@ -88,6 +88,7 @@ std::size_t allocation_counting_scope::bytes_allocated() const noexcept
 
 } // namespace tools::data_structures::finger_tree::tests
 
+#ifndef FINGERTREE_DISABLE_ALLOCATION_TRACKING
 namespace {
 
 [[nodiscard]] std::size_t actual_allocation_size(const std::size_t size) noexcept
@@ -274,3 +275,4 @@ void operator delete[](void* const memory, std::size_t) noexcept
 {
     ::operator delete(memory);
 }
+#endif

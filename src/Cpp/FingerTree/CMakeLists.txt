@@ -7,7 +7,14 @@ project(
     LANGUAGES CXX
 )
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../../eng/HeadlessTest.cmake")
+
 option(FINGERTREE_BUILD_TESTS "Build the C++ FingerTree tests." ON)
+option(
+    FINGERTREE_ENABLE_ALLOCATION_TRACKING
+    "Override global new/delete in tests for allocation regression guards. Disable under AddressSanitizer."
+    ON
+)
 
 add_library(tools_data_structures_finger_tree INTERFACE)
 add_library(tools::data_structures::finger_tree ALIAS tools_data_structures_finger_tree)

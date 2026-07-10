@@ -6,5 +6,5 @@ add_executable(fingertree_c_snapshots persistent_snapshots.c)
 target_link_libraries(fingertree_c_snapshots PRIVATE tools::data_structures::finger_tree_c)
 fingertree_c_configure_target(fingertree_c_snapshots)
 
-add_test(NAME fingertree_c.sample.showcase COMMAND fingertree_c_showcase)
-add_test(NAME fingertree_c.sample.snapshots COMMAND fingertree_c_snapshots)
+tds_add_headless_test(NAME fingertree_c.sample.showcase TARGET fingertree_c_showcase)
+tds_add_headless_test(NAME fingertree_c.sample.snapshots TARGET fingertree_c_snapshots)

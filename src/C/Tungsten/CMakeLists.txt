@@ -7,6 +7,8 @@ project(
     LANGUAGES C
 )
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../../eng/HeadlessTest.cmake")
+
 option(TUNGSTEN_C_BUILD_TESTS "Build the C Tungsten tests." ON)
 
 add_library(tools_data_structures_hamt_c STATIC ../Hamt/src/hamt.c)

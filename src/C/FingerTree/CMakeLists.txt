@@ -7,6 +7,8 @@ project(
     LANGUAGES C
 )
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../../eng/HeadlessTest.cmake")
+
 option(FINGERTREE_C_BUILD_TESTS "Build the C FingerTree tests." ON)
 option(FINGERTREE_C_BUILD_SAMPLES "Build the C FingerTree samples." ON)
 option(FINGERTREE_C_BUILD_BENCHMARKS "Build the C FingerTree benchmark executable." ON)

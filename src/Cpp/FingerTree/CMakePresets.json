@@ -51,6 +51,7 @@
       "binaryDir": "${sourceDir}/out/build/ninja-asan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "FINGERTREE_ENABLE_ALLOCATION_TRACKING": "OFF",
         "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
         "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
       }

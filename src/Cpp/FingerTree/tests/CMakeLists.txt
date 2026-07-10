@@ -30,6 +30,14 @@ target_include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+if(NOT FINGERTREE_ENABLE_ALLOCATION_TRACKING)
+    target_compile_definitions(
+        fingertree_smoke_tests
+        PRIVATE
+            FINGERTREE_DISABLE_ALLOCATION_TRACKING=1
+    )
+endif()
+
 fingertree_configure_target(fingertree_smoke_tests)
 
-add_test(NAME fingertree.smoke COMMAND fingertree_smoke_tests)
+tds_add_headless_test(NAME fingertree.smoke TARGET fingertree_smoke_tests)

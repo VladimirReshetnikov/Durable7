@@ -18,6 +18,11 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+if ($RunTests) {
+    . (Join-Path $PSScriptRoot '..\..\eng\Enable-HeadlessTestMode.ps1')
+    $null = Enable-HeadlessTestMode
+}
+
 function Invoke-HamtBuild {
     Push-Location -LiteralPath (Join-Path $PSScriptRoot 'Hamt')
     try {

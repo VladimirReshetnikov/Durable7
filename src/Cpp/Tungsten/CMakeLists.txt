@@ -7,6 +7,8 @@ project(
     LANGUAGES CXX
 )
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../../eng/HeadlessTest.cmake")
+
 option(TUNGSTEN_BUILD_TESTS "Build the C++ Tungsten collection tests." ON)
 
 add_library(tools_data_structures_tungsten INTERFACE)

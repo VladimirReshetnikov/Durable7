@@ -1,4 +1,5 @@
 #include <Tools/DataStructures/Hamt/hamt.h>
+#include <tools/data_structures/test_support/headless_test_process.h>
 
 #include <ctype.h>
 #include <stdint.h>
@@ -14,7 +15,9 @@ void tds_hamt_test_fail_allocations_after(size_t successful_allocations);
 void tds_hamt_test_reset_allocator(void);
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 typedef volatile LONG test_atomic_long;
 
@@ -1564,6 +1567,10 @@ static const test_case tests[] = {
 };
 
 int main(void) {
+    if (!tds_enter_headless_test_process()) {
+        return EXIT_FAILURE;
+    }
+
     init_pools();
 
     const size_t test_count = sizeof(tests) / sizeof(tests[0]);

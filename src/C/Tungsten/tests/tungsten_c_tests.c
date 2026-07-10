@@ -1,4 +1,5 @@
 #include <tools/data_structures/tungsten/tungsten.h>
+#include <tools/data_structures/test_support/headless_test_process.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -7,7 +8,9 @@
 #include <string.h>
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 typedef volatile LONG test_atomic_long;
 
@@ -800,6 +803,10 @@ static void run_test(const char* name, void (*test)(void))
 
 int main(void)
 {
+    if (!tds_enter_headless_test_process()) {
+        return EXIT_FAILURE;
+    }
+
     run_test("list examples", test_list_examples);
     run_test("association ordering examples", test_association_ordering_examples);
     run_test("association custom policy", test_association_custom_policy);

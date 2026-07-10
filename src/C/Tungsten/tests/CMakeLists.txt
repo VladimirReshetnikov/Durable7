@@ -11,4 +11,4 @@ target_link_libraries(
 
 tungsten_c_configure_target(tungsten_c_tests)
 
-add_test(NAME tungsten_c.core COMMAND tungsten_c_tests)
+tds_add_headless_test(NAME tungsten_c.core TARGET tungsten_c_tests)

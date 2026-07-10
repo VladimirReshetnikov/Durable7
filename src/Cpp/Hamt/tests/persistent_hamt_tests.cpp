@@ -1,5 +1,6 @@
 #include <Tools/DataStructures/Hamt/persistent_hash_map.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_set.hpp>
+#include <tools/data_structures/test_support/headless_test_process.h>
 
 #include <algorithm>
 #include <atomic>
@@ -1033,6 +1034,10 @@ TEST(Set_SymmetricExceptTreatsInputDuplicatesAsOneItem) {
 } // namespace
 
 int main() {
+    if (!tds_enter_headless_test_process()) {
+        return EXIT_FAILURE;
+    }
+
     int failed = 0;
     for (const auto& test : registry()) {
         try {

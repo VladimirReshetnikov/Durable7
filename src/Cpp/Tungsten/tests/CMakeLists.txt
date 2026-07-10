@@ -17,4 +17,4 @@ target_include_directories(
 
 tungsten_configure_target(tungsten_smoke_tests)
 
-add_test(NAME tungsten.smoke COMMAND tungsten_smoke_tests)
+tds_add_headless_test(NAME tungsten.smoke TARGET tungsten_smoke_tests)

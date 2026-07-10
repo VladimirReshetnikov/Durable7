@@ -5,6 +5,8 @@
 #include "test_support/operation_counter.hpp"
 #include "test_support/test_runner.hpp"
 
+#include <tools/data_structures/test_support/headless_test_process.h>
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -13,14 +15,6 @@
 #include <new>
 #include <string_view>
 #include <vector>
-
-#ifdef _MSC_VER
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <crtdbg.h>
-#include <windows.h>
-#endif
 
 using namespace tools::data_structures::finger_tree;
 using namespace tools::data_structures::finger_tree::tests;
@@ -40,36 +34,12 @@ void add_rope_text_tests(suite& tests);
 void add_sorted_collection_tests(suite& tests);
 void add_tearable_concurrency_tests(suite& tests);
 
-#ifdef _MSC_VER
-void configure_non_interactive_failure_reporting()
-{
-    _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
-    _CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
-    _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
-    _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
-    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
-    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
-
-    _set_error_mode(_OUT_TO_STDERR);
-    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
-    _set_invalid_parameter_handler([](
-                                       const wchar_t*,
-                                       const wchar_t*,
-                                       const wchar_t*,
-                                       unsigned int,
-                                       uintptr_t) {
-        std::abort();
-    });
-
-    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
-}
-#endif
-
 int main()
 {
-#ifdef _MSC_VER
-    configure_non_interactive_failure_reporting();
-#endif
+    if (!tds_enter_headless_test_process()) {
+        return EXIT_FAILURE;
+    }
+
     std::cout << std::unitbuf;
     std::cerr << std::unitbuf;
 
@@ -109,6 +79,7 @@ int main()
         FT_REQUIRE(counter.comparisons() > 0);
     });
 
+#ifndef FINGERTREE_DISABLE_ALLOCATION_TRACKING
     tests.add("allocation counter can bracket heap work", [] {
         allocation_counting_scope scope;
         auto values = std::vector<int>{};
@@ -135,6 +106,7 @@ int main()
         FT_REQUIRE_EQUAL(scope.allocations(), static_cast<std::size_t>(2));
         FT_REQUIRE_EQUAL(scope.deallocations(), static_cast<std::size_t>(2));
     });
+#endif
 
     add_measure_tests(tests);
     add_interval_tree_tests(tests);

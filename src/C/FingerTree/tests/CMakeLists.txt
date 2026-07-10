@@ -17,4 +17,4 @@ target_include_directories(
 
 fingertree_c_configure_target(fingertree_c_tests)
 
-add_test(NAME fingertree_c.core COMMAND fingertree_c_tests)
+tds_add_headless_test(NAME fingertree_c.core TARGET fingertree_c_tests)
