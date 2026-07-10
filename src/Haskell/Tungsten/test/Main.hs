@@ -20,6 +20,7 @@ main = do
   testAssociationOrderingExamples
   testAssociationCustomPolicy
   testAssociationRelabelStress
+  testAssociationTreeBalance
   testAssociationGeneratedHistory
   testConcurrentReads
   putStrLn "tools-data-structures-tungsten tests passed"
@@ -97,6 +98,36 @@ testAssociationRelabelStress = do
   assertEqual "association relabel first" (Just (0, 0)) (Association.first values)
   assertEqual "association relabel last" (Just (999, 999)) (Association.last values)
   assertEqual "association relabel middle prefix" [0, 25, 24, 23, 22, 21] (fmap fst (List.take 6 (Association.toList values)))
+
+-- Locks the AVL invariant of the internal order tree: split/join reassembly
+-- must return balanced pieces, so the height after heavy positional editing
+-- stays within the AVL bound of roughly 1.4405 * log2 (n + 2). The unbalanced
+-- treeSplit this guards against reached height 48 at 16384 appends.
+testAssociationTreeBalance :: IO ()
+testAssociationTreeBalance = do
+  let appendCount = 2000 :: Int
+      appended = Association.fromList [(key, key) | key <- [0 .. appendCount - 1]]
+      seed = Association.fromList [(-1 :: Int, -1), (-2, -2)]
+      midpointStressed = List.foldl' insertMiddle seed [0 :: Int .. appendCount - 1]
+      insertMiddle association value =
+        case Association.insertAt 1 value value association of
+          Just result -> result
+          Nothing -> error "validated balance-stress insertion failed"
+  assertEqual "balance stress appended contents" [(key, key) | key <- [0 .. appendCount - 1]] (Association.toList appended)
+  assertBool
+    "appended order tree stays within the AVL height bound"
+    (Association.internalEntryTreeHeight appended <= avlHeightBound appendCount)
+  assertEqual "balance stress midpoint count" (appendCount + 2) (Association.count midpointStressed)
+  assertEqual
+    "balance stress midpoint order"
+    ((-1) : [appendCount - 1, appendCount - 2 .. 0] ++ [-2])
+    (Association.keys midpointStressed)
+  assertBool
+    "midpoint-stressed order tree stays within the AVL height bound"
+    (Association.internalEntryTreeHeight midpointStressed <= avlHeightBound (appendCount + 2))
+
+avlHeightBound :: Int -> Int
+avlHeightBound n = ceiling (1.4405 * logBase 2 (fromIntegral n + 2) :: Double)
 
 testAssociationGeneratedHistory :: IO ()
 testAssociationGeneratedHistory =

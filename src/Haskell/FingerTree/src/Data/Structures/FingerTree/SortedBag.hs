@@ -64,9 +64,14 @@ member value bag = countOf value bag > 0
 countOf :: Ord a => a -> SortedBag a -> Int
 countOf value (SortedBag _ values) = maybe 0 length (Map.lookup value values)
 
+-- The first stored equal instance stays the map key — the representative
+-- that toCounts reports — matching the C# reference; Map.adjust keeps the
+-- originally stored key, whereas Map.insertWith would replace it with the
+-- newest equal instance. New instances append after existing ones.
 insert :: Ord a => a -> SortedBag a -> SortedBag a
-insert value (SortedBag total values) =
-  SortedBag (total + 1) (Map.insertWith (flip (++)) value [value] values)
+insert value (SortedBag total values)
+  | Map.member value values = SortedBag (total + 1) (Map.adjust (++ [value]) value values)
+  | otherwise = SortedBag (total + 1) (Map.insert value [value] values)
 
 deleteOne :: Ord a => a -> SortedBag a -> SortedBag a
 deleteOne value bag@(SortedBag total values) =

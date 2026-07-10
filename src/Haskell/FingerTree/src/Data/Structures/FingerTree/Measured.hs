@@ -89,17 +89,28 @@ measureTree Empty = mempty
 measureTree (Single value) = measure value
 measureTree (Deep value _ _ _) = value
 
+-- Deep results extend the cached measure incrementally instead of calling
+-- deep: deep measures its middle, which would force the suspended overflow
+-- cascade eagerly and defeat the lazy spine documented on the Deep
+-- constructor. A cons puts the new element on the LEFT of every existing
+-- element, so its measure combines on the left of the old cached total
+-- (measure value <> v); snoc mirrors this on the right (v <> measure value).
+-- The order matters because the measure monoid may be non-commutative.
 cons :: Measured v a => a -> FingerTree v a -> FingerTree v a
 cons value Empty = Single value
 cons value (Single old) = deep (One value) Empty (One old)
-cons value (Deep _ (Four a b c d) middle suffix) = deep (Two value a) (cons (node3 b c d) middle) suffix
-cons value (Deep _ prefix middle suffix) = deep (consDigit value prefix) middle suffix
+cons value (Deep v (Four a b c d) middle suffix) =
+  Deep (measure value <> v) (Two value a) (cons (node3 b c d) middle) suffix
+cons value (Deep v prefix middle suffix) =
+  Deep (measure value <> v) (consDigit value prefix) middle suffix
 
 snoc :: Measured v a => FingerTree v a -> a -> FingerTree v a
 snoc Empty value = Single value
 snoc (Single old) value = deep (One old) Empty (One value)
-snoc (Deep _ prefix middle (Four a b c d)) value = deep prefix (snoc middle (node3 a b c)) (Two d value)
-snoc (Deep _ prefix middle suffix) value = deep prefix middle (snocDigit suffix value)
+snoc (Deep v prefix middle (Four a b c d)) value =
+  Deep (v <> measure value) prefix (snoc middle (node3 a b c)) (Two d value)
+snoc (Deep v prefix middle suffix) value =
+  Deep (v <> measure value) prefix middle (snocDigit suffix value)
 
 append :: Measured v a => FingerTree v a -> FingerTree v a -> FingerTree v a
 append left right = app3 left [] right

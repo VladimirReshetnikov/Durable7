@@ -105,6 +105,18 @@ testCrossPolicySetRelations = do
   assertBool "cross-policy equality normalizes under receiver policy" (HashSet.setEquals receiver equivalentArgument)
   assertBool "cross-policy proper subset uses normalized membership" (HashSet.isProperSubsetOf receiver strictSupersetArgument)
   assertBool "cross-policy overlap uses receiver policy" (HashSet.overlaps receiver (HashSet.fromList [42 :: Int]))
+  -- Proper-relation strictness must count the argument as the receiver's
+  -- policy sees it: {11, 21} collapses to one element mod 10, so it is not a
+  -- proper superset of {1} even though its raw size is larger, and {1, 2} is
+  -- a proper superset of it even though the raw sizes are equal.
+  let singleElement = HashSet.fromListWith moduloTen [1 :: Int]
+      collapsingArgument = HashSet.fromList [11 :: Int, 21]
+  assertBool
+    "proper subset counts argument under receiver policy"
+    (not (HashSet.isProperSubsetOf singleElement collapsingArgument))
+  assertBool
+    "proper superset counts argument under receiver policy"
+    (HashSet.isProperSupersetOf receiver collapsingArgument)
 
 testLargeFromList :: IO ()
 testLargeFromList = do

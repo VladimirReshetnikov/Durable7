@@ -1,3 +1,5 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
+
 module Main (main) where
 
 import Prelude hiding (lines, null, reverse, splitAt)
@@ -26,6 +28,7 @@ import qualified Data.Structures.FingerTree.SortedSet as SortedSet
 main :: IO ()
 main = do
   testMeasuredTree
+  testMeasureAccumulationOrder
   testLargeFromList
   testDeque
   testReversibleDeque
@@ -59,6 +62,22 @@ testMeasuredTree = do
   case FT.viewR tree of
     _ :> Elem 10 -> pure ()
     _ -> fail "viewR did not expose last element"
+
+-- Locks the incremental cached-measure order in cons/snoc under a
+-- non-commutative monoid: a cons combines the new element's measure on the
+-- LEFT of the cached total, a snoc on the RIGHT, so the accumulated trace
+-- must read exactly in sequence order through digit-overflow cascades.
+testMeasureAccumulationOrder :: IO ()
+testMeasureAccumulationOrder = do
+  let values = [1 :: Int .. 40]
+      consed, snoced, mixed :: FT.FingerTree Trace Traced
+      consed = foldr FT.cons FT.empty (map Traced values)
+      snoced = List.foldl' FT.snoc FT.empty (map Traced values)
+      mixed = FT.cons (Traced 0) (FT.snoc snoced (Traced 41))
+  assertEqual "cons keeps non-commutative measure order" (Trace values) (FT.measureTree consed)
+  assertEqual "snoc keeps non-commutative measure order" (Trace values) (FT.measureTree snoced)
+  assertEqual "mixed endpoint measure order" (Trace ([0] ++ values ++ [41])) (FT.measureTree mixed)
+  assertEqual "traced toList round-trip" (map Traced values) (FT.toList consed)
 
 testLargeFromList :: IO ()
 testLargeFromList = do
@@ -143,6 +162,10 @@ testSortedCollections = do
   assertEqual "set first instance wins" ["old"] (map keyedLabel (SortedSet.toList firstWins))
   let instanceBag = SortedBag.insert (Keyed 1 "b") (SortedBag.singleton (Keyed (1 :: Int) "a"))
   assertEqual "bag retains instances in order" ["a", "b"] (map keyedLabel (SortedBag.toList instanceBag))
+  assertEqual
+    "bag toCounts keeps first stored representative"
+    [("a", 2)]
+    (map (\(value, total) -> (keyedLabel value, total)) (SortedBag.toCounts instanceBag))
   assertEqual
     "bag deleteOne removes the first instance"
     ["b"]
@@ -292,6 +315,23 @@ runConcurrent label workerCount action = do
     case result of
       Right () -> pure ()
       Left exception -> fail (label ++ ": worker failed: " ++ show exception)
+
+-- A non-commutative measure (list concatenation) that records the order in
+-- which element measures were combined into the cached total.
+newtype Trace = Trace [Int]
+  deriving (Eq, Show)
+
+instance Semigroup Trace where
+  Trace left <> Trace right = Trace (left ++ right)
+
+instance Monoid Trace where
+  mempty = Trace []
+
+newtype Traced = Traced Int
+  deriving (Eq, Show)
+
+instance FT.Measured Trace Traced where
+  measure (Traced value) = Trace [value]
 
 -- An element whose ordering ignores the label, standing in for
 -- comparer-equal-but-distinct instances.

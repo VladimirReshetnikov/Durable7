@@ -124,14 +124,22 @@ symmetricDifference left right = List.foldl' toggle left (toList right)
 isSubsetOf :: HashSet a -> HashSet a -> Bool
 isSubsetOf left right = all (`member` probeWithReceiverPolicy left right) (toList left)
 
+-- The strictness comparisons below use the probe's size, not the argument's
+-- raw size: the C# reference counts the probe set materialized under the
+-- receiver's comparer, so argument elements that collapse under the
+-- receiver's policy count once.
 isProperSubsetOf :: HashSet a -> HashSet a -> Bool
-isProperSubsetOf left right = size left < size right && isSubsetOf left right
+isProperSubsetOf left right =
+  size left < size probe && all (`member` probe) (toList left)
+  where
+    probe = probeWithReceiverPolicy left right
 
 isSupersetOf :: HashSet a -> HashSet a -> Bool
 isSupersetOf left right = all (`member` left) (toList right)
 
 isProperSupersetOf :: HashSet a -> HashSet a -> Bool
-isProperSupersetOf left right = size left > size right && isSupersetOf left right
+isProperSupersetOf left right =
+  size left > size (probeWithReceiverPolicy left right) && isSupersetOf left right
 
 overlaps :: HashSet a -> HashSet a -> Bool
 overlaps left right = any (`member` left) (toList right)

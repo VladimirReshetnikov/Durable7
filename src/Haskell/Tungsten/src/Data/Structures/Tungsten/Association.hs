@@ -38,6 +38,10 @@ module Data.Structures.Tungsten.Association
   , sortBy
   , keys
   , elems
+    -- Test support, not part of the ported public surface: exposes the
+    -- internal order-tree height so the suite can lock the AVL balance
+    -- invariant after positional-edit stress.
+  , internalEntryTreeHeight
   ) where
 
 import Prelude hiding (drop, last, lookup, null, reverse, take)
@@ -285,6 +289,10 @@ keys = fmap fst . toList
 elems :: PersistentAssociation k v -> [v]
 elems = fmap snd . toList
 
+-- Test support: height of the internal order tree (empty tree has height 0).
+internalEntryTreeHeight :: PersistentAssociation k v -> Int
+internalEntryTreeHeight (PersistentAssociation entries _) = treeHeight entries
+
 appendNew :: k -> v -> PersistentAssociation k v -> PersistentAssociation k v
 appendNew key value association@(PersistentAssociation entries index) =
   insertEntry entries index (treeSize entries) key value association
@@ -423,16 +431,35 @@ treeRemoveFirst (Node _ _ left value right) =
     Just (firstValue, left') -> Just (firstValue, treeBalance (treeNode left' value right))
     Nothing -> Just (value, right)
 
+-- Joins two AVL trees around a middle element, tolerating an arbitrary height
+-- difference: it descends the taller side until the heights are within one and
+-- rebalances every level on the way back up, so each step sees a factor of at
+-- most two (the range treeBalance repairs). The result holds the left tree's
+-- elements, then the value, then the right tree's elements, and is AVL again.
+treeJoin :: SeqTree a -> a -> SeqTree a -> SeqTree a
+treeJoin left value right
+  | treeHeight left > treeHeight right + 1
+  , Node _ _ leftLeft leftValue leftRight <- left =
+      treeBalance (treeNode leftLeft leftValue (treeJoin leftRight value right))
+  | treeHeight right > treeHeight left + 1
+  , Node _ _ rightLeft rightValue rightRight <- right =
+      treeBalance (treeNode (treeJoin left value rightLeft) rightValue rightRight)
+  | otherwise = treeNode left value right
+
+-- Both split pieces are reassembled with treeJoin so they come back AVL;
+-- pairing a subtree with Empty in a raw treeNode would hand treeConcat and
+-- treeBalance (which only repair a factor of two) arbitrarily unbalanced
+-- inputs, degrading the tree super-logarithmically under repeated edits.
 treeSplit :: Int -> SeqTree a -> (SeqTree a, SeqTree a)
 treeSplit _ Empty = (Empty, Empty)
 treeSplit position (Node _ _ left value right)
   | position <= leftSize =
       let (before, after) = treeSplit position left
-       in (before, treeConcat after (treeNode Empty value right))
-  | position == leftSize + 1 = (treeNode left value Empty, right)
+       in (before, treeJoin after value right)
+  | position == leftSize + 1 = (treeJoin left value Empty, right)
   | otherwise =
       let (before, after) = treeSplit (position - leftSize - 1) right
-       in (treeConcat (treeNode left value Empty) before, after)
+       in (treeJoin left value before, after)
   where
     leftSize = treeSize left
 
@@ -441,7 +468,7 @@ treeInsert position value tree
   | position < 0 || position > treeSize tree = Nothing
   | otherwise =
       let (left, right) = treeSplit position tree
-       in Just (treeConcat (treeConcat left (treeNode Empty value Empty)) right)
+       in Just (treeJoin left value right)
 
 treeDelete :: Int -> SeqTree a -> Maybe (SeqTree a)
 treeDelete position tree
