@@ -337,7 +337,13 @@ tds_hamt_status tds_hamt_map_add(
     }
 
     if (!added) {
-        tds_hamt_map_destroy(result);
+        /* A rejected duplicate publishes the source root re-retained, so an
+         * aliased result already holds the original version with balanced
+         * reference counts; destroying it would free the caller's only
+         * handle. Only a distinct result owns a reference to release. */
+        if (result != map) {
+            tds_hamt_map_destroy(result);
+        }
         return TDS_HAMT_DUPLICATE_KEY;
     }
 
@@ -449,7 +455,8 @@ tds_hamt_status tds_hamt_map_try_remove(
         return status;
     }
 
-    if (result == map) {
+    const bool aliased = result == map;
+    if (aliased) {
         tds_hamt_node_release(&map->policy, map->root);
     }
     result->root = new_root;
@@ -459,7 +466,12 @@ tds_hamt_status tds_hamt_map_try_remove(
         *removed = local_removed;
     }
     if (removed_value != NULL) {
-        *removed_value = local_removed ? local_removed_value : NULL;
+        /* The removed value pointer refers into the previous version's nodes.
+         * Under aliasing that version's root has already been released above,
+         * so an owning value policy may have freed the payload; report NULL
+         * instead of a dangling pointer. Callers that need the removed value
+         * must pass a distinct result. */
+        *removed_value = (local_removed && !aliased) ? local_removed_value : NULL;
     }
 
     return TDS_HAMT_OK;
@@ -681,6 +693,9 @@ tds_hamt_status tds_hamt_set_add(
     tds_hamt_map map;
     const tds_hamt_status status = tds_hamt_map_set(&set->map, item, NULL, &map);
     if (status == TDS_HAMT_OK) {
+        if (result == set) {
+            tds_hamt_node_release(&set->map.policy, set->map.root);
+        }
         result->map = map;
     }
 

@@ -1539,6 +1539,133 @@ static void test_counting_policy_stays_balanced_and_aliasing_updates_are_safe(vo
     CHECK(state.key_retains > 0);
 }
 
+static void test_aliased_set_add_keeps_item_refcounts_balanced(void) {
+    counting_policy_state state = { 0, 0, 0, 0 };
+    tds_hamt_set_policy policy = int_set_policy(int_hash);
+    policy.retain_item = counting_retain_key;
+    policy.release_item = counting_release_key;
+    policy.context = &state;
+
+    tds_hamt_set set = tds_hamt_set_create(&policy);
+
+    /* In-place (aliased result) adds, including duplicate items that reuse
+     * the existing root through the unit-value no-op replace path. */
+    for (int i = 0; i < 48; ++i) {
+        CHECK_STATUS(tds_hamt_set_add(&set, int_key(i % 24), &set));
+    }
+    CHECK(tds_hamt_set_count(&set) == 24);
+
+    /* A retained snapshot must survive further aliased adds. */
+    tds_hamt_set snapshot = tds_hamt_set_clone(&set);
+    for (int i = 24; i < 32; ++i) {
+        CHECK_STATUS(tds_hamt_set_add(&set, int_key(i), &set));
+    }
+    CHECK(tds_hamt_set_count(&set) == 32);
+    CHECK(tds_hamt_set_count(&snapshot) == 24);
+    CHECK(tds_hamt_set_contains(&set, int_key(31)));
+    CHECK(!tds_hamt_set_contains(&snapshot, int_key(31)));
+
+    tds_hamt_set_destroy(&snapshot);
+    tds_hamt_set_destroy(&set);
+
+    /* Every retained item must be released: an aliased add that leaked the
+     * overwritten root would leave its items retained forever. */
+    CHECK(state.key_retains == state.key_releases);
+    CHECK(state.key_retains > 0);
+}
+
+static void test_aliased_map_add_duplicate_preserves_source(void) {
+    counting_policy_state state = { 0, 0, 0, 0 };
+    tds_hamt_policy policy = int_map_policy(int_hash);
+    policy.retain_key = counting_retain_key;
+    policy.release_key = counting_release_key;
+    policy.retain_value = counting_retain_value;
+    policy.release_value = counting_release_value;
+    policy.context = &state;
+
+    tds_hamt_map map = tds_hamt_map_create(&policy);
+    for (int i = 0; i < 16; ++i) {
+        CHECK_STATUS(tds_hamt_map_add(&map, int_key(i), int_value(i * 2), &map));
+    }
+    CHECK(tds_hamt_map_count(&map) == 16);
+
+    /* An aliased duplicate rejection must leave the caller's map intact. */
+    CHECK(tds_hamt_map_add(&map, int_key(5), int_value(999), &map) == TDS_HAMT_DUPLICATE_KEY);
+    CHECK(tds_hamt_map_count(&map) == 16);
+    for (int i = 0; i < 16; ++i) {
+        assert_int_value(&map, i, i * 2);
+    }
+
+    /* The rejected map must remain fully usable afterwards. */
+    CHECK_STATUS(tds_hamt_map_add(&map, int_key(16), int_value(32), &map));
+    CHECK(tds_hamt_map_count(&map) == 17);
+    assert_int_value(&map, 16, 32);
+
+    /* A distinct result still releases the rejected version, leaving an
+     * empty result value and an untouched source. */
+    tds_hamt_map rejected;
+    CHECK(tds_hamt_map_add(&map, int_key(5), int_value(999), &rejected) == TDS_HAMT_DUPLICATE_KEY);
+    CHECK(tds_hamt_map_count(&rejected) == 0);
+    CHECK(tds_hamt_map_count(&map) == 17);
+    assert_int_value(&map, 5, 10);
+
+    tds_hamt_map_destroy(&map);
+
+    CHECK(state.key_retains == state.key_releases);
+    CHECK(state.value_retains == state.value_releases);
+    CHECK(state.key_retains > 0);
+}
+
+static void test_aliased_try_remove_reports_null_removed_value(void) {
+    counting_policy_state state = { 0, 0, 0, 0 };
+    tds_hamt_policy policy = int_map_policy(int_hash);
+    policy.retain_key = counting_retain_key;
+    policy.release_key = counting_release_key;
+    policy.retain_value = counting_retain_value;
+    policy.release_value = counting_release_value;
+    policy.context = &state;
+
+    tds_hamt_map map = tds_hamt_map_create(&policy);
+    for (int i = 0; i < 8; ++i) {
+        CHECK_STATUS(tds_hamt_map_set(&map, int_key(i), int_value(i + 100), &map));
+    }
+
+    /* A distinct result keeps the removed value pointer valid through the
+     * still-live source version. */
+    bool removed = false;
+    const void *removed_value = NULL;
+    tds_hamt_map without_three;
+    CHECK_STATUS(tds_hamt_map_try_remove(&map, int_key(3), &without_three, &removed, &removed_value));
+    CHECK(removed);
+    CHECK(removed_value != NULL);
+    CHECK(*(const int *)removed_value == 103);
+    tds_hamt_map_destroy(&without_three);
+
+    /* An aliased removal releases the previous version inside the call, so
+     * the removed value pointer is reported as NULL while the removed flag
+     * stays accurate. */
+    removed = false;
+    removed_value = int_value(0);
+    CHECK_STATUS(tds_hamt_map_try_remove(&map, int_key(5), &map, &removed, &removed_value));
+    CHECK(removed);
+    CHECK(removed_value == NULL);
+    CHECK(tds_hamt_map_count(&map) == 7);
+    CHECK(!tds_hamt_map_contains_key(&map, int_key(5)));
+
+    /* An aliased miss also reports no removed value. */
+    removed = true;
+    removed_value = int_value(0);
+    CHECK_STATUS(tds_hamt_map_try_remove(&map, int_key(5), &map, &removed, &removed_value));
+    CHECK(!removed);
+    CHECK(removed_value == NULL);
+    CHECK(tds_hamt_map_count(&map) == 7);
+
+    tds_hamt_map_destroy(&map);
+
+    CHECK(state.key_retains == state.key_releases);
+    CHECK(state.value_retains == state.value_releases);
+}
+
 static const test_case tests[] = {
     { "empty map has no entries", test_empty_map_has_no_entries },
     { "set item adds replaces and preserves old versions", test_set_adds_replaces_and_preserves_old_versions },
@@ -1563,7 +1690,13 @@ static const test_case tests[] = {
     { "set symmetric_except treats duplicates as one item", test_set_symmetric_except_treats_duplicates_as_one_item },
     { "concurrent retained snapshot reads", test_concurrent_retained_snapshot_reads },
     { "counting policy stays balanced and aliasing updates are safe",
-      test_counting_policy_stays_balanced_and_aliasing_updates_are_safe }
+      test_counting_policy_stays_balanced_and_aliasing_updates_are_safe },
+    { "aliased set_add keeps item refcounts balanced",
+      test_aliased_set_add_keeps_item_refcounts_balanced },
+    { "aliased map_add duplicate preserves source",
+      test_aliased_map_add_duplicate_preserves_source },
+    { "aliased try_remove reports null removed value",
+      test_aliased_try_remove_reports_null_removed_value }
 };
 
 int main(void) {

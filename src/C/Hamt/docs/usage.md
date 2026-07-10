@@ -141,7 +141,9 @@ tds_hamt_status status = tds_hamt_map_try_remove(
 ```
 
 The removed value pointer is governed by the source map's lifetime and policy; the call does not
-transfer ownership.
+transfer ownership. When `result` aliases the source map the previous version is released inside
+the call, so the removed value pointer is reported as `NULL`; use a distinct `result` value when
+the removed value is needed.
 
 ## Bulk Updates
 

@@ -45,10 +45,16 @@ published). Retaining a `NULL` key or value yields `NULL` and is not an error.
 only while the source map value itself remains alive (not destroyed): the call performs no retain
 on the caller's behalf, and with a copying retain policy the payload is owned by the source's
 nodes, so destroying the source frees it even when the result map still contains sibling entries.
+When `result` aliases the source map no such lifetime exists — the previous version's root is
+released inside the call — so an aliased `try_remove` always reports a `NULL` removed value
+pointer (the removed flag stays accurate). Pass a distinct `result` when the removed value pointer
+is needed.
 
 Every operation's `result` may alias the source map or set: the library releases the overwritten
 version's root before publishing the new one, so `tds_hamt_map_set(&map, k, v, &map)`-style
-in-place updates are safe (the previous version is no longer reachable afterwards).
+in-place updates are safe (the previous version is no longer reachable afterwards). On a rejected
+duplicate, `tds_hamt_map_add` leaves an aliased `result` holding the unchanged source version,
+while a distinct `result` is left destroyed (empty, not a live handle).
 
 ## Hash Trie Shape
 
@@ -75,7 +81,8 @@ source map or set remains alive.
 - `tds_hamt_map_try_add` returns an added flag and rejects duplicate keys without reporting an
   error.
 - `tds_hamt_map_remove` removes a key if present.
-- `tds_hamt_map_try_remove` returns removed flag and removed value pointer.
+- `tds_hamt_map_try_remove` returns removed flag and removed value pointer; when `result` aliases
+  the source map the removed value pointer is reported as `NULL` (see [Ownership](#ownership)).
 - `tds_hamt_map_try_get` returns the stored value pointer, if present.
 - `tds_hamt_map_try_get_key` returns the stored equivalent key pointer, or echoes the query pointer
   on miss.
