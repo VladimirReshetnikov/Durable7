@@ -24,13 +24,12 @@ Use the real .NET SDK in the local Windows environment:
 cd C:\DataStructures\src\CSharp
 dotnet restore
 dotnet build
-dotnet test .\DataStructures.sln
-
-cd C:\DataStructures\src\CSharp
-dotnet restore
-dotnet build
-dotnet test .\DataStructures.sln
+.\test.ps1
 ```
+
+The test launcher establishes inherited non-interactive Windows failure handling before the .NET
+toolchain starts. Direct `dotnet test` remains available for diagnosis and automatically picks up
+the repository runsettings and test-assembly initializer.
 
 Prefer deterministic tests for data-structure complexity claims. Do not replace operation-count or allocation guards with timing thresholds unless the task is explicitly benchmark-oriented.
 

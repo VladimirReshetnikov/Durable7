@@ -37,6 +37,10 @@ This document is the canonical repository guidance for Vladimir and the AI codin
 │   ├── guides/
 │   ├── reference/
 │   └── migration/
+├── eng/
+│   ├── Enable-HeadlessTestMode.ps1
+│   ├── HeadlessTest.cmake
+│   └── Invoke-HeadlessTest.ps1
 └── src/
     ├── README.md
     ├── C/
@@ -92,6 +96,9 @@ This document is the canonical repository guidance for Vladimir and the AI codin
     │   ├── README.md
     │   ├── DataStructures.sln
     │   ├── Directory.Build.props
+    │   ├── Directory.Build.targets
+    │   ├── test.ps1
+    │   ├── test.runsettings
     │   ├── benchmarks/
     │   │   └── Tools.DataStructures.FingerTree.Benchmarks/
     │   ├── docs/
@@ -151,6 +158,8 @@ This document is the canonical repository guidance for Vladimir and the AI codin
     │       ├── README.md
     │       ├── src/
     │       └── test/
+    ├── test_support/
+    │   └── include/
     └── Rust/
         ├── Cargo.toml
         ├── README.md
@@ -223,7 +232,7 @@ Use [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) a
 cd C:\DataStructures\src\CSharp
 dotnet restore
 dotnet build
-dotnet test .\DataStructures.sln
+.\test.ps1
 
 cd C:\DataStructures\src\C
 .\build.ps1 -Workspace Hamt -RunTests
@@ -341,7 +350,8 @@ The expected local Windows environment includes:
 - Rust toolchain with Cargo for `src/Rust`; the local profile may expose Cargo as
   `$env:USERPROFILE\.cargo\bin\cargo.exe` even when it is not on `PATH`.
 
-Use `dotnet` directly for C# validation in this local environment.
+Use `dotnet` directly for C# restore/build operations and `src/CSharp/test.ps1` for unattended
+test validation in this local environment.
 
 ## Cross-repo toolbox
 

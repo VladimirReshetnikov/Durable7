@@ -32,10 +32,10 @@ entry points for unattended validation.
 
 | Workspace | Primary command | Local validation guide | Test map | Coverage |
 | --- | --- | --- | --- | --- |
-| [C# Numerics](../../src/CSharp/docs/Numerics/overview.md) | `dotnet test .\DataStructures.sln` from `src/CSharp` | [Validation](../../src/CSharp/docs/Numerics/validation.md) | [Tests](../../src/CSharp/tests/Tools.Numerics.Tests/README.md) | .NET library build, XML-doc warning gate, xUnit wide/sparse-integer behavior tests, declaration parity guardrails |
-| [C# HAMT](../../src/CSharp/docs/Hamt/overview.md) | `dotnet test .\DataStructures.sln` from `src/CSharp` | [Validation](../../src/CSharp/docs/Hamt/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests/README.md) | .NET library build, XML-doc warning gate, xUnit tests, CsCheck model tests |
-| [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | `dotnet test .\DataStructures.sln` from `src/CSharp` | [Validation](../../src/CSharp/docs/FingerTree/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/README.md) | .NET library, samples, benchmark project build, stress controls, xUnit/CsCheck suites |
-| [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) | `dotnet test .\DataStructures.sln` from `src/CSharp` | [Validation](../../src/CSharp/docs/Tungsten/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.Tungsten.Tests/README.md) | .NET library build, XML-doc warning gate, kernel-verified ordering examples, CsCheck ordered-model histories |
+| [C# Numerics](../../src/CSharp/docs/Numerics/overview.md) | `.\test.ps1` from `src/CSharp` | [Validation](../../src/CSharp/docs/Numerics/validation.md) | [Tests](../../src/CSharp/tests/Tools.Numerics.Tests/README.md) | .NET library build, XML-doc warning gate, xUnit wide/sparse-integer behavior tests, declaration parity guardrails |
+| [C# HAMT](../../src/CSharp/docs/Hamt/overview.md) | `.\test.ps1` from `src/CSharp` | [Validation](../../src/CSharp/docs/Hamt/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests/README.md) | .NET library build, XML-doc warning gate, xUnit tests, CsCheck model tests |
+| [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | `.\test.ps1` from `src/CSharp` | [Validation](../../src/CSharp/docs/FingerTree/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/README.md) | .NET library, samples, benchmark project build, stress controls, xUnit/CsCheck suites |
+| [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) | `.\test.ps1` from `src/CSharp` | [Validation](../../src/CSharp/docs/Tungsten/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.Tungsten.Tests/README.md) | .NET library build, XML-doc warning gate, kernel-verified ordering examples, CsCheck ordered-model histories |
 | [`src/C/Tungsten`](../../src/C/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten -RunTests` from `src/C` | [README](../../src/C/Tungsten/README.md) | [Tests](../../src/C/Tungsten/tests/tungsten_c_tests.c) | C17 MSVC Debug/Release CTest executable, list examples, Association ordering rules, custom policies, relabel stress, generated histories |
 | [`src/Cpp/Tungsten`](../../src/Cpp/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten -RunTests` from `src/Cpp` | [README](../../src/Cpp/Tungsten/README.md) | [Tests](../../src/Cpp/Tungsten/tests/tungsten_tests.cpp) | C++23 CTest executable, examples, policy tests, relabel stress, generated histories |
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | `.\build.ps1 -Workspace Hamt -RunTests` from `src/C` | [Validation](../../src/C/Hamt/docs/validation.md) | [Tests](../../src/C/Hamt/tests/README.md) | C17 MSVC, GCC, and Clang builds; warning policy; deterministic HAMT tests |
@@ -76,11 +76,13 @@ command and failure mode instead of silently omitting it.
 
 ```powershell
 cd C:\DataStructures\src\CSharp
-dotnet test .\DataStructures.sln
+.\test.ps1
 ```
 
 The C# solution targets `net10.0` and uses C# preview features. Treat public XML documentation warnings
 as build-relevant: `CS1591` and `CS1573` are intentionally escalated in the C# workspace. The local
+test launcher suppresses modal Windows failure UI before the SDK and test host start; direct
+`dotnet test` still receives the repository runsettings and per-test-assembly initializer. The local
 validation guides define family-specific coverage and optional stress/benchmark boundaries:
 
 - [C# Numerics validation](../../src/CSharp/docs/Numerics/validation.md)
