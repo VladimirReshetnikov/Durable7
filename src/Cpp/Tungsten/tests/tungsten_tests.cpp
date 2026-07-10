@@ -699,7 +699,7 @@ void add_persistent_association_tests(suite& tests)
 
 } // namespace
 
-int main()
+int main(const int argument_count, const char* const* arguments)
 {
     if (!tds_enter_headless_test_process()) {
         return EXIT_FAILURE;
@@ -707,6 +707,7 @@ int main()
 
     suite tests;
 
+    tests.set_group("metadata");
     tests.add("aggregate header exposes version metadata", [] {
         FT_REQUIRE_EQUAL(wf::library_name, std::string_view{"Tools.DataStructures.Tungsten.Cpp"});
         FT_REQUIRE_EQUAL(wf::version_major, 0U);
@@ -714,8 +715,10 @@ int main()
         FT_REQUIRE_EQUAL(wf::version_patch, 0U);
     });
 
+    tests.set_group("persistent-list");
     add_persistent_list_tests(tests);
+    tests.set_group("persistent-association");
     add_persistent_association_tests(tests);
 
-    return tests.run();
+    return tests.run(argument_count, arguments);
 }

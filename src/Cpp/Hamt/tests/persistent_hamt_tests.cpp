@@ -1031,6 +1031,33 @@ TEST(Set_SymmetricExceptTreatsInputDuplicatesAsOneItem) {
     assert_equal_set({2, 3}, set.symmetric_except_with(std::vector<int>{1, 1, 3, 3}));
 }
 
+TEST(Map_MovedFromMapReadsAsEmpty) {
+    auto source = persistent_hash_map<int, int>::empty().set_item(1, 10).set_item(2, 20);
+
+    const auto moved = std::move(source);
+    CHECK_EQ(std::size_t{2}, moved.count());
+    CHECK(source.is_empty());
+    CHECK_EQ(std::size_t{0}, source.count());
+    CHECK(source.begin() == source.end());
+
+    auto assign_source = persistent_hash_map<int, int>::empty().set_item(3, 30);
+    auto target = persistent_hash_map<int, int>::empty();
+    target = std::move(assign_source);
+    CHECK_EQ(std::size_t{1}, target.count());
+    CHECK(assign_source.is_empty());
+    CHECK_EQ(std::size_t{0}, assign_source.count());
+}
+
+TEST(Set_MovedFromSetReadsAsEmpty) {
+    auto source = persistent_hash_set<int>::empty().add(1).add(2);
+
+    const auto moved = std::move(source);
+    CHECK_EQ(std::size_t{2}, moved.count());
+    CHECK(source.is_empty());
+    CHECK_EQ(std::size_t{0}, source.count());
+    CHECK(source.begin() == source.end());
+}
+
 } // namespace
 
 int main() {

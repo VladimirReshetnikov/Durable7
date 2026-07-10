@@ -11,6 +11,7 @@
 #include <optional>
 #include <stdexcept>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -43,6 +44,14 @@ private:
     static constexpr int branch_mask = (1 << bits_per_level) - 1;
     static constexpr int max_depth = 7;
 
+    // The iterator keeps an inline stack of `max_depth` frames, which is only
+    // sufficient while bitmap nodes are confined to shifts covering a 32-bit
+    // hash. Guard the pairing so a future `bits_per_level` change cannot
+    // silently overflow that stack.
+    static_assert(
+        max_depth * bits_per_level >= 32 && (max_depth - 1) * bits_per_level < 32,
+        "max_depth must be exactly the number of bitmap levels needed to consume a 32-bit hash");
+
     struct node;
     struct hash_node;
     struct leaf_node;
@@ -63,6 +72,40 @@ public:
     using value_equal = ValueEqual;
 
     persistent_hash_map() = default;
+
+    persistent_hash_map(const persistent_hash_map&) = default;
+    persistent_hash_map& operator=(const persistent_hash_map&) = default;
+
+    // Moved-from maps must still read as empty: the defaulted move operations
+    // null `root_` but would leave `count_` stale, making `count()` disagree
+    // with enumeration.
+    persistent_hash_map(persistent_hash_map&& other) noexcept(
+        std::is_nothrow_move_constructible_v<Hash>
+        && std::is_nothrow_move_constructible_v<KeyEqual>
+        && std::is_nothrow_move_constructible_v<ValueEqual>)
+        : root_(std::move(other.root_)),
+          count_(std::exchange(other.count_, 0)),
+          hash_(std::move(other.hash_)),
+          key_equal_(std::move(other.key_equal_)),
+          value_equal_(std::move(other.value_equal_)) {
+    }
+
+    persistent_hash_map& operator=(persistent_hash_map&& other) noexcept(
+        std::is_nothrow_move_assignable_v<Hash>
+        && std::is_nothrow_move_assignable_v<KeyEqual>
+        && std::is_nothrow_move_assignable_v<ValueEqual>) {
+        if (this != &other) {
+            root_ = std::move(other.root_);
+            count_ = std::exchange(other.count_, 0);
+            hash_ = std::move(other.hash_);
+            key_equal_ = std::move(other.key_equal_);
+            value_equal_ = std::move(other.value_equal_);
+        }
+
+        return *this;
+    }
+
+    ~persistent_hash_map() = default;
 
     static persistent_hash_map empty() {
         return {};
