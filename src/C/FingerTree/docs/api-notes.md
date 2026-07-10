@@ -70,9 +70,18 @@ testing their cached aggregate measures; `ft_tree_split` composes those two path
 predicate, all three operations take O(log n) time and allocate O(log n) structural storage. Split results
 share untouched nodes with the source snapshot.
 
-This restores the sibling ports' O(log n) search/edit foundation for sorted containers, priority queues,
-interval trees, and both rope facades. The native suite includes operation-count guards over a 4,096-element
-tree so a return to leaf-by-leaf split or locate fails deterministically.
+This restores the sibling ports' O(log n) search/edit foundation for the tree core, the interval trees, and
+both rope facades. The native suite includes operation-count guards over a 4,096-element tree so a return to
+leaf-by-leaf split or locate fails deterministically.
+
+The sorted multiset/set/map facades and the priority queue do not yet route key search through that
+foundation: they binary-search over `ft_tree_at` probes, so membership, add, remove, and
+`ft_priority_queue_push` cost O(log^2 n) tree work (each of the O(log n) probes is an O(log n) descent that
+also deep-copies one entry through the facade's copy callbacks), where the C# and C++ references perform a
+single O(log n) measured split (and O(1) amortized priority-queue push). Results and equal-key ordering are
+identical; only the complexity class differs. Restoring parity requires key-carrying measures plus comparator
+predicates for these facades, as the generic interval facade already demonstrates with its `(count, maxHigh)`
+measure.
 
 ## Facade Annotations And Chunk Shape
 

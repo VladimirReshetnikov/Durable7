@@ -47,6 +47,14 @@ static long test_atomic_long_read(test_atomic_long* value)
 {
     return atomic_load_explicit(value, memory_order_relaxed);
 }
+
+/* Non-Windows builds race the snapshot workers with C11 threads when the
+ * implementation provides them; without threads.h the concurrency test
+ * degrades to a sequential functional check. */
+#if !defined(__STDC_NO_THREADS__)
+#define TEST_HAS_C11_THREADS 1
+#include <threads.h>
+#endif
 #endif
 
 static int g_failures = 0;
@@ -355,6 +363,14 @@ static bool text_rope_matches_model(const ft_text_rope* rope, const char* model,
         return false;
     }
 
+    size_t try_size = 0;
+    size_t try_lines = 0;
+    if (ft_text_rope_try_size(rope, &try_size) != FT_STATUS_OK || try_size != length ||
+        ft_text_rope_try_line_count(rope, &try_lines) != FT_STATUS_OK ||
+        try_lines != model_line_count(model, length)) {
+        return false;
+    }
+
     for (size_t index = 0; index != length; ++index) {
         char actual = '\0';
         if (ft_text_rope_at(rope, index, &actual) != FT_STATUS_OK || actual != model[index]) {
@@ -456,6 +472,12 @@ static DWORD WINAPI concurrent_tree_thread_proc(void* parameter)
     concurrent_tree_worker((concurrent_tree_context*)parameter);
     return 0;
 }
+#elif defined(TEST_HAS_C11_THREADS)
+static int concurrent_tree_thread_main(void* parameter)
+{
+    concurrent_tree_worker((concurrent_tree_context*)parameter);
+    return 0;
+}
 #endif
 
 static void test_concurrent_snapshot_refcounts(void)
@@ -489,6 +511,16 @@ static void test_concurrent_snapshot_refcounts(void)
     REQUIRE(wait_result == WAIT_OBJECT_0);
     for (DWORD index = 0; index != thread_count; ++index) {
         CloseHandle(threads[index]);
+    }
+#elif defined(TEST_HAS_C11_THREADS)
+    enum { thread_count = 8 };
+    thrd_t threads[thread_count];
+    for (int index = 0; index != thread_count; ++index) {
+        REQUIRE(thrd_create(&threads[index], concurrent_tree_thread_main, &context) == thrd_success);
+    }
+
+    for (int index = 0; index != thread_count; ++index) {
+        REQUIRE(thrd_join(threads[index], NULL) == thrd_success);
     }
 #else
     for (int index = 0; index != 8; ++index) {
@@ -1242,6 +1274,12 @@ static void test_rope(void)
     REQUIRE_STATUS(ft_rope_from_array(&rope, &int_type, values, 3000), FT_STATUS_OK);
     REQUIRE(ft_rope_size(&rope) == 3000);
     REQUIRE(ft_tree_size(&rope.tree) == 2);
+
+    size_t reported_size = 0;
+    REQUIRE_STATUS(ft_rope_try_size(&rope, &reported_size), FT_STATUS_OK);
+    REQUIRE(reported_size == 3000);
+    REQUIRE_STATUS(ft_rope_try_size(NULL, &reported_size), FT_STATUS_INVALID_ARGUMENT);
+    REQUIRE_STATUS(ft_rope_try_size(&rope, NULL), FT_STATUS_INVALID_ARGUMENT);
 
     const int probes[] = {0, 2047, 2048, 2999};
     for (size_t index = 0; index != sizeof(probes) / sizeof(probes[0]); ++index) {

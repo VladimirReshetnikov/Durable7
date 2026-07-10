@@ -299,6 +299,7 @@ void ft_rope_move(ft_rope* destination, ft_rope* source);
 void ft_rope_dispose(ft_rope* rope);
 bool ft_rope_empty(const ft_rope* rope);
 size_t ft_rope_size(const ft_rope* rope);
+ft_status ft_rope_try_size(const ft_rope* rope, size_t* size);
 ft_status ft_rope_at(const ft_rope* rope, size_t index, void* destination);
 ft_status ft_rope_push_back(const ft_rope* rope, const void* value, ft_rope* result);
 ft_status ft_rope_insert_at(const ft_rope* rope, size_t index, const void* value, ft_rope* result);
@@ -338,6 +339,7 @@ void ft_measured_rope_move(ft_measured_rope* destination, ft_measured_rope* sour
 void ft_measured_rope_dispose(ft_measured_rope* rope);
 bool ft_measured_rope_empty(const ft_measured_rope* rope);
 size_t ft_measured_rope_size(const ft_measured_rope* rope);
+ft_status ft_measured_rope_try_size(const ft_measured_rope* rope, size_t* size);
 ft_status ft_measured_rope_measure(const ft_measured_rope* rope, void* destination);
 ft_status ft_measured_rope_prefix_measure(const ft_measured_rope* rope, size_t count, void* destination);
 ft_status ft_measured_rope_at(const ft_measured_rope* rope, size_t index, void* destination);
@@ -509,10 +511,12 @@ ft_status ft_text_rope_copy(const ft_text_rope* source, ft_text_rope* destinatio
 void ft_text_rope_move(ft_text_rope* destination, ft_text_rope* source);
 void ft_text_rope_dispose(ft_text_rope* rope);
 size_t ft_text_rope_size(const ft_text_rope* rope);
+ft_status ft_text_rope_try_size(const ft_text_rope* rope, size_t* size);
 ft_status ft_text_rope_at(const ft_text_rope* rope, size_t index, char* value);
 ft_status ft_text_rope_insert_char(const ft_text_rope* rope, size_t index, char value, ft_text_rope* result);
 ft_status ft_text_rope_remove_at(const ft_text_rope* rope, size_t index, ft_text_rope* result);
 size_t ft_text_rope_line_count(const ft_text_rope* rope);
+ft_status ft_text_rope_try_line_count(const ft_text_rope* rope, size_t* count);
 ft_status ft_text_rope_line_of_offset(const ft_text_rope* rope, size_t offset, size_t* line);
 ft_status ft_text_rope_line_start_offset(const ft_text_rope* rope, size_t line, size_t* offset);
 ft_status ft_text_rope_line_column_of(const ft_text_rope* rope, size_t offset, ft_line_column* result);

@@ -4754,7 +4754,10 @@ static ft_status ft_rev_rep_visit(
 
 ft_status ft_reversible_deque_init(ft_reversible_deque* deque, const ft_tree_policy* policy)
 {
-    if (deque == NULL || policy == NULL) {
+    /* The reversible deque never consults the measure, so unlike ft_tree_init only the
+     * value description is validated; a zero-size value would silently produce a deque
+     * whose reads copy nothing. */
+    if (deque == NULL || policy == NULL || policy->value.size == 0) {
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
@@ -6343,18 +6346,23 @@ bool ft_rope_empty(const ft_rope* rope)
     return rope == NULL || ft_tree_empty(&rope->tree);
 }
 
+ft_status ft_rope_try_size(const ft_rope* rope, size_t* size)
+{
+    if (rope == NULL || size == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    return ft_tree_measure(&rope->tree, size);
+}
+
 size_t ft_rope_size(const ft_rope* rope)
 {
-    if (rope == NULL) {
-        return 0;
-    }
-
+    /* The first size query on a fresh snapshot may need to compute and cache the root
+     * measure, which can fail under allocation pressure; this convenience form collapses
+     * that failure to 0. Callers that must distinguish an empty rope from a transient
+     * failure should use ft_rope_try_size. */
     size_t size = 0;
-    if (ft_tree_measure(&rope->tree, &size) != FT_STATUS_OK) {
-        return 0;
-    }
-
-    return size;
+    return ft_rope_try_size(rope, &size) == FT_STATUS_OK ? size : 0;
 }
 
 ft_status ft_rope_at(const ft_rope* rope, size_t index, void* destination)
@@ -7585,21 +7593,32 @@ bool ft_measured_rope_empty(const ft_measured_rope* rope)
     return rope == NULL || ft_tree_empty(&rope->tree);
 }
 
-size_t ft_measured_rope_size(const ft_measured_rope* rope)
+ft_status ft_measured_rope_try_size(const ft_measured_rope* rope, size_t* size)
 {
-    if (rope == NULL) {
-        return 0;
+    if (rope == NULL || size == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
     }
 
     void* pair = ft_allocate(rope->policy.measure.size);
     if (pair == NULL) {
-        return 0;
+        return FT_STATUS_NO_MEMORY;
     }
 
     const ft_status status = ft_tree_measure(&rope->tree, pair);
-    const size_t result = status == FT_STATUS_OK ? *ft_measured_rope_pair_length_const(pair) : 0;
+    if (status == FT_STATUS_OK) {
+        *size = *ft_measured_rope_pair_length_const(pair);
+    }
+
     free(pair);
-    return result;
+    return status;
+}
+
+size_t ft_measured_rope_size(const ft_measured_rope* rope)
+{
+    /* Collapses allocation failure to 0; see ft_rope_size. Use
+     * ft_measured_rope_try_size to distinguish an empty rope from a failure. */
+    size_t size = 0;
+    return ft_measured_rope_try_size(rope, &size) == FT_STATUS_OK ? size : 0;
 }
 
 ft_status ft_measured_rope_measure(const ft_measured_rope* rope, void* destination)
@@ -10010,6 +10029,15 @@ void ft_text_rope_dispose(ft_text_rope* rope)
     ft_measured_rope_dispose(&rope->rope);
 }
 
+ft_status ft_text_rope_try_size(const ft_text_rope* rope, size_t* size)
+{
+    if (rope == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    return ft_measured_rope_try_size(&rope->rope, size);
+}
+
 size_t ft_text_rope_size(const ft_text_rope* rope)
 {
     return rope == NULL ? 0 : ft_measured_rope_size(&rope->rope);
@@ -10042,14 +10070,28 @@ ft_status ft_text_rope_remove_at(const ft_text_rope* rope, size_t index, ft_text
     return ft_measured_rope_remove_at(&rope->rope, index, &result->rope);
 }
 
-size_t ft_text_rope_line_count(const ft_text_rope* rope)
+ft_status ft_text_rope_try_line_count(const ft_text_rope* rope, size_t* count)
 {
-    if (rope == NULL) {
-        return 0;
+    if (rope == NULL || count == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
     }
 
     size_t newlines = 0;
-    return ft_measured_rope_measure(&rope->rope, &newlines) == FT_STATUS_OK ? newlines + 1u : 0;
+    const ft_status status = ft_measured_rope_measure(&rope->rope, &newlines);
+    if (status == FT_STATUS_OK) {
+        *count = newlines + 1u;
+    }
+
+    return status;
+}
+
+size_t ft_text_rope_line_count(const ft_text_rope* rope)
+{
+    /* An empty text rope has one line, so 0 here is otherwise impossible: it signals an
+     * invalid rope or a transient allocation failure while caching the root measure. Use
+     * ft_text_rope_try_line_count to observe the failure as a status. */
+    size_t count = 0;
+    return ft_text_rope_try_line_count(rope, &count) == FT_STATUS_OK ? count : 0;
 }
 
 ft_status ft_text_rope_line_of_offset(const ft_text_rope* rope, size_t offset, size_t* line)
