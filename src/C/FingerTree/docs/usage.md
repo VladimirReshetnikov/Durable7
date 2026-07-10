@@ -307,6 +307,8 @@ ft_line_column location;
 status = ft_text_rope_line_column_of(&rope, 8, &location);
 if (status == FT_STATUS_OK) {
     /* location.line and location.column are zero-based. */
+    size_t round_trip;
+    status = ft_text_rope_offset_of(&rope, location.line, location.column, &round_trip);
 }
 
 ft_text_rope edited;
@@ -324,7 +326,10 @@ return status;
 ```
 
 `ft_text_rope_line_count` follows the current text-rope facade semantics tested by the C workspace:
-an empty trailing line after a final newline is counted.
+an empty trailing line after a final newline is counted. `ft_text_rope_line_of_offset` and
+`ft_text_rope_line_start_offset` expose the two component navigations directly. `ft_text_rope_offset_of`
+accepts a column equal to a non-final line's character length (the terminating newline's offset) and rejects
+columns beyond that boundary.
 
 ## Concurrency And Lifetime
 

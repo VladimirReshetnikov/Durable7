@@ -27,8 +27,8 @@ included are:
 - `ft_rope`, a generic persistent chunked positional sequence backed by measured chunk leaves;
 - `ft_measured_rope`, a generic persistent chunked sequence with cached user measures and cumulative-measure
   navigation;
-- `ft_text_rope`, a character-rope facade backed by `ft_rope`, with insertion, removal, indexing, line count, and
-  line/column navigation.
+- `ft_text_rope`, a character-rope facade backed by `ft_measured_rope` with a cached newline measure, insertion,
+  removal, indexing, O(1) line count, O(log n) line navigation, and validated line/column-to-offset conversion.
 
 The central C++ lazy-middle publication machinery is now present in the C core: endpoint overflow and boundary
 pop repairs share memoized middle cells across persistent versions, and independently held immutable handles may

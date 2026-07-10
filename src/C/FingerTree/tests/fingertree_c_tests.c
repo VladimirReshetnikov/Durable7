@@ -158,6 +158,17 @@ static int compare_ints(const void* left, const void* right, void* context)
     return (left_value > right_value) - (left_value < right_value);
 }
 
+typedef struct comparison_counter {
+    size_t comparisons;
+} comparison_counter;
+
+static int compare_ints_counted(const void* left, const void* right, void* context)
+{
+    comparison_counter* counter = (comparison_counter*)context;
+    ++counter->comparisons;
+    return compare_ints(left, right, NULL);
+}
+
 static void int_sum_identity(void* destination, void* context)
 {
     (void)context;
@@ -1107,6 +1118,30 @@ static void test_priority_queue(void)
 
     REQUIRE(ft_priority_queue_empty(&queue));
     ft_priority_queue_dispose(&queue);
+
+    REQUIRE_STATUS(ft_priority_queue_init(&queue, &int_type, &int_type, compare_ints, NULL), FT_STATUS_OK);
+    const int same_priority = 7;
+    for (int ordinal = 0; ordinal != 128; ++ordinal) {
+        ft_priority_queue next;
+        REQUIRE_STATUS(ft_priority_queue_push(&queue, &ordinal, &same_priority, &next), FT_STATUS_OK);
+        ft_priority_queue_dispose(&queue);
+        ft_priority_queue_move(&queue, &next);
+    }
+
+    for (int ordinal = 0; ordinal != 128; ++ordinal) {
+        ft_priority_queue rest;
+        value = -1;
+        priority = -1;
+        REQUIRE_STATUS(ft_priority_queue_try_pop(&queue, &found, &value, &priority, &rest), FT_STATUS_OK);
+        REQUIRE(found);
+        REQUIRE(value == ordinal);
+        REQUIRE(priority == same_priority);
+        ft_priority_queue_dispose(&queue);
+        ft_priority_queue_move(&queue, &rest);
+    }
+
+    REQUIRE(ft_priority_queue_empty(&queue));
+    ft_priority_queue_dispose(&queue);
 }
 
 static void test_sorted_map(void)
@@ -1203,6 +1238,7 @@ static void test_rope(void)
     ft_rope rope;
     REQUIRE_STATUS(ft_rope_from_array(&rope, &int_type, values, 3000), FT_STATUS_OK);
     REQUIRE(ft_rope_size(&rope) == 3000);
+    REQUIRE(ft_tree_size(&rope.tree) == 2);
 
     const int probes[] = {0, 2047, 2048, 2999};
     for (size_t index = 0; index != sizeof(probes) / sizeof(probes[0]); ++index) {
@@ -1232,6 +1268,7 @@ static void test_rope(void)
     ft_rope joined;
     REQUIRE_STATUS(ft_rope_concat(&split.left, &split.right, &joined), FT_STATUS_OK);
     REQUIRE(ft_rope_size(&joined) == 3000);
+    REQUIRE(ft_tree_size(&joined.tree) == 2);
     for (size_t index = 0; index < 3000; index += 257) {
         int actual = -1;
         REQUIRE_STATUS(ft_rope_at(&joined, index, &actual), FT_STATUS_OK);
@@ -1242,6 +1279,7 @@ static void test_rope(void)
     ft_rope inserted;
     REQUIRE_STATUS(ft_rope_insert_at(&joined, 3, &inserted_value, &inserted), FT_STATUS_OK);
     REQUIRE(ft_rope_size(&inserted) == 3001);
+    REQUIRE(ft_tree_size(&inserted.tree) == 2);
     int actual = -1;
     REQUIRE_STATUS(ft_rope_at(&inserted, 3, &actual), FT_STATUS_OK);
     REQUIRE(actual == inserted_value);
@@ -1251,6 +1289,7 @@ static void test_rope(void)
     ft_rope removed;
     REQUIRE_STATUS(ft_rope_remove_at(&inserted, 3, &removed), FT_STATUS_OK);
     REQUIRE(ft_rope_size(&removed) == 3000);
+    REQUIRE(ft_tree_size(&removed.tree) == 2);
     REQUIRE_STATUS(ft_rope_at(&removed, 3, &actual), FT_STATUS_OK);
     REQUIRE(actual == 3);
 
@@ -1274,6 +1313,83 @@ static void test_rope(void)
     ft_rope_dispose(&rope);
 }
 
+static void test_rope_chunk_boundaries(void)
+{
+    ft_value_type int_type;
+    ft_value_type_init(&int_type, sizeof(int));
+
+    int values[2048];
+    for (int index = 0; index != 2048; ++index) {
+        values[index] = index;
+    }
+
+    ft_rope rope;
+    REQUIRE_STATUS(ft_rope_from_array(&rope, &int_type, values, 2048), FT_STATUS_OK);
+    REQUIRE(ft_tree_size(&rope.tree) == 1);
+
+    const int inserted_value = -1;
+    ft_rope inserted;
+    REQUIRE_STATUS(ft_rope_insert_at(&rope, 1024, &inserted_value, &inserted), FT_STATUS_OK);
+    REQUIRE(ft_rope_size(&inserted) == 2049);
+    REQUIRE(ft_tree_size(&inserted.tree) == 2);
+
+    ft_rope removed;
+    REQUIRE_STATUS(ft_rope_remove_at(&inserted, 1024, &removed), FT_STATUS_OK);
+    REQUIRE(ft_rope_size(&removed) == 2048);
+    REQUIRE(ft_tree_size(&removed.tree) == 1);
+
+    ft_rope_split_result split;
+    REQUIRE_STATUS(ft_rope_split_at(&removed, 1024, &split), FT_STATUS_OK);
+    REQUIRE(ft_tree_size(&split.left.tree) == 1);
+    REQUIRE(ft_tree_size(&split.right.tree) == 1);
+
+    ft_rope joined;
+    REQUIRE_STATUS(ft_rope_concat(&split.left, &split.right, &joined), FT_STATUS_OK);
+    REQUIRE(ft_rope_size(&joined) == 2048);
+    REQUIRE(ft_tree_size(&joined.tree) == 1);
+
+    ft_rope empty;
+    REQUIRE_STATUS(ft_rope_init(&empty, &int_type), FT_STATUS_OK);
+    ft_rope singleton;
+    REQUIRE_STATUS(ft_rope_insert_at(&empty, 0, &inserted_value, &singleton), FT_STATUS_OK);
+    REQUIRE(ft_tree_size(&singleton.tree) == 1);
+    ft_rope empty_again;
+    REQUIRE_STATUS(ft_rope_remove_at(&singleton, 0, &empty_again), FT_STATUS_OK);
+    REQUIRE(ft_rope_empty(&empty_again));
+    REQUIRE(ft_tree_size(&empty_again.tree) == 0);
+
+    ft_measure_policy sum_measure;
+    init_int_sum_measure(&sum_measure);
+    ft_measured_rope measured;
+    REQUIRE_STATUS(
+        ft_measured_rope_from_array(&measured, &int_type, &sum_measure, values, 2048),
+        FT_STATUS_OK);
+    REQUIRE(ft_tree_size(&measured.tree) == 1);
+    ft_measured_rope measured_inserted;
+    REQUIRE_STATUS(
+        ft_measured_rope_insert_at(&measured, 1024, &inserted_value, &measured_inserted),
+        FT_STATUS_OK);
+    REQUIRE(ft_tree_size(&measured_inserted.tree) == 2);
+    ft_measured_rope measured_removed;
+    REQUIRE_STATUS(
+        ft_measured_rope_remove_at(&measured_inserted, 1024, &measured_removed),
+        FT_STATUS_OK);
+    REQUIRE(ft_tree_size(&measured_removed.tree) == 1);
+
+    ft_measured_rope_dispose(&measured_removed);
+    ft_measured_rope_dispose(&measured_inserted);
+    ft_measured_rope_dispose(&measured);
+    ft_rope_dispose(&empty_again);
+    ft_rope_dispose(&singleton);
+    ft_rope_dispose(&empty);
+    ft_rope_dispose(&joined);
+    ft_rope_dispose(&split.left);
+    ft_rope_dispose(&split.right);
+    ft_rope_dispose(&removed);
+    ft_rope_dispose(&inserted);
+    ft_rope_dispose(&rope);
+}
+
 static void test_measured_rope(void)
 {
     ft_value_type int_type;
@@ -1293,6 +1409,7 @@ static void test_measured_rope(void)
     ft_measured_rope rope;
     REQUIRE_STATUS(ft_measured_rope_from_array(&rope, &int_type, &sum_measure, values, 3000), FT_STATUS_OK);
     REQUIRE(ft_measured_rope_size(&rope) == 3000);
+    REQUIRE(ft_tree_size(&rope.tree) == 2);
 
     int measure = -1;
     REQUIRE_STATUS(ft_measured_rope_measure(&rope, &measure), FT_STATUS_OK);
@@ -1338,6 +1455,7 @@ static void test_measured_rope(void)
     ft_measured_rope joined;
     REQUIRE_STATUS(ft_measured_rope_concat(&split.left, &split.right, &joined), FT_STATUS_OK);
     REQUIRE(ft_measured_rope_size(&joined) == 3000);
+    REQUIRE(ft_tree_size(&joined.tree) == 2);
     REQUIRE_STATUS(ft_measured_rope_measure(&joined, &measure), FT_STATUS_OK);
     REQUIRE(measure == expected_sum);
 
@@ -1345,6 +1463,7 @@ static void test_measured_rope(void)
     ft_measured_rope inserted;
     REQUIRE_STATUS(ft_measured_rope_insert_at(&joined, 3, &inserted_value, &inserted), FT_STATUS_OK);
     REQUIRE(ft_measured_rope_size(&inserted) == 3001);
+    REQUIRE(ft_tree_size(&inserted.tree) == 2);
     REQUIRE_STATUS(ft_measured_rope_measure(&inserted, &measure), FT_STATUS_OK);
     REQUIRE(measure == expected_sum + inserted_value);
     REQUIRE_STATUS(ft_measured_rope_at(&joined, 3, &actual), FT_STATUS_OK);
@@ -1352,6 +1471,7 @@ static void test_measured_rope(void)
 
     ft_measured_rope removed;
     REQUIRE_STATUS(ft_measured_rope_remove_at(&inserted, 3, &removed), FT_STATUS_OK);
+    REQUIRE(ft_tree_size(&removed.tree) == 2);
     REQUIRE_STATUS(ft_measured_rope_measure(&removed, &measure), FT_STATUS_OK);
     REQUIRE(measure == expected_sum);
 
@@ -1521,6 +1641,75 @@ static void test_generic_interval_tree(void)
     ft_interval_tree_dispose(&tree);
 }
 
+static void test_interval_tree_max_high_descent(void)
+{
+    ft_value_type int_type;
+    ft_value_type_init(&int_type, sizeof(int));
+    comparison_counter counter = { 0 };
+
+    ft_interval_tree tree;
+    REQUIRE_STATUS(
+        ft_interval_tree_init(&tree, &int_type, compare_ints_counted, &counter),
+        FT_STATUS_OK);
+
+    for (int index = 0; index != 2048; ++index) {
+        const int low = index * 2;
+        const int high = index == 7 ? 200000 : low;
+        ft_interval_tree next;
+        REQUIRE_STATUS(ft_interval_tree_insert(&tree, &low, &high, &next), FT_STATUS_OK);
+        ft_interval_tree_dispose(&tree);
+        ft_interval_tree_move(&tree, &next);
+    }
+
+    /* Keep only a copied handle before querying. The max-high annotations may
+     * borrow endpoint storage, so this also proves they remain valid through
+     * structural sharing after the original facade/context is released. */
+    ft_interval_tree snapshot;
+    REQUIRE_STATUS(ft_interval_tree_copy(&tree, &snapshot), FT_STATUS_OK);
+    ft_interval_tree_dispose(&tree);
+
+    int query_low = 150000;
+    int query_high = 150000;
+    bool found = false;
+    int overlap_low = -1;
+    int overlap_high = -1;
+    counter.comparisons = 0;
+    REQUIRE_STATUS(
+        ft_interval_tree_try_find_overlap(
+            &snapshot,
+            &query_low,
+            &query_high,
+            &found,
+            &overlap_low,
+            &overlap_high),
+        FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(overlap_low == 14);
+    REQUIRE(overlap_high == 200000);
+    REQUIRE(counter.comparisons < 128);
+
+    counter.comparisons = 0;
+    REQUIRE(ft_interval_tree_count_overlaps(&snapshot, &query_low, &query_high) == 1);
+    REQUIRE(counter.comparisons < 256);
+
+    query_low = 300000;
+    query_high = 300000;
+    counter.comparisons = 0;
+    REQUIRE_STATUS(
+        ft_interval_tree_try_find_overlap(
+            &snapshot,
+            &query_low,
+            &query_high,
+            &found,
+            &overlap_low,
+            &overlap_high),
+        FT_STATUS_OK);
+    REQUIRE(!found);
+    REQUIRE(counter.comparisons < 16);
+
+    ft_interval_tree_dispose(&snapshot);
+}
+
 static void test_text_rope(void)
 {
     ft_text_rope rope;
@@ -1533,9 +1722,32 @@ static void test_text_rope(void)
     REQUIRE(lc.line == 1);
     REQUIRE(lc.column == 1);
 
+    for (size_t offset = 0; offset <= ft_text_rope_size(&rope); ++offset) {
+        REQUIRE_STATUS(ft_text_rope_line_column_of(&rope, offset, &lc), FT_STATUS_OK);
+        size_t round_trip = SIZE_MAX;
+        REQUIRE_STATUS(ft_text_rope_offset_of(&rope, lc.line, lc.column, &round_trip), FT_STATUS_OK);
+        REQUIRE(round_trip == offset);
+    }
+
+    size_t line = SIZE_MAX;
+    REQUIRE_STATUS(ft_text_rope_line_of_offset(&rope, 4, &line), FT_STATUS_OK);
+    REQUIRE(line == 1);
+    size_t line_start = SIZE_MAX;
+    REQUIRE_STATUS(ft_text_rope_line_start_offset(&rope, 1, &line_start), FT_STATUS_OK);
+    REQUIRE(line_start == 3);
+    size_t offset = SIZE_MAX;
+    REQUIRE_STATUS(ft_text_rope_offset_of(&rope, 0, 2, &offset), FT_STATUS_OK);
+    REQUIRE(offset == 2);
+    REQUIRE_STATUS(ft_text_rope_offset_of(&rope, 0, 3, &offset), FT_STATUS_OUT_OF_RANGE);
+    REQUIRE_STATUS(ft_text_rope_offset_of(&rope, 2, 0, &offset), FT_STATUS_OK);
+    REQUIRE(offset == 6);
+    REQUIRE_STATUS(ft_text_rope_offset_of(&rope, 2, 1, &offset), FT_STATUS_OUT_OF_RANGE);
+    REQUIRE_STATUS(ft_text_rope_line_start_offset(&rope, 3, &line_start), FT_STATUS_OUT_OF_RANGE);
+
     ft_text_rope inserted;
     REQUIRE_STATUS(ft_text_rope_insert_char(&rope, 2, 'X', &inserted), FT_STATUS_OK);
     REQUIRE(ft_text_rope_size(&inserted) == 7);
+    REQUIRE(ft_tree_size(&inserted.rope.tree) == 1);
     char value = '\0';
     REQUIRE_STATUS(ft_text_rope_at(&inserted, 2, &value), FT_STATUS_OK);
     REQUIRE(value == 'X');
@@ -1614,6 +1826,15 @@ static void test_text_rope_long_edit_script(void)
 
     REQUIRE(text_rope_matches_model(&rope, model, length));
     REQUIRE(text_rope_matches_model(&snapshot, snapshot_model, snapshot_length));
+    const size_t ideal_chunks = (length + rope.rope.max_chunk_length - 1u) / rope.rope.max_chunk_length;
+    REQUIRE(ft_tree_size(&rope.rope.tree) <= ideal_chunks + 1u);
+    for (size_t probe = 0; probe <= length; probe += 113u) {
+        ft_line_column lc;
+        REQUIRE_STATUS(ft_text_rope_line_column_of(&rope, probe, &lc), FT_STATUS_OK);
+        size_t round_trip = SIZE_MAX;
+        REQUIRE_STATUS(ft_text_rope_offset_of(&rope, lc.line, lc.column, &round_trip), FT_STATUS_OK);
+        REQUIRE(round_trip == probe);
+    }
 
     ft_text_rope_dispose(&snapshot);
     ft_text_rope_dispose(&rope);
@@ -1643,11 +1864,13 @@ int main(void)
     run_test("sorted set and multiset", test_sorted_set_and_multiset);
     run_test("sorted map", test_sorted_map);
     run_test("rope", test_rope);
+    run_test("rope chunk boundaries", test_rope_chunk_boundaries);
     run_test("measured rope", test_measured_rope);
     run_test("priority queue", test_priority_queue);
     run_test("interval tree", test_interval_tree);
     run_test("interval tree equal-low tie order", test_interval_tree_equal_low_tie_order);
     run_test("generic interval tree", test_generic_interval_tree);
+    run_test("interval tree max-high descent", test_interval_tree_max_high_descent);
     run_test("text rope", test_text_rope);
     run_test("text rope long edit script", test_text_rope_long_edit_script);
 

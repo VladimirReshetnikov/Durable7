@@ -102,15 +102,18 @@ The executable covers:
   set/insert/remove, and persistence;
 - sorted set uniqueness, sorted multiset duplicates, rank access, removal, and traversal;
 - sorted map insert/set/remove, duplicate rejection, lookup, rank access, traversal, and persistence;
-- chunked rope construction across chunk boundaries, cumulative indexing, traversal, split/reconcat, insertion,
-  removal, append, and persistence;
-- measured rope construction across chunk boundaries, cached whole/prefix measure reads, cumulative-measure locate
-  and split, split/reconcat, insertion, removal, append, and persistence;
-- priority queue minimum-first drain order and FIFO stability for equal priorities;
+- chunked rope construction across chunk boundaries, cumulative indexing, traversal, split/reconcat, chunk-local
+  insertion/removal, boundary coalescing, bounded chunk counts, append, and persistence;
+- empty/singleton and exact-maximum chunk boundaries, including split-on-insert and merge-on-remove/concat for
+  positional and measured ropes;
+- measured rope construction across chunk boundaries, cached whole/prefix measure reads, one-descent prefix
+  measurement, cumulative-measure locate and split, chunk-local editing/coalescing, append, and persistence;
+- priority queue minimum-first drain order and FIFO stability for equal priorities, including a 128-element tie run;
 - signed 64-bit interval insertion, ordering, containment, removal, first-overlap, and overlap counting;
-- generic endpoint interval insertion, ordering, containment, removal, invalid interval rejection, first-overlap,
-  overlap counting, and persistence;
-- text rope construction, editing, indexing, line count, line/column navigation, and traversal.
+- generic endpoint interval insertion, ordering, containment, removal, invalid interval rejection, max-high-guided
+  first-overlap and overlap counting, shared-annotation lifetime, comparison-count ceilings, and persistence;
+- text rope construction, measured editing, indexing, O(1) line count, bidirectional offset/line-column navigation,
+  invalid-column rejection, bounded chunk counts, and traversal.
 - long text-rope edit scripts over retained snapshots, with model checks for indexing, traversal, line counts, and
   line/column navigation.
 

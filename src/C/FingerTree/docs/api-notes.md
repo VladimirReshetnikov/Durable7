@@ -74,20 +74,25 @@ This restores the sibling ports' O(log n) search/edit foundation for sorted cont
 interval trees, and both rope facades. The native suite includes operation-count guards over a 4,096-element
 tree so a return to leaf-by-leaf split or locate fails deterministically.
 
-## Remaining Complexity Gaps
+## Facade Annotations And Chunk Shape
 
-The remaining gaps are facade-level shape or annotation differences rather than generic-tree descent:
-- The ropes never merge undersized chunks: single-element inserts create one-element chunks that are
-  never coalesced on remove/concat, so edit-heavy workloads fragment toward one element per chunk.
-- `ft_text_rope` wraps the unmeasured rope, so `line_count`/`line_column_of` are O(n) character
-  scans; the C++/C#/Rust text facades ride a newline measure (O(1) line count, O(log n) navigation)
-  and additionally expose `line_of_offset`/`line_start_offset`/`offset_of`, which the C facade
-  lacks entirely.
-- `ft_measured_rope_prefix_measure` re-locates per element (O(count log n)) instead of splitting
-  once and reading the left tree's cached measure.
-- Interval overlap queries scan the low-sorted sequence with an early exit once `low > query.high`;
-  the references answer first-overlap in O(log n) via a cached max-high annotation. Adding a
-  `(count, lastLow, maxHigh)` product measure is the follow-up here.
+Both interval facades carry a cached `(count, maxHigh)` measure. `try_find_overlap` descends to the first
+prefix whose maximum high endpoint reaches the query low in O(log n); overlap counting repeatedly advances
+past each hit in O((k + 1) log n) for `k` results. The generic endpoint facade's measure borrows the high
+endpoint stored in its owning leaf or shared node. Leaf cloning therefore re-measures from the copied value,
+so no annotation points into a released source snapshot.
+
+The positional and measured ropes edit the located chunk directly, split a chunk only when it exceeds the
+configured maximum, and merge adjacent boundary chunks on split, concat, and removal whenever they fit.
+Edit-heavy workloads consequently remain chunked instead of degenerating toward one leaf per element.
+`ft_measured_rope_prefix_measure` descends once and scans at most one bounded chunk: O(log n + chunk-size).
+
+`ft_text_rope` is based on `ft_measured_rope<char>` with a newline-count measure. Line count is O(1), while
+`line_of_offset`, `line_start_offset`, `line_column_of`, and the column-validated `offset_of` use measured
+descent plus at most one bounded chunk scan.
+
+## Intentional API Differences
+
 - `ft_tree_locate` reports "not found" through its `found` flag with the total measure in
   `measure_before`; the C++ reference instead returns the last element as the hit. This is an
   intentional API difference — porters translating C++ callers must not assume an element is always

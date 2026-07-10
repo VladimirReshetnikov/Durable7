@@ -29,13 +29,18 @@ line information, and exits non-zero if any test increments the failure count. A
   value-copy/measure-combine ceilings over 4,096 elements.
 - `sorted set and multiset` covers uniqueness, duplicates, rank access, removal, and traversal.
 - `sorted map` covers insert, set, duplicate rejection, lookup, rank access, traversal, and persistence.
-- `rope` covers chunked positional construction, indexing, traversal, split/reconcat, insertion, removal, append,
-  and persistence.
-- `measured rope` covers cached measures, cumulative-measure locate/split, editing, append, and persistence.
-- `priority queue` covers minimum-first drain order and FIFO stability for equal priorities.
+- `rope` covers chunked positional construction, indexing, traversal, split/reconcat, chunk-local editing,
+  boundary coalescing, bounded chunk counts, append, and persistence.
+- `rope chunk boundaries` covers empty/singleton transitions, exact-maximum chunks, overflow splitting, removal
+  re-coalescing, and exact-boundary concat for both positional and measured ropes.
+- `measured rope` covers cached and prefix measures, cumulative-measure locate/split, chunk-local editing,
+  coalescing, bounded chunk counts, append, and persistence.
+- `priority queue` covers minimum-first drain order and FIFO stability through a 128-element equal-priority run.
 - `interval tree` covers the signed 64-bit closed-interval facade.
-- `generic interval tree` covers caller-supplied endpoint policies and invalid interval rejection.
-- `text rope` covers construction, editing, indexing, line count, line/column navigation, and traversal.
+- `generic interval tree` covers caller-supplied endpoint policies, invalid interval rejection, max-high descent,
+  shared-annotation lifetime, and comparison-count complexity ceilings.
+- `text rope` covers measured construction/editing, indexing, line count, both directions of line/column navigation,
+  invalid-column rejection, bounded chunk counts, and traversal.
 - `text rope long edit script` covers retained snapshots and repeated edits across a multi-line document, comparing
   indexing, traversal, line counts, and line/column navigation against a plain C string model.
 

@@ -495,7 +495,7 @@ ft_status ft_interval_tree_at(
     void* high);
 
 typedef struct ft_text_rope {
-    ft_rope rope;
+    ft_measured_rope rope;
 } ft_text_rope;
 
 typedef struct ft_line_column {
@@ -513,7 +513,10 @@ ft_status ft_text_rope_at(const ft_text_rope* rope, size_t index, char* value);
 ft_status ft_text_rope_insert_char(const ft_text_rope* rope, size_t index, char value, ft_text_rope* result);
 ft_status ft_text_rope_remove_at(const ft_text_rope* rope, size_t index, ft_text_rope* result);
 size_t ft_text_rope_line_count(const ft_text_rope* rope);
+ft_status ft_text_rope_line_of_offset(const ft_text_rope* rope, size_t offset, size_t* line);
+ft_status ft_text_rope_line_start_offset(const ft_text_rope* rope, size_t line, size_t* offset);
 ft_status ft_text_rope_line_column_of(const ft_text_rope* rope, size_t offset, ft_line_column* result);
+ft_status ft_text_rope_offset_of(const ft_text_rope* rope, size_t line, size_t column, size_t* offset);
 ft_status ft_text_rope_visit(const ft_text_rope* rope, ft_visit_fn visitor, void* context);
 
 #ifdef __cplusplus
