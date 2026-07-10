@@ -31,20 +31,24 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
 From `src/CSharp`, run the full solution test gate:
 
 ```powershell
-dotnet test .\DataStructures.sln
+.\test.ps1
 ```
 
 Run only this test project when iterating on test code:
 
 ```powershell
-dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj
+.\test.ps1 -Project .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj
 ```
 
 Filter a class while developing a focused change:
 
 ```powershell
-dotnet test .\DataStructures.sln --filter FullyQualifiedName~PersistentHashMapPropertyTests
+.\test.ps1 -Filter FullyQualifiedName~PersistentHashMapPropertyTests
 ```
+
+The launcher suppresses modal Windows loader/crash reporting for the complete `dotnet` child-process tree. The
+test assembly repeats the headless process configuration during module initialization, so direct test-runner and
+Test Explorer execution is non-interactive after the assembly loads as well.
 
 Use the workspace [validation guide](../../docs/Hamt/validation.md) for restore/build split commands, warning policy,
 and evidence expectations.

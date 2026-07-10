@@ -20,7 +20,7 @@ using Tools.DataStructures.Hamt;
 Validate the workspace through the solution:
 
 ```powershell
-dotnet test .\DataStructures.sln
+.\test.ps1
 ```
 
 The repository currently builds the library from source under

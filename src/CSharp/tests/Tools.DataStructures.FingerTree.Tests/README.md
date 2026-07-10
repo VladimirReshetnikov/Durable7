@@ -46,29 +46,33 @@ reasonable oracle.
 From `src/CSharp`, run the full solution test gate:
 
 ```powershell
-dotnet test .\DataStructures.sln
+.\test.ps1
 ```
 
 Run only this test project when iterating on test code:
 
 ```powershell
-dotnet test .\tests\Tools.DataStructures.FingerTree.Tests\Tools.DataStructures.FingerTree.Tests.csproj
+.\test.ps1 -Project .\tests\Tools.DataStructures.FingerTree.Tests\Tools.DataStructures.FingerTree.Tests.csproj
 ```
 
 Filter a class while developing a focused change:
 
 ```powershell
-dotnet test .\DataStructures.sln --filter FullyQualifiedName~RopePropertyTests
+.\test.ps1 -Filter FullyQualifiedName~RopePropertyTests
 ```
+
+The launcher suppresses modal Windows loader/crash reporting for the complete `dotnet` child-process tree. The
+test assembly repeats the headless process configuration during module initialization, so direct test-runner and
+Test Explorer execution is non-interactive after the assembly loads as well.
 
 ## Stress Controls
 
 `TearableConcurrencyStressTests` honors `FINGERTREE_STRESS_SECONDS`. The default is short enough for ordinary
-`dotnet test`; raise it for a local soak run without editing source:
+`.\test.ps1`; raise it for a local soak run without editing source:
 
 ```powershell
 $env:FINGERTREE_STRESS_SECONDS = '60'
-dotnet test .\DataStructures.sln --filter FullyQualifiedName~TearableConcurrencyStressTests
+.\test.ps1 -Filter FullyQualifiedName~TearableConcurrencyStressTests
 Remove-Item Env:\FINGERTREE_STRESS_SECONDS
 ```
 

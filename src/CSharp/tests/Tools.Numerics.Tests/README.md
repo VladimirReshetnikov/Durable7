@@ -11,8 +11,12 @@
 From `src/CSharp`, run:
 
 ```powershell
-dotnet test .\DataStructures.sln
+.\test.ps1
 ```
+
+The launcher suppresses modal Windows loader/crash reporting for the complete `dotnet` child-process tree. The
+test assembly repeats the headless process configuration during module initialization, so direct test-runner and
+Test Explorer execution is non-interactive after the assembly loads as well.
 
 This test project is organized by **bit width** and **signedness quadrant** so counterpart coverage is easy to compare.
 

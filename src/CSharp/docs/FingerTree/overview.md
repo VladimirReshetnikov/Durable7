@@ -55,7 +55,7 @@ This workspace provides two public finger-tree types. `FingerTree<TElement, TMea
 Use the local .NET SDK:
 
 ```powershell
-dotnet test .\DataStructures.sln
+.\test.ps1
 ```
 
 The solution builds warning-free with `CS1591`/`CS1573` as errors and the full test suite is expected to pass.

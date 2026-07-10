@@ -29,7 +29,7 @@ using FtSortedSet = Tools.DataStructures.FingerTree.SortedSet<int>;
 Validate the workspace through the solution:
 
 ```powershell
-dotnet test .\DataStructures.sln
+.\test.ps1
 ```
 
 Runnable tours live under [`samples`](../../samples/README.md):

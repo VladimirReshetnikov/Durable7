@@ -7,17 +7,39 @@
 
 The C# root is a single .NET 10 workspace. `DataStructures.sln` contains all managed libraries, tests,
 FingerTree samples, and the FingerTree benchmark harness; `Directory.Build.props` applies the shared
-preview-language, nullable, documentation, and warning policy to the tree.
+preview-language, nullable, documentation, warning, and test-runsettings policy to the tree.
 
 Source projects live under `src/`, tests under `tests/`, runnable samples under `samples/`, benchmarks
 under `benchmarks/`, and family-specific documentation under `docs/<Family>/`.
 
 | Family | Role | Primary entry points | Validation |
 | --- | --- | --- | --- |
-| [Numerics](docs/Numerics/overview.md) | Fixed-width and sparse integer numerics library | [project](src/Tools.Numerics/Tools.Numerics.csproj), [API reference](docs/Numerics/api-and-behavior-reference.md), [validation](docs/Numerics/validation.md), [maintainer guidance](docs/Numerics/wide-integer-maintainer-guidance.md) | `dotnet test .\DataStructures.sln`; see [tests](tests/Tools.Numerics.Tests/README.md) |
-| [HAMT](docs/Hamt/overview.md) | Canonical managed persistent HAMT map/set library | [project](src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj), [usage](docs/Hamt/usage.md), [API spec](docs/Hamt/api-specification.md), [validation](docs/Hamt/validation.md) | `dotnet test .\DataStructures.sln`; see [tests](tests/Tools.DataStructures.Hamt.Tests/README.md) |
-| [FingerTree](docs/FingerTree/overview.md) | Canonical managed FingerTree family: deque, measured tree, sorted collections, priority queue, intervals, ropes, text, samples, and benchmarks | [project](src/Tools.DataStructures.FingerTree/Tools.DataStructures.FingerTree.csproj), [usage](docs/FingerTree/usage.md), [API spec](docs/FingerTree/api-specification.md), [validation](docs/FingerTree/validation.md) | `dotnet test .\DataStructures.sln`; see [tests](tests/Tools.DataStructures.FingerTree.Tests/README.md), [samples](samples/README.md), and [benchmark project](benchmarks/Tools.DataStructures.FingerTree.Benchmarks/README.md) |
-| [Tungsten](docs/Tungsten/overview.md) | Tungsten-semantics persistent collections composed from the HAMT and FingerTree families: `PersistentList<T>` and insertion-ordered `PersistentAssociation<TKey, TValue>` (primary client: the Tungsten engine) | [project](src/Tools.DataStructures.Tungsten/Tools.DataStructures.Tungsten.csproj), [usage](docs/Tungsten/usage.md), [API spec](docs/Tungsten/api-specification.md), [validation](docs/Tungsten/validation.md) | `dotnet test .\DataStructures.sln`; see [tests](tests/Tools.DataStructures.Tungsten.Tests/README.md) |
+| [Numerics](docs/Numerics/overview.md) | Fixed-width and sparse integer numerics library | [project](src/Tools.Numerics/Tools.Numerics.csproj), [API reference](docs/Numerics/api-and-behavior-reference.md), [validation](docs/Numerics/validation.md), [maintainer guidance](docs/Numerics/wide-integer-maintainer-guidance.md) | `.\test.ps1`; see [tests](tests/Tools.Numerics.Tests/README.md) |
+| [HAMT](docs/Hamt/overview.md) | Canonical managed persistent HAMT map/set library | [project](src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj), [usage](docs/Hamt/usage.md), [API spec](docs/Hamt/api-specification.md), [validation](docs/Hamt/validation.md) | `.\test.ps1`; see [tests](tests/Tools.DataStructures.Hamt.Tests/README.md) |
+| [FingerTree](docs/FingerTree/overview.md) | Canonical managed FingerTree family: deque, measured tree, sorted collections, priority queue, intervals, ropes, text, samples, and benchmarks | [project](src/Tools.DataStructures.FingerTree/Tools.DataStructures.FingerTree.csproj), [usage](docs/FingerTree/usage.md), [API spec](docs/FingerTree/api-specification.md), [validation](docs/FingerTree/validation.md) | `.\test.ps1`; see [tests](tests/Tools.DataStructures.FingerTree.Tests/README.md), [samples](samples/README.md), and [benchmark project](benchmarks/Tools.DataStructures.FingerTree.Benchmarks/README.md) |
+| [Tungsten](docs/Tungsten/overview.md) | Tungsten-semantics persistent collections composed from the HAMT and FingerTree families: `PersistentList<T>` and insertion-ordered `PersistentAssociation<TKey, TValue>` (primary client: the Tungsten engine) | [project](src/Tools.DataStructures.Tungsten/Tools.DataStructures.Tungsten.csproj), [usage](docs/Tungsten/usage.md), [API spec](docs/Tungsten/api-specification.md), [validation](docs/Tungsten/validation.md) | `.\test.ps1`; see [tests](tests/Tools.DataStructures.Tungsten.Tests/README.md) |
+
+## Non-Interactive Test Runs
+
+From `src/CSharp`, use the workspace test launcher:
+
+```powershell
+.\test.ps1
+.\test.ps1 -Configuration Release
+.\test.ps1 -Project .\tests\Tools.Numerics.Tests\Tools.Numerics.Tests.csproj
+.\test.ps1 -Filter FullyQualifiedName~SparseIntegerTests
+```
+
+The launcher enables the repository-wide headless Windows error mode before it starts `dotnet`, so the SDK,
+MSBuild, vstest, testhost, and their descendants return loader, critical-I/O, and crash failures through exit codes
+and console output instead of modal dialogs. Every test assembly also includes an early module initializer that
+reasserts the process error mode and disables Windows Error Reporting UI; this covers direct Test Explorer and
+`dotnet test` execution after the CLR has loaded the test assembly. The launcher remains the canonical unattended
+entry point because only its inherited process setting can cover failures before managed startup.
+
+`test.runsettings` is applied automatically through `Directory.Build.props` and treats a run that discovers no
+tests as an error. `-NoRestore`, `-NoBuild`, and `-Blame` map to their `dotnet test` counterparts; unrecognized
+trailing arguments are forwarded to `dotnet test`.
 
 Use the parent [source index](../README.md) for the full language list, the repository
 [workspace map](../../docs/reference/workspace-map.md) for port lineage, and the

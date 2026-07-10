@@ -35,11 +35,15 @@ library. It targets the workspace defaults from `Directory.Build.props`, referen
 From `src/CSharp`, run the full solution test gate:
 
 ```powershell
-dotnet test .\DataStructures.sln
+.\test.ps1
 ```
 
 Or run only this project:
 
 ```powershell
-dotnet test .\tests\Tools.DataStructures.Tungsten.Tests\Tools.DataStructures.Tungsten.Tests.csproj
+.\test.ps1 -Project .\tests\Tools.DataStructures.Tungsten.Tests\Tools.DataStructures.Tungsten.Tests.csproj
 ```
+
+The launcher suppresses modal Windows loader/crash reporting for the complete `dotnet` child-process tree. The
+test assembly repeats the headless process configuration during module initialization, so direct test-runner and
+Test Explorer execution is non-interactive after the assembly loads as well.

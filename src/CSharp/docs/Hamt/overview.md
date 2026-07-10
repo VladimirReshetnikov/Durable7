@@ -36,7 +36,7 @@ allocation-free copy-safe struct enumerators.
 Use the local .NET SDK:
 
 ```powershell
-dotnet test .\DataStructures.sln
+.\test.ps1
 ```
 
 See [`docs/validation.md`](validation.md) for the restore/build/test split, XML documentation

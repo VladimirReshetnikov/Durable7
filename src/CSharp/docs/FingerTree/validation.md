@@ -41,12 +41,13 @@ From `src/CSharp`:
 ```powershell
 dotnet restore
 dotnet build .\DataStructures.sln
-dotnet test .\DataStructures.sln
+.\test.ps1
 ```
 
-For ordinary behavior changes, `dotnet test .\DataStructures.sln` is the main gate because it restores and
-builds as needed before running the test project. Use the explicit restore/build steps when validating
-toolchain, solution membership, XML documentation, sample build, or benchmark-project build changes.
+For ordinary behavior changes, `.\test.ps1` is the main gate because it restores and builds as needed before running
+the test projects while suppressing modal Windows failure UI throughout the child-process tree. Use the explicit
+restore/build steps when validating toolchain, solution membership, XML documentation, sample build, or
+benchmark-project build changes.
 
 Run individual sample tours when changing sample text or manual-demo behavior:
 
@@ -89,11 +90,11 @@ The suite covers:
 ## Stress Controls
 
 `TearableConcurrencyStressTests` honors `FINGERTREE_STRESS_SECONDS`. The default is short enough for ordinary
-`dotnet test`; raise it for a longer soak without editing source:
+`.\test.ps1`; raise it for a longer soak without editing source:
 
 ```powershell
 $env:FINGERTREE_STRESS_SECONDS = '60'
-dotnet test .\DataStructures.sln --filter FullyQualifiedName~TearableConcurrencyStressTests
+.\test.ps1 -Filter FullyQualifiedName~TearableConcurrencyStressTests
 Remove-Item Env:\FINGERTREE_STRESS_SECONDS
 ```
 
@@ -105,7 +106,7 @@ reads, or the tearable value/measure pathways.
 When reporting validation, include the workspace and exact command, for example:
 
 ```text
-src/CSharp> dotnet test .\DataStructures.sln
+src/CSharp> .\test.ps1
 ```
 
 If a docs-only change only updates links or wording and does not alter commands, API claims, XML documentation,

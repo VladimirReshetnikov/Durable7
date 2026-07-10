@@ -70,7 +70,7 @@ dotnet run --project .\Tools.DataStructures.FingerTree.Editor -c Release
 Run the focused sample gate from `src/CSharp` with:
 
 ```powershell
-dotnet test .\DataStructures.sln --filter FullyQualifiedName~SampleSmokeTests
+.\test.ps1 -Filter FullyQualifiedName~SampleSmokeTests
 ```
 
 Use the full workspace validation guide when sample changes also touch library APIs, build shape, or

@@ -11,9 +11,13 @@ From `src/CSharp`:
 
 ```powershell
 dotnet build .\DataStructures.sln     # includes the XML-documentation warnings-as-errors gate
-dotnet test .\DataStructures.sln      # full workspace gate
-dotnet test .\tests\Tools.DataStructures.Tungsten.Tests\Tools.DataStructures.Tungsten.Tests.csproj
+.\test.ps1                            # full workspace gate
+.\test.ps1 -Project .\tests\Tools.DataStructures.Tungsten.Tests\Tools.DataStructures.Tungsten.Tests.csproj
 ```
+
+The test launcher establishes the inherited Windows headless error mode before starting `dotnet`; the shared
+test-assembly initializer repeats the setting and disables WER UI for direct runner and Test Explorer execution.
+Failures remain visible in console output and the process exit code.
 
 The library builds under the workspace `Directory.Build.props` policy: .NET 10, preview language,
 nullable enabled, `GenerateDocumentationFile` with `CS1591`/`CS1573` as errors. A change that
