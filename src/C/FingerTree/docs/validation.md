@@ -100,7 +100,8 @@ The executable covers:
 - concurrent shared-snapshot copy/read/update/dispose behavior over atomic node and tree reference counts;
 - reversible-deque logical reversal, endpoint edits, index reads, traversal, mixed-orientation concat, split,
   set/insert/remove, and persistence;
-- sorted set uniqueness, sorted multiset duplicates, rank access, removal, and traversal;
+- sorted set uniqueness, sorted multiset duplicates, rank access, removal, traversal, and O(log n)
+  signpost-guided bounds with zero payload copies on read-only search;
 - sorted map insert/set/remove, duplicate rejection, lookup, rank access, traversal, and persistence;
 - chunked rope construction across chunk boundaries, cumulative indexing, traversal, split/reconcat, chunk-local
   insertion/removal, boundary coalescing, bounded chunk counts, append, and persistence;

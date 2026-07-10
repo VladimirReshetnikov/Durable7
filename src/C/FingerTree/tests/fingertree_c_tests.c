@@ -1111,6 +1111,44 @@ static void test_sorted_set_and_multiset(void)
     ft_sorted_set_dispose(&set);
 }
 
+static void test_sorted_facade_structural_bounds(void)
+{
+    structural_costs costs;
+    costs.value_copies = 0;
+    costs.measure_combines = 0;
+    ft_tree_policy policy;
+    init_counted_int_policy(&policy, &costs);
+
+    comparison_counter counter;
+    counter.comparisons = 0;
+    ft_sorted_multiset bag;
+    REQUIRE_STATUS(ft_sorted_multiset_init(&bag, &policy, compare_ints_counted, &counter), FT_STATUS_OK);
+    for (int value = 0; value != 4096; ++value) {
+        ft_sorted_multiset next;
+        REQUIRE_STATUS(ft_sorted_multiset_add(&bag, &value, &next), FT_STATUS_OK);
+        ft_sorted_multiset_dispose(&bag);
+        bag = next;
+    }
+
+    costs.value_copies = 0;
+    costs.measure_combines = 0;
+    counter.comparisons = 0;
+    int probe = 3072;
+    REQUIRE(ft_sorted_multiset_contains(&bag, &probe));
+    REQUIRE(ft_sorted_multiset_count_of(&bag, &probe) == 1);
+    REQUIRE(costs.value_copies == 0);
+    REQUIRE(counter.comparisons < 128);
+
+    costs.value_copies = 0;
+    counter.comparisons = 0;
+    int missing = 5000;
+    REQUIRE(!ft_sorted_multiset_contains(&bag, &missing));
+    REQUIRE(costs.value_copies == 0);
+    REQUIRE(counter.comparisons < 32);
+
+    ft_sorted_multiset_dispose(&bag);
+}
+
 static void test_priority_queue(void)
 {
     ft_value_type int_type;
@@ -1907,6 +1945,7 @@ int main(void)
     run_test("measure locate and split", test_measure_locate_and_split);
     run_test("structural split and locate costs", test_structural_split_and_locate_costs);
     run_test("sorted set and multiset", test_sorted_set_and_multiset);
+    run_test("sorted facade structural bounds", test_sorted_facade_structural_bounds);
     run_test("sorted map", test_sorted_map);
     run_test("rope", test_rope);
     run_test("rope chunk boundaries", test_rope_chunk_boundaries);

@@ -111,6 +111,7 @@ typedef struct ft_middle ft_middle;
 struct ft_element {
     ft_element_kind kind;
     size_t leaf_count;
+    const void* last_leaf;
     void* measure;
     union {
         void* value;
@@ -136,6 +137,7 @@ struct ft_tree_rep {
     ft_ref_count ref_count;
     ft_rep_kind kind;
     size_t leaf_count;
+    const void* last_leaf;
     ft_atomic_ptr measure;
     union {
         ft_element single;
@@ -373,6 +375,7 @@ static ft_status ft_element_clone(const ft_tree_policy* policy, const ft_element
         }
 
         ft_value_copy(&policy->value, destination->as.value, source->as.value);
+        destination->last_leaf = destination->as.value;
 
         destination->measure = ft_allocate(policy->measure.size);
         if (destination->measure == NULL) {
@@ -397,6 +400,7 @@ static ft_status ft_element_clone(const ft_tree_policy* policy, const ft_element
     }
 
     destination->as.node = source->as.node;
+    destination->last_leaf = source->last_leaf;
     ft_node_retain(destination->as.node);
     return FT_STATUS_OK;
 }
@@ -412,6 +416,7 @@ static ft_status ft_element_init_leaf(const ft_tree_policy* policy, const void* 
     }
 
     ft_value_copy(&policy->value, destination->as.value, value);
+    destination->last_leaf = destination->as.value;
 
     destination->measure = ft_allocate(policy->measure.size);
     if (destination->measure == NULL) {
@@ -507,6 +512,7 @@ static ft_status ft_element_init_node(const ft_tree_policy* policy, const ft_ele
     result->kind = FT_ELEMENT_NODE;
     result->leaf_count = node->leaf_count;
     result->as.node = node;
+    result->last_leaf = node->children[node->child_count - 1].last_leaf;
     status = ft_measure_new_copy(&policy->measure, node->measure, &result->measure);
     if (status != FT_STATUS_OK) {
         ft_node_release(policy, node);
@@ -604,6 +610,8 @@ static ft_status ft_rep_create_single(const ft_tree_policy* policy, const ft_ele
         free(rep);
         return status;
     }
+
+    rep->last_leaf = rep->as.single.last_leaf;
 
     void* measure = NULL;
     status = ft_measure_new_copy(&policy->measure, rep->as.single.measure, &measure);
@@ -1015,6 +1023,8 @@ static ft_status ft_rep_create_deep_with_middle(
         ft_rep_release(policy, rep);
         return FT_STATUS_OVERFLOW;
     }
+
+    rep->last_leaf = rep->as.deep.suffix[suffix_count - 1].last_leaf;
 
     *result = rep;
     return FT_STATUS_OK;
@@ -2446,6 +2456,128 @@ static ft_status ft_locate_rep(ft_locate_state* state, const ft_tree_rep* rep)
 static bool ft_tree_is_valid(const ft_tree* tree)
 {
     return tree != NULL && tree->policy != NULL && tree->rep != NULL;
+}
+
+typedef bool (*ft_leaf_bound_predicate_fn)(const void* leaf, void* context);
+
+static ft_status ft_bound_element(
+    const ft_tree_policy* policy,
+    const ft_element* element,
+    ft_leaf_bound_predicate_fn predicate,
+    void* context,
+    size_t* index,
+    const void** hit)
+{
+    (void)policy;
+    if (!predicate(element->last_leaf, context)) {
+        *index += element->leaf_count;
+        return FT_STATUS_OK;
+    }
+
+    if (element->kind == FT_ELEMENT_LEAF) {
+        *hit = element->as.value;
+        return FT_STATUS_OK;
+    }
+
+    for (size_t child = 0; child != element->as.node->child_count && *hit == NULL; ++child) {
+        ft_status status = ft_bound_element(
+            policy,
+            &element->as.node->children[child],
+            predicate,
+            context,
+            index,
+            hit);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+    }
+
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_bound_rep(
+    const ft_tree_policy* policy,
+    const ft_tree_rep* rep,
+    ft_leaf_bound_predicate_fn predicate,
+    void* context,
+    size_t* index,
+    const void** hit)
+{
+    if (rep->kind == FT_REP_EMPTY || *hit != NULL) {
+        return FT_STATUS_OK;
+    }
+
+    if (!predicate(rep->last_leaf, context)) {
+        *index += rep->leaf_count;
+        return FT_STATUS_OK;
+    }
+
+    if (rep->kind == FT_REP_SINGLE) {
+        return ft_bound_element(policy, &rep->as.single, predicate, context, index, hit);
+    }
+
+    for (size_t element = 0; element != rep->as.deep.prefix_count && *hit == NULL; ++element) {
+        ft_status status = ft_bound_element(
+            policy,
+            &rep->as.deep.prefix[element],
+            predicate,
+            context,
+            index,
+            hit);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+    }
+
+    if (*hit == NULL) {
+        ft_tree_rep* middle = NULL;
+        ft_status status = ft_middle_force(policy, rep->as.deep.middle, &middle);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+
+        status = ft_bound_rep(policy, middle, predicate, context, index, hit);
+        ft_rep_release(policy, middle);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+    }
+
+    for (size_t element = 0; element != rep->as.deep.suffix_count && *hit == NULL; ++element) {
+        ft_status status = ft_bound_element(
+            policy,
+            &rep->as.deep.suffix[element],
+            predicate,
+            context,
+            index,
+            hit);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+    }
+
+    return FT_STATUS_OK;
+}
+
+/* Finds the first leaf satisfying a monotone predicate. The cached last-leaf
+ * signpost on every grouping element lets the descent reject each preceding
+ * subtree in O(1), so the whole search visits one root-to-leaf path. The hit
+ * pointer is borrowed from the immutable tree and remains valid while the
+ * caller retains its tree handle. */
+static ft_status ft_tree_bound(
+    const ft_tree* tree,
+    ft_leaf_bound_predicate_fn predicate,
+    void* context,
+    size_t* index,
+    const void** hit)
+{
+    if (!ft_tree_is_valid(tree) || predicate == NULL || index == NULL || hit == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    *index = 0;
+    *hit = NULL;
+    return ft_bound_rep(tree->policy, tree->rep, predicate, context, index, hit);
 }
 
 static void ft_size_identity(void* destination, void* context)
@@ -5112,58 +5244,46 @@ static int ft_compare_values(const ft_sorted_multiset* set, const void* left, co
     return set->compare(left, right, set->compare_context);
 }
 
+typedef struct ft_sorted_bound_context {
+    const ft_sorted_multiset* set;
+    const void* value;
+    bool upper;
+} ft_sorted_bound_context;
+
+static bool ft_sorted_bound_reached(const void* leaf, void* context)
+{
+    const ft_sorted_bound_context* bound = (const ft_sorted_bound_context*)context;
+    const int comparison = ft_compare_values(bound->set, leaf, bound->value);
+    return bound->upper ? comparison > 0 : comparison >= 0;
+}
+
+static ft_status ft_sorted_bound(
+    const ft_sorted_multiset* set,
+    const void* value,
+    bool upper,
+    size_t* index,
+    const void** hit)
+{
+    ft_sorted_bound_context context;
+    context.set = set;
+    context.value = value;
+    context.upper = upper;
+    return ft_tree_bound(&set->tree, ft_sorted_bound_reached, &context, index, hit);
+}
+
 static ft_status ft_sorted_bounds(
     const ft_sorted_multiset* set,
     const void* value,
     size_t* lower,
     size_t* upper)
 {
-    void* current = ft_allocate(set->tree.policy->value.size);
-    if (current == NULL) {
-        return FT_STATUS_NO_MEMORY;
+    const void* hit = NULL;
+    ft_status status = ft_sorted_bound(set, value, false, lower, &hit);
+    if (status != FT_STATUS_OK) {
+        return status;
     }
 
-    size_t lo = 0;
-    size_t hi = ft_tree_size(&set->tree);
-    while (lo < hi) {
-        const size_t mid = lo + (hi - lo) / 2;
-        ft_status status = ft_tree_at(&set->tree, mid, current);
-        if (status != FT_STATUS_OK) {
-            free(current);
-            return status;
-        }
-
-        if (ft_compare_values(set, current, value) < 0) {
-            lo = mid + 1;
-        } else {
-            hi = mid;
-        }
-
-        ft_value_destroy(&set->tree.policy->value, current);
-    }
-
-    *lower = lo;
-    hi = ft_tree_size(&set->tree);
-    while (lo < hi) {
-        const size_t mid = lo + (hi - lo) / 2;
-        ft_status status = ft_tree_at(&set->tree, mid, current);
-        if (status != FT_STATUS_OK) {
-            free(current);
-            return status;
-        }
-
-        if (ft_compare_values(set, value, current) < 0) {
-            hi = mid;
-        } else {
-            lo = mid + 1;
-        }
-
-        ft_value_destroy(&set->tree.policy->value, current);
-    }
-
-    *upper = lo;
-    free(current);
-    return FT_STATUS_OK;
+    return ft_sorted_bound(set, value, true, upper, &hit);
 }
 
 ft_status ft_sorted_multiset_init(
@@ -5495,50 +5615,46 @@ static int ft_sorted_map_compare_key(const ft_sorted_map* map, const void* left,
     return map->compare_key(left, right, map->compare_context);
 }
 
+typedef struct ft_sorted_map_bound_context {
+    const ft_sorted_map* map;
+    const void* key;
+} ft_sorted_map_bound_context;
+
+static bool ft_sorted_map_lower_reached(const void* leaf, void* context)
+{
+    const ft_sorted_map_bound_context* bound = (const ft_sorted_map_bound_context*)context;
+    const ft_sorted_map_entry* entry = (const ft_sorted_map_entry*)leaf;
+    return ft_sorted_map_compare_key(bound->map, entry->key, bound->key) >= 0;
+}
+
 static ft_status ft_sorted_map_bounds(
     const ft_sorted_map* map,
     const void* key,
     size_t* lower,
     size_t* upper)
 {
-    ft_sorted_map_entry current;
-    size_t lo = 0;
-    size_t hi = ft_tree_size(&map->tree);
-    while (lo < hi) {
-        const size_t mid = lo + (hi - lo) / 2;
-        ft_status status = ft_tree_at(&map->tree, mid, &current);
-        if (status != FT_STATUS_OK) {
-            return status;
-        }
+    ft_sorted_map_bound_context context;
+    context.map = map;
+    context.key = key;
+    const void* hit = NULL;
+    ft_status status = ft_tree_bound(
+        &map->tree,
+        ft_sorted_map_lower_reached,
+        &context,
+        lower,
+        &hit);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
 
-        const int comparison = ft_sorted_map_compare_key(map, current.key, key);
-        ft_sorted_map_entry_destroy_value(map->entry_context, &current);
-        if (comparison < 0) {
-            lo = mid + 1;
-        } else {
-            hi = mid;
+    *upper = *lower;
+    if (hit != NULL) {
+        const ft_sorted_map_entry* entry = (const ft_sorted_map_entry*)hit;
+        if (ft_sorted_map_compare_key(map, entry->key, key) == 0) {
+            ++*upper;
         }
     }
 
-    *lower = lo;
-    hi = ft_tree_size(&map->tree);
-    while (lo < hi) {
-        const size_t mid = lo + (hi - lo) / 2;
-        ft_status status = ft_tree_at(&map->tree, mid, &current);
-        if (status != FT_STATUS_OK) {
-            return status;
-        }
-
-        const int comparison = ft_sorted_map_compare_key(map, key, current.key);
-        ft_sorted_map_entry_destroy_value(map->entry_context, &current);
-        if (comparison < 0) {
-            hi = mid;
-        } else {
-            lo = mid + 1;
-        }
-    }
-
-    *upper = lo;
     return FT_STATUS_OK;
 }
 
@@ -8725,29 +8841,24 @@ static void ft_priority_queue_rebind(ft_priority_queue* queue)
     queue->tree.policy = &queue->policy;
 }
 
+typedef struct ft_priority_bound_context {
+    const ft_priority_queue* queue;
+    const ft_priority_entry* value;
+} ft_priority_bound_context;
+
+static bool ft_priority_upper_reached(const void* leaf, void* context)
+{
+    const ft_priority_bound_context* bound = (const ft_priority_bound_context*)context;
+    return ft_priority_entry_compare(bound->queue, bound->value, (const ft_priority_entry*)leaf) < 0;
+}
+
 static ft_status ft_priority_queue_upper_bound(const ft_priority_queue* queue, const ft_priority_entry* value, size_t* index)
 {
-    ft_priority_entry current;
-    size_t lo = 0;
-    size_t hi = ft_tree_size(&queue->tree);
-    while (lo < hi) {
-        const size_t mid = lo + (hi - lo) / 2;
-        ft_status status = ft_tree_at(&queue->tree, mid, &current);
-        if (status != FT_STATUS_OK) {
-            return status;
-        }
-
-        const int comparison = ft_priority_entry_compare(queue, value, &current);
-        ft_priority_entry_destroy_value(queue->entry_context, &current);
-        if (comparison < 0) {
-            hi = mid;
-        } else {
-            lo = mid + 1;
-        }
-    }
-
-    *index = lo;
-    return FT_STATUS_OK;
+    ft_priority_bound_context context;
+    context.queue = queue;
+    context.value = value;
+    const void* hit = NULL;
+    return ft_tree_bound(&queue->tree, ft_priority_upper_reached, &context, index, &hit);
 }
 
 ft_status ft_priority_queue_init(
@@ -9052,6 +9163,12 @@ static bool ft_interval_i64_max_high_reaches(const void* measure, void* context)
     return interval_measure->has_max_high && interval_measure->max_high >= query_low;
 }
 
+static bool ft_interval_i64_low_reached(const void* leaf, void* context)
+{
+    const ft_interval_i64* interval = (const ft_interval_i64*)leaf;
+    return interval->low >= *(const int64_t*)context;
+}
+
 ft_status ft_interval_tree_i64_init(ft_interval_tree_i64* tree)
 {
     if (tree == NULL) {
@@ -9127,29 +9244,17 @@ static ft_status ft_interval_tree_i64_lower_bound_low(
     int64_t low,
     size_t* index)
 {
-    size_t lower = 0;
-    size_t upper = ft_sorted_multiset_size(&tree->intervals);
-    while (lower < upper) {
-        const size_t middle = lower + (upper - lower) / 2u;
-        ft_interval_i64 current;
-        const ft_status status = ft_sorted_multiset_at(&tree->intervals, middle, &current);
-        if (status != FT_STATUS_OK) {
-            return status;
-        }
-
-        if (current.low < low) {
-            lower = middle + 1u;
-        } else {
-            upper = middle;
-        }
-    }
-
-    *index = lower;
-    return FT_STATUS_OK;
+    const void* hit = NULL;
+    return ft_tree_bound(
+        &tree->intervals.tree,
+        ft_interval_i64_low_reached,
+        &low,
+        index,
+        &hit);
 }
 
-/* Rank of the first stored interval matching both endpoints: a low-endpoint
- * binary search plus a scan over the equal-low run. */
+/* Rank of the first stored interval matching both endpoints: a structural
+ * low-endpoint bound plus a scan over the equal-low run. */
 static ft_status ft_interval_tree_i64_index_of(
     const ft_interval_tree_i64* tree,
     ft_interval_i64 interval,
@@ -9379,6 +9484,18 @@ typedef struct ft_interval_overlap_query {
 static int ft_interval_endpoint_compare(const ft_interval_tree_context* context, const void* left, const void* right)
 {
     return context->compare_endpoint(left, right, context->compare_context);
+}
+
+typedef struct ft_interval_low_bound_context {
+    const ft_interval_tree_context* interval_context;
+    const void* low;
+} ft_interval_low_bound_context;
+
+static bool ft_interval_low_reached(const void* leaf, void* context)
+{
+    const ft_interval_entry* interval = (const ft_interval_entry*)leaf;
+    const ft_interval_low_bound_context* bound = (const ft_interval_low_bound_context*)context;
+    return ft_interval_endpoint_compare(bound->interval_context, interval->low, bound->low) >= 0;
 }
 
 static bool ft_interval_entry_valid(const ft_interval_tree_context* context, const void* low, const void* high)
@@ -9652,27 +9769,16 @@ static ft_status ft_interval_tree_lower_bound_low(
     const void* low,
     size_t* index)
 {
-    size_t lower = 0;
-    size_t upper = ft_interval_tree_size(tree);
-    while (lower < upper) {
-        const size_t middle = lower + (upper - lower) / 2u;
-        ft_interval_entry current;
-        const ft_status status = ft_sorted_multiset_at(&tree->intervals, middle, &current);
-        if (status != FT_STATUS_OK) {
-            return status;
-        }
-
-        const int comparison = ft_interval_endpoint_compare(tree->interval_context, current.low, low);
-        ft_interval_entry_destroy_value(tree->interval_context, &current);
-        if (comparison < 0) {
-            lower = middle + 1u;
-        } else {
-            upper = middle;
-        }
-    }
-
-    *index = lower;
-    return FT_STATUS_OK;
+    ft_interval_low_bound_context context;
+    context.interval_context = tree->interval_context;
+    context.low = low;
+    const void* hit = NULL;
+    return ft_tree_bound(
+        &tree->intervals.tree,
+        ft_interval_low_reached,
+        &context,
+        index,
+        &hit);
 }
 
 static ft_status ft_interval_tree_index_of(

@@ -28,6 +28,8 @@ line information, and exits non-zero if any test increments the failure count. A
 - `structural split and locate costs` checks deep-tree split/locate boundaries and enforces logarithmic
   value-copy/measure-combine ceilings over 4,096 elements.
 - `sorted set and multiset` covers uniqueness, duplicates, rank access, removal, and traversal.
+- `sorted facade structural bounds` covers 4,096-element signpost-guided bounds, comparison ceilings, and
+  zero-copy read-only searches under a counting value policy.
 - `sorted map` covers insert, set, duplicate rejection, lookup, rank access, traversal, and persistence.
 - `rope` covers chunked positional construction, indexing, traversal, split/reconcat, chunk-local editing,
   boundary coalescing, bounded chunk counts, append, and persistence.
