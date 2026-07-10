@@ -697,12 +697,15 @@ where
     fn from_iter<I: IntoIterator<Item = (K, V)>>(iter: I) -> Self {
         let mut entries: Vec<(K, V)> = iter.into_iter().collect();
         entries.sort_by(|(left, _), (right, _)| left.cmp(right));
-        let mut compacted = Vec::with_capacity(entries.len());
+        let mut compacted: Vec<(K, V)> = Vec::with_capacity(entries.len());
         for entry in entries {
-            if let Some((last_key, last_value)) = compacted.last_mut()
-                && *last_key == entry.0
+            if let Some(last) = compacted.last_mut()
+                && last.0 == entry.0
             {
-                *last_value = entry.1;
+                // The sort is stable, so an equal-key run keeps its input order; retain the
+                // run's last entry wholesale (key instance and value), matching the C#
+                // reference's CreateRange contract.
+                *last = entry;
                 continue;
             }
 
@@ -864,6 +867,71 @@ mod tests {
         assert_eq!(*value, 20);
         // The original snapshot keeps the original key.
         assert_eq!(map.min_entry().unwrap().0.label, "old");
+    }
+
+    #[test]
+    fn from_iter_keeps_the_last_entry_of_an_equal_key_run() {
+        // Key type whose ordering ignores the label, mirroring a
+        // comparer-equal-but-distinct key in the C# reference.
+        #[derive(Clone, Debug)]
+        struct Key {
+            id: i32,
+            label: &'static str,
+        }
+
+        impl PartialEq for Key {
+            fn eq(&self, other: &Self) -> bool {
+                self.id == other.id
+            }
+        }
+
+        impl Eq for Key {}
+
+        impl PartialOrd for Key {
+            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+                Some(self.cmp(other))
+            }
+        }
+
+        impl Ord for Key {
+            fn cmp(&self, other: &Self) -> Ordering {
+                self.id.cmp(&other.id)
+            }
+        }
+
+        // The C# reference's CreateRange keeps the last entry of each equal-key run
+        // wholesale: the retained key instance must be the last one supplied, exactly
+        // as a set_item sequence over the same entries would leave it.
+        let map: SortedMap<Key, i32> = [
+            (
+                Key {
+                    id: 1,
+                    label: "old",
+                },
+                10,
+            ),
+            (
+                Key {
+                    id: 2,
+                    label: "other",
+                },
+                30,
+            ),
+            (
+                Key {
+                    id: 1,
+                    label: "new",
+                },
+                20,
+            ),
+        ]
+        .into_iter()
+        .collect();
+
+        assert_eq!(map.len(), 2);
+        let (stored_key, value) = map.min_entry().unwrap();
+        assert_eq!(stored_key.label, "new");
+        assert_eq!(*value, 20);
     }
 
     #[test]

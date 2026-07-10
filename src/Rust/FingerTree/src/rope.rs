@@ -1563,21 +1563,28 @@ impl TextRope {
     pub fn get_line(&self, line: usize) -> Option<String> {
         let start = self.line_start_offset(line)?;
         let end = self.line_end_offset(line)?;
-        Some(
-            self.chars
-                .iter()
-                .skip(start)
-                .take(end - start)
-                .copied()
-                .collect(),
-        )
+        // Slice shares tree structure, so extracting a line costs O(log n + length)
+        // rather than the O(start) an iterator skip would pay.
+        let slice = self.chars.slice(start, end - start)?;
+        Some(slice.iter().copied().collect())
     }
 
     #[must_use]
     pub fn lines(&self) -> Vec<String> {
-        (0..self.line_count())
-            .filter_map(|line| self.get_line(line))
-            .collect()
+        // A single pass over the rope, matching the C# reference's Lines: the final
+        // line (after the last newline) is always present, possibly empty.
+        let mut lines = Vec::with_capacity(self.line_count());
+        let mut current = String::new();
+        for c in self.chars.iter() {
+            if *c == '\n' {
+                lines.push(core::mem::take(&mut current));
+            } else {
+                current.push(*c);
+            }
+        }
+
+        lines.push(current);
+        lines
     }
 
     #[must_use]
@@ -1669,6 +1676,8 @@ impl fmt::Display for TextRope {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RopeBuilder {
     text: String,
+    // Running char count so len() is O(1); text.chars().count() would be O(n) per call.
+    length: usize,
 }
 
 impl RopeBuilder {
@@ -1679,7 +1688,7 @@ impl RopeBuilder {
 
     #[must_use]
     pub fn len(&self) -> usize {
-        self.text.chars().count()
+        self.length
     }
 
     #[must_use]
@@ -1694,22 +1703,26 @@ impl RopeBuilder {
 
     pub fn append(&mut self, text: &str) -> &mut Self {
         self.text.push_str(text);
+        self.length += text.chars().count();
         self
     }
 
     pub fn append_char(&mut self, value: char) -> &mut Self {
         self.text.push(value);
+        self.length += 1;
         self
     }
 
     pub fn append_line(&mut self, text: &str) -> &mut Self {
         self.text.push_str(text);
         self.text.push('\n');
+        self.length += text.chars().count() + 1;
         self
     }
 
     pub fn clear(&mut self) -> &mut Self {
         self.text.clear();
+        self.length = 0;
         self
     }
 
