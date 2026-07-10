@@ -162,8 +162,8 @@ public readonly struct UInt256 :
     /// using the specified format and culture-specific format information.
     /// </summary>
     /// <param name="format">
-    /// A one-character standard numeric format specifier (for example <c>G</c>, <c>D</c>, or <c>X</c>)
-    /// that selects the textual representation.
+    /// A standard numeric format specifier with optional precision (for example <c>G</c>, <c>D5</c>, <c>N0</c>,
+    /// or <c>X8</c>) that selects the textual representation.
     /// </param>
     /// <param name="formatProvider">
     /// An object that supplies culture-specific formatting information used for decimal/general formatting tokens.
@@ -178,8 +178,8 @@ public readonly struct UInt256 :
     /// When this method returns, contains the number of characters written to <paramref name="destination"/>.
     /// </param>
     /// <param name="format">
-    /// A one-character standard numeric format specifier (for example <c>G</c>, <c>D</c>, or <c>X</c>)
-    /// that selects the textual representation.
+    /// A standard numeric format specifier with optional precision (for example <c>G</c>, <c>D5</c>, <c>N0</c>,
+    /// or <c>X8</c>) that selects the textual representation.
     /// </param>
     /// <param name="provider">
     /// An object that supplies culture-specific formatting information used for decimal/general formatting tokens.
@@ -212,8 +212,8 @@ public readonly struct UInt256 :
     /// When this method returns, contains the number of bytes written to <paramref name="utf8Destination"/>.
     /// </param>
     /// <param name="format">
-    /// A one-character standard numeric format specifier (for example <c>G</c>, <c>D</c>, or <c>X</c>) that selects the
-    /// textual representation.
+    /// A standard numeric format specifier with optional precision (for example <c>G</c>, <c>D5</c>, <c>N0</c>,
+    /// or <c>X8</c>) that selects the textual representation.
     /// </param>
     /// <param name="provider">
     /// An object that supplies culture-specific formatting information used for decimal/general formatting tokens.
@@ -724,19 +724,20 @@ public readonly struct UInt256 :
     public int GetByteCount() => Bytes;
 
     /// <summary>
-    /// Formats an unsigned 256-bit value according to the supported one-character numeric format specifiers.
+    /// Formats an unsigned 256-bit value using a supported standard numeric specifier and optional precision.
     /// </summary>
     /// <param name="value">The value to format.</param>
     /// <param name="format">
-    /// The requested format specifier. Supported values are <c>G</c>/<c>g</c>, <c>D</c>/<c>d</c>,
-    /// and <c>X</c>/<c>x</c>. A <see langword="null"/> or empty value defaults to decimal formatting.
+    /// The requested format. Supported standard specifiers are <c>G</c>/<c>g</c>, <c>D</c>/<c>d</c>,
+    /// <c>N</c>/<c>n</c>, and <c>X</c>/<c>x</c>, optionally followed by a non-negative decimal precision.
+    /// A <see langword="null"/> or empty value defaults to decimal formatting.
     /// </param>
     /// <param name="provider">
     /// The format provider used for culture-specific decimal digit formatting.
     /// </param>
     /// <returns>The formatted text representation of <paramref name="value"/>.</returns>
     /// <exception cref="FormatException">
-    /// Thrown when <paramref name="format"/> is not one of the supported one-character specifiers.
+    /// Thrown when <paramref name="format"/> is not a supported standard numeric format or has invalid precision.
     /// </exception>
     private static string FormatValue(UInt256 value, string? format, IFormatProvider? provider)
     {

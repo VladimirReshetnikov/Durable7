@@ -57,7 +57,9 @@ testCollisionShrinkCanonicalization = do
       singletonLeaf = HashMap.delete 3 (HashMap.delete 2 collided)
       branched = HashMap.insert 42 "z" singletonLeaf
   assertEqual "collision shrink leaves one entry" [(1, "a")] (HashMap.toList singletonLeaf)
+  assertBool "collision shrink demotes the singleton bucket" (HashMap.validStructure singletonLeaf)
   assertEqual "collision-shrunk entry survives a new branch" (Just "a") (HashMap.lookup 1 branched)
+  assertBool "branch beside collision-shrunk leaf stays canonical" (HashMap.validStructure branched)
   assertEqual "new branch beside collision-shrunk leaf" (Just "z") (HashMap.lookup 42 branched)
   assertEqual "removing collision-shrunk leaf preserves sibling" [(42, "z")] (HashMap.toList (HashMap.delete 1 branched))
 

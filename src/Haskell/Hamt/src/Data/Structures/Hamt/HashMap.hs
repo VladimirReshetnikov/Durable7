@@ -11,6 +11,7 @@ module Data.Structures.Hamt.HashMap
   , fromList
   , fromListWith
   , size
+  , validStructure
   , null
   , clear
   , policy
@@ -87,6 +88,22 @@ fromListWith hashPolicy = List.foldl' (\m (k, v) -> insert k v m) (emptyWith has
 
 size :: HashMap k v -> Int
 size (HashMap _ count _) = count
+
+-- | Checks cached cardinality and canonical node shape without relying on
+-- key or value equality. In particular, collision buckets must contain at
+-- least two entries; deletion demotes a singleton bucket to a 'Leaf'.
+validStructure :: HashMap k v -> Bool
+validStructure (HashMap _ expectedCount root) = nodeCountIfValid root == Just expectedCount
+
+nodeCountIfValid :: Node k v -> Maybe Int
+nodeCountIfValid EmptyNode = Just 0
+nodeCountIfValid (Leaf _ _ _) = Just 1
+nodeCountIfValid (Collision _ entries)
+  | length entries >= 2 = Just (length entries)
+  | otherwise = Nothing
+nodeCountIfValid (Branch bitmap children)
+  | bitmap == 0 || popCount bitmap /= length children = Nothing
+  | otherwise = sum <$> traverse nodeCountIfValid children
 
 null :: HashMap k v -> Bool
 null mapValue = size mapValue == 0

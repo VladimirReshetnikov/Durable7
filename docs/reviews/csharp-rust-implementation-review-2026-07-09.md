@@ -362,8 +362,8 @@ choice; the previously *undocumented* functional and signpost gaps are closed.
 
 ### Replacement validation evidence
 
-- `dotnet test .\DataStructures.sln` (`src/CSharp`): 772 passed, 0 failed, 0 skipped — FingerTree
-  381, Numerics 286, HAMT 54, Tungsten 51.
+- `.\test.ps1` (`src/CSharp`): 773 passed, 0 failed, 0 skipped — FingerTree 382,
+  Numerics 286, HAMT 54, Tungsten 51 — with inherited no-dialog process error mode.
 - `cargo test --workspace` (`src/Rust`): 78 passed — FingerTree 55, HAMT 15, Tungsten 8 — with all
   doc-tests passing.
 - `cargo fmt --all -- --check` and

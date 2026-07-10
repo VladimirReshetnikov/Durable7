@@ -52,8 +52,8 @@ Implemented in this checkpoint:
 - generic chunked positional rope with cumulative-length indexing, split, concat, insertion, removal, and traversal;
 - generic measured rope with cached per-chunk user measures, whole/prefix measure reads, cumulative-measure locate
   and split, split, concat, insertion, removal, and traversal;
-- character text rope facade, backed by the chunked rope, with insertion/removal/indexing and basic line
-  navigation.
+- character text rope facade, backed by the newline-measured rope, with insertion/removal/indexing and
+  logarithmic line/offset navigation plus column-validated offset lookup;
 - deterministic sample executables and a dependency-light benchmark harness.
 
 Deferred from the C++ port:

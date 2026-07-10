@@ -12,6 +12,8 @@ hash/equality behavior.
 
 The default factories use the package-local `Hashable` class plus `Eq`, avoiding third-party
 dependencies while keeping the public shape close to Haskell's `containers` style.
+`HashMap.validStructure` provides a key/value-agnostic diagnostic for cached cardinality and
+canonical node shape, including collision-bucket demotion after deletion.
 
 ```powershell
 cd src\Haskell

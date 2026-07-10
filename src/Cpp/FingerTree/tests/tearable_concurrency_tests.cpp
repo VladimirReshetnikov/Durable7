@@ -209,7 +209,7 @@ void add_tearable_concurrency_tests_impl(suite& tests)
         });
     });
 
-    tests.add("tearable stress lock-free rope publication snapshots stay contiguous", [] {
+    tests.add("tearable stress atomic rope publication snapshots stay contiguous", [] {
         auto cell = std::atomic<std::shared_ptr<const ft::rope<tearable>>>{};
         cell.store(std::make_shared<const ft::rope<tearable>>());
         auto stop = std::atomic<bool>{false};

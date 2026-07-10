@@ -240,3 +240,42 @@ Ranked; none are behavioral bugs in shipped operation results.
   iterator-outlives-map test); `-Workspace Tungsten` — passes; `-Workspace FingerTree` —
   fingertree.smoke passes with new `offset_of` and iterator-equality tests.
 - The C#, Rust, Haskell, and Kotlin workspaces were not modified by this review.
+
+## Resolution addendum — 2026-07-10
+
+This dated addendum preserves the original review above while recording the subsequent remediation.
+**All seven deferred follow-up groups are resolved.**
+
+1. **C structural search.** The generic measured tree now performs count/measure-guided descent for split and
+   locate, reconstructing only the boundary path. Deep boundary sweeps and 4,096-element operation ceilings guard
+   the restored O(log n) behavior.
+2. **C interval, rope, and text facades.** Interval nodes cache maximum-high annotations; first-overlap and
+   enumeration prune unreachable subtrees. Positional/measured ropes edit and coalesce bounded boundary chunks.
+   `ft_text_rope` now uses newline-measured storage with line count, bidirectional line/offset navigation, and
+   column-validated `offset_of`.
+3. **C++ cost polish.** Computed lazy cells avoid the redundant allocation; sorted rank access returns canonical
+   stored references; compatible sorted-set algebra has persistent fast paths; incompatible comparator state is
+   normalized under receiver semantics.
+4. **C concurrency contracts.** HAMT and Tungsten explicitly require lineage derivation to be single-threaded or
+   externally synchronized because their reference counts are non-atomic. FingerTree documents its stronger
+   atomic-handle contract and callback thread-safety obligations.
+5. **Deferred coverage.** C HAMT now sweeps allocation failure through node-set/merge paths and exercises a real
+   seven-frame iterator. C priority queues lock in 128-item equal-priority FIFO order. C++ sorted-map replacement
+   preserves the incoming comparator-equivalent key, and C++ Tungsten covers invalid input, exception safety,
+   ranges, `key_take`, and stable sort histories.
+6. **Minor native hardening.** Reversible-tree impossible digit fall-throughs throw `logic_error` instead of
+   reaching undefined behavior. Active C++ docs and samples describe `atomic<shared_ptr>` publication as atomic
+   and data-race-safe, with no lock-free progress guarantee because implementations may serialize internally.
+7. **Production validation and usability.** C++ FingerTree now has grouped replayable command models, streaming
+   traversal, semantic result equality, deterministic samples, scale-sensitive benchmarks, install/export plus a
+   relocated consumer, portable presets, static analysis, and MSVC/GCC/Clang plus ASan/UBSan/TSan CI lanes. All
+   Windows native test entry points inherit no-dialog error mode, including pre-`main` failures.
+
+Replacement local evidence:
+
+- C FingerTree: MSVC Debug/Release, GCC, and Clang — 3/3 CTests in each validated lane.
+- C HAMT: MSVC Debug/Release, GCC, and Clang — 23/23 tests in each validated lane; downstream C Tungsten 1/1.
+- C++ FingerTree: MSVC Debug and Release — 18/18 CTests in each configuration; full short benchmark suite and
+  aggregate-header Clang analyzer pass. Retained branching measured 4.00 allocations / 472 bytes per update at
+  100, 10,000, and 1,000,000 elements.
+- C++ HAMT and Tungsten: their deferred regression suites pass under the repository build wrappers.

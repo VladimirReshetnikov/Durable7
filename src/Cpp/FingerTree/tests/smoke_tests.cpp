@@ -84,12 +84,14 @@ int main(const int argument_count, const char* const* arguments)
 #ifndef FINGERTREE_DISABLE_ALLOCATION_TRACKING
     tests.add("allocation counter can bracket heap work", [] {
         allocation_counting_scope scope;
-        auto values = std::vector<int>{};
-        values.reserve(32);
+        constexpr auto byte_count = std::size_t{32 * sizeof(int)};
+        void* const memory = ::operator new(byte_count);
 
-        FT_REQUIRE_EQUAL(values.capacity(), static_cast<std::size_t>(32));
-        FT_REQUIRE(scope.allocations() > 0);
-        FT_REQUIRE(scope.bytes_allocated() >= 32 * sizeof(int));
+        FT_REQUIRE(memory != nullptr);
+        FT_REQUIRE_EQUAL(scope.allocations(), static_cast<std::size_t>(1));
+        FT_REQUIRE(scope.bytes_allocated() >= byte_count);
+        ::operator delete(memory);
+        FT_REQUIRE_EQUAL(scope.deallocations(), static_cast<std::size_t>(1));
     });
 
     tests.add("allocation counter covers nothrow and aligned global allocation paths", [] {

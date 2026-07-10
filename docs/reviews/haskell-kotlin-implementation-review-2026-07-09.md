@@ -210,10 +210,11 @@ the subsequent remediation. **All four deferred follow-up groups are resolved.**
    values strict, and `HashMap.adjust` updates through one trie/collision traversal rather than a
    lookup followed by insertion.
 4. **Deferred coverage — resolved.** Haskell includes 100,000/200,000-element bulk-construction
-   stress, collision-shrink canonicalization, receiver-policy set relations, multi-chunk rope/text
+   stress, representation-sensitive collision-shrink canonicalization through `validStructure`,
+   receiver-policy set relations, multi-chunk rope/text
    navigation, structural-sharing identity, and max-high interval model checks. Kotlin includes a
    100,000-element measured-tree build, a 5,000-command edit/split model with AVL assertions, sharing
-   checks across every facade, receiver-policy HAMT relations, the recurring cross-language bug
+   checks across the measured collection facades, receiver-policy HAMT relations, the recurring cross-language bug
    checklist, and 2,000 split/join/remove cycles over a 20,000-element Tungsten `SeqTree` with the AVL
    bound checked after every operation.
 
