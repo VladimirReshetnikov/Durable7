@@ -15,4 +15,5 @@ The dependency-free executable covers measured-tree split/view semantics, deque 
 search, reversible deque orientation plus all mixed-orientation append combinations, sorted
 bag/set/map facades, stable priority dequeue, interval queries and coalescing, positional ropes,
 measured ropes, newline-aware text helpers, and `forkIO` concurrent readers over shared immutable
-snapshots.
+snapshots. A 200,000-element construction stress case guards the strict bulk-fold path against
+space-leaking thunk chains.

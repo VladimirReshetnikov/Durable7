@@ -63,6 +63,10 @@ data RemoveResult k v
   = Missing
   | Removed !(Node k v) v
 
+data AdjustResult k v
+  = NotFound
+  | Adjusted !(Node k v)
+
 empty :: (Eq k, Hashable k) => HashMap k v
 empty = emptyWith defaultPolicy
 
@@ -138,10 +142,10 @@ tryRemove key (HashMap hashPolicy count root) =
     Removed root' value -> Just (value, HashMap hashPolicy (count - 1) root')
 
 adjust :: (v -> v) -> k -> HashMap k v -> HashMap k v
-adjust updater key mapValue =
-  case lookup key mapValue of
-    Just value -> insert key (updater value) mapValue
-    Nothing -> mapValue
+adjust updater key mapValue@(HashMap hashPolicy count root) =
+  case adjustNode hashPolicy updater (hashFor hashPolicy key) key 0 root of
+    NotFound -> mapValue
+    Adjusted root' -> HashMap hashPolicy count root'
 
 mapValues :: (v -> w) -> HashMap k v -> HashMap k w
 mapValues mapper (HashMap hashPolicy count root) = HashMap hashPolicy count (mapNode mapper root)
@@ -271,6 +275,40 @@ removeCollision hashPolicy key ((candidate, value) : rest)
         Nothing -> Nothing
         Just (removed, remaining) -> Just (removed, (candidate, value) : remaining)
 
+-- Updates an existing value and rebuilds exactly the visited trie spine.
+-- The old lookup-plus-insert implementation traversed the same hash path
+-- twice and repeated the collision-bucket search.
+adjustNode :: HashPolicy k -> (v -> v) -> Word32 -> k -> Int -> Node k v -> AdjustResult k v
+adjustNode _ _ _ _ _ EmptyNode = NotFound
+adjustNode hashPolicy updater hashValue key _ (Leaf leafHash leafKey value)
+  | hashValue == leafHash && equalKeys hashPolicy key leafKey =
+      let !updated = updater value
+       in Adjusted (Leaf leafHash leafKey updated)
+  | otherwise = NotFound
+adjustNode hashPolicy updater hashValue key _ (Collision collisionHash entries)
+  | hashValue /= collisionHash = NotFound
+  | otherwise =
+      case adjustCollision hashPolicy updater key entries of
+        Nothing -> NotFound
+        Just entries' -> Adjusted (Collision collisionHash entries')
+adjustNode hashPolicy updater hashValue key shift (Branch bitmap children)
+  | bitmap .&. bit == 0 = NotFound
+  | otherwise =
+      case adjustNode hashPolicy updater hashValue key (shift + bitsPerLevel) (children !! index) of
+        NotFound -> NotFound
+        Adjusted child -> Adjusted (Branch bitmap (replaceAt index child children))
+  where
+    bit = bitFor hashValue shift
+    index = childIndex bitmap bit
+
+adjustCollision :: HashPolicy k -> (v -> v) -> k -> [(k, v)] -> Maybe [(k, v)]
+adjustCollision _ _ _ [] = Nothing
+adjustCollision hashPolicy updater key ((candidate, value) : rest)
+  | equalKeys hashPolicy key candidate =
+      let !updated = updater value
+       in Just ((candidate, updated) : rest)
+  | otherwise = ((candidate, value) :) <$> adjustCollision hashPolicy updater key rest
+
 entriesToNode :: Word32 -> [(k, v)] -> Node k v
 entriesToNode _ [] = EmptyNode
 entriesToNode hashValue [(key, value)] = Leaf hashValue key value
@@ -300,9 +338,27 @@ normalizeBranch bitmap children = Branch bitmap children
 
 mapNode :: (v -> w) -> Node k v -> Node k w
 mapNode _ EmptyNode = EmptyNode
-mapNode mapper (Leaf hashValue key value) = Leaf hashValue key (mapper value)
-mapNode mapper (Collision hashValue entries) = Collision hashValue [(key, mapper value) | (key, value) <- entries]
-mapNode mapper (Branch bitmap children) = Branch bitmap (map (mapNode mapper) children)
+mapNode mapper (Leaf hashValue key value) =
+  let !mapped = mapper value
+   in Leaf hashValue key mapped
+mapNode mapper (Collision hashValue entries) =
+  let !mappedEntries = mapEntriesStrict entries
+   in Collision hashValue mappedEntries
+  where
+    mapEntriesStrict [] = []
+    mapEntriesStrict ((key, value) : rest) =
+      let !mapped = mapper value
+          !mappedRest = mapEntriesStrict rest
+       in (key, mapped) : mappedRest
+mapNode mapper (Branch bitmap children) =
+  let !mappedChildren = mapNodesStrict children
+   in Branch bitmap mappedChildren
+  where
+    mapNodesStrict [] = []
+    mapNodesStrict (child : rest) =
+      let !mapped = mapNode mapper child
+          !mappedRest = mapNodesStrict rest
+       in mapped : mappedRest
 
 foldrNode :: ((k, v) -> b -> b) -> b -> Node k v -> b
 foldrNode _ seed EmptyNode = seed

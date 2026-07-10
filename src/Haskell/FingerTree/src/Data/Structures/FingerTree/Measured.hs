@@ -42,8 +42,8 @@ data Digit a
   deriving (Eq, Ord, Read, Show)
 
 data Node v a
-  = Node2 !v a a
-  | Node3 !v a a a
+  = Node2 !v !a !a
+  | Node3 !v !a !a !a
   deriving (Eq, Ord, Read, Show)
 
 data FingerTree v a

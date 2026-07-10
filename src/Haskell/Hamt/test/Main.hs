@@ -3,7 +3,7 @@ module Main (main) where
 import Prelude hiding (lookup, null)
 
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
-import Control.Exception (SomeException, try)
+import Control.Exception (SomeException, evaluate, try)
 import Control.Monad (forM_, replicateM)
 import Data.Char (toLower)
 import Data.List (sort)
@@ -17,8 +17,12 @@ main :: IO ()
 main = do
   testMapBasics
   testCollisionPolicy
+  testCollisionShrinkCanonicalization
   testActualKeyPreservation
+  testAdjustAndStrictMapping
   testSetAlgebra
+  testCrossPolicySetRelations
+  testLargeFromList
   testConcurrentReads
   putStrLn "tools-data-structures-hamt tests passed"
 
@@ -43,12 +47,38 @@ testCollisionPolicy = do
   assertEqual "collision lookup last" (Just "c") (HashMap.lookup 3 values)
   assertEqual "collision delete keeps siblings" [1, 3] (sort (HashMap.keys (HashMap.delete 2 values)))
 
+testCollisionShrinkCanonicalization :: IO ()
+testCollisionShrinkCanonicalization = do
+  let splitHash key
+        | key < (10 :: Int) = 7
+        | otherwise = key
+      collisionPolicy = HashPolicy splitHash (==)
+      collided = HashMap.fromListWith collisionPolicy [(1 :: Int, "a"), (2, "b"), (3, "c")]
+      singletonLeaf = HashMap.delete 3 (HashMap.delete 2 collided)
+      branched = HashMap.insert 42 "z" singletonLeaf
+  assertEqual "collision shrink leaves one entry" [(1, "a")] (HashMap.toList singletonLeaf)
+  assertEqual "collision-shrunk entry survives a new branch" (Just "a") (HashMap.lookup 1 branched)
+  assertEqual "new branch beside collision-shrunk leaf" (Just "z") (HashMap.lookup 42 branched)
+  assertEqual "removing collision-shrunk leaf preserves sibling" [(42, "z")] (HashMap.toList (HashMap.delete 1 branched))
+
 testActualKeyPreservation :: IO ()
 testActualKeyPreservation = do
   let casePolicy = HashPolicy (hash . map toLower) (\left right -> map toLower left == map toLower right)
       values = HashMap.insert "HELLO" 2 (HashMap.singletonWith casePolicy "Hello" (1 :: Int))
   assertEqual "case-insensitive lookup" (Just 2) (HashMap.lookup "hello" values)
   assertEqual "replacement preserves original key" (Just "Hello") (HashMap.actualKey "hello" values)
+
+testAdjustAndStrictMapping :: IO ()
+testAdjustAndStrictMapping = do
+  let casePolicy = HashPolicy (hash . map toLower) (\left right -> map toLower left == map toLower right)
+      values = HashMap.fromListWith casePolicy [("Alpha", 1 :: Int), ("Beta", 2)]
+      adjusted = HashMap.adjust (+ 10) "ALPHA" values
+      absent = HashMap.adjust (+ 10) "missing" adjusted
+  assertEqual "adjust updates in one policy-aware path" (Just 11) (HashMap.lookup "alpha" adjusted)
+  assertEqual "adjust preserves stored key" (Just "Alpha") (HashMap.actualKey "alpha" adjusted)
+  assertEqual "absent adjust preserves contents" (sort (HashMap.toList adjusted)) (sort (HashMap.toList absent))
+  strictResult <- try (evaluate (HashMap.mapValues (\_ -> error "mapped value stayed lazy") values)) :: IO (Either SomeException (HashMap.HashMap String Int))
+  assertBool "mapValues forces mapped results to WHNF" (isLeft strictResult)
 
 testSetAlgebra :: IO ()
 testSetAlgebra = do
@@ -61,6 +91,28 @@ testSetAlgebra = do
   assertBool "subset relation" (HashSet.isSubsetOf (HashSet.fromList [1 :: Int, 2]) left)
   assertBool "overlap relation" (HashSet.overlaps left right)
   assertBool "set equality ignores duplicates" (HashSet.setEquals left (HashSet.fromList [3 :: Int, 2, 1, 2]))
+
+testCrossPolicySetRelations :: IO ()
+testCrossPolicySetRelations = do
+  let moduloTen = HashPolicy (`mod` 10) (\left right -> left `mod` 10 == (right :: Int) `mod` 10)
+      receiver = HashSet.fromListWith moduloTen [1 :: Int, 2]
+      equivalentArgument = HashSet.fromList [11 :: Int, 12]
+      strictSupersetArgument = HashSet.fromList [11 :: Int, 12, 99]
+  assertBool "cross-policy subset uses receiver policy" (HashSet.isSubsetOf receiver equivalentArgument)
+  assertBool "cross-policy superset uses receiver policy" (HashSet.isSupersetOf receiver equivalentArgument)
+  assertBool "cross-policy equality normalizes under receiver policy" (HashSet.setEquals receiver equivalentArgument)
+  assertBool "cross-policy proper subset uses normalized membership" (HashSet.isProperSubsetOf receiver strictSupersetArgument)
+  assertBool "cross-policy overlap uses receiver policy" (HashSet.overlaps receiver (HashSet.fromList [42 :: Int]))
+
+testLargeFromList :: IO ()
+testLargeFromList = do
+  let upper = 100000 :: Int
+      values = HashMap.fromList [(key, negate key) | key <- [0 .. upper - 1]]
+      setValues = HashSet.fromList [0 .. upper - 1]
+  assertEqual "large map fromList count" upper (HashMap.size values)
+  assertEqual "large map fromList tail lookup" (Just (1 - upper)) (HashMap.lookup (upper - 1) values)
+  assertEqual "large set fromList count" upper (HashSet.size setValues)
+  assertBool "large set fromList tail membership" (HashSet.member (upper - 1) setValues)
 
 testConcurrentReads :: IO ()
 testConcurrentReads = do
@@ -104,3 +156,7 @@ assertBool label condition
 isNothing :: Maybe a -> Bool
 isNothing Nothing = True
 isNothing _ = False
+
+isLeft :: Either a b -> Bool
+isLeft (Left _) = True
+isLeft _ = False

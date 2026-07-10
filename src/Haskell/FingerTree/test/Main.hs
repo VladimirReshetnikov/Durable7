@@ -25,6 +25,7 @@ import qualified Data.Structures.FingerTree.SortedSet as SortedSet
 main :: IO ()
 main = do
   testMeasuredTree
+  testLargeFromList
   testDeque
   testReversibleDeque
   testSortedCollections
@@ -57,6 +58,17 @@ testMeasuredTree = do
   case FT.viewR tree of
     _ :> Elem 10 -> pure ()
     _ -> fail "viewR did not expose last element"
+
+testLargeFromList :: IO ()
+testLargeFromList = do
+  let upper = 200000 :: Int
+      deque = Deque.fromList [0 .. upper - 1]
+      tree :: FT.FingerTree Size (Elem Int)
+      tree = FT.fromList (map Elem [0 .. upper - 1])
+  assertEqual "large deque fromList count" upper (Deque.count deque)
+  assertEqual "large deque fromList tail" (Just (upper - 1)) (Deque.last deque)
+  assertEqual "large measured fromList count" (Size upper) (FT.measureTree tree)
+  assertEqual "large measured fromList tail" (Just (Elem (upper - 1))) (FT.last tree)
 
 testDeque :: IO ()
 testDeque = do
