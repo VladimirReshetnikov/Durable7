@@ -16,4 +16,7 @@ search, reversible deque orientation plus all mixed-orientation append combinati
 bag/set/map facades, stable priority dequeue, interval queries and coalescing, positional ropes,
 measured ropes, newline-aware text helpers, and `forkIO` concurrent readers over shared immutable
 snapshots. A 200,000-element construction stress case guards the strict bulk-fold path against
-space-leaking thunk chains.
+space-leaking thunk chains. Boundary-focused rope tests cross the 64-element chunk limit and use
+`StableName` identity to prove an edit retains an untouched far chunk under optimized GHC. Interval
+coverage exercises equal-low order plus max-high prefix pruning and overlap enumeration; measured
+rope and text cases cross multiple chunks while checking cached totals, splits, and line navigation.

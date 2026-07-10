@@ -50,13 +50,17 @@ lineCount rope =
 lineOfOffset :: Int -> TextRope -> Maybe Int
 lineOfOffset offset rope
   | offset < 0 || offset > MeasuredRope.count rope = Nothing
-  | otherwise = Just (length (filter (== '\n') (take offset (toString rope))))
+  | otherwise = getNewlineCount <$> MeasuredRope.prefixMeasure offset rope
 
 lineStartOffset :: Int -> TextRope -> Maybe Int
 lineStartOffset line rope
   | line < 0 || line >= lineCount rope = Nothing
   | line == 0 = Just 0
-  | otherwise = findStart line 0 0 (toString rope)
+  | otherwise = do
+      (newlineOffset, _, _) <- MeasuredRope.locateByMeasure
+        (\(NewlineMeasure seen) -> seen >= line)
+        rope
+      pure (newlineOffset + 1)
 
 lineColumnOf :: Int -> TextRope -> Maybe (Int, Int)
 lineColumnOf offset rope = do
@@ -69,35 +73,34 @@ offsetOf line column rope
   | column < 0 = Nothing
   | otherwise = do
       start <- lineStartOffset line rope
-      lineText <- getLine line rope
-      if column <= length lineText
+      end <- lineEndOffset line rope
+      if column <= end - start
         then Just (start + column)
         else Nothing
 
 getLine :: Int -> TextRope -> Maybe String
 getLine line rope
-  | line < 0 || line >= length allLines = Nothing
-  | otherwise = Just (allLines !! line)
-  where
-    allLines = lines rope
+  | line < 0 || line >= lineCount rope = Nothing
+  | otherwise = do
+      start <- lineStartOffset line rope
+      end <- lineEndOffset line rope
+      segment <- MeasuredRope.slice start (end - start) rope
+      pure (MeasuredRope.toList segment)
 
 lines :: TextRope -> [String]
-lines = splitLines . toString
+lines rope = map lineAt [0 .. lineCount rope - 1]
+  where
+    lineAt line =
+      case getLine line rope of
+        Just value -> value
+        Nothing -> error "Data.Structures.FingerTree.Rope.Text.lines: inconsistent line measure"
 
 measureChar :: Char -> NewlineMeasure
 measureChar '\n' = NewlineMeasure 1
 measureChar _ = NewlineMeasure 0
 
-findStart :: Int -> Int -> Int -> String -> Maybe Int
-findStart _ _ _ [] = Nothing
-findStart targetLine currentLine offset (c : rest)
-  | c == '\n' && currentLine + 1 == targetLine = Just (offset + 1)
-  | c == '\n' = findStart targetLine (currentLine + 1) (offset + 1) rest
-  | otherwise = findStart targetLine currentLine (offset + 1) rest
-
-splitLines :: String -> [String]
-splitLines [] = [""]
-splitLines text =
-  case break (== '\n') text of
-    (line, []) -> [line]
-    (line, _ : rest) -> line : splitLines rest
+lineEndOffset :: Int -> TextRope -> Maybe Int
+lineEndOffset line rope
+  | line < 0 || line >= lineCount rope = Nothing
+  | line + 1 < lineCount rope = subtract 1 <$> lineStartOffset (line + 1) rope
+  | otherwise = Just (MeasuredRope.count rope)

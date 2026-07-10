@@ -3,10 +3,11 @@ module Main (main) where
 import Prelude hiding (lines, null, reverse, splitAt)
 
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
-import Control.Exception (SomeException, try)
+import Control.Exception (SomeException, evaluate, try)
 import Control.Monad (forM_, replicateM)
 import qualified Data.List as List
 import Data.Monoid (Sum(..))
+import System.Mem.StableName (eqStableName, makeStableName)
 
 import qualified Data.Structures.FingerTree.Deque as Deque
 import qualified Data.Structures.FingerTree.IntervalTree as IntervalTree
@@ -180,6 +181,15 @@ testIntervalTree = do
     "interval delete within equal-low run"
     [IntervalTree.Interval 0 9, IntervalTree.Interval 1 4, IntervalTree.Interval 1 3]
     (IntervalTree.toList (IntervalTree.delete (IntervalTree.Interval 1 5) ties))
+  let pointIntervals = [IntervalTree.Interval value value | value <- [0 :: Int .. 1000]]
+      spanning = IntervalTree.Interval 500 2000
+      augmented = IntervalTree.fromList (pointIntervals ++ [spanning])
+      probe = IntervalTree.Interval 1500 1500
+  assertEqual "max-high search skips non-overlapping prefix" (Just spanning) (IntervalTree.findOverlap probe augmented)
+  assertEqual "max-high count skips non-overlapping prefix" 1 (IntervalTree.countOverlaps probe augmented)
+  let rangeProbe = IntervalTree.Interval 450 550
+      expectedOverlaps = filter (\interval -> IntervalTree.low interval <= 550 && IntervalTree.high interval >= 450) (IntervalTree.toList augmented)
+  assertEqual "augmented overlap enumeration" expectedOverlaps (IntervalTree.findOverlaps rangeProbe augmented)
   where
     mustInterval low high =
       case IntervalTree.mkInterval low high of
@@ -196,11 +206,37 @@ testRopes = do
   assertEqual "rope split" (Just ([1, 2], [3, 4])) (pairToLists <$> Rope.splitAt 2 (Rope.fromList [1 :: Int .. 4]))
   assertEqual "rope overflowing slice rejected" Nothing (Rope.slice 1 maxBound rope)
   assertEqual "rope overflowing removal rejected" Nothing (Rope.removeRange 1 maxBound rope)
+  let boundaryRope = Rope.fromChunks [[1 :: Int .. 64], [65 .. 128], [129 .. 192]]
+  assertEqual "rope insert at chunk boundary" (Just ([61, 62, 63, 64, 999, 65, 66, 67])) (take 8 . drop 60 . Rope.toList <$> Rope.insertAt 64 999 boundaryRope)
+  assertEqual "rope delete at chunk boundary" (Just ([62, 63, 64, 66, 67, 68])) (take 6 . drop 61 . Rope.toList <$> Rope.deleteAt 64 boundaryRope)
+  assertEqual "rope boundary set" (Just 999) (Rope.index 127 =<< Rope.setAt 127 999 boundaryRope)
+  assertEqual "rope cross-chunk removal" (Just ([1 .. 60] ++ [133 .. 192])) (Rope.toList <$> Rope.removeRange 60 72 boundaryRope)
+  assertEqual "rope full boundary split" (Just ([1 .. 64], [65 .. 192])) (pairToLists <$> Rope.splitAt 64 boundaryRope)
+  let oldFarChunk = Rope.chunks boundaryRope !! 2
+      editedBoundary = maybe (error "boundary set unexpectedly failed") id (Rope.setAt 1 777 boundaryRope)
+      newFarChunk = Rope.chunks editedBoundary !! 2
+  oldFarChunk' <- evaluate oldFarChunk
+  newFarChunk' <- evaluate newFarChunk
+  oldName <- makeStableName oldFarChunk'
+  newName <- makeStableName newFarChunk'
+  assertBool "rope edit retains untouched chunk storage" (oldName `eqStableName` newName)
   let measured = MeasuredRope.fromListWith Sum [1 :: Int, 2, 3]
   assertEqual "measured rope total" (Sum 6) (MeasuredRope.measure measured)
   assertEqual "measured rope prefix" (Just (Sum 3)) (MeasuredRope.prefixMeasure 2 measured)
   assertEqual "measured rope locate" (Just (1, Sum 1, 2)) (MeasuredRope.locateByMeasure (\(Sum value) -> value >= 3) measured)
   assertEqual "measured rope overflowing slice rejected" Nothing (MeasuredRope.toList <$> MeasuredRope.slice 1 maxBound measured)
+  let measuredBoundary = MeasuredRope.fromListWith Sum [1 :: Int .. 192]
+  assertEqual "measured rope cross-chunk prefix" (Just (Sum (sum [1 :: Int .. 129]))) (MeasuredRope.prefixMeasure 129 measuredBoundary)
+  assertEqual "measured rope cross-chunk index" (Just 129) (MeasuredRope.index 128 measuredBoundary)
+  let changedMeasured = MeasuredRope.setAt 64 1000 measuredBoundary
+  assertEqual "measured rope boundary set measure" (Just (Sum (sum [1 :: Int .. 192] - 65 + 1000))) (MeasuredRope.measure <$> changedMeasured)
+  let insertedMeasured = MeasuredRope.insertAt 64 1000 measuredBoundary
+  assertEqual "measured rope boundary insert count" (Just 193) (MeasuredRope.count <$> insertedMeasured)
+  assertEqual "measured rope boundary insert measure" (Just (Sum (sum [1 :: Int .. 192] + 1000))) (MeasuredRope.measure <$> insertedMeasured)
+  assertEqual
+    "measured rope guided split across chunks"
+    (Just ([1 :: Int .. 99], 100, [101 .. 192]))
+    ((\(left, value, right) -> (MeasuredRope.toList left, value, MeasuredRope.toList right)) <$> MeasuredRope.splitByMeasure (\(Sum value) -> value >= sum [1 :: Int .. 100]) measuredBoundary)
   where
     pairToLists (left, right) = (Rope.toList left, Rope.toList right)
 
@@ -213,6 +249,13 @@ testTextRope = do
   assertEqual "text line column" (Just (1, 1)) (RopeText.lineColumnOf 3 text)
   assertEqual "text offset" (Just 4) (RopeText.offsetOf 1 2 text)
   assertEqual "text get trailing line" (Just "") (RopeText.getLine 2 text)
+  let longLines = replicate 80 'a' ++ "\n" ++ replicate 90 'b' ++ "\n" ++ replicate 70 'c'
+      longText = RopeText.fromString longLines
+  assertEqual "text measured line count across chunks" 3 (RopeText.lineCount longText)
+  assertEqual "text measured line start across chunks" (Just 81) (RopeText.lineStartOffset 1 longText)
+  assertEqual "text measured line-column across chunks" (Just (1, 45)) (RopeText.lineColumnOf 126 longText)
+  assertEqual "text measured offset across chunks" (Just 171) (RopeText.offsetOf 1 90 longText)
+  assertEqual "text measured line extraction across chunks" (Just (replicate 90 'b')) (RopeText.getLine 1 longText)
 
 testConcurrentReads :: IO ()
 testConcurrentReads = do
