@@ -254,9 +254,12 @@ void add_tearable_concurrency_tests_impl(suite& tests)
         const auto base_values = tearable_range(base_size);
         const auto base_rope = ft::rope<tearable>::from_range(base_values);
         const auto deadline = stress_deadline();
+        const auto replay_seed = effective_replay_seed(17);
+        capture_replay_seed(replay_seed);
 
-        run_racing_workers(8, [&](const int worker_id, std::atomic<int>& failures) {
-            auto rng = std::mt19937_64{static_cast<std::mt19937_64::result_type>(worker_id * 7919 + 17)};
+        run_racing_workers(8, [&, replay_seed](const int worker_id, std::atomic<int>& failures) {
+            auto rng = std::mt19937_64{
+                static_cast<std::mt19937_64::result_type>(worker_id * 7919) + replay_seed};
             auto next = static_cast<long long>(worker_id + 1) * 1'000'000'000LL;
 
             while (std::chrono::steady_clock::now() < deadline) {

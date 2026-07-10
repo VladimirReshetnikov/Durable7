@@ -23,6 +23,7 @@ void add_measure_tests(suite& tests);
 void add_interval_tree_tests(suite& tests);
 void add_lazy_cell_tests(suite& tests);
 void add_atomic_box_tests(suite& tests);
+void add_command_sequence_tests(suite& tests);
 void add_measured_finger_tree_tests(suite& tests);
 void add_measured_lazy_cell_tests(suite& tests);
 void add_measured_rope_tests(suite& tests);
@@ -34,7 +35,7 @@ void add_rope_text_tests(suite& tests);
 void add_sorted_collection_tests(suite& tests);
 void add_tearable_concurrency_tests(suite& tests);
 
-int main()
+int main(const int argument_count, const char* const* arguments)
 {
     if (!tds_enter_headless_test_process()) {
         return EXIT_FAILURE;
@@ -45,6 +46,7 @@ int main()
 
     suite tests;
 
+    tests.set_group("support");
     tests.add("public aggregate header exposes version metadata", [] {
         FT_REQUIRE_EQUAL(library_name, std::string_view{"Tools.DataStructures.FingerTree.Cpp"});
         FT_REQUIRE_EQUAL(version_major, 0U);
@@ -108,20 +110,50 @@ int main()
     });
 #endif
 
+    tests.set_group("measure");
     add_measure_tests(tests);
+
+    tests.set_group("interval-tree");
     add_interval_tree_tests(tests);
+
+    tests.set_group("lazy-cell");
     add_lazy_cell_tests(tests);
+
+    tests.set_group("atomic-box");
     add_atomic_box_tests(tests);
+
+    tests.set_group("command-model");
+    add_command_sequence_tests(tests);
+
+    tests.set_group("measured-tree");
     add_measured_finger_tree_tests(tests);
+
+    tests.set_group("measured-lazy-cell");
     add_measured_lazy_cell_tests(tests);
+
+    tests.set_group("measured-rope");
     add_measured_rope_tests(tests);
+
+    tests.set_group("deque");
     add_persistent_deque_tests(tests);
+
+    tests.set_group("priority-queue");
     add_priority_queue_tests(tests);
+
+    tests.set_group("reversible-deque");
     add_reversible_deque_tests(tests);
+
+    tests.set_group("rope");
     add_rope_tests(tests);
+
+    tests.set_group("rope-text");
     add_rope_text_tests(tests);
+
+    tests.set_group("sorted-collections");
     add_sorted_collection_tests(tests);
+
+    tests.set_group("concurrency");
     add_tearable_concurrency_tests(tests);
 
-    return tests.run();
+    return tests.run(argument_count, arguments);
 }

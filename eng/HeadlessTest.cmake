@@ -2,6 +2,62 @@
 
 include_guard(GLOBAL)
 
+function(tds_add_headless_command_test)
+    set(one_value_arguments NAME)
+    set(multi_value_arguments COMMAND)
+    cmake_parse_arguments(
+        TDS_HEADLESS_COMMAND_TEST
+        ""
+        "${one_value_arguments}"
+        "${multi_value_arguments}"
+        ${ARGN}
+    )
+
+    if(NOT TDS_HEADLESS_COMMAND_TEST_NAME)
+        message(FATAL_ERROR "tds_add_headless_command_test requires NAME.")
+    endif()
+    if(NOT TDS_HEADLESS_COMMAND_TEST_COMMAND)
+        message(FATAL_ERROR "tds_add_headless_command_test requires COMMAND.")
+    endif()
+
+    if(WIN32)
+        find_program(
+            TDS_POWERSHELL_EXECUTABLE
+            NAMES pwsh powershell
+            REQUIRED
+        )
+        string(MAKE_C_IDENTIFIER "${TDS_HEADLESS_COMMAND_TEST_NAME}" test_identifier)
+        set(
+            argument_file
+            "${CMAKE_CURRENT_BINARY_DIR}/headless-test-arguments/${test_identifier}-$<CONFIG>.txt"
+        )
+        set(argument_file_content "")
+        foreach(argument IN LISTS TDS_HEADLESS_COMMAND_TEST_COMMAND)
+            if(argument MATCHES "[\r\n]")
+                message(FATAL_ERROR "Headless command-test arguments cannot contain newlines.")
+            endif()
+            string(APPEND argument_file_content "${argument}\n")
+        endforeach()
+        file(GENERATE OUTPUT "${argument_file}" CONTENT "${argument_file_content}")
+        add_test(
+            NAME ${TDS_HEADLESS_COMMAND_TEST_NAME}
+            COMMAND
+                "${TDS_POWERSHELL_EXECUTABLE}"
+                -NoLogo
+                -NoProfile
+                -NonInteractive
+                -ExecutionPolicy Bypass
+                -File "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/Invoke-HeadlessCommandTest.ps1"
+                -ArgumentFile "${argument_file}"
+        )
+    else()
+        add_test(
+            NAME ${TDS_HEADLESS_COMMAND_TEST_NAME}
+            COMMAND ${TDS_HEADLESS_COMMAND_TEST_COMMAND}
+        )
+    endif()
+endfunction()
+
 function(tds_add_headless_test)
     set(one_value_arguments NAME TARGET)
     set(multi_value_arguments ARGUMENTS)

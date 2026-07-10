@@ -1,6 +1,7 @@
 add_executable(
     fingertree_smoke_tests
     atomic_box_tests.cpp
+    command_sequence_tests.cpp
     interval_tree_tests.cpp
     lazy_cell_tests.cpp
     measured_finger_tree_tests.cpp
@@ -40,4 +41,44 @@ endif()
 
 fingertree_configure_target(fingertree_smoke_tests)
 
-tds_add_headless_test(NAME fingertree.smoke TARGET fingertree_smoke_tests)
+set(
+    FINGERTREE_TEST_GROUPS
+    atomic-box
+    command-model
+    concurrency
+    deque
+    interval-tree
+    lazy-cell
+    measure
+    measured-lazy-cell
+    measured-rope
+    measured-tree
+    priority-queue
+    reversible-deque
+    rope
+    rope-text
+    sorted-collections
+)
+
+tds_add_headless_test(
+    NAME fingertree.support
+    TARGET fingertree_smoke_tests
+    ARGUMENTS --group support
+)
+set_tests_properties(
+    fingertree.support
+    PROPERTIES
+        LABELS "fingertree;support"
+)
+
+foreach(group IN LISTS FINGERTREE_TEST_GROUPS)
+    tds_add_headless_command_test(
+        NAME fingertree.${group}
+        COMMAND $<TARGET_FILE:fingertree_smoke_tests> --group ${group}
+    )
+    set_tests_properties(
+        fingertree.${group}
+        PROPERTIES
+            LABELS "fingertree;${group}"
+    )
+endforeach()
