@@ -275,6 +275,7 @@ public sealed partial class MeasuredRope<T, TMeasure, TMeasureOps> : IReadOnlyLi
     /// <summary>Concatenates this rope with <paramref name="other"/>. O(log(min(n, m))).</summary>
     /// <param name="other">Rope whose elements follow this rope's.</param>
     /// <exception cref="ArgumentNullException"><paramref name="other"/> is <see langword="null"/>.</exception>
+    /// <exception cref="OverflowException">The combined count would exceed <see cref="int.MaxValue"/>.</exception>
     public MeasuredRope<T, TMeasure, TMeasureOps> Concat(MeasuredRope<T, TMeasure, TMeasureOps> other)
     {
         ArgumentNullException.ThrowIfNull(other);
@@ -282,6 +283,8 @@ public sealed partial class MeasuredRope<T, TMeasure, TMeasureOps> : IReadOnlyLi
             return this;
         if (_tree.IsEmpty)
             return other;
+        if (other.Count > int.MaxValue - Count)
+            throw new OverflowException("The operation would create a rope with more than Int32.MaxValue elements.");
 
         _tree.TryViewRight(out var lastLeft, out var leftRest);
         other._tree.TryViewLeft(out var firstRight, out var rightRest);

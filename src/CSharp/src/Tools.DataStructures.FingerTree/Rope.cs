@@ -271,6 +271,7 @@ public sealed partial class Rope<T> : IReadOnlyList<T>
     /// <summary>Concatenates this rope with <paramref name="other"/>. O(log(min(n, m))).</summary>
     /// <param name="other">Rope whose elements follow this rope's.</param>
     /// <exception cref="ArgumentNullException"><paramref name="other"/> is <see langword="null"/>.</exception>
+    /// <exception cref="OverflowException">The combined count would exceed <see cref="int.MaxValue"/>.</exception>
     public Rope<T> Concat(Rope<T> other)
     {
         ArgumentNullException.ThrowIfNull(other);
@@ -278,6 +279,8 @@ public sealed partial class Rope<T> : IReadOnlyList<T>
             return this;
         if (_tree.IsEmpty)
             return other;
+        if (other.Count > int.MaxValue - Count)
+            throw new OverflowException("The operation would create a rope with more than Int32.MaxValue elements.");
 
         // Coalesce the boundary chunks when they fit, so repeated concatenation does not leave a seam of small
         // chunks between the operands.

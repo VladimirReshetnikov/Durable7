@@ -75,6 +75,18 @@ public sealed class RopeTextTests
     }
 
     /// <summary>
+    /// Verifies Lines and LinesText validate their rope argument at the call site rather than deferring the
+    /// ArgumentNullException to the first enumeration of the returned sequence.
+    /// </summary>
+    [Fact]
+    public void Lines_ValidatesEagerly()
+    {
+        MeasuredRope<char, int, NewlineMeasure> rope = null!;
+        Assert.Throws<ArgumentNullException>(() => rope.Lines());
+        Assert.Throws<ArgumentNullException>(() => rope.LinesText());
+    }
+
+    /// <summary>
     /// Verifies OffsetOf accepts columns up to the line length (the newline / end-of-rope position)
     /// and rejects columns past the line's end rather than silently addressing a later line.
     /// </summary>

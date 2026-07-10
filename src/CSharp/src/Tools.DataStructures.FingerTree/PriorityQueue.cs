@@ -180,6 +180,7 @@ public sealed class PriorityQueue<TElement, TPriority> : IReadOnlyCollection<(TE
     /// <param name="other">The queue to combine with this one.</param>
     /// <returns>A queue containing all entries of both.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="other"/> is <see langword="null"/>.</exception>
+    /// <exception cref="OverflowException">The combined count would exceed <see cref="int.MaxValue"/>.</exception>
     public PriorityQueue<TElement, TPriority> Meld(PriorityQueue<TElement, TPriority> other)
     {
         ArgumentNullException.ThrowIfNull(other);
@@ -187,6 +188,8 @@ public sealed class PriorityQueue<TElement, TPriority> : IReadOnlyCollection<(TE
             return this;
         if (_tree.IsEmpty)
             return other;
+        if (other.Count > int.MaxValue - Count)
+            throw new OverflowException("The operation would create a queue with more than Int32.MaxValue entries.");
         return new(_tree.Concat(other._tree));
     }
 

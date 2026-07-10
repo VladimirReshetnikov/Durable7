@@ -177,7 +177,13 @@ public static class RopeText
     /// <exception cref="ArgumentNullException"><paramref name="rope"/> is <see langword="null"/>.</exception>
     public static IEnumerable<string> Lines(this MeasuredRope<char, int, NewlineMeasure> rope)
     {
+        // Validate eagerly: iterator bodies defer their guards to the first MoveNext.
         ArgumentNullException.ThrowIfNull(rope);
+        return LinesIterator(rope);
+    }
+
+    private static IEnumerable<string> LinesIterator(MeasuredRope<char, int, NewlineMeasure> rope)
+    {
         var builder = new StringBuilder();
         foreach (var c in rope)
         {
