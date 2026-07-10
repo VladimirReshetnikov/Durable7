@@ -1,5 +1,6 @@
 #include <tools/data_structures/finger_tree/detail/measured_lazy_cell.hpp>
 
+#include "test_support/allocation_counter.hpp"
 #include "test_support/test_runner.hpp"
 
 #include <atomic>
@@ -33,6 +34,18 @@ void add_measured_lazy_cell_tests_impl(suite& tests)
         FT_REQUIRE(cell.force() == tree);
         FT_REQUIRE_EQUAL(cell.measure(), 42);
     });
+
+#ifndef FINGERTREE_DISABLE_ALLOCATION_TRACKING
+    tests.add("measured lazy cell computed state needs one control allocation", [] {
+        auto tree = std::make_shared<const measured_tree_stub>(measured_tree_stub{42});
+
+        allocation_counting_scope allocations;
+        auto cell = detail::measured_lazy_cell<measured_tree_stub>::computed(tree);
+
+        FT_REQUIRE(cell.force() == tree);
+        FT_REQUIRE_EQUAL(allocations.allocations(), static_cast<std::size_t>(1));
+    });
+#endif
 
     tests.add("measured lazy cell rejects null computed trees", [] {
         FT_REQUIRE_THROWS(

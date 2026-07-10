@@ -83,18 +83,18 @@ public:
         return tree_.back();
     }
 
-    [[nodiscard]] value_type at(const size_type index) const
+    [[nodiscard]] const value_type& at(const size_type index) const
     {
         throw_if_index_out_of_range(index, size());
-        auto located = tree_.try_locate(count_above_predicate<value_type>{index});
-        if (!located.item.has_value()) {
+        auto located = tree_.try_locate_reference(count_above_predicate<value_type>{index});
+        if (!located.has_value()) {
             throw std::logic_error("sorted_bag rank locate failed");
         }
 
         return *located.item;
     }
 
-    [[nodiscard]] value_type operator[](const size_type index) const
+    [[nodiscard]] const value_type& operator[](const size_type index) const
     {
         return at(index);
     }

@@ -1,4 +1,5 @@
 #include <tools/data_structures/tungsten/tungsten.hpp>
+#include <tools/data_structures/test_support/headless_test_process.h>
 
 #include "../../FingerTree/tests/test_support/test_runner.hpp"
 
@@ -6,6 +7,7 @@
 #include <atomic>
 #include <cctype>
 #include <cstdint>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -166,6 +168,25 @@ struct case_insensitive_equal final {
     }
 };
 
+struct throwing_hash_control final {
+    int calls = 0;
+    int throw_on_call = 0;
+};
+
+struct throwing_string_hash final {
+    std::shared_ptr<throwing_hash_control> control;
+
+    [[nodiscard]] std::size_t operator()(const std::string& value) const
+    {
+        ++control->calls;
+        if (control->throw_on_call != 0 && control->calls == control->throw_on_call) {
+            throw std::runtime_error{"injected hash failure"};
+        }
+
+        return std::hash<std::string>{}(value);
+    }
+};
+
 void add_persistent_list_tests(suite& tests)
 {
     tests.add("persistent list constructs and preserves Tungsten-style order", [] {
@@ -211,6 +232,28 @@ void add_persistent_list_tests(suite& tests)
         const auto split = list.split_at(2);
         require_vector_equal(split.left.to_vector(), std::vector<int>{1, 2});
         require_vector_equal(split.right.to_vector(), std::vector<int>{3, 4, 5});
+    });
+
+    tests.add("persistent list rejects invalid positions and counts", [] {
+        const auto empty = wf::persistent_list<int>{};
+        FT_REQUIRE_THROWS(std::logic_error, empty.front());
+        FT_REQUIRE_THROWS(std::logic_error, empty.back());
+        FT_REQUIRE_THROWS(std::out_of_range, empty.at(0));
+        FT_REQUIRE_THROWS(std::out_of_range, empty.remove_at(0));
+
+        const auto list = wf::persistent_list<int>{1, 2, 3};
+        FT_REQUIRE_THROWS(std::out_of_range, list.at(3));
+        FT_REQUIRE_THROWS(std::out_of_range, list.insert(4, 9));
+        FT_REQUIRE_THROWS(std::out_of_range, list.remove_at(3));
+        FT_REQUIRE_THROWS(std::out_of_range, list.remove_range(2, 2));
+        FT_REQUIRE_THROWS(std::out_of_range, list.set_item(3, 9));
+        FT_REQUIRE_THROWS(std::out_of_range, list.get_range(1, 3));
+        FT_REQUIRE_THROWS(std::out_of_range, list.take(4));
+        FT_REQUIRE_THROWS(std::out_of_range, list.take_last(4));
+        FT_REQUIRE_THROWS(std::out_of_range, list.drop(4));
+        FT_REQUIRE_THROWS(std::out_of_range, list.drop_last(4));
+        FT_REQUIRE_THROWS(std::out_of_range, list.split_at(4));
+        require_vector_equal(list.to_vector(), std::vector{1, 2, 3});
     });
 
     tests.add("persistent list reverse map and search expose List vocabulary", [] {
@@ -356,6 +399,56 @@ void add_persistent_association_tests(suite& tests)
         require_association_equal(assoc.remove_range(std::vector<std::string>{"c", "a", "missing"}), {{"b", 2}});
     });
 
+    tests.add("persistent association rejects invalid positions counts and empty access", [] {
+        const auto empty = wf::persistent_association<std::string, int>{};
+        FT_REQUIRE_THROWS(std::logic_error, empty.first());
+        FT_REQUIRE_THROWS(std::logic_error, empty.last());
+        FT_REQUIRE_THROWS(std::logic_error, empty.remove_first());
+        FT_REQUIRE_THROWS(std::logic_error, empty.remove_last());
+        FT_REQUIRE_THROWS(std::out_of_range, empty.at("missing"));
+        FT_REQUIRE_THROWS(std::out_of_range, empty.get_at(0));
+
+        const auto assoc = wf::persistent_association<std::string, int>{{"a", 1}, {"b", 2}, {"c", 3}};
+        FT_REQUIRE_THROWS(std::out_of_range, assoc.at("missing"));
+        FT_REQUIRE_THROWS(std::out_of_range, assoc.get_at(3));
+        FT_REQUIRE_THROWS(std::out_of_range, assoc.insert(4, "d", 4));
+        FT_REQUIRE_THROWS(std::out_of_range, assoc.remove_at(3));
+        FT_REQUIRE_THROWS(std::out_of_range, assoc.get_range(2, 2));
+        FT_REQUIRE_THROWS(std::out_of_range, assoc.take(4));
+        FT_REQUIRE_THROWS(std::out_of_range, assoc.drop(4));
+        require_association_equal(assoc, {{"a", 1}, {"b", 2}, {"c", 3}});
+    });
+
+    tests.add("persistent association preserves its source when callbacks throw", [] {
+        using assoc_type = wf::persistent_association<std::string, int, throwing_string_hash>;
+        const auto control = std::make_shared<throwing_hash_control>();
+        const auto assoc = assoc_type::create(throwing_string_hash{control})
+                               .set_item("a", 1)
+                               .set_item("b", 2);
+
+        control->calls = 0;
+        control->throw_on_call = 2;
+        FT_REQUIRE_THROWS(std::runtime_error, assoc.set_item("a", 9));
+
+        control->calls = 0;
+        control->throw_on_call = 2;
+        FT_REQUIRE_THROWS(std::runtime_error, assoc.append("c", 3));
+
+        control->calls = 0;
+        control->throw_on_call = 1;
+        FT_REQUIRE_THROWS(std::runtime_error, assoc.remove("a"));
+
+        control->throw_on_call = 0;
+        FT_REQUIRE_EQUAL(assoc.at("a"), 1);
+        FT_REQUIRE_EQUAL(assoc.at("b"), 2);
+        FT_REQUIRE(!assoc.contains_key("c"));
+        FT_REQUIRE_THROWS(std::runtime_error, assoc.sort([](const int, const int) -> bool {
+            throw std::runtime_error{"injected comparison failure"};
+        }));
+        FT_REQUIRE_EQUAL(assoc.at("a"), 1);
+        FT_REQUIRE_EQUAL(assoc.at("b"), 2);
+    });
+
     tests.add("persistent association sort and key_sort are stable ordinary associations", [] {
         const auto assoc = wf::persistent_association<std::string, int>{{"b", 2}, {"c", 0}, {"a", 1}};
 
@@ -414,12 +507,12 @@ void add_persistent_association_tests(suite& tests)
         auto model = std::vector<std::pair<int, int>>{};
         auto snapshots = std::vector<std::pair<wf::persistent_association<int, int>, std::vector<std::pair<int, int>>>>{};
 
-        for (auto step = 0; step != 700; ++step) {
+        for (auto step = 0; step != 900; ++step) {
             const auto key = rng.next_int(-20, 20);
             const auto value = rng.next_int(-1000, 1000);
             const auto position = rng.next_index(model.size() + 1);
 
-            switch (rng.next_index(11)) {
+            switch (rng.next_index(15)) {
             case 0: {
                 assoc = assoc.set_item(key, value);
                 const auto found = find_key(model, key);
@@ -505,6 +598,40 @@ void add_persistent_association_tests(suite& tests)
                 }
                 break;
             }
+            case 10: {
+                const auto index = rng.next_index(model.size() + 1);
+                const auto count = rng.next_index(model.size() - index + 1);
+                assoc = assoc.get_range(index, count);
+                model = std::vector<std::pair<int, int>>{
+                    model.begin() + static_cast<std::ptrdiff_t>(index),
+                    model.begin() + static_cast<std::ptrdiff_t>(index + count)};
+                break;
+            }
+            case 11: {
+                const auto requested = std::vector<int>{key, key + 1, key, key - 1, 10'000};
+                auto taken_model = std::vector<std::pair<int, int>>{};
+                for (const auto requested_key : requested) {
+                    const auto found = find_key(model, requested_key);
+                    if (found >= 0 && find_key(taken_model, requested_key) < 0) {
+                        taken_model.push_back(model[static_cast<std::size_t>(found)]);
+                    }
+                }
+                assoc = assoc.key_take(requested);
+                model = std::move(taken_model);
+                break;
+            }
+            case 12:
+                assoc = assoc.sort();
+                std::stable_sort(model.begin(), model.end(), [](const auto& left, const auto& right) {
+                    return left.second < right.second;
+                });
+                break;
+            case 13:
+                assoc = assoc.key_sort();
+                std::stable_sort(model.begin(), model.end(), [](const auto& left, const auto& right) {
+                    return left.first < right.first;
+                });
+                break;
             default:
                 snapshots.push_back({assoc, model});
                 if (snapshots.size() > 32) {
@@ -574,6 +701,10 @@ void add_persistent_association_tests(suite& tests)
 
 int main()
 {
+    if (!tds_enter_headless_test_process()) {
+        return EXIT_FAILURE;
+    }
+
     suite tests;
 
     tests.add("aggregate header exposes version metadata", [] {

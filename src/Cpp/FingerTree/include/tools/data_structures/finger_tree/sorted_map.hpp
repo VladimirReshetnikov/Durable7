@@ -142,7 +142,7 @@ public:
         return *value;
     }
 
-    [[nodiscard]] entry_type entry_at(const size_type index) const
+    [[nodiscard]] const entry_type& entry_at(const size_type index) const
     {
         throw_if_index_out_of_range(index, size());
         return entry_at_rank(index);
@@ -318,10 +318,10 @@ private:
         return std::nullopt;
     }
 
-    [[nodiscard]] entry_type entry_at_rank(const size_type rank) const
+    [[nodiscard]] const entry_type& entry_at_rank(const size_type rank) const
     {
-        auto located = tree_.try_locate(count_above_predicate<key_type>{rank});
-        if (!located.item.has_value()) {
+        auto located = tree_.try_locate_reference(count_above_predicate<key_type>{rank});
+        if (!located.has_value()) {
             throw std::logic_error("sorted_map rank locate failed");
         }
 

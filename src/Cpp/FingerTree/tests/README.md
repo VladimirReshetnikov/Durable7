@@ -19,11 +19,13 @@ basic aggregate-header and test-support checks, and then calls each domain-speci
 - `persistent_deque_tests.cpp` covers endpoint updates, indexing, split/concat, sorted search, retained versions,
   randomized command histories, allocation counters, and operation counters.
 - `measured_finger_tree_tests.cpp`, `lazy_cell_tests.cpp`, and `measured_lazy_cell_tests.cpp` cover the measured
-  tree core plus lazy publication helpers.
+  tree core, reference-locate lifetime under structural sharing, lazy publication helpers, and computed-cell
+  allocation guards.
 - `reversible_deque_tests.cpp` covers reverse orientation, mixed-orientation updates, random histories, and
   O(1)-reverse allocation checks.
-- `sorted_collection_tests.cpp` covers sorted bag, sorted set, and sorted map ranking, navigation, range queries,
-  custom order, set algebra, and randomized model checks.
+- `sorted_collection_tests.cpp` covers sorted bag, sorted set, and sorted map ranking, canonical stored-reference
+  access, navigation, range queries, runtime comparator-state normalization, persistence-aware set algebra, and
+  randomized model checks.
 - `priority_queue_tests.cpp` covers ordering, duplicate priorities, stability, and command-model behavior.
 - `interval_tree_tests.cpp` covers insertion, overlap, containment, coalescing, removal, and sweep-model checks.
 - `rope_tests.cpp`, `measured_rope_tests.cpp`, and `rope_text_tests.cpp` cover chunked sequence editing, measured

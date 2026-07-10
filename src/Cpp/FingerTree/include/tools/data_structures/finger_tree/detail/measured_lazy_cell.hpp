@@ -23,9 +23,7 @@ public:
             throw std::invalid_argument("measured_lazy_cell cannot hold a null computed tree");
         }
 
-        return measured_lazy_cell{
-            std::make_shared<control_block>(
-                std::make_shared<computed_state>(std::move(tree)))};
+        return measured_lazy_cell{std::make_shared<control_block>(std::move(tree), nullptr)};
     }
 
     template <class Factory, class MeasureProbe>
@@ -33,6 +31,7 @@ public:
     {
         return measured_lazy_cell{
             std::make_shared<control_block>(
+                nullptr,
                 std::make_shared<pending_state<std::decay_t<Factory>, std::decay_t<MeasureProbe>>>(
                     std::forward<Factory>(factory),
                     std::forward<MeasureProbe>(measure_probe)))};
@@ -49,9 +48,13 @@ public:
     [[nodiscard]] pointer force() const
     {
         for (;;) {
-            auto state = control_->state.load();
-            if (auto tree = state->try_get_tree()) {
+            if (auto tree = control_->tree.load()) {
                 return tree;
+            }
+
+            auto state = control_->state.load();
+            if (state == nullptr) {
+                continue;
             }
 
             auto computed = state->compute_tree();
@@ -59,26 +62,27 @@ public:
                 throw std::logic_error("measured_lazy_cell factory returned a null tree");
             }
 
-            auto replacement = std::make_shared<computed_state>(computed);
-            if (control_->state.compare_exchange_strong(state, replacement)) {
+            auto expected = pointer{};
+            if (control_->tree.compare_exchange_strong(expected, computed)) {
+                control_->state.store(nullptr);
                 return computed;
             }
 
-            if (auto tree = state->try_get_tree()) {
-                return tree;
-            }
+            return expected;
         }
     }
 
     [[nodiscard]] measure_type measure() const
     {
-        auto state = control_->state.load();
-        if (auto tree = state->try_get_tree()) {
+        if (auto tree = control_->tree.load()) {
             return tree->measure();
         }
 
-        if (auto measure = state->try_measure_without_forcing()) {
-            return *measure;
+        auto state = control_->state.load();
+        if (state != nullptr) {
+            if (auto measure = state->try_measure_without_forcing()) {
+                return *measure;
+            }
         }
 
         return force()->measure();
@@ -86,40 +90,14 @@ public:
 
     [[nodiscard]] bool is_forced() const
     {
-        return control_->state.load()->try_get_tree() != nullptr;
+        return control_->tree.load() != nullptr;
     }
 
 private:
     struct state_base {
         virtual ~state_base() = default;
-        [[nodiscard]] virtual pointer try_get_tree() const noexcept = 0;
         [[nodiscard]] virtual pointer compute_tree() const = 0;
         [[nodiscard]] virtual std::optional<measure_type> try_measure_without_forcing() const = 0;
-    };
-
-    struct computed_state final : state_base {
-        explicit computed_state(pointer tree)
-            : tree_(std::move(tree))
-        {
-        }
-
-        [[nodiscard]] pointer try_get_tree() const noexcept override
-        {
-            return tree_;
-        }
-
-        [[nodiscard]] pointer compute_tree() const override
-        {
-            return tree_;
-        }
-
-        [[nodiscard]] std::optional<measure_type> try_measure_without_forcing() const override
-        {
-            return tree_->measure();
-        }
-
-    private:
-        pointer tree_;
     };
 
     template <class Factory, class MeasureProbe>
@@ -128,11 +106,6 @@ private:
             : factory_(std::move(factory))
             , measure_probe_(std::move(measure_probe))
         {
-        }
-
-        [[nodiscard]] pointer try_get_tree() const noexcept override
-        {
-            return nullptr;
         }
 
         [[nodiscard]] pointer compute_tree() const override
@@ -157,11 +130,13 @@ private:
     };
 
     struct control_block final {
-        explicit control_block(std::shared_ptr<const state_base> initial)
-            : state(std::move(initial))
+        control_block(pointer initial_tree, std::shared_ptr<const state_base> initial_state)
+            : tree(std::move(initial_tree))
+            , state(std::move(initial_state))
         {
         }
 
+        mutable std::atomic<pointer> tree;
         mutable std::atomic<std::shared_ptr<const state_base>> state;
     };
 

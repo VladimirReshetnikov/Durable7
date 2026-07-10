@@ -333,6 +333,12 @@ struct measured_locate_result final {
     measured_element<Element, MeasurePolicy> hit;
 };
 
+template <class Element, class MeasurePolicy>
+struct measured_locate_reference_result final {
+    typename MeasurePolicy::measure_type measure_before;
+    const measured_element<Element, MeasurePolicy>* hit;
+};
+
 template <class Element, class MeasurePolicy, class Predicate>
 [[nodiscard]] measured_buffer_split<Element, MeasurePolicy> measured_split_buffer(
     Predicate& predicate,
@@ -379,6 +385,30 @@ template <class Element, class MeasurePolicy, class Predicate>
     }
 
     return measured_locate_result<Element, MeasurePolicy>{std::move(accumulator), values.back()};
+}
+
+template <class Element, class MeasurePolicy, class Predicate>
+[[nodiscard]] measured_locate_reference_result<Element, MeasurePolicy> measured_locate_buffer_reference(
+    Predicate& predicate,
+    typename MeasurePolicy::measure_type accumulator,
+    const measured_buffer<Element, MeasurePolicy>& values)
+{
+    if (values.empty()) {
+        throw std::logic_error("measured_locate_buffer_reference requires a non-empty buffer");
+    }
+
+    for (std::size_t index = 0; index + 1 < values.size(); ++index) {
+        auto next = MeasurePolicy::combine(accumulator, values[index].measure());
+        if (std::invoke(predicate, next)) {
+            return measured_locate_reference_result<Element, MeasurePolicy>{
+                std::move(accumulator),
+                &values[index]};
+        }
+
+        accumulator = std::move(next);
+    }
+
+    return measured_locate_reference_result<Element, MeasurePolicy>{std::move(accumulator), &values.back()};
 }
 
 template <class Element, class MeasurePolicy>
@@ -448,6 +478,11 @@ public:
 
     template <class Predicate>
     [[nodiscard]] measured_locate_result<Element, MeasurePolicy> locate_tree(
+        Predicate& predicate,
+        measure_type accumulator) const;
+
+    template <class Predicate>
+    [[nodiscard]] measured_locate_reference_result<Element, MeasurePolicy> locate_tree_reference(
         Predicate& predicate,
         measure_type accumulator) const;
 
@@ -869,6 +904,35 @@ struct deep_measured_tree_rep final : measured_tree_rep<Element, MeasurePolicy> 
 
         return measured_locate_buffer<Element, MeasurePolicy>(predicate, std::move(after_middle), suffix);
     }
+
+    template <class Predicate>
+    [[nodiscard]] measured_locate_reference_result<Element, MeasurePolicy> locate_tree_reference(
+        Predicate& predicate,
+        measure_type accumulator) const
+    {
+        auto before_middle = MeasurePolicy::combine(accumulator, measured_buffer_measure<Element, MeasurePolicy>(prefix));
+        if (std::invoke(predicate, before_middle)) {
+            return measured_locate_buffer_reference<Element, MeasurePolicy>(
+                predicate,
+                std::move(accumulator),
+                prefix);
+        }
+
+        auto forced_middle = force_middle();
+        auto after_middle = MeasurePolicy::combine(before_middle, forced_middle.measure());
+        if (std::invoke(predicate, after_middle)) {
+            auto located_node = forced_middle.locate_tree_reference(predicate, before_middle);
+            return measured_locate_buffer_reference<Element, MeasurePolicy>(
+                predicate,
+                std::move(located_node.measure_before),
+                located_node.hit->node_value().children());
+        }
+
+        return measured_locate_buffer_reference<Element, MeasurePolicy>(
+            predicate,
+            std::move(after_middle),
+            suffix);
+    }
 };
 
 template <class Element, class MeasurePolicy>
@@ -1035,6 +1099,28 @@ measured_locate_result<Element, MeasurePolicy> measured_tree<Element, MeasurePol
     case measured_tree_kind::deep:
         return static_cast<const deep_measured_tree_rep<Element, MeasurePolicy>&>(*rep_)
             .locate_tree(predicate, std::move(accumulator));
+    }
+
+    throw std::logic_error("unknown measured tree kind");
+}
+
+template <class Element, class MeasurePolicy>
+template <class Predicate>
+measured_locate_reference_result<Element, MeasurePolicy>
+measured_tree<Element, MeasurePolicy>::locate_tree_reference(
+    Predicate& predicate,
+    measure_type accumulator) const
+{
+    switch (kind()) {
+    case measured_tree_kind::empty:
+        throw std::logic_error("locate_tree_reference on an empty measured tree");
+    case measured_tree_kind::single:
+        return measured_locate_reference_result<Element, MeasurePolicy>{
+            std::move(accumulator),
+            &first_element()};
+    case measured_tree_kind::deep:
+        return static_cast<const deep_measured_tree_rep<Element, MeasurePolicy>&>(*rep_)
+            .locate_tree_reference(predicate, std::move(accumulator));
     }
 
     throw std::logic_error("unknown measured tree kind");

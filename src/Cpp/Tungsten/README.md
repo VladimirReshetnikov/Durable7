@@ -20,6 +20,6 @@ Build and test from `src/Cpp`:
 .\build.ps1 -Workspace Tungsten -RunTests
 ```
 
-The CTest executable in [`tests`](tests/tungsten_tests.cpp) covers examples, custom equality/hash
-policies, relabel stress, generated histories against ordered list/map models, and retained-snapshot
-reader threads.
+The CTest executable in [`tests`](tests/tungsten_tests.cpp) covers examples, invalid-argument and injected-callback
+exception paths, custom equality/hash policies, relabel stress, generated histories against ordered list/map
+models (including range, key-take, and stable sort operations), and retained-snapshot reader threads.

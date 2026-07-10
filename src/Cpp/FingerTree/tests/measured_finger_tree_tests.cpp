@@ -280,6 +280,38 @@ void add_measured_finger_tree_tests_impl(suite& tests)
         }
     });
 
+    tests.add("measured finger tree locate reference follows persistent node lifetime", [] {
+        using tree_type = ft::finger_tree<int, ft::size_measure<int>>;
+        auto snapshot = tree_type{};
+        const int* located_item = nullptr;
+
+        {
+            const auto source = tree_type::from_range(iota_vector(4'096));
+            snapshot = source.append(4'096);
+
+            const auto located = source.try_locate_reference([](const std::size_t count) {
+                return count > 1'024;
+            });
+            FT_REQUIRE(located.has_value());
+            FT_REQUIRE_EQUAL(located.measure_before, static_cast<std::size_t>(1'024));
+            FT_REQUIRE_EQUAL(*located.item, 1'024);
+            located_item = located.item;
+        }
+
+        const auto snapshot_located = snapshot.try_locate_reference([](const std::size_t count) {
+            return count > 1'024;
+        });
+        FT_REQUIRE(snapshot_located.has_value());
+        FT_REQUIRE(snapshot_located.item == located_item);
+        FT_REQUIRE_EQUAL(*located_item, 1'024);
+
+        const auto miss = snapshot.try_locate_reference([](const std::size_t count) {
+            return count > 10'000;
+        });
+        FT_REQUIRE(!miss.has_value());
+        FT_REQUIRE_EQUAL(miss.measure_before, snapshot.measure());
+    });
+
     tests.add("measured finger tree locate miss reports whole non-group measure", [] {
         const auto values = iota_vector(64, 10);
         const auto tree = ft::finger_tree<int, count_last_key_measure>::from_range(values);

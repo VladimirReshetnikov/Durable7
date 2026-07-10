@@ -214,7 +214,7 @@ public:
 
     [[nodiscard]] T get_leaf(std::size_t index) const
     {
-        for (std::size_t child_index = 0;; ++child_index) {
+        for (std::size_t child_index = 0; child_index < child_count(); ++child_index) {
             auto child = logical_child(child_index);
             if (index < child.size()) {
                 return child.get_leaf(index);
@@ -222,21 +222,23 @@ public:
 
             index -= child.size();
         }
+
+        throw std::logic_error("reversible node leaf index is out of range");
     }
 
     [[nodiscard]] element_type set_leaf(std::size_t index, T value) const
     {
         auto children = logical_children();
-        for (std::size_t child_index = 0;; ++child_index) {
+        for (std::size_t child_index = 0; child_index < children.size(); ++child_index) {
             if (index < children[child_index].size()) {
                 children[child_index] = children[child_index].set_leaf(index, std::move(value));
-                break;
+                return element_type::node(make(std::move(children)));
             }
 
             index -= children[child_index].size();
         }
 
-        return element_type::node(make(std::move(children)));
+        throw std::logic_error("reversible node set index is out of range");
     }
 
     void copy_leaves(std::vector<T>& sink) const

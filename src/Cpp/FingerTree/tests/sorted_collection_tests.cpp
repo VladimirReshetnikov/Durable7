@@ -1,5 +1,6 @@
 #include <tools/data_structures/finger_tree/finger_tree.hpp>
 
+#include "test_support/allocation_counter.hpp"
 #include "test_support/command_model.hpp"
 #include "test_support/test_runner.hpp"
 
@@ -12,6 +13,7 @@
 #include <source_location>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -69,6 +71,17 @@ struct tagged_key_less final {
     }
 };
 
+struct directional_less final {
+    bool descending = false;
+
+    [[nodiscard]] bool operator()(const int left, const int right) const noexcept
+    {
+        return descending ? left > right : left < right;
+    }
+
+    [[nodiscard]] bool operator==(const directional_less&) const = default;
+};
+
 template <class Map>
 [[nodiscard]] std::vector<typename Map::key_type> map_keys(const Map& map)
 {
@@ -83,6 +96,16 @@ template <class Map>
 
 void add_sorted_collection_tests_impl(suite& tests)
 {
+    static_assert(std::is_same_v<
+        decltype(std::declval<const ft::sorted_bag<int>&>().at(0)),
+        const int&>);
+    static_assert(std::is_same_v<
+        decltype(std::declval<const ft::sorted_set<int>&>()[0]),
+        const int&>);
+    static_assert(std::is_same_v<
+        decltype(std::declval<const ft::sorted_map<int, int>&>().entry_at(0)),
+        const std::pair<int, int>&>);
+
     tests.add("sorted bag construction preserves duplicates and sorted order", [] {
         const auto bag = ft::sorted_bag<int>::from_range(std::vector{5, 1, 3, 3, 9, 1});
 
@@ -142,6 +165,8 @@ void add_sorted_collection_tests_impl(suite& tests)
             {7, 'd'}};
         const auto bag = ft::sorted_bag<tagged_value, tagged_key_less>::from_range(tagged, tagged_key_less{});
         require_vector_equal(bag.to_vector(), tagged);
+        FT_REQUIRE(&bag.at(0) == &bag.min());
+        FT_REQUIRE(&bag[0] == &bag.min());
     });
 
     tests.add("sorted bag randomized history matches multiset vector model", [] {
@@ -194,6 +219,8 @@ void add_sorted_collection_tests_impl(suite& tests)
             FT_REQUIRE_EQUAL(navigable[index], values[index]);
             require_optional_equal(navigable.index_of(values[index]), std::optional{index});
         }
+        FT_REQUIRE(&navigable[0] == &navigable.min());
+        FT_REQUIRE(&navigable.at(values.size() - 1) == &navigable.max());
         require_optional_equal(navigable.index_of(5), std::optional<std::size_t>{});
         FT_REQUIRE_THROWS(std::out_of_range, navigable.at(values.size()));
 
@@ -265,6 +292,73 @@ void add_sorted_collection_tests_impl(suite& tests)
         FT_REQUIRE(left.set_equals(ft::sorted_set<int>::from_range(left_values)));
     });
 
+    tests.add("sorted set algebra preserves fast persistent paths", [] {
+        auto values = std::vector<int>{};
+        for (auto value = 0; value != 2'000; ++value) {
+            values.push_back(value);
+        }
+        const auto left = ft::sorted_set<int>::from_range(values);
+
+        auto right_values = std::vector<int>{};
+        for (auto value = 2'000; value != 4'000; ++value) {
+            right_values.push_back(value);
+        }
+        const auto right = ft::sorted_set<int>::from_range(right_values);
+        const auto empty = ft::sorted_set<int>{};
+        (void)empty;
+        const auto left_size = left.size();
+        (void)left.min();
+        (void)left.max();
+
+        {
+            allocation_counting_scope allocations;
+            const auto same_union = left.union_with(left);
+            const auto same_intersection = left.intersect(left);
+            const auto same_difference = left.except(left);
+            FT_REQUIRE_EQUAL(same_union.size(), left_size);
+            FT_REQUIRE_EQUAL(same_intersection.size(), left_size);
+            FT_REQUIRE(same_difference.empty());
+            FT_REQUIRE_EQUAL(allocations.allocations(), static_cast<std::size_t>(0));
+        }
+
+        {
+            auto combined = ft::sorted_set<int>{};
+            auto construction_allocations = std::size_t{0};
+            {
+                allocation_counting_scope allocations;
+                combined = left.union_with(right);
+                construction_allocations = allocations.allocations();
+            }
+
+            FT_REQUIRE_EQUAL(combined.size(), static_cast<std::size_t>(4'000));
+            FT_REQUIRE_EQUAL(combined.min(), 0);
+            FT_REQUIRE_EQUAL(combined.max(), 3'999);
+            FT_REQUIRE(construction_allocations < static_cast<std::size_t>(512));
+        }
+    });
+
+    tests.add("sorted set algebra normalizes incompatible runtime comparator state", [] {
+        using set_type = ft::sorted_set<int, directional_less>;
+        const auto ascending = set_type::from_range(std::vector{1, 3, 5}, directional_less{false});
+        const auto descending = set_type::from_range(std::vector{6, 5, 4, 2}, directional_less{true});
+
+        require_vector_equal(ascending.union_with(descending).to_vector(), std::vector{1, 2, 3, 4, 5, 6});
+        require_vector_equal(ascending.intersect(descending).to_vector(), std::vector{5});
+        require_vector_equal(ascending.except(descending).to_vector(), std::vector{1, 3});
+        require_vector_equal(ascending.symmetric_except(descending).to_vector(), std::vector{1, 2, 3, 4, 6});
+        FT_REQUIRE(ascending.overlaps(descending));
+        FT_REQUIRE(!ascending.set_equals(descending));
+
+        const auto same_members_descending =
+            set_type::from_range(std::vector{5, 3, 1}, directional_less{true});
+        FT_REQUIRE(ascending.set_equals(same_members_descending));
+        FT_REQUIRE(ascending.is_subset_of(same_members_descending));
+        FT_REQUIRE(ascending.is_superset_of(same_members_descending));
+
+        const auto empty_ascending = set_type{directional_less{false}};
+        require_vector_equal(empty_ascending.union_with(descending).to_vector(), std::vector{2, 4, 5, 6});
+    });
+
     tests.add("sorted set supports descending order and randomized updates", [] {
         const auto descending = ft::sorted_set<int, std::greater<>>::from_range(
             std::vector{5, 1, 9, 3, 5},
@@ -326,6 +420,18 @@ void add_sorted_collection_tests_impl(suite& tests)
         FT_REQUIRE(!removed->contains_key(3));
         require_vector_equal(current.remove(99).to_vector(), current.to_vector());
         FT_REQUIRE_THROWS(std::out_of_range, current.at(42));
+    });
+
+    tests.add("sorted map replacement retains the new comparator-equivalent key", [] {
+        using map_type = ft::sorted_map<tagged_value, std::string, tagged_key_less>;
+        const auto original = map_type{tagged_key_less{}}.set_item(tagged_value{7, 'a'}, "old");
+        const auto replaced = original.set_item(tagged_value{7, 'z'}, "new");
+
+        FT_REQUIRE_EQUAL(replaced.size(), static_cast<std::size_t>(1));
+        FT_REQUIRE_EQUAL(replaced.entry_at(0).first.tag, 'z');
+        FT_REQUIRE_EQUAL(replaced.entry_at(0).second, std::string{"new"});
+        FT_REQUIRE(&replaced.entry_at(0) == &replaced.min_entry());
+        FT_REQUIRE_EQUAL(original.entry_at(0).first.tag, 'a');
     });
 
     tests.add("sorted map order statistics navigation range and custom order work", [] {

@@ -380,8 +380,8 @@ Implemented:
 - General concat (`app3`/`Glue`) with the same 1..4 digit and 2/3-node chunking rule as C#:
   chunk triples while more than four elements remain, then use Node2 for a two-element remainder, Node3 for three,
   and two Node2 chunks for four.
-- Measure-guided `split`, `try_split_find`, and `try_locate`, including the allocation-free locate shape that
-  descends without reconstructing result trees.
+- Measure-guided `split`, `try_split_find`, `try_locate`, and reference-returning locate, including the
+  allocation-free locate shape that descends without reconstructing result trees.
 - Lazy deep measure publication through `detail::atomic_box<TMeasure>` and lazy measured middle publication through
   `detail::measured_lazy_cell<tree>`.
 
@@ -631,12 +631,12 @@ Parity notes:
   when that first suffix item is comparer-equal, preserving C# uniqueness by comparer equality.
 - The map `set_item` path replaces a comparer-equal key in place relative to the surrounding key order; `insert`
   throws on duplicate keys and `try_insert` reports absence with `std::optional`.
-- Rank and neighbor queries use `try_locate` rather than rebuilding split results, preserving the allocation-free
-  read shape that motivated the C# zero-closure predicate tests.
-- Set algebra currently materializes both operands into vectors before the linear merge. This is not worse than
-  the current C# sorted-wrapper behavior over the public general measured tree, whose enumerator materializes
-  before yielding as recorded in the measured-tree enumerator improvement proposal. Once C++ `finger_tree` has a
-  streaming iterator, these merges can be switched to iterator traversal without changing public semantics.
+- Rank access uses reference-returning locate rather than rebuilding split results or copying the stored value.
+  Neighbor queries retain their optional-by-value API.
+- Set algebra recognizes self, empty, and disjoint operands and reuses or concatenates their persistent trees.
+  The fallback performs a linear left-view merge. Runtime-stateful comparators are compared when possible; an
+  incompatible or non-comparable right policy is first normalized under the receiver's comparator so adoption,
+  merge order, and relation counts all retain receiver semantics.
 
 Justified divergences:
 
@@ -659,6 +659,8 @@ Validation:
 - Added tests for map last-wins construction, lookup, set/insert/try-insert/remove semantics, rank/index,
   floor/ceiling/lower/higher entry navigation, range extraction, descending key order, and randomized histories
   against `std::map`.
+- Added compile-time and runtime reference-return guards for sorted rank access, comparator-equivalent map-key
+  replacement coverage, persistent set-algebra allocation bounds, and opposite runtime comparator-state algebra.
 - Built `msvc-debug` with `/W4 /WX`.
 - Ran `ctest --preset msvc-debug --output-on-failure`; all tests passed.
 - Built `msvc-release` with `/W4 /WX`.

@@ -61,7 +61,7 @@ Primary operations:
 - observers: `empty`, `measure`, `front`, `back`;
 - endpoint updates/views: `prepend`, `append`, `try_view_left`, `try_view_right`;
 - catenation: `concat`;
-- measure-guided search: `split`, `try_split_find`, `try_locate`;
+- measure-guided search: `split`, `try_split_find`, `try_locate`, `try_locate_reference`;
 - materialization/copy: `to_vector`, `copy_to`.
 
 Notable C++ differences from C#:
@@ -73,6 +73,9 @@ Notable C++ differences from C#:
 - absent views and split-find searches use `std::optional` instead of C# `bool` plus out parameters;
 - `try_locate` is a total result: `item` is optional, while `measure_before` is the boundary prefix measure when
   found, the whole-tree measure on a miss, and the identity for an empty tree;
+- `try_locate_reference` has the same total-result boundary semantics but returns a pointer to the stored element
+  instead of copying it. The pointer remains valid while the source tree, or another persistent snapshot sharing
+  the located node, remains alive;
 - enumeration is exposed through `to_vector`/`copy_to` in this checkpoint. A streaming iterator can be added on top
   of the same tree/node block traversal used by the deque without changing tree semantics.
 
@@ -219,6 +222,11 @@ Notable C++ differences from C#:
 - `sorted_map` is the C++ name for C# `SortedDictionary`;
 - `sorted_bag` preserves comparer-equal insertion order, `sorted_set` keeps the first comparer-equal value during
   range construction, and `sorted_map` keeps the last duplicate-key entry;
+- bag/set `at` and `operator[]`, and map `entry_at`, return `const` references to the canonical stored objects;
+  their references follow the owning snapshot's lifetime;
+- set algebra reuses the receiver, empty, or disjoint tree directly when comparator state is compatible. When two
+  values have the same `Less` type but incompatible runtime state, the right operand is normalized under the
+  receiver's comparator before algebra or relation evaluation;
 - traversal is exposed through vector materialization in this checkpoint. Lazy sorted-wrapper iterators can be
   added after the general measured tree grows a streaming iterator.
 

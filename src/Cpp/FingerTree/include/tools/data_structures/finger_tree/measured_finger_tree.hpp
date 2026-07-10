@@ -54,6 +54,17 @@ struct finger_tree_locate_result final {
 };
 
 template <class Element, class MeasurePolicy>
+struct finger_tree_locate_reference_result final {
+    typename MeasurePolicy::measure_type measure_before;
+    const Element* item;
+
+    [[nodiscard]] bool has_value() const noexcept
+    {
+        return item != nullptr;
+    }
+};
+
+template <class Element, class MeasurePolicy>
     requires measure_policy<MeasurePolicy, Element>
 class finger_tree final {
 public:
@@ -193,6 +204,28 @@ public:
 
         auto located = root_.locate_tree(predicate, MeasurePolicy::empty());
         return finger_tree_locate_result<Element, MeasurePolicy>{std::move(located.measure_before), located.hit.value()};
+    }
+
+    // The returned pointer remains valid while this immutable tree (or a snapshot
+    // sharing the located node) remains alive.
+    template <class Predicate>
+        requires std::predicate<Predicate&, const measure_type&>
+    [[nodiscard]] finger_tree_locate_reference_result<Element, MeasurePolicy> try_locate_reference(
+        Predicate predicate) const
+    {
+        if (root_.is_empty()) {
+            return finger_tree_locate_reference_result<Element, MeasurePolicy>{MeasurePolicy::empty(), nullptr};
+        }
+
+        auto total = root_.measure();
+        if (!std::invoke(predicate, total)) {
+            return finger_tree_locate_reference_result<Element, MeasurePolicy>{std::move(total), nullptr};
+        }
+
+        auto located = root_.locate_tree_reference(predicate, MeasurePolicy::empty());
+        return finger_tree_locate_reference_result<Element, MeasurePolicy>{
+            std::move(located.measure_before),
+            &located.hit->value()};
     }
 
     [[nodiscard]] std::vector<value_type> to_vector() const

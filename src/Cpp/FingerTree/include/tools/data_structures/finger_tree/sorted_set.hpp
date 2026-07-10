@@ -12,6 +12,7 @@
 #include <optional>
 #include <ranges>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -92,13 +93,13 @@ public:
         return tree_.back();
     }
 
-    [[nodiscard]] value_type at(const size_type index) const
+    [[nodiscard]] const value_type& at(const size_type index) const
     {
         throw_if_index_out_of_range(index, size());
         return element_at(index);
     }
 
-    [[nodiscard]] value_type operator[](const size_type index) const
+    [[nodiscard]] const value_type& operator[](const size_type index) const
     {
         return at(index);
     }
@@ -286,10 +287,10 @@ private:
         return compare_with(less_, left, right) == 0;
     }
 
-    [[nodiscard]] value_type element_at(const size_type rank) const
+    [[nodiscard]] const value_type& element_at(const size_type rank) const
     {
-        auto located = tree_.try_locate(count_above_predicate<value_type>{rank});
-        if (!located.item.has_value()) {
+        auto located = tree_.try_locate_reference(count_above_predicate<value_type>{rank});
+        if (!located.has_value()) {
             throw std::logic_error("sorted_set rank locate failed");
         }
 
@@ -309,8 +310,46 @@ private:
         const bool emit_both,
         const bool emit_only_other) const
     {
+        if (this == &other) {
+            return emit_both ? *this : wrap(tree_type{});
+        }
+
+        auto reordered_other = std::optional<sorted_set>{};
+        if (!comparators_compatible(other)) {
+            reordered_other.emplace(from_range(other.to_vector(), less_));
+        }
+        const auto& right_set = reordered_other.has_value() ? *reordered_other : other;
+
+        if (empty()) {
+            return emit_only_other ? wrap(right_set.tree_) : wrap(tree_type{});
+        }
+
+        if (right_set.empty()) {
+            return emit_only_this ? *this : wrap(tree_type{});
+        }
+
+        const auto left_before_right = compare_with(less_, max(), right_set.min()) < 0;
+        const auto right_before_left = compare_with(less_, right_set.max(), min()) < 0;
+        if (left_before_right || right_before_left) {
+            if (emit_only_this && emit_only_other) {
+                return left_before_right
+                    ? wrap(tree_.concat(right_set.tree_))
+                    : wrap(right_set.tree_.concat(tree_));
+            }
+
+            if (emit_only_this) {
+                return *this;
+            }
+
+            if (emit_only_other) {
+                return wrap(right_set.tree_);
+            }
+
+            return wrap(tree_type{});
+        }
+
         auto left_tree = tree_;
-        auto right_tree = other.tree_;
+        auto right_tree = right_set.tree_;
         auto left_view = left_tree.try_view_left();
         auto right_view = right_tree.try_view_left();
 
@@ -365,8 +404,31 @@ private:
 
     [[nodiscard]] merge_count_result merge_counts(const sorted_set& other) const
     {
+        if (this == &other) {
+            return merge_count_result{0, size(), 0};
+        }
+
+        auto reordered_other = std::optional<sorted_set>{};
+        if (!comparators_compatible(other)) {
+            reordered_other.emplace(from_range(other.to_vector(), less_));
+        }
+        const auto& right_set = reordered_other.has_value() ? *reordered_other : other;
+
+        if (empty()) {
+            return merge_count_result{0, 0, right_set.size()};
+        }
+
+        if (right_set.empty()) {
+            return merge_count_result{size(), 0, 0};
+        }
+
+        if (compare_with(less_, max(), right_set.min()) < 0
+            || compare_with(less_, right_set.max(), min()) < 0) {
+            return merge_count_result{size(), 0, right_set.size()};
+        }
+
         auto left_tree = tree_;
-        auto right_tree = other.tree_;
+        auto right_tree = right_set.tree_;
         auto left_view = left_tree.try_view_left();
         auto right_view = right_tree.try_view_left();
         auto counts = merge_count_result{};
@@ -393,6 +455,17 @@ private:
         counts.only_this += left_tree.measure().count;
         counts.only_other += right_tree.measure().count;
         return counts;
+    }
+
+    [[nodiscard]] bool comparators_compatible(const sorted_set& other) const
+    {
+        if constexpr (std::is_empty_v<Less>) {
+            return true;
+        } else if constexpr (std::equality_comparable<Less>) {
+            return less_ == other.less_;
+        } else {
+            return false;
+        }
     }
 
     void throw_if_empty() const
