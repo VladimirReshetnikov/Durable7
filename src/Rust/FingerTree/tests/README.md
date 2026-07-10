@@ -21,11 +21,11 @@ Coverage groups:
   measure policies, key lower/upper-bound splits, product-measure component splits, cumulative-weight selection,
   priority extraction helpers, and order-statistic count plus last-key measures;
 - `sorted.rs`: sorted bag, set, and map facades with cached order-statistic measures, rank/key-boundary edits,
-  inclusive value/key ranges, proper set relations, shared measured storage, and ranges;
+  streaming large-set algebra, inclusive value/key ranges, proper set relations, shared measured storage, and ranges;
 - `priority_queue.rs`: stable minimum-priority queue, meld, cached minimum-priority measures, and shared-storage
   updates;
-- `interval_tree.rs`: closed intervals, overlap queries, cached maximum-high measures, coalescing, and
-  shared-storage updates;
+- `interval_tree.rs`: closed intervals, last-low/maximum-high measured overlap descent, a 100,000-interval
+  sparse-hit regression, coalescing, and shared-storage updates;
 - `rope.rs`: chunked positional and measured rope storage over cached count/user-measure summaries, chunk-copy
   construction, caller-supplied copy targets, structurally shared measured-rope point/range edits and slices,
   deterministic vector-model replay, append-builder measure tracking, and immutable snapshot isolation;

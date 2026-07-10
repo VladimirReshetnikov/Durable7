@@ -26,12 +26,12 @@ cover:
 - reversible-deque O(1) storage-sharing reversal, reversible-typed split/pop results, borrowed/owned logical
   iteration, wrapper-preserving logical edits, and mixed-orientation concat/split/pop paths over the shared tree;
 - measured sequence size/sum/min/max/key/product/order-statistic policies;
-- sorted bag/set/map rank, navigation, algebra, proper set relations, duplicate handling, inclusive value/key
-  ranges, cached order-statistic measures, and shared-storage edits/ranges;
+- sorted bag/set/map rank, navigation, streaming O(n + m) set algebra, proper set relations, duplicate handling,
+  inclusive value/key ranges, cached order-statistic measures, and shared-storage edits/ranges;
 - stable priority dequeue, meld behavior, cached minimum-priority measures, and shared-storage
   enqueue/meld/dequeue paths;
-- closed interval overlap, containment, coalescing, cached maximum-high measures, and shared-storage
-  insert/remove paths;
+- closed interval overlap, containment, coalescing, last-low/maximum-high measured descent (including a
+  100,000-interval sparse-hit case), and shared-storage insert/remove paths;
 - chunked positional rope construction from chunks, caller-supplied copy targets, edits, cached length measures,
   and chunk/subtree sharing;
 - measured-rope cached count-plus-user measures, measure navigation, persistent point/range insertion and removal,

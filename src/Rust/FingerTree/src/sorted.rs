@@ -394,42 +394,42 @@ where
         F: Fn(bool, bool) -> bool,
     {
         let mut next = Vec::new();
-        let mut left = 0;
-        let mut right = 0;
-        while left < self.len() || right < other.len() {
-            match (self.items.get(left), other.items.get(right)) {
+        let mut left = self.items.iter().peekable();
+        let mut right = other.items.iter().peekable();
+        while left.peek().is_some() || right.peek().is_some() {
+            match (left.peek().copied(), right.peek().copied()) {
                 (Some(left_value), Some(right_value)) => match left_value.cmp(right_value) {
                     std::cmp::Ordering::Less => {
                         if keep(true, false) {
                             next.push(left_value.clone());
                         }
-                        left += 1;
+                        left.next();
                     }
                     std::cmp::Ordering::Greater => {
                         if keep(false, true) {
                             next.push(right_value.clone());
                         }
-                        right += 1;
+                        right.next();
                     }
                     std::cmp::Ordering::Equal => {
                         if keep(true, true) {
                             next.push(left_value.clone());
                         }
-                        left += 1;
-                        right += 1;
+                        left.next();
+                        right.next();
                     }
                 },
                 (Some(left_value), None) => {
                     if keep(true, false) {
                         next.push(left_value.clone());
                     }
-                    left += 1;
+                    left.next();
                 }
                 (None, Some(right_value)) => {
                     if keep(false, true) {
                         next.push(right_value.clone());
                     }
-                    right += 1;
+                    right.next();
                 }
                 (None, None) => break,
             }
@@ -1004,6 +1004,20 @@ mod tests {
         assert!(left.intersect(&right).is_proper_subset_of(&left));
         assert!(left.is_proper_superset_of(&left.intersect(&right)));
         assert!(!left.is_proper_subset_of(&left));
+    }
+
+    #[test]
+    fn set_algebra_streams_large_disjoint_inputs() {
+        let left: SortedSet<_> = (0..50_000).map(|value| value * 2).collect();
+        let right: SortedSet<_> = (0..50_000).map(|value| value * 2 + 1).collect();
+
+        let union = left.union(&right);
+        assert_eq!(union.len(), 100_000);
+        assert_eq!(union.min(), Some(&0));
+        assert_eq!(union.max(), Some(&99_999));
+        assert!(left.intersect(&right).is_empty());
+        assert_eq!(left.except(&right), left);
+        assert_eq!(left.symmetric_except(&right), union);
     }
 
     #[test]

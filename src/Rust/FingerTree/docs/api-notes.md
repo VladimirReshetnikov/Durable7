@@ -72,10 +72,13 @@ count component. `MeasuredRope<T, P>` indexed splits, concatenation, point repla
 measure-guided locate share unchanged chunks and measured subtrees. `PriorityQueue<T, P>` now reuses the measured
 tree through an internal minimum-priority measure, so peek/dequeue locate the first global-minimum entry by cached
 prefix measures while preserving equal-priority stability. `IntervalTree<T>` now reuses the measured tree through
-an internal maximum-high endpoint measure, so overlap and containment queries skip prefixes whose cached high
-endpoint cannot intersect the probe. Sorted bag/set/map facades now reuse the measured tree through cached
-order-statistic measures: rank, inclusive value/key range, and key-boundary operations locate by count plus last-key prefixes,
-while edits and range extraction preserve unchanged measured subtrees. These derived facades still do not claim
+a last-low/maximum-high product summary. Overlap and containment queries structurally restrict the low-sorted
+candidate prefix and then descend directly to each hit, taking O(log n) for the first hit and
+O((k + 1) log n) for all `k` hits without scanning irrelevant intervals. Sorted bag/set/map facades now reuse
+the measured tree through cached order-statistic measures: rank, inclusive value/key range, and key-boundary
+operations locate by count plus last-key prefixes, while edits and range extraction preserve unchanged measured
+subtrees. Sorted-set algebra merges two streaming tree iterators in O(n + m) traversal work instead of performing
+a rank descent per element. These derived facades still do not claim
 the C#/C++ lazy measured-spine complexity or allocation profile for every operation.
 
 Future representation work should keep the Rust public names and result shapes stable while replacing the remaining

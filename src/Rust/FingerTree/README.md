@@ -37,8 +37,9 @@ their frozen prefixes. Both rope flavors expose chunk-copy construction and copy
 caller-supplied slices. `TextRope` and `RopeBuilder` include Rust-native string/display
 conveniences; character and text ropes also expose scalar/code-point addressing, Unicode UAX #29
 extended-grapheme addressing, newline-style detection, and CRLF-aware line text. `PriorityQueue<T, P>`
-now composes the measured core with cached minimum-priority measures, and `IntervalTree<T>` uses cached maximum-high interval measures for
-overlap and containment entry points. `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>` now use
+now composes the measured core with cached minimum-priority measures, and `IntervalTree<T>` uses a cached
+last-low/maximum-high product summary for O(log n) first-hit and O((k + 1) log n) full-overlap search.
+`SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>` now use
 order-statistic measured tree storage with cached count plus last-key measures. The crate still does
 not claim the C#/C++ lazy finger-tree asymptotic profile overall; derived algorithms remain
 semantic-checkpoint implementations until the lazy measured spine is ported through the whole family.

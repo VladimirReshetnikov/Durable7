@@ -35,26 +35,40 @@ where
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct IntervalMeasure<T>(PhantomData<T>);
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct IntervalSummary<T> {
+    last_low: Option<T>,
+    max_high: Option<T>,
+}
+
 impl<T> MeasurePolicy<Interval<T>> for IntervalMeasure<T>
 where
     T: Ord + Clone,
 {
-    type Measure = Option<T>;
+    type Measure = IntervalSummary<T>;
 
     fn empty() -> Self::Measure {
-        None
+        IntervalSummary {
+            last_low: None,
+            max_high: None,
+        }
     }
 
     fn measure(element: &Interval<T>) -> Self::Measure {
-        Some(element.high.clone())
+        IntervalSummary {
+            last_low: Some(element.low.clone()),
+            max_high: Some(element.high.clone()),
+        }
     }
 
     fn combine(left: &Self::Measure, right: &Self::Measure) -> Self::Measure {
-        match (left, right) {
+        let last_low = right.last_low.clone().or_else(|| left.last_low.clone());
+        let max_high = match (&left.max_high, &right.max_high) {
             (Some(left), Some(right)) => Some(left.max(right).clone()),
             (Some(value), None) | (None, Some(value)) => Some(value.clone()),
             (None, None) => None,
-        }
+        };
+        IntervalSummary { last_low, max_high }
     }
 }
 
@@ -161,8 +175,8 @@ where
         self.remove_at_index(index)
     }
 
-    /// Rank of the first stored interval matching both endpoints: a binary
-    /// search on the low endpoint plus a scan over the equal-low run,
+    /// Rank of the first stored interval matching both endpoints: a measured
+    /// lower-bound descent on the low endpoint plus a scan over the equal-low run,
     /// mirroring the C# `Contains`/`TryRemove` complexity contract.
     fn index_of(&self, interval: &Interval<T>) -> Option<usize> {
         let mut index = lower_bound_by_low(&self.intervals, &interval.low);
@@ -183,51 +197,56 @@ where
 
     #[must_use]
     pub fn find_overlap(&self, probe: &Interval<T>) -> Option<&Interval<T>> {
+        let end = self.upper_low_bound_index(&probe.high);
         let index = self.first_possible_overlap_index(&probe.low)?;
-        self.intervals
-            .iter()
-            .skip(index)
-            .take_while(|interval| interval.low <= probe.high)
-            .find(|interval| interval.overlaps(probe))
+        (index < end).then(|| {
+            self.intervals
+                .get(index)
+                .expect("measured overlap index is in range")
+        })
     }
 
     #[must_use]
     pub fn find_containing(&self, point: &T) -> Option<&Interval<T>> {
+        let end = self.upper_low_bound_index(point);
         let index = self.first_possible_overlap_index(point)?;
-        self.intervals
-            .iter()
-            .skip(index)
-            .take_while(|interval| interval.low <= *point)
-            .find(|interval| interval.contains_point(point))
+        (index < end).then(|| {
+            self.intervals
+                .get(index)
+                .expect("measured containment index is in range")
+        })
     }
 
     #[must_use]
     pub fn find_overlaps(&self, probe: &Interval<T>) -> Vec<Interval<T>> {
-        let Some(index) = self.first_possible_overlap_index(&probe.low) else {
-            return Vec::new();
-        };
-
-        self.intervals
-            .iter()
-            .skip(index)
-            .take_while(|interval| interval.low <= probe.high)
-            .filter(|interval| interval.overlaps(probe))
-            .cloned()
-            .collect()
+        let mut remaining = self.candidate_prefix(&probe.high);
+        let mut overlaps = Vec::new();
+        while let Some((_, interval, right)) = remaining.try_split_find(|summary| {
+            summary
+                .max_high
+                .as_ref()
+                .is_some_and(|high| high >= &probe.low)
+        }) {
+            overlaps.push(interval);
+            remaining = right;
+        }
+        overlaps
     }
 
     #[must_use]
     pub fn count_overlaps(&self, probe: &Interval<T>) -> usize {
-        let Some(index) = self.first_possible_overlap_index(&probe.low) else {
-            return 0;
-        };
-
-        self.intervals
-            .iter()
-            .skip(index)
-            .take_while(|interval| interval.low <= probe.high)
-            .filter(|interval| interval.overlaps(probe))
-            .count()
+        let mut remaining = self.candidate_prefix(&probe.high);
+        let mut count = 0;
+        while let Some((_, _, right)) = remaining.try_split_find(|summary| {
+            summary
+                .max_high
+                .as_ref()
+                .is_some_and(|high| high >= &probe.low)
+        }) {
+            count += 1;
+            remaining = right;
+        }
+        count
     }
 
     #[must_use]
@@ -267,8 +286,20 @@ where
     fn first_possible_overlap_index(&self, low: &T) -> Option<usize> {
         let located = self
             .intervals
-            .try_locate(|max_high| max_high.as_ref().is_some_and(|high| high >= low));
+            .try_locate(|summary| summary.max_high.as_ref().is_some_and(|high| high >= low));
         located.item.map(|_| located.index)
+    }
+
+    fn upper_low_bound_index(&self, high: &T) -> usize {
+        self.intervals
+            .try_locate(|summary| summary.last_low.as_ref().is_some_and(|low| low > high))
+            .index
+    }
+
+    fn candidate_prefix(&self, high: &T) -> IntervalStorage<T> {
+        self.intervals
+            .split(|summary| summary.last_low.as_ref().is_some_and(|low| low > high))
+            .left
     }
 
     fn remove_at_index(&self, index: usize) -> Option<(Self, Interval<T>)> {
@@ -306,21 +337,9 @@ fn lower_bound_by_low<T>(intervals: &IntervalStorage<T>, value: &T) -> usize
 where
     T: Ord + Clone,
 {
-    let mut low = 0;
-    let mut high = intervals.len();
-    while low < high {
-        let mid = low + (high - low) / 2;
-        let current = intervals
-            .get(mid)
-            .expect("binary search midpoint is in range");
-        if current.low < *value {
-            low = mid + 1;
-        } else {
-            high = mid;
-        }
-    }
-
-    low
+    intervals
+        .try_locate(|summary| summary.last_low.as_ref().is_some_and(|low| low >= value))
+        .index
 }
 
 #[cfg(test)]
@@ -353,7 +372,13 @@ mod tests {
         .into_iter()
         .collect();
 
-        assert_eq!(tree.intervals.measure(), &Some(50));
+        assert_eq!(
+            tree.intervals.measure(),
+            &IntervalSummary {
+                last_low: Some(40),
+                max_high: Some(50),
+            }
+        );
         assert_eq!(tree.find_overlap(&Interval::new(16, 19)), None);
         assert_eq!(
             tree.find_overlap(&Interval::new(29, 41)),
@@ -444,7 +469,8 @@ mod tests {
         assert!(inserted.contains(&Interval::new(1000, 1001)));
         assert!(!removed.contains(&Interval::new(300, 301)));
         assert_eq!(removed_interval, Interval::new(303, 304));
-        assert_eq!(inserted.intervals.measure(), &Some(1001));
+        assert_eq!(inserted.intervals.measure().last_low, Some(1000));
+        assert_eq!(inserted.intervals.measure().max_high, Some(1001));
         assert!(tree.intervals.shared_node_count_with(&inserted.intervals) > 100);
         assert!(
             inserted
@@ -462,5 +488,19 @@ mod tests {
         inserted.intervals.validate_invariants();
         removed.intervals.validate_invariants();
         try_removed.intervals.validate_invariants();
+    }
+
+    #[test]
+    fn measured_overlap_descent_skips_large_non_overlapping_regions() {
+        let tree: IntervalTree<_> = (0..100_000)
+            .map(|value| Interval::new(value * 3, value * 3 + 1))
+            .collect();
+        let probe = Interval::new(299_997, 299_998);
+
+        assert_eq!(tree.find_overlap(&probe), Some(&probe));
+        assert_eq!(tree.find_overlaps(&probe), vec![probe.clone()]);
+        assert_eq!(tree.count_overlaps(&probe), 1);
+        assert_eq!(tree.find_containing(&299_998), Some(&probe));
+        tree.intervals.validate_invariants();
     }
 }
