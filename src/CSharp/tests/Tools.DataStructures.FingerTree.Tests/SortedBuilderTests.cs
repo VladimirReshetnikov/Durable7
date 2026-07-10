@@ -201,4 +201,24 @@ public sealed class SortedBuilderTests
         builder.SetItem(3, "three");
         Assert.Throws<InvalidOperationException>(() => enumerator.MoveNext());
     }
+
+    /// <summary>Verifies key and value views capture fail-fast state when enumeration starts, not when the view is obtained.</summary>
+    [Fact]
+    public void SortedDictionaryBuilder_KeyAndValueViewsCaptureVersionAtEnumerationStart()
+    {
+        var builder = FtSortedDictionary.CreateBuilder();
+        builder.Add(1, "one");
+
+        var keys = builder.Keys;
+        var values = builder.Values;
+        builder.Add(2, "two");
+
+        Assert.Equal(new[] { 1, 2 }, keys.ToArray());
+        Assert.Equal(new[] { "one", "two" }, values.ToArray());
+
+        using var keyEnumerator = keys.GetEnumerator();
+        Assert.True(keyEnumerator.MoveNext());
+        builder.Add(3, "three");
+        Assert.Throws<InvalidOperationException>(() => keyEnumerator.MoveNext());
+    }
 }

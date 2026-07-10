@@ -17,6 +17,8 @@ public sealed partial class SortedDictionary<TKey, TValue>
     {
         private readonly System.Collections.Generic.SortedSet<KeyValuePair<TKey, TValue>> _items;
         private readonly IComparer<TKey> _comparer;
+        private readonly KeyEnumerable _keys;
+        private readonly ValueEnumerable _values;
         private int _version;
         private int _cachedVersion;
         private SortedDictionary<TKey, TValue> _cachedResult;
@@ -25,6 +27,8 @@ public sealed partial class SortedDictionary<TKey, TValue>
         {
             _comparer = comparer;
             _items = new System.Collections.Generic.SortedSet<KeyValuePair<TKey, TValue>>(new EntryKeyComparer(comparer));
+            _keys = new KeyEnumerable(this);
+            _values = new ValueEnumerable(this);
             _cachedResult = Create(comparer);
         }
 
@@ -32,6 +36,8 @@ public sealed partial class SortedDictionary<TKey, TValue>
         {
             _comparer = source.Comparer;
             _items = new System.Collections.Generic.SortedSet<KeyValuePair<TKey, TValue>>(new EntryKeyComparer(source.Comparer));
+            _keys = new KeyEnumerable(this);
+            _values = new ValueEnumerable(this);
             foreach (var entry in source)
                 _items.Add(entry);
             _cachedResult = source;
@@ -50,10 +56,10 @@ public sealed partial class SortedDictionary<TKey, TValue>
             TryGetValue(key, out var value) ? value : throw new KeyNotFoundException("The key was not present in the dictionary.");
 
         /// <summary>Gets the staged keys in comparer order.</summary>
-        public IEnumerable<TKey> Keys => EnumerateKeys(_version);
+        public IEnumerable<TKey> Keys => _keys;
 
         /// <summary>Gets the staged values in comparer-key order.</summary>
-        public IEnumerable<TValue> Values => EnumerateValues(_version);
+        public IEnumerable<TValue> Values => _values;
 
         /// <summary>Determines whether <paramref name="key"/> is present. O(log n).</summary>
         /// <param name="key">Key to test.</param>
@@ -203,6 +209,20 @@ public sealed partial class SortedDictionary<TKey, TValue>
         }
 
         private static KeyValuePair<TKey, TValue> Probe(TKey key) => new(key, default!);
+
+        private sealed class KeyEnumerable(Builder builder) : IEnumerable<TKey>
+        {
+            public IEnumerator<TKey> GetEnumerator() => builder.EnumerateKeys(builder._version).GetEnumerator();
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class ValueEnumerable(Builder builder) : IEnumerable<TValue>
+        {
+            public IEnumerator<TValue> GetEnumerator() => builder.EnumerateValues(builder._version).GetEnumerator();
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
 
         private sealed class EntryKeyComparer(IComparer<TKey> keyComparer) : IComparer<KeyValuePair<TKey, TValue>>
         {

@@ -17,7 +17,8 @@ reasonable oracle.
 
 - `FingerTreeDeque*Tests.cs` and `FingerTreeDequeAssert.cs` cover endpoint operations, indexing, split/concat,
   sorted search, enumeration/copy, invariants, branching persistence, randomized model histories, and complexity
-  guards for the tuned deque.
+  guards for the tuned deque. `InternalEngineContractTests.cs` pins shared bounds and invariant-failure behavior
+  at the internal enumeration seam.
 - `MeasuredFingerTreeTests.cs`, `MeasuredFingerTreePersistenceTests.cs`, `BuiltInMeasureTests.cs`,
   `CustomComparisonMeasureTests.cs`, `ProductMeasureTests.cs`, `SumMeasureTests.cs`, `TryLocateTests.cs`,
   `ZeroClosureNamedOpTests.cs`, and `AllocationFreeReadTests.cs` cover the measured core, measure families,
@@ -26,9 +27,13 @@ reasonable oracle.
   `PriorityQueueTests.cs`, `IntervalTreeTests.cs`, `ReversibleDequeTests.cs`, and
   `DerivedCollectionPersistenceTests.cs` cover derived collection facades and mutable sorted builders against
   BCL or brute-force model behavior.
+- `ComparerEquivalentFacadeTests.cs` covers canonical-instance behavior when comparer equality is coarser than
+  object equality across all sorted facades, plus duplicate-low interval-tree stress.
 - `RopeTests.cs`, `RopeModelTests.cs`, `MeasuredRopeTests.cs`, `RopeTextTests.cs`, `RopeTextExtrasTests.cs`, and
   `RopeBuilderTests.cs` / `RopeAppendBuilderTests.cs` cover chunked ropes, measured ropes, text helpers,
   Unicode/newline extras, and builders.
+- `RopeBoundaryCoverageTests.cs` covers legal sub-minimum split chunks, concatenation seam re-coalescing, and
+  mixed `TextReader` peek/single/buffered reads across chunk boundaries.
 - `SampleSmokeTests.cs` captures the Tour, Showcase, and Editor sample output contracts.
 - `PersistenceConcurrencyExamplesTests.cs` and `TearableConcurrencyStressTests.cs` cover structural-sharing
   examples, atomic publication, concurrent reads, and tearable-value stress.

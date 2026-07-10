@@ -88,12 +88,19 @@ internal readonly struct Digit<T, TChild> where TChild : ITreeElement<T, TChild>
 
     /// <summary>Gets the child at <paramref name="index"/> in <c>0..Length-1</c>.</summary>
     /// <param name="index">Zero-based child position.</param>
-    public TChild ChildAt(int index) => index switch
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> does not address a stored child.</exception>
+    public TChild ChildAt(int index)
     {
-        0 => A,
-        1 => B,
-        _ => C,
-    };
+        if ((uint)index >= (uint)Length)
+            throw new ArgumentOutOfRangeException(nameof(index), index, "The index must address a stored digit child.");
+
+        return index switch
+        {
+            0 => A,
+            1 => B,
+            _ => C,
+        };
+    }
 
     /// <summary>Returns a digit with <paramref name="child"/> prepended. Requires <see cref="Length"/> at most two.</summary>
     /// <param name="child">Child to prepend.</param>

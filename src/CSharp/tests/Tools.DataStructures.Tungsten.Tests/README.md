@@ -27,6 +27,8 @@ library. It targets the workspace defaults from `Directory.Build.props`, referen
   model, including retained snapshots for persistence.
 - `PersistentAssociationPropertyTests.cs` uses CsCheck generated histories against an ordered
   pair-list model implementing the Tungsten ordering rules, including retained snapshots.
+- `PersistentAssociationDerivedPropertyTests.cs` model-checks strict-middle `GetRange` reconciliation,
+  requested-order `KeyTake`, and stable value `Sort` (including custom ordering).
 
 ## Build And Run
 

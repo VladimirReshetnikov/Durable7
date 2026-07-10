@@ -114,6 +114,24 @@ public sealed class RopeAppendBuilderTests
         Assert.Equal(new[] { 5, 1, 4 }, first.ToArray());
     }
 
+    /// <summary>Verifies measured span appends bulk-copy across partial and full chunk boundaries without losing measure state.</summary>
+    [Fact]
+    public void MeasuredRopeBuilder_SpanAppendAcrossChunkBoundariesPreservesContentsAndMeasure()
+    {
+        var builder = MeasuredRope<int, int, SumMeasure<int>>.CreateBuilder();
+        var values = Enumerable.Range(1, (RopeChunking.MaxChunkSize * 2) + 17).ToArray();
+
+        builder.Add(-1);
+        builder.AddRange(values.AsSpan());
+
+        Assert.Equal(values.Length + 1, builder.Count);
+        Assert.Equal(-1 + values.Sum(), builder.Measure);
+
+        var frozen = builder.ToImmutable();
+        frozen.ValidateInvariants();
+        Assert.Equal(new[] { -1 }.Concat(values), frozen);
+    }
+
     /// <summary>Verifies measured rope ToBuilder preserves the source measure and Clear resets the live aggregate.</summary>
     [Fact]
     public void MeasuredRopeBuilder_ToBuilderPreservesMeasureAndClearResets()

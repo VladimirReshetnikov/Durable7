@@ -117,8 +117,29 @@ internal sealed class MeasuredChunkBuilder<T, TMeasure, TMeasureOps>
         if (items.Length > int.MaxValue - Count)
             throw new OverflowException("The measured rope builder cannot contain more than Int32.MaxValue elements.");
 
-        foreach (var item in items)
-            Add(item);
+        while (!items.IsEmpty)
+        {
+            if (_tailLength == RopeChunking.MaxChunkSize)
+                RetireFullTail();
+
+            var take = Math.Min(items.Length, RopeChunking.MaxChunkSize - _tailLength);
+            var added = items[..take];
+            var tailMeasure = _tailMeasure;
+            var measure = Measure;
+            foreach (var item in added)
+            {
+                var itemMeasure = TMeasureOps.Measure(item);
+                tailMeasure = TMeasureOps.Combine(tailMeasure, itemMeasure);
+                measure = TMeasureOps.Combine(measure, itemMeasure);
+            }
+
+            added.CopyTo(_tail.AsSpan(_tailLength));
+            _tailLength += take;
+            _tailMeasure = tailMeasure;
+            Count += take;
+            Measure = measure;
+            items = items[take..];
+        }
     }
 
     public void Clear()

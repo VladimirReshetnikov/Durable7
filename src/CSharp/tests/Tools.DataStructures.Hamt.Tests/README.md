@@ -15,6 +15,8 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
   comparer preservation, value materialization, concurrent snapshot readers, and immutable-version publication.
 - `PersistentHashMapEnumeratorTests.cs` covers allocation-free struct enumerators, copied enumerator independence,
   and key/value/pair enumeration.
+- `PersistentHashSetEnumeratorTests.cs` covers the set wrapper's default, before-first, active, exhausted,
+  copied, and interface/reset enumerator states.
 - `PersistentHashMapCollisionTests.cs` covers equal-hash buckets, deep shared hash prefixes, collision splitting,
   hash-mismatch misses, and equivalent-key retention.
 - `PersistentHamtStructureTests.cs` uses internal test access to verify root shape, collapse behavior, no-op root

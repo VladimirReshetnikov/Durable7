@@ -64,7 +64,7 @@ internal sealed class EmptyMeasuredTree<TElement, TChild, TMeasure, TMonoid>
 
     /// <inheritdoc/>
     public override bool TryGetChild(int index, out TElement leaf, out IEnumerationBlock<TElement>? block) =>
-        throw new ArgumentOutOfRangeException(nameof(index), index, "The empty measured tree has no children.");
+        throw EmptyAccess();
 
     /// <inheritdoc/>
     public override (MeasuredTree<TElement, TChild, TMeasure, TMonoid> Left, TChild Hit, MeasuredTree<TElement, TChild, TMeasure, TMonoid> Right)
