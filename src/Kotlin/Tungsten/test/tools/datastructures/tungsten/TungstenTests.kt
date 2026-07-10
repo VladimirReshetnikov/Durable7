@@ -370,6 +370,53 @@ private fun associationGeneratedHistoriesMatchOrderedModelAndSnapshots() {
     }
 }
 
+private fun iteratorsStreamInOrderAfterMixedEdits() {
+    val list = PersistentList.from(listOf(1, 2, 3, 4, 5))
+        .prepend(0)
+        .append(6)
+        .insert(3, 99)!!
+        .removeAt(5)!!
+        .setItem(0, -1)!!
+    val expectedList = listOf(-1, 1, 2, 99, 3, 5, 6)
+
+    val listIterated = ArrayList<Int>()
+    for (value in list) {
+        listIterated.add(value)
+    }
+    checkEquals(expectedList, listIterated, "list iterator order")
+    checkEquals(list.toList(), listIterated, "list iterator matches toList")
+
+    val listPrefix = ArrayList<Int>()
+    val listIterator = list.iterator()
+    repeat(3) { listPrefix.add(listIterator.next()) }
+    checkEquals(expectedList.take(3), listPrefix, "list iterator early termination")
+    check(listIterator.hasNext(), "list iterator continues after prefix")
+
+    val association = PersistentAssociation.empty<String, Int>()
+        .setItem("a", 1)
+        .setItem("b", 2)
+        .setItem("c", 3)
+        .prepend("d", 4)
+        .insert(2, "e", 5)!!
+        .remove("b")
+        .setItem("a", 10)
+        .append("d", 40)
+    val expectedPairs = listOf("a" to 10, "e" to 5, "c" to 3, "d" to 40)
+
+    val associationIterated = ArrayList<Pair<String, Int>>()
+    for (pair in association) {
+        associationIterated.add(pair)
+    }
+    checkEquals(expectedPairs, associationIterated, "association iterator order")
+    checkEquals(association.toList(), associationIterated, "association iterator matches toList")
+
+    val pairPrefix = ArrayList<Pair<String, Int>>()
+    val pairIterator = association.iterator()
+    repeat(2) { pairPrefix.add(pairIterator.next()) }
+    checkEquals(expectedPairs.take(2), pairPrefix, "association iterator early termination")
+    check(pairIterator.hasNext(), "association iterator continues after prefix")
+}
+
 private fun concurrentReadersObserveConsistentSnapshots() {
     val expectedList = (0 until 256).toList()
     val list = PersistentList.from(expectedList)
@@ -398,6 +445,7 @@ public fun main() {
         "associationCustomPolicyRecoversStoredKeys" to ::associationCustomPolicyRecoversStoredKeys,
         "associationRelabelStressPreservesPositionsAndLookups" to ::associationRelabelStressPreservesPositionsAndLookups,
         "associationGeneratedHistoriesMatchOrderedModelAndSnapshots" to ::associationGeneratedHistoriesMatchOrderedModelAndSnapshots,
+        "iteratorsStreamInOrderAfterMixedEdits" to ::iteratorsStreamInOrderAfterMixedEdits,
         "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,
     )
 

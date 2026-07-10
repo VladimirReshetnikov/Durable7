@@ -202,6 +202,8 @@ public class PersistentDeque<T> private constructor(
 
     override fun iterator(): Iterator<T> = items.iterator()
 
+    internal fun iteratorFrom(startIndex: Int): Iterator<T> = items.iteratorFrom(startIndex)
+
     @Suppress("UNCHECKED_CAST")
     private fun itemAt(index: Int): T = items[index] as T
 }
@@ -613,10 +615,18 @@ public data class MeasuredItemSplit<T, M>(
     public val right: FingerTree<T, M>,
 )
 
+/**
+ * The result of [FingerTree.tryLocate]. [found] reports whether the predicate
+ * selected a stored element; when the tree stores null elements it is the only
+ * reliable discriminator, because [item] is null both for a stored null and
+ * for a predicate that never became true (matching the C# reference, whose
+ * TryLocate returns a boolean alongside the out parameters).
+ */
 public data class LocateResult<T, M>(
     public val index: Int,
     public val measureBefore: M,
     public val item: T?,
+    public val found: Boolean,
 )
 
 public class FingerTree<T, M> private constructor(
@@ -694,7 +704,7 @@ public class FingerTree<T, M> private constructor(
 
     public fun tryLocate(predicate: (M) -> Boolean): LocateResult<T, M> {
         val located = items.locate(predicate)
-        return LocateResult(located.index, located.measureBefore, located.value)
+        return LocateResult(located.index, located.measureBefore, located.value, located.found)
     }
 
     public fun setItem(index: Int, value: T): FingerTree<T, M>? {

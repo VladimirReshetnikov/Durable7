@@ -432,6 +432,56 @@ private fun ropesEditAndNavigateText() {
     checkEquals("xy\nz", builder.toTextRope().asString(), "builder")
 }
 
+private fun ropeCopyToStreamsAcrossChunkBoundaries() {
+    val expected = (0 until 200).toList()
+    val rope = Rope.fromChunks(expected.chunked(7))
+    val measured = MeasuredRope.fromChunks(expected.chunked(7), IntSumMeasure)
+
+    for (start in listOf(0, 1, 6, 7, 13, 97, expected.size - 5)) {
+        val window = expected.subList(start, start + 5)
+        val destination = MutableList<Int?>(5) { null }
+        check(rope.copyTo(start, destination), "rope copyTo at $start")
+        checkEquals(window, destination, "rope copy window at $start")
+
+        val measuredDestination = MutableList<Int?>(5) { null }
+        check(measured.copyTo(start, measuredDestination), "measured copyTo at $start")
+        checkEquals(window, measuredDestination, "measured copy window at $start")
+    }
+
+    val full = MutableList<Int?>(expected.size) { null }
+    check(rope.copyTo(0, full), "rope full copy")
+    checkEquals(expected, full, "rope full copy contents")
+    val measuredFull = MutableList<Int?>(expected.size) { null }
+    check(measured.copyTo(0, measuredFull), "measured full copy")
+    checkEquals(expected, measuredFull, "measured full copy contents")
+
+    check(rope.copyTo(expected.size, mutableListOf<Int?>()), "empty copy at end succeeds")
+    check(!rope.copyTo(expected.size - 4, MutableList<Int?>(5) { null }), "overflowing copy rejected")
+    check(!rope.copyTo(-1, MutableList<Int?>(1) { null }), "negative start rejected")
+    check(!measured.copyTo(expected.size - 4, MutableList<Int?>(5) { null }), "measured overflowing copy rejected")
+}
+
+private fun locateReportsFoundForStoredNulls() {
+    val tree = FingerTree.from(listOf<Int?>(null, null, null), SizeMeasure())
+    val hit = tree.tryLocate { it >= 2 }
+    check(hit.found, "stored-null locate reports found")
+    checkEquals(1, hit.index, "stored-null locate index")
+    checkEquals(1, hit.measureBefore, "stored-null locate prefix")
+    checkEquals(null, hit.item, "stored-null locate item")
+
+    val miss = tree.tryLocate { it >= 5 }
+    check(!miss.found, "unsatisfied locate reports not found")
+    checkEquals(3, miss.index, "unsatisfied locate index")
+    checkEquals(null, miss.item, "unsatisfied locate item")
+
+    val rope = MeasuredRope.from(listOf<Int?>(null, null), SizeMeasure())
+    val ropeHit = rope.locateByMeasure { it >= 1 }
+    check(ropeHit.found, "measured rope stored-null locate reports found")
+    checkEquals(0, ropeHit.index, "measured rope stored-null locate index")
+    checkEquals(null, ropeHit.value, "measured rope stored-null locate value")
+    check(!rope.locateByMeasure { it >= 3 }.found, "measured rope unsatisfied locate reports not found")
+}
+
 private fun overflowingRangesAreRejected() {
     val deque = PersistentDeque.from(listOf(1, 2, 3))
     checkEquals(null, deque.splitRange(2, Int.MAX_VALUE), "deque overflow range")
@@ -492,6 +542,8 @@ public fun main() {
         "intervalTreeInsertsNewEqualLowIntervalsFirst" to ::intervalTreeInsertsNewEqualLowIntervalsFirst,
         "recurringPortingRegressionsStayLocked" to ::recurringPortingRegressionsStayLocked,
         "ropesEditAndNavigateText" to ::ropesEditAndNavigateText,
+        "ropeCopyToStreamsAcrossChunkBoundaries" to ::ropeCopyToStreamsAcrossChunkBoundaries,
+        "locateReportsFoundForStoredNulls" to ::locateReportsFoundForStoredNulls,
         "overflowingRangesAreRejected" to ::overflowingRangesAreRejected,
         "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,
     )

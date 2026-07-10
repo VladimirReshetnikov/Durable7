@@ -31,8 +31,11 @@ public class Rope<T> private constructor(
             return false
         }
 
+        // Seek to the start index once, then stream in order: O(k + log n)
+        // rather than a full root-to-leaf descent per copied element.
+        val source = items.iteratorFrom(index)
         for (offset in destination.indices) {
-            destination[offset] = itemAt(index + offset)
+            destination[offset] = source.next()
         }
 
         return true
@@ -122,9 +125,6 @@ public class Rope<T> private constructor(
     internal fun debugIsBalanced(): Boolean = items.debugIsBalanced()
 
     override fun iterator(): Iterator<T> = items.iterator()
-
-    @Suppress("UNCHECKED_CAST")
-    private fun itemAt(index: Int): T = items[index] as T
 }
 
 public data class MeasuredRopeSplit<T, M>(
@@ -132,10 +132,18 @@ public data class MeasuredRopeSplit<T, M>(
     public val right: MeasuredRope<T, M>,
 )
 
+/**
+ * The result of [MeasuredRope.locateByMeasure]. [found] reports whether the
+ * predicate selected a stored element; when the rope stores null elements it
+ * is the only reliable discriminator, because [value] is null both for a
+ * stored null and for a predicate that never became true (matching the C#
+ * reference, whose TryLocate returns a boolean alongside the out parameters).
+ */
 public data class MeasuredRopeLocate<T, M>(
     public val index: Int,
     public val measureBefore: M,
     public val value: T?,
+    public val found: Boolean,
 )
 
 public class MeasuredRope<T, M> private constructor(
@@ -178,8 +186,11 @@ public class MeasuredRope<T, M> private constructor(
             return false
         }
 
+        // Seek to the start index once, then stream in order: O(k + log n)
+        // rather than a full root-to-leaf descent per copied element.
+        val source = items.iteratorFrom(index)
         for (offset in destination.indices) {
-            destination[offset] = itemAt(index + offset)
+            destination[offset] = source.next()
         }
 
         return true
@@ -213,7 +224,7 @@ public class MeasuredRope<T, M> private constructor(
 
     public fun locateByMeasure(predicate: (M) -> Boolean): MeasuredRopeLocate<T, M> {
         val located = items.locate(predicate)
-        return MeasuredRopeLocate(located.index, located.measureBefore, located.value)
+        return MeasuredRopeLocate(located.index, located.measureBefore, located.value, located.found)
     }
 
     public fun concat(other: MeasuredRope<T, M>): MeasuredRope<T, M> {
@@ -232,9 +243,6 @@ public class MeasuredRope<T, M> private constructor(
     internal fun debugIsBalanced(): Boolean = items.isBalanced()
 
     override fun iterator(): Iterator<T> = items.iterator()
-
-    @Suppress("UNCHECKED_CAST")
-    private fun itemAt(index: Int): T = items[index] as T
 }
 
 public object NewlineMeasure : MeasurePolicy<Char, Int> {

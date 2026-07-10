@@ -166,6 +166,13 @@ internal class PersistentMeasuredTree<T, M> private constructor(
     fun isBalanced(): Boolean = validateNode(root).valid
 
     override fun iterator(): Iterator<T> = NodeIterator(root)
+
+    /**
+     * Returns an in-order iterator positioned at [startIndex]. The seek skips
+     * whole subtrees by cached size, so reaching the first element costs
+     * O(log n) and streaming k elements costs O(k + log n) overall.
+     */
+    fun iteratorFrom(startIndex: Int): Iterator<T> = NodeIterator(root, startIndex)
 }
 
 private data class Validation(val valid: Boolean, val size: Int, val height: Int)
@@ -427,11 +434,36 @@ private fun <T, M> validateNode(node: PersistentMeasuredTree.Node<T, M>?): Valid
     )
 }
 
-private class NodeIterator<T, M>(root: PersistentMeasuredTree.Node<T, M>?) : Iterator<T> {
+private class NodeIterator<T, M>(
+    root: PersistentMeasuredTree.Node<T, M>?,
+    startIndex: Int = 0,
+) : Iterator<T> {
     private val stack = ArrayDeque<PersistentMeasuredTree.Node<T, M>>()
 
     init {
-        pushLeft(root)
+        // Descend once from the root, keeping only the ancestors whose value
+        // or right subtree still lies at or after startIndex. Left subtrees
+        // that end before startIndex are skipped by cached size, so the seek
+        // is O(log n); startIndex == 0 degenerates to pushLeft(root).
+        var node = root
+        var remaining = startIndex
+        while (node != null) {
+            val leftSize = nodeSize(node.left)
+            when {
+                remaining < leftSize -> {
+                    stack.addLast(node)
+                    node = node.left
+                }
+                remaining == leftSize -> {
+                    stack.addLast(node)
+                    node = null
+                }
+                else -> {
+                    remaining -= leftSize + 1
+                    node = node.right
+                }
+            }
+        }
     }
 
     override fun hasNext(): Boolean = stack.isNotEmpty()

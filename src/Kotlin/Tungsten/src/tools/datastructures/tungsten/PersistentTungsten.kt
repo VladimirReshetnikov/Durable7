@@ -162,6 +162,34 @@ private fun <T> appendToList(node: SeqNode<T>?, destination: MutableList<T>) {
     appendToList(node.right, destination)
 }
 
+/** Lazy stack-based in-order iterator; O(1) amortized per element, O(log n) stack. */
+private class SeqNodeIterator<T>(root: SeqNode<T>?) : Iterator<T> {
+    private val stack = ArrayDeque<SeqNode<T>>()
+
+    init {
+        pushLeft(root)
+    }
+
+    override fun hasNext(): Boolean = stack.isNotEmpty()
+
+    override fun next(): T {
+        if (stack.isEmpty()) {
+            throw NoSuchElementException()
+        }
+        val node = stack.removeLast()
+        pushLeft(node.right)
+        return node.value
+    }
+
+    private fun pushLeft(start: SeqNode<T>?) {
+        var node = start
+        while (node != null) {
+            stack.addLast(node)
+            node = node.left
+        }
+    }
+}
+
 private data class SeqValidation(val valid: Boolean, val size: Int, val height: Int)
 
 private fun <T> validateSeqNode(node: SeqNode<T>?): SeqValidation {
@@ -288,9 +316,7 @@ private class SeqTree<T> private constructor(
 
     fun isBalanced(): Boolean = validateSeqNode(root).valid
 
-    override fun iterator(): Iterator<T> = sequence {
-        yieldAll(toList())
-    }.iterator()
+    override fun iterator(): Iterator<T> = SeqNodeIterator(root)
 }
 
 public data class PersistentListSplit<T>(
@@ -680,7 +706,13 @@ public class PersistentAssociation<K, V> private constructor(
 
     internal fun debugSequenceIsBalanced(): Boolean = entries.isBalanced()
 
-    override fun iterator(): Iterator<Pair<K, V>> = toList().iterator()
+    override fun iterator(): Iterator<Pair<K, V>> = object : Iterator<Pair<K, V>> {
+        private val source = entries.iterator()
+
+        override fun hasNext(): Boolean = source.hasNext()
+
+        override fun next(): Pair<K, V> = source.next().toPair()
+    }
 
     private fun AssociationEntry<K, V>.toPair(): Pair<K, V> = key() to value()
 
