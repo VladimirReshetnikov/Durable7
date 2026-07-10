@@ -754,6 +754,7 @@ public readonly struct Int512 :
     private static void Divide(Int512 dividend, Int512 divisor, out Int512 quotient, out Int512 remainder)
     {
         if (divisor.IsZero) throw new DivideByZeroException();
+        if (dividend == MinValue && divisor == -One) throw new OverflowException();
 
         UInt512 left = GetUnsignedMagnitude(dividend);
         UInt512 right = GetUnsignedMagnitude(divisor);
@@ -865,6 +866,15 @@ public readonly struct Int512 :
             ? 0
             : value.IsNegative ? -1 : 1;
 
+    /// <summary>Computes the integer base-2 logarithm of a non-negative value.</summary>
+    /// <param name="value">The operand value for the operation.</param>
+    /// <returns>Zero for zero; otherwise, the zero-based index of the highest set bit.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is negative.</exception>
+    public static int Log2(Int512 value) =>
+        value.IsNegative
+            ? throw new ArgumentOutOfRangeException(nameof(value), "Non-negative number required.")
+            : UInt512.Log2((UInt512)value);
+
     #endregion
 
     #region Byte representation helpers
@@ -874,15 +884,15 @@ public readonly struct Int512 :
     /// </summary>
     public int GetShortestBitLength() =>
         IsZero
-            ? 1
+            ? 0
             : IsNegative
                 ? Bits + 1 - UInt512.LeadingZeroCount(new UInt512(~_upper, ~_lower))
-                : Bits - UInt512.LeadingZeroCount(new UInt512(_upper, _lower)) + 1;
+                : Bits - UInt512.LeadingZeroCount(new UInt512(_upper, _lower));
 
     /// <summary>
-    /// Gets the number of bytes required by the shortest two's-complement representation of the current value.
+    /// Gets the fixed storage width of the current value in bytes.
     /// </summary>
-    public int GetByteCount() => (GetShortestBitLength() + 7) / 8;
+    public int GetByteCount() => Bytes;
 
     /// <summary>
     /// Formats a signed 512-bit value according to the supported one-character numeric format specifiers.

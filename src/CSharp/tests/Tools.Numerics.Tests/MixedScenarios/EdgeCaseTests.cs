@@ -908,8 +908,8 @@ public sealed class EdgeCaseTests
     }
 
     /// <summary>
-    /// Verifies that unsigned shortest-bit-length and byte-count helpers match an independent
-    /// <see cref="BigInteger"/> reference model across random 256-bit patterns.
+    /// Verifies that unsigned shortest-bit-length and fixed byte-count helpers match the
+    /// <see cref="UInt128"/> integral conventions across random 256-bit patterns.
     /// </summary>
     [Fact]
     public void UInt256_ShortestEncodingMetrics_MatchBigIntegerModel_AcrossRandomData()
@@ -920,18 +920,16 @@ public sealed class EdgeCaseTests
             var value = IntegerTestHelpers.RandomUInt256(random);
             var big = (BigInteger)value;
 
-            var expectedBitLength = big.IsZero ? 1 : (int)BigInteger.Log2(big) + 1;
-            var expectedByteCount = (expectedBitLength + 7) / 8;
+            var expectedBitLength = big.IsZero ? 0 : (int)BigInteger.Log2(big) + 1;
 
             Assert.Equal(expectedBitLength, value.GetShortestBitLength());
-            Assert.Equal(expectedByteCount, value.GetByteCount());
-            Assert.Equal(big.GetByteCount(isUnsigned: true), value.GetByteCount());
+            Assert.Equal(32, value.GetByteCount());
         }
     }
 
     /// <summary>
-    /// Verifies that signed shortest-bit-length and byte-count helpers match the mathematically minimal
-    /// two's-complement width needed to represent each value.
+    /// Verifies that signed shortest-bit-length and fixed byte-count helpers match the
+    /// <see cref="Int128"/> integral conventions.
     /// </summary>
     [Fact]
     public void Int256_ShortestEncodingMetrics_MatchMinimalTwosComplementWidth_AcrossRandomData()
@@ -943,20 +941,17 @@ public sealed class EdgeCaseTests
             var big = (BigInteger)value;
 
             var expectedBitLength = MinimalSignedBitLength(big);
-            var expectedByteCount = (expectedBitLength + 7) / 8;
-
             Assert.Equal(expectedBitLength, value.GetShortestBitLength());
-            Assert.Equal(expectedByteCount, value.GetByteCount());
-            Assert.Equal(big.GetByteCount(isUnsigned: false), value.GetByteCount());
+            Assert.Equal(32, value.GetByteCount());
         }
     }
 
     /// <summary>
-    /// Verifies that checked division has exactly one extra overflow condition beyond unchecked division:
+    /// Verifies that checked and unchecked division have the same overflow contract, including
     /// <see cref="Int256.MinValue"/> divided by <c>-1</c>.
     /// </summary>
     [Fact]
-    public void CheckedDivision_DiffersFromUncheckedOnlyForMinValueDividedByNegativeOne()
+    public void CheckedAndUncheckedDivision_ShareMinValueOverflowContract()
     {
         var random = new Random(314159);
 
@@ -971,6 +966,7 @@ public sealed class EdgeCaseTests
 
             if (left == Int256.MinValue && right == -1)
             {
+                Assert.Throws<OverflowException>(() => left / right);
                 Assert.Throws<OverflowException>(() => checked(left / right));
                 continue;
             }
@@ -978,21 +974,16 @@ public sealed class EdgeCaseTests
             Assert.Equal(left / right, checked(left / right));
         }
 
+        Assert.Throws<OverflowException>(() => Int256.MinValue / (Int256)(-1));
         Assert.Throws<OverflowException>(() => checked(Int256.MinValue / (Int256)(-1)));
     }
 
     private static int MinimalSignedBitLength(BigInteger value)
     {
-        for (var bits = 1; bits <= 256; bits++)
-        {
-            var min = -(BigInteger.One << (bits - 1));
-            var max = (BigInteger.One << (bits - 1)) - BigInteger.One;
-            if (value >= min && value <= max)
-            {
-                return bits;
-            }
-        }
-
-        throw new InvalidOperationException("Value is outside signed 256-bit range.");
+        if (value.IsZero)
+            return 0;
+        return value.Sign > 0
+            ? (int)value.GetBitLength()
+            : (int)(~value).GetBitLength() + 1;
     }
 }

@@ -102,7 +102,7 @@ public sealed class PublicApiCoverageTests
         _ = UInt256.RotateRight(a, 11);
         Assert.True(UInt256.Log2((UInt256)8) >= 0);
 
-        Assert.True(a.GetByteCount() >= 1);
+        Assert.Equal(32, a.GetByteCount());
         Assert.True(a.GetShortestBitLength() >= 1);
 
         var asBig = (BigInteger)a;
@@ -224,9 +224,10 @@ public sealed class PublicApiCoverageTests
         _ = Int256.RotateRight(a, 11);
         Assert.Equal(123, Int256.Abs(-123));
         Assert.Equal(1, Int256.Sign(1));
+        Assert.Equal(6, Int256.Log2(123));
 
         Assert.True(a.GetShortestBitLength() >= 1);
-        Assert.True(a.GetByteCount() >= 1);
+        Assert.Equal(32, a.GetByteCount());
 
         var asBig = (BigInteger)a;
         var fromBig = (Int256)asBig;
@@ -352,7 +353,7 @@ public sealed class PublicApiCoverageTests
         _ = UInt512.RotateRight(a, 11);
         Assert.True(UInt512.Log2((UInt512)8) >= 0);
 
-        Assert.True(a.GetByteCount() >= 1);
+        Assert.Equal(64, a.GetByteCount());
         Assert.True(a.GetShortestBitLength() >= 1);
 
         var asBig = (BigInteger)a;
@@ -475,9 +476,10 @@ public sealed class PublicApiCoverageTests
         _ = Int512.RotateRight(a, 11);
         Assert.Equal(123, Int512.Abs(-123));
         Assert.Equal(1, Int512.Sign(1));
+        Assert.Equal(6, Int512.Log2(123));
 
         Assert.True(a.GetShortestBitLength() >= 1);
-        Assert.True(a.GetByteCount() >= 1);
+        Assert.Equal(64, a.GetByteCount());
 
         var asBig = (BigInteger)a;
         var fromBig = (Int512)asBig;
@@ -670,7 +672,7 @@ public sealed class PublicApiCoverageTests
         _ = UInt1024.RotateRight(a, 11);
         Assert.True(UInt1024.Log2((UInt1024)8) >= 0);
 
-        Assert.True(a.GetByteCount() >= 1);
+        Assert.Equal(128, a.GetByteCount());
         Assert.True(a.GetShortestBitLength() >= 1);
 
         var asBig = (BigInteger)a;
@@ -793,9 +795,10 @@ public sealed class PublicApiCoverageTests
         _ = Int1024.RotateRight(a, 11);
         Assert.Equal(123, Int1024.Abs(-123));
         Assert.Equal(1, Int1024.Sign(1));
+        Assert.Equal(6, Int1024.Log2(123));
 
         Assert.True(a.GetShortestBitLength() >= 1);
-        Assert.True(a.GetByteCount() >= 1);
+        Assert.Equal(128, a.GetByteCount());
 
         var asBig = (BigInteger)a;
         var fromBig = (Int1024)asBig;

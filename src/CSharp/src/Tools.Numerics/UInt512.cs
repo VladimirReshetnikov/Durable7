@@ -687,9 +687,7 @@ public readonly struct UInt512 :
     /// <summary>Computes the integer base-2 logarithm of a value.</summary>
     /// <param name="value">The operand value for the operation.</param>
     public static int Log2(UInt512 value) =>
-        value.IsZero
-            ? throw new ArgumentOutOfRangeException(nameof(value), "Log2 is undefined for zero.")
-            : Bits - 1 - LeadingZeroCount(value);
+        value.IsZero ? 0 : Bits - 1 - LeadingZeroCount(value);
 
     #endregion
 
@@ -697,14 +695,14 @@ public readonly struct UInt512 :
 
     /// <summary>
     /// Gets the length, in bits, of the shortest unsigned binary representation of the current value.
-    /// This is the bit length, with zero reported as <c>1</c> to match integral interface conventions.
+    /// Zero has a shortest bit length of zero, matching <see cref="UInt128.GetShortestBitLength"/>.
     /// </summary>
-    public int GetShortestBitLength() => IsZero ? 1 : Bits - LeadingZeroCount(this);
+    public int GetShortestBitLength() => IsZero ? 0 : Bits - LeadingZeroCount(this);
 
     /// <summary>
-    /// Gets the number of bytes required by the shortest representation of the current value.
+    /// Gets the fixed storage width of the current value in bytes.
     /// </summary>
-    public int GetByteCount() => IsZero ? 1 : (Bits - LeadingZeroCount(this) + 7) / 8;
+    public int GetByteCount() => Bytes;
 
     /// <summary>
     /// Formats an unsigned 512-bit value according to the supported one-character numeric format specifiers.

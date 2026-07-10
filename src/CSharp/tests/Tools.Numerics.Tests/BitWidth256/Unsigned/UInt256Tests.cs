@@ -177,7 +177,7 @@ public sealed class UInt256Tests
     /// </summary>
     /// <remarks>
     /// The test covers both zero edge cases and randomized values, including the contract that
-    /// <see cref="UInt256.Log2(UInt256)"/> throws for <see cref="UInt256.Zero"/>.
+    /// <see cref="UInt256.Log2(UInt256)"/> returns zero for <see cref="UInt256.Zero"/>.
     /// </remarks>
     [Fact]
     public void BitHelpers_MatchBitOperationsSemantics()
@@ -228,7 +228,7 @@ public sealed class UInt256Tests
             }
         }
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => UInt256.Log2(UInt256.Zero));
+        Assert.Equal(0, UInt256.Log2(UInt256.Zero));
     }
 
     /// <summary>
@@ -627,13 +627,13 @@ public sealed class UInt256Tests
     [Fact]
     public void ShortestBitLength_AndByteCount_HandleBoundaryTransitions()
     {
-        Assert.Equal(1, UInt256.Zero.GetShortestBitLength());
+        Assert.Equal(0, UInt256.Zero.GetShortestBitLength());
         Assert.Equal(1, UInt256.One.GetShortestBitLength());
         Assert.Equal(8, ((UInt256)255).GetShortestBitLength());
         Assert.Equal(9, ((UInt256)256).GetShortestBitLength());
 
-        Assert.Equal(1, UInt256.Zero.GetByteCount());
-        Assert.Equal(1, ((UInt256)255).GetByteCount());
-        Assert.Equal(2, ((UInt256)256).GetByteCount());
+        Assert.Equal(32, UInt256.Zero.GetByteCount());
+        Assert.Equal(32, ((UInt256)255).GetByteCount());
+        Assert.Equal(32, ((UInt256)256).GetByteCount());
     }
 }

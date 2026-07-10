@@ -423,8 +423,8 @@ public sealed class Int1024Tests
 
         Assert.Throws<OverflowException>(() => checked(Int1024.MinValue / (Int1024)(-1)));
 
-        var uncheckedQuotient = Int1024.MinValue / -1;
-        Assert.Equal(Int1024.MinValue, uncheckedQuotient);
+        Assert.Throws<OverflowException>(() => _ = Int1024.MinValue / -1);
+        Assert.Throws<OverflowException>(() => _ = Int1024.MinValue % -1);
     }
 
     /// <summary>
@@ -667,16 +667,20 @@ public sealed class Int1024Tests
     [Fact]
     public void ShortestBitLength_AndByteCount_HandleSignBoundaryTransitions()
     {
-        Assert.Equal(1, Int1024.Zero.GetShortestBitLength());
+        Assert.Equal(0, Int1024.Zero.GetShortestBitLength());
         Assert.Equal(1, ((Int1024)(-1)).GetShortestBitLength());
         Assert.Equal(2, ((Int1024)(-2)).GetShortestBitLength());
-        Assert.Equal(8, ((Int1024)127).GetShortestBitLength());
-        Assert.Equal(9, ((Int1024)128).GetShortestBitLength());
+        Assert.Equal(7, ((Int1024)127).GetShortestBitLength());
+        Assert.Equal(8, ((Int1024)128).GetShortestBitLength());
 
-        Assert.Equal(1, Int1024.Zero.GetByteCount());
-        Assert.Equal(1, ((Int1024)(-1)).GetByteCount());
-        Assert.Equal(1, ((Int1024)127).GetByteCount());
-        Assert.Equal(2, ((Int1024)128).GetByteCount());
+        Assert.Equal(128, Int1024.Zero.GetByteCount());
+        Assert.Equal(128, ((Int1024)(-1)).GetByteCount());
+        Assert.Equal(128, ((Int1024)127).GetByteCount());
+        Assert.Equal(128, ((Int1024)128).GetByteCount());
+
+        Assert.Equal(0, Int1024.Log2(Int1024.Zero));
+        Assert.Equal(7, Int1024.Log2(128));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Int1024.Log2(-1));
     }
 
     /// <summary>

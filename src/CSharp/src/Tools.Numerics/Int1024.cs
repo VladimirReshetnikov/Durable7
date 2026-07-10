@@ -754,6 +754,7 @@ public readonly struct Int1024 :
     private static void Divide(Int1024 dividend, Int1024 divisor, out Int1024 quotient, out Int1024 remainder)
     {
         if (divisor.IsZero) throw new DivideByZeroException();
+        if (dividend == MinValue && divisor == -One) throw new OverflowException();
 
         UInt1024 left = GetUnsignedMagnitude(dividend);
         UInt1024 right = GetUnsignedMagnitude(divisor);
@@ -899,6 +900,15 @@ public readonly struct Int1024 :
             ? 0
             : value.IsNegative ? -1 : 1;
 
+    /// <summary>Computes the integer base-2 logarithm of a non-negative value.</summary>
+    /// <param name="value">The operand value for the operation.</param>
+    /// <returns>Zero for zero; otherwise, the zero-based index of the highest set bit.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is negative.</exception>
+    public static int Log2(Int1024 value) =>
+        value.IsNegative
+            ? throw new ArgumentOutOfRangeException(nameof(value), "Non-negative number required.")
+            : UInt1024.Log2((UInt1024)value);
+
     #endregion
 
     #region Byte representation helpers
@@ -908,15 +918,15 @@ public readonly struct Int1024 :
     /// </summary>
     public int GetShortestBitLength() =>
         IsZero
-            ? 1
+            ? 0
             : IsNegative
                 ? Bits + 1 - UInt1024.LeadingZeroCount(new UInt1024(~_upper, ~_lower))
-                : Bits - UInt1024.LeadingZeroCount(new UInt1024(_upper, _lower)) + 1;
+                : Bits - UInt1024.LeadingZeroCount(new UInt1024(_upper, _lower));
 
     /// <summary>
-    /// Gets the number of bytes required by the shortest two's-complement representation of the current value.
+    /// Gets the fixed storage width of the current value in bytes.
     /// </summary>
-    public int GetByteCount() => (GetShortestBitLength() + 7) / 8;
+    public int GetByteCount() => Bytes;
 
     /// <summary>
     /// Formats a signed 1024-bit value according to the supported one-character numeric format specifiers.
