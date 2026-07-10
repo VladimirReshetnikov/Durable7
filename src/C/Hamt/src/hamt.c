@@ -4,6 +4,32 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef TDS_HAMT_TESTING
+static size_t tds_hamt_test_fail_after = SIZE_MAX;
+static size_t tds_hamt_test_allocation_count = 0;
+
+void tds_hamt_test_fail_allocations_after(size_t successful_allocations) {
+    tds_hamt_test_fail_after = successful_allocations;
+    tds_hamt_test_allocation_count = 0;
+}
+
+void tds_hamt_test_reset_allocator(void) {
+    tds_hamt_test_fail_after = SIZE_MAX;
+    tds_hamt_test_allocation_count = 0;
+}
+#endif
+
+static void *tds_hamt_allocate(size_t size) {
+#ifdef TDS_HAMT_TESTING
+    if (tds_hamt_test_allocation_count == tds_hamt_test_fail_after) {
+        return NULL;
+    }
+
+    ++tds_hamt_test_allocation_count;
+#endif
+    return malloc(size);
+}
+
 enum {
     TDS_HAMT_BITS_PER_LEVEL = 5,
     TDS_HAMT_BRANCH_MASK = 31
@@ -1311,7 +1337,7 @@ static tds_hamt_status tds_hamt_leaf_create_from_retained(
     void *key,
     void *value,
     tds_hamt_node **result) {
-    tds_hamt_leaf_node *leaf = (tds_hamt_leaf_node *)malloc(sizeof(*leaf));
+    tds_hamt_leaf_node *leaf = (tds_hamt_leaf_node *)tds_hamt_allocate(sizeof(*leaf));
     if (leaf == NULL) {
         *result = NULL;
         return TDS_HAMT_OUT_OF_MEMORY;
@@ -1372,7 +1398,7 @@ static tds_hamt_status tds_hamt_collision_create(
         : 1u;
     const size_t total_count = left_count + 1u;
     tds_hamt_collision_node *collision =
-        (tds_hamt_collision_node *)malloc(sizeof(*collision) + total_count * sizeof(tds_hamt_entry));
+        (tds_hamt_collision_node *)tds_hamt_allocate(sizeof(*collision) + total_count * sizeof(tds_hamt_entry));
     if (collision == NULL) {
         tds_hamt_node_release(policy, left);
         tds_hamt_node_release(policy, right);
@@ -1424,7 +1450,7 @@ static tds_hamt_status tds_hamt_bitmap_create(
     size_t child_count,
     tds_hamt_node **result) {
     tds_hamt_bitmap_node *branch =
-        (tds_hamt_bitmap_node *)malloc(sizeof(*branch) + child_count * sizeof(tds_hamt_node *));
+        (tds_hamt_bitmap_node *)tds_hamt_allocate(sizeof(*branch) + child_count * sizeof(tds_hamt_node *));
     if (branch == NULL) {
         *result = NULL;
         return TDS_HAMT_OUT_OF_MEMORY;
@@ -1580,7 +1606,8 @@ static tds_hamt_status tds_hamt_node_set(
             }
 
             tds_hamt_collision_node *replaced =
-                (tds_hamt_collision_node *)malloc(sizeof(*replaced) + collision->count * sizeof(tds_hamt_entry));
+                (tds_hamt_collision_node *)tds_hamt_allocate(
+                    sizeof(*replaced) + collision->count * sizeof(tds_hamt_entry));
             if (replaced == NULL) {
                 *result = NULL;
                 return TDS_HAMT_OUT_OF_MEMORY;
@@ -1611,7 +1638,8 @@ static tds_hamt_status tds_hamt_node_set(
         }
 
         tds_hamt_collision_node *expanded =
-            (tds_hamt_collision_node *)malloc(sizeof(*expanded) + (collision->count + 1u) * sizeof(tds_hamt_entry));
+            (tds_hamt_collision_node *)tds_hamt_allocate(
+                sizeof(*expanded) + (collision->count + 1u) * sizeof(tds_hamt_entry));
         if (expanded == NULL) {
             *result = NULL;
             return TDS_HAMT_OUT_OF_MEMORY;
@@ -1646,7 +1674,8 @@ static tds_hamt_status tds_hamt_node_set(
     const size_t selected_slot = tds_hamt_slot(branch->bitmap, selected_bit);
 
     if ((branch->bitmap & selected_bit) == 0) {
-        tds_hamt_node **children = (tds_hamt_node **)malloc((branch->count + 1u) * sizeof(tds_hamt_node *));
+        tds_hamt_node **children = (tds_hamt_node **)tds_hamt_allocate(
+            (branch->count + 1u) * sizeof(tds_hamt_node *));
         if (children == NULL) {
             *result = NULL;
             return TDS_HAMT_OUT_OF_MEMORY;
@@ -1701,7 +1730,7 @@ static tds_hamt_status tds_hamt_node_set(
         return TDS_HAMT_OK;
     }
 
-    tds_hamt_node **children = (tds_hamt_node **)malloc(branch->count * sizeof(tds_hamt_node *));
+    tds_hamt_node **children = (tds_hamt_node **)tds_hamt_allocate(branch->count * sizeof(tds_hamt_node *));
     if (children == NULL) {
         tds_hamt_node_release(policy, new_child);
         *result = NULL;
@@ -1786,7 +1815,8 @@ static tds_hamt_status tds_hamt_node_remove(
             }
 
             tds_hamt_collision_node *shrunk =
-                (tds_hamt_collision_node *)malloc(sizeof(*shrunk) + (collision->count - 1u) * sizeof(tds_hamt_entry));
+                (tds_hamt_collision_node *)tds_hamt_allocate(
+                    sizeof(*shrunk) + (collision->count - 1u) * sizeof(tds_hamt_entry));
             if (shrunk == NULL) {
                 *result = NULL;
                 return TDS_HAMT_OUT_OF_MEMORY;
@@ -1858,7 +1888,8 @@ static tds_hamt_status tds_hamt_node_remove(
             return TDS_HAMT_OK;
         }
 
-        tds_hamt_node **children = (tds_hamt_node **)malloc((branch->count - 1u) * sizeof(tds_hamt_node *));
+        tds_hamt_node **children = (tds_hamt_node **)tds_hamt_allocate(
+            (branch->count - 1u) * sizeof(tds_hamt_node *));
         if (children == NULL) {
             *result = NULL;
             return TDS_HAMT_OUT_OF_MEMORY;
@@ -1881,7 +1912,7 @@ static tds_hamt_status tds_hamt_node_remove(
         return status;
     }
 
-    tds_hamt_node **children = (tds_hamt_node **)malloc(branch->count * sizeof(tds_hamt_node *));
+    tds_hamt_node **children = (tds_hamt_node **)tds_hamt_allocate(branch->count * sizeof(tds_hamt_node *));
     if (children == NULL) {
         tds_hamt_node_release(policy, new_child);
         *result = NULL;

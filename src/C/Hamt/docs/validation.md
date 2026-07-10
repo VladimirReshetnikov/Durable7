@@ -23,6 +23,8 @@ The script uses these project-level compiler gates:
 - Exception mode: `/EHsc-`; the C port does not use C++ exceptions.
 - Flexible-array-member warning suppression: `/wd4200`, because the implementation intentionally uses
   flexible storage for compact HAMT nodes.
+- Test-only allocation hooks: `/DTDS_HAMT_TESTING`, enabling deterministic fail-after-N allocation injection
+  inside the native executable without adding hooks to the public header.
 - Debug configuration: `/Od`, `/Zi`, `/MDd`.
 - Release configuration: `/O2`, `/MD`, `/DNDEBUG`.
 
@@ -58,7 +60,7 @@ Typical direct GCC lane:
 
 ```powershell
 New-Item -ItemType Directory -Force build\portable | Out-Null
-gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -Iinclude src\hamt.c tests\hamt_tests.c `
+gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -DTDS_HAMT_TESTING -Iinclude src\hamt.c tests\hamt_tests.c `
     -o build\portable\hamt_tests_gcc.exe
 .\build\portable\hamt_tests_gcc.exe
 ```
@@ -69,7 +71,7 @@ Typical Clang lane on Windows, using the Visual Studio developer environment for
 $vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
 $clang = "C:\Program Files\LLVM\bin\clang.exe"
 
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$clang"" -std=c17 -Wall -Wextra -Wpedantic -Werror -Iinclude src\hamt.c tests\hamt_tests.c -o build\portable\hamt_tests_clang.exe && build\portable\hamt_tests_clang.exe"
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$clang"" -std=c17 -Wall -Wextra -Wpedantic -Werror -DTDS_HAMT_TESTING -Iinclude src\hamt.c tests\hamt_tests.c -o build\portable\hamt_tests_clang.exe && build\portable\hamt_tests_clang.exe"
 ```
 
 ## Portable Sanitizer Check
@@ -78,7 +80,7 @@ On hosts with GCC or Clang supporting AddressSanitizer and UndefinedBehaviorSani
 ownership-policy and collision-bucket changes:
 
 ```powershell
-gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined -fno-omit-frame-pointer `
+gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -DTDS_HAMT_TESTING -fsanitize=address,undefined -fno-omit-frame-pointer `
     -Iinclude src/hamt.c tests/hamt_tests.c -o build/hamt_tests_asan
 ./build/hamt_tests_asan
 ```
@@ -96,6 +98,9 @@ The suite covers:
 - first equivalent key/item retention for custom equality policies;
 - equal-hash collision buckets, collision-bucket splitting, and hash-mismatch misses;
 - deep shared hash-prefix lookup/removal cases;
+- all seven inline iterator frames through a depth-7 shared-prefix traversal;
+- fail-after-N allocation injection across recursive hash-node merge and bitmap `node_set` insertion paths,
+  verifying source persistence and complete unwind at every allocation boundary;
 - no-op root reuse and structural sharing shape checks;
 - independent iterator copies;
 - randomized map histories checked against an in-memory model, including retained snapshots;

@@ -19,6 +19,11 @@ reuse, and structural sharing across versions. Because this is C, ownership is e
 sets are value structs whose roots are reference-counted, and callers use `clone`/`destroy` to manage
 version lifetimes.
 
+The intrusive node reference counts are deliberately non-atomic. Already-retained snapshots support
+concurrent read-only access, but copying, updating, clearing, or destroying versions that share a lineage must
+be serialized; those operations retain or release shared nodes. Fully independent maps/sets with no shared
+nodes may be updated on separate threads, subject to the thread-safety of their policy callbacks.
+
 ## Layout
 
 - `include/Tools/DataStructures/Hamt/hamt.h` contains the public C API.

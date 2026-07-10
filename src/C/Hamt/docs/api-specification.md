@@ -117,6 +117,16 @@ equal-hash collision bucket.
   predicates.
 
 Update allocation is O(b * depth + c) array storage and O(depth + c) allocated node objects for the
-changed path and any touched collision bucket. Published nodes are immutable apart from root
-reference counts; concurrent reads of already-retained versions are safe under ordinary C object
-lifetime rules, but the reference count itself is not atomic.
+changed path and any touched collision bucket. Published nodes are immutable apart from reference counts.
+
+## Concurrency
+
+Reference counts are non-atomic. Concurrent read-only access to already-retained map/set handles is safe when
+the configured hash/equality callbacks and pointed-to payloads are themselves safe to read concurrently. A
+handle must remain alive for the full read; do not copy or destroy that handle concurrently.
+
+Copying, updating, clearing, set algebra, and destroying versions retain or release nodes, including untouched
+nodes shared with sibling snapshots. Serialize those operations across every structurally shared lineage:
+derive versions single-threaded (or under one external lock), publish already-retained snapshots to readers,
+then join/quiesce those readers before releasing their handles. Independent collections proven not to share
+nodes may be updated concurrently.

@@ -339,7 +339,8 @@ when each thread owns or synchronizes access to the handle object it mutates or 
 
 Do not have two threads concurrently write, dispose, or replace the same C handle variable without
 external synchronization. The library protects shared immutable reps, not unsynchronized mutation of
-your local `ft_*` structs.
+your local `ft_*` structs. User value-copy/destroy, measure, predicate, comparison, and visitor callbacks must
+also be safe for the concurrent call pattern the application permits.
 
 ## Choosing A Surface
 

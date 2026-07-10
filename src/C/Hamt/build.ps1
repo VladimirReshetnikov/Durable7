@@ -32,6 +32,7 @@ $commonArgs = @(
     '/W4',
     '/WX',
     '/wd4200',
+    '/DTDS_HAMT_TESTING',
     "/I$includeDir",
     "/Fo$objectDir\\",
     "/Fd$pdbPath",

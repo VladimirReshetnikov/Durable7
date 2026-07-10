@@ -24,6 +24,8 @@ The executable registers these cases:
 - `create_range last wins and retains first equivalent key`
 - `equal hash collision bucket preserves every key`
 - `deep shared hash prefixes lookup and remove correctly`
+- `depth seven iterator traversal`
+- `allocation failures unwind node_set and merge`
 - `collision bucket splits and hash mismatch probes miss`
 - `collision bucket equal value keeps root and key object`
 - `structure root shape and sharing`

@@ -26,3 +26,15 @@ The dependency-free CTest executable in [`tests`](tests/tungsten_c_tests.c) cove
 Tungsten Association ordering rules, custom key policies, relabel stress, and deterministic generated
 histories against an ordered-pair model, plus retained-snapshot reader threads on Windows with a
 sequential fallback on other C targets.
+
+## Concurrency
+
+Already-retained `tds_tungsten_list` and `tds_tungsten_association` snapshots may be read concurrently when
+their value/key callbacks and borrowed payloads are reader-safe. Keep every published handle alive until its
+readers finish.
+
+Association HAMT/AVL reference counts are non-atomic (the FingerTree list substrate is atomic, but the public
+workspace contract follows the stricter composed structure). Serialize copy, update, slice, sort, join, and
+dispose operations across versions that share a lineage. Derive completed snapshots single-threaded or under
+one external lock, then publish them to concurrent readers; do not derive new versions concurrently from one
+shared ancestry merely because the handles themselves are distinct C structs.

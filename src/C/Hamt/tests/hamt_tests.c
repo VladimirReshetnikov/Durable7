@@ -6,6 +6,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef TDS_HAMT_TESTING
+#error The native HAMT test executable requires TDS_HAMT_TESTING allocation hooks.
+#endif
+
+void tds_hamt_test_fail_allocations_after(size_t successful_allocations);
+void tds_hamt_test_reset_allocator(void);
+
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -617,6 +624,124 @@ static void test_deep_shared_hash_prefixes_lookup_and_remove_correctly(void) {
 
     tds_hamt_map_destroy(&reduced);
     tds_hamt_map_destroy(&map);
+}
+
+static void test_depth_seven_iterator_traversal(void) {
+    tds_hamt_policy policy = explicit_map_policy();
+    explicit_hash_key first = { 1, 0u };
+    explicit_hash_key second = { 2, 1u << 30 };
+
+    tds_hamt_map empty = tds_hamt_map_create(&policy);
+    tds_hamt_map one;
+    CHECK_STATUS(tds_hamt_map_set(&empty, &first, int_value(1), &one));
+    tds_hamt_map map;
+    CHECK_STATUS(tds_hamt_map_set(&one, &second, int_value(2), &map));
+
+    tds_hamt_map_iterator iterator;
+    tds_hamt_map_iterator_init(&map, &iterator);
+    const void *key = NULL;
+    const void *value = NULL;
+    CHECK(tds_hamt_map_iterator_next(&iterator, &key, &value));
+    CHECK(iterator.depth == 7);
+    CHECK(((const explicit_hash_key *)key)->id == 1);
+    CHECK(*(const int *)value == 1);
+    CHECK(tds_hamt_map_iterator_next(&iterator, &key, &value));
+    CHECK(((const explicit_hash_key *)key)->id == 2);
+    CHECK(*(const int *)value == 2);
+    CHECK(!tds_hamt_map_iterator_next(&iterator, &key, &value));
+
+    tds_hamt_map_destroy(&map);
+    tds_hamt_map_destroy(&one);
+    tds_hamt_map_destroy(&empty);
+}
+
+static void test_allocation_failures_unwind_node_set_and_merge(void) {
+    tds_hamt_policy policy = explicit_map_policy();
+    explicit_hash_key deep_left = { 1, 0u };
+    explicit_hash_key deep_right = { 2, 1u << 30 };
+
+    tds_hamt_map empty = tds_hamt_map_create(&policy);
+    tds_hamt_map deep_base;
+    CHECK_STATUS(tds_hamt_map_set(&empty, &deep_left, int_value(1), &deep_base));
+
+    bool merge_succeeded = false;
+    size_t merge_failure_count = 0;
+    for (size_t fail_after = 0; fail_after != 32; ++fail_after) {
+        tds_hamt_map result = { 0 };
+        tds_hamt_test_fail_allocations_after(fail_after);
+        const tds_hamt_status status =
+            tds_hamt_map_set(&deep_base, &deep_right, int_value(2), &result);
+        tds_hamt_test_reset_allocator();
+
+        const void *actual = NULL;
+        CHECK(tds_hamt_map_count(&deep_base) == 1);
+        CHECK(tds_hamt_map_try_get(&deep_base, &deep_left, &actual));
+        CHECK(*(const int *)actual == 1);
+        CHECK(!tds_hamt_map_contains_key(&deep_base, &deep_right));
+        if (status == TDS_HAMT_OUT_OF_MEMORY) {
+            CHECK(result.root == NULL);
+            ++merge_failure_count;
+            continue;
+        }
+
+        CHECK(status == TDS_HAMT_OK);
+        CHECK(tds_hamt_map_count(&result) == 2);
+        CHECK(tds_hamt_map_try_get(&result, &deep_right, &actual));
+        CHECK(*(const int *)actual == 2);
+        tds_hamt_map_destroy(&result);
+        merge_succeeded = true;
+        break;
+    }
+
+    CHECK(merge_succeeded);
+    CHECK(merge_failure_count >= 8);
+
+    explicit_hash_key branch_first = { 3, 0u };
+    explicit_hash_key branch_second = { 4, 1u };
+    explicit_hash_key branch_added = { 5, 2u };
+    tds_hamt_map branch_one;
+    CHECK_STATUS(tds_hamt_map_set(&empty, &branch_first, int_value(3), &branch_one));
+    tds_hamt_map branch_base;
+    CHECK_STATUS(tds_hamt_map_set(&branch_one, &branch_second, int_value(4), &branch_base));
+
+    bool node_set_succeeded = false;
+    size_t node_set_failure_count = 0;
+    for (size_t fail_after = 0; fail_after != 16; ++fail_after) {
+        tds_hamt_map result = { 0 };
+        tds_hamt_test_fail_allocations_after(fail_after);
+        const tds_hamt_status status =
+            tds_hamt_map_set(&branch_base, &branch_added, int_value(5), &result);
+        tds_hamt_test_reset_allocator();
+
+        const void *actual = NULL;
+        CHECK(tds_hamt_map_count(&branch_base) == 2);
+        CHECK(tds_hamt_map_try_get(&branch_base, &branch_first, &actual));
+        CHECK(*(const int *)actual == 3);
+        CHECK(tds_hamt_map_try_get(&branch_base, &branch_second, &actual));
+        CHECK(*(const int *)actual == 4);
+        CHECK(!tds_hamt_map_contains_key(&branch_base, &branch_added));
+        if (status == TDS_HAMT_OUT_OF_MEMORY) {
+            CHECK(result.root == NULL);
+            ++node_set_failure_count;
+            continue;
+        }
+
+        CHECK(status == TDS_HAMT_OK);
+        CHECK(tds_hamt_map_count(&result) == 3);
+        CHECK(tds_hamt_map_try_get(&result, &branch_added, &actual));
+        CHECK(*(const int *)actual == 5);
+        tds_hamt_map_destroy(&result);
+        node_set_succeeded = true;
+        break;
+    }
+
+    CHECK(node_set_succeeded);
+    CHECK(node_set_failure_count >= 3);
+
+    tds_hamt_map_destroy(&branch_base);
+    tds_hamt_map_destroy(&branch_one);
+    tds_hamt_map_destroy(&deep_base);
+    tds_hamt_map_destroy(&empty);
 }
 
 static void test_collision_bucket_splits_and_hash_mismatch_probes_miss(void) {
@@ -1420,6 +1545,8 @@ static const test_case tests[] = {
     { "create_range last wins and retains first equivalent key", test_create_range_last_wins_and_retains_first_equivalent_key },
     { "equal hash collision bucket preserves every key", test_equal_hash_collision_bucket_preserves_every_key },
     { "deep shared hash prefixes lookup and remove correctly", test_deep_shared_hash_prefixes_lookup_and_remove_correctly },
+    { "depth seven iterator traversal", test_depth_seven_iterator_traversal },
+    { "allocation failures unwind node_set and merge", test_allocation_failures_unwind_node_set_and_merge },
     { "collision bucket splits and hash mismatch probes miss", test_collision_bucket_splits_and_hash_mismatch_probes_miss },
     { "collision bucket equal value keeps root and key object", test_collision_bucket_equal_value_keeps_root_and_key_object },
     { "structure root shape and sharing", test_structure_root_shape_and_sharing },

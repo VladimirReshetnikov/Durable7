@@ -242,6 +242,17 @@ Available operations:
 Operations that need distinct right-side membership materialize a temporary set under the receiver's
 policy. Superset and overlap checks stream the input and can exit early.
 
+## Concurrency And Lineages
+
+HAMT nodes are immutable, so already-retained snapshots may be read concurrently. Retain the required handles
+before publishing them to reader threads and keep each handle alive until its reader has stopped using it.
+
+The intrusive reference counts are not atomic. Do not concurrently clone, update, clear, combine, or destroy
+versions that share nodes, even when the threads start from different handle variables: persistent siblings
+still share untouched paths. Serialize derivation and disposal per structural lineage, then publish completed
+snapshots for concurrent read-only use. Policy callbacks and borrowed payload objects must independently obey
+the same reader-safety contract.
+
 ## Choosing A Surface
 
 | Need | Start with |
