@@ -355,6 +355,44 @@ static void test_list_examples(void)
     tds_tungsten_list_dispose(&list);
 }
 
+static void test_result_aliasing_is_rejected(void)
+{
+    ft_value_type int_type;
+    init_int_type(&int_type);
+
+    const int values[] = {1, 2, 3};
+    tds_tungsten_list list;
+    REQUIRE_STATUS(tds_tungsten_list_from_array(&list, &int_type, values, 3));
+
+    /* Every operation must reject a result that aliases the source and leave it intact. */
+    const int extra = 4;
+    REQUIRE(tds_tungsten_list_push_back(&list, &extra, &list) == TDS_TUNGSTEN_INVALID_ARGUMENT);
+    REQUIRE(tds_tungsten_list_insert_range(&list, 0, values, 3, &list) == TDS_TUNGSTEN_INVALID_ARGUMENT);
+    REQUIRE(tds_tungsten_list_slice(&list, 0, 2, &list) == TDS_TUNGSTEN_INVALID_ARGUMENT);
+    REQUIRE(tds_tungsten_list_reverse(&list, &list) == TDS_TUNGSTEN_INVALID_ARGUMENT);
+    REQUIRE(list_matches(&list, values, 3));
+
+    /* An out-of-range drop is a range error, matching take/slice and the association. */
+    tds_tungsten_list dropped;
+    REQUIRE(tds_tungsten_list_drop(&list, 4, &dropped) == TDS_TUNGSTEN_OUT_OF_RANGE);
+
+    tds_tungsten_association_policy policy;
+    init_assoc_policy(&policy);
+
+    tds_tungsten_association association;
+    REQUIRE_STATUS(tds_tungsten_association_init(&association, &policy));
+
+    const int key = 1;
+    const int value = 10;
+    REQUIRE(tds_tungsten_association_set_item(&association, &key, &value, &association) ==
+            TDS_TUNGSTEN_INVALID_ARGUMENT);
+    REQUIRE(tds_tungsten_association_copy(&association, &association) == TDS_TUNGSTEN_INVALID_ARGUMENT);
+    REQUIRE(tds_tungsten_association_size(&association) == 0);
+
+    tds_tungsten_association_dispose(&association);
+    tds_tungsten_list_dispose(&list);
+}
+
 static tds_tungsten_assoc_pair pair_of(const int* key, const int* value)
 {
     tds_tungsten_assoc_pair pair;
@@ -808,6 +846,7 @@ int main(void)
     }
 
     run_test("list examples", test_list_examples);
+    run_test("result aliasing is rejected", test_result_aliasing_is_rejected);
     run_test("association ordering examples", test_association_ordering_examples);
     run_test("association custom policy", test_association_custom_policy);
     run_test("association relabel stress", test_association_relabel_stress);

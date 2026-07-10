@@ -142,7 +142,10 @@ static tds_tungsten_status tds_tungsten_list_prepare(
     const tds_tungsten_list* source,
     tds_tungsten_list* result)
 {
-    if (!tds_tungsten_list_is_valid(source) || result == NULL) {
+    /* Unlike the HAMT surfaces, result must not alias the source: prepare zeroes the
+     * result before the source is read, which would leak the source's deque rep and
+     * leave the caller holding an empty list even when the operation then fails. */
+    if (!tds_tungsten_list_is_valid(source) || result == NULL || result == source) {
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
     }
 
@@ -355,8 +358,15 @@ tds_tungsten_status tds_tungsten_list_concat(
     const tds_tungsten_list* right,
     tds_tungsten_list* result)
 {
-    if (!tds_tungsten_list_is_valid(left) || !tds_tungsten_list_is_valid(right) ||
-        left->policy.value.size != right->policy.value.size) {
+    /* Concatenation shares nodes between the operands under the left list's policy, so
+     * the value types must agree completely: two payloads of equal size but different
+     * copy/destroy callbacks (say plain ints versus owned pointers) would otherwise have
+     * some shared nodes released through the wrong callbacks, leaking or double-freeing. */
+    if (!tds_tungsten_list_is_valid(left) || !tds_tungsten_list_is_valid(right) || result == right ||
+        left->policy.value.size != right->policy.value.size ||
+        left->policy.value.copy != right->policy.value.copy ||
+        left->policy.value.destroy != right->policy.value.destroy ||
+        left->policy.value.context != right->policy.value.context) {
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
     }
 
@@ -413,8 +423,8 @@ tds_tungsten_status tds_tungsten_list_insert_range(
     size_t count,
     tds_tungsten_list* result)
 {
-    if (!tds_tungsten_list_is_valid(list) || result == NULL || (values == NULL && count != 0) ||
-        index > ft_persistent_deque_size(&list->items)) {
+    if (!tds_tungsten_list_is_valid(list) || result == NULL || result == list ||
+        (values == NULL && count != 0) || index > ft_persistent_deque_size(&list->items)) {
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
     }
 
@@ -485,7 +495,7 @@ tds_tungsten_status tds_tungsten_list_remove_range(
     size_t count,
     tds_tungsten_list* result)
 {
-    if (!tds_tungsten_list_is_valid(list) || result == NULL) {
+    if (!tds_tungsten_list_is_valid(list) || result == NULL || result == list) {
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
     }
 
@@ -557,7 +567,7 @@ tds_tungsten_status tds_tungsten_list_slice(
     size_t count,
     tds_tungsten_list* result)
 {
-    if (!tds_tungsten_list_is_valid(list) || result == NULL) {
+    if (!tds_tungsten_list_is_valid(list) || result == NULL || result == list) {
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
     }
 
@@ -597,8 +607,14 @@ tds_tungsten_status tds_tungsten_list_take(const tds_tungsten_list* list, size_t
 
 tds_tungsten_status tds_tungsten_list_drop(const tds_tungsten_list* list, size_t count, tds_tungsten_list* result)
 {
-    if (!tds_tungsten_list_is_valid(list) || count > ft_persistent_deque_size(&list->items)) {
+    if (!tds_tungsten_list_is_valid(list)) {
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
+    }
+
+    /* Classified like take/slice and the association's drop: a bad range is
+     * TDS_TUNGSTEN_OUT_OF_RANGE, not a bad handle. */
+    if (count > ft_persistent_deque_size(&list->items)) {
+        return TDS_TUNGSTEN_OUT_OF_RANGE;
     }
 
     return tds_tungsten_list_slice(list, count, ft_persistent_deque_size(&list->items) - count, result);
@@ -626,7 +642,7 @@ static void tds_tungsten_list_reverse_visit(const void* value, void* context)
 
 tds_tungsten_status tds_tungsten_list_reverse(const tds_tungsten_list* list, tds_tungsten_list* result)
 {
-    if (!tds_tungsten_list_is_valid(list) || result == NULL) {
+    if (!tds_tungsten_list_is_valid(list) || result == NULL || result == list) {
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
     }
 
@@ -678,7 +694,7 @@ tds_tungsten_status tds_tungsten_list_map(
     tds_tungsten_list* result)
 {
     if (!tds_tungsten_list_is_valid(list) || result_value_type == NULL || result_value_type->size == 0 ||
-        map == NULL || result == NULL) {
+        map == NULL || result == NULL || result == list) {
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
     }
 
@@ -1614,12 +1630,17 @@ static tds_tungsten_status tds_tungsten_rebuild_from_views(
 }
 
 static tds_tungsten_status tds_tungsten_association_take_parts(
-    struct tds_tungsten_assoc_context* context,
+    const tds_tungsten_association* source,
     struct tds_tungsten_assoc_node* root,
     tds_hamt_map index,
     tds_tungsten_association* result)
 {
-    if (result == NULL) {
+    struct tds_tungsten_assoc_context* context = source->context;
+
+    /* The result must not alias the source: publishing overwrites result's root, index,
+     * and context reference without releasing the prior contents, so an aliased call
+     * would leak the source's whole previous version. */
+    if (result == NULL || result == source) {
         tds_tungsten_node_release(context, root);
         tds_hamt_map_destroy(&index);
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
@@ -1773,7 +1794,7 @@ static tds_tungsten_status tds_tungsten_insert_absent(
             return status;
         }
 
-        return tds_tungsten_association_take_parts(association->context, new_root, new_index, result);
+        return tds_tungsten_association_take_parts(association, new_root, new_index, result);
     }
 
     tds_tungsten_assoc_entry entry;
@@ -1800,7 +1821,7 @@ static tds_tungsten_status tds_tungsten_insert_absent(
         return status;
     }
 
-    return tds_tungsten_association_take_parts(association->context, new_root, new_index, result);
+    return tds_tungsten_association_take_parts(association, new_root, new_index, result);
 }
 
 tds_tungsten_status tds_tungsten_association_from_pairs(
@@ -1837,7 +1858,9 @@ tds_tungsten_status tds_tungsten_association_copy(
     const tds_tungsten_association* source,
     tds_tungsten_association* destination)
 {
-    if (!tds_tungsten_association_valid(source) || destination == NULL) {
+    /* An aliased copy would retain the context, root, and index a second time and then
+     * overwrite the only handles that could release the extra references. */
+    if (!tds_tungsten_association_valid(source) || destination == NULL || destination == source) {
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
     }
 
@@ -2064,7 +2087,7 @@ tds_tungsten_status tds_tungsten_association_set_item(
         return status;
     }
 
-    return tds_tungsten_association_take_parts(association->context, new_root, new_index, result);
+    return tds_tungsten_association_take_parts(association, new_root, new_index, result);
 }
 
 tds_tungsten_status tds_tungsten_association_set_items(
@@ -2110,7 +2133,10 @@ tds_tungsten_status tds_tungsten_association_join(
     const tds_tungsten_association* right,
     tds_tungsten_association* result)
 {
-    if (!tds_tungsten_association_valid(left) || !tds_tungsten_association_valid(right) || result == NULL) {
+    /* The result must not alias either operand: publishing overwrites result in place
+     * (see tds_tungsten_association_take_parts). */
+    if (!tds_tungsten_association_valid(left) || !tds_tungsten_association_valid(right) || result == NULL ||
+        result == left || result == right) {
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
     }
 
@@ -2347,7 +2373,7 @@ tds_tungsten_status tds_tungsten_association_try_remove(
     if (removed != NULL) {
         *removed = true;
     }
-    return tds_tungsten_association_take_parts(association->context, root, index, result);
+    return tds_tungsten_association_take_parts(association, root, index, result);
 }
 
 tds_tungsten_status tds_tungsten_association_remove(
@@ -2395,7 +2421,10 @@ tds_tungsten_status tds_tungsten_association_key_take(
     size_t count,
     tds_tungsten_association* result)
 {
-    if (!tds_tungsten_association_valid(association) || result == NULL || (keys == NULL && count != 0)) {
+    /* copy_empty_like overwrites result's root and index in place, so an aliased result
+     * would leak the source's previous version before the take loop reads it. */
+    if (!tds_tungsten_association_valid(association) || result == NULL || result == association ||
+        (keys == NULL && count != 0)) {
         return TDS_TUNGSTEN_INVALID_ARGUMENT;
     }
 
@@ -2471,7 +2500,7 @@ tds_tungsten_status tds_tungsten_association_remove_at(
         return status;
     }
 
-    return tds_tungsten_association_take_parts(association->context, root, index_side, result);
+    return tds_tungsten_association_take_parts(association, root, index_side, result);
 }
 
 static tds_tungsten_status tds_tungsten_index_remove_tree(
@@ -2558,7 +2587,7 @@ tds_tungsten_status tds_tungsten_association_slice(
         return status;
     }
 
-    return tds_tungsten_association_take_parts(association->context, kept, index_side, result);
+    return tds_tungsten_association_take_parts(association, kept, index_side, result);
 }
 
 tds_tungsten_status tds_tungsten_association_take(
@@ -2623,7 +2652,7 @@ tds_tungsten_status tds_tungsten_association_reverse(
         return status;
     }
 
-    return tds_tungsten_association_take_parts(association->context, root, index_side, result);
+    return tds_tungsten_association_take_parts(association, root, index_side, result);
 }
 
 static int tds_tungsten_compare_views(
@@ -2716,7 +2745,7 @@ static tds_tungsten_status tds_tungsten_association_sort_core(
         return status;
     }
 
-    return tds_tungsten_association_take_parts(association->context, root, index_side, result);
+    return tds_tungsten_association_take_parts(association, root, index_side, result);
 }
 
 tds_tungsten_status tds_tungsten_association_key_sort(

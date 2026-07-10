@@ -27,6 +27,15 @@ Tungsten Association ordering rules, custom key policies, relabel stress, and de
 histories against an ordered-pair model, plus retained-snapshot reader threads on Windows with a
 sequential fallback on other C targets.
 
+## Out-parameter aliasing
+
+Unlike the C HAMT (whose operations support `result` aliasing the source), every Tungsten list and
+association operation requires `result` to be a distinct struct: aliasing the source would overwrite the
+caller's only handle before the source is fully consumed, leaking the previous version. All entry points
+reject `result == source` (and `result == right` for two-operand forms) with
+`TDS_TUNGSTEN_INVALID_ARGUMENT`. Use the operation into a temporary plus `tds_tungsten_list_move` /
+`tds_tungsten_association_move` for update-in-place call patterns.
+
 ## Concurrency
 
 Already-retained `tds_tungsten_list` and `tds_tungsten_association` snapshots may be read concurrently when
