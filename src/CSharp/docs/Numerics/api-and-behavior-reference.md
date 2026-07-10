@@ -64,6 +64,12 @@ All width pairs (signed + unsigned) are expected to support:
 - Bitwise operators (`&`, `|`, `^`, `~`) and width-constrained shifts/rotations.
 - Parse and format APIs for UTF-16 and UTF-8 pathways.
 - Conversion operators to/from primitive integer types and `BigInteger`.
+- `IParsable<T>`, `ISpanParsable<T>`, `IMinMaxValue<T>`, and `IUtf8SpanFormattable` integration.
+
+`INumber<T>` and `IBinaryInteger<T>` are deliberately outside the current contract. Their static-abstract member
+graphs include generic cross-type creation/conversion and endian read/write operations that are not safely supplied
+by the existing handwritten width family. Add them only together with a shared/generated implementation and a
+complete BCL differential suite.
 
 ## 2a) Sparse non-negative integer type
 
@@ -101,7 +107,8 @@ No API should introduce width drift or variable-length storage semantics.
 
 ### Checked/unchecked invariants
 
-- Unchecked arithmetic must wrap modulo `2^N`.
+- Unchecked arithmetic must wrap modulo `2^N`, except that signed `MinValue / -1` and `MinValue % -1` throw
+  `OverflowException` in checked and unchecked contexts, matching `Int128`.
 - Checked arithmetic must throw `OverflowException` when result does not fit the target type.
 - Checked narrowing conversions must enforce destination range limits.
 
@@ -118,9 +125,15 @@ For signed types:
 - `Parse` and `TryParse` families must remain behaviorally aligned for success/failure classification (`TryParse == false` for any `Parse` exception path).
 - UTF-8 parse/format pathways must match UTF-16 semantics for equivalent textual data. Fixed-width integer
   UTF-8 parsers transcode through temporary spans rather than allocating intermediate strings.
-- Culture-aware sign token handling and supported `NumberStyles` flag validation are centralized through shared
-  helper logic. Decimal parsing supports leading/trailing whitespace and leading signs; hexadecimal parsing
-  requires `AllowHexSpecifier` and supports leading/trailing whitespace when the corresponding flags are set.
+- Supported `NumberStyles` validation is centralized through shared helper logic. Decimal parsing accepts the
+  `NumberStyles.Number` family: leading/trailing whitespace and signs, trailing signs, culture-specific group
+  separators, and decimal points whose fractional digits are all zero. Hexadecimal parsing requires
+  `AllowHexSpecifier` and supports leading/trailing whitespace when the corresponding flags are set.
+- Formatting supports `G`/`D`/`N`/`X` (and lowercase forms), including minimum-digit or fractional precision
+  components such as `D5`, `N0`, and `X8`. One-character `G`/`D` stays on the specialized limb formatter;
+  precision/grouping cases use the `BigInteger` interop boundary for BCL-compatible standard formatting.
+- `GetShortestBitLength()` and `GetByteCount()` follow integral-interface conventions: the former reports zero for
+  zero and otherwise the BCL signed/unsigned shortest bit length; the latter reports the fixed 32/64/128-byte width.
 
 ### Byte conversion invariants (`BitConverterEx`)
 

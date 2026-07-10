@@ -33,6 +33,8 @@ This test project is organized by **bit width** and **signedness quadrant** so c
 - `MixedScenarios/`
   - Tests that intentionally span quadrants (dynamic runtime binding, cross-type comparison contracts, edge behaviors exercised across multiple types, and broad API-surface coverage).
   - `SparseIntegerTests.cs` covers the sparse non-negative integer representation, including conversion, comparison, sparse powers, arithmetic, and invalid inputs.
+  - `WideIntegerNumberStylesTests.cs` covers style combinations, precision/grouping formats, redundant hexadecimal
+    zeroes, and generic parsing/min-max interface conformance across all six fixed-width types.
   - Mixed tests are explicitly labeled in class/method names and XML docs so asymmetry is intentional and discoverable.
 - `Infrastructure/`
   - Shared deterministic test helpers (random generators, normalization helpers, and reference-model utilities).

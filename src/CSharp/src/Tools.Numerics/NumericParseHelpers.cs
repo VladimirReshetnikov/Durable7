@@ -26,10 +26,7 @@ internal static class NumericParseHelpers
 
     private const int StackCharBufferLimit = 256;
 
-    private const NumberStyles SupportedDecimalStyles =
-        NumberStyles.AllowLeadingWhite |
-        NumberStyles.AllowTrailingWhite |
-        NumberStyles.AllowLeadingSign;
+    private const NumberStyles SupportedDecimalStyles = NumberStyles.Number;
 
     private const NumberStyles SupportedHexStyles =
         NumberStyles.AllowLeadingWhite |

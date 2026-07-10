@@ -46,7 +46,11 @@ public readonly struct Int512 :
     IComparable,
     IComparable<Int512>,
     IEquatable<Int512>,
-    ISpanFormattable
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IParsable<Int512>,
+    ISpanParsable<Int512>,
+    IMinMaxValue<Int512>
 {
     /// <summary>Total bit width of the integer representation.</summary>
     private const int Bits = 512;
@@ -109,6 +113,21 @@ public readonly struct Int512 :
 
     /// <summary>Represents the largest possible <see cref="Int512"/> value.</summary>
     public static readonly Int512 MaxValue = new((UInt256)Int256.MaxValue, UInt256.MaxValue);
+
+    static Int512 IMinMaxValue<Int512>.MinValue => MinValue;
+
+    static Int512 IMinMaxValue<Int512>.MaxValue => MaxValue;
+
+    static Int512 IParsable<Int512>.Parse(string s, IFormatProvider? provider) => Parse(s, provider);
+
+    static bool IParsable<Int512>.TryParse(string? s, IFormatProvider? provider, out Int512 result) =>
+        TryParse(s, NumberStyles.Integer, provider, out result);
+
+    static Int512 ISpanParsable<Int512>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) =>
+        Parse(s, NumberStyles.Integer, provider);
+
+    static bool ISpanParsable<Int512>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Int512 result) =>
+        TryParse(s, NumberStyles.Integer, provider, out result);
 
     /// <summary>Gets a value indicating whether the current value is equal to zero.</summary>
     public bool IsZero => _upper == 0 && _lower == 0;
@@ -915,7 +934,8 @@ public readonly struct Int512 :
             : format[0] switch
             {
                 'G' or 'g' or 'D' or 'd' when format.Length == 1 => FormatDecimal(value, provider),
-                'X' or 'x' when format.Length == 1 => ((UInt512)value).ToString(format, provider),
+                'G' or 'g' or 'D' or 'd' or 'N' or 'n' => value.ToBigInteger().ToString(format, provider),
+                'X' or 'x' => ((UInt512)value).ToString(format, provider),
                 _ => throw new FormatException()
             };
 
@@ -1004,48 +1024,17 @@ public readonly struct Int512 :
         overflow = false;
         if ((style & NumberStyles.AllowHexSpecifier) != 0)
             return TryParseHex(text, style, out value, out overflow);
-        if (!NumericParseHelpers.TryNormalizeDecimalText(text, style, out text))
+        if (!NumericParseHelpers.TryNormalizeDecimalText(text, style, out text) ||
+            !BigInteger.TryParse(text, style, provider, out BigInteger parsed))
             return false;
 
-        if (text.IsEmpty) return false;
-        bool neg = false;
-
-        if ((style & NumberStyles.AllowLeadingSign) != 0 &&
-            NumericParseHelpers.TryStripLeadingSign(
-                text,
-                NumberFormatInfo.GetInstance(provider),
-                out ReadOnlySpan<char> unsigned,
-                out bool isNegative))
-        {
-            neg = isNegative;
-            text = unsigned;
-        }
-
-        if (text.IsEmpty) return false;
-        if (!UInt512.TryParse(text, NumberStyles.None, provider, out UInt512 u))
-        {
-            overflow = IsAllDecimalDigits(text);
-            return false;
-        }
-
-        if (!neg)
-        {
-            if (u > (UInt512)MaxValue)
-            {
-                overflow = true;
-                return false;
-            }
-            value = (Int512)u;
-            return true;
-        }
-
-        if (u > (UInt512)MaxValue + UInt512.One)
+        if (parsed < s_bigMinValue || parsed > s_bigMaxValue)
         {
             overflow = true;
             return false;
         }
 
-        value = -(Int512)u;
+        value = (Int512)parsed;
         return true;
     }
 

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Numerics;
 using System.Reflection;
 using Xunit;
 
@@ -42,18 +43,50 @@ public sealed class WideIntegerNumberStylesTests
     }
 
     /// <summary>
-    /// Verifies unsupported style flags and disallowed syntactic elements are rejected.
+    /// Verifies unsupported style flags and disallowed syntactic elements are rejected while thousands separators
+    /// and an all-zero fractional component follow <see cref="NumberStyles.Number"/> semantics.
     /// </summary>
     /// <param name="type">The fixed-width integer type to validate.</param>
     [Theory]
     [MemberData(nameof(WideIntegerTypes))]
-    public void TryParse_RejectsDisallowedStyleElements(Type type)
+    public void TryParse_HonorsNumberStylesAndRejectsDisallowedElements(Type type)
     {
         Assert.False(TryParse(type, "+42", NumberStyles.None, out _));
         Assert.False(TryParse(type, " +42 ", NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite, out _));
         Assert.False(TryParse(type, " 2A ", NumberStyles.AllowHexSpecifier, out _));
         Assert.False(TryParse(type, "+2A", NumberStyles.HexNumber, out _));
-        Assert.False(TryParse(type, "1,000", NumberStyles.Integer | NumberStyles.AllowThousands, out _));
+        Assert.True(TryParse(type, "1,000", NumberStyles.Integer | NumberStyles.AllowThousands, out object? thousands));
+        Assert.Equal("1000", thousands!.ToString());
+        Assert.True(TryParse(type, "1,234.00", NumberStyles.Number, out object? number));
+        Assert.Equal("1234", number!.ToString());
+        Assert.False(TryParse(type, "1,234.50", NumberStyles.Number, out _));
+    }
+
+    /// <summary>Verifies precision and numeric-grouping format specifiers across all six wide types.</summary>
+    /// <param name="type">The fixed-width integer type to validate.</param>
+    [Theory]
+    [MemberData(nameof(WideIntegerTypes))]
+    public void Formatting_AcceptsPrecisionAndNumericSpecifiers(Type type)
+    {
+        object value = Parse(type, "1234", NumberStyles.Integer);
+        MethodInfo? method = type.GetMethod("ToString", new[] { typeof(string), typeof(IFormatProvider) });
+        Assert.NotNull(method);
+
+        Assert.Equal("000004D2", method.Invoke(value, new object?[] { "X8", CultureInfo.InvariantCulture }));
+        Assert.Equal("01234", method.Invoke(value, new object?[] { "D5", CultureInfo.InvariantCulture }));
+        Assert.Equal("1,234", method.Invoke(value, new object?[] { "N0", CultureInfo.InvariantCulture }));
+    }
+
+    /// <summary>Verifies the tractable generic parsing and min/max interface cluster on every wide type.</summary>
+    [Fact]
+    public void GenericParsingAndMinMaxInterfaces_AreImplementedAcrossWidths()
+    {
+        AssertGenericInterfaces<UInt256>();
+        AssertGenericInterfaces<UInt512>();
+        AssertGenericInterfaces<UInt1024>();
+        AssertGenericInterfaces<Int256>();
+        AssertGenericInterfaces<Int512>();
+        AssertGenericInterfaces<Int1024>();
     }
 
     /// <summary>
@@ -135,5 +168,16 @@ public sealed class WideIntegerNumberStylesTests
         var parsed = (bool)method.Invoke(null, arguments)!;
         value = arguments[3];
         return parsed;
+    }
+
+    private static void AssertGenericInterfaces<T>()
+        where T : IParsable<T>, ISpanParsable<T>, IMinMaxValue<T>
+    {
+        T fromString = T.Parse("42", CultureInfo.InvariantCulture);
+        T fromSpan = T.Parse("42".AsSpan(), CultureInfo.InvariantCulture);
+        Assert.Equal(fromString, fromSpan);
+        Assert.True(T.TryParse("43", CultureInfo.InvariantCulture, out _));
+        Assert.True(T.TryParse("44".AsSpan(), CultureInfo.InvariantCulture, out _));
+        Assert.NotEqual(T.MinValue, T.MaxValue);
     }
 }

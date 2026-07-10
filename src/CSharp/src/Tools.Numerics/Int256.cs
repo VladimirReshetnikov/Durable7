@@ -46,7 +46,11 @@ public readonly struct Int256 :
     IComparable,
     IComparable<Int256>,
     IEquatable<Int256>,
-    ISpanFormattable
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IParsable<Int256>,
+    ISpanParsable<Int256>,
+    IMinMaxValue<Int256>
 {
     /// <summary>Total bit width of the integer representation.</summary>
     private const int Bits = 256;
@@ -109,6 +113,21 @@ public readonly struct Int256 :
 
     /// <summary>Represents the largest possible <see cref="Int256"/> value.</summary>
     public static readonly Int256 MaxValue = new((UInt128)Int128.MaxValue, UInt128.MaxValue);
+
+    static Int256 IMinMaxValue<Int256>.MinValue => MinValue;
+
+    static Int256 IMinMaxValue<Int256>.MaxValue => MaxValue;
+
+    static Int256 IParsable<Int256>.Parse(string s, IFormatProvider? provider) => Parse(s, provider);
+
+    static bool IParsable<Int256>.TryParse(string? s, IFormatProvider? provider, out Int256 result) =>
+        TryParse(s, NumberStyles.Integer, provider, out result);
+
+    static Int256 ISpanParsable<Int256>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) =>
+        Parse(s, NumberStyles.Integer, provider);
+
+    static bool ISpanParsable<Int256>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Int256 result) =>
+        TryParse(s, NumberStyles.Integer, provider, out result);
 
     /// <summary>Gets a value indicating whether the current value is equal to zero.</summary>
     public bool IsZero => _upper == 0 && _lower == 0;
@@ -894,7 +913,8 @@ public readonly struct Int256 :
             : format[0] switch
             {
                 'G' or 'g' or 'D' or 'd' when format.Length == 1 => FormatDecimal(value, provider),
-                'X' or 'x' when format.Length == 1 => ((UInt256)value).ToString(format, provider),
+                'G' or 'g' or 'D' or 'd' or 'N' or 'n' => value.ToBigInteger().ToString(format, provider),
+                'X' or 'x' => ((UInt256)value).ToString(format, provider),
                 _ => throw new FormatException()
             };
 
@@ -983,48 +1003,17 @@ public readonly struct Int256 :
         overflow = false;
         if ((style & NumberStyles.AllowHexSpecifier) != 0)
             return TryParseHex(text, style, out value, out overflow);
-        if (!NumericParseHelpers.TryNormalizeDecimalText(text, style, out text))
+        if (!NumericParseHelpers.TryNormalizeDecimalText(text, style, out text) ||
+            !BigInteger.TryParse(text, style, provider, out BigInteger parsed))
             return false;
 
-        if (text.IsEmpty) return false;
-        bool neg = false;
-
-        if ((style & NumberStyles.AllowLeadingSign) != 0 &&
-            NumericParseHelpers.TryStripLeadingSign(
-                text,
-                NumberFormatInfo.GetInstance(provider),
-                out ReadOnlySpan<char> unsigned,
-                out bool isNegative))
-        {
-            neg = isNegative;
-            text = unsigned;
-        }
-
-        if (text.IsEmpty) return false;
-        if (!UInt256.TryParse(text, NumberStyles.None, provider, out UInt256 u))
-        {
-            overflow = IsAllDecimalDigits(text);
-            return false;
-        }
-
-        if (!neg)
-        {
-            if (u > (UInt256)MaxValue)
-            {
-                overflow = true;
-                return false;
-            }
-            value = (Int256)u;
-            return true;
-        }
-
-        if (u > (UInt256)MaxValue + UInt256.One)
+        if (parsed < s_bigMinValue || parsed > s_bigMaxValue)
         {
             overflow = true;
             return false;
         }
 
-        value = -(Int256)u;
+        value = (Int256)parsed;
         return true;
     }
 

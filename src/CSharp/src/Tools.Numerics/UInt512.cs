@@ -39,7 +39,11 @@ public readonly struct UInt512 :
     IComparable,
     IComparable<UInt512>,
     IEquatable<UInt512>,
-    ISpanFormattable
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IParsable<UInt512>,
+    ISpanParsable<UInt512>,
+    IMinMaxValue<UInt512>
 {
     /// <summary>Total bit width of the unsigned representation.</summary>
     private const int Bits = 512;
@@ -86,6 +90,21 @@ public readonly struct UInt512 :
 
     /// <summary>Represents the largest possible <see cref="UInt512"/> value.</summary>
     public static readonly UInt512 MaxValue = new(UInt256.MaxValue, UInt256.MaxValue);
+
+    static UInt512 IMinMaxValue<UInt512>.MinValue => MinValue;
+
+    static UInt512 IMinMaxValue<UInt512>.MaxValue => MaxValue;
+
+    static UInt512 IParsable<UInt512>.Parse(string s, IFormatProvider? provider) => Parse(s, provider);
+
+    static bool IParsable<UInt512>.TryParse(string? s, IFormatProvider? provider, out UInt512 result) =>
+        TryParse(s, NumberStyles.Integer, provider, out result);
+
+    static UInt512 ISpanParsable<UInt512>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) =>
+        Parse(s, NumberStyles.Integer, provider);
+
+    static bool ISpanParsable<UInt512>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out UInt512 result) =>
+        TryParse(s, NumberStyles.Integer, provider, out result);
 
     /// <summary>Gets a value indicating whether the current value is equal to zero.</summary>
     public bool IsZero => _upper == 0 && _lower == 0;
@@ -695,7 +714,7 @@ public readonly struct UInt512 :
 
     /// <summary>
     /// Gets the length, in bits, of the shortest unsigned binary representation of the current value.
-    /// Zero has a shortest bit length of zero, matching <see cref="UInt128.GetShortestBitLength"/>.
+    /// Zero has a shortest bit length of zero, matching the <see cref="UInt128"/> integral convention.
     /// </summary>
     public int GetShortestBitLength() => IsZero ? 0 : Bits - LeadingZeroCount(this);
 
@@ -728,7 +747,8 @@ public readonly struct UInt512 :
         return spec switch
         {
             'G' or 'g' or 'D' or 'd' when format.Length == 1 => FormatDecimal(value, provider),
-            'X' or 'x' when format.Length == 1 => FormatHex(value, spec == 'x'),
+            'G' or 'g' or 'D' or 'd' or 'N' or 'n' => value.ToBigInteger().ToString(format, provider),
+            'X' or 'x' => NumericFormatHelpers.ApplyHexPrecision(FormatHex(value, spec == 'x'), format),
             _ => throw new FormatException()
         };
     }
@@ -871,43 +891,17 @@ public readonly struct UInt512 :
         if ((style & NumberStyles.AllowHexSpecifier) != 0)
             return TryParseHex(text, style, out value, out overflow);
 
-        if (!NumericParseHelpers.TryNormalizeDecimalText(text, style, out text))
+        if (!NumericParseHelpers.TryNormalizeDecimalText(text, style, out text) ||
+            !BigInteger.TryParse(text, style, provider, out BigInteger parsed))
             return false;
 
-        NumberFormatInfo numberFormat = NumberFormatInfo.GetInstance(provider);
-        if (text.IsEmpty) return false;
-
-        bool isNegative = false;
-        if ((style & NumberStyles.AllowLeadingSign) != 0 &&
-            NumericParseHelpers.TryStripLeadingSign(text, numberFormat, out ReadOnlySpan<char> unsigned, out isNegative))
-        {
-            text = unsigned;
-        }
-
-        if (text.IsEmpty) return false;
-
-        UInt512 result = Zero;
-        foreach (char ch in text)
-        {
-            if ((uint)(ch - '0') > 9) return false;
-            UInt512 digit = new UInt512(0, (ulong)(ch - '0'));
-            UInt512 product = Multiply(result, new UInt512(0, 10), out overflow);
-            if (overflow) return false;
-            result = product + digit;
-            if (result < product)
-            {
-                overflow = true;
-                return false;
-            }
-        }
-
-        if (isNegative && !result.IsZero)
+        if (parsed.Sign < 0 || parsed > s_bigMaxValue)
         {
             overflow = true;
             return false;
         }
 
-        value = result;
+        value = (UInt512)parsed;
         return true;
     }
 

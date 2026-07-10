@@ -545,7 +545,7 @@ public sealed class UInt1024Tests
         Assert.Equal("1234567890ABCDEF1234567890ABCDEF", mixed.ToString("X", CultureInfo.InvariantCulture));
         Assert.Equal("1234567890abcdef1234567890abcdef", mixed.ToString("x", CultureInfo.InvariantCulture));
 
-        Assert.Throws<FormatException>(() => mixed.ToString("X2", CultureInfo.InvariantCulture));
+        Assert.Equal(mixed.ToString("X", CultureInfo.InvariantCulture), mixed.ToString("X2", CultureInfo.InvariantCulture));
     }
 
     /// <summary>

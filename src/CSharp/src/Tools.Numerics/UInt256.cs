@@ -39,7 +39,11 @@ public readonly struct UInt256 :
     IComparable,
     IComparable<UInt256>,
     IEquatable<UInt256>,
-    ISpanFormattable
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IParsable<UInt256>,
+    ISpanParsable<UInt256>,
+    IMinMaxValue<UInt256>
 {
     /// <summary>Total bit width of the unsigned representation.</summary>
     private const int Bits = 256;
@@ -86,6 +90,21 @@ public readonly struct UInt256 :
 
     /// <summary>Represents the largest possible <see cref="UInt256"/> value.</summary>
     public static readonly UInt256 MaxValue = new(UInt128.MaxValue, UInt128.MaxValue);
+
+    static UInt256 IMinMaxValue<UInt256>.MinValue => MinValue;
+
+    static UInt256 IMinMaxValue<UInt256>.MaxValue => MaxValue;
+
+    static UInt256 IParsable<UInt256>.Parse(string s, IFormatProvider? provider) => Parse(s, provider);
+
+    static bool IParsable<UInt256>.TryParse(string? s, IFormatProvider? provider, out UInt256 result) =>
+        TryParse(s, NumberStyles.Integer, provider, out result);
+
+    static UInt256 ISpanParsable<UInt256>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) =>
+        Parse(s, NumberStyles.Integer, provider);
+
+    static bool ISpanParsable<UInt256>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out UInt256 result) =>
+        TryParse(s, NumberStyles.Integer, provider, out result);
 
     /// <summary>Gets a value indicating whether the current value is equal to zero.</summary>
     public bool IsZero => _upper == 0 && _lower == 0;
@@ -695,7 +714,7 @@ public readonly struct UInt256 :
 
     /// <summary>
     /// Gets the length, in bits, of the shortest unsigned binary representation of the current value.
-    /// Zero has a shortest bit length of zero, matching <see cref="UInt128.GetShortestBitLength"/>.
+    /// Zero has a shortest bit length of zero, matching the <see cref="UInt128"/> integral convention.
     /// </summary>
     public int GetShortestBitLength() => IsZero ? 0 : Bits - LeadingZeroCount(this);
 
@@ -728,7 +747,8 @@ public readonly struct UInt256 :
         return spec switch
         {
             'G' or 'g' or 'D' or 'd' when format.Length == 1 => FormatDecimal(value, provider),
-            'X' or 'x' when format.Length == 1 => FormatHex(value, spec == 'x'),
+            'G' or 'g' or 'D' or 'd' or 'N' or 'n' => value.ToBigInteger().ToString(format, provider),
+            'X' or 'x' => NumericFormatHelpers.ApplyHexPrecision(FormatHex(value, spec == 'x'), format),
             _ => throw new FormatException()
         };
     }
@@ -871,43 +891,17 @@ public readonly struct UInt256 :
         if ((style & NumberStyles.AllowHexSpecifier) != 0)
             return TryParseHex(text, style, out value, out overflow);
 
-        if (!NumericParseHelpers.TryNormalizeDecimalText(text, style, out text))
+        if (!NumericParseHelpers.TryNormalizeDecimalText(text, style, out text) ||
+            !BigInteger.TryParse(text, style, provider, out BigInteger parsed))
             return false;
 
-        NumberFormatInfo numberFormat = NumberFormatInfo.GetInstance(provider);
-        if (text.IsEmpty) return false;
-
-        bool isNegative = false;
-        if ((style & NumberStyles.AllowLeadingSign) != 0 &&
-            NumericParseHelpers.TryStripLeadingSign(text, numberFormat, out ReadOnlySpan<char> unsigned, out isNegative))
-        {
-            text = unsigned;
-        }
-
-        if (text.IsEmpty) return false;
-
-        UInt256 result = Zero;
-        foreach (char ch in text)
-        {
-            if ((uint)(ch - '0') > 9) return false;
-            UInt256 digit = new UInt256(0, (ulong)(ch - '0'));
-            UInt256 product = Multiply(result, new UInt256(0, 10), out overflow);
-            if (overflow) return false;
-            result = product + digit;
-            if (result < product)
-            {
-                overflow = true;
-                return false;
-            }
-        }
-
-        if (isNegative && !result.IsZero)
+        if (parsed.Sign < 0 || parsed > s_bigMaxValue)
         {
             overflow = true;
             return false;
         }
 
-        value = result;
+        value = (UInt256)parsed;
         return true;
     }
 

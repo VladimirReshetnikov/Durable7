@@ -79,15 +79,22 @@ This keeps carry/borrow and shift behavior explicit while avoiding arbitrary-pre
 
 ### Arithmetic and overflow
 
-- Unchecked arithmetic wraps with modulo-`2^N` semantics.
+- Unchecked arithmetic wraps with modulo-`2^N` semantics except for the CLR/BCL-mandated signed
+  `MinValue / -1` and `MinValue % -1` overflow cases, which throw in every context.
 - Checked arithmetic throws on overflow.
 - Signed types maintain two's-complement behavior for all bitwise and shift operations.
 
 ### Parsing and formatting
 
 - `Parse` / `TryParse` overloads are available for UTF-16 (`string`, `ReadOnlySpan<char>`) and UTF-8 (`ReadOnlySpan<byte>`) inputs.
-- Formatting supports `ToString`, `TryFormat`, and UTF-8 formatting paths.
-- Parsing behavior is culture-aware for sign token handling where applicable.
+- Formatting supports `ToString`, `TryFormat`, and UTF-8 formatting paths, including `G`, `D`, `N`, and `X`
+  standard formats with precision specifiers such as `D5`, `N0`, and `X8`.
+- Decimal parsing supports the `NumberStyles.Number` flag family, including culture-aware signs, group separators,
+  and an all-zero fractional component; hexadecimal parsing preserves fixed-width two's-complement semantics.
+- All six types implement `IParsable<T>`, `ISpanParsable<T>`, `IMinMaxValue<T>`, and
+  `IUtf8SpanFormattable`. They intentionally do not yet claim `INumber<T>` or `IBinaryInteger<T>`: those interfaces
+  require a substantially larger cross-type conversion and endian-operation surface that should be introduced from
+  shared/generated code rather than six drifting handwritten implementations.
 
 ### Bit-centric helpers
 
@@ -98,6 +105,10 @@ Wide-integer types expose width-aware helpers including:
 - `PopCount`
 - `RotateLeft` / `RotateRight`
 - `Log2` (on unsigned and applicable signed paths)
+
+`Log2(0)` returns zero; signed `Log2` rejects negative inputs. `GetShortestBitLength()` follows the
+`Int128`/`UInt128` convention (zero is zero bits), while `GetByteCount()` reports the fixed storage width
+(32, 64, or 128 bytes).
 
 ### Conversion model
 

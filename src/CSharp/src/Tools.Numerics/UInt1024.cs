@@ -39,7 +39,11 @@ public readonly struct UInt1024 :
     IComparable,
     IComparable<UInt1024>,
     IEquatable<UInt1024>,
-    ISpanFormattable
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IParsable<UInt1024>,
+    ISpanParsable<UInt1024>,
+    IMinMaxValue<UInt1024>
 {
     /// <summary>Total bit width of the unsigned representation.</summary>
     private const int Bits = 1024;
@@ -86,6 +90,21 @@ public readonly struct UInt1024 :
 
     /// <summary>Represents the largest possible <see cref="UInt1024"/> value.</summary>
     public static readonly UInt1024 MaxValue = new(UInt512.MaxValue, UInt512.MaxValue);
+
+    static UInt1024 IMinMaxValue<UInt1024>.MinValue => MinValue;
+
+    static UInt1024 IMinMaxValue<UInt1024>.MaxValue => MaxValue;
+
+    static UInt1024 IParsable<UInt1024>.Parse(string s, IFormatProvider? provider) => Parse(s, provider);
+
+    static bool IParsable<UInt1024>.TryParse(string? s, IFormatProvider? provider, out UInt1024 result) =>
+        TryParse(s, NumberStyles.Integer, provider, out result);
+
+    static UInt1024 ISpanParsable<UInt1024>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) =>
+        Parse(s, NumberStyles.Integer, provider);
+
+    static bool ISpanParsable<UInt1024>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out UInt1024 result) =>
+        TryParse(s, NumberStyles.Integer, provider, out result);
 
     /// <summary>Gets a value indicating whether the current value is equal to zero.</summary>
     public bool IsZero => _upper == 0 && _lower == 0;
@@ -697,7 +716,7 @@ public readonly struct UInt1024 :
 
     /// <summary>
     /// Gets the length, in bits, of the shortest unsigned binary representation of the current value.
-    /// Zero has a shortest bit length of zero, matching <see cref="UInt128.GetShortestBitLength"/>.
+    /// Zero has a shortest bit length of zero, matching the <see cref="UInt128"/> integral convention.
     /// </summary>
     public int GetShortestBitLength() => IsZero ? 0 : Bits - LeadingZeroCount(this);
 
@@ -730,7 +749,8 @@ public readonly struct UInt1024 :
         return spec switch
         {
             'G' or 'g' or 'D' or 'd' when format.Length == 1 => FormatDecimal(value, provider),
-            'X' or 'x' when format.Length == 1 => FormatHex(value, spec == 'x'),
+            'G' or 'g' or 'D' or 'd' or 'N' or 'n' => value.ToBigInteger().ToString(format, provider),
+            'X' or 'x' => NumericFormatHelpers.ApplyHexPrecision(FormatHex(value, spec == 'x'), format),
             _ => throw new FormatException()
         };
     }
@@ -873,43 +893,17 @@ public readonly struct UInt1024 :
         if ((style & NumberStyles.AllowHexSpecifier) != 0)
             return TryParseHex(text, style, out value, out overflow);
 
-        if (!NumericParseHelpers.TryNormalizeDecimalText(text, style, out text))
+        if (!NumericParseHelpers.TryNormalizeDecimalText(text, style, out text) ||
+            !BigInteger.TryParse(text, style, provider, out BigInteger parsed))
             return false;
 
-        NumberFormatInfo numberFormat = NumberFormatInfo.GetInstance(provider);
-        if (text.IsEmpty) return false;
-
-        bool isNegative = false;
-        if ((style & NumberStyles.AllowLeadingSign) != 0 &&
-            NumericParseHelpers.TryStripLeadingSign(text, numberFormat, out ReadOnlySpan<char> unsigned, out isNegative))
-        {
-            text = unsigned;
-        }
-
-        if (text.IsEmpty) return false;
-
-        UInt1024 result = Zero;
-        foreach (char ch in text)
-        {
-            if ((uint)(ch - '0') > 9) return false;
-            UInt1024 digit = new UInt1024(0, (ulong)(ch - '0'));
-            UInt1024 product = Multiply(result, new UInt1024(0, 10), out overflow);
-            if (overflow) return false;
-            result = product + digit;
-            if (result < product)
-            {
-                overflow = true;
-                return false;
-            }
-        }
-
-        if (isNegative && !result.IsZero)
+        if (parsed.Sign < 0 || parsed > s_bigMaxValue)
         {
             overflow = true;
             return false;
         }
 
-        value = result;
+        value = (UInt1024)parsed;
         return true;
     }
 
