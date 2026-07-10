@@ -101,6 +101,13 @@ public readonly struct IntervalMeasure<T> : IMeasure<Interval<T>, IntervalAnnota
 /// lazy-memoized measured finger tree and hold under fully persistent branching histories.
 /// </para>
 /// <para>Instances are immutable and safe for concurrent reads.</para>
+/// <para>
+/// Unlike the other sorted facades, this tree does not accept a runtime <see cref="IComparer{T}"/>: the
+/// maximum-high component of <see cref="IntervalMeasure{T}"/> is combined inside the shared measured tree,
+/// where no per-instance comparer is available, so ordering is fixed to <see cref="Comparer{T}.Default"/>.
+/// Supporting a custom comparer would require threading it through the measure itself; ports should either
+/// replicate this asymmetry or thread the comparer consistently, not "fix" it ad hoc.
+/// </para>
 /// </remarks>
 /// <example>
 /// <code>
@@ -242,7 +249,25 @@ public sealed class IntervalTree<T> : IEnumerable<Interval<T>>
     /// <summary>Counts the intervals overlapping <paramref name="query"/>. O(k log n) for k results.</summary>
     /// <param name="query">The query interval.</param>
     /// <returns>The number of overlapping intervals.</returns>
-    public int CountOverlaps(Interval<T> query) => FindOverlaps(query).Count;
+    public int CountOverlaps(Interval<T> query)
+    {
+        var comparer = Comparer<T>.Default;
+        var count = 0;
+
+        // Same walk as FindOverlaps, counting hits without materializing a result list.
+        var (candidates, _) = _tree.Split(new LastLowAbovePredicate<T>(comparer, query.High));
+        while (candidates.TrySplitFind(
+            new MaxHighAtLeastPredicate<T>(comparer, query.Low),
+            out _,
+            out _,
+            out var after))
+        {
+            count++;
+            candidates = after;
+        }
+
+        return count;
+    }
 
     /// <summary>
     /// Determines whether an interval matching <paramref name="interval"/> is present, where "matching" means

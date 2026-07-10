@@ -401,6 +401,17 @@ public sealed partial class SortedSet<T> : IReadOnlyCollection<T>
     private SortedSet<T> Merge(SortedSet<T> other, bool emitOnlyThis, bool emitBoth, bool emitOnlyOther)
     {
         ArgumentNullException.ThrowIfNull(other);
+
+        // Empty-operand fast paths. Beyond skipping the O(n + m) merge, returning the
+        // non-empty operand keeps `sets.Aggregate(SortedSet<T>.Empty, (a, s) => a.Union(s))`
+        // sound for custom comparers: merging under the empty accumulator would otherwise
+        // produce a set ordered by the other operand's comparer but stamped with the
+        // accumulator's, corrupting every later query.
+        if (IsEmpty)
+            return emitOnlyOther ? other : this;
+        if (other.IsEmpty)
+            return emitOnlyThis ? this : Wrap(FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>>.Empty);
+
         var result = FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>>.Empty;
         using var thisItems = GetEnumerator();
         using var otherItems = other.GetEnumerator();

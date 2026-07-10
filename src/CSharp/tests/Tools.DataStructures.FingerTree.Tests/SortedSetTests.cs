@@ -108,6 +108,33 @@ public sealed class SortedSetTests
         }
     }
 
+    /// <summary>
+    /// Verifies the empty-operand fast paths of the set algebra: a union starting from the default-comparer
+    /// empty set (the natural Aggregate seed) adopts the non-empty operand — including its comparer — instead
+    /// of merging under the seed's comparer and producing a set whose stored comparer disagrees with its order.
+    /// </summary>
+    [Fact]
+    public void SetAlgebra_EmptyOperandsPreserveTheUsefulComparer()
+    {
+        var descending = Comparer<int>.Create((x, y) => y.CompareTo(x));
+        var custom = FtSortedSet.CreateRange(new[] { 1, 5, 9 }, descending);
+        var empty = FtSortedSet.Empty;
+
+        var union = empty.Union(custom);
+        Assert.Same(descending, union.Comparer);
+        Assert.Equal(new[] { 9, 5, 1 }, union.ToArray());
+        Assert.True(union.Contains(5));   // queries agree with the stored comparer
+
+        Assert.Same(descending, empty.SymmetricExcept(custom).Comparer);
+        Assert.Equal(new[] { 9, 5, 1 }, custom.Union(FtSortedSet.Empty).ToArray());
+        Assert.Same(descending, custom.Union(FtSortedSet.Empty).Comparer);
+
+        Assert.True(empty.Intersect(custom).IsEmpty);
+        Assert.True(custom.Intersect(FtSortedSet.Empty).IsEmpty);
+        Assert.True(empty.Except(custom).IsEmpty);
+        Assert.Equal(new[] { 9, 5, 1 }, custom.Except(FtSortedSet.Empty).ToArray());
+    }
+
     /// <summary>Verifies a custom (reverse) comparer is honored and preserved across operations.</summary>
     [Fact]
     public void CustomComparer_OrdersDescendingAndIsPreserved()
