@@ -136,8 +136,8 @@ what those documents prove is useful for maintainers.
 - Treat C# as the broadest semantic baseline for HAMT, FingerTree, and Numerics unless a local API
   spec explicitly states otherwise.
 - Treat C and C++ docs as authoritative for ownership, callback, RAII, and native build details.
-- Treat Haskell, Kotlin, and Rust docs as authoritative for idiomatic result shapes and checkpoint
-  boundaries in those ports.
+- Treat Haskell, Kotlin, and Rust docs as authoritative for idiomatic result shapes, persistent
+  representation choices, and explicitly documented engine-level complexity differences.
 - Do not infer parity from similar names. Confirm the contract in the local API notes or source.
 - When a sibling port intentionally differs, document the shared semantic contract first and the local
   divergence second.
@@ -177,4 +177,3 @@ Before committing, verify:
 - repository-owned Markdown links resolve;
 - indexes point to every new long-lived document;
 - validation evidence matches the actual blast radius.
-

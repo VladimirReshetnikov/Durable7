@@ -162,6 +162,26 @@ private fun <T> appendToList(node: SeqNode<T>?, destination: MutableList<T>) {
     appendToList(node.right, destination)
 }
 
+private data class SeqValidation(val valid: Boolean, val size: Int, val height: Int)
+
+private fun <T> validateSeqNode(node: SeqNode<T>?): SeqValidation {
+    if (node == null) {
+        return SeqValidation(true, 0, 0)
+    }
+
+    val left = validateSeqNode(node.left)
+    val right = validateSeqNode(node.right)
+    val expectedSize = left.size + right.size + 1
+    val expectedHeight = maxOf(left.height, right.height) + 1
+    return SeqValidation(
+        left.valid && right.valid &&
+            kotlin.math.abs(left.height - right.height) <= 1 &&
+            node.size == expectedSize && node.height == expectedHeight,
+        expectedSize,
+        expectedHeight,
+    )
+}
+
 private class SeqTree<T> private constructor(
     private val root: SeqNode<T>?,
 ) : Iterable<T> {
@@ -265,6 +285,8 @@ private class SeqTree<T> private constructor(
 
         return -1
     }
+
+    fun isBalanced(): Boolean = validateSeqNode(root).valid
 
     override fun iterator(): Iterator<T> = sequence {
         yieldAll(toList())
@@ -385,6 +407,8 @@ public class PersistentList<T> private constructor(
         indexOf(value, equivalent) >= 0
 
     public fun toList(): List<T> = items.toList()
+
+    internal fun debugSequenceIsBalanced(): Boolean = items.isBalanced()
 
     override fun iterator(): Iterator<T> = items.iterator()
 }
@@ -653,6 +677,8 @@ public class PersistentAssociation<K, V> private constructor(
     public fun values(): List<V> = entries.map { it.value() }
 
     public fun toList(): List<Pair<K, V>> = entries.map { it.toPair() }
+
+    internal fun debugSequenceIsBalanced(): Boolean = entries.isBalanced()
 
     override fun iterator(): Iterator<Pair<K, V>> = toList().iterator()
 

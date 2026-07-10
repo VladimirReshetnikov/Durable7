@@ -21,4 +21,6 @@ Build and test from `src/Kotlin`:
 
 The dependency-free executable tests cover list examples, Association ordering rules, custom
 `HashPolicy` behavior, relabel stress, generated histories against ordered models, and JVM
-concurrent readers over shared immutable snapshots.
+concurrent readers over shared immutable snapshots. Balance-factor assertions run throughout the
+generated histories, and a 20,000-element sequence undergoes 2,000 split/join/remove cycles with the
+AVL height and cached-size invariant checked after every operation.

@@ -12,7 +12,7 @@ where the language surfaces line up.
 | Workspace | Role | Primary entry points | Validation |
 | --- | --- | --- | --- |
 | [Hamt](Hamt/README.md) | Persistent HAMT map/set port with 32-way bitmap-indexed trie nodes and immutable collision buckets | `tools.datastructures.hamt.PersistentHashMap`, `PersistentHashSet` | `.\build.ps1 -Workspace Hamt` |
-| [FingerTree](FingerTree/README.md) | Kotlin semantic checkpoint for the FingerTree family: persistent deque, measured sequence, reversible deque, sorted collections, priority queue, intervals, ropes, and text helpers | `tools.datastructures.fingertree.*` | `.\build.ps1 -Workspace FingerTree` |
+| [FingerTree](FingerTree/README.md) | Persistent measured-tree port of the FingerTree family: deque, measured sequence, reversible deque, sorted collections, priority queue, max-high intervals, ropes, and measured text | `tools.datastructures.fingertree.*` | `.\build.ps1 -Workspace FingerTree` |
 | [Tungsten](Tungsten/README.md) | Tungsten `List` and `Association` collection port over Kotlin persistent substrates | `tools.datastructures.tungsten.PersistentList`, `PersistentAssociation` | `.\build.ps1 -Workspace Tungsten` |
 
 Run the full Kotlin validation from this directory:
@@ -26,11 +26,12 @@ On non-Windows hosts, put Java 21+ on `PATH` or set `JAVA_HOME` before running t
 2.4.0 command-line compiler is bootstrapped into `src/Kotlin/build/tools` on every host, then the script compiles
 each workspace and runs its dependency-free executable tests. The `build` directory is ignored by the repository.
 
-The FingerTree workspace intentionally starts as a semantic checkpoint rather than a final lazy
-finger-tree representation. It preserves immutable snapshot behavior and the public family surfaces;
-its README and API notes mark the remaining asymptotic representation boundary.
+The FingerTree workspace uses immutable measured AVL sequence nodes throughout the public family.
+Cached size and monoidal measures drive logarithmic indexed edits, splits, prefix location, priority,
+interval, rope, and text operations; path copying retains unchanged JVM subtrees. The local API notes
+spell out the few engine-level differences from the C# lazy digit spine.
 
 Use the repository [semantic contracts reference](../../docs/reference/semantic-contracts.md) when
-checking which persistence, ordering, policy, and checkpoint obligations should align with sibling
+checking which persistence, ordering, policy, and representation obligations should align with sibling
 ports, and use the [porting guide](../../docs/guides/porting-and-semantic-parity.md) before changing
 shared behavior.

@@ -19,4 +19,5 @@ under the ignored `build` directory.
 
 The test executable covers map persistence, no-op root sharing, duplicate-key rejection, equal-hash
 collision buckets, trie-order iteration, last-wins replacement with original-key retention, and set
-algebra.
+algebra, including relations between sets built with different policies where the receiver's policy
+is authoritative.

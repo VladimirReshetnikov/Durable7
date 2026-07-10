@@ -21,7 +21,7 @@ intentional differences are explicit in the local API notes.
 | --- | --- |
 | Managed API specs under `src/CSharp/*/docs` | Primary semantic contract for repository-owned collection behavior. |
 | Native API specs and public headers under `src/C/*` and `src/Cpp/*` | Idiomatic C and C++ surface shape, ownership model, and local divergences. |
-| Kotlin API notes under `src/Kotlin/*/docs` | Kotlin/JVM value semantics, null/result shapes, tool bootstrap, and checkpoint divergences. |
+| Kotlin API notes under `src/Kotlin/*/docs` | Kotlin/JVM value semantics, null/result shapes, tool bootstrap, persistent representation, complexity, and intentional engine differences. |
 | Rust API notes under `src/Rust/*/docs` | Rust value semantics, `Result`/`Option` shape, Cargo validation, and checkpoint divergences. |
 | [Data structure catalog](../reference/data-structure-catalog.md) | Cross-language inventory of public data-structure entry points. |
 | [Workspace map](../reference/workspace-map.md) | Port lineage, path conventions, and documentation placement. |
@@ -63,8 +63,9 @@ FingerTree lineage:
 4. [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) ports the family to Haskell
    with a general measured tree, size-measured deque, reversible deque, derived collections,
    priority queue, intervals, ropes, and text helpers.
-5. [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) ports the family to Kotlin/JVM as
-   a semantic checkpoint with immutable snapshot behavior and runtime measure/comparator policies.
+5. [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) ports the family to Kotlin/JVM over
+   structurally shared measured AVL sequences with cached monoidal summaries and runtime
+   measure/comparator policies; its API notes state the strict-AVL versus lazy-digit-spine costs.
 6. [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) is the Rust semantic checkpoint for
    the same family names. It preserves immutable snapshot behavior now; the public facades use
    structurally shared Rust tree storage, while the workspace documents the remaining asymptotic

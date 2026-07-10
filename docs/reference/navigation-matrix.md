@@ -47,7 +47,7 @@ patterns.
 | C FingerTree | [src/C/FingerTree/docs/usage.md](../../src/C/FingerTree/docs/usage.md) | C handle lifetime, policy setup, persistent updates, facades, text ropes |
 | C++ FingerTree | [src/Cpp/FingerTree/docs/usage.md](../../src/Cpp/FingerTree/docs/usage.md) | Aggregate include path, value semantics, persistent deque/tree facades, ropes/text, publication patterns |
 | Haskell FingerTree | [src/Haskell/FingerTree/README.md](../../src/Haskell/FingerTree/README.md) | General measured tree, deque, reversible deque, sorted facades, priority queue, intervals, ropes, and text helpers |
-| Kotlin FingerTree | [src/Kotlin/FingerTree/docs/api-notes.md](../../src/Kotlin/FingerTree/docs/api-notes.md) | Kotlin semantic-checkpoint surfaces for deque, measured sequence, sorted collections, priority queue, intervals, ropes/text |
+| Kotlin FingerTree | [src/Kotlin/FingerTree/docs/api-notes.md](../../src/Kotlin/FingerTree/docs/api-notes.md) | Kotlin measured-AVL persistence, deque/measured sequence, sorted collections, cached priority, max-high intervals, ropes/text, and complexity |
 | Rust FingerTree | [src/Rust/FingerTree/docs/api-notes.md](../../src/Rust/FingerTree/docs/api-notes.md) | Rust shared-storage checkpoint surfaces for deque, measured sequence, sorted collections, priority queue, intervals, ropes/text |
 | C# Tungsten collections | [src/CSharp/docs/Tungsten/usage.md](../../src/CSharp/docs/Tungsten/usage.md) | `PersistentList<T>` and `PersistentAssociation<TKey, TValue>` with the Tungsten operation correspondence |
 | C/C++/Haskell/Kotlin/Rust Tungsten collections | [data-structure catalog](data-structure-catalog.md#tungsten-collections) | Language-local Tungsten `List` and `Association` entry points, README links, tests, and substrate notes |
@@ -76,7 +76,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | C++ Tungsten collections | [Workspace README](../../src/Cpp/Tungsten/README.md) and [aggregate header](../../src/Cpp/Tungsten/include/tools/data_structures/tungsten/tungsten.hpp) | C++ value API and header-first List/Association templates |
 | Haskell/Kotlin/Rust Tungsten collections | [catalog rows](data-structure-catalog.md#tungsten-collections) | Language-local README and source entry points for Tungsten `List` and `Association` ports |
 | Haskell FingerTree | [Workspace README](../../src/Haskell/FingerTree/README.md) and [source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Measured.hs) | Haskell measured tree and derived collection API shape |
-| Kotlin FingerTree | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md) and [source](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Core.kt) | Kotlin measured tree and derived collection API shape plus semantic-checkpoint boundary |
+| Kotlin FingerTree | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md) and [measured-tree source](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/PersistentMeasuredTree.kt) | Kotlin measured-tree engine, structural sharing, complexity, and derived collection API shape |
 | Rust FingerTree | [API notes](../../src/Rust/FingerTree/docs/api-notes.md) and [source](../../src/Rust/FingerTree/src/measured.rs) | Rust measured tree and derived collection API shape |
 
 ## Validation Entry Points
@@ -97,7 +97,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | Haskell | [Workspace README](../../src/Haskell/README.md) | `cabal test all` builds all Haskell packages and runs the HAMT/FingerTree/Tungsten executables |
 | Kotlin | [Workspace README](../../src/Kotlin/README.md) | `.\build.ps1` builds all Kotlin workspaces and runs dependency-free executable tests |
 | Kotlin HAMT | [Validation](../../src/Kotlin/Hamt/docs/validation.md) | Kotlin compiler bootstrap and deterministic HAMT executable tests |
-| Kotlin FingerTree | [Validation](../../src/Kotlin/FingerTree/docs/validation.md) | Kotlin compiler bootstrap and semantic-checkpoint executable tests across collection facades |
+| Kotlin FingerTree | [Validation](../../src/Kotlin/FingerTree/docs/validation.md) | Kotlin compiler bootstrap, measured-AVL invariants, generated histories, large construction, and executable facade tests |
 | Rust | [Workspace README](../../src/Rust/README.md) | `cargo test --workspace` builds both Rust crates and runs unit/doc tests |
 | Rust FingerTree | [Validation](../../src/Rust/FingerTree/docs/validation.md) | Cargo unit tests for shared storage and checkpoint semantics across deque, measured sequence, sorted, priority, interval, rope, and text helpers |
 | C# FingerTree benchmarks | [Benchmark notes](../../src/CSharp/docs/FingerTree/benchmarks.md) | Curated BenchmarkDotNet results and interpretation |
@@ -117,9 +117,9 @@ For a cross-family checklist before drilling into a local spec, start with the
 | Haskell HAMT tests | [Tests README](../../src/Haskell/Hamt/test/README.md) | Cabal executable covering collision buckets, custom policies, key recovery, and set algebra |
 | Haskell FingerTree tests | [Tests README](../../src/Haskell/FingerTree/test/README.md) | Cabal executable covering measured tree, facades, intervals, ropes, and text helpers |
 | Haskell Tungsten tests | [Test source](../../src/Haskell/Tungsten/test/Main.hs) | Cabal executable covering list operations, Association ordering examples, policies, relabel stress, and generated histories |
-| Kotlin HAMT tests | [Tests README](../../src/Kotlin/Hamt/tests/README.md) | Kotlin executable covering collisions, root sharing, replacement, iteration, and set algebra |
-| Kotlin FingerTree tests | [Tests README](../../src/Kotlin/FingerTree/tests/README.md) | Kotlin executable covering deque, measured tree, facades, intervals, ropes, and text helpers |
-| Kotlin Tungsten tests | [Test source](../../src/Kotlin/Tungsten/test/tools/datastructures/tungsten/TungstenTests.kt) | Kotlin executable covering list operations, Association ordering examples, policies, relabel stress, and generated histories |
+| Kotlin HAMT tests | [Tests README](../../src/Kotlin/Hamt/tests/README.md) | Kotlin executable covering collisions, root sharing, replacement, iteration, set algebra, and receiver-policy cross-policy relations |
+| Kotlin FingerTree tests | [Tests README](../../src/Kotlin/FingerTree/tests/README.md) | Kotlin executable covering measured-tree facades, structural sharing/AVL bounds, generated and large histories, intervals, ropes, and text helpers |
+| Kotlin Tungsten tests | [Test source](../../src/Kotlin/Tungsten/test/tools/datastructures/tungsten/TungstenTests.kt) | Kotlin executable covering list/Association rules, policies, relabel stress, generated histories, and 20,000-element SeqTree balance stress |
 | Rust HAMT tests | [Tests README](../../src/Rust/Hamt/tests/README.md) | Cargo unit tests covering collisions, updates, iteration, and set algebra |
 | Rust FingerTree tests | [Tests README](../../src/Rust/FingerTree/tests/README.md) | Cargo unit tests covering deque, measured tree, facades, intervals, ropes, and text helpers |
 | Rust Tungsten tests | [Source tests](../../src/Rust/Tungsten/src/lib.rs) | Cargo unit tests covering list operations, Association ordering examples, relabel stress, and generated histories |

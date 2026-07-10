@@ -21,4 +21,5 @@ Coverage groups:
 - streaming trie-order iteration;
 - last-wins replacement and original-key retention through an equivalence policy;
 - set algebra, equality, and proper subset/superset relations;
+- cross-policy subset/superset/equality/overlap relations under the receiver's `HashPolicy`;
 - JVM concurrent readers over shared immutable map/set snapshots.

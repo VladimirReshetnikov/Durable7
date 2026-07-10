@@ -183,3 +183,42 @@ stamp assumption and trie-order enumeration.
   stored-null removal), FingerTree 15 (+2: supplied-key setItem, interval tie order),
   Tungsten 8.
 - The C#, Rust, C, and C++ workspaces were not modified by this review.
+
+## Resolution addendum — 2026-07-10
+
+This dated addendum preserves the review's original findings and provenance above while recording
+the subsequent remediation. **All four deferred follow-up groups are resolved.**
+
+1. **Haskell rope and interval representation — resolved.** `Rope` now stores 64-element-bounded
+   chunks in an element-count-measured finger tree; positional edits replace only the boundary chunk
+   and retain untouched subtrees. `MeasuredRope` caches both element count and the caller's monoidal
+   measure on the same substrate. Text navigation uses cached newline measures rather than full-text
+   scans. `IntervalTree` is now a low-sorted finger tree annotated with last-low and maximum-high
+   summaries, so lower-bound insertion and first-overlap lookup are logarithmic and overlap
+   enumeration prunes unreachable prefixes. Optimized-GHC tests use `StableName` identity to prove a
+   far chunk survives a boundary edit.
+2. **Kotlin post-checkpoint representation — resolved.** The former flat-`List`/`String` storage was
+   removed from every long-lived FingerTree-family facade. A shared immutable measured AVL sequence
+   now supplies cached size/height/monoidal measure, structural joins and splits, logarithmic indexed
+   edits and measure location, and path-copying JVM-node sharing. `PersistentDeque`, `FingerTree`,
+   sorted collections, priority queue, max-high interval tree, positional/measured ropes, and measured
+   text all use that substrate; `ReversibleDeque` retains its already-real orientation-aware tree.
+   The active API notes explicitly distinguish this strict measured-AVL engine from the C#/C++ lazy
+   digit spine instead of carrying a vague flat-storage checkpoint.
+3. **Haskell strictness and HAMT adjustment — resolved.** Finger-tree `Node` elements are strict,
+   `mapValues` forces mapped results to weak head normal form without globally making ordinary map
+   values strict, and `HashMap.adjust` updates through one trie/collision traversal rather than a
+   lookup followed by insertion.
+4. **Deferred coverage — resolved.** Haskell includes 100,000/200,000-element bulk-construction
+   stress, collision-shrink canonicalization, receiver-policy set relations, multi-chunk rope/text
+   navigation, structural-sharing identity, and max-high interval model checks. Kotlin includes a
+   100,000-element measured-tree build, a 5,000-command edit/split model with AVL assertions, sharing
+   checks across every facade, receiver-policy HAMT relations, the recurring cross-language bug
+   checklist, and 2,000 split/join/remove cycles over a 20,000-element Tungsten `SeqTree` with the AVL
+   bound checked after every operation.
+
+Resolution validation:
+
+- `cabal test all -j1` from `src/Haskell`: all three suites pass.
+- `.\build.ps1` from `src/Kotlin`: HAMT 11/11, FingerTree 18/18, and Tungsten 9/9 executable tests
+  pass.

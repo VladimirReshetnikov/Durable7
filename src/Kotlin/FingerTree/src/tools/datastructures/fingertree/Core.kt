@@ -99,36 +99,36 @@ public data class DequePop<T>(
 )
 
 public class PersistentDeque<T> private constructor(
-    private val items: List<T>,
+    private val items: PersistentMeasuredTree<T, Int>,
 ) : Iterable<T> {
     public companion object {
-        public fun <T> empty(): PersistentDeque<T> = PersistentDeque(emptyList())
+        public fun <T> empty(): PersistentDeque<T> = PersistentDeque(PersistentMeasuredTree.empty(SizeMeasure()))
 
         public fun <T> from(values: Iterable<T>): PersistentDeque<T> =
-            PersistentDeque(values.toList())
+            PersistentDeque(PersistentMeasuredTree.from(values, SizeMeasure()))
     }
 
     public val size: Int
         get() = items.size
 
     public val isEmpty: Boolean
-        get() = items.isEmpty()
+        get() = items.isEmpty
 
-    public fun front(): T? = items.firstOrNull()
+    public fun front(): T? = items.front()
 
-    public fun back(): T? = items.lastOrNull()
+    public fun back(): T? = items.back()
 
-    public operator fun get(index: Int): T? = items.getOrNull(index)
+    public operator fun get(index: Int): T? = items[index]
 
-    public fun prepend(value: T): PersistentDeque<T> = PersistentDeque(listOf(value) + items)
+    public fun prepend(value: T): PersistentDeque<T> = PersistentDeque(items.prepend(value))
 
-    public fun append(value: T): PersistentDeque<T> = PersistentDeque(items + value)
+    public fun append(value: T): PersistentDeque<T> = PersistentDeque(items.append(value))
 
     public fun concat(other: PersistentDeque<T>): PersistentDeque<T> =
         when {
             isEmpty -> other
             other.isEmpty -> this
-            else -> PersistentDeque(items + other.items)
+            else -> PersistentDeque(items.concat(other.items))
         }
 
     public fun splitAt(index: Int): DequeSplit<T>? {
@@ -136,7 +136,8 @@ public class PersistentDeque<T> private constructor(
             return null
         }
 
-        return DequeSplit(PersistentDeque(items.take(index)), PersistentDeque(items.drop(index)))
+        val split = items.splitAt(index)!!
+        return DequeSplit(PersistentDeque(split.first), PersistentDeque(split.second))
     }
 
     public fun splitItemAt(index: Int): DequeItemSplit<T>? {
@@ -145,9 +146,9 @@ public class PersistentDeque<T> private constructor(
         }
 
         return DequeItemSplit(
-            PersistentDeque(items.take(index)),
-            items[index],
-            PersistentDeque(items.drop(index + 1)),
+            splitAt(index)!!.left,
+            itemAt(index),
+            splitAt(index + 1)!!.right,
         )
     }
 
@@ -156,11 +157,9 @@ public class PersistentDeque<T> private constructor(
             return null
         }
 
-        return DequeRangeSplit(
-            PersistentDeque(items.take(start)),
-            PersistentDeque(items.drop(start).take(count)),
-            PersistentDeque(items.drop(start + count)),
-        )
+        val first = items.splitAt(start)!!
+        val second = first.second.splitAt(count)!!
+        return DequeRangeSplit(PersistentDeque(first.first), PersistentDeque(second.first), PersistentDeque(second.second))
     }
 
     public fun insertAt(index: Int, value: T): PersistentDeque<T>? {
@@ -168,7 +167,7 @@ public class PersistentDeque<T> private constructor(
             return null
         }
 
-        return PersistentDeque(items.take(index) + value + items.drop(index))
+        return PersistentDeque(items.insertAt(index, value)!!)
     }
 
     public fun setItem(index: Int, value: T): PersistentDeque<T>? {
@@ -178,9 +177,7 @@ public class PersistentDeque<T> private constructor(
 
         // Always store the supplied element (the C# reference replaces
         // unconditionally, even for an equal value).
-        val next = items.toMutableList()
-        next[index] = value
-        return PersistentDeque(next.toList())
+        return PersistentDeque(items.setItem(index, value)!!)
     }
 
     public fun removeAt(index: Int): PersistentDeque<T>? {
@@ -189,19 +186,24 @@ public class PersistentDeque<T> private constructor(
     }
 
     public fun tryViewLeft(): DequePop<T>? =
-        if (isEmpty) null else DequePop(items.first(), PersistentDeque(items.drop(1)))
+        if (isEmpty) null else DequePop(itemAt(0), splitAt(1)!!.right)
 
     public fun tryViewRight(): DequePop<T>? =
-        if (isEmpty) null else DequePop(items.last(), PersistentDeque(items.dropLast(1)))
+        if (isEmpty) null else DequePop(itemAt(size - 1), splitAt(size - 1)!!.left)
 
     public fun reverse(): PersistentDeque<T> =
-        if (size <= 1) this else PersistentDeque(items.asReversed().toList())
+        if (size <= 1) this else from(toList().asReversed())
 
     public fun toList(): List<T> = items.toList()
 
-    public fun sharesStorageWith(other: PersistentDeque<T>): Boolean = items === other.items
+    public fun sharesStorageWith(other: PersistentDeque<T>): Boolean = items.sharesStructureWith(other.items)
+
+    internal fun debugIsBalanced(): Boolean = items.isBalanced()
 
     override fun iterator(): Iterator<T> = items.iterator()
+
+    @Suppress("UNCHECKED_CAST")
+    private fun itemAt(index: Int): T = items[index] as T
 }
 
 private const val ReversibleDequeLeafCapacity = 32
@@ -618,56 +620,47 @@ public data class LocateResult<T, M>(
 )
 
 public class FingerTree<T, M> private constructor(
-    private val items: List<T>,
+    private val items: PersistentMeasuredTree<T, M>,
     public val policy: MeasurePolicy<T, M>,
 ) : Iterable<T> {
     public companion object {
         public fun <T, M> empty(policy: MeasurePolicy<T, M>): FingerTree<T, M> =
-            FingerTree(emptyList(), policy)
+            FingerTree(PersistentMeasuredTree.empty(policy), policy)
 
         public fun <T, M> from(values: Iterable<T>, policy: MeasurePolicy<T, M>): FingerTree<T, M> =
-            FingerTree(values.toList(), policy)
+            FingerTree(PersistentMeasuredTree.from(values, policy), policy)
     }
 
     public val size: Int
         get() = items.size
 
     public val isEmpty: Boolean
-        get() = items.isEmpty()
+        get() = items.isEmpty
 
-    public fun measure(): M = items.fold(policy.empty) { total, item ->
-        policy.combine(total, policy.measure(item))
-    }
+    public fun measure(): M = items.measure()
 
-    public fun front(): T? = items.firstOrNull()
+    public fun front(): T? = items.front()
 
-    public fun back(): T? = items.lastOrNull()
+    public fun back(): T? = items.back()
 
-    public operator fun get(index: Int): T? = items.getOrNull(index)
+    public operator fun get(index: Int): T? = items[index]
 
-    public fun prepend(value: T): FingerTree<T, M> = FingerTree(listOf(value) + items, policy)
+    public fun prepend(value: T): FingerTree<T, M> = FingerTree(items.prepend(value), policy)
 
-    public fun append(value: T): FingerTree<T, M> = FingerTree(items + value, policy)
+    public fun append(value: T): FingerTree<T, M> = FingerTree(items.append(value), policy)
 
     public fun concat(other: FingerTree<T, M>): FingerTree<T, M> {
         require(policy === other.policy || policy == other.policy) { "Cannot concatenate trees with different measure policies." }
         return when {
             isEmpty -> other
             other.isEmpty -> this
-            else -> FingerTree(items + other.items, policy)
+            else -> FingerTree(items.concat(other.items), policy)
         }
     }
 
     public fun split(predicate: (M) -> Boolean): MeasuredSplit<T, M> {
-        var prefix = policy.empty
-        for (index in items.indices) {
-            prefix = policy.combine(prefix, policy.measure(items[index]))
-            if (predicate(prefix)) {
-                return MeasuredSplit(FingerTree(items.take(index), policy), FingerTree(items.drop(index), policy))
-            }
-        }
-
-        return MeasuredSplit(this, FingerTree(emptyList(), policy))
+        val split = items.splitByMeasure(predicate)
+        return MeasuredSplit(FingerTree(split.first, policy), FingerTree(split.second, policy))
     }
 
     public fun splitAtIndex(index: Int): MeasuredSplit<T, M>? {
@@ -675,13 +668,20 @@ public class FingerTree<T, M> private constructor(
             return null
         }
 
-        return MeasuredSplit(FingerTree(items.take(index), policy), FingerTree(items.drop(index), policy))
+        val split = items.splitAt(index)!!
+        return MeasuredSplit(FingerTree(split.first, policy), FingerTree(split.second, policy))
     }
 
     public fun trySplitFind(predicate: (M) -> Boolean): MeasuredItemSplit<T, M>? {
-        val split = split(predicate)
-        val item = split.right.front() ?: return null
-        return MeasuredItemSplit(split.left, item, FingerTree(split.right.items.drop(1), policy))
+        val located = items.locate(predicate)
+        if (!located.found) {
+            return null
+        }
+        val first = items.splitAt(located.index)!!
+        val second = first.second.splitAt(1)!!
+        @Suppress("UNCHECKED_CAST")
+        val item = located.value as T
+        return MeasuredItemSplit(FingerTree(first.first, policy), item, FingerTree(second.second, policy))
     }
 
     public fun prefixMeasure(count: Int): M? {
@@ -689,23 +689,12 @@ public class FingerTree<T, M> private constructor(
             return null
         }
 
-        return items.take(count).fold(policy.empty) { total, item ->
-            policy.combine(total, policy.measure(item))
-        }
+        return items.prefixMeasure(count)
     }
 
     public fun tryLocate(predicate: (M) -> Boolean): LocateResult<T, M> {
-        var before = policy.empty
-        for (index in items.indices) {
-            val after = policy.combine(before, policy.measure(items[index]))
-            if (predicate(after)) {
-                return LocateResult(index, before, items[index])
-            }
-
-            before = after
-        }
-
-        return LocateResult(size, before, null)
+        val located = items.locate(predicate)
+        return LocateResult(located.index, located.measureBefore, located.value)
     }
 
     public fun setItem(index: Int, value: T): FingerTree<T, M>? {
@@ -715,9 +704,7 @@ public class FingerTree<T, M> private constructor(
 
         // Always store the supplied element (the C# reference replaces
         // unconditionally, even for an equal value).
-        val next = items.toMutableList()
-        next[index] = value
-        return FingerTree(next.toList(), policy)
+        return FingerTree(items.setItem(index, value)!!, policy)
     }
 
     public fun insertAt(index: Int, value: T): FingerTree<T, M>? {
@@ -725,7 +712,7 @@ public class FingerTree<T, M> private constructor(
             return null
         }
 
-        return FingerTree(items.take(index) + value + items.drop(index), policy)
+        return FingerTree(items.insertAt(index, value)!!, policy)
     }
 
     public fun removeAt(index: Int): FingerTree<T, M>? {
@@ -733,18 +720,23 @@ public class FingerTree<T, M> private constructor(
             return null
         }
 
-        return FingerTree(items.take(index) + items.drop(index + 1), policy)
+        return FingerTree(items.removeAt(index)!!, policy)
     }
 
     public fun tryViewLeft(): Pair<T, FingerTree<T, M>>? =
-        front()?.let { it to FingerTree(items.drop(1), policy) }
+        if (isEmpty) null else itemAt(0) to splitAtIndex(1)!!.right
 
     public fun tryViewRight(): Pair<T, FingerTree<T, M>>? =
-        back()?.let { it to FingerTree(items.dropLast(1), policy) }
+        if (isEmpty) null else itemAt(size - 1) to splitAtIndex(size - 1)!!.left
 
     public fun toList(): List<T> = items.toList()
 
-    public fun sharesStorageWith(other: FingerTree<T, M>): Boolean = items === other.items
+    public fun sharesStorageWith(other: FingerTree<T, M>): Boolean = items.sharesStructureWith(other.items)
+
+    internal fun debugIsBalanced(): Boolean = items.isBalanced()
 
     override fun iterator(): Iterator<T> = items.iterator()
+
+    @Suppress("UNCHECKED_CAST")
+    private fun itemAt(index: Int): T = items[index] as T
 }

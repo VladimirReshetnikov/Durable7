@@ -5,15 +5,16 @@
 - Audience: Maintainers and reviewers of the Kotlin FingerTree workspace
 - Scope: Documentation index for `src/Kotlin/FingerTree`
 
-The Kotlin FingerTree workspace is a semantic checkpoint for the repository FingerTree family. It
-preserves immutable snapshot behavior and the public collection surface while documenting the remaining
-lazy-spine asymptotic boundary.
+The Kotlin FingerTree workspace is a structurally shared measured-tree port of the repository
+FingerTree family. Public facades share a persistent measured AVL sequence with cached size/measure;
+the API notes document its complexity and the deliberate strict-AVL versus lazy-digit-spine engine
+difference.
 
 ## Current Documents
 
 - [API notes](api-notes.md) describe `PersistentDeque<T>`, `ReversibleDeque<T>`,
   `FingerTree<T, M>`, measure policies, sorted facades, priority queues, interval trees, ropes, text
-  helpers, Kotlin result shapes, comparator policy behavior, and checkpoint limitations.
+  helpers, Kotlin result shapes, comparator policy behavior, measured-tree persistence, and complexity.
 - [Validation](validation.md) records the `src/Kotlin/build.ps1` command shape, local JDK and Kotlin
   compiler bootstrap behavior, generated-output locations, and executable-test coverage boundary.
 - [Tests README](../tests/README.md) maps deterministic coverage for deque operations, reversible

@@ -16,11 +16,20 @@ names for the public families:
 - `Interval<T>` and `IntervalTree<T>`;
 - `Rope<T>`, `MeasuredRope<T, M>`, `TextRope`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
 
-This is a semantic checkpoint port. It preserves immutable snapshot behavior, stable observable
-ordering, rank/range semantics, stable equal-priority dequeue behavior, closed-interval overlap
-semantics, and text line navigation. The current representation is an immutable JVM-value checkpoint
-rather than the final C#/C++ lazy measured-spine implementation, so it does not claim asymptotic
-parity for every operation.
+The family is backed by a shared immutable measured AVL sequence. Every node caches subtree size,
+height, and the active monoidal measure; joins, splits, indexed edits, and concatenation copy only
+the affected paths and retain untouched JVM nodes. The same substrate drives `PersistentDeque`, the
+general `FingerTree`, sorted facades, stable priority selection, max-high interval pruning,
+positional/measured ropes, and newline-measured text. `ReversibleDeque` keeps its specialized
+orientation-aware balanced tree so whole-value reversal remains O(1).
+
+This closes the former flat-`List` semantic checkpoint. Indexed access, updates, inserts, removes,
+splits, and measure-guided location are logarithmic in tree size; `PriorityQueue.peekEntry` reads a
+cached stable minimum in O(1), and `IntervalTree.findOverlap` uses cached maximum-high summaries.
+Materialization, sorting/filter rebuilding, `PersistentDeque.reverse`, and string conversion remain
+linear. The internal engine is a strict measured AVL sequence rather than the C#/C++ lazy
+Hinze–Paterson digit spine, so endpoint operations are O(log n), not the managed engine's amortized
+O(1); this is an explicit engine choice, not a flat-storage checkpoint.
 
 Validate from `src/Kotlin`:
 

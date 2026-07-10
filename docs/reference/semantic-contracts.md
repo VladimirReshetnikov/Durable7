@@ -253,7 +253,7 @@ Shared obligations:
 | C | Opaque handles/value structs with explicit copy/destroy and callback policies | Status codes, allocation failure, retained versus borrowed values, cleanup obligations, callback lifetime |
 | C++ | RAII values over shared immutable nodes | Move/copy cost, exception behavior, policy object lifetime, iterator/materialization behavior |
 | Haskell | Pure immutable values | Total versus `Maybe` operations, package-local type classes, dependency-light design, strictness where relevant |
-| Kotlin | Immutable JVM values plus runtime policies | Null/result/exception shapes, JVM comparator/hash policy behavior, checkpoint boundaries |
+| Kotlin | Immutable JVM values plus runtime policies | Null/result/exception shapes, JVM comparator/hash policy behavior, structural sharing, and documented engine complexity |
 | Rust | Owned values, borrows, `Arc` sharing, traits, and `Option`/`Result` | Clone requirements, borrowed lookup results, panic boundaries, safe Rust guarantees, Send/Sync claims only when proven |
 
 ## What A New Public Surface Must Document

@@ -14,6 +14,11 @@ private class EquivalentKeyPolicy : HashPolicy<EquivalentKey> {
     override fun equivalent(left: EquivalentKey, right: EquivalentKey): Boolean = left.text == right.text
 }
 
+private class ModuloTenPolicy : HashPolicy<Int> {
+    override fun hash(key: Int): Int = key.mod(10)
+    override fun equivalent(left: Int, right: Int): Boolean = left.mod(10) == right.mod(10)
+}
+
 private fun check(value: Boolean, message: String) {
     if (!value) {
         throw AssertionError(message)
@@ -137,6 +142,18 @@ private fun setAlgebraUsesSetMembership() {
     check(!left.isProperSupersetOf(listOf(1, 2, 3)), "non-proper superset")
 }
 
+private fun crossPolicyRelationsUseReceiverPolicy() {
+    val receiver = PersistentHashSet.from(listOf(1, 2), ModuloTenPolicy())
+    val equivalentArgument = PersistentHashSet.from(listOf(11, 12))
+    val strictSupersetArgument = PersistentHashSet.from(listOf(11, 12, 99))
+
+    check(receiver.isSubsetOf(equivalentArgument), "cross-policy subset")
+    check(receiver.isSupersetOf(equivalentArgument), "cross-policy superset")
+    check(receiver.setEquals(equivalentArgument), "cross-policy equality")
+    check(receiver.isProperSubsetOf(strictSupersetArgument), "cross-policy proper subset")
+    check(receiver.overlaps(PersistentHashSet.from(listOf(42))), "cross-policy overlap")
+}
+
 private fun concurrentReadersObserveConsistentSnapshots() {
     val expectedMap = (0 until 256).map { it to it * 3 - 100 }
     val map = PersistentHashMap.empty<Int, Int>().setItems(expectedMap)
@@ -196,6 +213,7 @@ public fun main() {
         "iterationStreamsTrieOrder" to ::iterationStreamsTrieOrder,
         "setItemsAreLastWinsAndRetainOriginalKey" to ::setItemsAreLastWinsAndRetainOriginalKey,
         "setAlgebraUsesSetMembership" to ::setAlgebraUsesSetMembership,
+        "crossPolicyRelationsUseReceiverPolicy" to ::crossPolicyRelationsUseReceiverPolicy,
         "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,
     )
 

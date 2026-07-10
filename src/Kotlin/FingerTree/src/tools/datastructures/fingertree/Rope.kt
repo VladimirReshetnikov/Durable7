@@ -1,30 +1,30 @@
 package tools.datastructures.fingertree
 
 public class Rope<T> private constructor(
-    private val items: List<T>,
+    private val items: PersistentDeque<T>,
 ) : Iterable<T> {
     public companion object {
-        public fun <T> empty(): Rope<T> = Rope(emptyList())
+        public fun <T> empty(): Rope<T> = Rope(PersistentDeque.empty())
 
-        public fun <T> from(values: Iterable<T>): Rope<T> = Rope(values.toList())
+        public fun <T> from(values: Iterable<T>): Rope<T> = Rope(PersistentDeque.from(values))
 
         public fun <T> fromChunks(chunks: Iterable<Iterable<T>>): Rope<T> =
-            Rope(chunks.flatMap { it.toList() })
+            Rope(PersistentDeque.from(chunks.flatten()))
 
-        public fun fromText(text: String): Rope<Char> = Rope(text.toList())
+        public fun fromText(text: String): Rope<Char> = from(text.asIterable())
     }
 
     public val size: Int
         get() = items.size
 
     public val isEmpty: Boolean
-        get() = items.isEmpty()
+        get() = items.isEmpty
 
-    public fun front(): T? = items.firstOrNull()
+    public fun front(): T? = items.front()
 
-    public fun back(): T? = items.lastOrNull()
+    public fun back(): T? = items.back()
 
-    public operator fun get(index: Int): T? = items.getOrNull(index)
+    public operator fun get(index: Int): T? = items[index]
 
     public fun copyTo(index: Int, destination: MutableList<in T>): Boolean {
         if (!isValidRange(index, destination.size, size)) {
@@ -32,15 +32,15 @@ public class Rope<T> private constructor(
         }
 
         for (offset in destination.indices) {
-            destination[offset] = items[index + offset]
+            destination[offset] = itemAt(index + offset)
         }
 
         return true
     }
 
-    public fun pushFront(value: T): Rope<T> = Rope(listOf(value) + items)
+    public fun pushFront(value: T): Rope<T> = Rope(items.prepend(value))
 
-    public fun pushBack(value: T): Rope<T> = Rope(items + value)
+    public fun pushBack(value: T): Rope<T> = Rope(items.append(value))
 
     public fun setItem(index: Int, value: T): Rope<T>? {
         if (index < 0 || index >= size) {
@@ -49,9 +49,7 @@ public class Rope<T> private constructor(
 
         // Always store the supplied element (the C# reference replaces
         // unconditionally, even for an equal value).
-        val next = items.toMutableList()
-        next[index] = value
-        return Rope(next.toList())
+        return Rope(items.setItem(index, value)!!)
     }
 
     public fun insertAt(index: Int, value: T): Rope<T>? {
@@ -59,7 +57,7 @@ public class Rope<T> private constructor(
             return null
         }
 
-        return Rope(items.take(index) + value + items.drop(index))
+        return Rope(items.insertAt(index, value)!!)
     }
 
     public fun insertRange(index: Int, values: Iterable<T>): Rope<T>? {
@@ -67,7 +65,9 @@ public class Rope<T> private constructor(
             return null
         }
 
-        return Rope(items.take(index) + values.toList() + items.drop(index))
+        val split = items.splitAt(index)!!
+        val middle = PersistentDeque.from(values)
+        return Rope(split.left.concat(middle).concat(split.right))
     }
 
     public fun removeAt(index: Int): Rope<T>? {
@@ -75,7 +75,7 @@ public class Rope<T> private constructor(
             return null
         }
 
-        return Rope(items.take(index) + items.drop(index + 1))
+        return Rope(items.removeAt(index)!!)
     }
 
     public fun removeRange(index: Int, count: Int): Rope<T>? {
@@ -83,7 +83,9 @@ public class Rope<T> private constructor(
             return null
         }
 
-        return Rope(items.take(index) + items.drop(index + count))
+        val first = items.splitAt(index)!!
+        val second = first.right.splitAt(count)!!
+        return Rope(first.left.concat(second.right))
     }
 
     public fun slice(index: Int, count: Int): Rope<T>? {
@@ -91,7 +93,8 @@ public class Rope<T> private constructor(
             return null
         }
 
-        return Rope(items.drop(index).take(count))
+        val suffix = items.splitAt(index)!!.right
+        return Rope(suffix.splitAt(count)!!.left)
     }
 
     public fun splitAt(index: Int): Pair<Rope<T>, Rope<T>>? {
@@ -99,23 +102,29 @@ public class Rope<T> private constructor(
             return null
         }
 
-        return Rope(items.take(index)) to Rope(items.drop(index))
+        val split = items.splitAt(index)!!
+        return Rope(split.left) to Rope(split.right)
     }
 
     public fun concat(other: Rope<T>): Rope<T> =
         when {
             isEmpty -> other
             other.isEmpty -> this
-            else -> Rope(items + other.items)
+            else -> Rope(items.concat(other.items))
         }
 
     public fun compact(): Rope<T> = this
 
     public fun toList(): List<T> = items.toList()
 
-    public fun sharesStorageWith(other: Rope<T>): Boolean = items === other.items
+    public fun sharesStorageWith(other: Rope<T>): Boolean = items.sharesStorageWith(other.items)
+
+    internal fun debugIsBalanced(): Boolean = items.debugIsBalanced()
 
     override fun iterator(): Iterator<T> = items.iterator()
+
+    @Suppress("UNCHECKED_CAST")
+    private fun itemAt(index: Int): T = items[index] as T
 }
 
 public data class MeasuredRopeSplit<T, M>(
@@ -130,42 +139,38 @@ public data class MeasuredRopeLocate<T, M>(
 )
 
 public class MeasuredRope<T, M> private constructor(
-    private val items: List<T>,
+    private val items: PersistentMeasuredTree<T, M>,
     public val policy: MeasurePolicy<T, M>,
 ) : Iterable<T> {
     public companion object {
         public fun <T, M> empty(policy: MeasurePolicy<T, M>): MeasuredRope<T, M> =
-            MeasuredRope(emptyList(), policy)
+            MeasuredRope(PersistentMeasuredTree.empty(policy), policy)
 
         public fun <T, M> from(values: Iterable<T>, policy: MeasurePolicy<T, M>): MeasuredRope<T, M> =
-            MeasuredRope(values.toList(), policy)
+            MeasuredRope(PersistentMeasuredTree.from(values, policy), policy)
 
         public fun <T, M> fromChunks(
             chunks: Iterable<Iterable<T>>,
             policy: MeasurePolicy<T, M>,
-        ): MeasuredRope<T, M> = MeasuredRope(chunks.flatMap { it.toList() }, policy)
+        ): MeasuredRope<T, M> = MeasuredRope(PersistentMeasuredTree.from(chunks.flatten(), policy), policy)
     }
 
     public val size: Int
         get() = items.size
 
     public val isEmpty: Boolean
-        get() = items.isEmpty()
+        get() = items.isEmpty
 
-    public fun measure(): M = items.fold(policy.empty) { total, item ->
-        policy.combine(total, policy.measure(item))
-    }
+    public fun measure(): M = items.measure()
 
-    public operator fun get(index: Int): T? = items.getOrNull(index)
+    public operator fun get(index: Int): T? = items[index]
 
     public fun prefixMeasure(count: Int): M? {
         if (count < 0 || count > size) {
             return null
         }
 
-        return items.take(count).fold(policy.empty) { total, item ->
-            policy.combine(total, policy.measure(item))
-        }
+        return items.prefixMeasure(count)
     }
 
     public fun copyTo(index: Int, destination: MutableList<in T>): Boolean {
@@ -174,13 +179,13 @@ public class MeasuredRope<T, M> private constructor(
         }
 
         for (offset in destination.indices) {
-            destination[offset] = items[index + offset]
+            destination[offset] = itemAt(index + offset)
         }
 
         return true
     }
 
-    public fun pushBack(value: T): MeasuredRope<T, M> = MeasuredRope(items + value, policy)
+    public fun pushBack(value: T): MeasuredRope<T, M> = MeasuredRope(items.append(value), policy)
 
     public fun setItem(index: Int, value: T): MeasuredRope<T, M>? {
         if (index < 0 || index >= size) {
@@ -189,9 +194,7 @@ public class MeasuredRope<T, M> private constructor(
 
         // Always store the supplied element (the C# reference replaces
         // unconditionally, even for an equal value).
-        val next = items.toMutableList()
-        next[index] = value
-        return MeasuredRope(next.toList(), policy)
+        return MeasuredRope(items.setItem(index, value)!!, policy)
     }
 
     public fun splitAt(index: Int): MeasuredRopeSplit<T, M>? {
@@ -199,33 +202,18 @@ public class MeasuredRope<T, M> private constructor(
             return null
         }
 
-        return MeasuredRopeSplit(MeasuredRope(items.take(index), policy), MeasuredRope(items.drop(index), policy))
+        val split = items.splitAt(index)!!
+        return MeasuredRopeSplit(MeasuredRope(split.first, policy), MeasuredRope(split.second, policy))
     }
 
     public fun splitByMeasure(predicate: (M) -> Boolean): MeasuredRopeSplit<T, M> {
-        var prefix = policy.empty
-        for (index in items.indices) {
-            prefix = policy.combine(prefix, policy.measure(items[index]))
-            if (predicate(prefix)) {
-                return MeasuredRopeSplit(MeasuredRope(items.take(index), policy), MeasuredRope(items.drop(index), policy))
-            }
-        }
-
-        return MeasuredRopeSplit(this, MeasuredRope(emptyList(), policy))
+        val split = items.splitByMeasure(predicate)
+        return MeasuredRopeSplit(MeasuredRope(split.first, policy), MeasuredRope(split.second, policy))
     }
 
     public fun locateByMeasure(predicate: (M) -> Boolean): MeasuredRopeLocate<T, M> {
-        var before = policy.empty
-        for (index in items.indices) {
-            val after = policy.combine(before, policy.measure(items[index]))
-            if (predicate(after)) {
-                return MeasuredRopeLocate(index, before, items[index])
-            }
-
-            before = after
-        }
-
-        return MeasuredRopeLocate(size, before, null)
+        val located = items.locate(predicate)
+        return MeasuredRopeLocate(located.index, located.measureBefore, located.value)
     }
 
     public fun concat(other: MeasuredRope<T, M>): MeasuredRope<T, M> {
@@ -233,15 +221,20 @@ public class MeasuredRope<T, M> private constructor(
         return when {
             isEmpty -> other
             other.isEmpty -> this
-            else -> MeasuredRope(items + other.items, policy)
+            else -> MeasuredRope(items.concat(other.items), policy)
         }
     }
 
     public fun toList(): List<T> = items.toList()
 
-    public fun sharesStorageWith(other: MeasuredRope<T, M>): Boolean = items === other.items
+    public fun sharesStorageWith(other: MeasuredRope<T, M>): Boolean = items.sharesStructureWith(other.items)
+
+    internal fun debugIsBalanced(): Boolean = items.isBalanced()
 
     override fun iterator(): Iterator<T> = items.iterator()
+
+    @Suppress("UNCHECKED_CAST")
+    private fun itemAt(index: Int): T = items[index] as T
 }
 
 public object NewlineMeasure : MeasurePolicy<Char, Int> {
@@ -253,29 +246,29 @@ public object NewlineMeasure : MeasurePolicy<Char, Int> {
 public data class LineColumn(public val line: Int, public val column: Int)
 
 public class TextRope private constructor(
-    private val text: String,
+    private val characters: MeasuredRope<Char, Int>,
 ) {
     public companion object {
-        public fun empty(): TextRope = TextRope("")
-        public fun fromText(text: String): TextRope = TextRope(text)
+        public fun empty(): TextRope = TextRope(MeasuredRope.empty(NewlineMeasure))
+        public fun fromText(text: String): TextRope = TextRope(MeasuredRope.from(text.asIterable(), NewlineMeasure))
     }
 
     public val size: Int
-        get() = text.length
+        get() = characters.size
 
     public val isEmpty: Boolean
-        get() = text.isEmpty()
+        get() = characters.isEmpty
 
-    public fun asString(): String = text
+    public fun asString(): String = characters.toList().joinToString("")
 
-    public fun lineCount(): Int = text.count { it == '\n' } + 1
+    public fun lineCount(): Int = characters.measure() + 1
 
     public fun lineOfOffset(offset: Int): Int? {
         if (offset < 0 || offset > size) {
             return null
         }
 
-        return text.take(offset).count { it == '\n' }
+        return characters.prefixMeasure(offset)
     }
 
     public fun lineStartOffset(line: Int): Int? {
@@ -287,17 +280,8 @@ public class TextRope private constructor(
             return 0
         }
 
-        var seen = 0
-        for (index in text.indices) {
-            if (text[index] == '\n') {
-                seen += 1
-                if (seen == line) {
-                    return index + 1
-                }
-            }
-        }
-
-        return null
+        val newline = characters.locateByMeasure { it >= line }
+        return if (newline.value == null) null else newline.index + 1
     }
 
     public fun lineColumnOf(offset: Int): LineColumn? {
@@ -322,16 +306,19 @@ public class TextRope private constructor(
     public fun getLine(line: Int): String? {
         val start = lineStartOffset(line) ?: return null
         val end = lineEndOffset(line) ?: return null
-        return text.substring(start, end)
+        val suffix = characters.splitAt(start)!!.right
+        return suffix.splitAt(end - start)!!.left.toList().joinToString("")
     }
 
     public fun lines(): List<String> = (0 until lineCount()).mapNotNull { getLine(it) }
 
-    public fun toCharRope(): Rope<Char> = Rope.from(text.toList())
+    public fun toCharRope(): Rope<Char> = Rope.from(characters)
 
-    public fun toMeasuredRope(): MeasuredRope<Char, Int> = MeasuredRope.from(text.toList(), NewlineMeasure)
+    public fun toMeasuredRope(): MeasuredRope<Char, Int> = characters
 
-    override fun toString(): String = text
+    override fun toString(): String = asString()
+
+    internal fun debugIsBalanced(): Boolean = characters.debugIsBalanced()
 
     private fun lineEndOffset(line: Int): Int? {
         if (line < 0 || line >= lineCount()) {

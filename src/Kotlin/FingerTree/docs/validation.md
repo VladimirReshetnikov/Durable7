@@ -18,6 +18,8 @@ Temurin JDK 21 under `src/Kotlin/build/tools`; on non-Windows hosts, provide Jav
 files stay under the ignored `build` directory.
 
 The test executable covers persistent deque snapshots, reversible orientation, measured prefix
-splits/locates, sorted bag/set/map ordering and ranges, stable priority dequeue, closed interval
-queries and coalescing, positional and measured ropes, text line navigation, and rope builder
-conveniences.
+splits/locates, sorted bag/set/map ordering and ranges, stable cached-priority dequeue, max-high closed
+interval queries and coalescing, positional and measured ropes, measured text line navigation, and
+rope builder conveniences. Representation coverage validates AVL balance and identity sharing across
+every facade, a 5,000-command sequence model, 100,000-element construction, policy compatibility,
+overflow and comparison regressions, and concurrent readers over retained snapshots.

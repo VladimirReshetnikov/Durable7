@@ -158,11 +158,31 @@ private fun listGeneratedHistoriesPreserveSnapshots() {
         }
 
         checkEquals(model.toList(), list.toList(), "random list model")
+        check(list.debugSequenceIsBalanced(), "random list SeqTree balance")
     }
 
     for ((snapshot, expected) in snapshots) {
         checkEquals(expected, snapshot.toList(), "retained list snapshot")
     }
+}
+
+private fun seqTreeMaintainsAvlBoundThroughLargeSplits() {
+    val count = 20_000
+    var list = PersistentList.from(0 until count)
+    check(list.debugSequenceIsBalanced(), "initial 20k SeqTree balance")
+
+    repeat(2_000) { step ->
+        val index = (step * 7919) % (count + 1)
+        val split = list.splitAt(index) ?: throw AssertionError("large split")
+        check(split.left.debugSequenceIsBalanced(), "large split left balance at $step")
+        check(split.right.debugSequenceIsBalanced(), "large split right balance at $step")
+        list = split.left.join(PersistentList.from(listOf(-step - 1))).join(split.right)
+        check(list.debugSequenceIsBalanced(), "large join balance at $step")
+        list = list.removeAt(index) ?: throw AssertionError("remove inserted pivot")
+        check(list.debugSequenceIsBalanced(), "large removal balance at $step")
+    }
+
+    checkEquals((0 until count).toList(), list.toList(), "large split/join content")
 }
 
 private fun associationOrderingExamplesMatchTungstenRules() {
@@ -342,6 +362,7 @@ private fun associationGeneratedHistoriesMatchOrderedModelAndSnapshots() {
         }
 
         checkAssociation(model.toList(), assoc, "generated association")
+        check(assoc.debugSequenceIsBalanced(), "generated association SeqTree balance")
     }
 
     for ((snapshot, expected) in snapshots) {
@@ -371,6 +392,7 @@ public fun main() {
     val tests = listOf(
         "listExamplesMatchTungstenSurface" to ::listExamplesMatchTungstenSurface,
         "listGeneratedHistoriesPreserveSnapshots" to ::listGeneratedHistoriesPreserveSnapshots,
+        "seqTreeMaintainsAvlBoundThroughLargeSplits" to ::seqTreeMaintainsAvlBoundThroughLargeSplits,
         "associationOrderingExamplesMatchTungstenRules" to ::associationOrderingExamplesMatchTungstenRules,
         "associationPositionOperationsAndSortsMatchModel" to ::associationPositionOperationsAndSortsMatchModel,
         "associationCustomPolicyRecoversStoredKeys" to ::associationCustomPolicyRecoversStoredKeys,

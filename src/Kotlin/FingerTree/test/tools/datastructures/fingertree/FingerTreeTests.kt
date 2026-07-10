@@ -1,6 +1,7 @@
 package tools.datastructures.fingertree
 
 import java.util.Collections
+import java.math.BigDecimal
 
 private fun check(value: Boolean, message: String) {
     if (!value) {
@@ -12,6 +13,18 @@ private fun <T> checkEquals(expected: T, actual: T, message: String) {
     if (expected != actual) {
         throw AssertionError("$message Expected <$expected>, actual <$actual>.")
     }
+}
+
+private inline fun <reified T : Throwable> checkThrows(message: String, action: () -> Unit) {
+    try {
+        action()
+    } catch (error: Throwable) {
+        if (error is T) {
+            return
+        }
+        throw AssertionError("$message Expected ${T::class.simpleName}, got ${error::class.simpleName}.", error)
+    }
+    throw AssertionError("$message Expected ${T::class.simpleName}.")
 }
 
 private fun runConcurrent(name: String, workerCount: Int = 8, action: (Int) -> Unit) {
@@ -168,6 +181,124 @@ private fun measuredTreeSplitsAndLocatesByPrefix() {
     checkEquals(5, located.item, "located item")
 }
 
+private fun realTreeSubstrateBalancesAndSharesAcrossFacades() {
+    val values = (0 until 4096).toList()
+    val deque = PersistentDeque.from(values)
+    val dequeEdit = deque.setItem(2048, -1) ?: throw AssertionError("deque edit")
+    check(deque.debugIsBalanced() && dequeEdit.debugIsBalanced(), "deque AVL invariant")
+    check(deque.sharesStorageWith(dequeEdit), "deque edit shares untouched nodes")
+
+    val measuredTree = FingerTree.from(values, SizeMeasure<Int>())
+    val measuredTreeEdit = measuredTree.insertAt(2048, -1) ?: throw AssertionError("tree insert")
+    check(measuredTree.debugIsBalanced() && measuredTreeEdit.debugIsBalanced(), "measured tree AVL invariant")
+    check(measuredTree.sharesStorageWith(measuredTreeEdit), "measured tree insert shares untouched nodes")
+    checkEquals(4097, measuredTreeEdit.measure(), "cached size measure after insert")
+    val compatible = FingerTree.from(listOf(4096, 4097), SizeMeasure<Int>())
+    checkEquals(4098, measuredTree.concat(compatible).measure(), "value-equal policies concatenate")
+
+    val descending = values.asReversed()
+    val bag = SortedBag.from(descending)
+    val bagEdit = bag.add(2048)
+    check(bag.debugIsBalanced() && bagEdit.debugIsBalanced(), "sorted bag AVL invariant")
+    check(bag.sharesStorageWith(bagEdit), "sorted bag edit shares untouched nodes")
+    val set = SortedSet.from(descending)
+    val setEdit = set.add(5000)
+    check(set.debugIsBalanced() && setEdit.debugIsBalanced(), "sorted set AVL invariant")
+    check(set.sharesStorageWith(setEdit), "sorted set edit shares untouched nodes")
+    val map = SortedMap.from(descending.map { it to -it })
+    val mapEdit = map.setItem(2048, 1)
+    check(map.debugIsBalanced() && mapEdit.debugIsBalanced(), "sorted map AVL invariant")
+    check(map.sharesStorageWith(mapEdit), "sorted map edit shares untouched nodes")
+
+    var queue = PriorityQueue.empty<Int, Int>()
+    for (value in values) {
+        queue = queue.enqueue(value, 4096 - value)
+    }
+    val queueEdit = queue.enqueue(-1, -1)
+    check(queue.debugIsBalanced() && queueEdit.debugIsBalanced(), "priority queue AVL invariant")
+    check(queue.sharesStorageWith(queueEdit), "priority enqueue shares untouched nodes")
+    checkEquals(-1, queueEdit.peekEntry()?.value, "cached priority summary")
+
+    val intervalTree = IntervalTree.from(values.map { Interval(it * 2, it * 2 + 1) })
+    val intervalEdit = intervalTree.insert(Interval(4095, 10000))
+    check(intervalTree.debugIsBalanced() && intervalEdit.debugIsBalanced(), "interval tree AVL invariant")
+    check(intervalTree.sharesStorageWith(intervalEdit), "interval insertion shares untouched nodes")
+    checkEquals(Interval(4095, 10000), intervalEdit.findOverlap(Interval(9000, 9001)), "max-high search")
+
+    val rope = Rope.from(values)
+    val ropeEdit = rope.setItem(2048, -1) ?: throw AssertionError("rope set")
+    check(rope.debugIsBalanced() && ropeEdit.debugIsBalanced(), "rope AVL invariant")
+    check(rope.sharesStorageWith(ropeEdit), "rope edit shares untouched nodes")
+    val measuredRope = MeasuredRope.from(values, IntSumMeasure)
+    val measuredRopeEdit = measuredRope.setItem(2048, -1) ?: throw AssertionError("measured rope set")
+    check(measuredRope.debugIsBalanced() && measuredRopeEdit.debugIsBalanced(), "measured rope AVL invariant")
+    check(measuredRope.sharesStorageWith(measuredRopeEdit), "measured rope edit shares untouched nodes")
+    checkEquals(values.sum() - 2048 - 1, measuredRopeEdit.measure(), "cached rope measure after set")
+    val text = TextRope.fromText((0 until 4096).joinToString("\n"))
+    check(text.debugIsBalanced(), "text rope measured AVL invariant")
+    checkEquals(4096, text.lineCount(), "text rope cached newline measure")
+}
+
+private fun generatedRealTreeEditsMatchListModel() {
+    var state = 0x13579BDFL
+    fun nextInt(bound: Int): Int {
+        state = state * 6364136223846793005L + 1442695040888963407L
+        return if (bound == 0) 0 else ((state ushr 32).toInt().toUInt().toLong() % bound).toInt()
+    }
+
+    var actual = PersistentDeque.empty<Int>()
+    val model = ArrayList<Int>()
+    repeat(5000) { step ->
+        when (nextInt(5)) {
+            0 -> {
+                val index = nextInt(model.size + 1)
+                val value = nextInt(100000)
+                actual = actual.insertAt(index, value) ?: throw AssertionError("generated insert")
+                model.add(index, value)
+            }
+            1 -> if (model.isNotEmpty()) {
+                val index = nextInt(model.size)
+                actual = actual.removeAt(index) ?: throw AssertionError("generated remove")
+                model.removeAt(index)
+            }
+            2 -> if (model.isNotEmpty()) {
+                val index = nextInt(model.size)
+                val value = -nextInt(100000)
+                actual = actual.setItem(index, value) ?: throw AssertionError("generated set")
+                model[index] = value
+            }
+            3 -> {
+                val value = nextInt(100000)
+                actual = actual.append(value)
+                model.add(value)
+            }
+            else -> {
+                val index = nextInt(model.size + 1)
+                val split = actual.splitAt(index) ?: throw AssertionError("generated split")
+                actual = split.left.concat(split.right)
+            }
+        }
+
+        check(actual.debugIsBalanced(), "generated AVL invariant at step $step")
+        if (step % 64 == 0) {
+            checkEquals(model, actual.toList(), "generated tree model at step $step")
+        }
+    }
+    checkEquals(model, actual.toList(), "generated tree final model")
+}
+
+private fun largeRealTreeConstructionKeepsCachedMeasures() {
+    val count = 100_000
+    val values = 0 until count
+    val deque = PersistentDeque.from(values)
+    val tree = FingerTree.from(values, SizeMeasure<Int>())
+    checkEquals(count, deque.size, "large deque size")
+    checkEquals(count - 1, deque[count - 1], "large deque tail")
+    check(deque.debugIsBalanced(), "large deque AVL invariant")
+    checkEquals(count, tree.measure(), "large measured tree cached size")
+    check(tree.debugIsBalanced(), "large measured tree AVL invariant")
+}
+
 private fun sortedCollectionsKeepOrderAndRelations() {
     val bag = SortedBag.from(listOf(3, 1, 2, 3, 2, 3))
     checkEquals(listOf(1, 2, 2, 3, 3, 3), bag.toList(), "bag sort")
@@ -228,6 +359,23 @@ private fun intervalTreeInsertsNewEqualLowIntervalsFirst() {
     val removed = tree.remove(Interval(1, 5))
     checkEquals(3, removed.size, "removal within the equal-low run")
     check(removed.contains(Interval(1, 4)) && removed.contains(Interval(1, 3)), "survivors intact")
+}
+
+private fun recurringPortingRegressionsStayLocked() {
+    val scaled = IntervalTree.empty<BigDecimal>()
+        .insert(Interval(BigDecimal("1.0"), BigDecimal("2.00")))
+    check(scaled.contains(Interval(BigDecimal("1.00"), BigDecimal("2.0"))), "interval membership uses comparison")
+    checkEquals(0, scaled.remove(Interval(BigDecimal("1.00"), BigDecimal("2.0"))).size, "interval removal uses comparison")
+
+    val text = TextRope.fromText("a\nb")
+    checkEquals(null, text.offsetOf(1, Int.MAX_VALUE), "huge text column cannot overflow")
+
+    val ascending = Comparator<Int> { left, right -> left.compareTo(right) }
+    val descending = Comparator<Int> { left, right -> right.compareTo(left) }
+    checkThrows<IllegalArgumentException>("meld rejects incompatible comparators") {
+        PriorityQueue.empty<String, Int>(ascending).enqueue("a", 1)
+            .meld(PriorityQueue.empty<String, Int>(descending).enqueue("b", 2))
+    }
 }
 
 private fun priorityQueueDequeuesStably() {
@@ -333,12 +481,16 @@ public fun main() {
         "reversibleDequeConcatenatesMixedOrientations" to ::reversibleDequeConcatenatesMixedOrientations,
         "reversibleDequeKeepsMixedConcatHistoriesNavigable" to ::reversibleDequeKeepsMixedConcatHistoriesNavigable,
         "measuredTreeSplitsAndLocatesByPrefix" to ::measuredTreeSplitsAndLocatesByPrefix,
+        "realTreeSubstrateBalancesAndSharesAcrossFacades" to ::realTreeSubstrateBalancesAndSharesAcrossFacades,
+        "generatedRealTreeEditsMatchListModel" to ::generatedRealTreeEditsMatchListModel,
+        "largeRealTreeConstructionKeepsCachedMeasures" to ::largeRealTreeConstructionKeepsCachedMeasures,
         "sortedCollectionsKeepOrderAndRelations" to ::sortedCollectionsKeepOrderAndRelations,
         "sortedMapIsLastWinsAndNavigable" to ::sortedMapIsLastWinsAndNavigable,
         "sortedMapSetItemStoresTheSuppliedKey" to ::sortedMapSetItemStoresTheSuppliedKey,
         "priorityQueueDequeuesStably" to ::priorityQueueDequeuesStably,
         "intervalTreeUsesClosedOverlapAndCoalesces" to ::intervalTreeUsesClosedOverlapAndCoalesces,
         "intervalTreeInsertsNewEqualLowIntervalsFirst" to ::intervalTreeInsertsNewEqualLowIntervalsFirst,
+        "recurringPortingRegressionsStayLocked" to ::recurringPortingRegressionsStayLocked,
         "ropesEditAndNavigateText" to ::ropesEditAndNavigateText,
         "overflowingRangesAreRejected" to ::overflowingRangesAreRejected,
         "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,
