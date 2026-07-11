@@ -31,8 +31,12 @@ tree handles; use their `ft_*_move` helpers when relocating an initialized value
 
 Most allocation failures are reported as `FT_STATUS_NO_MEMORY`. The current `ft_copy_fn` callback contract is
 void-returning, so allocations performed inside library-provided deep-copy callbacks for compound facade values
-cannot be reported through `ft_status`; those callbacks terminate the process on allocation failure. Caller-supplied
-copy callbacks should either complete successfully or apply their own fatal/allocation policy consistently.
+cannot be reported through `ft_status`; those callbacks terminate the process on allocation failure. This
+boundary includes read paths that copy stored compound entries out to the caller — for example `ft_rope_at`,
+`ft_measured_rope_at`, `ft_sorted_map_entry_at`, priority-queue entry peeks, and interval-tree entry reads —
+which can therefore abort under allocation pressure even though neighboring operations return
+`FT_STATUS_NO_MEMORY`. Caller-supplied copy callbacks should either complete successfully or apply their own
+fatal/allocation policy consistently.
 
 ## Current Scope
 

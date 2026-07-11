@@ -664,6 +664,7 @@ tds_tungsten_status tds_tungsten_list_reverse(const tds_tungsten_list* list, tds
 
 typedef struct tds_tungsten_map_context {
     tds_tungsten_list result;
+    const ft_value_type* result_value_type;
     tds_tungsten_map_fn map;
     void* map_context;
     void* buffer;
@@ -680,6 +681,9 @@ static void tds_tungsten_list_map_visit(const void* value, void* context)
     map_context->map(map_context->buffer, value, map_context->map_context);
     tds_tungsten_list next;
     map_context->status = tds_tungsten_list_push_back(&map_context->result, map_context->buffer, &next);
+    /* push_back deep-copied the mapped value; destroy the callback-constructed
+     * original so owning result types do not leak one payload per element. */
+    tds_tungsten_value_destroy(map_context->result_value_type, map_context->buffer);
     if (map_context->status == TDS_TUNGSTEN_OK) {
         tds_tungsten_list_dispose(&map_context->result);
         tds_tungsten_list_move(&map_context->result, &next);
@@ -699,6 +703,7 @@ tds_tungsten_status tds_tungsten_list_map(
     }
 
     tds_tungsten_map_context context;
+    context.result_value_type = result_value_type;
     context.map = map;
     context.map_context = map_context;
     context.buffer = malloc(result_value_type->size == 0 ? 1u : result_value_type->size);
@@ -1765,26 +1770,16 @@ static tds_tungsten_status tds_tungsten_insert_absent(
             return TDS_TUNGSTEN_OUT_OF_MEMORY;
         }
 
+        /* Collect the existing entries with one in-order walk (the per-index
+         * tree descent made this rare relabel path O(n log n)), then splice
+         * the new pair in at its position. */
         size_t written = 0;
-        for (size_t source = 0; source != count; ++source) {
-            if (written == position) {
-                views[written].stamp = 0;
-                views[written].key = key;
-                views[written].value = value;
-                ++written;
-            }
-            const tds_tungsten_assoc_entry* entry = tds_tungsten_tree_at(root, source);
-            views[written].stamp = entry->stamp;
-            views[written].key = entry->key;
-            views[written].value = entry->value;
-            ++written;
-        }
-        if (written == position) {
-            views[written].stamp = 0;
-            views[written].key = key;
-            views[written].value = value;
-            ++written;
-        }
+        tds_tungsten_tree_fill_views(root, views, &written);
+        (void)memmove(&views[position + 1u], &views[position], (count - position) * sizeof(*views));
+        views[position].stamp = 0;
+        views[position].key = key;
+        views[position].value = value;
+        written = count + 1u;
 
         struct tds_tungsten_assoc_node* new_root = NULL;
         tds_hamt_map new_index;

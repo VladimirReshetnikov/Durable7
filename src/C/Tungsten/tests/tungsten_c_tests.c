@@ -293,6 +293,88 @@ static void double_int(void* destination, const void* source, void* context)
     *(int*)destination = *(const int*)source * 2;
 }
 
+/* An owning value type whose payload lives on the heap, with balanced
+ * allocation/destruction counters so ownership leaks are observable. */
+typedef struct owned_int {
+    int* payload;
+} owned_int;
+
+static long g_owned_allocations = 0;
+static long g_owned_destructions = 0;
+
+static void owned_int_copy(void* destination, const void* source, void* context)
+{
+    (void)context;
+    owned_int* to = (owned_int*)destination;
+    to->payload = (int*)malloc(sizeof(int));
+    if (to->payload == NULL) {
+        abort();
+    }
+    *to->payload = *((const owned_int*)source)->payload;
+    ++g_owned_allocations;
+}
+
+static void owned_int_destroy(void* value, void* context)
+{
+    (void)context;
+    owned_int* owned = (owned_int*)value;
+    free(owned->payload);
+    owned->payload = NULL;
+    ++g_owned_destructions;
+}
+
+static void map_int_to_owned(void* destination, const void* source, void* context)
+{
+    (void)context;
+    owned_int* owned = (owned_int*)destination;
+    owned->payload = (int*)malloc(sizeof(int));
+    if (owned->payload == NULL) {
+        abort();
+    }
+    *owned->payload = *(const int*)source * 3;
+    ++g_owned_allocations;
+}
+
+static void test_list_map_owning_result_type(void)
+{
+    ft_value_type int_type;
+    init_int_type(&int_type);
+
+    ft_value_type owned_type;
+    ft_value_type_init(&owned_type, sizeof(owned_int));
+    owned_type.copy = owned_int_copy;
+    owned_type.destroy = owned_int_destroy;
+
+    g_owned_allocations = 0;
+    g_owned_destructions = 0;
+
+    const int values[] = {1, 2, 3, 4, 5};
+    tds_tungsten_list list;
+    REQUIRE_STATUS(tds_tungsten_list_from_array(&list, &int_type, values, 5));
+
+    tds_tungsten_list mapped;
+    REQUIRE_STATUS(tds_tungsten_list_map(&list, &owned_type, map_int_to_owned, NULL, &mapped));
+    REQUIRE(tds_tungsten_list_size(&mapped) == 5);
+
+    owned_int front;
+    REQUIRE_STATUS(tds_tungsten_list_front(&mapped, &front));
+    REQUIRE(front.payload != NULL && *front.payload == 3);
+    owned_int_destroy(&front, NULL);
+
+    owned_int back;
+    REQUIRE_STATUS(tds_tungsten_list_back(&mapped, &back));
+    REQUIRE(back.payload != NULL && *back.payload == 15);
+    owned_int_destroy(&back, NULL);
+
+    tds_tungsten_list_dispose(&mapped);
+    tds_tungsten_list_dispose(&list);
+
+    /* Every owned payload constructed by the map callback or copied into the
+     * list must have been destroyed exactly once. */
+    REQUIRE(g_owned_allocations > 0);
+    REQUIRE(g_owned_allocations == g_owned_destructions);
+}
+
 static void test_list_examples(void)
 {
     ft_value_type int_type;
@@ -846,6 +928,7 @@ int main(void)
     }
 
     run_test("list examples", test_list_examples);
+    run_test("list map owning result type", test_list_map_owning_result_type);
     run_test("result aliasing is rejected", test_result_aliasing_is_rejected);
     run_test("association ordering examples", test_association_ordering_examples);
     run_test("association custom policy", test_association_custom_policy);

@@ -25,6 +25,11 @@ typedef enum tds_tungsten_status {
 
 typedef uint32_t (*tds_tungsten_hash_fn)(const void* key, void* context);
 typedef bool (*tds_tungsten_equal_fn)(const void* left, const void* right, void* context);
+/* Constructs the mapped value for `source` into `destination` (uninitialized
+ * storage of the result value type's size). The list copies the constructed
+ * value with the result type's `copy` and then destroys the original with the
+ * result type's `destroy`, so owning result types release per-element
+ * resources exactly once. */
 typedef void (*tds_tungsten_map_fn)(void* destination, const void* source, void* context);
 typedef void (*tds_tungsten_visit_fn)(const void* value, void* context);
 typedef void (*tds_tungsten_assoc_visit_fn)(const void* key, const void* value, void* context);
