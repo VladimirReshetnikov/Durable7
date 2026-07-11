@@ -35,6 +35,8 @@ reasonable oracle.
   Unicode/newline extras, and builders.
 - `RopeBoundaryCoverageTests.cs` covers legal sub-minimum split chunks, concatenation seam re-coalescing, and
   mixed `TextReader` peek/single/buffered reads across chunk boundaries.
+- `RrbVectorTests.cs` covers branch-factor boundaries, unequal-height boundary-spine concatenation,
+  split round-trips, endpoint contracts, and randomized persistent edit histories with retained versions.
 - `SampleSmokeTests.cs` captures the Tour, Showcase, and Editor sample output contracts.
 - `PersistenceConcurrencyExamplesTests.cs` and `TearableConcurrencyStressTests.cs` cover structural-sharing
   examples, atomic publication, concurrent reads, and tearable-value stress.

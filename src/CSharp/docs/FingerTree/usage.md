@@ -333,6 +333,23 @@ Implement `IMeasure<TElement, TMeasure>` for custom measures and `IMeasurePredic
 zero-allocation custom locate/split predicates. Prefer the typed facades above when they match the
 problem; use the raw measured tree when your measure is the primary design.
 
+## Relaxed Radix-Balanced Vectors
+
+Use `RrbVector<T>` for a persistent sequence whose dominant operation is uniform random indexing:
+
+```csharp
+var left = RrbVector<int>.CreateRange(Enumerable.Range(0, 10_000));
+var right = RrbVector<int>.CreateRange(Enumerable.Range(10_000, 10_000));
+var vector = left.Concat(right);
+
+int middle = vector[10_000];
+var edited = vector.SetItem(10_000, -1);
+var (prefix, suffix) = edited.SplitAt(5_000);
+```
+
+Choose `FingerTreeDeque<T>` when endpoints and concat dominate, `Rope<T>` when scan density and
+middle edits dominate, and `RrbVector<T>` when consistent indexing constants dominate.
+
 ## Choosing A Surface
 
 | Need | Start with |
@@ -348,6 +365,7 @@ problem; use the raw measured tree when your measure is the primary design.
 | Minimum-priority draining and meld | `PriorityQueue<TElement, TPriority>` |
 | Closed-interval overlap and containment queries | `IntervalTree<T>` |
 | Chunked persistent positional sequence | `Rope<T>` |
+| Uniform random-access persistent sequence | `RrbVector<T>` |
 | Incremental generic append construction | `Rope<T>.Builder` |
 | Chunked sequence with cumulative measure navigation | `MeasuredRope<T, TMeasure, TMeasureOps>` |
 | Incremental measured append construction | `MeasuredRope<T, TMeasure, TMeasureOps>.Builder` |

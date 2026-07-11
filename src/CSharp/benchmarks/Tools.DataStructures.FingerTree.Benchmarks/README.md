@@ -51,6 +51,7 @@ Results are written under `BenchmarkDotNet.Artifacts/` (git-ignored); curated ta
 | `ChampBenchmarks` | CHAMP lookup, payload-dense iteration, and independent-history equality | `Dictionary` and `ImmutableDictionary` |
 | `CtrieBenchmarks` | lock-free lookup and O(1) immutable snapshot publication | `ConcurrentDictionary` lookup and O(n) immutable copy |
 | `PatriciaMapBenchmarks` | integer-key lookup and prefix-aware structural union | CHAMP and `ImmutableDictionary` lookup |
+| `RrbVectorBenchmarks` | uniform middle indexing and boundary-spine concatenation | `Rope<T>` indexing and `ImmutableList<T>` indexing/concat |
 
 ## Fairness methodology
 

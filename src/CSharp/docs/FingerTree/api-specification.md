@@ -526,3 +526,21 @@ The implementation should keep XML documentation aligned with this file. XML sum
 - **Builder.** `MeasuredRope<T, TMeasure, TMeasureOps>.Builder` is the measured analogue of `Rope<T>.Builder`: append-only, frozen-prefix based, and clean-freeze cached. It additionally exposes a live O(1) `Measure` property seeded from `TMeasureOps.Empty` and updated as elements are appended.
 - **Choice.** Use `Rope<T>` when no secondary measure is needed; `MeasuredRope<T, TMeasure, TMeasureOps>` when measure-based navigation is required.
 - **Text conveniences.** `RopeText` is a companion extension layer (so the rope cores stay element-agnostic) over `Rope<char>` and the line-aware `MeasuredRope<char, int, NewlineMeasure>`: the ready-made `NewlineMeasure`, string interop (`ToCharRope`/`ToTextRope`/`AsString`), zero-based O(log n) line/column navigation (`LineCount`, `LineOfOffset`, `LineStartOffset`, `LineColumnOf`, `OffsetOf`, `GetLine`, `Lines`), and a forward-only `TextReader` adapter (`AsTextReader`). Line numbering follows the editor convention that line count is newline count plus one (an empty buffer is one empty line; a trailing newline yields a trailing empty line).
+
+## Relaxed Radix-Balanced Vector
+
+`RrbVector<T>` is an immutable `IReadOnlyList<T>` with 32-element leaf arrays and 32-way internal
+branches. Every branch stores cumulative child sizes, including regular branches, so indexing uses
+the same code before and after concatenation relaxes the shape.
+
+- `CreateRange` builds packed leaves and bottom-up 32-way levels in O(n).
+- Indexed get and `SetItem` are O(log32 n); equal-value replacement returns the current instance.
+- `AddFirst`/`AddLast` are boundary concatenations. `Concat` recursively merges the right and left
+  boundary spines, coalesces leaf payloads, and partitions at most 64 children into balanced nodes,
+  taking O(log32(n + m)) time and storage.
+- `SplitAt` copies one path and returns structurally shared prefix/suffix vectors. `InsertRange` and
+  `RemoveRange` compose split and concat with O(log n + inserted-elements) / O(log n) structure work.
+- Enumeration is O(n) and currently allocates an iterator and explicit traversal stack.
+
+All produced nodes are immutable. Old vectors remain valid, empty-side concat and boundary splits
+preserve instance identity, and no caller-owned mutable arrays are retained.

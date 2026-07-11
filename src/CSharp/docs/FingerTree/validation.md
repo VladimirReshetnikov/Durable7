@@ -82,6 +82,8 @@ The suite covers:
   behavior against BCL or brute-force models where appropriate;
 - `Rope<T>`, `MeasuredRope<T, TMeasure, TMeasureOps>`, text helpers, editor-grade Unicode/newline helpers,
   `RopeBuilder`, and nested append-only rope builders;
+- `RrbVector<T>` radix boundaries, unequal-height concatenation, split round-trips, retained
+  snapshots, and randomized mixed-edit histories;
 - runnable sample smoke tests for Tour, Showcase, and Editor;
 - persistence/concurrency examples and tearable-struct stress tests;
 - CsCheck property tests and model-based command-sequence tests that shrink operation histories rather than only

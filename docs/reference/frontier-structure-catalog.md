@@ -163,6 +163,11 @@ key-width strategy, no-op merge identity - for that scheduled work.
 
 ### RRB vector
 
+**C# status (2026-07-10): Implemented.** `RrbVector<T>` ships with 32-element leaves, relaxed
+32-way branches and cumulative size tables, O(log32 n) indexing/path-copying updates, structural
+split/edit operations, and O(log32(n + m)) boundary-spine concatenation. Its benchmark class covers
+the random-access gate against `Rope<T>` and `ImmutableList<T>`.
+
 **What it is.** The relaxed radix-balanced tree (Bagwell & Rompf 2011; practical treatment with
 transients in Stucki et al., ICFP 2015): a 32-way branching persistent vector where nodes are
 normally full (radix-indexable in O(log32 n) with pure bit arithmetic) and carry small size tables
