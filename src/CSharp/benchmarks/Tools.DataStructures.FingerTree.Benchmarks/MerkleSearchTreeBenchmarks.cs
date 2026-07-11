@@ -9,6 +9,11 @@ public class MerkleSearchTreeBenchmarks
     private MerkleSearchTree<int, long> _tree = null!;
     private MerkleSearchTree<int, long> _independent = null!;
     private MerkleSearchTree<int, long> _changed = null!;
+    private MerkleSearchTree<int, long> _left = null!;
+    private MerkleSearchTree<int, long> _right = null!;
+    private MerkleSearchTreePolicy<int, long> _policy = null!;
+    private InMemoryMerkleBlockStore _store = null!;
+    private InMemoryMerkleBlockStore _emptyStore = null!;
     private System.Collections.Generic.SortedDictionary<int, long> _dictionary = null!;
     private int _probe;
 
@@ -18,15 +23,20 @@ public class MerkleSearchTreeBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        var policy = MerkleSearchTreePolicy<int, long>.Create(
+        _policy = MerkleSearchTreePolicy<int, long>.Create(
             "benchmark-int-long-v1",
             Comparer<int>.Default,
             MerkleCodecs.Int32,
             MerkleCodecs.Int64);
         var entries = Enumerable.Range(0, Count).Select(key => KeyValuePair.Create(key, (long)key)).ToArray();
-        _tree = MerkleSearchTree<int, long>.CreateRange(entries, policy);
-        _independent = MerkleSearchTree<int, long>.CreateRange(entries.Reverse(), policy);
+        _tree = MerkleSearchTree<int, long>.CreateRange(entries, _policy);
+        _independent = MerkleSearchTree<int, long>.CreateRange(entries.Reverse(), _policy);
         _changed = _tree.SetItem(Count / 2, -1);
+        _left = _tree.SetItem(0, -1);
+        _right = _tree.SetItem(Count - 1, -2);
+        _store = new InMemoryMerkleBlockStore();
+        _ = _tree.Save(_store);
+        _emptyStore = new InMemoryMerkleBlockStore();
         _dictionary = new System.Collections.Generic.SortedDictionary<int, long>(entries.ToDictionary());
         _probe = Count / 2;
     }
@@ -45,4 +55,27 @@ public class MerkleSearchTreeBenchmarks
 
     [Benchmark]
     public MerkleSearchTree<int, long> MerklePersistentUpdate() => _tree.SetItem(_probe, -1);
+
+    [Benchmark]
+    public MerkleSearchTree<int, long> MerklePersistentInsert() => _tree.SetItem(Count, Count);
+
+    [Benchmark]
+    public MerkleSearchTree<int, long> MerklePersistentRemove() => _tree.Remove(_probe);
+
+    [Benchmark]
+    public MerkleSearchTree<int, long> MerkleVerifiedLoad() =>
+        MerkleSearchTree<int, long>.Load(_tree.RootHash, _policy, _store);
+
+    [Benchmark]
+    public MerkleBlockPack MerkleColdSyncPack() => _tree.CreateSyncPack(_emptyStore);
+
+    [Benchmark]
+    public MerkleProof MerkleMembershipProof() => _tree.CreateProof(_probe);
+
+    [Benchmark]
+    public MerkleProof MerkleRangeProof() => _tree.CreateRangeProof(_probe - 32, _probe + 32);
+
+    [Benchmark]
+    public MerkleThreeWayMergeResult<int, long> MerkleDisjointThreeWayMerge() =>
+        MerkleSearchTree<int, long>.Merge(_tree, _left, _right);
 }

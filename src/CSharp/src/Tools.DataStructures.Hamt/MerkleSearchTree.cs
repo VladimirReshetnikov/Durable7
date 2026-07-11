@@ -1,15 +1,31 @@
+using System.Buffers.Binary;
 using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
 
 namespace Tools.DataStructures.Hamt;
 
-/// <summary>Represents an immutable ordered content-addressed map with deterministic Merkle shape.</summary>
+/// <summary>
+/// Represents an immutable ordered content-addressed map using canonical wide Merkle-search-tree
+/// blocks.
+/// </summary>
 /// <typeparam name="TKey">The ordered key type.</typeparam>
 /// <typeparam name="TValue">The value type.</typeparam>
-[DebuggerDisplay("Count = {Count}, Height = {Height}, RootHash = {RootHash}")]
-public sealed class MerkleSearchTree<TKey, TValue> : IReadOnlyDictionary<TKey, TValue>
+/// <remarks>
+/// Keys are assigned geometric layers from leading zero base-16 digits in their policy-bound
+/// SHA-256 digest. A block stores every consecutive key at one layer and child blocks for the key
+/// intervals between them. The resulting B=16 shape is determined entirely by policy-bound encoded
+/// contents, never insertion or deletion history.
+/// </remarks>
+[DebuggerDisplay("Count = {Count}, Height = {Height}, Blocks = {BlockCount}, RootHash = {RootHash}")]
+public sealed partial class MerkleSearchTree<TKey, TValue> : IReadOnlyDictionary<TKey, TValue>
 {
+    private const int DigestLength = 32;
+    private const int BlockHeaderLength = 4 + 1 + DigestLength + 1 + sizeof(int) + sizeof(int);
+    private const byte NodeBlockTag = 1;
+    private static readonly byte[] BlockMagic = "MST2"u8.ToArray();
+
     private readonly Node? _root;
 
     private MerkleSearchTree(Node? root, MerkleSearchTreePolicy<TKey, TValue> policy)
@@ -18,17 +34,20 @@ public sealed class MerkleSearchTree<TKey, TValue> : IReadOnlyDictionary<TKey, T
         Policy = policy;
     }
 
-    /// <summary>Gets the deterministic comparison/encoding/hash policy.</summary>
+    /// <summary>Gets the deterministic comparison, codec, and hash-domain policy.</summary>
     public MerkleSearchTreePolicy<TKey, TValue> Policy { get; }
 
     /// <summary>Gets the number of entries.</summary>
     public int Count => _root?.Count ?? 0;
 
-    /// <summary>Gets whether the tree is empty.</summary>
+    /// <summary>Gets whether the tree contains no entries.</summary>
     public bool IsEmpty => _root is null;
 
-    /// <summary>Gets the tree height for diagnostics.</summary>
+    /// <summary>Gets the number of block levels on the deepest path.</summary>
     public int Height => _root?.Height ?? 0;
+
+    /// <summary>Gets the number of content-addressed blocks.</summary>
+    public int BlockCount => _root?.BlockCount ?? 0;
 
     /// <summary>Gets the SHA-256 digest naming this exact policy-bound map content.</summary>
     public MerkleDigest RootHash => _root?.Digest ?? Policy.EmptyDigest;
@@ -48,91 +67,123 @@ public sealed class MerkleSearchTree<TKey, TValue> : IReadOnlyDictionary<TKey, T
 
     internal object? RootIdentity => _root;
 
-    internal (TKey Key, int LeftCount, int RightCount)[] ShapeForTesting()
+    internal (int Level, TKey Key, int EntriesInBlock, int SubtreeCount)[] ShapeForTesting()
     {
         if (_root is null)
             return [];
-        var result = new List<(TKey, int, int)>(Count);
+
+        var result = new List<(int, TKey, int, int)>(Count);
         var stack = new Stack<Node>();
         stack.Push(_root);
         while (stack.TryPop(out var node))
         {
-            result.Add((node.Key, node.Left?.Count ?? 0, node.Right?.Count ?? 0));
-            if (node.Right is not null) stack.Push(node.Right);
-            if (node.Left is not null) stack.Push(node.Left);
+            foreach (var entry in node.Entries)
+                result.Add((node.Level, entry.Key, node.Entries.Length, node.Count));
+            for (var index = node.Children.Length - 1; index >= 0; index--)
+            {
+                if (node.Children[index] is not null)
+                    stack.Push(node.Children[index]!);
+            }
         }
         return [.. result];
     }
 
+    internal IReadOnlyList<(MerkleDigest Digest, byte[] Bytes)> BlocksForTesting()
+    {
+        if (_root is null)
+            return [];
+        var result = new List<(MerkleDigest, byte[])>(_root.BlockCount);
+        var stack = new Stack<Node>();
+        stack.Push(_root);
+        while (stack.TryPop(out var node))
+        {
+            result.Add((node.Digest, [.. node.BlockBytes]));
+            foreach (var child in node.Children)
+            {
+                if (child is not null)
+                    stack.Push(child);
+            }
+        }
+        return result;
+    }
+
     /// <summary>Creates an empty tree with an explicit deterministic policy.</summary>
-    /// <param name="policy">The deterministic policy.</param>
-    /// <returns>An empty tree.</returns>
     public static MerkleSearchTree<TKey, TValue> Create(MerkleSearchTreePolicy<TKey, TValue> policy)
     {
         ArgumentNullException.ThrowIfNull(policy);
         return new MerkleSearchTree<TKey, TValue>(null, policy);
     }
 
-    /// <summary>Creates a tree from entries with last-wins duplicate-key semantics.</summary>
-    /// <param name="entries">The entries to add.</param>
-    /// <param name="policy">The deterministic policy.</param>
-    /// <returns>A tree containing the entries.</returns>
+    /// <summary>Creates a canonical tree with last-value/first-equivalent-key semantics.</summary>
     public static MerkleSearchTree<TKey, TValue> CreateRange(
         IEnumerable<KeyValuePair<TKey, TValue>> entries,
         MerkleSearchTreePolicy<TKey, TValue> policy)
     {
         ArgumentNullException.ThrowIfNull(entries);
-        var result = Create(policy);
-        foreach (var (key, value) in entries)
-            result = result.SetItem(key, value);
-        return result;
+        var tree = Create(policy);
+        var pending = new List<PendingEntry>();
+        var sequence = 0;
+        foreach (var entry in entries)
+            pending.Add(new PendingEntry(entry.Key, entry.Value, checked(sequence++)));
+        if (pending.Count == 0)
+            return tree;
+
+        pending.Sort((left, right) =>
+        {
+            var comparison = policy.Comparer.Compare(left.Key, right.Key);
+            return comparison != 0 ? comparison : left.Sequence.CompareTo(right.Sequence);
+        });
+
+        var items = new List<EntryRecord>(pending.Count);
+        for (var index = 0; index < pending.Count;)
+        {
+            var end = index + 1;
+            while (end < pending.Count && policy.Comparer.Compare(pending[index].Key, pending[end].Key) == 0)
+                end++;
+            items.Add(tree.CreateItem(pending[index].Key, pending[end - 1].Value));
+            index = end;
+        }
+
+        var array = items.ToArray();
+        return new MerkleSearchTree<TKey, TValue>(tree.BuildCanonical(array, 0, array.Length), policy);
     }
 
     /// <summary>Determines whether a key is present.</summary>
-    /// <param name="key">The key.</param>
-    /// <returns><see langword="true"/> when present.</returns>
     public bool ContainsKey(TKey key) => TryFind(key, out _);
 
     /// <summary>Tries to retrieve a value by key.</summary>
-    /// <param name="key">The key.</param>
-    /// <param name="value">The value on success.</param>
-    /// <returns><see langword="true"/> when present.</returns>
     public bool TryGetValue(TKey key, [MaybeNullWhen(false)] out TValue value)
     {
-        if (TryFind(key, out var node))
+        if (TryFind(key, out var item))
         {
-            value = node.Value;
+            value = item.Value;
             return true;
         }
         value = default;
         return false;
     }
 
-    /// <summary>Adds or replaces an entry and recomputes only the copied Merkle path.</summary>
-    /// <param name="key">The key.</param>
-    /// <param name="value">The value.</param>
-    /// <returns>The updated tree, or this tree for an equal-value no-op.</returns>
+    /// <summary>Adds or replaces an entry by copying only affected blocks.</summary>
     public MerkleSearchTree<TKey, TValue> SetItem(TKey key, TValue value)
     {
         if (TryFind(key, out var existing))
         {
-            if (EqualityComparer<TValue>.Default.Equals(existing.Value, value))
+            var valueBytes = EncodeOwned(Policy.ValueCodec, value);
+            if (existing.ValueBytes.AsSpan().SequenceEqual(valueBytes))
                 return this;
-            var valueBytes = Policy.ValueCodec.Encode(value);
-            var root = UpdateValue(_root!, key, value, valueBytes);
-            return new MerkleSearchTree<TKey, TValue>(root, Policy);
+            var replacement = new EntryRecord(
+                existing.Key,
+                value,
+                existing.KeyBytes,
+                valueBytes,
+                existing.Layer);
+            return new MerkleSearchTree<TKey, TValue>(UpdateValue(_root!, key, replacement), Policy);
         }
 
-        var keyBytes = Policy.KeyCodec.Encode(key);
-        var valueEncoding = Policy.ValueCodec.Encode(value);
-        var rank = Policy.HashKey(keyBytes);
-        var item = NewNode(key, value, keyBytes, valueEncoding, rank, null, null);
-        return new MerkleSearchTree<TKey, TValue>(Insert(_root, item), Policy);
+        return new MerkleSearchTree<TKey, TValue>(Insert(_root, CreateItem(key, value)), Policy);
     }
 
-    /// <summary>Removes a key, preserving identity when absent.</summary>
-    /// <param name="key">The key.</param>
-    /// <returns>The updated tree.</returns>
+    /// <summary>Removes a key and contracts any empty block shell.</summary>
     public MerkleSearchTree<TKey, TValue> Remove(TKey key)
     {
         var root = Remove(_root, key, out var removed);
@@ -140,37 +191,32 @@ public sealed class MerkleSearchTree<TKey, TValue> : IReadOnlyDictionary<TKey, T
     }
 
     /// <summary>Returns an empty tree retaining the same deterministic policy.</summary>
-    /// <returns>An empty tree, or this tree when already empty.</returns>
     public MerkleSearchTree<TKey, TValue> Clear() => IsEmpty ? this : Create(Policy);
 
-    /// <summary>Compares policy domain and root digest in O(1).</summary>
-    /// <param name="other">The other tree.</param>
-    /// <returns><see langword="true"/> when the SHA-256 content addresses match.</returns>
+    /// <summary>Compares policy domains and root content addresses in O(1).</summary>
     /// <remarks>This treats SHA-256 collision resistance as the content-addressing assumption.</remarks>
     public bool ContentEquals(MerkleSearchTree<TKey, TValue>? other) =>
         other is not null
         && Policy.DomainDigest == other.Policy.DomainDigest
         && RootHash == other.RootHash;
 
-    /// <summary>Verifies semantic map equality after digest and policy fast paths.</summary>
-    /// <param name="other">The other tree.</param>
-    /// <param name="valueComparer">The value comparer, or <see langword="null"/> for the default.</param>
-    /// <returns><see langword="true"/> when the maps are semantically equal.</returns>
+    /// <summary>Compares semantic map contents, using content addresses and block identity as fast paths.</summary>
     public bool MapEquals(
         MerkleSearchTree<TKey, TValue>? other,
         IEqualityComparer<TValue>? valueComparer = null)
     {
         if (ReferenceEquals(this, other))
             return true;
-        if (other is null || Count != other.Count || !ContentEquals(other))
+        if (other is null || Count != other.Count || Policy.DomainDigest != other.Policy.DomainDigest)
             return false;
-        return NodesEqual(_root, other._root, valueComparer ?? EqualityComparer<TValue>.Default);
+
+        var values = valueComparer ?? EqualityComparer<TValue>.Default;
+        if (RootHash == other.RootHash)
+            return NodesEqual(_root, other._root, values);
+        return EnumeratedEquals(other, values);
     }
 
-    /// <summary>Computes a digest-pruned semantic diff.</summary>
-    /// <param name="other">The target tree.</param>
-    /// <param name="valueComparer">The value comparer, or <see langword="null"/> for the default.</param>
-    /// <returns>Added, removed, and changed entries.</returns>
+    /// <summary>Computes a block-digest-pruned semantic diff.</summary>
     public IReadOnlyList<MerkleMapDifference<TKey, TValue>> Diff(
         MerkleSearchTree<TKey, TValue> other,
         IEqualityComparer<TValue>? valueComparer = null)
@@ -182,9 +228,6 @@ public sealed class MerkleSearchTree<TKey, TValue> : IReadOnlyDictionary<TKey, T
     }
 
     /// <summary>Enumerates an inclusive key range in comparer order.</summary>
-    /// <param name="minimumKey">The inclusive lower bound.</param>
-    /// <param name="maximumKey">The inclusive upper bound.</param>
-    /// <returns>The entries in range.</returns>
     public IEnumerable<KeyValuePair<TKey, TValue>> EnumerateRange(TKey minimumKey, TKey maximumKey)
     {
         if (Policy.Comparer.Compare(minimumKey, maximumKey) > 0)
@@ -192,150 +235,380 @@ public sealed class MerkleSearchTree<TKey, TValue> : IReadOnlyDictionary<TKey, T
         return EnumerateRangeCore(_root, minimumKey, maximumKey);
     }
 
+    /// <summary>Validates ordering, layering, cached metadata, and exact block bytes.</summary>
+    public MerkleSearchTreeStatistics ValidateStructure()
+    {
+        if (_root is null)
+            return new MerkleSearchTreeStatistics(0, 0, 0, 0, 0, 0, 0);
+
+        var accumulator = new ValidationAccumulator();
+        ValidateNode(_root, accumulator);
+        if (accumulator.EntryCount != Count || accumulator.BlockCount != BlockCount)
+            throw new InvalidOperationException("Merkle root metadata disagrees with validated contents.");
+        return accumulator.ToStatistics(Height);
+    }
+
     /// <summary>Returns an enumerator in key order.</summary>
-    /// <returns>An enumerator.</returns>
     public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator() => Enumerate(_root).GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-    private bool TryFind(TKey key, [NotNullWhen(true)] out Node? result)
+    private EntryRecord CreateItem(TKey key, TValue value)
+    {
+        var keyBytes = EncodeOwned(Policy.KeyCodec, key);
+        var valueBytes = EncodeOwned(Policy.ValueCodec, value);
+        return new EntryRecord(key, value, keyBytes, valueBytes, Layer(Policy.HashKey(keyBytes)));
+    }
+
+    private static byte[] EncodeOwned<T>(IMerkleCodec<T> codec, T value)
+    {
+        var encoded = codec.Encode(value)
+            ?? throw new InvalidOperationException($"Merkle codec '{codec.EncodingId}' returned null bytes.");
+        return [.. encoded];
+    }
+
+    private bool TryFind(TKey key, [NotNullWhen(true)] out EntryRecord? result)
     {
         var node = _root;
         while (node is not null)
         {
-            var comparison = Policy.Comparer.Compare(key, node.Key);
-            if (comparison == 0)
+            var position = FindPosition(node.Entries, key, out var found);
+            if (found)
             {
-                result = node;
+                result = node.Entries[position];
                 return true;
             }
-            node = comparison < 0 ? node.Left : node.Right;
+            node = node.Children[position];
         }
         result = null;
         return false;
     }
 
-    private Node UpdateValue(Node node, TKey key, TValue value, byte[] valueBytes)
+    private int FindPosition(EntryRecord[] entries, TKey key, out bool found)
     {
-        var comparison = Policy.Comparer.Compare(key, node.Key);
-        if (comparison == 0)
-            return NewNode(node.Key, value, node.KeyBytes, valueBytes, node.Rank, node.Left, node.Right);
-        return comparison < 0
-            ? NewNode(node.Key, node.Value, node.KeyBytes, node.ValueBytes, node.Rank, UpdateValue(node.Left!, key, value, valueBytes), node.Right)
-            : NewNode(node.Key, node.Value, node.KeyBytes, node.ValueBytes, node.Rank, node.Left, UpdateValue(node.Right!, key, value, valueBytes));
-    }
-
-    private Node Insert(Node? root, Node item)
-    {
-        if (root is null)
-            return item;
-        if (Higher(item, root))
+        var low = 0;
+        var high = entries.Length;
+        while (low < high)
         {
-            var (left, right) = Split(root, item.Key);
-            return NewNode(item.Key, item.Value, item.KeyBytes, item.ValueBytes, item.Rank, left, right);
+            var middle = (low + high) >>> 1;
+            var comparison = Policy.Comparer.Compare(entries[middle].Key, key);
+            if (comparison < 0)
+                low = middle + 1;
+            else
+                high = middle;
         }
-        return Policy.Comparer.Compare(item.Key, root.Key) < 0
-            ? NewNode(root.Key, root.Value, root.KeyBytes, root.ValueBytes, root.Rank, Insert(root.Left, item), root.Right)
-            : NewNode(root.Key, root.Value, root.KeyBytes, root.ValueBytes, root.Rank, root.Left, Insert(root.Right, item));
+        found = low < entries.Length && Policy.Comparer.Compare(entries[low].Key, key) == 0;
+        return low;
     }
 
-    private (Node? Left, Node? Right) Split(Node? root, TKey key)
+    private Node? BuildCanonical(EntryRecord[] items, int start, int length)
     {
-        if (root is null)
+        if (length == 0)
+            return null;
+
+        var maximumLayer = 0;
+        for (var index = start; index < start + length; index++)
+            maximumLayer = Math.Max(maximumLayer, items[index].Layer);
+
+        var entries = new List<EntryRecord>();
+        var children = new List<Node?>();
+        var segmentStart = start;
+        for (var index = start; index < start + length; index++)
+        {
+            if (items[index].Layer != maximumLayer)
+                continue;
+            children.Add(BuildCanonical(items, segmentStart, index - segmentStart));
+            entries.Add(items[index]);
+            segmentStart = index + 1;
+        }
+        children.Add(BuildCanonical(items, segmentStart, start + length - segmentStart));
+        return NewNode(maximumLayer, [.. entries], [.. children]);
+    }
+
+    private Node UpdateValue(Node node, TKey key, EntryRecord replacement)
+    {
+        var position = FindPosition(node.Entries, key, out var found);
+        if (found)
+        {
+            var entries = (EntryRecord[])node.Entries.Clone();
+            entries[position] = replacement;
+            return NewNode(node.Level, entries, node.Children);
+        }
+
+        var children = (Node?[])node.Children.Clone();
+        children[position] = UpdateValue(children[position]!, key, replacement);
+        return NewNode(node.Level, node.Entries, children);
+    }
+
+    private Node Insert(Node? node, EntryRecord item)
+    {
+        if (node is null)
+            return NewNode(item.Layer, [item], [null, null]);
+
+        if (item.Layer > node.Level)
+        {
+            var split = Split(node, item.Key);
+            return NewNode(item.Layer, [item], [split.Left, split.Right]);
+        }
+
+        var position = FindPosition(node.Entries, item.Key, out var found);
+        Debug.Assert(!found, "SetItem checks for equivalent keys before insertion.");
+        if (item.Layer < node.Level)
+        {
+            var children = (Node?[])node.Children.Clone();
+            children[position] = Insert(children[position], item);
+            return NewNode(node.Level, node.Entries, children);
+        }
+
+        var childSplit = Split(node.Children[position], item.Key);
+        var entries = new EntryRecord[node.Entries.Length + 1];
+        Array.Copy(node.Entries, 0, entries, 0, position);
+        entries[position] = item;
+        Array.Copy(node.Entries, position, entries, position + 1, node.Entries.Length - position);
+
+        var expandedChildren = new Node?[node.Children.Length + 1];
+        Array.Copy(node.Children, 0, expandedChildren, 0, position);
+        expandedChildren[position] = childSplit.Left;
+        expandedChildren[position + 1] = childSplit.Right;
+        Array.Copy(
+            node.Children,
+            position + 1,
+            expandedChildren,
+            position + 2,
+            node.Children.Length - position - 1);
+        return NewNode(node.Level, entries, expandedChildren);
+    }
+
+    private (Node? Left, Node? Right) Split(Node? node, TKey key)
+    {
+        if (node is null)
             return (null, null);
-        if (Policy.Comparer.Compare(key, root.Key) < 0)
-        {
-            var (left, right) = Split(root.Left, key);
-            return (left, NewNode(root.Key, root.Value, root.KeyBytes, root.ValueBytes, root.Rank, right, root.Right));
-        }
-        var (newLeft, newRight) = Split(root.Right, key);
-        return (NewNode(root.Key, root.Value, root.KeyBytes, root.ValueBytes, root.Rank, root.Left, newLeft), newRight);
+
+        var position = FindPosition(node.Entries, key, out var found);
+        Debug.Assert(!found, "Split is used only for keys absent from the tree.");
+        var childSplit = Split(node.Children[position], key);
+
+        var leftEntries = node.Entries[..position];
+        var leftChildren = new Node?[position + 1];
+        Array.Copy(node.Children, 0, leftChildren, 0, position);
+        leftChildren[position] = childSplit.Left;
+
+        var rightEntries = node.Entries[position..];
+        var rightChildren = new Node?[rightEntries.Length + 1];
+        rightChildren[0] = childSplit.Right;
+        Array.Copy(node.Children, position + 1, rightChildren, 1, rightEntries.Length);
+
+        return (
+            CreateOrCollapse(node.Level, leftEntries, leftChildren),
+            CreateOrCollapse(node.Level, rightEntries, rightChildren));
     }
 
-    private Node? Remove(Node? root, TKey key, out bool removed)
+    private Node? Remove(Node? node, TKey key, out bool removed)
     {
-        if (root is null)
+        if (node is null)
         {
             removed = false;
             return null;
         }
-        var comparison = Policy.Comparer.Compare(key, root.Key);
-        if (comparison == 0)
+
+        var position = FindPosition(node.Entries, key, out var found);
+        if (!found)
         {
-            removed = true;
-            return Merge(root.Left, root.Right);
+            var child = Remove(node.Children[position], key, out removed);
+            if (!removed)
+                return node;
+            var children = (Node?[])node.Children.Clone();
+            children[position] = child;
+            return NewNode(node.Level, node.Entries, children);
         }
-        if (comparison < 0)
+
+        removed = true;
+        var entries = new EntryRecord[node.Entries.Length - 1];
+        Array.Copy(node.Entries, 0, entries, 0, position);
+        Array.Copy(node.Entries, position + 1, entries, position, entries.Length - position);
+
+        var childrenAfterRemoval = new Node?[node.Children.Length - 1];
+        Array.Copy(node.Children, 0, childrenAfterRemoval, 0, position);
+        childrenAfterRemoval[position] = Join(node.Children[position], node.Children[position + 1]);
+        Array.Copy(
+            node.Children,
+            position + 2,
+            childrenAfterRemoval,
+            position + 1,
+            node.Children.Length - position - 2);
+        return CreateOrCollapse(node.Level, entries, childrenAfterRemoval);
+    }
+
+    private Node? Join(Node? left, Node? right)
+    {
+        if (left is null)
+            return right;
+        if (right is null)
+            return left;
+
+        if (left.Level > right.Level)
         {
-            var left = Remove(root.Left, key, out removed);
-            return removed ? NewNode(root.Key, root.Value, root.KeyBytes, root.ValueBytes, root.Rank, left, root.Right) : root;
+            var children = (Node?[])left.Children.Clone();
+            children[^1] = Join(children[^1], right);
+            return NewNode(left.Level, left.Entries, children);
         }
-        var right = Remove(root.Right, key, out removed);
-        return removed ? NewNode(root.Key, root.Value, root.KeyBytes, root.ValueBytes, root.Rank, root.Left, right) : root;
+        if (left.Level < right.Level)
+        {
+            var children = (Node?[])right.Children.Clone();
+            children[0] = Join(left, children[0]);
+            return NewNode(right.Level, right.Entries, children);
+        }
+
+        var entries = new EntryRecord[left.Entries.Length + right.Entries.Length];
+        left.Entries.CopyTo(entries, 0);
+        right.Entries.CopyTo(entries, left.Entries.Length);
+        var combinedChildren = new Node?[entries.Length + 1];
+        Array.Copy(left.Children, 0, combinedChildren, 0, left.Entries.Length);
+        combinedChildren[left.Entries.Length] = Join(left.Children[^1], right.Children[0]);
+        Array.Copy(right.Children, 1, combinedChildren, left.Entries.Length + 1, right.Entries.Length);
+        return NewNode(left.Level, entries, combinedChildren);
     }
 
-    private Node? Merge(Node? left, Node? right)
+    private Node? CreateOrCollapse(int level, EntryRecord[] entries, Node?[] children)
     {
-        if (left is null) return right;
-        if (right is null) return left;
-        return Higher(left, right)
-            ? NewNode(left.Key, left.Value, left.KeyBytes, left.ValueBytes, left.Rank, left.Left, Merge(left.Right, right))
-            : NewNode(right.Key, right.Value, right.KeyBytes, right.ValueBytes, right.Rank, Merge(left, right.Left), right.Right);
+        Debug.Assert(children.Length == entries.Length + 1);
+        return entries.Length == 0 ? children[0] : NewNode(level, entries, children);
     }
 
-    private bool Higher(Node left, Node right)
+    private Node NewNode(int level, EntryRecord[] entries, Node?[] children)
     {
-        var level = left.Level.CompareTo(right.Level);
-        if (level != 0) return level > 0;
-        var digest = left.Rank.CompareTo(right.Rank);
-        if (digest != 0) return digest > 0;
-        return Policy.Comparer.Compare(left.Key, right.Key) < 0;
+        if (level is < 0 or > 64)
+            throw new InvalidOperationException("An MST layer must be between zero and 64.");
+        if (entries.Length == 0 || children.Length != entries.Length + 1)
+            throw new InvalidOperationException("An MST block must contain entries plus one child interval.");
+
+        var count = entries.Length;
+        var height = 1;
+        var blockCount = 1;
+        foreach (var child in children)
+        {
+            count = checked(count + (child?.Count ?? 0));
+            height = Math.Max(height, checked(1 + (child?.Height ?? 0)));
+            blockCount = checked(blockCount + (child?.BlockCount ?? 0));
+        }
+
+        var bytes = EncodeBlock(level, count, entries, children);
+        var digest = new MerkleDigest(SHA256.HashData(bytes));
+        var minimumKey = children[0] is { } firstChild ? firstChild.MinimumKey : entries[0].Key;
+        var maximumKey = children[^1] is { } lastChild ? lastChild.MaximumKey : entries[^1].Key;
+        return new Node(
+            level,
+            entries,
+            children,
+            count,
+            height,
+            blockCount,
+            minimumKey,
+            maximumKey,
+            bytes,
+            digest);
     }
 
-    private Node NewNode(
-        TKey key,
-        TValue value,
-        byte[] keyBytes,
-        byte[] valueBytes,
-        MerkleDigest rank,
-        Node? left,
-        Node? right) =>
-        new(
-            key,
-            value,
-            keyBytes,
-            valueBytes,
-            rank,
-            LeadingZeroBits(rank),
-            left,
-            right,
-            Policy.HashNode(keyBytes, valueBytes, left?.Digest ?? Policy.EmptyDigest, right?.Digest ?? Policy.EmptyDigest));
-
-    private static int LeadingZeroBits(MerkleDigest digest)
+    private byte[] EncodeBlock(int level, int subtreeCount, EntryRecord[] entries, Node?[] children)
     {
-        var bytes = digest.ToArray();
-        var count = 0;
+        var length = checked(BlockHeaderLength + checked(children.Length * DigestLength));
+        foreach (var entry in entries)
+            length = checked(length + sizeof(int) + entry.KeyBytes.Length + sizeof(int) + entry.ValueBytes.Length);
+
+        var result = new byte[length];
+        var offset = 0;
+        BlockMagic.CopyTo(result, offset);
+        offset += BlockMagic.Length;
+        result[offset++] = NodeBlockTag;
+        Policy.DomainDigest.WriteTo(result.AsSpan(offset, DigestLength));
+        offset += DigestLength;
+        result[offset++] = checked((byte)level);
+        BinaryPrimitives.WriteInt32BigEndian(result.AsSpan(offset, sizeof(int)), subtreeCount);
+        offset += sizeof(int);
+        BinaryPrimitives.WriteInt32BigEndian(result.AsSpan(offset, sizeof(int)), entries.Length);
+        offset += sizeof(int);
+
+        foreach (var entry in entries)
+        {
+            BinaryPrimitives.WriteInt32BigEndian(result.AsSpan(offset, sizeof(int)), entry.KeyBytes.Length);
+            offset += sizeof(int);
+            entry.KeyBytes.CopyTo(result, offset);
+            offset += entry.KeyBytes.Length;
+            BinaryPrimitives.WriteInt32BigEndian(result.AsSpan(offset, sizeof(int)), entry.ValueBytes.Length);
+            offset += sizeof(int);
+            entry.ValueBytes.CopyTo(result, offset);
+            offset += entry.ValueBytes.Length;
+        }
+
+        foreach (var child in children)
+        {
+            (child?.Digest ?? Policy.EmptyDigest).WriteTo(result.AsSpan(offset, DigestLength));
+            offset += DigestLength;
+        }
+        Debug.Assert(offset == result.Length);
+        return result;
+    }
+
+    private static int Layer(MerkleDigest digest)
+    {
+        Span<byte> bytes = stackalloc byte[DigestLength];
+        digest.WriteTo(bytes);
+        var result = 0;
         foreach (var value in bytes)
         {
-            if (value == 0)
-            {
-                count += 8;
-                continue;
-            }
-            count += System.Numerics.BitOperations.LeadingZeroCount((uint)value) - 24;
-            break;
+            if ((value & 0xf0) == 0)
+                result++;
+            else
+                return result;
+            if ((value & 0x0f) == 0)
+                result++;
+            else
+                return result;
         }
-        return count;
+        return result;
     }
 
-    private bool NodesEqual(Node? left, Node? right, IEqualityComparer<TValue> valueComparer)
+    private bool NodesEqual(Node? left, Node? right, IEqualityComparer<TValue> values)
     {
-        if (ReferenceEquals(left, right)) return true;
-        if (left is null || right is null || Policy.Comparer.Compare(left.Key, right.Key) != 0)
+        if (ReferenceEquals(left, right))
+            return true;
+        if (left is null || right is null
+            || left.Level != right.Level
+            || left.Entries.Length != right.Entries.Length)
+        {
             return false;
-        return valueComparer.Equals(left.Value, right.Value)
-            && NodesEqual(left.Left, right.Left, valueComparer)
-            && NodesEqual(left.Right, right.Right, valueComparer);
+        }
+
+        for (var index = 0; index < left.Entries.Length; index++)
+        {
+            if (Policy.Comparer.Compare(left.Entries[index].Key, right.Entries[index].Key) != 0
+                || !values.Equals(left.Entries[index].Value, right.Entries[index].Value))
+            {
+                return false;
+            }
+        }
+        for (var index = 0; index < left.Children.Length; index++)
+        {
+            if (!NodesEqual(left.Children[index], right.Children[index], values))
+                return false;
+        }
+        return true;
+    }
+
+    private bool EnumeratedEquals(MerkleSearchTree<TKey, TValue> other, IEqualityComparer<TValue> values)
+    {
+        using var left = GetEnumerator();
+        using var right = other.GetEnumerator();
+        while (left.MoveNext())
+        {
+            if (!right.MoveNext()
+                || Policy.Comparer.Compare(left.Current.Key, right.Current.Key) != 0
+                || !values.Equals(left.Current.Value, right.Current.Value))
+            {
+                return false;
+            }
+        }
+        return !right.MoveNext();
     }
 
     private void DiffNodes(
@@ -344,7 +617,7 @@ public sealed class MerkleSearchTree<TKey, TValue> : IReadOnlyDictionary<TKey, T
         IEqualityComparer<TValue> values,
         List<MerkleMapDifference<TKey, TValue>> result)
     {
-        if (left?.Digest == right?.Digest)
+        if (ReferenceEquals(left, right) || left?.Digest == right?.Digest)
             return;
         if (left is null)
         {
@@ -358,27 +631,58 @@ public sealed class MerkleSearchTree<TKey, TValue> : IReadOnlyDictionary<TKey, T
                 result.Add(MerkleMapDifference<TKey, TValue>.Removed(entry.Key, entry.Value));
             return;
         }
-        if (Policy.Comparer.Compare(left.Key, right.Key) == 0)
+
+        if (SameSeparators(left, right))
         {
-            if (!values.Equals(left.Value, right.Value))
-                result.Add(MerkleMapDifference<TKey, TValue>.Changed(left.Key, left.Value, right.Value));
-            DiffNodes(left.Left, right.Left, values, result);
-            DiffNodes(left.Right, right.Right, values, result);
+            for (var index = 0; index < left.Entries.Length; index++)
+            {
+                DiffNodes(left.Children[index], right.Children[index], values, result);
+                if (!values.Equals(left.Entries[index].Value, right.Entries[index].Value))
+                {
+                    result.Add(MerkleMapDifference<TKey, TValue>.Changed(
+                        left.Entries[index].Key,
+                        left.Entries[index].Value,
+                        right.Entries[index].Value));
+                }
+            }
+            DiffNodes(left.Children[^1], right.Children[^1], values, result);
             return;
         }
 
+        MergeDiff(left, right, values, result);
+    }
+
+    private bool SameSeparators(Node left, Node right)
+    {
+        if (left.Level != right.Level || left.Entries.Length != right.Entries.Length)
+            return false;
+        for (var index = 0; index < left.Entries.Length; index++)
+        {
+            if (Policy.Comparer.Compare(left.Entries[index].Key, right.Entries[index].Key) != 0)
+                return false;
+        }
+        return true;
+    }
+
+    private void MergeDiff(
+        Node left,
+        Node right,
+        IEqualityComparer<TValue> values,
+        List<MerkleMapDifference<TKey, TValue>> result)
+    {
         using var oldEntries = Enumerate(left).GetEnumerator();
         using var newEntries = Enumerate(right).GetEnumerator();
         var hasOld = oldEntries.MoveNext();
         var hasNew = newEntries.MoveNext();
         while (hasOld || hasNew)
         {
-            if (!hasNew || (hasOld && Policy.Comparer.Compare(oldEntries.Current.Key, newEntries.Current.Key) < 0))
+            var comparison = !hasOld ? 1 : !hasNew ? -1 : Policy.Comparer.Compare(oldEntries.Current.Key, newEntries.Current.Key);
+            if (comparison < 0)
             {
                 result.Add(MerkleMapDifference<TKey, TValue>.Removed(oldEntries.Current.Key, oldEntries.Current.Value));
                 hasOld = oldEntries.MoveNext();
             }
-            else if (!hasOld || Policy.Comparer.Compare(oldEntries.Current.Key, newEntries.Current.Key) > 0)
+            else if (comparison > 0)
             {
                 result.Add(MerkleMapDifference<TKey, TValue>.Added(newEntries.Current.Key, newEntries.Current.Value));
                 hasNew = newEntries.MoveNext();
@@ -386,7 +690,12 @@ public sealed class MerkleSearchTree<TKey, TValue> : IReadOnlyDictionary<TKey, T
             else
             {
                 if (!values.Equals(oldEntries.Current.Value, newEntries.Current.Value))
-                    result.Add(MerkleMapDifference<TKey, TValue>.Changed(oldEntries.Current.Key, oldEntries.Current.Value, newEntries.Current.Value));
+                {
+                    result.Add(MerkleMapDifference<TKey, TValue>.Changed(
+                        oldEntries.Current.Key,
+                        oldEntries.Current.Value,
+                        newEntries.Current.Value));
+                }
                 hasOld = oldEntries.MoveNext();
                 hasNew = newEntries.MoveNext();
             }
@@ -400,21 +709,18 @@ public sealed class MerkleSearchTree<TKey, TValue> : IReadOnlyDictionary<TKey, T
             throw new ArgumentException("Merkle trees must use the same algorithm/policy/codec domain.", nameof(other));
     }
 
-    private static IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(Node? root)
+    private static IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(Node? node)
     {
-        var stack = new Stack<Node>();
-        var node = root;
-        while (node is not null || stack.Count != 0)
+        if (node is null)
+            yield break;
+        for (var index = 0; index < node.Entries.Length; index++)
         {
-            while (node is not null)
-            {
-                stack.Push(node);
-                node = node.Left;
-            }
-            node = stack.Pop();
-            yield return KeyValuePair.Create(node.Key, node.Value);
-            node = node.Right;
+            foreach (var entry in Enumerate(node.Children[index]))
+                yield return entry;
+            yield return KeyValuePair.Create(node.Entries[index].Key, node.Entries[index].Value);
         }
+        foreach (var entry in Enumerate(node.Children[^1]))
+            yield return entry;
     }
 
     private IEnumerable<KeyValuePair<TKey, TValue>> EnumerateRangeCore(
@@ -422,47 +728,163 @@ public sealed class MerkleSearchTree<TKey, TValue> : IReadOnlyDictionary<TKey, T
         TKey minimumKey,
         TKey maximumKey)
     {
-        if (node is null) yield break;
-        var low = Policy.Comparer.Compare(node.Key, minimumKey);
-        var high = Policy.Comparer.Compare(node.Key, maximumKey);
-        if (low > 0)
+        if (node is null)
+            yield break;
+        for (var index = 0; index < node.Entries.Length; index++)
         {
-            foreach (var entry in EnumerateRangeCore(node.Left, minimumKey, maximumKey))
-                yield return entry;
+            var low = Policy.Comparer.Compare(node.Entries[index].Key, minimumKey);
+            var high = Policy.Comparer.Compare(node.Entries[index].Key, maximumKey);
+            if (low > 0)
+            {
+                foreach (var entry in EnumerateRangeCore(node.Children[index], minimumKey, maximumKey))
+                    yield return entry;
+            }
+            if (low >= 0 && high <= 0)
+                yield return KeyValuePair.Create(node.Entries[index].Key, node.Entries[index].Value);
+            if (high > 0)
+                yield break;
         }
-        if (low >= 0 && high <= 0)
-            yield return KeyValuePair.Create(node.Key, node.Value);
-        if (high < 0)
+
+        if (Policy.Comparer.Compare(node.Entries[^1].Key, maximumKey) < 0)
         {
-            foreach (var entry in EnumerateRangeCore(node.Right, minimumKey, maximumKey))
+            foreach (var entry in EnumerateRangeCore(node.Children[^1], minimumKey, maximumKey))
                 yield return entry;
         }
     }
 
-    private sealed class Node(
+    private void ValidateNode(Node node, ValidationAccumulator accumulator)
+    {
+        if (node.Entries.Length == 0 || node.Children.Length != node.Entries.Length + 1)
+            throw new InvalidOperationException("An MST block has an invalid entry/child arity.");
+        if (node.Level is < 0 or > 64)
+            throw new InvalidOperationException("An MST block has an invalid layer.");
+
+        var count = node.Entries.Length;
+        var height = 1;
+        var blocks = 1;
+        for (var index = 0; index < node.Entries.Length; index++)
+        {
+            var entry = node.Entries[index];
+            if (entry.Layer != node.Level)
+                throw new InvalidOperationException("An MST entry is stored in the wrong layer.");
+            if (index != 0 && Policy.Comparer.Compare(node.Entries[index - 1].Key, entry.Key) >= 0)
+                throw new InvalidOperationException("MST block entries are not strictly ordered.");
+        }
+
+        for (var index = 0; index < node.Children.Length; index++)
+        {
+            var child = node.Children[index];
+            if (child is null)
+                continue;
+            if (child.Level >= node.Level)
+                throw new InvalidOperationException("An MST child does not occupy a lower layer.");
+            if (index != 0 && Policy.Comparer.Compare(child.MinimumKey, node.Entries[index - 1].Key) <= 0)
+                throw new InvalidOperationException("An MST child crosses its lower key separator.");
+            if (index != node.Entries.Length && Policy.Comparer.Compare(child.MaximumKey, node.Entries[index].Key) >= 0)
+                throw new InvalidOperationException("An MST child crosses its upper key separator.");
+            ValidateNode(child, accumulator);
+            count = checked(count + child.Count);
+            height = Math.Max(height, checked(1 + child.Height));
+            blocks = checked(blocks + child.BlockCount);
+        }
+
+        if (count != node.Count || height != node.Height || blocks != node.BlockCount)
+            throw new InvalidOperationException("An MST block has invalid cached metadata.");
+        var encoded = EncodeBlock(node.Level, node.Count, node.Entries, node.Children);
+        if (!encoded.AsSpan().SequenceEqual(node.BlockBytes)
+            || new MerkleDigest(SHA256.HashData(node.BlockBytes)) != node.Digest)
+        {
+            throw new InvalidOperationException("An MST block's canonical bytes or digest are invalid.");
+        }
+        accumulator.Add(node);
+    }
+
+    private sealed class ValidationAccumulator
+    {
+        internal int EntryCount;
+        internal int BlockCount;
+        private int _minimumEntries = int.MaxValue;
+        private int _maximumEntries;
+        private int _minimumBlockBytes = int.MaxValue;
+        private int _maximumBlockBytes;
+
+        internal void Add(Node node)
+        {
+            EntryCount = checked(EntryCount + node.Entries.Length);
+            BlockCount++;
+            _minimumEntries = Math.Min(_minimumEntries, node.Entries.Length);
+            _maximumEntries = Math.Max(_maximumEntries, node.Entries.Length);
+            _minimumBlockBytes = Math.Min(_minimumBlockBytes, node.BlockBytes.Length);
+            _maximumBlockBytes = Math.Max(_maximumBlockBytes, node.BlockBytes.Length);
+        }
+
+        internal MerkleSearchTreeStatistics ToStatistics(int height) => new(
+            EntryCount,
+            BlockCount,
+            height,
+            BlockCount == 0 ? 0 : _minimumEntries,
+            _maximumEntries,
+            BlockCount == 0 ? 0 : _minimumBlockBytes,
+            _maximumBlockBytes);
+    }
+
+    private readonly record struct PendingEntry(TKey Key, TValue Value, int Sequence);
+
+    private sealed class EntryRecord(
         TKey key,
         TValue value,
         byte[] keyBytes,
         byte[] valueBytes,
-        MerkleDigest rank,
-        int level,
-        Node? left,
-        Node? right,
-        MerkleDigest digest)
+        int layer)
     {
         internal TKey Key { get; } = key;
         internal TValue Value { get; } = value;
         internal byte[] KeyBytes { get; } = keyBytes;
         internal byte[] ValueBytes { get; } = valueBytes;
-        internal MerkleDigest Rank { get; } = rank;
+        internal int Layer { get; } = layer;
+    }
+
+    private sealed class Node(
+        int level,
+        EntryRecord[] entries,
+        Node?[] children,
+        int count,
+        int height,
+        int blockCount,
+        TKey minimumKey,
+        TKey maximumKey,
+        byte[] blockBytes,
+        MerkleDigest digest)
+    {
         internal int Level { get; } = level;
-        internal Node? Left { get; } = left;
-        internal Node? Right { get; } = right;
+        internal EntryRecord[] Entries { get; } = entries;
+        internal Node?[] Children { get; } = children;
+        internal int Count { get; } = count;
+        internal int Height { get; } = height;
+        internal int BlockCount { get; } = blockCount;
+        internal TKey MinimumKey { get; } = minimumKey;
+        internal TKey MaximumKey { get; } = maximumKey;
+        internal byte[] BlockBytes { get; } = blockBytes;
         internal MerkleDigest Digest { get; } = digest;
-        internal int Count { get; } = checked(1 + (left?.Count ?? 0) + (right?.Count ?? 0));
-        internal int Height { get; } = checked(1 + Math.Max(left?.Height ?? 0, right?.Height ?? 0));
     }
 }
+
+/// <summary>Describes validated wide-block Merkle-search-tree representation statistics.</summary>
+/// <param name="Count">The entry count.</param>
+/// <param name="BlockCount">The content-addressed block count.</param>
+/// <param name="Height">The maximum block-path length.</param>
+/// <param name="MinimumEntriesPerBlock">The smallest block entry run.</param>
+/// <param name="MaximumEntriesPerBlock">The largest block entry run.</param>
+/// <param name="MinimumBlockBytes">The smallest canonical block encoding.</param>
+/// <param name="MaximumBlockBytes">The largest canonical block encoding.</param>
+public readonly record struct MerkleSearchTreeStatistics(
+    int Count,
+    int BlockCount,
+    int Height,
+    int MinimumEntriesPerBlock,
+    int MaximumEntriesPerBlock,
+    int MinimumBlockBytes,
+    int MaximumBlockBytes);
 
 /// <summary>Identifies a key-level difference between Merkle maps.</summary>
 public enum MerkleMapDifferenceKind
@@ -476,19 +898,18 @@ public enum MerkleMapDifferenceKind
 }
 
 /// <summary>Describes one semantic difference between two Merkle maps.</summary>
-/// <typeparam name="TKey">The key type.</typeparam>
-/// <typeparam name="TValue">The value type.</typeparam>
-/// <param name="Kind">The difference kind.</param>
-/// <param name="Key">The affected key.</param>
-/// <param name="OldValue">The old value for removed/changed entries.</param>
-/// <param name="NewValue">The new value for added/changed entries.</param>
 public readonly record struct MerkleMapDifference<TKey, TValue>(
     MerkleMapDifferenceKind Kind,
     TKey Key,
     TValue? OldValue,
     TValue? NewValue)
 {
-    internal static MerkleMapDifference<TKey, TValue> Added(TKey key, TValue value) => new(MerkleMapDifferenceKind.Added, key, default, value);
-    internal static MerkleMapDifference<TKey, TValue> Removed(TKey key, TValue value) => new(MerkleMapDifferenceKind.Removed, key, value, default);
-    internal static MerkleMapDifference<TKey, TValue> Changed(TKey key, TValue oldValue, TValue newValue) => new(MerkleMapDifferenceKind.Changed, key, oldValue, newValue);
+    internal static MerkleMapDifference<TKey, TValue> Added(TKey key, TValue value) =>
+        new(MerkleMapDifferenceKind.Added, key, default, value);
+
+    internal static MerkleMapDifference<TKey, TValue> Removed(TKey key, TValue value) =>
+        new(MerkleMapDifferenceKind.Removed, key, value, default);
+
+    internal static MerkleMapDifference<TKey, TValue> Changed(TKey key, TValue oldValue, TValue newValue) =>
+        new(MerkleMapDifferenceKind.Changed, key, oldValue, newValue);
 }

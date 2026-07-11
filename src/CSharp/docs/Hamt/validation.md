@@ -68,8 +68,19 @@ The suite covers:
   checks across ordinary, shared-prefix, and equal-hash policies.
 - 32/64-bit Patricia signed-boundary ordering, 35,000 randomized model operations with retained
   snapshots, combining overloads, set relations, and randomized prefix-aware structural algebra.
-- Merkle search-tree independent-policy/history convergence, canonical codec vectors, typed diff,
-  30,000 randomized updates with retained snapshots, ordered ranges, no-op identity, and policy-domain separation.
+- Merkle `mst-sha256-b16-v2` codec, digest, empty-manifest, and complete block golden vectors;
+  strict bidirectional codec round trips; and malformed, trailing, non-canonical, unversioned-id,
+  ill-formed-Unicode, domain, and digest rejection;
+- wide-block Merkle independent-history convergence under ordinary and adversarial layer schedules,
+  randomized model histories with retained snapshots and ordered ranges, exact-root restoration,
+  off-path block sharing, structure statistics, no-op identity, and shape-changing typed diff in both
+  directions;
+- Merkle save/load and complete/partial pack round trips; missing, tampered, malformed,
+  non-canonical, foreign-domain, resource-budget, and destination-conflict failures; and commit
+  atomicity for preflight/verification failures;
+- complete and partial-closure block synchronization, canonical membership/non-membership/inclusive-
+  range proofs, tampered-query/block and extra-step rejection, and typed three-way merge including
+  disjoint edits, identical edits, unresolved/resolved conflicts, deletion, and present-null state.
 
 For a new public operation, add both direct examples and model/property coverage when there is a natural
 BCL or simple in-memory oracle.

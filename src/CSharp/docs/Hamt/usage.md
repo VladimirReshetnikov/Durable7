@@ -2,8 +2,8 @@
 
 - Created (UTC): 2026-07-02T20:12:28Z
 - Repository HEAD: f448af2c7626e4f3b06f74701c3f9f9383db7446
-- Audience: .NET consumers and maintainers using `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>`
-- Scope: Namespace, construction, persistent update patterns, comparer behavior, iteration, set algebra, and concurrency
+- Audience: .NET consumers and maintainers using the C# HAMT, Ctrie, Patricia, and Merkle families
+- Scope: Construction, persistent updates, comparer behavior, iteration, concurrency, and content-addressed workflows
 
 This guide is the practical companion to the [C# API specification](api-specification.md). It shows
 the common usage patterns for the canonical C# HAMT implementation; the API specification remains
@@ -273,7 +273,9 @@ the corresponding value-set surfaces with structural `Union`, `Intersect`, and `
 
 ## Content-Addressed Ordered Maps
 
-Construct a Merkle tree only with an explicit semantic and encoding policy:
+Construct a Merkle tree only with an explicit semantic and encoding policy. The policy id must
+version the application's comparer semantics, and each codec id must end in `-v` plus decimal
+digits:
 
 ```csharp
 var policy = MerkleSearchTreePolicy<int, string?>.Create(
@@ -289,11 +291,168 @@ var updated = baseline.SetItem(20, "TWENTY").SetItem(30, "thirty");
 
 MerkleDigest address = updated.RootHash;
 IReadOnlyList<MerkleMapDifference<int, string?>> changes = baseline.Diff(updated);
+
+foreach (var (key, value) in updated.EnumerateRange(15, 30))
+    Console.WriteLine($"{key}: {value}");
 ```
 
 Recreate the same policy id, comparer semantics, codec ids, and logical entries in another process
-to obtain the same root address. Do not use a codec whose output depends on process-randomized hashes,
-culture, object identity, or ambient serialization settings.
+to obtain the same B=16 wide-block graph and root address. `IMerkleCodec<T>.Decode` must accept
+exactly one canonical encoding and reject malformed, non-canonical, or trailing input. Do not use a
+codec whose output depends on process-randomized hashes, culture, object identity, ambient
+serialization settings, or mutable state.
+
+### Persist And Verify Blocks
+
+`Save` stores the complete closure. `Load` never trusts the store: it recomputes block digests,
+strictly decodes and re-encodes entries, follows and validates child references, checks the expected
+root, and applies a finite verification budget.
+
+```csharp
+var store = new InMemoryMerkleBlockStore();
+int blocksAdded = updated.Save(store);
+
+var loaded = MerkleSearchTree<int, string?>.Load(
+    updated.RootHash,
+    policy,
+    store);
+
+if (!loaded.MapEquals(updated))
+    throw new InvalidOperationException("Verified round-trip changed the map.");
+```
+
+Use a pack at a transport boundary. A complete pack is self-contained; a partial pack can be
+completed from blocks already present in the destination store. When a destination is supplied,
+`Import` verifies the complete root closure before committing the pack's blocks.
+
+```csharp
+MerkleBlockPack outbound = updated.ExportPack();
+var replicaStore = new InMemoryMerkleBlockStore();
+
+var replica = MerkleSearchTree<int, string?>.Import(
+    outbound,
+    policy,
+    replicaStore);
+
+Console.WriteLine(replica.RootHash == updated.RootHash); // True
+```
+
+For untrusted network input, retain or tighten the bounded defaults:
+
+```csharp
+var networkBudget = new MerkleVerificationBudget(
+    maxBlockCount: 50_000,
+    maxTotalByteCount: 64L << 20,
+    maxBlockByteCount: 1 << 20,
+    maxDepth: 128,
+    maxEntryCount: 2_000_000,
+    maxChildReferencesPerBlock: 8_192);
+
+var bounded = MerkleSearchTree<int, string?>.Import(
+    outbound,
+    policy,
+    budget: networkBudget);
+```
+
+`MerkleBlock` and `IMerkleBlockStore.Put` do not by themselves verify transported bytes. Publish a
+received root only after successful `Load` or `Import`.
+
+### Prove Point And Range Claims
+
+Point proofs are canonical membership or non-membership proofs. Range proofs establish completeness
+for inclusive bounds by expanding every intersecting child interval.
+
+```csharp
+MerkleProof present = updated.CreateProof(20);
+MerkleProof absent = updated.CreateProof(99);
+MerkleProof range = updated.CreateRangeProof(15, 30);
+
+foreach (var proof in new[] { present, absent, range })
+{
+    MerkleProofVerificationResult result =
+        MerkleSearchTree<int, string?>.VerifyProof(proof, policy);
+
+    if (!result.IsValid || result.ComputedRootHash != updated.RootHash)
+        throw new InvalidDataException(result.FailureMessage ?? "Proof verification failed.");
+}
+```
+
+Verification establishes the proof's encoded claim relative to its declared root and policy
+domain. Obtain the expected root through a trusted channel. A proof is not a signature and does not
+authenticate its sender.
+
+### Synchronize By Block Address
+
+For a receiver whose stored blocks each imply a previously verified descendant closure, create one
+pack containing all missing target regions:
+
+```csharp
+var receiverStore = new InMemoryMerkleBlockStore();
+MerkleBlockPack missing = updated.CreateSyncPack(receiverStore);
+
+var synchronized = MerkleSearchTree<int, string?>.Import(
+    missing,
+    policy,
+    receiverStore);
+```
+
+For an empty or incomplete staging store, exchange frontier requests iteratively. The sender owns
+the target tree; the receiver stages immutable blocks and verifies the complete closure once no more
+blocks are requested:
+
+```csharp
+var staging = new InMemoryMerkleBlockStore();
+MerkleSearchTree<int, string?> published = baseline;
+
+while (true)
+{
+    MerkleSyncPlan plan = updated.PlanSync(published, staging);
+    if (!plan.RequiresBlocks)
+        break;
+
+    MerkleBlockPack response = updated.ExportPack(plan.RequestedBlocks);
+    foreach (MerkleBlock block in response.Blocks)
+        staging.Put(block); // Staged, not yet trusted.
+}
+
+published = MerkleSearchTree<int, string?>.Load(
+    updated.RootHash,
+    policy,
+    staging);
+```
+
+`RootsMatch` means the supplied published tree already has the target root. A plan with
+`RequiresBlocks == false` can instead mean that staging has a complete target closure awaiting
+verification.
+
+### Merge Descendants From A Common Base
+
+Three-way merge accepts one-sided changes and identical two-sided changes without invoking the
+resolver. A true conflict carries typed base/left/right states; `MerkleMergeValue<T>` distinguishes
+an absent key from a present null value.
+
+```csharp
+var common = updated.SetItem(20, "twenty");
+var left = common.SetItem(20, "TWENTY").SetItem(40, "forty");
+var right = common.SetItem(20, "veinte").SetItem(50, "fifty");
+
+MerkleThreeWayMergeResult<int, string?> merge =
+    MerkleSearchTree<int, string?>.Merge(
+        common,
+        left,
+        right,
+        conflict => conflict.Key == 20
+            ? MerkleMergeResolution<string?>.SetValue("20")
+            : MerkleMergeResolution<string?>.Unresolved);
+
+var merged = merge.IsSuccess
+    ? merge.MergedTree
+    : throw new InvalidOperationException(
+        $"Unresolved conflicts: {merge.UnresolvedConflicts.Count}");
+```
+
+Resolvers can also return `UseBase`, `UseLeft`, `UseRight`, or `Delete`. If any conflict remains
+unresolved, the result exposes every unresolved conflict and no partial tree.
 
 ## Choosing A Surface
 
@@ -309,7 +468,11 @@ culture, object identity, or ambient serialization settings.
 | Custom value semantics | `Create(comparer)` or `CreateRange(items, comparer)` |
 | Shared mutable map with O(1) immutable snapshots | `ConcurrentHashTrie<TKey, TValue>` |
 | Signed integer keys with ordered structural merge | `PersistentIntMap<TValue>` / `PersistentLongMap<TValue>` |
-| Cross-process content address, ordered range sync, and digest-pruned diff | `MerkleSearchTree<TKey, TValue>` |
+| Canonical cross-process content address and ordered ranges | `MerkleSearchTree<TKey, TValue>` |
+| Verified block persistence and transfer | `Save`, `Load`, `ExportPack`, `Import` |
+| Membership, non-membership, or inclusive-range proof | `CreateProof`, `CreateRangeProof`, `VerifyProof` |
+| One-shot or iterative block synchronization | `CreateSyncPack` or `PlanSync` |
+| Typed three-way content merge | `MerkleSearchTree<TKey, TValue>.Merge` |
 
 For cross-language contract alignment, see the repository
 [porting and semantic parity guide](../../../../docs/guides/porting-and-semantic-parity.md).

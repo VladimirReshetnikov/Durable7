@@ -191,32 +191,231 @@ stack; unlike the CHAMP enumerator, it is not an allocation-free struct enumerat
 
 ## Merkle Search Tree Contract
 
-`MerkleSearchTree<TKey, TValue>` is an immutable ordered content-addressed map. Shape priority is a
-geometric layer derived from `SHA-256(domain || canonical-key)` plus the full digest and key order as
-tie-breaks. Consequently, the same policy and logical entries produce the same Cartesian/Merkle
-search-tree shape regardless of insertion/deletion history.
+`MerkleSearchTree<TKey, TValue>` is an immutable ordered content-addressed map using the
+`mst-sha256-b16-v2` wide-block format. The comparer orders keys and defines key equivalence. The
+codecs define the exact bytes that are hashed and persisted. Given the same semantic policy and
+canonical entries, construction, incremental updates, and deletion histories converge on the same
+block graph and root digest.
+
+### Policy And Canonical Codecs
 
 There is deliberately no unsafe default policy. `MerkleSearchTreePolicy<TKey, TValue>` requires:
 
 - a stable application `PolicyId` naming comparer semantics and their version;
 - an `IComparer<TKey>` defining key equivalence/order;
-- an injective `IMerkleCodec<TKey>` encoding comparer-equivalence classes;
+- an injective `IMerkleCodec<TKey>` whose bytes identify comparer-equivalence classes; and
 - a canonical `IMerkleCodec<TValue>` value encoding.
 
-The domain digest covers `mst-sha256-v1`, the application policy id, and both codec ids. Built-in
-codecs provide big-endian `int`/`long`, tagged nullable UTF-8 strings and byte arrays, and RFC-4122
-GUID bytes. Every node hash uses domain-separated, 32-bit-big-endian length-framed fields plus child
-digests. Default randomized .NET string hashing is never used. A caller whose comparer equates
-multiple representations must encode that equivalence class identically; distinct classes must not
-share an encoding.
+`IMerkleCodec<T>.EncodingId` must be nonempty and end in `-v` followed by decimal digits.
+`Encode` returns a newly owned canonical byte array. `Decode` consumes exactly one complete
+encoding and must reject malformed, non-canonical, or trailing input with `FormatException`.
+Verified loading additionally decodes and re-encodes every field and requires byte-for-byte
+identity. A custom key codec must encode equivalent keys identically and non-equivalent keys
+differently; neither the library nor a digest can repair a comparer/codec disagreement.
 
-Lookup and ordered ranges are expected O(log n + k). `SetItem`/`Remove` path-copy expected O(log n)
-nodes and eagerly recompute their hashes; equal values and absent removals preserve identity.
-`RootHash` and `ContentEquals` are O(1); the latter adopts the ordinary SHA-256 collision-resistance
-assumption of content-addressed systems. `MapEquals` follows the digest fast path with semantic
-lockstep verification. `Diff` prunes equal-digest subtrees and returns typed added/removed/changed
-records; when one edit changes a canonical ancestor, it merge-scans that divergent region.
+The built-in codecs are:
 
-Keys and values should be semantically immutable after insertion, just as dictionary keys must not
-change comparer behavior. The tree owns encoded byte arrays, so later mutation of caller-provided
-codec buffers cannot alter a published root address.
+| API | Encoding id | Canonical bytes |
+| --- | --- | --- |
+| `MerkleCodecs.Int32` | `i32-be-v1` | exactly four signed big-endian bytes |
+| `MerkleCodecs.Int64` | `i64-be-v1` | exactly eight signed big-endian bytes |
+| `MerkleCodecs.Utf8String` | `nullable-utf8-v1` | `00` for null; otherwise `01` plus strict UTF-8 |
+| `MerkleCodecs.Bytes` | `nullable-bytes-v1` | `00` for null; otherwise `01` plus the payload |
+| `MerkleCodecs.Guid` | `guid-rfc4122-v1` | exactly 16 RFC-4122/network-order bytes |
+
+`MerkleDigest` is a 32-byte SHA-256 value with exact binary and 64-character hexadecimal
+parse/format APIs. Hexadecimal output is lower case; parsing accepts either case.
+
+### B=16 Shape And Block Wire Format
+
+The policy domain is SHA-256 over byte tag `0x50`, followed by the algorithm id, application policy
+id, key-codec id, and value-codec id, each prefixed by its signed 32-bit big-endian byte length. A
+key's policy-bound digest is SHA-256 over tag `0x4B`, a length-prefixed 32-byte domain digest, and the
+length-prefixed canonical key bytes. The key's layer is the number of leading zero nibbles in that
+256-bit digest, from 0 through 64.
+
+Within any key interval, all entries at its highest layer become separators in one wide block.
+The lower-layer intervals before, between, and after those separators become its children. Thus a
+block with `e` entries always carries `e + 1` child addresses. Because a hexadecimal digit is zero
+with probability 1/16 for a uniform digest, the expected block occupancy is wide and expected depth
+is logarithmic base 16. Hash outcomes can still produce a degenerate shape; these are expected, not
+adversarial worst-case guarantees.
+
+Every nonempty block is the following exact byte sequence. All integers and lengths are signed
+32-bit big-endian values and all digests are 32 bytes:
+
+| Field | Bytes | Contract |
+| --- | ---: | --- |
+| magic | 4 | ASCII `MST2` |
+| tag | 1 | `01` for a node block |
+| domain | 32 | the policy `DomainDigest` |
+| layer | 1 | the common hash-derived entry layer, 0 through 64 |
+| subtree count | 4 | positive count of entries in the complete block closure |
+| entry count | 4 | positive number of entries in this block |
+| entries | variable | repeated key length/key bytes/value length/value bytes |
+| child digests | `32 * (entry count + 1)` | interval addresses; the policy's empty digest denotes no child |
+
+The block address is SHA-256 of that complete sequence, with no bytes omitted. The empty-tree digest
+is SHA-256 of ASCII `MST2`, a zero tag byte, and the domain digest. Empty children use that same
+domain-specific digest. Persisted blocks therefore commit to algorithm version, policy and codec
+versions, layer, cached subtree count, encoded entries, child order, and every descendant address.
+
+### Ordered Map Surface
+
+- `Create(policy)` creates the domain-specific empty map.
+- `CreateRange(entries, policy)` sorts by the policy comparer, retains the first equivalent key
+  representative, and applies last-value semantics.
+- `SetItem` adds or replaces while retaining an existing equivalent key representative. An exact
+  canonical-value-byte no-op returns the current instance.
+- `Remove` and `Clear` preserve instance identity when they make no change.
+- `Count`, `Height`, `BlockCount`, and `RootHash` expose cached representation metadata.
+- lookup, dictionary enumeration, and `EnumerateRange(minimum, maximum)` use comparer order; range
+  bounds are inclusive.
+- `ValidateStructure` rechecks in-memory ordering, layers, child intervals, counts, block bytes, and
+  digests and returns `MerkleSearchTreeStatistics`.
+- `ContentEquals` compares domain and root digests in O(1), under the SHA-256 collision-resistance
+  assumption.
+- `MapEquals` verifies semantic key/value equality. Root and reference equality are pruning aids,
+  not permission to skip semantic traversal.
+- `Diff` reports comparer-ordered `Added`, `Removed`, and `Changed` values. Equal block digests are
+  pruned; a separator change may require a merge scan of the whole divergent region.
+
+### Blocks, Stores, Packs, And Verified Loading
+
+`MerkleBlock` owns a copy of canonical block bytes and a claimed digest. Its constructor deliberately
+does not verify that pair. `IMerkleBlockStore` stores immutable blocks by digest: repeated identical
+content is an idempotent no-op, while different bytes under an existing digest must raise
+`MerkleVerificationException` with `ConflictingBlock`. `InMemoryMerkleBlockStore` is thread-safe and
+ephemeral; it is not a durable transaction, eviction, or trust boundary.
+
+`Save(store)` exports the complete closure, preflights known address conflicts, and returns the
+number of newly stored blocks. `ExportPack()` returns that closure in deterministic preorder.
+`ExportPack(digests)` returns unique explicitly requested blocks in request order. A
+`MerkleBlockPack` carries the algorithm id, domain digest, target root, and unique blocks; it may be
+complete or partial, so `ContainsRootBlock` is diagnostic rather than an invariant.
+
+`Load(rootHash, policy, store, budget)` and
+`Import(pack, policy, destinationStore, budget)` do not trust stored or transported bytes. They:
+
+1. enforce the expected algorithm and policy domain where an envelope is present;
+2. recompute each block digest and parse exact lengths, magic, tag, layer, and counts;
+3. decode and byte-for-byte re-encode every key and value;
+4. recompute every entry layer and require strict comparer order within a block;
+5. reject trailing bytes and require exact canonical block reserialization;
+6. follow the closure while detecting missing blocks and cycles;
+7. validate child layers and separator intervals, subtree counts, and the requested root; and
+8. revalidate the reconstructed in-memory structure.
+
+`Import` may combine a partial pack with blocks already in `destinationStore`. It verifies the pack
+and complete root closure before preflighting and writing the supplied blocks. This prevents a
+single-threaded failed import from partially committing to the supplied store, but
+`IMerkleBlockStore` does not define multi-writer transaction isolation.
+
+Format, reference, root, and resource failures are classified by
+`MerkleVerificationFailureKind` and surfaced as `MerkleVerificationException`; proof verification
+reports the same classifications without throwing. Exceptions raised by an application comparer or
+codec outside its documented format contract may propagate directly. The finite default
+`MerkleVerificationBudget` is:
+
+| Limit | Default |
+| --- | ---: |
+| distinct decoded blocks | 1,000,000 |
+| cumulative serialized bytes | 1 GiB |
+| bytes in one block | 16 MiB |
+| reference depth | 256 |
+| cumulative decoded entries | 100,000,000 |
+| child references in one block | 65,536 |
+
+Network-facing callers should normally retain or tighten these limits. A budget limits parser and
+closure work; it does not authenticate the root, policy id, comparer implementation, or peer.
+
+### Proofs
+
+`CreateProof(key)` emits a canonical membership proof carrying the authenticated canonical value,
+or a non-membership proof ending at the authenticated empty interval. `CreateRangeProof(minimum,
+maximum)` expands every child interval intersecting the inclusive range, authenticating its complete
+contents while leaving disjoint child digests opaque. `MerkleProofStep.ExpandedChildIndexes` states
+which child blocks are supplied; verification requires exactly the canonical expansion and rejects
+missing, extra, repeated, malformed, or tampered steps.
+
+The opaque query descriptor begins with ASCII `MSP2` and a one-byte `MerkleProofKind`. Point queries
+then contain a length-prefixed canonical key and, for membership only, a length-prefixed canonical
+value. Range queries contain length-prefixed canonical minimum and maximum keys. All query lengths
+are signed 32-bit big-endian values, and verification rejects trailing bytes or non-canonical codec
+round trips.
+
+`VerifyProof(proof, policy, budget)` returns `MerkleProofVerificationResult`. On success it reports
+the computed root and verified block/byte counts. On failure it reports a typed failure and diagnostic
+without publishing decoded tree state. The result establishes that the proof's canonical query is
+consistent with its declared root and domain. The caller must obtain that root from a trusted
+channel; a self-consistent proof is neither a signature nor evidence of who produced the data.
+
+### Block Synchronization
+
+`CreateSyncPack(receiverStore)` performs one-shot synchronization: it exports missing target blocks
+and stops descending whenever the receiver already contains a block digest. This optimization
+requires the receiver to treat presence as evidence that the block's verified descendant closure is
+also present. Use `Import` to verify and commit the resulting complete closure.
+
+`PlanSync(localTree, receiverStore)` supports a partial store. It compares compatible roots and, if
+they differ, requests the first absent block on each target path reachable through already present
+blocks. The peer answers with `ExportPack(plan.RequestedBlocks)`, the receiver stages those immutable
+blocks, and the parties repeat until `RequiresBlocks` is false. The receiver must then call `Load`
+or `Import` to verify the complete closure before publishing it. `RootsMatch` means the supplied
+local tree already has the target root; `RequiresBlocks == false` alone can instead mean that the
+store has completed a still-unpublished target closure.
+
+`ExaminedBlockCount` and `ExaminedByteCount` describe planning work. Planning prunes at absent
+frontier blocks. The current explicit-digest `ExportPack` indexes the target's complete in-memory
+block graph before selecting requested blocks, so its local CPU cost is O(all target blocks) even
+when transfer size is small.
+
+### Typed Three-Way Merge
+
+`Merge(baseTree, left, right, resolver, valueComparer)` requires one policy domain. Root-digest fast
+paths return an unchanged descendant or identical descendants directly. Otherwise it comparer-merges
+all three ordered maps:
+
+- a change made by only one descendant is accepted;
+- equal changes made by both descendants are accepted;
+- differing changes made by both descendants create a
+  `MerkleThreeWayMergeConflict<TKey, TValue>`; and
+- the optional resolver may choose `UseBase`, `UseLeft`, `UseRight`, `SetValue`, `Delete`, or
+  `Unresolved`.
+
+`MerkleMergeValue<TValue>` distinguishes absence from a present nullable value. Without a resolver,
+true conflicts remain unresolved. If any conflict remains, the result exposes all unresolved
+conflicts and deliberately no partial tree. A successful result exposes one complete canonical
+`MergedTree`.
+
+### Complexity, Allocation, And Security Boundary
+
+Let `h` be block height, `e` the entries in a visited block, `S` serialized bytes processed, and `k`
+the number of reported range/diff entries.
+
+- lookup performs O(sum log(e + 1)) comparisons along one path; under uniform SHA-256 layers this
+  is expected O(log n), with expected `h = O(log16 n)`;
+- `SetItem` and `Remove` copy one path and re-encode copied blocks, expected O(16 log16 n) entry work
+  plus encoded bytes; a hash-degenerate block can make one update O(n + S);
+- `EnumerateRange` is expected O(log16 n + k) for uniform layers but can scan O(n) entries in a
+  degenerate wide block; full enumeration is O(n);
+- `CreateRange` sorts in O(n log n), then constructs the recursive partitions in expected
+  O(n log16 n + S); adversarial layers can make that construction O(n^2 + S);
+- `ContentEquals` is O(1); `MapEquals` is O(n) in the general case; `Diff` is proportional to visited
+  divergent regions plus output and is O(n + m) worst-case;
+- full save/export/load/import is O(block count + S), with storage proportional to the closure;
+- point-proof size and verification are proportional to one root-to-terminal block path; range
+  proof work is proportional to expanded intersecting blocks and their bytes;
+- one-shot sync traversal is proportional to missing regions plus known-subtree boundaries, while
+  transferred bytes are exactly the selected block payloads; and
+- a non-fast-path three-way merge materializes three ordered sequences and rebuilds through
+  `CreateRange`, requiring expected O(N log N + S) time, O(N^2 + S) worst-case time under
+  adversarial layers, and O(N) auxiliary storage for total input/output size N.
+
+All expected shape bounds assume SHA-256 behaves uniformly for policy-bound key encodings. All
+content-equality, pruning, proof, and synchronization claims assume SHA-256 collision resistance.
+The format provides integrity relative to a trusted root, not confidentiality, availability,
+signatures, key management, replay protection, or peer authentication. Keys, values, comparer
+semantics, codec behavior, and policy identifiers must remain semantically immutable for the
+lifetime of every published root. The tree copies encoded arrays, so later mutation of a codec's
+returned buffer cannot rewrite an existing address.

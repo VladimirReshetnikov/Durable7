@@ -23,10 +23,21 @@ canonical `PersistentHashMap<TKey, TValue>` representation explicitly in O(n).
 path-compressed binary shape provides ascending signed enumeration and prefix-aware structural
 `Union`, `Intersect`, and `Except` with reference-equal subtree pruning.
 
-`MerkleSearchTree<TKey, TValue>` is the ordered content-addressed sibling. Explicit versioned
-key/value codecs and an application policy domain feed SHA-256 key layers and node hashes, producing
-a deterministic search-tree shape and root address across processes. It provides ordered range
-enumeration, O(1) digest equality, verified equality, and digest-pruned semantic diff.
+`MerkleSearchTree<TKey, TValue>` is the ordered content-addressed sibling. The
+`mst-sha256-b16-v2` format assigns every canonical key to a geometric layer by counting leading
+zero hexadecimal digits in its policy-bound SHA-256 key digest. A block holds the consecutive
+entries at one layer plus one child digest per intervening key interval, giving a canonical B=16
+wide tree. It provides ordered ranges, O(1)
+content-address comparison, verified semantic equality and diff, strict block persistence,
+membership/non-membership/range proofs, block-level synchronization, and typed three-way merge.
+
+Merkle persistence is explicit and defensive. Bidirectional codecs must reject malformed,
+non-canonical, and trailing input. `Save`/`Load` and complete or partial `MerkleBlockPack` values use
+an `IMerkleBlockStore`; loading rehashes exact block bytes, round-trips decoded entries, validates
+layers, ordering, child intervals, subtree counts, and the root, and enforces finite caller-selected
+resource budgets. Proofs and synchronization inherit SHA-256's collision-resistance assumption and
+still require a trusted root and policy domain; they do not provide signatures or peer
+authentication.
 
 The trie consumes 5 hash bits per level. Each sparse branch has separate data and node bitmaps,
 with key/value payloads inlined into a compact data run and subtries held in a compact child run.
@@ -56,8 +67,13 @@ and canonical topology alone does not confer reference identity.
   - `ConcurrentHashTrie.cs` is the lock-free mutable map with O(1) immutable snapshots.
   - `PersistentIntMap.cs`, `PersistentLongMap.cs`, and their set facades expose the Patricia family.
   - `Internal/PatriciaMapCore.cs` contains the shared width-specialized engine.
-  - `MerkleEncoding.cs` defines canonical codecs, the 256-bit digest, and versioned policy domain.
-  - `MerkleSearchTree.cs` implements the ordered content-addressed map and typed diff results.
+  - `MerkleEncoding.cs` defines strict canonical codecs, the 256-bit digest, and versioned policy
+    domain.
+  - `MerkleSearchTree.cs` implements the canonical B=16 wide-block ordered map and typed diff.
+  - `MerklePersistence.cs` defines immutable blocks and packs, the block-store abstraction,
+    synchronization/proof envelopes, verification budgets and failures, and typed merge results.
+  - `MerkleSearchTree.PersistenceAlgorithms.cs` implements save/load/import, one-shot and iterative
+    synchronization, point/range proofs, and three-way merge.
   - `PersistentHashSet.cs` is the set wrapper over the map core.
 - [`tests/Tools.DataStructures.Hamt.Tests/`](../../tests/Tools.DataStructures.Hamt.Tests/README.md) contains xUnit
   and CsCheck-backed model tests.

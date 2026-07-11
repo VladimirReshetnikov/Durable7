@@ -58,7 +58,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | CHAMP canonicalization + structural equality/diff | 1 | Strong | Evaluate with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
 | `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (= proposal Tier C1) | - (new self-contained core) | 1 new core, ~2 public types, ~30 members, structural set ops |
 | DABA Lite sliding-window aggregator | 1, 3 | Strong | Reuses `IMonoid<T>` | 1 small type, ~8 members |
-| Merkle search tree | 1 | Strong direction, gated | Deterministic hashing + serialization story | Largest single item in this catalog |
+| Merkle search tree | 1 | Strong (C# implemented) | Completed: deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (benchmark-gated; deferred by proposal) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
 | Zip tree (canonical sorted set) | 1, 3 | Plausible | Keyed hash for rank derivation | 1 new core, ~2 facades |
 | Brodal-Okasaki heap | 1 | Plausible (real-time niche) | - | 1 new core, small surface |
@@ -297,11 +297,20 @@ benchmark-first question").
 
 ### Merkle search trees / Prolly trees
 
-**C# status (2026-07-10): Implemented with the deterministic-hashing and serialization gates.**
-`MerkleSearchTree<TKey, TValue>` uses explicit versioned `IMerkleCodec<T>` policies, domain-separated
-SHA-256 geometric key layers, canonical length-framed node serialization, cross-policy fingerprinting,
-ordered ranges, content equality, verified equality, and digest-pruned typed diff. Built-in codecs
-cover integers, strings, byte arrays, and GUIDs; arbitrary types must supply canonical encodings.
+**C# status (2026-07-11): Implemented with the hashing, wire, verification, and synchronization
+gates.** `MerkleSearchTree<TKey, TValue>` is now the paper-style B=16 wide tree: leading zero
+SHA-256 nibbles assign geometric layers, one block holds each consecutive same-layer run, and exact
+`MST2` bytes include the policy domain, entries, subtree count, and child digests. Strict versioned
+`IMerkleCodec<T>` implementations encode *and* decode canonical values; the built-ins cover integers,
+nullable strings, nullable byte arrays, and GUIDs. The public persistence tier adds immutable blocks,
+a thread-safe content store, complete and partial packs, bounded verified load/import, canonical
+membership/non-membership/range proofs, iterative frontier plans and closure-pruned sync packs, and a
+typed three-way merge that never publishes a partial result with unresolved conflicts. Golden wire
+vectors and adversarial tests cover independent histories, wide blocks, retained sharing, malformed
+or noncanonical data, missing/tampered closures, resource budgets, proof tampering, sync repair, and
+present-null merge semantics. In-process `Diff` prunes equal aligned blocks but honestly falls back to
+ordered subtree comparison when a topology-changing edit moves separators; block synchronization is
+the cross-process divergence-oriented path.
 
 **What they are.** Two convergent designs for *uniquely represented, content-addressed* search
 trees. Merkle search trees (Auvolat & Taïani, SRDS 2019) place each key at a layer derived from its
@@ -716,9 +725,10 @@ scheduling slot; this list sequences the frontier-only items and says where each
    the measure framework outside the trees.
 5. **`PersistentIntMap` / `PersistentIntSet`** - already the proposal's C1 slot; this catalog's
    contribution is the structural-merge API detail. No separate slot needed here.
-6. **Merkle search tree** - the most strategically interesting item, deliberately last: blocked on
-   the deterministic-hashing and serialization prerequisites, which are worthwhile infrastructure
-   in their own right.
+6. **Merkle search tree** - completed as the C# reference after landing its deterministic hashing,
+   bidirectional canonical codecs, exact block wire format, bounded verifier, proofs, synchronization,
+   and merge infrastructure. Any future port starts from those wire vectors rather than inventing a
+   language-local serialization.
 
 The remaining plausible entries (zip tree, Brodal-Okasaki, PSQ, Ctrie, order-maintenance list,
 chunked bitset, key-type factories) are consumer-gated: schedule none of them until a concrete
