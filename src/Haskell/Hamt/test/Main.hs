@@ -105,10 +105,29 @@ testPatriciaMapsAndSets = do
 
   let leftMap = Patricia.fromList [(1 :: Int32, "left"), (2, "two")]
       rightMap = Patricia.fromList [(1 :: Int32, "right"), (3, "three")]
+      combinedUnion = Patricia.unionWith (\left right -> left ++ "+" ++ right) leftMap rightMap
+      keyedUnion = Patricia.unionWithKey (\key left right -> show key ++ "=" ++ left ++ "/" ++ right) leftMap rightMap
+      combinedIntersection = Patricia.intersectionWith (\left right -> left ++ "+" ++ right) leftMap rightMap
+      keyedIntersection = Patricia.intersectionWithKey (\key left right -> show key ++ "=" ++ left ++ "/" ++ right) leftMap rightMap
+      longLeft = Patricia.fromList [(minBound :: Int64, 10), (0, 20)] :: Patricia.IntMap64 Int
+      longRight = Patricia.fromList [(minBound :: Int64, 1), (maxBound, 2)] :: Patricia.IntMap64 Int
+      longCombined = Patricia.unionWith (+) longLeft longRight
       leftSet = Patricia.setFromList [-3, -1, 1, 3 :: Int32]
       rightSet = Patricia.setFromList [-1, 0, 1 :: Int32]
-  assertEqual "Patricia right-biased map union" [(1, "right"), (2, "two"), (3, "three")] (Patricia.toAscList (Patricia.union leftMap rightMap))
-  assertEqual "Patricia left-valued intersection" [(1, "left")] (Patricia.toAscList (Patricia.intersection leftMap rightMap))
+      rightBiased = Patricia.union leftMap rightMap
+      leftValued = Patricia.intersection leftMap rightMap
+      removed = Patricia.difference leftMap rightMap
+  assertEqual "Patricia right-biased map union" [(1, "right"), (2, "two"), (3, "three")] (Patricia.toAscList rightBiased)
+  assertEqual "Patricia unionWith receives left then right" [(1, "left+right"), (2, "two"), (3, "three")] (Patricia.toAscList combinedUnion)
+  assertEqual "Patricia unionWithKey receives key, left, then right" [(1, "1=left/right"), (2, "two"), (3, "three")] (Patricia.toAscList keyedUnion)
+  assertEqual "Patricia left-valued intersection" [(1, "left")] (Patricia.toAscList leftValued)
+  assertEqual "Patricia intersectionWith receives left then right" [(1, "left+right")] (Patricia.toAscList combinedIntersection)
+  assertEqual "Patricia intersectionWithKey receives key, left, then right" [(1, "1=left/right")] (Patricia.toAscList keyedIntersection)
+  assertEqual "Int64 Patricia unionWith" [(minBound, 11), (0, 20), (maxBound, 2)] (Patricia.toAscList longCombined)
+  assertBool "Patricia cached cardinalities survive randomized history" (Patricia.validStructure actual)
+  assertBool "Patricia cached cardinalities survive structural algebra"
+    (all Patricia.validStructure [rightBiased, combinedUnion, keyedUnion, leftValued, combinedIntersection, keyedIntersection, removed])
+  assertBool "Int64 Patricia cached cardinalities survive combining union" (Patricia.validStructure longCombined)
   assertEqual "Patricia set union" [-3, -1, 0, 1, 3] (Patricia.setToAscList (Patricia.setUnion leftSet rightSet))
   assertEqual "Patricia set intersection" [-1, 1] (Patricia.setToAscList (Patricia.setIntersection leftSet rightSet))
   assertEqual "Patricia set difference" [-3, 3] (Patricia.setToAscList (Patricia.setDifference leftSet rightSet))

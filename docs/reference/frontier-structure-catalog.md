@@ -154,8 +154,9 @@ prefix-aware structural union/intersection/difference plus map combining overloa
 
 **Kotlin status (2026-07-10): Implemented for both widths.** `PersistentIntMap`/`Set` and
 `PersistentLongMap`/`Set` share an immutable big-endian Patricia engine with sign-bit transforms,
-ascending signed iteration, path compression, no-op identity, and prefix-aligned structural
-union/intersection/difference. Boundary and randomized model tests cover both key widths.
+ascending signed iteration, path compression, cached subtree counts, no-op identity, and
+prefix-aligned structural union/intersection/difference with map combining overloads. Boundary and
+randomized model tests cover both key widths.
 
 **Rust status (2026-07-10): Implemented for both widths.** `PersistentIntMap`/`Set` and
 `PersistentLongMap`/`Set` use safe `Arc`-shared compressed-prefix nodes, sign-flipped ordering,
@@ -164,8 +165,9 @@ signed boundaries, right-biased union, intersection, difference, and no-op root 
 
 **Haskell status (2026-07-11): Implemented for explicit `Int32` and `Int64` widths.**
 `Data.Structures.Hamt.Patricia` exposes strict maps and sets over one `Word64` path core, sign-bit
-ordering, compressed prefixes, and prefix-aligned structural algebra. The explicit aliases avoid
-making the width contract depend on platform-sized `Int`.
+ordering, compressed prefixes, cached subtree counts, keyed/unkeyed combining algebra, and an
+invariant validator. The explicit aliases avoid making the width contract depend on platform-sized
+`Int`.
 
 **C++ status (2026-07-11): Implemented for both widths.** `persistent_int_map` / `set` and
 `persistent_long_map` / `set` use immutable `shared_ptr` nodes with compressed prefixes, cached

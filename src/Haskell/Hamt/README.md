@@ -31,4 +31,8 @@ contract).
 `Data.Structures.Hamt.Patricia` adds `IntMap32`/`IntSet32` and `IntMap64`/`IntSet64`. The shared
 strict big-endian Patricia core sign-flips keys for ascending signed traversal, compresses common
 prefixes at the highest differing bit, and implements prefix-aware right-biased union,
-left-valued intersection, and difference.
+left-valued intersection, and difference. Every branch caches its subtree cardinality, so a
+structurally pruned algebra operation can publish the result count without traversing the retained
+subtrees. `unionWith`/`unionWithKey` and `intersectionWith`/`intersectionWithKey` receive left and
+right values in argument order; the keyed forms additionally receive the shared integer key.
+`validStructure` verifies both the root count and every cached branch count.

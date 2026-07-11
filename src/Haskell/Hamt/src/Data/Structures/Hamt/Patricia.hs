@@ -10,12 +10,17 @@ module Data.Structures.Hamt.Patricia
   , fromList
   , size
   , null
+  , validStructure
   , lookup
   , member
   , insert
   , delete
   , union
+  , unionWith
+  , unionWithKey
   , intersection
+  , intersectionWith
+  , intersectionWithKey
   , difference
   , toAscList
   , PatriciaSet
@@ -49,7 +54,7 @@ instance PatriciaKey Int64 where
 
 data Node k v
   = Leaf !Word64 k v
-  | Branch !Word64 !Word64 !(Node k v) !(Node k v)
+  | Branch !Int !Word64 !Word64 !(Node k v) !(Node k v)
 
 data PatriciaMap k v = PatriciaMap !Int !(Maybe (Node k v))
 type IntMap32 v = PatriciaMap Int32 v
@@ -70,6 +75,20 @@ size (PatriciaMap count _) = count
 null :: PatriciaMap k v -> Bool
 null = (== 0) . size
 
+-- | Checks the map cardinality against every cached subtree cardinality.
+validStructure :: PatriciaMap k v -> Bool
+validStructure (PatriciaMap expected root) = case root of
+  Nothing -> expected == 0
+  Just node -> validNode node == Just expected
+
+validNode :: Node k v -> Maybe Int
+validNode (Leaf _ _ _) = Just 1
+validNode (Branch cached _ _ left right) = do
+  leftCount <- validNode left
+  rightCount <- validNode right
+  let actual = leftCount + rightCount
+  if cached == actual then Just actual else Nothing
+
 lookup :: PatriciaKey k => k -> PatriciaMap k v -> Maybe v
 lookup key (PatriciaMap _ root) = root >>= lookupNode (encodeKey key)
 
@@ -80,7 +99,7 @@ lookupNode :: Word64 -> Node k v -> Maybe v
 lookupNode path (Leaf leafPath _ value)
   | path == leafPath = Just value
   | otherwise = Nothing
-lookupNode path (Branch prefix mask left right)
+lookupNode path (Branch _ prefix mask left right)
   | prefixOf path mask /= prefix = Nothing
   | path .&. mask == 0 = lookupNode path left
   | otherwise = lookupNode path right
@@ -97,14 +116,14 @@ insertNode :: Word64 -> k -> v -> Node k v -> (Node k v, Bool)
 insertNode path key value leaf@(Leaf oldPath oldKey _)
   | path == oldPath = (Leaf path oldKey value, False)
   | otherwise = (join oldPath leaf path (Leaf path key value), True)
-insertNode path key value branch@(Branch prefix mask left right)
+insertNode path key value branch@(Branch _ prefix mask left right)
   | prefixOf path mask /= prefix = (join prefix branch path (Leaf path key value), True)
   | path .&. mask == 0 =
       let (child, added) = insertNode path key value left
-       in (Branch prefix mask child right, added)
+       in (makeBranch prefix mask child right, added)
   | otherwise =
       let (child, added) = insertNode path key value right
-       in (Branch prefix mask left child, added)
+       in (makeBranch prefix mask left child, added)
 
 delete :: PatriciaKey k => k -> PatriciaMap k v -> PatriciaMap k v
 delete key original@(PatriciaMap count root) = case root >>= deleteNode (encodeKey key) of
@@ -117,50 +136,81 @@ deleteNode :: Word64 -> Node k v -> Maybe (Maybe (Node k v), Bool)
 deleteNode path leaf@(Leaf leafPath _ _)
   | path == leafPath = Just (Nothing, True)
   | otherwise = Just (Just leaf, False)
-deleteNode path branch@(Branch prefix mask left right)
+deleteNode path branch@(Branch _ prefix mask left right)
   | prefixOf path mask /= prefix = Just (Just branch, False)
   | path .&. mask == 0 = do
       (child, changed) <- deleteNode path left
-      pure (if changed then Just (maybe right (\node -> Branch prefix mask node right) child) else Just branch, changed)
+      pure (if changed then Just (maybe right (\node -> makeBranch prefix mask node right) child) else Just branch, changed)
   | otherwise = do
       (child, changed) <- deleteNode path right
-      pure (if changed then Just (maybe left (Branch prefix mask left) child) else Just branch, changed)
+      pure (if changed then Just (maybe left (makeBranch prefix mask left) child) else Just branch, changed)
 
 union :: PatriciaKey k => PatriciaMap k v -> PatriciaMap k v -> PatriciaMap k v
-union (PatriciaMap _ left) (PatriciaMap _ right) = fromNode (unionNodes left right)
+union = unionWithKey (\_ _ right -> right)
+
+-- | Unions two maps, combining a left and right value at every shared key.
+unionWith :: PatriciaKey k => (v -> v -> v) -> PatriciaMap k v -> PatriciaMap k v -> PatriciaMap k v
+unionWith combine = unionWithKey (\_ left right -> combine left right)
+
+-- | Unions two maps, passing the key, left value, and right value to the combining function.
+unionWithKey :: PatriciaKey k => (k -> v -> v -> v) -> PatriciaMap k v -> PatriciaMap k v -> PatriciaMap k v
+unionWithKey _ left@(PatriciaMap _ _) (PatriciaMap 0 _) = left
+unionWithKey _ (PatriciaMap 0 _) right@(PatriciaMap _ _) = right
+unionWithKey combine (PatriciaMap _ left) (PatriciaMap _ right) =
+  fromNode (unionWithKeyNodes combine left right)
 
 intersection :: PatriciaKey k => PatriciaMap k v -> PatriciaMap k w -> PatriciaMap k v
+intersection left@(PatriciaMap 0 _) _ = left
+intersection _ (PatriciaMap 0 _) = empty
 intersection (PatriciaMap _ left) (PatriciaMap _ right) = fromNode (intersectNodes left right)
 
+-- | Intersects two maps, combining a left and right value at every shared key.
+intersectionWith :: PatriciaKey k => (a -> b -> c) -> PatriciaMap k a -> PatriciaMap k b -> PatriciaMap k c
+intersectionWith combine = intersectionWithKey (\_ left right -> combine left right)
+
+-- | Intersects two maps, passing the key, left value, and right value to the combining function.
+intersectionWithKey :: PatriciaKey k => (k -> a -> b -> c) -> PatriciaMap k a -> PatriciaMap k b -> PatriciaMap k c
+intersectionWithKey _ (PatriciaMap 0 _) _ = empty
+intersectionWithKey _ _ (PatriciaMap 0 _) = empty
+intersectionWithKey combine (PatriciaMap _ left) (PatriciaMap _ right) =
+  fromNode (intersectWithKeyNodes combine left right)
+
 difference :: PatriciaKey k => PatriciaMap k v -> PatriciaMap k w -> PatriciaMap k v
+difference left@(PatriciaMap 0 _) _ = left
+difference left@(PatriciaMap _ _) (PatriciaMap 0 _) = left
 difference (PatriciaMap _ left) (PatriciaMap _ right) = fromNode (exceptNodes left right)
 
 fromNode :: Maybe (Node k v) -> PatriciaMap k v
-fromNode root = PatriciaMap (maybe 0 countNode root) root
+fromNode root = PatriciaMap (maybe 0 nodeSize root) root
 
-unionNodes :: Maybe (Node k v) -> Maybe (Node k v) -> Maybe (Node k v)
-unionNodes Nothing right = right
-unionNodes left Nothing = left
-unionNodes (Just (Leaf path key value)) (Just right) = Just (putExisting True path key value right)
-unionNodes (Just left) (Just (Leaf path key value)) = Just (putExisting False path key value left)
-unionNodes (Just left@(Branch lp lm ll lr)) (Just right@(Branch rp rm rl rr))
-  | lm == rm && lp == rp = Just (Branch lp lm (required (unionNodes (Just ll) (Just rl))) (required (unionNodes (Just lr) (Just rr))))
+unionWithKeyNodes :: (k -> v -> v -> v) -> Maybe (Node k v) -> Maybe (Node k v) -> Maybe (Node k v)
+unionWithKeyNodes _ Nothing right = right
+unionWithKeyNodes _ left Nothing = left
+unionWithKeyNodes combine (Just (Leaf path key value)) (Just right) =
+  Just (putCombined combine True path key value right)
+unionWithKeyNodes combine (Just left) (Just (Leaf path key value)) =
+  Just (putCombined combine False path key value left)
+unionWithKeyNodes combine (Just left@(Branch _ lp lm ll lr)) (Just right@(Branch _ rp rm rl rr))
+  | lm == rm && lp == rp = Just (makeBranch lp lm
+      (required (unionWithKeyNodes combine (Just ll) (Just rl)))
+      (required (unionWithKeyNodes combine (Just lr) (Just rr))))
   | lm > rm && prefixOf rp lm == lp = Just $ if rp .&. lm == 0
-      then Branch lp lm (required (unionNodes (Just ll) (Just right))) lr
-      else Branch lp lm ll (required (unionNodes (Just lr) (Just right)))
+      then makeBranch lp lm (required (unionWithKeyNodes combine (Just ll) (Just right))) lr
+      else makeBranch lp lm ll (required (unionWithKeyNodes combine (Just lr) (Just right)))
   | rm > lm && prefixOf lp rm == rp = Just $ if lp .&. rm == 0
-      then Branch rp rm (required (unionNodes (Just left) (Just rl))) rr
-      else Branch rp rm rl (required (unionNodes (Just left) (Just rr)))
+      then makeBranch rp rm (required (unionWithKeyNodes combine (Just left) (Just rl))) rr
+      else makeBranch rp rm rl (required (unionWithKeyNodes combine (Just left) (Just rr)))
   | otherwise = Just (join lp left rp right)
 
-putExisting :: Bool -> Word64 -> k -> v -> Node k v -> Node k v
-putExisting prefer path key value leaf@(Leaf oldPath oldKey _)
-  | path == oldPath = if prefer then leaf else Leaf path oldKey value
-  | otherwise = join oldPath leaf path (Leaf path key value)
-putExisting prefer path key value branch@(Branch prefix mask left right)
+putCombined :: (k -> v -> v -> v) -> Bool -> Word64 -> k -> v -> Node k v -> Node k v
+putCombined combine incomingIsLeft path key value leaf@(Leaf oldPath oldKey oldValue)
+  | path /= oldPath = join oldPath leaf path (Leaf path key value)
+  | incomingIsLeft = Leaf path key (combine key value oldValue)
+  | otherwise = Leaf path oldKey (combine oldKey oldValue value)
+putCombined combine incomingIsLeft path key value branch@(Branch _ prefix mask left right)
   | prefixOf path mask /= prefix = join prefix branch path (Leaf path key value)
-  | path .&. mask == 0 = Branch prefix mask (putExisting prefer path key value left) right
-  | otherwise = Branch prefix mask left (putExisting prefer path key value right)
+  | path .&. mask == 0 = makeBranch prefix mask (putCombined combine incomingIsLeft path key value left) right
+  | otherwise = makeBranch prefix mask left (putCombined combine incomingIsLeft path key value right)
 
 intersectNodes :: Maybe (Node k v) -> Maybe (Node k w) -> Maybe (Node k v)
 intersectNodes Nothing _ = Nothing
@@ -169,10 +219,31 @@ intersectNodes (Just left@(Leaf path _ _)) (Just right)
   | containsPath path right = Just left
   | otherwise = Nothing
 intersectNodes (Just left) (Just (Leaf path _ _)) = findPath path left
-intersectNodes (Just left@(Branch lp lm ll lr)) (Just right@(Branch rp rm rl rr))
+intersectNodes (Just left@(Branch _ lp lm ll lr)) (Just right@(Branch _ rp rm rl rr))
   | lm == rm && lp == rp = collapse lp lm (intersectNodes (Just ll) (Just rl)) (intersectNodes (Just lr) (Just rr))
   | lm > rm && prefixOf rp lm == lp = if rp .&. lm == 0 then intersectNodes (Just ll) (Just right) else intersectNodes (Just lr) (Just right)
   | rm > lm && prefixOf lp rm == rp = if lp .&. rm == 0 then intersectNodes (Just left) (Just rl) else intersectNodes (Just left) (Just rr)
+  | otherwise = Nothing
+
+intersectWithKeyNodes :: (k -> a -> b -> c) -> Maybe (Node k a) -> Maybe (Node k b) -> Maybe (Node k c)
+intersectWithKeyNodes _ Nothing _ = Nothing
+intersectWithKeyNodes _ _ Nothing = Nothing
+intersectWithKeyNodes combine (Just (Leaf path key leftValue)) (Just right) = case findPath path right of
+  Just (Leaf _ _ rightValue) -> Just (Leaf path key (combine key leftValue rightValue))
+  _ -> Nothing
+intersectWithKeyNodes combine (Just left) (Just (Leaf path _ rightValue)) = case findPath path left of
+  Just (Leaf leftPath key leftValue) -> Just (Leaf leftPath key (combine key leftValue rightValue))
+  _ -> Nothing
+intersectWithKeyNodes combine (Just left@(Branch _ lp lm ll lr)) (Just right@(Branch _ rp rm rl rr))
+  | lm == rm && lp == rp = collapse lp lm
+      (intersectWithKeyNodes combine (Just ll) (Just rl))
+      (intersectWithKeyNodes combine (Just lr) (Just rr))
+  | lm > rm && prefixOf rp lm == lp = if rp .&. lm == 0
+      then intersectWithKeyNodes combine (Just ll) (Just right)
+      else intersectWithKeyNodes combine (Just lr) (Just right)
+  | rm > lm && prefixOf lp rm == rp = if lp .&. rm == 0
+      then intersectWithKeyNodes combine (Just left) (Just rl)
+      else intersectWithKeyNodes combine (Just left) (Just rr)
   | otherwise = Nothing
 
 exceptNodes :: Maybe (Node k v) -> Maybe (Node k w) -> Maybe (Node k v)
@@ -180,7 +251,7 @@ exceptNodes Nothing _ = Nothing
 exceptNodes left Nothing = left
 exceptNodes (Just left@(Leaf path _ _)) (Just right) = if containsPath path right then Nothing else Just left
 exceptNodes (Just left) (Just (Leaf path _ _)) = removePath path left
-exceptNodes (Just left@(Branch lp lm ll lr)) (Just right@(Branch rp rm rl rr))
+exceptNodes (Just left@(Branch _ lp lm ll lr)) (Just right@(Branch _ rp rm rl rr))
   | lm == rm && lp == rp = collapse lp lm (exceptNodes (Just ll) (Just rl)) (exceptNodes (Just lr) (Just rr))
   | lm > rm && prefixOf rp lm == lp = if rp .&. lm == 0
       then collapse lp lm (exceptNodes (Just ll) (Just right)) (Just lr)
@@ -193,14 +264,14 @@ containsPath path = maybe False (const True) . findPath path
 
 findPath :: Word64 -> Node k v -> Maybe (Node k v)
 findPath path leaf@(Leaf found _ _) = if path == found then Just leaf else Nothing
-findPath path (Branch prefix mask left right)
+findPath path (Branch _ prefix mask left right)
   | prefixOf path mask /= prefix = Nothing
   | path .&. mask == 0 = findPath path left
   | otherwise = findPath path right
 
 removePath :: Word64 -> Node k v -> Maybe (Node k v)
 removePath path leaf@(Leaf found _ _) = if path == found then Nothing else Just leaf
-removePath path branch@(Branch prefix mask left right)
+removePath path branch@(Branch _ prefix mask left right)
   | prefixOf path mask /= prefix = Just branch
   | path .&. mask == 0 = collapse prefix mask (removePath path left) (Just right)
   | otherwise = collapse prefix mask (Just left) (removePath path right)
@@ -208,21 +279,24 @@ removePath path branch@(Branch prefix mask left right)
 collapse :: Word64 -> Word64 -> Maybe (Node k v) -> Maybe (Node k v) -> Maybe (Node k v)
 collapse _ _ Nothing right = right
 collapse _ _ left Nothing = left
-collapse prefix mask (Just left) (Just right) = Just (Branch prefix mask left right)
+collapse prefix mask (Just left) (Just right) = Just (makeBranch prefix mask left right)
 
 join :: Word64 -> Node k v -> Word64 -> Node k v -> Node k v
 join leftPath left rightPath right =
   let differenceBits = leftPath `xor` rightPath
       mask = 1 `shiftL` (63 - countLeadingZeros differenceBits)
       prefix = prefixOf leftPath mask
-   in if leftPath .&. mask == 0 then Branch prefix mask left right else Branch prefix mask right left
+   in if leftPath .&. mask == 0 then makeBranch prefix mask left right else makeBranch prefix mask right left
 
 prefixOf :: Word64 -> Word64 -> Word64
 prefixOf path mask = path .&. complement ((mask `shiftL` 1) - 1)
 
-countNode :: Node k v -> Int
-countNode (Leaf _ _ _) = 1
-countNode (Branch _ _ left right) = countNode left + countNode right
+nodeSize :: Node k v -> Int
+nodeSize (Leaf _ _ _) = 1
+nodeSize (Branch count _ _ _ _) = count
+
+makeBranch :: Word64 -> Word64 -> Node k v -> Node k v -> Node k v
+makeBranch prefix mask left right = Branch (nodeSize left + nodeSize right) prefix mask left right
 
 required :: Maybe a -> a
 required (Just value) = value
@@ -232,7 +306,7 @@ toAscList :: PatriciaMap k v -> [(k, v)]
 toAscList (PatriciaMap _ root) = maybe [] visit root
   where
     visit (Leaf _ key value) = [(key, value)]
-    visit (Branch _ _ left right) = visit left ++ visit right
+    visit (Branch _ _ _ left right) = visit left ++ visit right
 
 newtype PatriciaSet k = PatriciaSet (PatriciaMap k ())
 type IntSet32 = PatriciaSet Int32

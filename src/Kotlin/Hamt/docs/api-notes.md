@@ -57,4 +57,8 @@ The 32- and 64-bit map/set facades share a big-endian Patricia core. A sign-bit 
 signed keys to unsigned trie order, so iteration is ascending signed order including minimum and
 maximum boundaries. Nodes store a common prefix and highest differing bit; insertion and removal
 path-copy only the compressed search spine. `union`, `intersect`, and `except` align prefixes,
-reuse disjoint or identical subtrees, and preserve receiver identity for structural no-ops.
+reuse disjoint or identical subtrees, and preserve receiver identity for semantic no-ops. Each node
+caches its subtree cardinality, allowing an algebra result to expose `size` without a separate
+result-tree traversal. Map `union` and `intersect` overloads accept a
+`(key, leftValue, rightValue) -> value` function that is invoked exactly for keys present in both
+operands; disjoint subtrees remain structurally shared.

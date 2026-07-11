@@ -286,6 +286,93 @@ private fun patriciaMapsAndSetsPreserveSignedOrder() {
     checkEquals(listOf(1 to "left"), mapLeft.intersect(mapRight).toList(), "Patricia map intersection retains left values")
 }
 
+private fun patriciaCombiningCountsAndNoOps() {
+    val left = PersistentIntMap.from(listOf(-4 to 40, 2 to 20, 7 to 70))
+    val right = PersistentIntMap.from(listOf(2 to 3, 7 to 5, 9 to 90))
+    val combine: (Int, Int, Int) -> Int = { key, leftValue, rightValue ->
+        key + leftValue * 100 + rightValue
+    }
+
+    val union = left.union(right, combine)
+    checkEquals(listOf(-4 to 40, 2 to 2_005, 7 to 7_012, 9 to 90), union.toList(), "Patricia combining union")
+    checkEquals(4, union.size, "Patricia combining union cached count")
+
+    val intersection = left.intersect(right, combine)
+    checkEquals(listOf(2 to 2_005, 7 to 7_012), intersection.toList(), "Patricia combining intersection")
+    checkEquals(2, intersection.size, "Patricia combining intersection cached count")
+
+    val independentCopy = PersistentIntMap.from(left.toList())
+    check(left.put(2, 20) === left, "same-value Patricia put should preserve receiver identity")
+    check(left.remove(1_000) === left, "absent Patricia remove should preserve receiver identity")
+    check(left.union(independentCopy) === left, "equal Patricia union should preserve receiver identity")
+    check(left.intersect(independentCopy) === left, "equal Patricia intersection should preserve receiver identity")
+    check(left.union(independentCopy) { _, leftValue, _ -> leftValue } === left,
+        "combining Patricia union should preserve identity when values are unchanged")
+    check(left.intersect(independentCopy) { _, leftValue, _ -> leftValue } === left,
+        "combining Patricia intersection should preserve identity when values are unchanged")
+    check(left.except(PersistentIntMap.from(listOf(1_000 to 1, 2_000 to 2))) === left,
+        "disjoint Patricia difference should preserve receiver identity")
+
+    val set = PersistentIntSet.from(left.map { it.first })
+    val equalSet = PersistentIntSet.from(set.toList().reversed())
+    check(set.add(2) === set, "duplicate Patricia set add should preserve receiver identity")
+    check(set.remove(1_000) === set, "absent Patricia set remove should preserve receiver identity")
+    check(set.union(equalSet) === set, "equal Patricia set union should preserve receiver identity")
+    check(set.intersect(equalSet) === set, "equal Patricia set intersection should preserve receiver identity")
+    check(set.except(PersistentIntSet.from(listOf(1_000, 2_000))) === set,
+        "disjoint Patricia set difference should preserve receiver identity")
+
+    val nullable = PersistentIntMap.empty<String?>().put(1, null)
+    check(nullable.containsKey(1), "Patricia containsKey should distinguish a stored null value")
+
+    val longLeft = PersistentLongMap.from(listOf(Long.MIN_VALUE to 4L, 6L to 7L))
+    val longRight = PersistentLongMap.from(listOf(6L to 11L, Long.MAX_VALUE to 8L))
+    val longUnion = longLeft.union(longRight) { key, leftValue, rightValue -> key xor leftValue xor rightValue }
+    checkEquals(
+        listOf(Long.MIN_VALUE to 4L, 6L to (6L xor 7L xor 11L), Long.MAX_VALUE to 8L),
+        longUnion.toList(),
+        "64-bit Patricia combining union",
+    )
+    checkEquals(3, longUnion.size, "64-bit Patricia combining union cached count")
+
+    var state = 0x6D2B79F5
+    repeat(256) { history ->
+        val leftModel = mutableMapOf<Int, Int>()
+        val rightModel = mutableMapOf<Int, Int>()
+        repeat(48) {
+            state = state * 1_664_525 + 1_013_904_223
+            val key = (state ushr 9).mod(129) - 64
+            if (state and 1 == 0) leftModel[key] = state else rightModel[key] = state
+        }
+
+        val actualLeft = PersistentIntMap.from(leftModel.map { it.key to it.value })
+        val actualRight = PersistentIntMap.from(rightModel.map { it.key to it.value })
+        val expectedUnion = leftModel.toMutableMap()
+        for ((key, rightValue) in rightModel) {
+            expectedUnion[key] = if (leftModel.containsKey(key)) {
+                key xor leftModel.getValue(key) xor rightValue
+            } else {
+                rightValue
+            }
+        }
+        val expectedIntersection = leftModel.keys.intersect(rightModel.keys).associateWith { key ->
+            key xor leftModel.getValue(key) xor rightModel.getValue(key)
+        }
+
+        val actualUnion = actualLeft.union(actualRight) { key, leftValue, rightValue -> key xor leftValue xor rightValue }
+        val actualIntersection = actualLeft.intersect(actualRight) { key, leftValue, rightValue -> key xor leftValue xor rightValue }
+        val actualDifference = actualLeft.except(actualRight)
+        val expectedDifference = leftModel.filterKeys { it !in rightModel }
+
+        checkEquals(expectedUnion.toSortedMap().toList(), actualUnion.toList(), "randomized Patricia combining union $history")
+        checkEquals(expectedUnion.size, actualUnion.size, "randomized Patricia union cached count $history")
+        checkEquals(expectedIntersection.toSortedMap().toList(), actualIntersection.toList(), "randomized Patricia combining intersection $history")
+        checkEquals(expectedIntersection.size, actualIntersection.size, "randomized Patricia intersection cached count $history")
+        checkEquals(expectedDifference.toSortedMap().toList(), actualDifference.toList(), "randomized Patricia difference $history")
+        checkEquals(expectedDifference.size, actualDifference.size, "randomized Patricia difference cached count $history")
+    }
+}
+
 private fun exceptAndSymmetricExceptPreserveUntouchedRoots() {
     val set = PersistentHashSet.from((0..63).toList())
 
@@ -331,6 +418,7 @@ public fun main() {
         "ctrieContentionAndGenerationRenewal" to ::ctrieContentionAndGenerationRenewal,
         "ctrieCollisionNodesRemainStable" to ::ctrieCollisionNodesRemainStable,
         "patriciaMapsAndSetsPreserveSignedOrder" to ::patriciaMapsAndSetsPreserveSignedOrder,
+        "patriciaCombiningCountsAndNoOps" to ::patriciaCombiningCountsAndNoOps,
     )
 
     for ((name, test) in tests) {

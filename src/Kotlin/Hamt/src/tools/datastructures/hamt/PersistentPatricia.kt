@@ -1,13 +1,21 @@
 package tools.datastructures.hamt
 
-private sealed interface PatriciaNode<K, V>
-private data class PatriciaLeaf<K, V>(val path: ULong, val key: K, val value: V) : PatriciaNode<K, V>
+private sealed interface PatriciaNode<K, V> {
+    val count: Int
+}
+
+private data class PatriciaLeaf<K, V>(val path: ULong, val key: K, val value: V) : PatriciaNode<K, V> {
+    override val count: Int get() = 1
+}
+
 private data class PatriciaBranch<K, V>(
     val prefix: ULong,
     val mask: ULong,
     val left: PatriciaNode<K, V>,
     val right: PatriciaNode<K, V>,
-) : PatriciaNode<K, V>
+) : PatriciaNode<K, V> {
+    override val count: Int = Math.addExact(left.count, right.count)
+}
 
 private data class PatriciaChange<K, V>(val node: PatriciaNode<K, V>?, val changed: Boolean, val added: Boolean)
 
@@ -26,6 +34,11 @@ private class PatriciaCore<K, V>(
                 node = if (path and node.mask == 0uL) node.left else node.right
             }
         }
+    }
+
+    fun containsKey(key: K): Boolean {
+        val node = root ?: return false
+        return findLeaf(node, encode(key)) != null
     }
 
     fun put(key: K, value: V): PatriciaCore<K, V> {
@@ -66,19 +79,31 @@ private class PatriciaCore<K, V>(
     fun union(other: PatriciaCore<K, V>): PatriciaCore<K, V> {
         val merged = unionNodes(root, other.root)
         if (merged === root) return this
-        return PatriciaCore(merged, countNodes(merged), encode)
+        return PatriciaCore(merged, merged?.count ?: 0, encode)
+    }
+
+    fun union(other: PatriciaCore<K, V>, combine: (K, V, V) -> V): PatriciaCore<K, V> {
+        val merged = unionCombinedNodes(root, other.root, combine)
+        if (merged === root) return this
+        return PatriciaCore(merged, merged?.count ?: 0, encode)
     }
 
     fun intersect(other: PatriciaCore<K, *>): PatriciaCore<K, V> {
         val merged = intersectNodes(root, other.root)
         if (merged === root) return this
-        return PatriciaCore(merged, countNodes(merged), encode)
+        return PatriciaCore(merged, merged?.count ?: 0, encode)
+    }
+
+    fun intersect(other: PatriciaCore<K, V>, combine: (K, V, V) -> V): PatriciaCore<K, V> {
+        val merged = intersectCombinedNodes(root, other.root, combine)
+        if (merged === root) return this
+        return PatriciaCore(merged, merged?.count ?: 0, encode)
     }
 
     fun except(other: PatriciaCore<K, *>): PatriciaCore<K, V> {
         val merged = exceptNodes(root, other.root)
         if (merged === root) return this
-        return PatriciaCore(merged, countNodes(merged), encode)
+        return PatriciaCore(merged, merged?.count ?: 0, encode)
     }
 
     private fun remove(node: PatriciaNode<K, V>?, path: ULong): PatriciaChange<K, V> = when (node) {
@@ -125,38 +150,120 @@ private class PatriciaCore<K, V>(
 private fun <K, V> unionNodes(left: PatriciaNode<K, V>?, right: PatriciaNode<K, V>?): PatriciaNode<K, V>? {
     if (left == null) return right
     if (right == null || left === right) return left
-    if (left is PatriciaLeaf) return putNode(right, left.path, left.key, left.value, preferExisting = true)
-    if (right is PatriciaLeaf) return putNode(left, right.path, right.key, right.value, preferExisting = false)
+    if (left is PatriciaLeaf) return putNode(right, left, preferExisting = true)
+    if (right is PatriciaLeaf) return putNode(left, right, preferExisting = false)
     left as PatriciaBranch
     right as PatriciaBranch
     return when {
-        left.mask == right.mask && left.prefix == right.prefix -> PatriciaBranch(
-            left.prefix, left.mask,
+        left.mask == right.mask && left.prefix == right.prefix -> rebuildPatricia(
+            left,
             unionNodes(left.left, right.left)!!,
             unionNodes(left.right, right.right)!!,
         )
         left.mask > right.mask && prefixOfPatricia(right.prefix, left.mask) == left.prefix ->
-            if (right.prefix and left.mask == 0uL) left.copy(left = unionNodes(left.left, right)!!)
-            else left.copy(right = unionNodes(left.right, right)!!)
+            if (right.prefix and left.mask == 0uL) rebuildPatricia(left, unionNodes(left.left, right)!!, left.right)
+            else rebuildPatricia(left, left.left, unionNodes(left.right, right)!!)
         right.mask > left.mask && prefixOfPatricia(left.prefix, right.mask) == right.prefix ->
-            if (left.prefix and right.mask == 0uL) right.copy(left = unionNodes(left, right.left)!!)
-            else right.copy(right = unionNodes(left, right.right)!!)
+            if (left.prefix and right.mask == 0uL) rebuildPatricia(right, unionNodes(left, right.left)!!, right.right)
+            else rebuildPatricia(right, right.left, unionNodes(left, right.right)!!)
         else -> joinPatricia(left.prefix, left, right.prefix, right)
     }
 }
 
 private fun <K, V> putNode(
-    node: PatriciaNode<K, V>, path: ULong, key: K, value: V, preferExisting: Boolean,
+    node: PatriciaNode<K, V>, leaf: PatriciaLeaf<K, V>, preferExisting: Boolean,
 ): PatriciaNode<K, V> = when (node) {
     is PatriciaLeaf -> when {
-        node.path == path && preferExisting -> node
-        node.path == path -> PatriciaLeaf(path, node.key, value)
-        else -> joinPatricia(node.path, node, path, PatriciaLeaf(path, key, value))
+        node.path == leaf.path && node.value == leaf.value -> if (preferExisting) leaf else node
+        node.path == leaf.path && preferExisting -> node
+        node.path == leaf.path -> leaf
+        else -> joinPatricia(node.path, node, leaf.path, leaf)
     }
-    is PatriciaBranch -> if (prefixOfPatricia(path, node.mask) != node.prefix) {
-        joinPatricia(node.prefix, node, path, PatriciaLeaf(path, key, value))
-    } else if (path and node.mask == 0uL) node.copy(left = putNode(node.left, path, key, value, preferExisting))
-    else node.copy(right = putNode(node.right, path, key, value, preferExisting))
+    is PatriciaBranch -> if (prefixOfPatricia(leaf.path, node.mask) != node.prefix) {
+        joinPatricia(node.prefix, node, leaf.path, leaf)
+    } else if (leaf.path and node.mask == 0uL) {
+        rebuildPatricia(node, putNode(node.left, leaf, preferExisting), node.right)
+    } else {
+        rebuildPatricia(node, node.left, putNode(node.right, leaf, preferExisting))
+    }
+}
+
+private fun <K, V> unionCombinedNodes(
+    left: PatriciaNode<K, V>?,
+    right: PatriciaNode<K, V>?,
+    combine: (K, V, V) -> V,
+): PatriciaNode<K, V>? {
+    if (left == null) return right
+    if (right == null) return left
+    if (left is PatriciaLeaf) return unionLeftLeaf(left, right, combine)
+    if (right is PatriciaLeaf) return unionRightLeaf(left, right, combine)
+    left as PatriciaBranch
+    right as PatriciaBranch
+    return when {
+        left.mask == right.mask && left.prefix == right.prefix -> rebuildPatricia(
+            left,
+            unionCombinedNodes(left.left, right.left, combine)!!,
+            unionCombinedNodes(left.right, right.right, combine)!!,
+        )
+        left.mask > right.mask && prefixOfPatricia(right.prefix, left.mask) == left.prefix ->
+            if (right.prefix and left.mask == 0uL) {
+                rebuildPatricia(left, unionCombinedNodes(left.left, right, combine)!!, left.right)
+            } else {
+                rebuildPatricia(left, left.left, unionCombinedNodes(left.right, right, combine)!!)
+            }
+        right.mask > left.mask && prefixOfPatricia(left.prefix, right.mask) == right.prefix ->
+            if (left.prefix and right.mask == 0uL) {
+                rebuildPatricia(right, unionCombinedNodes(left, right.left, combine)!!, right.right)
+            } else {
+                rebuildPatricia(right, right.left, unionCombinedNodes(left, right.right, combine)!!)
+            }
+        else -> joinPatricia(left.prefix, left, right.prefix, right)
+    }
+}
+
+private fun <K, V> unionLeftLeaf(
+    left: PatriciaLeaf<K, V>,
+    right: PatriciaNode<K, V>,
+    combine: (K, V, V) -> V,
+): PatriciaNode<K, V> = when (right) {
+    is PatriciaLeaf -> if (left.path == right.path) combinedLeaf(left, right, combine)
+    else joinPatricia(left.path, left, right.path, right)
+    is PatriciaBranch -> if (prefixOfPatricia(left.path, right.mask) != right.prefix) {
+        joinPatricia(left.path, left, right.prefix, right)
+    } else if (left.path and right.mask == 0uL) {
+        rebuildPatricia(right, unionLeftLeaf(left, right.left, combine), right.right)
+    } else {
+        rebuildPatricia(right, right.left, unionLeftLeaf(left, right.right, combine))
+    }
+}
+
+private fun <K, V> unionRightLeaf(
+    left: PatriciaNode<K, V>,
+    right: PatriciaLeaf<K, V>,
+    combine: (K, V, V) -> V,
+): PatriciaNode<K, V> = when (left) {
+    is PatriciaLeaf -> if (left.path == right.path) combinedLeaf(left, right, combine)
+    else joinPatricia(left.path, left, right.path, right)
+    is PatriciaBranch -> if (prefixOfPatricia(right.path, left.mask) != left.prefix) {
+        joinPatricia(left.prefix, left, right.path, right)
+    } else if (right.path and left.mask == 0uL) {
+        rebuildPatricia(left, unionRightLeaf(left.left, right, combine), left.right)
+    } else {
+        rebuildPatricia(left, left.left, unionRightLeaf(left.right, right, combine))
+    }
+}
+
+private fun <K, V> combinedLeaf(
+    left: PatriciaLeaf<K, V>,
+    right: PatriciaLeaf<K, V>,
+    combine: (K, V, V) -> V,
+): PatriciaLeaf<K, V> {
+    val value = combine(left.key, left.value, right.value)
+    return when {
+        value == left.value -> left
+        value == right.value -> right
+        else -> PatriciaLeaf(left.path, left.key, value)
+    }
 }
 
 private fun <K, V, W> intersectNodes(left: PatriciaNode<K, V>?, right: PatriciaNode<K, W>?): PatriciaNode<K, V>? {
@@ -168,12 +275,50 @@ private fun <K, V, W> intersectNodes(left: PatriciaNode<K, V>?, right: PatriciaN
     right as PatriciaBranch
     return when {
         left.mask == right.mask && left.prefix == right.prefix -> collapsePatricia(
-            intersectNodes(left.left, right.left), intersectNodes(left.right, right.right), left.prefix, left.mask,
+            left, intersectNodes(left.left, right.left), intersectNodes(left.right, right.right),
         )
         left.mask > right.mask && prefixOfPatricia(right.prefix, left.mask) == left.prefix ->
             if (right.prefix and left.mask == 0uL) intersectNodes(left.left, right) else intersectNodes(left.right, right)
         right.mask > left.mask && prefixOfPatricia(left.prefix, right.mask) == right.prefix ->
             if (left.prefix and right.mask == 0uL) intersectNodes(left, right.left) else intersectNodes(left, right.right)
+        else -> null
+    }
+}
+
+private fun <K, V> intersectCombinedNodes(
+    left: PatriciaNode<K, V>?,
+    right: PatriciaNode<K, V>?,
+    combine: (K, V, V) -> V,
+): PatriciaNode<K, V>? {
+    if (left == null || right == null) return null
+    if (left is PatriciaLeaf) {
+        val rightLeaf = findLeaf(right, left.path) ?: return null
+        return combinedLeaf(left, rightLeaf, combine)
+    }
+    if (right is PatriciaLeaf) {
+        val leftLeaf = findLeaf(left, right.path) ?: return null
+        return combinedLeaf(leftLeaf, right, combine)
+    }
+    left as PatriciaBranch
+    right as PatriciaBranch
+    return when {
+        left.mask == right.mask && left.prefix == right.prefix -> collapsePatricia(
+            left,
+            intersectCombinedNodes(left.left, right.left, combine),
+            intersectCombinedNodes(left.right, right.right, combine),
+        )
+        left.mask > right.mask && prefixOfPatricia(right.prefix, left.mask) == left.prefix ->
+            if (right.prefix and left.mask == 0uL) {
+                intersectCombinedNodes(left.left, right, combine)
+            } else {
+                intersectCombinedNodes(left.right, right, combine)
+            }
+        right.mask > left.mask && prefixOfPatricia(left.prefix, right.mask) == right.prefix ->
+            if (left.prefix and right.mask == 0uL) {
+                intersectCombinedNodes(left, right.left, combine)
+            } else {
+                intersectCombinedNodes(left, right.right, combine)
+            }
         else -> null
     }
 }
@@ -187,20 +332,33 @@ private fun <K, V, W> exceptNodes(left: PatriciaNode<K, V>?, right: PatriciaNode
     right as PatriciaBranch
     return when {
         left.mask == right.mask && left.prefix == right.prefix -> collapsePatricia(
-            exceptNodes(left.left, right.left), exceptNodes(left.right, right.right), left.prefix, left.mask,
+            left, exceptNodes(left.left, right.left), exceptNodes(left.right, right.right),
         )
         left.mask > right.mask && prefixOfPatricia(right.prefix, left.mask) == left.prefix ->
-            if (right.prefix and left.mask == 0uL) collapsePatricia(exceptNodes(left.left, right), left.right, left.prefix, left.mask)
-            else collapsePatricia(left.left, exceptNodes(left.right, right), left.prefix, left.mask)
+            if (right.prefix and left.mask == 0uL) collapsePatricia(left, exceptNodes(left.left, right), left.right)
+            else collapsePatricia(left, left.left, exceptNodes(left.right, right))
         right.mask > left.mask && prefixOfPatricia(left.prefix, right.mask) == right.prefix ->
             if (left.prefix and right.mask == 0uL) exceptNodes(left, right.left) else exceptNodes(left, right.right)
         else -> left
     }
 }
 
+private fun <K, V> rebuildPatricia(
+    original: PatriciaBranch<K, V>,
+    left: PatriciaNode<K, V>,
+    right: PatriciaNode<K, V>,
+): PatriciaNode<K, V> = if (left === original.left && right === original.right) original
+else PatriciaBranch(original.prefix, original.mask, left, right)
+
 private fun <K, V> collapsePatricia(
-    left: PatriciaNode<K, V>?, right: PatriciaNode<K, V>?, prefix: ULong, mask: ULong,
-): PatriciaNode<K, V>? = when { left == null -> right; right == null -> left; else -> PatriciaBranch(prefix, mask, left, right) }
+    original: PatriciaBranch<K, V>,
+    left: PatriciaNode<K, V>?,
+    right: PatriciaNode<K, V>?,
+): PatriciaNode<K, V>? = when {
+    left == null -> right
+    right == null -> left
+    else -> rebuildPatricia(original, left, right)
+}
 
 private fun <K, V> containsPath(node: PatriciaNode<K, V>, path: ULong): Boolean = findLeaf(node, path) != null
 private fun <K, V> findLeaf(node: PatriciaNode<K, V>, path: ULong): PatriciaLeaf<K, V>? = when (node) {
@@ -211,13 +369,8 @@ private fun <K, V> findLeaf(node: PatriciaNode<K, V>, path: ULong): PatriciaLeaf
 private fun <K, V> removePath(node: PatriciaNode<K, V>, path: ULong): PatriciaNode<K, V>? = when (node) {
     is PatriciaLeaf -> if (node.path == path) null else node
     is PatriciaBranch -> if (prefixOfPatricia(path, node.mask) != node.prefix) node
-    else if (path and node.mask == 0uL) collapsePatricia(removePath(node.left, path), node.right, node.prefix, node.mask)
-    else collapsePatricia(node.left, removePath(node.right, path), node.prefix, node.mask)
-}
-private fun <K, V> countNodes(node: PatriciaNode<K, V>?): Int = when (node) {
-    null -> 0
-    is PatriciaLeaf -> 1
-    is PatriciaBranch -> countNodes(node.left) + countNodes(node.right)
+    else if (path and node.mask == 0uL) collapsePatricia(node, removePath(node.left, path), node.right)
+    else collapsePatricia(node, node.left, removePath(node.right, path))
 }
 private fun prefixOfPatricia(path: ULong, mask: ULong): ULong = path and ((mask shl 1) - 1uL).inv()
 private fun <K, V> joinPatricia(
@@ -240,12 +393,14 @@ public class PersistentIntMap<V> private constructor(private val core: PatriciaC
     public val size: Int get() = core.size
     public val isEmpty: Boolean get() = size == 0
     public operator fun get(key: Int): V? = core.get(key)
-    public fun containsKey(key: Int): Boolean = core.get(key) != null
+    public fun containsKey(key: Int): Boolean = core.containsKey(key)
     public fun put(key: Int, value: V): PersistentIntMap<V> { val next = core.put(key, value); return if (next === core) this else PersistentIntMap(next) }
     public fun remove(key: Int): PersistentIntMap<V> { val next = core.remove(key); return if (next === core) this else PersistentIntMap(next) }
     public fun clear(): PersistentIntMap<V> = if (isEmpty) this else empty()
     public fun union(other: PersistentIntMap<V>): PersistentIntMap<V> { val next = core.union(other.core); return if (next === core) this else PersistentIntMap(next) }
+    public fun union(other: PersistentIntMap<V>, combine: (Int, V, V) -> V): PersistentIntMap<V> { val next = core.union(other.core, combine); return if (next === core) this else PersistentIntMap(next) }
     public fun intersect(other: PersistentIntMap<V>): PersistentIntMap<V> { val next = core.intersect(other.core); return if (next === core) this else PersistentIntMap(next) }
+    public fun intersect(other: PersistentIntMap<V>, combine: (Int, V, V) -> V): PersistentIntMap<V> { val next = core.intersect(other.core, combine); return if (next === core) this else PersistentIntMap(next) }
     public fun except(other: PersistentIntMap<*>): PersistentIntMap<V> { val next = core.except(other.core); return if (next === core) this else PersistentIntMap(next) }
     override fun iterator(): Iterator<Pair<Int, V>> = core.iterator()
 }
@@ -258,12 +413,14 @@ public class PersistentLongMap<V> private constructor(private val core: Patricia
     public val size: Int get() = core.size
     public val isEmpty: Boolean get() = size == 0
     public operator fun get(key: Long): V? = core.get(key)
-    public fun containsKey(key: Long): Boolean = core.get(key) != null
+    public fun containsKey(key: Long): Boolean = core.containsKey(key)
     public fun put(key: Long, value: V): PersistentLongMap<V> { val next = core.put(key, value); return if (next === core) this else PersistentLongMap(next) }
     public fun remove(key: Long): PersistentLongMap<V> { val next = core.remove(key); return if (next === core) this else PersistentLongMap(next) }
     public fun clear(): PersistentLongMap<V> = if (isEmpty) this else empty()
     public fun union(other: PersistentLongMap<V>): PersistentLongMap<V> { val next = core.union(other.core); return if (next === core) this else PersistentLongMap(next) }
+    public fun union(other: PersistentLongMap<V>, combine: (Long, V, V) -> V): PersistentLongMap<V> { val next = core.union(other.core, combine); return if (next === core) this else PersistentLongMap(next) }
     public fun intersect(other: PersistentLongMap<V>): PersistentLongMap<V> { val next = core.intersect(other.core); return if (next === core) this else PersistentLongMap(next) }
+    public fun intersect(other: PersistentLongMap<V>, combine: (Long, V, V) -> V): PersistentLongMap<V> { val next = core.intersect(other.core, combine); return if (next === core) this else PersistentLongMap(next) }
     public fun except(other: PersistentLongMap<*>): PersistentLongMap<V> { val next = core.except(other.core); return if (next === core) this else PersistentLongMap(next) }
     override fun iterator(): Iterator<Pair<Long, V>> = core.iterator()
 }
@@ -272,22 +429,24 @@ public class PersistentIntSet private constructor(private val map: PersistentInt
     public companion object { public fun empty(): PersistentIntSet = PersistentIntSet(PersistentIntMap.empty()); public fun from(items: Iterable<Int>): PersistentIntSet { var r = empty(); for (v in items) r = r.add(v); return r } }
     public val size: Int get() = map.size
     public fun contains(value: Int): Boolean = map.containsKey(value)
-    public fun add(value: Int): PersistentIntSet = PersistentIntSet(map.put(value, Unit))
-    public fun remove(value: Int): PersistentIntSet = PersistentIntSet(map.remove(value))
-    public fun union(other: PersistentIntSet): PersistentIntSet = PersistentIntSet(map.union(other.map))
-    public fun intersect(other: PersistentIntSet): PersistentIntSet = PersistentIntSet(map.intersect(other.map))
-    public fun except(other: PersistentIntSet): PersistentIntSet = PersistentIntSet(map.except(other.map))
+    public fun add(value: Int): PersistentIntSet = withMap(map.put(value, Unit))
+    public fun remove(value: Int): PersistentIntSet = withMap(map.remove(value))
+    public fun union(other: PersistentIntSet): PersistentIntSet = withMap(map.union(other.map))
+    public fun intersect(other: PersistentIntSet): PersistentIntSet = withMap(map.intersect(other.map))
+    public fun except(other: PersistentIntSet): PersistentIntSet = withMap(map.except(other.map))
     override fun iterator(): Iterator<Int> = map.map { it.first }.iterator()
+    private fun withMap(next: PersistentIntMap<Unit>): PersistentIntSet = if (next === map) this else PersistentIntSet(next)
 }
 
 public class PersistentLongSet private constructor(private val map: PersistentLongMap<Unit>) : Iterable<Long> {
     public companion object { public fun empty(): PersistentLongSet = PersistentLongSet(PersistentLongMap.empty()); public fun from(items: Iterable<Long>): PersistentLongSet { var r = empty(); for (v in items) r = r.add(v); return r } }
     public val size: Int get() = map.size
     public fun contains(value: Long): Boolean = map.containsKey(value)
-    public fun add(value: Long): PersistentLongSet = PersistentLongSet(map.put(value, Unit))
-    public fun remove(value: Long): PersistentLongSet = PersistentLongSet(map.remove(value))
-    public fun union(other: PersistentLongSet): PersistentLongSet = PersistentLongSet(map.union(other.map))
-    public fun intersect(other: PersistentLongSet): PersistentLongSet = PersistentLongSet(map.intersect(other.map))
-    public fun except(other: PersistentLongSet): PersistentLongSet = PersistentLongSet(map.except(other.map))
+    public fun add(value: Long): PersistentLongSet = withMap(map.put(value, Unit))
+    public fun remove(value: Long): PersistentLongSet = withMap(map.remove(value))
+    public fun union(other: PersistentLongSet): PersistentLongSet = withMap(map.union(other.map))
+    public fun intersect(other: PersistentLongSet): PersistentLongSet = withMap(map.intersect(other.map))
+    public fun except(other: PersistentLongSet): PersistentLongSet = withMap(map.except(other.map))
     override fun iterator(): Iterator<Long> = map.map { it.first }.iterator()
+    private fun withMap(next: PersistentLongMap<Unit>): PersistentLongSet = if (next === map) this else PersistentLongSet(next)
 }

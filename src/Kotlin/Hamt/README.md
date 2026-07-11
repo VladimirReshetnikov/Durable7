@@ -19,7 +19,10 @@ canonical persistent CHAMP representation explicitly in O(n).
 The integer-specialized family provides `PersistentIntMap`/`PersistentIntSet` and
 `PersistentLongMap`/`PersistentLongSet`. A shared big-endian Patricia engine path-compresses on the
 highest differing bit, sign-flips keys for ascending signed iteration, and performs prefix-aware
-structural union, intersection, and difference without hashing or collision buckets.
+structural union, intersection, and difference without hashing or collision buckets. Branches cache
+subtree cardinality, so algebra results publish their count without a finishing traversal; map union
+and intersection also provide `(key, leftValue, rightValue)` combining overloads. Rebuilds retain the
+receiver and its root whenever an update or algebra operation is semantically unchanged.
 
 The default factories use Kotlin `hashCode`/`equals`, keeping the public shape close to JVM collection
 expectations while preserving the repository HAMT contracts: persistent updates, duplicate-key
