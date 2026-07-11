@@ -157,6 +157,11 @@ prefix-aware structural union/intersection/difference plus map combining overloa
 ascending signed iteration, path compression, no-op identity, and prefix-aligned structural
 union/intersection/difference. Boundary and randomized model tests cover both key widths.
 
+**Rust status (2026-07-10): Implemented for both widths.** `PersistentIntMap`/`Set` and
+`PersistentLongMap`/`Set` use safe `Arc`-shared compressed-prefix nodes, sign-flipped ordering,
+and prefix-aligned structural algebra. Tests compare randomized histories with `BTreeMap` and cover
+signed boundaries, right-biased union, intersection, difference, and no-op root sharing.
+
 **What it is.** Okasaki & Gill's mergeable integer maps (1998): a binary trie over the bits of an
 integer key, path-compressed so each internal node stores a prefix and the single branching bit,
 branching on the highest bit where keys differ. Operations are O(min(n, W)) with W the key width;

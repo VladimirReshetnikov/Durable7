@@ -21,6 +21,8 @@ The crate uses `#![forbid(unsafe_code)]`. The unit tests are inline in `Hamt/src
 - duplicate rejection through `try_add` and `add`;
 - same-hash collision insertion, lookup, and removal;
 - CHAMP inline-payload/child-run invariants, independent insertion histories, and typed diff;
+- 32/64-bit Patricia signed boundaries, randomized `BTreeMap` histories, structural map/set algebra,
+  and no-op root sharing;
 - streaming iterator exact-size accounting over collision buckets;
 - last-wins bulk map construction while retaining the original stored key;
 - persistent set algebra and proper subset/superset relations;

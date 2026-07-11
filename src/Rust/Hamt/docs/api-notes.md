@@ -15,6 +15,7 @@ Primary entry points:
 - `BulkBuilder<K, V, S = RandomState>`;
 - `DuplicateKey`;
 - `MapDifference<K, V>`.
+- `PersistentIntMap<V>` / `PersistentIntSet` and `PersistentLongMap<V>` / `PersistentLongSet`.
 
 The port follows the repository HAMT semantics:
 
@@ -72,3 +73,8 @@ Rust-specific differences:
 The hash contract is the standard Rust hash-map contract: keys that compare equal must hash equally under the
 chosen `BuildHasher`. The implementation truncates `Hasher::finish()` to 32 bits to match the repository HAMT
 shape.
+
+The integer-specialized facades do not hash. They sign-flip `i32`/`i64` keys into unsigned order
+and store compressed common prefixes plus the highest differing branch bit. Iteration is ascending
+signed order. `union` is right-biased for duplicate map keys, `intersect` retains left values, and
+`except` removes right-side keys; all three align Patricia prefixes and reuse whole subtrees.

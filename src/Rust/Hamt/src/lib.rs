@@ -8,6 +8,9 @@ use std::iter::FusedIterator;
 use std::ops::Index;
 use std::sync::Arc;
 
+mod patricia;
+pub use patricia::{PersistentIntMap, PersistentIntSet, PersistentLongMap, PersistentLongSet};
+
 const BITS_PER_LEVEL: u32 = 5;
 const BRANCH_MASK: u32 = 0x1f;
 /// Deepest shift at which a `Branch` node can appear (32-bit hash, 5 bits per level).

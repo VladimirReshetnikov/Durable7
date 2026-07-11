@@ -22,6 +22,11 @@ The trie follows the existing ports:
 - map bulk construction uses last-wins semantics.
 - map diff returns owned typed additions, removals, and changes, with a shared-root fast path.
 
+The crate also exports `PersistentIntMap`/`PersistentIntSet` and
+`PersistentLongMap`/`PersistentLongSet`. Their big-endian Patricia core sign-flips keys for
+ascending signed iteration, path-compresses on the highest differing bit, shares immutable `Arc`
+subtrees, and implements prefix-aware union, intersection, and difference.
+
 Rust-specific shape:
 
 - key equality is Rust's `Eq`; hash policy is supplied through `BuildHasher`;
