@@ -41,6 +41,14 @@ public sealed class WideIntegerConversionParityTests
         else
             AssertOverflow(() => ConvertFrom(type, "op_CheckedExplicit", -1.75));
 
+        // Values in (-1, 0) truncate to zero, but a checked conversion to an unsigned type must still
+        // reject the negative input before truncation, matching checked((UInt128)(-0.9)).
+        Assert.Equal(BigInteger.Zero, ToBigInteger(ConvertFrom(type, "op_Explicit", -0.9)));
+        if (isSigned)
+            Assert.Equal(BigInteger.Zero, ToBigInteger(ConvertFrom(type, "op_CheckedExplicit", -0.9)));
+        else
+            AssertOverflow(() => ConvertFrom(type, "op_CheckedExplicit", -0.9));
+
         Assert.Equal(BigInteger.Zero, ToBigInteger(ConvertFrom(type, "op_Explicit", float.NaN)));
         Assert.Equal(max, ToBigInteger(ConvertFrom(type, "op_Explicit", float.PositiveInfinity)));
         AssertOverflow(() => ConvertFrom(type, "op_CheckedExplicit", float.PositiveInfinity));

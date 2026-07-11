@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Numerics;
 using System.Reflection;
+using System.Text;
 using Xunit;
 
 namespace Tools.Numerics.Tests;
@@ -110,6 +111,25 @@ public sealed class WideIntegerNumberStylesTests
         Assert.Throws<ArgumentException>("style", () => Int256.TryParse("42", invalid, culture, out _));
         Assert.Throws<ArgumentException>("style", () => Int256.TryParse("42".AsSpan(), invalid, culture, out _));
         Assert.Throws<ArgumentException>("style", () => Int256.TryParse("42"u8, invalid, culture, out _));
+    }
+
+    /// <summary>
+    /// Verifies the string <c>TryParse</c> overloads validate the style before the null-input check: an
+    /// invalid style combination throws <see cref="ArgumentException"/> even when the input string is
+    /// <see langword="null"/>, matching the BCL numeric types.
+    /// </summary>
+    [Fact]
+    public void TryParse_NullString_ThrowsArgumentException_ForInvalidStyles()
+    {
+        const NumberStyles invalid = NumberStyles.AllowHexSpecifier | NumberStyles.AllowLeadingSign;
+        CultureInfo culture = CultureInfo.InvariantCulture;
+
+        Assert.Throws<ArgumentException>("style", () => UInt256.TryParse((string?)null, invalid, culture, out _));
+        Assert.Throws<ArgumentException>("style", () => UInt512.TryParse((string?)null, invalid, culture, out _));
+        Assert.Throws<ArgumentException>("style", () => UInt1024.TryParse((string?)null, invalid, culture, out _));
+        Assert.Throws<ArgumentException>("style", () => Int256.TryParse((string?)null, invalid, culture, out _));
+        Assert.Throws<ArgumentException>("style", () => Int512.TryParse((string?)null, invalid, culture, out _));
+        Assert.Throws<ArgumentException>("style", () => Int1024.TryParse((string?)null, invalid, culture, out _));
     }
 
     /// <summary>
@@ -224,6 +244,40 @@ public sealed class WideIntegerNumberStylesTests
         Assert.Equal("000004D2", method.Invoke(value, new object?[] { "X8", CultureInfo.InvariantCulture }));
         Assert.Equal("01234", method.Invoke(value, new object?[] { "D5", CultureInfo.InvariantCulture }));
         Assert.Equal("1,234", method.Invoke(value, new object?[] { "N0", CultureInfo.InvariantCulture }));
+    }
+
+    /// <summary>
+    /// Verifies the span and UTF-8 <c>TryFormat</c> "N" paths honor every
+    /// <see cref="NumberFormatInfo.NumberNegativePattern"/> layout, agreeing with <c>ToString("N")</c>
+    /// (which delegates to <see cref="BigInteger"/>) on the same value and format info.
+    /// </summary>
+    [Fact]
+    public void TryFormat_NumberFormat_HonorsNumberNegativePattern()
+    {
+        Span<char> buffer = stackalloc char[64];
+        Span<byte> utf8 = stackalloc byte[64];
+        for (int pattern = 0; pattern <= 4; pattern++)
+        {
+            NumberFormatInfo nfi = (NumberFormatInfo)CultureInfo.InvariantCulture.NumberFormat.Clone();
+            nfi.NumberNegativePattern = pattern;
+
+            Int256 value = (Int256)(-1234567);
+            string expected = value.ToString("N", nfi);
+
+            Assert.True(value.TryFormat(buffer, out int written, "N", nfi));
+            Assert.Equal(expected, new string(buffer[..written]));
+
+            Assert.True(value.TryFormat(utf8, out int bytes, "N", nfi));
+            Assert.Equal(expected, Encoding.UTF8.GetString(utf8[..bytes]));
+
+            Int512 wide = (Int512)(-98765);
+            Assert.True(wide.TryFormat(buffer, out written, "N0", nfi));
+            Assert.Equal(wide.ToString("N0", nfi), new string(buffer[..written]));
+
+            UInt1024 positive = (UInt1024)7654321;
+            Assert.True(positive.TryFormat(buffer, out written, "N", nfi));
+            Assert.Equal(positive.ToString("N", nfi), new string(buffer[..written]));
+        }
     }
 
     /// <summary>Verifies the tractable generic parsing and min/max interface cluster on every wide type.</summary>

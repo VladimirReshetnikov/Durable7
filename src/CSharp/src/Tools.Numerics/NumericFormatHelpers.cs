@@ -158,6 +158,22 @@ internal static class NumericFormatHelpers
             return true;
         }
 
+        // The "N" format lays the negative value out according to NumberNegativePattern, matching the
+        // BCL (and this library's own string ToString path, which delegates to BigInteger).
+        string prefix = string.Empty;
+        string suffix = string.Empty;
+        if (negative)
+        {
+            (prefix, suffix) = nfi.NumberNegativePattern switch
+            {
+                0 => ("(", ")"),
+                2 => (nfi.NegativeSign + " ", string.Empty),
+                3 => (string.Empty, nfi.NegativeSign),
+                4 => (string.Empty, " " + nfi.NegativeSign),
+                _ => (nfi.NegativeSign, string.Empty),
+            };
+        }
+
         int decimalDigits = precision < 0 ? nfi.NumberDecimalDigits : precision;
         int[] groupSizes = nfi.IsReadOnly
             ? s_numberGroupSizes.GetValue(nfi, static value => value.NumberGroupSizes)
@@ -166,7 +182,8 @@ internal static class NumericFormatHelpers
         int groupCount = BuildGroups(digitCount, groupSizes, groups);
         string groupSeparator = nfi.NumberGroupSeparator;
         string decimalSeparator = nfi.NumberDecimalSeparator;
-        long requiredNumber = (long)sign.Length + digitCount + (long)(groupCount - 1) * groupSeparator.Length;
+        long requiredNumber = (long)prefix.Length + digitCount + (long)(groupCount - 1) * groupSeparator.Length
+            + suffix.Length;
         if (decimalDigits != 0)
             requiredNumber += decimalSeparator.Length + decimalDigits;
         if (requiredNumber > destination.Length)
@@ -175,8 +192,8 @@ internal static class NumericFormatHelpers
             return false;
         }
 
-        sign.AsSpan().CopyTo(destination);
-        int write = sign.Length;
+        prefix.AsSpan().CopyTo(destination);
+        int write = prefix.Length;
         int digitOffset = 0;
         for (int group = groupCount - 1; group >= 0; group--)
         {
@@ -197,6 +214,8 @@ internal static class NumericFormatHelpers
             destination.Slice(write, decimalDigits).Fill('0');
             write += decimalDigits;
         }
+        suffix.AsSpan().CopyTo(destination[write..]);
+        write += suffix.Length;
 
         charsWritten = write;
         return true;

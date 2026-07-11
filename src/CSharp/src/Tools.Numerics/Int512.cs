@@ -414,6 +414,7 @@ public readonly struct Int512 :
         IFormatProvider? provider,
         out Int512 result)
     {
+        NumericParseHelpers.ValidateStyle(style);
         if (s is not null)
             return TryParseCore(s.AsSpan(), style, provider, out result);
         result = default;

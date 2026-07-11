@@ -41,6 +41,12 @@ internal static class NumericConversionHelpers
             return maxValue;
         }
 
+        // A checked conversion to an unsigned destination must reject any negative input, including
+        // values in (-1, 0) that truncation would silently turn into zero; the BCL's UInt128 checked
+        // conversion compares the raw double against the bound before truncating.
+        if (isChecked && minValue.IsZero && value < 0.0)
+            throw new OverflowException();
+
         BigInteger truncated = new(value);
         if (truncated < minValue)
         {

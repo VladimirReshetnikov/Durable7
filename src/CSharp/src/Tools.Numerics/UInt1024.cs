@@ -404,6 +404,7 @@ public readonly struct UInt1024 :
         IFormatProvider? provider,
         out UInt1024 result)
     {
+        NumericParseHelpers.ValidateStyle(style);
         if (s is not null)
             return TryParseCore(s.AsSpan(), style, provider, out result);
         result = default;

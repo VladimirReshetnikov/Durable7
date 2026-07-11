@@ -402,6 +402,7 @@ public readonly struct UInt256 :
         IFormatProvider? provider,
         out UInt256 result)
     {
+        NumericParseHelpers.ValidateStyle(style);
         if (s is not null)
             return TryParseCore(s.AsSpan(), style, provider, out result);
         result = default;
