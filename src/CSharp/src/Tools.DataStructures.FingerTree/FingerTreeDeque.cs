@@ -1030,21 +1030,22 @@ public sealed class FingerTreeDeque<T> : IReadOnlyList<T>
     /// </summary>
     /// <remarks>
     /// Maintains an explicit traversal stack of O(log n) frames, giving O(1) amortized cost per yielded
-    /// element. The enumerator observes the immutable snapshot it was created from.
+    /// element. The enumerator observes the immutable snapshot it was created from. Value copies of an
+    /// in-progress enumerator share one traversal stack: advancing a copy invalidates every other copy,
+    /// whose next <see cref="MoveNext"/> throws <see cref="InvalidOperationException"/> instead of
+    /// silently skipping elements.
     /// </remarks>
     public struct Enumerator : IEnumerator<T>
     {
-        private Frame[]? _stack;
-        private int _depth;
+        private readonly TraversalState? _state;
+        private int _cursor;
         private T _current;
 
         internal Enumerator(Tree<T, Leaf<T>> root)
         {
-            _stack = null;
-            _depth = 0;
+            _state = root.Size > 0 ? new TraversalState(root) : null;
+            _cursor = 0;
             _current = default!;
-            if (root.Size > 0)
-                Push(root);
         }
 
         /// <summary>
@@ -1068,13 +1069,19 @@ public sealed class FingerTreeDeque<T> : IReadOnlyList<T>
         /// <returns><see langword="true"/> when the enumerator advanced to an element; otherwise <see langword="false"/>.</returns>
         public bool MoveNext()
         {
-            while (_depth > 0)
+            var state = _state;
+            if (state is null)
+                return false;
+            if (_cursor != state.Cursor)
+                throw CopyDivergedError();
+
+            while (state.Depth > 0)
             {
-                ref var frame = ref _stack![_depth - 1];
+                ref var frame = ref state.Frames[state.Depth - 1];
                 if (frame.NextChild == frame.Block.ChildCount)
                 {
                     frame = default;
-                    _depth--;
+                    state.Depth--;
                     continue;
                 }
 
@@ -1084,10 +1091,11 @@ public sealed class FingerTreeDeque<T> : IReadOnlyList<T>
                 if (block.TryGetChild(frame.NextChild++, out var leaf, out var child))
                 {
                     _current = leaf;
+                    _cursor = ++state.Cursor;
                     return true;
                 }
 
-                Push(child!);
+                state.Push(child!);
             }
 
             _current = default!;
@@ -1100,12 +1108,29 @@ public sealed class FingerTreeDeque<T> : IReadOnlyList<T>
         /// <exception cref="NotSupportedException">Always thrown.</exception>
         void IEnumerator.Reset() => throw new NotSupportedException();
 
-        private void Push(IEnumerationBlock<T> block)
+        private static InvalidOperationException CopyDivergedError() =>
+            new("Another value copy of this enumerator has been advanced. Copies share one traversal "
+                + "stack and cannot be advanced independently; create a new enumerator instead.");
+
+        /// <summary>
+        /// Traversal state shared by all value copies of one enumerator. <see cref="Cursor"/> counts
+        /// elements yielded from the shared stack; each enumerator copy tracks the cursor value it last
+        /// observed, so a copy left behind by another copy's advance is detected and fails fast.
+        /// </summary>
+        private sealed class TraversalState
         {
-            _stack ??= new Frame[8];
-            if (_depth == _stack.Length)
-                Array.Resize(ref _stack, _depth * 2);
-            _stack[_depth++] = new Frame(block);
+            public Frame[] Frames = new Frame[8];
+            public int Depth;
+            public int Cursor;
+
+            public TraversalState(IEnumerationBlock<T> root) => Push(root);
+
+            public void Push(IEnumerationBlock<T> block)
+            {
+                if (Depth == Frames.Length)
+                    Array.Resize(ref Frames, Depth * 2);
+                Frames[Depth++] = new Frame(block);
+            }
         }
 
         /// <summary>One traversal-stack entry: a block and the index of its next unvisited child.</summary>

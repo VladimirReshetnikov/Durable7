@@ -131,6 +131,12 @@ public sealed class IntervalTree<T> : IEnumerable<Interval<T>>
 
     private IntervalTree(FingerTree<Interval<T>, IntervalAnnotation<T>, IntervalMeasure<T>> tree) => _tree = tree;
 
+    private void CheckRoomForOneMore()
+    {
+        if (Count == int.MaxValue)
+            throw new OverflowException("The operation would create a tree with more than Int32.MaxValue intervals.");
+    }
+
     /// <summary>Gets the empty interval tree.</summary>
     public static IntervalTree<T> Empty => EmptyInstance;
 
@@ -156,8 +162,10 @@ public sealed class IntervalTree<T> : IEnumerable<Interval<T>>
     /// <summary>Inserts an interval, keeping the collection ordered by low endpoint. O(log n) amortized.</summary>
     /// <param name="interval">The interval to insert.</param>
     /// <returns>A new tree containing <paramref name="interval"/>.</returns>
+    /// <exception cref="OverflowException">The tree already holds <see cref="int.MaxValue"/> intervals.</exception>
     public IntervalTree<T> Insert(Interval<T> interval)
     {
+        CheckRoomForOneMore();
         var comparer = Comparer<T>.Default;
         var (left, right) = _tree.Split(new LastLowAtLeastPredicate<T>(comparer, interval.Low));
         return new(left.Append(interval).Concat(right));

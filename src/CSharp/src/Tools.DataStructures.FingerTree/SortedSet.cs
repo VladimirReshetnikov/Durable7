@@ -138,11 +138,13 @@ public sealed partial class SortedSet<T> : IReadOnlyCollection<T>
     /// <summary>Adds an element, or returns the unchanged set when an equal element is already present. O(log n).</summary>
     /// <param name="item">Element to add.</param>
     /// <returns>A set containing <paramref name="item"/>.</returns>
+    /// <exception cref="OverflowException">The set already holds <see cref="int.MaxValue"/> elements.</exception>
     public SortedSet<T> Add(T item)
     {
         var (less, atLeast) = SplitAtLeast(item);
         if (!atLeast.IsEmpty && _comparer.Compare(atLeast.First, item) == 0)
             return this;
+        CheckRoomForOneMore();
         return Wrap(less.Append(item).Concat(atLeast));
     }
 
@@ -513,4 +515,10 @@ public sealed partial class SortedSet<T> : IReadOnlyCollection<T>
         tree.IsEmpty && ReferenceEquals(comparer, Comparer<T>.Default) ? EmptyDefault : new(tree, comparer);
 
     private static InvalidOperationException EmptyError() => new("The sorted set is empty.");
+
+    private void CheckRoomForOneMore()
+    {
+        if (Count == int.MaxValue)
+            throw new OverflowException("The operation would create a set with more than Int32.MaxValue elements.");
+    }
 }

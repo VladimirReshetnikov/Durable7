@@ -117,8 +117,10 @@ public sealed class SortedBag<T> : IReadOnlyCollection<T>
     /// <summary>Adds an element, after any existing equal elements. O(log n).</summary>
     /// <param name="item">Element to add.</param>
     /// <returns>A bag containing the added element.</returns>
+    /// <exception cref="OverflowException">The bag already holds <see cref="int.MaxValue"/> elements.</exception>
     public SortedBag<T> Add(T item)
     {
+        CheckRoomForOneMore();
         var (atMost, greater) = _tree.Split(new KeyAbovePredicate<T>(_comparer, item));
         return Wrap(atMost.Append(item).Concat(greater));
     }
@@ -227,4 +229,10 @@ public sealed class SortedBag<T> : IReadOnlyCollection<T>
         tree.IsEmpty && ReferenceEquals(_comparer, Comparer<T>.Default) ? EmptyDefault : new(tree, _comparer);
 
     private static InvalidOperationException EmptyError() => new("The sorted bag is empty.");
+
+    private void CheckRoomForOneMore()
+    {
+        if (Count == int.MaxValue)
+            throw new OverflowException("The operation would create a bag with more than Int32.MaxValue elements.");
+    }
 }

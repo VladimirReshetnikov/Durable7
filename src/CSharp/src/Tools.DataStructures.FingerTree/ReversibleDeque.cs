@@ -299,21 +299,21 @@ public sealed class ReversibleDeque<T> : IReadOnlyList<T>
     /// <remarks>
     /// The traversal carries an orientation bit on each stack frame, so reversed trees and nodes are read in
     /// logical order without allocating mirrored wrappers. The enumerator observes the immutable snapshot it
-    /// was created from.
+    /// was created from. Value copies of an in-progress enumerator share one traversal stack: advancing a
+    /// copy invalidates every other copy, whose next <see cref="MoveNext"/> throws
+    /// <see cref="InvalidOperationException"/> instead of silently skipping elements.
     /// </remarks>
     public struct Enumerator : IEnumerator<T>
     {
-        private Frame[]? _stack;
-        private int _depth;
+        private readonly TraversalState? _state;
+        private int _cursor;
         private T _current;
 
         internal Enumerator(RevTree<T> root)
         {
-            _stack = null;
-            _depth = 0;
+            _state = root.IsEmpty ? null : new TraversalState(root);
+            _cursor = 0;
             _current = default!;
-            if (!root.IsEmpty)
-                Push(root, mirrored: false);
         }
 
         /// <summary>Gets the current element.</summary>
@@ -331,16 +331,24 @@ public sealed class ReversibleDeque<T> : IReadOnlyList<T>
         /// <returns><see langword="true"/> when the enumerator advanced to an element; otherwise <see langword="false"/>.</returns>
         public bool MoveNext()
         {
-            while (_depth > 0)
+            var state = _state;
+            if (state is null)
+                return false;
+            if (_cursor != state.Cursor)
+                throw CopyDivergedError();
+
+            while (state.Depth > 0)
             {
-                ref var frame = ref _stack![_depth - 1];
+                ref var frame = ref state.Frames[state.Depth - 1];
                 if (frame.NextChild == frame.ChildCount)
                 {
                     frame = default;
-                    _depth--;
+                    state.Depth--;
                     continue;
                 }
 
+                // Advance the current frame before any Push: a Push may grow (and thus copy) the stack,
+                // and the increment must already be recorded in the slot that gets copied.
                 var childIndex = frame.NextChild++;
                 if (frame.TryGetChild(
                     childIndex,
@@ -350,13 +358,14 @@ public sealed class ReversibleDeque<T> : IReadOnlyList<T>
                     out var childMirrored))
                 {
                     _current = leaf;
+                    _cursor = ++state.Cursor;
                     return true;
                 }
 
                 if (tree is not null)
-                    Push(tree, childMirrored);
+                    state.Push(tree, childMirrored);
                 else
-                    Push(node!, childMirrored);
+                    state.Push(node!, childMirrored);
             }
 
             _current = default!;
@@ -367,20 +376,36 @@ public sealed class ReversibleDeque<T> : IReadOnlyList<T>
         /// <exception cref="NotSupportedException">Always thrown.</exception>
         void IEnumerator.Reset() => throw new NotSupportedException();
 
-        private void Push(RevTree<T> tree, bool mirrored)
-        {
-            _stack ??= new Frame[8];
-            if (_depth == _stack.Length)
-                Array.Resize(ref _stack, _depth * 2);
-            _stack[_depth++] = new Frame(tree, mirrored);
-        }
+        private static InvalidOperationException CopyDivergedError() =>
+            new("Another value copy of this enumerator has been advanced. Copies share one traversal "
+                + "stack and cannot be advanced independently; create a new enumerator instead.");
 
-        private void Push(RevNode<T> node, bool mirrored)
+        /// <summary>
+        /// Traversal state shared by all value copies of one enumerator. <see cref="Cursor"/> counts
+        /// elements yielded from the shared stack; each enumerator copy tracks the cursor value it last
+        /// observed, so a copy left behind by another copy's advance is detected and fails fast.
+        /// </summary>
+        private sealed class TraversalState
         {
-            _stack ??= new Frame[8];
-            if (_depth == _stack.Length)
-                Array.Resize(ref _stack, _depth * 2);
-            _stack[_depth++] = new Frame(node, mirrored);
+            public Frame[] Frames = new Frame[8];
+            public int Depth;
+            public int Cursor;
+
+            public TraversalState(RevTree<T> root) => Push(root, mirrored: false);
+
+            public void Push(RevTree<T> tree, bool mirrored)
+            {
+                if (Depth == Frames.Length)
+                    Array.Resize(ref Frames, Depth * 2);
+                Frames[Depth++] = new Frame(tree, mirrored);
+            }
+
+            public void Push(RevNode<T> node, bool mirrored)
+            {
+                if (Depth == Frames.Length)
+                    Array.Resize(ref Frames, Depth * 2);
+                Frames[Depth++] = new Frame(node, mirrored);
+            }
         }
 
         private struct Frame

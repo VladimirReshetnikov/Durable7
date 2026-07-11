@@ -207,12 +207,14 @@ public sealed partial class SortedDictionary<TKey, TValue> : IReadOnlyDictionary
     /// <param name="key">Key to set.</param>
     /// <param name="value">Value to associate.</param>
     /// <returns>A dictionary with <paramref name="key"/> mapped to <paramref name="value"/>.</returns>
+    /// <exception cref="OverflowException">The key is absent and the dictionary already holds <see cref="int.MaxValue"/> entries.</exception>
     public SortedDictionary<TKey, TValue> SetItem(TKey key, TValue value)
     {
         var entry = new KeyValuePair<TKey, TValue>(key, value);
         var (less, atLeast) = SplitAtLeast(key);
         if (atLeast.TryViewLeft(out var head, out var tail) && _comparer.Compare(head.Key, key) == 0)
             return Wrap(less.Append(entry).Concat(tail));     // replace the existing entry
+        CheckRoomForOneMore();
         return Wrap(less.Append(entry).Concat(atLeast));      // insert a new entry
     }
 
@@ -221,11 +223,13 @@ public sealed partial class SortedDictionary<TKey, TValue> : IReadOnlyDictionary
     /// <param name="value">Value to associate.</param>
     /// <returns>A dictionary including the new entry.</returns>
     /// <exception cref="ArgumentException"><paramref name="key"/> is already present.</exception>
+    /// <exception cref="OverflowException">The dictionary already holds <see cref="int.MaxValue"/> entries.</exception>
     public SortedDictionary<TKey, TValue> Add(TKey key, TValue value)
     {
         var (less, atLeast) = SplitAtLeast(key);
         if (!atLeast.IsEmpty && _comparer.Compare(atLeast.First.Key, key) == 0)
             throw new ArgumentException("An entry with the same key already exists.", nameof(key));
+        CheckRoomForOneMore();
         return Wrap(less.Append(new KeyValuePair<TKey, TValue>(key, value)).Concat(atLeast));
     }
 
@@ -243,6 +247,7 @@ public sealed partial class SortedDictionary<TKey, TValue> : IReadOnlyDictionary
             return false;
         }
 
+        CheckRoomForOneMore();
         result = Wrap(less.Append(new KeyValuePair<TKey, TValue>(key, value)).Concat(atLeast));
         return true;
     }
@@ -414,4 +419,10 @@ public sealed partial class SortedDictionary<TKey, TValue> : IReadOnlyDictionary
         tree.IsEmpty && ReferenceEquals(comparer, Comparer<TKey>.Default) ? EmptyDefault : new(tree, comparer);
 
     private static InvalidOperationException EmptyError() => new("The sorted dictionary is empty.");
+
+    private void CheckRoomForOneMore()
+    {
+        if (Count == int.MaxValue)
+            throw new OverflowException("The operation would create a dictionary with more than Int32.MaxValue entries.");
+    }
 }

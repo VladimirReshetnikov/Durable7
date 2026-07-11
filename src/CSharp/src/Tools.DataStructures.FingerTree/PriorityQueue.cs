@@ -117,8 +117,12 @@ public sealed class PriorityQueue<TElement, TPriority> : IReadOnlyCollection<(TE
     /// <param name="element">Element to enqueue.</param>
     /// <param name="priority">Its priority (smaller dequeues first).</param>
     /// <returns>A queue including the new entry.</returns>
-    public PriorityQueue<TElement, TPriority> Enqueue(TElement element, TPriority priority) =>
-        new(_tree.Append((element, priority)));
+    /// <exception cref="OverflowException">The queue already holds <see cref="int.MaxValue"/> entries.</exception>
+    public PriorityQueue<TElement, TPriority> Enqueue(TElement element, TPriority priority)
+    {
+        CheckRoomForOneMore();
+        return new(_tree.Append((element, priority)));
+    }
 
     /// <summary>Reads the least priority present without removing anything. O(1) amortized; the first read of a fresh spine may force memoized deferred work.</summary>
     /// <param name="priority">The least priority when non-empty; otherwise <see langword="default"/>.</param>
@@ -189,7 +193,7 @@ public sealed class PriorityQueue<TElement, TPriority> : IReadOnlyCollection<(TE
         if (_tree.IsEmpty)
             return other;
         if (other.Count > int.MaxValue - Count)
-            throw new OverflowException("The operation would create a queue with more than Int32.MaxValue entries.");
+            throw CountOverflowError();
         return new(_tree.Concat(other._tree));
     }
 
@@ -221,4 +225,13 @@ public sealed class PriorityQueue<TElement, TPriority> : IReadOnlyCollection<(TE
     private static PriorityQueue<TElement, TPriority> Wrap(
         FingerTree<(TElement Element, TPriority Priority), PriorityAggregate<TPriority>, PriorityMeasure<TElement, TPriority>> tree) =>
         tree.IsEmpty ? EmptyInstance : new(tree);
+
+    private void CheckRoomForOneMore()
+    {
+        if (Count == int.MaxValue)
+            throw CountOverflowError();
+    }
+
+    private static OverflowException CountOverflowError() =>
+        new("The operation would create a queue with more than Int32.MaxValue entries.");
 }

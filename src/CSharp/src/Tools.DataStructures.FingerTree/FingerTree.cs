@@ -68,7 +68,8 @@ public sealed class FingerTree<TElement, TMeasure, TMeasureOps>
     public bool IsEmpty => _root.IsEmpty;
 
     /// <summary>
-    /// Gets the combined measure of all elements, or <c>TMeasureOps.Empty</c> when the tree is empty. O(1).
+    /// Gets the combined measure of all elements, or <c>TMeasureOps.Empty</c> when the tree is empty.
+    /// O(1) amortized; the first read of a fresh spine may force memoized deferred work.
     /// </summary>
     public TMeasure Measure => _root.Measure;
 
@@ -388,21 +389,21 @@ public sealed class FingerTree<TElement, TMeasure, TMeasureOps>
     /// </summary>
     /// <remarks>
     /// Maintains an explicit traversal stack of O(log n) frames, yielding from the immutable snapshot captured
-    /// when the enumerator was created.
+    /// when the enumerator was created. Value copies of an in-progress enumerator share one traversal stack:
+    /// advancing a copy invalidates every other copy, whose next <see cref="MoveNext"/> throws
+    /// <see cref="InvalidOperationException"/> instead of silently skipping elements.
     /// </remarks>
     public struct Enumerator : IEnumerator<TElement>
     {
-        private Frame[]? _stack;
-        private int _depth;
+        private readonly TraversalState? _state;
+        private int _cursor;
         private TElement _current;
 
         internal Enumerator(MeasuredTree<TElement, MeasuredLeaf<TElement, TMeasure, TMeasureOps>, TMeasure, TMeasureOps> root)
         {
-            _stack = null;
-            _depth = 0;
+            _state = root.IsEmpty ? null : new TraversalState(root);
+            _cursor = 0;
             _current = default!;
-            if (!root.IsEmpty)
-                Push(root);
         }
 
         /// <summary>Gets the current element.</summary>
@@ -420,24 +421,33 @@ public sealed class FingerTree<TElement, TMeasure, TMeasureOps>
         /// <returns><see langword="true"/> when the enumerator advanced to an element; otherwise <see langword="false"/>.</returns>
         public bool MoveNext()
         {
-            while (_depth > 0)
+            var state = _state;
+            if (state is null)
+                return false;
+            if (_cursor != state.Cursor)
+                throw CopyDivergedError();
+
+            while (state.Depth > 0)
             {
-                ref var frame = ref _stack![_depth - 1];
+                ref var frame = ref state.Frames[state.Depth - 1];
                 if (frame.NextChild == frame.Block.ChildCount)
                 {
                     frame = default;
-                    _depth--;
+                    state.Depth--;
                     continue;
                 }
 
+                // Advance the current frame before any Push: a Push may grow (and thus copy) the stack,
+                // and the increment must already be recorded in the slot that gets copied.
                 var block = frame.Block;
                 if (block.TryGetChild(frame.NextChild++, out var leaf, out var child))
                 {
                     _current = leaf;
+                    _cursor = ++state.Cursor;
                     return true;
                 }
 
-                Push(child!);
+                state.Push(child!);
             }
 
             _current = default!;
@@ -450,12 +460,29 @@ public sealed class FingerTree<TElement, TMeasure, TMeasureOps>
         /// <exception cref="NotSupportedException">Always thrown.</exception>
         void IEnumerator.Reset() => throw new NotSupportedException();
 
-        private void Push(IEnumerationBlock<TElement> block)
+        private static InvalidOperationException CopyDivergedError() =>
+            new("Another value copy of this enumerator has been advanced. Copies share one traversal "
+                + "stack and cannot be advanced independently; create a new enumerator instead.");
+
+        /// <summary>
+        /// Traversal state shared by all value copies of one enumerator. <see cref="Cursor"/> counts
+        /// elements yielded from the shared stack; each enumerator copy tracks the cursor value it last
+        /// observed, so a copy left behind by another copy's advance is detected and fails fast.
+        /// </summary>
+        private sealed class TraversalState
         {
-            _stack ??= new Frame[8];
-            if (_depth == _stack.Length)
-                Array.Resize(ref _stack, _depth * 2);
-            _stack[_depth++] = new Frame(block);
+            public Frame[] Frames = new Frame[8];
+            public int Depth;
+            public int Cursor;
+
+            public TraversalState(IEnumerationBlock<TElement> root) => Push(root);
+
+            public void Push(IEnumerationBlock<TElement> block)
+            {
+                if (Depth == Frames.Length)
+                    Array.Resize(ref Frames, Depth * 2);
+                Frames[Depth++] = new Frame(block);
+            }
         }
 
         /// <summary>One traversal-stack entry: a block and the index of its next unvisited child.</summary>
