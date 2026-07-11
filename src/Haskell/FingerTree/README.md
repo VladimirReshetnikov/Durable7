@@ -19,6 +19,12 @@ The core measured tree follows the Hinze-Paterson shape directly. Some derived H
 idiomatic `containers` storage where it preserves the same observable contract more naturally than
 copying a stricter managed implementation detail.
 
+`SortedBag` uses the measured core rather than `Data.Map`: each distinct-key bucket is a
+`Data.Sequence`, and the spine caches total multiplicity, distinct count, and last key. Key counts,
+rank lookup, and rank-boundary slicing therefore descend in O(log n); slicing rebuilds at most its
+two boundary buckets and shares untouched measured subtrees. This remains logarithmic when all
+instances belong to one comparer-equal bucket.
+
 `Rope` and `MeasuredRope` are chunked facades over that measured core, with chunks capped at 64
 elements. Their spines are measured by element count (and, for `MeasuredRope`, by the caller's
 monoidal element measure), so indexing, splitting, prefix measurement, and measure-guided location

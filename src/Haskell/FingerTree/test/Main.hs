@@ -1,4 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NumericUnderscores #-}
 
 module Main (main) where
 
@@ -33,6 +34,7 @@ main = do
   testDeque
   testReversibleDeque
   testSortedCollections
+  testSortedBagRanks
   testPriorityQueue
   testIntervalTree
   testRopes
@@ -170,6 +172,26 @@ testSortedCollections = do
     "bag deleteOne removes the first instance"
     ["b"]
     (map keyedLabel (SortedBag.toList (SortedBag.deleteOne (Keyed 1 "a") instanceBag)))
+
+testSortedBagRanks :: IO ()
+testSortedBagRanks = do
+  let distinct = SortedBag.fromList [0 :: Int .. 19_999]
+  assertEqual "bag logarithmic distinct index" (Just 17_531) (SortedBag.index 17_531 distinct)
+  assertEqual "bag logarithmic count less" 12_345 (SortedBag.countLessThan 12_345 distinct)
+  assertEqual "bag logarithmic count at most" 12_346 (SortedBag.countAtMost 12_345 distinct)
+  assertEqual
+    "bag measured slice across buckets"
+    (Just [9_995 :: Int .. 10_014])
+    (SortedBag.toList <$> SortedBag.slice 9_995 20 distinct)
+
+  let equalRun = SortedBag.fromList (replicate 100_000 (7 :: Int))
+  assertEqual "bag equal-run count" 100_000 (SortedBag.count equalRun)
+  assertEqual "bag equal-run distinct count" 1 (SortedBag.distinctCount equalRun)
+  assertEqual "bag equal-run final rank" (Just 7) (SortedBag.index 99_999 equalRun)
+  assertEqual
+    "bag measured slice within one bucket"
+    (Just (replicate 64 (7 :: Int)))
+    (SortedBag.toList <$> SortedBag.slice 50_000 64 equalRun)
 
 testPriorityQueue :: IO ()
 testPriorityQueue = do

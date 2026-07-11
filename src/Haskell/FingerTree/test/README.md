@@ -20,3 +20,5 @@ space-leaking thunk chains. Boundary-focused rope tests cross the 64-element chu
 `StableName` identity to prove an edit retains an untouched far chunk under optimized GHC. Interval
 coverage exercises equal-low order plus max-high prefix pruning and overlap enumeration; measured
 rope and text cases cross multiple chunks while checking cached totals, splits, and line navigation.
+Sorted-bag rank coverage exercises 20,000 distinct keys plus a 100,000-instance single bucket,
+including measured count bounds, final-rank access, and slices both across and within buckets.
