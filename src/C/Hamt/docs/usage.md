@@ -12,6 +12,7 @@ declarations live in [`hamt.h`](../include/Tools/DataStructures/Hamt/hamt.h).
 
 ```c
 #include <Tools/DataStructures/Hamt/hamt.h>
+#include <Tools/DataStructures/Hamt/patricia.h>
 ```
 
 The workspace builds a static library and test executable through `build.ps1`:
@@ -243,6 +244,33 @@ Available operations:
 
 Operations that need distinct right-side membership materialize a temporary set under the receiver's
 policy. Superset and overlap checks stream the input and can exit early.
+
+## Integer Patricia Maps And Sets
+
+Use the Patricia family when keys are signed 32- or 64-bit integers and ordered traversal or
+structural merge matters. Values remain type-erased, but keys do not need hash/equality callbacks:
+
+```c
+tds_int_map left = tds_int_map_create(NULL);
+tds_int_map right = tds_int_map_create(NULL);
+
+tds_int_map_set(&left, -10, left_value, &left);
+tds_int_map_set(&right, -10, right_value, &right);
+tds_int_map_set(&right, 20, another_value, &right);
+
+tds_int_map merged;
+tds_hamt_status status = tds_int_map_union(&left, &right, &merged); /* right wins at -10 */
+
+tds_int_map_destroy(&merged);
+tds_int_map_destroy(&right);
+tds_int_map_destroy(&left);
+```
+
+`tds_int_map_visit` and `tds_long_map_visit` enumerate in ascending signed-key order. The set
+visitors have the same ordering. For overlapping values, `tds_int_map_union_with` /
+`tds_long_map_union_with` and the corresponding `intersect_with` operations accept a typed callback
+of `(key, left, right, context) -> value`. The returned pointer is retained through the map's
+`tds_patricia_value_policy`; it is not implicitly copied by the combining API itself.
 
 ## Concurrency And Lineages
 

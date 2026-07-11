@@ -15,11 +15,15 @@ $buildRoot = Join-Path $root 'build'
 $buildDir = Join-Path $buildRoot $Configuration
 $includeDir = Join-Path $root 'include'
 $testSupportIncludeDir = Join-Path $root '..\..\test_support\include'
-$sourcePath = Join-Path $root 'src\hamt.c'
+$hamtSourcePath = Join-Path $root 'src\hamt.c'
+$patriciaSourcePath = Join-Path $root 'src\patricia.c'
 $testSource = Join-Path $root 'tests\hamt_tests.c'
+$patriciaTestSource = Join-Path $root 'tests\patricia_tests.c'
 $objectDir = Join-Path $buildDir 'obj'
 $pdbPath = Join-Path $buildDir 'hamt_tests.pdb'
 $exePath = Join-Path $buildDir 'hamt_tests.exe'
+$patriciaPdbPath = Join-Path $buildDir 'patricia_tests.pdb'
+$patriciaExePath = Join-Path $buildDir 'patricia_tests.exe'
 
 New-Item -ItemType Directory -Force -Path $objectDir | Out-Null
 
@@ -42,9 +46,7 @@ $commonArgs = @(
     '/DTDS_HAMT_TESTING',
     "/I$includeDir",
     "/I$testSupportIncludeDir",
-    "/Fo$objectDir\\",
-    "/Fd$pdbPath",
-    "/Fe:$exePath"
+    "/Fo$objectDir\\"
 )
 
 if ($Configuration -eq 'Debug') {
@@ -54,14 +56,24 @@ else {
     $configurationArgs = @('/O2', '/MD', '/DNDEBUG')
 }
 
-& cl.exe @commonArgs @configurationArgs $sourcePath $testSource
+& cl.exe @commonArgs @configurationArgs "/Fd$pdbPath" "/Fe:$exePath" $hamtSourcePath $testSource
 if ($LASTEXITCODE -ne 0) {
     throw "cl.exe failed with exit code $LASTEXITCODE."
+}
+
+& cl.exe @commonArgs @configurationArgs "/Fd$patriciaPdbPath" "/Fe:$patriciaExePath" $patriciaSourcePath $patriciaTestSource
+if ($LASTEXITCODE -ne 0) {
+    throw "cl.exe failed for the Patricia tests with exit code $LASTEXITCODE."
 }
 
 if ($RunTests) {
     & $exePath
     if ($LASTEXITCODE -ne 0) {
         throw "hamt_tests.exe failed with exit code $LASTEXITCODE."
+    }
+
+    & $patriciaExePath
+    if ($LASTEXITCODE -ne 0) {
+        throw "patricia_tests.exe failed with exit code $LASTEXITCODE."
     }
 }

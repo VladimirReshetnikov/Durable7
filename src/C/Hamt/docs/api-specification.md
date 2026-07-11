@@ -18,9 +18,35 @@ collision bucket.
 `tds_hamt_set` is a value-set wrapper over the same map core. It stores set items as map keys and
 uses a unit value.
 
+`tds_int_map` / `tds_long_map` and their set wrappers are a separate explicit-width family backed
+by one big-endian Patricia engine. They use integer keys directly rather than hashing and compress
+every unary prefix path into a branch prefix plus its highest differing bit.
+
 The C API is type-erased. Keys, values, and set items are `void *` payloads interpreted by policy
 callbacks. A policy may simply store borrowed pointers, or it may retain/release payloads to give
 collections ownership of copied or reference-counted objects.
+
+## Patricia Integer Contract
+
+Include `patricia.h` for `tds_int_map`, `tds_long_map`, `tds_int_set`, and `tds_long_set`. The two
+map widths accept type-erased values governed by `tds_patricia_value_policy`; the set wrappers store
+a unit value. Sign-bit transforms map signed keys to lexicographically sortable unsigned paths, so
+visitor traversal is ascending signed order and covers the full `INT32_MIN`/`INT32_MAX` or
+`INT64_MIN`/`INT64_MAX` domain.
+
+Point updates path-copy only the compressed search path. Setting an equal value and removing an
+absent key reuse the source root. Nodes cache subtree cardinality, and `union`, `intersect`, and
+`except` align prefixes before descending, share untouched subtrees, and preserve a source root when
+the algebra is a semantic no-op. Union is right-biased for unequal overlapping values; intersection
+keeps the left value. The `*_union_with` and `*_intersect_with` variants invoke a typed combining
+callback only for keys present on both sides.
+
+Combining callbacks receive `(key, left, right, context)` and return a borrowed value pointer. The
+map retains that value through its policy before publishing it, so an allocating retain callback can
+still report `TDS_HAMT_OUT_OF_MEMORY`. Callback execution is synchronous; its context need remain
+valid only for the call, while any pointed-to returned value must obey the configured retain policy.
+Both operands of structural algebra must have identical equality/retain/release callback and context
+identities. A result may alias either operand.
 
 ## Ownership
 
@@ -127,6 +153,11 @@ equal-hash collision bucket.
   build.
 - Set algebra implemented from public operations: O((n + m) * update-cost), except for streaming
   predicates.
+- Patricia lookup, insert, and remove: O(W), with `W` fixed at 32 or 64 and usually far fewer hops
+  because unary paths are compressed.
+- Patricia structural algebra: O(v), where `v` is the prefix structure visited after shared-root and
+  disjoint-prefix pruning; O(n + m) in the worst case. Result cardinality is read from cached subtree
+  metadata rather than recomputed by traversal.
 
 Update allocation is O(b * depth + c) array storage and O(depth + c) allocated node objects for the
 changed path and any touched collision bucket. Published nodes are immutable apart from reference counts.

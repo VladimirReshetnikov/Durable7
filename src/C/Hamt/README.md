@@ -11,6 +11,8 @@ for immutable unordered collections backed by a hash-array mapped trie:
 
 - `tds_hamt_map`, a persistent map from `void *` keys to `void *` values.
 - `tds_hamt_set`, a persistent set wrapper over the map core.
+- `tds_int_map` / `tds_long_map`, explicit-width persistent maps backed by a big-endian Patricia
+  trie, plus `tds_int_set` / `tds_long_set` wrappers.
 
 The implementation preserves the C# and C++ libraries' core shape: 32-way logical branching, five
 hash bits per trie level, canonical CHAMP branches with separate data/node maps, inline type-erased
@@ -19,6 +21,12 @@ buckets, custom hash/equality policy callbacks, first equivalent key/item retent
 reuse, and structural sharing across versions. Because this is C, ownership is explicit: maps and
 sets are value structs whose roots are reference-counted, and callers use `clone`/`destroy` to manage
 version lifetimes.
+
+The Patricia family sign-flips signed keys before branching, so visitor traversal is ascending
+signed order for both 32- and 64-bit keys. Compressed prefixes support subtree-aware union,
+intersection, and difference; map union/intersection also accept typed combining callbacks. Nodes
+cache subtree cardinality, and algebra preserves a source root whenever the result is a semantic
+no-op.
 
 Maps expose policy-compatible content equality and visitor-based typed diff without requiring a
 result allocator. Inline payload rebuilds retain through the configured callbacks and unwind every
@@ -32,9 +40,12 @@ nodes may be updated on separate threads, subject to the thread-safety of their 
 ## Layout
 
 - `include/Tools/DataStructures/Hamt/hamt.h` contains the public C API.
+- `include/Tools/DataStructures/Hamt/patricia.h` contains the integer Patricia map/set API.
 - `src/hamt.c` contains the HAMT implementation.
+- `src/patricia.c` contains the shared 32-/64-bit Patricia implementation.
 - `tests/` contains the [deterministic native test executable](tests/README.md).
-- `build.ps1` imports the MSVC toolchain through Scriptorium and compiles the test executable.
+- `build.ps1` imports the MSVC toolchain through Scriptorium and compiles both native test
+  executables.
 - `docs/api-specification.md` documents the C API adaptation and complexity guarantees.
 - `docs/usage.md` provides practical policy, lifetime, update, iteration, and set-algebra examples.
 - `docs/validation.md` records the local build script, warning policy, Debug/Release commands, and

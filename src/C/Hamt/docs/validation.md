@@ -14,7 +14,9 @@ the [API specification](api-specification.md) and [usage guide](usage.md).
 
 `build.ps1` is the validation entry point. It imports the local MSVC environment through
 `C:\Scriptorium\windows\Import-VisualCppEnvironment.ps1 -IncludePrerelease`, then compiles
-`src/hamt.c` and `tests/hamt_tests.c` into `build/<Configuration>/hamt_tests.exe`.
+`src/hamt.c` and `tests/hamt_tests.c` into `build/<Configuration>/hamt_tests.exe`, then compiles
+`src/patricia.c` and `tests/patricia_tests.c` into
+`build/<Configuration>/patricia_tests.exe`.
 
 The script uses these project-level compiler gates:
 
@@ -90,6 +92,11 @@ gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -DTDS_HAMT_TESTING -fsanitize=addr
 `tests/hamt_tests.c` is a deterministic native test executable. It prints `[PASS]` lines and exits nonzero
 on the first failed check. See the [tests README](../tests/README.md) for named test cases, the direct
 executable path, and runner failure behavior.
+
+`tests/patricia_tests.c` is the explicit-width integer-map/set executable. It covers signed extrema
+and traversal order, root-sharing no-ops, retained snapshots, fixed and callback-combining map
+algebra, set algebra, 10,000 deterministic randomized updates against an array model, randomized
+structural set algebra, and value retain/release balance.
 
 The suite covers:
 

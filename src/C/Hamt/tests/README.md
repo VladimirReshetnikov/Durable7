@@ -9,6 +9,10 @@
 [`build.ps1`](../build.ps1) script compiles it together with `src/hamt.c` into
 `build/<Configuration>/hamt_tests.exe`.
 
+`patricia_tests.c` is the companion dependency-free executable for the explicit-width Patricia
+maps and sets. The build script compiles it with `src/patricia.c` into
+`build/<Configuration>/patricia_tests.exe` and runs it after the HAMT suite.
+
 The runner keeps a static table of named test cases, prints `[PASS]` after each successful case, and exits on the
 first failed check with file, line, and expression diagnostics. A successful run ends with `<N> test(s) passed`.
 
@@ -56,3 +60,13 @@ Run the built executable directly when changing runner diagnostics or investigat
 
 Use the workspace [validation guide](../docs/validation.md) for Release validation, compiler flags, generated-output
 locations, and coverage policy.
+
+Run the Patricia executable directly when investigating integer-trie behavior:
+
+```powershell
+.\build\Debug\patricia_tests.exe
+```
+
+Its deterministic coverage includes 32-/64-bit signed ordering, persistent snapshots, no-op root
+identity, fixed and callback-combining map algebra, set algebra, randomized model histories, and
+retain/release accounting.
