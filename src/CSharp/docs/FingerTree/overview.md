@@ -35,12 +35,15 @@ colliding policy forces height h = n.
 `BrodalOkasakiHeap<T>` is the latency-oriented heap sibling: a persistent bootstrapped
 skew-binomial priority queue with O(1) worst-case insert, minimum, and meld and O(log n) worst-case
 delete-min. It complements the measured finger-tree priority queue when per-operation worst-case
-bounds matter more than constants or stable priority/payload separation.
+bounds matter more than constants or stable priority/payload separation. Its public structural
+validator audits the fused bootstrapped/skew-binomial representation and reports rank/depth statistics.
 
 `PrioritySearchQueue<TKey, TPriority, TValue>` combines an ordered key map with a min-priority
-queue in one persistent AVL core. Each node caches its subtree winner, enabling O(log n) keyed
-updates/deletion, O(1) minimum, O(log n) delete-min, and key-range plus priority-threshold queries
-that prune irrelevant key intervals and subtrees whose minimum priority already exceeds the bound.
+queue in one persistent AVL core. This is a winner-cached AVL, not Hinze's loser-tree priority-search
+pennant. Each node caches its subtree winner, enabling O(log n) keyed updates/deletion, O(1)
+minimum, O(log n) delete-min, and key-range plus priority-threshold queries that prune irrelevant key
+intervals and subtrees whose minimum priority already exceeds the bound. A query costs O(log n + v)
+for v visited nodes, with v ≤ n and therefore an O(n) worst case.
 
 `FingerTreeDeque<T>` is the individually tuned sequence/deque (the analogue of Haskell's `Data.Sequence`, kept separate from the general core just as Haskell keeps it separate from `Data.FingerTree`): an immutable `IReadOnlyList<T>` with O(1) endpoint reads, O(log n) worst-case / O(1) amortized endpoint insertion and removal, concatenation logarithmic in the smaller operand (amortized), indexed access and splitting logarithmic in the distance from the nearer end (amortized), and comparer-based sorted search over rightmost-element signposts with a worst-case near-bound comparer-call count. The representation follows the simplified finger tree of Claessen's *Finger Trees Explained Anew, and Slightly Simplified* (digits of one through three elements, middle nodes of two or three children), with element height encoded through polymorphic recursion, leaf counts plus rightmost-leaf signposts cached per node, and the middle subtree of every deep node held behind a memoize-on-first-force suspension — the strict-language strategy from Hinze and Paterson's original paper that makes the amortized bounds hold under fully persistent (branching) version use. The normative API and complexity contract is [docs/api-specification.md](api-specification.md); its complexity columns were realigned with the source papers' amortized claims (worst-case O(log n), amortized sharp under branching persistence, O(1) worst-case endpoint reads) after the specification review.
 
@@ -66,8 +69,10 @@ that prune irrelevant key intervals and subtrees whose minimum priority already 
   - `DabaLite.cs` — a chunk-queue-backed worst-case O(1) FIFO sliding-window aggregator over any monoid.
   - `CanonicalSortedSet.cs` / `ZipTreeRankPolicy.cs` — the policy-canonical, stack-safe
     zip-zip-inspired sorted set and its random, publicly seeded, or caller-keyed HMAC rank policy.
-  - `BrodalOkasakiHeap.cs` — the bootstrapped skew-binomial heap with optimal purely functional worst-case bounds.
-  - `PrioritySearchQueue.cs` — the keyed AVL priority-search queue and range/threshold query surface.
+  - `BrodalOkasakiHeap.cs` — the bootstrapped skew-binomial heap with optimal purely functional
+    worst-case bounds and a public invariant/statistics audit.
+  - `PrioritySearchQueue.cs` — the winner-cached keyed AVL priority-search queue, range/threshold
+    query surface, and public AVL/winner validation statistics.
   - `FingerTree.cs` — the public general measured finger tree `FingerTree<TElement, TMeasure, TMeasureOps>`.
   - `Rope.cs` / `Rope.Builder.cs` + `Internal/RopeChunk.cs` — `Rope<T>`, a general-purpose persistent **chunked** sequence (rope): elements live in bounded array chunks (`Chunk<T>`, measured by `ChunkLengthMeasure<T>`) at the leaves of a count-measured finger tree, giving cache-friendly storage and O(log n) indexed insert/remove/split/slice with O(log min) concat and structural-sharing persistence. Element-agnostic (`Rope<char>` is a text buffer, `Rope<byte>` a binary buffer); positional reads/splits use the zero-allocation `ElementIndexPredicate` over `TryLocate`; the nested append-only builder uses frozen-prefix snapshots for incremental construction.
   - `MeasuredRope.cs` / `MeasuredRope.Builder.cs` + `Internal/MeasuredRopeChunk.cs` — `MeasuredRope<T, TMeasure, TMeasureOps>`, the measured sibling of `Rope<T>`: each chunk additionally caches an arbitrary monoidal user measure (`MeasuredChunk<…>`, measured by the product `MeasuredChunkMeasure<…>` of count and user measure), so the rope supports O(log n) navigation by the measure as well as by position (`Measure`, `PrefixMeasure`, `SplitByMeasure`, `TryLocateByMeasure`). Its append-only builder maintains a live combined measure. The canonical use is a text buffer with a line-count measure for O(log n) offset↔line navigation; the same machinery serves weighted selection and byte-offset addressing.

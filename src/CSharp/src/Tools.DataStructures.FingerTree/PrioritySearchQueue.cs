@@ -45,6 +45,49 @@ public sealed class PrioritySearchQueue<TKey, TPriority, TValue> :
 
     internal object? RootIdentity => _root;
 
+    /// <summary>Validates BST order, AVL balance, cached metadata, and subtree winners in O(n) time.</summary>
+    /// <returns>Statistics for the validated winner-cached AVL representation.</returns>
+    /// <remarks>The traversal uses O(log n) explicit-stack space.</remarks>
+    public PrioritySearchQueueStatistics ValidateStructure()
+    {
+        if (_root is null)
+            return new PrioritySearchQueueStatistics(0, 0, 0);
+        var pending = new Stack<ValidationFrame>();
+        pending.Push(new ValidationFrame(_root, default, default));
+        var count = 0;
+        var maximumBalance = 0;
+        while (pending.TryPop(out var frame))
+        {
+            var node = frame.Node;
+            if (frame.Lower.HasValue && KeyComparer.Compare(node.Entry.Key, frame.Lower.Value) <= 0)
+                throw new InvalidOperationException("A priority-search node crosses its lower key bound.");
+            if (frame.Upper.HasValue && KeyComparer.Compare(node.Entry.Key, frame.Upper.Value) >= 0)
+                throw new InvalidOperationException("A priority-search node crosses its upper key bound.");
+
+            var expectedCount = checked(1 + (node.Left?.Count ?? 0) + (node.Right?.Count ?? 0));
+            var expectedHeight = checked(1 + Math.Max(HeightOf(node.Left), HeightOf(node.Right)));
+            var balance = HeightOf(node.Left) - HeightOf(node.Right);
+            if (node.Count != expectedCount || node.Height != expectedHeight)
+                throw new InvalidOperationException("A priority-search node has invalid cached metadata.");
+            if (Math.Abs(balance) > 1)
+                throw new InvalidOperationException("A priority-search node violates AVL balance.");
+
+            var expectedWinner = SelectWinner(node.Entry, node.Left, node.Right);
+            if (!SameStoredEntry(expectedWinner, node.Winner))
+                throw new InvalidOperationException("A priority-search node has an invalid cached winner.");
+
+            count++;
+            maximumBalance = Math.Max(maximumBalance, Math.Abs(balance));
+            if (node.Right is not null)
+                pending.Push(new ValidationFrame(node.Right, new KeyBound(node.Entry.Key), frame.Upper));
+            if (node.Left is not null)
+                pending.Push(new ValidationFrame(node.Left, frame.Lower, new KeyBound(node.Entry.Key)));
+        }
+        if (count != Count)
+            throw new InvalidOperationException("Priority-search root metadata disagrees with the validated tree.");
+        return new PrioritySearchQueueStatistics(count, Height, maximumBalance);
+    }
+
     /// <summary>Creates an empty queue with retained comparers.</summary>
     /// <param name="keyComparer">The key comparer, or <see langword="null"/> for the default.</param>
     /// <param name="priorityComparer">The priority comparer, or <see langword="null"/> for the default.</param>
@@ -61,7 +104,9 @@ public sealed class PrioritySearchQueue<TKey, TPriority, TValue> :
             : new PrioritySearchQueue<TKey, TPriority, TValue>(null, keyComparer, priorityComparer);
     }
 
-    /// <summary>Creates a queue from entries with last-wins duplicate-key semantics.</summary>
+    /// <summary>
+    /// Creates a queue in O(n log n) time by repeated insertion, with last-wins duplicate-key semantics.
+    /// </summary>
     /// <param name="entries">The entries to add in enumeration order.</param>
     /// <param name="keyComparer">The key comparer, or <see langword="null"/> for the default.</param>
     /// <param name="priorityComparer">The priority comparer, or <see langword="null"/> for the default.</param>
@@ -78,12 +123,12 @@ public sealed class PrioritySearchQueue<TKey, TPriority, TValue> :
         return result;
     }
 
-    /// <summary>Determines whether a key is present.</summary>
+    /// <summary>Determines whether a key is present in O(log n) time.</summary>
     /// <param name="key">The key.</param>
     /// <returns><see langword="true"/> when present.</returns>
     public bool ContainsKey(TKey key) => TryGetEntry(key, out _);
 
-    /// <summary>Tries to retrieve an entry by key.</summary>
+    /// <summary>Tries to retrieve an entry by key in O(log n) time.</summary>
     /// <param name="key">The key.</param>
     /// <param name="entry">The stored entry on success.</param>
     /// <returns><see langword="true"/> when present.</returns>
@@ -106,11 +151,15 @@ public sealed class PrioritySearchQueue<TKey, TPriority, TValue> :
         return false;
     }
 
-    /// <summary>Adds or replaces a keyed entry.</summary>
+    /// <summary>Adds or replaces a keyed entry in O(log n) time.</summary>
     /// <param name="key">The key.</param>
     /// <param name="priority">The new priority.</param>
     /// <param name="value">The new value.</param>
-    /// <returns>The updated queue, or this queue for an equal entry.</returns>
+    /// <returns>
+    /// The updated queue, or this queue when the priority is equal under both the retained comparer
+    /// and default equality and the payload is equal under default equality.
+    /// </returns>
+    /// <remarks>An equivalent key retains the first stored key representative.</remarks>
     public PrioritySearchQueue<TKey, TPriority, TValue> SetItem(TKey key, TPriority priority, TValue value)
     {
         var entry = new PrioritySearchEntry<TKey, TPriority, TValue>(key, priority, value);
@@ -118,7 +167,7 @@ public sealed class PrioritySearchQueue<TKey, TPriority, TValue> :
         return ReferenceEquals(root, _root) ? this : new(root, KeyComparer, PriorityComparer);
     }
 
-    /// <summary>Attempts to add a key and rejects an existing equivalent key.</summary>
+    /// <summary>Attempts to add a key in O(log n) time and rejects an existing equivalent key.</summary>
     /// <param name="key">The key.</param>
     /// <param name="priority">The priority.</param>
     /// <param name="value">The value.</param>
@@ -135,7 +184,7 @@ public sealed class PrioritySearchQueue<TKey, TPriority, TValue> :
         return added;
     }
 
-    /// <summary>Removes a key when present.</summary>
+    /// <summary>Removes a key in O(log n) time when present.</summary>
     /// <param name="key">The key.</param>
     /// <returns>The updated queue, or this queue when absent.</returns>
     public PrioritySearchQueue<TKey, TPriority, TValue> Remove(TKey key)
@@ -146,7 +195,7 @@ public sealed class PrioritySearchQueue<TKey, TPriority, TValue> :
         return root is null ? Create(KeyComparer, PriorityComparer) : new(root, KeyComparer, PriorityComparer);
     }
 
-    /// <summary>Attempts to remove an entry by key.</summary>
+    /// <summary>Attempts to remove an entry by key in O(log n) time.</summary>
     /// <param name="key">The key.</param>
     /// <param name="entry">The removed entry on success.</param>
     /// <param name="result">The updated queue on success; otherwise, this queue.</param>
@@ -207,6 +256,10 @@ public sealed class PrioritySearchQueue<TKey, TPriority, TValue> :
     /// <param name="maximumPriority">The inclusive priority threshold.</param>
     /// <returns>Qualifying entries in key order.</returns>
     /// <exception cref="ArgumentException">The key range is inverted.</exception>
+    /// <remarks>
+    /// The query costs O(log n + v), where v is the number of visited nodes whose subtrees cannot
+    /// be pruned; v is at most n, so an unselective query is O(n). Traversal uses O(log n) stack space.
+    /// </remarks>
     public IEnumerable<PrioritySearchEntry<TKey, TPriority, TValue>> EnumerateAtMost(
         TKey minimumKey,
         TKey maximumKey,
@@ -217,8 +270,9 @@ public sealed class PrioritySearchQueue<TKey, TPriority, TValue> :
         return EnumerateAtMostCore(_root, minimumKey, maximumKey, maximumPriority);
     }
 
-    /// <summary>Returns an enumerator over all entries in key order.</summary>
+    /// <summary>Returns an O(n)-time enumerator over all entries in key order.</summary>
     /// <returns>An enumerator.</returns>
+    /// <remarks>The enumerator uses O(log n) explicit-stack space.</remarks>
     public IEnumerator<PrioritySearchEntry<TKey, TPriority, TValue>> GetEnumerator() =>
         Enumerate().GetEnumerator();
 
@@ -247,21 +301,33 @@ public sealed class PrioritySearchQueue<TKey, TPriority, TValue> :
         TKey maximumKey,
         TPriority maximumPriority)
     {
-        if (node is null || PriorityComparer.Compare(node.Winner.Priority, maximumPriority) > 0)
+        if (node is null)
             yield break;
-        var lower = KeyComparer.Compare(node.Entry.Key, minimumKey);
-        var upper = KeyComparer.Compare(node.Entry.Key, maximumKey);
-        if (lower > 0)
+        var pending = new Stack<QueryFrame>();
+        pending.Push(new QueryFrame(node, Emit: false));
+        while (pending.TryPop(out var frame))
         {
-            foreach (var entry in EnumerateAtMostCore(node.Left, minimumKey, maximumKey, maximumPriority))
-                yield return entry;
-        }
-        if (lower >= 0 && upper <= 0 && PriorityComparer.Compare(node.Entry.Priority, maximumPriority) <= 0)
-            yield return node.Entry;
-        if (upper < 0)
-        {
-            foreach (var entry in EnumerateAtMostCore(node.Right, minimumKey, maximumKey, maximumPriority))
-                yield return entry;
+            node = frame.Node;
+            if (frame.Emit)
+            {
+                yield return node.Entry;
+                continue;
+            }
+            if (PriorityComparer.Compare(node.Winner.Priority, maximumPriority) > 0)
+                continue;
+
+            var lower = KeyComparer.Compare(node.Entry.Key, minimumKey);
+            var upper = KeyComparer.Compare(node.Entry.Key, maximumKey);
+            if (upper < 0 && node.Right is not null)
+                pending.Push(new QueryFrame(node.Right, Emit: false));
+            if (lower >= 0
+                && upper <= 0
+                && PriorityComparer.Compare(node.Entry.Priority, maximumPriority) <= 0)
+            {
+                pending.Push(new QueryFrame(node, Emit: true));
+            }
+            if (lower > 0 && node.Left is not null)
+                pending.Push(new QueryFrame(node.Left, Emit: false));
         }
     }
 
@@ -281,7 +347,8 @@ public sealed class PrioritySearchQueue<TKey, TPriority, TValue> :
         {
             added = false;
             if (!overwrite
-                || (EqualityComparer<TPriority>.Default.Equals(entry.Priority, node.Entry.Priority)
+                || (PriorityComparer.Compare(entry.Priority, node.Entry.Priority) == 0
+                    && EqualityComparer<TPriority>.Default.Equals(entry.Priority, node.Entry.Priority)
                     && EqualityComparer<TValue>.Default.Equals(entry.Value, node.Entry.Value)))
                 return node;
             return NewNode(new(node.Entry.Key, entry.Priority, entry.Value), node.Left, node.Right);
@@ -364,13 +431,30 @@ public sealed class PrioritySearchQueue<TKey, TPriority, TValue> :
         Node? left,
         Node? right)
     {
+        return new Node(entry, left, right, SelectWinner(entry, left, right));
+    }
+
+    private PrioritySearchEntry<TKey, TPriority, TValue> SelectWinner(
+        PrioritySearchEntry<TKey, TPriority, TValue> entry,
+        Node? left,
+        Node? right)
+    {
         var winner = entry;
         if (left is not null && IsBefore(left.Winner, winner))
             winner = left.Winner;
         if (right is not null && IsBefore(right.Winner, winner))
             winner = right.Winner;
-        return new Node(entry, left, right, winner);
+        return winner;
     }
+
+    private bool SameStoredEntry(
+        PrioritySearchEntry<TKey, TPriority, TValue> left,
+        PrioritySearchEntry<TKey, TPriority, TValue> right) =>
+        KeyComparer.Compare(left.Key, right.Key) == 0
+        && EqualityComparer<TKey>.Default.Equals(left.Key, right.Key)
+        && PriorityComparer.Compare(left.Priority, right.Priority) == 0
+        && EqualityComparer<TPriority>.Default.Equals(left.Priority, right.Priority)
+        && EqualityComparer<TValue>.Default.Equals(left.Value, right.Value);
 
     private bool IsBefore(
         PrioritySearchEntry<TKey, TPriority, TValue> left,
@@ -388,6 +472,23 @@ public sealed class PrioritySearchQueue<TKey, TPriority, TValue> :
             node = node.Left;
         return node;
     }
+
+    private readonly record struct QueryFrame(Node Node, bool Emit);
+
+    private readonly record struct KeyBound
+    {
+        internal KeyBound(TKey value)
+        {
+            HasValue = true;
+            Value = value;
+        }
+
+        internal bool HasValue { get; }
+
+        internal TKey Value { get; }
+    }
+
+    private readonly record struct ValidationFrame(Node Node, KeyBound Lower, KeyBound Upper);
 
     private sealed class Node(
         PrioritySearchEntry<TKey, TPriority, TValue> entry,
@@ -415,3 +516,12 @@ public readonly record struct PrioritySearchEntry<TKey, TPriority, TValue>(
     TKey Key,
     TPriority Priority,
     TValue Value);
+
+/// <summary>Describes a validated winner-cached priority-search AVL representation.</summary>
+/// <param name="Count">The entry count.</param>
+/// <param name="Height">The AVL height.</param>
+/// <param name="MaximumAbsoluteBalanceFactor">The largest absolute AVL balance factor.</param>
+public readonly record struct PrioritySearchQueueStatistics(
+    int Count,
+    int Height,
+    int MaximumAbsoluteBalanceFactor);

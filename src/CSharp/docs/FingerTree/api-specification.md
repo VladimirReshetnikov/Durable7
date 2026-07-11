@@ -707,11 +707,26 @@ and `Meld` inspect and link only the first two forest ranks, giving O(1) worst-c
 number of comparisons; `Minimum` is O(1), and `DeleteMinimum` normalizes and melds O(log n) ranked
 trees in O(log n) worst-case time.
 
+The implementation uses the paper's final fused representation. A ranked tree stores its primitive
+skew-binomial children `c` immediately followed by the forest `f` of its embedded bootstrapped heap,
+as one persistent list `c ++ f`. The rank determines where the structural prefix ends; the permitted
+rank-zero ambiguity is resolved in favor of the structural prefix, exactly as in delete-min's split.
+This saves an indirection but makes the rank-aware decomposition, rather than raw child-list shape,
+the representation invariant.
+
 `Meld` requires comparer object identity, returns either operand for an empty-side meld, and otherwise
 shares every untouched ranked tree. `TryGetMinimum` and `TryDeleteMinimum` provide nonthrowing empty
 handling; throwing counterparts use `InvalidOperationException`. Enumeration visits structural
 heap order and is explicitly not sorted; repeatedly deleting the minimum produces sorted order.
-Equal-priority tie order is unspecified.
+It visits every logical element exactly once in O(n) time with an explicit stack. Equal-priority tie
+order is unspecified. `CreateRange` performs one O(1) worst-case insertion per input and therefore
+costs O(n) time.
+
+`ValidateStructure` is an O(n) diagnostic traversal using O(n) worst-case explicit-stack storage. It
+checks the global root, fused child/embedded-forest decomposition, skew-forest rank discipline, heap
+order, and the logical count. It returns `BrodalOkasakiHeapStatistics` with the count, root-forest
+length, maximum rank, and maximum traversal depth. Validation never changes the heap or forces a
+normalization that an ordinary operation would not perform.
 
 Strict Fibonacci and hollow heaps remain intentionally absent. Their optimal decrease-key machinery
 depends on mutable pointer surgery, so path-copying would not preserve the bounds that distinguish
@@ -722,14 +737,33 @@ them; this is a recorded rejection, not an implementation gap.
 `PrioritySearchQueue<TKey, TPriority, TValue>` stores at most one entry per key in an immutable AVL
 tree ordered by `IComparer<TKey>`. Every node caches the minimum-priority entry in its subtree under
 the retained `IComparer<TPriority>`; equal-priority winners use key order as a deterministic tie-break.
+The cached full entry is one additional metadata field per node. This is a winner-cached AVL
+implementation of the priority-search-queue abstraction, not Hinze's loser-tree priority-search
+pennant, so pennant-specific representation and output bounds do not apply.
 
 `TryGetEntry`, `SetItem`, `TryAdd`, `Remove`, and `TryRemove` are O(log n) worst-case. Equivalent-key
-replacement retains the original key representative, and equal entry updates/absent removals preserve
-instance identity. `Minimum`/`TryGetMinimum` are O(1); `DeleteMinimum` is O(log n). Enumeration is in
+replacement retains the original key representative. It preserves instance identity only when the
+new priority is equal to the stored priority under both the retained priority comparer and
+`EqualityComparer<TPriority>.Default`, and the value is equal under
+`EqualityComparer<TValue>.Default`; comparer-equal but representation-distinct priorities are stored,
+as are default-equal priorities that the retained comparer distinguishes. Absent removals also
+preserve identity. `Minimum`/`TryGetMinimum` are O(1); `DeleteMinimum` is O(log n). Enumeration is in
 key order. Policies flow into every version; there is no operation that silently changes them.
+
+`CreateRange` applies entries in enumeration order through `SetItem`, taking O(n log n) time and
+O(log n) transient traversal stack per insertion. For equivalent keys, the last priority/value wins
+while the first stored key representative remains. This is deliberately not Hinze's linear
+ordered-input `from-ord-list` construction.
 
 `EnumerateAtMost(minimumKey, maximumKey, maximumPriority)` returns entries in the inclusive key range
 whose priority is no greater than the threshold. Traversal prunes outside BST key bounds and any
 subtree whose cached winner exceeds the threshold, costing O(log n + v) where v is the number of
-nodes that cannot be pruned (including the k reported entries). This query is the core's differentiator
-from a HAMT-plus-sorted-set composition.
+visited nodes that cannot be pruned (including the k reported entries). Since v can equal n, the
+worst case is O(n); no O(log n + k) or pennant output-sensitive bound is promised. The iterator uses
+an explicit stack and remains stack-safe. This query is the core's differentiator from a
+HAMT-plus-sorted-set composition.
+
+`ValidateStructure` checks strict comparer order, cached count and height, AVL balance, and every
+cached subtree winner in O(n) time with O(log n) explicit-stack storage. It returns
+`PrioritySearchQueueStatistics` containing the entry count, AVL height, and maximum absolute balance
+factor. `Height` is also exposed as a constant-time diagnostic property.

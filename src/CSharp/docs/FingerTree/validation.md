@@ -95,10 +95,21 @@ The suite covers:
 - canonical-set Cartesian bulk building, `ValidateStructure` statistics, localized path sharing,
   no-op identity, concurrent digest publication, and a 4,096-node fully colliding height-n tree that
   exercises stack-safe delete, reinsert, enumeration, digest, equality, and validation paths;
-- `BrodalOkasakiHeap<T>` sorted drains through 100,000 items, randomized meld forests, retained
-  versions, comparer gating, and size-independent insert/meld comparison ceilings;
-- `PrioritySearchQueue<TKey, TPriority, TValue>` 50,000-operation keyed histories, retained
-  snapshots, complete minimum draining, 1,000 range/threshold model queries, balance, and representative retention;
+- `BrodalOkasakiHeapTests.cs` covers sorted drains through 100,000 items, randomized meld forests,
+  retained versions, comparer gating, and size-independent insert/meld comparison ceilings;
+- `BrodalOkasakiHeapAuditTests.cs` adds ascending, descending, equal-key, and melded fused-forest
+  shapes; a 30,000-operation branching retained-version model; exact off-path sharing;
+  comparer-equivalent representatives; public `ValidateStructure` statistics; an independent
+  reflection audit of fused child/embedded-forest decomposition; and comparison/allocation ceilings
+  separating O(1) insert/meld from O(log n) delete-min;
+- `PrioritySearchQueueTests.cs` covers 50,000-operation keyed histories, retained snapshots,
+  complete minimum draining, 1,000 range/threshold model queries, AVL balance, and representative
+  retention;
+- `PrioritySearchQueueAdversarialTests.cs` covers comparer-equality versus default-equality replacement,
+  equivalent-key representative retention, every AVL rotation and deletion rebalance, public
+  `ValidateStructure` statistics, a 20,000-operation branching retained history, exact no-op/path
+  sharing, priority-tie order, and comparison-count evidence for whole-tree, exact-key, and mixed
+  range/threshold pruning;
 - runnable sample smoke tests for Tour, Showcase, and Editor;
 - persistence/concurrency examples and tearable-struct stress tests;
 - CsCheck property tests and model-based command-sequence tests that shrink operation histories rather than only

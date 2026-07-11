@@ -49,8 +49,14 @@ reasonable oracle.
   sharing, and stack-safe 4,096-node fully colliding histories.
 - `BrodalOkasakiHeapTests.cs` covers large sorted drains, randomized meld trees, persistence,
   comparer-policy gating, empty behavior, and worst-case constant insert/meld comparison counts.
+  `BrodalOkasakiHeapAuditTests.cs` independently decomposes the fused child/embedded-forest encoding
+  and covers public invariant statistics, adversarial shapes, a 30,000-operation branching retained
+  history, exact off-path sharing, comparer-equivalent representatives, and operation-cost ceilings.
 - `PrioritySearchQueueTests.cs` covers keyed priority updates, minimum ties/deletion, AVL balance,
   randomized histories and snapshots, range/threshold pruning, try patterns, and stored-key retention.
+  `PrioritySearchQueueAdversarialTests.cs` covers comparer-versus-default equality during replacement,
+  public invariant statistics, every AVL rotation and deletion rebalance, a 20,000-operation retained
+  history, exact path sharing, tie order, and comparison-count evidence for query pruning.
 - `SampleSmokeTests.cs` captures the Tour, Showcase, and Editor sample output contracts.
 - `PersistenceConcurrencyExamplesTests.cs` and `TearableConcurrencyStressTests.cs` cover structural-sharing
   examples, atomic publication, concurrent reads, and tearable-value stress.

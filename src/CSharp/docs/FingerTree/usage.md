@@ -299,6 +299,62 @@ while (queue.TryDequeue(out element, out priority, out var rest))
 Use `Meld` when two persistent queues should be combined without rebuilding a heap from scratch.
 The queue orders priorities by `Comparer<TPriority>.Default`.
 
+## Worst-Case Meldable Heap
+
+`BrodalOkasakiHeap<T>` is the alternative for a persistent workload that needs worst-case rather
+than amortized latency for insert and meld. Reuse the same comparer object for every heap that may
+be melded:
+
+```csharp
+var order = Comparer<int>.Default;
+var left = BrodalOkasakiHeap<int>.CreateRange([7, 2, 9], order);
+var right = BrodalOkasakiHeap<int>.CreateRange([6, 1, 8], order);
+var heap = left.Meld(right).Insert(3);
+
+var statistics = heap.ValidateStructure();
+
+while (heap.TryDeleteMinimum(out var minimum, out var rest))
+{
+    // minimum values arrive as 1, 2, 3, 6, 7, 8, 9.
+    heap = rest;
+}
+```
+
+`Minimum`, `Insert`, and `Meld` are O(1) worst-case; `DeleteMinimum` is O(log n) worst-case.
+`Meld` requires comparer object identity even when one operand is empty. Ordinary enumeration visits
+each element in unspecified structural order, so repeatedly delete the minimum when sorted order is
+required. Equal elements have no stable tie order. `ValidateStructure` is an O(n) diagnostic pass.
+
+## Priority Search Queue
+
+`PrioritySearchQueue<TKey, TPriority, TValue>` is one persistent structure for keyed lookup,
+minimum-priority removal, and a combined key-range/priority-threshold query:
+
+```csharp
+var jobs = PrioritySearchQueue<string, int, string>.Create(
+        StringComparer.Ordinal,
+        Comparer<int>.Default)
+    .SetItem("compile", 3, "Build the solution")
+    .SetItem("deploy", 8, "Publish artifacts")
+    .SetItem("audit", 1, "Check invariants");
+
+var next = jobs.Minimum; // key "audit", priority 1
+var urgent = jobs.EnumerateAtMost("a", "z", maximumPriority: 3).ToArray();
+jobs = jobs.DeleteMinimum(out var removed);
+
+var statistics = jobs.ValidateStructure();
+```
+
+The AVL is ordered by the retained key comparer and caches one minimum-priority winner per subtree.
+Keyed lookup/update/removal and `DeleteMinimum` are O(log n); `Minimum` is O(1). Priority ties use
+key order, and full enumeration and `EnumerateAtMost` both return entries in key order. A range query
+costs O(log n + v), where v is the number of nodes not excluded by key or priority pruning; v can be
+n for a dense result. Equivalent-key replacement keeps the originally stored key representative.
+An update is an exact no-op only when its priority is equal under both the retained priority comparer
+and default equality and its value is equal under default equality. `CreateRange` applies entries in
+order in O(n log n), so the last priority/value for an equivalent key wins while the first key
+representative remains stored.
+
 ## Interval Tree
 
 `IntervalTree<T>` stores closed intervals and supports overlap and point-stabbing queries:

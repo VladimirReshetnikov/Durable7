@@ -44,6 +44,49 @@ public sealed class BrodalOkasakiHeap<T> : IEnumerable<T>
 
     internal object? RootIdentity => _root;
 
+    /// <summary>
+    /// Validates the global root, every fused primitive-child/embedded-forest boundary,
+    /// skew-forest ranks, heap order, and logical count in O(n) time.
+    /// </summary>
+    /// <returns>Statistics for the validated bootstrapped skew-binomial representation.</returns>
+    /// <remarks>The traversal uses an explicit stack requiring O(n) space in the worst case.</remarks>
+    public BrodalOkasakiHeapStatistics ValidateStructure()
+    {
+        if (_root is null)
+        {
+            if (Count != 0)
+                throw new InvalidOperationException("An empty Brodal-Okasaki heap has a nonzero count.");
+            return new BrodalOkasakiHeapStatistics(0, 0, 0, 0);
+        }
+        if (_root.Rank != 0)
+            throw new InvalidOperationException("The Brodal-Okasaki global root must have rank zero.");
+        var rootForestLength = ValidateSkewForest(_root.Children);
+        var pending = new Stack<TreeFrame>();
+        pending.Push(new TreeFrame(_root, 1));
+        var logicalCount = 0;
+        var maximumRank = 0;
+        var maximumDepth = 0;
+        while (pending.TryPop(out var frame))
+        {
+            var tree = frame.Tree;
+            if (tree.Rank < 0)
+                throw new InvalidOperationException("A Brodal-Okasaki tree has a negative rank.");
+            logicalCount = checked(logicalCount + 1);
+            maximumRank = Math.Max(maximumRank, tree.Rank);
+            maximumDepth = Math.Max(maximumDepth, frame.Depth);
+            ValidateSkewForest(ValidateFusedChildren(tree));
+            for (var forest = tree.Children; forest is not null; forest = forest.Tail)
+            {
+                if (!LessOrEqual(tree.Value, forest.Head.Value))
+                    throw new InvalidOperationException("A Brodal-Okasaki child outranks its parent.");
+                pending.Push(new TreeFrame(forest.Head, checked(frame.Depth + 1)));
+            }
+        }
+        if (logicalCount != Count)
+            throw new InvalidOperationException("Brodal-Okasaki logical count disagrees with its tree graph.");
+        return new BrodalOkasakiHeapStatistics(Count, rootForestLength, maximumRank, maximumDepth);
+    }
+
     /// <summary>Creates an empty heap with a retained comparer.</summary>
     /// <param name="comparer">The comparer, or <see langword="null"/> for the default.</param>
     /// <returns>An empty heap using the comparer.</returns>
@@ -53,7 +96,7 @@ public sealed class BrodalOkasakiHeap<T> : IEnumerable<T>
         return ReferenceEquals(comparer, Comparer<T>.Default) ? Empty : new BrodalOkasakiHeap<T>(null, 0, comparer);
     }
 
-    /// <summary>Creates a heap from a sequence.</summary>
+    /// <summary>Creates a heap from a sequence in O(n) time by repeated worst-case-O(1) insertion.</summary>
     /// <param name="items">The items to insert.</param>
     /// <param name="comparer">The comparer, or <see langword="null"/> for the default.</param>
     /// <returns>A heap containing the items.</returns>
@@ -66,7 +109,7 @@ public sealed class BrodalOkasakiHeap<T> : IEnumerable<T>
         return result;
     }
 
-    /// <summary>Tries to get the minimum element.</summary>
+    /// <summary>Tries to get the minimum element in O(1) time.</summary>
     /// <param name="minimum">The minimum on success; otherwise, the default value.</param>
     /// <returns><see langword="true"/> when nonempty.</returns>
     public bool TryGetMinimum([MaybeNullWhen(false)] out T minimum)
@@ -131,7 +174,7 @@ public sealed class BrodalOkasakiHeap<T> : IEnumerable<T>
         return new BrodalOkasakiHeap<T>(new Tree(0, minimum.Value, merged), checked(Count - 1), Comparer);
     }
 
-    /// <summary>Tries to remove the minimum element.</summary>
+    /// <summary>Tries to remove the minimum element in O(log n) worst-case time.</summary>
     /// <param name="minimum">The removed minimum on success.</param>
     /// <param name="remainder">The remaining heap on success; otherwise, this heap.</param>
     /// <returns><see langword="true"/> when nonempty.</returns>
@@ -150,8 +193,9 @@ public sealed class BrodalOkasakiHeap<T> : IEnumerable<T>
         return true;
     }
 
-    /// <summary>Returns an enumerator over the heap in unspecified structural order.</summary>
+    /// <summary>Returns an O(n)-time enumerator over the heap in unspecified structural order.</summary>
     /// <returns>An enumerator.</returns>
+    /// <remarks>The enumerator uses an explicit stack and does not compare elements.</remarks>
     public IEnumerator<T> GetEnumerator() => Enumerate().GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -275,6 +319,82 @@ public sealed class BrodalOkasakiHeap<T> : IEnumerable<T>
         return [.. trees];
     }
 
+    private static Forest? ValidateFusedChildren(Tree tree)
+    {
+        var rank = tree.Rank;
+        var forest = tree.Children;
+        while (rank > 0)
+        {
+            if (forest is null)
+                throw new InvalidOperationException("A ranked Brodal-Okasaki tree is missing structural children.");
+
+            var first = forest.Head;
+            if (rank == 1)
+            {
+                if (first.Rank != 0)
+                    throw new InvalidOperationException("A rank-one Brodal-Okasaki tree must begin with a rank-zero child.");
+                if (forest.Tail is null)
+                    return null;
+
+                // The fused representation stores primitive children c followed by the embedded
+                // heap forest f. When f also starts at rank zero, the paper permits that zero to
+                // be decoded as the second primitive child; SplitForest makes the same choice.
+                return forest.Tail.Head.Rank == 0 ? forest.Tail.Tail : forest.Tail;
+            }
+            if (forest.Tail is null)
+                throw new InvalidOperationException("A ranked Brodal-Okasaki tree has an incomplete child encoding.");
+
+            var second = forest.Tail.Head;
+            if (first.Rank == second.Rank)
+            {
+                if (first.Rank != rank - 1)
+                    throw new InvalidOperationException("A skew-linked Brodal-Okasaki tree has invalid child ranks.");
+                return forest.Tail.Tail;
+            }
+
+            if (first.Rank == 0)
+            {
+                if (second.Rank != rank - 1)
+                    throw new InvalidOperationException("A skew-linked Brodal-Okasaki tree has an invalid ranked child.");
+                forest = forest.Tail.Tail;
+            }
+            else
+            {
+                if (first.Rank != rank - 1)
+                    throw new InvalidOperationException("A linked Brodal-Okasaki tree has an invalid ranked child.");
+                forest = forest.Tail;
+            }
+            rank--;
+        }
+        return forest;
+    }
+
+    private static int ValidateSkewForest(Forest? forest)
+    {
+        var length = 0;
+        var previousRank = -1;
+        var duplicate = false;
+        for (; forest is not null; forest = forest.Tail)
+        {
+            var rank = forest.Head.Rank;
+            if (rank < 0)
+                throw new InvalidOperationException("A Brodal-Okasaki forest contains a negative rank.");
+            if (rank < previousRank)
+                throw new InvalidOperationException("Brodal-Okasaki root-forest ranks are not nondecreasing.");
+            if (rank == previousRank)
+            {
+                if (length != 1 || duplicate)
+                    throw new InvalidOperationException("Only the first two skew-forest ranks may be equal.");
+                duplicate = true;
+            }
+            previousRank = rank;
+            length++;
+        }
+        return length;
+    }
+
+    private readonly record struct TreeFrame(Tree Tree, int Depth);
+
     private sealed class Tree(int rank, T value, Forest? children)
     {
         internal int Rank { get; } = rank;
@@ -288,3 +408,14 @@ public sealed class BrodalOkasakiHeap<T> : IEnumerable<T>
         internal Forest? Tail { get; } = tail;
     }
 }
+
+/// <summary>Describes a validated bootstrapped skew-binomial heap representation.</summary>
+/// <param name="Count">The logical element count.</param>
+/// <param name="RootForestLength">The number of trees directly below the global minimum root.</param>
+/// <param name="MaximumRank">The largest skew-binomial rank.</param>
+/// <param name="MaximumDepth">The deepest global-root-to-tree path.</param>
+public readonly record struct BrodalOkasakiHeapStatistics(
+    int Count,
+    int RootForestLength,
+    int MaximumRank,
+    int MaximumDepth);

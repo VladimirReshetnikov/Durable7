@@ -1,14 +1,16 @@
 # Frontier Structure Catalog
 
-- Status: Candidate catalog - nothing in this document is shipped surface
+- Status: Current-state catalog - shipped Axis 1 cores and remaining frontier candidates
 - Created (UTC): 2026-07-11T03:31:23Z
 - Repository HEAD: f40e301e8faf26d748f33d8546d7d9216657301e
 - Audience: Maintainers and AI agents planning new repository-owned cores, representation tiers, and specialized sibling collections
-- Scope: Surveyed candidates beyond composition of the shipped families: new structure cores (including recent inventions), hybrid/adaptive representations, and niche-specialized collections
+- Scope: New structure cores beyond composition of the original families, plus candidate hybrid/adaptive representations and niche-specialized collections
 
-This document catalogs candidate work that the [derived structure catalog](derived-structure-catalog.md)
-deliberately does not cover. That catalog records what can be built *by composing* the shipped HAMT
-and FingerTree families; this one records three complementary axes:
+This document began as a catalog of candidate work that the
+[derived structure catalog](derived-structure-catalog.md) deliberately does not cover. That catalog
+records what can be built *by composing* the shipped HAMT and FingerTree families; this one records
+three complementary axes. Axis 1 now includes both implemented reference cores and unimplemented
+candidates, while axes 2 and 3 remain primarily planning material:
 
 1. **New cores** - structures that need their own node layer, including several invented or refined
    in the last decade.
@@ -19,16 +21,15 @@ and FingerTree families; this one records three complementary axes:
 
 ## Provenance And Method
 
-Findings come from a single-pass design survey conducted 2026-07-10/11, grounded against the shipped
+The initial findings came from a single-pass design survey conducted 2026-07-10/11, grounded against the shipped
 C# workspaces ([HAMT](../../src/CSharp/docs/Hamt/overview.md),
 [FingerTree](../../src/CSharp/docs/FingerTree/overview.md),
 [Tungsten](../../src/CSharp/docs/Tungsten/overview.md), and the
 [measured benchmark notes](../../src/CSharp/docs/FingerTree/benchmarks.md)) and against the derived
-structure catalog's verified composition rules. Unlike the derived catalog, the candidates here have
-**not** been adversarially verified by independent passes, and the literature references come from
-assistant knowledge (cutoff 2026-01) rather than re-read primary sources. Before implementing any
-candidate, verify the cited paper's actual claims and bounds; the [references](#references) section
-lists what to pull.
+structure catalog's verified composition rules. Implemented entries now record the validation and
+primary-source checks performed while they were built. Unimplemented candidates have **not** all
+received that treatment: before implementing one, re-read the cited paper and verify its actual
+claims and bounds. The [references](#references) section lists what to pull.
 
 **Division of labor with the
 [2026-07-09 proposal](../proposals/new-data-structures-2026-07-09.md).** That proposal selects a
@@ -53,17 +54,17 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 
 ## Summary Matrix
 
-| Candidate | Axis | Verdict | Depends on | Rough size |
+| Structure or strategy | Axis | Verdict / status | Depends on | Rough size |
 | --- | --- | --- | --- | --- |
-| CHAMP canonicalization + structural equality/diff | 1 | Strong | Evaluate with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
-| `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (= proposal Tier C1) | - (new self-contained core) | 1 new core, ~2 public types, ~30 members, structural set ops |
-| DABA Lite sliding-window aggregator | 1, 3 | Strong | Reuses `IMonoid<T>` | 1 small type, ~8 members |
+| CHAMP canonicalization + structural equality/diff | 1 | Strong (implemented across all six languages) | Completed with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
+| `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all six languages) | Completed as proposal Tier C1 | 1 new core, ~2 public types, ~30 members, structural set ops |
+| DABA Lite sliding-window aggregator | 1, 3 | Strong (C# implemented) | Reuses `IMonoid<T>` | 1 small type, ~8 members |
 | Merkle search tree | 1 | Strong (C# implemented) | Completed: deterministic wire + bounded verification | Largest single item in this catalog |
-| RRB vector | 1 | Plausible (benchmark-gated; deferred by proposal) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
+| RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
 | Zip tree (canonical sorted set) | 1, 3 | Plausible (C# implemented) | Completed: coherent keyed rank policy | 1 new core, set facade |
-| Brodal-Okasaki heap | 1 | Plausible (real-time niche) | - | 1 new core, small surface |
-| Priority search queue (Hinze) | 1 | Plausible | Only if `AddressablePriorityQueue` composition constants disappoint | 1 new core |
-| Ctrie (concurrent, O(1) snapshot) | 1 | C# + Kotlin/JVM only | Tracing GC; native ports require reclamation design | 1 new core, concurrency test tier |
+| Brodal-Okasaki heap | 1 | Plausible (C# implemented for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
+| Priority search queue (winner-cached AVL) | 1 | Plausible (C# implemented) | Completed as a direct core rather than the addressable composition | 1 new core |
+| Ctrie (concurrent, O(1) snapshot) | 1 | Managed-only (C# + Kotlin/JVM implemented) | Tracing GC; native ports require reclamation design | 1 new core, concurrency test tier |
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
 | Size-tiered small representations | 2 | Strong | Benchmark gate at tier boundary | Internal tier per facade + representation-forcing tests |
 | `Freeze()` read-optimized tier | 2 | Strong | Optional: fuse filter, PGM for sorted | 1 frozen type per family + strategy selection |
@@ -380,33 +381,36 @@ topology and memoized inequality dominate.
 **Verdict: Plausible.** Frame it as `CanonicalSortedSet<T>` - a niche sibling (axis 3 framing)
 whose selling point is unique representation, not general sorted-set duty.
 
-### Heaps: Brodal-Okasaki yes, hollow/strict-Fibonacci no, PSQ maybe
+### Heaps: Brodal-Okasaki and PSQ shipped; hollow/strict-Fibonacci rejected
 
-**C# status (2026-07-10): Brodal–Okasaki and PSQ implemented; mutation-dependent heaps rejected as
-specified.** `BrodalOkasakiHeap<T>` directly ports the bootstrapped skew-binomial representation
-with bounded-comparison O(1) insert/meld/minimum and O(log n) delete-min.
-`PrioritySearchQueue<TKey, TPriority, TValue>` supplies keyed priority updates and the distinctive
-key-range/priority-threshold query over one winner-cached AVL core. Strict Fibonacci and hollow
-heaps remain explicit non-goals.
+**C# status (2026-07-11): Brodal–Okasaki and PSQ implemented and adversarially audited;
+mutation-dependent heaps rejected as specified.** `BrodalOkasakiHeap<T>` directly ports the
+bootstrapped skew-binomial representation with bounded-comparison O(1) insert/meld/minimum and
+O(log n) delete-min. `PrioritySearchQueue<TKey, TPriority, TValue>` supplies keyed priority updates
+and the distinctive key-range/priority-threshold query over one winner-cached AVL core. Both expose
+public structural validators. Strict Fibonacci and hollow heaps remain explicit non-goals.
 
 - **Brodal-Okasaki heap** (JFP 1996; skew binomial queues + data-structural bootstrapping): purely
   functional with O(1) *worst-case* insert, meld, and findMin, O(log n) deleteMin. The shipped
   finger-tree `PriorityQueue` has the same bounds amortized (meld O(log min)). The niche is
-  worst-case latency guarantees. **Plausible** - small, well-documented, pedagogically clean; build
-  it when a latency-sensitive consumer appears, and benchmark constants against the shipped queue
-  first.
+  worst-case latency guarantees. The C# implementation occupies that niche as a small, explicit
+  sibling, with comparison-count tests for the operation bounds and a benchmark harness for its
+  constants against the measured finger-tree queue.
 - **Strict Fibonacci heaps** (Brodal, Lagogiannis & Tarjan, STOC 2012) and **hollow heaps**
   (Hansen, Kaplan, Tarjan & Zwick, ICALP 2015) achieve optimal decrease-key bounds through
   aggressive pointer mutation. Persistent path-copying destroys exactly the surgery they rely on.
   **Reject** for this repository.
-- **Priority search queues** (Hinze, ICFP 2001; Haskell `psqueues`): a purely functional structure
-  that is simultaneously a search tree on keys and a heap on priorities - keyed decrease-key and
-  delete in O(log n), min access in O(1)/O(log n), plus the distinctive query "all keys in range
-  with priority at most p" in O(r + k). The derived catalog already rates the composition
-  alternative (`AddressablePriorityQueue` = HAMT + `SortedSet<(priority, stamp, key)>`) plausible
-  and notes it dominates a bespoke design on most operations. **Plausible, second in line:** build
-  the composition first; reach for the PSQ core only if its constants (two structures touched per
-  update) disappoint or the range-bounded priority query becomes a real requirement.
+- **Priority search queues** combine a finite map ordered by key with minimum-priority access.
+  Hinze's ICFP 2001 implementation uses priority-search pennants: a loser/semi-heap over a
+  weight-balanced search tree. Its threshold-only `at-most` operation has the output-sensitive
+  bound Θ(r(log n - log r + 1)) for r results; the full paper adds a key range. The shipped C# core
+  deliberately uses a different representation, a persistent AVL node carrying its own entry and
+  a cached subtree winner. It provides O(log n) keyed updates and deletion, O(1) `Minimum`, and
+  O(log n) `DeleteMinimum`. Its inclusive key-range/priority-threshold traversal costs O(log n + v),
+  where v is the number of visited nodes that pruning cannot exclude and v ≤ n; the worst case is
+  therefore O(n), and no pennant-specific output bound is claimed. The direct core complements the
+  plausible `AddressablePriorityQueue` composition (HAMT plus a sorted priority index) when this
+  combined query is required.
 
 ### DABA Lite sliding-window aggregator
 
@@ -716,40 +720,54 @@ New rules this survey adds to the derived catalog's seven:
    admitting deliberately mutable members into a persistence-first library requires the docs to
    segregate them as sharply as the external-material policy segregates licenses.
 
-## Recommended Sequencing
+## Implementation Status And Remaining Sequencing
 
-Applying the derived catalog's parity-economics rule (stage as C#-first reference implementations;
-promote to six-language families only with proven value). Items shared with the
-[2026-07-09 proposal](../proposals/new-data-structures-2026-07-09.md) keep that proposal's
-scheduling slot; this list sequences the frontier-only items and says where each attaches:
+### Shipped Axis 1 reference cores
 
-1. **CHAMP canonicalization** - attach to the proposal's A2 slot (HAMT `MapEquals`/`Diff`): do the
-   two-bitmap layout and canonical deletion behind the existing public surface *before or with* A2
-   phase 1, then reproduce the paper's iteration/equality benchmarks in the harness. Retrofitting
-   canonical form after diff ships would mean re-verifying the diff bounds twice.
-2. **Size tiers + `Freeze()`** for the HAMT family - frontier-only; can proceed independently of
-   the proposal slate. First step: the small-size benchmark suite (n in 1..64 versus `Dictionary`,
-   `FrozenDictionary`, `ImmutableDictionary`) to fix thresholds with data.
-3. **Range-update sequence** - frontier-only, and the natural companion to the proposal's A3
-   cursor work (both are editor-grade; the styled-text sample consumes both). The measure-action
-   interface is the design decision to review first.
-4. **DABA Lite window aggregator** - frontier-only; small, recent, reuses `IMonoid`, and exercises
-   the measure framework outside the trees.
-5. **`PersistentIntMap` / `PersistentIntSet`** - already the proposal's C1 slot; this catalog's
-   contribution is the structural-merge API detail. No separate slot needed here.
-6. **Merkle search tree** - completed as the C# reference after landing its deterministic hashing,
-   bidirectional canonical codecs, exact block wire format, bounded verifier, proofs, synchronization,
-   and merge infrastructure. Any future port starts from those wire vectors rather than inventing a
-   language-local serialization.
+The implementation wave described by this catalog has already landed these C# reference surfaces:
 
-The remaining plausible entries (zip tree, Brodal-Okasaki, PSQ, Ctrie, order-maintenance list,
-chunked bitset, key-type factories) are consumer-gated: schedule none of them until a concrete
-consumer or profile names the need, per the consumer-driven bar the Tungsten case study set.
+- CHAMP canonical nodes plus structural equality/diff;
+- 32-bit and 64-bit Patricia maps and sets;
+- `RrbVector<T>`;
+- the Merkle search tree, including its deterministic wire, bounded verification, proofs, sync,
+  and merge infrastructure;
+- `CanonicalSortedSet<T>` with keyed zip-zip ranks;
+- `BrodalOkasakiHeap<T>` and `PrioritySearchQueue<TKey, TPriority, TValue>`;
+- `DabaLite<T, TMonoid>`; and
+- the managed Ctrie with O(1) immutable snapshots.
+
+CHAMP, Patricia, and RRB have also advanced through the sibling-language work recorded in their
+entries; the Ctrie's deliberate parity boundary remains C# and Kotlin/JVM. These are current-state
+implementation records, not candidates awaiting a consumer. Future work on them is ordinary
+hardening, measurement, and demand-driven porting.
+
+### Remaining candidate sequencing
+
+For work that has not shipped, continue applying the derived catalog's parity-economics rule: stage
+a C# reference first, and promote it only with proven value. Items shared with the
+[2026-07-09 proposal](../proposals/new-data-structures-2026-07-09.md) keep that proposal's scheduling
+slot. The remaining plausible work is sequenced as follows:
+
+1. **Size tiers + `Freeze()`** for the HAMT family. Begin with the small-size benchmark suite
+   (n in 1..64 versus `Dictionary`, `FrozenDictionary`, and `ImmutableDictionary`) so measurements
+   fix the thresholds.
+2. **Range-update sequence**, coordinated with the proposal's A3 cursor work. Review the measure-action
+   interface before committing the representation; the styled-text sample depends on this decision.
+3. **Cursor / zipper** over rope and deque, in the proposal's A3 slot and validated against editor
+   navigation histories.
+4. **Order-maintenance list**, only when a concrete client needs insertion-stable positional handles.
+5. **Persistent chunked bitset**, gated by a workload where measured-tree composition is insufficient.
+6. **Key-type-specialized factories**, justified by profiles after the Patricia family is considered.
+7. **Styled-text rope sample**, after the range-update and cursor foundations settle.
+
+The rejected structures remain rejected; none should silently re-enter the schedule without new
+evidence addressing the objection recorded in its entry.
 
 ## References
 
-Verify each against the primary source before implementation; these citations are from survey
-knowledge, not re-read papers.
+Implemented entries were checked against their primary sources during design and hardening. Re-read
+the cited source before beginning any still-unimplemented candidate rather than relying on this
+catalog's summary alone.
 
 - Steindorfer & Vinju, *Optimizing Hash-Array Mapped Tries for Fast and Lean Immutable JVM
   Collections*, OOPSLA 2015. (CHAMP)
@@ -790,10 +808,10 @@ knowledge, not re-read papers.
 - [Next data structures proposal (2026-07-09)](../proposals/new-data-structures-2026-07-09.md) -
   the committed slate this catalog complements; overlapping items (Patricia trie, cursor/zipper,
   RRB deferral) keep that proposal's scheduling, with design detail added here.
-- [Data structure catalog](data-structure-catalog.md) - shipped surface only; when a candidate
-  from this document ships, move its authoritative description there.
+- [Data structure catalog](data-structure-catalog.md) - the concise shipped-surface index. Implemented
+  entries here retain frontier design rationale while their public entry points belong in that index.
 - [Porting and semantic parity](../guides/porting-and-semantic-parity.md) - the parity workflow a
-  shipped candidate must satisfy; note the Ctrie entry's explicit parity exception.
+  promoted candidate must satisfy; note the Ctrie entry's explicit parity exception.
 - [Semantic contracts](semantic-contracts.md) - the no-op identity, ordering, and policy
   obligations that tiered representations must preserve across tiers.
 - [C# FingerTree benchmark notes](../../src/CSharp/docs/FingerTree/benchmarks.md) - the measured
