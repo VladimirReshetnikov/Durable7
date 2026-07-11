@@ -13,13 +13,16 @@ Primary entry points:
 - `PersistentHashMap<K, V, S = RandomState>`;
 - `PersistentHashSet<T, S = RandomState>`;
 - `BulkBuilder<K, V, S = RandomState>`;
-- `DuplicateKey`.
+- `DuplicateKey`;
+- `MapDifference<K, V>`.
 
 The port follows the repository HAMT semantics:
 
 - updates return new persistent values and keep old versions usable;
 - nodes are immutable and shared through `Arc`;
-- the trie uses 32-way bitmap-indexed branching over 32 truncated hash bits;
+- the trie uses 32-way CHAMP branching over 32 truncated hash bits, with independent data/node maps,
+  compact inline `(hash, key, value)` payload runs, and child-only node runs;
+- deletion promotes a singleton child payload back into its parent to restore canonical shape;
 - equal full-hash collisions are kept in immutable collision buckets;
 - no-op value replacement and absent removal preserve the existing root;
 - duplicate `add`/`try_add` calls reject the key without changing the root;
@@ -34,7 +37,7 @@ and an empty probe preserves the existing root — matching the C# `Except`/`Sym
 complexity contract of O(m) single-element updates.
 
 `BulkBuilder` mirrors the C# reference's transient bulk builder (commit `c092016`): unpublished
-leaf, collision, and branch nodes are mutated in place and frozen into detached persistent nodes, so
+leaf, collision, and split-map CHAMP branch nodes are mutated in place and frozen into detached persistent nodes, so
 one-pass construction costs O(n (w + c)) node mutations — bounded trie depth plus the applicable
 equal-hash collision scan — with no persistent path copies between successive entries. `set_item`
 follows the map's duplicate rule (first stored key instance, last supplied value, earlier stored

@@ -16,6 +16,13 @@ const MAX_BRANCH_SHIFT: u32 = 30;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DuplicateKey;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MapDifference<K, V> {
+    Added { key: K, value: V },
+    Removed { key: K, value: V },
+    Changed { key: K, before: V, after: V },
+}
+
 impl fmt::Display for DuplicateKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("an entry with the same key already exists")
@@ -52,7 +59,9 @@ enum Node<K, V> {
         entries: Arc<[(K, V)]>,
     },
     Branch {
-        bitmap: u32,
+        data_map: u32,
+        node_map: u32,
+        data: Arc<[(u32, K, V)]>,
         children: Arc<[Arc<Node<K, V>>]>,
     },
 }
@@ -290,6 +299,38 @@ where
 
         map
     }
+
+    /// Reports semantic additions, removals, and replacements, with a shared-root fast path.
+    #[must_use]
+    pub fn diff(&self, other: &Self) -> Vec<MapDifference<K, V>> {
+        if self.shares_root_with(other) {
+            return Vec::new();
+        }
+        let mut result = Vec::new();
+        for (key, before) in self {
+            match other.get(key) {
+                None => result.push(MapDifference::Removed {
+                    key: key.clone(),
+                    value: before.clone(),
+                }),
+                Some(after) if after != before => result.push(MapDifference::Changed {
+                    key: key.clone(),
+                    before: before.clone(),
+                    after: after.clone(),
+                }),
+                _ => {}
+            }
+        }
+        for (key, value) in other {
+            if self.get(key).is_none() {
+                result.push(MapDifference::Added {
+                    key: key.clone(),
+                    value: value.clone(),
+                });
+            }
+        }
+        result
+    }
 }
 
 impl<K, V, S: Default> Default for PersistentHashMap<K, V, S> {
@@ -392,7 +433,9 @@ enum MutableNode<K, V> {
         entries: Vec<(K, V)>,
     },
     Branch {
-        bitmap: u32,
+        data_map: u32,
+        node_map: u32,
+        data: Vec<(u32, K, V)>,
         children: Vec<MutableNode<K, V>>,
     },
 }
@@ -514,6 +557,7 @@ impl<K, V> Clone for Iter<'_, K, V> {
 
 enum IterFrame<'a, K, V> {
     Node(&'a Node<K, V>),
+    Data(std::slice::Iter<'a, (u32, K, V)>),
     Branch(std::slice::Iter<'a, Arc<Node<K, V>>>),
     Collision(std::slice::Iter<'a, (K, V)>),
 }
@@ -522,6 +566,7 @@ impl<K, V> Clone for IterFrame<'_, K, V> {
     fn clone(&self) -> Self {
         match self {
             Self::Node(node) => Self::Node(node),
+            Self::Data(data) => Self::Data(data.clone()),
             Self::Branch(children) => Self::Branch(children.clone()),
             Self::Collision(entries) => Self::Collision(entries.clone()),
         }
@@ -542,10 +587,18 @@ impl<'a, K, V> Iterator for Iter<'a, K, V> {
                     Node::Collision { entries, .. } => {
                         self.stack.push(IterFrame::Collision(entries.iter()));
                     }
-                    Node::Branch { children, .. } => {
+                    Node::Branch { data, children, .. } => {
                         self.stack.push(IterFrame::Branch(children.iter()));
+                        self.stack.push(IterFrame::Data(data.iter()));
                     }
                 },
+                IterFrame::Data(mut data) => {
+                    if let Some((_, key, value)) = data.next() {
+                        self.stack.push(IterFrame::Data(data));
+                        self.remaining -= 1;
+                        return Some((key, value));
+                    }
+                }
                 IterFrame::Branch(mut children) => {
                     if let Some(child) = children.next() {
                         self.stack.push(IterFrame::Branch(children));
@@ -935,14 +988,26 @@ where
                 .find(|(entry_key, _)| entry_key == key)
                 .map(|(entry_key, value)| (entry_key, value))
         }
-        Node::Branch { bitmap, children } => {
+        Node::Branch {
+            data_map,
+            node_map,
+            data,
+            children,
+        } => {
             let bit = bit_position(hash_fragment(hash, shift));
-            if bitmap & bit == 0 {
-                return None;
+            if data_map & bit != 0 {
+                let (_, entry_key, value) = &data[sparse_index(*data_map, bit)];
+                return (entry_key == key).then_some((entry_key, value));
             }
-
-            let index = sparse_index(*bitmap, bit);
-            get_in_node(&children[index], hash, key, shift + BITS_PER_LEVEL)
+            if node_map & bit != 0 {
+                return get_in_node(
+                    &children[sparse_index(*node_map, bit)],
+                    hash,
+                    key,
+                    shift + BITS_PER_LEVEL,
+                );
+            }
+            None
         }
     }
 }
@@ -1077,15 +1142,68 @@ where
                 duplicate: false,
             }
         }
-        Node::Branch { bitmap, children } => {
+        Node::Branch {
+            data_map,
+            node_map,
+            data,
+            children,
+        } => {
             let bit = bit_position(hash_fragment(hash, shift));
-            let index = sparse_index(*bitmap, bit);
-            if bitmap & bit == 0 {
+            if data_map & bit != 0 {
+                let index = sparse_index(*data_map, bit);
+                let (leaf_hash, leaf_key, leaf_value) = &data[index];
+                if *leaf_hash == hash && leaf_key == &key {
+                    if !overwrite {
+                        return InsertResult {
+                            node: Arc::clone(node),
+                            added: false,
+                            changed: false,
+                            duplicate: true,
+                        };
+                    }
+                    if leaf_value == &value {
+                        return InsertResult {
+                            node: Arc::clone(node),
+                            added: false,
+                            changed: false,
+                            duplicate: false,
+                        };
+                    }
+                    let mut next_data = data.to_vec();
+                    next_data[index] = (hash, leaf_key.clone(), value);
+                    return InsertResult {
+                        node: Arc::new(Node::Branch {
+                            data_map: *data_map,
+                            node_map: *node_map,
+                            data: Arc::from(next_data),
+                            children: Arc::clone(children),
+                        }),
+                        added: false,
+                        changed: true,
+                        duplicate: false,
+                    };
+                }
+
+                let child = merge_two(
+                    Arc::new(Node::Leaf {
+                        hash: *leaf_hash,
+                        key: leaf_key.clone(),
+                        value: leaf_value.clone(),
+                    }),
+                    *leaf_hash,
+                    Arc::new(Node::Leaf { hash, key, value }),
+                    hash,
+                    shift + BITS_PER_LEVEL,
+                );
+                let mut next_data = data.to_vec();
+                next_data.remove(index);
                 let mut next_children = children.to_vec();
-                next_children.insert(index, Arc::new(Node::Leaf { hash, key, value }));
+                next_children.insert(sparse_index(*node_map, bit), child);
                 return InsertResult {
                     node: Arc::new(Node::Branch {
-                        bitmap: bitmap | bit,
+                        data_map: data_map & !bit,
+                        node_map: node_map | bit,
+                        data: Arc::from(next_data),
                         children: Arc::from(next_children),
                     }),
                     added: true,
@@ -1094,6 +1212,23 @@ where
                 };
             }
 
+            if node_map & bit == 0 {
+                let mut next_data = data.to_vec();
+                next_data.insert(sparse_index(*data_map, bit), (hash, key, value));
+                return InsertResult {
+                    node: Arc::new(Node::Branch {
+                        data_map: data_map | bit,
+                        node_map: *node_map,
+                        data: Arc::from(next_data),
+                        children: Arc::clone(children),
+                    }),
+                    added: true,
+                    changed: true,
+                    duplicate: false,
+                };
+            }
+
+            let index = sparse_index(*node_map, bit);
             let child_result = insert_node(
                 &children[index],
                 hash,
@@ -1115,7 +1250,9 @@ where
             next_children[index] = child_result.node;
             InsertResult {
                 node: Arc::new(Node::Branch {
-                    bitmap: *bitmap,
+                    data_map: *data_map,
+                    node_map: *node_map,
+                    data: Arc::clone(data),
                     children: Arc::from(next_children),
                 }),
                 added: child_result.added,
@@ -1193,9 +1330,37 @@ where
                 changed: true,
             }
         }
-        Node::Branch { bitmap, children } => {
+        Node::Branch {
+            data_map,
+            node_map,
+            data,
+            children,
+        } => {
             let bit = bit_position(hash_fragment(hash, shift));
-            if bitmap & bit == 0 {
+            if data_map & bit != 0 {
+                let index = sparse_index(*data_map, bit);
+                let (leaf_hash, leaf_key, leaf_value) = &data[index];
+                if *leaf_hash != hash || leaf_key != key {
+                    return RemoveResult {
+                        node: Some(Arc::clone(node)),
+                        removed: None,
+                        changed: false,
+                    };
+                }
+                let mut next_data = data.to_vec();
+                next_data.remove(index);
+                return RemoveResult {
+                    node: normalize_branch(
+                        data_map & !bit,
+                        *node_map,
+                        next_data,
+                        children.to_vec(),
+                    ),
+                    removed: Some((leaf_key.clone(), leaf_value.clone())),
+                    changed: true,
+                };
+            }
+            if node_map & bit == 0 {
                 return RemoveResult {
                     node: Some(Arc::clone(node)),
                     removed: None,
@@ -1203,7 +1368,7 @@ where
                 };
             }
 
-            let index = sparse_index(*bitmap, bit);
+            let index = sparse_index(*node_map, bit);
             let child_result = remove_node(&children[index], hash, key, shift + BITS_PER_LEVEL);
             if !child_result.changed {
                 return RemoveResult {
@@ -1214,29 +1379,28 @@ where
             }
 
             let mut next_children = children.to_vec();
-            let next_bitmap;
+            let mut next_data = data.to_vec();
+            let mut next_data_map = *data_map;
+            let mut next_node_map = *node_map;
             match child_result.node {
                 Some(child) => {
-                    next_children[index] = child;
-                    next_bitmap = *bitmap;
+                    if let Some(entry) = singleton_entry(&child) {
+                        next_children.remove(index);
+                        next_node_map &= !bit;
+                        next_data.insert(sparse_index(next_data_map, bit), entry);
+                        next_data_map |= bit;
+                    } else {
+                        next_children[index] = child;
+                    }
                 }
                 None => {
                     next_children.remove(index);
-                    next_bitmap = bitmap & !bit;
+                    next_node_map &= !bit;
                 }
             }
 
-            let next_node = match next_children.as_slice() {
-                [] => None,
-                [only] if !matches!(only.as_ref(), Node::Branch { .. }) => Some(Arc::clone(only)),
-                _ => Some(Arc::new(Node::Branch {
-                    bitmap: next_bitmap,
-                    children: Arc::from(next_children),
-                })),
-            };
-
             RemoveResult {
-                node: next_node,
+                node: normalize_branch(next_data_map, next_node_map, next_data, next_children),
                 removed: child_result.removed,
                 changed: true,
             }
@@ -1277,20 +1441,45 @@ where
     if left_bit == right_bit {
         let child = merge_two(left, left_hash, right, right_hash, shift + BITS_PER_LEVEL);
         return Arc::new(Node::Branch {
-            bitmap: left_bit,
+            data_map: 0,
+            node_map: left_bit,
+            data: Arc::from([]),
             children: Arc::from(vec![child]),
         });
     }
 
-    let (bitmap, children) = if left_fragment < right_fragment {
-        (left_bit | right_bit, vec![left, right])
-    } else {
-        (left_bit | right_bit, vec![right, left])
+    let mut data = Vec::new();
+    let mut children = Vec::new();
+    let mut data_map = 0;
+    let mut node_map = 0;
+    let mut add = |bit: u32, node: Arc<Node<K, V>>| match node.as_ref() {
+        Node::Leaf { hash, key, value } => {
+            data_map |= bit;
+            data.push((bit, *hash, key.clone(), value.clone()));
+        }
+        _ => {
+            node_map |= bit;
+            children.push((bit, node));
+        }
     };
-
+    add(left_bit, left);
+    add(right_bit, right);
+    data.sort_by_key(|(bit, ..)| *bit);
+    children.sort_by_key(|(bit, _)| *bit);
     Arc::new(Node::Branch {
-        bitmap,
-        children: Arc::from(children),
+        data_map,
+        node_map,
+        data: Arc::from(
+            data.into_iter()
+                .map(|(_, hash, key, value)| (hash, key, value))
+                .collect::<Vec<_>>(),
+        ),
+        children: Arc::from(
+            children
+                .into_iter()
+                .map(|(_, node)| node)
+                .collect::<Vec<_>>(),
+        ),
     })
 }
 
@@ -1304,11 +1493,62 @@ where
         Node::Collision {
             entries: bucket, ..
         } => entries.extend(bucket.iter().cloned()),
-        Node::Branch { children, .. } => {
+        Node::Branch { data, children, .. } => {
+            entries.extend(
+                data.iter()
+                    .map(|(_, key, value)| (key.clone(), value.clone())),
+            );
             for child in children.iter() {
                 collect_owned_entries(child, entries);
             }
         }
+    }
+}
+
+fn singleton_entry<K, V>(node: &Node<K, V>) -> Option<(u32, K, V)>
+where
+    K: Clone,
+    V: Clone,
+{
+    match node {
+        Node::Leaf { hash, key, value } => Some((*hash, key.clone(), value.clone())),
+        Node::Collision { hash, entries } if entries.len() == 1 => {
+            Some((*hash, entries[0].0.clone(), entries[0].1.clone()))
+        }
+        Node::Branch { data, children, .. } if data.len() == 1 && children.is_empty() => {
+            Some(data[0].clone())
+        }
+        _ => None,
+    }
+}
+
+fn normalize_branch<K, V>(
+    data_map: u32,
+    node_map: u32,
+    data: Vec<(u32, K, V)>,
+    children: Vec<Arc<Node<K, V>>>,
+) -> Option<Arc<Node<K, V>>>
+where
+    K: Clone,
+    V: Clone,
+{
+    if data.is_empty() && children.is_empty() {
+        None
+    } else if data.len() == 1 && children.is_empty() {
+        let (hash, key, value) = data.into_iter().next().unwrap();
+        Some(Arc::new(Node::Leaf { hash, key, value }))
+    } else if data.is_empty()
+        && children.len() == 1
+        && !matches!(children[0].as_ref(), Node::Branch { .. })
+    {
+        Some(Arc::clone(&children[0]))
+    } else {
+        Some(Arc::new(Node::Branch {
+            data_map,
+            node_map,
+            data: Arc::from(data),
+            children: Arc::from(children),
+        }))
     }
 }
 
@@ -1363,16 +1603,48 @@ where
             entries.push((key, value));
             true
         }
-        MutableNode::Branch { bitmap, children } => {
+        MutableNode::Branch {
+            data_map,
+            node_map,
+            data,
+            children,
+        } => {
             let bit = bit_position(hash_fragment(hash, shift));
-            let index = sparse_index(*bitmap, bit);
-            if *bitmap & bit == 0 {
-                *bitmap |= bit;
-                children.insert(index, MutableNode::Leaf { hash, key, value });
+            if *data_map & bit != 0 {
+                let index = sparse_index(*data_map, bit);
+                if data[index].0 == hash && data[index].1 == key {
+                    if data[index].2 != value {
+                        data[index].2 = value;
+                    }
+                    return false;
+                }
+                let (old_hash, old_key, old_value) = data.remove(index);
+                let child = merge_mutable(
+                    MutableNode::Leaf {
+                        hash: old_hash,
+                        key: old_key,
+                        value: old_value,
+                    },
+                    MutableNode::Leaf { hash, key, value },
+                    shift + BITS_PER_LEVEL,
+                );
+                *data_map &= !bit;
+                children.insert(sparse_index(*node_map, bit), child);
+                *node_map |= bit;
                 return true;
             }
-
-            set_in_mutable(&mut children[index], hash, key, value, shift + BITS_PER_LEVEL)
+            if *node_map & bit != 0 {
+                return set_in_mutable(
+                    &mut children[sparse_index(*node_map, bit)],
+                    hash,
+                    key,
+                    value,
+                    shift + BITS_PER_LEVEL,
+                );
+            }
+            data.insert(sparse_index(*data_map, bit), (hash, key, value));
+            *data_map |= bit;
+            true
         }
     }
 }
@@ -1383,7 +1655,9 @@ fn take_mutable<K, V>(node: &mut MutableNode<K, V>) -> MutableNode<K, V> {
     std::mem::replace(
         node,
         MutableNode::Branch {
-            bitmap: 0,
+            data_map: 0,
+            node_map: 0,
+            data: Vec::new(),
             children: Vec::new(),
         },
     )
@@ -1419,19 +1693,63 @@ fn merge_mutable<K, V>(
     if left_bit == right_bit {
         let child = merge_mutable(left, right, shift + BITS_PER_LEVEL);
         return MutableNode::Branch {
-            bitmap: left_bit,
+            data_map: 0,
+            node_map: left_bit,
+            data: Vec::new(),
             children: vec![child],
         };
     }
 
-    let children = if left_fragment < right_fragment {
-        vec![left, right]
-    } else {
-        vec![right, left]
-    };
+    let mut data_map = 0;
+    let mut node_map = 0;
+    let mut data = Vec::new();
+    let mut children = Vec::new();
+    push_mutable_slot(
+        left_bit,
+        left,
+        &mut data_map,
+        &mut node_map,
+        &mut data,
+        &mut children,
+    );
+    push_mutable_slot(
+        right_bit,
+        right,
+        &mut data_map,
+        &mut node_map,
+        &mut data,
+        &mut children,
+    );
+    data.sort_by_key(|(bit, ..)| *bit);
+    children.sort_by_key(|(bit, _)| *bit);
     MutableNode::Branch {
-        bitmap: left_bit | right_bit,
-        children,
+        data_map,
+        node_map,
+        data: data
+            .into_iter()
+            .map(|(_, hash, key, value)| (hash, key, value))
+            .collect(),
+        children: children.into_iter().map(|(_, node)| node).collect(),
+    }
+}
+
+fn push_mutable_slot<K, V>(
+    bit: u32,
+    node: MutableNode<K, V>,
+    data_map: &mut u32,
+    node_map: &mut u32,
+    data: &mut Vec<(u32, u32, K, V)>,
+    children: &mut Vec<(u32, MutableNode<K, V>)>,
+) {
+    match node {
+        MutableNode::Leaf { hash, key, value } => {
+            *data_map |= bit;
+            data.push((bit, hash, key, value));
+        }
+        other => {
+            *node_map |= bit;
+            children.push((bit, other));
+        }
     }
 }
 
@@ -1460,14 +1778,16 @@ fn freeze_owned<K, V>(node: MutableNode<K, V>) -> Arc<Node<K, V>> {
             hash,
             entries: Arc::from(entries),
         },
-        MutableNode::Branch { bitmap, children } => Node::Branch {
-            bitmap,
-            children: Arc::from(
-                children
-                    .into_iter()
-                    .map(freeze_owned)
-                    .collect::<Vec<_>>(),
-            ),
+        MutableNode::Branch {
+            data_map,
+            node_map,
+            data,
+            children,
+        } => Node::Branch {
+            data_map,
+            node_map,
+            data: Arc::from(data),
+            children: Arc::from(children.into_iter().map(freeze_owned).collect::<Vec<_>>()),
         },
     })
 }
@@ -1489,8 +1809,15 @@ where
             hash: *hash,
             entries: Arc::from(entries.clone()),
         },
-        MutableNode::Branch { bitmap, children } => Node::Branch {
-            bitmap: *bitmap,
+        MutableNode::Branch {
+            data_map,
+            node_map,
+            data,
+            children,
+        } => Node::Branch {
+            data_map: *data_map,
+            node_map: *node_map,
+            data: Arc::from(data.clone()),
             children: Arc::from(children.iter().map(freeze_cloned).collect::<Vec<_>>()),
         },
     })
@@ -1849,6 +2176,61 @@ mod tests {
 
         let printed = format!("{:?}", PersistentHashMap::new().insert("a", 1));
         assert_eq!(printed, "{\"a\": 1}");
+    }
+
+    #[test]
+    fn champ_inlines_payloads_and_classifies_diff() {
+        let empty = PersistentHashMap::new();
+        let ascending = empty.set_items((0..512).map(|key| (key, key)));
+        let descending = empty.set_items((0..512).rev().map(|key| (key, key)));
+        assert_eq!(ascending, descending);
+        assert!(ascending.diff(&descending).is_empty());
+
+        let (inline, bitmap_nodes, invalid_leaf_children) =
+            champ_statistics(ascending.root.as_deref().unwrap());
+        assert_eq!(inline, 512);
+        assert!(bitmap_nodes > 1);
+        assert_eq!(invalid_leaf_children, 0);
+
+        let changed = descending.remove(&7).insert(9, -9).insert(1_000, 1_000);
+        let diff = ascending.diff(&changed);
+        assert_eq!(diff.len(), 3);
+        assert!(
+            diff.iter()
+                .any(|item| matches!(item, MapDifference::Removed { key: 7, .. }))
+        );
+        assert!(
+            diff.iter()
+                .any(|item| matches!(item, MapDifference::Changed { key: 9, .. }))
+        );
+        assert!(
+            diff.iter()
+                .any(|item| matches!(item, MapDifference::Added { key: 1_000, .. }))
+        );
+    }
+
+    fn champ_statistics<K, V>(node: &Node<K, V>) -> (usize, usize, usize) {
+        match node {
+            Node::Leaf { .. } => (1, 0, 0),
+            Node::Collision { entries, .. } => (entries.len(), 0, 0),
+            Node::Branch { data, children, .. } => {
+                let mut result = (
+                    data.len(),
+                    1,
+                    children
+                        .iter()
+                        .filter(|child| matches!(child.as_ref(), Node::Leaf { .. }))
+                        .count(),
+                );
+                for child in children.iter() {
+                    let child_stats = champ_statistics(child);
+                    result.0 += child_stats.0;
+                    result.1 += child_stats.1;
+                    result.2 += child_stats.2;
+                }
+                result
+            }
+        }
     }
 
     #[test]

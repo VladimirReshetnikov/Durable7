@@ -87,7 +87,12 @@ construction, `MapEquals`, `Diff`, independent-history shape tests, and a CHAMP 
 **Kotlin status (2026-07-10): Implemented.** The JVM port now has the same split bitmap/inline
 payload representation and canonical deletion promotion, plus policy-compatible `mapEquals` and
 typed `diff`. Its executable suite checks independent insertion histories, CHAMP node invariants,
-collisions, persistence, and concurrent readers. C, C++, Haskell, and Rust ports remain pending.
+collisions, persistence, and concurrent readers.
+
+**Rust status (2026-07-10): Implemented.** Both persistent path copying and `BulkBuilder` freezing
+now produce split data/node maps with inline payload runs and canonical deletion promotion. The safe
+`Arc` implementation adds owned typed diff and representation-invariant coverage. C, C++, and
+Haskell ports remain pending.
 
 **What it is.** CHAMP (Compressed Hash-Array Mapped Prefix-tree; Steindorfer & Vinju, OOPSLA 2015)
 is a refinement of Bagwell's HAMT with two changes that matter here:

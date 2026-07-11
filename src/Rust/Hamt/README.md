@@ -14,11 +14,13 @@ set intersection, the set-relation probes, and the Tungsten association's index 
 The trie follows the existing ports:
 
 - 32-way logical branching over 32 truncated hash bits;
-- sparse branch nodes with a bitmap and compact child array;
+- canonical CHAMP branch nodes with separate data/node maps, inline payload arrays, and compact
+  child-only arrays;
 - immutable same-hash collision buckets;
 - `Arc`-shared nodes across persistent versions;
 - no-op replacement and absent removal reuse the existing root;
 - map bulk construction uses last-wins semantics.
+- map diff returns owned typed additions, removals, and changes, with a shared-root fast path.
 
 Rust-specific shape:
 
