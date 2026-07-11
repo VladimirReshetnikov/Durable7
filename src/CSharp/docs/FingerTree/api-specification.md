@@ -544,3 +544,22 @@ the same code before and after concatenation relaxes the shape.
 
 All produced nodes are immutable. Old vectors remain valid, empty-side concat and boundary splits
 preserve instance identity, and no caller-owned mutable arrays are retained.
+
+## DABA Lite Sliding-Window Aggregator
+
+`DabaLite<T, TMonoid>` is a mutable FIFO sliding-window aggregator over the existing static
+`IMonoid<T>` vocabulary. `Insert` appends, `Evict`/`TryEvict` remove the oldest value, and `Aggregate`
+returns the in-order aggregate; the monoid need be associative but need not be commutative or
+invertible.
+
+The implementation follows Tangwongsan, Hirzel, and Schneider's DABA Lite pointer/fixup algorithm.
+Six cursors partition a chunked queue into front, left, right, accumulator, and back regions; every
+insert or eviction performs exactly one singleton/flip/shift/shrink fixup. Consequently, there are
+no loops or recursive reversal steps in a window operation: insert invokes `Combine` at most three
+times, eviction at most two times, and query exactly once. The linked fixed-size chunk queue grows,
+trims, and moves cursors in worst-case O(1), avoiding a ring-buffer resize spike.
+
+The type is deliberately mutable and not safe for unsynchronized concurrent writers. `Clear` is
+O(n) because it performs the ordinary bounded eviction operation for every item. Space is O(n),
+with one stored value/partial aggregate per window entry, two aggregate fields, and bounded chunk
+slack.

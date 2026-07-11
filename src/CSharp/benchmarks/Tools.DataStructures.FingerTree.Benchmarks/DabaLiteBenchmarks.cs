@@ -1,0 +1,51 @@
+using BenchmarkDotNet.Attributes;
+using Tools.DataStructures.FingerTree;
+
+namespace Tools.DataStructures.FingerTree.Benchmarks;
+
+[MemoryDiagnoser]
+public class DabaLiteBenchmarks
+{
+    private DabaLite<long, SumMonoid> _daba = null!;
+    private Queue<long> _queue = null!;
+    private long _next;
+
+    [Params(1_000, 100_000)]
+    public int Count { get; set; }
+
+    [GlobalSetup]
+    public void Setup()
+    {
+        _daba = new DabaLite<long, SumMonoid>();
+        _queue = new Queue<long>(Count);
+        for (var i = 0; i < Count; i++)
+        {
+            _daba.Insert(i);
+            _queue.Enqueue(i);
+        }
+        _next = Count;
+    }
+
+    [Benchmark(Baseline = true)]
+    public long DabaSlideAndQuery()
+    {
+        _daba.Evict();
+        _daba.Insert(_next++);
+        return _daba.Aggregate;
+    }
+
+    [Benchmark]
+    public long QueueSlideAndReaggregate()
+    {
+        _queue.Dequeue();
+        _queue.Enqueue(_next++);
+        return _queue.Sum();
+    }
+
+    private readonly struct SumMonoid : IMonoid<long>
+    {
+        public static long Empty => 0;
+
+        public static long Combine(long left, long right) => left + right;
+    }
+}

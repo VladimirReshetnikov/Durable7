@@ -366,6 +366,7 @@ middle edits dominate, and `RrbVector<T>` when consistent indexing constants dom
 | Closed-interval overlap and containment queries | `IntervalTree<T>` |
 | Chunked persistent positional sequence | `Rope<T>` |
 | Uniform random-access persistent sequence | `RrbVector<T>` |
+| Mutable FIFO window aggregate with worst-case O(1) operations | `DabaLite<T, TMonoid>` |
 | Incremental generic append construction | `Rope<T>.Builder` |
 | Chunked sequence with cumulative measure navigation | `MeasuredRope<T, TMeasure, TMeasureOps>` |
 | Incremental measured append construction | `MeasuredRope<T, TMeasure, TMeasureOps>.Builder` |

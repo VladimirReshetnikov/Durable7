@@ -274,6 +274,10 @@ whose selling point is unique representation, not general sorted-set duty.
 
 ### DABA Lite sliding-window aggregator
 
+**C# status (2026-07-10): Implemented.** `DabaLite<T, TMonoid>` reuses `IMonoid<T>`, implements
+the paper's six-cursor incremental-reversal schedule over a worst-case-O(1) chunked queue, and has
+instrumented tests locking down the three/two/one combine ceilings for insert/evict/query.
+
 **What it is.** De-Amortized Banker's Aggregator (Tangwongsan, Hirzel & Schneider; DEBS 2015,
 VLDB J 2021 for the Lite variant): FIFO sliding-window aggregation over any monoid with O(1)
 *worst-case* time per insert/evict/query and two words of overhead. The finger tree answers the

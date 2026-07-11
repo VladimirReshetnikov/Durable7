@@ -84,6 +84,8 @@ The suite covers:
   `RopeBuilder`, and nested append-only rope builders;
 - `RrbVector<T>` radix boundaries, unequal-height concatenation, split round-trips, retained
   snapshots, and randomized mixed-edit histories;
+- `DabaLite<T, TMonoid>` noncommutative ordering, 100,000-operation randomized windows, empty/clear
+  behavior, and instrumented worst-case combine-count ceilings;
 - runnable sample smoke tests for Tour, Showcase, and Editor;
 - persistence/concurrency examples and tearable-struct stress tests;
 - CsCheck property tests and model-based command-sequence tests that shrink operation histories rather than only

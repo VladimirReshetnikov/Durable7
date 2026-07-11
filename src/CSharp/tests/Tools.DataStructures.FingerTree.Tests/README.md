@@ -37,6 +37,8 @@ reasonable oracle.
   mixed `TextReader` peek/single/buffered reads across chunk boundaries.
 - `RrbVectorTests.cs` covers branch-factor boundaries, unequal-height boundary-spine concatenation,
   split round-trips, endpoint contracts, and randomized persistent edit histories with retained versions.
+- `DabaLiteTests.cs` covers noncommutative FIFO order, randomized variable windows, chunk churn,
+  empty/clear contracts, and the proven worst-case monoid invocation limits.
 - `SampleSmokeTests.cs` captures the Tour, Showcase, and Editor sample output contracts.
 - `PersistenceConcurrencyExamplesTests.cs` and `TearableConcurrencyStressTests.cs` cover structural-sharing
   examples, atomic publication, concurrent reads, and tearable-value stress.
