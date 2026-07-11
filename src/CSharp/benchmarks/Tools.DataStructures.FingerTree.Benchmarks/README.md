@@ -3,7 +3,7 @@
 - Created (UTC): 2026-06-13T00:00:00Z
 - Repository HEAD: 49863a2aadab97d9ace092b65949af5f094237ca
 - Audience: Maintainers validating the library's complexity and constant-factor claims
-- Scope: BenchmarkDotNet harness for `Tools.DataStructures.FingerTree`
+- Scope: BenchmarkDotNet harness for the C# persistent collection cores
 
 A [BenchmarkDotNet](https://benchmarkdotnet.org/) harness that turns the library's asymptotic and
 constant-factor claims into measured evidence, comparing against the BCL's persistent collections
@@ -48,6 +48,7 @@ Results are written under `BenchmarkDotNet.Artifacts/` (git-ignored); curated ta
 | `MeasuredRopeBenchmarks` | `MeasuredRope<char,…>` line navigation in O(log n) (offset↔line) | `string` newline scan (O(n)) |
 | `SortedBuilderBenchmarks` | sorted builder batch-edit freeze constants and allocation | repeated immutable edits, caller-side BCL staging, BCL immutable builders |
 | `RopeBuilderBenchmarks` | append-only rope builder construction and snapshot constants | `Create`, `AddLast` loop, text `StringBuilder` materialization, `ImmutableList<T>.Builder` |
+| `ChampBenchmarks` | CHAMP lookup, payload-dense iteration, and independent-history equality | `Dictionary` and `ImmutableDictionary` |
 
 ## Fairness methodology
 

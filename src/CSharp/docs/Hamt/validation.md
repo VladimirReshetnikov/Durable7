@@ -55,8 +55,9 @@ The suite covers:
 - comparer preservation, first equivalent key/item retention, and custom equality;
 - equal-hash collision buckets, deep shared hash prefixes, and collision splitting;
 - allocation-free copy-safe enumerators;
-- structural sharing/root-shape invariants through internal test access;
-- mutable bulk-builder semantics, including collision/deep-prefix construction and detachment of
+- CHAMP data-map/node-map shape, canonical independent-history construction, structural equality,
+  semantic diff classification, and structural-sharing invariants through internal test access;
+- bulk-builder semantics, including collision/deep-prefix construction and detachment of
   already-frozen snapshots from later builder mutations;
 - generated map histories checked against model dictionaries with retained snapshots;
 - generated set behavior checked against model set semantics.

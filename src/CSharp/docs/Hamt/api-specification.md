@@ -21,9 +21,10 @@ structural-sharing semantics as the map.
 
 ## Hash Trie Shape
 
-The implementation uses 32-way logical branching with 5 hash bits consumed per level. Sparse branch
-nodes are represented by a 32-bit bitmap and a compact child array; the array index is the population
-count below the selected bit. Unequal keys with identical full hash codes are stored in immutable
+The implementation uses CHAMP's 32-way logical branching with 5 hash bits consumed per level. Sparse
+branch nodes carry separate 32-bit data and node bitmaps, an inline key/value payload array, and a
+compact child-node array; each array index is the population count below the selected bit. Canonical
+deletion pulls singleton leaf children into their parent payload run. Unequal keys with identical full hash codes are stored in immutable
 collision buckets and compared linearly with the configured equality comparer.
 
 Enumeration order is an implementation detail of the trie shape and comparer hash codes. It is stable
@@ -52,6 +53,10 @@ original.
   key, or echoes `equalKey` back when absent.
 - `Clear()` returns an empty map preserving the current comparer, and returns the current instance
   when the map is already empty.
+- `MapEquals(other, valueComparer)` uses canonical shape for lockstep equality with reference-equal
+  subtree pruning. The two maps must retain the same comparer object; collision-bucket order is ignored.
+- `Diff(other, valueComparer)` yields `MapDifference<TKey, TValue>` values classified as `Added`,
+  `Removed`, or `Changed`. A shared root returns an empty sequence immediately; comparer mismatch throws.
 
 `Add` and `TryAdd` hash the key once and walk the trie once; a rejected duplicate allocates nothing.
 The try-pattern `out` values (`TryGetValue`, `TryRemove`) carry `[MaybeNullWhen(false)]`, matching
@@ -99,8 +104,11 @@ equal-hash collision bucket.
   plus collision-bucket scan for 32-bit hashes. Lookups allocate nothing.
 - Enumeration: O(n) time. The enumerator holds at most seven inline frames (one per trie level) and
   performs no heap allocation.
-- Map `CreateRange` / set `CreateRange`: O(n (w + c)) through a mutable unpublished trie followed by
-  one freeze; unlike repeated persistent updates, the build does not clone every traversed path.
+- Map `CreateRange` / set `CreateRange`: O(n (w + c)) through hash-bucket staging followed by one
+  canonical freeze; unlike repeated persistent updates, the build does not clone every traversed path.
+- `MapEquals`: O(divergent canonical nodes + collision comparisons), with reference-equal subtrees
+  skipped in O(1).
+- `Diff`: O(n + m) in the current public implementation, with an O(1) shared-root fast path.
 - Set algebra implemented from public operations: O((n + m) * update-cost) unless the operation only
   probes membership.
 

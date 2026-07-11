@@ -10,5 +10,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Tools.DataStructures.FingerTree\Tools.DataStructures.FingerTree.csproj" />
+    <ProjectReference Include="..\..\src\Tools.DataStructures.Hamt\Tools.DataStructures.Hamt.csproj" />
   </ItemGroup>
 </Project>

@@ -66,8 +66,9 @@ public sealed class PersistentHamtStructureTests
         var rootAfter = Assert.IsType<PersistentHashMap<ExplicitHashKey, string>.BitmapIndexedNode>(updated.RootForTesting);
 
         Assert.NotSame(rootBefore, rootAfter);
-        Assert.NotSame(rootBefore.Children[0], rootAfter.Children[0]);
-        Assert.Same(rootBefore.Children[1], rootAfter.Children[1]);
+        Assert.NotSame(rootBefore.Data, rootAfter.Data);
+        Assert.Same(rootBefore.Children, rootAfter.Children);
+        Assert.Same(rootBefore.Children[0], rootAfter.Children[0]);
     }
 
     /// <summary>Verifies no-op updates preserve the root node instance.</summary>
@@ -106,6 +107,47 @@ public sealed class PersistentHamtStructureTests
         Assert.Same(bucketBefore.Entries, bucketAfter.Entries);
     }
 
+    /// <summary>Verifies independent insertion histories produce the same canonical CHAMP shape.</summary>
+    [Fact]
+    public void IndependentHistories_ProduceCanonicalShapeAndEquality()
+    {
+        var comparer = new ExplicitHashComparer();
+        var items = Enumerable.Range(0, 100)
+            .Select(i => new KeyValuePair<ExplicitHashKey, string>(
+                new ExplicitHashKey(i, i % 9 == 0 ? 17 : unchecked(i * 0x01010101)),
+                $"v{i}"))
+            .ToArray();
+
+        var forward = PersistentHashMap<ExplicitHashKey, string>.CreateRange(items, comparer);
+        var reverse = PersistentHashMap<ExplicitHashKey, string>.CreateRange(items.Reverse(), comparer);
+
+        Assert.True(forward.MapEquals(reverse));
+        AssertCanonicalShapeEqual(forward.RootForTesting, reverse.RootForTesting);
+
+        var removedAndRestored = forward.Remove(items[42].Key).SetItem(items[42].Key, items[42].Value);
+        Assert.True(forward.MapEquals(removedAndRestored));
+        AssertCanonicalShapeEqual(forward.RootForTesting, removedAndRestored.RootForTesting);
+    }
+
+    /// <summary>Verifies diff classifies additions, removals, changes, and shared-root no-ops.</summary>
+    [Fact]
+    public void Diff_ReportsSemanticChanges()
+    {
+        var source = PersistentHashMap<int, string>.Empty
+            .SetItem(1, "one")
+            .SetItem(2, "two")
+            .SetItem(3, "three");
+        var target = source.Remove(1).SetItem(2, "TWO").SetItem(4, "four");
+
+        Assert.Empty(source.Diff(source));
+        var changes = source.Diff(target).ToDictionary(change => change.Key);
+        Assert.Equal(MapDifferenceKind.Removed, changes[1].Kind);
+        Assert.Equal(MapDifferenceKind.Changed, changes[2].Kind);
+        Assert.Equal(MapDifferenceKind.Added, changes[4].Kind);
+        Assert.Equal("two", changes[2].OldValue);
+        Assert.Equal("TWO", changes[2].NewValue);
+    }
+
     /// <summary>Verifies the set wrapper reports the underlying map root.</summary>
     [Fact]
     public void SetRoot_TracksUnderlyingMap()
@@ -121,5 +163,23 @@ public sealed class PersistentHamtStructureTests
         public bool Equals(ExplicitHashKey x, ExplicitHashKey y) => x.Id == y.Id;
 
         public int GetHashCode(ExplicitHashKey obj) => obj.Hash;
+    }
+
+    private static void AssertCanonicalShapeEqual(
+        PersistentHashMap<ExplicitHashKey, string>.Node? left,
+        PersistentHashMap<ExplicitHashKey, string>.Node? right)
+    {
+        Assert.Equal(left?.GetType(), right?.GetType());
+        if (left is PersistentHashMap<ExplicitHashKey, string>.BitmapIndexedNode leftBranch)
+        {
+            var rightBranch = Assert.IsType<PersistentHashMap<ExplicitHashKey, string>.BitmapIndexedNode>(right);
+            Assert.Equal(leftBranch.DataMap, rightBranch.DataMap);
+            Assert.Equal(leftBranch.NodeMap, rightBranch.NodeMap);
+            Assert.Equal(leftBranch.Data.Select(entry => (entry.Hash, entry.Key, entry.Value)),
+                rightBranch.Data.Select(entry => (entry.Hash, entry.Key, entry.Value)));
+            Assert.Equal(leftBranch.Children.Length, rightBranch.Children.Length);
+            for (var i = 0; i < leftBranch.Children.Length; i++)
+                AssertCanonicalShapeEqual(leftBranch.Children[i], rightBranch.Children[i]);
+        }
     }
 }

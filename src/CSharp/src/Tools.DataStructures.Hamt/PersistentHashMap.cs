@@ -398,6 +398,67 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     /// </returns>
     public PersistentHashMap<TKey, TValue> Clear() => _count == 0 ? this : EmptyFor(_comparer);
 
+    /// <summary>Determines whether another map has the same comparer, keys, and values.</summary>
+    /// <param name="other">The map to compare with this map.</param>
+    /// <param name="valueComparer">
+    /// The value comparer, or <see langword="null"/> to use <see cref="EqualityComparer{T}.Default"/>.
+    /// </param>
+    /// <returns><see langword="true"/> when the maps are semantically equal; otherwise, <see langword="false"/>.</returns>
+    /// <remarks>
+    /// Comparers must be the same object. Canonical CHAMP shape permits a lockstep traversal with
+    /// reference-equal subtree pruning; equal-hash collision buckets are compared without regard to
+    /// their insertion order.
+    /// </remarks>
+    public bool MapEquals(
+        PersistentHashMap<TKey, TValue>? other,
+        IEqualityComparer<TValue>? valueComparer = null)
+    {
+        if (ReferenceEquals(this, other))
+            return true;
+        if (other is null || _count != other._count || !ReferenceEquals(_comparer, other._comparer))
+            return false;
+
+        return NodesEqual(_root, other._root, _comparer, valueComparer ?? EqualityComparer<TValue>.Default);
+    }
+
+    /// <summary>Enumerates the semantic changes needed to transform this map into another map.</summary>
+    /// <param name="other">The target map.</param>
+    /// <param name="valueComparer">
+    /// The value comparer, or <see langword="null"/> to use <see cref="EqualityComparer{T}.Default"/>.
+    /// </param>
+    /// <returns>Added, removed, and changed entries in the maps' stable trie order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="other"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The maps do not share the same comparer object.</exception>
+    /// <remarks>
+    /// A shared root produces an empty sequence without walking entries. Divergent maps are compared
+    /// semantically; collision-bucket order is not observable.
+    /// </remarks>
+    public IEnumerable<MapDifference<TKey, TValue>> Diff(
+        PersistentHashMap<TKey, TValue> other,
+        IEqualityComparer<TValue>? valueComparer = null)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        if (!ReferenceEquals(_comparer, other._comparer))
+            throw new ArgumentException("Maps must use the same comparer object.", nameof(other));
+        if (ReferenceEquals(_root, other._root))
+            yield break;
+
+        var values = valueComparer ?? EqualityComparer<TValue>.Default;
+        foreach (var entry in this)
+        {
+            if (!other.TryGetValue(entry.Key, out var newValue))
+                yield return MapDifference<TKey, TValue>.Removed(entry.Key, entry.Value);
+            else if (!values.Equals(entry.Value, newValue))
+                yield return MapDifference<TKey, TValue>.Changed(entry.Key, entry.Value, newValue);
+        }
+
+        foreach (var entry in other)
+        {
+            if (!ContainsKey(entry.Key))
+                yield return MapDifference<TKey, TValue>.Added(entry.Key, entry.Value);
+        }
+    }
+
     /// <summary>
     /// Returns an enumerator over the map's key/value pairs in trie order.
     /// </summary>
@@ -426,14 +487,29 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             while (node is BitmapIndexedNode branch)
             {
                 var bit = Bit(Index(hash, shift));
-                if ((branch.Bitmap & bit) == 0)
+                if ((branch.DataMap & bit) != 0)
+                {
+                    var entry = branch.Data[Slot(branch.DataMap, bit)];
+                    if (entry.Hash == hash && _comparer.Equals(entry.Key, key))
+                    {
+                        actualKey = entry.Key;
+                        value = entry.Value;
+                        return true;
+                    }
+
+                    actualKey = default;
+                    value = default;
+                    return false;
+                }
+
+                if ((branch.NodeMap & bit) == 0)
                 {
                     actualKey = default;
                     value = default;
                     return false;
                 }
 
-                node = branch.Children[Slot(branch.Bitmap, bit)];
+                node = branch.Children[Slot(branch.NodeMap, bit)];
                 shift += BitsPerLevel;
             }
 
@@ -493,6 +569,72 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
 
     private static int Slot(uint bitmap, uint bit) => BitOperations.PopCount(bitmap & (bit - 1));
 
+    private static bool NodesEqual(
+        Node? left,
+        Node? right,
+        IEqualityComparer<TKey> keyComparer,
+        IEqualityComparer<TValue> valueComparer)
+    {
+        if (ReferenceEquals(left, right))
+            return true;
+        if (left is null || right is null || left.GetType() != right.GetType())
+            return false;
+
+        if (left is LeafNode leftLeaf)
+        {
+            var rightLeaf = (LeafNode)right;
+            return leftLeaf.Hash == rightLeaf.Hash
+                && keyComparer.Equals(leftLeaf.Key, rightLeaf.Key)
+                && valueComparer.Equals(leftLeaf.Value, rightLeaf.Value);
+        }
+
+        if (left is CollisionNode leftCollision)
+        {
+            var rightCollision = (CollisionNode)right;
+            if (leftCollision.Hash != rightCollision.Hash || leftCollision.Entries.Length != rightCollision.Entries.Length)
+                return false;
+
+            foreach (var leftEntry in leftCollision.Entries)
+            {
+                var found = false;
+                foreach (var rightEntry in rightCollision.Entries)
+                {
+                    if (keyComparer.Equals(leftEntry.Key, rightEntry.Key)
+                        && valueComparer.Equals(leftEntry.Value, rightEntry.Value))
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found)
+                    return false;
+            }
+
+            return true;
+        }
+
+        var leftBranch = (BitmapIndexedNode)left;
+        var rightBranch = (BitmapIndexedNode)right;
+        if (leftBranch.DataMap != rightBranch.DataMap || leftBranch.NodeMap != rightBranch.NodeMap)
+            return false;
+        for (var i = 0; i < leftBranch.Data.Length; i++)
+        {
+            var l = leftBranch.Data[i];
+            var r = rightBranch.Data[i];
+            if (l.Hash != r.Hash || !keyComparer.Equals(l.Key, r.Key) || !valueComparer.Equals(l.Value, r.Value))
+                return false;
+        }
+
+        for (var i = 0; i < leftBranch.Children.Length; i++)
+        {
+            if (!NodesEqual(leftBranch.Children[i], rightBranch.Children[i], keyComparer, valueComparer))
+                return false;
+        }
+
+        return true;
+    }
+
     private static Node MergeHashNodes(HashNode left, LeafNode right, int shift)
     {
         if (left.Hash == right.Hash)
@@ -511,12 +653,18 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
         if (leftIndex == rightIndex)
         {
             var child = MergeHashNodes(left, right, shift + BitsPerLevel);
-            return new BitmapIndexedNode(leftBit, [child]);
+            return new BitmapIndexedNode(0, [], leftBit, [child]);
         }
 
-        return leftIndex < rightIndex
-            ? new BitmapIndexedNode(leftBit | rightBit, [left, right])
-            : new BitmapIndexedNode(leftBit | rightBit, [right, left]);
+        if (left is LeafNode leftLeaf)
+        {
+            return leftIndex < rightIndex
+                ? new BitmapIndexedNode(leftBit | rightBit, [Entry.From(leftLeaf), Entry.From(right)], 0, [])
+                : new BitmapIndexedNode(leftBit | rightBit, [Entry.From(right), Entry.From(leftLeaf)], 0, []);
+        }
+
+        // Equal-hash collision buckets remain child nodes; ordinary leaves are inlined.
+        return new BitmapIndexedNode(rightBit, [Entry.From(right)], leftBit, [left]);
     }
 
     /// <summary>
@@ -579,13 +727,20 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
                     }
 
                     ref var top = ref _frames[_depth - 1];
-                    if (top.Index == top.Children.Length)
+                    if (top.DataIndex < top.Data.Length)
+                    {
+                        var entry = top.Data[top.DataIndex++];
+                        _current = new KeyValuePair<TKey, TValue>(entry.Key, entry.Value);
+                        return true;
+                    }
+
+                    if (top.ChildIndex == top.Children.Length)
                     {
                         _frames[--_depth] = default;
                         continue;
                     }
 
-                    node = top.Children[top.Index++];
+                    node = top.Children[top.ChildIndex++];
                 }
 
                 if (node is LeafNode leaf)
@@ -603,7 +758,8 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
                     return true;
                 }
 
-                _frames[_depth++] = new Frame(((BitmapIndexedNode)node).Children);
+                var branch = (BitmapIndexedNode)node;
+                _frames[_depth++] = new Frame(branch.Data, branch.Children);
                 node = null;
             }
         }
@@ -635,10 +791,12 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             return false;
         }
 
-        private struct Frame(Node[] children)
+        private struct Frame(Entry[] data, Node[] children)
         {
+            public readonly Entry[] Data = data;
             public readonly Node[] Children = children;
-            public int Index;
+            public int DataIndex;
+            public int ChildIndex;
         }
 
         [InlineArray(MaxDepth)]
@@ -649,197 +807,102 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     }
 
     /// <summary>
-    /// Builds an independent HAMT by mutating unpublished nodes and freezes them into persistent
-    /// nodes on demand. Frozen maps never share mutable storage with the builder.
+    /// Stages entries by full hash and freezes each snapshot directly into canonical CHAMP shape.
+    /// Published snapshots own their arrays and remain isolated from subsequent builder updates.
     /// </summary>
     internal sealed class BulkBuilder(IEqualityComparer<TKey> comparer)
     {
         private readonly IEqualityComparer<TKey> _comparer = comparer;
-        private MutableNode? _root;
-        private int _count;
+        private readonly List<Entry> _entries = [];
+        private readonly Dictionary<uint, List<int>> _hashBuckets = [];
 
-        internal int Count => _count;
+        internal int Count => _entries.Count;
 
         internal void SetItem(TKey key, TValue value)
         {
             var hash = unchecked((uint)_comparer.GetHashCode(key!));
-            if (_root is null)
+            if (_hashBuckets.TryGetValue(hash, out var bucket))
             {
-                _root = new MutableLeafNode(hash, key, value);
-                _count = 1;
-                return;
+                foreach (var index in bucket)
+                {
+                    var entry = _entries[index];
+                    if (!_comparer.Equals(entry.Key, key))
+                        continue;
+
+                    if (!EqualityComparer<TValue>.Default.Equals(entry.Value, value))
+                        _entries[index] = new Entry(hash, entry.Key, value);
+                    return;
+                }
+            }
+            else
+            {
+                bucket = [];
+                _hashBuckets.Add(hash, bucket);
             }
 
-            _root = _root.Set(key, value, hash, shift: 0, _comparer, out var added);
-            if (added)
-                _count = checked(_count + 1);
+            bucket.Add(_entries.Count);
+            _entries.Add(new Entry(hash, key, value));
         }
 
-        internal PersistentHashMap<TKey, TValue> ToImmutable() =>
-            _root is null
-                ? EmptyFor(_comparer)
-                : new PersistentHashMap<TKey, TValue>(_root.Freeze(), _count, _comparer);
-    }
-
-    private abstract class MutableNode
-    {
-        internal abstract MutableNode Set(
-            TKey key,
-            TValue value,
-            uint hash,
-            int shift,
-            IEqualityComparer<TKey> comparer,
-            out bool added);
-
-        internal abstract Node Freeze();
-    }
-
-    private abstract class MutableHashNode(uint hash) : MutableNode
-    {
-        internal readonly uint Hash = hash;
-    }
-
-    private sealed class MutableLeafNode(uint hash, TKey key, TValue value) : MutableHashNode(hash)
-    {
-        private readonly TKey _key = key;
-        private TValue _value = value;
-
-        internal override MutableNode Set(
-            TKey key,
-            TValue value,
-            uint hash,
-            int shift,
-            IEqualityComparer<TKey> comparer,
-            out bool added)
+        internal PersistentHashMap<TKey, TValue> ToImmutable()
         {
-            if (Hash == hash && comparer.Equals(_key, key))
+            if (_entries.Count == 0)
+                return EmptyFor(_comparer);
+
+            return new PersistentHashMap<TKey, TValue>(BuildCanonical([.. _entries], 0), _entries.Count, _comparer);
+        }
+
+        private static Node BuildCanonical(Entry[] entries, int shift)
+        {
+            if (entries.Length == 1)
             {
-                added = false;
-                if (!EqualityComparer<TValue>.Default.Equals(_value, value))
-                    _value = value;
-                return this;
+                var entry = entries[0];
+                return new LeafNode(entry.Hash, entry.Key, entry.Value);
             }
 
-            added = true;
-            return MergeMutableHashNodes(this, new MutableLeafNode(hash, key, value), shift);
-        }
+            var firstHash = entries[0].Hash;
+            if (entries.All(entry => entry.Hash == firstHash))
+                return new CollisionNode(firstHash, entries);
 
-        internal override Node Freeze() => new LeafNode(Hash, _key, _value);
+            Debug.Assert(shift < 32);
+            var groups = new List<Entry>?[32];
+            foreach (var entry in entries)
+                (groups[Index(entry.Hash, shift)] ??= []).Add(entry);
 
-        internal Entry ToEntry() => new(_key, _value);
-    }
-
-    private sealed class MutableCollisionNode(uint hash, List<Entry> entries) : MutableHashNode(hash)
-    {
-        private readonly List<Entry> _entries = entries;
-
-        internal static MutableCollisionNode Create(MutableHashNode left, MutableLeafNode right)
-        {
-            Debug.Assert(left is MutableLeafNode, "Equal-hash mutable merges must combine two leaves.");
-            return new MutableCollisionNode(left.Hash, [((MutableLeafNode)left).ToEntry(), right.ToEntry()]);
-        }
-
-        internal override MutableNode Set(
-            TKey key,
-            TValue value,
-            uint hash,
-            int shift,
-            IEqualityComparer<TKey> comparer,
-            out bool added)
-        {
-            if (Hash != hash)
+            uint dataMap = 0;
+            uint nodeMap = 0;
+            var data = new List<Entry>();
+            var children = new List<Node>();
+            for (var index = 0; index < groups.Length; index++)
             {
-                added = true;
-                return MergeMutableHashNodes(this, new MutableLeafNode(hash, key, value), shift);
-            }
-
-            for (var i = 0; i < _entries.Count; i++)
-            {
-                var entry = _entries[i];
-                if (!comparer.Equals(entry.Key, key))
+                var group = groups[index];
+                if (group is null)
                     continue;
 
-                added = false;
-                if (!EqualityComparer<TValue>.Default.Equals(entry.Value, value))
-                    _entries[i] = new Entry(entry.Key, value);
-                return this;
+                var bit = Bit(index);
+                if (group.Count == 1)
+                {
+                    dataMap |= bit;
+                    data.Add(group[0]);
+                }
+                else
+                {
+                    nodeMap |= bit;
+                    children.Add(BuildCanonical([.. group], shift + BitsPerLevel));
+                }
             }
 
-            _entries.Add(new Entry(key, value));
-            added = true;
-            return this;
-        }
-
-        internal override Node Freeze() => new CollisionNode(Hash, [.. _entries]);
-    }
-
-    private sealed class MutableBitmapIndexedNode(uint bitmap, List<MutableNode> children) : MutableNode
-    {
-        private uint _bitmap = bitmap;
-        private readonly List<MutableNode> _children = children;
-
-        internal override MutableNode Set(
-            TKey key,
-            TValue value,
-            uint hash,
-            int shift,
-            IEqualityComparer<TKey> comparer,
-            out bool added)
-        {
-            var bit = Bit(Index(hash, shift));
-            var slot = Slot(_bitmap, bit);
-            if ((_bitmap & bit) == 0)
-            {
-                _bitmap |= bit;
-                _children.Insert(slot, new MutableLeafNode(hash, key, value));
-                added = true;
-                return this;
-            }
-
-            _children[slot] = _children[slot].Set(
-                key, value, hash, shift + BitsPerLevel, comparer, out added);
-            return this;
-        }
-
-        internal override Node Freeze()
-        {
-            var children = new Node[_children.Count];
-            for (var i = 0; i < children.Length; i++)
-                children[i] = _children[i].Freeze();
-            return new BitmapIndexedNode(_bitmap, children);
+            return new BitmapIndexedNode(dataMap, [.. data], nodeMap, [.. children]);
         }
     }
 
-    private static MutableNode MergeMutableHashNodes(
-        MutableHashNode left,
-        MutableLeafNode right,
-        int shift)
+    internal readonly struct Entry(uint hash, TKey key, TValue value)
     {
-        if (left.Hash == right.Hash)
-            return MutableCollisionNode.Create(left, right);
-
-        if (shift >= 32)
-            throw new InvalidOperationException("Different 32-bit hashes cannot share every HAMT level.");
-
-        var leftIndex = Index(left.Hash, shift);
-        var rightIndex = Index(right.Hash, shift);
-        var leftBit = Bit(leftIndex);
-        var rightBit = Bit(rightIndex);
-        if (leftIndex == rightIndex)
-        {
-            var child = MergeMutableHashNodes(left, right, shift + BitsPerLevel);
-            return new MutableBitmapIndexedNode(leftBit, [child]);
-        }
-
-        return leftIndex < rightIndex
-            ? new MutableBitmapIndexedNode(leftBit | rightBit, [left, right])
-            : new MutableBitmapIndexedNode(leftBit | rightBit, [right, left]);
-    }
-
-    internal readonly struct Entry(TKey key, TValue value)
-    {
+        public readonly uint Hash = hash;
         public readonly TKey Key = key;
         public readonly TValue Value = value;
+
+        internal static Entry From(LeafNode leaf) => new(leaf.Hash, leaf.Key, leaf.Value);
     }
 
     internal abstract class Node
@@ -930,8 +993,8 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             Debug.Assert(left is LeafNode, "Equal-hash merges must combine two leaves.");
             var leaf = (LeafNode)left;
             var entries = new Entry[2];
-            entries[0] = new Entry(leaf.Key, leaf.Value);
-            entries[1] = new Entry(right.Key, right.Value);
+            entries[0] = new Entry(leaf.Hash, leaf.Key, leaf.Value);
+            entries[1] = new Entry(right.Hash, right.Key, right.Value);
             return new CollisionNode(left.Hash, entries);
         }
 
@@ -960,13 +1023,13 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
                     return this;
 
                 var replaced = (Entry[])Entries.Clone();
-                replaced[i] = new Entry(Entries[i].Key, value);
+                replaced[i] = new Entry(Hash, Entries[i].Key, value);
                 return new CollisionNode(Hash, replaced);
             }
 
             var entries = new Entry[Entries.Length + 1];
             Array.Copy(Entries, entries, Entries.Length);
-            entries[^1] = new Entry(key, value);
+            entries[^1] = new Entry(hash, key, value);
             added = true;
             return new CollisionNode(Hash, entries);
         }
@@ -1014,9 +1077,17 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
         }
     }
 
-    internal sealed class BitmapIndexedNode(uint bitmap, Node[] children) : Node
+    internal sealed class BitmapIndexedNode(
+        uint dataMap,
+        Entry[] data,
+        uint nodeMap,
+        Node[] children) : Node
     {
-        internal uint Bitmap { get; } = bitmap;
+        internal uint DataMap { get; } = dataMap;
+
+        internal Entry[] Data { get; } = data;
+
+        internal uint NodeMap { get; } = nodeMap;
 
         internal Node[] Children { get; } = children;
 
@@ -1030,26 +1101,46 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             out bool added)
         {
             var bit = Bit(Index(hash, shift));
-            var slot = Slot(Bitmap, bit);
-
-            if ((Bitmap & bit) == 0)
+            if ((DataMap & bit) != 0)
             {
-                var children = new Node[Children.Length + 1];
-                Array.Copy(Children, 0, children, 0, slot);
-                children[slot] = new LeafNode(hash, key, value);
-                Array.Copy(Children, slot, children, slot + 1, Children.Length - slot);
+                var slot = Slot(DataMap, bit);
+                var entry = Data[slot];
+                if (entry.Hash == hash && comparer.Equals(entry.Key, key))
+                {
+                    added = false;
+                    if (!overwrite || EqualityComparer<TValue>.Default.Equals(entry.Value, value))
+                        return this;
+
+                    var replacedData = (Entry[])Data.Clone();
+                    replacedData[slot] = new Entry(hash, entry.Key, value);
+                    return new BitmapIndexedNode(DataMap, replacedData, NodeMap, Children);
+                }
+
+                var child = MergeHashNodes(
+                    new LeafNode(entry.Hash, entry.Key, entry.Value),
+                    new LeafNode(hash, key, value),
+                    shift + BitsPerLevel);
                 added = true;
-                return new BitmapIndexedNode(Bitmap | bit, children);
+                return MoveDataToNode(bit, slot, child);
             }
 
-            var oldChild = Children[slot];
-            var newChild = oldChild.Set(key, value, hash, shift + BitsPerLevel, comparer, overwrite, out added);
-            if (ReferenceEquals(newChild, oldChild))
-                return this;
+            if ((NodeMap & bit) != 0)
+            {
+                var slot = Slot(NodeMap, bit);
+                var oldChild = Children[slot];
+                var newChild = oldChild.Set(key, value, hash, shift + BitsPerLevel, comparer, overwrite, out added);
+                if (ReferenceEquals(newChild, oldChild))
+                    return this;
 
-            var replaced = (Node[])Children.Clone();
-            replaced[slot] = newChild;
-            return new BitmapIndexedNode(Bitmap, replaced);
+                var replaced = (Node[])Children.Clone();
+                replaced[slot] = newChild;
+                return new BitmapIndexedNode(DataMap, Data, NodeMap, replaced);
+            }
+
+            var dataSlot = Slot(DataMap, bit);
+            var inserted = Insert(Data, dataSlot, new Entry(hash, key, value));
+            added = true;
+            return new BitmapIndexedNode(DataMap | bit, inserted, NodeMap, Children);
         }
 
         internal override Node? Remove(
@@ -1061,44 +1152,97 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             out TValue value)
         {
             var bit = Bit(Index(hash, shift));
-            if ((Bitmap & bit) == 0)
+            if ((DataMap & bit) != 0)
+            {
+                var slot = Slot(DataMap, bit);
+                var entry = Data[slot];
+                if (entry.Hash != hash || !comparer.Equals(entry.Key, key))
+                {
+                    removed = false;
+                    value = default!;
+                    return this;
+                }
+
+                removed = true;
+                value = entry.Value;
+                return Rebuild(DataMap ^ bit, RemoveAt(Data, slot), NodeMap, Children);
+            }
+
+            if ((NodeMap & bit) == 0)
             {
                 removed = false;
                 value = default!;
                 return this;
             }
 
-            var slot = Slot(Bitmap, bit);
-            var oldChild = Children[slot];
+            var nodeSlot = Slot(NodeMap, bit);
+            var oldChild = Children[nodeSlot];
             var newChild = oldChild.Remove(key, hash, shift + BitsPerLevel, comparer, out removed, out value);
             if (!removed)
                 return this;
 
             if (newChild is null)
+                return Rebuild(DataMap, Data, NodeMap ^ bit, RemoveAt(Children, nodeSlot));
+
+            if (newChild is LeafNode leaf)
             {
-                if (Children.Length == 1)
-                    return null;
-
-                var children = new Node[Children.Length - 1];
-                if (slot > 0)
-                    Array.Copy(Children, 0, children, 0, slot);
-                if (slot < Children.Length - 1)
-                    Array.Copy(Children, slot + 1, children, slot, Children.Length - slot - 1);
-
-                return Rebuild(Bitmap ^ bit, children);
+                var dataSlot = Slot(DataMap, bit);
+                return Rebuild(
+                    DataMap | bit,
+                    Insert(Data, dataSlot, Entry.From(leaf)),
+                    NodeMap ^ bit,
+                    RemoveAt(Children, nodeSlot));
             }
 
             var replaced = (Node[])Children.Clone();
-            replaced[slot] = newChild;
-            return Rebuild(Bitmap, replaced);
+            replaced[nodeSlot] = newChild;
+            return Rebuild(DataMap, Data, NodeMap, replaced);
         }
 
-        private static Node Rebuild(uint bitmap, Node[] children)
+        private Node MoveDataToNode(uint bit, int dataSlot, Node child)
         {
-            if (children.Length == 1 && children[0] is HashNode hashNode)
+            var nodeSlot = Slot(NodeMap, bit);
+            return new BitmapIndexedNode(
+                DataMap ^ bit,
+                RemoveAt(Data, dataSlot),
+                NodeMap | bit,
+                Insert(Children, nodeSlot, child));
+        }
+
+        private static Node? Rebuild(uint dataMap, Entry[] data, uint nodeMap, Node[] children)
+        {
+            if (data.Length == 0 && children.Length == 0)
+                return null;
+            if (data.Length == 1 && children.Length == 0)
+            {
+                var entry = data[0];
+                return new LeafNode(entry.Hash, entry.Key, entry.Value);
+            }
+            if (data.Length == 0 && children.Length == 1 && children[0] is HashNode hashNode)
                 return hashNode;
 
-            return new BitmapIndexedNode(bitmap, children);
+            return new BitmapIndexedNode(dataMap, data, nodeMap, children);
+        }
+
+        private static T[] Insert<T>(T[] source, int index, T value)
+        {
+            var result = new T[source.Length + 1];
+            if (index > 0)
+                Array.Copy(source, 0, result, 0, index);
+            result[index] = value;
+            if (index < source.Length)
+                Array.Copy(source, index, result, index + 1, source.Length - index);
+            return result;
+        }
+
+        private static T[] RemoveAt<T>(T[] source, int index)
+        {
+            var result = new T[source.Length - 1];
+            if (index > 0)
+                Array.Copy(source, 0, result, 0, index);
+            if (index < source.Length - 1)
+                Array.Copy(source, index + 1, result, index, source.Length - index - 1);
+            return result;
         }
     }
 }

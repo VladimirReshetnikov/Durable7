@@ -80,6 +80,11 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 
 ### CHAMP canonicalization (upgrade to the shipped HAMT)
 
+**C# status (2026-07-10): Implemented.** The managed HAMT now uses separate data/node bitmaps,
+inline payload runs, canonical deletion with payload promotion, canonical one-freeze bulk
+construction, `MapEquals`, `Diff`, independent-history shape tests, and a CHAMP benchmark class.
+Sibling-language ports remain intentionally out of scope for this C#-only Axis 1 implementation.
+
 **What it is.** CHAMP (Compressed Hash-Array Mapped Prefix-tree; Steindorfer & Vinju, OOPSLA 2015)
 is a refinement of Bagwell's HAMT with two changes that matter here:
 
