@@ -14,6 +14,7 @@ For language-level source browsing, start with the [`src` index](../../src/READM
 
 - [Data structure catalog](data-structure-catalog.md) - cross-language catalog of repository-owned data-structure families, public entry points, and primary references.
 - [Derived structure catalog](derived-structure-catalog.md) - verified candidate structures buildable on the HAMT and FingerTree families, shared enabling API gaps, and composition design rules; candidates only, not shipped surface.
+- [Frontier structure catalog](frontier-structure-catalog.md) - surveyed candidates beyond composition: new structure cores (including recent inventions), hybrid/adaptive representation tiers, and niche-specialized siblings, with verdicts, sequencing, and literature references; candidates only, not shipped surface.
 - [Documentation navigation matrix](navigation-matrix.md) - task-oriented entry points across repository-level docs and workspace-owned docs.
 - [Reversible deque complexity audit](reversible-deque-complexity-audit.md) - cross-language verification of O(1) reverse and reversed-operation behavior.
 - [Semantic contracts](semantic-contracts.md) - shared behavior, ownership, policy, ordering, and documentation obligations across repository-owned numerics and data structures.
