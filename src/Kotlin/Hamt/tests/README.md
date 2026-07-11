@@ -26,3 +26,5 @@ Coverage groups:
 - JVM concurrent readers over shared immutable map/set snapshots.
 - Ctrie node-local GCAS updates, O(1) retained generations, lazy renewal, contended unique adds and
   counters, equal-hash collision nodes, and snapshot-to-CHAMP conversion.
+- 32/64-bit big-endian Patricia boundary ordering, randomized histories, structural map/set algebra,
+  and right-biased map union semantics.

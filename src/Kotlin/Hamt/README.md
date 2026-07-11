@@ -16,6 +16,11 @@ indirection nodes and helping GCAS descriptors for lock-free updates, captures i
 in O(1), lazily renews old-generation children on later write paths, and converts snapshots to the
 canonical persistent CHAMP representation explicitly in O(n).
 
+The integer-specialized family provides `PersistentIntMap`/`PersistentIntSet` and
+`PersistentLongMap`/`PersistentLongSet`. A shared big-endian Patricia engine path-compresses on the
+highest differing bit, sign-flips keys for ascending signed iteration, and performs prefix-aware
+structural union, intersection, and difference without hashing or collision buckets.
+
 The default factories use Kotlin `hashCode`/`equals`, keeping the public shape close to JVM collection
 expectations while preserving the repository HAMT contracts: persistent updates, duplicate-key
 rejection, last-wins bulk replacement, original-key retention on equivalent-key replacement, and set

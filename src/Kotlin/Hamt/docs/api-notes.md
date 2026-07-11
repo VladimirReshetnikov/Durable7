@@ -12,6 +12,7 @@ Primary entry points:
 - `HashPolicy<K>` for runtime hash/equality policy injection;
 - `DuplicateKeyException`, `AddResult<T>`, and removal result records.
 - `ConcurrentHashTrie<K,V>` and its immutable `Snapshot<K,V>`.
+- `PersistentIntMap<V>` / `PersistentIntSet` and `PersistentLongMap<V>` / `PersistentLongSet`.
 
 The port follows the repository HAMT semantics:
 
@@ -49,3 +50,11 @@ generation and returns the frozen predecessor in O(1); later writers copy old-ge
 indirections only along paths they modify. `Snapshot.toPersistentHashMap()` performs the explicit
 O(n) conversion into canonical CHAMP form. `getOrPut` and `compute` callbacks can run repeatedly
 after a lost GCAS and must therefore be repeatable. Progress is lock-free, not wait-free.
+
+## Integer Patricia Family
+
+The 32- and 64-bit map/set facades share a big-endian Patricia core. A sign-bit transform maps
+signed keys to unsigned trie order, so iteration is ascending signed order including minimum and
+maximum boundaries. Nodes store a common prefix and highest differing bit; insertion and removal
+path-copy only the compressed search spine. `union`, `intersect`, and `except` align prefixes,
+reuse disjoint or identical subtrees, and preserve receiver identity for structural no-ops.

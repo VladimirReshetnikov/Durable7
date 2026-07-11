@@ -152,6 +152,11 @@ bound in one pass instead of retrofitting it later.
 big-endian Patricia engine, enumerate in signed order, preserve no-op identity, and provide
 prefix-aware structural union/intersection/difference plus map combining overloads.
 
+**Kotlin status (2026-07-10): Implemented for both widths.** `PersistentIntMap`/`Set` and
+`PersistentLongMap`/`Set` share an immutable big-endian Patricia engine with sign-bit transforms,
+ascending signed iteration, path compression, no-op identity, and prefix-aligned structural
+union/intersection/difference. Boundary and randomized model tests cover both key widths.
+
 **What it is.** Okasaki & Gill's mergeable integer maps (1998): a binary trie over the bits of an
 integer key, path-compressed so each internal node stores a prefix and the single branching bit,
 branching on the highest bit where keys differ. Operations are O(min(n, W)) with W the key width;

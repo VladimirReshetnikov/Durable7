@@ -247,6 +247,45 @@ private fun ctrieCollisionNodesRemainStable() {
     checkEquals(1_599, snapshot[1_599], "collision snapshot lookup")
 }
 
+private fun patriciaMapsAndSetsPreserveSignedOrder() {
+    val intKeys = listOf(Int.MIN_VALUE, -1, 0, 1, Int.MAX_VALUE)
+    val intMap = PersistentIntMap.from(intKeys.reversed().map { it to it.toString() })
+    checkEquals(intKeys, intMap.map { it.first }, "32-bit Patricia signed order")
+    checkEquals(Int.MIN_VALUE.toString(), intMap[Int.MIN_VALUE], "32-bit boundary lookup")
+
+    val longKeys = listOf(Long.MIN_VALUE, -1L, 0L, 1L, Long.MAX_VALUE)
+    val longMap = PersistentLongMap.from(longKeys.reversed().map { it to it.toString() })
+    checkEquals(longKeys, longMap.map { it.first }, "64-bit Patricia signed order")
+    checkEquals(Long.MAX_VALUE.toString(), longMap[Long.MAX_VALUE], "64-bit boundary lookup")
+
+    var actual = PersistentIntMap.empty<Int>()
+    val expected = mutableMapOf<Int, Int>()
+    var state = 0x1234ABCD
+    repeat(10_000) {
+        state = state * 1664525 + 1013904223
+        val key = (state ushr 8) % 401 - 200
+        if (state and 3 == 0) {
+            actual = actual.remove(key)
+            expected.remove(key)
+        } else {
+            actual = actual.put(key, state)
+            expected[key] = state
+        }
+    }
+    checkEquals(expected.toSortedMap().toList(), actual.toList(), "Patricia randomized history")
+
+    val left = PersistentIntSet.from(listOf(-3, -1, 1, 3))
+    val right = PersistentIntSet.from(listOf(-1, 0, 1))
+    checkEquals(listOf(-3, -1, 0, 1, 3), left.union(right).toList(), "Patricia set union")
+    checkEquals(listOf(-1, 1), left.intersect(right).toList(), "Patricia set intersection")
+    checkEquals(listOf(-3, 3), left.except(right).toList(), "Patricia set difference")
+
+    val mapLeft = PersistentIntMap.from(listOf(1 to "left", 2 to "two"))
+    val mapRight = PersistentIntMap.from(listOf(1 to "right", 3 to "three"))
+    checkEquals(listOf(1 to "right", 2 to "two", 3 to "three"), mapLeft.union(mapRight).toList(), "Patricia map union is right-biased")
+    checkEquals(listOf(1 to "left"), mapLeft.intersect(mapRight).toList(), "Patricia map intersection retains left values")
+}
+
 private fun exceptAndSymmetricExceptPreserveUntouchedRoots() {
     val set = PersistentHashSet.from((0..63).toList())
 
@@ -291,6 +330,7 @@ public fun main() {
         "ctrieSnapshotsAndAtomicUpdates" to ::ctrieSnapshotsAndAtomicUpdates,
         "ctrieContentionAndGenerationRenewal" to ::ctrieContentionAndGenerationRenewal,
         "ctrieCollisionNodesRemainStable" to ::ctrieCollisionNodesRemainStable,
+        "patriciaMapsAndSetsPreserveSignedOrder" to ::patriciaMapsAndSetsPreserveSignedOrder,
     )
 
     for ((name, test) in tests) {
