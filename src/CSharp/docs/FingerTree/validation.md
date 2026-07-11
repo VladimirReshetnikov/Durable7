@@ -86,6 +86,8 @@ The suite covers:
   snapshots, and randomized mixed-edit histories;
 - `DabaLite<T, TMonoid>` noncommutative ordering, 100,000-operation randomized windows, empty/clear
   behavior, and instrumented worst-case combine-count ceilings;
+- `CanonicalSortedSet<T>` independent-history shape/digest convergence, 50,000 randomized updates,
+  comparer-equivalent representatives, policy gating, adversarial rank collisions, and concurrent digest publication;
 - runnable sample smoke tests for Tour, Showcase, and Editor;
 - persistence/concurrency examples and tearable-struct stress tests;
 - CsCheck property tests and model-based command-sequence tests that shrink operation histories rather than only

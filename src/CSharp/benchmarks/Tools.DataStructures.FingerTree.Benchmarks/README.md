@@ -53,6 +53,7 @@ Results are written under `BenchmarkDotNet.Artifacts/` (git-ignored); curated ta
 | `PatriciaMapBenchmarks` | integer-key lookup and prefix-aware structural union | CHAMP and `ImmutableDictionary` lookup |
 | `RrbVectorBenchmarks` | uniform middle indexing and boundary-spine concatenation | `Rope<T>` indexing and `ImmutableList<T>` indexing/concat |
 | `DabaLiteBenchmarks` | worst-case O(1) FIFO slide-and-query aggregation | `Queue<T>` plus O(n) reaggregation |
+| `CanonicalSortedSetBenchmarks` | keyed zip-zip lookup, independent-history equality, and memoized digest | `ImmutableSortedSet<T>` |
 
 ## Fairness methodology
 

@@ -229,6 +229,11 @@ content-addressed family.
 
 ### Zip trees and zip-zip trees (canonical sorted core)
 
+**C# status (2026-07-10): Implemented.** `CanonicalSortedSet<T>` and
+`ZipTreeRankPolicy<T>` provide keyed two-part zip-zip ranks, history-independent shape, persistent
+unzip/zip updates, memoized subtree digests, canonical lockstep equality, policy-gated algebra, and
+explicit adversarial-rank degradation diagnostics.
+
 **What they are.** Zip trees (Tarjan, Levy & Timmel, 2018/2019) are randomized-rank binary search
 trees - a reformulation of treaps where insertion and deletion are single root-to-position *unzip*
 / *zip* passes with O(1) expected restructuring, no rotations. Zip-zip trees (Gila, Goodrich &

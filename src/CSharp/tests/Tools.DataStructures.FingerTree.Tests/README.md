@@ -39,6 +39,8 @@ reasonable oracle.
   split round-trips, endpoint contracts, and randomized persistent edit histories with retained versions.
 - `DabaLiteTests.cs` covers noncommutative FIFO order, randomized variable windows, chunk churn,
   empty/clear contracts, and the proven worst-case monoid invocation limits.
+- `CanonicalSortedSetTests.cs` covers permutation/delete-reinsert shape convergence, keyed policy
+  semantics, randomized histories, rank collisions, algebra, representative retention, and digest publication.
 - `SampleSmokeTests.cs` captures the Tour, Showcase, and Editor sample output contracts.
 - `PersistenceConcurrencyExamplesTests.cs` and `TearableConcurrencyStressTests.cs` cover structural-sharing
   examples, atomic publication, concurrent reads, and tearable-value stress.

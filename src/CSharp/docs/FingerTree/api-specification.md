@@ -563,3 +563,26 @@ The type is deliberately mutable and not safe for unsynchronized concurrent writ
 O(n) because it performs the ordinary bounded eviction operation for every item. Space is O(n),
 with one stored value/partial aggregate per window entry, two aggregate fields, and bounded chunk
 slack.
+
+## Canonical Zip-Zip Sorted Set
+
+`CanonicalSortedSet<T>` is an immutable `IReadOnlySet<T>` whose binary-search-tree priority is a
+keyed content-derived zip-zip rank: a geometrically distributed primary rank, a uniformly mixed
+secondary rank, and a comparer tie-break. Under one retained `ZipTreeRankPolicy<T>`, equal contents
+therefore produce the same shape independently of update history.
+
+`ZipTreeRankPolicy<T>` retains the `IComparer<T>`, rank-hash function, and seed. The rank hash must
+be constant on comparer-equivalence classes. The default policy is process-local and mixes the
+default equality hash with a cryptographically generated seed; callers needing repeatability across
+processes must supply both a pinned seed and a deterministic equivalence-class hash. Set algebra
+requires policy object identity so incompatible rank spaces cannot be silently mixed.
+
+Lookup, add, and remove are expected O(log n) and path-copy the search/unzip/zip path; adversarial or
+constant rank hashes can produce O(n) height, which diagnostics and tests expose honestly. Duplicate
+adds and absent removes preserve instance identity and the first stored representative. Enumeration
+is sorted. `Union`, `Intersect`, and `Except` currently compose public updates and cost O(m log n).
+
+Each node memoizes a non-cryptographic 64-bit subtree digest with compare-and-swap publication.
+`ContentHash` is O(n) on first access and O(1) afterward. Digest inequality proves content inequality;
+equal digests still require `SetEquals`, which traverses canonical shapes in lockstep and prunes
+reference-equal nodes.
