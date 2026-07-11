@@ -22,3 +22,5 @@ coverage exercises equal-low order plus max-high prefix pruning and overlap enum
 rope and text cases cross multiple chunks while checking cached totals, splits, and line navigation.
 Sorted-bag rank coverage exercises 20,000 distinct keys plus a 100,000-instance single bucket,
 including measured count bounds, final-rank access, and slices both across and within buckets.
+Deque sorted-bound coverage uses a 65,536-element tree and a counting comparator to enforce a
+logarithmic comparison ceiling for lower bound, upper bound, and binary search.

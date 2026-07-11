@@ -1,3 +1,6 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+
 module Data.Structures.FingerTree.Deque
   ( Deque
   , SearchResult(..)
@@ -37,10 +40,23 @@ module Data.Structures.FingerTree.Deque
 import Prelude hiding (last, null, splitAt)
 
 import qualified Data.Structures.FingerTree.Measured as FT
-import Data.Structures.FingerTree.Measured (ViewL(..), ViewR(..))
-import Data.Structures.FingerTree.Measures (Elem(..), Size(..))
+import Data.Structures.FingerTree.Measured (Measured(..), ViewL(..), ViewR(..))
+import Data.Structures.FingerTree.Measures (Elem(..))
 
-newtype Deque a = Deque (FT.FingerTree Size (Elem a))
+data DequeMeasure a = DequeMeasure !Int !(Maybe a)
+  deriving (Eq, Ord, Read, Show)
+
+instance Semigroup (DequeMeasure a) where
+  DequeMeasure leftCount leftLast <> DequeMeasure rightCount rightLast =
+    DequeMeasure (leftCount + rightCount) (case rightLast of Just _ -> rightLast; Nothing -> leftLast)
+
+instance Monoid (DequeMeasure a) where
+  mempty = DequeMeasure 0 Nothing
+
+instance Measured (DequeMeasure a) (Elem a) where
+  measure (Elem value) = DequeMeasure 1 (Just value)
+
+newtype Deque a = Deque (FT.FingerTree (DequeMeasure a) (Elem a))
   deriving (Show)
 
 -- Extensional equality: two deques are equal exactly when they contain the
@@ -70,7 +86,7 @@ toList :: Deque a -> [a]
 toList (Deque tree) = map getElem (FT.toList tree)
 
 count :: Deque a -> Int
-count (Deque tree) = getSize (FT.measureTree tree)
+count (Deque tree) = measureCount (FT.measureTree tree)
 
 null :: Deque a -> Bool
 null deque = count deque == 0
@@ -104,9 +120,9 @@ last deque = snd <$> viewR deque
 
 index :: Int -> Deque a -> Maybe a
 index position (Deque tree)
-  | position < 0 || position >= getSize (FT.measureTree tree) = Nothing
+  | position < 0 || position >= measureCount (FT.measureTree tree) = Nothing
   | otherwise =
-      case FT.split (\(Size seen) -> seen > position) tree of
+      case FT.split (\measureValue -> measureCount measureValue > position) tree of
         Just (_, Elem value, _) -> Just value
         Nothing -> Nothing
 
@@ -117,7 +133,7 @@ updateAt :: Int -> (a -> a) -> Deque a -> Maybe (Deque a)
 updateAt position updater deque@(Deque tree)
   | position < 0 || position >= count deque = Nothing
   | otherwise =
-      case FT.split (\(Size seen) -> seen > position) tree of
+      case FT.split (\measureValue -> measureCount measureValue > position) tree of
         Just (left, Elem old, right) -> Just (Deque (FT.append (FT.snoc left (Elem (updater old))) right))
         Nothing -> Nothing
 
@@ -133,7 +149,7 @@ deleteAt :: Int -> Deque a -> Maybe (Deque a)
 deleteAt position deque@(Deque tree)
   | position < 0 || position >= count deque = Nothing
   | otherwise =
-      case FT.split (\(Size seen) -> seen > position) tree of
+      case FT.split (\measureValue -> measureCount measureValue > position) tree of
         Just (left, _, right) -> Just (Deque (FT.append left right))
         Nothing -> Nothing
 
@@ -143,7 +159,7 @@ splitAt position deque@(Deque tree)
   | position == 0 = Just (empty, deque)
   | position == total = Just (deque, empty)
   | otherwise =
-      case FT.split (\(Size seen) -> seen > position) tree of
+      case FT.split (\measureValue -> measureCount measureValue > position) tree of
         Just (left, value, right) -> Just (Deque left, Deque (FT.cons value right))
         Nothing -> Nothing
   where
@@ -172,45 +188,25 @@ sortedLowerBound :: Ord a => a -> Deque a -> Int
 sortedLowerBound = sortedLowerBoundBy compare
 
 sortedLowerBoundBy :: (a -> a -> Ordering) -> a -> Deque a -> Int
-sortedLowerBoundBy comparison value deque = go 0 (count deque)
-  where
-    go low high
-      | low >= high = low
-      | otherwise =
-          let mid = low + (high - low) `div` 2
-           in case index mid deque of
-                Just candidate
-                  | comparison candidate value == LT -> go (mid + 1) high
-                  | otherwise -> go low mid
-                Nothing -> low
+sortedLowerBoundBy comparison value deque = fst (sortedBoundBy (/= LT) comparison value deque)
 
 sortedUpperBound :: Ord a => a -> Deque a -> Int
 sortedUpperBound = sortedUpperBoundBy compare
 
 sortedUpperBoundBy :: (a -> a -> Ordering) -> a -> Deque a -> Int
-sortedUpperBoundBy comparison value deque = go 0 (count deque)
-  where
-    go low high
-      | low >= high = low
-      | otherwise =
-          let mid = low + (high - low) `div` 2
-           in case index mid deque of
-                Just candidate
-                  | comparison candidate value == GT -> go low mid
-                  | otherwise -> go (mid + 1) high
-                Nothing -> low
+sortedUpperBoundBy comparison value deque = fst (sortedBoundBy (== GT) comparison value deque)
 
 sortedBinarySearch :: Ord a => a -> Deque a -> SearchResult
 sortedBinarySearch = sortedBinarySearchBy compare
 
 sortedBinarySearchBy :: (a -> a -> Ordering) -> a -> Deque a -> SearchResult
 sortedBinarySearchBy comparison value deque =
-  case index lower deque of
-    Just candidate
-      | comparison candidate value == EQ -> Found lower
+  case candidate of
+    Just stored
+      | comparison stored value == EQ -> Found lower
     _ -> Missing lower
   where
-    lower = sortedLowerBoundBy comparison value deque
+    (lower, candidate) = sortedBoundBy (/= LT) comparison value deque
 
 insertSorted :: Ord a => a -> Deque a -> Deque a
 insertSorted = insertSortedBy compare
@@ -232,3 +228,14 @@ removeAllSortedBy comparison value deque =
   where
     lower = sortedLowerBoundBy comparison value deque
     upper = sortedUpperBoundBy comparison value deque
+
+sortedBoundBy :: (Ordering -> Bool) -> (a -> a -> Ordering) -> a -> Deque a -> (Int, Maybe a)
+sortedBoundBy accepts comparison value deque@(Deque tree) =
+  case FT.locate predicate tree of
+    Just (before, Elem candidate) -> (measureCount before, Just candidate)
+    Nothing -> (count deque, Nothing)
+  where
+    predicate (DequeMeasure _ candidate) = maybe False (\stored -> accepts (comparison stored value)) candidate
+
+measureCount :: DequeMeasure a -> Int
+measureCount (DequeMeasure value _) = value

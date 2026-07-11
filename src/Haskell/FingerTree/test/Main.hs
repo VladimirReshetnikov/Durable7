@@ -8,8 +8,10 @@ import Prelude hiding (lines, null, reverse, splitAt)
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (SomeException, evaluate, try)
 import Control.Monad (forM_, replicateM)
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import qualified Data.List as List
 import Data.Monoid (Sum(..))
+import System.IO.Unsafe (unsafePerformIO)
 import System.Mem.StableName (eqStableName, makeStableName)
 
 import qualified Data.Structures.FingerTree.Deque as Deque
@@ -32,6 +34,7 @@ main = do
   testMeasureAccumulationOrder
   testLargeFromList
   testDeque
+  testDequeSortedBounds
   testReversibleDeque
   testSortedCollections
   testSortedBagRanks
@@ -108,6 +111,25 @@ testDeque = do
   assertEqual "deque upper bound" 3 (Deque.sortedUpperBound 2 (Deque.fromList [1 :: Int, 2, 2, 4]))
   assertEqual "deque binary search" (Deque.Found 1) (Deque.sortedBinarySearch 2 (Deque.fromList [1 :: Int, 2, 2, 4]))
   assertEqual "deque remove sorted" [1, 4] (Deque.toList (Deque.removeAllSorted 2 (Deque.fromList [1 :: Int, 2, 2, 4])))
+
+testDequeSortedBounds :: IO ()
+testDequeSortedBounds = do
+  let upper = 65_536
+      deque = Deque.fromList [0 :: Int .. upper - 1]
+  calls <- newIORef 0
+  assertEqual "deque measured lower bound" 53_217 (Deque.sortedLowerBoundBy (countingCompare calls) 53_217 deque)
+  lowerCalls <- readIORef calls
+  assertBool "deque lower bound logarithmic comparisons" (lowerCalls < 128)
+
+  writeIORef calls 0
+  assertEqual "deque measured upper bound" 53_218 (Deque.sortedUpperBoundBy (countingCompare calls) 53_217 deque)
+  upperCalls <- readIORef calls
+  assertBool "deque upper bound logarithmic comparisons" (upperCalls < 128)
+
+  writeIORef calls 0
+  assertEqual "deque measured binary search" (Deque.Found 53_217) (Deque.sortedBinarySearchBy (countingCompare calls) 53_217 deque)
+  binaryCalls <- readIORef calls
+  assertBool "deque binary search logarithmic comparisons" (binaryCalls < 128)
 
 testReversibleDeque :: IO ()
 testReversibleDeque = do
@@ -368,6 +390,12 @@ instance Ord Keyed where
 
 keyedLabel :: Keyed -> String
 keyedLabel (Keyed _ label) = label
+
+{-# NOINLINE countingCompare #-}
+countingCompare :: Ord a => IORef Int -> a -> a -> Ordering
+countingCompare calls left right = unsafePerformIO $ do
+  modifyIORef' calls (+ 1)
+  pure (compare left right)
 
 assertEqual :: (Eq a, Show a) => String -> a -> a -> IO ()
 assertEqual label expected actual

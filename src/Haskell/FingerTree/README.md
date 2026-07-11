@@ -6,9 +6,9 @@
 - Scope: `tools-data-structures-fingertree` package
 
 This package ports the repository finger-tree family to Haskell. It includes a general measured
-finger tree, a size-measured deque, a reversible deque, sorted bag/set/map facades, a stable
-meldable priority queue, interval tree helpers, positional ropes, measured ropes, and text-rope
-navigation helpers.
+finger tree, a size-and-rightmost-leaf-measured deque, a reversible deque, sorted bag/set/map
+facades, a stable meldable priority queue, interval tree helpers, positional ropes, measured ropes,
+and text-rope navigation helpers.
 
 `ReversibleDeque a` uses its own orientation-aware strict finger-tree core. `reverse` is an O(1)
 mirror of the root, and `append` glues logical digits through mirrored middle views, so
@@ -18,6 +18,10 @@ reifying either operand through lists.
 The core measured tree follows the Hinze-Paterson shape directly. Some derived Haskell facades use
 idiomatic `containers` storage where it preserves the same observable contract more naturally than
 copying a stricter managed implementation detail.
+
+The deque's rightmost-leaf signpost is comparator-agnostic storage used by the runtime-comparator
+sorted helpers. Lower bound, upper bound, and binary search follow one measured root-to-leaf path in
+O(log n), rather than binary-searching through O(log n) positional probes.
 
 `SortedBag` uses the measured core rather than `Data.Map`: each distinct-key bucket is a
 `Data.Sequence`, and the spine caches total multiplicity, distinct count, and last key. Key counts,
