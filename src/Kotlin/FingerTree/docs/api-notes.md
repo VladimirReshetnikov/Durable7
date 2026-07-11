@@ -15,6 +15,8 @@ Current public families:
 - `PriorityQueue<T, P>` and `PriorityEntry<T, P>`;
 - `Interval<T>` and `IntervalTree<T>`;
 - `RrbVector<T>` and `RrbVector.Builder<T>`;
+- `ZipTreeRankPolicy<T>`, `CanonicalSortedSet<T>`, `CanonicalSetLookup<T>`, and
+  `CanonicalSortedSetStatistics`;
 - `Monoid<T>`, `DabaLite<T>`, and `DabaLiteStatistics`;
 - `Rope<T>`, `MeasuredRope<T, M>`, `TextRope`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
 
@@ -71,6 +73,62 @@ adopts an existing vector as an O(1) frozen prefix. `toImmutable()` caches clean
 later builder mutation cannot change an earlier vector. Builder iteration freezes once and is
 fail-fast if the builder is subsequently modified. The builder is not thread-safe; published
 vectors are immutable and safe for concurrent readers.
+
+## Canonical zip-zip sorted set
+
+`CanonicalSortedSet<T>` is an immutable Cartesian binary-search tree. Comparator order is the search
+order; a content-derived priority makes topology canonical inside a retained
+`ZipTreeRankPolicy<T>`, not globally for the JVM type. `empty(policy)` and `from(values, policy)` are
+the idiomatic factories; `create` and `createRange` are aliases for callers porting C# code.
+
+`ZipTreeRankPolicy<T>.create()` uses natural order, the zero-extended 32-bit JVM `hashCode`, and a
+fresh unexposed 32-byte key. Passing a `Long` seed derives the key as SHA-256 of ASCII `ZZT2` followed
+by the seed's eight big-endian bits. Every factory call creates a distinct policy; unlike the C#
+surface, Kotlin does not expose one closed-generic process-wide default object. The explicit-
+comparator overload requires a `(T) -> Long` rank hash and rejects its omission. `createKeyed`
+requires at least 32 caller-owned bytes, copies them, and offers both natural-order and explicit-
+comparator overloads.
+
+For each item, the policy writes the rank hash's 64 bits in big-endian order and computes
+HMAC-SHA-256. The first three big-endian 64-bit digest words supply a leading-zero geometric
+coordinate, an unsigned secondary coordinate, and a content word for the subtree digest. Heap order
+uses geometric rank, unsigned secondary rank, then the comparator-smaller item. Kotlin `Long`
+carries the same raw 64-bit seed/hash words as C# `ulong`; negative values are not sign-extended or
+re-encoded. The implementation uses only JCA (`SecureRandom`, SHA-256, and HmacSHA256).
+
+The rank hash must be stable and constant on comparator-equivalence classes. Bulk duplicate
+elimination and duplicate `add` dynamically reject unequal derived ranks, but no finite check can
+prove global coherence. Natural JVM `hashCode` values are not generally cross-language encodings;
+cross-process or cross-language reproduction requires the caller to pin equivalent comparator,
+rank-hash, key/seed, and item semantics. A public seed permits reproduction but not adversarial rank
+secrecy. A protected caller key makes ranks hard to predict only to the extent that the pre-HMAC
+64-bit rank hash itself is collision-resistant for the workload. The fixed 64-bit secondary
+coordinate is a practical zip-zip-inspired policy and does not claim the paper's compact-rank
+metadata theorem.
+
+`from` sorts by comparator plus original sequence index, retains the first representative in each
+equivalence class, checks duplicate rank coherence, and freezes a monotone-stack Cartesian build.
+`add`, `remove`, and `clear` preserve the receiver for no-ops; `tryGetValue` returns an explicit
+`CanonicalSetLookup<T>` so a stored nullable representative remains distinguishable from failure.
+`union`, `intersect`, and `except` require the exact same policy object and return canonical results.
+`setEquals` is semantic across policy objects under the receiver's comparator; relation methods
+likewise deduplicate arbitrary iterables under that comparator.
+
+Every node caches count and height and lazily publishes a non-cryptographic 64-bit `contentHash`.
+Within one coherent policy, count or digest inequality proves set inequality; digest equality is
+only a filter and is followed by iterative lockstep comparison, with reference-equal subtrees
+pruned. Digests from distinct policy objects have no equality meaning. `sharesStorageWith` is an
+O(n + m) diagnostic over node identity. `validateStructure` checks strict comparator bounds, rank
+reproduction, heap order, node uniqueness/acyclicity, cached metadata, and root metadata, and reports
+count, height, largest geometric rank, and repeated geometric/secondary priorities.
+
+For height h, lookup is O(h) time and O(1) space; persistent insertion/removal take O(h) time,
+allocate O(h) path nodes, and use O(h) temporary explicit-stack entries. Bulk build is O(n log n)
+for sorting plus O(n) Cartesian construction. Validation and the first digest evaluation are O(n);
+later root digest reads are O(1). Expected coherent pseudorandom height is O(log n), but colliding or
+publicly predictable ranks can force h = n. Every traversal and update is iterative and therefore
+remains JVM-stack-safe in that case. Immutable sets and policies are safe for concurrent readers
+provided their comparator and rank-hash callbacks are themselves stable and thread-safe.
 
 ## DABA Lite sliding-window aggregation
 

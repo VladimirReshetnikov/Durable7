@@ -32,6 +32,13 @@ Coverage groups:
   all four six-cursor fixups, exact combine ceilings, 64-slot chunk boundaries and churn, callback
   failure at every reachable mutation ordinal, atomic boundary rollback, O(1) clear/reuse,
   callback-free structural statistics, nullable identity, and prompt slot/chunk reclamation;
+- `CanonicalSortedSet` bulk/incremental permutation and delete/reinsert topology convergence, a
+  15,000-command retained-snapshot model, bulk first-representative and nullable-lookup semantics,
+  exact keyed/public-seed HMAC derivation, hidden-key and same-seed policy behavior, unsigned
+  secondary priority ordering, comparer/hash coherence rejection, and receiver-comparer equality
+  asymmetry plus every set relation. Canonical algebra, no-op identity, quantified add/remove
+  off-path sharing, fully colliding 4,096-node stack safety, digest inequality short-circuit,
+  concurrent digest publication, and injected-metadata validator rejection have dedicated checks;
 - `Rope`, `MeasuredRope`, `TextRope`, and `RopeBuilder` complete positional/range edits, copies,
   measure-guided navigation, compaction, snapshot retention, line/column mapping, and string conversion;
 - shared measured-AVL invariants and identity sharing across deque, measured tree, sorted, priority,

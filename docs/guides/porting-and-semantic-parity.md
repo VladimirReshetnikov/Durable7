@@ -72,6 +72,17 @@ mutable core `!Send` and `!Sync`. Treat these ownership/concurrency differences 
 semantics, not parity failures. A pure Haskell value would not preserve DABA's ephemeral incremental
 schedule, so omission there is intentional.
 
+The canonical zip-zip sorted set is a policy-canonical persistent member, currently implemented in
+C# and Kotlin/JVM. Both ports derive a 32-byte HMAC key as SHA-256 of ASCII `ZZT2` followed by the
+public seed in big-endian order, feed an eight-byte big-endian equivalence-class hash to
+HMAC-SHA-256, and interpret the first three big-endian words as leading-zero geometric rank,
+unsigned secondary rank, and digest content. Preserve random-key and caller-keyed modes, the
+minimum 32-byte caller-key contract, comparer-smaller final priority tie, first-representative bulk
+semantics, policy-object identity for canonical algebra, and receiver-comparer semantics for
+cross-policy equality. A port must test exact rank vectors, unsigned secondary ordering,
+equivalence/hash incoherence, insertion-order-independent topology, deep colliding chains, and
+concurrent lazy-digest publication where the language exposes shared readers.
+
 FingerTree lineage:
 
 1. [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) is the broadest semantic source:
@@ -88,8 +99,8 @@ FingerTree lineage:
    priority queue, intervals, ropes, and text helpers.
 5. [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) ports the family to Kotlin/JVM over
    structurally shared measured AVL sequences with cached monoidal summaries and runtime
-   measure/comparator policies; its API notes state the strict-AVL versus lazy-digit-spine costs and
-   segregate the mutable managed DABA Lite member.
+   measure/comparator policies, plus the policy-canonical zip-zip sorted set; its API notes state
+   the strict-AVL versus lazy-digit-spine costs and segregate the mutable managed DABA Lite member.
 6. [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) is the Rust semantic checkpoint for
    the same family names. It preserves immutable snapshot behavior now; the public facades use
    structurally shared Rust tree storage, while the workspace documents the remaining asymptotic

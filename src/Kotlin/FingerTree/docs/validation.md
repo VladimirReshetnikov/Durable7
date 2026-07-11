@@ -47,3 +47,27 @@ for unchanged statistics, aggregate, and continued usability; the chunk-allocati
 and predecessor-chunk collectability while keeping the aggregator alive. Validation also locks down
 callback-free region/capacity statistics, O(1) clear to one block, reuse, nullable identities, and
 direct reuse of a `MeasurePolicy` as a monoid.
+
+Canonical zip-zip validation checks bulk and purely incremental permutation convergence,
+delete/reinsert convergence, a 15,000-operation retained-snapshot model, bulk first-representative
+retention, nullable stored-representative versus miss lookup, explicit-comparator hash coherence and
+rejection, and all receiver-comparer set relations including asymmetric cross-policy equality. Exact
+keyed-HMAC and `ZZT2` public-seed vectors lock down byte order and derivation; same-seed policies
+reproduce shape/digest/statistics, caller-key copies survive source mutation, and independently
+generated hidden keys produce distinct retained ranks. The latter is the suite's sole intentionally
+probabilistic assertion: collision of the checked 128-bit secondary/content pair has probability at
+most 2^-128.
+
+A deterministic opposite-sign secondary-rank pair proves heap ordering uses unsigned 64-bit order.
+Policy-gated algebra, identity-preserving no-ops, and node-identity counts prove both add and remove
+retain at least 90% of a 2,000-node set off their edited paths. A 4,096-node fully colliding priority
+chain exercises stack-safe bulk build, validation, removal, reinsertion, digesting, and equality.
+Counting-comparator coverage proves digest inequality returns before semantic comparison; concurrent
+readers exercise lazy digest publication. A local reflection-injected cached-count fault verifies
+that structural validation rejects corrupted metadata.
+
+This workspace has no Kotlin benchmark harness. The executable suite deliberately includes the
+4,096-node degeneracy case, 12,000-node concurrent digest case, and 15,000-command model as workload
+and complexity guardrails, but it does not report timings. Comparative canonical-set benchmarks live
+in the C# BenchmarkDotNet workspace; a Kotlin timing harness should be added only with a reproducible
+JMH setup rather than embedding stopwatch assertions in correctness tests.

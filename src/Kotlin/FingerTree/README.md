@@ -15,6 +15,7 @@ names for the public families:
 - `PriorityQueue<T, P>` and `PriorityEntry<T, P>`;
 - `Interval<T>` and `IntervalTree<T>`;
 - `RrbVector<T>` and its append-only `RrbVector.Builder<T>`;
+- `ZipTreeRankPolicy<T>`, `CanonicalSortedSet<T>`, and `CanonicalSortedSetStatistics`;
 - `Monoid<T>`, `DabaLite<T>`, and `DabaLiteStatistics` for mutable FIFO window aggregation;
 - `Rope<T>`, `MeasuredRope<T, M>`, `TextRope`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
 
@@ -31,6 +32,17 @@ tables, while split/concatenation-induced relaxed branches cache `IntArray` cumu
 Indexing and replacement copy one O(log32 n) path; concatenation and splitting rebuild only boundary
 spines and retain untouched leaves. Its append builder owns mutable tail arrays, freezes full leaves,
 copies partial tails, and caches isolated immutable snapshots.
+
+`CanonicalSortedSet<T>` is the policy-canonical sorted sibling. It is an immutable Cartesian binary
+search tree whose geometric and secondary priorities come from keyed HMAC-SHA-256 ranks. Natural-
+order and explicit-comparator `ZipTreeRankPolicy<T>` factories support fresh hidden keys, public
+reproducibility seeds, and caller-retained keys; an explicit comparator requires a rank hash that is
+constant on its equivalence classes. Bulk and incremental histories with the same coherent policy
+converge on one topology, and path-copying updates retain untouched nodes. A lazily published 64-bit
+tree digest provides same-policy inequality rejection, while semantic equality remains comparer-
+based and canonical algebra requires the same policy object. Fully colliding ranks can produce a
+linear tree, so all construction, editing, validation, iteration, equality, and digest traversals use
+explicit stacks.
 
 `DabaLite<T>` is the family's deliberately mutable streaming member. It accepts a runtime
 `Monoid<T>` (and every `MeasurePolicy<*, T>` is one), and implements the VLDB Journal 2021 DABA Lite

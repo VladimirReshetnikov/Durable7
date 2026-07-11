@@ -12,7 +12,7 @@ where the language surfaces line up.
 | Workspace | Role | Primary entry points | Validation |
 | --- | --- | --- | --- |
 | [Hamt](Hamt/README.md) | Persistent HAMT map/set port with 32-way bitmap-indexed trie nodes and immutable collision buckets | `tools.datastructures.hamt.PersistentHashMap`, `PersistentHashSet` | `.\build.ps1 -Workspace Hamt` |
-| [FingerTree](FingerTree/README.md) | Persistent measured-tree port of the FingerTree family, RRB vectors, and the mutable DABA Lite FIFO aggregator | `tools.datastructures.fingertree.*` | `.\build.ps1 -Workspace FingerTree` |
+| [FingerTree](FingerTree/README.md) | Persistent measured-tree port of the FingerTree family, RRB vectors, the policy-canonical zip-zip sorted set, and the mutable DABA Lite FIFO aggregator | `tools.datastructures.fingertree.*` | `.\build.ps1 -Workspace FingerTree` |
 | [Tungsten](Tungsten/README.md) | Tungsten `List` and `Association` collection port over Kotlin persistent substrates | `tools.datastructures.tungsten.PersistentList`, `PersistentAssociation` | `.\build.ps1 -Workspace Tungsten` |
 
 Run the full Kotlin validation from this directory:
@@ -35,6 +35,12 @@ interval, rope, and text operations; path copying retains unchanged JVM subtrees
 spell out the few engine-level differences from the C# lazy digit spine. Its separate `DabaLite<T>`
 member is deliberately mutable: a six-cursor, chunk-backed schedule maintains a FIFO monoid aggregate
 with bounded callback counts and requires external serialization.
+
+`CanonicalSortedSet<T>` is a separate immutable Cartesian-tree core for workloads that need
+policy-scoped, insertion-order-independent topology. `ZipTreeRankPolicy<T>` combines a JVM
+`Comparator`, an equivalence-class-coherent 64-bit hash, and a random, publicly seeded, or
+caller-keyed HMAC-SHA-256 rank source. Persistent zip/unzip edits share untouched nodes; same-policy
+equality can reject unequal digests before a lockstep structural comparison.
 
 Use the repository [semantic contracts reference](../../docs/reference/semantic-contracts.md) when
 checking which persistence, ordering, policy, and representation obligations should align with sibling

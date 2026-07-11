@@ -61,7 +61,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | DABA Lite sliding-window aggregator | 1, 3 | Strong (implemented in every applicable language: C#, C, C++, Kotlin/JVM, and Rust; pure Haskell is not applicable) | Reuses the language's monoid abstraction | 1 small type, ~8 members |
 | Merkle search tree | 1 | Strong (C# implemented) | Completed: deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
-| Zip tree (canonical sorted set) | 1, 3 | Plausible (C# implemented) | Completed: coherent keyed rank policy | 1 new core, set facade |
+| Zip tree (canonical sorted set) | 1, 3 | Plausible (C# + Kotlin/JVM implemented) | Completed: coherent keyed rank policy | 1 new core, set facade |
 | Brodal-Okasaki heap | 1 | Plausible (C# and Haskell implemented for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
 | Priority search queue (winner-cached AVL) | 1 | Plausible (C# and Haskell implemented) | Completed as a direct core rather than the addressable composition | 1 new core |
 | Ctrie (concurrent, O(1) snapshot) | 1 | Managed-only (C# + Kotlin/JVM implemented) | Tracing GC; native ports require reclamation design | 1 new core, concurrency test tier |
@@ -354,6 +354,14 @@ reproducibility, metadata, depth, and priority collisions. Set equality is seman
 families while canonical algebra remains policy-identity gated. Adversarial tests cover keyed-rank
 reproduction, comparer/hash incoherence, ordinary `IReadOnlySet<T>` interoperability, randomized
 retained histories, exact sharing, and maximally deep delete/reinsert/digest traversal.
+
+**Kotlin/JVM status (2026-07-11): Implemented and independently reviewed.** The JVM port preserves
+the `ZZT2` public-seed derivation, full caller-keyed HMAC-SHA-256 mode, unsigned secondary-rank
+ordering, first-representative bulk semantics, policy-identity algebra gate, receiver-comparator
+cross-policy equality, and explicit-stack Cartesian-tree algorithms. Its lazily published digest
+uses `AtomicReference`; focused adversarial coverage fixes the keyed and public-seed vectors,
+exercises nullable representatives and maximally colliding chains, quantifies off-path sharing for
+add/remove, and races cold digest publication across readers.
 
 **What they are.** Zip trees (Tarjan, Levy & Timmel, 2018/2019) are randomized-rank binary search
 trees - a reformulation of treaps where insertion and deletion are single root-to-position *unzip*
@@ -843,11 +851,11 @@ The implementation wave described by this catalog has already landed these C# re
 - the managed Ctrie with O(1) immutable snapshots.
 
 CHAMP, Patricia, and RRB have also advanced through the sibling-language work recorded in their
-entries; the Brodal-Okasaki heap and priority-search queue have Haskell ports, and DABA Lite now
-exists in every applicable imperative language (C#, C, C++, Kotlin/JVM, and Rust). The Ctrie's
-deliberate parity boundary remains C# and Kotlin/JVM. These are current-state implementation
-records, not candidates awaiting a consumer. Future work on them is ordinary hardening,
-measurement, and demand-driven porting.
+entries; the canonical zip-zip set has a Kotlin/JVM port, the Brodal-Okasaki heap and
+priority-search queue have Haskell ports, and DABA Lite now exists in every applicable imperative
+language (C#, C, C++, Kotlin/JVM, and Rust). The Ctrie's deliberate parity boundary remains C# and
+Kotlin/JVM. These are current-state implementation records, not candidates awaiting a consumer.
+Future work on them is ordinary hardening, measurement, and demand-driven porting.
 
 ### Remaining candidate sequencing
 
