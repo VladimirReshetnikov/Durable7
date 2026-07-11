@@ -180,6 +180,99 @@ var frozenMap = mapBuilder.ToImmutable();
 The sorted builders are staging builders: a dirty `ToImmutable()` rebuilds the immutable value. For small
 batches into a large existing collection, persistent `Add`/`Remove`/`SetItem` remains the better default.
 
+## Policy-Canonical Sorted Set
+
+Use `CanonicalSortedSet<T>` when equal contents should converge on one binary-tree shape within a
+retained rank policy. The shared default is convenient for process-local persistent versions; its
+HMAC key is generated randomly once and is not exposed:
+
+```csharp
+var local = CanonicalSortedSet<int>.Empty
+    .Add(3)
+    .Add(1)
+    .Add(2);
+
+var withoutTwo = local.Remove(2);
+CanonicalSortedSetStatistics statistics = local.ValidateStructure();
+Console.WriteLine($"{statistics.Count} items, height {statistics.Height}");
+```
+
+All versions derived from `local` retain the same `ZipTreeRankPolicy<int>`. Another process, or a
+fresh `ZipTreeRankPolicy<int>.Create()` call without a seed, receives a different random key and
+generally a different shape.
+
+Use a public seed for reproducible tests, artifacts, or cooperative processes where adversarial key
+selection is not a concern. An explicit comparer must be paired with a rank hash that is constant on
+its equivalence classes. This example treats integers with equal magnitude as equivalent:
+
+```csharp
+static ulong MagnitudeRankHash(int value) => (ulong)Math.Abs((long)value);
+
+var byMagnitude = Comparer<int>.Create(static (left, right) =>
+    Math.Abs((long)left).CompareTo(Math.Abs((long)right)));
+
+var policy = ZipTreeRankPolicy<int>.Create(
+    comparer: byMagnitude,
+    rankHash: MagnitudeRankHash,
+    seed: 0x1234_5678_9abc_def0UL);
+
+var first = CanonicalSortedSet<int>.CreateRange([-3, 2, 1, 3, -2], policy);
+first.TryGetValue(3, out var representative); // representative == -3
+
+var secondPolicy = ZipTreeRankPolicy<int>.Create(
+    comparer: byMagnitude,
+    rankHash: MagnitudeRankHash,
+    seed: 0x1234_5678_9abc_def0UL);
+var second = CanonicalSortedSet<int>.CreateRange([-1, -2, 3], secondPolicy);
+
+Console.WriteLine(first.SetEquals(second));                 // True: semantic equality.
+Console.WriteLine(first.ContentHash == second.ContentHash); // True for this reproduced rank policy.
+```
+
+The seed is public and deterministically derives the HMAC key; it is not a password or a denial-of-
+service defense. For ranks that should remain unpredictable to an input chooser, create a policy
+from caller-managed secret material:
+
+```csharp
+byte[] rankKey = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
+var keyedPolicy = ZipTreeRankPolicy<int>.CreateKeyed(
+    rankKey,
+    rankHash: static value => unchecked((ulong)(uint)value));
+
+var keyed = CanonicalSortedSet<int>.CreateRange([5, 1, 9, 3], keyedPolicy);
+```
+
+`CreateKeyed` requires at least 32 bytes and copies the key. Retain it securely if another policy or
+process must reproduce ranks; otherwise clear the caller-owned array after construction. A secret
+key cannot compensate for rank-hash collisions: two equal 64-bit rank-hash inputs receive the same
+complete HMAC-derived rank.
+
+Set equality and algebra intentionally have different compatibility rules. `SetEquals` and the
+`IReadOnlySet<T>` relation members use the receiver's comparer and interoperate semantically with
+different canonical policies or ordinary sets. `Union`, `Intersect`, and `Except` require the exact
+same policy object because their results must stay in one rank space:
+
+```csharp
+var left = CanonicalSortedSet<int>.CreateRange([1, 2, 4], policy);
+var right = CanonicalSortedSet<int>.CreateRange([2, 3, 5], policy);
+var union = left.Union(right);
+
+var differentPolicy = CanonicalSortedSet<int>.CreateRange(
+    [1, 2, 4],
+    ZipTreeRankPolicy<int>.Create(seed: 99));
+bool semanticallyEqual = left.SetEquals(differentPolicy);
+```
+
+`ContentHash` is a memoized non-cryptographic shape/content digest. Treat it as a same-policy
+inequality fast path, never as authentication or as a cross-policy content address; call
+`SetEquals` for semantic equality.
+
+Expected O(log n) lookup and updates assume sparse rank-hash collisions and pseudorandom HMAC ranks
+for the actual key set. `Add` and `Remove` copy O(h) path nodes. A constant rank hash can force
+h = n, but all search, update, build, enumeration, digest, equality, and validation traversals use
+explicit stacks and remain stack-safe. `CreateRange` always sorts in O(n log n), then builds the
+Cartesian tree in O(n).
+
 ## Priority Queue
 
 `PriorityQueue<TElement, TPriority>` is a persistent minimum-priority queue. Equal priorities drain
@@ -374,7 +467,7 @@ an `AddLast` loop for bulk append construction.
 | Chunked persistent positional sequence | `Rope<T>` |
 | Uniform random-access persistent sequence | `RrbVector<T>` |
 | Mutable FIFO window aggregate with worst-case O(1) operations | `DabaLite<T, TMonoid>` |
-| History-independent sorted shape and memoized equality digest | `CanonicalSortedSet<T>` |
+| Policy-scoped canonical sorted shape and memoized digest | `CanonicalSortedSet<T>` |
 | Worst-case O(1) persistent insert and meld | `BrodalOkasakiHeap<T>` |
 | Keyed priority updates and range-bounded priority queries | `PrioritySearchQueue<TKey, TPriority, TValue>` |
 | Incremental generic append construction | `Rope<T>.Builder` |

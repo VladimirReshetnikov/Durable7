@@ -87,8 +87,14 @@ The suite covers:
   builder snapshot isolation, retained snapshots, and randomized mixed-edit histories;
 - `DabaLite<T, TMonoid>` noncommutative ordering, 100,000-operation randomized windows, empty/clear
   behavior, and instrumented worst-case combine-count ceilings;
-- `CanonicalSortedSet<T>` independent-history shape/digest convergence, 50,000 randomized updates,
-  comparer-equivalent representatives, policy gating, adversarial rank collisions, and concurrent digest publication;
+- `CanonicalSortedSet<T>` public-seed and caller-keyed HMAC rank reproducibility, independent-history
+  shape/digest convergence, 50,000-operation and invariant-heavy 12,000-operation randomized
+  histories with retained versions, comparer-equivalent representative retention, rejection and
+  detection of incoherent rank hashes, semantic `IReadOnlySet<T>` relations across policies, and
+  identity-gated algebra;
+- canonical-set Cartesian bulk building, `ValidateStructure` statistics, localized path sharing,
+  no-op identity, concurrent digest publication, and a 4,096-node fully colliding height-n tree that
+  exercises stack-safe delete, reinsert, enumeration, digest, equality, and validation paths;
 - `BrodalOkasakiHeap<T>` sorted drains through 100,000 items, randomized meld forests, retained
   versions, comparer gating, and size-independent insert/meld comparison ceilings;
 - `PrioritySearchQueue<TKey, TPriority, TValue>` 50,000-operation keyed histories, retained

@@ -60,7 +60,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | DABA Lite sliding-window aggregator | 1, 3 | Strong | Reuses `IMonoid<T>` | 1 small type, ~8 members |
 | Merkle search tree | 1 | Strong (C# implemented) | Completed: deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (benchmark-gated; deferred by proposal) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
-| Zip tree (canonical sorted set) | 1, 3 | Plausible | Keyed hash for rank derivation | 1 new core, ~2 facades |
+| Zip tree (canonical sorted set) | 1, 3 | Plausible (C# implemented) | Completed: coherent keyed rank policy | 1 new core, set facade |
 | Brodal-Okasaki heap | 1 | Plausible (real-time niche) | - | 1 new core, small surface |
 | Priority search queue (Hinze) | 1 | Plausible | Only if `AddressablePriorityQueue` composition constants disappoint | 1 new core |
 | Ctrie (concurrent, O(1) snapshot) | 1 | C# + Kotlin/JVM only | Tracing GC; native ports require reclamation design | 1 new core, concurrency test tier |
@@ -341,10 +341,17 @@ content-addressed family.
 
 ### Zip trees and zip-zip trees (canonical sorted core)
 
-**C# status (2026-07-10): Implemented.** `CanonicalSortedSet<T>` and
-`ZipTreeRankPolicy<T>` provide keyed two-part zip-zip ranks, history-independent shape, persistent
-unzip/zip updates, memoized subtree digests, canonical lockstep equality, policy-gated algebra, and
-explicit adversarial-rank degradation diagnostics.
+**C# status (2026-07-11): Implemented and hardened.** `CanonicalSortedSet<T>` and
+`ZipTreeRankPolicy<T>` derive a geometric coordinate and fixed 64-bit secondary coordinate from
+HMAC-SHA-256. A policy can use an unexposed random key, a public reproducibility seed, or a
+caller-retained key; an explicit comparer must also supply a rank hash constant on its equivalence
+classes, and duplicate representatives dynamically check that contract. Persistent zip/unzip is
+explicit-stack and remains stack-safe under a fully colliding 4,096-node chain. Sorted bulk build is
+O(n log n) plus a linear Cartesian-tree pass; `ValidateStructure` checks order, heap rank,
+reproducibility, metadata, depth, and priority collisions. Set equality is semantic across policy
+families while canonical algebra remains policy-identity gated. Adversarial tests cover keyed-rank
+reproduction, comparer/hash incoherence, ordinary `IReadOnlySet<T>` interoperability, randomized
+retained histories, exact sharing, and maximally deep delete/reinsert/digest traversal.
 
 **What they are.** Zip trees (Tarjan, Levy & Timmel, 2018/2019) are randomized-rank binary search
 trees - a reformulation of treaps where insertion and deletion are single root-to-position *unzip*
@@ -352,18 +359,23 @@ trees - a reformulation of treaps where insertion and deletion are single root-t
 Tarjan, 2023) refine the rank distribution to bring expected depth near the information-theoretic
 optimum while keeping O(log log n) rank bits.
 
-**Why they matter here.** Deriving each key's rank from a keyed hash of the key makes the tree
-**uniquely represented**: same contents, same shape, regardless of history. That yields the
-lightweight (no-serialization-needed) version of the canonical-form benefits: memoized subtree
-digests give O(1) inequality and O(min divergence) equality, and history independence is a real
-security niche (structure cannot leak access or insertion patterns - relevant wherever a persistent
-snapshot crosses a trust boundary). Path copying is unusually cheap because updates restructure
-O(1) expected nodes.
+**Why they matter here.** Deriving each comparison-equivalence class's rank from a retained keyed
+policy makes topology converge for the same stored representatives regardless of update order. That
+is the lightweight, process-local form of canonical topology: the memoized root digest rejects most
+inequality in O(1), shared nodes prune semantic equality, and independently built equal sets compare
+in O(n). The public first-representative rule is observable through `TryGetValue`, so this facade does
+not claim a formally unique full representation or hide which equivalent representative arrived
+first. Ephemeral zip trees change O(1) expected pointers, but a persistent update still copies its
+O(h) search/zip/unzip path: expected O(log n) nodes, O(n) under adversarial ranks.
 
-**Caveats.** All bounds are expected-case; an adversary who can choose keys *and* knows the hash
-seed degrades it, so the rank hash must be keyed. The shipped sorted finger tree already covers
-ordinary sorted workloads with worst-case bounds and the measure framework; the zip tree earns its
-place only where equality/memoization dominates.
+**Caveats.** This is a practical fixed-width variant, not the paper's compact representation: its
+64-bit secondary coordinate does not inherit the paper's O(log log n)-metadata theorem, and its
+64-bit caller hash (32-bit for the fallback) can collide before HMAC. Expected-depth claims therefore
+require a well-distributed, stable, equivalence-class-coherent rank source. `CreateKeyed` can resist
+adaptive rank prediction only while its caller-retained key remains secret; a public seed provides
+reproduction, not adversarial security. The shipped sorted finger tree covers ordinary workloads
+with worst-case bounds and the measure framework; the zip-zip set earns its place where canonical
+topology and memoized inequality dominate.
 
 **Verdict: Plausible.** Frame it as `CanonicalSortedSet<T>` - a niche sibling (axis 3 framing)
 whose selling point is unique representation, not general sorted-set duty.

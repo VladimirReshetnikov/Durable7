@@ -41,8 +41,12 @@ reasonable oracle.
   persistent edit histories with retained versions.
 - `DabaLiteTests.cs` covers noncommutative FIFO order, randomized variable windows, chunk churn,
   empty/clear contracts, and the proven worst-case monoid invocation limits.
-- `CanonicalSortedSetTests.cs` covers permutation/delete-reinsert shape convergence, keyed policy
-  semantics, randomized histories, rank collisions, algebra, representative retention, and digest publication.
+- `CanonicalSortedSetTests.cs` covers public-seed permutation/delete-reinsert convergence, 50,000
+  randomized persistent updates, policy-gated algebra, representative retention, rank collisions,
+  and concurrent digest publication. `CanonicalSortedSetAdversarialTests.cs` covers required
+  comparer-equivalence rank hashes, semantic `IReadOnlySet<T>` equality across policy identities,
+  caller-keyed HMAC reproducibility and key ownership, invariant/statistics validation, localized
+  sharing, and stack-safe 4,096-node fully colliding histories.
 - `BrodalOkasakiHeapTests.cs` covers large sorted drains, randomized meld trees, persistence,
   comparer-policy gating, empty behavior, and worst-case constant insert/meld comparison counts.
 - `PrioritySearchQueueTests.cs` covers keyed priority updates, minimum ties/deletion, AVL balance,

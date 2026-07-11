@@ -22,10 +22,15 @@ with immutable cached snapshots.
 `IMonoid<T>` to maintain a FIFO window aggregate with worst-case O(1) insert, evict, and query,
 de-amortizing reversal through one bounded fixup per window operation.
 
-`CanonicalSortedSet<T>` is the uniquely represented sorted sibling. A retained
-`ZipTreeRankPolicy<T>` derives keyed zip-zip ranks from each comparison-equivalence class, making
-tree shape independent of insertion/deletion history and enabling memoized content digests and
-lockstep equality across independently built sets.
+`CanonicalSortedSet<T>` is the policy-canonical sorted sibling. A retained
+`ZipTreeRankPolicy<T>` applies HMAC-SHA256 to a comparer-equivalence-class rank hash, using a
+geometric primary rank, a fixed 64-bit secondary rank, and comparer order as the final tie-break.
+Versions retaining one policy therefore converge on the same shape for equal contents regardless
+of insertion/deletion history. Public seeds reproduce ranks but are not secrets; random policies
+use unexposed keys, while `CreateKeyed` accepts caller-retained secret material. Lookup and updates
+are expected O(log n) only when rank-hash collisions and key selection preserve pseudorandom-rank
+behavior. Every traversal and O(h)-path-copying update is iterative and remains stack-safe when a
+colliding policy forces height h = n.
 
 `BrodalOkasakiHeap<T>` is the latency-oriented heap sibling: a persistent bootstrapped
 skew-binomial priority queue with O(1) worst-case insert, minimum, and meld and O(log n) worst-case
@@ -59,7 +64,8 @@ that prune irrelevant key intervals and subtrees whose minimum priority already 
     nodes, relaxed-node size tables, an append-only builder, structural split/edit, and
     boundary-spine concatenation.
   - `DabaLite.cs` — a chunk-queue-backed worst-case O(1) FIFO sliding-window aggregator over any monoid.
-  - `CanonicalSortedSet.cs` / `ZipTreeRankPolicy.cs` — the keyed uniquely shaped zip-zip set and its retained rank policy.
+  - `CanonicalSortedSet.cs` / `ZipTreeRankPolicy.cs` — the policy-canonical, stack-safe
+    zip-zip-inspired sorted set and its random, publicly seeded, or caller-keyed HMAC rank policy.
   - `BrodalOkasakiHeap.cs` — the bootstrapped skew-binomial heap with optimal purely functional worst-case bounds.
   - `PrioritySearchQueue.cs` — the keyed AVL priority-search queue and range/threshold query surface.
   - `FingerTree.cs` — the public general measured finger tree `FingerTree<TElement, TMeasure, TMeasureOps>`.

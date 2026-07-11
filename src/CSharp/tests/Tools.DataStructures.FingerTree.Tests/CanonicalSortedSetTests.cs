@@ -97,6 +97,7 @@ public sealed class CanonicalSortedSetTests
         var incompatible = CanonicalSortedSet<int>.CreateRange([1, 2], ZipTreeRankPolicy<int>.Create(seed: 99));
         Assert.Throws<ArgumentException>(() => left.Union(incompatible));
         Assert.False(left.SetEquals(incompatible));
+        Assert.False(((IReadOnlySet<int>)left).SetEquals(incompatible));
     }
 
     /// <summary>Verifies rank-hash collisions remain correct and history-independent.</summary>

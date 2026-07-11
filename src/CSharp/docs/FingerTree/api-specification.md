@@ -576,26 +576,128 @@ slack.
 
 ## Canonical Zip-Zip Sorted Set
 
-`CanonicalSortedSet<T>` is an immutable `IReadOnlySet<T>` whose binary-search-tree priority is a
-keyed content-derived zip-zip rank: a geometrically distributed primary rank, a uniformly mixed
-secondary rank, and a comparer tie-break. Under one retained `ZipTreeRankPolicy<T>`, equal contents
-therefore produce the same shape independently of update history.
+`CanonicalSortedSet<T>` is an immutable `IReadOnlySet<T>` implemented as a persistent Cartesian
+binary-search tree. Comparer order is the search-tree order. A content-derived priority makes the
+shape canonical within a retained `ZipTreeRankPolicy<T>` rather than within the type globally.
 
-`ZipTreeRankPolicy<T>` retains the `IComparer<T>`, rank-hash function, and seed. The rank hash must
-be constant on comparer-equivalence classes. The default policy is process-local and mixes the
-default equality hash with a cryptographically generated seed; callers needing repeatability across
-processes must supply both a pinned seed and a deterministic equivalence-class hash. Set algebra
-requires policy object identity so incompatible rank spaces cannot be silently mixed.
+### Rank Derivation And Policy Modes
 
-Lookup, add, and remove are expected O(log n) and path-copy the search/unzip/zip path; adversarial or
-constant rank hashes can produce O(n) height, which diagnostics and tests expose honestly. Duplicate
-adds and absent removes preserve instance identity and the first stored representative. Enumeration
-is sorted. `Union`, `Intersect`, and `Except` currently compose public updates and cost O(m log n).
+`ZipTreeRankPolicy<T>` retains an `IComparer<T>`, a `Func<T, ulong>` rank hash, and an owned HMAC key.
+For an item, the implementation encodes the 64-bit rank-hash result in big-endian order and computes
+HMAC-SHA256 under that key. The first three 64-bit big-endian words of the digest supply:
 
-Each node memoizes a non-cryptographic 64-bit subtree digest with compare-and-swap publication.
-`ContentHash` is O(n) on first access and O(1) afterward. Digest inequality proves content inequality;
-equal digests still require `SetEquals`, which traverses canonical shapes in lockstep and prunes
-reference-equal nodes.
+1. a geometric coordinate equal to the leading-zero count of the first word, from 0 through 64;
+2. a fixed-width 64-bit secondary coordinate; and
+3. a 64-bit content word used by the memoized subtree digest, not by heap ordering.
+
+Nodes form a max-heap under geometric coordinate, then secondary coordinate. If that pair collides,
+the comparer-smaller item wins. This final tie-break makes the priority order total and the shape
+deterministic even under collisions, but a large collision class can become a linear chain.
+
+Policy construction has three distinct reproducibility and trust modes:
+
+- `ZipTreeRankPolicy<T>.Default` uses the default comparer and equality hash plus one 32-byte
+  cryptographically random key generated once for the closed generic type. The key is not exposed;
+  the policy and its canonical shapes are process-local.
+- `ZipTreeRankPolicy<T>.Create(..., seed: null)` generates a fresh unexposed 32-byte random key on
+  every call. `Create(..., seed: value)` deterministically derives a 32-byte HMAC key as SHA-256 of
+  ASCII `ZZT2` followed by the seed's eight big-endian bytes. `Seed` exposes that public seed. It is
+  a reproducibility salt, not a secret adversarial-security key.
+- `ZipTreeRankPolicy<T>.CreateKeyed(rankKey, ...)` requires at least 32 bytes, copies the supplied
+  key, and does not expose it. Callers that retain and protect the same key can reproduce ranks in
+  another policy or process.
+
+When no comparer is supplied, the fallback rank hash is the zero-extended 32-bit bit pattern of
+`EqualityComparer<T>.Default.GetHashCode`. Supplying an explicit comparer requires an explicit rank
+hash; the factory rejects omission. In every mode, the rank hash must be constant on the comparer's
+equivalence classes. Incremental duplicate insertion and bulk duplicate elimination detect unequal
+derived ranks for equivalent values and throw `InvalidOperationException`, but callers remain
+responsible for the function's global coherence and stability.
+
+With an unexposed or secret key, HMAC-SHA256 makes ranks for distinct inputs impractical to predict
+under the usual HMAC pseudorandom-function assumption. It cannot restore entropy lost before the
+HMAC: equal 64-bit rank hashes produce equal complete ranks, and the default fallback has only 32
+bits of input. `CreateKeyed` therefore does not protect an incoherent or attacker-collidable rank
+hash. A public seed is deterministic mixing rather than a secret PRF boundary: any caller can
+calculate ranks and deliberately select an unfavorable set.
+
+This is a practical zip-zip-inspired rank scheme, not the paper's exact metadata construction. The
+secondary coordinate is always 64 bits rather than a range sized as a function of n. The
+implementation therefore makes no claim to the paper's O(log log n)-bit rank-metadata theorem.
+
+### Canonicality And Set Semantics
+
+For stable comparer and rank-hash behavior, equal mathematical contents under one policy object
+produce one shape regardless of insertion, removal, or bulk-construction history. Separate policy
+objects also reproduce that shape when they use the same comparer semantics, equivalence-class rank
+hash, and public seed or retained key. Policies with independent random keys generally produce
+different shapes. Thus "history-independent" means policy-scoped; it does not mean that all
+`CanonicalSortedSet<T>` instances share one representation.
+
+`Create(policy)` creates an empty set retaining that exact policy. `CreateRange(items, policy)` keeps
+the first item in each comparer-equivalence class. `Add` retains an existing representative and
+returns the current instance for a duplicate. `Remove` returns the current instance when absent;
+`Clear` does so when already empty. `TryGetValue` recovers the stored representative. Enumeration is
+strictly in comparer order. `Policy`, `Count`, `IsEmpty`, and diagnostic `Height` are O(1) cached
+properties.
+
+The `IReadOnlySet<T>` relation members apply the receiver's comparer to arbitrary enumerables.
+`SetEquals(CanonicalSortedSet<T>)` and the interface `SetEquals(IEnumerable<T>)` compare semantic set
+contents even when policy objects differ. With different comparer semantics, the result is defined
+by the receiver and need not be symmetric. By contrast, `Union`, `Intersect`, and `Except` accept
+only another canonical set retaining the same policy object; they throw `ArgumentException` for a
+distinct policy even when its seed and configuration are identical. This identity gate prevents
+algebra from silently mixing rank spaces.
+
+Each node lazily memoizes a non-cryptographic 64-bit `ContentHash` from its content word and child
+digests, publishing it with compare-and-swap; the empty set reports zero. Under one coherent policy,
+digest inequality is a safe semantic-inequality fast path. Digest equality is not proof of equality.
+Across policy objects,
+neither equality nor inequality of `ContentHash` has semantic meaning. Same-policy `SetEquals` uses
+count and digest rejection before an iterative lockstep comparison that prunes reference-equal
+subtrees; cross-policy equality falls back to comparer-based set semantics.
+
+### Bulk Build And Validation
+
+`CreateRange` materializes and comparer-sorts all input together with its original sequence index,
+so equivalent values retain the first representative. After duplicate/rank-coherence checks, a
+monotone-stack Cartesian builder constructs the unique priority tree in O(u) time for u unique
+items, and a second explicit-stack pass freezes immutable nodes bottom-up. Including the mandatory
+sort, construction is O(n log n) time and O(n) auxiliary storage; it does not become linear merely
+because the input was already sorted.
+
+`ValidateStructure` iteratively checks strict comparer order, rank reproducibility, heap order,
+cached count and height, and root metadata. It returns `CanonicalSortedSetStatistics` containing
+item count, height, largest geometric rank, and the number of repeated geometric/secondary pairs.
+Validation costs O(n) expected time and O(n) auxiliary storage because it tracks priority pairs as
+well as an explicit traversal stack.
+
+### Complexity, Persistence, And Degeneracy
+
+Let h be the current tree height, n the receiver size, and m the other input size.
+
+- `Contains` and `TryGetValue` take O(h) time and O(1) auxiliary space.
+- `Add` and `Remove` take O(h) time and allocate O(h) immutable path nodes plus O(h) temporary
+  explicit-stack entries. Untouched subtrees remain shared. They do not copy O(1) nodes.
+- Enumeration takes O(n) time and O(h) iterator-stack space.
+- The first `ContentHash` access visits uncached descendants in O(n) time and O(h) stack space;
+  later root accesses are O(1). Concurrent readers may duplicate benign work but publish one stable
+  boxed digest per node.
+- Same-policy equality is O(n + m) worst-case after digest computation, with shared subtrees pruned.
+  Cross-policy equality materializes the other input in a BCL `SortedSet<T>`, costing O(m log m)
+  plus O(mh) receiver membership work and O(m) auxiliary storage.
+- Algebra composes public searches and updates rather than performing a fused linear Cartesian
+  merge. Under expected logarithmic height, union and difference are O(m log(n + m)); intersection
+  additionally probes n receiver items against the other tree and rebuilds retained items. A
+  degenerate tree can make these compositions quadratic.
+
+All search/update expected O(log n) bounds require distinct or sufficiently sparse rank-hash
+collisions and HMAC outputs behaving like independent pseudorandom ranks for the actual key set.
+They are not worst-case or adversarial bounds. Constant rank hashes demonstrably yield h = n.
+Contains, updates, split/merge, bulk freeze, enumeration, digest computation, equality, and
+validation all use explicit stacks, so even this case does not consume the managed call stack or
+raise a recursion-depth failure. It still costs O(n) time and O(n) explicit-stack memory for a
+height-n operation.
 
 ## Brodal–Okasaki Heap
 
