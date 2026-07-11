@@ -184,6 +184,10 @@ Items A4 (parity completions) ride along with ongoing maintenance and need no sc
 
 - [Derived-structure catalog](../reference/derived-structure-catalog.md) — the verified candidate
   space this proposal selects from; verdicts there are not repeated here.
+- [Frontier structure catalog](../reference/frontier-structure-catalog.md) (added 2026-07-11) —
+  surveys the candidate space *beyond* composition (new cores, hybrid representation tiers, niche
+  specializations); overlapping items (C1 Patricia trie, A3 cursor/zipper, the RRB deferral) keep
+  this proposal's scheduling, with added design detail there.
 - [C#/Rust implementation review (2026-07-09)](../reviews/csharp-rust-implementation-review-2026-07-09.md)
   — source of the parity-gap and testing-pattern observations cited above.
 - [Porting and semantic parity](../guides/porting-and-semantic-parity.md) — the bill every shipped

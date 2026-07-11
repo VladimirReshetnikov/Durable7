@@ -22,6 +22,7 @@ Library-specific design and API documentation lives beside each workspace under 
 - [Reference index](reference/README.md) - durable cross-workspace reference material.
 - [Data structure catalog](reference/data-structure-catalog.md) - cross-language catalog of repository-owned data-structure families, public entry points, and primary references.
 - [Derived structure catalog](reference/derived-structure-catalog.md) - verified candidate structures buildable on the shipped families, shared enabling API gaps, and composition design rules.
+- [Frontier structure catalog](reference/frontier-structure-catalog.md) - surveyed candidates beyond composition: new cores (including recent inventions), hybrid/adaptive representation tiers, and niche-specialized siblings, with verdicts and sequencing.
 - [Documentation navigation matrix](reference/navigation-matrix.md) - task-oriented entry points for usage, API, validation, porting, history, and maintenance work.
 - [Semantic contracts](reference/semantic-contracts.md) - shared behavior, ownership, policy, ordering, and documentation obligations across repository-owned numerics and data structures.
 - [Test suite map](reference/test-suite-map.md) - cross-workspace map of test runners, routine commands, stress knobs, sample smoke tests, and benchmark boundaries.
