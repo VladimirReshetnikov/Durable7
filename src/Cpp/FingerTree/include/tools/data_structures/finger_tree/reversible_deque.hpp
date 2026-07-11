@@ -188,11 +188,11 @@ public:
 
     class const_iterator final {
     public:
-        // Logical descent through a reversed node returns values, not stable
-        // references into physical storage. Keep the honest single-pass
-        // category even though iterator objects themselves are copyable.
-        using iterator_concept = std::input_iterator_tag;
-        using iterator_category = std::input_iterator_tag;
+        // The orientation-bit cursor reaches physical leaves without
+        // materializing mirrored nodes, so retained references are stable and
+        // copied cursors remain independent multipass traversals.
+        using iterator_concept = std::forward_iterator_tag;
+        using iterator_category = std::forward_iterator_tag;
         using value_type = T;
         using difference_type = std::ptrdiff_t;
         using pointer = const T*;
@@ -202,22 +202,18 @@ public:
 
         [[nodiscard]] reference operator*() const
         {
-            return *current_;
+            return cursor_.current();
         }
 
         [[nodiscard]] pointer operator->() const
         {
-            return &*current_;
+            return &cursor_.current();
         }
 
         const_iterator& operator++()
         {
+            cursor_.advance();
             ++position_;
-            if (position_ == root_.size()) {
-                current_.reset();
-            } else {
-                current_ = root_.get_leaf(position_);
-            }
             return *this;
         }
 
@@ -230,8 +226,8 @@ public:
 
         friend bool operator==(const const_iterator& left, const const_iterator& right) noexcept
         {
-            if (!left.current_.has_value() || !right.current_.has_value()) {
-                return left.current_.has_value() == right.current_.has_value();
+            if (left.cursor_.at_end() || right.cursor_.at_end()) {
+                return left.cursor_.at_end() == right.cursor_.at_end();
             }
 
             return left.owner_ == right.owner_ && left.position_ == right.position_;
@@ -241,16 +237,12 @@ public:
         friend class reversible_deque;
 
         explicit const_iterator(detail::rev_tree<T> root)
-            : root_(std::move(root))
-            , owner_(root_.identity())
+            : cursor_(root)
+            , owner_(root.identity())
         {
-            if (root_.size() != 0) {
-                current_ = root_.get_leaf(0);
-            }
         }
 
-        detail::rev_tree<T> root_;
-        std::optional<T> current_;
+        detail::rev_tree_cursor<T> cursor_;
         const void* owner_ = nullptr;
         size_type position_ = 0;
     };

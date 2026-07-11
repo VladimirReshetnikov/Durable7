@@ -17,6 +17,9 @@ template <class T>
 class rev_node;
 
 template <class T>
+class rev_tree_cursor;
+
+template <class T>
 class rev_element;
 
 template <class T>
@@ -138,6 +141,8 @@ public:
     [[nodiscard]] std::size_t validate_and_count() const;
 
 private:
+    friend class rev_tree_cursor<T>;
+
     struct leaf_storage final {
         T value;
     };
@@ -267,6 +272,8 @@ public:
     }
 
 private:
+    friend class rev_tree_cursor<T>;
+
     [[nodiscard]] static std::size_t validated_size(const digit_type& children)
     {
         if (children.size() < 2 || children.size() > 3) {
@@ -427,6 +434,7 @@ public:
 private:
     template <class U>
     friend rev_tree<U> rev_concat_with_middle(rev_tree<U> left, const rev_digit<U>& middle, rev_tree<U> right);
+    friend class rev_tree_cursor<T>;
 
     std::shared_ptr<const rev_tree_rep<T>> rep_;
 };
@@ -942,6 +950,155 @@ std::size_t rev_tree<T>::depth() const noexcept
 {
     return rep_->depth();
 }
+
+/* A retained logical-order cursor over the physical reversible tree. Each
+ * task carries the orientation inherited from its parent instead of calling
+ * mirror(), so increment neither allocates mirrored nodes nor repeats an
+ * indexed root-to-leaf descent. The reserved task stack is O(log n), and a
+ * complete traversal visits every tree/node/leaf block once. */
+template <class T>
+class rev_tree_cursor final {
+public:
+    rev_tree_cursor() = default;
+
+    explicit rev_tree_cursor(rev_tree<T> root)
+        : root_(std::move(root))
+    {
+        tasks_.reserve(6 * (root_.depth() + 1) + 8);
+        tasks_.push_back(task::tree(&root_, false));
+        advance();
+    }
+
+    [[nodiscard]] bool at_end() const noexcept
+    {
+        return current_ == nullptr;
+    }
+
+    [[nodiscard]] const T& current() const noexcept
+    {
+        return *current_;
+    }
+
+    void advance()
+    {
+        current_ = nullptr;
+        while (!tasks_.empty()) {
+            const auto next = tasks_.back();
+            tasks_.pop_back();
+            switch (next.kind) {
+            case task_kind::tree:
+                expand_tree(*next.tree_value, next.reversed);
+                break;
+            case task_kind::digit:
+                expand_digit(*next.digit_value, next.reversed);
+                break;
+            case task_kind::element:
+                if (expand_element(*next.element_value, next.reversed)) {
+                    return;
+                }
+                break;
+            }
+        }
+    }
+
+private:
+    enum class task_kind {
+        tree,
+        digit,
+        element
+    };
+
+    struct task final {
+        [[nodiscard]] static task tree(const rev_tree<T>* value, const bool reversed)
+        {
+            auto result = task{};
+            result.kind = task_kind::tree;
+            result.tree_value = value;
+            result.reversed = reversed;
+            return result;
+        }
+
+        [[nodiscard]] static task digit(const rev_digit<T>* value, const bool reversed)
+        {
+            auto result = task{};
+            result.kind = task_kind::digit;
+            result.digit_value = value;
+            result.reversed = reversed;
+            return result;
+        }
+
+        [[nodiscard]] static task element(const rev_element<T>* value, const bool reversed)
+        {
+            auto result = task{};
+            result.kind = task_kind::element;
+            result.element_value = value;
+            result.reversed = reversed;
+            return result;
+        }
+
+        task_kind kind = task_kind::tree;
+        const rev_tree<T>* tree_value = nullptr;
+        const rev_digit<T>* digit_value = nullptr;
+        const rev_element<T>* element_value = nullptr;
+        bool reversed = false;
+    };
+
+    void expand_tree(const rev_tree<T>& tree, const bool inherited_reversal)
+    {
+        switch (tree.rep_->kind()) {
+        case rev_tree_kind::empty:
+            return;
+        case rev_tree_kind::single: {
+            const auto& single = static_cast<const single_rev_tree_rep<T>&>(*tree.rep_);
+            tasks_.push_back(task::element(&single.element, inherited_reversal));
+            return;
+        }
+        case rev_tree_kind::deep: {
+            const auto& deep = static_cast<const deep_rev_tree_rep<T>&>(*tree.rep_);
+            const bool reversed = inherited_reversal != deep.reversed;
+            if (reversed) {
+                tasks_.push_back(task::digit(&deep.prefix, true));
+                tasks_.push_back(task::tree(&deep.middle, true));
+                tasks_.push_back(task::digit(&deep.suffix, true));
+            } else {
+                tasks_.push_back(task::digit(&deep.suffix, false));
+                tasks_.push_back(task::tree(&deep.middle, false));
+                tasks_.push_back(task::digit(&deep.prefix, false));
+            }
+            return;
+        }
+        }
+    }
+
+    void expand_digit(const rev_digit<T>& digit, const bool reversed)
+    {
+        if (reversed) {
+            for (const auto& element : digit) {
+                tasks_.push_back(task::element(&element, true));
+            }
+        } else {
+            for (auto index = digit.size(); index != 0; --index) {
+                tasks_.push_back(task::element(&digit[index - 1], false));
+            }
+        }
+    }
+
+    [[nodiscard]] bool expand_element(const rev_element<T>& element, const bool inherited_reversal)
+    {
+        if (element.is_leaf()) {
+            current_ = &element.leaf_value();
+            return true;
+        }
+
+        const auto& node = element.node_value();
+        tasks_.push_back(task::digit(&node.children_, inherited_reversal != node.reversed_));
+        return false;
+    }
+
+    rev_tree<T> root_;
+    std::vector<task> tasks_;
+    const T* current_ = nullptr;
+};
 
 template <class T>
 std::size_t rev_sum_sizes(const rev_digit<T>& elements)

@@ -29,8 +29,9 @@ listing, and replay-seed selection.
 - `measured_finger_tree_tests.cpp`, `lazy_cell_tests.cpp`, and `measured_lazy_cell_tests.cpp` cover the measured
   tree core, retained forward streaming and copy behavior, constrained result equality, reference-locate lifetime
   under structural sharing, lazy publication helpers, and computed-cell allocation guards.
-- `reversible_deque_tests.cpp` covers reverse orientation, mixed-orientation updates, retained input-iterator
-  logical order, result equality, random histories, and O(1)-reverse allocation checks.
+- `reversible_deque_tests.cpp` covers reverse orientation, mixed-orientation updates, retained multipass
+  forward-iterator logical order, zero-allocation prefix increment over 16,384 values, result equality, random
+  histories, and O(1)-reverse allocation checks.
 - `command_sequence_tests.cpp` instantiates the stateful command recorder against the measured tree, tuned deque,
   reversible deque, positional rope, measured rope, and sorted set. Five default seeds exercise retained-version
   branching; failures are replayed and delta-debugged to a deletion-minimal operation program. The same unit

@@ -151,7 +151,8 @@ The suite covers:
   randomized branching histories, allocation counters, and operation counters;
 - the general measured finger tree, lazy cells, measured lazy cells, measure predicates, product/sum/order
   measures, and named operations;
-- reversible deque reversal, mixed-orientation operations, random histories, and O(1)-reverse allocation guards;
+- reversible deque reversal, mixed-orientation operations, random histories, retained forward-iterator semantics,
+  zero-allocation prefix increment over 16,384 reversed values, and O(1)-reverse allocation guards;
 - sorted bag/set/map ranking, navigation, range, custom order, set algebra, and randomized model checks;
 - priority queue ordering, stability, and command-model behavior;
 - interval tree insertion, overlap, containment, coalescing, removal, and model comparisons;

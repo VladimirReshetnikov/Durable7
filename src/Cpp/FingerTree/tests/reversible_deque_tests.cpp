@@ -19,9 +19,9 @@ using namespace tools::data_structures::finger_tree::tests;
 namespace {
 
 static_assert(std::input_iterator<ft::reversible_deque<int>::const_iterator>);
-static_assert(!std::forward_iterator<ft::reversible_deque<int>::const_iterator>);
+static_assert(std::forward_iterator<ft::reversible_deque<int>::const_iterator>);
 static_assert(std::ranges::input_range<const ft::reversible_deque<int>>);
-static_assert(!std::ranges::forward_range<const ft::reversible_deque<int>>);
+static_assert(std::ranges::forward_range<const ft::reversible_deque<int>>);
 
 struct non_equality_value final {
     int value;
@@ -191,7 +191,7 @@ void add_reversible_deque_tests_impl(suite& tests)
         require_sequence_equal(deque, expected);
     });
 
-    tests.add("reversible deque input iterator streams logical orientation and retains source lifetime", [] {
+    tests.add("reversible deque forward iterator streams logical orientation and retains source lifetime", [] {
         const auto values = iota_vector(1'500);
         const auto deque = ft::reversible_deque<int>::from_range(values).reverse();
         const auto expected = reversed(values);
@@ -202,6 +202,12 @@ void add_reversible_deque_tests_impl(suite& tests)
             iterated.push_back(value);
         }
         FT_REQUIRE(iterated == expected);
+
+        auto first = deque.begin();
+        auto second = first;
+        ++first;
+        FT_REQUIRE_EQUAL(*second, expected[0]);
+        FT_REQUIRE_EQUAL(*first, expected[1]);
 
         auto surviving = [] {
             return ft::reversible_deque<int>::from_range(iota_vector(1'500)).reverse().begin();
@@ -224,6 +230,21 @@ void add_reversible_deque_tests_impl(suite& tests)
         FT_REQUIRE(deque.split_at(733) != independent.split_at(734));
         FT_REQUIRE(deque.try_pop_front() == independent.try_pop_front());
         FT_REQUIRE(deque.try_pop_back() == independent.try_pop_back());
+    });
+
+    tests.add("reversible deque traversal allocates no per-element mirrored state", [] {
+        const auto deque = ft::reversible_deque<int>::from_range(iota_vector(16'384)).reverse();
+        auto iterator = deque.begin();
+        const auto end = deque.end();
+        long long sum = 0;
+        allocation_counting_scope allocations;
+        while (iterator != end) {
+            sum += *iterator;
+            ++iterator;
+        }
+
+        FT_REQUIRE_EQUAL(sum, 134'209'536LL);
+        FT_REQUIRE_EQUAL(allocations.allocations(), std::size_t{0});
     });
 
     tests.add("reversible deque reverse allocation count is independent of size", [] {

@@ -139,9 +139,10 @@ Notable C++ differences from C#:
 - counts and indices use `std::size_t`, continuing the port-wide count policy;
 - construction uses initializer-list, iterator, and range APIs rather than C# `params ReadOnlySpan<T>` and
   `IEnumerable<T>` overloads;
-- logical reversal can only expose values produced during orientation-aware descent, so `const_iterator` is
-  intentionally an input iterator rather than claiming stable-reference forward semantics. It retains the root
-  and one current value, streams without whole-sequence materialization, and `copy_to` uses that logical order.
+- `const_iterator` is a retained multipass forward iterator. Its O(log n) task stack carries one orientation bit
+  per tree/node frame and reaches physical leaves directly, so references remain stable, prefix increment performs
+  no allocation, and a complete traversal is O(n). `copy_to` streams through the same cursor without indexed
+  descent or mirrored-node materialization.
 
 ## `rope<T>`
 
