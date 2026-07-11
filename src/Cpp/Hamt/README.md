@@ -12,6 +12,8 @@ collections backed by a hash-array mapped trie:
 
 - `tools::data_structures::hamt::persistent_hash_map<Key, T, Hash, KeyEqual, ValueEqual>`
 - `tools::data_structures::hamt::persistent_hash_set<T, Hash, KeyEqual>`
+- `persistent_int_map<T>` / `persistent_long_map<T>` and the corresponding explicit-width
+  `persistent_int_set` / `persistent_long_set` types.
 
 The implementation preserves the C# library's core shape: 32-way logical branching, five hash bits
 per trie level, canonical CHAMP branches with separate data/node maps, compact inline payload and
@@ -23,12 +25,19 @@ construction) mutates unpublished nodes in place and freezes them into detached 
 added/removed/changed diff. Because C++ collections use value semantics,
 identity guarantees are expressed as shared root identity rather than object reference identity.
 
+The integer family is a separate big-endian Patricia core. It sign-flips keys for ascending signed
+iteration, compresses unary prefixes, caches subtree cardinality, and aligns prefixes for structural
+union/intersection/difference. Map union/intersection have resolver overloads for overlapping values;
+all algebra preserves shared roots when the semantic result is unchanged.
+
 ## Layout
 
 - `include/Tools/DataStructures/Hamt/persistent_hash_map.hpp` contains the template map
   implementation.
 - `include/Tools/DataStructures/Hamt/persistent_hash_set.hpp` contains the set wrapper and set
   algebra.
+- `include/Tools/DataStructures/Hamt/persistent_int_map.hpp` contains both widths of Patricia maps
+  and sets.
 - `tests/` contains the [deterministic native test executable](tests/README.md).
 - `build.ps1` imports the MSVC toolchain through Scriptorium and compiles the test executable.
 - `docs/api-specification.md` documents the C++ API adaptation and complexity guarantees.

@@ -24,6 +24,25 @@ The port intentionally follows C++ value semantics rather than C# reference iden
 return a value that shares the same root node as the source; `shares_root_with` and the debug root
 inspection helpers expose that property for tests.
 
+## Patricia Integer Maps And Sets
+
+`persistent_int_map<T>` / `persistent_long_map<T>` and `persistent_int_set` /
+`persistent_long_set` are explicit-width ordered collections backed by one big-endian Patricia
+template. Keys are transformed by flipping the sign bit before branching, so `to_vector()` is in
+ascending signed order across the full 32- or 64-bit domain. Branches store a compressed prefix,
+the highest differing bit, two immutable children, and cached subtree cardinality.
+
+`set_item` and `remove` path-copy only the compressed search path and preserve the root for equal
+replacement or absent removal. `union_with`, `intersect_with`, and `except_with` align prefixes,
+reuse disjoint/shared subtrees, and preserve the receiver root when the semantic result is unchanged.
+Fixed union is right-biased for unequal overlapping values and fixed intersection keeps the left
+value. Resolver overloads accept `(key, left, right)` and structurally combine only overlaps.
+
+Patricia point operations are O(W), where W is fixed at 32 or 64 but unary-path compression normally
+visits far fewer nodes. Structural algebra is O(v) for the prefix structure actually visited after
+shared-root and disjoint-prefix pruning, with O(n + m) worst case. Result size is read in O(1) from
+cached node metadata.
+
 ## Hash Trie Shape
 
 The trie uses 32-way logical branching and consumes five hash bits per level. CHAMP branch nodes

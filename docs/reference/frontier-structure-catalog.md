@@ -167,6 +167,16 @@ signed boundaries, right-biased union, intersection, difference, and no-op root 
 ordering, compressed prefixes, and prefix-aligned structural algebra. The explicit aliases avoid
 making the width contract depend on platform-sized `Int`.
 
+**C++ status (2026-07-11): Implemented for both widths.** `persistent_int_map` / `set` and
+`persistent_long_map` / `set` use immutable `shared_ptr` nodes with compressed prefixes, cached
+subtree counts, signed-order traversal, prefix-aligned fixed and resolver-combining algebra, and
+root-preserving semantic no-ops.
+
+**C status (2026-07-11): Implemented for both widths.** The type-erased `tds_int_map` / `set` and
+`tds_long_map` / `set` share a reference-counted C17 core with explicit value ownership policy,
+cached subtree counts, signed-order visitors, prefix-aware structural algebra, typed combining
+callbacks, alias-safe updates, and deterministic model/lifetime tests.
+
 **What it is.** Okasaki & Gill's mergeable integer maps (1998): a binary trie over the bits of an
 integer key, path-compressed so each internal node stores a prefix and the single branching bit,
 branching on the highest bit where keys differ. Operations are O(min(n, W)) with W the key width;

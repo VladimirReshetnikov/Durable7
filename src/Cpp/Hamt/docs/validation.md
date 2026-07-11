@@ -106,6 +106,9 @@ The suite covers:
   equal-value retention for duplicates, final-hash-level branching, a collision-heavy randomized
   build checked against persistent updates, and builder-backed `create_range`/`intersect_with`
   semantics.
+- 32-/64-bit Patricia signed ordering, 10,000 deterministic updates against `std::map`, retained
+  no-op roots, cached subtree counts, fixed-bias and resolver-combining map algebra, and integer-set
+  union/intersection/difference.
 
 For new behavior, prefer adding deterministic model checks here before relying on example-only coverage.
 

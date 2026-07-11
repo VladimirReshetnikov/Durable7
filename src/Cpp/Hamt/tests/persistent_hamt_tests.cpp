@@ -1,5 +1,6 @@
 #include <Tools/DataStructures/Hamt/persistent_hash_map.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_set.hpp>
+#include <Tools/DataStructures/Hamt/persistent_int_map.hpp>
 #include <tools/data_structures/test_support/headless_test_process.h>
 
 #include <algorithm>
@@ -11,6 +12,7 @@
 #include <iostream>
 #include <iterator>
 #include <mutex>
+#include <map>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -24,6 +26,9 @@
 using tools::data_structures::hamt::persistent_hamt_node_kind;
 using tools::data_structures::hamt::map_difference_kind;
 using tools::data_structures::hamt::persistent_hash_map;
+using tools::data_structures::hamt::persistent_int_map;
+using tools::data_structures::hamt::persistent_int_set;
+using tools::data_structures::hamt::persistent_long_map;
 using tools::data_structures::hamt::persistent_hash_set;
 
 namespace {
@@ -547,6 +552,59 @@ TEST(Champ_IndependentHistoriesAndTypedDiff) {
     CHECK(std::ranges::any_of(differences, [](const auto& item) {
         return item.kind == map_difference_kind::added && item.key == 1000;
     }));
+}
+
+TEST(Patricia_SignedOrderingHistoriesAndStructuralAlgebra) {
+    auto ints = persistent_int_map<std::string>{};
+    for (const auto key : {INT32_MAX, 1, 0, -1, INT32_MIN}) {
+        ints = ints.set_item(key, std::to_string(key));
+    }
+    const auto entries = ints.to_vector();
+    CHECK_EQ(INT32_MIN, entries.front().first);
+    CHECK_EQ(INT32_MAX, entries.back().first);
+
+    auto longs = persistent_long_map<std::int64_t>{};
+    for (const auto key : {INT64_MAX, std::int64_t{1}, std::int64_t{0}, std::int64_t{-1}, INT64_MIN}) {
+        longs = longs.set_item(key, key);
+    }
+    CHECK_EQ(INT64_MIN, longs.to_vector().front().first);
+    CHECK_EQ(INT64_MAX, longs.to_vector().back().first);
+
+    auto actual = persistent_int_map<std::uint32_t>{};
+    std::map<std::int32_t, std::uint32_t> expected;
+    std::uint32_t state = 0x1234abcdu;
+    for (int operation = 0; operation < 10000; ++operation) {
+        state = state * 1664525u + 1013904223u;
+        const auto key = static_cast<std::int32_t>((state >> 8) % 401u) - 200;
+        if ((state & 3u) == 0) { actual = actual.remove(key); expected.erase(key); }
+        else { actual = actual.set_item(key, state); expected[key] = state; }
+    }
+    CHECK_EQ((std::vector<std::pair<std::int32_t, std::uint32_t>>(expected.begin(), expected.end())), actual.to_vector());
+    CHECK(actual.remove(10000).shares_root_with(actual));
+
+    const auto left_map = persistent_int_map<std::string>{}.set_item(1, "left").set_item(2, "two");
+    const auto right_map = persistent_int_map<std::string>{}.set_item(1, "right").set_item(3, "three");
+    CHECK_EQ(std::string("right"), *left_map.union_with(right_map).try_get(1));
+    CHECK_EQ(std::string("left"), *left_map.intersect_with(right_map).try_get(1));
+    const auto append_values = [](std::int32_t, const std::string& left_value, const std::string& right_value) {
+        return left_value + "+" + right_value;
+    };
+    const auto combined_union = left_map.union_with(right_map, append_values);
+    const auto combined_intersection = left_map.intersect_with(right_map, append_values);
+    CHECK_EQ(std::string("left+right"), *combined_union.try_get(1));
+    CHECK_EQ(std::string("left+right"), *combined_intersection.try_get(1));
+    CHECK_EQ(std::size_t{3}, combined_union.size());
+    CHECK_EQ(std::size_t{1}, combined_intersection.size());
+    const auto choose_left = [](
+        std::int32_t, const std::string& left_value, const std::string&) { return left_value; };
+    CHECK(left_map.union_with(left_map, choose_left).shares_root_with(left_map));
+    CHECK(left_map.intersect_with(left_map, choose_left).shares_root_with(left_map));
+
+    const auto left = persistent_int_set{}.add(-3).add(-1).add(1).add(3);
+    const auto right = persistent_int_set{}.add(-1).add(0).add(1);
+    CHECK_EQ((std::vector<std::int32_t>{-3, -1, 0, 1, 3}), left.union_with(right).to_vector());
+    CHECK_EQ((std::vector<std::int32_t>{-1, 1}), left.intersect_with(right).to_vector());
+    CHECK_EQ((std::vector<std::int32_t>{-3, 3}), left.except_with(right).to_vector());
 }
 
 TEST(Enumerator_CopiedIteratorAdvancesIndependently) {
@@ -1218,6 +1276,28 @@ TEST(BulkBuilder_CreateRangeAndIntersectionUseBuilderSemantics) {
     CHECK_EQ(std::string("Alpha"), *intersected);
     CHECK(intersection.contains("gamma"));
     CHECK(!intersection.contains("beta"));
+}
+
+TEST(PatriciaMap_CachedCountsAndNoOpAlgebraPreserveRoots) {
+    using map_type = tools::data_structures::hamt::persistent_int_map<std::string>;
+
+    const auto left = map_type{}
+        .set_item(1, "one")
+        .set_item(2, "two")
+        .set_item(3, "three");
+    const auto subset = map_type{}
+        .set_item(1, "one")
+        .set_item(2, "two");
+    const auto disjoint = map_type{}.set_item(4, "four");
+
+    CHECK_EQ(std::size_t{3}, left.size());
+    CHECK(left.union_with(left).shares_root_with(left));
+    CHECK(left.intersect_with(left).shares_root_with(left));
+    CHECK(left.except_with(map_type{}).shares_root_with(left));
+    CHECK(left.union_with(subset).shares_root_with(left));
+    CHECK_EQ(std::size_t{4}, left.union_with(disjoint).size());
+    CHECK_EQ(std::size_t{2}, left.intersect_with(subset).size());
+    CHECK_EQ(std::size_t{1}, left.except_with(subset).size());
 }
 
 } // namespace

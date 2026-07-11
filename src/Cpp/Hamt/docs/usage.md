@@ -14,6 +14,7 @@ the specification.
 ```cpp
 #include <Tools/DataStructures/Hamt/persistent_hash_map.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_set.hpp>
+#include <Tools/DataStructures/Hamt/persistent_int_map.hpp>
 
 namespace hamt = tools::data_structures::hamt;
 ```
@@ -192,6 +193,31 @@ bool equal = left.set_equals(std::vector{3, 2, 1});
 
 Operations that need distinct right-side membership materialize the range into `std::unordered_set`
 using the set's hash and equality policy. Superset and overlap checks stream and can exit early.
+
+## Integer Patricia Collections
+
+Choose the Patricia surface for signed integer keys, sorted traversal, or merge-heavy workloads:
+
+```cpp
+auto left = hamt::persistent_int_map<std::string>{}
+    .set_item(-10, "left")
+    .set_item(20, "twenty");
+auto right = hamt::persistent_int_map<std::string>{}
+    .set_item(-10, "right")
+    .set_item(30, "thirty");
+
+auto right_biased = left.union_with(right);
+auto combined = left.union_with(right,
+    [](std::int32_t, const std::string& l, const std::string& r) {
+        return l + "+" + r;
+    });
+
+auto ordered = combined.to_vector(); // ascending signed keys
+```
+
+The 64-bit aliases have the same surface. Integer sets expose `add`, `remove`, structural union,
+intersection, difference, and ordered `to_vector()`. No custom hash or comparison policy is needed:
+the key bits define both identity and order.
 
 ## Concurrency And Lifetime
 

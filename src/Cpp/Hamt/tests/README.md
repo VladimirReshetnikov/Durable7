@@ -31,6 +31,8 @@ The executable registers these cases:
 - `Structure_RootShapeTracksContentsAndCollapse`
 - `Structure_UpdateSharesUntouchedSiblingSubtrees`
 - `Champ_IndependentHistoriesAndTypedDiff`
+- `Patricia_SignedOrderingHistoriesAndStructuralAlgebra`
+- `PatriciaMap_CachedCountsAndNoOpAlgebraPreserveRoots`
 - `Enumerator_CopiedIteratorAdvancesIndependently`
 - `Enumerator_RetainsTheTrieBeyondTheSourceMapValue`
 - `RandomHistory_MatchesUnorderedMapAndPreservesSnapshots`
