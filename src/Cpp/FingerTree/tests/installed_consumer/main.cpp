@@ -7,6 +7,24 @@
 
 namespace ft = tools::data_structures::finger_tree;
 
+namespace {
+
+struct sum_monoid final {
+    using measure_type = int;
+
+    [[nodiscard]] static constexpr measure_type empty() noexcept
+    {
+        return 0;
+    }
+
+    [[nodiscard]] static constexpr measure_type combine(const measure_type left, const measure_type right) noexcept
+    {
+        return left + right;
+    }
+};
+
+} // namespace
+
 int main()
 {
     if (ft::library_name != std::string_view{"Tools.DataStructures.FingerTree.Cpp"}) {
@@ -20,10 +38,14 @@ int main()
     const auto selected = ft::try_select_by_cumulative_weight(weighted, 5);
     const auto rrb = ft::rrb_vector<int>::from_range(source).set_item(2, 30).concat(ft::rrb_vector<int>{5, 6});
     const auto text = ft::to_text_rope("alpha\nbeta\ngamma");
+    auto daba = ft::daba_lite<int, sum_monoid>{};
+    daba.insert(7);
+    daba.insert(11);
+    daba.evict();
 
     if (deque.size() != 6 || deque.front() != 0 || deque.back() != 5 || !selected.has_value()
         || selected->value != 1 || rrb.size() != 6 || rrb[2] != 30 || rrb.back() != 6
-        || ft::line_count(text) != 3 || ft::get_line(text, 1) != "beta") {
+        || ft::line_count(text) != 3 || ft::get_line(text, 1) != "beta" || daba.aggregate() != 11) {
         std::cerr << "installed public API smoke check failed\n";
         return 1;
     }

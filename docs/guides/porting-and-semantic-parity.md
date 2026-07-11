@@ -61,22 +61,24 @@ structure. Promoting another language requires a separately reviewed reclamation
 contract, not a mechanical HAMT port.
 
 DABA Lite is another deliberately mutable member, but its algorithm is portable independently of
-its lifetime policy. C#, Kotlin/JVM, and Rust preserve FIFO ordering, the six-cursor schedule,
+its lifetime policy. C#, C++, Kotlin/JVM, and Rust preserve FIFO ordering, the six-cursor schedule,
 three/two/one combine ceilings, callback-atomic mutators, callback-free structural validation, and
 the absence of raw-value iteration. Managed tracing-GC ports can replace the active chunk chain in
-O(1). Safe Rust instead clears in O(n + c), iteratively dropping `n` owned values in `c` chunks;
-deferring that destruction would violate prompt reclamation. Its stable `Rc` cursor representation
-also makes the mutable core `!Send` and `!Sync`. Treat these ownership/concurrency differences as
-explicit language semantics, not parity failures. A pure Haskell value would not preserve DABA's
-ephemeral incremental schedule, so omission there is intentional.
+O(1). C++ and safe Rust instead clear in O(n + c), iteratively destroying `n` owned values in `c`
+chunks; deferring that work would violate prompt reclamation. C++ requires no-throw moves so its
+planned publication phase cannot tear, while Rust's stable `Rc` cursor representation makes the
+mutable core `!Send` and `!Sync`. Treat these ownership/concurrency differences as explicit
+language semantics, not parity failures. A pure Haskell value would not preserve DABA's ephemeral
+incremental schedule, so omission there is intentional.
 
 FingerTree lineage:
 
 1. [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) is the broadest semantic source:
    tuned deque, general measured tree, derived collections, ropes, text helpers, samples,
    benchmarks, and design notes.
-2. [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) ports that family to a header-first
-   C++ library with local C++ naming, value semantics, and CTest validation.
+2. [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) ports the persistent family to a
+   header-first C++ library with local naming, value semantics, and CTest validation, and segregates
+   the noncopyable mutable DABA Lite core with its native ownership constraints.
 3. [`src/C/FingerTree`](../../src/C/FingerTree/README.md) follows the native design in C form with
    explicit handles, callback policies, and facade types.
 4. [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) ports the family to Haskell

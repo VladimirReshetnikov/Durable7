@@ -24,6 +24,7 @@ void add_interval_tree_tests(suite& tests);
 void add_lazy_cell_tests(suite& tests);
 void add_atomic_box_tests(suite& tests);
 void add_command_sequence_tests(suite& tests);
+void add_daba_lite_tests(suite& tests);
 void add_measured_finger_tree_tests(suite& tests);
 void add_measured_lazy_cell_tests(suite& tests);
 void add_measured_rope_tests(suite& tests);
@@ -127,6 +128,9 @@ int main(const int argument_count, const char* const* arguments)
 
     tests.set_group("command-model");
     add_command_sequence_tests(tests);
+
+    tests.set_group("daba-lite");
+    add_daba_lite_tests(tests);
 
     tests.set_group("measured-tree");
     add_measured_finger_tree_tests(tests);

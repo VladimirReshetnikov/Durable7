@@ -46,7 +46,7 @@ patterns.
 | Rust HAMT | [src/Rust/Hamt/docs/api-notes.md](../../src/Rust/Hamt/docs/api-notes.md) | `PersistentHashMap`, `PersistentHashSet`, hash policies, and Cargo validation |
 | C# FingerTree | [src/CSharp/docs/FingerTree/usage.md](../../src/CSharp/docs/FingerTree/usage.md) | Deques, reversible deques, sorted collections, priority queues, intervals, ropes/text, raw measured trees |
 | C FingerTree | [src/C/FingerTree/docs/usage.md](../../src/C/FingerTree/docs/usage.md) | C handle lifetime, policy setup, persistent updates, facades, text ropes |
-| C++ FingerTree | [src/Cpp/FingerTree/docs/usage.md](../../src/Cpp/FingerTree/docs/usage.md) | Aggregate include path, value semantics, persistent deque/tree facades, ropes/text, publication patterns |
+| C++ FingerTree | [src/Cpp/FingerTree/docs/usage.md](../../src/Cpp/FingerTree/docs/usage.md) | Aggregate include path, persistent values, DABA Lite ownership/exception constraints, ropes/text, and publication patterns |
 | Haskell FingerTree | [src/Haskell/FingerTree/README.md](../../src/Haskell/FingerTree/README.md) | General measured tree, deque, reversible deque, sorted facades, priority queue, intervals, ropes, and text helpers |
 | Kotlin FingerTree | [src/Kotlin/FingerTree/docs/api-notes.md](../../src/Kotlin/FingerTree/docs/api-notes.md) | Kotlin measured-AVL/RRB persistence, derived collections, ropes/text, and mutable DABA Lite aggregation |
 | Rust FingerTree | [src/Rust/FingerTree/docs/api-notes.md](../../src/Rust/FingerTree/docs/api-notes.md) | Rust shared-storage persistent surfaces plus single-threaded DABA Lite and deterministic-drop semantics |
@@ -71,7 +71,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | Rust HAMT | [API notes](../../src/Rust/Hamt/docs/api-notes.md) and [source](../../src/Rust/Hamt/src/lib.rs) | Rust value API, `BuildHasher`, `Arc` sharing, and trie-order iteration |
 | C# FingerTree | [API specification](../../src/CSharp/docs/FingerTree/api-specification.md) | Deque contract plus measured-tree, reversible-deque, rope, and related surface notes |
 | C FingerTree | [API notes](../../src/C/FingerTree/docs/api-notes.md) | C API shape, ownership rules, and C++ port differences |
-| C++ FingerTree | [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) | C++ conventions and active differences from the C# workspace |
+| C++ FingerTree | [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) | C++ conventions, DABA no-throw commit and deterministic clear semantics, and active C# differences |
 | C# Tungsten collections | [API specification](../../src/CSharp/docs/Tungsten/api-specification.md) | List facade and association contracts, kernel-verified ordering rules, complexity and no-op identity tables |
 | C Tungsten collections | [Workspace README](../../src/C/Tungsten/README.md) and [public header](../../src/C/Tungsten/include/tools/data_structures/tungsten/tungsten.h) | C value-struct API, explicit lifetime, policy callbacks, and stamp-sequence representation |
 | C++ Tungsten collections | [Workspace README](../../src/Cpp/Tungsten/README.md) and [aggregate header](../../src/Cpp/Tungsten/include/tools/data_structures/tungsten/tungsten.hpp) | C++ value API and header-first List/Association templates |
@@ -91,7 +91,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | C++ HAMT | [Validation](../../src/Cpp/Hamt/docs/validation.md) | MSVC C++20 build script, Debug/Release commands, warning policy, and native model tests |
 | C# FingerTree | [Validation](../../src/CSharp/docs/FingerTree/validation.md) | .NET restore/build/test commands, sample smoke coverage, benchmark boundary, stress controls, and xUnit/CsCheck coverage |
 | C FingerTree | [Validation](../../src/C/FingerTree/docs/validation.md) | CMake build, CTest validation, sample smoke tests, and benchmark harness entry points |
-| C++ FingerTree | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | CMake build, CTest validation, stress controls, and benchmark-harness status |
+| C++ FingerTree | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | CMake/CTest validation, DABA callback/copy-failure gates, stress controls, packaging, and benchmarks |
 | C# Tungsten collections | [Validation](../../src/CSharp/docs/Tungsten/validation.md) | .NET build/test commands, kernel-verified semantics coverage, model histories, relabel stress |
 | C Tungsten collections | [Workspace README](../../src/C/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten -RunTests` and Release validation for the C CTest executable |
 | C++ Tungsten collections | [Workspace README](../../src/Cpp/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten -RunTests` for the C++ CTest executable |
@@ -114,7 +114,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | C FingerTree tests | [Tests README](../../src/C/FingerTree/tests/README.md) | Core CTest executable, named test cases, direct executable path, and runner failure behavior |
 | C FingerTree samples | [Samples README](../../src/C/FingerTree/samples/README.md) | Deterministic C sample executables and CTest smoke-test names |
 | C FingerTree benchmarks | [Benchmarks README](../../src/C/FingerTree/benchmarks/README.md) | Dependency-light timing harness workloads and output shape |
-| C++ FingerTree tests | [Tests README](../../src/Cpp/FingerTree/tests/README.md) | Native smoke runner source map, direct executable path, and tearable stress controls |
+| C++ FingerTree tests | [Tests README](../../src/Cpp/FingerTree/tests/README.md) | Native group map including DABA models/failures, direct runner paths, packaging, and tearable stress controls |
 | Haskell HAMT tests | [Tests README](../../src/Haskell/Hamt/test/README.md) | Cabal executable covering collision buckets, custom policies, key recovery, and set algebra |
 | Haskell FingerTree tests | [Tests README](../../src/Haskell/FingerTree/test/README.md) | Cabal executable covering measured tree, facades, intervals, ropes, and text helpers |
 | Haskell Tungsten tests | [Test source](../../src/Haskell/Tungsten/test/Main.hs) | Cabal executable covering list operations, Association ordering examples, policies, relabel stress, and generated histories |

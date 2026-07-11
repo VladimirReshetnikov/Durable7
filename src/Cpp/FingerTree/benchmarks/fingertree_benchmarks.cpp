@@ -8,9 +8,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <deque>
 #include <exception>
 #include <iomanip>
 #include <iostream>
+#include <numeric>
 #include <optional>
 #include <ranges>
 #include <stdexcept>
@@ -52,6 +54,9 @@ constexpr std::array benchmark_names{
     std::string_view{"rope_indexed_read"},
     std::string_view{"rrb_catenation"},
     std::string_view{"rope_catenation"},
+    std::string_view{"daba_slide_and_query"},
+    std::string_view{"deque_slide_and_reaggregate"},
+    std::string_view{"daba_validate_structure"},
     std::string_view{"reversible_reverse"},
     std::string_view{"reversible_endpoint"},
     std::string_view{"reversible_endpoint_read"},
@@ -268,6 +273,69 @@ void run_deque_reads(const options& settings)
         values[index] = static_cast<int>(index);
     }
     return values;
+}
+
+struct benchmark_sum_monoid final {
+    using measure_type = std::int64_t;
+
+    [[nodiscard]] static constexpr measure_type empty() noexcept
+    {
+        return 0;
+    }
+
+    [[nodiscard]] static constexpr measure_type combine(const measure_type left, const measure_type right) noexcept
+    {
+        return left + right;
+    }
+};
+
+void run_daba_lite(const options& settings)
+{
+    constexpr auto daba_name = std::string_view{"daba_slide_and_query"};
+    constexpr auto deque_name = std::string_view{"deque_slide_and_reaggregate"};
+    constexpr auto validation_name = std::string_view{"daba_validate_structure"};
+    if (!selected(settings, daba_name)
+        && !selected(settings, deque_name)
+        && !selected(settings, validation_name)) {
+        return;
+    }
+
+    for (const auto size : {63U, 64U, 65U, 1'000U, 100'000U}) {
+        auto daba = ft::daba_lite<std::int64_t, benchmark_sum_monoid>{};
+        auto queue = std::deque<std::int64_t>{};
+        for (auto index = std::size_t{0}; index < size; ++index) {
+            daba.insert(static_cast<std::int64_t>(index));
+            queue.push_back(static_cast<std::int64_t>(index));
+        }
+        auto next_daba = static_cast<std::int64_t>(size);
+        auto next_queue = static_cast<std::int64_t>(size);
+        const auto iterations = settings.short_mode
+            ? (size >= 100'000U ? 8U : (size >= 1'000U ? 32U : 128U))
+            : (size >= 100'000U ? 128U : (size >= 1'000U ? 1'024U : 4'096U));
+
+        if (selected(settings, daba_name)) {
+            print(measure(daba_name, size, iterations, true, [&](const std::size_t) {
+                daba.evict();
+                daba.insert(next_daba++);
+                return static_cast<std::uint64_t>(daba.aggregate());
+            }));
+        }
+        if (selected(settings, deque_name)) {
+            print(measure(deque_name, size, iterations, true, [&](const std::size_t) {
+                queue.pop_front();
+                queue.push_back(next_queue++);
+                return static_cast<std::uint64_t>(
+                    std::accumulate(queue.begin(), queue.end(), std::int64_t{0}));
+            }));
+        }
+        if (selected(settings, validation_name)) {
+            print(measure(validation_name, size, iterations, true, [&](const std::size_t) {
+                const auto statistics = daba.validate_structure();
+                return static_cast<std::uint64_t>(
+                    statistics.count + statistics.block_count + statistics.slack_slot_count);
+            }));
+        }
+    }
 }
 
 void run_rrb_vector(const options& settings)
@@ -581,8 +649,8 @@ int main(const int argc, char** argv)
         }
 
         std::cout << "FingerTree dependency-free benchmark harness\n"
-                     "contract: persistent updates retain the source version and share structure; mutable baselines "
-                     "may update in place and are not semantically equivalent\n"
+                     "contract: persistent cases retain source versions; DABA Lite and its deque baseline are "
+                     "explicitly mutable streaming cases\n"
                      "mode: "
                   << (settings.short_mode ? "short sanity" : "measurement") << "\n"
                   << "case,size,iterations,ns/op,allocations/op,bytes/op,checksum\n";
@@ -590,6 +658,7 @@ int main(const int argc, char** argv)
         run_persistence_branching(settings);
         run_deque_reads(settings);
         run_deque_catenation(settings);
+        run_daba_lite(settings);
         run_rrb_vector(settings);
         run_reversible_reverse(settings);
         run_reversible_overhead(settings);

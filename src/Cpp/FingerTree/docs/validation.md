@@ -3,8 +3,8 @@
 - Status: Current validation guide
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-11T16:09:45Z
-- Updated Repository HEAD: 66b6821334b243f2d7170a6f9360dae54ef90994
+- Updated (UTC): 2026-07-11T21:45:54Z
+- Updated Repository HEAD: ee5f888b47fc8d4317fb0209546cb5c9f808039d
 - Audience: Maintainers validating the C++ port
 - Scope: Local/CI build, test, stress, sample, packaging, sanitizer, and benchmark guidance
 
@@ -135,11 +135,12 @@ lane does not provide a viable TSan runtime.
 
 ## Current Coverage
 
-CTest registers 19 cases: 17 subsystem cases backed by `tests/fingertree_smoke_tests`, from `fingertree.atomic-box` through
-`fingertree.support`. Each case invokes the same local runner with an exact `--group` filter through the repository
+CTest registers 20 cases: 18 subsystem cases backed by `tests/fingertree_smoke_tests`, including the focused
+`fingertree.daba-lite` and `fingertree.support` groups. Each case invokes the same local runner with an exact
+`--group` filter through the repository
 headless launcher, so a subsystem failure is isolated without introducing Catch2/GoogleTest or duplicating test
 execution. `fingertree.samples` checks two deterministic transcripts, and `fingertree.installed-consumer` performs
-the staged package integration test. All 18 carry the `fingertree` label and all Windows invocations—including the
+the staged package integration test. All 20 carry the `fingertree` label and all Windows invocations—including the
 nested install/configure/build/test command—inherit the no-dialog error mode. Use
 `ctest --test-dir out/build/msvc-debug -N -L fingertree` to list the cases, or `-R` with one exact case name for a
 focused run. See the [tests README](../tests/README.md) for the complete group list, direct runner options,
@@ -156,6 +157,10 @@ The suite covers:
 - RRB-vector packed construction at every 32-way boundary tier, regular/relaxed metadata, persistent point and
   range edits, unequal concatenation, exact-boundary identity reuse, 10,000-step vector-model histories,
   adversarial density/height sequences, append-builder snapshot isolation, and injected-copy exception safety;
+- DABA Lite exhaustive short histories and a deterministic 100,000-operation FIFO model, all fixup phases,
+  three/two/one callback ceilings, every reachable throwing-policy and value-copy ordinal, compile-time rejection
+  of throwing moves, provisional-block rollback, 63/64/65 and 127/128/129 boundaries, bounded chunk retention,
+  prompt owned-reference release, structural statistics, and deterministic clear/reuse;
 - sorted bag/set/map ranking, navigation, range, custom order, set algebra, and randomized model checks;
 - priority queue ordering, stability, and command-model behavior;
 - interval tree insertion, overlap, containment, coalescing, removal, and model comparisons;
@@ -182,7 +187,8 @@ cmake --build --preset msvc-release --target fingertree_benchmarks
 `--short` is the required sanity tier. It reduces repetitions while retaining the 100/10k/1M branching ladder.
 The branching case counts allocations and fails when marginal allocation cost is not size-flat. The remaining
 cases cover endpoint updates and endpoint/index reads, ordinary and reversible catenation/endpoint overhead,
-RRB-vector indexing and concatenation against positional-rope baselines, O(1) reverse, sorted search, weighted
+RRB-vector indexing and concatenation against positional-rope baselines, DABA slide/query against
+`std::deque` reaggregation plus validator cost, O(1) reverse, sorted search, weighted
 selection, rope insert/split/slice, measured navigation versus a linear
 scan, priority meld, and interval overlap queries. A nonempty `--filter` that matches no case is an error. See the
 [benchmark guide](../benchmarks/README.md) for the complete contract.
@@ -200,7 +206,8 @@ The packaging test performs a real installation to a configuration-specific priv
 fresh project with `FINGERTREE_BUILD_TESTS`, `FINGERTREE_BUILD_SAMPLES`, and
 `FINGERTREE_BUILD_BENCHMARKS` all off. The consumer uses only
 `find_package(ToolsDataStructuresFingerTree CONFIG)`, the exported
-`tools::data_structures::finger_tree` target, and installed headers:
+`tools::data_structures::finger_tree` target, and installed headers. Its aggregate-header program instantiates
+the DABA Lite policy surface as well as persistent collections:
 
 ```powershell
 ctest --preset msvc-debug -R '^fingertree\.installed-consumer$' --output-on-failure

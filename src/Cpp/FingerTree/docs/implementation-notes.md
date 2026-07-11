@@ -3,8 +3,8 @@
 - Status: Living implementation notes
 - Created (UTC): 2026-06-30T17:20:17Z
 - Repository HEAD: d140fb07d8ae21726e96b9ad916154c3bf87411d
-- Updated (UTC): 2026-07-10T20:20:56Z
-- Updated against repository HEAD: 18f23de9cb90ac47234bfdeea097da2cedff6f9f
+- Updated (UTC): 2026-07-11T21:45:54Z
+- Updated against repository HEAD: ee5f888b47fc8d4317fb0209546cb5c9f808039d
 - Audience: Maintainers and AI agents implementing or reviewing the C++ port
 - Scope: Implementation decisions, C# parity checks, justified divergences, validation observations, and defect-report links
 
@@ -1111,3 +1111,63 @@ Validation coverage:
   equality.
 - Same-type positional and measured-rope insertion is covered for lvalues and temporaries, guarding the prior
   stack-overflow regression.
+
+## Checkpoint: DABA Lite Sliding-Window Aggregator
+
+Updated (UTC): 2026-07-11T21:45:54Z
+
+Updated against repository HEAD: `ee5f888b47fc8d4317fb0209546cb5c9f808039d`
+
+Implemented core:
+
+- Added header-first `daba_lite<T, MonoidPolicy>` and `daba_lite_statistics`, exported through the aggregate
+  header and installed CMake package. The static policy reuses `monoid_policy` and requires `measure_type` to be
+  exactly the stored value type.
+- Ported the C# six-cursor schedule literally: `F <= L <= R <= A <= B <= E`, two out-of-queue aggregates, and
+  one bounded fixup per insertion or eviction. The singleton collapse, flip initialization, three-cursor shift,
+  and two-slot shrink phases have no reversal loop.
+- Used a doubly linked active chain of uniquely owned 64-slot blocks. Slots are `std::optional<T>` so successful
+  eviction destroys an owned value immediately; crossing a boundary moves ownership to the new first block and
+  destroys the predecessor on that operation. Iterative chain destruction avoids recursive teardown depth.
+- Kept the type deliberately mutable, noncopyable, nonmovable, and unsynchronized. There is no raw-value peek or
+  enumeration surface because the Lite schedule overwrites values with partial products.
+- Constrained stored values to `daba_lite_value`: copyable with nonthrowing move construction and assignment.
+  Copies remain allowed to throw because they happen only in an unpublished plan. Potentially throwing moves are
+  rejected statically so the final optional-slot rewrites and aggregate publication are a genuinely nonthrowing
+  commit rather than a best-effort rollback after partial overwrite.
+
+Exception and callback discipline:
+
+- `insert` computes its initial back product, provisions the end slot/block, and computes a complete fixup plan
+  before publishing cursors or aggregate fields. If a later policy callback throws, the provisional slot and
+  successor are removed and the exact prior representation remains observable.
+- `try_evict` computes the full fixup plan before touching the front cursor or retired slot. `clear` obtains the
+  policy identity and allocates the replacement block before publication. Thus every throwing `empty` or
+  `combine` callback has the strong object-state guarantee; callback-owned external side effects remain outside
+  it.
+- Injected copy failures receive the same guarantee: insert rolls back its provisional slot and boundary block,
+  while eviction and clear have not mutated anything when a plan copy fails. Allocation failure likewise occurs
+  before the nonthrowing commit.
+- `insert`, eviction, and nonempty query retain the C# three/two/exactly-one `combine` ceilings. Empty query uses
+  the identity without combining, and empty `clear`/`try_evict` perform no policy work.
+
+Native ownership divergence:
+
+- C# can swap to a fresh root in O(1) and leave a tracing collector to reclaim the detached chain. A generic C++
+  owner cannot both synchronously release arbitrary `T` instances and hide their destructors behind an O(1)
+  claim. This port chooses prompt deterministic release and bounded retention: `clear` is honestly documented as
+  O(n + c), while insert, eviction, query, cursor movement, and block growth remain worst-case O(1).
+
+Validation and measurement surfaces:
+
+- `validate_structure` invokes no policy callback. It checks bidirectional links, cursor reachability/order,
+  occupied-slot count, front/back/work-region equations, active-block count, and the 1-through-127 slack bound;
+  it returns all corresponding region and capacity statistics.
+- The `daba-lite` runner group exhausts every length-10 insert/evict history with a noncommutative matrix monoid,
+  runs a deterministic 100,000-operation variable-window model, crosses 63/64/65 and 127/128/129 boundaries,
+  churns fixed windows, observes all four fixup phases and exact callback maxima, injects every reachable policy
+  failure ordinal, injects every reachable value-copy failure, rejects throwing-move values at compile time,
+  proves boundary-allocation rollback, and checks reference release plus clear/reuse.
+- The dependency-free benchmark harness adds paired DABA slide/query and `std::deque` slide/full-reaggregation
+  cases at five boundary/scale points. Validator cost is a separate case so diagnostic O(n + c) traversal is not
+  conflated with the constant-work hot path.

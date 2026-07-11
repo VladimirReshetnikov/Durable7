@@ -3,8 +3,8 @@
 - Status: Active C++ workspace
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-11T16:09:45Z
-- Updated against repository HEAD: 66b6821334b243f2d7170a6f9360dae54ef90994
+- Updated (UTC): 2026-07-11T21:45:54Z
+- Updated against repository HEAD: ee5f888b47fc8d4317fb0209546cb5c9f808039d
 - Audience: Maintainers implementing and reviewing the C++ port
 - Scope: Build entry points, layout, and validation for `src/Cpp/FingerTree`
 
@@ -18,6 +18,13 @@ radix-balanced vector with dense regular branches, cumulative-size relaxed branc
 concatenation, and an append builder whose immutable snapshots remain isolated from later staging. The public
 aggregate header includes the vector and its builder; representation diagnostics and adversarial model tests keep
 the regular/relaxed distinction, density, height, and sharing contracts observable to maintainers.
+
+The same public package also ships `daba_lite<T, MonoidPolicy>`, the deliberately mutable six-cursor DABA Lite
+sliding-window aggregator. Insert, eviction, and query have exact three/two/one `combine` ceilings; linked
+64-slot blocks keep every slide worst-case O(1), retire crossed blocks promptly, and expose callback-free
+representation statistics. Throwing monoid callbacks leave the published window unchanged. C++ deterministic
+destruction is called out explicitly: `clear()` releases all owned values and blocks before returning and is
+therefore O(n + c), unlike the tracing-GC C# reference's constant root swap.
 
 The workspace is intentionally dependency-free beyond the C++ standard library. Its native tests use a small
 local runner and its benchmark harness is repository-owned, so configuring a preset does not implicitly run a

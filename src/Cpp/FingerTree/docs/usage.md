@@ -2,8 +2,8 @@
 
 - Created (UTC): 2026-07-02T20:03:36Z
 - Repository HEAD: 17d505f18e9e0a5748058701d408ed6642dcba29
-- Updated (UTC): 2026-07-11T16:09:45Z
-- Updated against repository HEAD: 66b6821334b243f2d7170a6f9360dae54ef90994
+- Updated (UTC): 2026-07-11T21:45:54Z
+- Updated against repository HEAD: ee5f888b47fc8d4317fb0209546cb5c9f808039d
 - Audience: C++ consumers and maintainers using the public FingerTree headers
 - Scope: Public include path, value semantics, common construction/update patterns, and facade quick starts
 
@@ -109,6 +109,47 @@ auto second = builder.to_immutable();       // first remains [0, 1000); second i
 
 The immutable facade deliberately has no persistent tail buffer. `push_back` and `pop_last` therefore remain
 boundary-spine operations; use the builder for bulk append staging.
+
+## DABA Lite Sliding-Window Aggregation
+
+Use `daba_lite<T, MonoidPolicy>` for one mutable FIFO window whose aggregate must remain available with bounded
+worst-case work per slide. The policy's `measure_type` is the stored value type itself. It supplies only identity
+and combination; no inverse or commutativity is required.
+
+The value type must be copyable with nonthrowing move construction and assignment. This lets the implementation
+perform callbacks, allocation, and possibly throwing copies while preparing a private plan, then publish the
+entire mutation through nonthrowing moves. An exception from any preparation step leaves the exact window intact.
+
+```cpp
+struct sum_monoid {
+    using measure_type = long long;
+
+    static constexpr measure_type empty() noexcept { return 0; }
+    static constexpr measure_type combine(measure_type left, measure_type right) noexcept
+    {
+        return left + right;
+    }
+};
+
+ft::daba_lite<long long, sum_monoid> window;
+window.insert(10);
+window.insert(20);
+window.insert(30);
+
+auto first_sum = window.aggregate(); // 60
+window.evict();
+window.insert(40);
+auto next_sum = window.aggregate();  // 90, for [20, 30, 40]
+```
+
+Prefer `try_evict()` when an empty window is ordinary control flow; `evict()` throws `std::out_of_range` when
+empty. `validate_structure()` returns cursor-region and block-capacity statistics without invoking the policy.
+It is suitable for invariant gates and diagnostics, not the hot query path.
+
+This is the deliberately ephemeral member of an otherwise persistence-first workspace. Do not copy it, publish
+it as a snapshot, enumerate it, or race one instance between threads. Successful eviction releases the retired
+slot and crossed chunk immediately. `clear()` also releases every owned value and chunk before returning; that
+deterministic native reclamation is O(n + c), although subsequent reuse starts from one empty 64-slot block.
 
 ## Generic Measured Tree
 
@@ -281,6 +322,9 @@ auto text_rope = builder.to_text_rope();
 Collection values are immutable after construction. Independent snapshots can be read concurrently,
 and update-shaped operations return new values without mutating existing ones.
 
+`daba_lite` is the explicit exception: it is mutable streaming state, has no snapshot operation, and requires
+external synchronization around every overlapping access.
+
 If one thread publishes snapshots to another, publish the owning pointer atomically. Include `<atomic>`
 and `<memory>` for this pattern:
 
@@ -302,6 +346,7 @@ data-race rules still apply to your variables.
 | Need | Start with |
 | --- | --- |
 | Persistent indexed sequence with endpoint edits | `persistent_deque<T>` |
+| Mutable FIFO aggregate with worst-case bounded slides | `daba_lite<T, MonoidPolicy>` |
 | Custom monoid measure, measure-guided locate, or split | `finger_tree<T, MeasurePolicy>` |
 | O(1) logical reverse | `reversible_deque<T>` |
 | Sorted values with duplicates | `sorted_bag<T, Less>` |

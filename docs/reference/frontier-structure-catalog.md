@@ -58,7 +58,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | --- | --- | --- | --- | --- |
 | CHAMP canonicalization + structural equality/diff | 1 | Strong (implemented across all six languages) | Completed with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
 | `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all six languages) | Completed as proposal Tier C1 | 1 shared core, 4 C# public types, structural map/set algebra |
-| DABA Lite sliding-window aggregator | 1, 3 | Strong (C#, Kotlin/JVM, and Rust implemented; deterministic-drop divergence documented) | Reuses the language's monoid abstraction | 1 small type, ~8 members |
+| DABA Lite sliding-window aggregator | 1, 3 | Strong (C#, C++, Kotlin/JVM, and Rust implemented; native deterministic-drop divergence documented) | Reuses the language's monoid abstraction | 1 small type, ~8 members |
 | Merkle search tree | 1 | Strong (C# implemented) | Completed: deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
 | Zip tree (canonical sorted set) | 1, 3 | Plausible (C# implemented) | Completed: coherent keyed rank policy | 1 new core, set facade |
@@ -442,6 +442,22 @@ adds exhaustive noncommutative histories, a 100,000-operation FIFO model, every 
 callback ordinal, boundary-allocation rollback, and weak-reference checks for retired slots and
 chunks.
 
+**C++ status (2026-07-11): Implemented with a nonthrowing publication phase.**
+`daba_lite<T, MonoidPolicy>` reuses the static `monoid_policy` vocabulary and a public
+`daba_lite_value` constraint: values are copyable but must be nothrow move-constructible and
+nothrow move-assignable. Callbacks, allocation, and potentially throwing copies build a private
+fixup plan; the final optional-slot rewrites, cursor update, and aggregate replacement then commit
+without throwing. Failed policy calls, value copies, and boundary allocation therefore preserve
+the exact prior representation. Unique ownership of 64-slot blocks and `std::optional<T>` slots
+gives prompt deterministic destruction. The mutable type is deliberately noncopyable, nonmovable,
+and unsynchronized.
+
+The C++ gate exhausts noncommutative short histories, runs a 100,000-operation FIFO model, reaches
+all fixups and callback ceilings, injects every reachable callback and value-copy failure, rejects
+throwing-move values at constraint checking, crosses and churns both block-boundary tiers, proves
+provisional-successor rollback and prompt reference release, exercises the installed aggregate
+header, and benchmarks DABA slide/query against `std::deque` reaggregation.
+
 **Rust status (2026-07-11): Implemented with explicit deterministic-drop semantics.**
 `DabaLite<T, M>` over `DabaMonoid<T>` preserves the six-cursor schedule, 64-slot chunk geometry,
 three/two/one combine ceilings, callback-free validation, and strong callback-panic guarantee.
@@ -451,13 +467,12 @@ so a callback unwind cannot expose a partial mutation. Occupied positions and ag
 mutable type `!Send` and `!Sync`. Successful eviction promptly clears its retired slot and severs a
 retired predecessor block.
 
-Rust `clear` is intentionally O(n + c), unlike the managed O(1) reset: safe deterministic
-destruction must run the destructors of `n` generic owned values across `c` chunks to satisfy prompt
-reclamation. The implementation iteratively breaks the chain, neither leaking nor deferring an
-unbounded retired representation. Insert, eviction, and query retain worst-case O(1) structural and
-callback work when the monoid callbacks are O(1). The gate includes a non-`Clone` value, exhaustive
-noncommutative histories, 100,000 model operations, every reachable panic ordinal, boundary-link
-rollback, deterministic reclamation, and a compile-fail `!Send`/`!Sync` contract.
+**Native clear divergence.** C++ and Rust `clear` are intentionally O(n + c), unlike the managed
+O(1) reset: deterministic destruction must run the destructors of `n` generic owned values across
+`c` chunks to satisfy prompt reclamation. Both implementations iteratively break the chain, neither
+leaking nor deferring an unbounded retired representation. Insert, eviction, and query retain
+worst-case O(1) structural and callback work when value operations and monoid callbacks are O(1).
+The Rust gate additionally includes a non-`Clone` value and a compile-fail `!Send`/`!Sync` contract.
 
 **What it is.** The De-Amortized Banker's Aggregator was introduced by Tangwongsan, Hirzel, and
 Schneider at DEBS 2017; the 2021 journal article introduced the Lite representation. It maintains
@@ -812,8 +827,8 @@ The implementation wave described by this catalog has already landed these C# re
 - the managed Ctrie with O(1) immutable snapshots.
 
 CHAMP, Patricia, and RRB have also advanced through the sibling-language work recorded in their
-entries; the Brodal-Okasaki heap and priority-search queue have Haskell ports, DABA Lite has
-Kotlin/JVM and Rust ports, and the Ctrie's deliberate parity boundary remains C# and Kotlin/JVM.
+entries; the Brodal-Okasaki heap and priority-search queue have Haskell ports, DABA Lite has C++,
+Kotlin/JVM, and Rust ports, and the Ctrie's deliberate parity boundary remains C# and Kotlin/JVM.
 These are current-state implementation records, not candidates awaiting a consumer. Future work on
 them is ordinary hardening, measurement, and demand-driven porting.
 

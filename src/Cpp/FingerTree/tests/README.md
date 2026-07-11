@@ -2,14 +2,14 @@
 
 - Created (UTC): 2026-07-02T21:06:57Z
 - Repository HEAD: 399710816b9007dde1374aef2043f118beddc225
-- Updated (UTC): 2026-07-11T16:09:45Z
-- Updated Repository HEAD: 66b6821334b243f2d7170a6f9360dae54ef90994
+- Updated (UTC): 2026-07-11T21:45:54Z
+- Updated Repository HEAD: ee5f888b47fc8d4317fb0209546cb5c9f808039d
 - Audience: Maintainers validating the C++ FingerTree port
 - Scope: Native test executable, source grouping, and stress controls under `src/Cpp/FingerTree/tests`
 
 The C++ FingerTree workspace has one dependency-free native test executable, `fingertree_smoke_tests`. CTest runs
-that executable through 17 subsystem entries (`fingertree.atomic-box`, `fingertree.command-model`,
-`fingertree.concurrency`, `fingertree.deque`, `fingertree.interval-tree`, `fingertree.lazy-cell`,
+that executable through 18 subsystem entries (`fingertree.atomic-box`, `fingertree.command-model`,
+`fingertree.concurrency`, `fingertree.daba-lite`, `fingertree.deque`, `fingertree.interval-tree`, `fingertree.lazy-cell`,
 `fingertree.measure`, `fingertree.measured-lazy-cell`, `fingertree.measured-rope`, `fingertree.measured-tree`,
 `fingertree.priority-queue`, `fingertree.reversible-deque`, `fingertree.rope`, `fingertree.rope-text`,
 `fingertree.rrb-vector`,
@@ -37,6 +37,12 @@ listing, and replay-seed selection.
   and endpoint updates, unequal concatenation, exact leaf-boundary identity reuse, split/range edits, retained
   forward iteration, a deterministic 10,000-step vector model, adversarial density/height drift, append-builder
   snapshot isolation, adopted-prefix sharing, and injected-copy strong-exception guarantees.
+- `daba_lite_tests.cpp` exhausts every short insert/evict history with a noncommutative model, runs a deterministic
+  100,000-operation variable-window model, covers the 63/64/65 and 127/128/129 block boundaries and long churn,
+  reaches all four incremental-fixup phases, proves the three/two/one `combine` ceilings, injects failures at every
+  reachable `combine`, identity, and value-copy ordinal, rejects throwing-move values at constraint checking,
+  checks boundary-allocation rollback, validates statistics, and observes prompt reference release plus
+  clear/reuse behavior.
 - `command_sequence_tests.cpp` instantiates the stateful command recorder against the measured tree, tuned deque,
   reversible deque, positional rope, measured rope, and sorted set. Five default seeds exercise retained-version
   branching; failures are replayed and delta-debugged to a deletion-minimal operation program. The same unit
@@ -74,6 +80,7 @@ Run one subsystem through the same headless CTest launcher:
 
 ```powershell
 & "$cmakeDir\ctest.exe" --test-dir out\build\msvc-debug --output-on-failure -R '^fingertree\.command-model$'
+& "$cmakeDir\ctest.exe" --test-dir out\build\msvc-debug --output-on-failure -R '^fingertree\.daba-lite$'
 ```
 
 Run the built executable directly when changing runner output, failure diagnostics, or tests that need local
@@ -82,6 +89,7 @@ iteration outside CTest. The executable enters headless mode itself, so direct f
 ```powershell
 .\out\build\msvc-debug\tests\fingertree_smoke_tests.exe --list
 .\out\build\msvc-debug\tests\fingertree_smoke_tests.exe --group command-model
+.\out\build\msvc-debug\tests\fingertree_smoke_tests.exe --group daba-lite
 .\out\build\msvc-debug\tests\fingertree_smoke_tests.exe --group rope --filter randomized
 ```
 

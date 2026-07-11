@@ -3,8 +3,8 @@
 - Status: Current API notes
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-11T16:09:45Z
-- Updated against repository HEAD: 66b6821334b243f2d7170a6f9360dae54ef90994
+- Updated (UTC): 2026-07-11T21:45:54Z
+- Updated against repository HEAD: ee5f888b47fc8d4317fb0209546cb5c9f808039d
 - Audience: Maintainers implementing and reviewing public C++ APIs
 - Scope: C++ naming, contracts, and intentional differences from the C# workspace
 
@@ -30,6 +30,7 @@ The C++ port follows the repository's C# semantics, but it uses idiomatic C++ sp
 
 - collection observers use `empty`, `size`, `front`, `back`, `at`, and `operator[]`;
 - persistent updates return new values and do not mutate existing snapshots;
+- `daba_lite` is the one deliberately mutable streaming surface and is segregated from those persistent values;
 - absent ranks use `std::optional<std::size_t>` rather than a `-1` sentinel;
 - pure-value multi-value returns use named result structs with semantic equality when their public element/value
   components are equality comparable; persistent collection fields compare by logical sequence rather than
@@ -105,6 +106,47 @@ Notable C++ differences and limits:
 - the builder is a mutable construction aid but does not expose editable node ownership or transient tokens;
 - there is deliberately no persistent tail buffer, so immutable endpoint append is a boundary-spine operation
   rather than a worst-case O(1) tail write.
+
+## `daba_lite<T, MonoidPolicy>`
+
+`daba_lite<T, MonoidPolicy>` ports C# `DabaLite<T, TMonoid>` and the VLDB Journal 2021 DABA Lite schedule. The
+policy satisfies `daba_lite_monoid_policy`: its `measure_type` is exactly `T`, and static `empty()` and
+`combine(left, right)` members define the associative monoid. The implementation is an ephemeral FIFO window,
+not a persistent collection. It is noncopyable and nonmovable so no accidental operation duplicates or
+invalidates its six internal cursors.
+
+`T` satisfies `daba_lite_value`: it is copyable, nothrow move-constructible, and nothrow move-assignable. Copies
+may throw because they occur while building an unpublished operation plan. Nonthrowing moves make slot rewrites,
+aggregate replacement, and cursor publication one nonthrowing commit. A type with a potentially throwing move is
+rejected at constraint checking rather than admitted into a representation that could be torn mid-commit.
+
+Primary operations:
+
+- observers: `empty`, `size`, and FIFO-ordered `aggregate`;
+- mutation: `insert`, `evict`, `try_evict`, and `clear`;
+- representation diagnostics: `validate_structure`, returning `daba_lite_statistics`.
+
+The six cursors preserve `F <= L <= R <= A <= B <= E` over linked 64-slot blocks. Each insertion or eviction
+performs one scheduled fixup and never runs an unbounded reversal loop. `insert`, `evict`/`try_evict`, and a
+nonempty `aggregate` invoke `combine` at most three, two, and exactly one times respectively; an empty aggregate
+invokes `empty` and no `combine`. These are unconditional invocation bounds. Complete operations are worst-case
+O(1) when policy calls and value copies are O(1).
+
+All potentially throwing work needed by a mutation—monoid callbacks, allocation, and value copies—finishes
+before its cursor/aggregate publication. Any such exception leaves the window, chunk chain, statistics, and
+aggregate unchanged; callback-owned side effects are outside that guarantee. Successful eviction resets the
+retired `std::optional<T>` immediately and
+severs a predecessor block on the crossing operation. The active chain has `n` occupied positions plus 1 through
+127 slack slots. `validate_structure` is callback-free and checks link direction, reachability, slot ownership,
+cursor order, region equations, active-block count, and slack bounds.
+
+`clear` is the intentional native ownership divergence. It obtains the identity and replacement block before
+publication, then deterministically destroys every retired value and block before returning. That prompt release
+costs O(n + c) for n occupied positions in c blocks; claiming the C# tracing collector's O(1) root-swap time in a
+generic owning C++ container would be false. Calling `clear` on an already empty window does no policy work.
+
+There is no oldest-value or iteration API because the Lite schedule overwrites raw values with partial products.
+One instance is mutable and not thread-safe; do not overlap any access without external synchronization.
 
 ## `finger_tree<T, MeasurePolicy>`
 
