@@ -5,13 +5,14 @@
 - Audience: Maintainers validating the C FingerTree port
 - Scope: Native test executable and source organization under `src/C/FingerTree/tests`
 
-The C FingerTree workspace currently has one native test executable, `fingertree_c_tests`, registered with CTest as
-`fingertree_c.core`. The executable is intentionally dependency-free: `fingertree_c_tests.c` contains the test
-runner, assertion macros, policy helpers, and all test cases.
+The C FingerTree workspace has two dependency-free native test executables. `fingertree_c_tests` is
+registered as `fingertree_c.core`; `rrb_vector_c_tests` is registered as
+`fingertree_c.rrb_vector`. Each source contains its runner, assertion macros, policy helpers, and
+test cases.
 
 The runner prints one `[pass]` line per named test case, writes failed requirements to standard error with file and
 line information, and exits non-zero if any test increments the failure count. A successful direct run ends with
-`all C FingerTree tests passed`.
+`all C FingerTree tests passed`. The focused runner ends with `all C RRB vector tests passed`.
 
 ## Test Cases
 
@@ -46,6 +47,17 @@ line information, and exits non-zero if any test increments the failure count. A
 - `text rope long edit script` covers retained snapshots and repeated edits across a multi-line document, comparing
   indexing, traversal, line counts, and line/column navigation against a plain C string model.
 
+`rrb_vector_tests.c` covers:
+
+- radix boundaries and unequal-height concatenation through 100,000 values;
+- exact leaf sharing, root no-op identity, and relaxed-layout diagnostics;
+- a 10,000-operation list model with aliasing updates and retained snapshots;
+- 2,000 adversarial split/concat rounds with density and height bounds;
+- append-builder cached snapshots and adopted immutable prefixes;
+- value copy/destroy lifetime balance and policy-pointer compatibility;
+- deterministic failpoint allocation rollback for construction, updates, and builder staging; and
+- concurrent vector copy/read/validate/dispose over atomic node references.
+
 ## Build And Run
 
 From `src/C/FingerTree`, build and run the core CTest target:
@@ -57,10 +69,11 @@ $cmakeDir = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\Co
 cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-debug && ""$cmakeDir\cmake.exe"" --build --preset msvc-debug && ""$cmakeDir\ctest.exe"" --preset msvc-debug --output-on-failure -R ""^fingertree_c\.core$"""
 ```
 
-Run the built executable directly when changing runner diagnostics or a single-file test case:
+Run the built executables directly when changing runner diagnostics or a focused test case:
 
 ```powershell
 .\out\build\msvc-debug\tests\fingertree_c_tests.exe
+.\out\build\msvc-debug\tests\rrb_vector_c_tests.exe
 ```
 
 Use the workspace [validation guide](../docs/validation.md) for Release validation, warning policy,

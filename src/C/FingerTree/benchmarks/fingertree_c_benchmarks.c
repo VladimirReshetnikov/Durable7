@@ -1,4 +1,5 @@
 #include <tools/data_structures/finger_tree/fingertree.h>
+#include <tools/data_structures/finger_tree/rrb_vector.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,6 +16,95 @@ static int compare_ints(const void* left, const void* right, void* context)
 static double elapsed_ms(clock_t start, clock_t end)
 {
     return 1000.0 * (double)(end - start) / (double)CLOCKS_PER_SEC;
+}
+
+static bool equal_ints(const void* left, const void* right, void* context)
+{
+    (void)context;
+    return *(const int*)left == *(const int*)right;
+}
+
+static int benchmark_rrb_vector(size_t count)
+{
+    int* values = (int*)malloc(count * sizeof(int));
+    if (values == NULL) {
+        return 1;
+    }
+    for (size_t index = 0; index != count; ++index) {
+        values[index] = (int)index;
+    }
+
+    ft_value_type int_type;
+    ft_value_type_init(&int_type, sizeof(int));
+    ft_rrb_policy policy;
+    ft_rrb_policy_init(&policy, &int_type, equal_ints, NULL);
+
+    const clock_t build_start = clock();
+    ft_rrb_vector vector;
+    if (ft_rrb_vector_from_array(&vector, &policy, values, count) != FT_STATUS_OK) {
+        free(values);
+        return 1;
+    }
+    long long probe_sum = 0;
+    for (size_t index = 0; index < count; index += 257) {
+        int value = 0;
+        if (ft_rrb_vector_at(&vector, index, &value) != FT_STATUS_OK) {
+            ft_rrb_vector_dispose(&vector);
+            free(values);
+            return 1;
+        }
+        probe_sum += value;
+    }
+    ft_rrb_split_result split;
+    if (ft_rrb_vector_split_at(&vector, count / 2, &split) != FT_STATUS_OK) {
+        ft_rrb_vector_dispose(&vector);
+        free(values);
+        return 1;
+    }
+    ft_rrb_vector joined;
+    if (ft_rrb_vector_concat(&split.left, &split.right, &joined) != FT_STATUS_OK) {
+        ft_rrb_vector_dispose(&split.left);
+        ft_rrb_vector_dispose(&split.right);
+        ft_rrb_vector_dispose(&vector);
+        free(values);
+        return 1;
+    }
+    const clock_t build_end = clock();
+    printf("rrb_build_index_split_concat,%zu,%.3f,%lld\n", count, elapsed_ms(build_start, build_end), probe_sum);
+
+    const clock_t builder_start = clock();
+    ft_rrb_builder builder;
+    if (ft_rrb_builder_init(&builder, &policy) != FT_STATUS_OK ||
+        ft_rrb_builder_append_range(&builder, values, count) != FT_STATUS_OK) {
+        ft_rrb_builder_dispose(&builder);
+        ft_rrb_vector_dispose(&joined);
+        ft_rrb_vector_dispose(&split.left);
+        ft_rrb_vector_dispose(&split.right);
+        ft_rrb_vector_dispose(&vector);
+        free(values);
+        return 1;
+    }
+    ft_rrb_vector built;
+    if (ft_rrb_builder_to_vector(&builder, &built) != FT_STATUS_OK) {
+        ft_rrb_builder_dispose(&builder);
+        ft_rrb_vector_dispose(&joined);
+        ft_rrb_vector_dispose(&split.left);
+        ft_rrb_vector_dispose(&split.right);
+        ft_rrb_vector_dispose(&vector);
+        free(values);
+        return 1;
+    }
+    const clock_t builder_end = clock();
+    printf("rrb_builder_freeze,%zu,%.3f,%zu\n", count, elapsed_ms(builder_start, builder_end), ft_rrb_vector_size(&built));
+
+    ft_rrb_vector_dispose(&built);
+    ft_rrb_builder_dispose(&builder);
+    ft_rrb_vector_dispose(&joined);
+    ft_rrb_vector_dispose(&split.left);
+    ft_rrb_vector_dispose(&split.right);
+    ft_rrb_vector_dispose(&vector);
+    free(values);
+    return 0;
 }
 
 static int benchmark_deque(size_t count)
@@ -148,7 +238,8 @@ int main(int argc, char** argv)
     }
 
     printf("benchmark,count,elapsed_ms,check\n");
-    if (benchmark_deque(count) != 0 || benchmark_rope(count) != 0 || benchmark_sorted_set(count / 2) != 0) {
+    if (benchmark_deque(count) != 0 || benchmark_rope(count) != 0 ||
+        benchmark_rrb_vector(count) != 0 || benchmark_sorted_set(count / 2) != 0) {
         return 1;
     }
 

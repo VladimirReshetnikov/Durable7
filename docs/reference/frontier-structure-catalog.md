@@ -249,6 +249,14 @@ validation/statistics, exact sharing, and the frozen-prefix append builder work 
 the full workspace and warning-clean Clippy gates cover randomized, adversarial, non-`Clone`, and
 concurrent-reader cases.
 
+**C status (2026-07-11): Implemented with explicit ownership and failure semantics.** The C11
+`ft_rrb_vector` uses atomic-reference-counted immutable nodes, policy-driven value copy/destroy/equal
+callbacks, injected allocation, size-table-free regular branches, relaxed cumulative sizes, and
+alias-safe persistent operations. The builder transfers full owned tails and copies partial tails on
+publication. Validation spans MSVC Debug/Release, warning-strict GCC and Clang, Clang AddressSanitizer,
+allocation-failure rollback, tracked lifetimes, retained snapshots, concurrent readers, and release
+benchmark smoke coverage.
+
 **What it is.** The relaxed radix-balanced tree (Bagwell & Rompf 2011; practical treatment with
 transients in Stucki et al., ICFP 2015): a 32-way branching persistent vector where nodes are
 normally full (radix-indexable in O(log32 n) with pure bit arithmetic) and carry small size tables

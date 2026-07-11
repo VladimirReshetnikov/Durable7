@@ -24,6 +24,8 @@ included are:
 - `ft_priority_queue`, a generic persistent minimum-priority queue with FIFO tie-breaking for equal priorities;
 - `ft_interval_tree`, a generic closed-interval tree facade over caller-supplied endpoint policies;
 - `ft_interval_tree_i64`, a convenience closed-interval facade for signed 64-bit endpoints;
+- `ft_rrb_vector`, a type-erased 32-way relaxed radix-balanced vector with atomic structural
+  sharing, checked prefix sizes, persistent range edits, and an append-only builder;
 - `ft_rope`, a generic persistent chunked positional sequence backed by measured chunk leaves;
 - `ft_measured_rope`, a generic persistent chunked sequence with cached user measures and cumulative-measure
   navigation;
@@ -56,7 +58,9 @@ generated-output locations, see the [validation guide](docs/validation.md).
 ## Layout
 
 - `include/tools/data_structures/finger_tree/fingertree.h` contains the public C API.
-- `src/fingertree.c` contains the measured-tree implementation and the current wrappers.
+- `include/tools/data_structures/finger_tree/rrb_vector.h` contains the separate RRB vector API.
+- `src/fingertree.c` contains the measured-tree implementation and its wrappers;
+  `src/rrb_vector.c` contains the independent RRB core and builder.
 - `tests/` contains the [bootstrap CTest executable](tests/README.md).
 - `samples/` contains deterministic C sample executables that are also registered as CTest smoke tests; see
   [`samples/README.md`](samples/README.md).

@@ -6,7 +6,8 @@
 - Audience: Maintainers implementing and reviewing public C APIs
 - Scope: C naming, contracts, ownership, and intentional differences from `src/Cpp/FingerTree`
 
-The public C API lives in `tools/data_structures/finger_tree/fingertree.h`. For setup and handle-lifetime
+The public C API lives in `tools/data_structures/finger_tree/fingertree.h` and the focused
+`tools/data_structures/finger_tree/rrb_vector.h`. For setup and handle-lifetime
 examples, start with the [usage guide](usage.md). The API uses opaque handles plus explicit policy callbacks
 rather than C++ templates:
 
@@ -58,13 +59,40 @@ Implemented in this checkpoint:
   and split, split, concat, insertion, removal, and traversal;
 - character text rope facade, backed by the newline-measured rope, with insertion/removal/indexing and
   logarithmic line/offset navigation plus column-validated offset lookup;
+- type-erased `ft_rrb_vector` with 32-element leaves, radix-indexed regular branches without size
+  tables, relaxed branches with cumulative `size_t` prefixes, atomic node references, persistent
+  endpoint/concat/split/range edits, ordered visitation, structural diagnostics, and an append-only
+  snapshot builder;
 - deterministic sample executables and a dependency-light benchmark harness.
 
-Deferred from the C++ port:
+Deferred from the original measured-tree port:
 
-- allocator customization and typed macro-generation helpers.
+- allocator customization for the measured-tree/facade core (the independent RRB policy already
+  supplies an allocator) and typed macro-generation helpers.
 
 The core now carries the C++ port's shared lazy-middle shape in C form.
+
+## RRB Vector Contract
+
+`ft_rrb_policy` combines the existing value copy/destroy vocabulary with required value equality and
+an allocator pair. The policy pointer must be identical across concatenated vectors and must outlive
+all vectors/builders using it. Injected allocation makes every RRB construction path report
+`FT_STATUS_NO_MEMORY`; completed nodes are unwound on failure before any output handle is published.
+Updates accept their source handle as the output, so `ft_rrb_vector_set(&v, ..., &v)` and the
+corresponding endpoint/concat/range-edit patterns are alias-safe.
+
+Leaves contain one through 32 values. Regular branches have full-capacity children except possibly
+the last and navigate by five-bit shifts without allocating prefix sizes. Split and concat may make
+a branch relaxed; only those branches own cumulative `size_t` sizes. Lookup and replacement visit
+O(log32 n) nodes, while concat/split/range edits rebuild boundary spines and share untouched leaves.
+`ft_rrb_vector_validate`, `ft_rrb_vector_root_identity`, and leaf visitation expose representation
+diagnostics for tests and embedders without exposing mutable node storage.
+
+`ft_rrb_builder` stages owned 32-value tails. A full tail is transferred to an immutable leaf only
+after the builder abandons mutable access; a partial tail is copied during `to_vector`. Clean freezes
+retain the cached root, and later appends cannot mutate prior snapshots. Range append clones staging
+transactionally, so an allocation failure leaves the builder's logical contents unchanged. Builders
+are mutable and not thread-safe; published vectors are immutable and safe for concurrent readers.
 
 ## Structural Search Complexity
 

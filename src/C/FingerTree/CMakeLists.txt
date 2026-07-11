@@ -20,6 +20,7 @@ target_sources(
     tools_data_structures_finger_tree_c
     PRIVATE
         src/fingertree.c
+        src/rrb_vector.c
 )
 
 target_include_directories(

@@ -18,6 +18,9 @@ The executable currently reports:
 
 - `deque_push_index`: repeated `ft_persistent_deque_push_back` followed by sparse indexed probes;
 - `rope_build_split_concat`: `ft_rope_from_array`, midpoint split, and concat;
+- `rrb_build_index_split_concat`: packed RRB construction, sparse uniform indexing, midpoint split,
+  and boundary-spine concat;
+- `rrb_builder_freeze`: append-builder staging and immutable snapshot publication;
 - `sorted_set_insert`: descending inserts into `ft_sorted_set`.
 
 The first command-line argument is the size parameter. If it is omitted or parsed as zero, the harness
@@ -41,6 +44,8 @@ Expected output shape:
 benchmark,count,elapsed_ms,check
 deque_push_index,10000,...
 rope_build_split_concat,10000,...
+rrb_build_index_split_concat,10000,...
+rrb_builder_freeze,10000,...
 sorted_set_insert,5000,...
 ```
 

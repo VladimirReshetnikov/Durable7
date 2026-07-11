@@ -16,6 +16,7 @@ Include the public header:
 
 ```c
 #include <tools/data_structures/finger_tree/fingertree.h>
+#include <tools/data_structures/finger_tree/rrb_vector.h>
 ```
 
 The workspace builds a static C library through the CMake presets documented in
@@ -157,6 +158,50 @@ return status;
 Use the generic `ft_tree` operations directly when you need a custom monoid measure and
 measure-guided `locate` or `split`. A locate operation reports both whether a boundary element was
 found and the accumulated measure before that boundary.
+
+## RRB Vector And Append Builder
+
+Choose `ft_rrb_vector` when uniform random access and dense 32-way storage matter more than the
+deque's endpoint constants. The RRB policy adds semantic equality and allocator callbacks to the
+ordinary value copy/destroy policy:
+
+```c
+static bool equal_int(const void* left, const void* right, void* context)
+{
+    (void)context;
+    return *(const int*)left == *(const int*)right;
+}
+
+ft_value_type int_type;
+ft_value_type_init(&int_type, sizeof(int));
+ft_rrb_policy rrb_policy;
+ft_rrb_policy_init(&rrb_policy, &int_type, equal_int, NULL);
+
+ft_rrb_builder builder;
+ft_status status = ft_rrb_builder_init(&builder, &rrb_policy);
+for (int value = 0; status == FT_STATUS_OK && value != 1000; ++value) {
+    status = ft_rrb_builder_append(&builder, &value);
+}
+
+ft_rrb_vector vector;
+if (status == FT_STATUS_OK) {
+    status = ft_rrb_builder_to_vector(&builder, &vector);
+}
+ft_rrb_builder_dispose(&builder);
+if (status != FT_STATUS_OK) {
+    return status;
+}
+
+int replacement = 42;
+status = ft_rrb_vector_set(&vector, 500, &replacement, &vector); /* Alias-safe. */
+ft_rrb_vector_dispose(&vector);
+return status;
+```
+
+The default policy allocator uses `malloc`/`free`; replace both callbacks together before creating
+handles when an arena, quota, or deterministic failpoint allocator is required. Concatenation
+requires policy pointer identity. Dispose every successfully initialized vector and builder while
+its policy and callback contexts are still alive.
 
 ## Reversible Deque
 

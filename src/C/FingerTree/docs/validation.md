@@ -14,10 +14,11 @@ with the [API notes](api-notes.md) and [usage guide](usage.md).
 
 The workspace uses CMake presets. The `msvc-*` presets use Visual Studio's bundled Ninja by absolute path;
 the `ninja-*` presets use `cmake` and `ninja` from `PATH` for host-agnostic validation. `CMakeLists.txt` builds the
-`tools_data_structures_finger_tree_c` static library from `src/fingertree.c`, with these options enabled by
-default:
+`tools_data_structures_finger_tree_c` static library from `src/fingertree.c` and `src/rrb_vector.c`,
+with these options enabled by default:
 
-- `FINGERTREE_C_BUILD_TESTS`: builds `tests/fingertree_c_tests` and registers `fingertree_c.core`.
+- `FINGERTREE_C_BUILD_TESTS`: builds `tests/fingertree_c_tests` and `tests/rrb_vector_c_tests`,
+  registering `fingertree_c.core` and `fingertree_c.rrb_vector`.
 - `FINGERTREE_C_BUILD_SAMPLES`: builds `samples/fingertree_c_showcase` and
   `samples/fingertree_c_snapshots`, both registered as CTest smoke tests.
 - `FINGERTREE_C_BUILD_BENCHMARKS`: builds `benchmarks/fingertree_c_benchmarks`.
@@ -117,6 +118,13 @@ The executable covers:
   invalid-column rejection, bounded chunk counts, and traversal.
 - long text-rope edit scripts over retained snapshots, with model checks for indexing, traversal, line counts, and
   line/column navigation.
+
+The independent RRB executable covers 0/1/31/32/33/1,023/1,024/1,025/100,000-element boundaries,
+unequal-height concatenation, exact leaf identity through aligned splits and updates, regular versus
+relaxed prefix-table invariants, and a 10,000-operation aliasing/model history with retained
+snapshots. It also runs 2,000 adversarial boundary splits with explicit density/height bounds,
+builder cache/isolation checks, policy lifetime accounting, policy incompatibility, deterministic
+allocation-failure sweeps with rollback/leak assertions, and concurrent copy/read/dispose stress.
 
 The sample executables are registered as CTest smoke tests:
 
