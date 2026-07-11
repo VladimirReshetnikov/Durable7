@@ -21,5 +21,6 @@ Build and test from `src/Cpp`:
 ```
 
 The CTest executable in [`tests`](tests/tungsten_tests.cpp) covers examples, invalid-argument and injected-callback
-exception paths, custom equality/hash policies, relabel stress, generated histories against ordered list/map
-models (including range, key-take, and stable sort operations), and retained-snapshot reader threads.
+exception paths, custom equality/hash policies, relabel stress, bulk-builder index rebuilds (policy preservation
+and detachment from later versions), generated histories against ordered list/map models (including range,
+key-take, and stable sort operations), and retained-snapshot reader threads.

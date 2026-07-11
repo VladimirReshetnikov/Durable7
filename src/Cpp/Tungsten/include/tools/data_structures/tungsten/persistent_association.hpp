@@ -714,7 +714,7 @@ private:
 
     [[nodiscard]] persistent_association rebuilt(std::vector<entry> ordered) const
     {
-        auto index_side = index_map::create(hash_, key_equal_, slot_equal{value_equal_});
+        auto index_builder = index_map::create_bulk_builder(hash_, key_equal_, slot_equal{value_equal_});
         for (auto index = size_type{0}; index != ordered.size(); ++index) {
             if (index > static_cast<size_type>((std::numeric_limits<std::int64_t>::max)() / stamp_gap)) {
                 throw std::overflow_error("persistent_association is too large to relabel");
@@ -722,10 +722,10 @@ private:
 
             const auto stamp = static_cast<std::int64_t>(index) * stamp_gap;
             ordered[index] = entry{stamp, ordered[index].key_ref(), ordered[index].value_ref()};
-            index_side = index_side.set_item(ordered[index].key_ref(), slot{stamp, ordered[index].value_ref()});
+            index_builder.set_item(ordered[index].key_ref(), slot{stamp, ordered[index].value_ref()});
         }
 
-        return make(entry_deque{ordered.begin(), ordered.end()}, std::move(index_side));
+        return make(entry_deque{ordered.begin(), ordered.end()}, index_builder.to_immutable());
     }
 
     [[nodiscard]] size_type index_of_stamp(const std::int64_t stamp) const

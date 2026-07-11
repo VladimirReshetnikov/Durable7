@@ -48,7 +48,15 @@ the containing version is alive.
 - `empty()` returns an empty default-policy map.
 - `create(hash, equal, values_equal)` returns an empty map using supplied policy objects.
 - `create_range(items, hash, equal, values_equal)` adds entries in enumeration order with
-  last-wins values.
+  last-wins values. It builds through the bulk builder, so no intermediate persistent versions
+  are allocated.
+- `create_bulk_builder(hash, equal, values_equal)` returns a move-only `bulk_builder` for one-pass
+  bulk construction. `set_item` mutates unpublished nodes in place with the map's duplicate rules
+  (first stored key retained; value writes skipped when the incoming value compares equal under
+  `ValueEqual`, so the earlier stored value is retained and the last distinct value wins).
+  `to_immutable()` freezes the current contents into a detached persistent map by copying every
+  reachable node; the builder never shares mutable storage with frozen maps and stays usable for
+  further `set_item`/`to_immutable` rounds afterwards.
 - `set_item(key, value)` adds or replaces a key.
 - `set_items(items)` adds or replaces entries in enumeration order.
 - `add(key, value)` adds a key and throws `std::invalid_argument` when an equivalent key already
@@ -78,6 +86,8 @@ is retained.
 `intersect_with`, `symmetric_except_with`, `is_subset_of`, `is_proper_subset_of`,
 `is_proper_superset_of`, and `set_equals` materialize their argument into `std::unordered_set` using
 the set's policy objects. `is_superset_of` and `overlaps` stream their argument and exit early.
+Set `create_range` and `intersect_with` assemble their result through the map bulk builder and
+freeze it once.
 
 ## Complexity
 
@@ -87,8 +97,11 @@ length of an equal-hash collision bucket.
 - Lookup, insert, replace, and remove: O(w / log2(b) + c), effectively bounded by seven trie levels
   plus collision-bucket scan for 32-bit hashes.
 - Enumeration: O(n) time with at most seven inline branch frames.
-- Map `create_range` / set `create_range`: O(n * update-cost), with structural sharing during the
-  build.
+- Map `create_range` / set `create_range` / set `intersect_with`: O(n * (w / log2(b) + c)) through
+  the bulk builder. A mutable unpublished trie is updated in place and frozen once, avoiding
+  persistent path copies between successive input entries.
+- Bulk builder `set_item`: O(w / log2(b) + c) with in-place mutation of unpublished nodes;
+  `to_immutable`: O(n) node copies producing a detached persistent trie.
 - Set algebra implemented from public operations: O((n + m) * update-cost) unless the operation
   only probes membership.
 

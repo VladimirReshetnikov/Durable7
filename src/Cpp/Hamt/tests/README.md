@@ -31,6 +31,7 @@ The executable registers these cases:
 - `Structure_RootShapeTracksContentsAndCollapse`
 - `Structure_UpdateSharesUntouchedSiblingSubtrees`
 - `Enumerator_CopiedIteratorAdvancesIndependently`
+- `Enumerator_RetainsTheTrieBeyondTheSourceMapValue`
 - `RandomHistory_MatchesUnorderedMapAndPreservesSnapshots`
 - `ScriptedCollisionSnapshotStory_MatchesModel`
 - `RandomHistory_WithCollidingHashes_MatchesUnorderedMap`
@@ -41,6 +42,13 @@ The executable registers these cases:
 - `Set_AlgebraMatchesUnorderedSet`
 - `Set_AlgebraHonorsCustomComparer`
 - `Set_SymmetricExceptTreatsInputDuplicatesAsOneItem`
+- `Map_MovedFromMapReadsAsEmpty`
+- `Set_MovedFromSetReadsAsEmpty`
+- `BulkBuilder_FrozenSnapshotsRemainImmutableAcrossBuilderMutations`
+- `BulkBuilder_EquivalentKeysRetainFirstKeyAndEqualValue`
+- `BulkBuilder_DeepPrefixKeysBranchAtFinalHashLevel`
+- `BulkBuilder_RandomizedBuildMatchesPersistentUpdates`
+- `BulkBuilder_CreateRangeAndIntersectionUseBuilderSemantics`
 
 ## Build And Run
 

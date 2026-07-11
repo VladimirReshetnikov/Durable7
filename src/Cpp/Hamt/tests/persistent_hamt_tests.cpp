@@ -190,6 +190,14 @@ struct few_buckets_hash {
     }
 };
 
+// Distinguishes stored-value retention from replacement: values equal mod 10
+// compare equal under the policy while staying observably different.
+struct mod_ten_equal {
+    bool operator()(int left, int right) const noexcept {
+        return left % 10 == right % 10;
+    }
+};
+
 template <class T>
 std::vector<T> sorted(std::vector<T> items) {
     std::sort(items.begin(), items.end());
@@ -1056,6 +1064,135 @@ TEST(Set_MovedFromSetReadsAsEmpty) {
     CHECK(source.is_empty());
     CHECK_EQ(std::size_t{0}, source.count());
     CHECK(source.begin() == source.end());
+}
+
+TEST(BulkBuilder_FrozenSnapshotsRemainImmutableAcrossBuilderMutations) {
+    using map_type = persistent_hash_map<explicit_hash_key, std::string, explicit_hash, explicit_equal>;
+
+    const auto first = explicit_hash_key{1, 0x10};
+    const auto collision = explicit_hash_key{2, 0x10};
+    const auto branch = explicit_hash_key{3, 0x11};
+    auto builder = map_type::create_bulk_builder();
+
+    builder.set_item(first, "first");
+    const auto leaf_snapshot = builder.to_immutable();
+    builder.set_item(collision, "collision");
+    const auto collision_snapshot = builder.to_immutable();
+    builder.set_item(branch, "branch");
+    builder.set_item(first, "updated");
+    const auto branch_snapshot = builder.to_immutable();
+
+    CHECK_EQ(std::size_t{1}, leaf_snapshot.count());
+    CHECK_EQ(std::string("first"), leaf_snapshot.at(first));
+    CHECK(!leaf_snapshot.contains_key(collision));
+    CHECK_EQ(std::size_t{2}, collision_snapshot.count());
+    CHECK_EQ(std::string("first"), collision_snapshot.at(first));
+    CHECK_EQ(std::string("collision"), collision_snapshot.at(collision));
+    CHECK(!collision_snapshot.contains_key(branch));
+    CHECK_EQ(std::size_t{3}, branch_snapshot.count());
+    CHECK_EQ(std::string("updated"), branch_snapshot.at(first));
+    CHECK_EQ(std::string("collision"), branch_snapshot.at(collision));
+    CHECK_EQ(std::string("branch"), branch_snapshot.at(branch));
+    CHECK(!leaf_snapshot.shares_root_with(collision_snapshot));
+    CHECK(!collision_snapshot.shares_root_with(branch_snapshot));
+}
+
+TEST(BulkBuilder_EquivalentKeysRetainFirstKeyAndEqualValue) {
+    using map_type = persistent_hash_map<
+        std::string,
+        int,
+        case_insensitive_hash,
+        case_insensitive_equal,
+        mod_ten_equal>;
+
+    auto builder = map_type::create_bulk_builder();
+    builder.set_item("Alpha", 12);
+    builder.set_item("ALPHA", 22);
+    const auto equal_snapshot = builder.to_immutable();
+    builder.set_item("alpha", 7);
+    const auto replaced_snapshot = builder.to_immutable();
+
+    CHECK_EQ(std::size_t{1}, builder.count());
+    const auto* stored_key = equal_snapshot.try_get_key("alpha");
+    CHECK(stored_key != nullptr);
+    CHECK_EQ(std::string("Alpha"), *stored_key);
+    CHECK_EQ(12, equal_snapshot.at("ALPHA"));
+    const auto* replaced_key = replaced_snapshot.try_get_key("ALPHA");
+    CHECK(replaced_key != nullptr);
+    CHECK_EQ(std::string("Alpha"), *replaced_key);
+    CHECK_EQ(7, replaced_snapshot.at("alpha"));
+}
+
+TEST(BulkBuilder_DeepPrefixKeysBranchAtFinalHashLevel) {
+    using map_type = persistent_hash_map<explicit_hash_key, int, explicit_hash, explicit_equal>;
+
+    const auto low = explicit_hash_key{1, 0};
+    const auto high = explicit_hash_key{2, 1u << 30};
+    auto builder = map_type::create_bulk_builder();
+    builder.set_item(low, 10);
+    builder.set_item(high, 20);
+    const auto map = builder.to_immutable();
+
+    CHECK_EQ(std::size_t{2}, map.count());
+    CHECK_EQ(10, map.at(low));
+    CHECK_EQ(20, map.at(high));
+}
+
+TEST(BulkBuilder_RandomizedBuildMatchesPersistentUpdates) {
+    using map_type = persistent_hash_map<explicit_hash_key, int, explicit_hash, explicit_equal>;
+
+    auto builder = map_type::create_bulk_builder();
+    auto persistent = map_type::create();
+    std::mt19937 random(20260710u);
+
+    for (int i = 0; i < 10000; ++i) {
+        const auto id = static_cast<int>(random() % 2000u);
+        const auto hash = id % 4 == 0
+            ? static_cast<std::uint32_t>(id) & 31u
+            : static_cast<std::uint32_t>(id) * 0x01010101u;
+        const auto key = explicit_hash_key{id, hash};
+        const auto value = static_cast<int>(random() % 100000u);
+        builder.set_item(key, value);
+        persistent = persistent.set_item(key, value);
+    }
+
+    const auto built = builder.to_immutable();
+    CHECK_EQ(persistent.count(), built.count());
+    CHECK(persistent.to_vector() == built.to_vector());
+}
+
+TEST(BulkBuilder_CreateRangeAndIntersectionUseBuilderSemantics) {
+    using map_type = persistent_hash_map<
+        std::string,
+        int,
+        case_insensitive_hash,
+        case_insensitive_equal,
+        mod_ten_equal>;
+
+    const auto map = map_type::create_range(
+        std::vector<std::pair<std::string, int>>{{"Alpha", 12}, {"ALPHA", 22}, {"beta", 3}, {"alpha", 5}},
+        case_insensitive_hash{},
+        case_insensitive_equal{},
+        mod_ten_equal{});
+    CHECK_EQ(std::size_t{2}, map.count());
+    const auto* range_key = map.try_get_key("alpha");
+    CHECK(range_key != nullptr);
+    CHECK_EQ(std::string("Alpha"), *range_key);
+    CHECK_EQ(5, map.at("ALPHA"));
+    CHECK_EQ(3, map.at("BETA"));
+
+    using set_type = persistent_hash_set<std::string, case_insensitive_hash, case_insensitive_equal>;
+    const auto set = set_type::create_range(
+        std::vector<std::string>{"Alpha", "beta", "Gamma"},
+        case_insensitive_hash{},
+        case_insensitive_equal{});
+    const auto intersection = set.intersect_with(std::vector<std::string>{"ALPHA", "GAMMA"});
+    CHECK_EQ(std::size_t{2}, intersection.count());
+    const auto* intersected = intersection.try_get_value("alpha");
+    CHECK(intersected != nullptr);
+    CHECK_EQ(std::string("Alpha"), *intersected);
+    CHECK(intersection.contains("gamma"));
+    CHECK(!intersection.contains("beta"));
 }
 
 } // namespace

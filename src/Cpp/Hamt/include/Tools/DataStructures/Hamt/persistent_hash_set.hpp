@@ -50,12 +50,12 @@ public:
         std::initializer_list<T> items,
         Hash hash = {},
         KeyEqual equal = {}) {
-        auto set = create(std::move(hash), std::move(equal));
+        auto builder = map_type::create_bulk_builder(std::move(hash), std::move(equal), unit_equal{});
         for (const auto& item : items) {
-            set = set.add(item);
+            builder.set_item(item, unit{});
         }
 
-        return set;
+        return persistent_hash_set(builder.to_immutable());
     }
 
     template <class Range>
@@ -63,12 +63,12 @@ public:
         const Range& items,
         Hash hash = {},
         KeyEqual equal = {}) {
-        auto set = create(std::move(hash), std::move(equal));
+        auto builder = map_type::create_bulk_builder(std::move(hash), std::move(equal), unit_equal{});
         for (const auto& item : items) {
-            set = set.add(item);
+            builder.set_item(item, unit{});
         }
 
-        return set;
+        return persistent_hash_set(builder.to_immutable());
     }
 
     [[nodiscard]] size_type count() const noexcept {
@@ -356,14 +356,14 @@ private:
     template <class Range>
     [[nodiscard]] persistent_hash_set intersect_with_range(const Range& items) const {
         const auto probe = materialize_probe(items);
-        auto result = create(hash_function(), key_eq());
+        auto builder = map_type::create_bulk_builder(hash_function(), key_eq(), unit_equal{});
         for (const auto& item : *this) {
             if (probe.find(item) != probe.end()) {
-                result = result.add(item);
+                builder.set_item(item, unit{});
             }
         }
 
-        return result;
+        return persistent_hash_set(builder.to_immutable());
     }
 
     template <class Range>

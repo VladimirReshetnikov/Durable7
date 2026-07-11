@@ -485,6 +485,33 @@ void add_persistent_association_tests(suite& tests)
         FT_REQUIRE_EQUAL(taken.at("alpha"), 1);
     });
 
+    tests.add("persistent association index rebuilds preserve custom policies and detach from later versions", [] {
+        using assoc_type =
+            wf::persistent_association<std::string, int, case_insensitive_hash, case_insensitive_equal>;
+
+        const auto assoc = assoc_type::create(case_insensitive_hash{}, case_insensitive_equal{})
+                               .set_item("Gamma", 3)
+                               .set_item("Alpha", 1)
+                               .set_item("Beta", 2);
+
+        // key_sort routes through the bulk-builder index rebuild.
+        const auto sorted = assoc.key_sort();
+        FT_REQUIRE_EQUAL(sorted.get_at(0).first, std::string{"Alpha"});
+        FT_REQUIRE_EQUAL(sorted.at("ALPHA"), 1);
+        FT_REQUIRE_EQUAL(sorted.at("bEtA"), 2);
+        const auto* stored = sorted.try_get_key("gamma");
+        FT_REQUIRE(stored != nullptr);
+        FT_REQUIRE_EQUAL(*stored, std::string{"Gamma"});
+
+        // The rebuilt index must be detached: mutating a later version leaves
+        // the frozen rebuild untouched.
+        const auto mutated = sorted.set_item("ALPHA", 9).remove("beta");
+        FT_REQUIRE_EQUAL(sorted.at("alpha"), 1);
+        FT_REQUIRE(sorted.contains_key("Beta"));
+        FT_REQUIRE_EQUAL(mutated.at("alpha"), 9);
+        FT_REQUIRE(!mutated.contains_key("Beta"));
+    });
+
     tests.add("persistent association relabels exhausted stamp gaps without losing lookup positions", [] {
         auto assoc = wf::persistent_association<std::string, int>{{"start", -1}, {"end", -2}};
         for (auto index = 0; index != 100; ++index) {

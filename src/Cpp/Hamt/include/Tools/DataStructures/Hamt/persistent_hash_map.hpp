@@ -62,6 +62,16 @@ private:
     using hash_node_ptr = std::shared_ptr<const hash_node>;
     using leaf_node_ptr = std::shared_ptr<const leaf_node>;
 
+    struct mutable_node;
+    struct mutable_hash_node;
+    struct mutable_leaf_node;
+    struct mutable_collision_node;
+    struct mutable_bitmap_indexed_node;
+
+    using mutable_node_ptr = std::unique_ptr<mutable_node>;
+    using mutable_hash_node_ptr = std::unique_ptr<mutable_hash_node>;
+    using mutable_leaf_node_ptr = std::unique_ptr<mutable_leaf_node>;
+
 public:
     using key_type = Key;
     using mapped_type = T;
@@ -118,17 +128,76 @@ public:
         return persistent_hash_map(nullptr, 0, std::move(hash), std::move(equal), std::move(values_equal));
     }
 
+    // Builds an independent HAMT by mutating unpublished nodes in place and
+    // freezing them into detached persistent nodes on demand. Each
+    // `to_immutable` call copies every reachable node, so frozen maps never
+    // share mutable storage with the builder and the builder stays usable
+    // afterwards. Duplicate keys keep the first stored key; a value write is
+    // skipped when the incoming value compares equal under the value-equality
+    // policy, so the earlier stored value is retained (last distinct value
+    // wins). Builders are move-only scratch state, not persistent values.
+    class bulk_builder {
+    public:
+        explicit bulk_builder(Hash hash = {}, KeyEqual equal = {}, ValueEqual values_equal = {})
+            : hash_(std::move(hash)),
+              key_equal_(std::move(equal)),
+              value_equal_(std::move(values_equal)) {
+        }
+
+        [[nodiscard]] size_type count() const noexcept {
+            return count_;
+        }
+
+        void set_item(const Key& key, const T& value) {
+            const auto hash = static_cast<std::uint32_t>(std::invoke(hash_, key));
+            if (!root_) {
+                root_ = std::make_unique<mutable_leaf_node>(hash, key, value);
+                count_ = 1;
+                return;
+            }
+
+            bool added = false;
+            auto* const root = root_.get();
+            root_ = root->set(std::move(root_), key, value, hash, 0, key_equal_, value_equal_, added);
+            if (added) {
+                ++count_;
+            }
+        }
+
+        [[nodiscard]] persistent_hash_map to_immutable() const {
+            if (!root_) {
+                return persistent_hash_map(nullptr, 0, hash_, key_equal_, value_equal_);
+            }
+
+            return persistent_hash_map(root_->freeze(), count_, hash_, key_equal_, value_equal_);
+        }
+
+    private:
+        mutable_node_ptr root_;
+        size_type count_ = 0;
+        TOOLS_DATA_STRUCTURES_HAMT_NO_UNIQUE_ADDRESS Hash hash_{};
+        TOOLS_DATA_STRUCTURES_HAMT_NO_UNIQUE_ADDRESS KeyEqual key_equal_{};
+        TOOLS_DATA_STRUCTURES_HAMT_NO_UNIQUE_ADDRESS ValueEqual value_equal_{};
+    };
+
+    static bulk_builder create_bulk_builder(
+        Hash hash = {},
+        KeyEqual equal = {},
+        ValueEqual values_equal = {}) {
+        return bulk_builder(std::move(hash), std::move(equal), std::move(values_equal));
+    }
+
     static persistent_hash_map create_range(
         std::initializer_list<value_type> items,
         Hash hash = {},
         KeyEqual equal = {},
         ValueEqual values_equal = {}) {
-        auto map = create(std::move(hash), std::move(equal), std::move(values_equal));
+        auto builder = create_bulk_builder(std::move(hash), std::move(equal), std::move(values_equal));
         for (const auto& item : items) {
-            map = map.set_item(item.first, item.second);
+            builder.set_item(item.first, item.second);
         }
 
-        return map;
+        return builder.to_immutable();
     }
 
     template <class Range>
@@ -137,12 +206,12 @@ public:
         Hash hash = {},
         KeyEqual equal = {},
         ValueEqual values_equal = {}) {
-        auto map = create(std::move(hash), std::move(equal), std::move(values_equal));
+        auto builder = create_bulk_builder(std::move(hash), std::move(equal), std::move(values_equal));
         for (const auto& item : items) {
-            map = map.set_item(item.first, item.second);
+            builder.set_item(item.first, item.second);
         }
 
-        return map;
+        return builder.to_immutable();
     }
 
     [[nodiscard]] size_type count() const noexcept {
@@ -948,6 +1017,227 @@ private:
         std::uint32_t bitmap_;
         std::vector<node_ptr> children_;
     };
+
+    // Unpublished bulk-builder nodes. They are uniquely owned by exactly one
+    // builder, are mutated in place, and never escape: `freeze` copies a
+    // subtree into detached persistent nodes.
+    struct mutable_node {
+        virtual ~mutable_node() = default;
+
+        // `self` must own `this`. The call either mutates in place and returns
+        // `self`, or consumes `self` into a replacement subtree.
+        [[nodiscard]] virtual mutable_node_ptr set(
+            mutable_node_ptr self,
+            const Key& key,
+            const T& value,
+            std::uint32_t hash,
+            int shift,
+            const KeyEqual& equal,
+            const ValueEqual& values_equal,
+            bool& added) = 0;
+
+        [[nodiscard]] virtual node_ptr freeze() const = 0;
+    };
+
+    struct mutable_hash_node : mutable_node {
+        explicit mutable_hash_node(std::uint32_t hash)
+            : hash_(hash) {
+        }
+
+        std::uint32_t hash_;
+    };
+
+    struct mutable_leaf_node final : mutable_hash_node {
+        mutable_leaf_node(std::uint32_t hash, Key key, T value)
+            : mutable_hash_node(hash),
+              entry_(std::move(key), std::move(value)) {
+        }
+
+        [[nodiscard]] mutable_node_ptr set(
+            mutable_node_ptr self,
+            const Key& key,
+            const T& value,
+            std::uint32_t hash,
+            int shift,
+            const KeyEqual& equal,
+            const ValueEqual& values_equal,
+            bool& added) override {
+            if (this->hash_ == hash && std::invoke(equal, entry_.first, key)) {
+                added = false;
+                if (!std::invoke(values_equal, entry_.second, value)) {
+                    entry_.second = value;
+                }
+
+                return self;
+            }
+
+            added = true;
+            return merge_mutable_hash_nodes(
+                mutable_hash_node_ptr(static_cast<mutable_hash_node*>(self.release())),
+                std::make_unique<mutable_leaf_node>(hash, key, value),
+                shift);
+        }
+
+        [[nodiscard]] node_ptr freeze() const override {
+            return make_leaf(this->hash_, entry_.first, entry_.second);
+        }
+
+        value_type entry_;
+    };
+
+    struct mutable_collision_node final : mutable_hash_node {
+        mutable_collision_node(std::uint32_t hash, std::vector<value_type> entries)
+            : mutable_hash_node(hash),
+              entries_(std::move(entries)) {
+        }
+
+        // Same precondition as collision_node::create: an equal-hash merge
+        // only ever combines two leaves whose keys differ under the map's
+        // comparer, so the entries can be adopted without a duplicate scan.
+        [[nodiscard]] static std::unique_ptr<mutable_collision_node> create(
+            mutable_hash_node_ptr left,
+            mutable_leaf_node_ptr right) {
+            assert(dynamic_cast<mutable_leaf_node*>(left.get()) != nullptr
+                && "Equal-hash mutable merges must combine two leaves.");
+            auto* const leaf = static_cast<mutable_leaf_node*>(left.get());
+            std::vector<value_type> entries;
+            entries.reserve(2);
+            entries.push_back(std::move(leaf->entry_));
+            entries.push_back(std::move(right->entry_));
+            return std::make_unique<mutable_collision_node>(leaf->hash_, std::move(entries));
+        }
+
+        [[nodiscard]] mutable_node_ptr set(
+            mutable_node_ptr self,
+            const Key& key,
+            const T& value,
+            std::uint32_t hash,
+            int shift,
+            const KeyEqual& equal,
+            const ValueEqual& values_equal,
+            bool& added) override {
+            if (this->hash_ != hash) {
+                added = true;
+                return merge_mutable_hash_nodes(
+                    mutable_hash_node_ptr(static_cast<mutable_hash_node*>(self.release())),
+                    std::make_unique<mutable_leaf_node>(hash, key, value),
+                    shift);
+            }
+
+            for (auto& collision_entry : entries_) {
+                if (!std::invoke(equal, collision_entry.first, key)) {
+                    continue;
+                }
+
+                added = false;
+                if (!std::invoke(values_equal, collision_entry.second, value)) {
+                    collision_entry.second = value;
+                }
+
+                return self;
+            }
+
+            entries_.emplace_back(key, value);
+            added = true;
+            return self;
+        }
+
+        [[nodiscard]] node_ptr freeze() const override {
+            return std::make_shared<collision_node>(this->hash_, entries_);
+        }
+
+        std::vector<value_type> entries_;
+    };
+
+    struct mutable_bitmap_indexed_node final : mutable_node {
+        mutable_bitmap_indexed_node(std::uint32_t bitmap, std::vector<mutable_node_ptr> children)
+            : bitmap_(bitmap),
+              children_(std::move(children)) {
+        }
+
+        [[nodiscard]] mutable_node_ptr set(
+            mutable_node_ptr self,
+            const Key& key,
+            const T& value,
+            std::uint32_t hash,
+            int shift,
+            const KeyEqual& equal,
+            const ValueEqual& values_equal,
+            bool& added) override {
+            const auto selected_bit = bit(index(hash, shift));
+            const auto selected_slot = slot(bitmap_, selected_bit);
+
+            if ((bitmap_ & selected_bit) == 0) {
+                children_.insert(
+                    children_.begin() + static_cast<std::ptrdiff_t>(selected_slot),
+                    std::make_unique<mutable_leaf_node>(hash, key, value));
+                bitmap_ |= selected_bit;
+                added = true;
+                return self;
+            }
+
+            auto* const child = children_[selected_slot].get();
+            children_[selected_slot] = child->set(
+                std::move(children_[selected_slot]),
+                key,
+                value,
+                hash,
+                shift + bits_per_level,
+                equal,
+                values_equal,
+                added);
+            return self;
+        }
+
+        [[nodiscard]] node_ptr freeze() const override {
+            std::vector<node_ptr> children;
+            children.reserve(children_.size());
+            for (const auto& child : children_) {
+                children.push_back(child->freeze());
+            }
+
+            return std::make_shared<bitmap_indexed_node>(bitmap_, std::move(children));
+        }
+
+        std::uint32_t bitmap_;
+        std::vector<mutable_node_ptr> children_;
+    };
+
+    static mutable_node_ptr merge_mutable_hash_nodes(
+        mutable_hash_node_ptr left,
+        mutable_leaf_node_ptr right,
+        int shift) {
+        if (left->hash_ == right->hash_) {
+            return mutable_collision_node::create(std::move(left), std::move(right));
+        }
+
+        if (shift >= 32) {
+            throw std::logic_error("Different 32-bit hashes cannot share every HAMT level.");
+        }
+
+        const auto left_index = index(left->hash_, shift);
+        const auto right_index = index(right->hash_, shift);
+        const auto left_bit = bit(left_index);
+        const auto right_bit = bit(right_index);
+
+        if (left_index == right_index) {
+            std::vector<mutable_node_ptr> children;
+            children.push_back(merge_mutable_hash_nodes(std::move(left), std::move(right), shift + bits_per_level));
+            return std::make_unique<mutable_bitmap_indexed_node>(left_bit, std::move(children));
+        }
+
+        std::vector<mutable_node_ptr> children;
+        children.reserve(2);
+        if (left_index < right_index) {
+            children.push_back(std::move(left));
+            children.push_back(std::move(right));
+        } else {
+            children.push_back(std::move(right));
+            children.push_back(std::move(left));
+        }
+
+        return std::make_unique<mutable_bitmap_indexed_node>(left_bit | right_bit, std::move(children));
+    }
 
     node_ptr root_;
     size_type count_ = 0;
