@@ -349,17 +349,61 @@ private class ReversibleDequeConcatNode<T>(
         left.appendToReversed(destination)
     }
 
-    override fun iterator(): Iterator<T> = sequence {
-        yieldAll(left.iterator())
-        yieldAll(right.iterator())
-    }.iterator()
+    override fun iterator(): Iterator<T> = ReversibleDequeNodeIterator(this)
 
-    override fun reversedIterator(): Iterator<T> = sequence {
-        yieldAll(right.reversedIterator())
-        yieldAll(left.reversedIterator())
-    }.iterator()
+    override fun reversedIterator(): Iterator<T> = ReversibleDequeNodeIterator(ReversedReversibleDequeNode(this))
 
     override fun logicalParts(): Pair<ReversibleDequeNode<T>, ReversibleDequeNode<T>> = left to right
+}
+
+/**
+ * Streams a reversible-deque subtree with an explicit stack of unvisited siblings, so traversal
+ * costs O(1) amortized per element with O(height) transient state, instead of paying one nested
+ * coroutine delegation per tree level per element.
+ */
+private class ReversibleDequeNodeIterator<T>(root: ReversibleDequeNode<T>) : Iterator<T> {
+    private val pending = ArrayDeque<ReversibleDequeNode<T>>()
+    private var current: Iterator<T> = EmptyIterator
+
+    init {
+        if (root.size > 0) {
+            descend(root)
+        }
+    }
+
+    private fun descend(start: ReversibleDequeNode<T>) {
+        var node = start
+        while (true) {
+            val parts = node.logicalParts()
+            if (parts == null) {
+                // A leaf (or reversed leaf): its own iterator is a plain list iterator.
+                current = node.iterator()
+                return
+            }
+            pending.addLast(parts.second)
+            node = parts.first
+        }
+    }
+
+    override fun hasNext(): Boolean {
+        while (!current.hasNext()) {
+            val next = pending.removeLastOrNull() ?: return false
+            descend(next)
+        }
+        return true
+    }
+
+    override fun next(): T {
+        if (!hasNext()) {
+            throw NoSuchElementException()
+        }
+        return current.next()
+    }
+
+    private object EmptyIterator : Iterator<Nothing> {
+        override fun hasNext(): Boolean = false
+        override fun next(): Nothing = throw NoSuchElementException()
+    }
 }
 
 private class ReversedReversibleDequeNode<T>(

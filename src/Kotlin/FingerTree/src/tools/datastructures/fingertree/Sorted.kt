@@ -12,9 +12,11 @@ public data class SortedMapRemoveResult<K, V>(
     public val value: V,
 )
 
-internal fun <T : Comparable<T>> naturalComparator(): Comparator<T> = Comparator { left, right ->
-    left.compareTo(right)
-}
+// Every call must return the same instance: PriorityQueue.meld accepts only queues whose
+// comparators are identical or equal, and Comparator instances compare by identity. The stdlib's
+// naturalOrder() is a shared singleton object, unlike a lambda, whose per-call-site caching is a
+// compiler detail.
+internal fun <T : Comparable<T>> naturalComparator(): Comparator<T> = naturalOrder()
 
 private fun <T> compare(comparator: Comparator<in T>, left: T, right: T): Int =
     comparator.compare(left, right)

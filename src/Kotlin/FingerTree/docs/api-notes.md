@@ -49,7 +49,10 @@ rather than string-backed. Full enumeration, conversion, sorting/filter rebuildi
 `PriorityQueue` caches the stable leftmost minimum entry, making peek O(1), enqueue/meld O(log n), and
 dequeue O(log n). `IntervalTree` caches last-low and maximum-high summaries: lower-bound insertion and
 the first overlap query are O(log n), while overlap enumeration repeatedly prunes unreachable
-prefixes. Measure or comparator policies on concatenated values must compare equal.
+prefixes. Measure or comparator policies on concatenated values must compare equal. `meld` compares
+comparators by identity (JVM `Comparator` has no structural equality): natural-order queues share one
+stdlib singleton and always meld, but queues built with custom comparators must be constructed from a
+single shared comparator instance.
 
 `ReversibleDeque<T>` retains its specialized orientation-aware balanced storage: `reverse()` wraps or
 unwraps a root in O(1), `concat` joins logical roots without materializing either operand, and endpoint
