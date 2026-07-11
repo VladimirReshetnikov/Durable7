@@ -33,6 +33,7 @@ Library-specific design and API documentation lives beside each workspace under 
 
 ## Reviews
 
+- [Cross-language implementation review (2026-07-11)](reviews/cross-language-implementation-review-2026-07-11.md) - seven-pass follow-up review after the 2026-07-10 round: empirically confirmed findings (C# enumerator-copy aliasing, three Numerics BCL-parity gaps, Haskell cross-policy symmetric difference and stale bag representatives, C Tungsten map-callback leak, Kotlin/Rust/C++ complexity-parity items), the six fix commits landed, areas re-verified clean, validation evidence, and the remaining backlog (HAMT bulk-builder ports, Kotlin log² bounds).
 - [Cross-language implementation review (2026-07-10)](reviews/cross-language-implementation-review-2026-07-10.md) - nine-pass correctness, semantic-parity, and complexity-parity review of the FingerTree, HAMT, Tungsten, and Numerics families across all six languages: verified findings, the eleven fix commits landed, the post-review parity matrix, validation evidence, and the prioritized open-item backlog. (The three 2026-07-09 review reports were resolved and deleted; this report supersedes them.)
 
 ## Migration
