@@ -124,23 +124,26 @@ public:
 
     [[nodiscard]] bool contains_key(const key_type& key) const
     {
-        return locate_key(key).has_value();
+        return locate_key(key) != nullptr;
     }
 
     [[nodiscard]] std::optional<mapped_type> try_get(const key_type& key) const
     {
-        auto located = locate_key(key);
-        return located.has_value() ? std::optional<mapped_type>{located->second} : std::nullopt;
+        const auto* entry = locate_key(key);
+        return entry != nullptr ? std::optional<mapped_type>{entry->second} : std::nullopt;
     }
 
-    [[nodiscard]] mapped_type at(const key_type& key) const
+    // The returned reference remains valid while this immutable map (or a
+    // snapshot sharing the located node) remains alive, matching
+    // sorted_set::at and entry_at.
+    [[nodiscard]] const mapped_type& at(const key_type& key) const
     {
-        auto value = try_get(key);
-        if (!value.has_value()) {
+        const auto* entry = locate_key(key);
+        if (entry == nullptr) {
             throw std::out_of_range("sorted_map key was not present");
         }
 
-        return *value;
+        return entry->second;
     }
 
     [[nodiscard]] const entry_type& entry_at(const size_type index) const
@@ -322,14 +325,16 @@ private:
         return tree_.split(key_at_least_predicate<key_type, Less>{key, less_});
     }
 
-    [[nodiscard]] std::optional<entry_type> locate_key(const key_type& key) const
+    // The returned pointer remains valid while this immutable map (or a
+    // snapshot sharing the located node) remains alive; nullptr when absent.
+    [[nodiscard]] const entry_type* locate_key(const key_type& key) const
     {
-        auto located = tree_.try_locate(key_at_least_predicate<key_type, Less>{key, less_});
-        if (located.item.has_value() && equivalent_key(located.item->first, key)) {
+        auto located = tree_.try_locate_reference(key_at_least_predicate<key_type, Less>{key, less_});
+        if (located.has_value() && equivalent_key(located.item->first, key)) {
             return located.item;
         }
 
-        return std::nullopt;
+        return nullptr;
     }
 
     [[nodiscard]] const entry_type& entry_at_rank(const size_type rank) const

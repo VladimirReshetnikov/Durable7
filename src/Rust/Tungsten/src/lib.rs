@@ -525,11 +525,19 @@ where
             return self.append_new(key, value);
         };
 
-        let position = self.index_of_stamp(found.stamp);
-        if position == self.len() - 1 && found.value == value {
+        // Stamps are unique, so an end-stamp comparison decides the no-op
+        // fast path in O(1) like the C# reference, without the O(log n)
+        // position search that the removal path below still needs.
+        if self
+            .entries
+            .back()
+            .is_some_and(|last| last.stamp == found.stamp)
+            && found.value == value
+        {
             return self.clone();
         }
 
+        let position = self.index_of_stamp(found.stamp);
         let entries = self
             .entries
             .remove_at(position)
@@ -541,11 +549,18 @@ where
     #[must_use]
     pub fn prepend(&self, key: K, value: V) -> Self {
         if let Some(found) = self.index.get(&key) {
-            let position = self.index_of_stamp(found.stamp);
-            if position == 0 && found.value == value {
+            // Mirrors append: the front-stamp comparison keeps the no-op
+            // fast path O(1); only the removal path pays the search.
+            if self
+                .entries
+                .front()
+                .is_some_and(|first| first.stamp == found.stamp)
+                && found.value == value
+            {
                 return self.clone();
             }
 
+            let position = self.index_of_stamp(found.stamp);
             let entries = self
                 .entries
                 .remove_at(position)

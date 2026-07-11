@@ -291,11 +291,14 @@ public:
             return append_new(key, value);
         }
 
-        const auto position = index_of_stamp(found->stamp);
-        if (position == size() - 1 && std::invoke(value_equal_, found->value, value)) {
+        // Stamps are unique, so an end-stamp comparison decides the no-op fast
+        // path in O(1) like the C# reference; only the removal path below
+        // still needs the O(log n) position search.
+        if (found->stamp == entries_.back().stamp && std::invoke(value_equal_, found->value, value)) {
             return *this;
         }
 
+        const auto position = index_of_stamp(found->stamp);
         auto entries = entries_.remove_at(position);
         // Hoisted before the call: argument evaluations are indeterminately
         // sequenced, so entries.size() must not race the move of entries.
@@ -307,11 +310,13 @@ public:
     {
         const auto* found = index_.try_get(key);
         if (found != nullptr) {
-            const auto position = index_of_stamp(found->stamp);
-            if (position == 0 && std::invoke(value_equal_, found->value, value)) {
+            // Mirrors append: the front-stamp comparison keeps the no-op fast
+            // path O(1); only the removal path pays the position search.
+            if (found->stamp == entries_.front().stamp && std::invoke(value_equal_, found->value, value)) {
                 return *this;
             }
 
+            const auto position = index_of_stamp(found->stamp);
             auto entries = entries_.remove_at(position);
             return with_entry_inserted(std::move(entries), index_.remove(key), 0, key, value);
         }
