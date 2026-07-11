@@ -58,6 +58,8 @@ The suite covers:
 - primitive, floating-point, cross-width, and `BigInteger` conversions, including checked/non-finite boundaries;
 - fixed-width binary conversion through `BitConverterEx`;
 - sparse non-negative integer conversion, arithmetic, and power/logarithm behavior;
+- randomized quotient/remainder differential checks against `BigInteger`, allocation checks for warmed span-format
+  paths, and dense sparse-addition carry cascades;
 - dynamic binding, comparison, hashing, public API coverage, and declaration parity guardrails.
 
 When adding or changing a public wide-integer operation, update the corresponding bit-width and signedness quadrant,

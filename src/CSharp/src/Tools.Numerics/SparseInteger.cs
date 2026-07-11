@@ -340,29 +340,76 @@ namespace Tools.Numerics
                 }
             }
 
-            var xPositions = x.Positions;
-            var yPositions = y.Positions;
+            SparseInteger[] xPositions = x.Positions;
+            SparseInteger[] yPositions = y.Positions;
+            var merged = new SparseInteger[xPositions.Length + yPositions.Length + 1];
+            int xIndex = 0;
+            int yIndex = 0;
+            int mergedCount = 0;
+            SparseInteger? carry = null;
 
-            // swap if necessary to make yPositions shorter
-            if (yPositions.Length > xPositions.Length)
+            while (xIndex < xPositions.Length || yIndex < yPositions.Length || carry.HasValue)
             {
-                (xPositions, yPositions) = (yPositions, xPositions);
+                SparseInteger position;
+                if (xIndex < xPositions.Length)
+                {
+                    position = xPositions[xIndex];
+                }
+                else if (yIndex < yPositions.Length)
+                {
+                    position = yPositions[yIndex];
+                }
+                else
+                {
+                    position = carry!.Value;
+                }
+
+                if (yIndex < yPositions.Length && yPositions[yIndex] < position)
+                {
+                    position = yPositions[yIndex];
+                }
+
+                if (carry.HasValue && carry.Value < position)
+                {
+                    position = carry.Value;
+                }
+
+                int occurrences = 0;
+                if (xIndex < xPositions.Length && xPositions[xIndex] == position)
+                {
+                    xIndex++;
+                    occurrences++;
+                }
+
+                if (yIndex < yPositions.Length && yPositions[yIndex] == position)
+                {
+                    yIndex++;
+                    occurrences++;
+                }
+
+                if (carry.HasValue && carry.Value == position)
+                {
+                    carry = null;
+                    occurrences++;
+                }
+
+                if ((occurrences & 1) != 0)
+                {
+                    merged[mergedCount++] = position;
+                }
+
+                if (occurrences >= 2)
+                {
+                    carry = position.PlusOne();
+                }
             }
 
-            foreach (var position in yPositions)
+            if (mergedCount != merged.Length)
             {
-                var xPositionsNew = ArrayHelpers.RemoveElement(xPositions, position, out bool removed);
-
-                var x1 = position.PlusOne();
-                // The carry sum must be materialized through the Positions property: reading the
-                // private positions field would yield null whenever the intermediate sum fits into
-                // ulong, silently discarding every bit accumulated so far.
-                xPositions = removed
-                    ? (new SparseInteger(xPositionsNew) + x1.Exp2()).Positions
-                    : ArrayHelpers.InsertElement(xPositions, position);
+                Array.Resize(ref merged, mergedCount);
             }
 
-            return new SparseInteger(xPositions);
+            return new SparseInteger(merged);
         }
 
         /// <summary>

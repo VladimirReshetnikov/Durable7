@@ -41,6 +41,9 @@ This test project is organized by **bit width** and **signedness quadrant** so c
     zeroes, and generic parsing/min-max interface conformance across all six fixed-width types.
   - `WideIntegerConversionParityTests.cs` covers binary/decimal floating-point conversions and the direct
     512↔128 and 1024↔256/128 conversion matrix.
+  - `WideIntegerAlgorithmTests.cs` differentially checks normalized limb division at every width, verifies warmed
+    UTF-16/UTF-8 span formatting is allocation-free for representative decimal, grouped, and hexadecimal formats,
+    and stresses dense `SparseInteger` carry propagation.
   - Mixed tests are explicitly labeled in class/method names and XML docs so asymmetry is intentional and discoverable.
 - `Infrastructure/`
   - Shared deterministic test helpers (random generators, normalization helpers, and reference-model utilities).

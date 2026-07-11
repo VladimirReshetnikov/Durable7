@@ -75,6 +75,10 @@ The integer structs use compositional fixed halves:
 
 This keeps carry/borrow and shift behavior explicit while avoiding arbitrary-precision storage as the core runtime representation. `BigInteger` is used as an interop boundary and validation bridge, not as fundamental storage.
 
+Unsigned division uses a shared allocation-free limb engine: a single-limb fast path and normalized Knuth long
+division for multi-limb divisors. Quotient and remainder therefore operate on fixed stack storage rather than
+repeatedly shifting and subtracting whole-width values.
+
 ## Behavioral contract summary
 
 ### Arithmetic and overflow
@@ -90,6 +94,8 @@ This keeps carry/borrow and shift behavior explicit while avoiding arbitrary-pre
 - Formatting supports `ToString`, `TryFormat`, and UTF-8 formatting paths, including `G`, `D`, `N`, and `X`
   standard formats. `D`, `N`, and `X` accept precision specifiers such as `D5`, `N0`, and `X8`; `G` takes no
   precision and rejects one (for example `G3`) with `FormatException`.
+- Span formatting writes digits, signs, grouping separators, and decimal separators directly into caller-owned
+  storage. Common UTF-16 and UTF-8 paths do not materialize an intermediate formatted string.
 - Decimal parsing supports every `NumberStyles.Any` subset, including culture-aware signs, parenthesized negatives,
   currency symbols, group separators, exponents, and an all-zero fractional component; hexadecimal parsing preserves
   fixed-width two's-complement semantics. Invalid style combinations throw `ArgumentException` from both `Parse` and

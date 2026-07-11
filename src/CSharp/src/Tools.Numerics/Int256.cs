@@ -6,7 +6,6 @@ using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text;
 using static Tools.Numerics.BitHelpers;
 
 namespace Tools.Numerics;
@@ -78,7 +77,7 @@ public readonly struct Int256 :
     private readonly UInt128 _lower;
 
     /// <summary>Bit mask that isolates the sign bit within the upper 128-bit half.</summary>
-    private static readonly UInt128 s_signMaskUpper = (UInt128)1 << 127;
+    private static readonly UInt128 s_signMaskUpper = UInt128.One << 127;
 
     /// <summary>Initializes a new <see cref="Int256"/> from its upper and lower 128-bit halves.</summary>
     /// <param name="upper">The most significant 128 bits in two's-complement form.</param>
@@ -109,7 +108,7 @@ public readonly struct Int256 :
     public static readonly Int256 One = new(0, 1);
 
     /// <summary>Represents the smallest possible <see cref="Int256"/> value.</summary>
-    public static readonly Int256 MinValue = new((UInt128)1 << 127, 0);
+    public static readonly Int256 MinValue = new(UInt128.One << 127, 0);
 
     /// <summary>Represents the largest possible <see cref="Int256"/> value.</summary>
     public static readonly Int256 MaxValue = new((UInt128)Int128.MaxValue, UInt128.MaxValue);
@@ -213,16 +212,10 @@ public readonly struct Int256 :
         ReadOnlySpan<char> format = default,
         IFormatProvider? provider = null)
     {
-        string s = FormatValue(this, format.IsEmpty ? null : new string(format), provider);
-        if (s.Length > destination.Length)
-        {
-            charsWritten = 0;
-            return false;
-        }
-
-        s.AsSpan().CopyTo(destination);
-        charsWritten = s.Length;
-        return true;
+        bool hex = !format.IsEmpty && format[0] is 'X' or 'x';
+        UInt256 magnitude = hex ? (UInt256)this : GetUnsignedMagnitude(this);
+        return UInt256.TryFormatMagnitude(magnitude, !hex && IsNegative,
+            destination, out charsWritten, format, provider);
     }
 
     /// <summary>
@@ -249,10 +242,10 @@ public readonly struct Int256 :
         ReadOnlySpan<char> format = default,
         IFormatProvider? provider = null)
     {
-        return Encoding.UTF8.TryGetBytes(
-            FormatValue(this, format.IsEmpty ? null : new string(format), provider),
-            utf8Destination,
-            out bytesWritten);
+        bool hex = !format.IsEmpty && format[0] is 'X' or 'x';
+        UInt256 magnitude = hex ? (UInt256)this : GetUnsignedMagnitude(this);
+        return UInt256.TryFormatMagnitude(magnitude, !hex && IsNegative,
+            utf8Destination, out bytesWritten, format, provider);
     }
 
     #region Parsing
@@ -561,7 +554,7 @@ public readonly struct Int256 :
     public static Int256 operator +(Int256 left, Int256 right)
     {
         UInt128 lo = left._lower + right._lower;
-        return new(left._upper + right._upper + (UInt128)(lo < left._lower ? 1 : 0), lo);
+        return new(left._upper + right._upper + (lo < left._lower ? UInt128.One : UInt128.Zero), lo);
     }
 
     /// <summary>Subtracts one signed 256-bit value from another.</summary>
@@ -569,7 +562,7 @@ public readonly struct Int256 :
     /// <param name="right">The subtrahend (the value subtracted from <paramref name="left"/>).</param>
     public static Int256 operator -(Int256 left, Int256 right) =>
         new(
-            left._upper - right._upper - (left._lower < right._lower ? (UInt128)1 : 0),
+            left._upper - right._upper - (left._lower < right._lower ? UInt128.One : UInt128.Zero),
             left._lower - right._lower);
 
     /// <summary>Computes the bitwise AND of two values.</summary>

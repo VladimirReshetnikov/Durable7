@@ -78,6 +78,10 @@ where each set-bit position is recursively represented as another `SparseInteger
 addition, multiplication, base-2 exponentiation, exact base-2 logarithm, decimal formatting/parsing, and
 `BigInteger` conversion when the most significant set-bit position fits in `int`.
 
+Addition merges the two ordered set-bit streams in one forward pass and propagates carry within that merge. It must
+not repeatedly insert into or remove from the middle of an array, which turns dense sparse operands into quadratic
+array-copy workloads.
+
 ## 3) Signed-specific expectations
 
 Signed types (`Int*`) also provide:
@@ -136,8 +140,10 @@ For signed types:
   whitespace when the corresponding flags are set. `AllowBinarySpecifier` is a valid style but is not supported:
   binary input fails parsing (`FormatException` from `Parse`, `false` from `TryParse`).
 - Formatting supports `G`/`D`/`N`/`X` (and lowercase forms). `D`, `N`, and `X` accept minimum-digit or fractional
-  precision components such as `D5`, `N0`, and `X8`; precision/grouping cases use the `BigInteger` interop boundary
-  for BCL-compatible standard formatting, while one-character `G`/`D` stays on the specialized limb formatter.
+  precision components such as `D5`, `N0`, and `X8`. The span overloads use the shared limb formatter for decimal,
+  grouped-number, and hexadecimal output without first creating a formatted string; oversized UTF-8 scratch space
+  may be rented from `ArrayPool<T>`. String-returning overloads allocate only their required result on the default
+  decimal path.
   `G`/`g` accepts no precision component: `BigInteger` formatting ignores `G` precision instead of applying
   `Int128`-style rounding/scientific notation, so a `G` format with a precision specifier (for example `G3`) is
   rejected with `FormatException` rather than silently diverging from the built-in integer types.

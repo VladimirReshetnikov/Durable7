@@ -6,7 +6,6 @@ using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text;
 using static Tools.Numerics.BitHelpers;
 
 namespace Tools.Numerics;
@@ -192,16 +191,7 @@ public readonly struct UInt1024 :
         ReadOnlySpan<char> format = default,
         IFormatProvider? provider = null)
     {
-        string s = FormatValue(this, format.IsEmpty ? null : new string(format), provider);
-        if (s.Length > destination.Length)
-        {
-            charsWritten = 0;
-            return false;
-        }
-
-        s.AsSpan().CopyTo(destination);
-        charsWritten = s.Length;
-        return true;
+        return TryFormatMagnitude(this, negative: false, destination, out charsWritten, format, provider);
     }
 
     /// <summary>
@@ -227,10 +217,23 @@ public readonly struct UInt1024 :
         ReadOnlySpan<char> format = default,
         IFormatProvider? provider = null)
     {
-        return Encoding.UTF8.TryGetBytes(
-            FormatValue(this, format.IsEmpty ? null : new string(format), provider),
-            utf8Destination,
-            out bytesWritten);
+        return TryFormatMagnitude(this, negative: false, utf8Destination, out bytesWritten, format, provider);
+    }
+
+    internal static bool TryFormatMagnitude(UInt1024 value, bool negative, Span<char> destination,
+        out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider)
+    {
+        Span<ulong> limbs = stackalloc ulong[16];
+        WideIntegerAlgorithms.WriteLimbs(value, limbs);
+        return NumericFormatHelpers.TryFormatUnsigned(limbs, negative, destination, out charsWritten, format, provider);
+    }
+
+    internal static bool TryFormatMagnitude(UInt1024 value, bool negative, Span<byte> destination,
+        out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider)
+    {
+        Span<ulong> limbs = stackalloc ulong[16];
+        WideIntegerAlgorithms.WriteLimbs(value, limbs);
+        return NumericFormatHelpers.TryFormatUnsignedUtf8(limbs, negative, destination, out bytesWritten, format, provider);
     }
 
     #region Parsing
@@ -543,7 +546,7 @@ public readonly struct UInt1024 :
     public static UInt1024 operator +(UInt1024 left, UInt1024 right)
     {
         UInt512 lo = left._lower + right._lower;
-        return new(left._upper + right._upper + (UInt512)(lo < left._lower ? 1 : 0), lo);
+        return new(left._upper + right._upper + (lo < left._lower ? UInt512.One : UInt512.Zero), lo);
     }
 
     /// <summary>Subtracts one unsigned 1024-bit value from another.</summary>
@@ -551,7 +554,7 @@ public readonly struct UInt1024 :
     /// <param name="right">The subtrahend (the value subtracted from <paramref name="left"/>).</param>
     public static UInt1024 operator -(UInt1024 left, UInt1024 right) =>
         new(
-            left._upper - right._upper - (left._lower < right._lower ? (UInt512)1 : 0),
+            left._upper - right._upper - (left._lower < right._lower ? UInt512.One : UInt512.Zero),
             left._lower - right._lower);
 
     /// <summary>Computes the bitwise AND of two values.</summary>
@@ -671,7 +674,7 @@ public readonly struct UInt1024 :
     public static UInt1024 operator checked +(UInt1024 left, UInt1024 right)
     {
         UInt512 lo = left._lower + right._lower;
-        UInt512 carry = lo < left._lower ? (UInt512)1 : 0;
+        UInt512 carry = lo < left._lower ? UInt512.One : UInt512.Zero;
         UInt512 hi = checked(left._upper + right._upper + carry);
         return new(hi, lo);
     }
@@ -685,7 +688,7 @@ public readonly struct UInt1024 :
     public static UInt1024 operator checked -(UInt1024 left, UInt1024 right)
     {
         UInt512 lo = left._lower - right._lower;
-        UInt512 borrow = lo > left._lower ? (UInt512)1 : 0;
+        UInt512 borrow = lo > left._lower ? UInt512.One : UInt512.Zero;
         UInt512 hi = checked(left._upper - right._upper - borrow);
         return new(hi, lo);
     }
@@ -819,24 +822,9 @@ public readonly struct UInt1024 :
     /// <returns>A decimal string that round-trips through <see cref="Parse(string)"/>.</returns>
     private static string FormatDecimal(UInt1024 value, IFormatProvider? provider)
     {
-        if (value.IsZero)
-            return 0UL.ToString(provider);
-
-        Span<UInt1024> parts = stackalloc UInt1024[17];
-        int count = 0;
-        UInt1024 current = value;
-        UInt1024 divisor = new(0, 10_000_000_000_000_000_000UL);
-        while (!current.IsZero)
-        {
-            Divide(current, divisor, out current, out UInt1024 rem);
-            parts[count++] = rem;
-        }
-
-        StringBuilder sb = new StringBuilder(count * 19);
-        sb.Append(((ulong)parts[count - 1]).ToString(provider));
-        for (int i = count - 2; i >= 0; i--)
-            sb.Append(((ulong)parts[i]).ToString("D19", provider));
-        return sb.ToString();
+        Span<char> buffer = stackalloc char[309];
+        _ = TryFormatMagnitude(value, negative: false, buffer, out int written, default, provider);
+        return new string(buffer[..written]);
     }
 
     /// <summary>
@@ -1120,7 +1108,7 @@ public readonly struct UInt1024 :
     }
 
     /// <summary>
-    /// Divides one unsigned 1024-bit value by another using restoring binary long division.
+    /// Divides one unsigned 1024-bit value by another using normalized limb long division.
     /// </summary>
     /// <param name="dividend">The value to divide.</param>
     /// <param name="divisor">The value that divides <paramref name="dividend"/>.</param>
@@ -1131,27 +1119,15 @@ public readonly struct UInt1024 :
     /// </exception>
     private static void Divide(UInt1024 dividend, UInt1024 divisor, out UInt1024 quotient, out UInt1024 remainder)
     {
-        if (divisor.IsZero) throw new DivideByZeroException();
-        if (dividend < divisor)
-        {
-            quotient = Zero;
-            remainder = dividend;
-            return;
-        }
-
-        quotient = Zero;
-        remainder = dividend;
-        int shift = LeadingZeroCount(divisor) - LeadingZeroCount(dividend);
-        UInt1024 scaled = divisor << shift;
-        for (; shift >= 0; shift--)
-        {
-            if (remainder >= scaled)
-            {
-                remainder -= scaled;
-                quotient |= One << shift;
-            }
-            scaled >>= 1;
-        }
+        Span<ulong> dividendLimbs = stackalloc ulong[16];
+        Span<ulong> divisorLimbs = stackalloc ulong[16];
+        WideIntegerAlgorithms.WriteLimbs(dividend, dividendLimbs);
+        WideIntegerAlgorithms.WriteLimbs(divisor, divisorLimbs);
+        Span<ulong> quotientLimbs = stackalloc ulong[16];
+        Span<ulong> remainderLimbs = stackalloc ulong[16];
+        WideIntegerAlgorithms.DivRem(dividendLimbs, divisorLimbs, quotientLimbs, remainderLimbs);
+        quotient = WideIntegerAlgorithms.CreateUInt1024(quotientLimbs);
+        remainder = WideIntegerAlgorithms.CreateUInt1024(remainderLimbs);
     }
 
     #endregion
