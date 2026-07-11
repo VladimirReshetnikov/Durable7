@@ -27,3 +27,8 @@ The local [test README](test/README.md) lists the deterministic coverage areas.
 Enumeration follows trie bitmap order and collision-bucket order: stable for an unchanged
 version, but neither insertion order nor sorted order (matching the C# reference's documented
 contract).
+
+`Data.Structures.Hamt.Patricia` adds `IntMap32`/`IntSet32` and `IntMap64`/`IntSet64`. The shared
+strict big-endian Patricia core sign-flips keys for ascending signed traversal, compresses common
+prefixes at the highest differing bit, and implements prefix-aware right-biased union,
+left-valued intersection, and difference.

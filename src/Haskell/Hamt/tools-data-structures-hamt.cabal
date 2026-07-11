@@ -14,6 +14,7 @@ library
     Data.Structures.Hamt.Hashable
     Data.Structures.Hamt.HashMap
     Data.Structures.Hamt.HashSet
+    Data.Structures.Hamt.Patricia
   hs-source-dirs: src
   build-depends:
     base >=4.21 && <4.22

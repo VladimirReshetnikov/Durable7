@@ -162,6 +162,11 @@ union/intersection/difference. Boundary and randomized model tests cover both ke
 and prefix-aligned structural algebra. Tests compare randomized histories with `BTreeMap` and cover
 signed boundaries, right-biased union, intersection, difference, and no-op root sharing.
 
+**Haskell status (2026-07-11): Implemented for explicit `Int32` and `Int64` widths.**
+`Data.Structures.Hamt.Patricia` exposes strict maps and sets over one `Word64` path core, sign-bit
+ordering, compressed prefixes, and prefix-aligned structural algebra. The explicit aliases avoid
+making the width contract depend on platform-sized `Int`.
+
 **What it is.** Okasaki & Gill's mergeable integer maps (1998): a binary trie over the bits of an
 integer key, path-compressed so each internal node stores a prefix and the single branching bit,
 branching on the highest bit where keys differ. Operations are O(min(n, W)) with W the key width;

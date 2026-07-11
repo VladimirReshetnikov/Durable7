@@ -6,12 +6,14 @@ import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (SomeException, evaluate, try)
 import Control.Monad (forM_, replicateM)
 import Data.Char (toLower)
+import Data.Int (Int32, Int64)
 import Data.List (sort)
 
 import Data.Structures.Hamt.Hashable (hash)
 import Data.Structures.Hamt.HashMap (HashPolicy(..))
 import qualified Data.Structures.Hamt.HashMap as HashMap
 import qualified Data.Structures.Hamt.HashSet as HashSet
+import qualified Data.Structures.Hamt.Patricia as Patricia
 
 main :: IO ()
 main = do
@@ -19,6 +21,7 @@ main = do
   testCollisionPolicy
   testCollisionShrinkCanonicalization
   testChampCanonicalizationAndDiff
+  testPatriciaMapsAndSets
   testActualKeyPreservation
   testAdjustAndStrictMapping
   testSetAlgebra
@@ -77,6 +80,38 @@ testChampCanonicalizationAndDiff = do
   assertBool "typed diff removal" (HashMap.EntryRemoved 7 7 `elem` differences)
   assertBool "typed diff change" (HashMap.EntryChanged 9 9 (-9) `elem` differences)
   assertBool "typed diff addition" (HashMap.EntryAdded 1000 1000 `elem` differences)
+
+testPatriciaMapsAndSets :: IO ()
+testPatriciaMapsAndSets = do
+  let intKeys = [minBound, -1, 0, 1, maxBound] :: [Int32]
+      intMap = Patricia.fromList [(key, show key) | key <- reverse intKeys]
+      longKeys = [minBound, -1, 0, 1, maxBound] :: [Int64]
+      longMap = Patricia.fromList [(key, key) | key <- reverse longKeys]
+  assertEqual "Int32 Patricia signed order" intKeys (map fst (Patricia.toAscList intMap))
+  assertEqual "Int64 Patricia signed order" longKeys (map fst (Patricia.toAscList longMap))
+  assertEqual "Int32 Patricia minimum lookup" (Just (show (minBound :: Int32))) (Patricia.lookup minBound intMap)
+
+  let history = take 10000 (drop 1 (iterate (\state -> state * 1664525 + 1013904223) (0x1234abcd :: Int)))
+      actual = foldl applyPatricia (Patricia.empty :: Patricia.IntMap32 Int) history
+      expected = foldl applyModel [] history
+      applyPatricia values state =
+        let key = fromIntegral (((state `div` 256) `mod` 401) - 200) :: Int32
+         in if state `mod` 4 == 0 then Patricia.delete key values else Patricia.insert key state values
+      applyModel values state =
+        let key = fromIntegral (((state `div` 256) `mod` 401) - 200) :: Int32
+            rest = filter ((/= key) . fst) values
+         in if state `mod` 4 == 0 then rest else (key, state) : rest
+  assertEqual "Patricia randomized history" (sort expected) (Patricia.toAscList actual)
+
+  let leftMap = Patricia.fromList [(1 :: Int32, "left"), (2, "two")]
+      rightMap = Patricia.fromList [(1 :: Int32, "right"), (3, "three")]
+      leftSet = Patricia.setFromList [-3, -1, 1, 3 :: Int32]
+      rightSet = Patricia.setFromList [-1, 0, 1 :: Int32]
+  assertEqual "Patricia right-biased map union" [(1, "right"), (2, "two"), (3, "three")] (Patricia.toAscList (Patricia.union leftMap rightMap))
+  assertEqual "Patricia left-valued intersection" [(1, "left")] (Patricia.toAscList (Patricia.intersection leftMap rightMap))
+  assertEqual "Patricia set union" [-3, -1, 0, 1, 3] (Patricia.setToAscList (Patricia.setUnion leftSet rightSet))
+  assertEqual "Patricia set intersection" [-1, 1] (Patricia.setToAscList (Patricia.setIntersection leftSet rightSet))
+  assertEqual "Patricia set difference" [-3, 3] (Patricia.setToAscList (Patricia.setDifference leftSet rightSet))
 
 testActualKeyPreservation :: IO ()
 testActualKeyPreservation = do
