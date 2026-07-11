@@ -99,7 +99,8 @@ equal-hash collision bucket.
   plus collision-bucket scan for 32-bit hashes. Lookups allocate nothing.
 - Enumeration: O(n) time. The enumerator holds at most seven inline frames (one per trie level) and
   performs no heap allocation.
-- Map `CreateRange` / set `CreateRange`: O(n * update-cost) with structural sharing during the build.
+- Map `CreateRange` / set `CreateRange`: O(n (w + c)) through a mutable unpublished trie followed by
+  one freeze; unlike repeated persistent updates, the build does not clone every traversed path.
 - Set algebra implemented from public operations: O((n + m) * update-cost) unless the operation only
   probes membership.
 

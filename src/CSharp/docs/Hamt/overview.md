@@ -18,6 +18,11 @@ adversarial equal hashes; operations clone only the search path and reuse every 
 Lookups allocate nothing, single-pass `Add`/`TryAdd` hash and walk once, and both collections expose
 allocation-free copy-safe struct enumerators.
 
+From-scratch map/set factories use an internal mutable bulk builder. Its nodes remain unpublished
+while inputs are consumed and are frozen into ordinary immutable nodes once, avoiding a persistent
+path copy for every item. The same internal facility is available to the sibling Tungsten assembly
+for association relabel/sort/reverse rebuilds; no mutable storage is ever shared with a published map.
+
 ## Layout
 
 - `DataStructures.sln` is the solution entry point.

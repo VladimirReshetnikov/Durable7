@@ -21,6 +21,8 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
   hash-mismatch misses, and equivalent-key retention.
 - `PersistentHamtStructureTests.cs` uses internal test access to verify root shape, collapse behavior, no-op root
   reuse, and structural sharing of untouched subtrees.
+- `PersistentHashMapBulkBuilderTests.cs` verifies duplicate retention, null/deep-prefix keys, collision and branch
+  freezes, and immutable snapshot detachment while the unpublished builder continues mutating.
 - `PersistentHashMapPropertyTests.cs` uses CsCheck generated histories against dictionary-style model state,
   including retained snapshots and deliberately colliding hashes.
 - `PersistentHashSetTests.cs` covers set membership, add/remove, try-add/try-remove, custom equality, set algebra,

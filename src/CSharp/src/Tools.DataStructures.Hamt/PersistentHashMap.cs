@@ -127,6 +127,10 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     public static PersistentHashMap<TKey, TValue> Create(IEqualityComparer<TKey>? comparer = null) =>
         EmptyFor(comparer ?? EqualityComparer<TKey>.Default);
 
+    /// <summary>Creates an internal mutable builder for one-pass bulk construction.</summary>
+    internal static BulkBuilder CreateBulkBuilder(IEqualityComparer<TKey>? comparer = null) =>
+        new(comparer ?? EqualityComparer<TKey>.Default);
+
     /// <summary>
     /// Creates a map from an enumerable sequence of key/value pairs.
     /// </summary>
@@ -142,18 +146,22 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     /// for values, the earlier stored value object is retained.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
-    /// <remarks>Runs in O(n) single-key updates with structural sharing during the build.</remarks>
+    /// <remarks>
+    /// Runs in O(n (w + c)), where w is the bounded trie depth and c is the applicable equal-hash
+    /// collision scan. A mutable unpublished trie is frozen once, avoiding persistent path copies
+    /// between successive input entries.
+    /// </remarks>
     public static PersistentHashMap<TKey, TValue> CreateRange(
         IEnumerable<KeyValuePair<TKey, TValue>> items,
         IEqualityComparer<TKey>? comparer = null)
     {
         ArgumentNullException.ThrowIfNull(items);
 
-        var map = Create(comparer);
+        var builder = CreateBulkBuilder(comparer);
         foreach (var (key, value) in items)
-            map = map.SetItem(key, value);
+            builder.SetItem(key, value);
 
-        return map;
+        return builder.ToImmutable();
     }
 
     /// <summary>
@@ -637,6 +645,194 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
         {
             private Frame _frame0;
         }
+    }
+
+    /// <summary>
+    /// Builds an independent HAMT by mutating unpublished nodes and freezes them into persistent
+    /// nodes on demand. Frozen maps never share mutable storage with the builder.
+    /// </summary>
+    internal sealed class BulkBuilder(IEqualityComparer<TKey> comparer)
+    {
+        private readonly IEqualityComparer<TKey> _comparer = comparer;
+        private MutableNode? _root;
+        private int _count;
+
+        internal int Count => _count;
+
+        internal void SetItem(TKey key, TValue value)
+        {
+            var hash = unchecked((uint)_comparer.GetHashCode(key!));
+            if (_root is null)
+            {
+                _root = new MutableLeafNode(hash, key, value);
+                _count = 1;
+                return;
+            }
+
+            _root = _root.Set(key, value, hash, shift: 0, _comparer, out var added);
+            if (added)
+                _count = checked(_count + 1);
+        }
+
+        internal PersistentHashMap<TKey, TValue> ToImmutable() =>
+            _root is null
+                ? EmptyFor(_comparer)
+                : new PersistentHashMap<TKey, TValue>(_root.Freeze(), _count, _comparer);
+    }
+
+    private abstract class MutableNode
+    {
+        internal abstract MutableNode Set(
+            TKey key,
+            TValue value,
+            uint hash,
+            int shift,
+            IEqualityComparer<TKey> comparer,
+            out bool added);
+
+        internal abstract Node Freeze();
+    }
+
+    private abstract class MutableHashNode(uint hash) : MutableNode
+    {
+        internal readonly uint Hash = hash;
+    }
+
+    private sealed class MutableLeafNode(uint hash, TKey key, TValue value) : MutableHashNode(hash)
+    {
+        private readonly TKey _key = key;
+        private TValue _value = value;
+
+        internal override MutableNode Set(
+            TKey key,
+            TValue value,
+            uint hash,
+            int shift,
+            IEqualityComparer<TKey> comparer,
+            out bool added)
+        {
+            if (Hash == hash && comparer.Equals(_key, key))
+            {
+                added = false;
+                if (!EqualityComparer<TValue>.Default.Equals(_value, value))
+                    _value = value;
+                return this;
+            }
+
+            added = true;
+            return MergeMutableHashNodes(this, new MutableLeafNode(hash, key, value), shift);
+        }
+
+        internal override Node Freeze() => new LeafNode(Hash, _key, _value);
+
+        internal Entry ToEntry() => new(_key, _value);
+    }
+
+    private sealed class MutableCollisionNode(uint hash, List<Entry> entries) : MutableHashNode(hash)
+    {
+        private readonly List<Entry> _entries = entries;
+
+        internal static MutableCollisionNode Create(MutableHashNode left, MutableLeafNode right)
+        {
+            Debug.Assert(left is MutableLeafNode, "Equal-hash mutable merges must combine two leaves.");
+            return new MutableCollisionNode(left.Hash, [((MutableLeafNode)left).ToEntry(), right.ToEntry()]);
+        }
+
+        internal override MutableNode Set(
+            TKey key,
+            TValue value,
+            uint hash,
+            int shift,
+            IEqualityComparer<TKey> comparer,
+            out bool added)
+        {
+            if (Hash != hash)
+            {
+                added = true;
+                return MergeMutableHashNodes(this, new MutableLeafNode(hash, key, value), shift);
+            }
+
+            for (var i = 0; i < _entries.Count; i++)
+            {
+                var entry = _entries[i];
+                if (!comparer.Equals(entry.Key, key))
+                    continue;
+
+                added = false;
+                if (!EqualityComparer<TValue>.Default.Equals(entry.Value, value))
+                    _entries[i] = new Entry(entry.Key, value);
+                return this;
+            }
+
+            _entries.Add(new Entry(key, value));
+            added = true;
+            return this;
+        }
+
+        internal override Node Freeze() => new CollisionNode(Hash, [.. _entries]);
+    }
+
+    private sealed class MutableBitmapIndexedNode(uint bitmap, List<MutableNode> children) : MutableNode
+    {
+        private uint _bitmap = bitmap;
+        private readonly List<MutableNode> _children = children;
+
+        internal override MutableNode Set(
+            TKey key,
+            TValue value,
+            uint hash,
+            int shift,
+            IEqualityComparer<TKey> comparer,
+            out bool added)
+        {
+            var bit = Bit(Index(hash, shift));
+            var slot = Slot(_bitmap, bit);
+            if ((_bitmap & bit) == 0)
+            {
+                _bitmap |= bit;
+                _children.Insert(slot, new MutableLeafNode(hash, key, value));
+                added = true;
+                return this;
+            }
+
+            _children[slot] = _children[slot].Set(
+                key, value, hash, shift + BitsPerLevel, comparer, out added);
+            return this;
+        }
+
+        internal override Node Freeze()
+        {
+            var children = new Node[_children.Count];
+            for (var i = 0; i < children.Length; i++)
+                children[i] = _children[i].Freeze();
+            return new BitmapIndexedNode(_bitmap, children);
+        }
+    }
+
+    private static MutableNode MergeMutableHashNodes(
+        MutableHashNode left,
+        MutableLeafNode right,
+        int shift)
+    {
+        if (left.Hash == right.Hash)
+            return MutableCollisionNode.Create(left, right);
+
+        if (shift >= 32)
+            throw new InvalidOperationException("Different 32-bit hashes cannot share every HAMT level.");
+
+        var leftIndex = Index(left.Hash, shift);
+        var rightIndex = Index(right.Hash, shift);
+        var leftBit = Bit(leftIndex);
+        var rightBit = Bit(rightIndex);
+        if (leftIndex == rightIndex)
+        {
+            var child = MergeMutableHashNodes(left, right, shift + BitsPerLevel);
+            return new MutableBitmapIndexedNode(leftBit, [child]);
+        }
+
+        return leftIndex < rightIndex
+            ? new MutableBitmapIndexedNode(leftBit | rightBit, [left, right])
+            : new MutableBitmapIndexedNode(leftBit | rightBit, [right, left]);
     }
 
     internal readonly struct Entry(TKey key, TValue value)

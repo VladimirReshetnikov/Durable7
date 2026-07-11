@@ -69,6 +69,10 @@ is stamp-sorted, any key's position is recovered from its stamp by the deque's s
 signposts in `O(log n)` - this is how keyed removal, in-place update, and `IndexOfKey` avoid
 linear scans.
 
+Relabel, reverse, and sort rebuild their keyed side through the HAMT's internal mutable bulk
+builder. The builder freezes once after all fresh stamps are assigned, so these O(n (w + c))
+operations do not also allocate an immutable search path for each entry.
+
 ## Tungsten Semantics Guaranteed
 
 The kernel-verified ordering rules implemented and test-locked (zero-based indexes here,

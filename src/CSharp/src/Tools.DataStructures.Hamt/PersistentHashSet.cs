@@ -70,16 +70,19 @@ public sealed class PersistentHashSet<T> : IReadOnlySet<T>
     /// the first item object is retained.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
-    /// <remarks>Runs in O(n) single-item updates with structural sharing during the build.</remarks>
+    /// <remarks>
+    /// Runs in O(n (w + c)), where w is the bounded trie depth and c is the applicable equal-hash
+    /// collision scan. A mutable unpublished trie is frozen once after enumeration.
+    /// </remarks>
     public static PersistentHashSet<T> CreateRange(IEnumerable<T> items, IEqualityComparer<T>? comparer = null)
     {
         ArgumentNullException.ThrowIfNull(items);
 
-        var set = Create(comparer);
+        var builder = PersistentHashMap<T, Unit>.CreateBulkBuilder(comparer);
         foreach (var item in items)
-            set = set.Add(item);
+            builder.SetItem(item, default);
 
-        return set;
+        return Wrap(builder.ToImmutable());
     }
 
     /// <summary>
@@ -233,14 +236,14 @@ public sealed class PersistentHashSet<T> : IReadOnlySet<T>
         ArgumentNullException.ThrowIfNull(items);
 
         var probe = new HashSet<T>(items, Comparer);
-        var result = Create(Comparer);
+        var builder = PersistentHashMap<T, Unit>.CreateBulkBuilder(Comparer);
         foreach (var item in this)
         {
             if (probe.Contains(item))
-                result = result.Add(item);
+                builder.SetItem(item, default);
         }
 
-        return result;
+        return Wrap(builder.ToImmutable());
     }
 
     /// <summary>

@@ -56,6 +56,8 @@ The suite covers:
 - equal-hash collision buckets, deep shared hash prefixes, and collision splitting;
 - allocation-free copy-safe enumerators;
 - structural sharing/root-shape invariants through internal test access;
+- mutable bulk-builder semantics, including collision/deep-prefix construction and detachment of
+  already-frozen snapshots from later builder mutations;
 - generated map histories checked against model dictionaries with retained snapshots;
 - generated set behavior checked against model set semantics.
 

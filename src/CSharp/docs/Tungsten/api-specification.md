@@ -120,8 +120,8 @@ overflow) can relabel.
 | `KeyTake` | `KeyTake` | O(m (w + c)) | rule 8; never searches the order structure |
 | `RemoveAt`, `RemoveFirst`, `RemoveLast` | `Delete`, `Rest`, `Most` | O(w + c + log min(i + 1, n - i)) amortized; ends O(w + c) | surviving entries shared: `Rest`-recursion is O(n (w + c)) total |
 | `GetRange`, `Take`, `Drop` | `Part` span, `Take`, `Drop` | O(log n + min(kept, removed) (w + c)) | index reconciled from the smaller side |
-| `Reverse` | `Reverse` | O(n (w + c)) | fresh labels; no reversal bit by design |
-| `KeySort(comparer?)`, `Sort(comparer?)` | `KeySort`, `Sort` | O(n log n) comparisons + O(n (w + c)) rebuild | rule 7; stable via stamp tiebreak |
+| `Reverse` | `Reverse` | O(n (w + c)) | fresh labels; keyed side uses one mutable-build freeze; no reversal bit by design |
+| `KeySort(comparer?)`, `Sort(comparer?)` | `KeySort`, `Sort` | O(n log n) comparisons + O(n (w + c)) rebuild | rule 7; stable via stamp tiebreak; keyed side uses one mutable-build freeze |
 
 ### Divergences from Tungsten, by design
 

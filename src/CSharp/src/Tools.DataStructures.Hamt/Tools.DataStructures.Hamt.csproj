@@ -6,5 +6,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Tools.DataStructures.Hamt.Tests" />
+    <InternalsVisibleTo Include="Tools.DataStructures.Tungsten" />
   </ItemGroup>
 </Project>

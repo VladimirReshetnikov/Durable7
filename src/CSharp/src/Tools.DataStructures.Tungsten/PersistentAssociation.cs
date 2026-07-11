@@ -910,14 +910,14 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     /// <summary>Rebuilds both structures from entries in the given order, assigning fresh gapped labels.</summary>
     private PersistentAssociation<TKey, TValue> Rebuilt(Entry[] ordered)
     {
-        var indexSide = PersistentHashMap<TKey, Slot>.Create(Comparer);
+        var indexBuilder = PersistentHashMap<TKey, Slot>.CreateBulkBuilder(Comparer);
         for (var i = 0; i < ordered.Length; i++)
         {
             var stamp = (long)i * StampGap;
             ordered[i] = new Entry(stamp, ordered[i].Key, ordered[i].Value);
-            indexSide = indexSide.SetItem(ordered[i].Key, new Slot(stamp, ordered[i].Value));
+            indexBuilder.SetItem(ordered[i].Key, new Slot(stamp, ordered[i].Value));
         }
-        return new(FingerTreeDeque<Entry>.Create(ordered), indexSide);
+        return new(FingerTreeDeque<Entry>.Create(ordered), indexBuilder.ToImmutable());
     }
 
     private PersistentAssociation<TKey, TValue> SortedBy<TOrder>(Func<Entry, TOrder> selector, IComparer<TOrder> comparer)
