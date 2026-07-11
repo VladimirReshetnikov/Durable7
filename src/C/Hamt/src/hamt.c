@@ -56,12 +56,24 @@ typedef struct tds_hamt_collision_node {
     tds_hamt_entry entries[];
 } tds_hamt_collision_node;
 
+typedef struct tds_hamt_inline_entry {
+    uint32_t hash;
+    tds_hamt_entry entry;
+} tds_hamt_inline_entry;
+
 typedef struct tds_hamt_bitmap_node {
     tds_hamt_node base;
-    uint32_t bitmap;
-    size_t count;
-    tds_hamt_node *children[];
+    uint32_t data_map;
+    uint32_t node_map;
+    size_t data_count;
+    size_t node_count;
+    unsigned char storage[];
 } tds_hamt_bitmap_node;
+
+static tds_hamt_inline_entry *tds_hamt_bitmap_data(tds_hamt_bitmap_node *node);
+static const tds_hamt_inline_entry *tds_hamt_bitmap_data_const(const tds_hamt_bitmap_node *node);
+static tds_hamt_node **tds_hamt_bitmap_children(tds_hamt_bitmap_node *node);
+static tds_hamt_node *const *tds_hamt_bitmap_children_const(const tds_hamt_bitmap_node *node);
 
 static uint32_t tds_hamt_pointer_hash(const void *item, void *context);
 static bool tds_hamt_pointer_equal(const void *left, const void *right, void *context);
@@ -104,8 +116,20 @@ static tds_hamt_status tds_hamt_collision_create(
     tds_hamt_node *right,
     tds_hamt_node **result);
 static tds_hamt_status tds_hamt_bitmap_create(
-    uint32_t bitmap,
+    uint32_t data_map,
+    uint32_t node_map,
+    const tds_hamt_inline_entry *data,
+    size_t data_count,
     tds_hamt_node **children,
+    size_t child_count,
+    tds_hamt_node **result);
+static tds_hamt_status tds_hamt_bitmap_copy_create(
+    const tds_hamt_policy *policy,
+    uint32_t data_map,
+    uint32_t node_map,
+    const tds_hamt_inline_entry *data,
+    size_t data_count,
+    tds_hamt_node *const *children,
     size_t child_count,
     tds_hamt_node **result);
 static tds_hamt_status tds_hamt_merge_hash_nodes(
@@ -134,8 +158,12 @@ static tds_hamt_status tds_hamt_node_remove(
     const void **removed_value,
     tds_hamt_node **result);
 static tds_hamt_status tds_hamt_bitmap_rebuild(
-    uint32_t bitmap,
-    tds_hamt_node **children,
+    const tds_hamt_policy *policy,
+    uint32_t data_map,
+    uint32_t node_map,
+    const tds_hamt_inline_entry *data,
+    size_t data_count,
+    tds_hamt_node *const *children,
     size_t child_count,
     tds_hamt_node **result);
 
@@ -546,13 +574,24 @@ bool tds_hamt_map_iterator_next(
             }
 
             tds_hamt_map_iterator_frame *top = &iterator->frames[iterator->depth - 1];
-            if (top->index == top->child_count) {
+            if (top->data_index < top->data_count) {
+                const tds_hamt_inline_entry *data = (const tds_hamt_inline_entry *)top->data;
+                const tds_hamt_inline_entry *entry = &data[top->data_index++];
+                if (key != NULL) {
+                    *key = entry->entry.key;
+                }
+                if (value != NULL) {
+                    *value = entry->entry.value;
+                }
+                return true;
+            }
+            if (top->child_index == top->child_count) {
                 memset(top, 0, sizeof(*top));
                 --iterator->depth;
                 continue;
             }
 
-            node = top->children[top->index++];
+            node = top->children[top->child_index++];
         }
 
         if (node->kind == TDS_HAMT_NODE_LEAF) {
@@ -576,9 +615,13 @@ bool tds_hamt_map_iterator_next(
 
         const tds_hamt_bitmap_node *branch = (const tds_hamt_bitmap_node *)node;
         assert(iterator->depth < 7);
-        iterator->frames[iterator->depth].children = (const tds_hamt_node *const *)branch->children;
-        iterator->frames[iterator->depth].child_count = branch->count;
-        iterator->frames[iterator->depth].index = 0;
+        iterator->frames[iterator->depth].data = tds_hamt_bitmap_data_const(branch);
+        iterator->frames[iterator->depth].data_count = branch->data_count;
+        iterator->frames[iterator->depth].data_index = 0;
+        iterator->frames[iterator->depth].children =
+            (const tds_hamt_node *const *)tds_hamt_bitmap_children_const(branch);
+        iterator->frames[iterator->depth].child_count = branch->node_count;
+        iterator->frames[iterator->depth].child_index = 0;
         ++iterator->depth;
         node = NULL;
     }
@@ -586,6 +629,77 @@ bool tds_hamt_map_iterator_next(
 
 bool tds_hamt_map_shares_root(const tds_hamt_map *left, const tds_hamt_map *right) {
     return left != NULL && right != NULL && left->root == right->root;
+}
+
+static bool tds_hamt_policies_compatible(const tds_hamt_map *left, const tds_hamt_map *right) {
+    return left->policy.hash == right->policy.hash
+        && left->policy.key_equal == right->policy.key_equal
+        && left->policy.value_equal == right->policy.value_equal
+        && left->policy.context == right->policy.context;
+}
+
+bool tds_hamt_map_equals(const tds_hamt_map *left, const tds_hamt_map *right) {
+    if (left == NULL || right == NULL || !tds_hamt_policies_compatible(left, right)) {
+        return false;
+    }
+    if (left->root == right->root) {
+        return true;
+    }
+    if (left->count != right->count) {
+        return false;
+    }
+    tds_hamt_map_iterator iterator;
+    tds_hamt_map_iterator_init(left, &iterator);
+    const void *key = NULL;
+    const void *value = NULL;
+    while (tds_hamt_map_iterator_next(&iterator, &key, &value)) {
+        const void *other_value = NULL;
+        if (!tds_hamt_map_try_get(right, key, &other_value)
+            || !tds_hamt_values_equal(&left->policy, value, other_value)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+tds_hamt_status tds_hamt_map_diff(
+    const tds_hamt_map *left,
+    const tds_hamt_map *right,
+    tds_hamt_difference_visitor visitor,
+    void *context) {
+    if (left == NULL || right == NULL || visitor == NULL
+        || !tds_hamt_policies_compatible(left, right)) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+    if (left->root == right->root) {
+        return TDS_HAMT_OK;
+    }
+    tds_hamt_map_iterator iterator;
+    tds_hamt_map_iterator_init(left, &iterator);
+    const void *key = NULL;
+    const void *value = NULL;
+    while (tds_hamt_map_iterator_next(&iterator, &key, &value)) {
+        const void *after = NULL;
+        tds_hamt_difference difference;
+        if (!tds_hamt_map_try_get(right, key, &after)) {
+            difference = (tds_hamt_difference){
+                TDS_HAMT_DIFFERENCE_REMOVED, key, value, NULL };
+            visitor(&difference, context);
+        } else if (!tds_hamt_values_equal(&left->policy, value, after)) {
+            difference = (tds_hamt_difference){
+                TDS_HAMT_DIFFERENCE_CHANGED, key, value, after };
+            visitor(&difference, context);
+        }
+    }
+    tds_hamt_map_iterator_init(right, &iterator);
+    while (tds_hamt_map_iterator_next(&iterator, &key, &value)) {
+        if (!tds_hamt_map_contains_key(left, key)) {
+            const tds_hamt_difference difference = {
+                TDS_HAMT_DIFFERENCE_ADDED, key, NULL, value };
+            visitor(&difference, context);
+        }
+    }
+    return TDS_HAMT_OK;
 }
 
 const void *tds_hamt_map_debug_root_identity(const tds_hamt_map *map) {
@@ -610,15 +724,16 @@ size_t tds_hamt_map_debug_root_child_identities(
 
     const tds_hamt_bitmap_node *branch = (const tds_hamt_bitmap_node *)map->root;
     if (children == NULL) {
-        return branch->count;
+        return branch->node_count;
     }
 
-    const size_t copy_count = branch->count < child_capacity ? branch->count : child_capacity;
+    const size_t copy_count = branch->node_count < child_capacity ? branch->node_count : child_capacity;
+    tds_hamt_node *const *branch_children = tds_hamt_bitmap_children_const(branch);
     for (size_t i = 0; i < copy_count; ++i) {
-        children[i] = branch->children[i];
+        children[i] = branch_children[i];
     }
 
-    return branch->count;
+    return branch->node_count;
 }
 
 tds_hamt_set tds_hamt_set_create(const tds_hamt_set_policy *policy) {
@@ -1236,8 +1351,14 @@ static void tds_hamt_node_release(const tds_hamt_policy *policy, const tds_hamt_
 
     case TDS_HAMT_NODE_BITMAP_INDEXED: {
         tds_hamt_bitmap_node *branch = (tds_hamt_bitmap_node *)mutable_node;
-        for (size_t i = 0; i < branch->count; ++i) {
-            tds_hamt_node_release(policy, branch->children[i]);
+        tds_hamt_inline_entry *data = tds_hamt_bitmap_data(branch);
+        for (size_t i = 0; i < branch->data_count; ++i) {
+            tds_hamt_release_key(policy, (void *)data[i].entry.key);
+            tds_hamt_release_value(policy, (void *)data[i].entry.value);
+        }
+        tds_hamt_node **children = tds_hamt_bitmap_children(branch);
+        for (size_t i = 0; i < branch->node_count; ++i) {
+            tds_hamt_node_release(policy, children[i]);
         }
         free(branch);
         break;
@@ -1300,6 +1421,39 @@ static void tds_hamt_release_value(const tds_hamt_policy *policy, void *value) {
     }
 }
 
+static tds_hamt_status tds_hamt_inline_copy(
+    const tds_hamt_policy *policy,
+    const tds_hamt_inline_entry *source,
+    tds_hamt_inline_entry *target) {
+    target->hash = source->hash;
+    target->entry.key = NULL;
+    target->entry.value = NULL;
+    void *key = NULL;
+    void *value = NULL;
+    tds_hamt_status status = tds_hamt_checked_retain_key(policy, source->entry.key, &key);
+    if (status == TDS_HAMT_OK) {
+        status = tds_hamt_checked_retain_value(policy, source->entry.value, &value);
+    }
+    if (status != TDS_HAMT_OK) {
+        tds_hamt_release_key(policy, key);
+        tds_hamt_release_value(policy, value);
+        return status;
+    }
+    target->entry.key = key;
+    target->entry.value = value;
+    return TDS_HAMT_OK;
+}
+
+static void tds_hamt_inline_release(
+    const tds_hamt_policy *policy,
+    tds_hamt_inline_entry *data,
+    size_t count) {
+    for (size_t i = 0; i < count; ++i) {
+        tds_hamt_release_key(policy, (void *)data[i].entry.key);
+        tds_hamt_release_value(policy, (void *)data[i].entry.value);
+    }
+}
+
 static int tds_hamt_index(uint32_t hash, int shift) {
     return (int)((hash >> shift) & TDS_HAMT_BRANCH_MASK);
 }
@@ -1320,6 +1474,22 @@ static size_t tds_hamt_popcount(uint32_t value) {
     }
 
     return count;
+}
+
+static tds_hamt_inline_entry *tds_hamt_bitmap_data(tds_hamt_bitmap_node *node) {
+    return (tds_hamt_inline_entry *)node->storage;
+}
+
+static const tds_hamt_inline_entry *tds_hamt_bitmap_data_const(const tds_hamt_bitmap_node *node) {
+    return (const tds_hamt_inline_entry *)node->storage;
+}
+
+static tds_hamt_node **tds_hamt_bitmap_children(tds_hamt_bitmap_node *node) {
+    return (tds_hamt_node **)(node->storage + node->data_count * sizeof(tds_hamt_inline_entry));
+}
+
+static tds_hamt_node *const *tds_hamt_bitmap_children_const(const tds_hamt_bitmap_node *node) {
+    return (tds_hamt_node *const *)(node->storage + node->data_count * sizeof(tds_hamt_inline_entry));
 }
 
 static tds_hamt_status tds_hamt_leaf_create(
@@ -1460,12 +1630,18 @@ static tds_hamt_status tds_hamt_collision_create(
 }
 
 static tds_hamt_status tds_hamt_bitmap_create(
-    uint32_t bitmap,
+    uint32_t data_map,
+    uint32_t node_map,
+    const tds_hamt_inline_entry *data,
+    size_t data_count,
     tds_hamt_node **children,
     size_t child_count,
     tds_hamt_node **result) {
     tds_hamt_bitmap_node *branch =
-        (tds_hamt_bitmap_node *)tds_hamt_allocate(sizeof(*branch) + child_count * sizeof(tds_hamt_node *));
+        (tds_hamt_bitmap_node *)tds_hamt_allocate(
+            sizeof(*branch)
+            + data_count * sizeof(tds_hamt_inline_entry)
+            + child_count * sizeof(tds_hamt_node *));
     if (branch == NULL) {
         *result = NULL;
         return TDS_HAMT_OUT_OF_MEMORY;
@@ -1473,12 +1649,69 @@ static tds_hamt_status tds_hamt_bitmap_create(
 
     branch->base.kind = TDS_HAMT_NODE_BITMAP_INDEXED;
     branch->base.ref_count = 1;
-    branch->bitmap = bitmap;
-    branch->count = child_count;
+    branch->data_map = data_map;
+    branch->node_map = node_map;
+    branch->data_count = data_count;
+    branch->node_count = child_count;
+    tds_hamt_inline_entry *target_data = tds_hamt_bitmap_data(branch);
+    for (size_t i = 0; i < data_count; ++i) {
+        target_data[i] = data[i];
+    }
+    tds_hamt_node **target_children = tds_hamt_bitmap_children(branch);
     for (size_t i = 0; i < child_count; ++i) {
-        branch->children[i] = children[i];
+        target_children[i] = children[i];
     }
 
+    *result = &branch->base;
+    return TDS_HAMT_OK;
+}
+
+static tds_hamt_status tds_hamt_bitmap_copy_create(
+    const tds_hamt_policy *policy,
+    uint32_t data_map,
+    uint32_t node_map,
+    const tds_hamt_inline_entry *data,
+    size_t data_count,
+    tds_hamt_node *const *children,
+    size_t child_count,
+    tds_hamt_node **result) {
+    tds_hamt_bitmap_node *branch =
+        (tds_hamt_bitmap_node *)tds_hamt_allocate(
+            sizeof(*branch)
+            + data_count * sizeof(tds_hamt_inline_entry)
+            + child_count * sizeof(tds_hamt_node *));
+    if (branch == NULL) {
+        *result = NULL;
+        return TDS_HAMT_OUT_OF_MEMORY;
+    }
+    branch->base.kind = TDS_HAMT_NODE_BITMAP_INDEXED;
+    branch->base.ref_count = 1;
+    branch->data_map = data_map;
+    branch->node_map = node_map;
+    branch->data_count = data_count;
+    branch->node_count = 0;
+    tds_hamt_inline_entry *target_data = tds_hamt_bitmap_data(branch);
+    tds_hamt_status status = TDS_HAMT_OK;
+    size_t written_data = 0;
+    while (status == TDS_HAMT_OK && written_data < data_count) {
+        status = tds_hamt_inline_copy(
+            policy, &data[written_data], &target_data[written_data]);
+        if (status == TDS_HAMT_OK) {
+            ++written_data;
+        }
+    }
+    if (status != TDS_HAMT_OK) {
+        tds_hamt_inline_release(policy, target_data, written_data);
+        free(branch);
+        *result = NULL;
+        return status;
+    }
+    tds_hamt_node **target_children =
+        (tds_hamt_node **)(branch->storage + data_count * sizeof(tds_hamt_inline_entry));
+    while (branch->node_count < child_count) {
+        target_children[branch->node_count] = tds_hamt_node_retain(children[branch->node_count]);
+        ++branch->node_count;
+    }
     *result = &branch->base;
     return TDS_HAMT_OK;
 }
@@ -1522,27 +1755,39 @@ static tds_hamt_status tds_hamt_merge_hash_nodes(
         }
 
         tds_hamt_node *children[1] = { child };
-        status = tds_hamt_bitmap_create(left_bit, children, 1, result);
+        status = tds_hamt_bitmap_create(0, left_bit, NULL, 0, children, 1, result);
         if (status != TDS_HAMT_OK) {
             tds_hamt_node_release(policy, child);
         }
         return status;
     }
 
-    tds_hamt_node *children[2];
-    if (left_index < right_index) {
-        children[0] = left;
-        children[1] = right;
+    tds_hamt_status status;
+    const tds_hamt_leaf_node *right_leaf = (const tds_hamt_leaf_node *)right;
+    if (left->kind == TDS_HAMT_NODE_LEAF) {
+        const tds_hamt_leaf_node *left_leaf = (const tds_hamt_leaf_node *)left;
+        tds_hamt_inline_entry data[2];
+        const size_t left_slot = left_index < right_index ? 0u : 1u;
+        const size_t right_slot = 1u - left_slot;
+        data[left_slot].hash = left_leaf->hash;
+        data[left_slot].entry.key = left_leaf->key;
+        data[left_slot].entry.value = left_leaf->value;
+        data[right_slot].hash = right_leaf->hash;
+        data[right_slot].entry.key = right_leaf->key;
+        data[right_slot].entry.value = right_leaf->value;
+        status = tds_hamt_bitmap_copy_create(
+            policy, left_bit | right_bit, 0, data, 2, NULL, 0, result);
     } else {
-        children[0] = right;
-        children[1] = left;
+        tds_hamt_inline_entry data;
+        data.hash = right_leaf->hash;
+        data.entry.key = right_leaf->key;
+        data.entry.value = right_leaf->value;
+        tds_hamt_node *children[1] = { left };
+        status = tds_hamt_bitmap_copy_create(
+            policy, right_bit, left_bit, &data, 1, children, 1, result);
     }
-
-    const tds_hamt_status status = tds_hamt_bitmap_create(left_bit | right_bit, children, 2, result);
-    if (status != TDS_HAMT_OK) {
-        tds_hamt_node_release(policy, left);
-        tds_hamt_node_release(policy, right);
-    }
+    tds_hamt_node_release(policy, left);
+    tds_hamt_node_release(policy, right);
 
     return status;
 }
@@ -1685,49 +1930,96 @@ static tds_hamt_status tds_hamt_node_set(
     }
 
     const tds_hamt_bitmap_node *branch = (const tds_hamt_bitmap_node *)node;
+    const tds_hamt_inline_entry *source_data = tds_hamt_bitmap_data_const(branch);
+    tds_hamt_node *const *source_children = tds_hamt_bitmap_children_const(branch);
     const uint32_t selected_bit = tds_hamt_bit(tds_hamt_index(hash, shift));
-    const size_t selected_slot = tds_hamt_slot(branch->bitmap, selected_bit);
+    tds_hamt_inline_entry data[32];
+    tds_hamt_node *children[32];
 
-    if ((branch->bitmap & selected_bit) == 0) {
-        tds_hamt_node **children = (tds_hamt_node **)tds_hamt_allocate(
-            (branch->count + 1u) * sizeof(tds_hamt_node *));
-        if (children == NULL) {
-            *result = NULL;
-            return TDS_HAMT_OUT_OF_MEMORY;
-        }
-
-        for (size_t i = 0; i < selected_slot; ++i) {
-            children[i] = tds_hamt_node_retain(branch->children[i]);
-        }
-
-        tds_hamt_status status = tds_hamt_leaf_create(policy, hash, key, value, &children[selected_slot]);
-        if (status != TDS_HAMT_OK) {
-            for (size_t i = 0; i < selected_slot; ++i) {
-                tds_hamt_node_release(policy, children[i]);
+    if ((branch->data_map & selected_bit) != 0) {
+        const size_t data_slot = tds_hamt_slot(branch->data_map, selected_bit);
+        const tds_hamt_inline_entry *existing = &source_data[data_slot];
+        if (existing->hash == hash && tds_hamt_keys_equal(policy, existing->entry.key, key)) {
+            *added = false;
+            if (!overwrite || tds_hamt_values_equal(policy, existing->entry.value, value)) {
+                *result = tds_hamt_node_retain(node);
+                return TDS_HAMT_OK;
             }
-            free(children);
+            memcpy(data, source_data, branch->data_count * sizeof(*data));
+            data[data_slot].entry.value = value;
+            return tds_hamt_bitmap_copy_create(
+                policy, branch->data_map, branch->node_map,
+                data, branch->data_count, source_children, branch->node_count, result);
+        }
+
+        tds_hamt_node *left = NULL;
+        tds_hamt_node *right = NULL;
+        tds_hamt_status status = tds_hamt_leaf_create(
+            policy, existing->hash, existing->entry.key, existing->entry.value, &left);
+        if (status == TDS_HAMT_OK) {
+            status = tds_hamt_leaf_create(policy, hash, key, value, &right);
+        }
+        if (status != TDS_HAMT_OK) {
+            tds_hamt_node_release(policy, left);
             return status;
         }
-
-        for (size_t i = selected_slot; i < branch->count; ++i) {
-            children[i + 1u] = tds_hamt_node_retain(branch->children[i]);
-        }
-
-        status = tds_hamt_bitmap_create(branch->bitmap | selected_bit, children, branch->count + 1u, result);
+        tds_hamt_node *child = NULL;
+        status = tds_hamt_merge_hash_nodes(
+            policy, left, right, shift + TDS_HAMT_BITS_PER_LEVEL, &child);
         if (status != TDS_HAMT_OK) {
-            for (size_t i = 0; i < branch->count + 1u; ++i) {
-                tds_hamt_node_release(policy, children[i]);
+            return status;
+        }
+        for (size_t source = 0, target = 0; source < branch->data_count; ++source) {
+            if (source != data_slot) {
+                data[target++] = source_data[source];
             }
         }
-        free(children);
+        const size_t node_slot = tds_hamt_slot(branch->node_map, selected_bit);
+        for (size_t source = 0, target = 0; target < branch->node_count + 1u; ++target) {
+            children[target] = target == node_slot ? child : source_children[source++];
+        }
+        status = tds_hamt_bitmap_copy_create(
+            policy,
+            branch->data_map & ~selected_bit,
+            branch->node_map | selected_bit,
+            data,
+            branch->data_count - 1u,
+            children,
+            branch->node_count + 1u,
+            result);
+        tds_hamt_node_release(policy, child);
         *added = true;
         return status;
     }
 
+    if ((branch->node_map & selected_bit) == 0) {
+        const size_t data_slot = tds_hamt_slot(branch->data_map, selected_bit);
+        for (size_t source = 0, target = 0; target < branch->data_count + 1u; ++target) {
+            if (target == data_slot) {
+                data[target].hash = hash;
+                data[target].entry.key = key;
+                data[target].entry.value = value;
+            } else {
+                data[target] = source_data[source++];
+            }
+        }
+        *added = true;
+        return tds_hamt_bitmap_copy_create(
+            policy,
+            branch->data_map | selected_bit,
+            branch->node_map,
+            data,
+            branch->data_count + 1u,
+            source_children,
+            branch->node_count,
+            result);
+    }
+
+    const size_t selected_slot = tds_hamt_slot(branch->node_map, selected_bit);
     tds_hamt_node *new_child = NULL;
     tds_hamt_status status = tds_hamt_node_set(
         policy,
-        branch->children[selected_slot],
+        source_children[selected_slot],
         key,
         value,
         hash,
@@ -1739,30 +2031,19 @@ static tds_hamt_status tds_hamt_node_set(
         return status;
     }
 
-    if (new_child == branch->children[selected_slot]) {
+    if (new_child == source_children[selected_slot]) {
         tds_hamt_node_release(policy, new_child);
         *result = tds_hamt_node_retain(node);
         return TDS_HAMT_OK;
     }
 
-    tds_hamt_node **children = (tds_hamt_node **)tds_hamt_allocate(branch->count * sizeof(tds_hamt_node *));
-    if (children == NULL) {
-        tds_hamt_node_release(policy, new_child);
-        *result = NULL;
-        return TDS_HAMT_OUT_OF_MEMORY;
+    for (size_t i = 0; i < branch->node_count; ++i) {
+        children[i] = i == selected_slot ? new_child : source_children[i];
     }
-
-    for (size_t i = 0; i < branch->count; ++i) {
-        children[i] = i == selected_slot ? new_child : tds_hamt_node_retain(branch->children[i]);
-    }
-
-    status = tds_hamt_bitmap_create(branch->bitmap, children, branch->count, result);
-    if (status != TDS_HAMT_OK) {
-        for (size_t i = 0; i < branch->count; ++i) {
-            tds_hamt_node_release(policy, children[i]);
-        }
-    }
-    free(children);
+    status = tds_hamt_bitmap_copy_create(
+        policy, branch->data_map, branch->node_map,
+        source_data, branch->data_count, children, branch->node_count, result);
+    tds_hamt_node_release(policy, new_child);
     return status;
 }
 
@@ -1868,19 +2149,51 @@ static tds_hamt_status tds_hamt_node_remove(
     }
 
     const tds_hamt_bitmap_node *branch = (const tds_hamt_bitmap_node *)node;
+    const tds_hamt_inline_entry *source_data = tds_hamt_bitmap_data_const(branch);
+    tds_hamt_node *const *source_children = tds_hamt_bitmap_children_const(branch);
     const uint32_t selected_bit = tds_hamt_bit(tds_hamt_index(hash, shift));
-    if ((branch->bitmap & selected_bit) == 0) {
+    tds_hamt_inline_entry data[32];
+    tds_hamt_node *children[32];
+
+    if ((branch->data_map & selected_bit) != 0) {
+        const size_t selected_slot = tds_hamt_slot(branch->data_map, selected_bit);
+        const tds_hamt_inline_entry *existing = &source_data[selected_slot];
+        if (existing->hash != hash || !tds_hamt_keys_equal(policy, existing->entry.key, key)) {
+            *removed = false;
+            *removed_value = NULL;
+            *result = tds_hamt_node_retain(node);
+            return TDS_HAMT_OK;
+        }
+        for (size_t source = 0, target = 0; source < branch->data_count; ++source) {
+            if (source != selected_slot) {
+                data[target++] = source_data[source];
+            }
+        }
+        *removed = true;
+        *removed_value = existing->entry.value;
+        return tds_hamt_bitmap_rebuild(
+            policy,
+            branch->data_map & ~selected_bit,
+            branch->node_map,
+            data,
+            branch->data_count - 1u,
+            source_children,
+            branch->node_count,
+            result);
+    }
+
+    if ((branch->node_map & selected_bit) == 0) {
         *removed = false;
         *removed_value = NULL;
         *result = tds_hamt_node_retain(node);
         return TDS_HAMT_OK;
     }
 
-    const size_t selected_slot = tds_hamt_slot(branch->bitmap, selected_bit);
+    const size_t selected_slot = tds_hamt_slot(branch->node_map, selected_bit);
     tds_hamt_node *new_child = NULL;
     tds_hamt_status status = tds_hamt_node_remove(
         policy,
-        branch->children[selected_slot],
+        source_children[selected_slot],
         key,
         hash,
         shift + TDS_HAMT_BITS_PER_LEVEL,
@@ -1898,67 +2211,88 @@ static tds_hamt_status tds_hamt_node_remove(
     }
 
     if (new_child == NULL) {
-        if (branch->count == 1) {
-            *result = NULL;
-            return TDS_HAMT_OK;
-        }
-
-        tds_hamt_node **children = (tds_hamt_node **)tds_hamt_allocate(
-            (branch->count - 1u) * sizeof(tds_hamt_node *));
-        if (children == NULL) {
-            *result = NULL;
-            return TDS_HAMT_OUT_OF_MEMORY;
-        }
-
-        for (size_t source = 0, target = 0; source < branch->count; ++source) {
+        for (size_t source = 0, target = 0; source < branch->node_count; ++source) {
             if (source == selected_slot) {
                 continue;
             }
-            children[target++] = tds_hamt_node_retain(branch->children[source]);
+            children[target++] = source_children[source];
         }
+        return tds_hamt_bitmap_rebuild(
+            policy,
+            branch->data_map,
+            branch->node_map & ~selected_bit,
+            source_data,
+            branch->data_count,
+            children,
+            branch->node_count - 1u,
+            result);
+    }
 
-        status = tds_hamt_bitmap_rebuild(branch->bitmap ^ selected_bit, children, branch->count - 1u, result);
-        if (status != TDS_HAMT_OK) {
-            for (size_t i = 0; i < branch->count - 1u; ++i) {
-                tds_hamt_node_release(policy, children[i]);
+    if (new_child->kind == TDS_HAMT_NODE_LEAF) {
+        const tds_hamt_leaf_node *leaf = (const tds_hamt_leaf_node *)new_child;
+        const size_t data_slot = tds_hamt_slot(branch->data_map, selected_bit);
+        for (size_t source = 0, target = 0; target < branch->data_count + 1u; ++target) {
+            if (target == data_slot) {
+                data[target].hash = leaf->hash;
+                data[target].entry.key = leaf->key;
+                data[target].entry.value = leaf->value;
+            } else {
+                data[target] = source_data[source++];
             }
         }
-        free(children);
+        for (size_t source = 0, target = 0; source < branch->node_count; ++source) {
+            if (source != selected_slot) {
+                children[target++] = source_children[source];
+            }
+        }
+        status = tds_hamt_bitmap_rebuild(
+            policy,
+            branch->data_map | selected_bit,
+            branch->node_map & ~selected_bit,
+            data,
+            branch->data_count + 1u,
+            children,
+            branch->node_count - 1u,
+            result);
+        tds_hamt_node_release(policy, new_child);
         return status;
     }
 
-    tds_hamt_node **children = (tds_hamt_node **)tds_hamt_allocate(branch->count * sizeof(tds_hamt_node *));
-    if (children == NULL) {
-        tds_hamt_node_release(policy, new_child);
-        *result = NULL;
-        return TDS_HAMT_OUT_OF_MEMORY;
+    for (size_t i = 0; i < branch->node_count; ++i) {
+        children[i] = i == selected_slot ? new_child : source_children[i];
     }
-
-    for (size_t i = 0; i < branch->count; ++i) {
-        children[i] = i == selected_slot ? new_child : tds_hamt_node_retain(branch->children[i]);
-    }
-
-    status = tds_hamt_bitmap_rebuild(branch->bitmap, children, branch->count, result);
-    if (status != TDS_HAMT_OK) {
-        for (size_t i = 0; i < branch->count; ++i) {
-            tds_hamt_node_release(policy, children[i]);
-        }
-    }
-    free(children);
+    status = tds_hamt_bitmap_rebuild(
+        policy, branch->data_map, branch->node_map,
+        source_data, branch->data_count,
+        children, branch->node_count, result);
+    tds_hamt_node_release(policy, new_child);
     return status;
 }
 
 static tds_hamt_status tds_hamt_bitmap_rebuild(
-    uint32_t bitmap,
-    tds_hamt_node **children,
+    const tds_hamt_policy *policy,
+    uint32_t data_map,
+    uint32_t node_map,
+    const tds_hamt_inline_entry *data,
+    size_t data_count,
+    tds_hamt_node *const *children,
     size_t child_count,
     tds_hamt_node **result) {
-    if (child_count == 1u && children[0]->kind != TDS_HAMT_NODE_BITMAP_INDEXED) {
-        *result = children[0];
+    if (data_count == 0 && child_count == 0) {
+        *result = NULL;
         return TDS_HAMT_OK;
     }
-
-    return tds_hamt_bitmap_create(bitmap, children, child_count, result);
+    if (data_count == 1u && child_count == 0) {
+        return tds_hamt_leaf_create(
+            policy, data[0].hash, data[0].entry.key, data[0].entry.value, result);
+    }
+    if (data_count == 0 && child_count == 1u
+        && children[0]->kind != TDS_HAMT_NODE_BITMAP_INDEXED) {
+        *result = tds_hamt_node_retain(children[0]);
+        return TDS_HAMT_OK;
+    }
+    return tds_hamt_bitmap_copy_create(
+        policy, data_map, node_map, data, data_count, children, child_count, result);
 }
 
 static bool tds_hamt_try_get_entry(
@@ -1977,11 +2311,25 @@ static bool tds_hamt_try_get_entry(
     while (node->kind == TDS_HAMT_NODE_BITMAP_INDEXED) {
         const tds_hamt_bitmap_node *branch = (const tds_hamt_bitmap_node *)node;
         const uint32_t selected_bit = tds_hamt_bit(tds_hamt_index(hash, shift));
-        if ((branch->bitmap & selected_bit) == 0) {
+        if ((branch->data_map & selected_bit) != 0) {
+            const tds_hamt_inline_entry *entry =
+                &tds_hamt_bitmap_data_const(branch)[tds_hamt_slot(branch->data_map, selected_bit)];
+            if (entry->hash == hash && tds_hamt_keys_equal(&map->policy, entry->entry.key, key)) {
+                if (actual_key != NULL) {
+                    *actual_key = entry->entry.key;
+                }
+                if (value != NULL) {
+                    *value = entry->entry.value;
+                }
+                return true;
+            }
+            return false;
+        }
+        if ((branch->node_map & selected_bit) == 0) {
             return false;
         }
 
-        node = branch->children[tds_hamt_slot(branch->bitmap, selected_bit)];
+        node = tds_hamt_bitmap_children_const(branch)[tds_hamt_slot(branch->node_map, selected_bit)];
         shift += TDS_HAMT_BITS_PER_LEVEL;
     }
 

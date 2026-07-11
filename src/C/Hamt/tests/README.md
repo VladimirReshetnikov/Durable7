@@ -29,6 +29,7 @@ The executable registers these cases:
 - `collision bucket splits and hash mismatch probes miss`
 - `collision bucket equal value keeps root and key object`
 - `structure root shape and sharing`
+- `CHAMP independent histories and typed diff`
 - `iterator copy advances independently`
 - `random history matches model and preserves snapshots`
 - `scripted collision snapshot story`

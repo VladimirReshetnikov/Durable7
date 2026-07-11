@@ -13,11 +13,16 @@ for immutable unordered collections backed by a hash-array mapped trie:
 - `tds_hamt_set`, a persistent set wrapper over the map core.
 
 The implementation preserves the C# and C++ libraries' core shape: 32-way logical branching, five
-hash bits per trie level, compact bitmap-indexed branch nodes, immutable equal-hash collision
+hash bits per trie level, canonical CHAMP branches with separate data/node maps, inline type-erased
+payload runs and child-only subtrie runs, immutable equal-hash collision
 buckets, custom hash/equality policy callbacks, first equivalent key/item retention, no-op root
 reuse, and structural sharing across versions. Because this is C, ownership is explicit: maps and
 sets are value structs whose roots are reference-counted, and callers use `clone`/`destroy` to manage
 version lifetimes.
+
+Maps expose policy-compatible content equality and visitor-based typed diff without requiring a
+result allocator. Inline payload rebuilds retain through the configured callbacks and unwind every
+completed retain when allocation fails.
 
 The intrusive node reference counts are deliberately non-atomic. Already-retained snapshots support
 concurrent read-only access, but copying, updating, clearing, or destroying versions that share a lineage must

@@ -58,9 +58,11 @@ while a distinct `result` is left destroyed (empty, not a live handle).
 
 ## Hash Trie Shape
 
-The trie uses 32-way logical branching and consumes five hash bits per level. Branch nodes store a
-32-bit bitmap and a compact child array; the child slot is the population count below the selected
-bit. Unequal keys with identical full 32-bit hashes are stored in immutable collision buckets and
+The trie uses 32-way logical branching and consumes five hash bits per level. CHAMP branch nodes
+store separate data and node maps, a compact inline `(hash,key,value)` payload run, and a child-only
+subtrie run in one flexible allocation; each slot is the population count below the selected bit.
+Deletion promotes a singleton leaf child into its parent payload run. Unequal keys with identical
+full 32-bit hashes are stored in immutable collision buckets and
 compared linearly with the configured equality callback.
 
 Enumeration order follows trie bitmap order and collision-bucket order. It is stable for an
@@ -87,6 +89,9 @@ source map or set remains alive.
 - `tds_hamt_map_try_get_key` returns the stored equivalent key pointer, or echoes the query pointer
   on miss.
 - `tds_hamt_map_clear` returns an empty map preserving the current policy.
+- `tds_hamt_map_equals` compares contents when the callback/context policy identities match.
+- `tds_hamt_map_diff` calls a visitor with `ADDED`, `REMOVED`, and `CHANGED` records. It performs no
+  result allocation and returns `TDS_HAMT_INVALID_ARGUMENT` for incompatible policies.
 
 When replacing an existing key, the originally stored key is re-retained through the policy: with
 identity or reference-counting retain callbacks the stored key *pointer* is preserved (matching the

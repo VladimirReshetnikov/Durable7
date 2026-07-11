@@ -739,7 +739,9 @@ static void test_allocation_failures_unwind_node_set_and_merge(void) {
     }
 
     CHECK(node_set_succeeded);
-    CHECK(node_set_failure_count >= 3);
+    /* CHAMP inserts an unused bitmap position directly into the inline
+     * payload run, so only the replacement node allocation is mandatory. */
+    CHECK(node_set_failure_count >= 1);
 
     tds_hamt_map_destroy(&branch_base);
     tds_hamt_map_destroy(&branch_one);
@@ -839,10 +841,9 @@ static void test_structure_root_shape_and_sharing(void) {
     CHECK_STATUS(tds_hamt_map_set(&map, &a, int_value(10), &updated));
     const void *before_children[4] = { NULL };
     const void *after_children[4] = { NULL };
-    CHECK(tds_hamt_map_debug_root_child_identities(&map, before_children, 4) == 2);
-    CHECK(tds_hamt_map_debug_root_child_identities(&updated, after_children, 4) == 2);
-    CHECK(before_children[0] != after_children[0]);
-    CHECK(before_children[1] == after_children[1]);
+    CHECK(tds_hamt_map_debug_root_child_identities(&map, before_children, 4) == 1);
+    CHECK(tds_hamt_map_debug_root_child_identities(&updated, after_children, 4) == 1);
+    CHECK(before_children[0] == after_children[0]);
 
     tds_hamt_map no_op;
     CHECK_STATUS(tds_hamt_map_set(&map, &a, int_value(1), &no_op));
@@ -853,6 +854,48 @@ static void test_structure_root_shape_and_sharing(void) {
     tds_hamt_map_destroy(&map);
     tds_hamt_map_destroy(&single);
     tds_hamt_map_destroy(&empty);
+}
+
+typedef struct diff_counts {
+    size_t added;
+    size_t removed;
+    size_t changed;
+} diff_counts;
+
+static void count_difference(const tds_hamt_difference *difference, void *context) {
+    diff_counts *counts = (diff_counts *)context;
+    if (difference->kind == TDS_HAMT_DIFFERENCE_ADDED) {
+        ++counts->added;
+    } else if (difference->kind == TDS_HAMT_DIFFERENCE_REMOVED) {
+        ++counts->removed;
+    } else {
+        ++counts->changed;
+    }
+}
+
+static void test_champ_independent_histories_and_typed_diff(void) {
+    tds_hamt_policy policy = int_map_policy(int_hash);
+    tds_hamt_map ascending = tds_hamt_map_create(&policy);
+    tds_hamt_map descending = tds_hamt_map_create(&policy);
+    for (int key = -100; key <= 100; ++key) {
+        CHECK_STATUS(tds_hamt_map_set(&ascending, int_key(key), int_value(key), &ascending));
+        CHECK_STATUS(tds_hamt_map_set(&descending, int_key(-key), int_value(-key), &descending));
+    }
+    CHECK(tds_hamt_map_equals(&ascending, &descending));
+    diff_counts empty_counts = { 0 };
+    CHECK_STATUS(tds_hamt_map_diff(&ascending, &descending, count_difference, &empty_counts));
+    CHECK(empty_counts.added == 0 && empty_counts.removed == 0 && empty_counts.changed == 0);
+
+    tds_hamt_map changed = tds_hamt_map_clone(&descending);
+    CHECK_STATUS(tds_hamt_map_remove(&changed, int_key(7), &changed));
+    CHECK_STATUS(tds_hamt_map_set(&changed, int_key(9), int_value(-9), &changed));
+    CHECK_STATUS(tds_hamt_map_set(&changed, int_key(101), int_value(101), &changed));
+    diff_counts counts = { 0 };
+    CHECK_STATUS(tds_hamt_map_diff(&ascending, &changed, count_difference, &counts));
+    CHECK(counts.added == 1 && counts.removed == 1 && counts.changed == 1);
+    tds_hamt_map_destroy(&changed);
+    tds_hamt_map_destroy(&descending);
+    tds_hamt_map_destroy(&ascending);
 }
 
 static void test_iterator_copy_advances_independently(void) {
@@ -1680,6 +1723,7 @@ static const test_case tests[] = {
     { "collision bucket splits and hash mismatch probes miss", test_collision_bucket_splits_and_hash_mismatch_probes_miss },
     { "collision bucket equal value keeps root and key object", test_collision_bucket_equal_value_keeps_root_and_key_object },
     { "structure root shape and sharing", test_structure_root_shape_and_sharing },
+    { "CHAMP independent histories and typed diff", test_champ_independent_histories_and_typed_diff },
     { "iterator copy advances independently", test_iterator_copy_advances_independently },
     { "random history matches model and preserves snapshots", test_random_history_matches_model_and_preserves_snapshots },
     { "scripted collision snapshot story", test_scripted_collision_snapshot_story },

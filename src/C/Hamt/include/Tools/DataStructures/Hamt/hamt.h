@@ -52,6 +52,23 @@ typedef struct tds_hamt_entry {
     const void *value;
 } tds_hamt_entry;
 
+typedef enum tds_hamt_difference_kind {
+    TDS_HAMT_DIFFERENCE_ADDED = 0,
+    TDS_HAMT_DIFFERENCE_REMOVED = 1,
+    TDS_HAMT_DIFFERENCE_CHANGED = 2
+} tds_hamt_difference_kind;
+
+typedef struct tds_hamt_difference {
+    tds_hamt_difference_kind kind;
+    const void *key;
+    const void *before;
+    const void *after;
+} tds_hamt_difference;
+
+typedef void (*tds_hamt_difference_visitor)(
+    const tds_hamt_difference *difference,
+    void *context);
+
 struct tds_hamt_node;
 
 typedef struct tds_hamt_map {
@@ -65,9 +82,12 @@ typedef struct tds_hamt_set {
 } tds_hamt_set;
 
 typedef struct tds_hamt_map_iterator_frame {
+    const void *data;
+    size_t data_count;
+    size_t data_index;
     const struct tds_hamt_node *const *children;
     size_t child_count;
-    size_t index;
+    size_t child_index;
 } tds_hamt_map_iterator_frame;
 
 typedef struct tds_hamt_map_iterator {
@@ -141,6 +161,12 @@ bool tds_hamt_map_iterator_next(
     const void **value);
 
 bool tds_hamt_map_shares_root(const tds_hamt_map *left, const tds_hamt_map *right);
+bool tds_hamt_map_equals(const tds_hamt_map *left, const tds_hamt_map *right);
+tds_hamt_status tds_hamt_map_diff(
+    const tds_hamt_map *left,
+    const tds_hamt_map *right,
+    tds_hamt_difference_visitor visitor,
+    void *context);
 const void *tds_hamt_map_debug_root_identity(const tds_hamt_map *map);
 tds_hamt_node_kind tds_hamt_map_debug_root_kind(const tds_hamt_map *map);
 size_t tds_hamt_map_debug_root_child_identities(

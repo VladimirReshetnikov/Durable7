@@ -100,8 +100,12 @@ checking the CHAMP invariants. Native-port status follows below.
 
 **C++ status (2026-07-10): Implemented.** The header-first C++20 map and its move-only bulk builder
 now use split maps, compact inline payload vectors, child-only shared subtries, and canonical removal
-promotion. `map_equals` and owned typed `map_difference` results round out the map surface. The C
-port remains pending.
+promotion. `map_equals` and owned typed `map_difference` results round out the map surface.
+
+**C status (2026-07-10): Implemented.** The C17 core stores split maps, inline type-erased payloads,
+and child-only flexible-array runs while preserving retain/release policy balance and allocation-
+failure rollback. Visitor-based typed diff avoids imposing an allocator on callers. CHAMP is now
+implemented across all six repository languages.
 
 **What it is.** CHAMP (Compressed Hash-Array Mapped Prefix-tree; Steindorfer & Vinju, OOPSLA 2015)
 is a refinement of Bagwell's HAMT with two changes that matter here:
