@@ -21,35 +21,15 @@ internal fun <T : Comparable<T>> naturalComparator(): Comparator<T> = naturalOrd
 private fun <T> compare(comparator: Comparator<in T>, left: T, right: T): Int =
     comparator.compare(left, right)
 
-private fun <T> PersistentDeque<T>.lowerBound(value: T, comparator: Comparator<in T>): Int {
-    var low = 0
-    var high = size
-    while (low < high) {
-        val mid = (low + high) ushr 1
-        if (compare(comparator, itemAt(mid), value) < 0) {
-            low = mid + 1
-        } else {
-            high = mid
-        }
-    }
+// The facades keep their storage comparator-sorted, so each bound is the
+// partition point of a monotone predicate: one guided root-to-leaf descent
+// costs O(log n) comparisons, unlike binary search over indexing, whose every
+// probe repeats an O(log n) positional walk.
+private fun <T> PersistentDeque<T>.lowerBound(value: T, comparator: Comparator<in T>): Int =
+    prefixLength { compare(comparator, it, value) < 0 }
 
-    return low
-}
-
-private fun <T> PersistentDeque<T>.upperBound(value: T, comparator: Comparator<in T>): Int {
-    var low = 0
-    var high = size
-    while (low < high) {
-        val mid = (low + high) ushr 1
-        if (compare(comparator, itemAt(mid), value) <= 0) {
-            low = mid + 1
-        } else {
-            high = mid
-        }
-    }
-
-    return low
-}
+private fun <T> PersistentDeque<T>.upperBound(value: T, comparator: Comparator<in T>): Int =
+    prefixLength { compare(comparator, it, value) <= 0 }
 
 public class SortedBag<T> private constructor(
     private val items: PersistentDeque<T>,
@@ -455,35 +435,11 @@ public class SortedMap<K, V> private constructor(
 
     override fun iterator(): Iterator<SortedMapEntry<K, V>> = entries.iterator()
 
-    private fun lowerBoundByKey(key: K): Int {
-        var low = 0
-        var high = entries.size
-        while (low < high) {
-            val mid = (low + high) ushr 1
-            if (compare(comparator, entries.itemAt(mid).key, key) < 0) {
-                low = mid + 1
-            } else {
-                high = mid
-            }
-        }
+    private fun lowerBoundByKey(key: K): Int =
+        entries.prefixLength { compare(comparator, it.key, key) < 0 }
 
-        return low
-    }
-
-    private fun upperBoundByKey(key: K): Int {
-        var low = 0
-        var high = entries.size
-        while (low < high) {
-            val mid = (low + high) ushr 1
-            if (compare(comparator, entries.itemAt(mid).key, key) <= 0) {
-                low = mid + 1
-            } else {
-                high = mid
-            }
-        }
-
-        return low
-    }
+    private fun upperBoundByKey(key: K): Int =
+        entries.prefixLength { compare(comparator, it.key, key) <= 0 }
 }
 
 @Suppress("UNCHECKED_CAST")

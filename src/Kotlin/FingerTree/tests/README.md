@@ -20,6 +20,8 @@ Coverage groups:
 - `FingerTree` runtime measure policies, prefix measures, splits, and locate;
 - `SortedBag`, `SortedSet`, and `SortedMap` ordering, duplicate/range behavior, navigation, duplicate insert
   rejection, and comparator-aware last-wins bulk construction;
+- counting-comparator guards over 65,536-element sorted collections proving bag counting bounds,
+  set rank/neighbor navigation, and keyed map lookup each finish within one logarithmic descent;
 - `PriorityQueue` stable minimum-priority dequeue and meld;
 - `IntervalTree` closed overlap, containment, removal, and coalescing;
 - `Rope`, `MeasuredRope`, `TextRope`, and `RopeBuilder` complete positional/range edits, copies,

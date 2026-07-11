@@ -23,6 +23,8 @@ The test executable covers persistent deque snapshots, reversible orientation, m
 splits/locates, sorted bag/set/map ordering and ranges, stable cached-priority dequeue, max-high closed
 interval queries and coalescing, complete positional/range editing surfaces for positional and measured ropes,
 comparator-aware sorted-map bulk construction, measured text line navigation, and rope builder conveniences.
+Counting-comparator guards over 65,536-element sorted collections prove that bag counting bounds, set
+rank/neighbor navigation, and keyed map lookup finish within one logarithmic descent.
 Representation coverage validates AVL balance and identity sharing across
 every facade, a 5,000-command sequence model, 100,000-element construction, policy compatibility,
 overflow and comparison regressions, and concurrent readers over retained snapshots.

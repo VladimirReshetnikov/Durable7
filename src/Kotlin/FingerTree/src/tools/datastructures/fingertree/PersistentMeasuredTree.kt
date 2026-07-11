@@ -139,6 +139,28 @@ internal class PersistentMeasuredTree<T, M> private constructor(
     fun locate(predicate: (M) -> Boolean): Locate<T, M> =
         locateNode(root, 0, policy.empty, predicate, policy)
 
+    /**
+     * Returns the number of leading elements matching [isInPrefix]. Requires
+     * the sequence to be partitioned: every matching element precedes every
+     * non-matching one. The descent walks a single root-to-leaf path, deciding
+     * each step from the node's own value, so the cost is O(log n) with one
+     * predicate evaluation per visited node.
+     */
+    fun prefixLength(isInPrefix: (T) -> Boolean): Int {
+        var count = 0
+        var node = root
+        while (node != null) {
+            node = if (isInPrefix(node.value)) {
+                count += nodeSize(node.left) + 1
+                node.right
+            } else {
+                node.left
+            }
+        }
+
+        return count
+    }
+
     fun splitByMeasure(predicate: (M) -> Boolean): Pair<PersistentMeasuredTree<T, M>, PersistentMeasuredTree<T, M>> {
         val located = locate(predicate)
         return splitAt(located.index)!!

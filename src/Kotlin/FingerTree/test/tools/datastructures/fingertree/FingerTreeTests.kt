@@ -553,6 +553,66 @@ private fun overflowingRangesAreRejected() {
     checkEquals(null, map.getRange(2, Int.MAX_VALUE), "map overflow range")
 }
 
+private class CountingComparator : Comparator<Int> {
+    var calls: Int = 0
+
+    override fun compare(left: Int, right: Int): Int {
+        calls++
+        return left.compareTo(right)
+    }
+}
+
+private fun sortedBoundsDescendOnceOnLargeCollections() {
+    val upper = 65_536
+    val target = 53_217
+    // An AVL tree over 65,536 elements is at most ~23 levels deep, so a single
+    // guided descent stays well under 64 comparisons, while the former binary
+    // search over indexing would burn one comparison per probe but visit
+    // O(log² n) nodes; the budget guards the descent count per bound query.
+    val budget = 64
+    val comparator = CountingComparator()
+
+    val bag = SortedBag.from((0 until upper) + target, comparator)
+    comparator.calls = 0
+    checkEquals(target, bag.countLessThan(target), "bag lower bound on 65,537 elements")
+    check(comparator.calls <= budget, "bag countLessThan comparisons (${comparator.calls})")
+    comparator.calls = 0
+    checkEquals(target + 2, bag.countAtMost(target), "bag upper bound with duplicate")
+    check(comparator.calls <= budget, "bag countAtMost comparisons (${comparator.calls})")
+    comparator.calls = 0
+    checkEquals(2, bag.countOf(target), "bag duplicate count")
+    check(comparator.calls <= 2 * budget, "bag countOf comparisons (${comparator.calls})")
+    for (probe in listOf(0, 1, 25_000, target, upper - 1)) {
+        val expectedBelow = if (probe > target) probe + 1 else probe
+        checkEquals(expectedBelow, bag.countLessThan(probe), "bag lower bound at $probe")
+        checkEquals(expectedBelow + if (probe == target) 2 else 1, bag.countAtMost(probe), "bag upper bound at $probe")
+    }
+    comparator.calls = 0
+    checkEquals(0, bag.countLessThan(-1), "bag lower bound before front")
+    checkEquals(upper + 1, bag.countAtMost(upper), "bag upper bound past back")
+    check(comparator.calls <= 2 * budget, "bag boundary comparisons (${comparator.calls})")
+
+    val set = SortedSet.from(0 until upper, comparator)
+    comparator.calls = 0
+    checkEquals(target, set.indexOf(target), "set rank lookup on 65,536 elements")
+    check(comparator.calls <= budget + 1, "set indexOf comparisons (${comparator.calls})")
+    comparator.calls = 0
+    checkEquals(target - 1, set.lower(target), "set lower neighbor")
+    checkEquals(target + 1, set.higher(target), "set higher neighbor")
+    checkEquals(target, set.floor(target), "set floor")
+    checkEquals(target, set.ceiling(target), "set ceiling")
+    check(comparator.calls <= 4 * budget, "set navigation comparisons (${comparator.calls})")
+
+    val map = SortedMap.from((0 until upper).map { it to -it }, comparator)
+    comparator.calls = 0
+    checkEquals(-target, map[target], "map keyed lookup on 65,536 entries")
+    check(comparator.calls <= budget + 1, "map keyed lookup comparisons (${comparator.calls})")
+    comparator.calls = 0
+    checkEquals(SortedMapEntry(target - 1, -(target - 1)), map.lowerEntry(target), "map lower entry")
+    checkEquals(SortedMapEntry(target + 1, -(target + 1)), map.higherEntry(target), "map higher entry")
+    check(comparator.calls <= 2 * budget, "map navigation comparisons (${comparator.calls})")
+}
+
 private fun concurrentReadersObserveConsistentSnapshots() {
     val expected = (0 until 256).toList()
     val deque = PersistentDeque.from(expected)
@@ -599,6 +659,7 @@ public fun main() {
         "locateReportsFoundForStoredNulls" to ::locateReportsFoundForStoredNulls,
         "measuredRopeSupportsThePositionalEditingSurface" to ::measuredRopeSupportsThePositionalEditingSurface,
         "sortedMapBulkFactoryHonorsComparatorAndLastWins" to ::sortedMapBulkFactoryHonorsComparatorAndLastWins,
+        "sortedBoundsDescendOnceOnLargeCollections" to ::sortedBoundsDescendOnceOnLargeCollections,
         "overflowingRangesAreRejected" to ::overflowingRangesAreRejected,
         "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,
     )
