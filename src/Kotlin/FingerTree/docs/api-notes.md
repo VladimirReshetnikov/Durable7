@@ -23,6 +23,8 @@ The Kotlin surface follows Kotlin/JVM conventions:
   `SortedAddResult` for `tryInsert`;
 - measure policies are runtime objects with identity, element measure, and combine operations;
 - sorted and priority facades accept JVM `Comparator` values where natural ordering is not enough;
+- `SortedMap.from(values, comparator)` provides comparator-aware bulk construction and keeps the last supplied
+  entry, including its key instance, from every comparator-equal run;
 - text offsets are Kotlin `Char` offsets, matching the repository's `Rope<char>` interpretation.
 
 ## Representation and complexity
@@ -34,7 +36,10 @@ location, and splits are O(log n); concatenation joins trees by height and retai
 The public `sharesStorageWith` diagnostics report shared node identity, and executable tests validate
 the AVL bound after generated histories and 100,000-element construction.
 
-`PersistentDeque<T>` and `FingerTree<T, M>` use that engine directly. `SortedBag`, `SortedSet`, and
+`PersistentDeque<T>` and `FingerTree<T, M>` use that engine directly. `MeasuredRope` exposes front/back,
+endpoint and positional insertion, range insertion/removal, replacement, slicing, splitting, concatenation,
+copying, and compaction over the measured engine; every result retains the supplied measure policy and cached
+aggregate. `SortedBag`, `SortedSet`, and
 `SortedMap` use `PersistentDeque`; comparator-guided binary bounds are O(log² n) because each of the
 O(log n) comparisons performs tree indexing, while the resulting edit is O(log n). `Rope` uses the
 same positional tree. `MeasuredRope` caches its supplied measure, and `TextRope` is newline-measured

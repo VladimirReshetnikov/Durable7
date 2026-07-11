@@ -171,6 +171,10 @@ public class MeasuredRope<T, M> private constructor(
 
     public fun measure(): M = items.measure()
 
+    public fun front(): T? = items.front()
+
+    public fun back(): T? = items.back()
+
     public operator fun get(index: Int): T? = items[index]
 
     public fun prefixMeasure(count: Int): M? {
@@ -196,6 +200,8 @@ public class MeasuredRope<T, M> private constructor(
         return true
     }
 
+    public fun pushFront(value: T): MeasuredRope<T, M> = MeasuredRope(items.prepend(value), policy)
+
     public fun pushBack(value: T): MeasuredRope<T, M> = MeasuredRope(items.append(value), policy)
 
     public fun setItem(index: Int, value: T): MeasuredRope<T, M>? {
@@ -206,6 +212,51 @@ public class MeasuredRope<T, M> private constructor(
         // Always store the supplied element (the C# reference replaces
         // unconditionally, even for an equal value).
         return MeasuredRope(items.setItem(index, value)!!, policy)
+    }
+
+    public fun insertAt(index: Int, value: T): MeasuredRope<T, M>? {
+        if (index < 0 || index > size) {
+            return null
+        }
+
+        return MeasuredRope(items.insertAt(index, value)!!, policy)
+    }
+
+    public fun insertRange(index: Int, values: Iterable<T>): MeasuredRope<T, M>? {
+        if (index < 0 || index > size) {
+            return null
+        }
+
+        val split = items.splitAt(index)!!
+        val middle = PersistentMeasuredTree.from(values, policy)
+        return MeasuredRope(split.first.concat(middle).concat(split.second), policy)
+    }
+
+    public fun removeAt(index: Int): MeasuredRope<T, M>? {
+        if (index < 0 || index >= size) {
+            return null
+        }
+
+        return MeasuredRope(items.removeAt(index)!!, policy)
+    }
+
+    public fun removeRange(index: Int, count: Int): MeasuredRope<T, M>? {
+        if (!isValidRange(index, count, size)) {
+            return null
+        }
+
+        val first = items.splitAt(index)!!
+        val second = first.second.splitAt(count)!!
+        return MeasuredRope(first.first.concat(second.second), policy)
+    }
+
+    public fun slice(index: Int, count: Int): MeasuredRope<T, M>? {
+        if (!isValidRange(index, count, size)) {
+            return null
+        }
+
+        val suffix = items.splitAt(index)!!.second
+        return MeasuredRope(suffix.splitAt(count)!!.first, policy)
     }
 
     public fun splitAt(index: Int): MeasuredRopeSplit<T, M>? {
@@ -235,6 +286,8 @@ public class MeasuredRope<T, M> private constructor(
             else -> MeasuredRope(items.concat(other.items), policy)
         }
     }
+
+    public fun compact(): MeasuredRope<T, M> = this
 
     public fun toList(): List<T> = items.toList()
 

@@ -18,12 +18,12 @@ Coverage groups:
 - `ReversibleDeque` logical orientation, storage sharing across whole-deque reverse, mixed-orientation
   concatenation, split/rejoin behavior, endpoint views, and larger mixed concat histories;
 - `FingerTree` runtime measure policies, prefix measures, splits, and locate;
-- `SortedBag`, `SortedSet`, and `SortedMap` ordering, duplicate/range behavior, navigation, and
-  duplicate insert rejection;
+- `SortedBag`, `SortedSet`, and `SortedMap` ordering, duplicate/range behavior, navigation, duplicate insert
+  rejection, and comparator-aware last-wins bulk construction;
 - `PriorityQueue` stable minimum-priority dequeue and meld;
 - `IntervalTree` closed overlap, containment, removal, and coalescing;
-- `Rope`, `MeasuredRope`, `TextRope`, and `RopeBuilder` positional edits, copies, measure-guided
-  navigation, line/column mapping, and string conversion;
+- `Rope`, `MeasuredRope`, `TextRope`, and `RopeBuilder` complete positional/range edits, copies,
+  measure-guided navigation, compaction, snapshot retention, line/column mapping, and string conversion;
 - shared measured-AVL invariants and identity sharing across deque, measured tree, sorted, priority,
   interval, rope, measured-rope, and text facades;
 - a 5,000-command edit/split model and 100,000-element construction stress for the real-tree

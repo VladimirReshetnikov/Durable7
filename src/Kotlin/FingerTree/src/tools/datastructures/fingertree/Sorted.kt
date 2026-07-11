@@ -327,6 +327,18 @@ public class SortedMap<K, V> private constructor(
             return result
         }
 
+        public fun <K, V> from(
+            values: Iterable<Pair<K, V>>,
+            comparator: Comparator<in K>,
+        ): SortedMap<K, V> {
+            var result = empty<K, V>(comparator)
+            for ((key, value) in values) {
+                result = result.setItem(key, value)
+            }
+
+            return result
+        }
+
         public fun <K, V> empty(comparator: Comparator<in K>): SortedMap<K, V> =
             SortedMap(PersistentDeque.empty(), comparator)
     }

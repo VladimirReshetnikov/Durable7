@@ -482,6 +482,59 @@ private fun locateReportsFoundForStoredNulls() {
     check(!rope.locateByMeasure { it >= 3 }.found, "measured rope unsatisfied locate reports not found")
 }
 
+private fun measuredRopeSupportsThePositionalEditingSurface() {
+    val originalValues = (0 until 128).toList()
+    val original = MeasuredRope.from(originalValues, IntSumMeasure)
+    val model = originalValues.toMutableList()
+
+    var edited = original.pushFront(-1)
+    model.add(0, -1)
+    edited = edited.insertAt(65, 1_000) ?: throw AssertionError("measured insertAt")
+    model.add(65, 1_000)
+    edited = edited.insertRange(10, listOf(700, 701, 702)) ?: throw AssertionError("measured insertRange")
+    model.addAll(10, listOf(700, 701, 702))
+    edited = edited.removeAt(20) ?: throw AssertionError("measured removeAt")
+    model.removeAt(20)
+    edited = edited.removeRange(30, 5) ?: throw AssertionError("measured removeRange")
+    repeat(5) { model.removeAt(30) }
+    edited = edited.setItem(0, 999) ?: throw AssertionError("measured setItem")
+    model[0] = 999
+
+    checkEquals(model, edited.toList(), "measured editing model")
+    checkEquals(model.sum(), edited.measure(), "measured editing total")
+    checkEquals(model.first(), edited.front(), "measured front")
+    checkEquals(model.last(), edited.back(), "measured back")
+    checkEquals(model.take(40).sum(), edited.prefixMeasure(40), "measured editing prefix")
+    checkEquals(originalValues, original.toList(), "measured original snapshot")
+    check(original.sharesStorageWith(edited), "measured edits retain untouched storage")
+
+    val slice = edited.slice(8, 80) ?: throw AssertionError("measured slice")
+    checkEquals(model.subList(8, 88), slice.toList(), "measured slice contents")
+    checkEquals(model.subList(8, 88).sum(), slice.measure(), "measured slice total")
+    checkEquals(slice.toList(), slice.compact().toList(), "measured compact")
+    checkEquals(null, edited.insertAt(-1, 0), "measured negative insert")
+    checkEquals(null, edited.removeRange(edited.size - 2, Int.MAX_VALUE), "measured overflowing remove")
+    checkEquals(null, edited.slice(edited.size - 2, Int.MAX_VALUE), "measured overflowing slice")
+}
+
+private fun sortedMapBulkFactoryHonorsComparatorAndLastWins() {
+    val map = SortedMap.from(
+        listOf("beta" to 1, "ALPHA" to 2, "Beta" to 3, "gamma" to 4, "alpha" to 5),
+        String.CASE_INSENSITIVE_ORDER,
+    )
+
+    checkEquals(3, map.size, "comparator bulk map size")
+    checkEquals(
+        listOf(
+            SortedMapEntry("alpha", 5),
+            SortedMapEntry("Beta", 3),
+            SortedMapEntry("gamma", 4),
+        ),
+        map.toList(),
+        "comparator bulk map order and last wins",
+    )
+}
+
 private fun overflowingRangesAreRejected() {
     val deque = PersistentDeque.from(listOf(1, 2, 3))
     checkEquals(null, deque.splitRange(2, Int.MAX_VALUE), "deque overflow range")
@@ -544,6 +597,8 @@ public fun main() {
         "ropesEditAndNavigateText" to ::ropesEditAndNavigateText,
         "ropeCopyToStreamsAcrossChunkBoundaries" to ::ropeCopyToStreamsAcrossChunkBoundaries,
         "locateReportsFoundForStoredNulls" to ::locateReportsFoundForStoredNulls,
+        "measuredRopeSupportsThePositionalEditingSurface" to ::measuredRopeSupportsThePositionalEditingSurface,
+        "sortedMapBulkFactoryHonorsComparatorAndLastWins" to ::sortedMapBulkFactoryHonorsComparatorAndLastWins,
         "overflowingRangesAreRejected" to ::overflowingRangesAreRejected,
         "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,
     )

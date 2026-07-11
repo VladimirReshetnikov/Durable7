@@ -23,6 +23,11 @@ general `FingerTree`, sorted facades, stable priority selection, max-high interv
 positional/measured ropes, and newline-measured text. `ReversibleDeque` keeps its specialized
 orientation-aware balanced tree so whole-value reversal remains O(1).
 
+`MeasuredRope` exposes the same positional editing vocabulary as `Rope`—front/back, endpoint and
+indexed insertion, range insertion/removal, slicing, splitting, concatenation, replacement, copy,
+and compaction—while maintaining the caller's cached monoidal measure. `SortedMap.from` has both
+natural-order and explicit-comparator bulk factories; comparator-equal input runs remain last-entry-wins.
+
 This closes the former flat-`List` semantic checkpoint. Indexed access, updates, inserts, removes,
 splits, and measure-guided location are logarithmic in tree size; `PriorityQueue.peekEntry` reads a
 cached stable minimum in O(1), and `IntervalTree.findOverlap` uses cached maximum-high summaries.
