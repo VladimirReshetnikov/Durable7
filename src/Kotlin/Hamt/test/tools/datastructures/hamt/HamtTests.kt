@@ -195,6 +195,58 @@ private fun concurrentReadersObserveConsistentSnapshots() {
     }
 }
 
+private fun ctrieSnapshotsAndAtomicUpdates() {
+    val trie = ConcurrentHashTrie<String, Int>()
+    check(trie.tryAdd("alpha", 1), "Ctrie first add")
+    check(!trie.tryAdd("alpha", 2), "Ctrie duplicate add")
+    trie.set("alpha", 1)
+    checkEquals(1L, trie.generation, "equal-value Ctrie update is a no-op")
+    val snapshot = trie.snapshot()
+    trie.compute("alpha", { 1 }, { _, value -> value + 1 })
+    trie.set("beta", 2)
+    checkEquals(1, snapshot["alpha"], "frozen generation retains old value")
+    checkEquals(null, snapshot["beta"], "frozen generation excludes later key")
+    checkEquals(1, snapshot.toPersistentHashMap().size, "snapshot converts explicitly to CHAMP")
+    checkEquals(2, trie["alpha"], "live Ctrie advances")
+}
+
+private fun ctrieContentionAndGenerationRenewal() {
+    val trie = ConcurrentHashTrie<Int, Int>()
+    runConcurrent("ctrie-unique-add") { worker ->
+        repeat(1_000) { offset ->
+            val key = worker * 1_000 + offset
+            check(trie.tryAdd(key, key * 3), "unique Ctrie add")
+        }
+    }
+    val retained = trie.snapshot()
+    runConcurrent("ctrie-counter") {
+        repeat(2_000) { trie.compute(-1, { 1 }, { _, value -> value + 1 }) }
+    }
+    checkEquals(8_000, trie.size - 1, "all unique Ctrie entries survive contention")
+    checkEquals(16_000, trie[-1], "node-local GCAS counter")
+    checkEquals(8_000, retained.size, "snapshot remains stable after generation renewal")
+}
+
+private fun ctrieCollisionNodesRemainStable() {
+    val trie = ConcurrentHashTrie<Int, Int>(ConstantPolicy())
+    runConcurrent("ctrie-collisions") { worker ->
+        repeat(200) { offset ->
+            val key = worker * 200 + offset
+            trie.set(key, key)
+        }
+    }
+    val snapshot = trie.snapshot()
+    runConcurrent("ctrie-collision-removal") { worker ->
+        repeat(50) { offset ->
+            val key = worker * 200 + offset
+            checkEquals(key, trie.remove(key)?.value, "collision removal")
+        }
+    }
+    checkEquals(1_600, snapshot.size, "collision snapshot size")
+    checkEquals(1_200, trie.size, "collision live size")
+    checkEquals(1_599, snapshot[1_599], "collision snapshot lookup")
+}
+
 private fun exceptAndSymmetricExceptPreserveUntouchedRoots() {
     val set = PersistentHashSet.from((0..63).toList())
 
@@ -236,6 +288,9 @@ public fun main() {
         "setAlgebraUsesSetMembership" to ::setAlgebraUsesSetMembership,
         "crossPolicyRelationsUseReceiverPolicy" to ::crossPolicyRelationsUseReceiverPolicy,
         "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,
+        "ctrieSnapshotsAndAtomicUpdates" to ::ctrieSnapshotsAndAtomicUpdates,
+        "ctrieContentionAndGenerationRenewal" to ::ctrieContentionAndGenerationRenewal,
+        "ctrieCollisionNodesRemainStable" to ::ctrieCollisionNodesRemainStable,
     )
 
     for ((name, test) in tests) {

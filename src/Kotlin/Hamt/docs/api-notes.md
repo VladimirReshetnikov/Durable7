@@ -11,6 +11,7 @@ Primary entry points:
 - `PersistentHashSet<T>`;
 - `HashPolicy<K>` for runtime hash/equality policy injection;
 - `DuplicateKeyException`, `AddResult<T>`, and removal result records.
+- `ConcurrentHashTrie<K,V>` and its immutable `Snapshot<K,V>`.
 
 The port follows the repository HAMT semantics:
 
@@ -39,3 +40,12 @@ Kotlin-specific differences:
 
 The hash contract is the standard hash-map contract: keys considered equivalent by the active
 `HashPolicy` must produce the same hash through that policy.
+
+## Concurrent Ctrie
+
+The mutable Ctrie stores bitmap C-nodes behind generation-stamped indirection nodes. Updates install
+helping GCAS descriptors on the owning indirection node. `snapshot()` replaces only the root
+generation and returns the frozen predecessor in O(1); later writers copy old-generation child
+indirections only along paths they modify. `Snapshot.toPersistentHashMap()` performs the explicit
+O(n) conversion into canonical CHAMP form. `getOrPut` and `compute` callbacks can run repeatedly
+after a lost GCAS and must therefore be repeatable. Progress is lock-free, not wait-free.

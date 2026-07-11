@@ -24,3 +24,5 @@ Coverage groups:
 - set algebra, equality, and proper subset/superset relations;
 - cross-policy subset/superset/equality/overlap relations under the receiver's `HashPolicy`;
 - JVM concurrent readers over shared immutable map/set snapshots.
+- Ctrie node-local GCAS updates, O(1) retained generations, lazy renewal, contended unique adds and
+  counters, equal-hash collision nodes, and snapshot-to-CHAMP conversion.

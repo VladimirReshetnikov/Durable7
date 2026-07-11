@@ -63,7 +63,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | Zip tree (canonical sorted set) | 1, 3 | Plausible | Keyed hash for rank derivation | 1 new core, ~2 facades |
 | Brodal-Okasaki heap | 1 | Plausible (real-time niche) | - | 1 new core, small surface |
 | Priority search queue (Hinze) | 1 | Plausible | Only if `AddressablePriorityQueue` composition constants disappoint | 1 new core |
-| Ctrie (concurrent, O(1) snapshot) | 1 | Plausible, C#-first only | .NET GC (C port is an epochs project) | 1 new core, concurrency test tier |
+| Ctrie (concurrent, O(1) snapshot) | 1 | C# + Kotlin/JVM only | Tracing GC; native ports require reclamation design | 1 new core, concurrency test tier |
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
 | Size-tiered small representations | 2 | Strong | Benchmark gate at tier boundary | Internal tier per facade + representation-forcing tests |
 | `Freeze()` read-optimized tier | 2 | Strong | Optional: fuse filter, PGM for sorted | 1 frozen type per family + strategy selection |
@@ -345,12 +345,24 @@ singleton leaves, and equal-hash collision nodes. Readers help complete node-loc
 indirection nodes lazily along modified paths. The immutable snapshot view converts explicitly to
 canonical `PersistentHashMap` form in O(n).
 
+**Kotlin/JVM status (2026-07-10): Implemented.** `ConcurrentHashTrie<K,V>` mirrors the C# node
+protocol with JVM atomics: bitmap C-nodes, singleton/collision nodes, helping GCAS descriptors,
+O(1) root-generation snapshots, and lazy child renewal. Its contention suite covers unique-key
+publication, a contended atomic counter, equal-hash collision nodes, retained generations, and
+explicit snapshot-to-CHAMP conversion.
+
+**Other-language status: Not applicable without a separate reclamation project.** C and C++ need
+epochs or hazard pointers before indirection-node CAS can reclaim safely. Rust's `Arc` ownership
+alone does not make an atomic child-pointer protocol safe; an `ArcSwap`/epoch design would be a new
+dependency and core. Haskell has GC, but this imperative GCAS/generation algorithm is not a useful
+port of the repository's pure persistent API; STM or an atomic root wrapper is a different structure.
+
 **What it is.** Prokopec, Bronson, Bagwell & Odersky (PPoPP 2012): a lock-free *mutable* hash trie
 (CAS on indirection nodes, generation-stamped GCAS) whose `Snapshot()` is O(1) - subsequent writers
 copy-on-write lazily against the frozen generation. It bridges mutable-map throughput and
 persistent snapshotting: `ConcurrentDictionary` performance with `PersistentHashMap` snapshots.
 
-**Why C#-first only.** In .NET the garbage collector solves the memory-reclamation problem that
+**Why managed runtimes only.** In .NET and on the JVM the garbage collector solves the memory-reclamation problem that
 makes lock-free tries hard in native code; the C port would be an epoch/hazard-pointer project (the
 derived catalog's `Atom<T>` entry records the same conclusion for a far simpler cell). Parity
 economics therefore cap this at a C#-only (or C#+JVM) tier, which the porting guide would need to
