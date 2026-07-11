@@ -28,3 +28,11 @@ rank/neighbor navigation, and keyed map lookup finish within one logarithmic des
 Representation coverage validates AVL balance and identity sharing across
 every facade, a 5,000-command sequence model, 100,000-element construction, policy compatibility,
 overflow and comparison regressions, and concurrent readers over retained snapshots.
+
+RRB validation covers every 32-way boundary through 100,000 elements, unequal-height and uneven
+fragment concatenation, exact-boundary leaf identity, regular-versus-relaxed size-table invariants,
+a 10,000-operation retained-snapshot model, and 2,000 adversarial split/concat rounds with explicit
+density and height bounds. Builder tests cover full-tail transfer, partial-tail copying, cached
+snapshots, adopted prefixes, fail-fast iteration, clearing, and source-array isolation. Nullable
+elements, checked count overflow, invalid overflowing ranges, no-op identity, and concurrent readers
+have dedicated cases.

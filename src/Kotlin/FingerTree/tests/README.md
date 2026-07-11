@@ -24,6 +24,10 @@ Coverage groups:
   set rank/neighbor navigation, and keyed map lookup each finish within one logarithmic descent;
 - `PriorityQueue` stable minimum-priority dequeue and meld;
 - `IntervalTree` closed overlap, containment, removal, and coalescing;
+- `RrbVector` radix boundaries, regular/relaxed layouts, unequal-height and adversarial
+  concatenation, exact leaf sharing, split/insert/remove/pop, 10,000 randomized edits with retained
+  snapshots, append-builder isolation/caching, nullable elements, checked overflow, and concurrent
+  readers;
 - `Rope`, `MeasuredRope`, `TextRope`, and `RopeBuilder` complete positional/range edits, copies,
   measure-guided navigation, compaction, snapshot retention, line/column mapping, and string conversion;
 - shared measured-AVL invariants and identity sharing across deque, measured tree, sorted, priority,

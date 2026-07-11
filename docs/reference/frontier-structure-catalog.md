@@ -233,6 +233,14 @@ root-sharing diagnostics. `fromList` performs bottom-up bulk construction; no pu
 transient is exposed because an `ST`-style implementation detail would not be an idiomatic public
 Haskell value.
 
+**Kotlin/JVM status (2026-07-11): Implemented and representation-hardened.** `RrbVector<T>` uses
+32-element object-array leaves, radix-indexed regular branches without size tables, relaxed
+cumulative-size branches, boundary-spine concatenation, structural split/range/endpoint edits, and
+ordered iteration. Its append builder adopts frozen prefixes, transfers full tails, copies partial
+tails, caches clean snapshots, and detects mutation during iteration. Nullable-pop, overflow,
+exact-sharing, 10,000-operation model, adversarial density/height, and concurrent-reader gates cover
+the JVM representation.
+
 **What it is.** The relaxed radix-balanced tree (Bagwell & Rompf 2011; practical treatment with
 transients in Stucki et al., ICFP 2015): a 32-way branching persistent vector where nodes are
 normally full (radix-indexable in O(log32 n) with pure bit arithmetic) and carry small size tables

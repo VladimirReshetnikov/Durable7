@@ -14,6 +14,7 @@ Current public families:
 - `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>`;
 - `PriorityQueue<T, P>` and `PriorityEntry<T, P>`;
 - `Interval<T>` and `IntervalTree<T>`;
+- `RrbVector<T>` and `RrbVector.Builder<T>`;
 - `Rope<T>`, `MeasuredRope<T, M>`, `TextRope`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
 
 The Kotlin surface follows Kotlin/JVM conventions:
@@ -26,6 +27,12 @@ The Kotlin surface follows Kotlin/JVM conventions:
 - `SortedMap.from(values, comparator)` provides comparator-aware bulk construction and keeps the last supplied
   entry, including its key instance, from every comparator-equal run;
 - text offsets are Kotlin `Char` offsets, matching the repository's `Rope<char>` interpretation.
+
+`RrbVector` uses `append`/`prepend`, `concat`, `splitAt`, `setItem`, `insertAt`/`insertRange`,
+`removeAt`/`removeRange`, and `tryRemoveLast`. Invalid indexed edits and boundaries return `null`,
+matching the rest of this workspace. `RrbPop<T>` keeps successful removal distinct from failure even
+when a vector stores nullable elements. Equal-value replacement, empty insertion/removal, boundary
+splits, and concatenation with empty preserve the receiver or existing root where applicable.
 
 ## Representation and complexity
 
@@ -47,6 +54,21 @@ edit is also O(log n). `Rope` uses the
 same positional tree. `MeasuredRope` caches its supplied measure, and `TextRope` is newline-measured
 rather than string-backed. Full enumeration, conversion, sorting/filter rebuilding, and
 `PersistentDeque.reverse()` are O(n).
+
+`RrbVector<T>` is a separate 32-way RRB core. Leaves contain 1 through 32 elements. A regular branch
+has full-capacity children except possibly its final child and navigates by radix shifts without a
+size table; only a relaxed branch stores cumulative child sizes. Lookup and `setItem` are
+O(log32 n), and split, insertion, removal, append/prepend, and boundary-spine concatenation are
+O(log32(n + m)) with fixed-arity array copying. Exact leaf-boundary splits and full-leaf
+concatenations retain original leaves. Counts and cumulative sizes use checked `Int` arithmetic;
+the maximum valid height for an `Int`-sized vector is six.
+
+`RrbVector.Builder` is append-only between freezes. It stages 32-element tail arrays, transfers a
+full tail only after abandoning mutable access to that array, copies a partial tail on freeze, and
+adopts an existing vector as an O(1) frozen prefix. `toImmutable()` caches clean snapshots, and
+later builder mutation cannot change an earlier vector. Builder iteration freezes once and is
+fail-fast if the builder is subsequently modified. The builder is not thread-safe; published
+vectors are immutable and safe for concurrent readers.
 
 `PriorityQueue` caches the stable leftmost minimum entry, making peek O(1), enqueue/meld O(log n), and
 dequeue O(log n). `IntervalTree` caches last-low and maximum-high summaries: lower-bound insertion and

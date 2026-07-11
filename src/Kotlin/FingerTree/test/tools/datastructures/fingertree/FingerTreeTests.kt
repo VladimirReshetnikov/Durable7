@@ -662,7 +662,7 @@ public fun main() {
         "sortedBoundsDescendOnceOnLargeCollections" to ::sortedBoundsDescendOnceOnLargeCollections,
         "overflowingRangesAreRejected" to ::overflowingRangesAreRejected,
         "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,
-    )
+    ) + rrbVectorTestCases()
 
     for ((name, test) in tests) {
         test()

@@ -14,6 +14,7 @@ names for the public families:
 - `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>`;
 - `PriorityQueue<T, P>` and `PriorityEntry<T, P>`;
 - `Interval<T>` and `IntervalTree<T>`;
+- `RrbVector<T>` and its append-only `RrbVector.Builder<T>`;
 - `Rope<T>`, `MeasuredRope<T, M>`, `TextRope`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
 
 The family is backed by a shared immutable measured AVL sequence. Every node caches subtree size,
@@ -22,6 +23,13 @@ the affected paths and retain untouched JVM nodes. The same substrate drives `Pe
 general `FingerTree`, sorted facades, stable priority selection, max-high interval pruning,
 positional/measured ropes, and newline-measured text. `ReversibleDeque` keeps its specialized
 orientation-aware balanced tree so whole-value reversal remains O(1).
+
+`RrbVector<T>` is the family's random-access-optimized sequence. It stores up to 32 elements per
+leaf and uses 32-way branches: packed branches navigate by five-bit radix arithmetic without size
+tables, while split/concatenation-induced relaxed branches cache `IntArray` cumulative sizes.
+Indexing and replacement copy one O(log32 n) path; concatenation and splitting rebuild only boundary
+spines and retain untouched leaves. Its append builder owns mutable tail arrays, freezes full leaves,
+copies partial tails, and caches isolated immutable snapshots.
 
 `MeasuredRope` exposes the same positional editing vocabulary as `Rope`—front/back, endpoint and
 indexed insertion, range insertion/removal, slicing, splitting, concatenation, replacement, copy,
