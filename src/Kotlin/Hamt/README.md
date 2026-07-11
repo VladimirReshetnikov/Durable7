@@ -6,9 +6,10 @@
 - Scope: `tools.datastructures.hamt` package
 
 This workspace ports the repository HAMT map and set family to Kotlin/JVM. It provides persistent
-`PersistentHashMap<K, V>` and `PersistentHashSet<T>` values with a 32-way bitmap-indexed trie,
-immutable equal-hash collision buckets, structural sharing between versions, and optional runtime
-`HashPolicy<K>` values for custom hash/equality behavior.
+`PersistentHashMap<K, V>` and `PersistentHashSet<T>` values with a canonical 32-way CHAMP trie,
+separate data/node bitmaps, inline payload runs, immutable equal-hash collision buckets, structural
+sharing between versions, and optional runtime `HashPolicy<K>` values for custom hash/equality
+behavior. Maps expose policy-compatible semantic equality and typed added/removed/changed diff.
 
 The default factories use Kotlin `hashCode`/`equals`, keeping the public shape close to JVM collection
 expectations while preserving the repository HAMT contracts: persistent updates, duplicate-key

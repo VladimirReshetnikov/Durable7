@@ -16,7 +16,9 @@ The port follows the repository HAMT semantics:
 
 - updates return new persistent values and keep old versions usable;
 - trie nodes are immutable and shared by JVM object reference;
-- the trie uses 32-way bitmap-indexed branching over 32 hash bits;
+- the trie uses 32-way CHAMP branching over 32 hash bits, with separate payload and child bitmaps;
+- ordinary key/value leaves are inlined in compact payload runs, while child runs contain only
+  subtries; deletion promotes singleton child payloads to restore canonical shape;
 - equal full-hash collisions are kept in immutable collision buckets;
 - no-op value replacement and absent removal preserve the existing root;
 - duplicate `add` / `tryAdd` calls reject the key without changing the root;
@@ -24,6 +26,8 @@ The port follows the repository HAMT semantics:
 - bulk map construction is last-wins;
 - set algebra includes union, intersection, difference, symmetric difference, subset/superset,
   proper subset/superset, overlap, and equality checks.
+- `mapEquals` requires the same `HashPolicy` object and compares map contents; `diff` reports typed
+  added, removed, and changed entries and returns immediately for a shared root.
 
 Kotlin-specific differences:
 

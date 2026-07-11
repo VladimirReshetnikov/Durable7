@@ -105,6 +105,26 @@ private fun collisionsAreStoredAndRemoved() {
     checkEquals(listOf(1, 3), removed.map.keys().toList().sorted(), "removal keeps other collision entries")
 }
 
+private fun champCanonicalizationAndDiff() {
+    val policy = defaultHashPolicy<Int>()
+    val ascending = PersistentHashMap.from((0 until 512).map { it to it }, policy)
+    val descending = PersistentHashMap.from((0 until 512).reversed().map { it to it }, policy)
+    check(ascending.mapEquals(descending), "independent insertion histories must be semantically equal")
+    checkEquals(0, ascending.diff(descending).count(), "equal canonical maps have an empty diff")
+
+    val statistics = ascending.champStatistics()
+    checkEquals(512, statistics.inlinePayloads, "CHAMP must inline ordinary payloads")
+    check(statistics.bitmapNodes > 1, "test data must exercise nested bitmap nodes")
+    checkEquals(0, statistics.invalidLeafChildren, "bitmap child runs must not contain leaf nodes")
+
+    val changed = descending.remove(7).put(9, -9).put(1_000, 1_000)
+    val differences = ascending.diff(changed).toList()
+    checkEquals(3, differences.size, "typed diff count")
+    check(differences.any { it.kind == MapDifferenceKind.REMOVED && it.key == 7 }, "removed difference")
+    check(differences.any { it.kind == MapDifferenceKind.CHANGED && it.key == 9 }, "changed difference")
+    check(differences.any { it.kind == MapDifferenceKind.ADDED && it.key == 1_000 }, "added difference")
+}
+
 private fun iterationStreamsTrieOrder() {
     val policy = ConstantPolicy<Int>()
     val map = PersistentHashMap.empty<Int, Int>(policy).setItems((0 until 64).map { it to it * it })
@@ -210,6 +230,7 @@ public fun main() {
         "setTryRemoveDistinguishesStoredNull" to ::setTryRemoveDistinguishesStoredNull,
         "addRejectsDuplicates" to ::addRejectsDuplicates,
         "collisionsAreStoredAndRemoved" to ::collisionsAreStoredAndRemoved,
+        "champCanonicalizationAndDiff" to ::champCanonicalizationAndDiff,
         "iterationStreamsTrieOrder" to ::iterationStreamsTrieOrder,
         "setItemsAreLastWinsAndRetainOriginalKey" to ::setItemsAreLastWinsAndRetainOriginalKey,
         "setAlgebraUsesSetMembership" to ::setAlgebraUsesSetMembership,

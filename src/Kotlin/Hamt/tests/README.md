@@ -18,6 +18,7 @@ Coverage groups:
 - root-sharing no-op behavior;
 - duplicate-key rejection;
 - equal-hash collision buckets through a constant `HashPolicy`;
+- CHAMP split-bitmap invariants, canonical independent-history equality, and typed map diff;
 - streaming trie-order iteration;
 - last-wins replacement and original-key retention through an equivalence policy;
 - set algebra, equality, and proper subset/superset relations;

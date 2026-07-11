@@ -83,7 +83,11 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 **C# status (2026-07-10): Implemented.** The managed HAMT now uses separate data/node bitmaps,
 inline payload runs, canonical deletion with payload promotion, canonical one-freeze bulk
 construction, `MapEquals`, `Diff`, independent-history shape tests, and a CHAMP benchmark class.
-Sibling-language ports remain intentionally out of scope for this C#-only Axis 1 implementation.
+
+**Kotlin status (2026-07-10): Implemented.** The JVM port now has the same split bitmap/inline
+payload representation and canonical deletion promotion, plus policy-compatible `mapEquals` and
+typed `diff`. Its executable suite checks independent insertion histories, CHAMP node invariants,
+collisions, persistence, and concurrent readers. C, C++, Haskell, and Rust ports remain pending.
 
 **What it is.** CHAMP (Compressed Hash-Array Mapped Prefix-tree; Steindorfer & Vinju, OOPSLA 2015)
 is a refinement of Bagwell's HAMT with two changes that matter here:
