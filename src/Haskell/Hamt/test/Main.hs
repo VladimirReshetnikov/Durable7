@@ -117,6 +117,13 @@ testCrossPolicySetRelations = do
   assertBool
     "proper superset counts argument under receiver policy"
     (HashSet.isProperSupersetOf receiver collapsingArgument)
+  -- Symmetric difference must toggle each distinct argument element once
+  -- under the receiver's policy: {11, 21} collapses to one element mod 10,
+  -- so it removes 1 rather than deleting 1 and re-inserting 21.
+  assertEqual
+    "symmetric difference deduplicates argument under receiver policy"
+    []
+    (sort (HashSet.toList (HashSet.symmetricDifference singleElement collapsingArgument)))
 
 testLargeFromList :: IO ()
 testLargeFromList = do

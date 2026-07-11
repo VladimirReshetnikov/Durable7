@@ -124,7 +124,7 @@ deleteOne value bag@(SortedBag buckets) =
             Seq.EmptyL -> bag
             _ Seq.:< rest
               | Seq.null rest -> SortedBag (Measured.append left right)
-              | otherwise -> SortedBag (joinWithBucket left (Bucket (bucketKey bucket) rest) right)
+              | otherwise -> SortedBag (joinWithBucket left (rekeyedBucket rest) right)
     _ -> bag
 
 deleteAll :: Ord a => a -> SortedBag a -> SortedBag a
@@ -181,6 +181,16 @@ bucketLength = Seq.length . bucketSequence
 
 appendBucket :: a -> Bucket a -> Bucket a
 appendBucket value (Bucket key values) = Bucket key (values Seq.|> value)
+
+-- Re-keys a bucket from the first surviving instance after front instances
+-- were removed, so the bucket key (and thus the toCounts representative) is
+-- always a value the bag actually contains. Callers guard against empty
+-- sequences.
+rekeyedBucket :: Seq.Seq a -> Bucket a
+rekeyedBucket values =
+  case Seq.viewl values of
+    value Seq.:< _ -> Bucket value values
+    Seq.EmptyL -> error "Data.Structures.FingerTree.SortedBag: empty bucket"
 
 firstBucketValue :: Bucket a -> Maybe a
 firstBucketValue = Seq.lookup 0 . bucketSequence
@@ -249,7 +259,7 @@ splitAtRank position buckets
               rightTree =
                 if Seq.null rightValues
                   then right
-                  else Measured.cons (Bucket (bucketKey bucket) rightValues) right
+                  else Measured.cons (rekeyedBucket rightValues) right
            in (leftTree, rightTree)
 
 isValidRange :: Int -> Int -> Int -> Bool

@@ -113,9 +113,12 @@ difference left right = List.foldl' (flip delete) left (toList right)
 
 -- Toggles the argument's elements on the receiver (matching the C#
 -- reference) instead of materializing union/intersection intermediates,
--- so untouched subtrees stay structurally shared.
+-- so untouched subtrees stay structurally shared. The argument is first
+-- deduplicated under the receiver's policy: elements that are duplicates
+-- to the receiver must toggle once, not cancel out pairwise.
 symmetricDifference :: HashSet a -> HashSet a -> HashSet a
-symmetricDifference left right = List.foldl' toggle left (toList right)
+symmetricDifference left right =
+  List.foldl' toggle left (toList (probeWithReceiverPolicy left right))
   where
     toggle result value
       | member value result = delete value result

@@ -190,10 +190,24 @@ testSortedCollections = do
     "bag toCounts keeps first stored representative"
     [("a", 2)]
     (map (\(value, total) -> (keyedLabel value, total)) (SortedBag.toCounts instanceBag))
+  let remaining = SortedBag.deleteOne (Keyed 1 "a") instanceBag
   assertEqual
     "bag deleteOne removes the first instance"
     ["b"]
-    (map keyedLabel (SortedBag.toList (SortedBag.deleteOne (Keyed 1 "a") instanceBag)))
+    (map keyedLabel (SortedBag.toList remaining))
+  -- After the first instance is removed, the bucket key must be re-keyed to
+  -- the surviving instance: the toCounts representative is always a value
+  -- the bag still contains.
+  assertEqual
+    "bag deleteOne re-keys the toCounts representative"
+    [("b", 1)]
+    (map (\(value, total) -> (keyedLabel value, total)) (SortedBag.toCounts remaining))
+  assertEqual
+    "bag rank slice re-keys the right partial bucket"
+    (Just [("b", 1)])
+    (fmap
+      (map (\(value, total) -> (keyedLabel value, total)) . SortedBag.toCounts)
+      (SortedBag.slice 1 1 instanceBag))
 
 testSortedBagRanks :: IO ()
 testSortedBagRanks = do
