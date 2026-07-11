@@ -61,6 +61,8 @@ The suite covers:
   already-frozen snapshots from later builder mutations;
 - generated map histories checked against model dictionaries with retained snapshots;
 - generated set behavior checked against model set semantics.
+- concurrent hash-trie generation semantics, stable snapshots/enumerators, contended unique-key
+  publication, atomic accumulation, and concurrent snapshot consistency.
 
 For a new public operation, add both direct examples and model/property coverage when there is a natural
 BCL or simple in-memory oracle.

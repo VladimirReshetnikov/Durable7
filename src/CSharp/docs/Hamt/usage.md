@@ -229,6 +229,23 @@ enumerated concurrently while other threads compute new versions from the same s
 variable ownership still applies: do not race on the same mutable variable while another thread
 reassigns it to a newer version.
 
+For a shared mutable map, use `ConcurrentHashTrie<TKey, TValue>`. Its updates are atomic and its
+snapshot is an O(1) persistent value:
+
+```csharp
+var live = new ConcurrentHashTrie<string, int>(StringComparer.OrdinalIgnoreCase);
+live.AddOrUpdate("requests", _ => 1, (_, count) => count + 1);
+
+PersistentHashMap<string, int> published = live.Snapshot();
+live["requests"] = 100;
+
+// The snapshot remains stable at 1 while the live trie advances.
+Console.WriteLine(published["REQUESTS"]);
+```
+
+Factories passed to `GetOrAdd` and `AddOrUpdate` may be invoked more than once under contention;
+keep them repeatable and free of non-repeatable side effects.
+
 ## Choosing A Surface
 
 | Need | Start with |
@@ -241,6 +258,7 @@ reassigns it to a newer version.
 | Stored equivalent item recovery | `TryGetValue` |
 | Union/intersection/difference | `Union`, `Intersect`, `Except`, `SymmetricExcept` |
 | Custom value semantics | `Create(comparer)` or `CreateRange(items, comparer)` |
+| Shared mutable map with O(1) immutable snapshots | `ConcurrentHashTrie<TKey, TValue>` |
 
 For cross-language contract alignment, see the repository
 [porting and semantic parity guide](../../../../docs/guides/porting-and-semantic-parity.md).

@@ -19,6 +19,10 @@ new or replaced leaves.
 `PersistentHashSet<T>` is a value set built on the same HAMT core. It preserves the same comparer and
 structural-sharing semantics as the map.
 
+`ConcurrentHashTrie<TKey, TValue>` is a lock-free mutable map over atomically published immutable
+CHAMP roots. Its public mutation surface is linearizable, and `Snapshot()` captures the current
+`PersistentHashMap<TKey, TValue>` in O(1).
+
 ## Hash Trie Shape
 
 The implementation uses CHAMP's 32-way logical branching with 5 hash bits consumed per level. Sparse
@@ -116,3 +120,22 @@ Update allocation is O(b * depth + c) array storage — O(depth + c) allocated n
 changed path and any touched collision bucket. Unchanged subtrees remain shared and are safe for
 concurrent readers because all node arrays are privately created before publication and never
 mutated afterward.
+
+## Concurrent Hash Trie Contract
+
+`ConcurrentHashTrie<TKey, TValue>` implements `IReadOnlyDictionary<TKey, TValue>` while exposing a
+mutable, thread-safe update surface:
+
+- `SetItem` and the indexer setter atomically add or replace; equal-value no-ops publish no generation.
+- `TryAdd`, `TryUpdate`, and `TryRemove` are single-key conditional atomic operations.
+- `GetOrAdd` and `AddOrUpdate` use retryable factories. A factory may run more than once when a CAS
+  loses contention, matching the repeatability requirement of `ConcurrentDictionary` factories.
+- `Clear` atomically publishes an empty root.
+- `Snapshot` and `GetEnumerator` capture one immutable generation. Later writes cannot change their
+  contents, and snapshots retain the trie's comparer.
+
+The managed implementation uses root-level CAS over persistent CHAMP path copies rather than the
+paper's JVM generation/indirection-node GCAS layout. A state object contains the root and a monotonic
+generation; unique state identity prevents ABA. Reads and snapshots are O(trie lookup) and O(1)
+respectively and take no locks. A successful write is O(CHAMP update) plus one CAS; under contention
+it may retry and allocate discarded paths, so progress is lock-free rather than wait-free.

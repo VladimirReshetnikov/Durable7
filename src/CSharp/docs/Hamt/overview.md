@@ -11,6 +11,10 @@ CHAMP library. The core type is `PersistentHashMap<TKey, TValue>`, an immutable
 unordered dictionary with structural sharing across versions. `PersistentHashSet<T>` is built on the
 same HAMT core and implements `IReadOnlySet<T>`.
 
+`ConcurrentHashTrie<TKey, TValue>` is the deliberately mutable member of the family. It publishes
+generation-stamped immutable CHAMP roots with compare-and-swap, giving lock-free reads and updates,
+stable enumeration, and O(1) `Snapshot()` conversion to `PersistentHashMap<TKey, TValue>`.
+
 The trie consumes 5 hash bits per level. Each sparse branch has separate data and node bitmaps,
 with key/value payloads inlined into a compact data run and subtries held in a compact child run.
 Canonical deletion promotes singleton child payloads back into their parent; equal-hash unequal-key
@@ -31,6 +35,7 @@ for association relabel/sort/reverse rebuilds; no mutable storage is ever shared
 - `src/Tools.DataStructures.Hamt/` contains the public library.
   - `PersistentHashMap.cs` is the bitmap-indexed HAMT map implementation.
   - `MapDifference.cs` defines the added/removed/changed result vocabulary used by structural diff.
+  - `ConcurrentHashTrie.cs` is the lock-free mutable map with O(1) persistent snapshots.
   - `PersistentHashSet.cs` is the set wrapper over the map core.
 - [`tests/Tools.DataStructures.Hamt.Tests/`](../../tests/Tools.DataStructures.Hamt.Tests/README.md) contains xUnit
   and CsCheck-backed model tests.
