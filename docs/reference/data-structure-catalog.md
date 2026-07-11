@@ -137,9 +137,9 @@ lazy-spine parity boundary.
 
 ## Measures, Comparisons, And Predicates
 
-Measures are the connective tissue for finger-tree-derived collections. The C# and C++ workspaces
-expose typed measure/comparison/predicate abstractions; the C workspace exposes equivalent policy
-callbacks and context pointers.
+Measures are the connective tissue for finger-tree-derived collections. The C#, C++, and Kotlin
+workspaces expose typed measure abstractions (with comparison and predicate abstractions where their
+surfaces require them); the C workspace exposes equivalent policy callbacks and context pointers.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
@@ -147,7 +147,7 @@ callbacks and context pointers.
 | C | `ft_measure_policy`, `ft_measure_predicate_fn`, `ft_compare_fn`, `ft_value_type` | [usage guide](../../src/C/FingerTree/docs/usage.md), [public header](../../src/C/FingerTree/include/tools/data_structures/finger_tree/fingertree.h), [API notes](../../src/C/FingerTree/docs/api-notes.md) |
 | C++ | measure policies and predicates in `measures.hpp`, `built_in_measures.hpp`, `product_measure.hpp`, `sum_measure.hpp`, `comparisons.hpp`, and `measure_predicates.hpp` | [usage guide](../../src/Cpp/FingerTree/docs/usage.md), [measure headers](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/measures.hpp), [built-ins](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/built_in_measures.hpp), [predicates](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/measure_predicates.hpp), [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) |
 | Haskell | `Measured v a`, `Size`, `Elem`, `MeasurePair`, `Maximum`, `Minimum`; predicates are ordinary pure functions `v -> Bool` | [measured tree source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Measured.hs), [measures source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Measures.hs), [tests](../../src/Haskell/FingerTree/test/README.md) |
-| Kotlin | `MeasurePolicy<T, M>`, `SizeMeasure<T>`, `IntSumMeasure`, `MaxMeasure<T>`, `MinMeasure<T>`, `ProductMeasure<T, A, B>`, `MeasurePair<A, B>`, `NewlineMeasure` | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [measures](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Core.kt), [newline measure](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Rope.kt) |
+| Kotlin | `Monoid<T>`, `MeasurePolicy<T, M>`, `DabaLite<T>`, `DabaLiteStatistics`, `SizeMeasure<T>`, `IntSumMeasure`, `MaxMeasure<T>`, `MinMeasure<T>`, `ProductMeasure<T, A, B>`, `MeasurePair<A, B>`, `NewlineMeasure` | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [monoids and measures](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Core.kt), [DABA Lite](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/DabaLite.kt), [newline measure](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Rope.kt) |
 | Rust | `MeasurePolicy<T>`, `SizeMeasure`, `SumMeasure<T>`, `MaxMeasure`, `MinMeasure`, `KeyMeasure<T>`, `ProductMeasure<T, PFirst, PSecond>`, `MeasurePair<TFirst, TSecond>`, `SizeAndSumMeasure<T>`, `SizeAndMaxMeasure<T>`, `SizeAndMinMeasure<T>`, `OrderStatisticMeasure<T>`, `RankedKey<T>`, `NewlineMeasure` | [API notes](../../src/Rust/FingerTree/docs/api-notes.md), [measures](../../src/Rust/FingerTree/src/measured.rs), [newline measure](../../src/Rust/FingerTree/src/rope.rs) |
 
 ## Tungsten Collections

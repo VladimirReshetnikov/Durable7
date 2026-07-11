@@ -13,14 +13,14 @@ difference.
 ## Current Documents
 
 - [API notes](api-notes.md) describe `PersistentDeque<T>`, `ReversibleDeque<T>`,
-  `FingerTree<T, M>`, `RrbVector<T>`, measure policies, sorted facades, priority queues, interval
-  trees, ropes, text helpers, Kotlin result shapes, comparator policy behavior, measured-tree/RRB
-  persistence, and complexity.
+  `FingerTree<T, M>`, `RrbVector<T>`, `DabaLite<T>`, measure/monoid policies, sorted facades,
+  priority queues, interval trees, ropes, text helpers, Kotlin result shapes, comparator policy
+  behavior, measured-tree/RRB persistence, and complexity.
 - [Validation](validation.md) records the `src/Kotlin/build.ps1` command shape, local JDK and Kotlin
   compiler bootstrap behavior, generated-output locations, and executable-test coverage boundary.
 - [Tests README](../tests/README.md) maps deterministic coverage for deque operations, reversible
   orientation, measured splits, sorted facades, priority queues, intervals, ropes, measured ropes, text
-  helpers, RRB vectors, and builders.
+  helpers, RRB vectors/builders, and adversarial DABA Lite schedules.
 
 ## Related Repository Docs
 

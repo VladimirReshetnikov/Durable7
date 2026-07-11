@@ -28,6 +28,10 @@ Coverage groups:
   concatenation, exact leaf sharing, split/insert/remove/pop, 10,000 randomized edits with retained
   snapshots, append-builder isolation/caching, nullable elements, checked overflow, and concurrent
   readers;
+- `DabaLite` exhaustive short histories with a noncommutative monoid, a 100,000-operation FIFO model,
+  all four six-cursor fixups, exact combine ceilings, 64-slot chunk boundaries and churn, callback
+  failure at every reachable mutation ordinal, atomic boundary rollback, O(1) clear/reuse,
+  callback-free structural statistics, nullable identity, and prompt slot/chunk reclamation;
 - `Rope`, `MeasuredRope`, `TextRope`, and `RopeBuilder` complete positional/range edits, copies,
   measure-guided navigation, compaction, snapshot retention, line/column mapping, and string conversion;
 - shared measured-AVL invariants and identity sharing across deque, measured tree, sorted, priority,

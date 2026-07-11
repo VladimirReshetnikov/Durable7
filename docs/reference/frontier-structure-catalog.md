@@ -58,7 +58,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | --- | --- | --- | --- | --- |
 | CHAMP canonicalization + structural equality/diff | 1 | Strong (implemented across all six languages) | Completed with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
 | `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all six languages) | Completed as proposal Tier C1 | 1 shared core, 4 C# public types, structural map/set algebra |
-| DABA Lite sliding-window aggregator | 1, 3 | Strong (C# implemented) | Reuses `IMonoid<T>` | 1 small type, ~8 members |
+| DABA Lite sliding-window aggregator | 1, 3 | Strong (C# + Kotlin/JVM implemented) | Reuses the language's monoid abstraction | 1 small type, ~8 members |
 | Merkle search tree | 1 | Strong (C# implemented) | Completed: deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
 | Zip tree (canonical sorted set) | 1, 3 | Plausible (C# implemented) | Completed: coherent keyed rank policy | 1 new core, set facade |
@@ -433,6 +433,15 @@ front exhaustion collapses the cursor state, `L == B` initializes the next flip,
 the three work cursors, and the remaining case rewrites one left and one right partial aggregate.
 There is no unbounded reversal loop.
 
+**Kotlin/JVM status (2026-07-11): Implemented with managed-runtime parity.** `DabaLite<T>` accepts a
+runtime `Monoid<T>`; `MeasurePolicy<E, M>` now refines `Monoid<M>`, so existing measure policies can
+be reused directly. The implementation preserves the same six-cursor schedule, 64-slot chunk
+geometry, callback ceilings, strong callback-failure guarantee, callback-free structural audit,
+O(1) clear, and mutable/external-serialization boundary as the C# reference. Its adversarial gate
+adds exhaustive noncommutative histories, a 100,000-operation FIFO model, every reachable throwing
+callback ordinal, boundary-allocation rollback, and weak-reference checks for retired slots and
+chunks.
+
 **What it is.** The De-Amortized Banker's Aggregator was introduced by Tangwongsan, Hirzel, and
 Schneider at DEBS 2017; the 2021 journal article introduced the Lite representation. It maintains
 the FIFO-ordered aggregate of a dynamically sized window for any associative monoid, without
@@ -442,29 +451,30 @@ These invocation ceilings are unconditional, but the complete operations are wor
 when both `IMonoid<T>.Combine` and `Empty` are O(1). A finger tree answers the same FIFO-window
 query in O(log n); DABA Lite removes that logarithm for this deliberately mutable special case.
 
-**C# contract and ownership.** A throwing monoid callback leaves the published window unchanged for
-every mutating operation. `Clear` swaps in one fresh empty chunk in O(1), invokes `Combine` zero
-times, and likewise commits only after obtaining `Empty`. Successful eviction promptly clears a
-retired reference-bearing slot and severs an obsolete predecessor chunk. `Begin` is derived from
-the current first chunk rather than a construction-time root, fixing the former unbounded retained
-prefix. The class has no oldest-value or enumeration API: the Lite schedule intentionally
-overwrites raw values with partial aggregates. It provides no synchronization; callers must not
-overlap access to one instance without external serialization.
+**Managed-runtime contract and ownership.** In both managed implementations, a throwing monoid
+callback leaves the published window unchanged for every mutating operation. `Clear`/`clear` swaps
+in one fresh empty chunk in O(1), invokes combine zero times, and likewise commits only after
+obtaining the identity. Successful eviction promptly clears a retired reference-bearing slot and
+severs an obsolete predecessor chunk. The begin cursor is derived from the current first chunk
+rather than a construction-time root, preventing an unbounded retained prefix. Neither class has
+an oldest-value or enumeration API: the Lite schedule intentionally overwrites raw values with
+partial aggregates. Neither provides synchronization; callers must not overlap access to one
+instance without external serialization.
 
 **Space and validation.** The paper's logical accounting is `n + 2` values of type `T`: `n` queue
-partial aggregates plus the two aggregate fields. The chunked C# representation instead allocates
-queue capacity for `n` live positions plus 1 through 127 slack slots; an empty instance retains one
-64-slot block. Two aggregate fields, six cursors, and block links are additional metadata.
-`ValidateStructure` is deliberately callback-free and content-blind: in O(c) time and space for
-`c` active chunks it checks links, cursor reachability and order, count/distance equations, DABA
-region-size equations, and the chunk/slack bound. It returns `DabaLiteStatistics` with `Count`,
-`FrontLength`, `BackLength`, `LeftLength`, `RightLength`, `AccumulatorLength`, `BlockCount`,
-`AllocatedSlotCapacity`, and `SlackSlotCount`. Because original values may already have been
+partial aggregates plus the two aggregate fields. The chunked managed representations instead
+allocate queue capacity for `n` live positions plus 1 through 127 slack slots; an empty instance
+retains one 64-slot block. Two aggregate fields, six cursors, and block links are additional
+metadata. `ValidateStructure`/`validateStructure` is deliberately callback-free and content-blind:
+in O(c) time and space for `c` active chunks it checks links, cursor reachability and order,
+count/distance equations, DABA region-size equations, and the chunk/slack bound. It returns
+`DabaLiteStatistics` with the count, five region lengths, active block count, allocated capacity,
+and slack count. Because original values may already have been
 overwritten, aggregate correctness is tested against an external FIFO model rather than reconstructed
 by the validator.
 
-**Why it fits.** It reuses the family's static-abstract monoid vocabulary verbatim, is compact, and
-has a direct naive re-aggregation oracle. Its adversarial gate exhausts short histories, covers all
+**Why it fits.** It reuses each language's existing monoid vocabulary, is compact, and has a direct
+naive re-aggregation oracle. Its adversarial gate exhausts short histories, covers all
 four fixup phases over the six-cursor state, crosses the 63/64/65 and 127/128/129 chunk boundaries,
 proves retained-reference release and clear/reuse, injects failures at every bounded callback
 position, checks structural statistics, and observes the three/two/at-most-one `Combine` ceilings.
@@ -785,9 +795,10 @@ The implementation wave described by this catalog has already landed these C# re
 - the managed Ctrie with O(1) immutable snapshots.
 
 CHAMP, Patricia, and RRB have also advanced through the sibling-language work recorded in their
-entries; the Ctrie's deliberate parity boundary remains C# and Kotlin/JVM. These are current-state
-implementation records, not candidates awaiting a consumer. Future work on them is ordinary
-hardening, measurement, and demand-driven porting.
+entries; the Brodal-Okasaki heap and priority-search queue have Haskell ports, DABA Lite has a
+Kotlin/JVM port, and the Ctrie's deliberate parity boundary remains C# and Kotlin/JVM. These are
+current-state implementation records, not candidates awaiting a consumer. Future work on them is
+ordinary hardening, measurement, and demand-driven porting.
 
 ### Remaining candidate sequencing
 

@@ -15,6 +15,7 @@ Current public families:
 - `PriorityQueue<T, P>` and `PriorityEntry<T, P>`;
 - `Interval<T>` and `IntervalTree<T>`;
 - `RrbVector<T>` and `RrbVector.Builder<T>`;
+- `Monoid<T>`, `DabaLite<T>`, and `DabaLiteStatistics`;
 - `Rope<T>`, `MeasuredRope<T, M>`, `TextRope`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
 
 The Kotlin surface follows Kotlin/JVM conventions:
@@ -22,7 +23,8 @@ The Kotlin surface follows Kotlin/JVM conventions:
 - fallible indexed operations return `null`;
 - duplicate sorted-map insertion throws `SortedDuplicateKeyException` for `insert` and returns
   `SortedAddResult` for `tryInsert`;
-- measure policies are runtime objects with identity, element measure, and combine operations;
+- monoids are runtime objects with identity and associative combine operations; measure policies
+  refine `Monoid<M>` with an element-to-measure operation;
 - sorted and priority facades accept JVM `Comparator` values where natural ordering is not enough;
 - `SortedMap.from(values, comparator)` provides comparator-aware bulk construction and keeps the last supplied
   entry, including its key instance, from every comparator-equal run;
@@ -69,6 +71,63 @@ adopts an existing vector as an O(1) frozen prefix. `toImmutable()` caches clean
 later builder mutation cannot change an earlier vector. Builder iteration freezes once and is
 fail-fast if the builder is subsequently modified. The builder is not thread-safe; published
 vectors are immutable and safe for concurrent readers.
+
+## DABA Lite sliding-window aggregation
+
+`DabaLite<T>` maintains the FIFO-ordered aggregate of one dynamically sized window without requiring
+a commutative operation or an inverse. It takes a runtime `Monoid<T>`; because `MeasurePolicy<E, M>`
+refines `Monoid<M>`, a policy such as `IntSumMeasure` can be passed directly when its measure type is
+also the window value type:
+
+```kotlin
+val window = DabaLite(IntSumMeasure)
+window.insert(5)
+window.insert(8)
+window.insert(13)
+
+val total = window.aggregate // 26
+window.evict()                // removes the oldest contribution, 5
+val remaining = window.aggregate // 21
+```
+
+The implementation follows Tangwongsan, Hirzel, and Schneider's 2021 DABA Lite schedule. Six
+cursors remain ordered `F <= L <= R <= A <= B <= E` over one logical queue. `[F, B)` and `[B, E)`
+are the front and back; `[L, R)`, `[R, A)`, and `[A, B)` are the incremental-reversal work regions.
+Two fields retain the `R`-through-`A` and back products. Every successful insertion or eviction
+executes one of four bounded fixups: collapse an exhausted front, begin the next flip, advance the
+three equal work cursors, or rewrite one left and one right partial aggregate. There is no loop or
+recursive reversal in a window operation.
+
+`insert`, `evict`/`tryEvict`, and a nonempty `aggregate` query invoke `Monoid.combine` at most three,
+two, and exactly one times respectively. An empty query obtains `empty` and invokes no combine.
+These callback ceilings are independent of window length; full worst-case O(1) time additionally
+requires `empty` and `combine` themselves to be O(1). `evict` throws `IllegalStateException` on an
+empty window, while `tryEvict` returns `false`.
+
+All mutators give the strong guarantee for monoid callback failures. Publication of counts, cursors,
+aggregate fields, slot rewrites, and chunk links is ordered so a throwing `empty` or `combine` leaves
+the previous window intact. External side effects performed by a callback cannot be rolled back.
+`clear()` is an O(1) reset: an empty clear makes no callback, while a nonempty clear obtains `empty`
+once, invokes combine zero times, and swaps in one fresh chunk only after the callback succeeds.
+
+The queue is a doubly linked chain of 64-slot JVM reference arrays. Cursor movement and growth are
+worst-case O(1), and no growth copies the window. A successful eviction nulls its retired slot;
+crossing a chunk boundary severs both links to the predecessor. `clear()` drops the old chain in
+O(1). A state with `n` live positions has queue capacity `n` plus 1 through 127 slack slots; an empty
+instance retains one 64-slot chunk. Queue slots are not a stable raw-value sequence because DABA
+Lite overwrites values with partial aggregates, so the API deliberately exposes neither peek,
+value-returning eviction, nor iteration.
+
+`validateStructure()` invokes neither monoid callback. In O(c) time and space for `c` active chunks,
+it checks bidirectional links and acyclicity, cursor reachability/order, `count == E - F`, the DABA
+region equations, and the chunk/slack bound. It returns `DabaLiteStatistics` containing count, the
+five region lengths, block count, allocated capacity, and slack. Aggregate correctness cannot be
+reconstructed from overwritten slots for an arbitrary non-invertible monoid, so executable tests
+also compare every operation with an external FIFO model.
+
+`DabaLite` is mutable and unsynchronized. Calls on one instance must not overlap unless the caller
+provides external serialization. This concurrency boundary is intentionally different from the
+immutable FingerTree and RRB values in the same package.
 
 `PriorityQueue` caches the stable leftmost minimum entry, making peek O(1), enqueue/meld O(log n), and
 dequeue O(log n). `IntervalTree` caches last-low and maximum-high summaries: lower-bound insertion and

@@ -3,10 +3,24 @@ package tools.datastructures.fingertree
 internal fun isValidRange(start: Int, count: Int, size: Int): Boolean =
     start >= 0 && count >= 0 && start <= size && count <= size - start
 
-public interface MeasurePolicy<T, M> {
-    public val empty: M
+/**
+ * An associative operation over [T] together with its identity value.
+ *
+ * Implementations must satisfy `combine(empty, x) == x == combine(x, empty)` and
+ * `combine(combine(x, y), z) == combine(x, combine(y, z))`.
+ */
+public interface Monoid<T> {
+    /** The two-sided identity for [combine]. */
+    public val empty: T
+
+    /** Combines [left] followed by [right]; implementations must be associative. */
+    public fun combine(left: T, right: T): T
+}
+
+/** Assigns a monoidal measure to each element. */
+public interface MeasurePolicy<T, M> : Monoid<M> {
+    /** Returns the measure of one [element]. */
     public fun measure(element: T): M
-    public fun combine(left: M, right: M): M
 }
 
 public class SizeMeasure<T> : MeasurePolicy<T, Int> {

@@ -36,3 +36,14 @@ density and height bounds. Builder tests cover full-tail transfer, partial-tail 
 snapshots, adopted prefixes, fail-fast iteration, clearing, and source-array isolation. Nullable
 elements, checked count overflow, invalid overflowing ranges, no-op identity, and concurrent readers
 have dedicated cases.
+
+DABA Lite validation exhausts all 1,024 insert/evict histories of length ten against a
+noncommutative matrix monoid, runs a 100,000-operation randomized FIFO model, and crosses the
+63/64/65 and 127/128/129 chunk boundaries under 512 sliding-window cycles each. A non-default
+identity drives all four fixup phases and observes the exact reachable three/two/one combine maxima.
+Every reachable insert and eviction `combine`/`empty` callback ordinal is forced to throw and checked
+for unchanged statistics, aggregate, and continued usability; the chunk-allocation boundary and
+`clear()` identity failure have dedicated rollback cases. Storage tests check prompt retired-slot
+and predecessor-chunk collectability while keeping the aggregator alive. Validation also locks down
+callback-free region/capacity statistics, O(1) clear to one block, reuse, nullable identities, and
+direct reuse of a `MeasurePolicy` as a monoid.

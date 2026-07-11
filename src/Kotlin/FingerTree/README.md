@@ -15,6 +15,7 @@ names for the public families:
 - `PriorityQueue<T, P>` and `PriorityEntry<T, P>`;
 - `Interval<T>` and `IntervalTree<T>`;
 - `RrbVector<T>` and its append-only `RrbVector.Builder<T>`;
+- `Monoid<T>`, `DabaLite<T>`, and `DabaLiteStatistics` for mutable FIFO window aggregation;
 - `Rope<T>`, `MeasuredRope<T, M>`, `TextRope`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
 
 The family is backed by a shared immutable measured AVL sequence. Every node caches subtree size,
@@ -30,6 +31,15 @@ tables, while split/concatenation-induced relaxed branches cache `IntArray` cumu
 Indexing and replacement copy one O(log32 n) path; concatenation and splitting rebuild only boundary
 spines and retain untouched leaves. Its append builder owns mutable tail arrays, freezes full leaves,
 copies partial tails, and caches isolated immutable snapshots.
+
+`DabaLite<T>` is the family's deliberately mutable streaming member. It accepts a runtime
+`Monoid<T>` (and every `MeasurePolicy<*, T>` is one), and implements the VLDB Journal 2021 DABA Lite
+six-cursor schedule over linked 64-slot chunks. Insert, eviction, and aggregate query invoke the
+monoid combine callback at most three, two, and one times respectively; their complete worst-case
+O(1) bound assumes the callbacks are O(1). Mutators are callback-atomic, `clear()` replaces the
+whole active chain in O(1), retired slots/chunks are released promptly, and `validateStructure()`
+audits links, cursor/region invariants, and capacity statistics without invoking the monoid. One
+instance must not be accessed concurrently without external serialization.
 
 `MeasuredRope` exposes the same positional editing vocabulary as `Rope`—front/back, endpoint and
 indexed insertion, range insertion/removal, slicing, splitting, concatenation, replacement, copy,
