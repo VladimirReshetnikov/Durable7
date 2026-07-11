@@ -62,8 +62,10 @@ The suite covers:
   already-frozen snapshots from later builder mutations;
 - generated map histories checked against model dictionaries with retained snapshots;
 - generated set behavior checked against model set semantics.
-- concurrent hash-trie generation semantics, stable snapshots/enumerators, contended unique-key
-  publication, atomic accumulation, and concurrent snapshot consistency.
+- concurrent hash-trie root/main RDCSS and node GCAS helping, deterministic snapshot/write race
+  schedules, tomb contraction, collision re-splitting, stored-key retention, stable snapshots,
+  contended publication/accumulation, and 400 exhaustively serialized short-history linearizability
+  checks across ordinary, shared-prefix, and equal-hash policies.
 - 32/64-bit Patricia signed-boundary ordering, 35,000 randomized model operations with retained
   snapshots, combining overloads, set relations, and randomized prefix-aware structural algebra.
 - Merkle search-tree independent-policy/history convergence, canonical codec vectors, typed diff,

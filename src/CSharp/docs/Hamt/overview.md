@@ -12,8 +12,10 @@ unordered dictionary with structural sharing across versions. `PersistentHashSet
 same HAMT core and implements `IReadOnlySet<T>`.
 
 `ConcurrentHashTrie<TKey, TValue>` is the deliberately mutable member of the family. It applies
-GCAS descriptors to generation-stamped indirection nodes, giving lock-free reads and updates,
-stable enumeration, and O(1) immutable generation snapshots. A snapshot can be copied into the
+GCAS descriptors to generation-stamped indirection nodes and a root/main RDCSS transition for
+snapshots, giving lock-free reads and updates, stable enumeration, and O(1) immutable generation
+snapshots without losing a writer that races between root-main observation and publication.
+Deletion tombs and promotes sparse children to keep paths compact. A snapshot can be copied into the
 canonical `PersistentHashMap<TKey, TValue>` representation explicitly in O(n).
 
 `PersistentIntMap<TValue>` / `PersistentIntSet` and `PersistentLongMap<TValue>` /

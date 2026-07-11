@@ -381,12 +381,15 @@ first consumer outside the trees.
 
 ### Ctrie (concurrent hash trie with O(1) snapshots)
 
-**C# status (2026-07-10): Implemented with generation-stamped indirection-node GCAS.**
+**C# status (2026-07-11): Implemented with node GCAS, root/main RDCSS, and tomb cleanup.**
 `ConcurrentHashTrie<TKey, TValue>` provides lock-free mutable operations over bitmap C-nodes,
-singleton leaves, and equal-hash collision nodes. Readers help complete node-local GCAS descriptors;
-`Snapshot()` advances the root generation in O(1), and later writers renew old-generation child
-indirection nodes lazily along modified paths. The immutable snapshot view converts explicitly to
-canonical `PersistentHashMap` form in O(n).
+singleton leaves, true equal-hash collision nodes, and empty/singleton tomb nodes. Readers help
+node-local GCAS; `Snapshot()` uses a GCAS-priority root/main RDCSS transition so a writer cannot be
+lost between main observation and root publication. Later writers lazily renew old-generation child
+indirection nodes, while deletion promotes tombs through parents to prevent path-skeleton buildup.
+The gate includes deterministic descriptor schedules and an exhaustive serialization oracle for 400
+mixed short histories under ordinary, shared-prefix, and all-equal-hash policies. Immutable snapshot
+views convert explicitly to canonical `PersistentHashMap` form in O(n).
 
 **Kotlin/JVM status (2026-07-10): Implemented.** `ConcurrentHashTrie<K,V>` mirrors the C# node
 protocol with JVM atomics: bitmap C-nodes, singleton/collision nodes, helping GCAS descriptors,
@@ -411,10 +414,10 @@ derived catalog's `Atom<T>` entry records the same conclusion for a far simpler 
 economics therefore cap this at a C#-only (or C#+JVM) tier, which the porting guide would need to
 acknowledge explicitly.
 
-**Verdict: Plausible.** The use case is real (hot shared caches that periodically publish immutable
-snapshots into the persistent world); the cost is a new concurrency-testing discipline
-(linearizability suites, stress harnesses) that the repository's current tearable-struct stress
-tests only partially prefigure.
+**Verdict: Implemented for the managed tier.** The use case is hot shared caches that periodically
+publish immutable snapshots into the persistent world. Deterministic descriptor interleavings,
+model-checked short histories, retained-generation tests, and larger contention stress form the
+required concurrency-validation tier; the native reclamation exception remains explicit above.
 
 ## Axis 2: Hybrid And Adaptive Representations
 

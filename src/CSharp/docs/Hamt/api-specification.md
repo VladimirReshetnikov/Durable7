@@ -135,7 +135,8 @@ mutated afterward.
 `ConcurrentHashTrie<TKey, TValue>` implements `IReadOnlyDictionary<TKey, TValue>` while exposing a
 mutable, thread-safe update surface:
 
-- `SetItem` and the indexer setter atomically add or replace; equal-value no-ops publish no generation.
+- `SetItem` and the indexer setter atomically add or replace; equal-value no-ops publish no generation,
+  and replacements retain the first equivalent stored key object.
 - `TryAdd`, `TryUpdate`, and `TryRemove` are single-key conditional atomic operations.
 - `GetOrAdd` and `AddOrUpdate` use retryable factories. A factory may run more than once when a CAS
   loses contention, matching the repeatability requirement of `ConcurrentDictionary` factories.
@@ -144,13 +145,25 @@ mutable, thread-safe update surface:
   contents, and snapshots retain the trie's comparer.
 - `SnapshotView.ToPersistentHashMap` copies a captured generation into canonical CHAMP form in O(n).
 
-The managed implementation installs GCAS descriptors on the indirection node owning a change.
-Readers help complete encountered descriptors. Root-generation identity decides whether a descriptor
-commits, preventing a write that raced with `Snapshot` from entering the frozen generation. The new
-root initially shares the old C-node graph; a later writer renews an old-generation child indirection
-node only when its path reaches that child. Reads and snapshots take no locks. A successful write
-copies one compact C-node array per changed level and performs node-local GCAS; collision-node work is
-linear in the equal-hash bucket. Contended operations can retry, so progress is lock-free, not wait-free.
+The managed implementation installs GCAS descriptors on the indirection node owning a change, and
+readers help complete encountered descriptors. `Snapshot` uses a specialized root/main RDCSS
+descriptor: it publishes the next root only if both the root identity and previously read root main
+remain current. A competing node GCAS has priority, so RDCSS aborts rather than entering a recursive
+helping cycle. This closes the otherwise legal race in which a plain root CAS could copy stale main
+state after a writer had already committed.
+
+Root-generation identity decides whether node GCAS commits, preventing a write that raced with
+`Snapshot` from entering the frozen generation. The new root initially shares the old C-node graph;
+a later writer renews old-generation child indirection nodes only along paths it modifies. Removal
+publishes empty/singleton tomb nodes and helps promote them through parents until the live path is
+compact again. Equal-hash L-nodes split back into C-node/I-node prefix structure when a later unequal
+hash reaches the bucket. Reads and snapshots take no locks. A successful write copies one compact
+C-node array per changed level and performs node-local GCAS; collision work is linear in an actual
+equal-hash bucket. Contended operations can retry, so progress is lock-free, not wait-free.
+
+`Generation` counts completed content-changing calls for diagnostics. It is not an atomic version
+paired with an arbitrary concurrent read; content linearizes at descriptor commit before the owning
+call increments the counter.
 
 ## Integer Patricia Map And Set Contract
 

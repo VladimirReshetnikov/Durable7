@@ -123,10 +123,197 @@ public sealed class ConcurrentHashTrieTests
         Assert.Equal(1_999, retained[0][1_999]);
     }
 
+    /// <summary>Reproduces the root-main race that requires RDCSS rather than a plain root CAS.</summary>
+    [Fact]
+    public async Task Snapshot_DoesNotLoseWriterCommittedAfterMainRead()
+    {
+        var trie = new ConcurrentHashTrie<int, int>();
+        using var mainRead = new ManualResetEventSlim();
+        using var releaseSnapshot = new ManualResetEventSlim();
+        var firstInvocation = 1;
+        trie.SnapshotMainReadHookForTesting = () =>
+        {
+            if (Interlocked.Exchange(ref firstInvocation, 0) == 1)
+            {
+                mainRead.Set();
+                releaseSnapshot.Wait();
+            }
+        };
+
+        var snapshotTask = Task.Run(trie.Snapshot);
+        try
+        {
+            Assert.True(mainRead.Wait(TimeSpan.FromSeconds(30)));
+            trie.SetItem(42, 420);
+        }
+        finally
+        {
+            releaseSnapshot.Set();
+        }
+
+        var snapshot = await snapshotTask.WaitAsync(TimeSpan.FromSeconds(30));
+        trie.SnapshotMainReadHookForTesting = null;
+
+        Assert.Equal(420, snapshot[42]);
+        Assert.Equal(420, trie[42]);
+        Assert.Equal(1, trie.ValidateStructureForTesting().EntryCount);
+    }
+
+    /// <summary>Verifies a reader completes an installed node-local GCAS descriptor.</summary>
+    [Fact]
+    public async Task Reader_HelpsInstalledGcasDescriptor()
+    {
+        var trie = new ConcurrentHashTrie<int, int>();
+        using var installed = new ManualResetEventSlim();
+        using var releaseWriter = new ManualResetEventSlim();
+        trie.GcasInstalledHookForTesting = () =>
+        {
+            installed.Set();
+            releaseWriter.Wait();
+        };
+
+        var writer = Task.Run(() => trie.SetItem(7, 70));
+        try
+        {
+            Assert.True(installed.Wait(TimeSpan.FromSeconds(30)));
+            Assert.True(trie.TryGetValue(7, out var value));
+            Assert.Equal(70, value);
+        }
+        finally
+        {
+            releaseWriter.Set();
+        }
+
+        await writer.WaitAsync(TimeSpan.FromSeconds(30));
+        trie.GcasInstalledHookForTesting = null;
+        Assert.Equal(70, trie[7]);
+    }
+
+    /// <summary>Verifies an equal-hash L-node splits when a later hash diverges below it.</summary>
+    [Fact]
+    public void CollisionNode_SplitsForDifferentFullHash()
+    {
+        var trie = new ConcurrentHashTrie<int, string>(CollisionThenSplitComparer.Instance);
+        trie.SetItem(0, "zero");
+        trie.SetItem(1, "one");
+        trie.SetItem(2, "two");
+
+        Assert.Equal("zero", trie[0]);
+        Assert.Equal("one", trie[1]);
+        Assert.Equal("two", trie[2]);
+        var statistics = trie.ValidateStructureForTesting();
+        Assert.Equal(3, statistics.EntryCount);
+        Assert.Equal(1, statistics.CollisionNodeCount);
+        Assert.Equal(0, statistics.TombNodeCount);
+    }
+
+    /// <summary>Verifies value replacement retains the first equivalent key object.</summary>
+    [Fact]
+    public void Replacement_RetainsStoredKeyRepresentative()
+    {
+        var stored = new string(['A', 'l', 'p', 'h', 'a']);
+        var equivalent = new string(['A', 'L', 'P', 'H', 'A']);
+        var trie = new ConcurrentHashTrie<string, int>(StringComparer.OrdinalIgnoreCase);
+        trie.SetItem(stored, 1);
+        trie.SetItem(equivalent, 2);
+
+        var actual = Assert.Single(trie.Snapshot()).Key;
+
+        Assert.Same(stored, actual);
+        Assert.Equal(2, trie[equivalent]);
+    }
+
+    /// <summary>Verifies deletion promotes deep survivors and restores the canonical empty root.</summary>
+    [Fact]
+    public void Removal_ContractsDeepPathsAndCanonicalizesEmptyRoot()
+    {
+        var trie = new ConcurrentHashTrie<int, int>();
+        trie.SetItem(0, 0);
+        trie.SetItem(1 << 30, 1);
+        var snapshot = trie.Snapshot();
+        Assert.True(trie.ValidateStructureForTesting().MaxDepth >= 6);
+
+        Assert.True(trie.TryRemove(1 << 30, out var removed));
+        Assert.Equal(1, removed);
+        var singleton = trie.ValidateStructureForTesting();
+        Assert.Equal(1, singleton.EntryCount);
+        Assert.Equal(1, singleton.IndirectionNodeCount);
+        Assert.Equal(0, singleton.TombNodeCount);
+
+        Assert.True(trie.TryRemove(0, out _));
+        var empty = trie.ValidateStructureForTesting();
+        Assert.Equal(0, empty.EntryCount);
+        Assert.Equal(1, empty.IndirectionNodeCount);
+        Assert.Equal(0, empty.TombNodeCount);
+        var revision = trie.Generation;
+        trie.Clear();
+        Assert.Equal(revision, trie.Generation);
+
+        Assert.Equal(2, snapshot.Count);
+        Assert.Equal(0, snapshot[0]);
+        Assert.Equal(1, snapshot[1 << 30]);
+    }
+
+    /// <summary>Stresses collision mutation, tomb cleanup, and snapshots with a known final model.</summary>
+    [Fact]
+    public async Task ParallelRemoveReaddAndSnapshots_PreserveEveryFinalEntry()
+    {
+        var trie = new ConcurrentHashTrie<int, int>(HashBandComparer.Instance);
+        var errors = new ConcurrentQueue<string>();
+        using var stop = new CancellationTokenSource();
+        var reader = Task.Run(() =>
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                var snapshot = trie.Snapshot();
+                if (snapshot.Count != snapshot.Count())
+                    errors.Enqueue("Snapshot count disagreed with enumeration.");
+                foreach (var (key, value) in snapshot)
+                {
+                    if (value != key && value != -key)
+                        errors.Enqueue($"Unexpected intermediate value {key}/{value}.");
+                }
+            }
+        });
+
+        Parallel.For(0, 4_000, key =>
+        {
+            Assert.True(trie.TryAdd(key, key));
+            Assert.True(trie.TryRemove(key, out var removed));
+            Assert.Equal(key, removed);
+            trie.SetItem(key, -key);
+        });
+
+        stop.Cancel();
+        await reader;
+
+        Assert.Empty(errors);
+        Assert.Equal(4_000, trie.Count);
+        for (var key = 0; key < 4_000; key++)
+            Assert.Equal(-key, trie[key]);
+        var statistics = trie.ValidateStructureForTesting();
+        Assert.Equal(4_000, statistics.EntryCount);
+        Assert.Equal(0, statistics.TombNodeCount);
+    }
+
     private sealed class ConstantHashComparer : IEqualityComparer<int>
     {
         internal static readonly ConstantHashComparer Instance = new();
         public bool Equals(int x, int y) => x == y;
         public int GetHashCode(int obj) => 0;
+    }
+
+    private sealed class CollisionThenSplitComparer : IEqualityComparer<int>
+    {
+        internal static readonly CollisionThenSplitComparer Instance = new();
+        public bool Equals(int x, int y) => x == y;
+        public int GetHashCode(int obj) => obj < 2 ? 0 : 32;
+    }
+
+    private sealed class HashBandComparer : IEqualityComparer<int>
+    {
+        internal static readonly HashBandComparer Instance = new();
+        public bool Equals(int x, int y) => x == y;
+        public int GetHashCode(int obj) => obj & 255;
     }
 }
