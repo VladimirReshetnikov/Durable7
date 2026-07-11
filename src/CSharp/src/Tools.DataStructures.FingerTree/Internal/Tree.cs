@@ -112,6 +112,16 @@ internal abstract class Tree<T, TChild> : IEnumerationBlock<T> where TChild : IT
         out Tree<T, TChild> right);
 
     /// <summary>
+    /// Splits around the first element containing a leaf that satisfies a monotone predicate,
+    /// combining signpost-guided location and boundary reconstruction in one descent.
+    /// </summary>
+    public abstract bool TrySplitBoundChild(
+        Func<T, bool> predicate,
+        out Tree<T, TChild> left,
+        out TChild hit,
+        out Tree<T, TChild> right);
+
+    /// <summary>
     /// Returns the first leaf index whose value satisfies <paramref name="predicate"/>, or <see cref="Size"/>
     /// when no leaf satisfies it. Requires the leaf sequence to be monotone under the predicate. The
     /// predicate-call count is O(log min(k + 1, Size - k + 1)) worst-case for result index k.
@@ -202,6 +212,19 @@ internal sealed class EmptyTree<T, TChild> : Tree<T, TChild> where TChild : ITre
         out int indexInHit,
         out Tree<T, TChild> right) =>
         throw UnreachableEmptyAccess();
+
+    /// <inheritdoc/>
+    public override bool TrySplitBoundChild(
+        Func<T, bool> predicate,
+        out Tree<T, TChild> left,
+        out TChild hit,
+        out Tree<T, TChild> right)
+    {
+        left = this;
+        hit = default!;
+        right = this;
+        return false;
+    }
 
     /// <inheritdoc/>
     public override int BoundIndex(Func<T, bool> predicate) => 0;
@@ -310,6 +333,25 @@ internal sealed class SingleTree<T, TChild>(TChild element) : Tree<T, TChild>
         hit = Element;
         indexInHit = index;
         right = EmptyTree<T, TChild>.Instance;
+    }
+
+    /// <inheritdoc/>
+    public override bool TrySplitBoundChild(
+        Func<T, bool> predicate,
+        out Tree<T, TChild> left,
+        out TChild hit,
+        out Tree<T, TChild> right)
+    {
+        left = EmptyTree<T, TChild>.Instance;
+        right = EmptyTree<T, TChild>.Instance;
+        if (predicate(Element.LastLeaf))
+        {
+            hit = Element;
+            return true;
+        }
+
+        hit = default!;
+        return false;
     }
 
     /// <inheritdoc/>
@@ -568,6 +610,58 @@ internal sealed class DeepTree<T, TChild> : Tree<T, TChild> where TChild : ITree
         Suffix.Split(index, out var beforeSuffix, out hit, out indexInHit, out var afterSuffix);
         left = TreeOperations.DeepRight(Prefix, ForceMiddle(), beforeSuffix);
         right = TreeOperations.FromPartialDigit(afterSuffix);
+    }
+
+    /// <inheritdoc/>
+    public override bool TrySplitBoundChild(
+        Func<T, bool> predicate,
+        out Tree<T, TChild> left,
+        out TChild hit,
+        out Tree<T, TChild> right)
+    {
+        for (var position = 0; position < Prefix.Length; position++)
+        {
+            var child = Prefix.ChildAt(position);
+            if (!predicate(child.LastLeaf))
+                continue;
+
+            left = TreeOperations.FromPartialDigit(Prefix.TakeBefore(position));
+            hit = child;
+            right = TreeOperations.DeepLeft(Prefix.TakeAfter(position), ForceMiddle(), Suffix);
+            return true;
+        }
+
+        if (MiddleSize > 0)
+        {
+            var middle = ForceMiddle();
+            if (predicate(middle.LastLeaf))
+            {
+                var found = middle.TrySplitBoundChild(
+                    predicate, out var middleLeft, out var hitNode, out var middleRight);
+                Debug.Assert(found, "A middle bound signpost must lead to a matching node.");
+                hitNode.SplitBound(predicate, out var before, out hit, out var after);
+                left = TreeOperations.DeepRight(Prefix, middleLeft, before);
+                right = TreeOperations.DeepLeft(after, middleRight, Suffix);
+                return true;
+            }
+        }
+
+        for (var position = 0; position < Suffix.Length; position++)
+        {
+            var child = Suffix.ChildAt(position);
+            if (!predicate(child.LastLeaf))
+                continue;
+
+            left = TreeOperations.DeepRight(Prefix, ForceMiddle(), Suffix.TakeBefore(position));
+            hit = child;
+            right = TreeOperations.FromPartialDigit(Suffix.TakeAfter(position));
+            return true;
+        }
+
+        left = this;
+        hit = default!;
+        right = EmptyTree<T, TChild>.Instance;
+        return false;
     }
 
     /// <inheritdoc/>

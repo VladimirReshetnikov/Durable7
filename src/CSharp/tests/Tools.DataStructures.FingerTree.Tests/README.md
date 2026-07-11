@@ -17,7 +17,8 @@ reasonable oracle.
 
 - `FingerTreeDeque*Tests.cs` and `FingerTreeDequeAssert.cs` cover endpoint operations, indexing, split/concat,
   sorted search, enumeration/copy, invariants, branching persistence, randomized model histories, and complexity
-  guards for the tuned deque. `InternalEngineContractTests.cs` pins shared bounds and invariant-failure behavior
+  guards for the tuned deque, including fused sorted locate-and-edit reconstruction.
+  `InternalEngineContractTests.cs` pins shared bounds and invariant-failure behavior
   at the internal enumeration seam.
 - `MeasuredFingerTreeTests.cs`, `MeasuredFingerTreePersistenceTests.cs`, `BuiltInMeasureTests.cs`,
   `CustomComparisonMeasureTests.cs`, `ProductMeasureTests.cs`, `SumMeasureTests.cs`, `TryLocateTests.cs`,

@@ -412,7 +412,8 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-    private bool TryGetEntry(
+    /// <summary>Gets the canonical stored key and its value in one trie traversal.</summary>
+    internal bool TryGetEntry(
         TKey key,
         [MaybeNullWhen(false)] out TKey actualKey,
         [MaybeNullWhen(false)] out TValue value)

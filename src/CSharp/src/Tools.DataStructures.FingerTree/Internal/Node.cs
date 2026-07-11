@@ -65,6 +65,13 @@ internal abstract class Node<T, TChild>(int size, T lastLeaf)
         out int indexInHit,
         out Digit<T, TChild> after);
 
+    /// <summary>Splits around the first child whose rightmost leaf satisfies a monotone predicate.</summary>
+    public abstract void SplitBound(
+        Func<T, bool> predicate,
+        out Digit<T, TChild> before,
+        out TChild hit,
+        out Digit<T, TChild> after);
+
     /// <inheritdoc/>
     public abstract int ChildCount { get; }
 
@@ -170,6 +177,27 @@ internal sealed class Node2<T, TChild>(TChild a, TChild b)
             indexInHit = leafIndex - A.Size;
             after = Digit<T, TChild>.Empty;
         }
+    }
+
+    /// <inheritdoc/>
+    public override void SplitBound(
+        Func<T, bool> predicate,
+        out Digit<T, TChild> before,
+        out TChild hit,
+        out Digit<T, TChild> after)
+    {
+        if (predicate(A.LastLeaf))
+        {
+            before = Digit<T, TChild>.Empty;
+            hit = A;
+            after = new Digit<T, TChild>(B);
+            return;
+        }
+
+        Debug.Assert(predicate(B.LastLeaf), "A bound node must contain a matching leaf.");
+        before = new Digit<T, TChild>(A);
+        hit = B;
+        after = Digit<T, TChild>.Empty;
     }
 
     /// <inheritdoc/>
@@ -286,6 +314,34 @@ internal sealed class Node3<T, TChild>(TChild a, TChild b, TChild c)
         before = new Digit<T, TChild>(A, B);
         hit = C;
         indexInHit = leafIndex - B.Size;
+        after = Digit<T, TChild>.Empty;
+    }
+
+    /// <inheritdoc/>
+    public override void SplitBound(
+        Func<T, bool> predicate,
+        out Digit<T, TChild> before,
+        out TChild hit,
+        out Digit<T, TChild> after)
+    {
+        if (predicate(A.LastLeaf))
+        {
+            before = Digit<T, TChild>.Empty;
+            hit = A;
+            after = new Digit<T, TChild>(B, C);
+            return;
+        }
+        if (predicate(B.LastLeaf))
+        {
+            before = new Digit<T, TChild>(A);
+            hit = B;
+            after = new Digit<T, TChild>(C);
+            return;
+        }
+
+        Debug.Assert(predicate(C.LastLeaf), "A bound node must contain a matching leaf.");
+        before = new Digit<T, TChild>(A, B);
+        hit = C;
         after = Digit<T, TChild>.Empty;
     }
 

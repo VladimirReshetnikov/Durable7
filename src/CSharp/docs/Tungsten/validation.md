@@ -39,6 +39,9 @@ map. The important gates:
   lookups, positional reads, and retained snapshots (branching persistence) after every step.
 - **Order-maintenance stress.** Repeated same-point inserts force stamp-gap exhaustion and full
   relabels; order, keyed lookups, and positions must survive.
+- **Fused stamp edits.** Generated set/append/prepend/insert/remove histories exercise the
+  one-descent sorted update/removal path while retained snapshots verify reconstruction remains
+  persistent.
 - **No-op identity.** Reference-equality checks for observably unchanged writes on both types.
 - **Policy preservation.** Custom key comparers govern equality, survive every derivation
   (slices, sorts, reversal, removal), and stored-key retention matches the HAMT contract.

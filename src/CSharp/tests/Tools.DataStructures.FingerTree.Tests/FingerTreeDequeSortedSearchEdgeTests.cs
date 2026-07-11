@@ -189,4 +189,32 @@ public sealed class FingerTreeDequeSortedSearchEdgeTests
         Assert.Same(deque, above.Left);
         Assert.Same(FingerTreeDeque<int>.Empty, above.Right);
     }
+
+    /// <summary>Verifies fused sorted update/removal across a deep tree and duplicate run.</summary>
+    [Fact]
+    public void FusedSortedEdits_LocateAndRebuildOneBoundaryPath()
+    {
+        var values = Enumerable.Range(0, 2_048).SelectMany(value => Enumerable.Repeat(value, 2)).ToArray();
+        var deque = FingerTreeDeque<int>.CreateRange(values);
+
+        Assert.True(deque.TryRemoveSortedItem(1_337, Comparer<int>.Default,
+            out var removedIndex, out var removedValue, out var removed));
+        Assert.Equal(2_674, removedIndex);
+        Assert.Equal(1_337, removedValue);
+        Assert.Equal(values.Length - 1, removed.Count);
+        Assert.Equal(1_337, removed[removedIndex]);
+
+        Assert.True(deque.TryUpdateSortedItem(1_337, Comparer<int>.Default,
+            static value => value, out var stored, out var updated));
+        Assert.Equal(1_337, stored);
+        Assert.Equal(values, updated.ToArray());
+
+        Assert.False(deque.TryRemoveSortedItem(3_000, Comparer<int>.Default,
+            out var missingIndex, out _, out var unchanged));
+        Assert.Equal(-1, missingIndex);
+        Assert.Same(deque, unchanged);
+        Assert.Equal(values, deque.ToArray());
+        removed.ValidateInvariants();
+        updated.ValidateInvariants();
+    }
 }

@@ -622,6 +622,69 @@ public sealed class FingerTreeDeque<T> : IReadOnlyList<T>
         return new(Wrap(left), hit.Value, Wrap(right));
     }
 
+    /// <summary>Locates and removes one comparer-equal sorted item in a single tree descent.</summary>
+    internal bool TryRemoveSortedItem(
+        T item,
+        IComparer<T> comparer,
+        out int index,
+        [MaybeNullWhen(false)] out T stored,
+        out FingerTreeDeque<T> result)
+    {
+        if (!TrySplitSortedItem(item, comparer, out var left, out var hit, out var right))
+        {
+            index = -1;
+            stored = default;
+            result = this;
+            return false;
+        }
+
+        index = left.Size;
+        stored = hit.Value;
+        result = Wrap(TreeOperations.Concat(left, right));
+        return true;
+    }
+
+    /// <summary>Locates and updates one comparer-equal sorted item in a single tree descent.</summary>
+    internal bool TryUpdateSortedItem(
+        T item,
+        IComparer<T> comparer,
+        Func<T, T> updater,
+        [MaybeNullWhen(false)] out T stored,
+        out FingerTreeDeque<T> result)
+    {
+        ArgumentNullException.ThrowIfNull(updater);
+        if (!TrySplitSortedItem(item, comparer, out var left, out var hit, out var right))
+        {
+            stored = default;
+            result = this;
+            return false;
+        }
+
+        stored = hit.Value;
+        var replacement = new Leaf<T>(updater(stored));
+        result = new FingerTreeDeque<T>(TreeOperations.Concat(left.Snoc(replacement), right));
+        return true;
+    }
+
+    private bool TrySplitSortedItem(
+        T item,
+        IComparer<T> comparer,
+        out Tree<T, Leaf<T>> left,
+        out Leaf<T> hit,
+        out Tree<T, Leaf<T>> right)
+    {
+        if (!_root.TrySplitBoundChild(value => comparer.Compare(value, item) >= 0, out left, out hit, out right) ||
+            comparer.Compare(hit.Value, item) != 0)
+        {
+            left = _root;
+            hit = default;
+            right = EmptyTree<T, Leaf<T>>.Instance;
+            return false;
+        }
+
+        return true;
+    }
+
     /// <summary>
     /// Splits the deque around a contiguous indexed range.
     /// </summary>

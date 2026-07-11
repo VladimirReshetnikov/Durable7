@@ -84,7 +84,8 @@ overflow) can relabel.
    and values (`entries.Count == index.Count`).
 2. Entry stamps strictly ascend in sequence order; association order *is* sequence order.
 3. A key's position is recovered from its stamp via sorted search in O(log n); positions and
-   ranks are never stored in the hash side.
+   ranks are never stored in the hash side. Stamp-keyed edits fuse location and reconstruction in
+   one tree descent.
 
 ### Ordering rules (kernel-verified fidelity spec)
 
@@ -117,7 +118,7 @@ overflow) can relabel.
 | `Append`, `Prepend` | `Append`, `Prepend` | O(w + c + log n) | rule 2 |
 | `Insert` | `Insert` | O(w + c + log n); O(n (w + c)) on relabel | rule 5 |
 | `Remove`, `TryRemove`, `RemoveRange` | `KeyDrop` | O(w + c + log n) per key | absent keys are no-ops |
-| `KeyTake` | `KeyTake` | O(m (w + c)) | rule 8; never searches the order structure |
+| `KeyTake` | `KeyTake` | O(m (w + c)) | rule 8; one source HAMT probe yields both canonical key and slot; never searches the order structure |
 | `RemoveAt`, `RemoveFirst`, `RemoveLast` | `Delete`, `Rest`, `Most` | O(w + c + log min(i + 1, n - i)) amortized; ends O(w + c) | surviving entries shared: `Rest`-recursion is O(n (w + c)) total |
 | `GetRange`, `Take`, `Drop` | `Part` span, `Take`, `Drop` | O(log n + min(kept, removed) (w + c)) | index reconciled from the smaller side |
 | `Reverse` | `Reverse` | O(n (w + c)) | fresh labels; keyed side uses one mutable-build freeze; no reversal bit by design |

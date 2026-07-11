@@ -372,9 +372,8 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
         // UpdateAt fuses the fetch and the replacement into one tree walk, and the hash map
         // retains its originally stored key instance on SetItem by contract, so neither side
         // needs a separate stored-key fetch.
-        var position = IndexOfStamp(slot.Stamp);
         return new(
-            _entries.UpdateAt(position, stored => new Entry(stored.Stamp, stored.Key, value)),
+            UpdateAtStamp(slot.Stamp, stored => new Entry(stored.Stamp, stored.Key, value)),
             _index.SetItem(key, new Slot(slot.Stamp, value)));
     }
 
@@ -440,11 +439,10 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
         if (!_index.TryGetValue(key, out var slot))
             return AppendNew(key, value);
 
-        var position = IndexOfStamp(slot.Stamp);
-        if (position == Count - 1 && EqualityComparer<TValue>.Default.Equals(slot.Value, value))
+        if (slot.Stamp == _entries.Last.Stamp && EqualityComparer<TValue>.Default.Equals(slot.Value, value))
             return this;
 
-        var entries = _entries.RemoveAt(position);
+        var entries = RemoveAtStamp(slot.Stamp, out _);
         return WithEntryInserted(entries, _index.Remove(key), entries.Count, key, value);
     }
 
@@ -465,11 +463,10 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     {
         if (_index.TryGetValue(key, out var slot))
         {
-            var position = IndexOfStamp(slot.Stamp);
-            if (position == 0 && EqualityComparer<TValue>.Default.Equals(slot.Value, value))
+            if (slot.Stamp == _entries.First.Stamp && EqualityComparer<TValue>.Default.Equals(slot.Value, value))
                 return this;
 
-            var trimmed = _entries.RemoveAt(position);
+            var trimmed = RemoveAtStamp(slot.Stamp, out _);
             return WithEntryInserted(trimmed, _index.Remove(key), 0, key, value);
         }
 
@@ -506,8 +503,7 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
         var insertAt = index;
         if (indexSide.TryGetValue(key, out var slot))
         {
-            var oldPosition = IndexOfStamp(slot.Stamp);
-            entries = entries.RemoveAt(oldPosition);
+            entries = RemoveAtStamp(slot.Stamp, out var oldPosition);
             indexSide = indexSide.Remove(key);
             if (oldPosition < insertAt)
                 insertAt--;
@@ -545,7 +541,7 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
             return false;
         }
 
-        var entries = _entries.RemoveAt(IndexOfStamp(slot.Stamp));
+        var entries = RemoveAtStamp(slot.Stamp, out _);
         result = entries.IsEmpty && ReferenceEquals(trimmedIndex, PersistentHashMap<TKey, Slot>.Empty)
             ? EmptyInstance
             : new(entries, trimmedIndex);
@@ -586,11 +582,8 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
         var result = Create(Comparer);
         foreach (var key in keys)
         {
-            if (_index.TryGetValue(key, out var slot) && !result.ContainsKey(key))
+            if (_index.TryGetEntry(key, out var storedKey, out var slot) && !result.ContainsKey(key))
             {
-                // The result presents the stored key instances; TryGetKey recovers one in a
-                // hash probe instead of a stamp search over the order structure.
-                _index.TryGetKey(key, out var storedKey);
                 result = result.AppendNew(storedKey, slot.Value);
             }
         }
@@ -819,9 +812,43 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int IndexOfStamp(long stamp)
     {
-        var position = _entries.SortedBinarySearch(new Entry(stamp, default!, default!), StampOrder.Instance);
-        Debug.Assert(position >= 0, "a stamp recorded in the keyed index must exist in the entry sequence");
+        // The keyed index is the source of the stamp, so lower-bound must land on that unique
+        // entry. Avoid SortedBinarySearch's second element-read descent used to classify misses.
+        var position = _entries.SortedLowerBound(new Entry(stamp, default!, default!), StampOrder.Instance);
+        Debug.Assert(position < Count, "a stamp recorded in the keyed index must exist in the entry sequence");
         return position;
+    }
+
+    /// <summary>Removes the uniquely stamped entry by fusing sorted location and reconstruction.</summary>
+    private FingerTreeDeque<Entry> RemoveAtStamp(long stamp, out int position)
+    {
+        if (_entries.TryRemoveSortedItem(
+                new Entry(stamp, default!, default!),
+                StampOrder.Instance,
+                out position,
+                out _,
+                out var result))
+        {
+            return result;
+        }
+
+        throw new InvalidOperationException("A stamp recorded in the keyed index is absent from the entry sequence.");
+    }
+
+    /// <summary>Updates the uniquely stamped entry by fusing sorted location and path rebuilding.</summary>
+    private FingerTreeDeque<Entry> UpdateAtStamp(long stamp, Func<Entry, Entry> updater)
+    {
+        if (_entries.TryUpdateSortedItem(
+                new Entry(stamp, default!, default!),
+                StampOrder.Instance,
+                updater,
+                out _,
+                out var result))
+        {
+            return result;
+        }
+
+        throw new InvalidOperationException("A stamp recorded in the keyed index is absent from the entry sequence.");
     }
 
     /// <summary>Appends a key known to be absent from the keyed index.</summary>
