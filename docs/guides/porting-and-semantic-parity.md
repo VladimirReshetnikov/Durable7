@@ -51,6 +51,15 @@ HAMT lineage:
    `BuildHasher` hash policies, `Eq` key equality, `Arc` structural sharing, and `Result`/`Option`
    result shapes.
 
+The Ctrie is an intentional parity exception. `ConcurrentHashTrie<TKey, TValue>` and its
+Kotlin/JVM counterpart are managed-runtime mutable structures whose lock-free indirection-node
+protocol relies on tracing garbage collection and offers O(1) immutable generation snapshots.
+Keep their observable map, snapshot, helping, and stored-key contracts aligned with each other.
+Do not treat the absence of C, C++, Rust, or Haskell ports as drift: native versions require an
+explicit epoch/hazard-pointer reclamation design, while a pure Haskell port would be a different
+structure. Promoting another language requires a separately reviewed reclamation and concurrency
+contract, not a mechanical HAMT port.
+
 FingerTree lineage:
 
 1. [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) is the broadest semantic source:

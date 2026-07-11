@@ -95,7 +95,11 @@ for v visited nodes, with v ≤ n and therefore an O(n) worst case.
 - [`tests/Tools.DataStructures.FingerTree.Tests/`](../../tests/Tools.DataStructures.FingerTree.Tests/README.md)
   contains the xUnit/CsCheck suite. Its local README maps the deque, measured-tree, derived-collection, rope,
   sample-smoke, property, model-command, persistence, and tearable-concurrency stress test files.
-- `benchmarks/Tools.DataStructures.FingerTree.Benchmarks/` contains the BenchmarkDotNet harness comparing the deque, reversible deque, sorted collections, priority queue, and measured-tree operations against the BCL persistent collections; see its `README.md` for how to run it.
+- `benchmarks/Tools.DataStructures.FingerTree.Benchmarks/` is the shared BenchmarkDotNet harness for
+  the C# persistent-collections workspace. Alongside the deque, ropes, measures, sorted collections,
+  and measured priority queue, it now contains RRB-vector, DABA Lite, canonical zip-set,
+  Brodal-Okasaki heap, priority-search-queue, CHAMP, Ctrie, Patricia, and Merkle search-tree gates;
+  see its `README.md` for the class-to-contract matrix and run commands.
 - `samples/` holds three runnable, smoke-tested console tours (see `samples/README.md`): `Tour` (a persistent text buffer — undo/redo over O(1) snapshots, O(log n) line/column navigation, and a background thread taking millions of lock-free, never-torn snapshots while a writer publishes versions), `Showcase` (one measured tree, many structures — priority queue, weighted sampling, order-statistic set, interval index, reversible deque, navigable map), and `Editor` (the editor-grade text extras — chars vs code points vs graphemes, newline detection, and offset addressing). Run e.g. `dotnet run --project samples/Tools.DataStructures.FingerTree.Editor -c Release`.
 - `docs/` contains usage, API, validation, and algorithm design references, including [docs/usage.md](usage.md) as the practical facade-selection and first-use guide; [docs/validation.md](validation.md) as the local restore/build/test, sample, benchmark, and stress-control guide; [docs/FingerTree-Design-Notes.tex](FingerTree-Design-Notes.tex) / [docs/FingerTree-Design-Notes.pdf](FingerTree-Design-Notes.pdf) — a single navigable design-notes tour of the whole library (the two cores, the lazy-memoized spine, the measure framework, the closure-free predicate API, the collection and rope families, the concurrency/memory-model argument, and the three-tier test strategy) — regenerate the PDF from the source with `pwsh -File docs/build-design-notes.ps1`; [docs/benchmarks.md](benchmarks.md) with curated measured results; and [docs/persistence-and-concurrency.md](persistence-and-concurrency.md) — a worked guide to cheap snapshots, structural-sharing undo/redo, and lock-free multi-threaded access (every pattern backed by a runnable example test).
 
@@ -118,4 +122,9 @@ cd benchmarks\Tools.DataStructures.FingerTree.Benchmarks
 dotnet run -c Release -- --filter * --job short   # quick pass; drop --job for a full run
 ```
 
-The harness validates the complexity claims against the BCL. Highlights ([docs/benchmarks.md](benchmarks.md)): `ReversibleDeque.Reverse` is flat at ~19 ns / 72 bytes from 100 to 1,000,000 elements (≈18,000,000× faster than `ImmutableList.Reverse` at 1M); `PriorityQueue.Meld` is ~750–900× faster than rebuilding a BCL heap; deque endpoints and Fenwick weighted-selection show the expected O(1) / O(log n) advantage over the BCL's O(log n) / O(n); and indexing exhibits the predicted distance-from-nearer-end U-shape.
+The harness is a measurement gate, not itself a stored result. Its
+[README](../../benchmarks/Tools.DataStructures.FingerTree.Benchmarks/README.md) maps each benchmark
+class to the contract and baseline it exercises; [benchmarks.md](benchmarks.md) is the authoritative
+home for curated measured tables. Run the relevant class in Release before making a new constant-
+factor or scaling claim, and do not infer results for newly added Axis 1 classes merely from their
+presence in the harness.

@@ -3,13 +3,14 @@
 - Status: Implemented workspace
 - Created (UTC): 2026-07-02T05:02:24Z
 - Repository HEAD: 3c639e02d05377685676923a13b30a3d22fd4994
-- Audience: Maintainers implementing and reviewing persistent hash-array mapped tries
+- Audience: Maintainers implementing and reviewing the CHAMP, Ctrie, Patricia, and Merkle families
 - Scope: Project layout and validation entry points for `src/CSharp/src/Tools.DataStructures.Hamt`
 
-`src/CSharp/src/Tools.DataStructures.Hamt` contains the .NET 10 C# preview workspace for `Tools.DataStructures.Hamt`, a persistent
-CHAMP library. The core type is `PersistentHashMap<TKey, TValue>`, an immutable
-unordered dictionary with structural sharing across versions. `PersistentHashSet<T>` is built on the
-same HAMT core and implements `IReadOnlySet<T>`.
+`src/CSharp/src/Tools.DataStructures.Hamt` contains the .NET 10 C# preview workspace for
+`Tools.DataStructures.Hamt`, a persistent and concurrent trie/search-tree library led by canonical
+CHAMP. `PersistentHashMap<TKey, TValue>` is an immutable unordered dictionary with structural
+sharing across versions. `PersistentHashSet<T>` is built on the same core and implements
+`IReadOnlySet<T>`.
 
 `ConcurrentHashTrie<TKey, TValue>` is the deliberately mutable member of the family. It applies
 GCAS descriptors to generation-stamped indirection nodes and a root/main RDCSS transition for
@@ -35,9 +36,10 @@ Merkle persistence is explicit and defensive. Bidirectional codecs must reject m
 non-canonical, and trailing input. `Save`/`Load` and complete or partial `MerkleBlockPack` values use
 an `IMerkleBlockStore`; loading rehashes exact block bytes, round-trips decoded entries, validates
 layers, ordering, child intervals, subtree counts, and the root, and enforces finite caller-selected
-resource budgets. Proofs and synchronization inherit SHA-256's collision-resistance assumption and
-still require a trusted root and policy domain; they do not provide signatures or peer
-authentication.
+resource budgets. Proof verification charges its canonical query descriptor before codec or block
+decoding as well as charging every distinct block. Proofs and synchronization inherit SHA-256's
+collision-resistance assumption and still require a trusted root and policy domain; they do not
+provide signatures or peer authentication.
 
 The trie consumes 5 hash bits per level. Each sparse branch has separate data and node bitmaps,
 with key/value payloads inlined into a compact data run and subtries held in a compact child run.
@@ -77,6 +79,10 @@ and canonical topology alone does not confer reference identity.
   - `PersistentHashSet.cs` is the set wrapper over the map core.
 - [`tests/Tools.DataStructures.Hamt.Tests/`](../../tests/Tools.DataStructures.Hamt.Tests/README.md) contains xUnit
   and CsCheck-backed model tests.
+- [`benchmarks/Tools.DataStructures.FingerTree.Benchmarks/`](../../benchmarks/Tools.DataStructures.FingerTree.Benchmarks/README.md)
+  is the shared C# persistent-collections harness. Its `ChampBenchmarks`, `CtrieBenchmarks`,
+  `PatriciaMapBenchmarks`, and `MerkleSearchTreeBenchmarks` classes cover this workspace; Release
+  configuration is required for meaningful measurements.
 - `docs/api-specification.md` documents public contracts and complexity guarantees.
 - `docs/usage.md` provides practical construction, comparer, persistent update, iteration, and
   set-algebra examples.

@@ -39,6 +39,14 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
   histories, retained snapshots, structural map algebra, combining overloads, and set relations.
 - `MerkleSearchTreeTests.cs` covers canonical codec vectors, independent policy/history shape and
   root-address convergence, typed digest-pruned diff, randomized histories/snapshots, ranges, and domain separation.
+- `MerkleEncodingWireTests.cs` locks built-in codec ids and golden vectors, canonical round trips,
+  malformed/trailing-input rejection, policy/domain framing, and strict digest parsing/writing.
+- `MerklePersistenceAlgorithmsTests.cs` covers golden block bytes, save/load/export/import,
+  destination atomicity, malformed/tampered/resource-bounded verification, proof-query budgets,
+  membership/non-membership/range proofs, synchronization plans, and typed three-way merge.
+- `MerkleSearchTreeCoreStressTests.cs` drives adversarial layers, long randomized mutation histories,
+  retained snapshots, independent-history convergence, shape-changing diff, off-path block sharing,
+  and exact-root restoration against ordered models.
 
 ## Build And Run
 

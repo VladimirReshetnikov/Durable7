@@ -79,8 +79,9 @@ The suite covers:
   non-canonical, foreign-domain, resource-budget, and destination-conflict failures; and commit
   atomicity for preflight/verification failures;
 - complete and partial-closure block synchronization, canonical membership/non-membership/inclusive-
-  range proofs, tampered-query/block and extra-step rejection, and typed three-way merge including
-  disjoint edits, identical edits, unresolved/resolved conflicts, deletion, and present-null state.
+  range proofs, pre-decode proof-query byte limits, exact query-plus-block accounting,
+  tampered-query/block and extra-step rejection, and typed three-way merge including disjoint edits,
+  identical edits, unresolved/resolved conflicts, deletion, and present-null state.
 
 For a new public operation, add both direct examples and model/property coverage when there is a natural
 BCL or simple in-memory oracle.

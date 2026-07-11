@@ -320,14 +320,18 @@ codec outside its documented format contract may propagate directly. The finite 
 | Limit | Default |
 | --- | ---: |
 | distinct decoded blocks | 1,000,000 |
-| cumulative serialized bytes | 1 GiB |
+| cumulative proof-query and serialized-block bytes | 1 GiB |
 | bytes in one block | 16 MiB |
+| bytes in one proof query | 16 MiB |
 | reference depth | 256 |
 | cumulative decoded entries | 100,000,000 |
 | child references in one block | 65,536 |
 
-Network-facing callers should normally retain or tighten these limits. A budget limits parser and
-closure work; it does not authenticate the root, policy id, comparer implementation, or peer.
+Network-facing callers should normally retain or tighten these limits. The six-argument budget
+constructor sets `MaxProofQueryByteCount` to `MaxBlockByteCount`; the seven-argument overload can
+tighten it independently. Proof verification charges query bytes before envelope, codec, or block
+decoding and includes them in the cumulative limit. A budget limits parser and closure work; it does
+not authenticate the root, policy id, comparer implementation, or peer.
 
 ### Proofs
 
@@ -345,10 +349,11 @@ are signed 32-bit big-endian values, and verification rejects trailing bytes or 
 round trips.
 
 `VerifyProof(proof, policy, budget)` returns `MerkleProofVerificationResult`. On success it reports
-the computed root and verified block/byte counts. On failure it reports a typed failure and diagnostic
-without publishing decoded tree state. The result establishes that the proof's canonical query is
-consistent with its declared root and domain. The caller must obtain that root from a trusted
-channel; a self-consistent proof is neither a signature nor evidence of who produced the data.
+the computed root, verified block count, and exact query-plus-block byte count (including an empty-
+root proof's query). On failure it reports a typed failure and diagnostic without publishing decoded
+tree state. The result establishes that the proof's canonical query is consistent with its declared
+root and domain. The caller must obtain that root from a trusted channel; a self-consistent proof is
+neither a signature nor evidence of who produced the data.
 
 ### Block Synchronization
 

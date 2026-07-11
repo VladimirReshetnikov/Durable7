@@ -586,13 +586,13 @@ public sealed record MerkleProofVerificationResult
     /// <summary>Gets the number of blocks whose bytes and structure were verified.</summary>
     public int VerifiedBlockCount { get; }
 
-    /// <summary>Gets the number of serialized bytes verified.</summary>
+    /// <summary>Gets the number of proof-query and serialized-block bytes accounted during verification.</summary>
     public long VerifiedByteCount { get; }
 
     /// <summary>Creates a successful proof result.</summary>
     /// <param name="computedRootHash">The root hash reconstructed from the proof.</param>
     /// <param name="verifiedBlockCount">The number of verified blocks.</param>
-    /// <param name="verifiedByteCount">The number of verified serialized bytes.</param>
+    /// <param name="verifiedByteCount">The number of proof-query and serialized-block bytes accounted.</param>
     /// <returns>A successful result.</returns>
     public static MerkleProofVerificationResult Success(
         MerkleDigest computedRootHash,
@@ -608,7 +608,7 @@ public sealed record MerkleProofVerificationResult
     /// <param name="failureKind">The non-success failure classification.</param>
     /// <param name="failureMessage">A diagnostic message.</param>
     /// <param name="verifiedBlockCount">The number of blocks verified before failure.</param>
-    /// <param name="verifiedByteCount">The number of serialized bytes verified before failure.</param>
+    /// <param name="verifiedByteCount">The number of proof-query and serialized-block bytes accounted before failure.</param>
     /// <param name="computedRootHash">The partial or complete computed root hash when one was available.</param>
     /// <returns>A failed result.</returns>
     public static MerkleProofVerificationResult Failure(

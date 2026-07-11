@@ -6,8 +6,8 @@
 - Scope: Construction, persistent updates, comparer behavior, iteration, concurrency, and content-addressed workflows
 
 This guide is the practical companion to the [C# API specification](api-specification.md). It shows
-the common usage patterns for the canonical C# HAMT implementation; the API specification remains
-the normative contract for complexity, allocation behavior, and edge cases.
+the common usage patterns for the CHAMP, Ctrie, Patricia, and Merkle families; the API specification
+remains the normative contract for complexity, allocation behavior, and edge cases.
 
 ## Namespace And Build
 
@@ -102,6 +102,33 @@ var built = PersistentHashMap<int, string>.CreateRange(new[]
     KeyValuePair.Create(1, "uno"),
 });
 ```
+
+Use `MapEquals` for semantic map equality and `Diff` for typed added/removed/changed entries. Both
+operations require the same key-comparer object so their lockstep CHAMP traversal has one hash and
+equivalence policy:
+
+```csharp
+IEqualityComparer<string> keys = StringComparer.OrdinalIgnoreCase;
+var before = PersistentHashMap<string, int>
+    .Create(keys)
+    .SetItem("alpha", 1)
+    .SetItem("beta", 2);
+var after = before
+    .SetItem("BETA", 20)
+    .SetItem("gamma", 3);
+
+bool unchanged = before.MapEquals(after); // false
+
+foreach (MapDifference<string, int> change in before.Diff(after))
+{
+    Console.WriteLine($"{change.Kind}: {change.Key}: {change.OldValue} -> {change.NewValue}");
+}
+```
+
+Reference-equal descendants are pruned, so closely related versions visit only their non-shared
+trie regions plus reported output. Independently allocated maps can require O(n + m) traversal;
+canonical CHAMP topology is not object identity, and unordered equal-hash collision buckets add
+their key-matching cost.
 
 ## Comparers And Equivalent Keys
 
@@ -346,13 +373,18 @@ var networkBudget = new MerkleVerificationBudget(
     maxBlockByteCount: 1 << 20,
     maxDepth: 128,
     maxEntryCount: 2_000_000,
-    maxChildReferencesPerBlock: 8_192);
+    maxChildReferencesPerBlock: 8_192,
+    maxProofQueryByteCount: 64 << 10);
 
 var bounded = MerkleSearchTree<int, string?>.Import(
     outbound,
     policy,
     budget: networkBudget);
 ```
+
+Proof verification charges its query descriptor before decoding codecs or supplied blocks. The
+six-argument constructor uses `maxBlockByteCount` as the query limit; pass the seventh argument when
+the transport should admit large blocks but only small point/range descriptors.
 
 `MerkleBlock` and `IMerkleBlockStore.Put` do not by themselves verify transported bytes. Publish a
 received root only after successful `Load` or `Import`.

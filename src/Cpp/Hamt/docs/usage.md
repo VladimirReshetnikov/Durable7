@@ -208,7 +208,7 @@ auto right = hamt::persistent_int_map<std::string>{}
 
 auto right_biased = left.union_with(right);
 auto combined = left.union_with(right,
-    [](std::int32_t, const std::string& l, const std::string& r) {
+    [] (std::int32_t, const std::string& l, const std::string& r) {
         return l + "+" + r;
     });
 

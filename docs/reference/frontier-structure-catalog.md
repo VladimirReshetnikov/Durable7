@@ -34,11 +34,11 @@ claims and bounds. The [references](#references) section lists what to pull.
 **Division of labor with the
 [2026-07-09 proposal](../proposals/new-data-structures-2026-07-09.md).** That proposal selects a
 committed, prioritized slate from the derived catalog plus review-observed gaps; this catalog maps
-the *frontier* candidate space beyond it. Three items overlap - the Patricia trie family
-(proposal Tier C1), the cursor/zipper (proposal A3), and the RRB vector (considered and deferred
-there on the same benchmark-first grounds as here). For those, the proposal's scheduling governs
-and the entries below add design detail; everything else in this catalog is new relative to both
-documents.
+the *frontier* candidate space beyond it. Three items originally overlapped: the Patricia trie
+family (proposal Tier C1), the cursor/zipper (proposal A3), and the RRB vector (then deferred on
+benchmark-first grounds). Patricia and RRB have since shipped; the cursor/zipper remains planned.
+The entries below are the current-state record, while the proposal remains useful historical
+scheduling context.
 
 Verdicts use the derived catalog's scale:
 
@@ -57,7 +57,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | Structure or strategy | Axis | Verdict / status | Depends on | Rough size |
 | --- | --- | --- | --- | --- |
 | CHAMP canonicalization + structural equality/diff | 1 | Strong (implemented across all six languages) | Completed with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
-| `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all six languages) | Completed as proposal Tier C1 | 1 new core, ~2 public types, ~30 members, structural set ops |
+| `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all six languages) | Completed as proposal Tier C1 | 1 shared core, 4 C# public types, structural map/set algebra |
 | DABA Lite sliding-window aggregator | 1, 3 | Strong (C# implemented) | Reuses `IMonoid<T>` | 1 small type, ~8 members |
 | Merkle search tree | 1 | Strong (C# implemented) | Completed: deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
@@ -66,9 +66,9 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | Priority search queue (winner-cached AVL) | 1 | Plausible (C# implemented) | Completed as a direct core rather than the addressable composition | 1 new core |
 | Ctrie (concurrent, O(1) snapshot) | 1 | Managed-only (C# + Kotlin/JVM implemented) | Tracing GC; native ports require reclamation design | 1 new core, concurrency test tier |
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
-| Size-tiered small representations | 2 | Strong | Benchmark gate at tier boundary | Internal tier per facade + representation-forcing tests |
-| `Freeze()` read-optimized tier | 2 | Strong | Optional: fuse filter, PGM for sorted | 1 frozen type per family + strategy selection |
-| Cursor / zipper over rope and deque | 2, 3 | Strong (= proposal A3) | - | 1 cursor type per sequence family |
+| Size-tiered small representations | 2 | Strong (planned, not shipped) | Benchmark gate at tier boundary | Internal tier per facade + representation-forcing tests |
+| `Freeze()` read-optimized tier | 2 | Strong (planned, not shipped) | Optional: fuse filter, PGM for sorted | 1 frozen type per family + strategy selection |
+| Cursor / zipper over rope and deque | 2, 3 | Strong (planned; proposal A3) | - | 1 cursor type per sequence family |
 | Key-type-specialized map factories | 2 | Plausible | `PersistentIntMap`, optionally ART | Factory layer, no new core beyond the above |
 | Self-adjusting (splay-style) structures | 2 | Reject | - | Reads allocate under path copying; cursors + freeze substitute |
 | Range-update sequence (lazy propagation) | 3 | Strong | Measure action interface | 1 sibling core + tag algebra + property tests |
@@ -126,17 +126,17 @@ is a refinement of Bagwell's HAMT with two changes that matter here:
 
 **Why it matters here.** Canonical topology lets equality and diff align logical bitmap slots without
 whole-map lookup passes. For versions with shared ancestry, reference-equal descendants are skipped,
-so work tracks non-shared trie regions plus reported differences. Independently built equal maps
-still require O(n) comparison: identical topology is not reference identity. A future trusted
-per-node digest or hash-consing layer could change that bound, but CHAMP alone does not. Equal-hash
-collision runs require unordered key matching and can take O(c²) comparisons for bucket size c.
+so structural work tracks visited non-shared trie regions plus reported differences. Independently
+built maps may require a complete O(n + m) traversal: identical topology is not reference identity,
+and CHAMP alone does not guarantee work proportional to logical divergence. Equal-hash collision
+runs require unordered key matching and can add O(c²) comparisons for a bucket of size c.
 
-**Migration path.** The shipped `PersistentHashMap` is already a bitmap-indexed HAMT with compact
-child arrays, collision buckets, struct enumerators, and an internal transient builder - the delta
-is the two-bitmap node layout, the canonical-deletion path, and the equality/diff surface. The
-enumeration order of an unordered map may change across this migration; the documented contract
-already declares enumeration order unspecified, but the test suites and downstream Tungsten
-association tests must not accidentally pin the old order.
+**Shipped representation change.** `PersistentHashMap<TKey, TValue>` and
+`PersistentHashSet<T>` moved from the predecessor bitmap-indexed HAMT to the two-bitmap node layout,
+canonical deletion, and structural equality/diff surface while retaining compact storage,
+collision buckets, struct enumerators, and one-freeze bulk construction. Enumeration remains
+explicitly unspecified, and the tests protect downstream consumers from depending on a historical
+node order.
 
 **Caveats.** Collision buckets remain insertion-ordered, so equality/diff use key-matched unordered
 comparison. Equivalent maps can also retain different concrete key objects. Enumeration order is
@@ -144,11 +144,10 @@ unspecified, deletion adds a collapse check, and independently allocated maps ca
 reference pruning. The managed benchmark suite separates shared-single-change diff from
 independent-history equality/diff so those two cost profiles stay visible.
 
-**Verdict: Strong.** It compounds with the diff/merge feature already ranked first, and it is an
-upgrade in place rather than a new family. Schedule it together with the
-[2026-07-09 proposal](../proposals/new-data-structures-2026-07-09.md)'s item A2 (HAMT structural
-diff/equality): doing A2 phase 1 on a canonicalized node layer gets the guaranteed O(divergence)
-bound in one pass instead of retrofitting it later.
+**Verdict: Strong (implemented).** The in-place CHAMP upgrade shipped together with the
+[2026-07-09 proposal](../proposals/new-data-structures-2026-07-09.md)'s item A2. `MapEquals` and
+`Diff` now exploit shared identity and aligned bitmap slots while retaining the honest complete-
+traversal and collision-bucket bounds above.
 
 ### `PersistentIntMap<TValue>` / `PersistentIntSet` (big-endian Patricia trie)
 
@@ -192,29 +191,29 @@ in practice a handful of node hops.
 
 **Why it matters here.** The derived catalog's "load-bearing test" (rule 4) explicitly names dense
 integer keys as the HAMT's least differentiated case. The Patricia trie fills that hole with a
-property the HAMT cannot match: **structural merge**. `Union`, `Intersect`, and `Except` recurse on
-prefix structure and short-circuit whole subtrees by reference equality, running in O(shared
-structure) - typically far below O(n + m) - and returning reference-equal results for no-op merges
-(the family's no-op identity contract extends naturally). Merge-heavy workloads (version-set
-algebra, sparse indices, ID-set reconciliation) get structurally what the HAMT needs a bespoke diff
-layer to approximate. Enumeration is in unsigned key order for free; a sign-flip key transform
+property the HAMT cannot match: **structural merge**. The default `Union`, `Intersect`, and `Except`
+align compressed prefixes and short-circuit reference-equal subtrees. Work is proportional to visited
+non-shared prefix regions plus materialized result/output, with O(n + m) worst-case work; retained
+sharing lowers the visited region count rather than defining a separate asymptotic bound. No-op
+merges preserve reference identity.
+Merge-heavy workloads (version-set algebra, sparse indices, ID-set reconciliation) therefore avoid
+per-key hash lookup passes. Enumeration is in unsigned key order for free; a sign-flip key transform
 yields signed order.
 
 **Design notes.**
 
-- Ship both 32- and 64-bit key widths; C# generic math (`IBinaryInteger<TKey>`) can unify them, but
-  two concrete key types keep the hot path free of abstraction.
-- Combining-function overloads (`Union(other, (k, l, r) => ...)`) are the API that makes merge
-  useful; mirror Haskell `Data.IntMap`'s `unionWith`/`intersectionWith`/`mergeA` vocabulary,
-  trimmed to this repository's style.
+- Both 32- and 64-bit key widths ship as concrete C# types, keeping the hot path free of generic-
+  math abstraction while sharing a static-policy internal engine.
+- Combining-function overloads (`Union(other, (k, l, r) => ...)`) make structural merge useful and
+  mirror the essential role of Haskell `Data.IntMap`'s `unionWith`/`intersectionWith` vocabulary in
+  this repository's style.
 - Collision buckets do not exist (keys are their own hashes); the structure is strictly simpler
   than the HAMT.
 
-**Verdict: Strong.** Self-contained, port-friendly, 25+ years of production precedent
-(`Data.IntMap`), and it covers the acknowledged weak spot of the shipped family. Already selected
-as the [2026-07-09 proposal](../proposals/new-data-structures-2026-07-09.md)'s Tier C1 (its one
-structurally new family); this entry supplies the design detail - structural-merge API vocabulary,
-key-width strategy, no-op merge identity - for that scheduled work.
+**Verdict: Strong (implemented).** The family shipped as the
+[2026-07-09 proposal](../proposals/new-data-structures-2026-07-09.md)'s Tier C1, with explicit 32-
+and 64-bit surfaces, combining algebra, signed ordering, validation, and no-op identity. Its
+production precedent remains Haskell `Data.IntMap`.
 
 ### RRB vector
 
@@ -275,26 +274,25 @@ Clojure (`core.rrb-vector`), C++ `immer`, and Rust `im`.
 **Why it matters here - and why it might not.** The shipped sequence story is
 `FingerTreeDeque<T>` (O(1) amortized endpoints, O(log distance-from-nearer-end) indexing - the
 measured U-shape) plus `Rope<T>` (chunked leaves, cache-dense, O(log n) edits). The RRB vector's
-differentiator is **uniform effectively-O(1) random access** with no U-shape, at the price of
-endpoint operations that are merely O(log32 n) amortized-O(1)-ish (tail optimization) rather than
-the deque's O(1), and concatenation that is O(log n) with worse constants than the deque's
-O(log min).
+differentiator is **uniform O(log32 n) random access** with no U-shape. The shipped C# persistent
+value deliberately has no dedicated tail buffer, so endpoint operations remain O(log32 n); its
+separate append-only builder is the bulk-construction path. Concatenation is O(log n) with worse
+constants than the deque's O(log min).
 
 | Workload | `FingerTreeDeque<T>` | `Rope<T>` | RRB vector |
 | --- | --- | --- | --- |
-| Endpoint push/pop | O(1) amortized (best) | O(log n), amortized O(1) staged | O(log32 n), O(1) with tail |
+| Endpoint push/pop | O(1) amortized (best) | O(log n), amortized O(1) staged | O(log32 n); no persistent tail |
 | Random index, middle | O(log n), ~310 ns at 100k | O(log n) chunked | O(log32 n), small constant (best) |
 | Concat | O(log min) (best) | O(log min) | O(log n), relaxed nodes |
 | Cache density | pointer-heavy | chunked (best for scans) | 32-way arrays (good) |
 | Bulk build | element-wise | chunk-staged builder (best) | transient tier |
 
-**Verdict: Plausible, benchmark-gated.** Before building it, add a random-access-heavy workload to
-the benchmark harness and measure `Rope<T>` against `ImmutableList` there. If the rope's mid-buffer
-indexing is the pain point in a real consumer, the RRB vector is the proven answer; otherwise it is
-redundant with the two shipped sequences. The
-[2026-07-09 proposal](../proposals/new-data-structures-2026-07-09.md) reached the same deferral
-independently ("RRB's win is constant factors, which the repository's design notes treat as a
-benchmark-first question").
+**Verdict: Plausible (implemented; adoption remains benchmark-gated).** The benchmark harness now
+contains random-access and concatenation comparisons against `Rope<T>` and `ImmutableList<T>`.
+Consumers should choose the vector when uniform indexing wins for their measured workload; the
+implementation does not by itself erase the overlap with the two shipped sequence families. The
+[2026-07-09 proposal](../proposals/new-data-structures-2026-07-09.md)'s original deferral remains
+useful context for that demand-driven adoption rule.
 
 ### Merkle search trees / Prolly trees
 
@@ -320,25 +318,28 @@ order. Prolly trees (probabilistic B-trees; Noms ~2016, now Dolt) reach the same
 content-defined chunking: node boundaries fall where a rolling hash of the entry stream crosses a
 threshold. Every node carries a digest of its contents; the root digest names the whole collection.
 
-**What they buy.** O(divergence) diff, sync, and three-way merge **across processes and machines**,
-not merely across versions sharing pointer ancestry - the property behind AT Protocol repositories
-(Bluesky) and Dolt's versioned SQL tables. Unique representation also gives history independence
-(the structure provably leaks nothing about insertion order) and digest-based equality.
+**What they buy.** Digest-pruned diff, synchronization, and three-way merge **across processes and
+machines**, not merely across versions sharing pointer ancestry - the property behind AT Protocol
+repositories (Bluesky) and Dolt's versioned SQL tables. Equal block digests prune complete regions;
+work follows the examined and missing block frontier, but a topology-changing edit can move
+separators, so the shipped API does not promise O(key divergence) for every diff. Policy-bound
+unique representation gives history independence and digest-based equality.
 
 **Relationship to the derived catalog.** The catalog's `MerkleHamt` (deferred) hashes an
 *unordered* trie; the MST is the *ordered* sibling and subsumes several of its uses while adding
-range queries and range sync. The same prerequisites bind both, and they are the real work:
+range queries and range sync. The implementation met the two prerequisites that remain mandatory
+for any future content-addressed family:
 
 1. **Pinned deterministic hashing.** Default .NET string hashing is per-process randomized - fatal
-   for cross-process addressing. The family needs an explicit, versioned hash policy (e.g.
-   xxHash64/BLAKE3 over a canonical key encoding), with the derived catalog's warning about
-   comparer-equality classes needing an encoder constant.
+   for cross-process addressing. `MerkleSearchTreePolicy<TKey, TValue>` therefore binds a versioned
+   semantic id, canonical codecs, comparer semantics, and SHA-256 domain digest.
 2. **Canonical serialization.** A digest is only as canonical as the byte encoding it hashes. The
-   repository currently has no serialization story; the MST forces one.
+   shipped `MST2` wire and `IMerkleCodec<T>` contract reject malformed, noncanonical, and trailing
+   encodings before accepting content.
 
-**Verdict: Strong direction, correctly gated.** Do not start it before deterministic hashing and a
-serialization layer exist; once they do, prefer the MST over `MerkleHamt` as the first
-content-addressed family.
+**Verdict: Strong (implemented after satisfying its gates).** The MST is the repository's first
+content-addressed family; the deferred `MerkleHamt` must reuse equally explicit hashing, encoding,
+verification-budget, and trust-boundary contracts if it is ever promoted.
 
 ### Zip trees and zip-zip trees (canonical sorted core)
 
@@ -360,14 +361,14 @@ trees - a reformulation of treaps where insertion and deletion are single root-t
 Tarjan, 2023) refine the rank distribution to bring expected depth near the information-theoretic
 optimum while keeping O(log log n) rank bits.
 
-**Why they matter here.** Deriving each comparison-equivalence class's rank from a retained keyed
-policy makes topology converge for the same stored representatives regardless of update order. That
-is the lightweight, process-local form of canonical topology: the memoized root digest rejects most
-inequality in O(1), shared nodes prune semantic equality, and independently built equal sets compare
-in O(n). The public first-representative rule is observable through `TryGetValue`, so this facade does
-not claim a formally unique full representation or hide which equivalent representative arrived
-first. Ephemeral zip trees change O(1) expected pointers, but a persistent update still copies its
-O(h) search/zip/unzip path: expected O(log n) nodes, O(n) under adversarial ranks.
+**Why they matter here.** Under one retained, coherent rank policy, deriving each comparison-
+equivalence class's rank makes topology converge for the same stored representatives regardless of
+update order. The memoized root digest rejects most inequality in O(1), shared nodes prune semantic
+equality, and independently built equal sets compare in O(n). This is policy-canonical topology,
+not a globally unique representation: policy identity gates structural algebra, and the observable
+first-representative rule means equivalent values can retain different concrete objects. Ephemeral
+zip trees change O(1) expected pointers, but a persistent update still copies its O(h)
+search/zip/unzip path: expected O(log n) nodes, O(n) under adversarial ranks.
 
 **Caveats.** This is a practical fixed-width variant, not the paper's compact representation: its
 64-bit secondary coordinate does not inherit the paper's O(log log n)-metadata theorem, and its
@@ -378,8 +379,9 @@ reproduction, not adversarial security. The shipped sorted finger tree covers or
 with worst-case bounds and the measure framework; the zip-zip set earns its place where canonical
 topology and memoized inequality dominate.
 
-**Verdict: Plausible.** Frame it as `CanonicalSortedSet<T>` - a niche sibling (axis 3 framing)
-whose selling point is unique representation, not general sorted-set duty.
+**Verdict: Plausible (implemented for the policy-canonical niche).**
+`CanonicalSortedSet<T>` is a sibling for reproducible same-policy topology and memoized inequality,
+not the general sorted-set default and not a claim of policy-independent unique representation.
 
 ### Heaps: Brodal-Okasaki and PSQ shipped; hollow/strict-Fibonacci rejected
 
@@ -509,6 +511,8 @@ required concurrency-validation tier; the native reclamation exception remains e
 
 ### Size-tiered small representations
 
+**Status: Planned; the current persistent facades do not switch to flat small-size tiers.**
+
 **The pattern.** Below a threshold, represent the collection as a flat array; promote to the tree
 representation at the threshold; demote on shrink with hysteresis. Precedents: Clojure's
 `PersistentArrayMap` (flat pair array through 8 entries, then HAMT), Rust `im::Vector` (inline
@@ -549,6 +553,8 @@ already have a partial answer in the rope's chunking.
 
 ### The transient -> persistent -> frozen lifecycle
 
+**Status: Planned; no repository-owned frozen collection tier has shipped.**
+
 **The idea.** Hybridize across *time* rather than size. The repository already ships two-thirds of
 the lifecycle: internal transient builders (HAMT bulk builder; rope and sorted-set/dictionary
 builders) cover the write-optimized unpublished phase, and the persistent structures cover the
@@ -574,6 +580,8 @@ complexity table honest and makes the lifecycle explicit in signatures.
 collections currently concede to mutable ones - tiny collections and read-forever snapshots.
 
 ### Cursor / zipper over the sequence family
+
+**Status: Planned; the current rope and deque APIs do not expose version-bound cursors.**
 
 **The idea.** Self-adjustment is impossible under persistence (below), but *per-consumer* locality
 is not: a cursor is a value holding the root-to-position path (plus the current chunk for
@@ -626,8 +634,8 @@ persistence, for two independent reasons worth recording so the idea is not re-l
    would each want it shaped for *their* access sequence; the amortized potential arguments assume
    one linear history (the same failure mode as the derived catalog's rule 2).
 
-The substitutes shipped by this catalog: cursors (per-consumer locality, axis 2) and `Freeze()`
-(explicit read-phase optimization, axis 2). **Reject.**
+The planned substitutes in this catalog are cursors (per-consumer locality, axis 2) and `Freeze()`
+(explicit read-phase optimization, axis 2). Neither is a shipped API yet. **Reject.**
 
 ## Axis 3: Niche Specializations
 
@@ -705,11 +713,12 @@ the editor samples are the natural home. **Verdict: Sample, not family.**
 
 ### Canonical sorted set
 
-The zip-tree candidate from axis 1, framed as this axis's specialization: the niche is
-"collections compared far more often than modified" (memoization keys, configuration
-fingerprints, cache validity stamps), where memoized digests plus unique representation turn
-equality into O(1) inequality / O(divergence) equality. See the axis 1 entry for the design and
-caveats.
+The shipped zip-tree core from axis 1 is also this axis's specialization: the niche is "collections
+compared far more often than modified" (memoization keys, configuration fingerprints, cache
+validity stamps). Under one coherent retained policy, memoized digests give O(1) inequality in the
+usual non-collision case and shared identity prunes equality; independently allocated equal sets
+still require O(n) semantic comparison. See the axis 1 entry for the policy and representative
+qualifications.
 
 ### Kaplan-Tarjan real-time deque: the recorded rejection
 
@@ -733,11 +742,13 @@ New rules this survey adds to the derived catalog's seven:
 2. **Unobservability is the tier contract.** A representation switch must preserve equality
    semantics, the enumeration-order contract, no-op identity, and enumerator shape; each tier
    boundary gets representation-forcing tests on both sides.
-3. **Canonical form is the gateway property.** CHAMP, zip trees with derived ranks, and Merkle
-   search trees all buy the same thing at different price points: unique representation makes
-   equality O(divergence), enables memoized digests for O(1) inequality, and (with content
-   addressing) unlocks cross-process diff/sync/merge. When equality or diffing is hot, prefer a
-   canonical core over a diff algorithm layered on a non-canonical one.
+3. **Say which canonicality you mean.** CHAMP canonicalizes hash-trie topology but leaves collision
+   order and stored representatives history-dependent; its structural work benefits from shared
+   identity and is O(n + m) without it. The zip set converges only under one coherent retained rank
+   policy and the same representatives. The MST alone defines a policy-bound canonical wire and
+   content address suitable for cross-process pruning, proofs, and synchronization. These are
+   related optimization opportunities, not one blanket O(divergence) or unique-representation
+   guarantee.
 4. **Adaptivity must live outside shared state.** Per-consumer cursors: yes. Self-adjusting shared
    structure: never (reads allocate; sharers conflict).
 5. **Freeze, don't self-adjust.** Read-pattern optimization is an explicit O(n) phase change to a
@@ -835,8 +846,8 @@ catalog's summary alone.
   families, the shared enabling API gaps, and the composition design rules this document extends.
   CHAMP's equality/diff entry here is the core-level realization of that catalog's top-ranked gap.
 - [Next data structures proposal (2026-07-09)](../proposals/new-data-structures-2026-07-09.md) -
-  the committed slate this catalog complements; overlapping items (Patricia trie, cursor/zipper,
-  RRB deferral) keep that proposal's scheduling, with design detail added here.
+  the original committed slate this catalog complements. Patricia and RRB are now implemented;
+  the cursor/zipper retains the proposal's planned slot.
 - [Data structure catalog](data-structure-catalog.md) - the concise shipped-surface index. Implemented
   entries here retain frontier design rationale while their public entry points belong in that index.
 - [Porting and semantic parity](../guides/porting-and-semantic-parity.md) - the parity workflow a
