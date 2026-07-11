@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NumericUnderscores #-}
 
@@ -7,10 +8,11 @@ import Prelude hiding (lines, null, reverse, splitAt)
 
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (SomeException, evaluate, try)
-import Control.Monad (forM_, replicateM)
+import Control.Monad (forM_, replicateM, when)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import qualified Data.List as List
 import Data.Monoid (Sum(..))
+import Data.Word (Word32)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Mem.StableName (eqStableName, makeStableName)
 
@@ -24,6 +26,7 @@ import qualified Data.Structures.FingerTree.PriorityQueue as PriorityQueue
 import qualified Data.Structures.FingerTree.ReversibleDeque as ReversibleDeque
 import qualified Data.Structures.FingerTree.Rope as Rope
 import qualified Data.Structures.FingerTree.Rope.Text as RopeText
+import qualified Data.Structures.FingerTree.RrbVector as RrbVector
 import qualified Data.Structures.FingerTree.SortedBag as SortedBag
 import qualified Data.Structures.FingerTree.SortedMap as SortedMap
 import qualified Data.Structures.FingerTree.SortedSet as SortedSet
@@ -40,6 +43,7 @@ main = do
   testSortedBagRanks
   testPriorityQueue
   testIntervalTree
+  testRrbVector
   testRopes
   testTextRope
   testConcurrentReads
@@ -277,6 +281,170 @@ testIntervalTree = do
         Just interval -> interval
         Nothing -> error "testIntervalTree: invalid interval literal"
 
+testRrbVector :: IO ()
+testRrbVector = do
+  forM_ [0, 1, 31, 32, 33, 1_023, 1_024, 1_025, 100_000] $ \valueCount -> do
+    let vector = RrbVector.fromList [0 :: Int .. valueCount - 1]
+    assertEqual "rrb construction count" valueCount (RrbVector.count vector)
+    assertEqual "rrb construction contents" [0 .. valueCount - 1] (RrbVector.toList vector)
+    case RrbVector.validateStructure vector of
+      Nothing -> fail "rrb packed construction failed structural validation"
+      Just statistics -> do
+        assertEqual "rrb statistics count" valueCount (RrbVector.statisticsCount statistics)
+        assertEqual "rrb packed construction has no relaxed branches" 0 (RrbVector.statisticsRelaxedBranchCount statistics)
+    forM_ [0, max 0 (valueCount `div` 2), max 0 (valueCount - 1)] $ \position ->
+      when (valueCount /= 0) (assertEqual "rrb indexed lookup" (Just position) (RrbVector.index position vector))
+
+  forM_ [(1, 100_000), (100_000, 1), (31, 33), (1_023, 1_025), (50_000, 50_000)] $ \(leftCount, rightCount) -> do
+    let left = RrbVector.fromList [0 :: Int .. leftCount - 1]
+        right = RrbVector.fromList [leftCount .. leftCount + rightCount - 1]
+        combined = RrbVector.append left right
+    assertEqual "rrb unequal-height concat" [0 .. leftCount + rightCount - 1] (RrbVector.toList combined)
+    assertBool "rrb concat validates" (isJustValidation combined)
+
+  let base = RrbVector.fromList [0 :: Int .. 9_999]
+  forM_ [0, 1, 31, 32, 33, 999, 1_024, 5_000, 9_999, 10_000] $ \boundary ->
+    case RrbVector.splitAt boundary base of
+      Nothing -> fail "rrb valid split boundary was rejected"
+      Just (left, right) -> do
+        assertEqual "rrb split left" [0 .. boundary - 1] (RrbVector.toList left)
+        assertEqual "rrb split right" [boundary .. 9_999] (RrbVector.toList right)
+        assertEqual "rrb split rejoin" base (RrbVector.append left right)
+        assertBool "rrb split left validates" (isJustValidation left)
+        assertBool "rrb split right validates" (isJustValidation right)
+
+  case (RrbVector.splitAt 0 base, RrbVector.splitAt (RrbVector.count base) base) of
+    (Just (_, atZero), Just (atEnd, _)) -> do
+      assertRrbSharesRoot "rrb zero split reuses vector" base atZero
+      assertRrbSharesRoot "rrb end split reuses vector" base atEnd
+    _ -> fail "rrb boundary split failed"
+  assertRrbSharesRoot "rrb append empty reuses left" base (RrbVector.append base RrbVector.empty)
+  assertRrbSharesRoot "rrb append empty reuses right" base (RrbVector.append RrbVector.empty base)
+  case RrbVector.setAt 2 2 base of
+    Just unchanged -> assertRrbSharesRoot "rrb equal set reuses vector" base unchanged
+    Nothing -> fail "rrb equal set failed"
+  case RrbVector.insertListAt 2 [] base of
+    Just unchanged -> assertRrbSharesRoot "rrb empty insert reuses vector" base unchanged
+    Nothing -> fail "rrb empty insert failed"
+  case RrbVector.removeRange 2 0 base of
+    Just unchanged -> assertRrbSharesRoot "rrb zero remove reuses vector" base unchanged
+    Nothing -> fail "rrb zero remove failed"
+
+  let packed = RrbVector.fromList [0 :: Int .. 32 * 1_024 - 1]
+  case RrbVector.splitAt 1 packed of
+    Nothing -> fail "rrb relaxed suffix split failed"
+    Just (_, relaxed) ->
+      case RrbVector.validateStructure relaxed of
+        Nothing -> fail "rrb relaxed suffix failed structural validation"
+        Just statistics -> assertBool "rrb suffix contains relaxed branches" (RrbVector.statisticsRelaxedBranchCount statistics > 0)
+
+  runRrbRandomized 0 0x9e37_79b9 RrbVector.empty [] []
+  adversarial <- runRrbSplitConcat 0 0x1234_abcd packed
+  assertEqual "rrb adversarial history contents" (RrbVector.toList packed) (RrbVector.toList adversarial)
+  case RrbVector.validateStructure adversarial of
+    Nothing -> fail "rrb adversarial history failed validation"
+    Just statistics -> do
+      assertBool "rrb adversarial logarithmic height" (RrbVector.statisticsHeight statistics <= minimumRrbHeight (RrbVector.count adversarial) + 1)
+      assertBool "rrb adversarial leaf density" (RrbVector.statisticsLeafCount statistics <= (RrbVector.count adversarial + 15) `div` 16)
+
+  let (fragmented, fragmentModel) = List.foldl' appendFragment (RrbVector.empty, []) [0 :: Int .. 2_047]
+  assertEqual "rrb uneven fragments" fragmentModel (RrbVector.toList fragmented)
+  assertBool "rrb uneven fragments validate" (isJustValidation fragmented)
+  case RrbVector.unsnoc (RrbVector.fromList [1 :: Int, 2, 3]) of
+    Just (remaining, value) -> do
+      assertEqual "rrb unsnoc value" 3 value
+      assertEqual "rrb unsnoc remaining" [1, 2] (RrbVector.toList remaining)
+    Nothing -> fail "rrb unsnoc failed"
+
+runRrbRandomized :: Int -> Word32 -> RrbVector.RrbVector Int -> [Int] -> [(RrbVector.RrbVector Int, [Int])] -> IO ()
+runRrbRandomized !step !random vector model snapshots
+  | step == 10_000 = do
+      assertEqual "rrb randomized final model" model (RrbVector.toList vector)
+      forM_ snapshots $ \(snapshot, expected) -> assertEqual "rrb retained randomized snapshot" expected (RrbVector.toList snapshot)
+  | otherwise = do
+      let next = nextRrbRandom random
+          operation = fromIntegral (next `mod` 5)
+      (updated, expected) <- applyRrbOperation operation step next vector model
+      when (step `mod` 257 == 0) $ assertBool "rrb randomized structure" (isJustValidation updated)
+      let retained = if step `mod` 701 == 0 then (updated, expected) : snapshots else snapshots
+      runRrbRandomized (step + 1) next updated expected retained
+
+applyRrbOperation :: Int -> Int -> Word32 -> RrbVector.RrbVector Int -> [Int] -> IO (RrbVector.RrbVector Int, [Int])
+applyRrbOperation operation step random vector model =
+  case operation of
+    0 -> pure (RrbVector.snoc vector step, model ++ [step])
+    1 -> pure (RrbVector.cons step vector, step : model)
+    2
+      | List.null model -> pure (vector, model)
+      | otherwise ->
+          let position = boundedRrb random (length model)
+              value = negate step
+          in case RrbVector.setAt position value vector of
+               Just updated -> pure (updated, take position model ++ [value] ++ drop (position + 1) model)
+               Nothing -> fail "rrb randomized set failed"
+    3 ->
+      let position = boundedRrb random (length model + 1)
+          values = [step, step + 1, step + 2]
+      in case RrbVector.insertListAt position values vector of
+           Just updated -> pure (updated, take position model ++ values ++ drop position model)
+           Nothing -> fail "rrb randomized insert failed"
+    _
+      | List.null model -> pure (vector, model)
+      | otherwise ->
+          let position = boundedRrb random (length model)
+              amount = boundedRrb (nextRrbRandom random) (length model - position + 1)
+          in case RrbVector.removeRange position amount vector of
+               Just updated -> pure (updated, take position model ++ drop (position + amount) model)
+               Nothing -> fail "rrb randomized remove failed"
+
+runRrbSplitConcat :: Int -> Word32 -> RrbVector.RrbVector Int -> IO (RrbVector.RrbVector Int)
+runRrbSplitConcat !operation !random vector
+  | operation == 2_000 = pure vector
+  | otherwise = do
+      let next = nextRrbRandom random
+          valueCount = RrbVector.count vector
+          boundary = case operation `mod` 7 of
+            0 -> 1
+            1 -> 31
+            2 -> 32
+            3 -> 1_023
+            4 -> 1_024
+            5 -> valueCount - 1
+            _ -> 1 + boundedRrb next (valueCount - 1)
+      updated <- case RrbVector.splitAt boundary vector of
+        Just (left, right) -> pure (RrbVector.append left right)
+        Nothing -> fail "rrb adversarial split failed"
+      when (operation `mod` 127 == 0) $ assertBool "rrb adversarial intermediate structure" (isJustValidation updated)
+      runRrbSplitConcat (operation + 1) next updated
+
+appendFragment :: (RrbVector.RrbVector Int, [Int]) -> Int -> (RrbVector.RrbVector Int, [Int])
+appendFragment (vector, model) fragment =
+  let fragmentLength = 1 + fragment * 17 `mod` 63
+      values = [length model .. length model + fragmentLength - 1]
+  in (RrbVector.append vector (RrbVector.fromList values), model ++ values)
+
+nextRrbRandom :: Word32 -> Word32
+nextRrbRandom value = value * 1_664_525 + 1_013_904_223
+
+boundedRrb :: Word32 -> Int -> Int
+boundedRrb _ bound | bound <= 0 = 0
+boundedRrb value bound = fromIntegral (value `mod` fromIntegral bound)
+
+minimumRrbHeight :: Int -> Int
+minimumRrbHeight valueCount = go 0 32
+  where
+    go result capacity
+      | capacity >= toInteger valueCount = result
+      | otherwise = go (result + 1) (capacity * 32)
+
+isJustValidation :: RrbVector.RrbVector a -> Bool
+isJustValidation vector = case RrbVector.validateStructure vector of
+  Just _ -> True
+  Nothing -> False
+
+assertRrbSharesRoot :: String -> RrbVector.RrbVector a -> RrbVector.RrbVector a -> IO ()
+assertRrbSharesRoot label left right = RrbVector.sharesRootWith left right >>= assertBool label
+
 testRopes :: IO ()
 testRopes = do
   let rope = Rope.fromList [1 :: Int .. 70]
@@ -345,6 +513,7 @@ testConcurrentReads = do
       reversible = ReversibleDeque.reverse (ReversibleDeque.fromList expectedDeque)
       expectedReverse = List.reverse expectedDeque
       rope = Rope.fromList expectedDeque
+      rrb = RrbVector.fromList expectedDeque
       measuredValues = [1 :: Int .. 128]
       measured = MeasuredRope.fromListWith Sum measuredValues
   runConcurrent "fingertree concurrent reads" 8 $ do
@@ -356,6 +525,9 @@ testConcurrentReads = do
       assertEqual "concurrent rope count" 512 (Rope.count rope)
       assertEqual "concurrent rope index" (Just 255) (Rope.index 255 rope)
       assertEqual "concurrent rope contents" expectedDeque (Rope.toList rope)
+      assertEqual "concurrent rrb count" 512 (RrbVector.count rrb)
+      assertEqual "concurrent rrb index" (Just 255) (RrbVector.index 255 rrb)
+      assertEqual "concurrent rrb contents" expectedDeque (RrbVector.toList rrb)
       assertEqual "concurrent measured count" 128 (MeasuredRope.count measured)
       assertEqual "concurrent measured total" (Sum (sum measuredValues)) (MeasuredRope.measure measured)
       assertEqual "concurrent measured index" (Just 64) (MeasuredRope.index 63 measured)

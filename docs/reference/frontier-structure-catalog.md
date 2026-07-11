@@ -222,6 +222,13 @@ bound density/height drift; the benchmark gate compares indexing and concat with
 `ImmutableList<T>`. A dedicated persistent tail remains deliberately unimplemented, so immutable
 endpoint append is still a boundary-spine operation rather than worst-case O(1).
 
+**Haskell status (2026-07-11): Implemented with an idiomatic pure construction tier.**
+`Data.Structures.FingerTree.RrbVector` uses boxed immutable arrays, radix-indexed regular branches,
+relaxed cumulative sizes, structural split/append/range edits, cached metadata validation, and
+root-sharing diagnostics. `fromList` performs bottom-up bulk construction; no public mutable
+transient is exposed because an `ST`-style implementation detail would not be an idiomatic public
+Haskell value.
+
 **What it is.** The relaxed radix-balanced tree (Bagwell & Rompf 2011; practical treatment with
 transients in Stucki et al., ICFP 2015): a 32-way branching persistent vector where nodes are
 normally full (radix-indexable in O(log32 n) with pure bit arithmetic) and carry small size tables

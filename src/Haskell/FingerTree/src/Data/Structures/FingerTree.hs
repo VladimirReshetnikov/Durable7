@@ -23,6 +23,8 @@ module Data.Structures.FingerTree
   , MeasuredRope.MeasuredRope
   , RopeText.NewlineMeasure(..)
   , RopeText.TextRope
+  , RrbVector.RrbVector
+  , RrbVector.RrbStatistics(..)
   ) where
 
 import qualified Data.Structures.FingerTree.Deque as Deque
@@ -34,6 +36,7 @@ import qualified Data.Structures.FingerTree.PriorityQueue as PriorityQueue
 import qualified Data.Structures.FingerTree.ReversibleDeque as ReversibleDeque
 import qualified Data.Structures.FingerTree.Rope as Rope
 import qualified Data.Structures.FingerTree.Rope.Text as RopeText
+import qualified Data.Structures.FingerTree.RrbVector as RrbVector
 import qualified Data.Structures.FingerTree.SortedBag as SortedBag
 import qualified Data.Structures.FingerTree.SortedMap as SortedMap
 import qualified Data.Structures.FingerTree.SortedSet as SortedSet

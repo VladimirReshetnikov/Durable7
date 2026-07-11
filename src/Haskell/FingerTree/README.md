@@ -8,7 +8,14 @@
 This package ports the repository finger-tree family to Haskell. It includes a general measured
 finger tree, a size-and-rightmost-leaf-measured deque, a reversible deque, sorted bag/set/map
 facades, a stable meldable priority queue, interval tree helpers, positional ropes, measured ropes,
-and text-rope navigation helpers.
+text-rope navigation helpers, and a persistent RRB vector.
+
+`RrbVector a` uses immutable boxed arrays for 32-element leaves and 32-way branches. Packed branches
+omit cumulative sizes and select children from five-bit radix digits; split/append-created relaxed
+branches retain exact prefix sizes. The surface provides indexed replacement, endpoints,
+boundary-spine append, split, range edits, `unsnoc`, structural validation/statistics, and an IO-only
+root-sharing diagnostic for tests. `fromList` is the idiomatic pure bulk-construction path: unlike
+the strict-language ports, Haskell does not expose a public mutable transient builder.
 
 `ReversibleDeque a` uses its own orientation-aware strict finger-tree core. `reverse` is an O(1)
 mirror of the root, and `append` glues logical digits through mirrored middle views, so
