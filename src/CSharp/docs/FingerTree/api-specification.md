@@ -530,20 +530,30 @@ The implementation should keep XML documentation aligned with this file. XML sum
 ## Relaxed Radix-Balanced Vector
 
 `RrbVector<T>` is an immutable `IReadOnlyList<T>` with 32-element leaf arrays and 32-way internal
-branches. Every branch stores cumulative child sizes, including regular branches, so indexing uses
-the same code before and after concatenation relaxes the shape.
+branches. Packed branches omit cumulative sizes and select a child from five-bit radix digits;
+only branches with irregular child spans retain a cumulative size table. Both representations are
+validated by the same cached-count/height/layout invariants.
 
-- `CreateRange` builds packed leaves and bottom-up 32-way levels in O(n).
+- `CreateRange` builds packed leaves and bottom-up 32-way levels in O(n). `CreateBuilder` and
+  `ToBuilder` provide mutable append-only staging: an existing vector is adopted as an O(1) frozen
+  prefix, full staged leaf arrays freeze without another element copy, partial leaves copy on
+  freeze, and a clean repeated `ToImmutable` returns the same immutable instance. Joining a staged
+  suffix to a nonempty prefix may redistribute the two boundary leaves; all other frozen leaves are
+  shared directly.
 - Indexed get and `SetItem` are O(log32 n); equal-value replacement returns the current instance.
 - `AddFirst`/`AddLast` are boundary concatenations. `Concat` recursively merges the right and left
   boundary spines, coalesces leaf payloads, and partitions at most 64 children into balanced nodes,
   taking O(log32(n + m)) time and storage.
-- `SplitAt` copies one path and returns structurally shared prefix/suffix vectors. `InsertRange` and
-  `RemoveRange` compose split and concat with O(log n + inserted-elements) / O(log n) structure work.
+- `SplitAt` copies one path and returns structurally shared prefix/suffix vectors. A split exactly on
+  a leaf or subtree boundary reuses that leaf/subtree rather than slicing an equal replacement.
+  `InsertRange` and `RemoveRange` compose split and concat with O(log n + inserted-elements) /
+  O(log n) structure work.
 - Enumeration is O(n) and currently allocates an iterator and explicit traversal stack.
 
 All produced nodes are immutable. Old vectors remain valid, empty-side concat and boundary splits
-preserve instance identity, and no caller-owned mutable arrays are retained.
+preserve instance identity, and no caller-owned mutable arrays are retained. There is currently no
+dedicated persistent tail buffer: repeated immutable `AddLast` remains a boundary-spine operation;
+use the builder when append throughput is the dominant construction workload.
 
 ## DABA Lite Sliding-Window Aggregator
 

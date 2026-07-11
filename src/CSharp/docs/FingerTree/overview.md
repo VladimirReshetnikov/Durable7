@@ -13,9 +13,10 @@ This workspace provides two public finger-tree types. `FingerTree<TElement, TMea
 `ReversibleDeque<T>` is a sibling deque that adds **O(1) `Reverse`** while preserving all of the deque's bounds (including mixed-orientation `Concat` at O(log min)), via per-node reversal bits read through orientation-aware accessors — at a constant-factor cost, so it is a separate opt-in type rather than a change to the tuned deque.
 
 `RrbVector<T>` is the random-access sibling: a persistent relaxed radix-balanced vector with
-32-element leaves, 32-way branches, and cumulative size tables. It provides uniform O(log32 n)
-indexing and path-copying updates, plus O(log32(n + m)) concatenation by merging and repartitioning
-only the two boundary spines.
+32-element leaves, 32-way regular radix branches, and cumulative size tables only on relaxed
+branches. It provides uniform O(log32 n) indexing and path-copying updates, O(log32(n + m))
+concatenation by merging and repartitioning only the two boundary spines, and an append-only builder
+with immutable cached snapshots.
 
 `DabaLite<T, TMonoid>` is the family's deliberately mutable streaming member. It reuses
 `IMonoid<T>` to maintain a FIFO window aggregate with worst-case O(1) insert, evict, and query,
@@ -54,8 +55,9 @@ that prune irrelevant key intervals and subtrees whose minimum priority already 
   - `SortedSet.cs` / `SortedSet.Builder.cs` — `SortedSet<T>`, the uniqueness-enforcing sibling: navigable-set queries (floor/ceiling/lower/higher), order-statistic indexing and ranking, range extraction, O(n + m) set algebra and relations, plus a nested mutable builder for batched edits and cached snapshots.
   - `SortedDictionary.cs` / `SortedDictionary.Builder.cs` — `SortedDictionary<TKey, TValue>` (an `IReadOnlyDictionary`) on a key-projecting order-statistic measure (`EntryMeasure<TKey, TValue>`): O(log n) lookup/set/add/remove, navigable-map neighbor queries, order-statistic access by rank, key-range extraction, plus a nested mutable builder for batched entry edits.
   - `PriorityQueue.cs` — `PriorityQueue<TElement, TPriority>`, a meldable persistent min-priority queue on a count-plus-min measure (`PriorityMeasure`): O(1) amortized enqueue, O(1) min-priority peek, O(log n) peek/dequeue, and O(log(min(n, m))) melding.
-  - `RrbVector.cs` — a 32-way relaxed radix-balanced persistent vector with cumulative size tables,
-    uniform random access, structural split/edit, and boundary-spine concatenation.
+  - `RrbVector.cs` — a 32-way relaxed radix-balanced persistent vector with radix-indexed regular
+    nodes, relaxed-node size tables, an append-only builder, structural split/edit, and
+    boundary-spine concatenation.
   - `DabaLite.cs` — a chunk-queue-backed worst-case O(1) FIFO sliding-window aggregator over any monoid.
   - `CanonicalSortedSet.cs` / `ZipTreeRankPolicy.cs` — the keyed uniquely shaped zip-zip set and its retained rank policy.
   - `BrodalOkasakiHeap.cs` — the bootstrapped skew-binomial heap with optimal purely functional worst-case bounds.

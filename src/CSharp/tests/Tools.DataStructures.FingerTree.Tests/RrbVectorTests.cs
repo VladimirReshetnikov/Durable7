@@ -23,6 +23,9 @@ public sealed class RrbVectorTests
         Assert.Equal(Enumerable.Range(0, count), vector);
         for (var i = 0; i < count; i += Math.Max(1, count / 101))
             Assert.Equal(i, vector[i]);
+        Assert.True(vector.ValidateStructure(out var statistics));
+        Assert.Equal(count, statistics.Count);
+        Assert.Equal(0, statistics.RelaxedBranchCount);
     }
 
     /// <summary>Verifies concatenation across unequal heights and small boundary chunks.</summary>
@@ -40,6 +43,7 @@ public sealed class RrbVectorTests
 
         Assert.Equal(leftCount + rightCount, combined.Count);
         Assert.Equal(Enumerable.Range(0, leftCount + rightCount), combined);
+        Assert.True(combined.ValidateStructure(out _));
         Assert.Same(left.RootIdentity, left.Concat(RrbVector<int>.Empty).RootIdentity);
         Assert.Same(right.RootIdentity, RrbVector<int>.Empty.Concat(right).RootIdentity);
     }
@@ -59,6 +63,97 @@ public sealed class RrbVectorTests
 
         Assert.Same(vector, vector.SplitAt(0).Right);
         Assert.Same(vector, vector.SplitAt(vector.Count).Left);
+    }
+
+    /// <summary>Verifies a split on a leaf boundary reuses every original leaf on the appropriate side.</summary>
+    [Fact]
+    public void SplitAt_ExactLeafBoundariesReuseLeaves()
+    {
+        var vector = RrbVector<int>.CreateRange(Enumerable.Range(0, 32 * 128));
+        var originalLeaves = vector.LeafIdentitiesForTesting();
+
+        foreach (var index in new[] { 32, 64, 32 * 31, 32 * 32, 32 * 33, 32 * 96, 32 * 127 })
+        {
+            var (left, right) = vector.SplitAt(index);
+            var retainedLeaves = left.LeafIdentitiesForTesting().Concat(right.LeafIdentitiesForTesting()).ToArray();
+
+            Assert.Equal(originalLeaves.Length, retainedLeaves.Length);
+            for (var i = 0; i < originalLeaves.Length; i++)
+                Assert.Same(originalLeaves[i], retainedLeaves[i]);
+            Assert.True(left.ValidateStructure(out _));
+            Assert.True(right.ValidateStructure(out _));
+        }
+    }
+
+    /// <summary>Verifies packed trees use radix nodes while a non-left-aligned suffix becomes relaxed.</summary>
+    [Fact]
+    public void Representation_UsesRadixNodesAndRestrictsSizeTablesToRelaxedBranches()
+    {
+        var packed = RrbVector<int>.CreateRange(Enumerable.Range(0, 32 * 1_024));
+        Assert.True(packed.ValidateStructure(out var packedStatistics));
+        Assert.True(packedStatistics.RegularBranchCount > 0);
+        Assert.Equal(0, packedStatistics.RelaxedBranchCount);
+
+        var (_, relaxed) = packed.SplitAt(1);
+        Assert.True(relaxed.ValidateStructure(out var relaxedStatistics));
+        Assert.True(relaxedStatistics.RelaxedBranchCount > 0);
+        Assert.Equal(Enumerable.Range(1, packed.Count - 1), relaxed);
+        for (var index = 0; index < relaxed.Count; index += 997)
+            Assert.Equal(index + 1, relaxed[index]);
+    }
+
+    /// <summary>Stress-tests boundary spines without permitting density or height to drift pathologically.</summary>
+    [Fact]
+    public void AdversarialSplitConcatHistories_PreserveDensityAndLogarithmicHeight()
+    {
+        const int count = 32 * 1_024;
+        var vector = RrbVector<int>.CreateRange(Enumerable.Range(0, count));
+        var random = new Random(20260724);
+
+        for (var operation = 0; operation < 2_000; operation++)
+        {
+            var boundary = operation % 7 switch
+            {
+                0 => 1,
+                1 => 31,
+                2 => 32,
+                3 => 1_023,
+                4 => 1_024,
+                5 => count - 1,
+                _ => random.Next(1, count),
+            };
+            var (left, right) = vector.SplitAt(boundary);
+            vector = left.Concat(right);
+
+            if (operation % 127 == 0)
+                Assert.True(vector.ValidateStructure(out _));
+        }
+
+        Assert.Equal(Enumerable.Range(0, count), vector);
+        Assert.True(vector.ValidateStructure(out var statistics));
+        Assert.True(statistics.Height <= MinimumHeight(count) + 1);
+        Assert.True(statistics.LeafCount <= (count + 15) / 16);
+        Assert.True(statistics.BranchCount < statistics.LeafCount);
+    }
+
+    /// <summary>Verifies many uneven fragments remain dense after repeated boundary-spine concatenation.</summary>
+    [Fact]
+    public void AdversarialUnevenFragments_RemainDenseAndBalanced()
+    {
+        var vector = RrbVector<int>.Empty;
+        var model = new List<int>();
+        for (var fragment = 0; fragment < 2_048; fragment++)
+        {
+            var length = 1 + fragment * 17 % 63;
+            var values = Enumerable.Range(model.Count, length).ToArray();
+            vector = vector.Concat(RrbVector<int>.CreateRange(values));
+            model.AddRange(values);
+        }
+
+        Assert.Equal(model, vector);
+        Assert.True(vector.ValidateStructure(out var statistics));
+        Assert.True(statistics.Height <= MinimumHeight(vector.Count) + 1);
+        Assert.True(statistics.LeafCount <= (vector.Count + 15) / 16);
     }
 
     /// <summary>Checks mixed persistent edits against a list model while retaining old versions.</summary>
@@ -125,5 +220,55 @@ public sealed class RrbVectorTests
         Assert.Equal("c", value);
         Assert.Equal(new[] { "a", "b" }, remainder);
         Assert.Equal(new[] { "a", "b", "c" }, vector);
+    }
+
+    /// <summary>Verifies builder freezes are cached and isolated from later mutable staging.</summary>
+    [Fact]
+    public void Builder_BulkStagesImmutableSnapshotsAndAdoptsFrozenPrefixes()
+    {
+        var builder = RrbVector<int>.CreateBuilder();
+        var source = Enumerable.Range(0, 1_000).ToArray();
+        builder.AddRange(source.AsSpan());
+        source[0] = -1;
+        var first = builder.ToImmutable();
+
+        Assert.Same(first, builder.ToImmutable());
+        Assert.Equal(1_000, builder.Count);
+        Assert.Equal(Enumerable.Range(0, 1_000), first);
+        Assert.True(first.ValidateStructure(out var firstStatistics));
+        Assert.Equal(0, firstStatistics.RelaxedBranchCount);
+
+        builder.Add(1_000);
+        builder.AddRange(Enumerable.Range(1_001, 999));
+        var second = builder.ToImmutable();
+        Assert.Equal(Enumerable.Range(0, 1_000), first);
+        Assert.Equal(Enumerable.Range(0, 2_000), second);
+        Assert.True(second.ValidateStructure(out _));
+
+        var adopted = second.ToBuilder();
+        Assert.Same(second, adopted.ToImmutable());
+        adopted.Add(2_000);
+        var third = adopted.ToImmutable();
+        Assert.Equal(Enumerable.Range(0, 2_000), second);
+        Assert.Equal(Enumerable.Range(0, 2_001), third);
+
+        var enumerator = adopted.GetEnumerator();
+        adopted.Add(2_001);
+        Assert.Throws<InvalidOperationException>(() => enumerator.MoveNext());
+        adopted.Clear();
+        Assert.Empty(adopted);
+        Assert.Same(RrbVector<int>.Empty, adopted.ToImmutable());
+    }
+
+    private static int MinimumHeight(int count)
+    {
+        var height = 0;
+        var capacity = 32L;
+        while (capacity < count)
+        {
+            capacity *= 32;
+            height++;
+        }
+        return height;
     }
 }

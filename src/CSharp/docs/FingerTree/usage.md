@@ -345,10 +345,17 @@ var vector = left.Concat(right);
 int middle = vector[10_000];
 var edited = vector.SetItem(10_000, -1);
 var (prefix, suffix) = edited.SplitAt(5_000);
+
+var builder = vector.ToBuilder(); // adopts vector as an O(1) immutable prefix
+builder.AddRange(Enumerable.Range(20_000, 10_000));
+var extended = builder.ToImmutable();
 ```
 
 Choose `FingerTreeDeque<T>` when endpoints and concat dominate, `Rope<T>` when scan density and
-middle edits dominate, and `RrbVector<T>` when consistent indexing constants dominate.
+middle edits dominate, and `RrbVector<T>` when consistent indexing constants dominate. Packed RRB
+nodes use radix indexing without size tables; split/concat introduces size tables only where child
+spans become irregular. The immutable type has no dedicated tail buffer, so prefer its builder over
+an `AddLast` loop for bulk append construction.
 
 ## Choosing A Surface
 

@@ -7,14 +7,18 @@ namespace Tools.DataStructures.FingerTree;
 /// <summary>Represents an immutable relaxed radix-balanced vector with 32-way branching.</summary>
 /// <typeparam name="T">The element type.</typeparam>
 /// <remarks>
-/// Branches store cumulative size tables, so indexing is O(log32 n) even after concatenation has
-/// produced relaxed nodes. Updates copy one root-to-leaf path. Concatenation merges and rebalances
-/// only the two boundary spines and is O(log32(n + m)).
+/// Packed branches omit size tables and select children with five-bit radix arithmetic. Only
+/// branches whose child spans have been relaxed by split or concatenation retain cumulative sizes.
+/// Updates copy one root-to-leaf path. Concatenation merges and rebalances only the two boundary
+/// spines and is O(log32(n + m)). Endpoint operations do not currently use a dedicated tail buffer;
+/// use <see cref="Builder"/> for append-heavy bulk construction.
 /// </remarks>
 [DebuggerDisplay("Count = {Count}, Height = {Height}")]
 public sealed class RrbVector<T> : IReadOnlyList<T>
 {
+    private const int RadixBits = 5;
     private const int BranchFactor = 32;
+    private const int MaximumHeight = 6;
     private readonly Node? _root;
 
     private RrbVector(Node? root) => _root = root;
@@ -47,6 +51,14 @@ public sealed class RrbVector<T> : IReadOnlyList<T>
 
     internal object? RootIdentity => _root;
 
+    /// <summary>Creates an empty mutable append-only builder.</summary>
+    /// <returns>A builder whose first immutable snapshot is <see cref="Empty"/>.</returns>
+    public static Builder CreateBuilder() => new(Empty);
+
+    /// <summary>Creates a mutable append-only builder with this vector as an O(1) frozen prefix.</summary>
+    /// <returns>A builder containing this vector's elements.</returns>
+    public Builder ToBuilder() => new(this);
+
     /// <summary>Creates a vector from a sequence in enumeration order.</summary>
     /// <param name="items">The elements to store.</param>
     /// <returns>A vector containing <paramref name="items"/>.</returns>
@@ -57,22 +69,9 @@ public sealed class RrbVector<T> : IReadOnlyList<T>
         if (items is IReadOnlyCollection<T> collection && collection.Count == 0)
             return Empty;
 
-        var leaves = new List<Node>();
-        var chunk = new List<T>(BranchFactor);
-        foreach (var item in items)
-        {
-            chunk.Add(item);
-            if (chunk.Count != BranchFactor)
-                continue;
-            leaves.Add(new Leaf([.. chunk]));
-            chunk.Clear();
-        }
-        if (chunk.Count != 0)
-            leaves.Add(new Leaf([.. chunk]));
-        if (leaves.Count == 0)
-            return Empty;
-
-        return new RrbVector<T>(BuildLevel(leaves));
+        var builder = CreateBuilder();
+        builder.AddRange(items);
+        return builder.ToImmutable();
     }
 
     /// <summary>Returns a vector with one element appended.</summary>
@@ -112,7 +111,7 @@ public sealed class RrbVector<T> : IReadOnlyList<T>
         _ = checked(Count + other.Count);
 
         var roots = ConcatNodes(_root, other._root);
-        return new RrbVector<T>(roots.Length == 1 ? roots[0] : new Branch(roots));
+        return FromRoot(roots.Length == 1 ? roots[0] : new Branch(roots));
     }
 
     /// <summary>Splits the vector at a zero-based boundary.</summary>
@@ -184,6 +183,48 @@ public sealed class RrbVector<T> : IReadOnlyList<T>
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
+    /// <summary>Validates cached counts, heights, branch layouts, and relaxed size tables.</summary>
+    /// <param name="statistics">Representation statistics collected during validation.</param>
+    /// <returns><see langword="true"/> when every internal invariant holds.</returns>
+    internal bool ValidateStructure(out RrbVectorStatistics statistics)
+    {
+        if (_root is null)
+        {
+            statistics = new RrbVectorStatistics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            return true;
+        }
+
+        var accumulator = new ValidationAccumulator();
+        var valid = ValidateNode(_root, isRoot: true, accumulator, out var count, out var height);
+        statistics = accumulator.ToStatistics(count, height);
+        return valid && count == Count && height == Height && height <= MaximumHeight;
+    }
+
+    /// <summary>Returns leaf-node identities in enumeration order for structural-sharing tests.</summary>
+    internal object[] LeafIdentitiesForTesting()
+    {
+        if (_root is null)
+            return [];
+
+        var result = new List<object>();
+        var stack = new Stack<Node>();
+        stack.Push(_root);
+        while (stack.TryPop(out var node))
+        {
+            if (node is Leaf leaf)
+            {
+                result.Add(leaf);
+                continue;
+            }
+
+            var branch = (Branch)node;
+            for (var i = branch.Children.Length - 1; i >= 0; i--)
+                stack.Push(branch.Children[i]);
+        }
+
+        return [.. result];
+    }
+
     private IEnumerable<T> Enumerate()
     {
         if (_root is null)
@@ -215,9 +256,8 @@ public sealed class RrbVector<T> : IReadOnlyList<T>
     {
         while (node is Branch branch)
         {
-            var childIndex = branch.FindChild(index);
-            if (childIndex != 0)
-                index -= branch.Sizes[childIndex - 1];
+            var childIndex = branch.FindChild(index, out var before);
+            index -= before;
             node = branch.Children[childIndex];
         }
         return ((Leaf)node).Items[index];
@@ -235,8 +275,8 @@ public sealed class RrbVector<T> : IReadOnlyList<T>
         }
 
         var branch = (Branch)node;
-        var childIndex = branch.FindChild(index);
-        var localIndex = childIndex == 0 ? index : index - branch.Sizes[childIndex - 1];
+        var childIndex = branch.FindChild(index, out var before);
+        var localIndex = index - before;
         var child = Set(branch.Children[childIndex], localIndex, value);
         if (ReferenceEquals(child, branch.Children[childIndex]))
             return branch;
@@ -265,7 +305,13 @@ public sealed class RrbVector<T> : IReadOnlyList<T>
     {
         if (left is Leaf leftLeaf)
         {
-            var combined = leftLeaf.Items.Concat(((Leaf)right).Items).ToArray();
+            var rightLeaf = (Leaf)right;
+            if (leftLeaf.Count == BranchFactor && rightLeaf.Count == BranchFactor)
+                return [leftLeaf, rightLeaf];
+
+            var combined = new T[leftLeaf.Count + rightLeaf.Count];
+            Array.Copy(leftLeaf.Items, combined, leftLeaf.Count);
+            Array.Copy(rightLeaf.Items, 0, combined, leftLeaf.Count, rightLeaf.Count);
             if (combined.Length <= BranchFactor)
                 return [new Leaf(combined)];
             var split = combined.Length / 2;
@@ -288,16 +334,18 @@ public sealed class RrbVector<T> : IReadOnlyList<T>
 
     private static (Node? Left, Node? Right) Split(Node node, int index)
     {
+        if (index == 0)
+            return (null, node);
+        if (index == node.Count)
+            return (node, null);
+
         if (node is Leaf leaf)
         {
-            return (
-                index == 0 ? null : new Leaf(leaf.Items[..index]),
-                index == leaf.Count ? null : new Leaf(leaf.Items[index..]));
+            return (new Leaf(leaf.Items[..index]), new Leaf(leaf.Items[index..]));
         }
 
         var branch = (Branch)node;
-        var childIndex = branch.FindChild(index == branch.Count ? index - 1 : index);
-        var before = childIndex == 0 ? 0 : branch.Sizes[childIndex - 1];
+        var childIndex = branch.FindChild(index, out var before);
         var local = index - before;
         var (childLeft, childRight) = Split(branch.Children[childIndex], local);
 
@@ -329,6 +377,257 @@ public sealed class RrbVector<T> : IReadOnlyList<T>
         return nodes[0];
     }
 
+    private static bool ValidateNode(
+        Node node,
+        bool isRoot,
+        ValidationAccumulator accumulator,
+        out int count,
+        out int height)
+    {
+        if (node is Leaf leaf)
+        {
+            count = leaf.Items.Length;
+            height = 0;
+            accumulator.AddLeaf(count);
+            return count is > 0 and <= BranchFactor && leaf.Count == count && leaf.Height == 0;
+        }
+
+        var branch = (Branch)node;
+        var children = branch.Children;
+        accumulator.AddBranch(children.Length, branch.IsRegular);
+        if (children.Length is < 1 or > BranchFactor || isRoot && children.Length == 1)
+        {
+            count = branch.Count;
+            height = branch.Height;
+            return false;
+        }
+
+        var valid = true;
+        var total = 0L;
+        var childHeight = -1;
+        for (var i = 0; i < children.Length; i++)
+        {
+            valid &= ValidateNode(children[i], isRoot: false, accumulator, out var childCount, out var actualHeight);
+            if (i == 0)
+                childHeight = actualHeight;
+            else if (actualHeight != childHeight)
+                valid = false;
+            total += childCount;
+        }
+
+        height = childHeight + 1;
+        count = total <= int.MaxValue ? (int)total : int.MaxValue;
+        valid &= total <= int.MaxValue && branch.Count == total && branch.Height == height;
+
+        var regularLayout = Branch.HasRegularLayout(children, height);
+        valid &= branch.IsRegular == regularLayout;
+        if (branch.CumulativeSizes is null)
+        {
+            valid &= regularLayout;
+        }
+        else
+        {
+            valid &= !regularLayout && branch.CumulativeSizes.Length == children.Length;
+            var cumulative = 0L;
+            for (var i = 0; i < children.Length; i++)
+            {
+                cumulative += children[i].Count;
+                valid &= branch.CumulativeSizes[i] == cumulative;
+            }
+        }
+
+        return valid;
+    }
+
+    /// <summary>Mutable append-only staging surface with immutable cached snapshots.</summary>
+    /// <remarks>
+    /// The builder owns every mutable tail array. Full leaves are transferred only after the builder
+    /// stops mutating their arrays; a partial tail is copied when frozen. Mutating the builder after
+    /// <see cref="ToImmutable"/> therefore cannot change an earlier vector.
+    /// </remarks>
+    public sealed class Builder : IReadOnlyCollection<T>
+    {
+        private readonly List<Node> _leaves = [];
+        private RrbVector<T> _prefix;
+        private T[] _tail = new T[BranchFactor];
+        private int _tailCount;
+        private int _stagedCount;
+        private int _version;
+
+        internal Builder(RrbVector<T> prefix) => _prefix = prefix;
+
+        /// <summary>Gets the number of elements in the frozen prefix and staged tail.</summary>
+        public int Count => _prefix.Count + _stagedCount;
+
+        /// <summary>Appends one element in amortized O(1).</summary>
+        public void Add(T item)
+        {
+            EnsureCanAdd(1);
+            AddCore(item);
+            _version++;
+        }
+
+        /// <summary>Appends a span in O(m).</summary>
+        public void AddRange(ReadOnlySpan<T> items)
+        {
+            if (items.IsEmpty)
+                return;
+            EnsureCanAdd(items.Length);
+            while (!items.IsEmpty)
+            {
+                var copied = Math.Min(BranchFactor - _tailCount, items.Length);
+                items[..copied].CopyTo(_tail.AsSpan(_tailCount));
+                _tailCount += copied;
+                _stagedCount += copied;
+                items = items[copied..];
+                if (_tailCount == BranchFactor)
+                    FreezeFullTail();
+            }
+            _version++;
+        }
+
+        /// <summary>Appends an enumerable source once in O(m).</summary>
+        public void AddRange(IEnumerable<T> items)
+        {
+            ArgumentNullException.ThrowIfNull(items);
+            if (items is T[] array)
+            {
+                AddRange(array.AsSpan());
+                return;
+            }
+
+            foreach (var item in items)
+                Add(item);
+        }
+
+        /// <summary>Removes the frozen prefix and all staged elements.</summary>
+        public void Clear()
+        {
+            if (Count == 0)
+                return;
+            _prefix = Empty;
+            _leaves.Clear();
+            Array.Clear(_tail, 0, _tailCount);
+            _tailCount = 0;
+            _stagedCount = 0;
+            _version++;
+        }
+
+        /// <summary>Freezes staged leaves; clean repeated calls return the same vector instance.</summary>
+        public RrbVector<T> ToImmutable()
+        {
+            if (_stagedCount == 0)
+                return _prefix;
+
+            var nodes = new List<Node>(_leaves.Count + (_tailCount == 0 ? 0 : 1));
+            nodes.AddRange(_leaves);
+            if (_tailCount != 0)
+            {
+                var tail = new T[_tailCount];
+                Array.Copy(_tail, tail, _tailCount);
+                nodes.Add(new Leaf(tail));
+                Array.Clear(_tail, 0, _tailCount);
+            }
+
+            var staged = new RrbVector<T>(BuildLevel(nodes));
+            _prefix = _prefix.IsEmpty ? staged : _prefix.Concat(staged);
+            _leaves.Clear();
+            _tailCount = 0;
+            _stagedCount = 0;
+            return _prefix;
+        }
+
+        /// <summary>Returns a fail-fast enumerator over a frozen snapshot.</summary>
+        public IEnumerator<T> GetEnumerator()
+        {
+            var version = _version;
+            return Enumerate(ToImmutable(), version);
+        }
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+        private IEnumerator<T> Enumerate(RrbVector<T> snapshot, int version)
+        {
+            foreach (var item in snapshot)
+            {
+                ThrowIfVersionChanged(version);
+                yield return item;
+            }
+            ThrowIfVersionChanged(version);
+        }
+
+        private void AddCore(T item)
+        {
+            _tail[_tailCount++] = item;
+            _stagedCount++;
+            if (_tailCount == BranchFactor)
+                FreezeFullTail();
+        }
+
+        private void FreezeFullTail()
+        {
+            Debug.Assert(_tailCount == BranchFactor);
+            _leaves.Add(new Leaf(_tail));
+            _tail = new T[BranchFactor];
+            _tailCount = 0;
+        }
+
+        private void EnsureCanAdd(int count)
+        {
+            if (count > int.MaxValue - Count)
+                throw new OverflowException("The RRB vector builder cannot contain more than Int32.MaxValue elements.");
+        }
+
+        private void ThrowIfVersionChanged(int capturedVersion)
+        {
+            if (_version != capturedVersion)
+                throw new InvalidOperationException("The RRB vector builder was modified during enumeration.");
+        }
+    }
+
+    private sealed class ValidationAccumulator
+    {
+        private int _minimumLeafLength = int.MaxValue;
+        private int _maximumLeafLength;
+        private int _minimumBranchingFactor = int.MaxValue;
+        private int _maximumBranchingFactor;
+
+        internal int LeafCount { get; private set; }
+        internal int BranchCount { get; private set; }
+        internal int RegularBranchCount { get; private set; }
+        internal int RelaxedBranchCount { get; private set; }
+
+        internal void AddLeaf(int length)
+        {
+            LeafCount++;
+            _minimumLeafLength = Math.Min(_minimumLeafLength, length);
+            _maximumLeafLength = Math.Max(_maximumLeafLength, length);
+        }
+
+        internal void AddBranch(int branchingFactor, bool regular)
+        {
+            BranchCount++;
+            if (regular)
+                RegularBranchCount++;
+            else
+                RelaxedBranchCount++;
+            _minimumBranchingFactor = Math.Min(_minimumBranchingFactor, branchingFactor);
+            _maximumBranchingFactor = Math.Max(_maximumBranchingFactor, branchingFactor);
+        }
+
+        internal RrbVectorStatistics ToStatistics(int count, int height) => new(
+            count,
+            height,
+            LeafCount,
+            BranchCount,
+            RegularBranchCount,
+            RelaxedBranchCount,
+            LeafCount == 0 ? 0 : _minimumLeafLength,
+            _maximumLeafLength,
+            BranchCount == 0 ? 0 : _minimumBranchingFactor,
+            _maximumBranchingFactor);
+    }
+
     private abstract class Node
     {
         internal abstract int Count { get; }
@@ -345,35 +644,79 @@ public sealed class RrbVector<T> : IReadOnlyList<T>
         internal override int Height => 0;
     }
 
-    private sealed class Branch(Node[] children) : Node
+    private sealed class Branch : Node
     {
-        internal Node[] Children { get; } = children;
-
-        internal int[] Sizes { get; } = BuildSizes(children);
-
-        internal override int Count => Sizes[^1];
-
-        internal override int Height { get; } = checked(children[0].Height + 1);
-
-        internal int FindChild(int index)
+        internal Branch(Node[] children)
         {
-            for (var i = 0; i < Sizes.Length; i++)
+            Debug.Assert(children is { Length: > 0 and <= BranchFactor });
+            Children = children;
+            Height = checked(children[0].Height + 1);
+
+            var count = 0;
+            var childHeight = children[0].Height;
+            for (var i = 0; i < children.Length; i++)
             {
-                if (index < Sizes[i])
-                    return i;
+                Debug.Assert(children[i].Height == childHeight);
+                count = checked(count + children[i].Count);
             }
-            return Sizes.Length - 1;
+            Count = count;
+            CumulativeSizes = HasRegularLayout(children, Height) ? null : BuildSizes(children);
+        }
+
+        internal Node[] Children { get; }
+
+        internal int[]? CumulativeSizes { get; }
+
+        internal bool IsRegular => CumulativeSizes is null;
+
+        internal override int Count { get; }
+
+        internal override int Height { get; }
+
+        internal int FindChild(int index, out int before)
+        {
+            Debug.Assert((uint)index < (uint)Count);
+            if (CumulativeSizes is null)
+            {
+                var shift = Height * RadixBits;
+                var childIndex = (int)((long)index >> shift);
+                before = (int)((long)childIndex << shift);
+                Debug.Assert((uint)childIndex < (uint)Children.Length);
+                return childIndex;
+            }
+
+            for (var i = 0; i < CumulativeSizes.Length; i++)
+            {
+                if (index >= CumulativeSizes[i])
+                    continue;
+                before = i == 0 ? 0 : CumulativeSizes[i - 1];
+                return i;
+            }
+
+            throw new UnreachableException();
+        }
+
+        internal static bool HasRegularLayout(Node[] children, int height)
+        {
+            if (children.Length == 0 || height is < 1 or > MaximumHeight)
+                return false;
+
+            var childCapacity = 1L << (height * RadixBits);
+            for (var i = 0; i < children.Length - 1; i++)
+            {
+                if (children[i].Count != childCapacity)
+                    return false;
+            }
+
+            return children[^1].Count <= childCapacity;
         }
 
         private static int[] BuildSizes(Node[] children)
         {
-            Debug.Assert(children is { Length: > 0 and <= BranchFactor });
             var sizes = new int[children.Length];
             var count = 0;
-            var height = children[0].Height;
             for (var i = 0; i < children.Length; i++)
             {
-                Debug.Assert(children[i].Height == height);
                 count = checked(count + children[i].Count);
                 sizes[i] = count;
             }
@@ -381,3 +724,15 @@ public sealed class RrbVector<T> : IReadOnlyList<T>
         }
     }
 }
+
+internal readonly record struct RrbVectorStatistics(
+    int Count,
+    int Height,
+    int LeafCount,
+    int BranchCount,
+    int RegularBranchCount,
+    int RelaxedBranchCount,
+    int MinimumLeafLength,
+    int MaximumLeafLength,
+    int MinimumBranchingFactor,
+    int MaximumBranchingFactor);

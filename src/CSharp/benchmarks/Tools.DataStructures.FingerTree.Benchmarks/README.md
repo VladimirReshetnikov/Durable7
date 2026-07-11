@@ -51,7 +51,7 @@ Results are written under `BenchmarkDotNet.Artifacts/` (git-ignored); curated ta
 | `ChampBenchmarks` | CHAMP lookup, payload-dense iteration, and independent-history equality | `Dictionary` and `ImmutableDictionary` |
 | `CtrieBenchmarks` | lock-free lookup and O(1) immutable snapshot publication | `ConcurrentDictionary` lookup and O(n) immutable copy |
 | `PatriciaMapBenchmarks` | integer-key lookup and prefix-aware structural union | CHAMP and `ImmutableDictionary` lookup |
-| `RrbVectorBenchmarks` | uniform middle indexing and boundary-spine concatenation | `Rope<T>` indexing and `ImmutableList<T>` indexing/concat |
+| `RrbVectorBenchmarks` | uniform middle indexing and boundary-spine concatenation | `Rope<T>` indexing/concat and `ImmutableList<T>` indexing/concat |
 | `DabaLiteBenchmarks` | worst-case O(1) FIFO slide-and-query aggregation | `Queue<T>` plus O(n) reaggregation |
 | `CanonicalSortedSetBenchmarks` | keyed zip-zip lookup, independent-history equality, and memoized digest | `ImmutableSortedSet<T>` |
 | `BrodalOkasakiHeapBenchmarks` | worst-case O(1) persistent insert/meld and O(log n) delete-min | measured finger-tree priority queue |

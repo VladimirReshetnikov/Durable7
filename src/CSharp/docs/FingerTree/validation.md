@@ -82,8 +82,9 @@ The suite covers:
   behavior against BCL or brute-force models where appropriate;
 - `Rope<T>`, `MeasuredRope<T, TMeasure, TMeasureOps>`, text helpers, editor-grade Unicode/newline helpers,
   `RopeBuilder`, and nested append-only rope builders;
-- `RrbVector<T>` radix boundaries, unequal-height concatenation, split round-trips, retained
-  snapshots, and randomized mixed-edit histories;
+- `RrbVector<T>` radix boundaries, regular-versus-relaxed representation invariants, exact-boundary
+  leaf reuse, unequal-height and adversarial-fragment concatenation, density/height ceilings,
+  builder snapshot isolation, retained snapshots, and randomized mixed-edit histories;
 - `DabaLite<T, TMonoid>` noncommutative ordering, 100,000-operation randomized windows, empty/clear
   behavior, and instrumented worst-case combine-count ceilings;
 - `CanonicalSortedSet<T>` independent-history shape/digest convergence, 50,000 randomized updates,

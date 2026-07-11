@@ -36,7 +36,9 @@ reasonable oracle.
 - `RopeBoundaryCoverageTests.cs` covers legal sub-minimum split chunks, concatenation seam re-coalescing, and
   mixed `TextReader` peek/single/buffered reads across chunk boundaries.
 - `RrbVectorTests.cs` covers branch-factor boundaries, unequal-height boundary-spine concatenation,
-  split round-trips, endpoint contracts, and randomized persistent edit histories with retained versions.
+  radix-indexed regular nodes, relaxed size-table invariants, exact-boundary leaf reuse, adversarial
+  split/concat density and height, builder snapshot isolation, endpoint contracts, and randomized
+  persistent edit histories with retained versions.
 - `DabaLiteTests.cs` covers noncommutative FIFO order, randomized variable windows, chunk churn,
   empty/clear contracts, and the proven worst-case monoid invocation limits.
 - `CanonicalSortedSetTests.cs` covers permutation/delete-reinsert shape convergence, keyed policy
