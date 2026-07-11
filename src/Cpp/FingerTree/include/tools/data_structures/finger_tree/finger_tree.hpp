@@ -14,6 +14,7 @@
 #include <tools/data_structures/finger_tree/reversible_deque.hpp>
 #include <tools/data_structures/finger_tree/rope.hpp>
 #include <tools/data_structures/finger_tree/rope_text.hpp>
+#include <tools/data_structures/finger_tree/rrb_vector.hpp>
 #include <tools/data_structures/finger_tree/sorted_bag.hpp>
 #include <tools/data_structures/finger_tree/sorted_map.hpp>
 #include <tools/data_structures/finger_tree/sorted_set.hpp>

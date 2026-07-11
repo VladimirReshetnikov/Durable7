@@ -3,6 +3,8 @@
 - Status: Active dependency-free benchmark harness
 - Created (UTC): 2026-07-10T19:40:22Z
 - Repository HEAD: 82a19b89405110255d76b848e6dff8a8f8d73bee
+- Updated (UTC): 2026-07-11T16:09:45Z
+- Updated against repository HEAD: 66b6821334b243f2d7170a6f9360dae54ef90994
 - Audience: Maintainers validating persistent-complexity and constant-factor behavior
 - Scope: Native benchmark cases and execution policy under `src/Cpp/FingerTree/benchmarks`
 
@@ -10,13 +12,15 @@
 header-first FingerTree target. It prints CSV-shaped observations with an anti-elision checksum. Run Release
 builds for performance evidence; Debug runs are useful only as functional smoke checks.
 
-The cases cover every Milestone 8 family:
+The cases cover every Milestone 8 family plus the RRB-vector benchmark gate:
 
 - `persistence_branching`: branch an endpoint update repeatedly from one retained, fully forced version at
   sizes 100, 10,000, and 1,000,000; report allocations and bytes per update and fail if allocation cost is not
   size-flat;
 - `deque_endpoint` (persistent endpoint updates), `deque_endpoint_read`, `deque_indexed_read`, and
   `deque_catenation`;
+- `rrb_indexed_read` and `rrb_catenation`, paired at identical sizes and iteration tiers with
+  `rope_indexed_read` and `rope_catenation`; these are the catalog's benchmark gate for the new 32-way RRB core;
 - `reversible_reverse`, plus `reversible_endpoint`, `reversible_endpoint_read`, and `reversible_catenation` for
   direct comparison with the ordinary-deque cases at the same sizes and iteration tiers;
 - `weighted_selection` and `sorted_search`;

@@ -226,6 +226,14 @@ bound density/height drift; the benchmark gate compares indexing and concat with
 `ImmutableList<T>`. A dedicated persistent tail remains deliberately unimplemented, so immutable
 endpoint append is still a boundary-spine operation rather than worst-case O(1).
 
+**C++ status (2026-07-11): Implemented and representation-hardened.** Header-first `rrb_vector<T>`
+uses `shared_ptr<const node>` ownership, 32-element leaves, size-table-free regular branches,
+cumulative-size relaxed branches, persistent point/range/endpoint edits, boundary-spine
+concatenation, retained forward iteration, and an append builder with immutable snapshot isolation.
+Structural diagnostics and adversarial model tests cover exact sharing, density/height drift, copy-
+constructible non-assignable values, and injected exceptions; native benchmark pairs compare indexed
+reads and concatenation directly with `rope<T>`.
+
 **Haskell status (2026-07-11): Implemented with an idiomatic pure construction tier.**
 `Data.Structures.FingerTree.RrbVector` uses boxed immutable arrays, radix-indexed regular branches,
 relaxed cumulative sizes, structural split/append/range edits, cached metadata validation, and

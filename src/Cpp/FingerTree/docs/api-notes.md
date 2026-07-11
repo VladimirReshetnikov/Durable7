@@ -3,8 +3,8 @@
 - Status: Current API notes
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-10T20:20:56Z
-- Updated against repository HEAD: 18f23de9cb90ac47234bfdeea097da2cedff6f9f
+- Updated (UTC): 2026-07-11T16:09:45Z
+- Updated against repository HEAD: 66b6821334b243f2d7170a6f9360dae54ef90994
 - Audience: Maintainers implementing and reviewing public C++ APIs
 - Scope: C++ naming, contracts, and intentional differences from the C# workspace
 
@@ -71,6 +71,40 @@ Notable C++ differences from C#:
 - `const_iterator` is a multipass forward iterator. It retains the immutable root, so its references remain valid
   after the facade object that created it is destroyed. Construction owns O(log n) traversal state; increment
   reuses that state instead of growing a sequence-sized buffer, and `copy_to` streams through the same traversal.
+
+## `rrb_vector<T>`
+
+`rrb_vector<T>` is the C++ port of C# `RrbVector<T>`. It is a persistent 32-way relaxed radix-balanced vector:
+leaves contain at most 32 elements, regular branches omit cumulative-size tables and use five-bit radix descent,
+and relaxed branches carry cumulative sizes only where split or concatenation makes child spans irregular.
+Every stored node is reached through `std::shared_ptr<const node>`; updates allocate replacement boundary paths
+and cannot mutate retained snapshots.
+
+Primary operations:
+
+- observers and traversal: `empty`, `size`, `height`, `front`, `back`, `at`, `operator[]`, `try_get`, retained
+  forward iteration, and `to_vector`;
+- point and endpoint updates: `set_item`, `add_first`, `add_last`, `push_front`, `push_back`, `pop_last`, and
+  `try_pop_last`;
+- structural edits: `concat`, `split_at`, `insert_range`, and `remove_range`;
+- bulk staging: `create_builder`, `to_builder`, builder `add`, `add_range`, `clear`, and `to_immutable`;
+- representation diagnostics: `root_identity`, `shares_root_with`, `leaf_identities`, `structure_statistics`,
+  and `validate_invariants`.
+
+Indexing and point update descend O(log32 n) levels. Split, range edits, endpoint operations, and concatenation
+rebuild only boundary spines; concatenation is O(log32(n + m)). Exact root and leaf boundaries preserve the
+corresponding node identities, and equality-comparable no-op `set_item` plus empty insert/remove operations return
+the original root. The append builder freezes full 32-element leaves, copies a partial tail when publishing, and
+caches a clean immutable snapshot; subsequent staging is isolated from every previously returned snapshot.
+
+Notable C++ differences and limits:
+
+- counts and indices use `std::size_t`; range and index violations throw `std::out_of_range`;
+- the element type is constrained to `std::copy_constructible`, matching path-copying and snapshot publication;
+- `rrb_vector_split<T>` and `rrb_vector_pop<T>` replace C# tuple/out-result shapes;
+- the builder is a mutable construction aid but does not expose editable node ownership or transient tokens;
+- there is deliberately no persistent tail buffer, so immutable endpoint append is a boundary-spine operation
+  rather than a worst-case O(1) tail write.
 
 ## `finger_tree<T, MeasurePolicy>`
 

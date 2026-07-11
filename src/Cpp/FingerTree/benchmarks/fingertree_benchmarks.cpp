@@ -48,6 +48,10 @@ constexpr std::array benchmark_names{
     std::string_view{"deque_endpoint_read"},
     std::string_view{"deque_indexed_read"},
     std::string_view{"deque_catenation"},
+    std::string_view{"rrb_indexed_read"},
+    std::string_view{"rope_indexed_read"},
+    std::string_view{"rrb_catenation"},
+    std::string_view{"rope_catenation"},
     std::string_view{"reversible_reverse"},
     std::string_view{"reversible_endpoint"},
     std::string_view{"reversible_endpoint_read"},
@@ -252,6 +256,67 @@ void run_deque_reads(const options& settings)
             const auto iterations = settings.short_mode ? 512U : 32'768U;
             print(measure(indexed_name, size, iterations, false, [&](const std::size_t iteration) {
                 return static_cast<std::size_t>(deque[(iteration * 7'919U) % size]);
+            }));
+        }
+    }
+}
+
+[[nodiscard]] std::vector<int> make_integer_values(const std::size_t size)
+{
+    auto values = std::vector<int>(size);
+    for (auto index = std::size_t{0}; index < size; ++index) {
+        values[index] = static_cast<int>(index);
+    }
+    return values;
+}
+
+void run_rrb_vector(const options& settings)
+{
+    constexpr auto rrb_index_name = std::string_view{"rrb_indexed_read"};
+    constexpr auto rope_index_name = std::string_view{"rope_indexed_read"};
+    constexpr auto rrb_concat_name = std::string_view{"rrb_catenation"};
+    constexpr auto rope_concat_name = std::string_view{"rope_catenation"};
+    if (!selected(settings, rrb_index_name)
+        && !selected(settings, rope_index_name)
+        && !selected(settings, rrb_concat_name)
+        && !selected(settings, rope_concat_name)) {
+        return;
+    }
+
+    for (const auto size : {100U, 10'000U, 100'000U}) {
+        const auto values = make_integer_values(size);
+        const auto rrb = ft::rrb_vector<int>::from_range(values);
+        const auto rope = ft::rope<int>::from_range(values);
+        const auto read_iterations = settings.short_mode ? 256U : 16'384U;
+        if (selected(settings, rrb_index_name)) {
+            print(measure(rrb_index_name, size, read_iterations, false, [&](const std::size_t iteration) {
+                return static_cast<std::size_t>(rrb[(iteration * 7'919U) % size]);
+            }));
+        }
+        if (selected(settings, rope_index_name)) {
+            print(measure(rope_index_name, size, read_iterations, false, [&](const std::size_t iteration) {
+                return static_cast<std::size_t>(rope[(iteration * 7'919U) % size]);
+            }));
+        }
+
+        const auto middle = size / 2;
+        const auto left_values = std::span<const int>{values}.first(middle);
+        const auto right_values = std::span<const int>{values}.subspan(middle);
+        const auto left_rrb = ft::rrb_vector<int>::create(left_values);
+        const auto right_rrb = ft::rrb_vector<int>::create(right_values);
+        const auto left_rope = ft::rope<int>::create(left_values);
+        const auto right_rope = ft::rope<int>::create(right_values);
+        const auto concat_iterations = settings.short_mode ? 128U : 4'096U;
+        if (selected(settings, rrb_concat_name)) {
+            print(measure(rrb_concat_name, size, concat_iterations, false, [&](const std::size_t) {
+                const auto joined = left_rrb.concat(right_rrb);
+                return joined.size() + static_cast<std::size_t>(joined.front() + joined.back());
+            }));
+        }
+        if (selected(settings, rope_concat_name)) {
+            print(measure(rope_concat_name, size, concat_iterations, false, [&](const std::size_t) {
+                const auto joined = left_rope.concat(right_rope);
+                return joined.size() + static_cast<std::size_t>(joined.front() + joined.back());
             }));
         }
     }
@@ -525,6 +590,7 @@ int main(const int argc, char** argv)
         run_persistence_branching(settings);
         run_deque_reads(settings);
         run_deque_catenation(settings);
+        run_rrb_vector(settings);
         run_reversible_reverse(settings);
         run_reversible_overhead(settings);
         run_weighted_selection(settings);

@@ -21,3 +21,10 @@ if(NOT FINGERTREE_ENABLE_ALLOCATION_TRACKING)
     )
 endif()
 fingertree_configure_target(fingertree_benchmarks)
+
+# Debug information for the aggregate header plus every benchmark specialization can exceed
+# COFF's default section count under MinGW. The large-object form is a format switch, not a
+# relaxation of the warning or language policy.
+if(MINGW AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(fingertree_benchmarks PRIVATE -Wa,-mbig-obj)
+endif()

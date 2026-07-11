@@ -13,6 +13,7 @@ add_executable(
     reversible_deque_tests.cpp
     rope_tests.cpp
     rope_text_tests.cpp
+    rrb_vector_tests.cpp
     sorted_collection_tests.cpp
     smoke_tests.cpp
     tearable_concurrency_tests.cpp
@@ -57,6 +58,7 @@ set(
     reversible-deque
     rope
     rope-text
+    rrb-vector
     sorted-collections
 )
 

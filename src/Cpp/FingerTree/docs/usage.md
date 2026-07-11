@@ -2,6 +2,8 @@
 
 - Created (UTC): 2026-07-02T20:03:36Z
 - Repository HEAD: 17d505f18e9e0a5748058701d408ed6642dcba29
+- Updated (UTC): 2026-07-11T16:09:45Z
+- Updated against repository HEAD: 66b6821334b243f2d7170a6f9360dae54ef90994
 - Audience: C++ consumers and maintainers using the public FingerTree headers
 - Scope: Public include path, value semantics, common construction/update patterns, and facade quick starts
 
@@ -76,6 +78,37 @@ std::size_t lower = sorted.sorted_lower_bound(3); // 1
 std::size_t upper = sorted.sorted_upper_bound(3); // 3
 auto without_threes = sorted.remove_all_sorted(3);
 ```
+
+## RRB Vector
+
+Use `rrb_vector<T>` when uniform low-depth indexing and persistent concatenation matter more than the deque's
+amortized-O(1) endpoints. Regular 32-way branches use radix indexing without size tables; splits and concatenation
+introduce cumulative tables only along irregular boundary spines.
+
+```cpp
+auto vector = ft::rrb_vector<int>::from_range(std::vector{10, 20, 30, 40});
+auto changed = vector.set_item(2, 300);     // vector still contains 30 at index 2
+
+auto split = changed.split_at(2);
+auto joined = split.left.concat(split.right);
+auto inserted = joined.insert_range(1, std::array{11, 12});
+auto popped = inserted.pop_last();          // { value = 40, rest = [10, 11, 12, 20, 300] }
+```
+
+For append-heavy construction, stage values in the builder. `to_immutable()` caches the clean snapshot; adding
+more values afterwards cannot mutate any snapshot already returned.
+
+```cpp
+auto builder = ft::rrb_vector<int>::create_builder();
+builder.add_range(std::views::iota(0, 1'000));
+auto first = builder.to_immutable();
+
+builder.add(1'000);
+auto second = builder.to_immutable();       // first remains [0, 1000); second is [0, 1000]
+```
+
+The immutable facade deliberately has no persistent tail buffer. `push_back` and `pop_last` therefore remain
+boundary-spine operations; use the builder for bulk append staging.
 
 ## Generic Measured Tree
 

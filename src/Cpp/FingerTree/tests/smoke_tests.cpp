@@ -32,6 +32,7 @@ void add_priority_queue_tests(suite& tests);
 void add_reversible_deque_tests(suite& tests);
 void add_rope_tests(suite& tests);
 void add_rope_text_tests(suite& tests);
+void add_rrb_vector_tests(suite& tests);
 void add_sorted_collection_tests(suite& tests);
 void add_tearable_concurrency_tests(suite& tests);
 
@@ -150,6 +151,9 @@ int main(const int argument_count, const char* const* arguments)
 
     tests.set_group("rope-text");
     add_rope_text_tests(tests);
+
+    tests.set_group("rrb-vector");
+    add_rrb_vector_tests(tests);
 
     tests.set_group("sorted-collections");
     add_sorted_collection_tests(tests);

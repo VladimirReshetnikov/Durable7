@@ -3,8 +3,8 @@
 - Status: Current validation guide
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-10T19:58:06Z
-- Updated Repository HEAD: 82a19b89405110255d76b848e6dff8a8f8d73bee
+- Updated (UTC): 2026-07-11T16:09:45Z
+- Updated Repository HEAD: 66b6821334b243f2d7170a6f9360dae54ef90994
 - Audience: Maintainers validating the C++ port
 - Scope: Local/CI build, test, stress, sample, packaging, sanitizer, and benchmark guidance
 
@@ -135,7 +135,7 @@ lane does not provide a viable TSan runtime.
 
 ## Current Coverage
 
-CTest registers 18 cases: 16 subsystem cases backed by `tests/fingertree_smoke_tests`, from `fingertree.atomic-box` through
+CTest registers 19 cases: 17 subsystem cases backed by `tests/fingertree_smoke_tests`, from `fingertree.atomic-box` through
 `fingertree.support`. Each case invokes the same local runner with an exact `--group` filter through the repository
 headless launcher, so a subsystem failure is isolated without introducing Catch2/GoogleTest or duplicating test
 execution. `fingertree.samples` checks two deterministic transcripts, and `fingertree.installed-consumer` performs
@@ -153,6 +153,9 @@ The suite covers:
   measures, and named operations;
 - reversible deque reversal, mixed-orientation operations, random histories, retained forward-iterator semantics,
   zero-allocation prefix increment over 16,384 reversed values, and O(1)-reverse allocation guards;
+- RRB-vector packed construction at every 32-way boundary tier, regular/relaxed metadata, persistent point and
+  range edits, unequal concatenation, exact-boundary identity reuse, 10,000-step vector-model histories,
+  adversarial density/height sequences, append-builder snapshot isolation, and injected-copy exception safety;
 - sorted bag/set/map ranking, navigation, range, custom order, set algebra, and randomized model checks;
 - priority queue ordering, stability, and command-model behavior;
 - interval tree insertion, overlap, containment, coalescing, removal, and model comparisons;
@@ -179,7 +182,8 @@ cmake --build --preset msvc-release --target fingertree_benchmarks
 `--short` is the required sanity tier. It reduces repetitions while retaining the 100/10k/1M branching ladder.
 The branching case counts allocations and fails when marginal allocation cost is not size-flat. The remaining
 cases cover endpoint updates and endpoint/index reads, ordinary and reversible catenation/endpoint overhead,
-O(1) reverse, sorted search, weighted selection, rope insert/split/slice, measured navigation versus a linear
+RRB-vector indexing and concatenation against positional-rope baselines, O(1) reverse, sorted search, weighted
+selection, rope insert/split/slice, measured navigation versus a linear
 scan, priority meld, and interval overlap queries. A nonempty `--filter` that matches no case is an error. See the
 [benchmark guide](../benchmarks/README.md) for the complete contract.
 

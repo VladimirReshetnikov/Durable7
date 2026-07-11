@@ -2,16 +2,17 @@
 
 - Created (UTC): 2026-07-02T21:06:57Z
 - Repository HEAD: 399710816b9007dde1374aef2043f118beddc225
-- Updated (UTC): 2026-07-10T20:20:56Z
-- Updated Repository HEAD: 18f23de9cb90ac47234bfdeea097da2cedff6f9f
+- Updated (UTC): 2026-07-11T16:09:45Z
+- Updated Repository HEAD: 66b6821334b243f2d7170a6f9360dae54ef90994
 - Audience: Maintainers validating the C++ FingerTree port
 - Scope: Native test executable, source grouping, and stress controls under `src/Cpp/FingerTree/tests`
 
 The C++ FingerTree workspace has one dependency-free native test executable, `fingertree_smoke_tests`. CTest runs
-that executable through 16 subsystem entries (`fingertree.atomic-box`, `fingertree.command-model`,
+that executable through 17 subsystem entries (`fingertree.atomic-box`, `fingertree.command-model`,
 `fingertree.concurrency`, `fingertree.deque`, `fingertree.interval-tree`, `fingertree.lazy-cell`,
 `fingertree.measure`, `fingertree.measured-lazy-cell`, `fingertree.measured-rope`, `fingertree.measured-tree`,
 `fingertree.priority-queue`, `fingertree.reversible-deque`, `fingertree.rope`, `fingertree.rope-text`,
+`fingertree.rrb-vector`,
 `fingertree.sorted-collections`, and `fingertree.support`). This preserves the small runner in
 `test_support/test_runner.hpp` while making CTest failures identify the affected subsystem.
 
@@ -32,6 +33,10 @@ listing, and replay-seed selection.
 - `reversible_deque_tests.cpp` covers reverse orientation, mixed-orientation updates, retained multipass
   forward-iterator logical order, zero-allocation prefix increment over 16,384 values, result equality, random
   histories, and O(1)-reverse allocation checks.
+- `rrb_vector_tests.cpp` covers regular-versus-relaxed metadata, boundary sizes through 100,000, persistent point
+  and endpoint updates, unequal concatenation, exact leaf-boundary identity reuse, split/range edits, retained
+  forward iteration, a deterministic 10,000-step vector model, adversarial density/height drift, append-builder
+  snapshot isolation, adopted-prefix sharing, and injected-copy strong-exception guarantees.
 - `command_sequence_tests.cpp` instantiates the stateful command recorder against the measured tree, tuned deque,
   reversible deque, positional rope, measured rope, and sorted set. Five default seeds exercise retained-version
   branching; failures are replayed and delta-debugged to a deletion-minimal operation program. The same unit

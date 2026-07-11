@@ -3,8 +3,8 @@
 - Status: Informational
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-10T19:40:22Z
-- Updated against repository HEAD: 82a19b89405110255d76b848e6dff8a8f8d73bee
+- Updated (UTC): 2026-07-11T16:09:45Z
+- Updated against repository HEAD: 66b6821334b243f2d7170a6f9360dae54ef90994
 - Audience: Maintainers and AI agents implementing the C++ port
 - Scope: C++ port documentation under `src/Cpp/FingerTree/docs`
 
@@ -23,7 +23,8 @@
 - [Tests README](../tests/README.md) maps the native smoke runner, domain test files, direct executable path, and
   tearable concurrency stress control.
 - [Samples README](../samples/README.md) describes the deterministic showcase and measured-rope snapshot tour.
-- [Benchmarks README](../benchmarks/README.md) catalogs the dependency-free Milestone 8 performance cases.
+- [Benchmarks README](../benchmarks/README.md) catalogs the dependency-free Milestone 8 performance cases and
+  the RRB-vector-versus-rope gate.
 
 ## Independent Reviews
 

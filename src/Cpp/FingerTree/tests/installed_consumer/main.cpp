@@ -18,10 +18,12 @@ int main()
     const auto deque = ft::persistent_deque<int>::from_range(source).push_front(0).push_back(5);
     const auto weighted = ft::finger_tree<int, ft::sum_measure<int>>{5, 1, 4};
     const auto selected = ft::try_select_by_cumulative_weight(weighted, 5);
+    const auto rrb = ft::rrb_vector<int>::from_range(source).set_item(2, 30).concat(ft::rrb_vector<int>{5, 6});
     const auto text = ft::to_text_rope("alpha\nbeta\ngamma");
 
     if (deque.size() != 6 || deque.front() != 0 || deque.back() != 5 || !selected.has_value()
-        || selected->value != 1 || ft::line_count(text) != 3 || ft::get_line(text, 1) != "beta") {
+        || selected->value != 1 || rrb.size() != 6 || rrb[2] != 30 || rrb.back() != 6
+        || ft::line_count(text) != 3 || ft::get_line(text, 1) != "beta") {
         std::cerr << "installed public API smoke check failed\n";
         return 1;
     }

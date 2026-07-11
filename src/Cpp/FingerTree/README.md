@@ -3,8 +3,8 @@
 - Status: Active C++ workspace
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-10T19:40:22Z
-- Updated against repository HEAD: 82a19b89405110255d76b848e6dff8a8f8d73bee
+- Updated (UTC): 2026-07-11T16:09:45Z
+- Updated against repository HEAD: 66b6821334b243f2d7170a6f9360dae54ef90994
 - Audience: Maintainers implementing and reviewing the C++ port
 - Scope: Build entry points, layout, and validation for `src/Cpp/FingerTree`
 
@@ -12,6 +12,12 @@ This workspace contains the C++ port of the `FingerTree` data-structure library.
 [`docs/port-plan.md`](docs/port-plan.md): a header-first library under the namespace
 `tools::data_structures::finger_tree`, CMake/Ninja build entry points for the local MSVC toolchain, and CTest
 validation from the first milestone onward.
+
+Alongside the measured-tree family, the workspace now ships `rrb_vector<T>`: a persistent 32-way relaxed
+radix-balanced vector with dense regular branches, cumulative-size relaxed branches, boundary-spine split and
+concatenation, and an append builder whose immutable snapshots remain isolated from later staging. The public
+aggregate header includes the vector and its builder; representation diagnostics and adversarial model tests keep
+the regular/relaxed distinction, density, height, and sharing contracts observable to maintainers.
 
 The workspace is intentionally dependency-free beyond the C++ standard library. Its native tests use a small
 local runner and its benchmark harness is repository-owned, so configuring a preset does not implicitly run a
