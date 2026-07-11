@@ -215,11 +215,11 @@ language-first layout.
   `PersistentHashMap` and `PersistentHashSet` with bitmap-indexed trie nodes, immutable collision
   buckets, `Arc` structural sharing, `BuildHasher` hash policy support, and Cargo unit tests.
 - [src/Rust/FingerTree](src/Rust/FingerTree/README.md) is the Rust checkpoint port of the FingerTree
-  family. It exposes persistent deque, measured sequence, reversible deque, sorted bag/set/map,
-  built-in/product measure policies, priority queue, interval tree, rope, measured rope, and text
-  helpers with immutable snapshot semantics. The public FingerTree-family facades now use
-  structurally shared Rust tree storage; the current crate documents the remaining
-  semantic-checkpoint boundary before final lazy measured-spine asymptotic parity.
+  family and newer sequence/streaming cores. Its persistent deque, measured sequence, RRB vector,
+  reversible deque, sorted bag/set/map, priority queue, interval tree, and rope/text facades use
+  structurally shared Rust storage. The separate mutable `DabaLite<T, M>` preserves bounded FIFO
+  aggregation callbacks and prompt deterministic reclamation; it is `!Send`/`!Sync`, and `clear`
+  is explicitly O(n + c) because owned values must be dropped.
 - [src/Rust/Tungsten](src/Rust/Tungsten/README.md) is the safe Rust Tungsten-collections crate. It exposes
   `PersistentList<T>` and `PersistentAssociation<K, V, S>` over the Rust FingerTree and HAMT crates,
   preserving the Tungsten Association ordering rules, slicing, sorting, and relabel behavior.

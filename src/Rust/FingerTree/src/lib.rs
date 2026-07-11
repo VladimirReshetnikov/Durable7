@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![doc = "Persistent FingerTree-family data structures for Rust."]
 
+mod daba_lite;
 mod deque;
 mod interval_tree;
 mod measured;
@@ -10,6 +11,9 @@ mod rrb_vector;
 mod sorted;
 mod text_extras;
 
+pub use daba_lite::{
+    DabaLite, DabaLiteInvariantError, DabaLiteStatistics, DabaMonoid, EmptyDabaLiteError,
+};
 pub use deque::{
     DequeItemSplit, DequePop, DequeRangeSplit, DequeSplit, PersistentDeque, ReversibleDeque,
     ReversibleDequePop, ReversibleDequeSplit,

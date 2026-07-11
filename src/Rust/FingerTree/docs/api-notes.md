@@ -11,6 +11,7 @@ The public crate is `tools-data-structures-fingertree`, with library name
 Current public families:
 
 - `PersistentDeque<T>` and `ReversibleDeque<T>`;
+- `DabaLite<T, M>`, `DabaMonoid<T>`, `DabaLiteStatistics`, and the empty/invariant error types;
 - `RrbVector<T>`, `RrbVectorBuilder<T>`, and the split/pop/statistics result types;
 - `FingerTree<T, P>` over `MeasurePolicy<T>`;
 - built-in policies `SizeMeasure`, `SumMeasure<T>`, `MaxMeasure`, `MinMeasure`, `KeyMeasure<T>`,
@@ -46,10 +47,70 @@ The Rust surface follows Rust conventions:
 - out-of-range RRB indexing, splitting, and range edits return `None`; indexing through `Index`
   retains Rust's ordinary panic-on-invalid-index convention.
 
-This workspace is a semantic checkpoint, not the final lazy finger-tree representation. It preserves immutable
-snapshot behavior, stable observable ordering, rank/range semantics, priority stability, closed-interval overlap
-semantics, and text line navigation. `PersistentDeque<T>` has moved past the initial vector snapshot and now uses
-an `Arc`-shared balanced tree, so nontrivial splits, concatenations, range operations, and point updates share
+## DABA Lite FIFO-window aggregation
+
+`DabaLite<T, M>` is the crate's intentionally mutable streaming core. `M: DabaMonoid<T>` supplies
+static `empty` and ordered `combine` callbacks; the built-in `SumMeasure<T>` also implements this
+trait when `T` has its existing sum-policy bounds. The monoid must be associative with a two-sided
+identity but need not be commutative or invertible.
+
+```rust
+use tools_data_structures_fingertree::{DabaLite, SumMeasure};
+
+let mut window = DabaLite::<i64, SumMeasure<i64>>::new();
+window.insert(5);
+window.insert(8);
+window.insert(13);
+assert_eq!(window.aggregate(), 26);
+
+window.evict().unwrap();
+assert_eq!(window.aggregate(), 21);
+assert_eq!(window.validate_structure().unwrap().len, 2);
+```
+
+The six cursor order is `F <= L <= R <= A <= B <= E`. Each insertion or eviction executes exactly
+one bounded fixup: front exhaustion, flip initialization, the `L == R` shift, or one paired partial-
+aggregate rewrite. There is no reversal loop. `insert`, `try_evict`/`evict`, and `aggregate` invoke
+`combine` at most three, two, and one times respectively. A nonempty query invokes it exactly once;
+an empty query calls `empty` and invokes no combine. These are callback-count bounds independent of
+window size, while the complete operation is worst-case O(1) only if the callbacks are O(1).
+
+All callback-derived values and a possible successor chunk are planned before any mutation is
+published. If `empty` or `combine` unwinds from an insertion, eviction, or nonempty clear, the exact
+length, six cursors, active links, slots, and aggregate fields remain unchanged. Callback side
+effects, including effects through interior mutability, are not rolled back. The guarantee is
+specifically callback panic safety; a user-defined `T::drop` that itself panics is outside it.
+
+`evict` returns `Err(EmptyDabaLiteError)` for an empty window, while `try_evict` returns `false`.
+Successful eviction clears the retired slot immediately and detaches a predecessor chunk as soon as
+`F` crosses the boundary. `clear` obtains `empty` once and invokes no combine before replacing the
+state with one empty chunk. It then iteratively severs the old chain and drops every slot. This is an
+intentional Rust/C# complexity divergence: safe generic Rust cannot both release arbitrary owned
+values promptly and perform only O(1) destructor work, so Rust `clear` is O(n + c) for `n` values in
+`c` chunks. It neither leaks nor defers an unbounded retired chain.
+
+Queue positions are partial-aggregate storage rather than stable originals, so the API intentionally
+has no peek, value-returning eviction, or iterator. `validate_structure` is callback-free and checks
+the bidirectional chunk links, acyclicity, cursor reachability/order, count and DABA region equations,
+and the one-to-127-slot nonempty slack bound. It returns front/back/work-region lengths and physical
+chunk capacity, but cannot reconstruct content for an arbitrary non-invertible monoid; tests compare
+the aggregate with an external FIFO model.
+
+For `n` live positions, the linked queue allocates `n` slots plus one through 127 slack slots; an
+empty window owns one 64-slot chunk. Each occupied slot and each of the two aggregate fields holds an
+`Rc<T>`. That bounded indirection lets transactional planning retain old and candidate aggregates
+without imposing `T: Clone`; tests exercise a non-`Clone` monoid value. Six cursors, weak backward
+links, and strong forward chunk links are additional metadata.
+
+The safe stable-cursor representation uses `Rc<RefCell<_>>`, making `DabaLite` neither `Send` nor
+`Sync`. Keep each instance on one thread and mutate it through exclusive `&mut self`; the type does
+not provide snapshots or internal synchronization.
+
+This workspace is a semantic checkpoint, not the final lazy finger-tree representation. Its persistent families
+preserve immutable snapshot behavior, stable observable ordering, rank/range semantics, priority stability,
+closed-interval overlap semantics, and text line navigation. `PersistentDeque<T>` has moved past the initial
+vector snapshot and now uses an `Arc`-shared balanced tree, so nontrivial splits, concatenations, range operations,
+and point updates share
 unchanged subtrees. `ReversibleDeque<T>` is now an O(1) mirrored-tree view over that deque: reverse wraps or
 cancels a shared tree view, and reversed/mixed-orientation endpoint operations, splits, and concatenations stay on
 the tree path instead of materializing vectors. Split/pop results preserve that wrapper, and `iter`, borrowed

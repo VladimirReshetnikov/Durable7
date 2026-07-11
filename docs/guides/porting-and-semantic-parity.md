@@ -60,6 +60,16 @@ explicit epoch/hazard-pointer reclamation design, while a pure Haskell port woul
 structure. Promoting another language requires a separately reviewed reclamation and concurrency
 contract, not a mechanical HAMT port.
 
+DABA Lite is another deliberately mutable member, but its algorithm is portable independently of
+its lifetime policy. C#, Kotlin/JVM, and Rust preserve FIFO ordering, the six-cursor schedule,
+three/two/one combine ceilings, callback-atomic mutators, callback-free structural validation, and
+the absence of raw-value iteration. Managed tracing-GC ports can replace the active chunk chain in
+O(1). Safe Rust instead clears in O(n + c), iteratively dropping `n` owned values in `c` chunks;
+deferring that destruction would violate prompt reclamation. Its stable `Rc` cursor representation
+also makes the mutable core `!Send` and `!Sync`. Treat these ownership/concurrency differences as
+explicit language semantics, not parity failures. A pure Haskell value would not preserve DABA's
+ephemeral incremental schedule, so omission there is intentional.
+
 FingerTree lineage:
 
 1. [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) is the broadest semantic source:
@@ -74,11 +84,13 @@ FingerTree lineage:
    priority queue, intervals, ropes, and text helpers.
 5. [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) ports the family to Kotlin/JVM over
    structurally shared measured AVL sequences with cached monoidal summaries and runtime
-   measure/comparator policies; its API notes state the strict-AVL versus lazy-digit-spine costs.
+   measure/comparator policies; its API notes state the strict-AVL versus lazy-digit-spine costs and
+   segregate the mutable managed DABA Lite member.
 6. [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) is the Rust semantic checkpoint for
    the same family names. It preserves immutable snapshot behavior now; the public facades use
    structurally shared Rust tree storage, while the workspace documents the remaining asymptotic
-   boundary until the lazy measured spine is ported through the whole family.
+   boundary until the lazy measured spine is ported through the whole family. Its separate DABA
+   Lite core is mutable, single-threaded, and documents deterministic-drop clear semantics.
 
 Tungsten collections lineage:
 
@@ -200,6 +212,9 @@ For finger-tree-family changes, verify these contracts across the relevant C#, C
 - Interval trees use the documented endpoint comparison, overlap, containment, and removal rules.
 - Ropes preserve chunked persistence, split/concat/indexing semantics, and text newline navigation
   rules where exposed.
+- DABA Lite ports preserve FIFO order, six-cursor region equations, bounded callback counts,
+  callback-failure atomicity, and the no-iteration surface; clear and concurrency claims must match
+  tracing-GC versus deterministic-ownership semantics rather than being copied mechanically.
 - Lazy middle and measure publication rules are not weakened when changing core internals.
 - Concurrency docs distinguish immutable snapshot reads from mutation of handles or reference counts.
 

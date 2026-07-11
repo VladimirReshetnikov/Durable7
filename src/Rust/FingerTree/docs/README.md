@@ -5,21 +5,23 @@
 - Audience: Maintainers and reviewers of `tools-data-structures-fingertree`
 - Scope: Documentation index for the Rust FingerTree-family workspace
 
-The Rust FingerTree crate is a safe Rust checkpoint for the repository FingerTree family. Its public
-facades use structurally shared Rust storage where implemented, preserve immutable snapshot behavior,
-and document the remaining lazy-spine asymptotic parity boundary.
+The Rust FingerTree crate is a safe Rust checkpoint for the repository FingerTree family. Its
+persistent public facades use structurally shared Rust storage where implemented and preserve
+immutable snapshot behavior. DABA Lite is the documented single-threaded mutable exception; the
+remaining persistent-family lazy-spine asymptotic parity boundary stays explicit.
 
 ## Current Documents
 
 - [API notes](api-notes.md) describe `PersistentDeque<T>`, `ReversibleDeque<T>`,
-  `RrbVector<T>`, `FingerTree<T, P>`, `MeasurePolicy<T>`, built-in and product measures, sorted
+  `DabaLite<T, M>`, `DabaMonoid<T>`, `RrbVector<T>`, `FingerTree<T, P>`, `MeasurePolicy<T>`,
+  built-in and product measures, sorted
   facades, priority queues, interval trees, ropes, measured ropes, text helpers, Rust result shapes,
   and checkpoint limitations.
 - [Validation](validation.md) records the Cargo command, local rustup fallback path, safe-Rust boundary,
   and coverage map for the checkpoint behavior.
 - [Tests README](../tests/README.md) maps unit coverage for deque operations, reversible orientation,
-  RRB representation invariants, measured splits, sorted facades, priority queues, intervals, ropes,
-  measured ropes, and text helpers.
+  DABA Lite state-machine and failure atomicity, RRB representation invariants, measured splits,
+  sorted facades, priority queues, intervals, ropes, measured ropes, and text helpers.
 
 ## Related Repository Docs
 

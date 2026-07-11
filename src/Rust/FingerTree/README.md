@@ -9,6 +9,7 @@
 family. It exposes Rust-native names for the same public families:
 
 - `PersistentDeque<T>`;
+- `DabaLite<T, M>` over a `DabaMonoid<T>`;
 - `RrbVector<T>` and its append-only `RrbVectorBuilder<T>`;
 - `FingerTree<T, P>` over a `MeasurePolicy<T>`, including built-in size, sum, min/max, key,
   order-statistic, and product-measure policies;
@@ -20,7 +21,14 @@ family. It exposes Rust-native names for the same public families:
   including Unicode text extras and newline-style classification.
 
 This checkpoint preserves immutable snapshot semantics and the observable behavior covered by the
-crate tests. `PersistentDeque<T>` uses structurally shared balanced tree storage and caches first/last
+crate tests for its persistent families. `DabaLite<T, M>` is the deliberate mutable exception: it
+ports the six-cursor DABA Lite schedule over linked 64-slot chunks, bounds insertion/eviction/query
+to three/two/one monoid combines, plans callback work transactionally before publication, and
+promptly releases retired slots and chunks. Its safe `Rc` cursor representation is single-threaded
+(`!Send` and `!Sync`). Rust's deterministic destruction makes `clear` O(n + c), because promptly
+releasing `n` generic owned values in `c` chunks must run their destructors; insertion, eviction,
+and query retain worst-case O(1) work when the callbacks do.
+`PersistentDeque<T>` uses structurally shared balanced tree storage and caches first/last
 leaf signposts at every node, so sorted lower/upper bounds visit O(log n) nodes and feed the full sorted
 split/equal-range/insert/remove vocabulary.
 `RrbVector<T>` is the uniform-random-access sibling: immutable 32-slot leaves sit below 32-way

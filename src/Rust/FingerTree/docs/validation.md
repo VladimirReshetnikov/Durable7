@@ -17,6 +17,11 @@ non-interactive Windows error handling before Cargo starts the test executable.
 The crate uses `#![forbid(unsafe_code)]`. Unit tests are inline in the module files under `FingerTree/src/` and
 cover:
 
+- DABA Lite exhaustive short histories under a noncommutative matrix monoid, a 100,000-operation
+  variable-window sum model, all four six-cursor fixup phases, exact three/two/one combine ceilings,
+  63/64/65 and 127/128/129 chunk boundaries, steady-window churn, callback-free structural
+  statistics, provisional successor rollback, identity/combine panic injection at every reachable
+  callback ordinal, state reuse after failure, prompt retired-slot/chunk release, and clear/reuse;
 - persistent deque updates, subtree sharing, bounded-depth tree shape, splitting, concatenation, cached endpoint
   signposts, logarithmic sorted bounds, sorted lower/upper/equal-range splits, insertion/removal, custom ordering,
   and randomized model replay;

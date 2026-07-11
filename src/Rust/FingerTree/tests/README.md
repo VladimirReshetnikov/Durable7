@@ -13,6 +13,10 @@ Tests currently live inline in the module files under [`../src`](../src). Run th
 
 Coverage groups:
 
+- `daba_lite.rs`: the six-cursor DABA Lite state machine, noncommutative/exhaustive and 100,000-step
+  FIFO models, all fixup phases and callback ceilings, 63/64/65 and 127/128/129 chunk boundaries,
+  exact callback-panic atomicity, provisional-link rollback, callback-free invariants, deterministic
+  retired-slot/chunk release, and clear/reuse;
 - `deque.rs`: structurally shared persistent deque, cached endpoint-signpost validation, logarithmic sorted bounds,
   sorted split/equal-range/insert/remove operations (including custom ordering), model replay, subtree-sharing
   checks, and reversible deque O(1) mirrored views with reversible-typed results, logical iteration, and
