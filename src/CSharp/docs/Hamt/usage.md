@@ -246,6 +246,28 @@ Console.WriteLine(published["REQUESTS"]);
 Factories passed to `GetOrAdd` and `AddOrUpdate` may be invoked more than once under contention;
 keep them repeatable and free of non-repeatable side effects.
 
+## Integer-Key Patricia Maps
+
+Choose the Patricia family when keys are exactly signed 32-bit or 64-bit integers and ordered
+enumeration or structural merge matters:
+
+```csharp
+var baseline = PersistentIntMap<string>.CreateRange(
+    new[] { KeyValuePair.Create(-1, "old"), KeyValuePair.Create(10, "ten") });
+var delta = PersistentIntMap<string>.CreateRange(
+    new[] { KeyValuePair.Create(-1, "new"), KeyValuePair.Create(20, "twenty") });
+
+var merged = baseline.Union(delta); // right-biased
+var combined = baseline.Union(delta, (key, left, right) => $"{key}:{left}+{right}");
+
+// -1, 10, 20: ascending signed order.
+foreach (var key in merged.Keys)
+    Console.WriteLine(key);
+```
+
+Use `PersistentLongMap<TValue>` for `long` keys. `PersistentIntSet` and `PersistentLongSet` expose
+the corresponding value-set surfaces with structural `Union`, `Intersect`, and `Except`.
+
 ## Choosing A Surface
 
 | Need | Start with |
@@ -259,6 +281,7 @@ keep them repeatable and free of non-repeatable side effects.
 | Union/intersection/difference | `Union`, `Intersect`, `Except`, `SymmetricExcept` |
 | Custom value semantics | `Create(comparer)` or `CreateRange(items, comparer)` |
 | Shared mutable map with O(1) immutable snapshots | `ConcurrentHashTrie<TKey, TValue>` |
+| Signed integer keys with ordered structural merge | `PersistentIntMap<TValue>` / `PersistentLongMap<TValue>` |
 
 For cross-language contract alignment, see the repository
 [porting and semantic parity guide](../../../../docs/guides/porting-and-semantic-parity.md).

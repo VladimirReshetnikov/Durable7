@@ -63,6 +63,8 @@ The suite covers:
 - generated set behavior checked against model set semantics.
 - concurrent hash-trie generation semantics, stable snapshots/enumerators, contended unique-key
   publication, atomic accumulation, and concurrent snapshot consistency.
+- 32/64-bit Patricia signed-boundary ordering, 35,000 randomized model operations with retained
+  snapshots, combining overloads, set relations, and randomized prefix-aware structural algebra.
 
 For a new public operation, add both direct examples and model/property coverage when there is a natural
 BCL or simple in-memory oracle.

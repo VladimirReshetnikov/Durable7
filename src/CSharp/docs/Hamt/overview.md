@@ -15,6 +15,11 @@ same HAMT core and implements `IReadOnlySet<T>`.
 generation-stamped immutable CHAMP roots with compare-and-swap, giving lock-free reads and updates,
 stable enumeration, and O(1) `Snapshot()` conversion to `PersistentHashMap<TKey, TValue>`.
 
+`PersistentIntMap<TValue>` / `PersistentIntSet` and `PersistentLongMap<TValue>` /
+`PersistentLongSet` are big-endian Patricia tries for signed 32-bit and 64-bit keys. Their
+path-compressed binary shape provides ascending signed enumeration and prefix-aware structural
+`Union`, `Intersect`, and `Except` with reference-equal subtree pruning.
+
 The trie consumes 5 hash bits per level. Each sparse branch has separate data and node bitmaps,
 with key/value payloads inlined into a compact data run and subtries held in a compact child run.
 Canonical deletion promotes singleton child payloads back into their parent; equal-hash unequal-key
@@ -36,6 +41,8 @@ for association relabel/sort/reverse rebuilds; no mutable storage is ever shared
   - `PersistentHashMap.cs` is the bitmap-indexed HAMT map implementation.
   - `MapDifference.cs` defines the added/removed/changed result vocabulary used by structural diff.
   - `ConcurrentHashTrie.cs` is the lock-free mutable map with O(1) persistent snapshots.
+  - `PersistentIntMap.cs`, `PersistentLongMap.cs`, and their set facades expose the Patricia family.
+  - `Internal/PatriciaMapCore.cs` contains the shared width-specialized engine.
   - `PersistentHashSet.cs` is the set wrapper over the map core.
 - [`tests/Tools.DataStructures.Hamt.Tests/`](../../tests/Tools.DataStructures.Hamt.Tests/README.md) contains xUnit
   and CsCheck-backed model tests.

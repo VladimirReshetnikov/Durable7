@@ -29,6 +29,8 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
   `IReadOnlySet<T>` behavior, generated set-algebra checks, and concurrent snapshot readers.
 - `ConcurrentHashTrieTests.cs` covers linearizable mutation, generation stamps, stable O(1)
   snapshots/enumerators, contended updates, and concurrent snapshot consistency.
+- `PersistentIntegerPatriciaTests.cs` covers signed boundary ordering, randomized 32/64-bit model
+  histories, retained snapshots, structural map algebra, combining overloads, and set relations.
 
 ## Build And Run
 

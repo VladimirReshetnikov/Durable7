@@ -125,6 +125,11 @@ bound in one pass instead of retrofitting it later.
 
 ### `PersistentIntMap<TValue>` / `PersistentIntSet` (big-endian Patricia trie)
 
+**C# status (2026-07-10): Implemented for both widths.** `PersistentIntMap<TValue>` /
+`PersistentIntSet` and `PersistentLongMap<TValue>` / `PersistentLongSet` share a static-policy
+big-endian Patricia engine, enumerate in signed order, preserve no-op identity, and provide
+prefix-aware structural union/intersection/difference plus map combining overloads.
+
 **What it is.** Okasaki & Gill's mergeable integer maps (1998): a binary trie over the bits of an
 integer key, path-compressed so each internal node stores a prefix and the single branching bit,
 branching on the highest bit where keys differ. Operations are O(min(n, W)) with W the key width;

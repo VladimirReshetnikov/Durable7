@@ -139,3 +139,27 @@ paper's JVM generation/indirection-node GCAS layout. A state object contains the
 generation; unique state identity prevents ABA. Reads and snapshots are O(trie lookup) and O(1)
 respectively and take no locks. A successful write is O(CHAMP update) plus one CAS; under contention
 it may retry and allocate discarded paths, so progress is lock-free rather than wait-free.
+
+## Integer Patricia Map And Set Contract
+
+The integer-specialized family consists of:
+
+- `PersistentIntMap<TValue>` and `PersistentIntSet` for `int` keys/items;
+- `PersistentLongMap<TValue>` and `PersistentLongSet` for `long` keys/items.
+
+The concrete facades share a static-policy big-endian Patricia engine; no generic-math or virtual
+key conversion occurs in the hot path. A sign-bit transform maps signed order to unsigned trie
+order, so enumeration is ascending signed order including the minimum/maximum boundary. Keys are
+their own identities and hashes, so collision buckets and comparer policies do not exist.
+
+Map `SetItem`, `Add`/`TryAdd`, `Remove`/`TryRemove`, `Clear`, and no-op instance identity mirror the
+persistent CHAMP vocabulary. `Union` is right-biased by default; `Union` and `Intersect` overloads
+accept `(key, left, right)` combining functions. Default `Union`, `Intersect`, and `Except` recurse
+over prefixes, prune reference-equal subtrees, and reuse untouched nodes. Set facades expose the
+same three structural operations and implement `IReadOnlySet<T>`.
+
+Lookup and update visit at most W path-compressed branches, where W is 32 or 64. Structural algebra
+is proportional to the prefixes where the inputs overlap or diverge and returns immediately for
+reference-equal roots. Combining overloads currently enumerate one side and therefore cost
+O(m * W). Enumeration is O(n) in ascending order and currently allocates an iterator plus a traversal
+stack; unlike the CHAMP enumerator, it is not an allocation-free struct enumerator.
