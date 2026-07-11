@@ -56,6 +56,7 @@ Results are written under `BenchmarkDotNet.Artifacts/` (git-ignored); curated ta
 | `CanonicalSortedSetBenchmarks` | keyed zip-zip lookup, independent-history equality, and memoized digest | `ImmutableSortedSet<T>` |
 | `BrodalOkasakiHeapBenchmarks` | worst-case O(1) persistent insert/meld and O(log n) delete-min | measured finger-tree priority queue |
 | `PrioritySearchQueueBenchmarks` | keyed priority updates, delete-min, and range-bounded priority queries | `SortedDictionary` lookup and filtered scan |
+| `MerkleSearchTreeBenchmarks` | content-addressed lookup/update, O(1) digest equality, and digest-pruned diff | `SortedDictionary` lookup |
 
 ## Fairness methodology
 

@@ -65,6 +65,8 @@ The suite covers:
   publication, atomic accumulation, and concurrent snapshot consistency.
 - 32/64-bit Patricia signed-boundary ordering, 35,000 randomized model operations with retained
   snapshots, combining overloads, set relations, and randomized prefix-aware structural algebra.
+- Merkle search-tree independent-policy/history convergence, canonical codec vectors, typed diff,
+  30,000 randomized updates with retained snapshots, ordered ranges, no-op identity, and policy-domain separation.
 
 For a new public operation, add both direct examples and model/property coverage when there is a natural
 BCL or simple in-memory oracle.

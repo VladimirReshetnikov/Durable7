@@ -268,6 +268,30 @@ foreach (var key in merged.Keys)
 Use `PersistentLongMap<TValue>` for `long` keys. `PersistentIntSet` and `PersistentLongSet` expose
 the corresponding value-set surfaces with structural `Union`, `Intersect`, and `Except`.
 
+## Content-Addressed Ordered Maps
+
+Construct a Merkle tree only with an explicit semantic and encoding policy:
+
+```csharp
+var policy = MerkleSearchTreePolicy<int, string?>.Create(
+    "document-index-v1",
+    Comparer<int>.Default,
+    MerkleCodecs.Int32,
+    MerkleCodecs.Utf8String);
+
+var baseline = MerkleSearchTree<int, string?>.Create(policy)
+    .SetItem(10, "ten")
+    .SetItem(20, "twenty");
+var updated = baseline.SetItem(20, "TWENTY").SetItem(30, "thirty");
+
+MerkleDigest address = updated.RootHash;
+IReadOnlyList<MerkleMapDifference<int, string?>> changes = baseline.Diff(updated);
+```
+
+Recreate the same policy id, comparer semantics, codec ids, and logical entries in another process
+to obtain the same root address. Do not use a codec whose output depends on process-randomized hashes,
+culture, object identity, or ambient serialization settings.
+
 ## Choosing A Surface
 
 | Need | Start with |
@@ -282,6 +306,7 @@ the corresponding value-set surfaces with structural `Union`, `Intersect`, and `
 | Custom value semantics | `Create(comparer)` or `CreateRange(items, comparer)` |
 | Shared mutable map with O(1) immutable snapshots | `ConcurrentHashTrie<TKey, TValue>` |
 | Signed integer keys with ordered structural merge | `PersistentIntMap<TValue>` / `PersistentLongMap<TValue>` |
+| Cross-process content address, ordered range sync, and digest-pruned diff | `MerkleSearchTree<TKey, TValue>` |
 
 For cross-language contract alignment, see the repository
 [porting and semantic parity guide](../../../../docs/guides/porting-and-semantic-parity.md).

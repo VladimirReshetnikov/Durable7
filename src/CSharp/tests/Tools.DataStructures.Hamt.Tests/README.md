@@ -31,6 +31,8 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
   snapshots/enumerators, contended updates, and concurrent snapshot consistency.
 - `PersistentIntegerPatriciaTests.cs` covers signed boundary ordering, randomized 32/64-bit model
   histories, retained snapshots, structural map algebra, combining overloads, and set relations.
+- `MerkleSearchTreeTests.cs` covers canonical codec vectors, independent policy/history shape and
+  root-address convergence, typed digest-pruned diff, randomized histories/snapshots, ranges, and domain separation.
 
 ## Build And Run
 

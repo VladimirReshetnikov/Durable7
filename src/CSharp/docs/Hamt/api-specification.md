@@ -163,3 +163,35 @@ is proportional to the prefixes where the inputs overlap or diverge and returns 
 reference-equal roots. Combining overloads currently enumerate one side and therefore cost
 O(m * W). Enumeration is O(n) in ascending order and currently allocates an iterator plus a traversal
 stack; unlike the CHAMP enumerator, it is not an allocation-free struct enumerator.
+
+## Merkle Search Tree Contract
+
+`MerkleSearchTree<TKey, TValue>` is an immutable ordered content-addressed map. Shape priority is a
+geometric layer derived from `SHA-256(domain || canonical-key)` plus the full digest and key order as
+tie-breaks. Consequently, the same policy and logical entries produce the same Cartesian/Merkle
+search-tree shape regardless of insertion/deletion history.
+
+There is deliberately no unsafe default policy. `MerkleSearchTreePolicy<TKey, TValue>` requires:
+
+- a stable application `PolicyId` naming comparer semantics and their version;
+- an `IComparer<TKey>` defining key equivalence/order;
+- an injective `IMerkleCodec<TKey>` encoding comparer-equivalence classes;
+- a canonical `IMerkleCodec<TValue>` value encoding.
+
+The domain digest covers `mst-sha256-v1`, the application policy id, and both codec ids. Built-in
+codecs provide big-endian `int`/`long`, tagged nullable UTF-8 strings and byte arrays, and RFC-4122
+GUID bytes. Every node hash uses domain-separated, 32-bit-big-endian length-framed fields plus child
+digests. Default randomized .NET string hashing is never used. A caller whose comparer equates
+multiple representations must encode that equivalence class identically; distinct classes must not
+share an encoding.
+
+Lookup and ordered ranges are expected O(log n + k). `SetItem`/`Remove` path-copy expected O(log n)
+nodes and eagerly recompute their hashes; equal values and absent removals preserve identity.
+`RootHash` and `ContentEquals` are O(1); the latter adopts the ordinary SHA-256 collision-resistance
+assumption of content-addressed systems. `MapEquals` follows the digest fast path with semantic
+lockstep verification. `Diff` prunes equal-digest subtrees and returns typed added/removed/changed
+records; when one edit changes a canonical ancestor, it merge-scans that divergent region.
+
+Keys and values should be semantically immutable after insertion, just as dictionary keys must not
+change comparer behavior. The tree owns encoded byte arrays, so later mutation of caller-provided
+codec buffers cannot alter a published root address.

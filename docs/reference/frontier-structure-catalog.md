@@ -200,6 +200,12 @@ benchmark-first question").
 
 ### Merkle search trees / Prolly trees
 
+**C# status (2026-07-10): Implemented with the deterministic-hashing and serialization gates.**
+`MerkleSearchTree<TKey, TValue>` uses explicit versioned `IMerkleCodec<T>` policies, domain-separated
+SHA-256 geometric key layers, canonical length-framed node serialization, cross-policy fingerprinting,
+ordered ranges, content equality, verified equality, and digest-pruned typed diff. Built-in codecs
+cover integers, strings, byte arrays, and GUIDs; arbitrary types must supply canonical encodings.
+
 **What they are.** Two convergent designs for *uniquely represented, content-addressed* search
 trees. Merkle search trees (Auvolat & Taïani, SRDS 2019) place each key at a layer derived from its
 hash (geometric distribution), producing a deterministic B-tree-like shape independent of insertion

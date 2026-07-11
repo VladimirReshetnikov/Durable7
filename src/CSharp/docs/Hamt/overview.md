@@ -20,6 +20,11 @@ stable enumeration, and O(1) `Snapshot()` conversion to `PersistentHashMap<TKey,
 path-compressed binary shape provides ascending signed enumeration and prefix-aware structural
 `Union`, `Intersect`, and `Except` with reference-equal subtree pruning.
 
+`MerkleSearchTree<TKey, TValue>` is the ordered content-addressed sibling. Explicit versioned
+key/value codecs and an application policy domain feed SHA-256 key layers and node hashes, producing
+a deterministic search-tree shape and root address across processes. It provides ordered range
+enumeration, O(1) digest equality, verified equality, and digest-pruned semantic diff.
+
 The trie consumes 5 hash bits per level. Each sparse branch has separate data and node bitmaps,
 with key/value payloads inlined into a compact data run and subtries held in a compact child run.
 Canonical deletion promotes singleton child payloads back into their parent; equal-hash unequal-key
@@ -43,6 +48,8 @@ for association relabel/sort/reverse rebuilds; no mutable storage is ever shared
   - `ConcurrentHashTrie.cs` is the lock-free mutable map with O(1) persistent snapshots.
   - `PersistentIntMap.cs`, `PersistentLongMap.cs`, and their set facades expose the Patricia family.
   - `Internal/PatriciaMapCore.cs` contains the shared width-specialized engine.
+  - `MerkleEncoding.cs` defines canonical codecs, the 256-bit digest, and versioned policy domain.
+  - `MerkleSearchTree.cs` implements the ordered content-addressed map and typed diff results.
   - `PersistentHashSet.cs` is the set wrapper over the map core.
 - [`tests/Tools.DataStructures.Hamt.Tests/`](../../tests/Tools.DataStructures.Hamt.Tests/README.md) contains xUnit
   and CsCheck-backed model tests.
