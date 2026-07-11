@@ -5,7 +5,8 @@
 - Audience: Maintainers navigating Rust HAMT test coverage
 - Scope: Test location, command, and coverage map
 
-Tests currently live inline in [`../src/lib.rs`](../src/lib.rs). Run them from `src/Rust`:
+Tests currently live inline in [`../src/lib.rs`](../src/lib.rs) and
+[`../src/patricia.rs`](../src/patricia.rs). Run them from `src/Rust`:
 
 ```powershell
 .\test.ps1 -Workspace Hamt
@@ -22,4 +23,6 @@ Coverage groups:
 - set algebra, equality, and proper subset/superset relations;
 - transient bulk-builder snapshot detachment, duplicate-identity rules, final-hash-level splits,
   and differential agreement with incremental construction;
+- 32/64-bit Patricia ordering and randomized histories, structural algebra, key/left/right map
+  combiners, cached branch cardinalities, and receiver-root no-op identity;
 - `Send`/`Sync` assertions and spawned-thread readers over shared immutable snapshots.

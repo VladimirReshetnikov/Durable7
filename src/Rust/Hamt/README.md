@@ -25,7 +25,9 @@ The trie follows the existing ports:
 The crate also exports `PersistentIntMap`/`PersistentIntSet` and
 `PersistentLongMap`/`PersistentLongSet`. Their big-endian Patricia core sign-flips keys for
 ascending signed iteration, path-compresses on the highest differing bit, shares immutable `Arc`
-subtrees, and implements prefix-aware union, intersection, and difference.
+subtrees, caches subtree cardinalities, and implements prefix-aware union, intersection, and
+difference. Map union and intersection also expose key/left/right combining forms without falling
+back to per-entry insertion.
 
 Rust-specific shape:
 

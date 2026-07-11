@@ -160,8 +160,9 @@ randomized model tests cover both key widths.
 
 **Rust status (2026-07-10): Implemented for both widths.** `PersistentIntMap`/`Set` and
 `PersistentLongMap`/`Set` use safe `Arc`-shared compressed-prefix nodes, sign-flipped ordering,
-and prefix-aligned structural algebra. Tests compare randomized histories with `BTreeMap` and cover
-signed boundaries, right-biased union, intersection, difference, and no-op root sharing.
+cached subtree cardinalities, and prefix-aligned structural algebra with key/left/right combining
+forms. Tests compare randomized histories with `BTreeMap` and cover signed boundaries, fixed and
+combining algebra, invariant counts, and no-op root sharing.
 
 **Haskell status (2026-07-11): Implemented for explicit `Int32` and `Int64` widths.**
 `Data.Structures.Hamt.Patricia` exposes strict maps and sets over one `Word64` path core, sign-bit

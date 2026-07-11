@@ -10,6 +10,7 @@ enum Node<K, V> {
     Branch {
         prefix: u64,
         mask: u64,
+        len: usize,
         left: Arc<Node<K, V>>,
         right: Arc<Node<K, V>>,
     },
@@ -46,6 +47,7 @@ impl<K: Copy + Eq, V> Core<K, V> {
                     mask,
                     left,
                     right,
+                    ..
                 } => {
                     if prefix_of(path, *mask) != *prefix {
                         return None;
@@ -96,24 +98,44 @@ impl<K: Copy + Eq, V: Clone + PartialEq> Core<K, V> {
     }
 
     fn union(&self, other: &Self) -> Self {
-        let root = union_nodes(self.root.as_ref(), other.root.as_ref());
+        if same_root(&self.root, &other.root) {
+            return self.clone();
+        }
+        self.union_with(other, |_, _, right| right.clone())
+    }
+
+    fn union_with<F>(&self, other: &Self, mut combine: F) -> Self
+    where
+        F: FnMut(K, &V, &V) -> V,
+    {
+        let root = union_with_nodes(self.root.as_ref(), other.root.as_ref(), &mut combine);
         if same_root(&root, &self.root) {
             return self.clone();
         }
         Self {
-            len: count(root.as_deref()),
+            len: node_len(root.as_deref()),
             root,
             encode: self.encode,
         }
     }
 
     fn intersect(&self, other: &Self) -> Self {
-        let root = intersect_nodes(self.root.as_ref(), other.root.as_ref());
+        if same_root(&self.root, &other.root) {
+            return self.clone();
+        }
+        self.intersect_with(other, |_, left, _| left.clone())
+    }
+
+    fn intersect_with<F>(&self, other: &Self, mut combine: F) -> Self
+    where
+        F: FnMut(K, &V, &V) -> V,
+    {
+        let root = intersect_with_nodes(self.root.as_ref(), other.root.as_ref(), &mut combine);
         if same_root(&root, &self.root) {
             return self.clone();
         }
         Self {
-            len: count(root.as_deref()),
+            len: node_len(root.as_deref()),
             root,
             encode: self.encode,
         }
@@ -125,7 +147,7 @@ impl<K: Copy + Eq, V: Clone + PartialEq> Core<K, V> {
             return self.clone();
         }
         Self {
-            len: count(root.as_deref()),
+            len: node_len(root.as_deref()),
             root,
             encode: self.encode,
         }
@@ -198,6 +220,7 @@ fn insert_node<K: Copy + Eq, V: Clone + PartialEq>(
             mask,
             left,
             right,
+            ..
         } => {
             if prefix_of(path, *mask) != *prefix {
                 return (
@@ -217,12 +240,7 @@ fn insert_node<K: Copy + Eq, V: Clone + PartialEq>(
                     (Arc::clone(node), false, false)
                 } else {
                     (
-                        Arc::new(Node::Branch {
-                            prefix: *prefix,
-                            mask: *mask,
-                            left: child,
-                            right: Arc::clone(right),
-                        }),
+                        branch(*prefix, *mask, child, Arc::clone(right)),
                         added,
                         true,
                     )
@@ -232,16 +250,7 @@ fn insert_node<K: Copy + Eq, V: Clone + PartialEq>(
                 if !changed {
                     (Arc::clone(node), false, false)
                 } else {
-                    (
-                        Arc::new(Node::Branch {
-                            prefix: *prefix,
-                            mask: *mask,
-                            left: Arc::clone(left),
-                            right: child,
-                        }),
-                        added,
-                        true,
-                    )
+                    (branch(*prefix, *mask, Arc::clone(left), child), added, true)
                 }
             }
         }
@@ -267,6 +276,7 @@ fn remove_node<K, V>(node: Option<&Arc<Node<K, V>>>, path: u64) -> (Option<Arc<N
             mask,
             left,
             right,
+            ..
         } => {
             if prefix_of(path, *mask) != *prefix {
                 return (Some(Arc::clone(node)), false);
@@ -302,20 +312,30 @@ fn remove_node<K, V>(node: Option<&Arc<Node<K, V>>>, path: u64) -> (Option<Arc<N
     }
 }
 
-fn union_nodes<K: Copy + Eq, V: Clone + PartialEq>(
+fn union_with_nodes<K: Copy + Eq, V: Clone + PartialEq, F>(
     left: Option<&Arc<Node<K, V>>>,
     right: Option<&Arc<Node<K, V>>>,
-) -> Option<Arc<Node<K, V>>> {
+    combine: &mut F,
+) -> Option<Arc<Node<K, V>>>
+where
+    F: FnMut(K, &V, &V) -> V,
+{
     match (left, right) {
         (None, _) => right.cloned(),
         (_, None) => left.cloned(),
-        (Some(left), Some(right)) if Arc::ptr_eq(left, right) => Some(Arc::clone(left)),
         (Some(left), Some(right)) => Some(match (left.as_ref(), right.as_ref()) {
+            (Node::Leaf { path: lp, .. }, Node::Leaf { path: rp, .. }) => {
+                if lp == rp {
+                    combine_leaves(left, right, combine)
+                } else {
+                    join(*lp, Arc::clone(left), *rp, Arc::clone(right))
+                }
+            }
             (Node::Leaf { path, key, value }, _) => {
-                put_existing(right, *path, *key, value.clone(), true)
+                put_left_leaf(right, *path, *key, value, combine)
             }
             (_, Node::Leaf { path, key, value }) => {
-                put_existing(left, *path, *key, value.clone(), false)
+                put_right_leaf(left, *path, *key, value, combine)
             }
             (
                 Node::Branch {
@@ -323,51 +343,58 @@ fn union_nodes<K: Copy + Eq, V: Clone + PartialEq>(
                     mask: lm,
                     left: ll,
                     right: lr,
+                    ..
                 },
                 Node::Branch {
                     prefix: rp,
                     mask: rm,
                     left: rl,
                     right: rr,
+                    ..
                 },
             ) => {
                 if lm == rm && lp == rp {
-                    branch(
+                    rebuild_branch(
+                        left,
                         *lp,
                         *lm,
-                        union_nodes(Some(ll), Some(rl)).unwrap(),
-                        union_nodes(Some(lr), Some(rr)).unwrap(),
+                        union_with_nodes(Some(ll), Some(rl), combine).unwrap(),
+                        union_with_nodes(Some(lr), Some(rr), combine).unwrap(),
                     )
                 } else if lm > rm && prefix_of(*rp, *lm) == *lp {
                     if rp & lm == 0 {
-                        branch(
+                        rebuild_branch(
+                            left,
                             *lp,
                             *lm,
-                            union_nodes(Some(ll), Some(right)).unwrap(),
+                            union_with_nodes(Some(ll), Some(right), combine).unwrap(),
                             Arc::clone(lr),
                         )
                     } else {
-                        branch(
+                        rebuild_branch(
+                            left,
                             *lp,
                             *lm,
                             Arc::clone(ll),
-                            union_nodes(Some(lr), Some(right)).unwrap(),
+                            union_with_nodes(Some(lr), Some(right), combine).unwrap(),
                         )
                     }
                 } else if rm > lm && prefix_of(*lp, *rm) == *rp {
                     if lp & rm == 0 {
-                        branch(
+                        rebuild_branch(
+                            right,
                             *rp,
                             *rm,
-                            union_nodes(Some(left), Some(rl)).unwrap(),
+                            union_with_nodes(Some(left), Some(rl), combine).unwrap(),
                             Arc::clone(rr),
                         )
                     } else {
-                        branch(
+                        rebuild_branch(
+                            right,
                             *rp,
                             *rm,
                             Arc::clone(rl),
-                            union_nodes(Some(left), Some(rr)).unwrap(),
+                            union_with_nodes(Some(left), Some(rr), combine).unwrap(),
                         )
                     }
                 } else {
@@ -378,25 +405,142 @@ fn union_nodes<K: Copy + Eq, V: Clone + PartialEq>(
     }
 }
 
-fn put_existing<K: Copy + Eq, V: Clone + PartialEq>(
+fn combine_leaves<K: Copy, V: PartialEq, F>(
+    left: &Arc<Node<K, V>>,
+    right: &Arc<Node<K, V>>,
+    combine: &mut F,
+) -> Arc<Node<K, V>>
+where
+    F: FnMut(K, &V, &V) -> V,
+{
+    let Node::Leaf {
+        path,
+        key,
+        value: left_value,
+    } = left.as_ref()
+    else {
+        unreachable!("left combine operand must be a Patricia leaf")
+    };
+    let Node::Leaf {
+        path: right_path,
+        value: right_value,
+        ..
+    } = right.as_ref()
+    else {
+        unreachable!("right combine operand must be a Patricia leaf")
+    };
+    debug_assert_eq!(*path, *right_path);
+
+    let value = combine(*key, left_value, right_value);
+    if &value == left_value {
+        Arc::clone(left)
+    } else if &value == right_value {
+        Arc::clone(right)
+    } else {
+        Arc::new(Node::Leaf {
+            path: *path,
+            key: *key,
+            value,
+        })
+    }
+}
+
+fn put_left_leaf<K: Copy + Eq, V: Clone + PartialEq, F>(
     node: &Arc<Node<K, V>>,
     path: u64,
     key: K,
-    value: V,
-    prefer_existing: bool,
-) -> Arc<Node<K, V>> {
+    left_value: &V,
+    combine: &mut F,
+) -> Arc<Node<K, V>>
+where
+    F: FnMut(K, &V, &V) -> V,
+{
     match node.as_ref() {
         Node::Leaf {
             path: old,
-            key: old_key,
+            value: right_value,
             ..
         } if *old == path => {
-            if prefer_existing {
+            let value = combine(key, left_value, right_value);
+            if &value == right_value {
+                Arc::clone(node)
+            } else {
+                Arc::new(Node::Leaf { path, key, value })
+            }
+        }
+        Node::Leaf { path: old, .. } => join(
+            *old,
+            Arc::clone(node),
+            path,
+            Arc::new(Node::Leaf {
+                path,
+                key,
+                value: left_value.clone(),
+            }),
+        ),
+        Node::Branch {
+            prefix,
+            mask,
+            left,
+            right,
+            ..
+        } => {
+            if prefix_of(path, *mask) != *prefix {
+                return join(
+                    *prefix,
+                    Arc::clone(node),
+                    path,
+                    Arc::new(Node::Leaf {
+                        path,
+                        key,
+                        value: left_value.clone(),
+                    }),
+                );
+            }
+            if path & mask == 0 {
+                rebuild_branch(
+                    node,
+                    *prefix,
+                    *mask,
+                    put_left_leaf(left, path, key, left_value, combine),
+                    Arc::clone(right),
+                )
+            } else {
+                rebuild_branch(
+                    node,
+                    *prefix,
+                    *mask,
+                    Arc::clone(left),
+                    put_left_leaf(right, path, key, left_value, combine),
+                )
+            }
+        }
+    }
+}
+
+fn put_right_leaf<K: Copy + Eq, V: Clone + PartialEq, F>(
+    node: &Arc<Node<K, V>>,
+    path: u64,
+    key: K,
+    right_value: &V,
+    combine: &mut F,
+) -> Arc<Node<K, V>>
+where
+    F: FnMut(K, &V, &V) -> V,
+{
+    match node.as_ref() {
+        Node::Leaf {
+            path: old,
+            key: left_key,
+            value: left_value,
+        } if *old == path => {
+            let value = combine(*left_key, left_value, right_value);
+            if &value == left_value {
                 Arc::clone(node)
             } else {
                 Arc::new(Node::Leaf {
                     path,
-                    key: *old_key,
+                    key: *left_key,
                     value,
                 })
             }
@@ -405,86 +549,105 @@ fn put_existing<K: Copy + Eq, V: Clone + PartialEq>(
             *old,
             Arc::clone(node),
             path,
-            Arc::new(Node::Leaf { path, key, value }),
+            Arc::new(Node::Leaf {
+                path,
+                key,
+                value: right_value.clone(),
+            }),
         ),
         Node::Branch {
             prefix,
             mask,
             left,
             right,
+            ..
         } => {
             if prefix_of(path, *mask) != *prefix {
                 return join(
                     *prefix,
                     Arc::clone(node),
                     path,
-                    Arc::new(Node::Leaf { path, key, value }),
+                    Arc::new(Node::Leaf {
+                        path,
+                        key,
+                        value: right_value.clone(),
+                    }),
                 );
             }
             if path & mask == 0 {
-                branch(
+                rebuild_branch(
+                    node,
                     *prefix,
                     *mask,
-                    put_existing(left, path, key, value, prefer_existing),
+                    put_right_leaf(left, path, key, right_value, combine),
                     Arc::clone(right),
                 )
             } else {
-                branch(
+                rebuild_branch(
+                    node,
                     *prefix,
                     *mask,
                     Arc::clone(left),
-                    put_existing(right, path, key, value, prefer_existing),
+                    put_right_leaf(right, path, key, right_value, combine),
                 )
             }
         }
     }
 }
 
-fn intersect_nodes<K: Copy + Eq, V: Clone + PartialEq>(
+fn intersect_with_nodes<K: Copy + Eq, V: Clone + PartialEq, F>(
     left: Option<&Arc<Node<K, V>>>,
     right: Option<&Arc<Node<K, V>>>,
-) -> Option<Arc<Node<K, V>>> {
+    combine: &mut F,
+) -> Option<Arc<Node<K, V>>>
+where
+    F: FnMut(K, &V, &V) -> V,
+{
     let (Some(left), Some(right)) = (left, right) else {
         return None;
     };
-    if Arc::ptr_eq(left, right) {
-        return Some(Arc::clone(left));
-    }
     match (left.as_ref(), right.as_ref()) {
-        (Node::Leaf { path, .. }, _) => contains_path(right, *path).then(|| Arc::clone(left)),
-        (_, Node::Leaf { path, .. }) => find_leaf(left, *path),
+        (Node::Leaf { path, .. }, _) => {
+            find_leaf(right, *path).map(|right_leaf| combine_leaves(left, &right_leaf, combine))
+        }
+        (_, Node::Leaf { path, .. }) => {
+            find_leaf(left, *path).map(|left_leaf| combine_leaves(&left_leaf, right, combine))
+        }
         (
             Node::Branch {
                 prefix: lp,
                 mask: lm,
                 left: ll,
                 right: lr,
+                ..
             },
             Node::Branch {
                 prefix: rp,
                 mask: rm,
                 left: rl,
                 right: rr,
+                ..
             },
         ) => {
             if lm == rm && lp == rp {
-                collapse(
+                collapse_reusing(
+                    left,
                     *lp,
                     *lm,
-                    intersect_nodes(Some(ll), Some(rl)),
-                    intersect_nodes(Some(lr), Some(rr)),
+                    intersect_with_nodes(Some(ll), Some(rl), combine),
+                    intersect_with_nodes(Some(lr), Some(rr), combine),
                 )
             } else if lm > rm && prefix_of(*rp, *lm) == *lp {
                 if rp & lm == 0 {
-                    intersect_nodes(Some(ll), Some(right))
+                    intersect_with_nodes(Some(ll), Some(right), combine)
                 } else {
-                    intersect_nodes(Some(lr), Some(right))
+                    intersect_with_nodes(Some(lr), Some(right), combine)
                 }
             } else if rm > lm && prefix_of(*lp, *rm) == *rp {
                 if lp & rm == 0 {
-                    intersect_nodes(Some(left), Some(rl))
+                    intersect_with_nodes(Some(left), Some(rl), combine)
                 } else {
-                    intersect_nodes(Some(left), Some(rr))
+                    intersect_with_nodes(Some(left), Some(rr), combine)
                 }
             } else {
                 None
@@ -497,9 +660,7 @@ fn except_nodes<K: Copy + Eq, V: Clone + PartialEq>(
     left: Option<&Arc<Node<K, V>>>,
     right: Option<&Arc<Node<K, V>>>,
 ) -> Option<Arc<Node<K, V>>> {
-    let Some(left) = left else {
-        return None;
-    };
+    let left = left?;
     let Some(right) = right else {
         return Some(Arc::clone(left));
     };
@@ -515,16 +676,19 @@ fn except_nodes<K: Copy + Eq, V: Clone + PartialEq>(
                 mask: lm,
                 left: ll,
                 right: lr,
+                ..
             },
             Node::Branch {
                 prefix: rp,
                 mask: rm,
                 left: rl,
                 right: rr,
+                ..
             },
         ) => {
             if lm == rm && lp == rp {
-                collapse(
+                collapse_reusing(
+                    left,
                     *lp,
                     *lm,
                     except_nodes(Some(ll), Some(rl)),
@@ -532,14 +696,16 @@ fn except_nodes<K: Copy + Eq, V: Clone + PartialEq>(
                 )
             } else if lm > rm && prefix_of(*rp, *lm) == *lp {
                 if rp & lm == 0 {
-                    collapse(
+                    collapse_reusing(
+                        left,
                         *lp,
                         *lm,
                         except_nodes(Some(ll), Some(right)),
                         Some(Arc::clone(lr)),
                     )
                 } else {
-                    collapse(
+                    collapse_reusing(
+                        left,
                         *lp,
                         *lm,
                         Some(Arc::clone(ll)),
@@ -567,6 +733,7 @@ fn find_leaf<K, V>(node: &Arc<Node<K, V>>, path: u64) -> Option<Arc<Node<K, V>>>
             mask,
             left,
             right,
+            ..
         } if prefix_of(path, *mask) == *prefix => {
             find_leaf(if path & mask == 0 { left } else { right }, path)
         }
@@ -584,16 +751,19 @@ fn remove_path<K, V>(node: &Arc<Node<K, V>>, path: u64) -> Option<Arc<Node<K, V>
             mask,
             left,
             right,
+            ..
         } if prefix_of(path, *mask) == *prefix => {
             if path & mask == 0 {
-                collapse(
+                collapse_reusing(
+                    node,
                     *prefix,
                     *mask,
                     remove_path(left, path),
                     Some(Arc::clone(right)),
                 )
             } else {
-                collapse(
+                collapse_reusing(
+                    node,
                     *prefix,
                     *mask,
                     Some(Arc::clone(left)),
@@ -604,7 +774,8 @@ fn remove_path<K, V>(node: &Arc<Node<K, V>>, path: u64) -> Option<Arc<Node<K, V>
         _ => Some(Arc::clone(node)),
     }
 }
-fn collapse<K, V>(
+fn collapse_reusing<K, V>(
+    original: &Arc<Node<K, V>>,
     prefix: u64,
     mask: u64,
     left: Option<Arc<Node<K, V>>>,
@@ -613,18 +784,46 @@ fn collapse<K, V>(
     match (left, right) {
         (None, right) => right,
         (left, None) => left,
-        (Some(left), Some(right)) => Some(branch(prefix, mask, left, right)),
+        (Some(left), Some(right)) => Some(rebuild_branch(original, prefix, mask, left, right)),
     }
 }
+
+fn rebuild_branch<K, V>(
+    original: &Arc<Node<K, V>>,
+    prefix: u64,
+    mask: u64,
+    left: Arc<Node<K, V>>,
+    right: Arc<Node<K, V>>,
+) -> Arc<Node<K, V>> {
+    if let Node::Branch {
+        prefix: old_prefix,
+        mask: old_mask,
+        left: old_left,
+        right: old_right,
+        ..
+    } = original.as_ref()
+        && *old_prefix == prefix
+        && *old_mask == mask
+        && Arc::ptr_eq(old_left, &left)
+        && Arc::ptr_eq(old_right, &right)
+    {
+        Arc::clone(original)
+    } else {
+        branch(prefix, mask, left, right)
+    }
+}
+
 fn branch<K, V>(
     prefix: u64,
     mask: u64,
     left: Arc<Node<K, V>>,
     right: Arc<Node<K, V>>,
 ) -> Arc<Node<K, V>> {
+    let len = node_len(Some(left.as_ref())) + node_len(Some(right.as_ref()));
     Arc::new(Node::Branch {
         prefix,
         mask,
+        len,
         left,
         right,
     })
@@ -646,11 +845,11 @@ fn join<K, V>(
 fn prefix_of(path: u64, mask: u64) -> u64 {
     path & !mask.wrapping_shl(1).wrapping_sub(1)
 }
-fn count<K, V>(node: Option<&Node<K, V>>) -> usize {
+fn node_len<K, V>(node: Option<&Node<K, V>>) -> usize {
     match node {
         None => 0,
         Some(Node::Leaf { .. }) => 1,
-        Some(Node::Branch { left, right, .. }) => count(Some(left)) + count(Some(right)),
+        Some(Node::Branch { len, .. }) => *len,
     }
 }
 fn same_root<K, V>(left: &Option<Arc<Node<K, V>>>, right: &Option<Arc<Node<K, V>>>) -> bool {
@@ -717,10 +916,36 @@ macro_rules! map_type {
                     core: self.core.union(&other.core),
                 }
             }
+            /// Unions two maps, combining values for keys present in both operands.
+            ///
+            /// The callback receives the key, the receiver's value, and the other
+            /// map's value, in that order. It is invoked exactly once per shared key.
+            #[must_use]
+            pub fn union_with<F>(&self, other: &Self, combine: F) -> Self
+            where
+                F: FnMut($key, &V, &V) -> V,
+            {
+                Self {
+                    core: self.core.union_with(&other.core, combine),
+                }
+            }
             #[must_use]
             pub fn intersect(&self, other: &Self) -> Self {
                 Self {
                     core: self.core.intersect(&other.core),
+                }
+            }
+            /// Intersects two maps, combining values for every retained key.
+            ///
+            /// The callback receives the key, the receiver's value, and the other
+            /// map's value, in that order. It is invoked exactly once per shared key.
+            #[must_use]
+            pub fn intersect_with<F>(&self, other: &Self, combine: F) -> Self
+            where
+                F: FnMut($key, &V, &V) -> V,
+            {
+                Self {
+                    core: self.core.intersect_with(&other.core, combine),
                 }
             }
             #[must_use]
@@ -756,6 +981,10 @@ macro_rules! set_type {
             #[must_use]
             pub fn len(&self) -> usize {
                 self.map.len()
+            }
+            #[must_use]
+            pub fn is_empty(&self) -> bool {
+                self.map.is_empty()
             }
             #[must_use]
             pub fn contains(&self, value: $key) -> bool {
@@ -888,5 +1117,151 @@ mod tests {
             left.except(&right).iter().copied().collect::<Vec<_>>(),
             [-3, 3]
         );
+    }
+
+    #[test]
+    fn combining_map_algebra_uses_key_left_right_order_and_reuses_no_ops() {
+        let left = PersistentIntMap::new()
+            .insert(1, 10)
+            .insert(2, 20)
+            .insert(4, 40);
+        let right = PersistentIntMap::new()
+            .insert(1, 3)
+            .insert(3, 30)
+            .insert(4, 5);
+
+        let mut union_calls = Vec::new();
+        let union = left.union_with(&right, |key, left, right| {
+            union_calls.push((key, *left, *right));
+            key * 100 + left * 10 + right
+        });
+        union_calls.sort_unstable();
+        assert_eq!(union_calls, [(1, 10, 3), (4, 40, 5)]);
+        assert_eq!(
+            union
+                .iter()
+                .map(|(key, value)| (*key, *value))
+                .collect::<Vec<_>>(),
+            [(1, 203), (2, 20), (3, 30), (4, 805)]
+        );
+
+        let mut intersection_calls = Vec::new();
+        let intersection = left.intersect_with(&right, |key, left, right| {
+            intersection_calls.push((key, *left, *right));
+            left - right + key
+        });
+        intersection_calls.sort_unstable();
+        assert_eq!(intersection_calls, [(1, 10, 3), (4, 40, 5)]);
+        assert_eq!(
+            intersection
+                .iter()
+                .map(|(key, value)| (*key, *value))
+                .collect::<Vec<_>>(),
+            [(1, 8), (4, 39)]
+        );
+
+        let subset = PersistentIntMap::new().insert(1, -10).insert(4, -40);
+        let unchanged_union = left.union_with(&subset, |_, left, _| *left);
+        assert!(left.shares_root_with(&unchanged_union));
+
+        let superset = left.insert(-1, -10).insert(9, 90);
+        let unchanged_intersection = left.intersect_with(&superset, |_, left, _| *left);
+        assert!(left.shares_root_with(&unchanged_intersection));
+        assert!(left.shares_root_with(&left.union(&left)));
+        assert!(left.shares_root_with(&left.intersect(&left)));
+
+        let one_left = PersistentIntMap::new().insert(1, 10);
+        let one_right = PersistentIntMap::new().insert(1, 20);
+        assert!(one_right.shares_root_with(&one_left.union(&one_right)));
+
+        assert_eq!(
+            assert_cached_lengths(union.core.root.as_deref()),
+            union.len()
+        );
+        assert_eq!(
+            assert_cached_lengths(intersection.core.root.as_deref()),
+            intersection.len()
+        );
+    }
+
+    #[test]
+    fn combining_map_algebra_matches_btree_map() {
+        fn combine(key: i32, left: u32, right: u32) -> u32 {
+            left.rotate_left(5) ^ right.rotate_right(3) ^ key as u32
+        }
+
+        let mut left = PersistentIntMap::new();
+        let mut right = PersistentIntMap::new();
+        let mut expected_left = std::collections::BTreeMap::new();
+        let mut expected_right = std::collections::BTreeMap::new();
+        let mut state = 0xd1b5_4a32_u32;
+        for index in 0..2_000_u32 {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            let key = ((state >> 9) % 1_001) as i32 - 500;
+            if index & 1 == 0 {
+                left = left.insert(key, state);
+                expected_left.insert(key, state);
+            } else {
+                right = right.insert(key, state);
+                expected_right.insert(key, state);
+            }
+        }
+
+        let union = left.union_with(&right, |key, left, right| combine(key, *left, *right));
+        let mut expected_union = expected_left.clone();
+        for (key, right) in &expected_right {
+            expected_union
+                .entry(*key)
+                .and_modify(|left| *left = combine(*key, *left, *right))
+                .or_insert(*right);
+        }
+        assert_eq!(
+            union
+                .iter()
+                .map(|(key, value)| (*key, *value))
+                .collect::<Vec<_>>(),
+            expected_union.into_iter().collect::<Vec<_>>()
+        );
+
+        let intersection =
+            left.intersect_with(&right, |key, left, right| combine(key, *left, *right));
+        let expected_intersection = expected_left
+            .iter()
+            .filter_map(|(key, left)| {
+                expected_right
+                    .get(key)
+                    .map(|right| (*key, combine(*key, *left, *right)))
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            intersection
+                .iter()
+                .map(|(key, value)| (*key, *value))
+                .collect::<Vec<_>>(),
+            expected_intersection
+        );
+        assert_eq!(
+            assert_cached_lengths(union.core.root.as_deref()),
+            union.len()
+        );
+        assert_eq!(
+            assert_cached_lengths(intersection.core.root.as_deref()),
+            intersection.len()
+        );
+    }
+
+    fn assert_cached_lengths<K, V>(node: Option<&Node<K, V>>) -> usize {
+        match node {
+            None => 0,
+            Some(Node::Leaf { .. }) => 1,
+            Some(Node::Branch {
+                len, left, right, ..
+            }) => {
+                let expected = assert_cached_lengths(Some(left.as_ref()))
+                    + assert_cached_lengths(Some(right.as_ref()));
+                assert_eq!(*len, expected);
+                expected
+            }
+        }
     }
 }

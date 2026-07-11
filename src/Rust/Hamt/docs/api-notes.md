@@ -77,4 +77,12 @@ shape.
 The integer-specialized facades do not hash. They sign-flip `i32`/`i64` keys into unsigned order
 and store compressed common prefixes plus the highest differing branch bit. Iteration is ascending
 signed order. `union` is right-biased for duplicate map keys, `intersect` retains left values, and
-`except` removes right-side keys; all three align Patricia prefixes and reuse whole subtrees.
+`except` removes right-side keys. `union_with` and `intersect_with` additionally accept an
+`FnMut(key, left, right) -> value` combiner that is invoked once for every shared key; the left and
+right arguments always correspond to the receiver and the other map, respectively. All algebra
+aligns Patricia prefixes and reuses whole subtrees. When a combiner returns receiver-equal values
+and no key-set change is needed, the receiver root is preserved.
+
+Every Patricia branch caches its subtree cardinality. Updates maintain that invariant while
+rebuilding the affected path, and structural algebra reads the result count from the root in O(1)
+instead of traversing the merged tree after the operation.
