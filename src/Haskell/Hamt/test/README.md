@@ -15,4 +15,4 @@ The dependency-free executable covers map last-wins construction, duplicate reje
 collision buckets, custom hash/equality policy behavior, original-key recovery, set algebra, and
 `forkIO` concurrent readers over shared immutable snapshots. It also locks in collision-to-leaf
 canonicalization, receiver-policy set relations, one-pass adjustment behavior, strict value mapping,
-and 100,000-entry bulk construction.
+independent-history CHAMP equality, typed diff classification, and 100,000-entry bulk construction.

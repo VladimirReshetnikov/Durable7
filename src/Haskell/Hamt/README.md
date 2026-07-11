@@ -6,14 +6,16 @@
 - Scope: `tools-data-structures-hamt` package
 
 This package ports the repository HAMT map and set family to Haskell. It provides persistent
-`HashMap` and `HashSet` values with a 32-way bitmap-indexed trie, immutable equal-hash collision
-buckets, structural sharing between versions, and optional runtime `HashPolicy` values for custom
-hash/equality behavior.
+`HashMap` and `HashSet` values with a canonical 32-way CHAMP trie, strict split data/node maps,
+inline payload runs, immutable equal-hash collision buckets, structural sharing between versions,
+and optional runtime `HashPolicy` values for custom hash/equality behavior. Maps expose semantic
+`mapEquals` and typed `MapDifference` classification.
 
 The default factories use the package-local `Hashable` class plus `Eq`, avoiding third-party
 dependencies while keeping the public shape close to Haskell's `containers` style.
 `HashMap.validStructure` provides a key/value-agnostic diagnostic for cached cardinality and
-canonical node shape, including collision-bucket demotion after deletion.
+canonical node shape, including child-only node runs, bitmap cardinality, singleton payload
+promotion, and collision-bucket demotion after deletion.
 
 ```powershell
 cd src\Haskell

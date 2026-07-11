@@ -18,6 +18,7 @@ main = do
   testMapBasics
   testCollisionPolicy
   testCollisionShrinkCanonicalization
+  testChampCanonicalizationAndDiff
   testActualKeyPreservation
   testAdjustAndStrictMapping
   testSetAlgebra
@@ -62,6 +63,20 @@ testCollisionShrinkCanonicalization = do
   assertBool "branch beside collision-shrunk leaf stays canonical" (HashMap.validStructure branched)
   assertEqual "new branch beside collision-shrunk leaf" (Just "z") (HashMap.lookup 42 branched)
   assertEqual "removing collision-shrunk leaf preserves sibling" [(42, "z")] (HashMap.toList (HashMap.delete 1 branched))
+
+testChampCanonicalizationAndDiff :: IO ()
+testChampCanonicalizationAndDiff = do
+  let ascending = HashMap.fromList [(key, key) | key <- [0 :: Int .. 511]]
+      descending = HashMap.fromList [(key, key) | key <- reverse [0 :: Int .. 511]]
+      changed = HashMap.insert 1000 1000 (HashMap.insert 9 (-9) (HashMap.delete 7 descending))
+      differences = HashMap.diff ascending changed
+  assertBool "independent histories have canonical valid shape" (HashMap.validStructure ascending && HashMap.validStructure descending)
+  assertBool "independent histories compare equal" (HashMap.mapEquals ascending descending)
+  assertEqual "equal histories have empty diff" [] (HashMap.diff ascending descending)
+  assertEqual "typed diff count" 3 (length differences)
+  assertBool "typed diff removal" (HashMap.EntryRemoved 7 7 `elem` differences)
+  assertBool "typed diff change" (HashMap.EntryChanged 9 9 (-9) `elem` differences)
+  assertBool "typed diff addition" (HashMap.EntryAdded 1000 1000 `elem` differences)
 
 testActualKeyPreservation :: IO ()
 testActualKeyPreservation = do

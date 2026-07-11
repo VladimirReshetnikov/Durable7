@@ -91,8 +91,12 @@ collisions, persistence, and concurrent readers.
 
 **Rust status (2026-07-10): Implemented.** Both persistent path copying and `BulkBuilder` freezing
 now produce split data/node maps with inline payload runs and canonical deletion promotion. The safe
-`Arc` implementation adds owned typed diff and representation-invariant coverage. C, C++, and
-Haskell ports remain pending.
+`Arc` implementation adds owned typed diff and representation-invariant coverage.
+
+**Haskell status (2026-07-10): Implemented.** `HashMap` now stores strict split data/node maps,
+inline `(hash,key,value)` payload runs, child-only subtrie runs, and deletion promotion. Its
+dependency-free API adds `mapEquals` and typed `MapDifference` values, with `validStructure`
+checking the CHAMP invariants. C and C++ ports remain pending.
 
 **What it is.** CHAMP (Compressed Hash-Array Mapped Prefix-tree; Steindorfer & Vinju, OOPSLA 2015)
 is a refinement of Bagwell's HAMT with two changes that matter here:
