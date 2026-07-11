@@ -28,7 +28,8 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
 - `PersistentHashSetTests.cs` covers set membership, add/remove, try-add/try-remove, custom equality, set algebra,
   `IReadOnlySet<T>` behavior, generated set-algebra checks, and concurrent snapshot readers.
 - `ConcurrentHashTrieTests.cs` covers linearizable mutation, generation stamps, stable O(1)
-  snapshots/enumerators, contended updates, and concurrent snapshot consistency.
+  snapshots/enumerators, contended updates, concurrent snapshot consistency, adversarial collision
+  nodes, lazy generation renewal, and explicit snapshot-to-CHAMP conversion.
 - `PersistentIntegerPatriciaTests.cs` covers signed boundary ordering, randomized 32/64-bit model
   histories, retained snapshots, structural map algebra, combining overloads, and set relations.
 - `MerkleSearchTreeTests.cs` covers canonical codec vectors, independent policy/history shape and

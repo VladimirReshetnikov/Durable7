@@ -31,7 +31,7 @@ public class CtrieBenchmarks
     public int ConcurrentDictionaryLookup() => _dictionary[_probe];
 
     [Benchmark]
-    public PersistentHashMap<int, int> CtrieSnapshot() => _trie.Snapshot();
+    public ConcurrentHashTrie<int, int>.SnapshotView CtrieSnapshot() => _trie.Snapshot();
 
     [Benchmark]
     public ImmutableDictionary<int, int> ConcurrentDictionaryImmutableSnapshot() =>

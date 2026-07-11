@@ -19,9 +19,9 @@ new or replaced leaves.
 `PersistentHashSet<T>` is a value set built on the same HAMT core. It preserves the same comparer and
 structural-sharing semantics as the map.
 
-`ConcurrentHashTrie<TKey, TValue>` is a lock-free mutable map over atomically published immutable
-CHAMP roots. Its public mutation surface is linearizable, and `Snapshot()` captures the current
-`PersistentHashMap<TKey, TValue>` in O(1).
+`ConcurrentHashTrie<TKey, TValue>` is a lock-free mutable map built from bitmap C-nodes, singleton
+leaves, collision nodes, and generation-stamped indirection nodes. Its public mutation surface is
+linearizable, and `Snapshot()` captures the current Ctrie generation in O(1).
 
 ## Hash Trie Shape
 
@@ -133,12 +133,15 @@ mutable, thread-safe update surface:
 - `Clear` atomically publishes an empty root.
 - `Snapshot` and `GetEnumerator` capture one immutable generation. Later writes cannot change their
   contents, and snapshots retain the trie's comparer.
+- `SnapshotView.ToPersistentHashMap` copies a captured generation into canonical CHAMP form in O(n).
 
-The managed implementation uses root-level CAS over persistent CHAMP path copies rather than the
-paper's JVM generation/indirection-node GCAS layout. A state object contains the root and a monotonic
-generation; unique state identity prevents ABA. Reads and snapshots are O(trie lookup) and O(1)
-respectively and take no locks. A successful write is O(CHAMP update) plus one CAS; under contention
-it may retry and allocate discarded paths, so progress is lock-free rather than wait-free.
+The managed implementation installs GCAS descriptors on the indirection node owning a change.
+Readers help complete encountered descriptors. Root-generation identity decides whether a descriptor
+commits, preventing a write that raced with `Snapshot` from entering the frozen generation. The new
+root initially shares the old C-node graph; a later writer renews an old-generation child indirection
+node only when its path reaches that child. Reads and snapshots take no locks. A successful write
+copies one compact C-node array per changed level and performs node-local GCAS; collision-node work is
+linear in the equal-hash bucket. Contended operations can retry, so progress is lock-free, not wait-free.
 
 ## Integer Patricia Map And Set Contract
 

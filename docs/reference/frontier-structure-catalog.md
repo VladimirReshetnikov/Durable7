@@ -316,11 +316,12 @@ first consumer outside the trees.
 
 ### Ctrie (concurrent hash trie with O(1) snapshots)
 
-**C# status (2026-07-10): Implemented with a managed CHAMP-root CAS design.**
-`ConcurrentHashTrie<TKey, TValue>` provides lock-free mutable operations, generation-stamped
-publication, stable enumeration, and O(1) `PersistentHashMap` snapshots. The implementation uses
-root-level CAS over immutable CHAMP path copies rather than the paper's JVM indirection-node GCAS;
-the C# API specification records the resulting progress and contention-allocation contract.
+**C# status (2026-07-10): Implemented with generation-stamped indirection-node GCAS.**
+`ConcurrentHashTrie<TKey, TValue>` provides lock-free mutable operations over bitmap C-nodes,
+singleton leaves, and equal-hash collision nodes. Readers help complete node-local GCAS descriptors;
+`Snapshot()` advances the root generation in O(1), and later writers renew old-generation child
+indirection nodes lazily along modified paths. The immutable snapshot view converts explicitly to
+canonical `PersistentHashMap` form in O(n).
 
 **What it is.** Prokopec, Bronson, Bagwell & Odersky (PPoPP 2012): a lock-free *mutable* hash trie
 (CAS on indirection nodes, generation-stamped GCAS) whose `Snapshot()` is O(1) - subsequent writers

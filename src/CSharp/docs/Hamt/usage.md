@@ -230,17 +230,20 @@ variable ownership still applies: do not race on the same mutable variable while
 reassigns it to a newer version.
 
 For a shared mutable map, use `ConcurrentHashTrie<TKey, TValue>`. Its updates are atomic and its
-snapshot is an O(1) persistent value:
+snapshot is an O(1) immutable Ctrie generation:
 
 ```csharp
 var live = new ConcurrentHashTrie<string, int>(StringComparer.OrdinalIgnoreCase);
 live.AddOrUpdate("requests", _ => 1, (_, count) => count + 1);
 
-PersistentHashMap<string, int> published = live.Snapshot();
+ConcurrentHashTrie<string, int>.SnapshotView published = live.Snapshot();
 live["requests"] = 100;
 
 // The snapshot remains stable at 1 while the live trie advances.
 Console.WriteLine(published["REQUESTS"]);
+
+// Conversion to the canonical CHAMP family is explicit and O(n).
+PersistentHashMap<string, int> champ = published.ToPersistentHashMap();
 ```
 
 Factories passed to `GetOrAdd` and `AddOrUpdate` may be invoked more than once under contention;

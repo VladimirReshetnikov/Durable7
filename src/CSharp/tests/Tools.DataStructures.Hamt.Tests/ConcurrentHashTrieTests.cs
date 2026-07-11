@@ -100,4 +100,33 @@ public sealed class ConcurrentHashTrieTests
         Assert.Empty(errors);
         Assert.Equal(5_000, trie.Count);
     }
+
+    /// <summary>Exercises collision nodes and lazy generation renewal under parallel mutation.</summary>
+    [Fact]
+    public void CollidingKeys_AreLinearizableAcrossRepeatedSnapshots()
+    {
+        var trie = new ConcurrentHashTrie<int, int>(ConstantHashComparer.Instance);
+        Parallel.For(0, 2_000, i => trie.SetItem(i, i));
+
+        var retained = new List<ConcurrentHashTrie<int, int>.SnapshotView>();
+        for (var round = 0; round < 8; round++)
+        {
+            retained.Add(trie.Snapshot());
+            var offset = round * 100;
+            Parallel.For(offset, offset + 100, i => Assert.True(trie.TryRemove(i, out _)));
+        }
+
+        Assert.Equal(2_000, retained[0].Count);
+        Assert.Equal(1_300, retained[^1].Count);
+        Assert.Equal(1_200, trie.Count);
+        Assert.Equal(2_000, retained[0].ToPersistentHashMap().Count);
+        Assert.Equal(1_999, retained[0][1_999]);
+    }
+
+    private sealed class ConstantHashComparer : IEqualityComparer<int>
+    {
+        internal static readonly ConstantHashComparer Instance = new();
+        public bool Equals(int x, int y) => x == y;
+        public int GetHashCode(int obj) => 0;
+    }
 }
