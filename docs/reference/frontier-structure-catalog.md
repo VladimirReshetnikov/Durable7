@@ -241,6 +241,14 @@ tails, caches clean snapshots, and detects mutation during iteration. Nullable-p
 exact-sharing, 10,000-operation model, adversarial density/height, and concurrent-reader gates cover
 the JVM representation.
 
+**Rust status (2026-07-11): Implemented and representation-hardened.** `RrbVector<T>` stores
+contiguous elements in shared `Arc<[T]>` leaf backing with structural slice offsets, uses
+size-table-free regular branches and cumulative-size relaxed branches, and keeps `Clone` bounds local
+to operations that copy owned values. Structural splits/ranges, borrowed iteration, endpoint removal,
+validation/statistics, exact sharing, and the frozen-prefix append builder work without unsafe code;
+the full workspace and warning-clean Clippy gates cover randomized, adversarial, non-`Clone`, and
+concurrent-reader cases.
+
 **What it is.** The relaxed radix-balanced tree (Bagwell & Rompf 2011; practical treatment with
 transients in Stucki et al., ICFP 2015): a 32-way branching persistent vector where nodes are
 normally full (radix-indexable in O(log32 n) with pure bit arithmetic) and carry small size tables

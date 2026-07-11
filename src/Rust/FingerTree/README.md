@@ -9,6 +9,7 @@
 family. It exposes Rust-native names for the same public families:
 
 - `PersistentDeque<T>`;
+- `RrbVector<T>` and its append-only `RrbVectorBuilder<T>`;
 - `FingerTree<T, P>` over a `MeasurePolicy<T>`, including built-in size, sum, min/max, key,
   order-statistic, and product-measure policies;
 - `ReversibleDeque<T>`;
@@ -22,6 +23,12 @@ This checkpoint preserves immutable snapshot semantics and the observable behavi
 crate tests. `PersistentDeque<T>` uses structurally shared balanced tree storage and caches first/last
 leaf signposts at every node, so sorted lower/upper bounds visit O(log n) nodes and feed the full sorted
 split/equal-range/insert/remove vocabulary.
+`RrbVector<T>` is the uniform-random-access sibling: immutable 32-slot leaves sit below 32-way
+branches, regular branches use five-bit radix indexing without size tables, and relaxed branches
+retain cumulative sizes only where split or concatenation made child spans irregular. Safe `Arc`
+path copying supports indexing, replacement, endpoint edits, boundary-spine concatenation, splits,
+range edits, and iteration. The append builder moves full leaves into persistent storage, adopts an
+existing vector as a frozen prefix, and caches clean immutable snapshots.
 `ReversibleDeque<T>` uses O(1) mirrored tree views over that shared deque, including tree-based
 mixed-orientation concat, split, and endpoint operations after reverse. Its split/pop results retain the
 reversible facade, and borrowed or owned iteration follows logical orientation. `Rope<T>` now uses chunked

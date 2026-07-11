@@ -11,6 +11,7 @@ The public crate is `tools-data-structures-fingertree`, with library name
 Current public families:
 
 - `PersistentDeque<T>` and `ReversibleDeque<T>`;
+- `RrbVector<T>`, `RrbVectorBuilder<T>`, and the split/pop/statistics result types;
 - `FingerTree<T, P>` over `MeasurePolicy<T>`;
 - built-in policies `SizeMeasure`, `SumMeasure<T>`, `MaxMeasure`, `MinMeasure`, `KeyMeasure<T>`,
   `ProductMeasure<T, PFirst, PSecond>` with `MeasurePair<TFirst, TSecond>`, and
@@ -42,6 +43,8 @@ The Rust surface follows Rust conventions:
   containing cluster's start, and the end boundary maps to the grapheme count, matching the C#
   contract;
 - out-of-range positional rope edits and text offset conversions return `None`.
+- out-of-range RRB indexing, splitting, and range edits return `None`; indexing through `Index`
+  retains Rust's ordinary panic-on-invalid-index convention.
 
 This workspace is a semantic checkpoint, not the final lazy finger-tree representation. It preserves immutable
 snapshot behavior, stable observable ordering, rank/range semantics, priority stability, closed-interval overlap
@@ -80,6 +83,20 @@ operations locate by count plus last-key prefixes, while edits and range extract
 subtrees. Sorted-set algebra merges two streaming tree iterators in O(n + m) traversal work instead of performing
 a rank descent per element. These derived facades still do not claim
 the C#/C++ lazy measured-spine complexity or allocation profile for every operation.
+
+`RrbVector<T>` ports the hardened C# relaxed radix-balanced representation. Leaves contain at most
+32 contiguous elements in shared `Arc<[T]>` backing arrays; leaf slices created by split retain that
+backing without cloning elements. Regular 32-way branches omit cumulative tables and select children
+from five-bit radix spans. Relaxed branches alone store prefix sizes. Indexed reads, borrowed
+iteration, split, range extraction, and endpoint removal therefore impose no `Clone` bound. Point
+replacement, concat, payload-redistributing range edits, owned pops, owned iteration, and `to_vec`
+require `T: Clone` only where Rust ownership requires copying stored values. Equal point
+replacement, empty insertion/removal, empty-side concat, and boundary splits preserve root identity
+where their result is unchanged. `validate_structure` reports count, height, leaf density, branching,
+and regular/relaxed-node statistics while checking every cached layout invariant. The append builder
+moves staged leaves into immutable nodes, retains an adopted vector as an O(1) prefix, and returns
+the same root on repeated clean freezes. As in C#, there is no dedicated persistent tail buffer;
+immutable endpoint insertion remains a boundary-spine operation.
 
 Future representation work should keep the Rust public names and result shapes stable while replacing the remaining
 semantic-checkpoint algorithms with lazy measured-spine equivalents where needed for asymptotic parity.

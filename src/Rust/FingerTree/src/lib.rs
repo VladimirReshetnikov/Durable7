@@ -6,6 +6,7 @@ mod interval_tree;
 mod measured;
 mod priority_queue;
 mod rope;
+mod rrb_vector;
 mod sorted;
 mod text_extras;
 
@@ -23,6 +24,10 @@ pub use priority_queue::{PriorityEntry, PriorityQueue};
 pub use rope::{
     LineColumn, MeasuredRope, MeasuredRopeBuilder, MeasuredRopeLocate, MeasuredRopeSplit,
     NewlineMeasure, Rope, RopeBuilder, TextRope,
+};
+pub use rrb_vector::{
+    RrbVector, RrbVectorBuilder, RrbVectorIntoIter, RrbVectorInvariantError, RrbVectorIter,
+    RrbVectorPop, RrbVectorSplit, RrbVectorStatistics,
 };
 pub use sorted::{DuplicateKeyError, SortedBag, SortedMap, SortedSet};
 pub use text_extras::NewlineStyle;

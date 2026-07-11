@@ -12,13 +12,14 @@ and document the remaining lazy-spine asymptotic parity boundary.
 ## Current Documents
 
 - [API notes](api-notes.md) describe `PersistentDeque<T>`, `ReversibleDeque<T>`,
-  `FingerTree<T, P>`, `MeasurePolicy<T>`, built-in and product measures, sorted facades, priority
-  queues, interval trees, ropes, measured ropes, text helpers, Rust result shapes, and checkpoint
-  limitations.
+  `RrbVector<T>`, `FingerTree<T, P>`, `MeasurePolicy<T>`, built-in and product measures, sorted
+  facades, priority queues, interval trees, ropes, measured ropes, text helpers, Rust result shapes,
+  and checkpoint limitations.
 - [Validation](validation.md) records the Cargo command, local rustup fallback path, safe-Rust boundary,
   and coverage map for the checkpoint behavior.
 - [Tests README](../tests/README.md) maps unit coverage for deque operations, reversible orientation,
-  measured splits, sorted facades, priority queues, intervals, ropes, measured ropes, and text helpers.
+  RRB representation invariants, measured splits, sorted facades, priority queues, intervals, ropes,
+  measured ropes, and text helpers.
 
 ## Related Repository Docs
 

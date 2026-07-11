@@ -17,6 +17,9 @@ Coverage groups:
   sorted split/equal-range/insert/remove operations (including custom ordering), model replay, subtree-sharing
   checks, and reversible deque O(1) mirrored views with reversible-typed results, logical iteration, and
   mixed-orientation concat/split/pop coverage;
+- `rrb_vector.rs`: 32-slot relaxed radix-balanced vectors, radix/relaxed layout validation,
+  unequal-height concat, exact leaf sharing, range and endpoint edits, 10,000-operation vector-model
+  replay, adversarial density/height checks, builder snapshot isolation, and concurrent readers;
 - `measured.rs`: structurally shared measured sequence core, cached-measure validation, prefix locate, built-in
   measure policies, key lower/upper-bound splits, product-measure component splits, cumulative-weight selection,
   priority extraction helpers, and order-statistic count plus last-key measures;

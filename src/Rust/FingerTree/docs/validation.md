@@ -20,6 +20,9 @@ cover:
 - persistent deque updates, subtree sharing, bounded-depth tree shape, splitting, concatenation, cached endpoint
   signposts, logarithmic sorted bounds, sorted lower/upper/equal-range splits, insertion/removal, custom ordering,
   and randomized model replay;
+- 32-way RRB radix boundaries, regular-versus-relaxed branch invariants, unequal-height boundary-spine
+  concatenation, exact-boundary leaf sharing, 10,000 randomized persistent edits, adversarial density/height
+  bounds, cached builder snapshots, non-`Clone` structural operations, and concurrent readers;
 - general measured tree cached-measure validation, subtree-sharing splits, randomized prefix-measure locate checks,
   key lower/upper-bound splits, product-measure component splits, cumulative-weight selection, and min/max
   extraction helpers;
