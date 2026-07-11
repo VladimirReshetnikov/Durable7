@@ -39,3 +39,24 @@ target_include_directories(
 fingertree_c_configure_target(rrb_vector_c_tests)
 
 tds_add_headless_test(NAME fingertree_c.rrb_vector TARGET rrb_vector_c_tests)
+
+add_executable(
+    daba_lite_c_tests
+    daba_lite_tests.c
+)
+
+target_link_libraries(
+    daba_lite_c_tests
+    PRIVATE
+        tools::data_structures::finger_tree_c
+)
+
+target_include_directories(
+    daba_lite_c_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+fingertree_c_configure_target(daba_lite_c_tests)
+
+tds_add_headless_test(NAME fingertree_c.daba_lite TARGET daba_lite_c_tests)

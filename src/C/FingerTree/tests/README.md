@@ -5,14 +5,15 @@
 - Audience: Maintainers validating the C FingerTree port
 - Scope: Native test executable and source organization under `src/C/FingerTree/tests`
 
-The C FingerTree workspace has two dependency-free native test executables. `fingertree_c_tests` is
+The C FingerTree workspace has three dependency-free native test executables. `fingertree_c_tests` is
 registered as `fingertree_c.core`; `rrb_vector_c_tests` is registered as
-`fingertree_c.rrb_vector`. Each source contains its runner, assertion macros, policy helpers, and
-test cases.
+`fingertree_c.rrb_vector`; and `daba_lite_c_tests` is registered as `fingertree_c.daba_lite`. Each
+source contains its runner, assertion macros, policy helpers, and test cases.
 
 The runner prints one `[pass]` line per named test case, writes failed requirements to standard error with file and
 line information, and exits non-zero if any test increments the failure count. A successful direct run ends with
-`all C FingerTree tests passed`. The focused runner ends with `all C RRB vector tests passed`.
+`all C FingerTree tests passed`. The focused runners end with `all C RRB vector tests passed` and
+`all C DABA Lite tests passed` respectively.
 
 ## Test Cases
 
@@ -58,6 +59,19 @@ line information, and exits non-zero if any test increments the failure count. A
 - deterministic failpoint allocation rollback for construction, updates, and builder staging; and
 - concurrent vector copy/read/validate/dispose over atomic node references.
 
+`daba_lite_tests.c` covers:
+
+- all 1,024 ten-step insert/evict histories against a noncommutative matrix FIFO model;
+- a 100,000-operation variable sum window plus periodic naive reaggregation and structural checks;
+- 63/64/65 and 127/128/129 block boundaries followed by sustained slide churn and complete drains;
+- all singleton, flip-and-shrink, shift, and shrink phases with exact maximum 3/2/1 combine counts;
+- callback-free structural validation and the fixed seven-temporary worst-path staging bound;
+- all four create, two boundary-growth, and two clear allocator failpoints with exact rollback and
+  allocation-liveness assertions;
+- populated handle ownership transfer, inert moved-from queries/destruction, and continued destination use;
+- prompt owned-value and retired-block reclamation, O(n + c) clear, and reuse after clear; and
+- maximum-alignment callback storage plus empty/nonempty clear callback counts.
+
 ## Build And Run
 
 From `src/C/FingerTree`, build and run the core CTest target:
@@ -74,6 +88,7 @@ Run the built executables directly when changing runner diagnostics or a focused
 ```powershell
 .\out\build\msvc-debug\tests\fingertree_c_tests.exe
 .\out\build\msvc-debug\tests\rrb_vector_c_tests.exe
+.\out\build\msvc-debug\tests\daba_lite_c_tests.exe
 ```
 
 Use the workspace [validation guide](../docs/validation.md) for Release validation, warning policy,

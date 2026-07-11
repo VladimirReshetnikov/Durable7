@@ -26,6 +26,8 @@ included are:
 - `ft_interval_tree_i64`, a convenience closed-interval facade for signed 64-bit endpoints;
 - `ft_rrb_vector`, a type-erased 32-way relaxed radix-balanced vector with atomic structural
   sharing, checked prefix sizes, persistent range edits, and an append-only builder;
+- `ft_daba_lite`, a mutable six-cursor FIFO monoid aggregator with 64-slot blocks, worst-case
+  3/2/1 combine ceilings for insert/evict/query, injected allocation, and deterministic reclamation;
 - `ft_rope`, a generic persistent chunked positional sequence backed by measured chunk leaves;
 - `ft_measured_rope`, a generic persistent chunked sequence with cached user measures and cumulative-measure
   navigation;
@@ -59,8 +61,10 @@ generated-output locations, see the [validation guide](docs/validation.md).
 
 - `include/tools/data_structures/finger_tree/fingertree.h` contains the public C API.
 - `include/tools/data_structures/finger_tree/rrb_vector.h` contains the separate RRB vector API.
+- `include/tools/data_structures/finger_tree/daba_lite.h` contains the separate mutable DABA Lite API.
 - `src/fingertree.c` contains the measured-tree implementation and its wrappers;
-  `src/rrb_vector.c` contains the independent RRB core and builder.
+  `src/rrb_vector.c` contains the independent RRB core and builder; and `src/daba_lite.c` contains
+  the independent sliding-window aggregator.
 - `tests/` contains the [bootstrap CTest executable](tests/README.md).
 - `samples/` contains deterministic C sample executables that are also registered as CTest smoke tests; see
   [`samples/README.md`](samples/README.md).

@@ -7,7 +7,7 @@
 - Scope: C naming, contracts, ownership, and intentional differences from `src/Cpp/FingerTree`
 
 The public C API lives in `tools/data_structures/finger_tree/fingertree.h` and the focused
-`tools/data_structures/finger_tree/rrb_vector.h`. For setup and handle-lifetime
+`tools/data_structures/finger_tree/rrb_vector.h` and `tools/data_structures/finger_tree/daba_lite.h` headers. For setup and handle-lifetime
 examples, start with the [usage guide](usage.md). The API uses opaque handles plus explicit policy callbacks
 rather than C++ templates:
 
@@ -63,6 +63,9 @@ Implemented in this checkpoint:
   tables, relaxed branches with cumulative `size_t` prefixes, atomic node references, persistent
   endpoint/concat/split/range edits, ordered visitation, structural diagnostics, and an append-only
   snapshot builder;
+- mutable `ft_daba_lite` with the six-cursor DABA Lite schedule, 64-slot linked blocks, FIFO
+  noncommutative aggregation, injected allocation, structural statistics, and prompt deterministic
+  value/block reclamation;
 - deterministic sample executables and a dependency-light benchmark harness.
 
 Deferred from the original measured-tree port:
@@ -71,6 +74,46 @@ Deferred from the original measured-tree port:
   supplies an allocator) and typed macro-generation helpers.
 
 The core now carries the C++ port's shared lazy-middle shape in C form.
+
+## DABA Lite Contract
+
+`ft_daba_policy` combines `ft_value_type`, the identity/combine portion of `ft_measure_policy`, and
+an allocator pair. DABA Lite stores monoid values directly, so the value and measure sizes must be
+equal; the measure callback remains in the shared policy vocabulary but is not invoked. The policy
+pointer and both callback contexts must outlive the mutable handle. Use `ft_daba_lite_move` to
+relocate ownership: copying a handle by assignment would create two owners of one mutable rep and is
+invalid.
+
+The value copy callback and the monoid identity/combine callbacks construct independent owned values
+in uninitialized, suitably aligned storage. The implementation stages callback-derived values in a
+fixed private plan and transfers ownership into slots or aggregate fields by byte move, destroying
+each constructed value exactly once. Values must therefore be relocatable as ordinary C objects and
+must not contain self-pointers that become invalid after relocation. `ft_daba_lite_aggregate` follows
+the other type-erased output APIs: it constructs an owned value in the caller's uninitialized
+destination, and the caller eventually invokes `policy.value.destroy` when that callback is present.
+
+The C callback vocabulary is deliberately void-returning. Copy, destroy, identity, and combine
+callbacks must return normally; callback side effects and nonlocal exits are outside the rollback
+contract. A callback must not reenter the same `ft_daba_lite` handle: private scratch values and a
+provisional end slot/block may exist before logical publication, so recursive observation or
+mutation would see an operation in flight. All callback results are nevertheless completed before logical window publication.
+Library allocator failures return `FT_STATUS_NO_MEMORY` and leave the size, aggregate, cursor state,
+block chain, and occupied slots unchanged. The fixed scratch bound is seven owned temporaries on the
+worst insertion/fixup path: inserted aggregate, inserted value, one identity, two final aggregates,
+and two pending slot writes.
+
+The structure maintains `F <= L <= R <= A <= B <= E` and performs one incremental-reversal fixup per
+slide. Insert invokes combine at most three times, eviction at most twice, and a nonempty aggregate
+query exactly once; empty queries invoke identity without combine. Each live position occupies one
+slot in a linked sequence of 64-slot blocks. Crossing the front boundary immediately destroys and
+deallocates the retired block. `clear` first prepares a replacement block and identity, then commits
+the empty state and deterministically destroys all old values and blocks. Consequently clear is
+O(n + c) for n live positions in c blocks in C, not the O(1) tracing-GC reset of the C# reference.
+
+The handle is deliberately mutable, non-thread-safe, and non-iterable. DABA Lite overwrites original
+values with partial aggregates during reversal, so a general non-invertible monoid cannot recover the
+input sequence. `ft_daba_lite_validate` instead checks links, exact slot occupancy, cursor order, size
+equations, the two-block slack bound, and statistics without invoking any value or monoid callback.
 
 ## RRB Vector Contract
 

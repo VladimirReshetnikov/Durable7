@@ -1,4 +1,5 @@
 #include <tools/data_structures/finger_tree/fingertree.h>
+#include <tools/data_structures/finger_tree/daba_lite.h>
 #include <tools/data_structures/finger_tree/rrb_vector.h>
 
 #include <stdio.h>
@@ -22,6 +23,71 @@ static bool equal_ints(const void* left, const void* right, void* context)
 {
     (void)context;
     return *(const int*)left == *(const int*)right;
+}
+
+static void u64_identity(void* destination, void* context)
+{
+    (void)context;
+    *(uint64_t*)destination = 0;
+}
+
+static void u64_measure(void* destination, const void* value, void* context)
+{
+    (void)context;
+    *(uint64_t*)destination = *(const uint64_t*)value;
+}
+
+static void u64_combine(void* destination, const void* left, const void* right, void* context)
+{
+    (void)context;
+    *(uint64_t*)destination = *(const uint64_t*)left + *(const uint64_t*)right;
+}
+
+static int benchmark_daba_lite(size_t count)
+{
+    ft_value_type value_type;
+    ft_measure_policy monoid;
+    ft_daba_policy policy;
+    ft_daba_lite daba;
+    uint64_t aggregate = 0;
+    ft_value_type_init(&value_type, sizeof(uint64_t));
+    monoid.size = sizeof(uint64_t);
+    monoid.identity = u64_identity;
+    monoid.measure = u64_measure;
+    monoid.combine = u64_combine;
+    monoid.context = NULL;
+    ft_daba_policy_init(&policy, &value_type, &monoid);
+    if (ft_daba_lite_create(&daba, &policy) != FT_STATUS_OK) {
+        return 1;
+    }
+
+    const clock_t start = clock();
+    for (size_t index = 0; index < count; ++index) {
+        const uint64_t value = (uint64_t)index + 1;
+        if (ft_daba_lite_insert(&daba, &value) != FT_STATUS_OK) {
+            ft_daba_lite_destroy(&daba);
+            return 1;
+        }
+    }
+    for (size_t index = 0; index < count / 2; ++index) {
+        const uint64_t value = (uint64_t)count + (uint64_t)index + 1;
+        if (ft_daba_lite_evict(&daba) != FT_STATUS_OK ||
+            ft_daba_lite_insert(&daba, &value) != FT_STATUS_OK) {
+            ft_daba_lite_destroy(&daba);
+            return 1;
+        }
+    }
+    if (ft_daba_lite_aggregate(&daba, &aggregate) != FT_STATUS_OK) {
+        ft_daba_lite_destroy(&daba);
+        return 1;
+    }
+    const clock_t end = clock();
+    printf("daba_lite_slide_aggregate,%zu,%.3f,%llu\n",
+        count,
+        elapsed_ms(start, end),
+        (unsigned long long)aggregate);
+    ft_daba_lite_destroy(&daba);
+    return 0;
 }
 
 static int benchmark_rrb_vector(size_t count)
@@ -238,7 +304,7 @@ int main(int argc, char** argv)
     }
 
     printf("benchmark,count,elapsed_ms,check\n");
-    if (benchmark_deque(count) != 0 || benchmark_rope(count) != 0 ||
+    if (benchmark_daba_lite(count) != 0 || benchmark_deque(count) != 0 || benchmark_rope(count) != 0 ||
         benchmark_rrb_vector(count) != 0 || benchmark_sorted_set(count / 2) != 0) {
         return 1;
     }

@@ -126,6 +126,15 @@ snapshots. It also runs 2,000 adversarial boundary splits with explicit density/
 builder cache/isolation checks, policy lifetime accounting, policy incompatibility, deterministic
 allocation-failure sweeps with rollback/leak assertions, and concurrent copy/read/dispose stress.
 
+The independent `fingertree_c.daba_lite` executable validates FIFO order through exhaustive
+noncommutative histories and a 100,000-operation variable-window model. It covers all four fixup
+phases, exact insert/evict/query combine ceilings of 3/2/1, 64-slot boundaries and sustained churn,
+callback-free structural statistics, prompt deterministic ownership reclamation, aligned
+type-erased storage, clear/reuse, and every library allocation failpoint in create, boundary growth,
+and clear with state/leak rollback assertions. Handle-move coverage verifies populated ownership
+transfer, moved-from queries/destruction, continued destination use, and final destruction. The C callback policy is infallible by type; callbacks
+must return normally, while injected library allocation failure is fully status-tested.
+
 The sample executables are registered as CTest smoke tests:
 
 - `fingertree_c.sample.showcase` exercises the priority queue, sorted set, interval tree, and text rope.

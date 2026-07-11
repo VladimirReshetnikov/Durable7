@@ -16,6 +16,8 @@ workspace CMake presets.
 
 The executable currently reports:
 
+- `daba_lite_slide_aggregate`: build a sum window, replace half of it through FIFO slides, and query
+  the final aggregate;
 - `deque_push_index`: repeated `ft_persistent_deque_push_back` followed by sparse indexed probes;
 - `rope_build_split_concat`: `ft_rope_from_array`, midpoint split, and concat;
 - `rrb_build_index_split_concat`: packed RRB construction, sparse uniform indexing, midpoint split,
@@ -42,6 +44,7 @@ Expected output shape:
 
 ```text
 benchmark,count,elapsed_ms,check
+daba_lite_slide_aggregate,10000,...
 deque_push_index,10000,...
 rope_build_split_concat,10000,...
 rrb_build_index_split_concat,10000,...

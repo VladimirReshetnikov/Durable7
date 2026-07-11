@@ -84,7 +84,7 @@ ordering, and documentation obligations that should remain recognizable across l
 | [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | Rust HAMT port | `Cargo.toml`, `src/lib.rs` | [`docs`](../../src/Rust/Hamt/docs/README.md) |
 | [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | Canonical managed FingerTree library | `DataStructures.sln`, `src/Tools.DataStructures.FingerTree/`, `tests/Tools.DataStructures.FingerTree.Tests/`, `samples/`, `benchmarks/` | [`docs`](../../src/CSharp/docs/FingerTree/README.md) |
 | [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | C++23 FingerTree/RRB family plus native DABA Lite | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/Cpp/FingerTree/docs/README.md) |
-| [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | C11 FingerTree port | `include/tools/data_structures/finger_tree/fingertree.h`, `CMakePresets.json` | [`docs`](../../src/C/FingerTree/docs/README.md) |
+| [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | C11 FingerTree/RRB family plus type-erased DABA Lite | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/C/FingerTree/docs/README.md) |
 | [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) | Haskell FingerTree family port | `tools-data-structures-fingertree.cabal`, `src/Data/Structures/FingerTree/` | [`README`](../../src/Haskell/FingerTree/README.md) |
 | [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | Kotlin/JVM persistent measured-tree/RRB family plus managed DABA Lite | `src/tools/datastructures/fingertree/`, `test/tools/datastructures/fingertree/` | [`docs`](../../src/Kotlin/FingerTree/docs/README.md) |
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | Rust FingerTree/RRB checkpoint plus single-threaded DABA Lite | `Cargo.toml`, `src/` | [`docs`](../../src/Rust/FingerTree/docs/README.md) |
@@ -110,7 +110,7 @@ FingerTree lineage:
 
 1. C# FingerTree (`src/CSharp/src/Tools.DataStructures.FingerTree`) is the broadest implementation and documentation source: tuned deque, general measured tree, derived sorted/priority/interval collections, ropes, text helpers, samples, benchmarks, and design notes.
 2. `src/Cpp/FingerTree` ports the persistent family to a header-first C++23 library and separately exposes native DABA Lite with deterministic reclamation and CMake/CTest validation.
-3. `src/C/FingerTree` starts from the C++ port and exposes a C11 API with explicit handles, ownership, and facade types.
+3. `src/C/FingerTree` starts from the C++ port and exposes a C11 API with explicit handles, ownership, persistent facades, RRB vectors, and mutable DABA Lite.
 4. `src/Haskell/FingerTree` ports the family to Haskell with a general measured tree, deque/reversible deque, derived collections, intervals, ropes, and text helpers.
 5. `src/Kotlin/FingerTree` ports the persistent family to Kotlin/JVM over immutable measured AVL and RRB sequences, and separately exposes the mutable six-cursor DABA Lite streaming aggregator.
 6. `src/Rust/FingerTree` is a Rust semantic checkpoint for the persistent family names over shared

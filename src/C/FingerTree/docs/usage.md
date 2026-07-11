@@ -16,6 +16,7 @@ Include the public header:
 
 ```c
 #include <tools/data_structures/finger_tree/fingertree.h>
+#include <tools/data_structures/finger_tree/daba_lite.h>
 #include <tools/data_structures/finger_tree/rrb_vector.h>
 ```
 
@@ -111,6 +112,73 @@ lifetime discipline.
 Use `copy` and `destroy` callbacks in `ft_value_type` when elements own memory or reference-counted
 resources. If the callbacks are null, the library byte-copies values of `size` bytes and does not
 perform element cleanup.
+
+## DABA Lite Sliding Aggregate
+
+Use `ft_daba_lite` for a mutable FIFO window whose values form a monoid. The value type and monoid
+measure size must match because the queue stores monoid values directly:
+
+```c
+static void sum_identity(void* destination, void* context)
+{
+    (void)context;
+    *(long long*)destination = 0;
+}
+
+static void sum_measure(void* destination, const void* value, void* context)
+{
+    (void)context;
+    *(long long*)destination = *(const long long*)value;
+}
+
+static void sum_combine(void* destination, const void* left, const void* right, void* context)
+{
+    (void)context;
+    *(long long*)destination = *(const long long*)left + *(const long long*)right;
+}
+
+ft_value_type value_type;
+ft_value_type_init(&value_type, sizeof(long long));
+
+ft_measure_policy monoid = {
+    sizeof(long long), sum_identity, sum_measure, sum_combine, NULL
+};
+ft_daba_policy policy;
+ft_daba_policy_init(&policy, &value_type, &monoid);
+
+ft_daba_lite daba;
+ft_status status = ft_daba_lite_create(&daba, &policy);
+if (status != FT_STATUS_OK) {
+    return status;
+}
+
+long long first = 10;
+long long second = 20;
+status = ft_daba_lite_insert(&daba, &first);
+if (status == FT_STATUS_OK)
+    status = ft_daba_lite_insert(&daba, &second);
+
+long long aggregate = 0;
+if (status == FT_STATUS_OK)
+    status = ft_daba_lite_aggregate(&daba, &aggregate); /* 30 */
+if (status == FT_STATUS_OK)
+    status = ft_daba_lite_evict(&daba);
+
+ft_daba_lite_destroy(&daba);
+return status;
+```
+
+The policy and contexts must outlive the handle. Do not copy the handle; use `ft_daba_lite_move` when
+relocating ownership. The instance is mutable and not thread-safe, and it intentionally has no
+iteration API because reversal slots may hold partial aggregates. Insert, eviction, and nonempty
+query call combine at most 3, 2, and 1 times. Allocation failures are state-atomic. Callbacks have no
+failure return in the shared C policy vocabulary, must return normally, and must not recursively
+query or mutate the same handle while an operation is in flight.
+
+An aggregate destination is uninitialized owned storage. For a nontrivial `ft_value_type`, call its
+destroy callback on the returned value after use. `ft_daba_lite_clear` is O(n + c): native C must
+destroy n owned slot values and release c blocks before returning, even though each ordinary slide is
+worst-case O(1). `ft_daba_lite_validate` is callback-free and returns region/block/slack statistics.
 
 ## Persistent Deque And Generic Tree
 
