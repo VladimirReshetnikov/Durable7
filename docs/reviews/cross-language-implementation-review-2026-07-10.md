@@ -384,3 +384,54 @@ Tungsten ordering-rule matrix.
    merge-based `SparseInteger` addition.
 7. **C# Hamt**: internal mutable bulk builder (biggest consumer: `PersistentAssociation.Rebuilt`).
 
+## Resolution addendum — 2026-07-10
+
+This addendum preserves the review's original findings, parity matrix, and contemporaneous evidence
+above while recording the subsequent remediation. **All actionable open, recorded-not-fixed, and
+recorded-not-applied items are resolved.** The older language-pair reviews in this directory already
+carry their own complete resolution addenda.
+
+1. **C FingerTree structural search — `a1f3ad0`.** The generic tree now caches rightmost-leaf
+   signposts and performs monotone bound descent in O(log n). Sorted bag/set/map membership and
+   edits, priority insertion, and both interval lower-bound paths no longer binary-search through
+   `ft_tree_at` payload copies. Counting-policy and 4,096-element operation ceilings lock in the
+   class and the read-path copy reduction.
+2. **Rust interval and set algebra — `19848eb`.** Interval storage carries low/max-high product
+   annotations and queries descend/prune the measured tree. `SortedSet` algebra now streams two
+   iterators rather than issuing indexed tree reads.
+3. **C++ reversible traversal — `aae1f6d`.** `reversible_deque` uses an orientation-bit inline
+   cursor, so iteration and `copy_to` stream in logical order without materializing a temporary
+   vector.
+4. **Haskell rank and sorted-bound descent — `58c300f`, `e05b76e`.** `SortedBag` is an
+   order-statistic measured tree of `Data.Sequence` buckets, giving logarithmic rank/count/slice
+   boundaries even for a single 100,000-instance bucket. `Deque` now measures size plus its
+   rightmost leaf, so runtime-comparator lower bound, upper bound, and binary search follow one
+   measured root-to-leaf path rather than O(log² n) indexed probes.
+5. **Kotlin facade parity — `85da13a`.** `MeasuredRope` has the C# positional/editing surface,
+   builder, slicing, and compaction behavior on the measured AVL substrate. `SortedMap.from` now
+   accepts an explicit comparator while preserving stable last-wins construction.
+6. **C# Numerics hot paths — `7115a65`.** The three unsigned widths share normalized Knuth
+   limb division with a single-limb fast path; signed division reuses magnitude wrappers.
+   UTF-16/UTF-8 `TryFormat` writes `G`/`D`/`N`/`X` directly from limbs without an intermediate
+   string on ordinary paths. `SparseInteger` addition merges ordered bit streams with integrated
+   carry instead of repeated middle-array edits. Wide carry/borrow propagation also no longer
+   converts literals through `BigInteger`.
+7. **C# HAMT/Tungsten bulk and fused edits — `c092016`, `d2f4d6d`.** An internal transient HAMT
+   mutates unpublished leaf/collision/bitmap nodes and freezes detached immutable nodes once;
+   map/set factories, set intersection, and `PersistentAssociation.Rebuilt` use it. `KeyTake`
+   obtains canonical key plus slot in one HAMT probe, while stamp-keyed set/append/prepend/insert/
+   remove operations fuse signpost location and persistent deque reconstruction in one descent.
+
+The reports also record deliberate, non-actionable differences—such as strict measured-AVL
+endpoint bounds in Kotlin/Rust, language-native error/result conventions, the absence of a Rust
+Numerics port, and intentionally reduced generic-math surface. Those remain documented design
+choices rather than postponed defects.
+
+### Replacement validation evidence
+
+- C FingerTree: MSVC Debug/Release, GCC, and Clang lanes, 3/3 CTests in each.
+- Rust workspace: 81 tests; `cargo fmt --check` and `cargo clippy --workspace --all-targets` clean.
+- C++ FingerTree: MSVC Debug/Release, 18/18 CTests in each; affected GCC and Clang lanes pass.
+- Haskell workspace: FingerTree, HAMT, and Tungsten suites pass under GHC 9.12.4 with `-Wall`.
+- Kotlin workspace: HAMT 11, FingerTree 22, and Tungsten 10 executable test groups pass.
+- C# workspace: HAMT 58, Numerics 317, Tungsten 51, and FingerTree 388 tests pass (814 total).
