@@ -13,15 +13,17 @@ remaining persistent-family lazy-spine asymptotic parity boundary stays explicit
 ## Current Documents
 
 - [API notes](api-notes.md) describe `PersistentDeque<T>`, `ReversibleDeque<T>`,
-  `DabaLite<T, M>`, `DabaMonoid<T>`, `RrbVector<T>`, `FingerTree<T, P>`, `MeasurePolicy<T>`,
+  `DabaLite<T, M>`, `DabaMonoid<T>`, `RrbVector<T>`, `CanonicalSortedSet<T>`,
+  `ZipTreeRankPolicy<T>`, `FingerTree<T, P>`, `MeasurePolicy<T>`,
   built-in and product measures, sorted
   facades, priority queues, interval trees, ropes, measured ropes, text helpers, Rust result shapes,
   and checkpoint limitations.
 - [Validation](validation.md) records the Cargo command, local rustup fallback path, safe-Rust boundary,
   and coverage map for the checkpoint behavior.
 - [Tests README](../tests/README.md) maps unit coverage for deque operations, reversible orientation,
-  DABA Lite state-machine and failure atomicity, RRB representation invariants, measured splits,
-  sorted facades, priority queues, intervals, ropes, measured ropes, and text helpers.
+  DABA Lite state-machine and failure atomicity, RRB representation invariants, canonical zip-tree
+  policy/topology/persistence, measured splits, sorted facades, priority queues, intervals, ropes,
+  measured ropes, and text helpers.
 
 ## Related Repository Docs
 

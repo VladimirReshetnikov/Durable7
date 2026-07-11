@@ -73,8 +73,8 @@ semantics, not parity failures. A pure Haskell value would not preserve DABA's e
 schedule, so omission there is intentional.
 
 The canonical zip-zip sorted set is a policy-canonical persistent member, currently implemented in
-C# and Kotlin/JVM. Both ports derive a 32-byte HMAC key as SHA-256 of ASCII `ZZT2` followed by the
-public seed in big-endian order, feed an eight-byte big-endian equivalence-class hash to
+C#, Kotlin/JVM, and Rust. All three ports derive a 32-byte HMAC key as SHA-256 of ASCII `ZZT2`
+followed by the public seed in big-endian order, feed an eight-byte big-endian equivalence-class hash to
 HMAC-SHA-256, and interpret the first three big-endian words as leading-zero geometric rank,
 unsigned secondary rank, and digest content. Preserve random-key and caller-keyed modes, the
 minimum 32-byte caller-key contract, comparer-smaller final priority tie, first-representative bulk
@@ -82,6 +82,11 @@ semantics, policy-object identity for canonical algebra, and receiver-comparer s
 cross-policy equality. A port must test exact rank vectors, unsigned secondary ordering,
 equivalence/hash incoherence, insertion-order-independent topology, deep colliding chains, and
 concurrent lazy-digest publication where the language exposes shared readers.
+
+Rust deliberately admits natural factories only for explicitly pinned stable hash types; it does
+not inherit `DefaultHasher`, `usize`, or `isize` as reproducibility contracts. Its bulk/read/clear/
+equality surface accepts non-`Clone` values, while path-copying edits, algebra, and owned diff
+require `Clone`. Treat these as honest type-system boundaries rather than parity gaps.
 
 FingerTree lineage:
 
@@ -103,9 +108,10 @@ FingerTree lineage:
    the strict-AVL versus lazy-digit-spine costs and segregate the mutable managed DABA Lite member.
 6. [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) is the Rust semantic checkpoint for
    the same family names. It preserves immutable snapshot behavior now; the public facades use
-   structurally shared Rust tree storage, while the workspace documents the remaining asymptotic
-   boundary until the lazy measured spine is ported through the whole family. Its separate DABA
-   Lite core is mutable, single-threaded, and documents deterministic-drop clear semantics.
+   structurally shared Rust tree storage and include the policy-canonical zip-zip sorted set, while
+   the workspace documents the remaining asymptotic boundary until the lazy measured spine is
+   ported through the whole family. Its separate DABA Lite core is mutable, single-threaded, and
+   documents deterministic-drop clear semantics.
 
 Tungsten collections lineage:
 

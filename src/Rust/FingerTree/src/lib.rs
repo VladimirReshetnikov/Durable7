@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![doc = "Persistent FingerTree-family data structures for Rust."]
 
+mod canonical_sorted_set;
 mod daba_lite;
 mod deque;
 mod interval_tree;
@@ -11,6 +12,11 @@ mod rrb_vector;
 mod sorted;
 mod text_extras;
 
+pub use canonical_sorted_set::{
+    CanonicalSetDifference, CanonicalSetError, CanonicalSetInvariantError, CanonicalSortedSet,
+    CanonicalSortedSetIter, CanonicalSortedSetStatistics, NaturalZipTreeComparer, StableRankHash,
+    StableZipTreeRankHash, ZipTreeComparer, ZipTreePolicyError, ZipTreeRankHash, ZipTreeRankPolicy,
+};
 pub use daba_lite::{
     DabaLite, DabaLiteInvariantError, DabaLiteStatistics, DabaMonoid, EmptyDabaLiteError,
 };
@@ -46,6 +52,7 @@ mod concurrency_tests {
     #[test]
     fn public_snapshots_are_send_sync_when_contents_are() {
         assert_send_sync::<PersistentDeque<i32>>();
+        assert_send_sync::<CanonicalSortedSet<i32>>();
         assert_send_sync::<ReversibleDeque<i32>>();
         assert_send_sync::<Rope<i32>>();
         assert_send_sync::<MeasuredRope<i32, SumMeasure<i32>>>();

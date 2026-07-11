@@ -11,6 +11,7 @@ family. It exposes Rust-native names for the same public families:
 - `PersistentDeque<T>`;
 - `DabaLite<T, M>` over a `DabaMonoid<T>`;
 - `RrbVector<T>` and its append-only `RrbVectorBuilder<T>`;
+- `CanonicalSortedSet<T>` over a retained `ZipTreeRankPolicy<T>`;
 - `FingerTree<T, P>` over a `MeasurePolicy<T>`, including built-in size, sum, min/max, key,
   order-statistic, and product-measure policies;
 - `ReversibleDeque<T>`;
@@ -37,6 +38,17 @@ retain cumulative sizes only where split or concatenation made child spans irreg
 path copying supports indexing, replacement, endpoint edits, boundary-spine concatenation, splits,
 range edits, and iteration. The append builder moves full leaves into persistent storage, adopts an
 existing vector as a frozen prefix, and caches clean immutable snapshots.
+`CanonicalSortedSet<T>` is the policy-canonical ordered-set sibling: immutable `Arc` nodes form a
+Cartesian search tree whose geometric, secondary, and content rank words come from HMAC-SHA-256 of
+an explicit stable 64-bit rank hash. Fresh OS-random, publicly seeded, and caller-keyed policy
+modes separate process-local, reproducible, and secret-key trust boundaries. Policy identity gates
+algebra and diff; independently reconstructed policies with the same key can reproduce topology.
+Persistent edits share untouched branches, `OnceLock` memoizes a non-cryptographic subtree digest,
+and complete validation checks ranks, ordering, heap priority, and metadata. Expected logarithmic
+operations require a coherent, sufficiently collision-resistant rank hash; full collisions remain
+correct and deterministic but produce linear height. Bulk construction, reads, iteration,
+validation, clear, and same- or cross-policy equality accept non-`Clone` elements; only path-copying
+updates, set algebra, and owned diff require `T: Clone`.
 `ReversibleDeque<T>` uses O(1) mirrored tree views over that shared deque, including tree-based
 mixed-orientation concat, split, and endpoint operations after reverse. Its split/pop results retain the
 reversible facade, and borrowed or owned iteration follows logical orientation. `Rope<T>` now uses chunked
@@ -68,5 +80,7 @@ Validate from `src/Rust`:
 .\test.ps1 -Workspace FingerTree
 ```
 
-Unicode extended-grapheme segmentation uses the non-vendored `unicode-segmentation` 1.13.3 crate
-(`MIT OR Apache-2.0`), pinned by the workspace `Cargo.lock`.
+Unicode extended-grapheme segmentation uses the non-vendored `unicode-segmentation` 1.13.3 crate.
+Canonical zip-tree policy uses RustCrypto `hmac` 0.12.1 and `sha2` 0.10.9 plus `getrandom` 0.3.4 for
+fresh OS-random keys. These dependencies are permissively licensed and pinned by the workspace
+`Cargo.lock`.

@@ -61,7 +61,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | DABA Lite sliding-window aggregator | 1, 3 | Strong (implemented in every applicable language: C#, C, C++, Kotlin/JVM, and Rust; pure Haskell is not applicable) | Reuses the language's monoid abstraction | 1 small type, ~8 members |
 | Merkle search tree | 1 | Strong (C# implemented) | Completed: deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
-| Zip tree (canonical sorted set) | 1, 3 | Plausible (C# + Kotlin/JVM implemented) | Completed: coherent keyed rank policy | 1 new core, set facade |
+| Zip tree (canonical sorted set) | 1, 3 | Plausible (C#, Kotlin/JVM, and Rust implemented) | Completed: coherent keyed rank policy | 1 new core, set facade |
 | Brodal-Okasaki heap | 1 | Plausible (C# and Haskell implemented for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
 | Priority search queue (winner-cached AVL) | 1 | Plausible (C# and Haskell implemented) | Completed as a direct core rather than the addressable composition | 1 new core |
 | Ctrie (concurrent, O(1) snapshot) | 1 | Managed-only (C# + Kotlin/JVM implemented) | Tracing GC; native ports require reclamation design | 1 new core, concurrency test tier |
@@ -362,6 +362,15 @@ cross-policy equality, and explicit-stack Cartesian-tree algorithms. Its lazily 
 uses `AtomicReference`; focused adversarial coverage fixes the keyed and public-seed vectors,
 exercises nullable representatives and maximally colliding chains, quantifies off-path sharing for
 add/remove, and races cold digest publication across readers.
+
+**Rust status (2026-07-11): Implemented and independently reviewed.** The safe Rust port uses
+RustCrypto HMAC/SHA-256 and `getrandom`, explicitly pinned stable rank hashes instead of
+`DefaultHasher`, `Arc` path sharing, `OnceLock` digest publication, and iterative destruction for
+height-n chains. Bulk construction, lookup, iteration, validation, clear, and same- or cross-policy
+equality accept non-`Clone` elements; only path-copying edits, algebra, and the owned diff require
+`T: Clone`. Its 14 focused tests include stable-hash and C#-compatible `ZZT2` vectors, unsigned
+secondary ordering, direct first-representative identity, receiver-comparer asymmetry, a
+20,000-operation retained-history model, deep destruction, and barrier-started cold digest readers.
 
 **What they are.** Zip trees (Tarjan, Levy & Timmel, 2018/2019) are randomized-rank binary search
 trees - a reformulation of treaps where insertion and deletion are single root-to-position *unzip*
@@ -851,7 +860,7 @@ The implementation wave described by this catalog has already landed these C# re
 - the managed Ctrie with O(1) immutable snapshots.
 
 CHAMP, Patricia, and RRB have also advanced through the sibling-language work recorded in their
-entries; the canonical zip-zip set has a Kotlin/JVM port, the Brodal-Okasaki heap and
+entries; the canonical zip-zip set has Kotlin/JVM and Rust ports, the Brodal-Okasaki heap and
 priority-search queue have Haskell ports, and DABA Lite now exists in every applicable imperative
 language (C#, C, C++, Kotlin/JVM, and Rust). The Ctrie's deliberate parity boundary remains C# and
 Kotlin/JVM. These are current-state implementation records, not candidates awaiting a consumer.

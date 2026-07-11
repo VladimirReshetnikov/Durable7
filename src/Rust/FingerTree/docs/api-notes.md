@@ -13,6 +13,8 @@ Current public families:
 - `PersistentDeque<T>` and `ReversibleDeque<T>`;
 - `DabaLite<T, M>`, `DabaMonoid<T>`, `DabaLiteStatistics`, and the empty/invariant error types;
 - `RrbVector<T>`, `RrbVectorBuilder<T>`, and the split/pop/statistics result types;
+- `CanonicalSortedSet<T>`, `ZipTreeRankPolicy<T>`, stable comparer/hash traits and built-ins,
+  algebra/diff result types, validation statistics, and policy/invariant errors;
 - `FingerTree<T, P>` over `MeasurePolicy<T>`;
 - built-in policies `SizeMeasure`, `SumMeasure<T>`, `MaxMeasure`, `MinMeasure`, `KeyMeasure<T>`,
   `ProductMeasure<T, PFirst, PSecond>` with `MeasurePair<TFirst, TSecond>`, and
@@ -106,6 +108,67 @@ The safe stable-cursor representation uses `Rc<RefCell<_>>`, making `DabaLite` n
 `Sync`. Keep each instance on one thread and mutate it through exclusive `&mut self`; the type does
 not provide snapshots or internal synchronization.
 
+## Canonical zip-zip sorted set
+
+`CanonicalSortedSet<T>` is an immutable Cartesian binary-search tree over `Arc` nodes. A retained
+`ZipTreeRankPolicy<T>` owns two `Send + Sync` trait objects: `ZipTreeComparer<T>` defines both order
+and set equivalence, while `ZipTreeRankHash<T>` supplies a deterministic 64-bit value that must be
+constant on every comparer-equivalence class. `NaturalZipTreeComparer` and
+`StableZipTreeRankHash` provide an explicit natural-order path for fixed-width integers, `bool`,
+`char`, UTF-8 strings, and byte strings. The stable-hash trait deliberately omits platform-sized
+integers and `std::hash::Hash`; Rust's randomized or implementation-defined hashers never influence
+canonical topology.
+
+The policy encodes the 64-bit rank hash in big-endian order and applies HMAC-SHA-256. The first
+three big-endian words supply geometric rank (leading-zero count), secondary rank, and subtree
+digest content. Heap order compares the first two coordinates descending and comparer order
+ascending as the final tie-break. Consequently rank collisions do not lose correctness or
+canonicality, but a constant rank hash makes height equal to count.
+
+Policy construction exposes the C# trust modes without a hash-unstable default:
+
+- `random` / `random_natural` obtain a fresh unexposed 32-byte key from the operating system. Each
+  call creates an independent policy; clone the handle to retain identity across versions.
+- `seeded` / `seeded_natural` derive the key as SHA-256 of ASCII `ZZT2` followed by the public
+  seed's eight big-endian bytes. This reproduces ranks but is not adversarial security.
+- `keyed` / `keyed_natural` require at least 32 bytes, copy and hide them, and let callers reproduce
+  ranks across processes while retaining responsibility for key protection.
+
+RustCrypto's `hmac` and `sha2` implement the primitive, and `getrandom` supplies fresh keys. HMAC
+cannot restore entropy discarded by the 64-bit input hash, make an incoherent hash coherent, or
+prevent deliberate degeneration under a public seed. Key bytes are redacted from `Debug`, but the
+type does not promise memory locking or zeroization. The 64-bit memoized `content_hash` is a fast
+same-policy inequality filter, not a cryptographic commitment or equality proof.
+
+`from_items` comparer-sorts and retains the first concrete representative in each equivalence class
+before an O(n) Cartesian freeze; total bulk cost is O(n log n). It takes ownership directly and
+does not require `T: Clone`. Neither do construction of an empty set, lookup, containment,
+iteration, digesting, topology diagnostics, validation, clear, version-identity checks, or same- and
+cross-policy equality. `T: Clone` is required only by operations that must reproduce owned items:
+`insert` and `remove` path-copy existing nodes, algebra composes those updates, and `diff` returns
+owned vectors.
+
+`insert` returns `CanonicalSetError::IncoherentRankHash` if an equivalent representative derives a
+different rank. It otherwise retains the old representative and shared root on duplicates. Absent
+removal, empty clear, self algebra, and difference by an empty set likewise preserve
+`is_same_version`. Localized edits path-copy O(h) nodes and share untouched subtrees; all
+traversals, updates, digest work, and destruction use explicit stacks so height-n collision cases
+remain call-stack safe.
+
+`union`, `intersection`, `except`, and `diff` require the exact same retained policy object and
+return `IncompatiblePolicy` for independently reconstructed policy handles. This prevents mixing
+rank spaces silently. `set_equals` still compares mathematical contents across policies under the
+receiver's comparer. It stably sorts and deduplicates borrowed references from the other set, so it
+does not clone elements; differing comparer semantics can intentionally make the receiver-defined
+result asymmetric. Same-policy equality first rejects count or memoized-digest differences and
+then walks canonical topology in lockstep while pruning shared nodes. `diff` returns owned
+`only_in_left` and `only_in_right` vectors in comparer order.
+
+`validate_structure` checks rank reproducibility, strict search order, heap priority, cached count
+and height, and root metadata. It reports count, height, largest geometric coordinate, and repeated
+geometric/secondary priority pairs. Immutable sets and policies are `Send + Sync` when `T` is; the
+memoized digest uses `OnceLock` for safe concurrent publication.
+
 This workspace is a semantic checkpoint, not the final lazy finger-tree representation. Its persistent families
 preserve immutable snapshot behavior, stable observable ordering, rank/range semantics, priority stability,
 closed-interval overlap semantics, and text line navigation. `PersistentDeque<T>` has moved past the initial
@@ -162,8 +225,10 @@ immutable endpoint insertion remains a boundary-spine operation.
 Future representation work should keep the Rust public names and result shapes stable while replacing the remaining
 semantic-checkpoint algorithms with lazy measured-spine equivalents where needed for asymptotic parity.
 
-## External dependency
+## External dependencies
 
 Extended-grapheme segmentation uses `unicode-segmentation` 1.13.3, licensed `MIT OR Apache-2.0`.
-Cargo resolves and pins that crate in the repository's `src/Rust/Cargo.lock`; its source is fetched
-from crates.io and is not vendored into this repository.
+Canonical rank derivation uses RustCrypto `hmac` 0.12.1 and `sha2` 0.10.9, also licensed
+`MIT OR Apache-2.0`; fresh key generation uses `getrandom` 0.3.4 under `MIT OR Apache-2.0`. Cargo
+resolves and pins these crates in the repository's `src/Rust/Cargo.lock`; their sources are fetched
+from crates.io and are not vendored into this repository.

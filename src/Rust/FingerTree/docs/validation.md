@@ -28,6 +28,15 @@ cover:
 - 32-way RRB radix boundaries, regular-versus-relaxed branch invariants, unequal-height boundary-spine
   concatenation, exact-boundary leaf sharing, 10,000 randomized persistent edits, adversarial density/height
   bounds, cached builder snapshots, non-`Clone` structural operations, and concurrent readers;
+- canonical zip-tree SHA-256/HMAC and stable-rank-hash golden vectors, a fixed C#-compatible `ZZT2`
+  rank/topology vector (including unsigned secondary ordering), insertion-order and delete/reinsert
+  convergence, caller-key ownership, random/seeded/keyed trust-mode separation, independently
+  reconstructed keyed-policy parity, comparator/hash incoherence rejection, receiver-comparer
+  asymmetry and borrowed deduplication, non-`Clone` bulk/read/equality/clear coverage with direct
+  first-representative identity, full rank collisions, algebra and owned diff, no-op/root-branch
+  identity, 20,000-operation model replay with retained snapshots, validation statistics,
+  stack-safe deep destruction, and barrier-started cold digest publication across `Send + Sync`
+  readers;
 - general measured tree cached-measure validation, subtree-sharing splits, randomized prefix-measure locate checks,
   key lower/upper-bound splits, product-measure component splits, cumulative-weight selection, and min/max
   extraction helpers;

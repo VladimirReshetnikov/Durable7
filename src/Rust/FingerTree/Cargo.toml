@@ -8,6 +8,9 @@ rust-version.workspace = true
 description = "Persistent FingerTree-family data structures for Rust."
 
 [dependencies]
+getrandom = "0.3.4"
+hmac = "0.12.1"
+sha2 = "0.10.9"
 unicode-segmentation = "1.13.3"
 
 [lib]

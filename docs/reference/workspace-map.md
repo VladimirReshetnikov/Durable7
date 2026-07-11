@@ -87,7 +87,7 @@ ordering, and documentation obligations that should remain recognizable across l
 | [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | C11 FingerTree/RRB family plus type-erased DABA Lite | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/C/FingerTree/docs/README.md) |
 | [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) | Haskell FingerTree family port | `tools-data-structures-fingertree.cabal`, `src/Data/Structures/FingerTree/` | [`README`](../../src/Haskell/FingerTree/README.md) |
 | [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | Kotlin/JVM persistent measured-tree/RRB/canonical-set family plus managed DABA Lite | `src/tools/datastructures/fingertree/`, `test/tools/datastructures/fingertree/` | [`docs`](../../src/Kotlin/FingerTree/docs/README.md) |
-| [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | Rust FingerTree/RRB checkpoint plus single-threaded DABA Lite | `Cargo.toml`, `src/` | [`docs`](../../src/Rust/FingerTree/docs/README.md) |
+| [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | Rust FingerTree/RRB/canonical-set checkpoint plus single-threaded DABA Lite | `Cargo.toml`, `src/` | [`docs`](../../src/Rust/FingerTree/docs/README.md) |
 | [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) | Canonical managed Tungsten-semantics collections (list facade and insertion-ordered association) composed from the HAMT and FingerTree families | `DataStructures.sln`, `src/Tools.DataStructures.Tungsten/`, `tests/Tools.DataStructures.Tungsten.Tests/` | [`docs`](../../src/CSharp/docs/Tungsten/README.md) |
 | [`src/C/Tungsten`](../../src/C/Tungsten/README.md) | C17 Tungsten `List` and `Association` port | `include/tools/data_structures/tungsten/tungsten.h`, `CMakePresets.json` | [`README`](../../src/C/Tungsten/README.md) |
 | [`src/Cpp/Tungsten`](../../src/Cpp/Tungsten/README.md) | C++23 Tungsten `List` and `Association` port | `include/tools/data_structures/tungsten/`, `CMakePresets.json` | [`README`](../../src/Cpp/Tungsten/README.md) |
@@ -116,8 +116,8 @@ FingerTree lineage:
    RRB sequences, adds the keyed policy-canonical zip-zip sorted set, and separately exposes the
    mutable six-cursor DABA Lite streaming aggregator.
 6. `src/Rust/FingerTree` is a Rust semantic checkpoint for the persistent family names over shared
-   tree/RRB storage, plus a separate single-threaded DABA Lite whose deterministic-drop clear cost
-   is documented locally.
+   tree/RRB storage, includes the keyed policy-canonical zip-zip sorted set, and keeps a separate
+   single-threaded DABA Lite whose deterministic-drop clear cost is documented locally.
 
 Tungsten collections lineage:
 

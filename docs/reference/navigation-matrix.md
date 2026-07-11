@@ -49,7 +49,7 @@ patterns.
 | C++ FingerTree | [src/Cpp/FingerTree/docs/usage.md](../../src/Cpp/FingerTree/docs/usage.md) | Aggregate include path, persistent values, DABA Lite ownership/exception constraints, ropes/text, and publication patterns |
 | Haskell FingerTree | [src/Haskell/FingerTree/README.md](../../src/Haskell/FingerTree/README.md) | General measured tree, deque, reversible deque, sorted facades, priority queue, intervals, ropes, and text helpers |
 | Kotlin FingerTree | [src/Kotlin/FingerTree/docs/api-notes.md](../../src/Kotlin/FingerTree/docs/api-notes.md) | Kotlin measured-AVL/RRB persistence, policy-canonical zip-zip set, derived collections, ropes/text, and mutable DABA Lite aggregation |
-| Rust FingerTree | [src/Rust/FingerTree/docs/api-notes.md](../../src/Rust/FingerTree/docs/api-notes.md) | Rust shared-storage persistent surfaces plus single-threaded DABA Lite and deterministic-drop semantics |
+| Rust FingerTree | [src/Rust/FingerTree/docs/api-notes.md](../../src/Rust/FingerTree/docs/api-notes.md) | Rust shared-storage persistent surfaces, policy-canonical zip-zip set, plus single-threaded DABA Lite and deterministic-drop semantics |
 | C# Tungsten collections | [src/CSharp/docs/Tungsten/usage.md](../../src/CSharp/docs/Tungsten/usage.md) | `PersistentList<T>` and `PersistentAssociation<TKey, TValue>` with the Tungsten operation correspondence |
 | C/C++/Haskell/Kotlin/Rust Tungsten collections | [data-structure catalog](data-structure-catalog.md#tungsten-collections) | Language-local Tungsten `List` and `Association` entry points, README links, tests, and substrate notes |
 
@@ -78,7 +78,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | Haskell/Kotlin/Rust Tungsten collections | [catalog rows](data-structure-catalog.md#tungsten-collections) | Language-local README and source entry points for Tungsten `List` and `Association` ports |
 | Haskell FingerTree | [Workspace README](../../src/Haskell/FingerTree/README.md) and [source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Measured.hs) | Haskell measured tree and derived collection API shape |
 | Kotlin FingerTree | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [measured-tree source](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/PersistentMeasuredTree.kt), and [canonical-set source](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/CanonicalSortedSet.kt) | Kotlin measured-tree engine, canonical rank policy/digest/algebra contracts, structural sharing, complexity, and derived collection API shape |
-| Rust FingerTree | [API notes](../../src/Rust/FingerTree/docs/api-notes.md) and [source](../../src/Rust/FingerTree/src/measured.rs) | Rust measured tree and derived collection API shape |
+| Rust FingerTree | [API notes](../../src/Rust/FingerTree/docs/api-notes.md), [measured source](../../src/Rust/FingerTree/src/measured.rs), and [canonical-set source](../../src/Rust/FingerTree/src/canonical_sorted_set.rs) | Rust measured tree, canonical rank policy/digest/algebra contracts, `Clone` boundaries, and derived collection API shape |
 
 ## Validation Entry Points
 
@@ -100,7 +100,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | Kotlin HAMT | [Validation](../../src/Kotlin/Hamt/docs/validation.md) | Kotlin compiler bootstrap and deterministic HAMT executable tests |
 | Kotlin FingerTree | [Validation](../../src/Kotlin/FingerTree/docs/validation.md) | Kotlin compiler bootstrap, persistent-structure invariants, DABA schedules/callback atomicity, canonical rank/topology/sharing/digest checks, generated histories, and executable facade tests |
 | Rust | [Workspace README](../../src/Rust/README.md) | `.\test.ps1` builds all Rust crates and runs unit/doc tests without Windows failure dialogs |
-| Rust FingerTree | [Validation](../../src/Rust/FingerTree/docs/validation.md) | Cargo tests for shared persistent storage plus DABA models, callback panic atomicity, chunk bounds, and reclamation |
+| Rust FingerTree | [Validation](../../src/Rust/FingerTree/docs/validation.md) | Cargo tests for shared persistent storage, DABA models/atomicity/reclamation, and canonical crypto vectors/topology/sharing/non-`Clone`/concurrent-digest contracts |
 | C# FingerTree benchmarks | [Benchmark notes](../../src/CSharp/docs/FingerTree/benchmarks.md) | Curated BenchmarkDotNet results and interpretation |
 | C# FingerTree samples | [Samples README](../../src/CSharp/samples/README.md) | Runnable tours covering text, measured-tree facades, and editor-grade text extras |
 | C# Numerics tests | [Tests README](../../src/CSharp/tests/Tools.Numerics.Tests/README.md) | xUnit project covering fixed-width integer behavior, binary conversion, public API coverage, and declaration parity |
@@ -122,7 +122,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | Kotlin FingerTree tests | [Tests README](../../src/Kotlin/FingerTree/tests/README.md) | Kotlin executable covering persistent facades and bounds plus adversarial DABA Lite and canonical zip-zip histories, callbacks, ranks, sharing, and concurrent digest publication |
 | Kotlin Tungsten tests | [Test source](../../src/Kotlin/Tungsten/test/tools/datastructures/tungsten/TungstenTests.kt) | Kotlin executable covering list/Association rules, policies, relabel stress, generated histories, and 20,000-element SeqTree balance stress |
 | Rust HAMT tests | [Tests README](../../src/Rust/Hamt/tests/README.md) | Cargo unit tests covering collisions, updates, iteration, and set algebra |
-| Rust FingerTree tests | [Tests README](../../src/Rust/FingerTree/tests/README.md) | Cargo tests covering persistent facades plus DABA histories, callbacks, chunks, clear/reuse, and ownership boundaries |
+| Rust FingerTree tests | [Tests README](../../src/Rust/FingerTree/tests/README.md) | Cargo tests covering persistent facades plus DABA histories/ownership and canonical zip-zip ranks, non-`Clone` reads, models, sharing, deep chains, and digest publication |
 | Rust Tungsten tests | [Source tests](../../src/Rust/Tungsten/src/lib.rs) | Cargo unit tests covering list operations, Association ordering examples, relabel stress, and generated histories |
 
 ## Historical And External Material

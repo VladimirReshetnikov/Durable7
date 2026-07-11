@@ -24,6 +24,14 @@ Coverage groups:
 - `rrb_vector.rs`: 32-slot relaxed radix-balanced vectors, radix/relaxed layout validation,
   unequal-height concat, exact leaf sharing, range and endpoint edits, 10,000-operation vector-model
   replay, adversarial density/height checks, builder snapshot isolation, and concurrent readers;
+- `canonical_sorted_set.rs`: RustCrypto SHA-256/HMAC vectors, fixed stable-hash outputs, and a
+  C#-compatible `ZZT2` rank/topology vector with unsigned-secondary ordering; fresh, seeded, and
+  caller-keyed policy modes; comparer/hash coherence; receiver-defined cross-policy asymmetry and
+  borrowed deduplication; non-`Clone` bulk/read/validation/equality/clear plus direct retained-
+  representative identity; insertion-order canonicality and deterministic full-rank ties;
+  immutable branch sharing and retained snapshots; algebra, owned diff, memoized inequality, model
+  replay, validation statistics, deep stack safety, and barrier-started cold digest publication
+  across concurrent `Send + Sync` readers;
 - `measured.rs`: structurally shared measured sequence core, cached-measure validation, prefix locate, built-in
   measure policies, key lower/upper-bound splits, product-measure component splits, cumulative-weight selection,
   priority extraction helpers, and order-statistic count plus last-key measures;
@@ -38,5 +46,5 @@ Coverage groups:
   deterministic vector-model replay, append-builder measure tracking, and immutable snapshot isolation;
 - `text_extras.rs`: Unicode-scalar addressing, UAX #29 extended grapheme segmentation and offset conversion,
   LF/CRLF/CR/mixed newline detection, and CRLF-aware line text over both character and text ropes.
-- `lib.rs`: public `Send`/`Sync` assertions and spawned-thread readers over shared immutable deque,
-  reversible deque, rope, and measured-rope snapshots.
+- `lib.rs`: public `Send`/`Sync` assertions and spawned-thread readers over the canonical set and
+  shared immutable deque, reversible deque, rope, and measured-rope snapshots.
