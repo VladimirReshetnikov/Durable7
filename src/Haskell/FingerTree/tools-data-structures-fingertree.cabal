@@ -17,6 +17,7 @@ library
     Data.Structures.FingerTree.MeasuredRope
     Data.Structures.FingerTree.Measures
     Data.Structures.FingerTree.PriorityQueue
+    Data.Structures.FingerTree.PrioritySearchQueue
     Data.Structures.FingerTree.ReversibleDeque
     Data.Structures.FingerTree.Rope
     Data.Structures.FingerTree.Rope.Text

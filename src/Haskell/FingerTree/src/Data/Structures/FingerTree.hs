@@ -16,6 +16,9 @@ module Data.Structures.FingerTree
   , SortedSet.SortedSet
   , SortedMap.SortedMap
   , PriorityQueue.PriorityQueue
+  , PrioritySearchQueue.PrioritySearchQueue
+  , PrioritySearchQueue.PrioritySearchEntry(..)
+  , PrioritySearchQueue.PrioritySearchQueueStatistics(..)
   , IntervalTree.Interval(..)
   , IntervalTree.IntervalTree
   , Rope.Rope
@@ -33,6 +36,7 @@ import qualified Data.Structures.FingerTree.Measured as Measured
 import qualified Data.Structures.FingerTree.MeasuredRope as MeasuredRope
 import qualified Data.Structures.FingerTree.Measures as Measures
 import qualified Data.Structures.FingerTree.PriorityQueue as PriorityQueue
+import qualified Data.Structures.FingerTree.PrioritySearchQueue as PrioritySearchQueue
 import qualified Data.Structures.FingerTree.ReversibleDeque as ReversibleDeque
 import qualified Data.Structures.FingerTree.Rope as Rope
 import qualified Data.Structures.FingerTree.Rope.Text as RopeText

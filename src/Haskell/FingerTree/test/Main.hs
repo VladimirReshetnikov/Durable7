@@ -11,6 +11,7 @@ import Control.Exception (SomeException, evaluate, try)
 import Control.Monad (forM_, replicateM, when)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import qualified Data.List as List
+import qualified Data.Map.Strict as Map
 import Data.Monoid (Sum(..))
 import Data.Word (Word32)
 import System.IO.Unsafe (unsafePerformIO)
@@ -23,6 +24,7 @@ import Data.Structures.FingerTree.Measured (ViewL(..), ViewR(..))
 import Data.Structures.FingerTree.Measures (Elem(..), Size(..))
 import qualified Data.Structures.FingerTree.MeasuredRope as MeasuredRope
 import qualified Data.Structures.FingerTree.PriorityQueue as PriorityQueue
+import qualified Data.Structures.FingerTree.PrioritySearchQueue as PrioritySearchQueue
 import qualified Data.Structures.FingerTree.ReversibleDeque as ReversibleDeque
 import qualified Data.Structures.FingerTree.Rope as Rope
 import qualified Data.Structures.FingerTree.Rope.Text as RopeText
@@ -42,6 +44,7 @@ main = do
   testSortedCollections
   testSortedBagRanks
   testPriorityQueue
+  testPrioritySearchQueue
   testIntervalTree
   testRrbVector
   testRopes
@@ -243,6 +246,139 @@ testPriorityQueue = do
     other -> fail ("unexpected priority dequeue: " ++ show other)
   let melded = PriorityQueue.meld (PriorityQueue.fromList [(5 :: Int, "x")]) (PriorityQueue.fromList [(0, "y")])
   assertEqual "priority meld" (Just ("y", 0)) (PriorityQueue.peek melded)
+
+testPrioritySearchQueue :: IO ()
+testPrioritySearchQueue = do
+  let queue = PrioritySearchQueue.fromList
+        [ (4 :: Int, 2 :: Int, "four")
+        , (1, 1, "one")
+        , (7, 1, "seven")
+        , (4, 0, "FOUR")
+        ]
+  assertEqual "psq last-wins count" 3 (PrioritySearchQueue.count queue)
+  assertEqual
+    "psq key order"
+    [ PrioritySearchQueue.PrioritySearchEntry 1 1 "one"
+    , PrioritySearchQueue.PrioritySearchEntry 4 0 "FOUR"
+    , PrioritySearchQueue.PrioritySearchEntry 7 1 "seven"
+    ]
+    (PrioritySearchQueue.toAscList queue)
+  assertEqual
+    "psq O(1) minimum"
+    (Just (PrioritySearchQueue.PrioritySearchEntry 4 0 "FOUR"))
+    (PrioritySearchQueue.minimumEntry queue)
+  assertEqual
+    "psq range and threshold"
+    (Just [PrioritySearchQueue.PrioritySearchEntry 4 0 "FOUR"])
+    (PrioritySearchQueue.enumerateAtMost 2 7 0 queue)
+  assertEqual "psq inverted range" Nothing (PrioritySearchQueue.enumerateAtMost 8 2 10 queue)
+  assertEqual "psq duplicate insertion" Nothing (PrioritySearchQueue.insertNew 4 9 "duplicate" queue)
+  case PrioritySearchQueue.insertNew 2 3 "two" queue of
+    Nothing -> fail "psq unique insertion failed"
+    Just inserted -> do
+      assertEqual "psq inserted lookup"
+        (Just (PrioritySearchQueue.PrioritySearchEntry 2 3 "two"))
+        (PrioritySearchQueue.lookup 2 inserted)
+      assertPsqValid "psq inserted structure" inserted
+  case PrioritySearchQueue.minView queue of
+    Nothing -> fail "psq minView missed"
+    Just (removed, remaining) -> do
+      assertEqual "psq minView entry" (PrioritySearchQueue.PrioritySearchEntry 4 0 "FOUR") removed
+      assertEqual "psq minView keys" [1, 7] (map PrioritySearchQueue.entryKey (PrioritySearchQueue.toAscList remaining))
+      assertPsqValid "psq minView structure" remaining
+
+  let ascending = List.foldl'
+        (\current key -> PrioritySearchQueue.setItem key (key `mod` 17) (negate key) current)
+        PrioritySearchQueue.empty
+        [0 :: Int .. 4_095]
+  assertPsqValid "psq ascending AVL structure" ascending
+  case PrioritySearchQueue.validateStructure ascending of
+    Nothing -> fail "psq ascending validation failed"
+    Just statistics -> do
+      assertEqual "psq ascending count" 4_096 (PrioritySearchQueue.psqStatisticsCount statistics)
+      assertBool "psq logarithmic AVL height" (PrioritySearchQueue.psqStatisticsHeight statistics <= 16)
+      assertBool "psq AVL balance" (PrioritySearchQueue.psqStatisticsMaximumAbsoluteBalance statistics <= 1)
+  assertEqual
+    "psq sparse bounded query"
+    (map (\key -> PrioritySearchQueue.PrioritySearchEntry key (key `mod` 17) (negate key))
+      [key | key <- [512 :: Int .. 1_024], key `mod` 17 <= 3])
+    (maybe [] id (PrioritySearchQueue.enumerateAtMost 512 1_024 3 ascending))
+
+  runPsqRandomized 0 0x51a7_2026 PrioritySearchQueue.empty Map.empty []
+
+runPsqRandomized
+  :: Int
+  -> Word32
+  -> PrioritySearchQueue.PrioritySearchQueue Int Int Int
+  -> Map.Map Int (Int, Int)
+  -> [(PrioritySearchQueue.PrioritySearchQueue Int Int Int, [PrioritySearchQueue.PrioritySearchEntry Int Int Int])]
+  -> IO ()
+runPsqRandomized !step !random queue model snapshots
+  | step == 10_000 = do
+      assertPsqModel "psq randomized final" queue model
+      forM_ snapshots $ \(snapshot, expected) -> do
+        assertEqual "psq retained snapshot" expected (PrioritySearchQueue.toAscList snapshot)
+        assertPsqValid "psq retained structure" snapshot
+  | otherwise = do
+      let next = nextRrbRandom random
+          key = boundedPsq next 1_537 - 768
+          priority = boundedPsq (nextRrbRandom next) 64
+          operation = boundedPsq (nextRrbRandom (nextRrbRandom next)) 8
+          value = step
+          (updated, expected) = case operation of
+            0 -> (PrioritySearchQueue.delete key queue, Map.delete key model)
+            1 -> case PrioritySearchQueue.insertNew key priority value queue of
+              Nothing -> (queue, model)
+              Just inserted -> (inserted, Map.insert key (priority, value) model)
+            2
+              | Map.null model ->
+                  (PrioritySearchQueue.setItem key priority value queue, Map.insert key (priority, value) model)
+              | otherwise -> case PrioritySearchQueue.minView queue of
+                  Nothing -> (queue, model)
+                  Just (entry, remaining) ->
+                    (remaining, Map.delete (PrioritySearchQueue.entryKey entry) model)
+            _ -> (PrioritySearchQueue.setItem key priority value queue, Map.insert key (priority, value) model)
+      when (step `mod` 127 == 0) $ assertPsqModel "psq randomized checkpoint" updated expected
+      let retained = if step `mod` 701 == 0
+            then (updated, psqModelEntries expected) : snapshots
+            else snapshots
+      runPsqRandomized (step + 1) next updated expected retained
+
+boundedPsq :: Word32 -> Int -> Int
+boundedPsq value bound = fromIntegral (value `mod` fromIntegral bound)
+
+psqModelEntries :: Map.Map Int (Int, Int) -> [PrioritySearchQueue.PrioritySearchEntry Int Int Int]
+psqModelEntries model =
+  [ PrioritySearchQueue.PrioritySearchEntry key priority value
+  | (key, (priority, value)) <- Map.toAscList model
+  ]
+
+assertPsqModel
+  :: String
+  -> PrioritySearchQueue.PrioritySearchQueue Int Int Int
+  -> Map.Map Int (Int, Int)
+  -> IO ()
+assertPsqModel label queue model = do
+  assertEqual (label ++ " entries") (psqModelEntries model) (PrioritySearchQueue.toAscList queue)
+  assertEqual (label ++ " count") (Map.size model) (PrioritySearchQueue.count queue)
+  let expectedMinimum = case Map.toAscList model of
+        [] -> Nothing
+        values -> Just (List.minimumBy comparePriority
+          [PrioritySearchQueue.PrioritySearchEntry key priority value | (key, (priority, value)) <- values])
+  assertEqual (label ++ " minimum") expectedMinimum (PrioritySearchQueue.minimumEntry queue)
+  assertPsqValid (label ++ " structure") queue
+  where
+    comparePriority left right = compare
+      (PrioritySearchQueue.entryPriority left, PrioritySearchQueue.entryKey left)
+      (PrioritySearchQueue.entryPriority right, PrioritySearchQueue.entryKey right)
+
+assertPsqValid :: (Ord k, Ord p, Eq v) => String -> PrioritySearchQueue.PrioritySearchQueue k p v -> IO ()
+assertPsqValid label queue = case PrioritySearchQueue.validateStructure queue of
+  Nothing -> fail (label ++ ": invalid priority-search queue")
+  Just statistics -> do
+    assertEqual (label ++ " validated count") (PrioritySearchQueue.count queue) (PrioritySearchQueue.psqStatisticsCount statistics)
+    assertEqual (label ++ " validated height") (PrioritySearchQueue.height queue) (PrioritySearchQueue.psqStatisticsHeight statistics)
+    assertBool (label ++ " balance") (PrioritySearchQueue.psqStatisticsMaximumAbsoluteBalance statistics <= 1)
 
 testIntervalTree :: IO ()
 testIntervalTree = do
