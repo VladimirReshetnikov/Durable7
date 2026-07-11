@@ -20,10 +20,19 @@ public sealed class AllocationFreeReadTests
         for (var i = 0; i < iterations; i++)   // warm up: JIT + memoize the lazy measures along every read path
             read(i);
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < iterations; i++)
-            read(i);
-        return GC.GetAllocatedBytesForCurrentThread() - before;
+        // Take the minimum over a few passes: a genuine per-read allocation shows up in every
+        // pass, while one-off tiered-JIT/OSR transition noise on a heavily loaded machine does
+        // not repeat and must not fail the guard.
+        var best = long.MaxValue;
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            for (var i = 0; i < iterations; i++)
+                read(i);
+            best = Math.Min(best, GC.GetAllocatedBytesForCurrentThread() - before);
+        }
+
+        return best;
     }
 
     /// <summary>Verifies SortedSet membership, rank, indexing, and navigable reads allocate nothing.</summary>
