@@ -85,8 +85,13 @@ The suite covers:
 - `RrbVector<T>` radix boundaries, regular-versus-relaxed representation invariants, exact-boundary
   leaf reuse, unequal-height and adversarial-fragment concatenation, density/height ceilings,
   builder snapshot isolation, retained snapshots, and randomized mixed-edit histories;
-- `DabaLite<T, TMonoid>` noncommutative ordering, 100,000-operation randomized windows, empty/clear
-  behavior, and instrumented worst-case combine-count ceilings;
+- `DabaLiteTests.cs` covers noncommutative FIFO ordering, a 100,000-operation randomized window
+  model, empty/clear behavior, and the three/two/at-most-one worst-case `Combine` ceilings;
+- `DabaLiteAdversarialTests.cs` exhausts short histories and covers all four fixup phases with a
+  non-default identity, 63/64/65 and 127/128/129 chunk boundaries, long-lived sliding churn,
+  callback failure at every reachable `Combine`/`Empty` ordinal with the strong exception
+  guarantee, prompt reference and retired-block release, clear/reuse, and `ValidateStructure`
+  callback independence plus region, capacity, and slack statistics;
 - `CanonicalSortedSet<T>` public-seed and caller-keyed HMAC rank reproducibility, independent-history
   shape/digest convergence, 50,000-operation and invariant-heavy 12,000-operation randomized
   histories with retained versions, comparer-equivalent representative retention, rejection and

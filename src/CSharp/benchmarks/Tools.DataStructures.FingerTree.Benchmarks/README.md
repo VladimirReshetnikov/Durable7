@@ -52,7 +52,7 @@ Results are written under `BenchmarkDotNet.Artifacts/` (git-ignored); curated ta
 | `CtrieBenchmarks` | lock-free lookup and O(1) immutable snapshot publication | `ConcurrentDictionary` lookup and O(n) immutable copy |
 | `PatriciaMapBenchmarks` | integer-key lookup and prefix-aware structural union | CHAMP and `ImmutableDictionary` lookup |
 | `RrbVectorBenchmarks` | uniform middle indexing and boundary-spine concatenation | `Rope<T>` indexing/concat and `ImmutableList<T>` indexing/concat |
-| `DabaLiteBenchmarks` | worst-case O(1) FIFO slide-and-query aggregation | `Queue<T>` plus O(n) reaggregation |
+| `DabaLiteBenchmarks` | worst-case O(1) FIFO slide-and-query aggregation, callback-free structure validation, and 63/64/65 chunk-boundary behavior | `Queue<T>` plus O(n) reaggregation |
 | `CanonicalSortedSetBenchmarks` | publicly seeded HMAC-rank lookup, O(h) persistent insert/remove, same-policy independent-history equality, memoized digest rejection, O(n log n) sort plus O(n) Cartesian bulk build (including a fully colliding rank hash), and structure validation | `ImmutableSortedSet<T>` |
 | `BrodalOkasakiHeapBenchmarks` | worst-case O(1) persistent insert/meld, O(log n) delete-min, full build/drain scaling, and fused-representation validation | measured finger-tree priority queue equivalents |
 | `PrioritySearchQueueBenchmarks` | keyed persistent updates, delete-min, structure validation, and fully pruned/sparse/dense range-bounded priority queries | `SortedDictionary` lookup and range-aware filtered scans |

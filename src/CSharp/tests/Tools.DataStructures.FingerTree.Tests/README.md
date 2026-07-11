@@ -39,8 +39,13 @@ reasonable oracle.
   radix-indexed regular nodes, relaxed size-table invariants, exact-boundary leaf reuse, adversarial
   split/concat density and height, builder snapshot isolation, endpoint contracts, and randomized
   persistent edit histories with retained versions.
-- `DabaLiteTests.cs` covers noncommutative FIFO order, randomized variable windows, chunk churn,
-  empty/clear contracts, and the proven worst-case monoid invocation limits.
+- `DabaLiteTests.cs` covers noncommutative FIFO order, a 100,000-operation randomized variable
+  window model, empty/clear contracts, and the three/two/at-most-one worst-case `Combine` limits.
+  `DabaLiteAdversarialTests.cs` exhausts short histories and covers all four fixup phases with a
+  non-default identity, 63/64/65 and 127/128/129 chunk boundaries, long-lived steady-window churn,
+  every reachable `Combine`/`Empty` failure ordinal with unchanged published state, prompt
+  retired-reference and retired-block release, O(1) clear/reuse, and exact structural region and
+  chunk/slack statistics without invoking monoid callbacks.
 - `CanonicalSortedSetTests.cs` covers public-seed permutation/delete-reinsert convergence, 50,000
   randomized persistent updates, policy-gated algebra, representative retention, rank collisions,
   and concurrent digest publication. `CanonicalSortedSetAdversarialTests.cs` covers required

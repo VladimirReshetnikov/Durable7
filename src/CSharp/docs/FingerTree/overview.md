@@ -19,8 +19,13 @@ concatenation by merging and repartitioning only the two boundary spines, and an
 with immutable cached snapshots.
 
 `DabaLite<T, TMonoid>` is the family's deliberately mutable streaming member. It reuses
-`IMonoid<T>` to maintain a FIFO window aggregate with worst-case O(1) insert, evict, and query,
-de-amortizing reversal through one bounded fixup per window operation.
+`IMonoid<T>` to maintain a FIFO window aggregate through the VLDB Journal 2021 six-cursor DABA Lite
+schedule. Insert, eviction, and query make at most three, two, and one `Combine` calls respectively;
+their total worst-case O(1) bound assumes `Combine` and `Empty` are themselves O(1). A linked
+64-slot chunk queue gives worst-case-O(1) cursor movement and growth without retaining retired
+prefixes, while `ValidateStructure` audits the callback-free structural state and reports region and
+chunk statistics. Mutators give the strong callback exception guarantee, `Clear` is O(1) with zero
+`Combine` calls, and callers must externally serialize access to this mutable type.
 
 `CanonicalSortedSet<T>` is the policy-canonical sorted sibling. A retained
 `ZipTreeRankPolicy<T>` applies HMAC-SHA256 to a comparer-equivalence-class rank hash, using a
@@ -66,7 +71,8 @@ for v visited nodes, with v ≤ n and therefore an O(n) worst case.
   - `RrbVector.cs` — a 32-way relaxed radix-balanced persistent vector with radix-indexed regular
     nodes, relaxed-node size tables, an append-only builder, structural split/edit, and
     boundary-spine concatenation.
-  - `DabaLite.cs` — a chunk-queue-backed worst-case O(1) FIFO sliding-window aggregator over any monoid.
+  - `DabaLite.cs` — a six-cursor, chunk-queue-backed FIFO sliding-window aggregator over any monoid,
+    with bounded callback counts, strong callback exception safety, and structural statistics.
   - `CanonicalSortedSet.cs` / `ZipTreeRankPolicy.cs` — the policy-canonical, stack-safe
     zip-zip-inspired sorted set and its random, publicly seeded, or caller-keyed HMAC rank policy.
   - `BrodalOkasakiHeap.cs` — the bootstrapped skew-binomial heap with optimal purely functional

@@ -8,9 +8,10 @@ public class DabaLiteBenchmarks
 {
     private DabaLite<long, SumMonoid> _daba = null!;
     private Queue<long> _queue = null!;
-    private long _next;
+    private long _nextDaba;
+    private long _nextQueue;
 
-    [Params(1_000, 100_000)]
+    [Params(63, 64, 65, 1_000, 100_000)]
     public int Count { get; set; }
 
     [GlobalSetup]
@@ -23,14 +24,15 @@ public class DabaLiteBenchmarks
             _daba.Insert(i);
             _queue.Enqueue(i);
         }
-        _next = Count;
+        _nextDaba = Count;
+        _nextQueue = Count;
     }
 
     [Benchmark(Baseline = true)]
     public long DabaSlideAndQuery()
     {
         _daba.Evict();
-        _daba.Insert(_next++);
+        _daba.Insert(_nextDaba++);
         return _daba.Aggregate;
     }
 
@@ -38,9 +40,12 @@ public class DabaLiteBenchmarks
     public long QueueSlideAndReaggregate()
     {
         _queue.Dequeue();
-        _queue.Enqueue(_next++);
+        _queue.Enqueue(_nextQueue++);
         return _queue.Sum();
     }
+
+    [Benchmark]
+    public DabaLiteStatistics DabaValidateStructure() => _daba.ValidateStructure();
 
     private readonly struct SumMonoid : IMonoid<long>
     {

@@ -414,24 +414,53 @@ public structural validators. Strict Fibonacci and hollow heaps remain explicit 
 
 ### DABA Lite sliding-window aggregator
 
-**C# status (2026-07-10): Implemented.** `DabaLite<T, TMonoid>` reuses `IMonoid<T>`, implements
-the paper's six-cursor incremental-reversal schedule over a worst-case-O(1) chunked queue, and has
-instrumented tests locking down the three/two/one combine ceilings for insert/evict/query.
+**C# status (2026-07-11): Implemented and adversarially hardened.** `DabaLite<T, TMonoid>` reuses
+`IMonoid<T>` and implements the VLDB Journal 2021 DABA Lite schedule over a linked queue of 64-slot
+chunks. Its six cursors remain ordered `F <= L <= R <= A <= B <= E`; they delimit the front, left,
+right, accumulator, and back regions while the two fields `aggregateRA` and `aggregateB` carry the
+products that do not live in queue slots. Every insertion or eviction performs one bounded fixup:
+front exhaustion collapses the cursor state, `L == B` initializes the next flip, `L == R` advances
+the three work cursors, and the remaining case rewrites one left and one right partial aggregate.
+There is no unbounded reversal loop.
 
-**What it is.** De-Amortized Banker's Aggregator (Tangwongsan, Hirzel & Schneider; DEBS 2015,
-VLDB J 2021 for the Lite variant): FIFO sliding-window aggregation over any monoid with O(1)
-*worst-case* time per insert/evict/query and two words of overhead. The finger tree answers the
-same query in O(log n); DABA Lite removes the log for the FIFO-window special case.
+**What it is.** The De-Amortized Banker's Aggregator was introduced by Tangwongsan, Hirzel, and
+Schneider at DEBS 2017; the 2021 journal article introduced the Lite representation. It maintains
+the FIFO-ordered aggregate of a dynamically sized window for any associative monoid, without
+requiring commutativity or an inverse. `Insert`, `Evict`/`TryEvict`, and `Aggregate` invoke
+`Combine` at most three, two, and one times respectively; an empty query invokes no `Combine`.
+These invocation ceilings are unconditional, but the complete operations are worst-case O(1) only
+when both `IMonoid<T>.Combine` and `Empty` are O(1). A finger tree answers the same FIFO-window
+query in O(log n); DABA Lite removes that logarithm for this deliberately mutable special case.
 
-**Why it fits.** It reuses the family's `IMonoid<TMeasure>` vocabulary verbatim - the aggregator is
-generic over the same static-abstract measure operations the trees use, so `SumMeasure`,
-`MaxMeasure`, `MinMeasure`, and any user monoid work unchanged. The type is small (two logical
-stacks in one buffer plus running aggregates), easy to test exhaustively against a naive
-re-aggregation model, and genuinely recent.
+**C# contract and ownership.** A throwing monoid callback leaves the published window unchanged for
+every mutating operation. `Clear` swaps in one fresh empty chunk in O(1), invokes `Combine` zero
+times, and likewise commits only after obtaining `Empty`. Successful eviction promptly clears a
+retired reference-bearing slot and severs an obsolete predecessor chunk. `Begin` is derived from
+the current first chunk rather than a construction-time root, fixing the former unbounded retained
+prefix. The class has no oldest-value or enumeration API: the Lite schedule intentionally
+overwrites raw values with partial aggregates. It provides no synchronization; callers must not
+overlap access to one instance without external serialization.
 
-**Caveats.** It is ephemeral (a mutable window), not persistent - which is fine, because the
-window itself is transient state; document it as the family's first deliberately mutable member, or
-ship a persistent facade over `FingerTreeDeque` with the DABA fast path inside a builder.
+**Space and validation.** The paper's logical accounting is `n + 2` values of type `T`: `n` queue
+partial aggregates plus the two aggregate fields. The chunked C# representation instead allocates
+queue capacity for `n` live positions plus 1 through 127 slack slots; an empty instance retains one
+64-slot block. Two aggregate fields, six cursors, and block links are additional metadata.
+`ValidateStructure` is deliberately callback-free and content-blind: in O(c) time and space for
+`c` active chunks it checks links, cursor reachability and order, count/distance equations, DABA
+region-size equations, and the chunk/slack bound. It returns `DabaLiteStatistics` with `Count`,
+`FrontLength`, `BackLength`, `LeftLength`, `RightLength`, `AccumulatorLength`, `BlockCount`,
+`AllocatedSlotCapacity`, and `SlackSlotCount`. Because original values may already have been
+overwritten, aggregate correctness is tested against an external FIFO model rather than reconstructed
+by the validator.
+
+**Why it fits.** It reuses the family's static-abstract monoid vocabulary verbatim, is compact, and
+has a direct naive re-aggregation oracle. Its adversarial gate exhausts short histories, covers all
+four fixup phases over the six-cursor state, crosses the 63/64/65 and 127/128/129 chunk boundaries,
+proves retained-reference release and clear/reuse, injects failures at every bounded callback
+position, checks structural statistics, and observes the three/two/at-most-one `Combine` ceilings.
+
+**Caveat.** It is ephemeral, not persistent. That is an intentional fit for transient streaming
+state, not a persistent replacement for `FingerTreeDeque<T>`.
 
 **Verdict: Strong (small).** High polish-to-effort ratio; also serves as the measure framework's
 first consumer outside the trees.
@@ -783,7 +812,7 @@ catalog's summary alone.
   Zwick, *Hollow Heaps*, ICALP 2015. (Both rejected here.)
 - Hinze, *A Simple Implementation Technique for Priority Search Queues*, ICFP 2001.
 - Tangwongsan, Hirzel & Schneider, *Low-Latency Sliding-Window Aggregation in Worst-Case Constant
-  Time*, DEBS 2015; *In-Order Sliding-Window Aggregation in Worst-Case Constant Time*, VLDB
+  Time*, DEBS 2017; *In-Order Sliding-Window Aggregation in Worst-Case Constant Time*, VLDB
   Journal 2021. (DABA / DABA Lite)
 - Prokopec, Bronson, Bagwell & Odersky, *Concurrent Tries with Efficient Non-Blocking Snapshots*,
   PPoPP 2012. (Ctrie)

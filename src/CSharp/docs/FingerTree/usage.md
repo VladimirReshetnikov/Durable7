@@ -482,6 +482,33 @@ Implement `IMeasure<TElement, TMeasure>` for custom measures and `IMeasurePredic
 zero-allocation custom locate/split predicates. Prefer the typed facades above when they match the
 problem; use the raw measured tree when your measure is the primary design.
 
+## FIFO Sliding-Window Aggregation
+
+Use `DabaLite<T, TMonoid>` for one mutable FIFO window whose ordered aggregate must be available
+with a bounded amount of work on every operation. The same monoid types used by the measured tree
+work directly; they need not be commutative or invertible.
+
+```csharp
+var window = new DabaLite<long, SumMeasure<long>>();
+window.Insert(5);
+window.Insert(8);
+window.Insert(13);
+
+long total = window.Aggregate; // 26
+window.Evict();                // removes the oldest contribution, 5
+total = window.Aggregate;      // 21
+
+var state = window.ValidateStructure(); // state.Count == 2
+window.Clear();                // O(1), with no Combine call
+```
+
+Insert, eviction, and query invoke `Combine` at most three, two, and one times respectively. Their
+total worst-case O(1) bound assumes both `Combine` and `Empty` are O(1). If either callback throws
+during a mutating operation, the window remains unchanged. `Clear` is O(1), but a nonempty clear
+still obtains `Empty` once before committing. The type intentionally exposes neither the oldest raw
+value nor enumeration: DABA Lite overwrites queue slots with partial aggregates while a flip is in
+progress. Externally serialize all access to an instance.
+
 ## Relaxed Radix-Balanced Vectors
 
 Use `RrbVector<T>` for a persistent sequence whose dominant operation is uniform random indexing:

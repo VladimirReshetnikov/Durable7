@@ -562,17 +562,92 @@ use the builder when append throughput is the dominant construction workload.
 returns the in-order aggregate; the monoid need be associative but need not be commutative or
 invertible.
 
-The implementation follows Tangwongsan, Hirzel, and Schneider's DABA Lite pointer/fixup algorithm.
-Six cursors partition a chunked queue into front, left, right, accumulator, and back regions; every
-insert or eviction performs exactly one singleton/flip/shift/shrink fixup. Consequently, there are
-no loops or recursive reversal steps in a window operation: insert invokes `Combine` at most three
-times, eviction at most two times, and query exactly once. The linked fixed-size chunk queue grows,
-trims, and moves cursors in worst-case O(1), avoiding a ring-buffer resize spike.
+The implementation follows the six-cursor DABA Lite algorithm introduced in Tangwongsan, Hirzel,
+and Schneider's 2021 VLDB Journal article. The cursor order is always
 
-The type is deliberately mutable and not safe for unsynchronized concurrent writers. `Clear` is
-O(n) because it performs the ordinary bounded eviction operation for every item. Space is O(n),
-with one stored value/partial aggregate per window entry, two aggregate fields, and bounded chunk
-slack.
+```text
+F <= L <= R <= A <= B <= E
+```
+
+over one logical queue. The half-open front and back regions are `[F, B)` and `[B, E)`; `[L, R)`,
+`[R, A)`, and `[A, B)` are the left, right, and accumulator work regions inside the front. Two
+additional values hold the `R`-through-`A` and back aggregates. After inserting at `E` or advancing
+`F`, one bounded fixup executes these paper cases in order:
+
+1. If `F == B`, it collapses `L`, `R`, `A`, and `B` to `E` and resets both aggregate fields.
+2. Otherwise, if `L == B`, it starts the next flip by setting `L = F` and `A = B = E`, moving the
+   old back aggregate into the `R`-through-`A` field, and resetting the back aggregate.
+3. If `L == R`, it advances `L`, `R`, and `A` once and resets the `R`-through-`A` field.
+4. Otherwise, it advances `L`, retreats `A`, and computes one new left and one new right partial
+   aggregate.
+
+There is no loop or recursive reversal in a window operation. `Insert`, `Evict`/`TryEvict`, and
+`Aggregate` invoke `Combine` at most three, two, and one times respectively. A query of an empty
+window returns `Empty` with zero `Combine` calls; a nonempty query combines the partial aggregate at
+`F` with the back aggregate exactly once. These callback-count ceilings are worst-case constants
+regardless of window size. The complete operations are worst-case O(1) only when both `Combine` and
+`Empty` themselves take O(1) time.
+
+### Mutation, Exceptions, And Concurrency
+
+`Insert` throws `OverflowException` before changing a window whose `Count` is already
+`int.MaxValue`. `Evict` throws `InvalidOperationException` on an empty window, while `TryEvict`
+returns `false`. All mutating operations provide the strong guarantee for monoid callback failures:
+if any `Combine` or `Empty` invocation throws, the published count, cursor state, aggregates, and
+active chunk chain remain unchanged. Callback side effects outside this object are naturally not
+rolled back.
+
+`Clear` is an O(1) reset, not a sequence of evictions. An empty clear makes no callback. A nonempty
+clear obtains `Empty` once, invokes `Combine` zero times, and then swaps in one new empty chunk; a
+throwing `Empty` leaves the old window intact.
+
+The class is deliberately mutable and provides no internal synchronization. Its contract does not
+support overlapping access to one instance; callers must serialize operations or provide external
+locking. Independently owned instances can of course be used independently.
+
+### Representation And Lifetime
+
+The logical algorithm stores the paper's `n + 2` values of type `T`: one partial aggregate per
+window position and two aggregate fields. The C# queue is physically a doubly linked chain of
+64-slot arrays, so a nonempty state with `n` logical positions has allocated queue capacity `n`
+plus 1 through 127 slack slots. The lower slack comes from the exclusive end position and the upper
+slack additionally includes retired positions before `F` in the current first block. An empty
+aggregator owns one 64-slot block. The two aggregate fields, six cursors, and block links are
+metadata in addition to those array slots.
+
+Chunk growth and every cursor move are worst-case O(1); no resizing copies the window. After a
+successful eviction, a reference-bearing retired slot is cleared promptly, and crossing a chunk
+boundary detaches the predecessor in both directions. The queue's `Begin` is derived from its
+current first block rather than retaining the block created with the aggregator, so a long-running
+sliding window cannot retain an unbounded chain through a stale construction-time root. `Clear`
+drops the entire previous chain in O(1).
+
+DABA Lite queue slots are not stable raw-value storage: the incremental reversal overwrites values
+with partial aggregates. The API consequently has no `Peek`, value-returning eviction, or
+enumeration member. `Count`, emptiness, and the aggregate are the observable window state.
+
+### Structural Validation
+
+`ValidateStructure` invokes neither `Combine` nor `Empty`. It follows the active chunk chain and
+checks predecessor/successor links, acyclicity, all six cursor indices and reachability, the cursor
+ordering, `Count == E - F`, and the active block/slack calculation. For a nonempty window it also
+checks the DABA equations
+
+```text
+|L,R| = |R,A|
+|L,R| + |R,A| + |A,B| + 1 = |F,B| - |B,E|
+|F,L| = |B,E| + 1
+```
+
+and for an empty window requires all cursors to coincide. The method takes O(c) time and O(c) space
+for `c` active chunks, hence O(n) in the window size. It returns `DabaLiteStatistics` with these
+fields: `Count`, `FrontLength`, `BackLength`, `LeftLength`, `RightLength`, `AccumulatorLength`,
+`BlockCount`, `AllocatedSlotCapacity`, and `SlackSlotCount`.
+
+Validation is intentionally structural only. Since arbitrary non-invertible monoids do not permit
+the overwritten original values to be reconstructed, it cannot independently recompute the
+aggregate or inspect an oldest raw value. Content correctness is validated against an external FIFO
+model in the test suite.
 
 ## Canonical Zip-Zip Sorted Set
 
