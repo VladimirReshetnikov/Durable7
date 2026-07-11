@@ -88,6 +88,8 @@ The suite covers:
   behavior, and instrumented worst-case combine-count ceilings;
 - `CanonicalSortedSet<T>` independent-history shape/digest convergence, 50,000 randomized updates,
   comparer-equivalent representatives, policy gating, adversarial rank collisions, and concurrent digest publication;
+- `BrodalOkasakiHeap<T>` sorted drains through 100,000 items, randomized meld forests, retained
+  versions, comparer gating, and size-independent insert/meld comparison ceilings;
 - runnable sample smoke tests for Tour, Showcase, and Editor;
 - persistence/concurrency examples and tearable-struct stress tests;
 - CsCheck property tests and model-based command-sequence tests that shrink operation histories rather than only

@@ -586,3 +586,21 @@ Each node memoizes a non-cryptographic 64-bit subtree digest with compare-and-sw
 `ContentHash` is O(n) on first access and O(1) afterward. Digest inequality proves content inequality;
 equal digests still require `SetEquals`, which traverses canonical shapes in lockstep and prunes
 reference-equal nodes.
+
+## Brodal–Okasaki Heap
+
+`BrodalOkasakiHeap<T>` is an immutable min-heap retaining an `IComparer<T>`. It stores one global
+minimum above a skew-binomial forest whose elements are themselves bootstrapped heaps. `Insert`
+and `Meld` inspect and link only the first two forest ranks, giving O(1) worst-case time and a bounded
+number of comparisons; `Minimum` is O(1), and `DeleteMinimum` normalizes and melds O(log n) ranked
+trees in O(log n) worst-case time.
+
+`Meld` requires comparer object identity, returns either operand for an empty-side meld, and otherwise
+shares every untouched ranked tree. `TryGetMinimum` and `TryDeleteMinimum` provide nonthrowing empty
+handling; throwing counterparts use `InvalidOperationException`. Enumeration visits structural
+heap order and is explicitly not sorted; repeatedly deleting the minimum produces sorted order.
+Equal-priority tie order is unspecified.
+
+Strict Fibonacci and hollow heaps remain intentionally absent. Their optimal decrease-key machinery
+depends on mutable pointer surgery, so path-copying would not preserve the bounds that distinguish
+them; this is a recorded rejection, not an implementation gap.

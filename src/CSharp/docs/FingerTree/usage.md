@@ -368,6 +368,7 @@ middle edits dominate, and `RrbVector<T>` when consistent indexing constants dom
 | Uniform random-access persistent sequence | `RrbVector<T>` |
 | Mutable FIFO window aggregate with worst-case O(1) operations | `DabaLite<T, TMonoid>` |
 | History-independent sorted shape and memoized equality digest | `CanonicalSortedSet<T>` |
+| Worst-case O(1) persistent insert and meld | `BrodalOkasakiHeap<T>` |
 | Incremental generic append construction | `Rope<T>.Builder` |
 | Chunked sequence with cumulative measure navigation | `MeasuredRope<T, TMeasure, TMeasureOps>` |
 | Incremental measured append construction | `MeasuredRope<T, TMeasure, TMeasureOps>.Builder` |

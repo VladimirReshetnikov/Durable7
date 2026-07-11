@@ -41,6 +41,8 @@ reasonable oracle.
   empty/clear contracts, and the proven worst-case monoid invocation limits.
 - `CanonicalSortedSetTests.cs` covers permutation/delete-reinsert shape convergence, keyed policy
   semantics, randomized histories, rank collisions, algebra, representative retention, and digest publication.
+- `BrodalOkasakiHeapTests.cs` covers large sorted drains, randomized meld trees, persistence,
+  comparer-policy gating, empty behavior, and worst-case constant insert/meld comparison counts.
 - `SampleSmokeTests.cs` captures the Tour, Showcase, and Editor sample output contracts.
 - `PersistenceConcurrencyExamplesTests.cs` and `TearableConcurrencyStressTests.cs` cover structural-sharing
   examples, atomic publication, concurrent reads, and tearable-value stress.
