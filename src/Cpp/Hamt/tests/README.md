@@ -30,6 +30,7 @@ The executable registers these cases:
 - `CollisionBucket_EqualValueKeepsRootAndReplaceKeepsKey`
 - `Structure_RootShapeTracksContentsAndCollapse`
 - `Structure_UpdateSharesUntouchedSiblingSubtrees`
+- `Champ_IndependentHistoriesAndTypedDiff`
 - `Enumerator_CopiedIteratorAdvancesIndependently`
 - `Enumerator_RetainsTheTrieBeyondTheSourceMapValue`
 - `RandomHistory_MatchesUnorderedMapAndPreservesSnapshots`

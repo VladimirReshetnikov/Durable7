@@ -32,6 +32,20 @@ enum class persistent_hamt_node_kind {
     bitmap_indexed,
 };
 
+enum class map_difference_kind {
+    added,
+    removed,
+    changed,
+};
+
+template<class Key, class T>
+struct map_difference {
+    map_difference_kind kind;
+    Key key;
+    std::optional<T> before;
+    std::optional<T> after;
+};
+
 template <
     class Key,
     class T,
@@ -57,6 +71,7 @@ private:
     struct leaf_node;
     struct collision_node;
     struct bitmap_indexed_node;
+    struct payload;
 
     using node_ptr = std::shared_ptr<const node>;
     using hash_node_ptr = std::shared_ptr<const hash_node>;
@@ -80,6 +95,14 @@ public:
     using hasher = Hash;
     using key_equal = KeyEqual;
     using value_equal = ValueEqual;
+
+private:
+    struct payload {
+        std::uint32_t hash;
+        value_type entry;
+    };
+
+public:
 
     persistent_hash_map() = default;
 
@@ -383,8 +406,9 @@ public:
     class const_iterator {
     private:
         struct frame {
-            const std::vector<node_ptr>* children = nullptr;
-            std::size_t index = 0;
+            const bitmap_indexed_node* branch = nullptr;
+            std::size_t data_index = 0;
+            std::size_t child_index = 0;
         };
 
     public:
@@ -458,12 +482,16 @@ public:
                     }
 
                     auto& top = frames_[depth_ - 1];
-                    if (top.index == top.children->size()) {
+                    if (top.data_index < top.branch->data_.size()) {
+                        current_ = std::addressof(top.branch->data_[top.data_index++].entry);
+                        return true;
+                    }
+                    if (top.child_index == top.branch->children_.size()) {
                         frames_[--depth_] = {};
                         continue;
                     }
 
-                    current_node = (*top.children)[top.index++].get();
+                    current_node = top.branch->children_[top.child_index++].get();
                 }
 
                 switch (current_node->kind()) {
@@ -477,7 +505,7 @@ public:
                     return move_next_collision_entry();
                 default: {
                     const auto* branch = static_cast<const bitmap_indexed_node*>(current_node);
-                    frames_[depth_++] = frame{std::addressof(branch->children_), 0};
+                    frames_[depth_++] = frame{branch, 0, 0};
                     current_node = nullptr;
                     break;
                 }
@@ -558,6 +586,48 @@ public:
 
     [[nodiscard]] bool shares_root_with(const persistent_hash_map& other) const noexcept {
         return root_.get() == other.root_.get();
+    }
+
+    [[nodiscard]] bool map_equals(const persistent_hash_map& other) const {
+        if (root_.get() == other.root_.get()) {
+            return true;
+        }
+        if (count_ != other.count_) {
+            return false;
+        }
+        for (const auto& [key, value] : *this) {
+            const auto* actual_key = static_cast<const Key*>(nullptr);
+            const auto* other_value = static_cast<const T*>(nullptr);
+            if (!other.try_get_entry(key, actual_key, other_value)
+                || !std::invoke(value_equal_, value, *other_value)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    [[nodiscard]] std::vector<map_difference<Key, T>> diff(const persistent_hash_map& other) const {
+        if (root_.get() == other.root_.get()) {
+            return {};
+        }
+        std::vector<map_difference<Key, T>> result;
+        for (const auto& [key, value] : *this) {
+            const auto* actual_key = static_cast<const Key*>(nullptr);
+            const auto* other_value = static_cast<const T*>(nullptr);
+            if (!other.try_get_entry(key, actual_key, other_value)) {
+                result.push_back({map_difference_kind::removed, key, value, std::nullopt});
+            } else if (!std::invoke(value_equal_, value, *other_value)) {
+                result.push_back({map_difference_kind::changed, key, value, *other_value});
+            }
+        }
+        for (const auto& [key, value] : other) {
+            const auto* actual_key = static_cast<const Key*>(nullptr);
+            const auto* old_value = static_cast<const T*>(nullptr);
+            if (!try_get_entry(key, actual_key, old_value)) {
+                result.push_back({map_difference_kind::added, key, std::nullopt, value});
+            }
+        }
+        return result;
     }
 
     [[nodiscard]] const void* debug_root_identity() const noexcept {
@@ -649,11 +719,19 @@ private:
         while (current_node->kind() == persistent_hamt_node_kind::bitmap_indexed) {
             const auto* branch = static_cast<const bitmap_indexed_node*>(current_node);
             const auto selected_bit = bit(index(hash, shift));
-            if ((branch->bitmap_ & selected_bit) == 0) {
+            if ((branch->data_map_ & selected_bit) != 0) {
+                const auto& candidate = branch->data_[slot(branch->data_map_, selected_bit)];
+                if (candidate.hash == hash && std::invoke(key_equal_, candidate.entry.first, key)) {
+                    actual_key = std::addressof(candidate.entry.first);
+                    value = std::addressof(candidate.entry.second);
+                    return true;
+                }
                 return false;
             }
-
-            current_node = branch->children_[slot(branch->bitmap_, selected_bit)].get();
+            if ((branch->node_map_ & selected_bit) == 0) {
+                return false;
+            }
+            current_node = branch->children_[slot(branch->node_map_, selected_bit)].get();
             shift += bits_per_level;
         }
 
@@ -701,20 +779,28 @@ private:
         if (left_index == right_index) {
             std::vector<node_ptr> children;
             children.push_back(merge_hash_nodes(std::move(left), std::move(right), shift + bits_per_level));
-            return std::make_shared<bitmap_indexed_node>(left_bit, std::move(children));
+            return std::make_shared<bitmap_indexed_node>(0, left_bit, std::vector<payload>{}, std::move(children));
         }
 
+        std::vector<payload> data;
         std::vector<node_ptr> children;
-        children.reserve(2);
-        if (left_index < right_index) {
-            children.push_back(std::move(left));
-            children.push_back(std::move(right));
-        } else {
-            children.push_back(std::move(right));
-            children.push_back(std::move(left));
+        if (left->kind() == persistent_hamt_node_kind::leaf) {
+            const auto leaf = std::static_pointer_cast<const leaf_node>(left);
+            if (left_index < right_index) {
+                data.push_back(payload{leaf->hash_, leaf->entry_});
+                data.push_back(payload{right->hash_, right->entry_});
+            } else {
+                data.push_back(payload{right->hash_, right->entry_});
+                data.push_back(payload{leaf->hash_, leaf->entry_});
+            }
+            return std::make_shared<bitmap_indexed_node>(
+                left_bit | right_bit, 0, std::move(data), std::move(children));
         }
 
-        return std::make_shared<bitmap_indexed_node>(left_bit | right_bit, std::move(children));
+        data.push_back(payload{right->hash_, right->entry_});
+        children.push_back(std::move(left));
+        return std::make_shared<bitmap_indexed_node>(
+            right_bit, left_bit, std::move(data), std::move(children));
     }
 
     struct node : std::enable_shared_from_this<node> {
@@ -912,8 +998,14 @@ private:
     };
 
     struct bitmap_indexed_node final : node {
-        bitmap_indexed_node(std::uint32_t bitmap, std::vector<node_ptr> children)
-            : bitmap_(bitmap),
+        bitmap_indexed_node(
+            std::uint32_t data_map,
+            std::uint32_t node_map,
+            std::vector<payload> data,
+            std::vector<node_ptr> children)
+            : data_map_(data_map),
+              node_map_(node_map),
+              data_(std::move(data)),
               children_(std::move(children)) {
         }
 
@@ -931,18 +1023,49 @@ private:
             bool overwrite,
             bool& added) const override {
             const auto selected_bit = bit(index(hash, shift));
-            const auto selected_slot = slot(bitmap_, selected_bit);
+            if ((data_map_ & selected_bit) != 0) {
+                const auto data_slot = slot(data_map_, selected_bit);
+                const auto& existing = data_[data_slot];
+                if (existing.hash == hash && std::invoke(equal, existing.entry.first, key)) {
+                    added = false;
+                    if (!overwrite || std::invoke(values_equal, existing.entry.second, value)) {
+                        return this->shared_from_this();
+                    }
+                    auto data = data_;
+                    data[data_slot] = payload{hash, value_type(existing.entry.first, value)};
+                    return std::make_shared<bitmap_indexed_node>(
+                        data_map_, node_map_, std::move(data), children_);
+                }
 
-            if ((bitmap_ & selected_bit) == 0) {
-                std::vector<node_ptr> children;
-                children.reserve(children_.size() + 1);
-                children.insert(children.end(), children_.begin(), children_.begin() + static_cast<std::ptrdiff_t>(selected_slot));
-                children.push_back(make_leaf(hash, key, value));
-                children.insert(children.end(), children_.begin() + static_cast<std::ptrdiff_t>(selected_slot), children_.end());
+                auto child = merge_hash_nodes(
+                    make_leaf(existing.hash, existing.entry.first, existing.entry.second),
+                    make_leaf(hash, key, value),
+                    shift + bits_per_level);
+                auto data = data_;
+                data.erase(data.begin() + static_cast<std::ptrdiff_t>(data_slot));
+                auto children = children_;
+                children.insert(
+                    children.begin() + static_cast<std::ptrdiff_t>(slot(node_map_, selected_bit)),
+                    std::move(child));
                 added = true;
-                return std::make_shared<bitmap_indexed_node>(bitmap_ | selected_bit, std::move(children));
+                return std::make_shared<bitmap_indexed_node>(
+                    data_map_ & ~selected_bit,
+                    node_map_ | selected_bit,
+                    std::move(data),
+                    std::move(children));
             }
 
+            if ((node_map_ & selected_bit) == 0) {
+                auto data = data_;
+                data.insert(
+                    data.begin() + static_cast<std::ptrdiff_t>(slot(data_map_, selected_bit)),
+                    payload{hash, value_type(key, value)});
+                added = true;
+                return std::make_shared<bitmap_indexed_node>(
+                    data_map_ | selected_bit, node_map_, std::move(data), children_);
+            }
+
+            const auto selected_slot = slot(node_map_, selected_bit);
             const auto& old_child = children_[selected_slot];
             auto new_child = old_child->set(
                 key,
@@ -959,7 +1082,7 @@ private:
 
             auto replaced = children_;
             replaced[selected_slot] = std::move(new_child);
-            return std::make_shared<bitmap_indexed_node>(bitmap_, std::move(replaced));
+            return std::make_shared<bitmap_indexed_node>(data_map_, node_map_, data_, std::move(replaced));
         }
 
         [[nodiscard]] node_ptr remove(
@@ -970,12 +1093,25 @@ private:
             bool& removed,
             std::optional<T>& value) const override {
             const auto selected_bit = bit(index(hash, shift));
-            if ((bitmap_ & selected_bit) == 0) {
+            if ((data_map_ & selected_bit) != 0) {
+                const auto selected_slot = slot(data_map_, selected_bit);
+                const auto& existing = data_[selected_slot];
+                if (existing.hash != hash || !std::invoke(equal, existing.entry.first, key)) {
+                    removed = false;
+                    return this->shared_from_this();
+                }
+                removed = true;
+                value = existing.entry.second;
+                auto data = data_;
+                data.erase(data.begin() + static_cast<std::ptrdiff_t>(selected_slot));
+                return rebuild(data_map_ & ~selected_bit, node_map_, std::move(data), children_);
+            }
+            if ((node_map_ & selected_bit) == 0) {
                 removed = false;
                 return this->shared_from_this();
             }
 
-            const auto selected_slot = slot(bitmap_, selected_bit);
+            const auto selected_slot = slot(node_map_, selected_bit);
             const auto& old_child = children_[selected_slot];
             auto new_child = old_child->remove(
                 key,
@@ -989,32 +1125,56 @@ private:
             }
 
             if (!new_child) {
-                if (children_.size() == 1) {
-                    return nullptr;
-                }
-
                 std::vector<node_ptr> children;
                 children.reserve(children_.size() - 1);
                 children.insert(children.end(), children_.begin(), children_.begin() + static_cast<std::ptrdiff_t>(selected_slot));
                 children.insert(children.end(), children_.begin() + static_cast<std::ptrdiff_t>(selected_slot) + 1, children_.end());
-                return rebuild(bitmap_ ^ selected_bit, std::move(children));
+                return rebuild(data_map_, node_map_ & ~selected_bit, data_, std::move(children));
+            }
+
+            if (new_child->kind() == persistent_hamt_node_kind::leaf) {
+                const auto leaf = std::static_pointer_cast<const leaf_node>(new_child);
+                auto data = data_;
+                data.insert(
+                    data.begin() + static_cast<std::ptrdiff_t>(slot(data_map_, selected_bit)),
+                    payload{leaf->hash_, leaf->entry_});
+                auto children = children_;
+                children.erase(children.begin() + static_cast<std::ptrdiff_t>(selected_slot));
+                return rebuild(
+                    data_map_ | selected_bit,
+                    node_map_ & ~selected_bit,
+                    std::move(data),
+                    std::move(children));
             }
 
             auto replaced = children_;
             replaced[selected_slot] = std::move(new_child);
-            return rebuild(bitmap_, std::move(replaced));
+            return rebuild(data_map_, node_map_, data_, std::move(replaced));
         }
 
-        static node_ptr rebuild(std::uint32_t bitmap, std::vector<node_ptr> children) {
-            if (children.size() == 1
+        static node_ptr rebuild(
+            std::uint32_t data_map,
+            std::uint32_t node_map,
+            std::vector<payload> data,
+            std::vector<node_ptr> children) {
+            if (data.empty() && children.empty()) {
+                return nullptr;
+            }
+            if (data.size() == 1 && children.empty()) {
+                return make_leaf(data[0].hash, data[0].entry.first, data[0].entry.second);
+            }
+            if (data.empty() && children.size() == 1
                 && children[0]->kind() != persistent_hamt_node_kind::bitmap_indexed) {
                 return std::move(children[0]);
             }
 
-            return std::make_shared<bitmap_indexed_node>(bitmap, std::move(children));
+            return std::make_shared<bitmap_indexed_node>(
+                data_map, node_map, std::move(data), std::move(children));
         }
 
-        std::uint32_t bitmap_;
+        std::uint32_t data_map_;
+        std::uint32_t node_map_;
+        std::vector<payload> data_;
         std::vector<node_ptr> children_;
     };
 
@@ -1150,8 +1310,14 @@ private:
     };
 
     struct mutable_bitmap_indexed_node final : mutable_node {
-        mutable_bitmap_indexed_node(std::uint32_t bitmap, std::vector<mutable_node_ptr> children)
-            : bitmap_(bitmap),
+        mutable_bitmap_indexed_node(
+            std::uint32_t data_map,
+            std::uint32_t node_map,
+            std::vector<payload> data,
+            std::vector<mutable_node_ptr> children)
+            : data_map_(data_map),
+              node_map_(node_map),
+              data_(std::move(data)),
               children_(std::move(children)) {
         }
 
@@ -1165,17 +1331,41 @@ private:
             const ValueEqual& values_equal,
             bool& added) override {
             const auto selected_bit = bit(index(hash, shift));
-            const auto selected_slot = slot(bitmap_, selected_bit);
-
-            if ((bitmap_ & selected_bit) == 0) {
+            if ((data_map_ & selected_bit) != 0) {
+                const auto data_slot = slot(data_map_, selected_bit);
+                auto& existing = data_[data_slot];
+                if (existing.hash == hash && std::invoke(equal, existing.entry.first, key)) {
+                    added = false;
+                    if (!std::invoke(values_equal, existing.entry.second, value)) {
+                        existing.entry.second = value;
+                    }
+                    return self;
+                }
+                auto child = merge_mutable_hash_nodes(
+                    std::make_unique<mutable_leaf_node>(
+                        existing.hash, existing.entry.first, existing.entry.second),
+                    std::make_unique<mutable_leaf_node>(hash, key, value),
+                    shift + bits_per_level);
+                data_.erase(data_.begin() + static_cast<std::ptrdiff_t>(data_slot));
                 children_.insert(
-                    children_.begin() + static_cast<std::ptrdiff_t>(selected_slot),
-                    std::make_unique<mutable_leaf_node>(hash, key, value));
-                bitmap_ |= selected_bit;
+                    children_.begin() + static_cast<std::ptrdiff_t>(slot(node_map_, selected_bit)),
+                    std::move(child));
+                data_map_ &= ~selected_bit;
+                node_map_ |= selected_bit;
                 added = true;
                 return self;
             }
 
+            if ((node_map_ & selected_bit) == 0) {
+                data_.insert(
+                    data_.begin() + static_cast<std::ptrdiff_t>(slot(data_map_, selected_bit)),
+                    payload{hash, value_type(key, value)});
+                data_map_ |= selected_bit;
+                added = true;
+                return self;
+            }
+
+            const auto selected_slot = slot(node_map_, selected_bit);
             auto* const child = children_[selected_slot].get();
             children_[selected_slot] = child->set(
                 std::move(children_[selected_slot]),
@@ -1196,10 +1386,13 @@ private:
                 children.push_back(child->freeze());
             }
 
-            return std::make_shared<bitmap_indexed_node>(bitmap_, std::move(children));
+            return std::make_shared<bitmap_indexed_node>(
+                data_map_, node_map_, data_, std::move(children));
         }
 
-        std::uint32_t bitmap_;
+        std::uint32_t data_map_;
+        std::uint32_t node_map_;
+        std::vector<payload> data_;
         std::vector<mutable_node_ptr> children_;
     };
 
@@ -1223,20 +1416,29 @@ private:
         if (left_index == right_index) {
             std::vector<mutable_node_ptr> children;
             children.push_back(merge_mutable_hash_nodes(std::move(left), std::move(right), shift + bits_per_level));
-            return std::make_unique<mutable_bitmap_indexed_node>(left_bit, std::move(children));
+            return std::make_unique<mutable_bitmap_indexed_node>(
+                0, left_bit, std::vector<payload>{}, std::move(children));
         }
 
+        std::vector<payload> data;
         std::vector<mutable_node_ptr> children;
-        children.reserve(2);
-        if (left_index < right_index) {
-            children.push_back(std::move(left));
-            children.push_back(std::move(right));
-        } else {
-            children.push_back(std::move(right));
-            children.push_back(std::move(left));
+        if (dynamic_cast<mutable_leaf_node*>(left.get()) != nullptr) {
+            const auto* leaf = static_cast<mutable_leaf_node*>(left.get());
+            if (left_index < right_index) {
+                data.push_back(payload{leaf->hash_, leaf->entry_});
+                data.push_back(payload{right->hash_, right->entry_});
+            } else {
+                data.push_back(payload{right->hash_, right->entry_});
+                data.push_back(payload{leaf->hash_, leaf->entry_});
+            }
+            return std::make_unique<mutable_bitmap_indexed_node>(
+                left_bit | right_bit, 0, std::move(data), std::move(children));
         }
 
-        return std::make_unique<mutable_bitmap_indexed_node>(left_bit | right_bit, std::move(children));
+        data.push_back(payload{right->hash_, right->entry_});
+        children.push_back(std::move(left));
+        return std::make_unique<mutable_bitmap_indexed_node>(
+            right_bit, left_bit, std::move(data), std::move(children));
     }
 
     node_ptr root_;

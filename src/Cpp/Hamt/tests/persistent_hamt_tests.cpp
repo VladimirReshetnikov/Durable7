@@ -22,6 +22,7 @@
 #include <vector>
 
 using tools::data_structures::hamt::persistent_hamt_node_kind;
+using tools::data_structures::hamt::map_difference_kind;
 using tools::data_structures::hamt::persistent_hash_map;
 using tools::data_structures::hamt::persistent_hash_set;
 
@@ -516,12 +517,36 @@ TEST(Structure_UpdateSharesUntouchedSiblingSubtrees) {
     const auto before_children = map.debug_root_child_identities();
     const auto after_children = updated.debug_root_child_identities();
 
-    CHECK_EQ(std::size_t{2}, before_children.size());
-    CHECK_EQ(std::size_t{2}, after_children.size());
-    CHECK(before_children[0] != after_children[0]);
-    CHECK(before_children[1] == after_children[1]);
+    CHECK_EQ(std::size_t{1}, before_children.size());
+    CHECK_EQ(std::size_t{1}, after_children.size());
+    CHECK(before_children[0] == after_children[0]);
     CHECK(map.set_item(a, "a").shares_root_with(map));
     CHECK(map.remove(explicit_hash_key{9, 0x09}).shares_root_with(map));
+}
+
+TEST(Champ_IndependentHistoriesAndTypedDiff) {
+    using map_type = persistent_hash_map<int, int>;
+    auto ascending = map_type::empty();
+    auto descending = map_type::empty();
+    for (int key = 0; key < 512; ++key) {
+        ascending = ascending.set_item(key, key);
+        descending = descending.set_item(511 - key, 511 - key);
+    }
+
+    CHECK(ascending.map_equals(descending));
+    CHECK(ascending.diff(descending).empty());
+    const auto changed = descending.remove(7).set_item(9, -9).set_item(1000, 1000);
+    const auto differences = ascending.diff(changed);
+    CHECK_EQ(std::size_t{3}, differences.size());
+    CHECK(std::ranges::any_of(differences, [](const auto& item) {
+        return item.kind == map_difference_kind::removed && item.key == 7;
+    }));
+    CHECK(std::ranges::any_of(differences, [](const auto& item) {
+        return item.kind == map_difference_kind::changed && item.key == 9;
+    }));
+    CHECK(std::ranges::any_of(differences, [](const auto& item) {
+        return item.kind == map_difference_kind::added && item.key == 1000;
+    }));
 }
 
 TEST(Enumerator_CopiedIteratorAdvancesIndependently) {

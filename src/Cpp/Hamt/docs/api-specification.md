@@ -26,9 +26,11 @@ inspection helpers expose that property for tests.
 
 ## Hash Trie Shape
 
-The trie uses 32-way logical branching and consumes five hash bits per level. Branch nodes store a
-32-bit bitmap and a compact child vector; the child slot is the population count below the selected
-bit. Unequal keys with identical 32-bit truncated hash codes are stored in immutable collision
+The trie uses 32-way logical branching and consumes five hash bits per level. CHAMP branch nodes
+store separate 32-bit data and node maps, a compact inline `(hash,key,value)` payload vector, and a
+compact child-only vector; each slot is the population count below the selected bit. Removal
+promotes a child that shrinks to one leaf back into its parent payload vector, restoring canonical
+shape. Unequal keys with identical 32-bit truncated hash codes are stored in immutable collision
 buckets and compared linearly with `KeyEqual`.
 
 `Hash` may return any integral-like hash value accepted by `static_cast<std::uint32_t>`; the port
@@ -68,6 +70,9 @@ the containing version is alive.
 - `try_get_key(equal_key)` returns a pointer to the stored equivalent key, or `nullptr` when absent.
 - `at(key)` returns the stored value reference or throws `std::out_of_range`.
 - `clear()` returns an empty map preserving the current policy objects.
+- `map_equals(other)` performs content equality with a shared-root fast path.
+- `diff(other)` returns owned `map_difference<Key,T>` records classified as `added`, `removed`, or
+  `changed`, also returning immediately for a shared root.
 
 When replacing an existing key, the originally stored key object inside the trie is retained. When
 the existing value compares equal under `ValueEqual`, the root is reused and the stored value object
