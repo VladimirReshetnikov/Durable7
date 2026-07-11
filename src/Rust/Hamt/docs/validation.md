@@ -22,4 +22,7 @@ The crate uses `#![forbid(unsafe_code)]`. The unit tests are inline in `Hamt/src
 - same-hash collision insertion, lookup, and removal;
 - streaming iterator exact-size accounting over collision buckets;
 - last-wins bulk map construction while retaining the original stored key;
-- persistent set algebra and proper subset/superset relations.
+- persistent set algebra and proper subset/superset relations;
+- transient bulk-builder snapshot detachment, first-key/last-value duplicate identity,
+  final-hash-level splitting, and collision-heavy/branch-heavy differential agreement with
+  incremental construction.

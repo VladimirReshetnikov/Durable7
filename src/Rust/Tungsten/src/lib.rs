@@ -6,7 +6,7 @@ use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hash};
 
 use tools_data_structures_fingertree::PersistentDeque;
-use tools_data_structures_hamt::PersistentHashMap;
+use tools_data_structures_hamt::{BulkBuilder, PersistentHashMap};
 
 const STAMP_GAP: i64 = 1_i64 << 20;
 
@@ -678,10 +678,12 @@ where
         }
 
         let removed_count = self.len() - kept.len();
-        let mut index_side = PersistentHashMap::with_hasher(self.hasher().clone());
-        if kept.len() <= removed_count {
+        let index_side = if kept.len() <= removed_count {
+            // Rebuilding the smaller side from scratch: bulk-build the index
+            // instead of paying a persistent path copy per kept key.
+            let mut builder = BulkBuilder::with_hasher(self.hasher().clone());
             for entry in &kept {
-                index_side = index_side.insert(
+                builder.set_item(
                     entry.key().clone(),
                     Slot {
                         stamp: entry.stamp,
@@ -689,8 +691,9 @@ where
                     },
                 );
             }
+            builder.into_immutable()
         } else {
-            index_side = self.index.clone();
+            let mut index_side = self.index.clone();
             for entry in &split.before {
                 index_side = index_side.remove(entry.key());
             }
@@ -698,7 +701,8 @@ where
             for entry in &split.after {
                 index_side = index_side.remove(entry.key());
             }
-        }
+            index_side
+        };
 
         Some(self.make(kept, index_side))
     }
@@ -838,14 +842,17 @@ where
     }
 
     fn rebuilt(&self, mut ordered: Vec<Entry<K, V>>) -> Self {
-        let mut index = PersistentHashMap::with_hasher(self.hasher().clone());
+        // The keyed index is rebuilt from scratch, so route it through the
+        // HAMT's transient bulk builder (one frozen tree, no persistent path
+        // copies per key), matching the C# reference's Rebuilt.
+        let mut index = BulkBuilder::with_hasher(self.hasher().clone());
         for (position, entry) in ordered.iter_mut().enumerate() {
             let stamp = i64::try_from(position)
                 .ok()
                 .and_then(|value| value.checked_mul(STAMP_GAP))
                 .expect("association is too large to relabel with i64 stamps");
             *entry = Entry::real(stamp, entry.key().clone(), entry.value().clone());
-            index = index.insert(
+            index.set_item(
                 entry.key().clone(),
                 Slot {
                     stamp,
@@ -854,7 +861,7 @@ where
             );
         }
 
-        self.make(ordered.into_iter().collect(), index)
+        self.make(ordered.into_iter().collect(), index.into_immutable())
     }
 
     fn index_of_stamp(&self, stamp: i64) -> usize {

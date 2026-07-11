@@ -6,7 +6,10 @@
 - Scope: Public crate shape, semantic parity notes, and validation entry point
 
 `tools-data-structures-hamt` ports the repository HAMT map and set to safe Rust. It exposes
-`PersistentHashMap<K, V, S = RandomState>` and `PersistentHashSet<T, S = RandomState>`.
+`PersistentHashMap<K, V, S = RandomState>`, `PersistentHashSet<T, S = RandomState>`, and
+`BulkBuilder<K, V, S = RandomState>`, the transient one-pass bulk constructor mirroring the C#
+reference (mutable unpublished nodes frozen into detached persistent nodes; used by `FromIterator`,
+set intersection, the set-relation probes, and the Tungsten association's index rebuilds).
 
 The trie follows the existing ports:
 

@@ -12,6 +12,7 @@ Primary entry points:
 
 - `PersistentHashMap<K, V, S = RandomState>`;
 - `PersistentHashSet<T, S = RandomState>`;
+- `BulkBuilder<K, V, S = RandomState>`;
 - `DuplicateKey`.
 
 The port follows the repository HAMT semantics:
@@ -31,6 +32,18 @@ Set difference removes each probe element from the receiver, and symmetric diffe
 distinct probe elements on the receiver, so subtrees untouched by the probe stay structurally shared
 and an empty probe preserves the existing root — matching the C# `Except`/`SymmetricExcept`
 complexity contract of O(m) single-element updates.
+
+`BulkBuilder` mirrors the C# reference's transient bulk builder (commit `c092016`): unpublished
+leaf, collision, and branch nodes are mutated in place and frozen into detached persistent nodes, so
+one-pass construction costs O(n (w + c)) node mutations — bounded trie depth plus the applicable
+equal-hash collision scan — with no persistent path copies between successive entries. `set_item`
+follows the map's duplicate rule (first stored key instance, last supplied value, earlier stored
+value retained on an equal replacement), `to_immutable` freezes a detached snapshot and leaves the
+builder usable, and `into_immutable` consumes the builder by moving nodes without cloning. Map and
+set `FromIterator`, set intersection, and the receiver-policy probe sets built by the binary set
+relations route through the builder; incremental updates on existing collections keep their
+structural-sharing paths. The Tungsten association's relabel/sort/reverse and small-side
+`get_range` index rebuilds consume the builder as well.
 
 Rust-specific differences:
 

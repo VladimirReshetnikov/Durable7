@@ -20,4 +20,6 @@ Coverage groups:
 - streaming trie-order iteration and exact-size accounting;
 - last-wins replacement and original-key retention;
 - set algebra, equality, and proper subset/superset relations;
+- transient bulk-builder snapshot detachment, duplicate-identity rules, final-hash-level splits,
+  and differential agreement with incremental construction;
 - `Send`/`Sync` assertions and spawned-thread readers over shared immutable snapshots.

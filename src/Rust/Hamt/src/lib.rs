@@ -305,7 +305,9 @@ where
     S: BuildHasher + Clone + Default,
 {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
-        Self::with_hasher(S::default()).set_items(iter)
+        let mut builder = BulkBuilder::with_hasher(S::default());
+        builder.set_items(iter);
+        builder.into_immutable()
     }
 }
 
@@ -359,6 +361,140 @@ where
 
     fn index(&self, key: &K) -> &V {
         self.get(key).expect("no entry found for key")
+    }
+}
+
+/// Builds an independent map in one pass by mutating unpublished nodes in
+/// place, then freezes them into persistent nodes.
+///
+/// Mirrors the C# reference's internal bulk builder: `set_item` follows the
+/// map's duplicate rule (the first stored key instance is retained, the last
+/// supplied value wins, and a value equal under `PartialEq` to the stored one
+/// keeps the earlier stored value), and the supplied hasher is preserved in
+/// every frozen map. Each update costs O(w + c) node mutations — bounded trie
+/// depth plus the applicable equal-hash collision scan — with no persistent
+/// path copies between successive entries. Frozen maps never share mutable
+/// storage with the builder.
+pub struct BulkBuilder<K, V, S = RandomState> {
+    root: Option<MutableNode<K, V>>,
+    len: usize,
+    hasher: S,
+}
+
+enum MutableNode<K, V> {
+    Leaf {
+        hash: u32,
+        key: K,
+        value: V,
+    },
+    Collision {
+        hash: u32,
+        entries: Vec<(K, V)>,
+    },
+    Branch {
+        bitmap: u32,
+        children: Vec<MutableNode<K, V>>,
+    },
+}
+
+impl<K, V> BulkBuilder<K, V, RandomState> {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::with_hasher(RandomState::new())
+    }
+}
+
+impl<K, V, S: Default> Default for BulkBuilder<K, V, S> {
+    fn default() -> Self {
+        Self::with_hasher(S::default())
+    }
+}
+
+impl<K, V, S> BulkBuilder<K, V, S> {
+    #[must_use]
+    pub fn with_hasher(hasher: S) -> Self {
+        Self {
+            root: None,
+            len: 0,
+            hasher,
+        }
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    #[must_use]
+    pub fn hasher(&self) -> &S {
+        &self.hasher
+    }
+
+    /// Freezes the builder into a persistent map, consuming it. Nodes are
+    /// moved, not cloned.
+    #[must_use]
+    pub fn into_immutable(self) -> PersistentHashMap<K, V, S> {
+        PersistentHashMap {
+            root: self.root.map(freeze_owned),
+            len: self.len,
+            hasher: self.hasher,
+        }
+    }
+}
+
+impl<K, V, S> BulkBuilder<K, V, S>
+where
+    K: Eq + Hash,
+    V: PartialEq,
+    S: BuildHasher,
+{
+    /// Adds or replaces the entry for `key` under the map's duplicate rule.
+    pub fn set_item(&mut self, key: K, value: V) {
+        let hash = self.hasher.hash_one(&key) as u32;
+        match &mut self.root {
+            None => {
+                self.root = Some(MutableNode::Leaf { hash, key, value });
+                self.len = 1;
+            }
+            Some(root) => {
+                if set_in_mutable(root, hash, key, value, 0) {
+                    self.len += 1;
+                }
+            }
+        }
+    }
+
+    /// Adds or replaces every pair in order, applying the duplicate rule.
+    pub fn set_items<I>(&mut self, items: I)
+    where
+        I: IntoIterator<Item = (K, V)>,
+    {
+        for (key, value) in items {
+            self.set_item(key, value);
+        }
+    }
+}
+
+impl<K, V, S> BulkBuilder<K, V, S>
+where
+    K: Clone,
+    V: Clone,
+    S: Clone,
+{
+    /// Freezes the current contents into a persistent map. The builder stays
+    /// usable and later mutations never affect the frozen snapshot.
+    #[must_use]
+    pub fn to_immutable(&self) -> PersistentHashMap<K, V, S> {
+        PersistentHashMap {
+            root: self.root.as_ref().map(freeze_cloned),
+            len: self.len,
+            hasher: self.hasher.clone(),
+        }
     }
 }
 
@@ -522,9 +658,37 @@ where
 
 impl<T, S> PersistentHashSet<T, S>
 where
+    T: Eq + Hash,
+    S: BuildHasher,
+{
+    /// Bulk-constructs a set from scratch through the map's transient builder,
+    /// preserving the map's duplicate rule (first stored instance wins).
+    fn bulk_from_items<I>(hasher: S, items: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let mut builder = BulkBuilder::with_hasher(hasher);
+        builder.set_items(items.into_iter().map(|value| (value, ())));
+        Self {
+            map: builder.into_immutable(),
+        }
+    }
+}
+
+impl<T, S> PersistentHashSet<T, S>
+where
     T: Eq + Hash + Clone,
     S: BuildHasher + Clone,
 {
+    /// Builds the receiver-policy probe set the binary relations judge
+    /// membership against, deduplicating the argument in one bulk pass.
+    fn probe_from<I>(&self, items: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+    {
+        Self::bulk_from_items(self.map.hasher().clone(), items)
+    }
+
     #[must_use]
     pub fn insert(&self, value: T) -> Self {
         Self {
@@ -573,15 +737,11 @@ where
     where
         I: IntoIterator<Item = T>,
     {
-        let probe = PersistentHashSet::with_hasher(self.map.hasher().clone()).union(other);
-        let mut result = Self::with_hasher(self.map.hasher().clone());
-        for value in self.iter() {
-            if probe.contains(value) {
-                result = result.insert(value.clone());
-            }
-        }
-
-        result
+        let probe = self.probe_from(other);
+        Self::bulk_from_items(
+            self.map.hasher().clone(),
+            self.iter().filter(|value| probe.contains(value)).cloned(),
+        )
     }
 
     #[must_use]
@@ -602,7 +762,7 @@ where
     where
         I: IntoIterator<Item = T>,
     {
-        let distinct = Self::with_hasher(self.map.hasher().clone()).union(other);
+        let distinct = self.probe_from(other);
         let mut result = self.clone();
         for value in distinct.iter() {
             result = if result.contains(value) {
@@ -620,7 +780,7 @@ where
     where
         I: IntoIterator<Item = T>,
     {
-        let probe = PersistentHashSet::with_hasher(self.map.hasher().clone()).union(other);
+        let probe = self.probe_from(other);
         self.iter().all(|value| probe.contains(value))
     }
 
@@ -637,7 +797,7 @@ where
     where
         I: IntoIterator<Item = T>,
     {
-        let probe = PersistentHashSet::with_hasher(self.map.hasher().clone()).union(other);
+        let probe = self.probe_from(other);
         self.len() < probe.len() && self.iter().all(|value| probe.contains(value))
     }
 
@@ -646,7 +806,7 @@ where
     where
         I: IntoIterator<Item = T>,
     {
-        let probe = PersistentHashSet::with_hasher(self.map.hasher().clone()).union(other);
+        let probe = self.probe_from(other);
         self.len() > probe.len() && probe.iter().all(|value| self.contains(value))
     }
 
@@ -663,7 +823,7 @@ where
     where
         I: IntoIterator<Item = T>,
     {
-        let other_set = PersistentHashSet::with_hasher(self.map.hasher().clone()).union(other);
+        let other_set = self.probe_from(other);
         self.len() == other_set.len() && self.iter().all(|value| other_set.contains(value))
     }
 }
@@ -680,7 +840,7 @@ where
     S: BuildHasher + Clone + Default,
 {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-        Self::with_hasher(S::default()).union(iter)
+        Self::bulk_from_items(S::default(), iter)
     }
 }
 
@@ -1152,6 +1312,190 @@ where
     }
 }
 
+/// Adds or replaces `key` in an unpublished mutable subtree, returning whether
+/// a new entry was added. Mirrors `insert_node` with `overwrite = true`,
+/// mutating in place instead of path-copying.
+fn set_in_mutable<K, V>(
+    node: &mut MutableNode<K, V>,
+    hash: u32,
+    key: K,
+    value: V,
+    shift: u32,
+) -> bool
+where
+    K: Eq,
+    V: PartialEq,
+{
+    match node {
+        MutableNode::Leaf {
+            hash: leaf_hash,
+            key: leaf_key,
+            value: leaf_value,
+        } => {
+            if *leaf_hash == hash && *leaf_key == key {
+                if *leaf_value != value {
+                    *leaf_value = value;
+                }
+                return false;
+            }
+
+            let existing = take_mutable(node);
+            *node = merge_mutable(existing, MutableNode::Leaf { hash, key, value }, shift);
+            true
+        }
+        MutableNode::Collision {
+            hash: bucket_hash,
+            entries,
+        } => {
+            if *bucket_hash != hash {
+                let existing = take_mutable(node);
+                *node = merge_mutable(existing, MutableNode::Leaf { hash, key, value }, shift);
+                return true;
+            }
+
+            if let Some(index) = entries.iter().position(|(entry_key, _)| *entry_key == key) {
+                if entries[index].1 != value {
+                    entries[index].1 = value;
+                }
+                return false;
+            }
+
+            entries.push((key, value));
+            true
+        }
+        MutableNode::Branch { bitmap, children } => {
+            let bit = bit_position(hash_fragment(hash, shift));
+            let index = sparse_index(*bitmap, bit);
+            if *bitmap & bit == 0 {
+                *bitmap |= bit;
+                children.insert(index, MutableNode::Leaf { hash, key, value });
+                return true;
+            }
+
+            set_in_mutable(&mut children[index], hash, key, value, shift + BITS_PER_LEVEL)
+        }
+    }
+}
+
+/// Moves a mutable node out of its slot, leaving a placeholder the caller
+/// immediately overwrites.
+fn take_mutable<K, V>(node: &mut MutableNode<K, V>) -> MutableNode<K, V> {
+    std::mem::replace(
+        node,
+        MutableNode::Branch {
+            bitmap: 0,
+            children: Vec::new(),
+        },
+    )
+}
+
+/// Combines two hash-carrying mutable nodes with different key positions,
+/// mirroring `merge_two` for the unpublished tree.
+fn merge_mutable<K, V>(
+    left: MutableNode<K, V>,
+    right: MutableNode<K, V>,
+    shift: u32,
+) -> MutableNode<K, V> {
+    debug_assert!(
+        shift <= MAX_BRANCH_SHIFT,
+        "branch nodes only exist at shifts 0..=30 for 32-bit hashes",
+    );
+    let left_hash = mutable_hash(&left);
+    let right_hash = mutable_hash(&right);
+    if left_hash == right_hash {
+        let mut entries = Vec::with_capacity(2);
+        push_mutable_entries(left, &mut entries);
+        push_mutable_entries(right, &mut entries);
+        return MutableNode::Collision {
+            hash: left_hash,
+            entries,
+        };
+    }
+
+    let left_fragment = hash_fragment(left_hash, shift);
+    let right_fragment = hash_fragment(right_hash, shift);
+    let left_bit = bit_position(left_fragment);
+    let right_bit = bit_position(right_fragment);
+    if left_bit == right_bit {
+        let child = merge_mutable(left, right, shift + BITS_PER_LEVEL);
+        return MutableNode::Branch {
+            bitmap: left_bit,
+            children: vec![child],
+        };
+    }
+
+    let children = if left_fragment < right_fragment {
+        vec![left, right]
+    } else {
+        vec![right, left]
+    };
+    MutableNode::Branch {
+        bitmap: left_bit | right_bit,
+        children,
+    }
+}
+
+fn mutable_hash<K, V>(node: &MutableNode<K, V>) -> u32 {
+    match node {
+        MutableNode::Leaf { hash, .. } | MutableNode::Collision { hash, .. } => *hash,
+        MutableNode::Branch { .. } => unreachable!("only hash-carrying nodes merge"),
+    }
+}
+
+fn push_mutable_entries<K, V>(node: MutableNode<K, V>, entries: &mut Vec<(K, V)>) {
+    match node {
+        MutableNode::Leaf { key, value, .. } => entries.push((key, value)),
+        MutableNode::Collision {
+            entries: bucket, ..
+        } => entries.extend(bucket),
+        MutableNode::Branch { .. } => unreachable!("only hash-carrying nodes merge"),
+    }
+}
+
+/// Freezes an owned mutable subtree into persistent nodes without cloning.
+fn freeze_owned<K, V>(node: MutableNode<K, V>) -> Arc<Node<K, V>> {
+    Arc::new(match node {
+        MutableNode::Leaf { hash, key, value } => Node::Leaf { hash, key, value },
+        MutableNode::Collision { hash, entries } => Node::Collision {
+            hash,
+            entries: Arc::from(entries),
+        },
+        MutableNode::Branch { bitmap, children } => Node::Branch {
+            bitmap,
+            children: Arc::from(
+                children
+                    .into_iter()
+                    .map(freeze_owned)
+                    .collect::<Vec<_>>(),
+            ),
+        },
+    })
+}
+
+/// Freezes a borrowed mutable subtree into detached persistent nodes; the
+/// builder's storage stays fully mutable afterwards.
+fn freeze_cloned<K, V>(node: &MutableNode<K, V>) -> Arc<Node<K, V>>
+where
+    K: Clone,
+    V: Clone,
+{
+    Arc::new(match node {
+        MutableNode::Leaf { hash, key, value } => Node::Leaf {
+            hash: *hash,
+            key: key.clone(),
+            value: value.clone(),
+        },
+        MutableNode::Collision { hash, entries } => Node::Collision {
+            hash: *hash,
+            entries: Arc::from(entries.clone()),
+        },
+        MutableNode::Branch { bitmap, children } => Node::Branch {
+            bitmap: *bitmap,
+            children: Arc::from(children.iter().map(freeze_cloned).collect::<Vec<_>>()),
+        },
+    })
+}
+
 fn leaf_entry<K, V>(node: Arc<Node<K, V>>) -> (K, V) {
     match Arc::try_unwrap(node) {
         Ok(Node::Leaf { key, value, .. }) => (key, value),
@@ -1298,6 +1642,136 @@ mod tests {
         assert_eq!(stored_key.1, 1);
         assert_eq!(*value, 20);
         assert_eq!(map.len(), 2);
+    }
+
+    #[test]
+    fn bulk_builder_snapshots_stay_detached_from_later_mutations() {
+        let mut builder: BulkBuilder<i32, i32, ConstantState> =
+            BulkBuilder::with_hasher(ConstantState::default());
+        for value in 0..32 {
+            builder.set_item(value, value);
+        }
+
+        let snapshot = builder.to_immutable();
+        for value in 0..64 {
+            builder.set_item(value, value * 10);
+        }
+        let updated = builder.to_immutable();
+
+        assert_eq!(snapshot.len(), 32);
+        assert_eq!(updated.len(), 64);
+        for value in 0..32 {
+            assert_eq!(snapshot.get(&value), Some(&value));
+            assert_eq!(updated.get(&value), Some(&(value * 10)));
+        }
+        assert_eq!(snapshot.get(&40), None);
+        assert_eq!(updated.get(&40), Some(&400));
+        assert!(!snapshot.shares_root_with(&updated));
+
+        let consumed = builder.into_immutable();
+        assert_eq!(consumed, updated);
+
+        let empty: PersistentHashMap<i32, i32, ConstantState> =
+            BulkBuilder::with_hasher(ConstantState::default()).into_immutable();
+        assert!(empty.is_empty());
+    }
+
+    #[test]
+    fn bulk_builder_keeps_first_key_and_earlier_equal_value() {
+        #[derive(Clone, Debug)]
+        struct Key(&'static str, usize);
+
+        impl Hash for Key {
+            fn hash<H: Hasher>(&self, state: &mut H) {
+                self.0.hash(state);
+            }
+        }
+
+        impl PartialEq for Key {
+            fn eq(&self, other: &Self) -> bool {
+                self.0 == other.0
+            }
+        }
+
+        impl Eq for Key {}
+
+        let mut builder = BulkBuilder::new();
+        let first_value = Arc::new(10);
+        builder.set_item(Key("x", 1), Arc::clone(&first_value));
+        builder.set_item(Key("x", 2), Arc::new(10));
+
+        let map = builder.to_immutable();
+        let (stored_key, stored_value) = map.get_key_value(&Key("x", 99)).unwrap();
+        assert_eq!(stored_key.1, 1);
+        // An equal replacement value keeps the earlier stored value instance.
+        assert!(Arc::ptr_eq(stored_value, &first_value));
+
+        builder.set_item(Key("x", 3), Arc::new(20));
+        builder.set_item(Key("y", 4), Arc::new(30));
+        let map = builder.into_immutable();
+        assert_eq!(map.len(), 2);
+        let (stored_key, stored_value) = map.get_key_value(&Key("x", 99)).unwrap();
+        // The first stored key instance survives replacement; the last value wins.
+        assert_eq!(stored_key.1, 1);
+        assert_eq!(**stored_value, 20);
+    }
+
+    #[test]
+    fn bulk_builder_splits_at_the_final_hash_level() {
+        #[derive(Default)]
+        struct IdentityHasher(u64);
+
+        impl Hasher for IdentityHasher {
+            fn finish(&self) -> u64 {
+                self.0
+            }
+
+            fn write(&mut self, _bytes: &[u8]) {}
+
+            fn write_u32(&mut self, value: u32) {
+                self.0 = u64::from(value);
+            }
+        }
+
+        type IdentityState = BuildHasherDefault<IdentityHasher>;
+
+        // 0 and 1 << 31 share every 5-bit fragment below shift 30 and split
+        // only at the final branch level.
+        let mut builder: BulkBuilder<u32, u32, IdentityState> = BulkBuilder::default();
+        builder.set_item(0, 1);
+        builder.set_item(1 << 31, 2);
+        builder.set_item(0, 3);
+
+        let map = builder.into_immutable();
+        assert_eq!(map.len(), 2);
+        assert_eq!(map.get(&0), Some(&3));
+        assert_eq!(map.get(&(1 << 31)), Some(&2));
+    }
+
+    #[test]
+    fn bulk_builder_matches_incremental_construction() {
+        let pairs: Vec<(u32, u32)> = (0..10_000_u32).map(|i| ((i * 37) % 512, i)).collect();
+
+        // Collision-heavy: every key lands in one bucket.
+        let mut builder: BulkBuilder<u32, u32, ConstantState> =
+            BulkBuilder::with_hasher(ConstantState::default());
+        builder.set_items(pairs.iter().copied());
+        let bulk = builder.into_immutable();
+        let incremental = PersistentHashMap::with_hasher(ConstantState::default())
+            .set_items(pairs.iter().copied());
+        assert_eq!(bulk.len(), 512);
+        assert_eq!(bulk, incremental);
+
+        // Branch-heavy: default hashing spreads the keys across the trie.
+        let mut builder = BulkBuilder::new();
+        builder.set_items(pairs.iter().copied());
+        let bulk_spread = builder.into_immutable();
+        let incremental_spread = PersistentHashMap::new().set_items(pairs.iter().copied());
+        assert_eq!(bulk_spread, incremental_spread);
+
+        // from_iter routes through the builder and must agree as well.
+        let collected: PersistentHashMap<u32, u32> = pairs.iter().copied().collect();
+        assert_eq!(collected, incremental_spread);
     }
 
     #[test]
