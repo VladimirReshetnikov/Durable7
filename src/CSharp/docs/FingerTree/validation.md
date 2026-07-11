@@ -90,6 +90,8 @@ The suite covers:
   comparer-equivalent representatives, policy gating, adversarial rank collisions, and concurrent digest publication;
 - `BrodalOkasakiHeap<T>` sorted drains through 100,000 items, randomized meld forests, retained
   versions, comparer gating, and size-independent insert/meld comparison ceilings;
+- `PrioritySearchQueue<TKey, TPriority, TValue>` 50,000-operation keyed histories, retained
+  snapshots, complete minimum draining, 1,000 range/threshold model queries, balance, and representative retention;
 - runnable sample smoke tests for Tour, Showcase, and Editor;
 - persistence/concurrency examples and tearable-struct stress tests;
 - CsCheck property tests and model-based command-sequence tests that shrink operation histories rather than only

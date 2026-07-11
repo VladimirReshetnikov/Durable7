@@ -604,3 +604,20 @@ Equal-priority tie order is unspecified.
 Strict Fibonacci and hollow heaps remain intentionally absent. Their optimal decrease-key machinery
 depends on mutable pointer surgery, so path-copying would not preserve the bounds that distinguish
 them; this is a recorded rejection, not an implementation gap.
+
+## Priority Search Queue
+
+`PrioritySearchQueue<TKey, TPriority, TValue>` stores at most one entry per key in an immutable AVL
+tree ordered by `IComparer<TKey>`. Every node caches the minimum-priority entry in its subtree under
+the retained `IComparer<TPriority>`; equal-priority winners use key order as a deterministic tie-break.
+
+`TryGetEntry`, `SetItem`, `TryAdd`, `Remove`, and `TryRemove` are O(log n) worst-case. Equivalent-key
+replacement retains the original key representative, and equal entry updates/absent removals preserve
+instance identity. `Minimum`/`TryGetMinimum` are O(1); `DeleteMinimum` is O(log n). Enumeration is in
+key order. Policies flow into every version; there is no operation that silently changes them.
+
+`EnumerateAtMost(minimumKey, maximumKey, maximumPriority)` returns entries in the inclusive key range
+whose priority is no greater than the threshold. Traversal prunes outside BST key bounds and any
+subtree whose cached winner exceeds the threshold, costing O(log n + v) where v is the number of
+nodes that cannot be pruned (including the k reported entries). This query is the core's differentiator
+from a HAMT-plus-sorted-set composition.

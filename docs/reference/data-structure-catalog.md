@@ -93,7 +93,7 @@ lazy-spine parity boundary.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
-| C# | `PriorityQueue<TElement, TPriority>`, `BrodalOkasakiHeap<T>` | [usage guide](../../src/CSharp/docs/FingerTree/usage.md), [measured priority queue](../../src/CSharp/src/Tools.DataStructures.FingerTree/PriorityQueue.cs), [Brodal–Okasaki heap](../../src/CSharp/src/Tools.DataStructures.FingerTree/BrodalOkasakiHeap.cs), [API spec](../../src/CSharp/docs/FingerTree/api-specification.md) |
+| C# | `PriorityQueue<TElement, TPriority>`, `BrodalOkasakiHeap<T>`, `PrioritySearchQueue<TKey, TPriority, TValue>` | [usage guide](../../src/CSharp/docs/FingerTree/usage.md), [measured priority queue](../../src/CSharp/src/Tools.DataStructures.FingerTree/PriorityQueue.cs), [Brodal–Okasaki heap](../../src/CSharp/src/Tools.DataStructures.FingerTree/BrodalOkasakiHeap.cs), [priority-search queue](../../src/CSharp/src/Tools.DataStructures.FingerTree/PrioritySearchQueue.cs), [API spec](../../src/CSharp/docs/FingerTree/api-specification.md) |
 | C | `ft_priority_queue` | [usage guide](../../src/C/FingerTree/docs/usage.md), [public header](../../src/C/FingerTree/include/tools/data_structures/finger_tree/fingertree.h), [API notes](../../src/C/FingerTree/docs/api-notes.md) |
 | C++ | `priority_queue<Element, Priority, Comparison>` | [usage guide](../../src/Cpp/FingerTree/docs/usage.md), [header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/priority_queue.hpp), [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) |
 | Haskell | `PriorityQueue p a` | [source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/PriorityQueue.hs), [tests](../../src/Haskell/FingerTree/test/README.md) |

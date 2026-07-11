@@ -55,6 +55,7 @@ Results are written under `BenchmarkDotNet.Artifacts/` (git-ignored); curated ta
 | `DabaLiteBenchmarks` | worst-case O(1) FIFO slide-and-query aggregation | `Queue<T>` plus O(n) reaggregation |
 | `CanonicalSortedSetBenchmarks` | keyed zip-zip lookup, independent-history equality, and memoized digest | `ImmutableSortedSet<T>` |
 | `BrodalOkasakiHeapBenchmarks` | worst-case O(1) persistent insert/meld and O(log n) delete-min | measured finger-tree priority queue |
+| `PrioritySearchQueueBenchmarks` | keyed priority updates, delete-min, and range-bounded priority queries | `SortedDictionary` lookup and filtered scan |
 
 ## Fairness methodology
 

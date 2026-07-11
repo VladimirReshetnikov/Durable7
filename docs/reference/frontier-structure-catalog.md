@@ -258,11 +258,12 @@ whose selling point is unique representation, not general sorted-set duty.
 
 ### Heaps: Brodal-Okasaki yes, hollow/strict-Fibonacci no, PSQ maybe
 
-**C# status (2026-07-10): Brodal–Okasaki implemented; mutation-dependent heaps rejected as
+**C# status (2026-07-10): Brodal–Okasaki and PSQ implemented; mutation-dependent heaps rejected as
 specified.** `BrodalOkasakiHeap<T>` directly ports the bootstrapped skew-binomial representation
-with bounded-comparison O(1) insert/meld/minimum and O(log n) delete-min. Strict Fibonacci and
-hollow heaps remain explicit non-goals. The priority-search queue is tracked separately below in
-this implementation sequence.
+with bounded-comparison O(1) insert/meld/minimum and O(log n) delete-min.
+`PrioritySearchQueue<TKey, TPriority, TValue>` supplies keyed priority updates and the distinctive
+key-range/priority-threshold query over one winner-cached AVL core. Strict Fibonacci and hollow
+heaps remain explicit non-goals.
 
 - **Brodal-Okasaki heap** (JFP 1996; skew binomial queues + data-structural bootstrapping): purely
   functional with O(1) *worst-case* insert, meld, and findMin, O(log n) deleteMin. The shipped

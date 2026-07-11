@@ -43,6 +43,8 @@ reasonable oracle.
   semantics, randomized histories, rank collisions, algebra, representative retention, and digest publication.
 - `BrodalOkasakiHeapTests.cs` covers large sorted drains, randomized meld trees, persistence,
   comparer-policy gating, empty behavior, and worst-case constant insert/meld comparison counts.
+- `PrioritySearchQueueTests.cs` covers keyed priority updates, minimum ties/deletion, AVL balance,
+  randomized histories and snapshots, range/threshold pruning, try patterns, and stored-key retention.
 - `SampleSmokeTests.cs` captures the Tour, Showcase, and Editor sample output contracts.
 - `PersistenceConcurrencyExamplesTests.cs` and `TearableConcurrencyStressTests.cs` cover structural-sharing
   examples, atomic publication, concurrent reads, and tearable-value stress.
