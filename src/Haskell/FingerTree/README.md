@@ -7,8 +7,15 @@
 
 This package ports the repository finger-tree family to Haskell. It includes a general measured
 finger tree, a size-and-rightmost-leaf-measured deque, a reversible deque, sorted bag/set/map
-facades, a stable meldable priority queue, a keyed priority-search queue, interval tree helpers,
-positional ropes, measured ropes, text-rope navigation helpers, and a persistent RRB vector.
+facades, a stable meldable priority queue, a worst-case-optimal Brodal-Okasaki heap, a keyed
+priority-search queue, interval tree helpers, positional ropes, measured ropes, text-rope navigation
+helpers, and a persistent RRB vector.
+
+`BrodalOkasakiHeap a` directly implements the bootstrapped skew-binomial representation: the
+rank-zero global root stores the minimum while its child list fuses primitive skew-tree children
+with the embedded heap forest. Insert, meld, and minimum are O(1) worst-case and minimum deletion is
+O(log n). Its validator decodes every fused boundary and checks skew ranks, heap order, count, and
+depth without depending on the operation code.
 
 `PrioritySearchQueue k p v` is a direct persistent winner-cached AVL core. Each key has one
 priority/payload entry, each node caches its subtree winner, and equal priorities break by key.

@@ -18,6 +18,7 @@ import System.IO.Unsafe (unsafePerformIO)
 import System.Mem.StableName (eqStableName, makeStableName)
 
 import qualified Data.Structures.FingerTree.Deque as Deque
+import qualified Data.Structures.FingerTree.BrodalOkasakiHeap as BrodalOkasakiHeap
 import qualified Data.Structures.FingerTree.IntervalTree as IntervalTree
 import qualified Data.Structures.FingerTree.Measured as FT
 import Data.Structures.FingerTree.Measured (ViewL(..), ViewR(..))
@@ -44,6 +45,7 @@ main = do
   testSortedCollections
   testSortedBagRanks
   testPriorityQueue
+  testBrodalOkasakiHeap
   testPrioritySearchQueue
   testIntervalTree
   testRrbVector
@@ -246,6 +248,59 @@ testPriorityQueue = do
     other -> fail ("unexpected priority dequeue: " ++ show other)
   let melded = PriorityQueue.meld (PriorityQueue.fromList [(5 :: Int, "x")]) (PriorityQueue.fromList [(0, "y")])
   assertEqual "priority meld" (Just ("y", 0)) (PriorityQueue.peek melded)
+
+testBrodalOkasakiHeap :: IO ()
+testBrodalOkasakiHeap = do
+  let source = [7 :: Int, 1, 9, 3, 1, 8, 2]
+      heap = BrodalOkasakiHeap.fromList source
+  assertEqual "Brodal count" (length source) (BrodalOkasakiHeap.count heap)
+  assertEqual "Brodal minimum" (Just 1) (BrodalOkasakiHeap.minimum heap)
+  assertEqual "Brodal sorted drain" (List.sort source) (drainBrodal heap)
+  assertBrodalValid "Brodal basic structure" heap
+
+  let left = BrodalOkasakiHeap.fromList [0 :: Int .. 255]
+      right = BrodalOkasakiHeap.fromList [256 :: Int .. 511]
+      melded = BrodalOkasakiHeap.meld left right
+      inserted = BrodalOkasakiHeap.insert (-1) left
+  assertEqual "Brodal retained left" [0 :: Int .. 255] (drainBrodal left)
+  assertEqual "Brodal retained right" [256 :: Int .. 511] (drainBrodal right)
+  assertEqual "Brodal meld" [0 :: Int .. 511] (drainBrodal melded)
+  assertEqual "Brodal inserted minimum" (Just (-1)) (BrodalOkasakiHeap.minimum inserted)
+  assertBrodalValid "Brodal meld structure" melded
+  assertBrodalValid "Brodal inserted structure" inserted
+
+  let selfMelded = BrodalOkasakiHeap.meld left left
+  assertEqual "Brodal self-meld count" 512 (BrodalOkasakiHeap.count selfMelded)
+  assertEqual "Brodal self-meld values" (concatMap (replicate 2) [0 :: Int .. 255]) (drainBrodal selfMelded)
+  assertBrodalValid "Brodal self-meld structure" selfMelded
+
+  let randomValues = take 20_000 (brodalRandomValues 0x6a09_e667)
+      randomHeap = BrodalOkasakiHeap.fromList randomValues
+  assertEqual "Brodal randomized drain" (List.sort randomValues) (drainBrodal randomHeap)
+  case BrodalOkasakiHeap.validateStructure randomHeap of
+    Nothing -> fail "Brodal randomized validation failed"
+    Just statistics -> do
+      assertEqual "Brodal randomized validated count" 20_000 (BrodalOkasakiHeap.brodalStatisticsCount statistics)
+      assertBool "Brodal randomized logarithmic rank" (BrodalOkasakiHeap.brodalStatisticsMaximumRank statistics <= 32)
+      assertBool "Brodal randomized bounded root forest" (BrodalOkasakiHeap.brodalStatisticsRootForestLength statistics <= 32)
+
+drainBrodal :: Ord a => BrodalOkasakiHeap.BrodalOkasakiHeap a -> [a]
+drainBrodal heap = case BrodalOkasakiHeap.minView heap of
+  Nothing -> []
+  Just (value, remaining) -> value : drainBrodal remaining
+
+brodalRandomValues :: Word32 -> [Int]
+brodalRandomValues seed =
+  let next = nextRrbRandom seed
+  in (fromIntegral (next `mod` 100_003) - 50_001) : brodalRandomValues next
+
+assertBrodalValid :: Ord a => String -> BrodalOkasakiHeap.BrodalOkasakiHeap a -> IO ()
+assertBrodalValid label heap = case BrodalOkasakiHeap.validateStructure heap of
+  Nothing -> fail (label ++ ": invalid Brodal-Okasaki representation")
+  Just statistics -> assertEqual
+    (label ++ " count")
+    (BrodalOkasakiHeap.count heap)
+    (BrodalOkasakiHeap.brodalStatisticsCount statistics)
 
 testPrioritySearchQueue :: IO ()
 testPrioritySearchQueue = do

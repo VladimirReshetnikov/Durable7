@@ -27,6 +27,9 @@ logarithmic comparison ceiling for lower bound, upper bound, and binary search.
 Priority-search-queue coverage includes last-wins keyed construction, minimum/tie semantics,
 range/priority filtering, ascending-key adversarial AVL construction, cached-winner validation,
 and a 10,000-operation map model with retained immutable snapshots.
+Brodal-Okasaki coverage checks persistent insert/meld, self-meld, retained operands, sorted drains,
+fused child/embedded-forest invariants, rank/depth bounds, and a 20,000-value deterministic random
+history against `Data.List.sort`.
 RRB-vector coverage exercises every 32-way boundary through 100,000 elements, unequal-height
 append, regular-versus-relaxed metadata, split round-trips, optimized root reuse, a 10,000-command
 list model with retained snapshots, 2,000 adversarial split/rejoin operations, uneven fragments,

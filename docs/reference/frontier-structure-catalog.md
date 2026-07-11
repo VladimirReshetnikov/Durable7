@@ -62,7 +62,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | Merkle search tree | 1 | Strong (C# implemented) | Completed: deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
 | Zip tree (canonical sorted set) | 1, 3 | Plausible (C# implemented) | Completed: coherent keyed rank policy | 1 new core, set facade |
-| Brodal-Okasaki heap | 1 | Plausible (C# implemented for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
+| Brodal-Okasaki heap | 1 | Plausible (C# and Haskell implemented for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
 | Priority search queue (winner-cached AVL) | 1 | Plausible (C# and Haskell implemented) | Completed as a direct core rather than the addressable composition | 1 new core |
 | Ctrie (concurrent, O(1) snapshot) | 1 | Managed-only (C# + Kotlin/JVM implemented) | Tracing GC; native ports require reclamation design | 1 new core, concurrency test tier |
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
@@ -392,12 +392,13 @@ O(log n) delete-min. `PrioritySearchQueue<TKey, TPriority, TValue>` supplies key
 and the distinctive key-range/priority-threshold query over one winner-cached AVL core. Both expose
 public structural validators. Strict Fibonacci and hollow heaps remain explicit non-goals.
 
-**Haskell status (2026-07-11): Priority search queue implemented.**
-`Data.Structures.FingerTree.PrioritySearchQueue` is a direct strict winner-cached AVL rather than a
-`Map`/heap composition. It retains one entry per ordered key, breaks priority ties by key, supports
-O(1) minimum and O(log n) keyed update/delete-min, validates all AVL/winner metadata, and preserves
-retained snapshots through a 10,000-operation model. The Brodal-Okasaki sibling remains pending in
-this workspace.
+**Haskell status (2026-07-11): Brodal-Okasaki heap and priority search queue implemented.**
+`Data.Structures.FingerTree.BrodalOkasakiHeap` directly implements the fused bootstrapped
+skew-binomial representation and validates primitive-child/embedded-forest boundaries, ranks, heap
+order, count, and depth. `Data.Structures.FingerTree.PrioritySearchQueue` is a direct strict winner-
+cached AVL rather than a `Map`/heap composition. It retains one entry per ordered key, breaks
+priority ties by key, supports O(1) minimum and O(log n) keyed update/delete-min, validates all
+AVL/winner metadata, and preserves retained snapshots through a 10,000-operation model.
 
 - **Brodal-Okasaki heap** (JFP 1996; skew binomial queues + data-structural bootstrapping): purely
   functional with O(1) *worst-case* insert, meld, and findMin, O(log n) deleteMin. The shipped

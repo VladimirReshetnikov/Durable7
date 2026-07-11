@@ -11,6 +11,7 @@ build-type: Simple
 library
   exposed-modules:
     Data.Structures.FingerTree
+    Data.Structures.FingerTree.BrodalOkasakiHeap
     Data.Structures.FingerTree.Deque
     Data.Structures.FingerTree.IntervalTree
     Data.Structures.FingerTree.Measured

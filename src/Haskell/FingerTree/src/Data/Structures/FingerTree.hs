@@ -16,6 +16,8 @@ module Data.Structures.FingerTree
   , SortedSet.SortedSet
   , SortedMap.SortedMap
   , PriorityQueue.PriorityQueue
+  , BrodalOkasakiHeap.BrodalOkasakiHeap
+  , BrodalOkasakiHeap.BrodalOkasakiHeapStatistics(..)
   , PrioritySearchQueue.PrioritySearchQueue
   , PrioritySearchQueue.PrioritySearchEntry(..)
   , PrioritySearchQueue.PrioritySearchQueueStatistics(..)
@@ -36,6 +38,7 @@ import qualified Data.Structures.FingerTree.Measured as Measured
 import qualified Data.Structures.FingerTree.MeasuredRope as MeasuredRope
 import qualified Data.Structures.FingerTree.Measures as Measures
 import qualified Data.Structures.FingerTree.PriorityQueue as PriorityQueue
+import qualified Data.Structures.FingerTree.BrodalOkasakiHeap as BrodalOkasakiHeap
 import qualified Data.Structures.FingerTree.PrioritySearchQueue as PrioritySearchQueue
 import qualified Data.Structures.FingerTree.ReversibleDeque as ReversibleDeque
 import qualified Data.Structures.FingerTree.Rope as Rope
