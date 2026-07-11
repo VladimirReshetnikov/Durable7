@@ -9,6 +9,7 @@ public class ChampBenchmarks
 {
     private PersistentHashMap<int, int> _champ = null!;
     private PersistentHashMap<int, int> _independentChamp = null!;
+    private PersistentHashMap<int, int> _changedChamp = null!;
     private ImmutableDictionary<int, int> _immutable = null!;
     private Dictionary<int, int> _dictionary = null!;
     private int _probe;
@@ -22,9 +23,10 @@ public class ChampBenchmarks
         var entries = Enumerable.Range(0, Count).Select(i => KeyValuePair.Create(i, i * 17)).ToArray();
         _champ = PersistentHashMap<int, int>.CreateRange(entries);
         _independentChamp = PersistentHashMap<int, int>.CreateRange(entries.Reverse());
+        _probe = Count * 3 / 4;
+        _changedChamp = _champ.SetItem(_probe, -1);
         _immutable = entries.ToImmutableDictionary();
         _dictionary = entries.ToDictionary();
-        _probe = Count * 3 / 4;
     }
 
     [Benchmark]
@@ -56,4 +58,10 @@ public class ChampBenchmarks
 
     [Benchmark]
     public bool ChampIndependentHistoryEquality() => _champ.MapEquals(_independentChamp);
+
+    [Benchmark]
+    public int ChampSharedSingleChangeDiff() => _champ.Diff(_changedChamp).Count();
+
+    [Benchmark]
+    public int ChampIndependentHistoryDiff() => _champ.Diff(_independentChamp).Count();
 }

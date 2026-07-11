@@ -17,7 +17,10 @@ public enum MapDifferenceKind
 /// <typeparam name="TKey">The key type.</typeparam>
 /// <typeparam name="TValue">The value type.</typeparam>
 /// <param name="Kind">The kind of difference.</param>
-/// <param name="Key">The affected key.</param>
+/// <param name="Key">
+/// The affected stored key. Removed and changed differences retain the source map's key
+/// representative; added differences retain the target map's representative.
+/// </param>
 /// <param name="OldValue">The source value for removed and changed entries.</param>
 /// <param name="NewValue">The target value for added and changed entries.</param>
 public readonly record struct MapDifference<TKey, TValue>(

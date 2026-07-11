@@ -80,9 +80,11 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 
 ### CHAMP canonicalization (upgrade to the shipped HAMT)
 
-**C# status (2026-07-10): Implemented.** The managed HAMT now uses separate data/node bitmaps,
-inline payload runs, canonical deletion with payload promotion, canonical one-freeze bulk
-construction, `MapEquals`, `Diff`, independent-history shape tests, and a CHAMP benchmark class.
+**C# status (2026-07-11): Implemented.** The managed HAMT uses separate data/node bitmaps, inline
+payload runs, deletion-time leaf promotion, canonical one-freeze bulk construction, lockstep
+reference-pruned `MapEquals`, and bitmap-aligned structural `Diff`. Its executable gate covers every
+leaf/collision/branch transition, eager argument validation, stored-key representatives, randomized
+node invariants, independent-history topology, reference-pruning bounds, and dedicated benchmarks.
 
 **Kotlin status (2026-07-10): Implemented.** The JVM port now has the same split bitmap/inline
 payload representation and canonical deletion promotion, plus policy-compatible `mapEquals` and
@@ -114,18 +116,19 @@ is a refinement of Bagwell's HAMT with two changes that matter here:
    `nodemap` for sub-node pointers - with payloads and sub-nodes stored in separate compact regions
    of one array. Iteration touches payload runs contiguously instead of interleaving pointers and
    payloads, and the node layout removes a class of indirection on lookup.
-2. **Canonical deletion.** Deletion restores the tree to the shape it would have had if the
-   remaining keys had been inserted fresh: a sub-node that shrinks to a single inline payload is
-   collapsed into its parent. The invariant "no node holds fewer than two children unless it is the
-   root" makes the representation **canonical**: two maps with equal contents under the same
-   comparer have bit-identical structure.
+2. **Canonical deletion topology.** A sub-node that shrinks to a single payload is collapsed into
+   its parent, and a child-only wrapper around a leaf or collision run is removed. Bitmap topology is
+   therefore determined by the remaining hashes rather than update history. Unary bitmap chains can
+   still be necessary when multiple hashes share successive 5-bit prefixes. Collision-run order and
+   first-retained stored key representatives remain history-dependent, so "canonical" here means
+   canonical trie topology modulo those semantic-equivalence details, not bit-identical object graphs.
 
-**Why it matters here.** Canonical form converts the derived catalog's highest-leverage gap -
-structural equality / diff / 3-way merge - from "reference-pruned traversal with heuristic value"
-into a guaranteed bound: `MapEquals` becomes O(divergence) *always*, not merely for versions that
-share ancestry, because equal subtrees are structurally identical even when built along different
-histories. It also unlocks an optional per-node memoized digest (the finger-tree family's
-CAS-published memoization precedent applies) for O(1) inequality answers.
+**Why it matters here.** Canonical topology lets equality and diff align logical bitmap slots without
+whole-map lookup passes. For versions with shared ancestry, reference-equal descendants are skipped,
+so work tracks non-shared trie regions plus reported differences. Independently built equal maps
+still require O(n) comparison: identical topology is not reference identity. A future trusted
+per-node digest or hash-consing layer could change that bound, but CHAMP alone does not. Equal-hash
+collision runs require unordered key matching and can take O(c²) comparisons for bucket size c.
 
 **Migration path.** The shipped `PersistentHashMap` is already a bitmap-indexed HAMT with compact
 child arrays, collision buckets, struct enumerators, and an internal transient builder - the delta
@@ -134,10 +137,11 @@ enumeration order of an unordered map may change across this migration; the docu
 already declares enumeration order unspecified, but the test suites and downstream Tungsten
 association tests must not accidentally pin the old order.
 
-**Caveats.** Collision buckets remain insertion-ordered, so bucket equality needs key-matched
-unordered comparison (already recorded in the derived catalog). Canonical deletion adds a
-collapse check to every remove; the paper reports net wins, but this workspace should reproduce the
-iteration/equality benchmarks before committing all six language ports.
+**Caveats.** Collision buckets remain insertion-ordered, so equality/diff use key-matched unordered
+comparison. Equivalent maps can also retain different concrete key objects. Enumeration order is
+unspecified, deletion adds a collapse check, and independently allocated maps cannot benefit from
+reference pruning. The managed benchmark suite separates shared-single-change diff from
+independent-history equality/diff so those two cost profiles stay visible.
 
 **Verdict: Strong.** It compounds with the diff/merge feature already ranked first, and it is an
 upgrade in place rather than a new family. Schedule it together with the

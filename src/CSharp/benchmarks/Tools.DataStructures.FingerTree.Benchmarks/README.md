@@ -48,7 +48,7 @@ Results are written under `BenchmarkDotNet.Artifacts/` (git-ignored); curated ta
 | `MeasuredRopeBenchmarks` | `MeasuredRope<char,…>` line navigation in O(log n) (offset↔line) | `string` newline scan (O(n)) |
 | `SortedBuilderBenchmarks` | sorted builder batch-edit freeze constants and allocation | repeated immutable edits, caller-side BCL staging, BCL immutable builders |
 | `RopeBuilderBenchmarks` | append-only rope builder construction and snapshot constants | `Create`, `AddLast` loop, text `StringBuilder` materialization, `ImmutableList<T>.Builder` |
-| `ChampBenchmarks` | CHAMP lookup, payload-dense iteration, and independent-history equality | `Dictionary` and `ImmutableDictionary` |
+| `ChampBenchmarks` | CHAMP lookup, payload-dense iteration, shared-single-change diff, and independent-history equality/diff | `Dictionary` and `ImmutableDictionary` |
 | `CtrieBenchmarks` | lock-free lookup and O(1) immutable snapshot publication | `ConcurrentDictionary` lookup and O(n) immutable copy |
 | `PatriciaMapBenchmarks` | integer-key lookup and prefix-aware structural union | CHAMP and `ImmutableDictionary` lookup |
 | `RrbVectorBenchmarks` | uniform middle indexing and boundary-spine concatenation | `Rope<T>` indexing/concat and `ImmutableList<T>` indexing/concat |

@@ -36,9 +36,14 @@ Lookups allocate nothing, single-pass `Add`/`TryAdd` hash and walk once, and bot
 allocation-free copy-safe struct enumerators.
 
 From-scratch map/set factories use an internal bulk builder. It stages entries by full hash and
-freezes them directly into canonical CHAMP shape, avoiding a persistent path copy for every item.
+freezes them directly into canonical CHAMP topology, avoiding a persistent path copy for every item.
 The same internal facility is available to the sibling Tungsten assembly
 for association relabel/sort/reverse rebuilds; no mutable storage is ever shared with a published map.
+
+`MapEquals` and `Diff` walk that topology in lockstep and prune reference-equal descendants. This is
+especially effective for versions with shared ancestry. Independently built equal maps still need a
+full semantic traversal: collision order and stored representatives are intentionally not canonical,
+and canonical topology alone does not confer reference identity.
 
 ## Layout
 

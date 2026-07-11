@@ -20,7 +20,8 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
 - `PersistentHashMapCollisionTests.cs` covers equal-hash buckets, deep shared hash prefixes, collision splitting,
   hash-mismatch misses, and equivalent-key retention.
 - `PersistentHamtStructureTests.cs` uses internal test access to verify CHAMP data/node maps, canonical
-  independent-history shape, collapse behavior, structural equality/diff, no-op root reuse, and sharing.
+  independent-history topology, collapse behavior, structural equality, slot-aligned diff through
+  leaf/collision/branch transitions, randomized invariants, eager validation, no-op root reuse, and sharing.
 - `PersistentHashMapBulkBuilderTests.cs` verifies duplicate retention, null/deep-prefix keys, collision and branch
   freezes, and immutable snapshot detachment while the bulk builder continues accepting entries.
 - `PersistentHashMapPropertyTests.cs` uses CsCheck generated histories against dictionary-style model state,

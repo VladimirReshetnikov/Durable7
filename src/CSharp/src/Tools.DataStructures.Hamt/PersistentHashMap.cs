@@ -426,12 +426,17 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     /// <param name="valueComparer">
     /// The value comparer, or <see langword="null"/> to use <see cref="EqualityComparer{T}.Default"/>.
     /// </param>
-    /// <returns>Added, removed, and changed entries in the maps' stable trie order.</returns>
+    /// <returns>
+    /// Added, removed, and changed entries in deterministic logical trie-slot order. The precise
+    /// ordering is an implementation detail.
+    /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="other"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The maps do not share the same comparer object.</exception>
     /// <remarks>
-    /// A shared root produces an empty sequence without walking entries. Divergent maps are compared
-    /// semantically; collision-bucket order is not observable.
+    /// Logical bitmap slots are traversed in lockstep and reference-equal subtries are skipped. The
+    /// work is therefore proportional to the trie regions that do not share identity plus the
+    /// reported differences. Independently built maps can still require a complete O(n) traversal;
+    /// equal-hash collision runs require pairwise key matching because their order is not observable.
     /// </remarks>
     public IEnumerable<MapDifference<TKey, TValue>> Diff(
         PersistentHashMap<TKey, TValue> other,
@@ -441,22 +446,12 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
         if (!ReferenceEquals(_comparer, other._comparer))
             throw new ArgumentException("Maps must use the same comparer object.", nameof(other));
         if (ReferenceEquals(_root, other._root))
-            yield break;
+            return Array.Empty<MapDifference<TKey, TValue>>();
 
         var values = valueComparer ?? EqualityComparer<TValue>.Default;
-        foreach (var entry in this)
-        {
-            if (!other.TryGetValue(entry.Key, out var newValue))
-                yield return MapDifference<TKey, TValue>.Removed(entry.Key, entry.Value);
-            else if (!values.Equals(entry.Value, newValue))
-                yield return MapDifference<TKey, TValue>.Changed(entry.Key, entry.Value, newValue);
-        }
-
-        foreach (var entry in other)
-        {
-            if (!ContainsKey(entry.Key))
-                yield return MapDifference<TKey, TValue>.Added(entry.Key, entry.Value);
-        }
+        List<MapDifference<TKey, TValue>> differences = [];
+        DiffNodes(_root, other._root, shift: 0, _comparer, values, differences);
+        return differences;
     }
 
     /// <summary>
@@ -633,6 +628,414 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
         }
 
         return true;
+    }
+
+    private static void DiffNodes(
+        Node? left,
+        Node? right,
+        int shift,
+        IEqualityComparer<TKey> keyComparer,
+        IEqualityComparer<TValue> valueComparer,
+        List<MapDifference<TKey, TValue>> differences)
+    {
+        if (ReferenceEquals(left, right))
+            return;
+        if (left is null)
+        {
+            AppendSubtree(right!, added: true, differences);
+            return;
+        }
+
+        if (right is null)
+        {
+            AppendSubtree(left, added: false, differences);
+            return;
+        }
+
+        if (left is HashNode leftHash)
+        {
+            var leftRun = new EntryRun(leftHash);
+            if (right is HashNode rightHash)
+                DiffEntryRuns(leftRun, new EntryRun(rightHash), keyComparer, valueComparer, differences);
+            else
+                DiffRunAndBranch(leftRun, (BitmapIndexedNode)right, shift, keyComparer, valueComparer, differences);
+            return;
+        }
+
+        if (right is HashNode rightHashNode)
+        {
+            DiffBranchAndRun(
+                (BitmapIndexedNode)left,
+                new EntryRun(rightHashNode),
+                shift,
+                keyComparer,
+                valueComparer,
+                differences);
+            return;
+        }
+
+        DiffBranches(
+            (BitmapIndexedNode)left,
+            (BitmapIndexedNode)right,
+            shift,
+            keyComparer,
+            valueComparer,
+            differences);
+    }
+
+    private static void DiffBranches(
+        BitmapIndexedNode left,
+        BitmapIndexedNode right,
+        int shift,
+        IEqualityComparer<TKey> keyComparer,
+        IEqualityComparer<TValue> valueComparer,
+        List<MapDifference<TKey, TValue>> differences)
+    {
+        var childShift = shift + BitsPerLevel;
+        for (var index = 0; index < 32; index++)
+        {
+            var bit = Bit(index);
+            var leftHasData = (left.DataMap & bit) != 0;
+            var leftHasNode = (left.NodeMap & bit) != 0;
+            var rightHasData = (right.DataMap & bit) != 0;
+            var rightHasNode = (right.NodeMap & bit) != 0;
+
+            if (leftHasData)
+            {
+                var leftEntry = left.Data[Slot(left.DataMap, bit)];
+                if (rightHasData)
+                {
+                    var rightEntry = right.Data[Slot(right.DataMap, bit)];
+                    DiffEntryRuns(
+                        new EntryRun(leftEntry),
+                        new EntryRun(rightEntry),
+                        keyComparer,
+                        valueComparer,
+                        differences);
+                }
+                else if (rightHasNode)
+                {
+                    DiffRunAndNode(
+                        new EntryRun(leftEntry),
+                        right.Children[Slot(right.NodeMap, bit)],
+                        childShift,
+                        keyComparer,
+                        valueComparer,
+                        differences);
+                }
+                else
+                {
+                    AppendEntry(leftEntry, added: false, differences);
+                }
+
+                continue;
+            }
+
+            if (leftHasNode)
+            {
+                var leftChild = left.Children[Slot(left.NodeMap, bit)];
+                if (rightHasData)
+                {
+                    DiffNodeAndRun(
+                        leftChild,
+                        new EntryRun(right.Data[Slot(right.DataMap, bit)]),
+                        childShift,
+                        keyComparer,
+                        valueComparer,
+                        differences);
+                }
+                else if (rightHasNode)
+                {
+                    DiffNodes(
+                        leftChild,
+                        right.Children[Slot(right.NodeMap, bit)],
+                        childShift,
+                        keyComparer,
+                        valueComparer,
+                        differences);
+                }
+                else
+                {
+                    AppendSubtree(leftChild, added: false, differences);
+                }
+
+                continue;
+            }
+
+            if (rightHasData)
+                AppendEntry(right.Data[Slot(right.DataMap, bit)], added: true, differences);
+            else if (rightHasNode)
+                AppendSubtree(right.Children[Slot(right.NodeMap, bit)], added: true, differences);
+        }
+    }
+
+    private static void DiffRunAndNode(
+        EntryRun left,
+        Node right,
+        int shift,
+        IEqualityComparer<TKey> keyComparer,
+        IEqualityComparer<TValue> valueComparer,
+        List<MapDifference<TKey, TValue>> differences)
+    {
+        if (right is HashNode rightHash)
+        {
+            DiffEntryRuns(left, new EntryRun(rightHash), keyComparer, valueComparer, differences);
+            return;
+        }
+
+        DiffRunAndBranch(left, (BitmapIndexedNode)right, shift, keyComparer, valueComparer, differences);
+    }
+
+    private static void DiffNodeAndRun(
+        Node left,
+        EntryRun right,
+        int shift,
+        IEqualityComparer<TKey> keyComparer,
+        IEqualityComparer<TValue> valueComparer,
+        List<MapDifference<TKey, TValue>> differences)
+    {
+        if (left is HashNode leftHash)
+        {
+            DiffEntryRuns(new EntryRun(leftHash), right, keyComparer, valueComparer, differences);
+            return;
+        }
+
+        DiffBranchAndRun((BitmapIndexedNode)left, right, shift, keyComparer, valueComparer, differences);
+    }
+
+    private static void DiffRunAndBranch(
+        EntryRun left,
+        BitmapIndexedNode right,
+        int shift,
+        IEqualityComparer<TKey> keyComparer,
+        IEqualityComparer<TValue> valueComparer,
+        List<MapDifference<TKey, TValue>> differences)
+    {
+        var matchingIndex = Index(left.Hash, shift);
+        for (var index = 0; index < 32; index++)
+        {
+            var bit = Bit(index);
+            var rightHasData = (right.DataMap & bit) != 0;
+            var rightHasNode = (right.NodeMap & bit) != 0;
+            if (index == matchingIndex)
+            {
+                if (rightHasData)
+                {
+                    DiffEntryRuns(
+                        left,
+                        new EntryRun(right.Data[Slot(right.DataMap, bit)]),
+                        keyComparer,
+                        valueComparer,
+                        differences);
+                }
+                else if (rightHasNode)
+                {
+                    DiffRunAndNode(
+                        left,
+                        right.Children[Slot(right.NodeMap, bit)],
+                        shift + BitsPerLevel,
+                        keyComparer,
+                        valueComparer,
+                        differences);
+                }
+                else
+                {
+                    AppendRun(left, added: false, differences);
+                }
+            }
+            else if (rightHasData)
+            {
+                AppendEntry(right.Data[Slot(right.DataMap, bit)], added: true, differences);
+            }
+            else if (rightHasNode)
+            {
+                AppendSubtree(right.Children[Slot(right.NodeMap, bit)], added: true, differences);
+            }
+        }
+    }
+
+    private static void DiffBranchAndRun(
+        BitmapIndexedNode left,
+        EntryRun right,
+        int shift,
+        IEqualityComparer<TKey> keyComparer,
+        IEqualityComparer<TValue> valueComparer,
+        List<MapDifference<TKey, TValue>> differences)
+    {
+        var matchingIndex = Index(right.Hash, shift);
+        for (var index = 0; index < 32; index++)
+        {
+            var bit = Bit(index);
+            var leftHasData = (left.DataMap & bit) != 0;
+            var leftHasNode = (left.NodeMap & bit) != 0;
+            if (index == matchingIndex)
+            {
+                if (leftHasData)
+                {
+                    DiffEntryRuns(
+                        new EntryRun(left.Data[Slot(left.DataMap, bit)]),
+                        right,
+                        keyComparer,
+                        valueComparer,
+                        differences);
+                }
+                else if (leftHasNode)
+                {
+                    DiffNodeAndRun(
+                        left.Children[Slot(left.NodeMap, bit)],
+                        right,
+                        shift + BitsPerLevel,
+                        keyComparer,
+                        valueComparer,
+                        differences);
+                }
+                else
+                {
+                    AppendRun(right, added: true, differences);
+                }
+            }
+            else if (leftHasData)
+            {
+                AppendEntry(left.Data[Slot(left.DataMap, bit)], added: false, differences);
+            }
+            else if (leftHasNode)
+            {
+                AppendSubtree(left.Children[Slot(left.NodeMap, bit)], added: false, differences);
+            }
+        }
+    }
+
+    private static void DiffEntryRuns(
+        EntryRun left,
+        EntryRun right,
+        IEqualityComparer<TKey> keyComparer,
+        IEqualityComparer<TValue> valueComparer,
+        List<MapDifference<TKey, TValue>> differences)
+    {
+        if (left.Hash != right.Hash)
+        {
+            AppendRun(left, added: false, differences);
+            AppendRun(right, added: true, differences);
+            return;
+        }
+
+        for (var leftIndex = 0; leftIndex < left.Count; leftIndex++)
+        {
+            var leftEntry = left[leftIndex];
+            var rightIndex = FindEntry(right, leftEntry.Key, keyComparer);
+            if (rightIndex < 0)
+            {
+                AppendEntry(leftEntry, added: false, differences);
+                continue;
+            }
+
+            var rightEntry = right[rightIndex];
+            if (!valueComparer.Equals(leftEntry.Value, rightEntry.Value))
+            {
+                differences.Add(MapDifference<TKey, TValue>.Changed(
+                    leftEntry.Key,
+                    leftEntry.Value,
+                    rightEntry.Value));
+            }
+        }
+
+        for (var rightIndex = 0; rightIndex < right.Count; rightIndex++)
+        {
+            var rightEntry = right[rightIndex];
+            if (FindEntry(left, rightEntry.Key, keyComparer) < 0)
+                AppendEntry(rightEntry, added: true, differences);
+        }
+    }
+
+    private static int FindEntry(EntryRun entries, TKey key, IEqualityComparer<TKey> keyComparer)
+    {
+        for (var index = 0; index < entries.Count; index++)
+        {
+            if (keyComparer.Equals(entries[index].Key, key))
+                return index;
+        }
+
+        return -1;
+    }
+
+    private static void AppendRun(
+        EntryRun entries,
+        bool added,
+        List<MapDifference<TKey, TValue>> differences)
+    {
+        for (var index = 0; index < entries.Count; index++)
+            AppendEntry(entries[index], added, differences);
+    }
+
+    private static void AppendSubtree(
+        Node node,
+        bool added,
+        List<MapDifference<TKey, TValue>> differences)
+    {
+        var enumerator = new Enumerator(node);
+        while (enumerator.MoveNext())
+        {
+            var entry = enumerator.Current;
+            differences.Add(added
+                ? MapDifference<TKey, TValue>.Added(entry.Key, entry.Value)
+                : MapDifference<TKey, TValue>.Removed(entry.Key, entry.Value));
+        }
+    }
+
+    private static void AppendEntry(
+        Entry entry,
+        bool added,
+        List<MapDifference<TKey, TValue>> differences) =>
+        differences.Add(added
+            ? MapDifference<TKey, TValue>.Added(entry.Key, entry.Value)
+            : MapDifference<TKey, TValue>.Removed(entry.Key, entry.Value));
+
+    private readonly struct EntryRun
+    {
+        private readonly HashNode? _node;
+        private readonly Entry _single;
+
+        internal EntryRun(HashNode node)
+        {
+            _node = node;
+            _single = default;
+        }
+
+        internal EntryRun(Entry single)
+        {
+            _node = null;
+            _single = single;
+        }
+
+        internal uint Hash => _node is null ? _single.Hash : _node.Hash;
+
+        internal int Count => _node switch
+        {
+            null => 1,
+            LeafNode => 1,
+            CollisionNode collision => collision.Entries.Length,
+            _ => throw new UnreachableException(),
+        };
+
+        internal Entry this[int index]
+        {
+            get
+            {
+                if (_node is null)
+                {
+                    Debug.Assert(index == 0);
+                    return _single;
+                }
+
+                if (_node is LeafNode leaf)
+                {
+                    Debug.Assert(index == 0);
+                    return Entry.From(leaf);
+                }
+
+                return ((CollisionNode)_node).Entries[index];
+            }
+        }
     }
 
     private static Node MergeHashNodes(HashNode left, LeafNode right, int shift)

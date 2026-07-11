@@ -57,10 +57,19 @@ original.
   key, or echoes `equalKey` back when absent.
 - `Clear()` returns an empty map preserving the current comparer, and returns the current instance
   when the map is already empty.
-- `MapEquals(other, valueComparer)` uses canonical shape for lockstep equality with reference-equal
-  subtree pruning. The two maps must retain the same comparer object; collision-bucket order is ignored.
-- `Diff(other, valueComparer)` yields `MapDifference<TKey, TValue>` values classified as `Added`,
-  `Removed`, or `Changed`. A shared root returns an empty sequence immediately; comparer mismatch throws.
+- `MapEquals(other, valueComparer)` uses canonical trie topology for lockstep equality with
+  reference-equal subtree pruning. The two maps must retain the same comparer object;
+  collision-bucket order is ignored.
+- `Diff(other, valueComparer)` structurally aligns logical bitmap slots, skips reference-equal
+  subtries, and returns materialized `MapDifference<TKey, TValue>` values classified as `Added`,
+  `Removed`, or `Changed`. Null and comparer-mismatch failures occur eagerly. Removed/changed results
+  expose the source's stored key representative; added results expose the target's. Result order is
+  deterministic for unchanged operands but remains an implementation detail.
+
+For maps derived from a shared version, equality and diff visit only non-shared trie regions (plus
+reported output). Independently built equal maps still require O(n) comparison because canonical
+topology does not make separately allocated nodes reference-equal. Equal-hash collision runs are
+matched without regard to order and can require O(c²) key comparisons for a bucket of size c.
 
 `Add` and `TryAdd` hash the key once and walk the trie once; a rejected duplicate allocates nothing.
 The try-pattern `out` values (`TryGetValue`, `TryRemove`) carry `[MaybeNullWhen(false)]`, matching
