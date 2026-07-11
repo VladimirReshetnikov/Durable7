@@ -236,6 +236,7 @@ public sealed partial class MerkleSearchTree<TKey, TValue>
         var context = new VerificationContext(budget ?? MerkleVerificationBudget.Default);
         try
         {
+            context.AccountProofQuery(proof.Query.Length, proof.RootHash);
             VerifyEnvelope(proof.AlgorithmId, proof.DomainDigest, policy);
             var verifier = Create(policy);
             var decoded = new Dictionary<MerkleDigest, DecodedBlock>();
@@ -259,7 +260,10 @@ public sealed partial class MerkleSearchTree<TKey, TValue>
                 if (proof.Steps.Count != 0)
                     throw Verification(MerkleVerificationFailureKind.ProofMismatch, "An empty-root proof must not contain blocks.", proof.RootHash);
                 VerifyEmptyProofQuery(proof, policy);
-                return MerkleProofVerificationResult.Success(proof.RootHash, 0, 0);
+                return MerkleProofVerificationResult.Success(
+                    proof.RootHash,
+                    context.BlockCount,
+                    context.TotalBytes);
             }
             if (!decoded.ContainsKey(proof.RootHash))
                 throw Verification(MerkleVerificationFailureKind.RootMismatch, "The proof does not contain its declared root block.", proof.RootHash);
@@ -1074,6 +1078,19 @@ public sealed partial class MerkleSearchTree<TKey, TValue>
             BlockCount++;
             TotalBytes += block.Length;
             return true;
+        }
+
+        internal void AccountProofQuery(int byteCount, MerkleDigest rootHash)
+        {
+            if (byteCount > Budget.MaxProofQueryByteCount
+                || TotalBytes > Budget.MaxTotalByteCount - byteCount)
+            {
+                throw Verification(
+                    MerkleVerificationFailureKind.ResourceLimitExceeded,
+                    "A Merkle proof query exceeds its query or total-byte budget.",
+                    rootHash);
+            }
+            TotalBytes += byteCount;
         }
 
         internal void AccountEntries(int count, MerkleDigest digest)

@@ -155,6 +155,7 @@ public sealed class MerklePersistenceAlgorithmsTests
             maxDepth: 256,
             maxEntryCount: 1_000_000,
             maxChildReferencesPerBlock: 65_536);
+        Assert.Equal(oneBlockBudget.MaxBlockByteCount, oneBlockBudget.MaxProofQueryByteCount);
         AssertVerification(
             MerkleVerificationFailureKind.ResourceLimitExceeded,
             () => MerkleSearchTree<int, string?>.Import(many.ExportPack(), policy, budget: oneBlockBudget));
@@ -270,6 +271,50 @@ public sealed class MerklePersistenceAlgorithmsTests
         var empty = MerkleSearchTree<int, string?>.Create(policy);
         AssertProofValid(empty.CreateProof(1), policy);
         AssertProofValid(empty.CreateRangeProof(-1, 1), policy);
+    }
+
+    /// <summary>Rejects an oversized proof query before decoding codecs or supplied blocks.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ProofVerification_RejectsOversizedQueryBeforeDecode(bool emptyTree)
+    {
+        var keyCodec = new CountingCodec<int>(MerkleCodecs.Int32);
+        var valueCodec = new CountingCodec<string?>(MerkleCodecs.Utf8String);
+        var policy = MerkleSearchTreePolicy<int, string?>.Create(
+            "proof-query-budget-v1",
+            Comparer<int>.Default,
+            keyCodec,
+            valueCodec);
+        var tree = MerkleSearchTree<int, string?>.Create(policy);
+        if (!emptyTree)
+            tree = tree.SetItem(1, "one");
+        var proof = tree.CreateProof(1);
+        Assert.False(proof.Query.IsEmpty);
+        if (!emptyTree)
+            Assert.NotEmpty(proof.Steps);
+
+        keyCodec.Reset();
+        valueCodec.Reset();
+        var budget = new MerkleVerificationBudget(
+            maxBlockCount: 1_000,
+            maxTotalByteCount: 1 << 20,
+            maxBlockByteCount: 1 << 20,
+            maxDepth: 256,
+            maxEntryCount: 1_000_000,
+            maxChildReferencesPerBlock: 65_536,
+            maxProofQueryByteCount: proof.Query.Length - 1);
+
+        var result = MerkleSearchTree<int, string?>.VerifyProof(proof, policy, budget);
+
+        Assert.False(result.IsValid);
+        Assert.Equal(MerkleVerificationFailureKind.ResourceLimitExceeded, result.FailureKind);
+        Assert.Equal(0, result.VerifiedBlockCount);
+        Assert.Equal(0, result.VerifiedByteCount);
+        Assert.Equal(0, keyCodec.EncodeCallCount);
+        Assert.Equal(0, keyCodec.DecodeCallCount);
+        Assert.Equal(0, valueCodec.EncodeCallCount);
+        Assert.Equal(0, valueCodec.DecodeCallCount);
     }
 
     /// <summary>Rejects changed block bytes, changed queries, and authenticated but noncanonical extra steps.</summary>
@@ -462,7 +507,7 @@ public sealed class MerklePersistenceAlgorithmsTests
         Assert.Equal(MerkleVerificationFailureKind.None, result.FailureKind);
         Assert.Equal(proof.RootHash, result.ComputedRootHash);
         Assert.Equal(proof.Steps.Count, result.VerifiedBlockCount);
-        Assert.True(result.VerifiedByteCount > 0 || proof.Steps.Count == 0);
+        Assert.Equal(proof.TotalByteCount, result.VerifiedByteCount);
     }
 
     private static void AssertProofFailure<TKey, TValue>(
@@ -538,5 +583,32 @@ public sealed class MerklePersistenceAlgorithmsTests
         public void Clear() => _blocks.Clear();
 
         internal void SeedUnsafe(MerkleBlock block) => _blocks.Add(block.Digest, block);
+    }
+
+    private sealed class CountingCodec<T>(IMerkleCodec<T> inner) : IMerkleCodec<T>
+    {
+        public string EncodingId => inner.EncodingId;
+
+        internal int EncodeCallCount { get; private set; }
+
+        internal int DecodeCallCount { get; private set; }
+
+        public byte[] Encode(T value)
+        {
+            EncodeCallCount++;
+            return inner.Encode(value);
+        }
+
+        public T Decode(ReadOnlySpan<byte> encoding)
+        {
+            DecodeCallCount++;
+            return inner.Decode(encoding);
+        }
+
+        internal void Reset()
+        {
+            EncodeCallCount = 0;
+            DecodeCallCount = 0;
+        }
     }
 }

@@ -222,6 +222,19 @@ public sealed class RrbVectorTests
         Assert.Equal(new[] { "a", "b", "c" }, vector);
     }
 
+    /// <summary>Verifies range-removal boundary failures identify the invalid argument.</summary>
+    [Fact]
+    public void RemoveRange_ValidatesIndexBeforeCount()
+    {
+        var vector = RrbVector<int>.CreateRange([1, 2, 3]);
+
+        Assert.Equal("index", Assert.Throws<ArgumentOutOfRangeException>(() => vector.RemoveRange(-1, 0)).ParamName);
+        Assert.Equal("index", Assert.Throws<ArgumentOutOfRangeException>(() => vector.RemoveRange(4, 0)).ParamName);
+        Assert.Equal("count", Assert.Throws<ArgumentOutOfRangeException>(() => vector.RemoveRange(0, -1)).ParamName);
+        Assert.Equal("count", Assert.Throws<ArgumentOutOfRangeException>(() => vector.RemoveRange(2, 2)).ParamName);
+        Assert.Same(vector, vector.RemoveRange(vector.Count, 0));
+    }
+
     /// <summary>Verifies builder freezes are cached and isolated from later mutable staging.</summary>
     [Fact]
     public void Builder_BulkStagesImmutableSnapshotsAndAdoptsFrozenPrefixes()

@@ -149,8 +149,6 @@ public sealed class PersistentLongMap<TValue> : IReadOnlyDictionary<long, TValue
     {
         ArgumentNullException.ThrowIfNull(other);
         ArgumentNullException.ThrowIfNull(combine);
-        if (ReferenceEquals(this, other))
-            return this;
         var result = Empty;
         foreach (var (key, left) in this)
         {

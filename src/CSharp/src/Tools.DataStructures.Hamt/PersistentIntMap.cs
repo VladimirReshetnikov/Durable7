@@ -150,8 +150,6 @@ public sealed class PersistentIntMap<TValue> : IReadOnlyDictionary<int, TValue>
     {
         ArgumentNullException.ThrowIfNull(other);
         ArgumentNullException.ThrowIfNull(combine);
-        if (ReferenceEquals(this, other))
-            return this;
         var result = Empty;
         foreach (var (key, left) in this)
         {

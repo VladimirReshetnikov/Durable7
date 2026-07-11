@@ -674,7 +674,7 @@ public sealed record MerkleVerificationBudget
 
     /// <summary>Initializes a verification budget.</summary>
     /// <param name="maxBlockCount">The maximum number of distinct blocks that may be decoded.</param>
-    /// <param name="maxTotalByteCount">The maximum cumulative serialized byte count.</param>
+    /// <param name="maxTotalByteCount">The maximum cumulative proof-query and serialized-block byte count.</param>
     /// <param name="maxBlockByteCount">The maximum serialized size of one block.</param>
     /// <param name="maxDepth">The maximum root-to-leaf reference depth.</param>
     /// <param name="maxEntryCount">The maximum cumulative decoded entry count.</param>
@@ -686,6 +686,33 @@ public sealed record MerkleVerificationBudget
         int maxDepth,
         long maxEntryCount,
         int maxChildReferencesPerBlock)
+        : this(
+            maxBlockCount,
+            maxTotalByteCount,
+            maxBlockByteCount,
+            maxDepth,
+            maxEntryCount,
+            maxChildReferencesPerBlock,
+            maxProofQueryByteCount: maxBlockByteCount)
+    {
+    }
+
+    /// <summary>Initializes a verification budget with an explicit proof-query byte limit.</summary>
+    /// <param name="maxBlockCount">The maximum number of distinct blocks that may be decoded.</param>
+    /// <param name="maxTotalByteCount">The maximum cumulative query and serialized-block byte count.</param>
+    /// <param name="maxBlockByteCount">The maximum serialized size of one block.</param>
+    /// <param name="maxDepth">The maximum root-to-leaf reference depth.</param>
+    /// <param name="maxEntryCount">The maximum cumulative decoded entry count.</param>
+    /// <param name="maxChildReferencesPerBlock">The maximum child-reference count in one block.</param>
+    /// <param name="maxProofQueryByteCount">The maximum canonical query-descriptor byte count in one proof.</param>
+    public MerkleVerificationBudget(
+        int maxBlockCount,
+        long maxTotalByteCount,
+        int maxBlockByteCount,
+        int maxDepth,
+        long maxEntryCount,
+        int maxChildReferencesPerBlock,
+        int maxProofQueryByteCount)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBlockCount);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxTotalByteCount);
@@ -693,8 +720,11 @@ public sealed record MerkleVerificationBudget
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxDepth);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxEntryCount);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxChildReferencesPerBlock);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxProofQueryByteCount);
         if (maxBlockByteCount > maxTotalByteCount)
             throw new ArgumentException("The per-block byte limit must not exceed the total byte limit.", nameof(maxBlockByteCount));
+        if (maxProofQueryByteCount > maxTotalByteCount)
+            throw new ArgumentException("The proof-query byte limit must not exceed the total byte limit.", nameof(maxProofQueryByteCount));
 
         MaxBlockCount = maxBlockCount;
         MaxTotalByteCount = maxTotalByteCount;
@@ -702,12 +732,13 @@ public sealed record MerkleVerificationBudget
         MaxDepth = maxDepth;
         MaxEntryCount = maxEntryCount;
         MaxChildReferencesPerBlock = maxChildReferencesPerBlock;
+        MaxProofQueryByteCount = maxProofQueryByteCount;
     }
 
     /// <summary>Gets the maximum number of distinct blocks that may be decoded.</summary>
     public int MaxBlockCount { get; }
 
-    /// <summary>Gets the maximum cumulative serialized byte count.</summary>
+    /// <summary>Gets the maximum cumulative proof-query and serialized-block byte count.</summary>
     public long MaxTotalByteCount { get; }
 
     /// <summary>Gets the maximum serialized size of one block.</summary>
@@ -721,6 +752,9 @@ public sealed record MerkleVerificationBudget
 
     /// <summary>Gets the maximum child-reference count in one block.</summary>
     public int MaxChildReferencesPerBlock { get; }
+
+    /// <summary>Gets the maximum canonical query-descriptor byte count in one proof.</summary>
+    public int MaxProofQueryByteCount { get; }
 }
 
 /// <summary>Represents presence or absence of a value in one side of a three-way merge.</summary>

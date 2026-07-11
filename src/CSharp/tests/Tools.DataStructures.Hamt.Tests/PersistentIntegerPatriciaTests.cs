@@ -103,6 +103,34 @@ public sealed class PersistentIntegerPatriciaTests
         Assert.Equal(new[] { 1 }, left.Except(right).Keys);
     }
 
+    /// <summary>Verifies a self-intersection still invokes a supplied non-idempotent combiner.</summary>
+    [Fact]
+    public void CombiningIntersection_WithSameMapCombinesValuesAtBothWidths()
+    {
+        var ints = PersistentIntMap<int>.CreateRange(
+            new[] { KeyValuePair.Create(-1, 10), KeyValuePair.Create(2, 20) });
+        var longs = PersistentLongMap<long>.CreateRange(
+            new[] { KeyValuePair.Create(-1L, 100L), KeyValuePair.Create(2L, 200L) });
+
+        var intCalls = 0;
+        var combinedInts = ints.Intersect(ints, (key, left, right) =>
+        {
+            intCalls++;
+            return key + left + right;
+        });
+        var longCalls = 0;
+        var combinedLongs = longs.Intersect(longs, (key, left, right) =>
+        {
+            longCalls++;
+            return key + left + right;
+        });
+
+        Assert.Equal(ints.Count, intCalls);
+        Assert.Equal(new[] { (-1, 19), (2, 42) }, combinedInts.Select(pair => (pair.Key, pair.Value)));
+        Assert.Equal(longs.Count, longCalls);
+        Assert.Equal(new[] { (-1L, 199L), (2L, 402L) }, combinedLongs.Select(pair => (pair.Key, pair.Value)));
+    }
+
     /// <summary>Verifies both set widths implement persistent algebra and IReadOnlySet relations.</summary>
     [Fact]
     public void Sets_ProvideOrderedPersistentAlgebra()

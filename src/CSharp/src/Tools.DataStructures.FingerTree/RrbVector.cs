@@ -151,6 +151,8 @@ public sealed class RrbVector<T> : IReadOnlyList<T>
     {
         ArgumentOutOfRangeException.ThrowIfNegative(index);
         ArgumentOutOfRangeException.ThrowIfNegative(count);
+        if (index > Count)
+            throw new ArgumentOutOfRangeException(nameof(index));
         if (index > Count - count)
             throw new ArgumentOutOfRangeException(nameof(count));
         if (count == 0)
