@@ -17,6 +17,8 @@ Current public families:
   algebra/diff result types, validation statistics, and policy/invariant errors;
 - `BrodalOkasakiHeap<T>`, `BrodalMinimumView<T>`, ordering policy/comparer types,
   validation statistics, and meld/invariant errors;
+- `PrioritySearchQueue<K, P, V>`, `PrioritySearchEntry<K, P, V>`, add/remove/minimum result
+  handles, borrowing iterators, validation statistics, and range/invariant errors;
 - `FingerTree<T, P>` over `MeasurePolicy<T>`;
 - built-in policies `SizeMeasure`, `SumMeasure<T>`, `MaxMeasure`, `MinMeasure`, `KeyMeasure<T>`,
   `ProductMeasure<T, PFirst, PSecond>` with `MeasurePair<TFirst, TSecond>`, and
@@ -76,6 +78,36 @@ skew-forest rank rules, parent/child order, logical count, maximum rank, and max
 `shared_tree_count` and `shares_root_with` are read-only identity diagnostics for persistence
 audits. See [Brodal-Okasaki heap](brodal-okasaki-heap.md) for the representation and validation
 contract in one place.
+
+## Priority-search queue
+
+`PrioritySearchQueue<K, P, V>` is an immutable AVL ordered map with one entry per key-policy
+equivalence class. Each node caches count, height, and the minimum-priority entry in its complete
+subtree. Keyed lookup, insertion, replacement, removal, and winner deletion are O(log n); global
+minimum is O(1). Equal priorities break by retained key order, so the winner is deterministic.
+
+The first concrete key representative is permanent for the life of an equivalence class. Bulk
+construction and `set_item` replace its priority and payload last-wins. `set_item` reuses the exact
+root only when the priority policy reports equality, ordinary `P: PartialEq` also reports equality,
+and `V: PartialEq` reports equal payloads. Those two equality bounds occur only on `set_item`;
+bulk last-wins construction, `try_add`, reads, iteration, removal, minimum deletion, validation,
+and diagnostics impose neither equality nor `Clone` bounds.
+
+`PrioritySearchEntry<K, P, V>` owns `Arc` handles for its three components. Borrowed accessors avoid
+copies, while component-handle accessors and the owned remove/minimum results remain usable after
+the source queue is dropped. This makes `Option` components explicit: outer `Option<Entry>` means
+presence or absence, independently of `None` stored inside the key, priority, or payload.
+
+`enumerate_at_most` eagerly rejects an inverted key range with `PrioritySearchRangeError`, then
+returns a lazy borrowing iterator. Bounds are inclusive, output is in key order, and a subtree is
+pruned when its cached winner exceeds the inclusive priority threshold. The traversal uses an
+explicit stack and requires no component cloning. Its lifetime deliberately borrows the queue and
+three query values instead of cloning generic bounds.
+
+`validate_structure` explicitly audits strict key bounds, AVL balance, cached count/height, and
+winner-handle identity at every node. `shared_node_count`, `shares_root_with`, and
+`shares_node_for_key` provide read-only persistence diagnostics. See
+[Priority-search queue](priority-search-queue.md) for the complete operation and evidence map.
 
 ## DABA Lite FIFO-window aggregation
 

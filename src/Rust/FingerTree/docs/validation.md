@@ -43,6 +43,11 @@ they cover:
   representative retention; custom-policy identity and canonical-natural interoperability;
   root/off-path sharing; `Option` and non-`Clone` elements; comparison ceilings through 65,536
   elements; and concurrent immutable readers;
+- winner-cached PSQ replacement semantics, first-key representatives, custom comparator policies,
+  `Option` and non-`Clone` components, every AVL rotation/deletion path, 50,000 ascending inserts,
+  a 20,000-operation retained `BTreeMap` model, exact range-pruning comparison equations, inclusive
+  range/threshold results, no-op/root/far-subtree sharing, priority-then-key tie deletion, and
+  concurrent immutable readers;
 - general measured tree cached-measure validation, subtree-sharing splits, randomized prefix-measure locate checks,
   key lower/upper-bound splits, product-measure component splits, cumulative-weight selection, and min/max
   extraction helpers;

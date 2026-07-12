@@ -15,6 +15,9 @@ remaining persistent-family lazy-spine asymptotic parity boundary stays explicit
 - [Brodal-Okasaki heap](brodal-okasaki-heap.md) records the direct bootstrapped skew-binomial
   representation, ordering-policy identity, ownership/result shapes, complexity, diagnostics, and
   adversarial validation evidence.
+- [Priority-search queue](priority-search-queue.md) records the winner-cached AVL representation,
+  first-key/last-value semantics, exact no-ops, borrowed pruning iterator, ownership/result shapes,
+  and validation evidence.
 - [API notes](api-notes.md) describe `PersistentDeque<T>`, `ReversibleDeque<T>`,
   `DabaLite<T, M>`, `DabaMonoid<T>`, `RrbVector<T>`, `CanonicalSortedSet<T>`,
   `ZipTreeRankPolicy<T>`, `FingerTree<T, P>`, `MeasurePolicy<T>`,
@@ -25,8 +28,8 @@ remaining persistent-family lazy-spine asymptotic parity boundary stays explicit
   and coverage map for the checkpoint behavior.
 - [Tests README](../tests/README.md) maps unit coverage for deque operations, reversible orientation,
   DABA Lite state-machine and failure atomicity, RRB representation invariants, canonical zip-tree
-  policy/topology/persistence, Brodal heaps, measured splits, sorted facades, priority queues,
-  intervals, ropes, measured ropes, and text helpers.
+  policy/topology/persistence, Brodal heaps, priority-search queues, measured splits, sorted facades,
+  measured priority queues, intervals, ropes, measured ropes, and text helpers.
 
 ## Related Repository Docs
 

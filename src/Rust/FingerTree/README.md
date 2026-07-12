@@ -14,6 +14,8 @@ family. It exposes Rust-native names for the same public families:
 - `CanonicalSortedSet<T>` over a retained `ZipTreeRankPolicy<T>`;
 - `BrodalOkasakiHeap<T>` over a retained `OrderPolicy<T>`, with owned minimum views and
   structural validation statistics;
+- `PrioritySearchQueue<K, P, V>` and its owned entry/result handles over retained key and priority
+  policies;
 - `FingerTree<T, P>` over a `MeasurePolicy<T>`, including built-in size, sum, min/max, key,
   order-statistic, and product-measure policies;
 - `ReversibleDeque<T>`;
@@ -58,6 +60,12 @@ O(log n) work. Trees and values use `Arc`, so persistent operations and owned mi
 require `T: Clone`. Canonical natural-order policies interoperate across construction; custom heaps
 may meld only when they retain clones of the same `OrderPolicy<T>` identity. Full validation decodes
 every fused boundary and audits ranks, heap order, count, and depth.
+`PrioritySearchQueue<K, P, V>` is a separate persistent winner-cached AVL map. It retains the first
+concrete representative of each key-order equivalence class and replaces priority/payload last;
+ties select the retained key that comes first under the key policy. Every node caches its subtree
+winner for O(1) global minimum and priority-threshold pruning. `Arc`-backed entry components make
+reads, removal, and owned result handles available without `Clone` bounds; only exact no-op
+detection requires ordinary priority and payload equality.
 `ReversibleDeque<T>` uses O(1) mirrored tree views over that shared deque, including tree-based
 mixed-orientation concat, split, and endpoint operations after reverse. Its split/pop results retain the
 reversible facade, and borrowed or owned iteration follows logical orientation. `Rope<T>` now uses chunked
@@ -80,8 +88,9 @@ order-statistic measured tree storage with cached count plus last-key measures. 
 not claim the C#/C++ lazy finger-tree asymptotic profile overall; derived algorithms remain
 semantic-checkpoint implementations until the lazy measured spine is ported through the whole family.
 
-See the [Brodal-Okasaki heap notes](docs/brodal-okasaki-heap.md),
-[API notes](docs/api-notes.md), [validation](docs/validation.md), and the
+See the [Brodal-Okasaki heap notes](docs/brodal-okasaki-heap.md), the
+[priority-search queue notes](docs/priority-search-queue.md), [API notes](docs/api-notes.md),
+[validation](docs/validation.md), and the
 [test map](tests/README.md) for the local contract, checkpoint boundary, and evidence entry points.
 
 Validate from `src/Rust`:

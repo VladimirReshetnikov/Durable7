@@ -19,6 +19,11 @@ Coverage groups:
   identity and canonical-natural interoperability; concrete representatives; root/off-path
   sharing; `Option` and non-`Clone` values; comparison ceilings through 65,536 elements; and
   concurrent readers;
+- `priority_search_queue.rs`: exact comparer/equality replacement semantics, first concrete key
+  representatives, custom policies, `Option` and non-`Clone` components, AVL rotation/deletion
+  rebalancing, 50,000 ascending inserts, a 20,000-operation retained `BTreeMap` model, audited
+  range-pruning comparison equations, inclusive threshold order, root/far-subtree sharing,
+  deterministic priority-then-key ties, and concurrent readers;
 - `daba_lite.rs`: the six-cursor DABA Lite state machine, noncommutative/exhaustive and 100,000-step
   FIFO models, all fixup phases and callback ceilings, 63/64/65 and 127/128/129 chunk boundaries,
   exact callback-panic atomicity, provisional-link rollback, callback-free invariants, deterministic

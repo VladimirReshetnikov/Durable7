@@ -9,6 +9,7 @@ mod interval_tree;
 mod measured;
 mod ordering;
 mod priority_queue;
+mod priority_search_queue;
 mod rope;
 mod rrb_vector;
 mod sorted;
@@ -38,6 +39,11 @@ pub use measured::{
 };
 pub use ordering::{NaturalOrderComparer, OrderComparer, OrderPolicy};
 pub use priority_queue::{PriorityEntry, PriorityQueue};
+pub use priority_search_queue::{
+    PrioritySearchAddResult, PrioritySearchEntry, PrioritySearchInvariantError, PrioritySearchIter,
+    PrioritySearchMinimumView, PrioritySearchQueue, PrioritySearchQueueStatistics,
+    PrioritySearchRangeError, PrioritySearchRangeIter, PrioritySearchRemoveResult,
+};
 pub use rope::{
     LineColumn, MeasuredRope, MeasuredRopeBuilder, MeasuredRopeLocate, MeasuredRopeSplit,
     NewlineMeasure, Rope, RopeBuilder, TextRope,
