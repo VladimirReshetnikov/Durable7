@@ -6,6 +6,23 @@ namespace Tools.DataStructures.Hamt.Tests;
 /// <summary>Contract, snapshot, and contention coverage for <see cref="ConcurrentHashTrie{TKey,TValue}"/>.</summary>
 public sealed class ConcurrentHashTrieTests
 {
+    /// <summary>Verifies same-reference values bypass user equality and publication.</summary>
+    [Fact]
+    public void SameReferenceUpdates_BypassValueEqualityAndKeepGeneration()
+    {
+        var trie = new ConcurrentHashTrie<string, EqualityCountingValue>();
+        var value = new EqualityCountingValue();
+        trie.SetItem("key", value);
+        var generation = trie.Generation;
+
+        trie.SetItem("key", value);
+        Assert.Same(value, trie.AddOrUpdate("key", _ => value, (_, _) => value));
+        Assert.True(trie.TryUpdate("key", value, value));
+
+        Assert.Equal(generation, trie.Generation);
+        Assert.Equal(0, value.EqualityCalls);
+    }
+
     /// <summary>Verifies ordinary mutable-map operations and no-op generation behavior.</summary>
     [Fact]
     public void BasicOperations_AreLinearizableAndGenerationStamped()
@@ -26,6 +43,19 @@ public sealed class ConcurrentHashTrieTests
         Assert.Equal(2, removed);
         Assert.False(trie.TryRemove("alpha", out _));
         Assert.True(trie.IsEmpty);
+    }
+
+    private sealed class EqualityCountingValue
+    {
+        public int EqualityCalls { get; private set; }
+
+        public override bool Equals(object? obj)
+        {
+            EqualityCalls++;
+            return ReferenceEquals(this, obj);
+        }
+
+        public override int GetHashCode() => 0;
     }
 
     /// <summary>Verifies snapshots and enumerators remain stable after later publications.</summary>

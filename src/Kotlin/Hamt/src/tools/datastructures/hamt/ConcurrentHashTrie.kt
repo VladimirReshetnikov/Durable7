@@ -34,7 +34,7 @@ public class ConcurrentHashTrie<K, V>(
 
     public fun set(key: K, value: V) {
         mutate(key) { exists, current ->
-            if (exists && current == value) Decision.none() else Decision.set(value)
+            if (exists && valuesEqual(current, value)) Decision.none() else Decision.set(value)
         }
     }
 
@@ -54,7 +54,7 @@ public class ConcurrentHashTrie<K, V>(
         val result = mutate(key) { exists, current ->
             @Suppress("UNCHECKED_CAST")
             val next = if (exists) update(key, current as V) else add(key)
-            if (exists && current == next) Decision.returning(current) else Decision.set(next)
+            if (exists && valuesEqual(current, next)) Decision.returning(current) else Decision.set(next)
         }
         @Suppress("UNCHECKED_CAST")
         return result.value as V
@@ -104,6 +104,8 @@ public class ConcurrentHashTrie<K, V>(
     }
 
     override fun iterator(): Iterator<HamtEntry<K, V>> = snapshot().iterator()
+
+    private fun valuesEqual(left: V?, right: V?): Boolean = left === right || left == right
 
     @Suppress("UNCHECKED_CAST")
     private fun mutate(

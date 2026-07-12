@@ -147,8 +147,9 @@ mutated afterward.
 `ConcurrentHashTrie<TKey, TValue>` implements `IReadOnlyDictionary<TKey, TValue>` while exposing a
 mutable, thread-safe update surface:
 
-- `SetItem` and the indexer setter atomically add or replace; equal-value no-ops publish no generation,
-  and replacements retain the first equivalent stored key object.
+- `SetItem` and the indexer setter atomically add or replace; equal-value no-ops publish no
+  generation, same-reference values bypass user equality, and replacements retain the first
+  equivalent stored key object. `AddOrUpdate` and `TryUpdate` apply the same reference-first rule.
 - `TryAdd`, `TryUpdate`, and `TryRemove` are single-key conditional atomic operations.
 - `GetOrAdd` and `AddOrUpdate` use retryable factories. A factory may run more than once when a CAS
   loses contention, matching the repeatability requirement of `ConcurrentDictionary` factories.

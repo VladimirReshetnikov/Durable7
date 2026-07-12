@@ -67,8 +67,9 @@ are promoted through their parents after removal, preserving the invariant that 
 tomb and that live lookup depth does not grow with historical churn. Later writers copy
 old-generation child indirections only along paths they modify. `Snapshot.toPersistentHashMap()`
 performs the explicit O(n) conversion into canonical CHAMP form. `getOrPut` and `compute` callbacks
-can run repeatedly after a lost GCAS and must therefore be repeatable. Progress is lock-free, not
-wait-free.
+can run repeatedly after a lost GCAS and must therefore be repeatable. `set` and `compute` treat an
+identical value reference as an immediate no-op before invoking user equality. Progress is
+lock-free, not wait-free.
 
 ## Integer Patricia Family
 

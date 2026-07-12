@@ -27,8 +27,9 @@ rehashing, reference-pruned shared ancestry, all four structural algebra truth t
 set models.
 It also covers the mutable Ctrie's node-local GCAS and root/main RDCSS helping, a deterministic
 snapshot-versus-committed-writer schedule, deep and equal-hash tomb contraction, lazy renewal after
-snapshot, contended same-key updates, explicit conversion back to persistent CHAMP, and a 250-round
-short-history linearizability oracle under ordinary, shared-prefix, and all-equal-hash policies.
+snapshot, same-reference no-op updates without equality callbacks, contended same-key updates,
+explicit conversion back to persistent CHAMP, and a 250-round short-history linearizability oracle
+under ordinary, shared-prefix, and all-equal-hash policies.
 
 Merkle search-tree coverage includes:
 

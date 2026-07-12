@@ -267,6 +267,31 @@ private fun ctrieSnapshotsAndAtomicUpdates() {
     checkEquals(2, trie["alpha"], "live Ctrie advances")
 }
 
+private class EqualityCountingValue {
+    var equalityCalls: Int = 0
+
+    override fun equals(other: Any?): Boolean {
+        equalityCalls++
+        return this === other
+    }
+
+    override fun hashCode(): Int = 0
+}
+
+private fun ctrieSameReferenceUpdatesBypassValueEquality() {
+    val trie = ConcurrentHashTrie<String, EqualityCountingValue>()
+    val value = EqualityCountingValue()
+    trie.set("key", value)
+    val generation = trie.generation
+
+    trie.set("key", value)
+    check(trie.compute("key", { value }, { _, _ -> value }) === value,
+        "same-reference compute returns the stored representative")
+
+    checkEquals(generation, trie.generation, "same-reference Ctrie updates do not publish")
+    checkEquals(0, value.equalityCalls, "same-reference Ctrie updates bypass value equality")
+}
+
 private fun ctrieContentionAndGenerationRenewal() {
     val trie = ConcurrentHashTrie<Int, Int>()
     runConcurrent("ctrie-unique-add") { worker ->
@@ -747,6 +772,7 @@ public fun main() {
         "crossPolicyRelationsUseReceiverPolicy" to ::crossPolicyRelationsUseReceiverPolicy,
         "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,
         "ctrieSnapshotsAndAtomicUpdates" to ::ctrieSnapshotsAndAtomicUpdates,
+        "ctrieSameReferenceUpdatesBypassValueEquality" to ::ctrieSameReferenceUpdatesBypassValueEquality,
         "ctrieContentionAndGenerationRenewal" to ::ctrieContentionAndGenerationRenewal,
         "ctrieCollisionNodesRemainStable" to ::ctrieCollisionNodesRemainStable,
         "ctrieSnapshotDoesNotLoseCommittedWriter" to ::ctrieSnapshotDoesNotLoseCommittedWriter,

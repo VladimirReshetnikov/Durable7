@@ -110,7 +110,7 @@ public sealed class ConcurrentHashTrie<TKey, TValue> : IReadOnlyDictionary<TKey,
 
     /// <summary>Adds or replaces a key/value pair atomically.</summary>
     public void SetItem(TKey key, TValue value) =>
-        Mutate(key, (exists, current) => exists && EqualityComparer<TValue>.Default.Equals(current, value)
+        Mutate(key, (exists, current) => exists && ValuesEqual(current, value)
             ? Decision.None
             : Decision.Set(value));
 
@@ -136,11 +136,10 @@ public sealed class ConcurrentHashTrie<TKey, TValue> : IReadOnlyDictionary<TKey,
     {
         ArgumentNullException.ThrowIfNull(addFactory);
         ArgumentNullException.ThrowIfNull(updateFactory);
-        var values = EqualityComparer<TValue>.Default;
         var result = Mutate(key, (exists, current) =>
         {
             var value = exists ? updateFactory(key, current!) : addFactory(key);
-            return exists && values.Equals(current, value) ? Decision.Return(current) : Decision.Set(value);
+            return exists && ValuesEqual(current, value) ? Decision.Return(current) : Decision.Set(value);
         });
         return result.Value!;
     }
@@ -148,16 +147,15 @@ public sealed class ConcurrentHashTrie<TKey, TValue> : IReadOnlyDictionary<TKey,
     /// <summary>Replaces a value only when it equals a comparison value.</summary>
     public bool TryUpdate(TKey key, TValue newValue, TValue comparisonValue)
     {
-        var values = EqualityComparer<TValue>.Default;
         var matched = false;
         var result = Mutate(key, (exists, current) =>
         {
-            matched = exists && values.Equals(current, comparisonValue);
+            matched = exists && ValuesEqual(current, comparisonValue);
             return matched
-                ? values.Equals(current, newValue) ? Decision.Return(current) : Decision.Set(newValue)
+                ? ValuesEqual(current, newValue) ? Decision.Return(current) : Decision.Set(newValue)
                 : Decision.None;
         });
-        return matched && (result.Changed || values.Equals(result.Value, newValue));
+        return matched && (result.Changed || ValuesEqual(result.Value, newValue));
     }
 
     /// <summary>Attempts to remove a key/value pair atomically.</summary>
@@ -617,6 +615,10 @@ public sealed class ConcurrentHashTrie<TKey, TValue> : IReadOnlyDictionary<TKey,
         Array.Copy(source, index + 1, result, index, source.Length - index - 1);
         return result;
     }
+
+    private static bool ValuesEqual(TValue? left, TValue? right) =>
+        (!typeof(TValue).IsValueType && ReferenceEquals(left, right)) ||
+        EqualityComparer<TValue>.Default.Equals(left!, right!);
 
     internal CtrieStatistics ValidateStructureForTesting()
     {

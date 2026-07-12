@@ -31,7 +31,8 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
 - `ConcurrentHashTrieTests.cs` covers linearizable mutation, generation stamps, stable O(1)
   snapshots/enumerators, deterministic root-RDCSS and GCAS-helping schedules, tomb contraction,
   collision-node re-splitting, stored-key retention, contended updates, concurrent snapshot
-  consistency, lazy generation renewal, and explicit snapshot-to-CHAMP conversion.
+  consistency, lazy generation renewal, same-reference value no-ops without equality callbacks,
+  and explicit snapshot-to-CHAMP conversion.
 - `ConcurrentHashTrieLinearizabilityTests.cs` records invocation/response intervals for 400 mixed
   five-operation histories and exhaustively checks all real-time-compatible serializations against a
   dictionary model under ordinary, shared-prefix, and all-equal-hash policies.
