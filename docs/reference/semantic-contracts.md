@@ -32,6 +32,7 @@ behavior change through sibling workspaces.
 | --- | --- |
 | Persistent value | An operation that looks like an update returns a new value or handle while preserving every retained old version. |
 | Structural sharing | Versions reuse immutable substructure where possible; no-op updates often preserve the same root or instance when the local API exposes that diagnostic. |
+| Reference-first equality | When two stored/incoming references are provably identical, implementations may accept equality without invoking user equality. A non-identical reference never proves semantic inequality. |
 | Policy preservation | Hash, equality, comparison, measure, allocator, ownership, and callback policies flow into derived versions unless a local API explicitly creates a new policy. |
 | Stable but unspecified order | Enumeration order is deterministic for unchanged structure versions, but callers must not treat the exact trie/tree traversal order as a sorted or insertion order unless the API says so. |
 | Measure | A monoidal summary cached on a finger-tree node, chunk, or facade element and used for split, locate, rank, priority, interval, rope, or text navigation. |
@@ -97,6 +98,9 @@ Shared obligations:
 - Bulk construction should document whether duplicate keys are last-wins or rejected.
 - Set algebra preserves the receiver's equality/hash policy unless the local API documents another
   policy source.
+- Equality, diff, no-op replacement, and structural algebra should prune reference-identical
+  roots/subtries/values before invoking semantic equality when the language can do so safely. This
+  is an optimization only: policy-defined equality remains authoritative for non-identical values.
 - Iteration order is trie order: stable for unchanged versions, not sorted, not insertion ordered, and
   not a serialization contract.
 - Diagnostic root-sharing APIs such as `shares_root_with` or debug root kind are test aids, not

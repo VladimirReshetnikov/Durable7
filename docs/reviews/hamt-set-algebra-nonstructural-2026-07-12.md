@@ -1,6 +1,6 @@
 # Issue: `PersistentHashSet<T>` Set Algebra Is Element-Wise, Not Structural
 
-- Status: Open issue — behavior confirmed against source; remediation is scheduled work, not yet done
+- Status: Resolved on 2026-07-12 — structural same-type algebra shipped across all six ports
 - Created (UTC): 2026-07-12T19:38:09Z
 - Repository HEAD: 02ebb40dd0f15a1a1f147cb1ad09320b52b4fd8d
 - Audience: Maintainers of the HAMT family and consumers doing set algebra over `PersistentHashSet<T>`
@@ -10,7 +10,8 @@
 
 ## Summary
 
-`PersistentHashSet<T>`'s set-algebra operations combine two collections **element by element**: they
+This document's original source observations are retained below as the pre-remediation record.
+`PersistentHashSet<T>`'s set-algebra operations formerly combined two collections **element by element**: they
 accept an `IEnumerable<T>`, re-hash and re-probe every element, and cannot exploit structural sharing
 between two set versions. Merging or intersecting two large sets that share ancestry therefore costs
 work proportional to the operand size (`O(m)` single-item operations, or a full probe-set
@@ -30,9 +31,30 @@ This document was surfaced while writing the
 where element-wise set algebra was one of two limitations of `PersistentHashSet<Guid>`; the gap is
 general to every `T` and is recorded here on its own.
 
-## Observed behavior
+## Resolution
 
-All four set-algebra methods on `PersistentHashSet<T>` take `IEnumerable<T>` and operate element-wise
+The scheduled Phase 2 work is complete in C#, Kotlin, Rust, C++, C, and Haskell:
+
+- every port now exposes same-type map/set union, intersection, difference, and symmetric difference;
+- compatible operands are combined by aligned CHAMP slots with root/subtrie reference pruning and
+  cached subtree cardinalities;
+- same-type set relations use the structural core, while iterable/range APIs remain available;
+- cross-policy behavior retains each port's receiver-policy contract or explicit compatibility gate;
+- union retains receiver key representatives and uses right values for unequal overlaps;
+- self/no-op cases preserve the receiver root or instance where the language surface exposes identity;
+- C's implementation is failure-atomic and balances callback ownership through exhaustive allocation
+  failpoints; and
+- shared-ancestry tests prove the structural path performs zero rehashing, with collision-heavy model
+  histories covering the complete truth tables.
+
+The shipped complexity is `O(divergence)` for reference-shared ancestry after pruned nodes and
+`O(n + m)` for independent compatible operands, with the documented equal-hash collision scan cost.
+The historical line references and analysis sections below describe the old implementation and
+should be read as provenance, not current-state instructions.
+
+## Historical observed behavior
+
+Before remediation, all four set-algebra methods on `PersistentHashSet<T>` took `IEnumerable<T>` and operated element-wise
 ([`PersistentHashSet.cs`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashSet.cs)):
 
 | Method | Lines | Strategy | Cost |
@@ -60,7 +82,7 @@ single-item updates," and `Intersect`/`SymmetricExcept` are documented as "Mater
 probe `HashSet<T>` — `O(m)` time and space." So the gap is a **documented capability limitation**,
 not a hidden regression.
 
-## Concrete impact
+## Historical impact
 
 Let `A` be a `PersistentHashSet<T>` of one million items, and let `B = A` after a handful of
 `Add`/`Remove` operations, so `B` shares nearly all of `A`'s node graph and differs from `A` in only a
@@ -82,7 +104,7 @@ align, versus the current `O(m)` re-hash-and-insert. The largest win, however, i
 version-vs-version case above, which is common in snapshot/undo, incremental-recompute, and
 change-tracking workloads.
 
-## Why this is a gap, not a defect
+## Historical classification
 
 - **Results are correct.** Comparer semantics, first-stored-instance retention, and no-op identity are
   all preserved; only the *cost* is higher than the structure allows.
@@ -91,9 +113,9 @@ change-tracking workloads.
 - **It is a missed optimization plus an API-shape limitation**, appropriate to schedule rather than
   hotfix.
 
-## Intra-repository inconsistency
+## Historical intra-repository inconsistency
 
-The repository already contains the better shape for a sibling family. `PersistentIntSet` exposes set
+The repository already contained the better shape for a sibling family. `PersistentIntSet` exposes set
 algebra that takes **another set of the same type** and delegates to the reference-pruned Patricia
 core ([`PersistentIntSet.cs:57`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentIntSet.cs),
 `:66`, `:75`):
@@ -113,7 +135,7 @@ So within one assembly, the integer-keyed persistent sets have structural set al
 operand, and the general hash-keyed persistent set does not — an avoidable inconsistency in the family
 surface.
 
-## Why the fix is well-supported by existing machinery
+## Why the fix was well-supported by existing machinery
 
 A structural combine on the HAMT is a node-layer feature, and the two pieces it needs already exist:
 
@@ -127,17 +149,17 @@ A structural combine on the HAMT is a node-layer feature, and the two pieces it 
    (`CreateBulkBuilder` / `ToImmutable`) is the same facility a node-layer combine would use to
    materialize any newly-built regions without per-item path allocation.
 
-What is missing is only the *combine* operation itself (produce the unioned/intersected/differenced
+What was missing was only the *combine* operation itself (produce the unioned/intersected/differenced
 node graph, reusing shared subtrees), and its surface on `PersistentHashSet<T>`.
 
-## Recommended remediation
+## Historical recommended remediation (completed)
 
-This is Phase 2 of the scheduled [proposal A2](../proposals/new-data-structures-2026-07-09.md), which
+This was Phase 2 of the scheduled [proposal A2](../proposals/new-data-structures-2026-07-09.md), which
 lays out the phasing explicitly:
 
 - Phase 1 — `MapEquals` + `Diff(other)` enumerator. **Shipped** (present on `PersistentHashMap` today).
-- **Phase 2 — structural `Union`/`Intersect`/`Except` between two maps/sets sharing a comparer. This
-  issue is exactly Phase 2.**
+- Phase 2 — structural `Union`/`Intersect`/`Except` between two maps/sets sharing a comparer.
+  **Shipped across all six ports.**
 - Phase 3 — three-way `Merge` with an explicit conflict matrix (deferred until a consumer exists).
 
 Concretely:
@@ -161,7 +183,7 @@ Concretely:
    cannot benefit from reference pruning. State both bounds rather than claiming `O(divergence)`
    universally.
 
-### Parity note
+### Historical parity note
 
 Per the [porting-and-semantic-parity guide](../guides/porting-and-semantic-parity.md), Phase 2 is
 node-layer work in each language port. Proposal A2 already flags this as the priciest Tier-A item and
@@ -169,7 +191,7 @@ notes the C port's reference-counted nodes need real design (a combine must not 
 spines). The 2026-07-11 review's backlog also records that the Rust and C++ HAMTs still lack the
 transient bulk builder the combine's materialization path would want — worth sequencing alongside.
 
-## Severity and classification
+## Historical severity and classification
 
 - **Type**: performance/capability gap + intra-family API inconsistency. Not a correctness defect.
 - **Severity**: Medium. It bounds a common workload (version-vs-version set algebra) at `O(m)` and
@@ -178,15 +200,18 @@ transient bulk builder the combine's materialization path would want — worth s
 - **Blast radius of the fix**: ~3 map members (combine) + ~4 set overloads per language, plus tests;
   reuses the shipped pruned-traversal and bulk-builder machinery.
 
-## How to confirm
+## How to verify the resolution
 
-- Read the four methods at [`PersistentHashSet.cs:210`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashSet.cs)–`290`
-  and note the `IEnumerable<T>` operand and element-wise strategy.
-- Contrast with [`PersistentIntSet.cs:57`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentIntSet.cs)–`79`
-  (same-type operand, structural core) and the `ReferenceEquals` short-circuits in
-  [`PatriciaMapCore.cs`](../../src/CSharp/src/Tools.DataStructures.Hamt/Internal/PatriciaMapCore.cs).
-- Confirm the map exposes only `MapEquals`/`Diff` (no structural combine) at
-  [`PersistentHashMap.cs:412`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashMap.cs), `:441`.
+- Inspect the same-type map and set overloads in
+  [`PersistentHashMap.cs`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashMap.cs) and
+  [`PersistentHashSet.cs`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashSet.cs).
+- Run the C# HAMT suite and its shared-ancestry structural-algebra tests documented in
+  [`src/CSharp/tests/Tools.DataStructures.Hamt.Tests/README.md`](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests/README.md).
+- Run the sibling HAMT suites. Their structural tests cover cached cardinalities, collision-heavy
+  truth tables, representative/bias rules, cross-policy behavior, and zero-rehash pruning; the C
+  suite additionally sweeps allocation failures.
+- Compare the current cross-language status and complexity bounds in the
+  [frontier structure catalog](../reference/frontier-structure-catalog.md#champ-canonicalization-upgrade-to-the-shipped-hamt).
 
 ## Relationship to other documents
 
@@ -199,5 +224,4 @@ transient bulk builder the combine's materialization path would want — worth s
   notes explain why the HAMT is topology-canonical but not reference-canonical, bounding what structural
   pruning can achieve for independently built operands.
 - [Cross-language implementation review (2026-07-11)](cross-language-implementation-review-2026-07-11.md)
-  — records the outstanding Rust/C++ transient bulk-builder parity that the combine's materialization
-  path interacts with.
+  — records the implementation state that preceded this remediation wave.

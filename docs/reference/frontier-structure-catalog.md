@@ -81,33 +81,38 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 
 ### CHAMP canonicalization (upgrade to the shipped HAMT)
 
-**C# status (2026-07-11): Implemented.** The managed HAMT uses separate data/node bitmaps, inline
+**C# status (2026-07-12): Implemented.** The managed HAMT uses separate data/node bitmaps, inline
 payload runs, deletion-time leaf promotion, canonical one-freeze bulk construction, lockstep
-reference-pruned `MapEquals`, and bitmap-aligned structural `Diff`. Its executable gate covers every
+reference-pruned `MapEquals`, bitmap-aligned structural `Diff`, and same-type structural map/set
+algebra and relations. Its executable gate covers every
 leaf/collision/branch transition, eager argument validation, stored-key representatives, randomized
 node invariants, independent-history topology, reference-pruning bounds, and dedicated benchmarks.
 
-**Kotlin status (2026-07-10): Implemented.** The JVM port now has the same split bitmap/inline
+**Kotlin status (2026-07-12): Implemented.** The JVM port now has the same split bitmap/inline
 payload representation and canonical deletion promotion, plus policy-compatible `mapEquals` and
-typed `diff`. Its executable suite checks independent insertion histories, CHAMP node invariants,
+typed `diff` and reference-pruned structural algebra. Its executable suite checks independent insertion histories, CHAMP node invariants,
 collisions, persistence, and concurrent readers.
 
-**Rust status (2026-07-10): Implemented.** Both persistent path copying and `BulkBuilder` freezing
+**Rust status (2026-07-12): Implemented.** Both persistent path copying and `BulkBuilder` freezing
 now produce split data/node maps with inline payload runs and canonical deletion promotion. The safe
-`Arc` implementation adds owned typed diff and representation-invariant coverage.
+`Arc` implementation adds owned typed diff, policy-identity-gated structural algebra, and
+representation-invariant coverage.
 
-**Haskell status (2026-07-10): Implemented.** `HashMap` now stores strict split data/node maps,
+**Haskell status (2026-07-12): Implemented.** `HashMap` now stores strict split data/node maps,
 inline `(hash,key,value)` payload runs, child-only subtrie runs, and deletion promotion. Its
-dependency-free API adds `mapEquals` and typed `MapDifference` values, with `validStructure`
+dependency-free API adds `mapEquals`, typed `MapDifference` values, cached-cardinality structural
+algebra, and positive-only GHC pointer pruning, with `validStructure`
 checking the CHAMP invariants. Native-port status follows below.
 
-**C++ status (2026-07-10): Implemented.** The header-first C++20 map and its move-only bulk builder
+**C++ status (2026-07-12): Implemented.** The header-first C++20 map and its move-only bulk builder
 now use split maps, compact inline payload vectors, child-only shared subtries, and canonical removal
-promotion. `map_equals` and owned typed `map_difference` results round out the map surface.
+promotion. `map_equals`, owned typed `map_difference`, cached counts, and policy-token-gated
+structural algebra round out the map surface.
 
-**C status (2026-07-10): Implemented.** The C17 core stores split maps, inline type-erased payloads,
+**C status (2026-07-12): Implemented.** The C17 core stores split maps, inline type-erased payloads,
 and child-only flexible-array runs while preserving retain/release policy balance and allocation-
-failure rollback. Visitor-based typed diff avoids imposing an allocator on callers. CHAMP is now
+failure rollback. Visitor-based typed diff avoids imposing an allocator on callers; two-set/map
+structural algebra is failure-atomic and reference-pruned. CHAMP is now
 implemented across all six repository languages.
 
 **What it is.** CHAMP (Compressed Hash-Array Mapped Prefix-tree; Steindorfer & Vinju, OOPSLA 2015)
