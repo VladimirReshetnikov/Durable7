@@ -8,6 +8,7 @@
 
 The public C API lives in `tools/data_structures/finger_tree/fingertree.h` and the focused
 `tools/data_structures/finger_tree/canonical_sorted_set.h`,
+`tools/data_structures/finger_tree/brodal_okasaki_heap.h`,
 `tools/data_structures/finger_tree/rrb_vector.h`, and
 `tools/data_structures/finger_tree/daba_lite.h` headers. For setup and handle-lifetime examples, start with the
 [usage guide](usage.md). The API uses opaque handles plus explicit policy callbacks rather than C++ templates:
@@ -57,6 +58,9 @@ Implemented in this checkpoint:
 - independent persistent canonical zip-zip sorted set with cryptographically keyed deterministic ranks,
   fallible callbacks and allocation, reproducible seeded topology, alias-safe updates, bulk construction,
   policy-gated algebra, receiver-policy relations, lazy content digests, and structural diagnostics;
+- independent persistent Brodal-Okasaki bootstrapped skew-binomial min-heap with fallible type-erased values,
+  constant worst-case insert/meld/minimum, logarithmic worst-case delete-minimum, retained representatives,
+  policy-identity-gated melding, and fused-representation diagnostics;
 - generic persistent minimum-priority queue with caller-supplied value and priority copy policies;
 - generic closed-interval tree facade, plus a signed 64-bit convenience facade, with insertion, removal,
   containment, first-overlap, and overlap count;
@@ -154,6 +158,54 @@ or deliberately colliding rank stream can produce O(n) height and operation cost
 O(n log n) for stable sorting followed by O(n) Cartesian construction. Algebra and cross-policy normalization use
 ordered visitation plus persistent point operations. A first uncached content hash and full validation are O(n),
 while a cached root hash is O(1). Explicit-stack implementation preserves stack safety at the O(n) worst case.
+
+## Brodal-Okasaki Heap Contract
+
+`ft_brodal_heap` is the persistent bootstrapped skew-binomial min-heap from Brodal and Okasaki's
+worst-case-optimal purely functional priority queue. One rank-zero global root stores the minimum.
+Its child list fuses the primitive skew-tree children with the root forest of the embedded heap, so
+the owning tree rank determines where the structural prefix ends. The rank-zero ambiguity is decoded
+in favor of the structural prefix, matching delete-minimum's split and the C#/Haskell semantic oracle.
+
+`ft_brodal_policy_config` supplies the value size, a required stable non-null value-type identity tag,
+an optional fallible copy/infallible destroy pair, a fallible comparator, callback context, and allocator.
+The policy is a reference-counted identity-bearing handle retained by every heap. Copying a policy handle
+preserves meld compatibility; recreating an equivalent config deliberately does not. The tag, callback
+contexts, allocator context, and referenced state remain caller-owned and must outlive all retaining handles.
+A destroy callback requires a copy callback. A failed copy leaves its destination ownership-free, while
+destroy and allocator hooks return normally.
+
+Values, trees, and forest cons cells are separately allocated immutable reference-counted objects. New
+versions share untouched trees and representatives. An empty-side meld shares the nonempty operand root;
+self-meld is not a no-op and preserves two logical occurrences, including DAG sharing of the same immutable
+subgraph. Every inserted representative remains present even when the comparator considers several values
+equivalent. Equal-priority drain order is intentionally unspecified. `try_get_minimum_ref` borrows the exact
+stored representative while its source version lives. `try_get_minimum_copy` and successful
+`try_delete_minimum` instead construct an independent owned copy; the latter returns the exact representative
+removed together with the remainder.
+
+Insert and nonempty meld compare only the global roots and, when the first two forest ranks match, perform one
+skew link. The audited ceiling is at most five value comparisons independent of heap size; minimum lookup and
+structural visitation perform none. Insert, minimum, and meld are O(1) worst-case. Delete-minimum scans,
+decomposes, consolidates, and restores O(log n) ranked trees, using O(log n) comparisons and transient native
+storage; the test ceiling is `32 * ceil(log2(n + 1)) + 8`. Array construction is O(n) by repeated worst-case
+O(1) insertion. These are worst-case, not amortized, claims.
+
+All persistent operations stage complete successors before publication and support exact result/operand
+aliasing. Allocation or callback failure leaves source handles and distinct outputs untouched. In
+`try_delete_minimum`, a failing representative copy also discards the staged remainder, so neither output is
+published. Disposal uses an intrusive nonallocating release worklist, and delete/visit/validation helpers use
+explicit arrays rather than recursive C calls. Concurrent reads, copies, updates into distinct handles, and
+disposals of independently owned handles are safe only when all reachable callbacks/allocator hooks are safe
+for that call pattern. Reentrancy through the same policy/heap handles and unsynchronized writes or disposal of
+one handle object are unsupported.
+
+`visit` exposes unspecified structural order. `visit_shape` additionally reports logical tree identity, rank,
+raw fused-child count, and depth, including repeated shared subgraphs after self-meld. `validate` checks the
+rank-zero global root, the fused primitive/embedded boundary of every ranked tree, skew-forest rank discipline,
+parent/child heap order, logical cardinality, and traversal depth. It returns count, root-forest length, maximum
+rank, and maximum depth. Structural invalidity is `FT_STATUS_OK` with `valid == false`; allocator and comparator
+failures remain explicit statuses and leave validation outputs unchanged.
 
 ## DABA Lite Contract
 

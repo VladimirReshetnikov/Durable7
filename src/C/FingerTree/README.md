@@ -26,6 +26,9 @@ included are:
 - `ft_canonical_sorted_set`, a type-erased persistent canonical zip-zip sorted set with cryptographically keyed
   deterministic ranks, reproducible seeded topology, fallible callbacks, policy-gated algebra, semantic
   cross-policy relations, concurrent lazy content digests, and structural-sharing diagnostics;
+- `ft_brodal_heap`, a type-erased persistent Brodal-Okasaki bootstrapped skew-binomial min-heap with
+  worst-case O(1) insert/meld/minimum, worst-case O(log n) delete-minimum, fallible policy callbacks,
+  comparer-identity-gated melding, and a full fused-representation validator;
 - `ft_priority_queue`, a generic persistent minimum-priority queue with FIFO tie-breaking for equal priorities;
 - `ft_interval_tree`, a generic closed-interval tree facade over caller-supplied endpoint policies;
 - `ft_interval_tree_i64`, a convenience closed-interval facade for signed 64-bit endpoints;
@@ -69,9 +72,12 @@ validation, benchmark entry points, warning policy, and generated-output locatio
 - `include/tools/data_structures/finger_tree/fingertree.h` contains the public C API.
 - `include/tools/data_structures/finger_tree/canonical_sorted_set.h` contains the independent canonical zip-zip
   sorted-set and rank-policy API.
+- `include/tools/data_structures/finger_tree/brodal_okasaki_heap.h` contains the independent persistent
+  Brodal-Okasaki heap and policy API.
 - `include/tools/data_structures/finger_tree/rrb_vector.h` contains the separate RRB vector API.
 - `include/tools/data_structures/finger_tree/daba_lite.h` contains the separate mutable DABA Lite API.
 - `src/fingertree.c` contains the measured-tree implementation and its wrappers;
+  `src/brodal_okasaki_heap.c` contains the fused bootstrapped skew-binomial heap;
   `src/canonical_sorted_set.c` contains the immutable zip-zip core and cryptographic policy implementation;
   `src/rrb_vector.c` contains the independent RRB core and builder; and `src/daba_lite.c` contains
   the independent sliding-window aggregator.

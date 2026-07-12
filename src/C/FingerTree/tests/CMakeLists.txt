@@ -81,3 +81,24 @@ target_include_directories(
 fingertree_c_configure_target(canonical_sorted_set_c_tests)
 
 tds_add_headless_test(NAME fingertree_c.canonical_sorted_set TARGET canonical_sorted_set_c_tests)
+
+add_executable(
+    brodal_okasaki_heap_c_tests
+    brodal_okasaki_heap_tests.c
+)
+
+target_link_libraries(
+    brodal_okasaki_heap_c_tests
+    PRIVATE
+        tools::data_structures::finger_tree_c
+)
+
+target_include_directories(
+    brodal_okasaki_heap_c_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+fingertree_c_configure_target(brodal_okasaki_heap_c_tests)
+
+tds_add_headless_test(NAME fingertree_c.brodal_okasaki_heap TARGET brodal_okasaki_heap_c_tests)

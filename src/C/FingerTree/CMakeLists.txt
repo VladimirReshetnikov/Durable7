@@ -19,6 +19,7 @@ add_library(tools::data_structures::finger_tree_c ALIAS tools_data_structures_fi
 target_sources(
     tools_data_structures_finger_tree_c
     PRIVATE
+        src/brodal_okasaki_heap.c
         src/canonical_sorted_set.c
         src/daba_lite.c
         src/fingertree.c

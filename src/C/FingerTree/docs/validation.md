@@ -15,13 +15,13 @@ with the [API notes](api-notes.md) and [usage guide](usage.md).
 The workspace uses CMake presets. The `msvc-*` presets use Visual Studio's bundled Ninja by absolute path;
 the `ninja-*` presets use `cmake` and `ninja` from `PATH` for host-agnostic validation. `CMakeLists.txt` builds the
 `tools_data_structures_finger_tree_c` static library from `src/fingertree.c`,
-`src/canonical_sorted_set.c`, `src/rrb_vector.c`, and `src/daba_lite.c`,
+`src/brodal_okasaki_heap.c`, `src/canonical_sorted_set.c`, `src/rrb_vector.c`, and `src/daba_lite.c`,
 with these options enabled by default:
 
 - `FINGERTREE_C_BUILD_TESTS`: builds `tests/fingertree_c_tests`,
-  `tests/canonical_sorted_set_c_tests`, `tests/rrb_vector_c_tests`, and `tests/daba_lite_c_tests`,
-  registering `fingertree_c.core`, `fingertree_c.canonical_sorted_set`, `fingertree_c.rrb_vector`,
-  and `fingertree_c.daba_lite`.
+  `tests/brodal_okasaki_heap_c_tests`, `tests/canonical_sorted_set_c_tests`, `tests/rrb_vector_c_tests`, and
+  `tests/daba_lite_c_tests`, registering `fingertree_c.core`, `fingertree_c.brodal_okasaki_heap`,
+  `fingertree_c.canonical_sorted_set`, `fingertree_c.rrb_vector`, and `fingertree_c.daba_lite`.
 - `FINGERTREE_C_BUILD_SAMPLES`: builds `samples/fingertree_c_showcase` and
   `samples/fingertree_c_snapshots`, both registered as CTest smoke tests.
 - `FINGERTREE_C_BUILD_BENCHMARKS`: builds `benchmarks/fingertree_c_benchmarks`.
@@ -140,6 +140,25 @@ and clear with state/leak rollback assertions. Handle-move coverage verifies pop
 transfer, moved-from queries/destruction, continued destination use, and final destruction. The C callback policy is infallible by type; callbacks
 must return normally, while injected library allocation failure is fully status-tested.
 
+The independent `fingertree_c.brodal_okasaki_heap` executable covers:
+
+- 4,096-element ascending, descending, and comparer-equivalent heaps; fused primitive/embedded forest
+  boundaries; rank/count/depth statistics; representative preservation; empty-side root sharing; and self-meld
+  DAG multiplicity;
+- exact comparison guards: zero for minimum/visitation, at most five for insert and meld, and at most
+  `32 * ceil(log2(n + 1)) + 8` for delete-minimum;
+- a 10,000-operation insert/meld/delete-minimum model with retained snapshots, repeated invariant validation,
+  and exact minimum representative removal;
+- every observed allocator and comparator position for insert, meld, delete-minimum, and array construction;
+  every bulk copy position; alias-failure rollback; representative-copy rollback in try-delete; validator/visitor
+  allocation failure; and exact copy/destroy/allocation lifetime accounting; and
+- concurrent copy/minimum/validate/dispose operations over independently held immutable handles.
+
+The tests distinguish logical occurrences from unique nodes: self-meld may revisit an immutable shared subtree,
+but logical count and representative multiplicity still double. The policy/tag/callback contexts remain
+caller-owned, callback reentrancy through in-flight handles is unsupported, and concurrent distinct-handle use
+requires thread-safe hooks.
+
 The independent `fingertree_c.canonical_sorted_set` executable covers:
 
 - exact SHA-256/HMAC-based `ZZT2` rank vectors, unsigned secondary ordering, random-policy hidden-key
@@ -205,8 +224,9 @@ $env:UBSAN_OPTIONS = "halt_on_error=1:print_stacktrace=1"
 ```
 
 Using `detect_leaks=1` on this platform terminates each executable before `main` with an unsupported-option
-diagnostic; that is an environment limitation, not a test failure. Canonical-set leak liveness is independently
-covered by deterministic allocator-failure sweeps and exact outstanding-allocation/copy-destroy accounting.
+diagnostic; that is an environment limitation, not a test failure. Canonical-set and Brodal-heap leak liveness is
+independently covered by deterministic allocator-failure sweeps and exact outstanding-allocation/copy-destroy
+accounting.
 
 ## Evidence To Record
 

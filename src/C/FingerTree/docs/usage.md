@@ -16,6 +16,7 @@ Include the public header:
 
 ```c
 #include <tools/data_structures/finger_tree/fingertree.h>
+#include <tools/data_structures/finger_tree/brodal_okasaki_heap.h>
 #include <tools/data_structures/finger_tree/canonical_sorted_set.h>
 #include <tools/data_structures/finger_tree/daba_lite.h>
 #include <tools/data_structures/finger_tree/rrb_vector.h>
@@ -219,6 +220,84 @@ and retain the source set version for the entire borrow. Content hashes and iden
 members are representation diagnostics, not serialized cryptographic identities. `validate` checks
 the full tree and reports structural failure with `valid == false`; ordinary callback, allocation,
 and crypto failures remain explicit `ft_status` values.
+
+## Brodal-Okasaki Heap
+
+Use `ft_brodal_heap` when persistent heap insertion, melding, and minimum lookup need worst-case O(1)
+rather than amortized bounds. The policy comparator defines priority; comparer-equivalent values remain
+distinct heap occurrences and preserve their stored representatives.
+
+```c
+static ft_status compare_int_priorities(
+    const void* left,
+    const void* right,
+    int* comparison,
+    void* context)
+{
+    int a = *(const int*)left;
+    int b = *(const int*)right;
+    (void)context;
+    *comparison = (a > b) - (a < b);
+    return FT_STATUS_OK;
+}
+
+static const unsigned char int_heap_type_identity = 0;
+ft_brodal_policy_config config;
+ft_brodal_policy_config_init(
+    &config,
+    sizeof(int),
+    &int_heap_type_identity,
+    compare_int_priorities,
+    NULL);
+
+ft_brodal_policy policy;
+ft_status status = ft_brodal_policy_create(&policy, &config);
+if (status != FT_STATUS_OK) {
+    return status;
+}
+
+ft_brodal_heap heap;
+status = ft_brodal_heap_init(&heap, &policy);
+if (status != FT_STATUS_OK) {
+    ft_brodal_policy_dispose(&policy);
+    return status;
+}
+ft_brodal_policy_dispose(&policy); /* the heap retained policy identity */
+
+int values[] = { 7, 2, 9, 2 };
+for (size_t index = 0; status == FT_STATUS_OK && index != 4; ++index) {
+    status = ft_brodal_heap_insert(&heap, &values[index], &heap);
+}
+
+bool removed = false;
+int minimum = 0;
+if (status == FT_STATUS_OK) {
+    status = ft_brodal_heap_try_delete_minimum(
+        &heap, &removed, &minimum, &heap);
+}
+/* removed is true and minimum is 2; the other 2 remains in the heap. */
+
+ft_brodal_heap_dispose(&heap);
+return status;
+```
+
+Meld requires exact policy identity. Initialize both heaps from the same policy handle or a copied
+handle; independently recreating the same config is intentionally incompatible. Melding an empty
+heap retains the other root without rebuilding it. Self-meld doubles logical multiplicity rather than
+returning a no-op.
+
+For nontrivial values, `try_get_minimum_ref` is the allocation-free borrowed form. Keep the source
+version alive for the entire borrow. `try_get_minimum_copy` and successful `try_delete_minimum`
+construct owned values in caller-provided uninitialized storage; invoke the configured destroy hook
+when finished. A failing copy publishes neither the removed value nor the staged remainder. All
+handle-producing operations support exact source/result aliasing and otherwise require an
+uninitialized or disposed destination.
+
+Copy, compare, and allocator callbacks may fail with any `ft_status`, which is propagated unchanged.
+Callbacks and allocator hooks must not reenter an operation in flight through the same handles. They
+must be thread-safe when independent immutable handles are used concurrently. `visit` is structural,
+not sorted; drain by repeated delete-minimum for priority order. `validate` checks the complete fused
+bootstrapped representation and returns rank/depth/forest statistics.
 
 ## DABA Lite Sliding Aggregate
 
@@ -577,6 +656,7 @@ including from a destroy callback during disposal, is unsupported.
 | O(1) logical reverse over a persistent sequence | `ft_reversible_deque` |
 | Unique sorted values | `ft_sorted_set` |
 | Canonical keyed topology, reproducible shape, or persistent set algebra | `ft_canonical_sorted_set` |
+| Worst-case O(1) persistent heap insert and meld | `ft_brodal_heap` |
 | Sorted values with duplicates | `ft_sorted_multiset` |
 | Sorted key/value lookup and rank access | `ft_sorted_map` |
 | Minimum-priority draining with stable equal priorities | `ft_priority_queue` |

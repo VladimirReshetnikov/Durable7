@@ -5,17 +5,19 @@
 - Audience: Maintainers validating the C FingerTree port
 - Scope: Native test executable and source organization under `src/C/FingerTree/tests`
 
-The C FingerTree workspace has four focused native test executables. `fingertree_c_tests` is
+The C FingerTree workspace has five focused native test executables. `fingertree_c_tests` is
 registered as `fingertree_c.core`; `rrb_vector_c_tests` is registered as
-`fingertree_c.rrb_vector`; `daba_lite_c_tests` is registered as `fingertree_c.daba_lite`; and
-`canonical_sorted_set_c_tests` is registered as `fingertree_c.canonical_sorted_set`. Each source
+`fingertree_c.rrb_vector`; `daba_lite_c_tests` is registered as `fingertree_c.daba_lite`;
+`canonical_sorted_set_c_tests` is registered as `fingertree_c.canonical_sorted_set`; and
+`brodal_okasaki_heap_c_tests` is registered as `fingertree_c.brodal_okasaki_heap`. Each source
 contains its runner, assertion macros, policy helpers, and test cases. The canonical executable uses
 the library's Windows CNG or OpenSSL Crypto backend but no test-framework dependency.
 
 The runner prints one `[pass]` line per named test case, writes failed requirements to standard error with file and
 line information, and exits non-zero if any test increments the failure count. A successful direct run ends with
 `all C FingerTree tests passed`. The focused runners end with `all C RRB vector tests passed` and
-`all C DABA Lite tests passed`, or `all C canonical sorted-set tests passed`, respectively.
+`all C DABA Lite tests passed`, `all C canonical sorted-set tests passed`, or
+`all C Brodal-Okasaki heap tests passed`, respectively.
 
 ## Test Cases
 
@@ -81,6 +83,19 @@ line information, and exits non-zero if any test increments the failure count. A
 - `canonical concurrent digest copy and readers` stresses distinct-handle copy/read/hash/validate/dispose across
   eight readers and verifies atomic lazy-digest publication.
 
+`brodal_okasaki_heap_tests.c` registers these cases:
+
+- `Brodal bounds representatives and sharing` validates ascending, descending, and fully equivalent 4,096-value
+  heaps; exact insert/meld/delete comparison ceilings; empty-side root sharing; incompatible policies; self-meld
+  logical multiplicity; exact removed representatives; and fused-tree statistics.
+- `Brodal randomized retained history` runs 10,000 branching insert, meld, and delete-minimum operations against
+  retained multiset snapshots, checking count, minimum, and structure throughout.
+- `Brodal failure atomicity and lifetimes` exhausts every observed allocator/comparator point for point and bulk
+  operations, every bulk-copy position, alias rollback, try-delete copy rollback, validation/visit failures, and
+  final reference/callback accounting.
+- `Brodal concurrent readers` runs eight independent copy/minimum/validate/dispose readers over a shared
+  10,000-value immutable heap.
+
 `daba_lite_tests.c` covers:
 
 - all 1,024 ten-step insert/evict histories against a noncommutative matrix FIFO model;
@@ -110,6 +125,7 @@ Run the built executables directly when changing runner diagnostics or a focused
 ```powershell
 .\out\build\msvc-debug\tests\fingertree_c_tests.exe
 .\out\build\msvc-debug\tests\canonical_sorted_set_c_tests.exe
+.\out\build\msvc-debug\tests\brodal_okasaki_heap_c_tests.exe
 .\out\build\msvc-debug\tests\rrb_vector_c_tests.exe
 .\out\build\msvc-debug\tests\daba_lite_c_tests.exe
 ```
