@@ -677,7 +677,7 @@ private:
     }
 
     static std::size_t slot(std::uint32_t bitmap, std::uint32_t bit) noexcept {
-        return std::popcount(bitmap & (bit - 1u));
+        return static_cast<std::size_t>(std::popcount(bitmap & (bit - 1u)));
     }
 
     std::uint32_t get_hash(const Key& key) const {

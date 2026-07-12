@@ -5,14 +5,23 @@
 - Audience: Maintainers validating the C++ HAMT port
 - Scope: Native test executable and source organization under `src/Cpp/Hamt/tests`
 
-`persistent_hamt_tests.cpp` is the dependency-free native test executable for the C++ HAMT port. The workspace
-[`build.ps1`](../build.ps1) script compiles it into `build/<Configuration>/persistent_hamt_tests.exe`.
+The C++ HAMT workspace has two dependency-free native suites and one installed-header consumer. The
+workspace [`build.ps1`](../build.ps1) script builds:
 
-The file contains a small local registry behind the `TEST` macro. The runner executes every registered test, prints
-`[PASS]` or `[FAIL]` per case, reports thrown exceptions with diagnostics, and exits non-zero if any case fails. A
-successful run ends with `<N> test(s) passed`.
+- `persistent_hamt_tests.cpp` as `build/<Configuration>/persistent_hamt_tests.exe`;
+- `merkle_search_tree_tests.cpp` as `build/<Configuration>/merkle_search_tree_tests.exe`; and
+- `merkle_header_consumer.cpp` as `build/<Configuration>/merkle_header_consumer.exe` against a
+  copied `build/<Configuration>/package/include` tree rather than the source include directory.
 
-## Test Cases
+All three programs link Windows CNG through `bcrypt.lib`. The copied-header consumer validates that
+the public aggregate and Merkle headers are self-contained when consumed like installed files.
+
+Each full suite contains a small local registry behind the `TEST` macro. The runner executes every
+registered test, prints `[PASS]` or `[FAIL]` per case, reports thrown exceptions with diagnostics,
+and exits non-zero if any case fails. A successful run ends with `<N> test(s) passed`. The focused
+header consumer reports only failures and exits zero after its compile/link/runtime contract holds.
+
+## CHAMP And Patricia Test Cases
 
 The executable registers these cases:
 
@@ -53,6 +62,47 @@ The executable registers these cases:
 - `BulkBuilder_RandomizedBuildMatchesPersistentUpdates`
 - `BulkBuilder_CreateRangeAndIntersectionUseBuilderSemantics`
 
+## Merkle Core And Wire Coverage
+
+`merkle_search_tree_tests.cpp` covers the in-memory core and exact wire contract only. Its groups
+exercise:
+
+- exact signed big-endian integer, tagged nullable UTF-8/bytes, RFC-4122 GUID, SHA-256 digest, and
+  malformed/noncanonical codec behavior;
+- Unicode-whitespace-aware policy/codec identifier validation plus explicit policy identity and
+  domain compatibility;
+- the shared cross-language domain digest, empty digest, one-entry root, and every byte of the
+  canonical `MST2` block;
+- encoded-value no-op identity and absent-remove root reuse;
+- canonical convergence across bulk, incremental, removal/reinsertion, and independent histories;
+- move-only key/value representatives, owning entry handles, ordered iteration, inclusive ranges,
+  semantic equality, typed diff, and block/shape/statistics diagnostics;
+- root, policy, entry, and untouched-block sharing across retained snapshots;
+- a 12,000-operation deterministic randomized history against `std::map`, including retained
+  versions and independently rebuilt canonical contents;
+- unchanged published snapshots when codecs or comparers throw;
+- deep validator rejection of a retained representative whose current encoding disagrees with its
+  captured canonical bytes; and
+- concurrent readers over retained immutable snapshots.
+
+The registered cases are:
+
+- `CanonicalCodecsAndDigestRejectMalformedRepresentations`
+- `PolicyValidationIdentityAndCompatibilityAreExplicit`
+- `SingleEntryMst2GoldenLocksDomainRootAndExactBlockBytes`
+- `CanonicalConstructionIsIndependentOfHistoryAndPolicyIdentity`
+- `PersistentMutationSharingRangeAndDiffHonorMapSemantics`
+- `MoveOnlyKeysAndValuesExposeStableSharedRepresentatives`
+- `RandomizedPersistentHistoriesMatchOrderedMapAndRetainedSnapshots`
+- `ThrowingComparersAndCodecsLeavePersistentSourcesUntouched`
+- `ValidatorDetectsMutationBehindAConstRepresentative`
+- `ConcurrentReadersObserveConsistentRetainedMerkleSnapshots`
+
+`merkle_header_consumer.cpp` includes the aggregate header from the copied package tree, creates and
+validates a one-entry integer tree, checks lookup, and verifies that its root differs from the empty
+root. It is an independent public-header closure and crypto-link gate, not a replacement for the
+model suite.
+
 ## Build And Run
 
 From `src/Cpp/Hamt`, build and run the Debug test executable:
@@ -65,7 +115,12 @@ Run the built executable directly when changing runner diagnostics or investigat
 
 ```powershell
 .\build\Debug\persistent_hamt_tests.exe
+.\build\Debug\merkle_search_tree_tests.exe
+.\build\Debug\merkle_header_consumer.exe
 ```
 
-Use the workspace [validation guide](../docs/validation.md) for Release validation, compiler flags,
-generated-output locations, and coverage policy.
+Use the workspace [validation guide](../docs/validation.md) for Release validation, portable GCC
+and Clang lanes, compiler flags, generated-output locations, and coverage policy. See the
+[Merkle specification](../docs/merkle-search-tree.md) for the exact policy and `MST2` contract under
+test. Persistence stores/import, proofs, sync, and merge are deliberately outside this C++
+milestone and therefore outside this suite.

@@ -6,14 +6,16 @@
 - Audience: Maintainers implementing and reviewing the native C++ HAMT port
 - Scope: Project layout and validation entry points for `src/Cpp/Hamt`
 
-`src/Cpp/Hamt` is the C++20 port of the C# HAMT project under `src/CSharp/src/Tools.DataStructures.Hamt`.
-It provides immutable unordered
-collections backed by a hash-array mapped trie:
+`src/Cpp/Hamt` is the C++20 port of the C# HAMT project under
+`src/CSharp/src/Tools.DataStructures.Hamt`. It provides immutable hash-trie, integer-Patricia, and
+content-addressed ordered-map cores:
 
 - `tools::data_structures::hamt::persistent_hash_map<Key, T, Hash, KeyEqual, ValueEqual>`
 - `tools::data_structures::hamt::persistent_hash_set<T, Hash, KeyEqual>`
 - `persistent_int_map<T>` / `persistent_long_map<T>` and the corresponding explicit-width
   `persistent_int_set` / `persistent_long_set` types.
+- `merkle_search_tree<K, V>`, `merkle_search_tree_policy<K, V>`, canonical codecs, and exact
+  `mst-sha256-b16-v2` / `MST2` block output.
 
 The implementation preserves the C# library's core shape: 32-way logical branching, five hash bits
 per trie level, canonical CHAMP branches with separate data/node maps, compact inline payload and
@@ -30,18 +32,37 @@ iteration, compresses unary prefixes, caches subtree cardinality, and aligns pre
 union/intersection/difference. Map union/intersection have resolver overloads for overlapping values;
 all algebra preserves shared roots when the semantic result is unchanged.
 
+The Merkle search tree is a separate immutable ordered map. An explicit policy binds comparator
+semantics and versioned canonical key/value codecs into the `mst-sha256-b16-v2` SHA-256 domain.
+Key-derived geometric levels produce canonical B=16 wide blocks independent of update history;
+updates path-copy changed blocks and share untouched subtrees. The C++ core emits byte-for-byte
+cross-language `MST2` blocks, exposes exact block and shape diagnostics, and deeply validates stored
+representatives, cached metadata, canonical bytes, and digests. This milestone is the in-memory core
+and wire contract only; block-store persistence/loading, proofs, synchronization, and merge are not
+part of the C++ surface yet.
+
 ## Layout
 
+- `include/Tools/DataStructures/Hamt/hamt.hpp` is the aggregate public include for all C++ HAMT,
+  Patricia, and Merkle surfaces.
 - `include/Tools/DataStructures/Hamt/persistent_hash_map.hpp` contains the template map
   implementation.
 - `include/Tools/DataStructures/Hamt/persistent_hash_set.hpp` contains the set wrapper and set
   algebra.
 - `include/Tools/DataStructures/Hamt/persistent_int_map.hpp` contains both widths of Patricia maps
   and sets.
-- `tests/` contains the [deterministic native test executable](tests/README.md).
-- `build.ps1` imports the MSVC toolchain through Scriptorium and compiles the test executable.
+- `include/Tools/DataStructures/Hamt/merkle_encoding.hpp` contains SHA-256 digests, strict canonical
+  codecs, comparers, and policy-domain construction.
+- `include/Tools/DataStructures/Hamt/merkle_search_tree.hpp` contains the immutable canonical wide
+  tree, ordered-map operations, diagnostics, exact block enumeration, and deep validation.
+- `tests/` contains the [deterministic native suites and copied-header consumer](tests/README.md).
+- `build.ps1` imports the MSVC toolchain through Scriptorium, stages a package-style include tree,
+  and compiles the CHAMP/Patricia suite, Merkle suite, and installed-header consumer.
 - `docs/api-specification.md` documents the C++ API adaptation and complexity guarantees.
-- `docs/usage.md` provides practical include, value-semantics, map/set, policy, iteration, and set-algebra examples.
+- `docs/merkle-search-tree.md` specifies the policy, codecs, canonical topology, `MST2` wire bytes,
+  and core ownership/lifetime contract.
+- `docs/usage.md` provides practical include, value-semantics, map/set, Merkle policy, iteration,
+  diagnostics, and set-algebra examples.
 - `docs/validation.md` records the local build script, warning policy, Debug/Release commands, and
   native test coverage.
 

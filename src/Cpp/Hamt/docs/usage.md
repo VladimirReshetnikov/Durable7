@@ -2,8 +2,8 @@
 
 - Created (UTC): 2026-07-02T20:07:09Z
 - Repository HEAD: c58fc1159beb94e985ca66861bdc2ed3767eb2da
-- Audience: C++ consumers and maintainers using `persistent_hash_map` and `persistent_hash_set`
-- Scope: Public include paths, value semantics, common map/set operations, policy objects, iteration, and set algebra
+- Audience: C++ consumers and maintainers using the HAMT, Patricia, and Merkle map families
+- Scope: Public include paths, value semantics, common operations, policy objects, canonical Merkle construction, iteration, and diagnostics
 
 This guide is the practical companion to the [C++ API specification](api-specification.md). It shows
 the common usage patterns from the public header-first HAMT port without repeating every contract in
@@ -15,8 +15,15 @@ the specification.
 #include <Tools/DataStructures/Hamt/persistent_hash_map.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_set.hpp>
 #include <Tools/DataStructures/Hamt/persistent_int_map.hpp>
+#include <Tools/DataStructures/Hamt/merkle_search_tree.hpp>
 
 namespace hamt = tools::data_structures::hamt;
+```
+
+Consumers that want the complete workspace surface can replace the individual includes with:
+
+```cpp
+#include <Tools/DataStructures/Hamt/hamt.hpp>
 ```
 
 The workspace builds through `build.ps1`:
@@ -219,12 +226,132 @@ The 64-bit aliases have the same surface. Integer sets expose `add`, `remove`, s
 intersection, difference, and ordered `to_vector()`. No custom hash or comparison policy is needed:
 the key bits define both identity and order.
 
+## Merkle Search Tree
+
+Choose `merkle_search_tree<K,V>` when comparator-ordered contents need a canonical SHA-256 address
+and exact cross-language `MST2` blocks. Every tree requires an explicit semantic policy with a
+comparator and versioned canonical codecs:
+
+```cpp
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+using merkle_value = std::optional<std::string>;
+using merkle_policy = hamt::merkle_search_tree_policy<std::int32_t, merkle_value>;
+using merkle_tree = hamt::merkle_search_tree<std::int32_t, merkle_value>;
+
+auto policy = merkle_policy::natural(
+    "golden-int-string-v1",
+    std::make_shared<hamt::int32_merkle_codec>(),
+    std::make_shared<hamt::nullable_utf8_merkle_codec>());
+
+auto empty = merkle_tree::create(policy);
+auto one = empty.set_item(42, merkle_value{"forty-two"});
+auto two = one.set_item(7, std::nullopt);
+
+// The source snapshots remain unchanged.
+// one.root_hash().to_hex() is the shared one-entry golden digest.
+```
+
+The policy ID names comparator semantics as well as application meaning. Reuse it only when every
+implementation agrees on key equivalence/order and key/value encodings. Codec IDs are part of the
+SHA-256 domain and must be explicit version IDs ending in `-v<digits>`. Use `create` rather than a
+default constructor: an implicit host-dependent policy would make content addresses ambiguous.
+
+Bulk construction takes ownership of a vector, sorts it by the policy, retains the first
+comparator-equivalent key, and takes the last supplied value:
+
+```cpp
+auto built = merkle_tree::create_range(
+    std::vector<std::pair<std::int32_t, merkle_value>>{
+        {42, merkle_value{"old"}},
+        {7, std::nullopt},
+        {42, merkle_value{"forty-two"}},
+    },
+    policy);
+```
+
+Point updates are persistent. An encoded-value no-op and an absent removal preserve the root;
+actual updates retain untouched block objects:
+
+```cpp
+auto unchanged = one.set_item(42, merkle_value{"forty-two"});
+bool same_root = unchanged.shares_root_with(one);
+
+auto changed = one.set_item(7, std::nullopt);
+std::size_t shared_blocks = one.shared_block_count(changed);
+```
+
+Lookup through `get_entry` distinguishes a missing key from a present nullable value. Use the
+entry's owning handles when the representative must outlive the source tree:
+
+```cpp
+if (const auto* entry = two.get_entry(7)) {
+    auto retained_key = entry->key_handle();
+    auto retained_value = entry->value_handle();
+    // *retained_value is std::nullopt; the entry was present.
+}
+```
+
+Iteration and inclusive ranges follow comparator order, not hash level or block preorder.
+`enumerate_range` materializes and returns an owning vector of entry handles:
+
+```cpp
+for (const auto& entry : two) {
+    // entry.key(), entry.value(), entry.level()
+}
+
+auto selected = two.enumerate_range(7, 42);
+```
+
+The forward iterator itself does not retain the tree root. Keep a tree snapshot alive until the
+iterator is finished; copy an entry or one of its shared handles when the representative must live
+longer.
+
+`content_equals` compares compatible content addresses. `map_equals` additionally applies value
+semantics, while `diff` returns owned shared handles for added, removed, and changed records:
+
+```cpp
+if (!one.content_equals(two)) {
+    for (const auto& change : one.diff(two)) {
+        switch (change.kind) {
+        case hamt::merkle_map_difference_kind::added:
+        case hamt::merkle_map_difference_kind::removed:
+        case hamt::merkle_map_difference_kind::changed:
+            break;
+        }
+    }
+}
+```
+
+Use the diagnostic surface when verifying serialization or structural sharing:
+
+```cpp
+auto statistics = two.validate_structure();
+auto shape = two.shape();
+for (const auto& block : two.blocks_preorder()) {
+    const std::string address = block.digest.to_hex();
+    const hamt::merkle_bytes& exact_mst2_bytes = *block.bytes;
+}
+```
+
+`validate_structure` performs a deep canonical audit; it is not required before ordinary trusted
+reads. This C++ milestone emits exact blocks but does not yet save/load a block store, parse
+untrusted blocks, produce proofs, synchronize peers, or merge divergent roots. See the
+[Merkle specification](merkle-search-tree.md) for the exact policy and wire contract.
+
 ## Concurrency And Lifetime
 
 Map and set values are immutable after construction. Independent snapshots can be read concurrently,
 and update-shaped operations create new values without mutating retained snapshots. Ordinary C++
 object lifetime rules still apply: do not race on the same local variable while another thread
-reassigns it.
+reassigns it. Merkle policies additionally call their shared comparator and codecs during reads,
+updates, equality, diff, and validation; custom implementations must support the concurrency the
+caller permits.
 
 ## Choosing A Surface
 
@@ -237,6 +364,9 @@ reassigns it.
 | Stored equivalent item recovery | `try_get_value` |
 | Union/intersection/difference | `union_with`, `intersect_with`, `except_with`, `symmetric_except_with` |
 | Custom value semantics | Template hash/equality policy objects plus `create(...)` or `create_range(...)` |
+| Canonical ordered map with a SHA-256 root | `merkle_search_tree<K,V>` |
+| Exact C#/Rust-compatible `MST2` blocks | `blocks_preorder()` under an explicit compatible policy |
+| Deep Merkle invariant audit | `validate_structure()` |
 
 For cross-language contract alignment, see the repository
 [porting and semantic parity guide](../../../../docs/guides/porting-and-semantic-parity.md).
