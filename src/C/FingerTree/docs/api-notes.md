@@ -167,6 +167,9 @@ while a cached root hash is O(1). Explicit-stack implementation preserves stack 
 
 `ft_brodal_heap` is the persistent bootstrapped skew-binomial min-heap from Brodal and Okasaki's
 worst-case-optimal purely functional priority queue. One rank-zero global root stores the minimum.
+Its native `skew_meld` consolidates child forests by rank buckets with carry rather than the managed
+ports' `uniquify`/`unionUnique` spelling; the algorithms are equivalent in ranked-tree multiset,
+minimum, validity, and complexity.
 Its child list fuses the primitive skew-tree children with the root forest of the embedded heap, so
 the owning tree rank determines where the structural prefix ends. The rank-zero ambiguity is decoded
 in favor of the structural prefix, matching delete-minimum's split and the C#/Haskell semantic oracle.

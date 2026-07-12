@@ -341,6 +341,31 @@ Each pass listed what it re-derived and found correct; the load-bearing ones:
 6. **Remaining Low items** — Rust Merkle budget field privacy, Haskell `validStructure` clause, CHAMP
    equality policy checks, C# Merkle wire assertion, the DABA/ Brodal cleanups and notes.
 
+## Remediation status (2026-07-12)
+
+All actionable findings from this review have been resolved on `codex/axis1-new-cores`:
+
+| Finding | Resolution |
+| --- | --- |
+| C canonical zip-set removal overflow (Critical) | Fixed on `main` by `bc8550d` and included by the branch merge; the interior-removal seam has a regression test. |
+| Kotlin Ctrie snapshot RDCSS (Critical) | `87b763f` ports a root descriptor, helping `readRoot`, generation-safe publication, and the deterministic snapshot/writer lost-update regression. |
+| Kotlin Ctrie concurrency evidence (High) | `87b763f` adds descriptor helping, same-key/deep-prefix churn, contraction checks, and a bounded short-history linearizability oracle. |
+| Kotlin Ctrie tomb contraction (Medium) | `87b763f` adds tomb nodes, contraction/collision contraction, cleanup, and the root-no-tomb invariant. |
+| Degenerate shared Merkle golden (High) | `a5e63c0` pins one 14-entry, four-block, three-level tree in all six ports, including exact root-block bytes and level. |
+| C# core wire anchor (Low) | The same `a5e63c0` vector adds an absolute `MST2` block assertion to `MerkleEncodingWireTests`. |
+| Haskell SHA-256 boundary evidence (Low) | `a5e63c0` pins 55-, 56-, 64-, and 65-byte vectors across padding and multi-block boundaries. |
+| C# Patricia combining algebra (Medium) | `3e23cf4` adds prefix-aligned combining union/intersection for both widths with root-reuse and randomized model tests. |
+| Rust Patricia shared-subtree pruning (Medium) | `3e23cf4` prunes `Arc`-identical subtrees only for built-in union/intersection; user-combining paths retain mandatory callback invocation. |
+| Haskell Patricia equal-value replacement (Low) | `3e23cf4` documents the deliberate `Eq`-free path rebuild in Haddock and workspace guidance. |
+| RRB density contract (Medium) | `bae48c0` records the deliberate boundary-only redistribution design in the catalog and every port's local contract; density ceilings are test/benchmark gates, not validator invariants. |
+| RRB maximum height (Low) | `bae48c0` standardizes `(count-storage bit width - 1) / 5`; Haskell is corrected to 12 on 64-bit targets and Rust now enforces/tests the cap. |
+| Five-port CHAMP canonicalization evidence (Medium) | `dfa89d7` adds recursive canonical validators, topology comparison, and independent-build plus delete/reinsert convergence gates in C, C++, Haskell, Kotlin, and Rust. |
+| Haskell CHAMP validator (Low) | `dfa89d7` rejects under-full branches unless the sole slot is the intentional bitmap-child depth bridge. |
+| CHAMP policy compatibility (Low) | C++ and Haskell now state the compatible-policy caller precondition necessitated by opaque function objects; Rust documents intentional semantic equality across `BuildHasher` state because key equivalence is fixed by `Eq`. |
+| Rust Merkle budget API wording (Low) | The API now explicitly documents public field mutation as a trusted local-policy escape hatch and checked constructors as the untrusted configuration boundary; the former false sealed-construction claim is removed. |
+| Native Brodal meld shape (informational) | The catalog and C/C++ API notes record rank-bucket-with-carry as equivalent to `uniquify`/`unionUnique`. |
+| DABA Lite cleanups (informational) | Rust's overlay-aware read now explains its future batch-fixup role; single-unlink trim remains tied to one-block-per-evict and native O(n+c) clear remains the documented ownership cost. |
+
 ## Validation
 
 - Base branch merged from `origin/main` (`f97e9b3..6bf9d79`), fast-forward, no conflicts.

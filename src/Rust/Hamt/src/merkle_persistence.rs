@@ -775,6 +775,10 @@ impl fmt::Display for MerkleBudgetError {
 impl Error for MerkleBudgetError {}
 
 /// Seven finite limits applied before allocation, decoding, and reference traversal.
+///
+/// The fields remain public so trusted callers can derive local policy values from a default.
+/// [`Self::new`] is the checked boundary for untrusted configuration; direct field mutation may
+/// intentionally relax limits or create a relationship that the constructor would reject.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub struct MerkleVerificationBudget {

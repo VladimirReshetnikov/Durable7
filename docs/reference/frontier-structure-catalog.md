@@ -562,6 +562,11 @@ copied removed representative and remainder if either cannot be published. Exhau
 lifetime sweeps accompany retained models, comparison ceilings, structural validation, and concurrent
 distinct-handle readers under MSVC, GCC, Clang, and ASan/UBSan.
 
+The C and C++ `skew_meld` implementations consolidate the child forest by rank buckets with carry,
+whereas C#, Haskell, Kotlin, and Rust spell the equivalent step as `uniquify` followed by
+`unionUnique`. This is an intentional native implementation-shape difference: both produce the same
+valid ranked-tree multiset, minimum, and public complexity bounds.
+
 **Rust status (2026-07-11): Brodal-Okasaki heap implemented without an element-cloning bound.**
 `BrodalOkasakiHeap<T>` stores representatives and the fused bootstrapped skew-binomial graph behind
 `Arc`. Owned minimum views retain the exact representative; independently constructed natural-order

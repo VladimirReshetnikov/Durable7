@@ -22,6 +22,9 @@ The trie follows the existing ports:
 - no-op replacement and absent removal reuse the existing root;
 - map bulk construction uses last-wins semantics.
 - map diff returns owned typed additions, removals, and changes, with a shared-root fast path.
+  Equality and diff are deliberately semantic across distinct `BuildHasher` states: Rust key
+  equivalence is always `Eq`, and each lookup hashes with the probed map's own builder. This differs
+  from C# comparer-object identity without weakening Rust's `Eq`/`Hash` contract.
 
 The crate also exports `PersistentIntMap`/`PersistentIntSet` and
 `PersistentLongMap`/`PersistentLongSet`. Their big-endian Patricia core sign-flips keys for

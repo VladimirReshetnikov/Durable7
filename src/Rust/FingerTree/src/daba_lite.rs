@@ -666,6 +666,9 @@ impl<T> ChunkedQueue<T> {
     }
 
     fn read_with_overlay(&self, cursor: &Cursor<T>, overlay: Option<&Overlay<T>>) -> Rc<T> {
+        // The current one-step fixup never reads the just-inserted slot. Keep the overlay-aware
+        // read at the planning boundary so a future batched fixup cannot accidentally observe an
+        // unpublished queue slot while preserving the present side-effect-free plan/commit split.
         if let Some(overlay) = overlay
             && cursor.same(&overlay.cursor)
         {

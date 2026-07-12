@@ -25,7 +25,10 @@ hash/equality policy objects, structural sharing across versions, first equivale
 retention, and no-op root reuse. A transient `bulk_builder` (mirroring the C# reference's bulk
 construction) mutates unpublished nodes in place and freezes them into detached persistent maps;
 `create_range` and set intersection build through it. Maps also expose `map_equals` and owned typed
-added/removed/changed diff. Because C++ collections use value semantics,
+added/removed/changed diff. Those two operations have a caller precondition that stateful `Hash` and
+`KeyEqual` objects define compatible semantics; arbitrary C++ policy objects expose no general
+identity/equality operation, so the library cannot enforce the C# reference's comparer-identity
+check. Because C++ collections use value semantics,
 identity guarantees are expressed as shared root identity rather than object reference identity.
 
 The integer family is a separate big-endian Patricia core. It sign-flips keys for ascending signed

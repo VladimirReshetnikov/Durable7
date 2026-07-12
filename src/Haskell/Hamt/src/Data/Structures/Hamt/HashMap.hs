@@ -220,10 +220,14 @@ elems = fmap snd . toList
 foldrWithKey :: (k -> v -> b -> b) -> b -> HashMap k v -> b
 foldrWithKey folder seed (HashMap _ _ root) = foldrNode (\(k, v) acc -> folder k v acc) seed root
 
+-- | Compares contents under the right map's key policy. Callers must ensure
+-- independently supplied policies define compatible key equivalence; Haskell
+-- functions have no decidable identity with which to enforce that precondition.
 mapEquals :: Eq v => HashMap k v -> HashMap k v -> Bool
 mapEquals left right =
   size left == size right && all (\(key, value) -> lookup key right == Just value) (toList left)
 
+-- | Reports changes between maps whose key policies are semantically compatible.
 diff :: Eq v => HashMap k v -> HashMap k v -> [MapDifference k v]
 diff left right = removedOrChanged ++ added
   where

@@ -588,6 +588,8 @@ public:
         return root_.get() == other.root_.get();
     }
 
+    // Precondition: both maps' stateful Hash/KeyEqual objects define compatible key semantics.
+    // Policy objects use C++ value semantics and have no general identity/equality operation.
     [[nodiscard]] bool map_equals(const persistent_hash_map& other) const {
         if (root_.get() == other.root_.get()) {
             return true;
@@ -606,6 +608,7 @@ public:
         return true;
     }
 
+    // The same policy-compatibility precondition as map_equals applies.
     [[nodiscard]] std::vector<map_difference<Key, T>> diff(const persistent_hash_map& other) const {
         if (root_.get() == other.root_.get()) {
             return {};

@@ -406,6 +406,10 @@ Notable C++ differences from C#:
 `brodal_okasaki_heap<T, Less>` is the C++23 port of C# `BrodalOkasakiHeap<T>`. It retains the fused
 bootstrapped skew-binomial representation rather than substituting a conventional binomial heap:
 
+Its `skew_meld` consolidates the child forest through rank buckets with carry. This is intentionally
+equivalent to, but internally shaped differently from, the C#/Haskell/Kotlin/Rust
+`uniquify`-then-`unionUnique` formulation.
+
 - `insert`, `minimum`, `try_minimum`, and compatible `meld` are worst-case O(1); `delete_minimum` and
   `try_delete_minimum` are worst-case O(log n);
 - insert and nonempty meld perform at most five `Less` invocations. Minimum lookup and traversal do not invoke

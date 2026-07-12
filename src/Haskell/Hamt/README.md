@@ -38,7 +38,10 @@ The local [test README](test/README.md) lists the deterministic coverage areas.
 
 Enumeration follows trie bitmap order and collision-bucket order: stable for an unchanged
 version, but neither insertion order nor sorted order (matching the C# reference's documented
-contract).
+contract). `mapEquals` and `diff` require semantically compatible `HashPolicy` values and interpret
+left keys through the right map where applicable. This is a documented caller precondition because
+Haskell functions have no decidable identity; unlike C#, the library cannot enforce comparer-object
+identity.
 
 `Data.Structures.Hamt.Patricia` adds `IntMap32`/`IntSet32` and `IntMap64`/`IntSet64`. The shared
 strict big-endian Patricia core sign-flips keys for ascending signed traversal, compresses common
