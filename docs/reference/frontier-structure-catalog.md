@@ -59,7 +59,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | CHAMP canonicalization + structural equality/diff | 1 | Strong (implemented across all six languages) | Completed with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
 | `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all six languages) | Completed as proposal Tier C1 | 1 shared core, 4 C# public types, structural map/set algebra |
 | DABA Lite sliding-window aggregator | 1, 3 | Strong (implemented in every applicable language: C#, C, C++, Kotlin/JVM, and Rust; pure Haskell is not applicable) | Reuses the language's monoid abstraction | 1 small type, ~8 members |
-| Merkle search tree | 1 | Strong (C#, Haskell, Kotlin/JVM, and Rust complete; C and C++ core/wire implemented) | Completed in full ports: deterministic wire + bounded verification | Largest single item in this catalog |
+| Merkle search tree | 1 | Strong (C#, C++, Haskell, Kotlin/JVM, and Rust complete; C core/wire implemented) | Completed in full ports: deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
 | Zip tree (canonical sorted set) | 1, 3 | Plausible (implemented across all six languages) | Completed: coherent keyed rank policy | 1 new core, set facade |
 | Brodal-Okasaki heap | 1 | Plausible (implemented across all six languages for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
@@ -1030,8 +1030,8 @@ CHAMP, Patricia, and RRB have also advanced through the sibling-language work re
 entries; the canonical zip-zip set, Brodal-Okasaki heap, and priority-search queue are implemented
 across all six languages, and DABA Lite now exists in every applicable imperative
 language (C#, C, C++, Kotlin/JVM, and Rust). The Ctrie's deliberate parity boundary remains C# and
-Kotlin/JVM. The Merkle search tree's full trust-boundary tier is complete in C#, Haskell,
-Kotlin/JVM, and Rust, with the remaining language checkpoints recorded above. These are
+Kotlin/JVM. The Merkle search tree's full trust-boundary tier is complete in C#, C++, Haskell,
+Kotlin/JVM, and Rust, with the remaining C checkpoint recorded above. These are
 current-state implementation records, not candidates awaiting a consumer.
 Future work on them is ordinary hardening, measurement, and demand-driven porting.
 

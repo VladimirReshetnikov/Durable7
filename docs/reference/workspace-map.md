@@ -78,7 +78,7 @@ ordering, and documentation obligations that should remain recognizable across l
 | [C# Numerics](../../src/CSharp/docs/Numerics/overview.md) | Managed fixed-width and sparse integer numerics library | `DataStructures.sln`, `src/Tools.Numerics/`, `tests/Tools.Numerics.Tests/` | [`docs`](../../src/CSharp/docs/Numerics/README.md) |
 | [C# HAMT](../../src/CSharp/docs/Hamt/overview.md) | Canonical managed HAMT library | `DataStructures.sln`, `src/Tools.DataStructures.Hamt/`, `tests/Tools.DataStructures.Hamt.Tests/` | [`docs`](../../src/CSharp/docs/Hamt/README.md) |
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | C17 HAMT/Patricia port and type-erased exact-wire Merkle core | `include/Tools/DataStructures/Hamt/*.h`, `build.ps1` | [`docs`](../../src/C/Hamt/docs/README.md) |
-| [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | C++20 HAMT/Patricia port and exact-wire Merkle core | `include/Tools/DataStructures/Hamt/*.hpp`, `build.ps1` | [`docs`](../../src/Cpp/Hamt/docs/README.md), [Merkle guide](../../src/Cpp/Hamt/docs/merkle-search-tree.md) |
+| [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | C++20 HAMT/Patricia port and complete wire-compatible Merkle search tree | `include/Tools/DataStructures/Hamt/*.hpp`, `build.ps1` | [`docs`](../../src/Cpp/Hamt/docs/README.md), [Merkle core](../../src/Cpp/Hamt/docs/merkle-search-tree.md), [persistence](../../src/Cpp/Hamt/docs/merkle-persistence.md) |
 | [`src/Haskell/Hamt`](../../src/Haskell/Hamt/README.md) | Haskell HAMT/Patricia port and complete pure wire-compatible Merkle search tree | `tools-data-structures-hamt.cabal`, `src/Data/Structures/Hamt/` | [`README`](../../src/Haskell/Hamt/README.md), [Merkle guide](../../src/Haskell/Hamt/docs/merkle-search-tree.md) |
 | [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | Kotlin/JVM HAMT/Ctrie/Patricia port and complete wire-compatible Merkle search tree | `src/tools/datastructures/hamt/`, `test/tools/datastructures/hamt/` | [`docs`](../../src/Kotlin/Hamt/docs/README.md) |
 | [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | Rust HAMT/Patricia port and wire-compatible Merkle search tree | `Cargo.toml`, `src/lib.rs`, `src/merkle_search_tree.rs` | [`docs`](../../src/Rust/Hamt/docs/README.md) |
@@ -101,8 +101,8 @@ HAMT lineage:
 
 1. C# HAMT (`src/CSharp/src/Tools.DataStructures.Hamt`) defines the managed public contract and model-test baseline.
 2. `src/Cpp/Hamt` ports the HAMT semantics to C++ value types, templates, and `std::shared_ptr` node
-   sharing, and ports the Merkle core through the exact SHA-256 domain and `MST2` wire while its
-   persistence tier remains a separate checkpoint.
+   sharing, and ports the Merkle search tree through exact `MST2` blocks, bounded verified
+   persistence, `MSP2` proofs, iterative synchronization, and present-null-safe typed merge.
 3. `src/C/Hamt` ports the same structure to a type-erased C API with explicit clone/destroy
    ownership, and ports the Merkle core/wire to fallible erased-type codecs and failure-atomic
    handles while leaving its persistence tier separate.

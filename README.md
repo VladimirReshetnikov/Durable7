@@ -203,10 +203,11 @@ language-first layout.
 - [src/C/Tungsten](src/C/Tungsten/README.md) is the C17 port of the Tungsten collections. It provides type-erased `tds_tungsten_list` and `tds_tungsten_association` value structs, composing the C FingerTree deque, C HAMT, and an internal ref-counted AVL stamp sequence for C#-parity keyed and positional Association operations.
 - [src/Cpp/Hamt](src/Cpp/Hamt/README.md) is a C++20 port of the persistent HAMT library. It provides
   header-first CHAMP hash maps/sets and Patricia integer maps/sets, plus a policy-bound Merkle
-  search-tree core with CNG/OpenSSL SHA-256, strict codecs, move-only representative handles, and
-  byte-identical cross-language `MST2` blocks. Immutable `std::shared_ptr` nodes provide structural
-  sharing; strict MSVC/GCC/Clang model, wire, failure, validation, and reader tests cover the native
-  value-semantics surface.
+  search tree with CNG/OpenSSL SHA-256, byte-identical `MST2` blocks, seven bounded-verification
+  limits, immutable block-store snapshots, exact `MSP2` proofs, iterative synchronization, and
+  present-null-safe three-way merge. Immutable `std::shared_ptr` state supports structural sharing
+  and move-only representatives; strict MSVC/GCC/Clang model, wire, failure, validation,
+  concurrency, analyzer, and packaged-header gates cover the native value-semantics surface.
 - [src/Cpp/FingerTree](src/Cpp/FingerTree/README.md) is the native C++ port of the FingerTree workspace and newer sequence/streaming cores. It is a header-first CMake/Ninja library with the persistent engines and facades, RRB vectors, a CNG/OpenSSL-backed policy-canonical zip-zip set, move-only-capable Brodal-Okasaki and winner-cached priority-search cores, ropes/text, and a noncopyable mutable DABA Lite whose no-throw publication and O(n+c) deterministic clear are covered by CTest and benchmarks.
 - [src/Cpp/Tungsten](src/Cpp/Tungsten/README.md) is the C++23 header-first Tungsten-collections port. It provides `persistent_list<T>` and `persistent_association<Key, T, Hash, KeyEqual, ValueEqual>` over the C++ FingerTree and HAMT substrates, with CTest coverage for the Tungsten ordering rules and relabel path.
 - [src/Haskell/Hamt](src/Haskell/Hamt/README.md) is a Haskell persistent-map workspace. It provides CHAMP hash maps/sets, Patricia integer maps/sets, and a pure wire-compatible Merkle search tree with immutable block-store snapshots, bounded verification, `MSP2` proofs, frontier synchronization, and typed merge.
