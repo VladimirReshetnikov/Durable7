@@ -9,6 +9,7 @@ use std::ops::Index;
 use std::sync::Arc;
 
 mod merkle_encoding;
+mod merkle_persistence;
 mod merkle_search_tree;
 mod patricia;
 pub use merkle_encoding::{
@@ -16,6 +17,13 @@ pub use merkle_encoding::{
     MerkleDigestParseError, MerkleDigestWriteError, MerkleKeyComparer, MerklePolicyError,
     MerklePolicyField, MerkleSearchTreePolicy, NaturalMerkleKeyComparer, NullableBytesMerkleCodec,
     NullableUtf8MerkleCodec, Rfc4122Guid, Rfc4122GuidMerkleCodec,
+};
+pub use merkle_persistence::{
+    InMemoryMerkleBlockStore, MerkleBlock, MerkleBlockPack, MerkleBlockStore, MerkleBudgetError,
+    MerkleMergeResolution, MerkleMergeValue, MerkleProof, MerkleProofCreationError,
+    MerkleProofKind, MerkleProofStep, MerkleProofVerificationResult, MerkleSyncPlan,
+    MerkleThreeWayMergeConflict, MerkleThreeWayMergeResolver, MerkleThreeWayMergeResult,
+    MerkleVerificationBudget, MerkleVerificationError, MerkleVerificationFailureKind,
 };
 pub use merkle_search_tree::{
     MerkleEntry, MerkleMapDifference, MerkleRangeError, MerkleRangeIter, MerkleSearchTree,

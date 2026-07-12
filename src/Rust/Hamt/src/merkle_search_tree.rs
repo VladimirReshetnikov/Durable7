@@ -47,7 +47,7 @@ impl<K, V> MerkleEntry<K, V> {
         }
     }
 
-    fn replacing_value(&self, value: V, value_bytes: Vec<u8>) -> Self {
+    pub(crate) fn replacing_value(&self, value: V, value_bytes: Vec<u8>) -> Self {
         Self {
             inner: Arc::new(MerkleEntryInner {
                 key: Arc::clone(&self.inner.key),
@@ -182,6 +182,13 @@ impl<K, V> MerkleSearchTree<K, V> {
     #[must_use]
     pub fn new(policy: MerkleSearchTreePolicy<K, V>) -> Self {
         Self { root: None, policy }
+    }
+
+    pub(crate) fn from_verified_root(
+        root: MerkleNodeLink<K, V>,
+        policy: MerkleSearchTreePolicy<K, V>,
+    ) -> Self {
+        Self { root, policy }
     }
 
     /// Creates a canonical tree with first-equivalent-key and last-value semantics.
@@ -545,7 +552,7 @@ impl<K, V> MerkleSearchTree<K, V> {
         )
     }
 
-    fn build_canonical(
+    pub(crate) fn build_canonical(
         &self,
         entries: &[MerkleEntry<K, V>],
     ) -> Result<Option<Arc<MerkleNode<K, V>>>, MerkleTreeError> {

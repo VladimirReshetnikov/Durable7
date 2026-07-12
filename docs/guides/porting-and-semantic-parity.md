@@ -51,6 +51,12 @@ HAMT lineage:
    `BuildHasher` hash policies, `Eq` key equality, `Arc` structural sharing, and `Result`/`Option`
    result shapes.
 
+The policy-bound Merkle search tree is currently a C#/Rust parity pair. Both implementations pin
+the SHA-256 domain, key framing, empty digest, canonical `MST2` block bytes, seven verification
+budgets, `MSP2` point/range proofs, closure-pruned synchronization, and no-partial-result three-way
+merge. Language-local ownership and callback shapes may differ, but golden blocks and accepted or
+rejected trust-boundary inputs must remain cross-language compatible.
+
 The Ctrie is an intentional parity exception. `ConcurrentHashTrie<TKey, TValue>` and its
 Kotlin/JVM counterpart are managed-runtime mutable structures whose lock-free indirection-node
 protocol relies on tracing garbage collection and offers O(1) immutable generation snapshots.
@@ -222,6 +228,9 @@ For map/set changes, verify these contracts across C#, C++, C, Haskell, Kotlin, 
 - Set algebra comparer/policy behavior and any temporary materialization costs.
 - Stable-but-unspecified enumeration order for unchanged versions.
 - Structural sharing and no-op root/instance behavior expressed in each language's ownership model.
+- For Merkle ports, byte-identical policy domains, `MST2` blocks, and `MSP2` queries; finite resource
+  budgets enforced before untrusted allocation or decoding; complete closure validation; atomic
+  publication; and merge semantics that distinguish deletion from a present nullable value.
 
 Primary semantic docs:
 

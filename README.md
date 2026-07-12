@@ -211,9 +211,10 @@ language-first layout.
 - [src/Kotlin/Hamt](src/Kotlin/Hamt/README.md) is a Kotlin/JVM port of the persistent HAMT library. It provides `PersistentHashMap<K, V>` and `PersistentHashSet<T>` values with bitmap-indexed 32-way branching, immutable collision buckets, runtime hash/equality policies, structural sharing, and dependency-free executable tests.
 - [src/Kotlin/FingerTree](src/Kotlin/FingerTree/README.md) is a Kotlin/JVM port of the FingerTree-family collections and newer sequence/streaming cores. Its immutable measured AVL, RRB, canonical zip-zip-tree, bootstrapped skew-binomial heap, and winner-cached AVL substrates provide structurally shared deque, measured sequence, vector, sorted bag/set/map, policy-canonical sorted set, both measured and worst-case-optimal meldable priority queues, a keyed priority-search queue, max-high interval tree, positional/measured ropes, and measured text helpers; the separate mutable DABA Lite core maintains FIFO monoid aggregates with worst-case bounded callbacks.
 - [src/Kotlin/Tungsten](src/Kotlin/Tungsten/README.md) is the Kotlin/JVM Tungsten-collections port. It exposes `PersistentList<T>` and `PersistentAssociation<K, V>` with immutable snapshots, runtime `HashPolicy` support, sparse stamps, and generated-history executable tests.
-- [src/Rust/Hamt](src/Rust/Hamt/README.md) is a safe Rust persistent HAMT map/set crate. It provides
-  `PersistentHashMap` and `PersistentHashSet` with bitmap-indexed trie nodes, immutable collision
-  buckets, `Arc` structural sharing, `BuildHasher` hash policy support, and Cargo unit tests.
+- [src/Rust/Hamt](src/Rust/Hamt/README.md) is a safe Rust persistent-map workspace. It provides
+  CHAMP hash maps/sets and Patricia integer maps/sets, plus a policy-bound Merkle search tree with
+  C#-compatible `MST2` blocks, bounded verified persistence, `MSP2` proofs, synchronization, and
+  three-way merge. Immutable nodes and values use `Arc` sharing and the crate forbids unsafe code.
 - [src/Rust/FingerTree](src/Rust/FingerTree/README.md) is the Rust checkpoint port of the FingerTree
   family and newer sequence/streaming cores. Its persistent deque, measured sequence, RRB vector,
   policy-canonical zip-zip sorted set, non-`Clone` bootstrapped skew-binomial heap, winner-cached
@@ -306,8 +307,8 @@ Release configuration is required for meaningful benchmark numbers.
 - [src/Kotlin/README.md](src/Kotlin/README.md) indexes the Kotlin/JVM workspaces.
 - [src/Kotlin/Hamt/docs/README.md](src/Kotlin/Hamt/docs/README.md) indexes the Kotlin HAMT port's API notes and validation guide.
 - [src/Kotlin/FingerTree/docs/README.md](src/Kotlin/FingerTree/docs/README.md) indexes the Kotlin FingerTree-family API notes and validation guide.
-- [src/Rust/Hamt/docs/README.md](src/Rust/Hamt/docs/README.md) indexes the Rust HAMT port's API notes
-  and validation guide.
+- [src/Rust/Hamt/docs/README.md](src/Rust/Hamt/docs/README.md) indexes the Rust HAMT, Patricia, and
+  Merkle search-tree API notes and validation guidance.
 - [src/Rust/FingerTree/docs/README.md](src/Rust/FingerTree/docs/README.md) indexes the Rust
   FingerTree-family API notes and validation guide.
 

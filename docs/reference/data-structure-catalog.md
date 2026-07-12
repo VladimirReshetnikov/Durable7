@@ -29,8 +29,8 @@ guardrails for the wide-integer family.
 The HAMT workspaces implement persistent hash-array mapped trie maps and sets with 32-way
 bitmap-indexed branching, immutable equal-hash collision buckets, structural sharing between
 versions, and comparer/hash-policy preservation. All six languages also expose explicit-width
-Patricia maps/sets; C# and Kotlin/JVM own the managed Ctrie, and C# owns the policy-bound Merkle
-search tree listed explicitly below.
+Patricia maps/sets; C# and Kotlin/JVM own the managed Ctrie, while C# and Rust own wire-compatible
+policy-bound Merkle search trees listed explicitly below.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
@@ -39,7 +39,7 @@ search tree listed explicitly below.
 | C++ | `persistent_hash_map<Key, T, Hash, KeyEqual, ValueEqual>`, `persistent_hash_set<T, Hash, KeyEqual>`, `persistent_int_map<T>`, `persistent_int_set`, `persistent_long_map<T>`, `persistent_long_set` | [Workspace](../../src/Cpp/Hamt/README.md), [usage guide](../../src/Cpp/Hamt/docs/usage.md), [API spec](../../src/Cpp/Hamt/docs/api-specification.md), [map header](../../src/Cpp/Hamt/include/Tools/DataStructures/Hamt/persistent_hash_map.hpp), [set header](../../src/Cpp/Hamt/include/Tools/DataStructures/Hamt/persistent_hash_set.hpp), [Patricia header](../../src/Cpp/Hamt/include/Tools/DataStructures/Hamt/persistent_int_map.hpp) |
 | Haskell | `HashMap k v`, `HashSet a`, `HashPolicy k`, `Hashable`, `IntMap32 v`, `IntMap64 v`, `IntSet32`, `IntSet64` | [Workspace](../../src/Haskell/Hamt/README.md), [map source](../../src/Haskell/Hamt/src/Data/Structures/Hamt/HashMap.hs), [set source](../../src/Haskell/Hamt/src/Data/Structures/Hamt/HashSet.hs), [Patricia source](../../src/Haskell/Hamt/src/Data/Structures/Hamt/Patricia.hs), [tests](../../src/Haskell/Hamt/test/README.md) |
 | Kotlin | `PersistentHashMap<K, V>`, `PersistentHashSet<T>`, `HashPolicy<K>`, `ConcurrentHashTrie<K, V>`, `PersistentIntMap<V>`, `PersistentIntSet`, `PersistentLongMap<V>`, `PersistentLongSet` | [Workspace](../../src/Kotlin/Hamt/README.md), [API notes](../../src/Kotlin/Hamt/docs/api-notes.md), [validation](../../src/Kotlin/Hamt/docs/validation.md), [CHAMP source](../../src/Kotlin/Hamt/src/tools/datastructures/hamt/PersistentHamt.kt), [Ctrie source](../../src/Kotlin/Hamt/src/tools/datastructures/hamt/ConcurrentHashTrie.kt), [Patricia source](../../src/Kotlin/Hamt/src/tools/datastructures/hamt/PersistentPatricia.kt), [tests](../../src/Kotlin/Hamt/tests/README.md) |
-| Rust | `PersistentHashMap<K, V, S>`, `PersistentHashSet<T, S>`, `PersistentIntMap<V>`, `PersistentIntSet`, `PersistentLongMap<V>`, `PersistentLongSet` | [Workspace](../../src/Rust/Hamt/README.md), [API notes](../../src/Rust/Hamt/docs/api-notes.md), [validation](../../src/Rust/Hamt/docs/validation.md), [source](../../src/Rust/Hamt/src/lib.rs) |
+| Rust | `PersistentHashMap<K, V, S>`, `PersistentHashSet<T, S>`, `PersistentIntMap<V>`, `PersistentIntSet`, `PersistentLongMap<V>`, `PersistentLongSet`, `MerkleSearchTree<K, V>`, `MerkleBlockStore`, `MerkleProof`, `MerkleVerificationBudget` | [Workspace](../../src/Rust/Hamt/README.md), [API notes](../../src/Rust/Hamt/docs/api-notes.md), [Merkle search tree](../../src/Rust/Hamt/docs/merkle-search-tree.md), [validation](../../src/Rust/Hamt/docs/validation.md), [core](../../src/Rust/Hamt/src/merkle_search_tree.rs), [encoding](../../src/Rust/Hamt/src/merkle_encoding.rs), [persistence, proofs, sync, and merge](../../src/Rust/Hamt/src/merkle_persistence.rs) |
 
 ## Finger-Tree Core And Deque
 

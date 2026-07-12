@@ -40,6 +40,14 @@ require neither keys nor values to implement `Clone`. Built-in codecs cover big-
 nullable UTF-8, nullable bytes, and RFC-4122/network-order GUID bytes. See the dedicated
 [Merkle search tree notes](docs/merkle-search-tree.md) for the hash framing and wire manifest.
 
+The same surface owns full content-addressed persistence: immutable `MerkleBlock` values, a
+thread-safe `InMemoryMerkleBlockStore`, complete and partial `MerkleBlockPack` transfer, bounded
+strict load/import, `MSP2` point/range proofs, closure-pruned synchronization, and typed three-way
+merge. Import verifies the complete reachable closure and preflights every destination conflict
+before the first write. All seven verification limits are finite by default, and proof queries are
+budgeted before any codec or block decode callback. Merge distinguishes deletion from a present
+`None` and never exposes a partial tree while conflicts remain.
+
 Rust-specific shape:
 
 - key equality is Rust's `Eq`; hash policy is supplied through `BuildHasher`;

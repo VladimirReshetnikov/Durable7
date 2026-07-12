@@ -3,7 +3,7 @@
 - Created (UTC): 2026-07-12T04:30:09Z
 - Repository HEAD: 8a926e3bdb0cc37da0c8a15c4c32352c2ebcb1f5
 - Audience: Maintainers implementing or reviewing the Rust Merkle search tree
-- Scope: Core persistent API, canonical codecs, SHA-256 domain, and `MST2` block bytes
+- Scope: Core API, codecs, `MST2` blocks, persistence, proofs, synchronization, and merge
 
 `MerkleSearchTree<K, V>` is a safe-Rust semantic and wire port of the C# canonical Merkle search
 tree. It is a deterministic ordered map and content-addressed block tree, not a probabilistic skip
@@ -77,6 +77,92 @@ nonempty block is encoded in this order:
 The block address is SHA-256 over those complete bytes. The integration suite locks the same
 single-entry domain, block, and root golden vector as C# and also proves independent insertion
 histories produce identical preorder block bytes.
+
+## Blocks, stores, and transfer packs
+
+`MerkleBlock` owns immutable serialized bytes and their claimed address. Its constructor does not
+authenticate that pair because storage is deliberately format agnostic. `MerkleBlockStore` defines
+concurrent-safe lookup and shared-reference mutation; a repeated identical write is a no-op and a
+different byte sequence under an existing digest is a `ConflictingBlock` failure.
+`InMemoryMerkleBlockStore` implements that contract with an `RwLock` and returns sorted digest
+snapshots.
+
+`export_pack` emits the complete closure in deterministic preorder. `export_pack_for` preserves an
+explicit unique request order for partial transfer. `MerkleBlockPack` records the algorithm,
+domain, target root, ordered unique blocks, total byte count, and whether the root block is directly
+included. `save` and destination-backed `import` preflight every transferred address before their
+first store write, so a late conflict does not partially publish earlier blocks.
+
+`load` follows only the closure reachable from the requested root. `import` first verifies every
+supplied block, overlays it on an optional existing store, verifies the complete reachable closure,
+then commits supplied blocks only after successful destination preflight. A partial pack is valid
+only when its fallback store completes the root closure. Empty roots require no block.
+
+For every unique block the loader authenticates the claimed SHA-256 digest, `MST2` magic/tag,
+policy domain, signed counts, exact codec decode-and-reencode bytes, key-derived level, comparer
+ordering, child digest arity, absence of trailing bytes, and full canonical re-encoding. Closure
+construction additionally rejects missing blocks, active-reference cycles, child levels that do
+not descend, keys crossing separator intervals, declared/actual subtree-count differences, and a
+reconstructed root mismatch. Trusted `Arc` nodes are created only after those checks.
+
+## Verification budgets
+
+`MerkleVerificationBudget` has seven positive finite limits:
+
+| Limit | Accounted resource |
+| --- | --- |
+| `max_block_count` | distinct decoded block addresses |
+| `max_total_byte_count` | proof query plus distinct serialized block bytes |
+| `max_block_byte_count` | one serialized block |
+| `max_depth` | root-to-leaf closure or proof expansion |
+| `max_entry_count` | entries decoded across distinct blocks |
+| `max_child_references_per_block` | child digest slots in one block |
+| `max_proof_query_byte_count` | one canonical `MSP2` query descriptor |
+
+Limits are checked before entry/child allocation and before following a reference. Proof-query
+accounting is the first verification action; an oversized query invokes no codec, hashing, or block
+decode work and reports zero verified bytes/blocks. `MerkleVerificationError` exposes a stable
+`MerkleVerificationFailureKind`, diagnostic text, and the offending/missing digest when known.
+
+## `MSP2` proofs
+
+`create_proof` produces membership or nonmembership steps along one search path.
+`create_range_proof` expands every nonempty child interval intersecting an inclusive range. The
+query descriptor is ASCII `MSP2`, one kind byte (`0` membership, `1` nonmembership, `2` range),
+then canonical key/value fields with signed big-endian 32-bit lengths. A `MerkleProofStep` contains
+one complete `MST2` block and sorted unique indexes of children expanded by other steps; all other
+child hashes remain authenticated opaque boundaries.
+
+Verification budgets and strictly decodes every supplied block, checks expanded indexes against
+the canonical query path/frontier, validates each expanded child reference, rejects repeated,
+missing, extra, or unreachable steps, decodes/re-encodes query keys and membership values, and
+requires the declared root block. Empty roots prove only nonmembership or ranges and contain no
+steps. The immutable result reports validity, failure kind/message, root, verified blocks, and
+accounted bytes.
+
+## Synchronization
+
+`create_sync_pack` walks the target tree and prunes any block already present in a receiver whose
+stored blocks are understood to have verified descendant closure. `plan_sync` is the repair-safe
+alternative for a possibly partial store: it requests the first absent block on each reachable
+target path and stops below that frontier. After fetching those exact addresses with
+`export_pack_for`, the receiver repeats planning until no addresses remain, then publishes only a
+successfully loaded target root. Plan diagnostics include local/target roots and examined blocks
+and bytes.
+
+## Typed three-way merge
+
+`merge` compares base, left, and right in key order. A side unchanged from base yields the other
+side; identical descendant edits collapse without a callback. True conflicts carry shared key and
+base/left/right values. `MerkleMergeValue::Absent` differs from `Present(Arc<V>)`, so deletion is
+not confused with a present `None` when `V = Option<T>`. A resolver may choose base/left/right,
+delete, provide a new value, or leave the conflict unresolved.
+
+Existing entry records are reused through `Arc`, and a custom value replaces only its value record,
+so neither persistence nor merge requires `K: Clone` or `V: Clone`. If any conflict remains, the
+result exposes all typed conflicts and intentionally no partial tree. A successful output is rebuilt
+through the same canonical wide-tree constructor and therefore has history-independent `MST2`
+bytes.
 
 ## Validation
 

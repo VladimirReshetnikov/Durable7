@@ -106,3 +106,29 @@ Equivalent replacement keys preserve the first stored representative; the final 
 Equal encoded replacements and absent removals preserve root identity.
 
 The complete format and shape contract is in [Merkle search tree](merkle-search-tree.md).
+
+`MerkleBlockStore` uses shared-reference mutation so a store can be used concurrently and through a
+trait object. `InMemoryMerkleBlockStore` protects immutable blocks with `RwLock`; a same-address,
+same-byte write is idempotent, while a same-address byte conflict is classified and rejected.
+`save` and destination-backed `import` inspect every supplied address before their first write.
+`MerkleBlockPack` preserves deterministic transfer order, rejects duplicate addresses, and may be
+complete or partial when a destination store supplies the rest of the closure.
+
+`load_with_budget`, `import_with_budget`, and `verify_proof_with_budget` use
+`MerkleVerificationBudget` to bound distinct blocks, cumulative bytes, one-block bytes, reference
+depth, cumulative decoded entries, child references per block, and proof-query bytes. The decoder
+authenticates each digest, domain, entry codec round trip, key-derived level, comparer order, exact
+trailing-free `MST2` bytes, child interval, subtree count, and final reconstructed root. Failures
+return `MerkleVerificationError` with `MerkleVerificationFailureKind` and an offending digest when
+known. Query byte limits run before envelope, codec, hash, or block work.
+
+Point and inclusive-range proofs carry an opaque canonical `MSP2` query plus uniquely addressed
+`MerkleProofStep` blocks. Each step declares exactly the child intervals expanded by the proof;
+opaque child hashes remain authenticated boundaries. `create_sync_pack` prunes a receiver's known
+verified closures, while `plan_sync` requests the first absent block on every target path so a
+partial receiver can be repaired iteratively.
+
+`merge` and `merge_by` operate over shared entry records, so they require no `Clone` bound. A
+`MerkleMergeValue::Present(Arc<V>)` is distinct from `Absent`, including when `V` itself is
+`Option<T>` and the present value is `None`. Resolvers may select a side, base, deletion, or a new
+value. Any unresolved conflict produces all typed conflicts and no partial tree.

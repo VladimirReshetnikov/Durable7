@@ -59,7 +59,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | CHAMP canonicalization + structural equality/diff | 1 | Strong (implemented across all six languages) | Completed with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
 | `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all six languages) | Completed as proposal Tier C1 | 1 shared core, 4 C# public types, structural map/set algebra |
 | DABA Lite sliding-window aggregator | 1, 3 | Strong (implemented in every applicable language: C#, C, C++, Kotlin/JVM, and Rust; pure Haskell is not applicable) | Reuses the language's monoid abstraction | 1 small type, ~8 members |
-| Merkle search tree | 1 | Strong (C# implemented) | Completed: deterministic wire + bounded verification | Largest single item in this catalog |
+| Merkle search tree | 1 | Strong (C# and Rust implemented) | Completed: deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
 | Zip tree (canonical sorted set) | 1, 3 | Plausible (implemented across all six languages) | Completed: coherent keyed rank policy | 1 new core, set facade |
 | Brodal-Okasaki heap | 1 | Plausible (implemented across all six languages for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
@@ -310,6 +310,18 @@ or noncanonical data, missing/tampered closures, resource budgets, proof tamperi
 present-null merge semantics. In-process `Diff` prunes equal aligned blocks but honestly falls back to
 ordered subtree comparison when a topology-changing edit moves separators; block synchronization is
 the cross-process divergence-oriented path.
+
+**Rust status (2026-07-11): Implemented through the complete persistence tier with exact wire
+compatibility.** `MerkleSearchTree<K, V>` shares the C# SHA-256 domain, key framing, empty digest,
+and `MST2` block bytes while adapting persistence to immutable `Arc` nodes and a safe-Rust,
+non-`Clone` API. `MerkleBlockStore` and its concurrent in-memory implementation support atomic
+save/import, complete and requested packs, closure-pruned synchronization, and iterative frontier
+repair. Strict load/import and `MSP2` point/range verification enforce seven finite budgets before
+publishing trusted nodes. Typed three-way merge distinguishes a deleted key from a present `None`
+value and withholds the merged tree until every conflict is resolved. Fifty-seven Debug and Release
+tests plus doctests cover the shared golden vector, malformed and noncanonical closures, every
+budget, proof tampering, partial-store repair, concurrent stores, retained snapshots, and
+non-`Clone` values; clippy and rustdoc are warning-clean.
 
 **What they are.** Two convergent designs for *uniquely represented, content-addressed* search
 trees. Merkle search trees (Auvolat & Taïani, SRDS 2019) place each key at a layer derived from its
