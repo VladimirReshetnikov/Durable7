@@ -419,6 +419,7 @@ public fun main() {
         "ctrieCollisionNodesRemainStable" to ::ctrieCollisionNodesRemainStable,
         "patriciaMapsAndSetsPreserveSignedOrder" to ::patriciaMapsAndSetsPreserveSignedOrder,
         "patriciaCombiningCountsAndNoOps" to ::patriciaCombiningCountsAndNoOps,
+        "merkleSearchTreeCoreAndWire" to ::runMerkleSearchTreeTests,
     )
 
     for ((name, test) in tests) {

@@ -29,11 +29,20 @@ expectations while preserving the repository HAMT contracts: persistent updates,
 rejection, last-wins bulk replacement, original-key retention on equivalent-key replacement, and set
 algebra.
 
+The workspace also exposes `MerkleSearchTree<K, V>`, the exact safe-JVM core/wire port of the C#
+paper-style B=16 wide Merkle search tree. `MerkleSearchTreePolicy<K, V>` binds a comparator and
+explicitly versioned canonical codecs into the `mst-sha256-b16-v2` domain. SHA-256 leading-zero
+nibbles select levels, consecutive same-level separators share one immutable wide block, and
+independent histories converge to the same topology, exact `MST2` bytes, and root digest. Persistent
+updates preserve first-equivalent-key/last-value semantics and share untouched node references.
+Strict built-ins cover big-endian `Int`/`Long`, nullable UTF-8, nullable bytes, and RFC-4122 UUIDs.
+See [Merkle search tree](docs/merkle-search-tree.md) for the exact framing and API contract.
+
 Validate from `src/Kotlin`:
 
 ```powershell
 .\build.ps1 -Workspace Hamt
 ```
 
-See [API notes](docs/api-notes.md), [validation](docs/validation.md), and the
-[test map](tests/README.md).
+See [API notes](docs/api-notes.md), [Merkle search tree](docs/merkle-search-tree.md),
+[validation](docs/validation.md), and the [test map](tests/README.md).

@@ -25,3 +25,17 @@ algebra, including relations between sets built with different policies where th
 is authoritative.
 It also covers the mutable Ctrie's generation snapshots, node-local GCAS contention, collision
 nodes, lazy renewal after snapshot, and explicit conversion back to persistent CHAMP.
+
+Merkle search-tree coverage includes:
+
+- strict integer, nullable UTF-8, nullable bytes, UUID, and digest vectors, including malformed and
+  noncanonical rejection;
+- the exact C#/Rust policy-domain digest, empty digest, root digest, and full `MST2` golden block;
+- canonical construction, insertion/removal contraction, independent-history convergence, no-op
+  identity, and reference sharing across retained versions;
+- inclusive ranges, typed nullable-value diffs, comparator-equivalent key retention, custom value
+  relations, caller key/value reference preservation, and mutated-representative rejection by the
+  deep canonical validator;
+- a 12,000-operation retained-version model against `TreeMap`, concurrent snapshot readers, exact
+  five-level adversarial geometry, and eight independent churn histories converging to identical
+  roots, topology, statistics, and block bytes.

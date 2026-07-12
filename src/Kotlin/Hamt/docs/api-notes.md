@@ -13,6 +13,9 @@ Primary entry points:
 - `DuplicateKeyException`, `AddResult<T>`, and removal result records.
 - `ConcurrentHashTrie<K,V>` and its immutable `Snapshot<K,V>`.
 - `PersistentIntMap<V>` / `PersistentIntSet` and `PersistentLongMap<V>` / `PersistentLongSet`.
+- `MerkleSearchTree<K, V>`, `MerkleSearchTreePolicy<K, V>`, `MerkleEntry<K, V>`, and the
+  `MerkleMapDifference<K, V>` variants.
+- `MerkleCodec<T>`, `MerkleDigest`, the strict built-in codecs, and `MerkleEncodedBlock`.
 
 The port follows the repository HAMT semantics:
 
@@ -62,3 +65,29 @@ caches its subtree cardinality, allowing an algebra result to expose `size` with
 result-tree traversal. Map `union` and `intersect` overloads accept a
 `(key, leftValue, rightValue) -> value` function that is invoked exactly for keys present in both
 operands; disjoint subtrees remain structurally shared.
+
+## Merkle Search Tree
+
+`MerkleSearchTreePolicy<K, V>` combines comparator semantics, a caller-owned policy ID, and
+explicitly versioned injective key/value codecs. Its `domainDigest` binds those identifiers to the
+`mst-sha256-b16-v2` algorithm. Keys are hashed again within that domain; their count of leading zero
+hexadecimal digits selects levels 0 through 64. The built-in codecs use fixed-width big-endian
+integers, tagged nullable UTF-8 or bytes, and RFC-4122 network-order UUIDs. UTF-8 encoding rejects
+unpaired surrogates and decoding rejects malformed byte sequences.
+
+`MerkleSearchTree.empty` and `from` create immutable canonical trees. `from` sorts by the supplied
+comparator, retains the first equivalent key object, and applies the last value. `setItem`, `remove`,
+and `clear` return persistent versions; unchanged encoded values and absent removals return the same
+tree object, while changed paths share untouched block objects. Lookups preserve nullable values via
+`getEntry`; iteration and `enumerateRange` use explicit stacks; `diff` skips matching block digests
+and returns unambiguous added/removed/changed variants. `contentEquals` compares compatible content
+addresses, while `mapEquals` permits a caller-supplied value relation.
+
+The tree retains caller key and value references. Codecs own their encoded byte snapshots, and all
+public byte-returning APIs return defensive copies. `blocksPreorder`, `shape`, `sharedBlockCount`,
+and `sharesRootWith` expose deterministic diagnostics without making nodes mutable.
+`validateStructure` re-encodes every retained key and value, recomputes key-derived levels, checks
+strict key order, child intervals, cached bounds/counts/heights, exact block bytes, and SHA-256
+content addresses. It therefore rejects caller mutation that makes a retained object disagree with
+the canonical bytes captured at insertion. See [Merkle search tree](merkle-search-tree.md) for the
+complete policy and `MST2` wire contract.
