@@ -14,7 +14,9 @@ for immutable unordered collections backed by a hash-array mapped trie:
 - `tds_int_map` / `tds_long_map`, explicit-width persistent maps backed by a big-endian Patricia
   trie, plus `tds_int_set` / `tds_long_set` wrappers.
 - `tds_merkle_search_tree`, a persistent ordered content-addressed map implementing the exact
-  cross-language `mst-sha256-b16-v2` policy and canonical `MST2` block wire contract.
+  cross-language `mst-sha256-b16-v2` policy and canonical `MST2` block wire contract, with verified
+  persistence, bounded import/load, `MSP2` proofs, synchronization planning, and typed three-way
+  merge.
 
 The implementation preserves the C# and C++ libraries' core shape: 32-way logical branching, five
 hash bits per trie level, canonical CHAMP branches with separate data/node maps, inline type-erased
@@ -34,9 +36,12 @@ Maps expose policy-compatible content equality and visitor-based typed diff with
 result allocator. Inline payload rebuilds retain through the configured callbacks and unwind every
 completed retain when allocation fails.
 
-The Merkle search tree uses fallible type/copy/comparison/codec hooks, library-owned canonical
+The Merkle search tree uses fallible type/copy/comparison/codec/store hooks, library-owned canonical
 bytes, atomic reference-counted immutable objects and nodes, strong alias-safe publication, and
-allocation-free intrusive release. See the [local Merkle specification](docs/merkle-search-tree.md).
+allocation-free intrusive release. Its persistence tier provides immutable block/pack/proof/plan
+handles, a synchronized in-memory block store, seven independent verification budgets, destination
+preflight, closure-checked import, iterative frontier sync, and present-null-safe merge conflicts.
+See the [local Merkle specification](docs/merkle-search-tree.md).
 
 The HAMT and Patricia intrusive node reference counts are deliberately non-atomic. Already-retained snapshots support
 concurrent read-only access, but copying, updating, clearing, or destroying versions that share a lineage must
@@ -50,7 +55,7 @@ callbacks and callback-owned contexts remain responsible for their own synchroni
 - `include/Tools/DataStructures/Hamt/hamt.h` contains the public C API.
 - `include/Tools/DataStructures/Hamt/patricia.h` contains the integer Patricia map/set API.
 - `include/Tools/DataStructures/Hamt/merkle_search_tree.h` contains the Merkle policy, codec, tree,
-  traversal, diff, wire-block, and validation API.
+  traversal, diff, wire-block, store, persistence, proof, sync, merge, and validation API.
 - `src/hamt.c` contains the HAMT implementation.
 - `src/patricia.c` contains the shared 32-/64-bit Patricia implementation.
 - `src/merkle_search_tree.c` contains the canonical Merkle search tree implementation and CNG /

@@ -13,7 +13,8 @@
 maps and sets. The build script compiles it with `src/patricia.c` into
 `build/<Configuration>/patricia_tests.exe` and runs it after the HAMT suite.
 
-`merkle_search_tree_tests.c` is the focused executable for the ordered content-addressed map. It
+`merkle_search_tree_tests.c` is the focused executable for the ordered content-addressed map and
+its complete persistence tier. It
 compiles with `src/merkle_search_tree.c` into
 `build/<Configuration>/merkle_search_tree_tests.exe`, links CNG through `bcrypt.lib`, and runs after
 the HAMT and Patricia suites.
@@ -62,6 +63,16 @@ The Merkle executable registers:
 - `streaming visitor failures`
 - `randomized model and snapshots`
 - `concurrent retained snapshot reads`
+- `verified persistence store and iterative sync`
+- `MSP2 proofs and budget preflight`
+- `all budgets import closure and preflight`
+- `MSP2 structural tamper and bomb precedence`
+- `three-way merge results and policy identity`
+- `merge present null is not deletion`
+- `concurrent memory store puts and owned snapshots`
+- `memory store never calls user code under lock`
+- `persistence allocation failure sweeps`
+- `persistence callback failures leave no result`
 
 ## Build And Run
 
@@ -90,8 +101,8 @@ Its deterministic coverage includes 32-/64-bit signed ordering, persistent snaps
 identity, fixed and callback-combining map algebra, set algebra, randomized model histories, and
 retain/release accounting.
 
-Run the Merkle executable directly when investigating canonical block bytes, codec failures,
-history independence, or allocator unwind:
+Run the Merkle executable directly when investigating canonical block bytes, verified persistence,
+proofs, sync, merge, codec/store failures, concurrency, history independence, or allocator unwind:
 
 ```powershell
 .\build\Debug\merkle_search_tree_tests.exe

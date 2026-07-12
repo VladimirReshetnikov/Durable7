@@ -16,6 +16,7 @@
 #include <bcrypt.h>
 #else
 #include <openssl/evp.h>
+#include <threads.h>
 #endif
 
 enum {
@@ -37,11 +38,20 @@ static void tds_mst_ref_init(tds_mst_ref_count *value) {
 }
 
 static void tds_mst_ref_retain(tds_mst_ref_count *value) {
-    (void)InterlockedIncrement64(value);
+    const LONG64 incremented = InterlockedIncrement64(value);
+    if (incremented <= 1) {
+        /* Retaining a dead object or overflowing the signed platform counter
+         * is an unrecoverable ownership invariant violation. */
+        abort();
+    }
 }
 
 static bool tds_mst_ref_release(tds_mst_ref_count *value) {
-    return InterlockedDecrement64(value) == 0;
+    const LONG64 decremented = InterlockedDecrement64(value);
+    if (decremented < 0) {
+        abort();
+    }
+    return decremented == 0;
 }
 #else
 typedef atomic_size_t tds_mst_ref_count;
@@ -51,11 +61,24 @@ static void tds_mst_ref_init(tds_mst_ref_count *value) {
 }
 
 static void tds_mst_ref_retain(tds_mst_ref_count *value) {
-    (void)atomic_fetch_add_explicit(value, 1, memory_order_relaxed);
+    const size_t previous = atomic_fetch_add_explicit(
+        value,
+        1,
+        memory_order_relaxed);
+    if (previous == 0 || previous == SIZE_MAX) {
+        abort();
+    }
 }
 
 static bool tds_mst_ref_release(tds_mst_ref_count *value) {
-    return atomic_fetch_sub_explicit(value, 1, memory_order_acq_rel) == 1;
+    const size_t previous = atomic_fetch_sub_explicit(
+        value,
+        1,
+        memory_order_acq_rel);
+    if (previous == 0) {
+        abort();
+    }
+    return previous == 1;
 }
 #endif
 
@@ -4144,4 +4167,4856 @@ tds_merkle_status tds_merkle_search_tree_validate(
     *valid = structurally_valid;
     *statistics = result;
     return TDS_MERKLE_OK;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Verified persistence infrastructure.                                      */
+
+struct tds_merkle_block_rep {
+    tds_mst_ref_count refs;
+    tds_merkle_allocator allocator;
+    struct tds_merkle_policy_rep *policy_owner;
+    tds_merkle_digest digest;
+    size_t byte_count;
+    unsigned char bytes[];
+};
+
+typedef struct tds_mst_digest_slot {
+    bool occupied;
+    tds_merkle_digest digest;
+    size_t value;
+    struct tds_merkle_node *node;
+} tds_mst_digest_slot;
+
+struct tds_merkle_block_pack_rep {
+    tds_mst_ref_count refs;
+    tds_merkle_allocator allocator;
+    struct tds_merkle_policy_rep *policy_owner;
+    unsigned char *algorithm_id;
+    size_t algorithm_id_size;
+    tds_merkle_digest domain_digest;
+    tds_merkle_digest root_hash;
+    tds_merkle_block *blocks;
+    size_t block_count;
+    uint64_t total_byte_count;
+    bool contains_root_block;
+};
+
+#if defined(_WIN32)
+typedef SRWLOCK tds_mst_store_lock;
+
+static bool tds_mst_store_lock_init(tds_mst_store_lock *lock) {
+    InitializeSRWLock(lock);
+    return true;
+}
+
+static void tds_mst_store_lock_dispose(tds_mst_store_lock *lock) {
+    (void)lock;
+}
+
+static tds_merkle_status tds_mst_store_lock_acquire(tds_mst_store_lock *lock) {
+    AcquireSRWLockExclusive(lock);
+    return TDS_MERKLE_OK;
+}
+
+static void tds_mst_store_lock_release(tds_mst_store_lock *lock) {
+    ReleaseSRWLockExclusive(lock);
+}
+#else
+typedef mtx_t tds_mst_store_lock;
+
+static bool tds_mst_store_lock_init(tds_mst_store_lock *lock) {
+    return mtx_init(lock, mtx_plain) == thrd_success;
+}
+
+static void tds_mst_store_lock_dispose(tds_mst_store_lock *lock) {
+    mtx_destroy(lock);
+}
+
+static tds_merkle_status tds_mst_store_lock_acquire(tds_mst_store_lock *lock) {
+    return mtx_lock(lock) == thrd_success
+        ? TDS_MERKLE_OK
+        : TDS_MERKLE_CALLBACK_FAILURE;
+}
+
+static void tds_mst_store_lock_release(tds_mst_store_lock *lock) {
+    /* Failure means the internal synchronization invariant is no longer
+     * recoverable: returning would permit shared state access without a known
+     * lock state. Treat it as a process-fatal implementation invariant. */
+    if (mtx_unlock(lock) != thrd_success) {
+        abort();
+    }
+}
+#endif
+
+struct tds_merkle_memory_block_store_rep {
+    tds_mst_ref_count refs;
+    tds_merkle_allocator allocator;
+    tds_mst_store_lock lock;
+    tds_merkle_block *blocks;
+    size_t count;
+    size_t capacity;
+};
+
+static bool tds_mst_allocator_valid(const tds_merkle_allocator *allocator) {
+    return allocator == NULL ||
+        (allocator->allocate != NULL && allocator->deallocate != NULL);
+}
+
+static tds_merkle_allocator tds_mst_normalize_allocator(
+    const tds_merkle_allocator *allocator) {
+    tds_merkle_allocator result;
+    if (allocator == NULL) {
+        result.allocate = tds_mst_default_allocate;
+        result.deallocate = tds_mst_default_deallocate;
+        result.context = NULL;
+    } else {
+        result = *allocator;
+    }
+    return result;
+}
+
+static void *tds_mst_allocator_allocate(
+    const tds_merkle_allocator *allocator,
+    size_t size) {
+    return allocator->allocate(size, allocator->context);
+}
+
+static void tds_mst_allocator_deallocate(
+    const tds_merkle_allocator *allocator,
+    void *allocation) {
+    if (allocation != NULL) {
+        allocator->deallocate(allocation, allocator->context);
+    }
+}
+
+void tds_merkle_verification_error_init(tds_merkle_verification_error *error) {
+    if (error != NULL) {
+        memset(error, 0, sizeof(*error));
+    }
+}
+
+static tds_merkle_status tds_mst_verification_fail(
+    tds_merkle_verification_error *error,
+    tds_merkle_verification_failure_kind kind,
+    const tds_merkle_digest *digest) {
+    if (error != NULL) {
+        error->kind = kind;
+        error->has_block_digest = digest != NULL;
+        if (digest != NULL) {
+            error->block_digest = *digest;
+        }
+    }
+    return TDS_MERKLE_VERIFICATION_FAILURE;
+}
+
+void tds_merkle_verification_budget_init_default(
+    tds_merkle_verification_budget *budget) {
+    if (budget != NULL) {
+        budget->max_block_count = 1000000u;
+        budget->max_total_byte_count = UINT64_C(1) << 30;
+        budget->max_block_byte_count = (size_t)16 << 20;
+        budget->max_depth = 256u;
+        budget->max_entry_count = UINT64_C(100000000);
+        budget->max_child_references_per_block = 65536u;
+        budget->max_proof_query_byte_count = (size_t)16 << 20;
+    }
+}
+
+tds_merkle_status tds_merkle_verification_budget_validate(
+    const tds_merkle_verification_budget *budget) {
+    if (budget == NULL || budget->max_block_count == 0 ||
+        budget->max_total_byte_count == 0 || budget->max_block_byte_count == 0 ||
+        budget->max_depth == 0 || budget->max_entry_count == 0 ||
+        budget->max_child_references_per_block == 0 ||
+        budget->max_proof_query_byte_count == 0 ||
+        (uint64_t)budget->max_block_byte_count > budget->max_total_byte_count ||
+        (uint64_t)budget->max_proof_query_byte_count > budget->max_total_byte_count) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    return TDS_MERKLE_OK;
+}
+
+static void tds_mst_block_retain(struct tds_merkle_block_rep *block) {
+    if (block != NULL) {
+        tds_mst_ref_retain(&block->refs);
+    }
+}
+
+static void tds_mst_block_release(struct tds_merkle_block_rep *block) {
+    if (block != NULL && tds_mst_ref_release(&block->refs)) {
+        const tds_merkle_allocator allocator = block->allocator;
+        struct tds_merkle_policy_rep *owner = block->policy_owner;
+        tds_mst_allocator_deallocate(&allocator, block);
+        tds_mst_policy_release(owner);
+    }
+}
+
+tds_merkle_status tds_merkle_block_init(
+    tds_merkle_digest digest,
+    const unsigned char *bytes,
+    size_t byte_count,
+    const tds_merkle_allocator *allocator,
+    tds_merkle_block *block) {
+    tds_merkle_allocator selected;
+    struct tds_merkle_block_rep *rep;
+    size_t allocation_size;
+    if (block == NULL || !tds_mst_allocator_valid(allocator) ||
+        (byte_count != 0 && bytes == NULL) ||
+        tds_mst_add_overflows(sizeof(*rep), byte_count, &allocation_size)) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    selected = tds_mst_normalize_allocator(allocator);
+    rep = (struct tds_merkle_block_rep *)tds_mst_allocator_allocate(
+        &selected,
+        allocation_size);
+    if (rep == NULL) {
+        return TDS_MERKLE_NO_MEMORY;
+    }
+    tds_mst_ref_init(&rep->refs);
+    rep->allocator = selected;
+    rep->policy_owner = NULL;
+    rep->digest = digest;
+    rep->byte_count = byte_count;
+    if (byte_count != 0) {
+        memcpy(rep->bytes, bytes, byte_count);
+    }
+    block->rep = rep;
+    return TDS_MERKLE_OK;
+}
+
+static tds_merkle_status tds_mst_block_init_policy(
+    const struct tds_merkle_policy_rep *policy,
+    tds_merkle_digest digest,
+    const unsigned char *bytes,
+    size_t byte_count,
+    tds_merkle_block *block) {
+    tds_merkle_status status = tds_merkle_block_init(
+        digest,
+        bytes,
+        byte_count,
+        &policy->config.allocator,
+        block);
+    if (status == TDS_MERKLE_OK) {
+        block->rep->policy_owner = (struct tds_merkle_policy_rep *)policy;
+        tds_mst_policy_retain(block->rep->policy_owner);
+    }
+    return status;
+}
+
+tds_merkle_status tds_merkle_block_copy(
+    const tds_merkle_block *source,
+    tds_merkle_block *destination) {
+    if (source == NULL || source->rep == NULL || destination == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    if (source != destination) {
+        tds_mst_block_retain(source->rep);
+        destination->rep = source->rep;
+    }
+    return TDS_MERKLE_OK;
+}
+
+void tds_merkle_block_move(
+    tds_merkle_block *destination,
+    tds_merkle_block *source) {
+    if (destination != NULL && source != NULL && destination != source) {
+        destination->rep = source->rep;
+        source->rep = NULL;
+    }
+}
+
+void tds_merkle_block_dispose(tds_merkle_block *block) {
+    if (block != NULL) {
+        tds_mst_block_release(block->rep);
+        block->rep = NULL;
+    }
+}
+
+bool tds_merkle_block_equal(
+    const tds_merkle_block *left,
+    const tds_merkle_block *right) {
+    return left != NULL && right != NULL && left->rep != NULL && right->rep != NULL &&
+        tds_merkle_digest_equal(left->rep->digest, right->rep->digest) &&
+        left->rep->byte_count == right->rep->byte_count &&
+        memcmp(left->rep->bytes, right->rep->bytes, left->rep->byte_count) == 0;
+}
+
+tds_merkle_digest tds_merkle_block_digest(const tds_merkle_block *block) {
+    tds_merkle_digest zero = {{0}};
+    return block == NULL || block->rep == NULL ? zero : block->rep->digest;
+}
+
+const unsigned char *tds_merkle_block_bytes(const tds_merkle_block *block) {
+    return block == NULL || block->rep == NULL ? NULL : block->rep->bytes;
+}
+
+size_t tds_merkle_block_byte_count(const tds_merkle_block *block) {
+    return block == NULL || block->rep == NULL ? 0 : block->rep->byte_count;
+}
+
+void tds_merkle_block_store_init(tds_merkle_block_store *store) {
+    if (store != NULL) {
+        memset(store, 0, sizeof(*store));
+    }
+}
+
+static bool tds_mst_store_valid(const tds_merkle_block_store *store) {
+    return store != NULL && store->count != NULL && store->contains != NULL &&
+        store->try_get != NULL && store->put != NULL && store->remove != NULL &&
+        store->clear != NULL;
+}
+
+tds_merkle_status tds_merkle_block_store_count(
+    const tds_merkle_block_store *store,
+    size_t *count) {
+    size_t produced = 0;
+    tds_merkle_status status;
+    if (!tds_mst_store_valid(store) || count == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    status = store->count(&produced, store->context);
+    if (status == TDS_MERKLE_OK) {
+        *count = produced;
+    }
+    return status;
+}
+
+tds_merkle_status tds_merkle_block_store_contains(
+    const tds_merkle_block_store *store,
+    tds_merkle_digest digest,
+    bool *contains) {
+    bool produced = false;
+    tds_merkle_status status;
+    if (!tds_mst_store_valid(store) || contains == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    status = store->contains(digest, &produced, store->context);
+    if (status == TDS_MERKLE_OK) {
+        *contains = produced;
+    }
+    return status;
+}
+
+tds_merkle_status tds_merkle_block_store_try_get(
+    const tds_merkle_block_store *store,
+    tds_merkle_digest digest,
+    bool *found,
+    tds_merkle_block *block) {
+    bool produced_found = false;
+    tds_merkle_block produced_block = {NULL};
+    tds_merkle_status status;
+    if (!tds_mst_store_valid(store) || found == NULL || block == NULL ||
+        block->rep != NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    status = store->try_get(
+        digest,
+        &produced_found,
+        &produced_block,
+        store->context);
+    if (status == TDS_MERKLE_OK &&
+        produced_found != (produced_block.rep != NULL)) {
+        status = TDS_MERKLE_CALLBACK_FAILURE;
+    }
+    if (status == TDS_MERKLE_OK) {
+        *found = produced_found;
+        if (produced_found) {
+            tds_merkle_block_move(block, &produced_block);
+        }
+    }
+    tds_merkle_block_dispose(&produced_block);
+    return status;
+}
+
+tds_merkle_status tds_merkle_block_store_put(
+    const tds_merkle_block_store *store,
+    const tds_merkle_block *block,
+    tds_merkle_store_put_result *result) {
+    tds_merkle_store_put_result produced = (tds_merkle_store_put_result)-1;
+    tds_merkle_status status;
+    if (!tds_mst_store_valid(store) || block == NULL || block->rep == NULL ||
+        result == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    status = store->put(block, &produced, store->context);
+    if (status == TDS_MERKLE_OK &&
+        produced != TDS_MERKLE_STORE_ADDED &&
+        produced != TDS_MERKLE_STORE_PRESENT_IDENTICAL) {
+        return TDS_MERKLE_CALLBACK_FAILURE;
+    }
+    if (status == TDS_MERKLE_VERIFICATION_FAILURE &&
+        produced != TDS_MERKLE_STORE_CONFLICT) {
+        return TDS_MERKLE_CALLBACK_FAILURE;
+    }
+    if (status != TDS_MERKLE_OK &&
+        status != TDS_MERKLE_VERIFICATION_FAILURE) {
+        return status;
+    }
+    *result = produced;
+    return status;
+}
+
+tds_merkle_status tds_merkle_block_store_remove(
+    const tds_merkle_block_store *store,
+    tds_merkle_digest digest,
+    bool *removed) {
+    bool produced = false;
+    tds_merkle_status status;
+    if (!tds_mst_store_valid(store) || removed == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    status = store->remove(digest, &produced, store->context);
+    if (status == TDS_MERKLE_OK) {
+        *removed = produced;
+    }
+    return status;
+}
+
+tds_merkle_status tds_merkle_block_store_clear(
+    const tds_merkle_block_store *store) {
+    return !tds_mst_store_valid(store)
+        ? TDS_MERKLE_INVALID_ARGUMENT
+        : store->clear(store->context);
+}
+
+static size_t tds_mst_store_lower_bound(
+    const struct tds_merkle_memory_block_store_rep *rep,
+    tds_merkle_digest digest,
+    bool *found) {
+    size_t low = 0;
+    size_t high = rep->count;
+    while (low < high) {
+        const size_t middle = low + (high - low) / 2;
+        if (tds_merkle_digest_compare(
+                rep->blocks[middle].rep->digest,
+                digest) < 0) {
+            low = middle + 1;
+        } else {
+            high = middle;
+        }
+    }
+    *found = low < rep->count &&
+        tds_merkle_digest_equal(rep->blocks[low].rep->digest, digest);
+    return low;
+}
+
+static tds_merkle_status tds_mst_memory_count(size_t *count, void *context) {
+    struct tds_merkle_memory_block_store_rep *rep =
+        (struct tds_merkle_memory_block_store_rep *)context;
+    size_t produced;
+    tds_merkle_status status = tds_mst_store_lock_acquire(&rep->lock);
+    if (status != TDS_MERKLE_OK) {
+        return status;
+    }
+    produced = rep->count;
+    tds_mst_store_lock_release(&rep->lock);
+    *count = produced;
+    return TDS_MERKLE_OK;
+}
+
+static tds_merkle_status tds_mst_memory_contains(
+    tds_merkle_digest digest,
+    bool *contains,
+    void *context) {
+    struct tds_merkle_memory_block_store_rep *rep =
+        (struct tds_merkle_memory_block_store_rep *)context;
+    bool produced;
+    tds_merkle_status status = tds_mst_store_lock_acquire(&rep->lock);
+    if (status != TDS_MERKLE_OK) {
+        return status;
+    }
+    (void)tds_mst_store_lower_bound(rep, digest, &produced);
+    tds_mst_store_lock_release(&rep->lock);
+    *contains = produced;
+    return TDS_MERKLE_OK;
+}
+
+static tds_merkle_status tds_mst_memory_try_get(
+    tds_merkle_digest digest,
+    bool *found,
+    tds_merkle_block *block,
+    void *context) {
+    struct tds_merkle_memory_block_store_rep *rep =
+        (struct tds_merkle_memory_block_store_rep *)context;
+    tds_merkle_block produced = {NULL};
+    size_t index;
+    bool produced_found;
+    tds_merkle_status status = TDS_MERKLE_OK;
+    status = tds_mst_store_lock_acquire(&rep->lock);
+    if (status != TDS_MERKLE_OK) {
+        return status;
+    }
+    index = tds_mst_store_lower_bound(rep, digest, &produced_found);
+    if (produced_found) {
+        status = tds_merkle_block_copy(&rep->blocks[index], &produced);
+    }
+    tds_mst_store_lock_release(&rep->lock);
+    if (status == TDS_MERKLE_OK) {
+        *found = produced_found;
+        if (produced_found) {
+            tds_merkle_block_move(block, &produced);
+        }
+    }
+    tds_merkle_block_dispose(&produced);
+    return status;
+}
+
+static tds_merkle_status tds_mst_memory_growth(
+    size_t current_capacity,
+    size_t required,
+    size_t *capacity,
+    size_t *bytes) {
+    size_t produced = current_capacity == 0 ? 8 : current_capacity;
+    if (required == 0) {
+        return TDS_MERKLE_OVERFLOW;
+    }
+    while (produced < required) {
+        if (produced > SIZE_MAX / 2) {
+            return TDS_MERKLE_OVERFLOW;
+        }
+        produced *= 2;
+    }
+    if (tds_mst_multiply_overflows(
+            produced,
+            sizeof(tds_merkle_block),
+            bytes)) {
+        return TDS_MERKLE_OVERFLOW;
+    }
+    *capacity = produced;
+    return TDS_MERKLE_OK;
+}
+
+static void tds_mst_memory_insert_locked(
+    struct tds_merkle_memory_block_store_rep *rep,
+    size_t index,
+    const tds_merkle_block *block) {
+    if (index != rep->count) {
+        memmove(
+            rep->blocks + index + 1,
+            rep->blocks + index,
+            (rep->count - index) * sizeof(*rep->blocks));
+    }
+    rep->blocks[index].rep = block->rep;
+    tds_mst_block_retain(rep->blocks[index].rep);
+    ++rep->count;
+}
+
+static tds_merkle_status tds_mst_memory_put(
+    const tds_merkle_block *block,
+    tds_merkle_store_put_result *result,
+    void *context) {
+    struct tds_merkle_memory_block_store_rep *rep =
+        (struct tds_merkle_memory_block_store_rep *)context;
+    tds_merkle_block *replacement = NULL;
+    size_t replacement_capacity = 0;
+    for (;;) {
+        tds_merkle_block *retired = NULL;
+        size_t current_capacity;
+        size_t required;
+        size_t replacement_bytes;
+        size_t index;
+        bool found;
+        tds_merkle_store_put_result produced;
+        tds_merkle_status status = tds_mst_store_lock_acquire(&rep->lock);
+        if (status != TDS_MERKLE_OK) {
+            tds_mst_allocator_deallocate(&rep->allocator, replacement);
+            return status;
+        }
+        index = tds_mst_store_lower_bound(rep, block->rep->digest, &found);
+        if (found) {
+            produced = tds_merkle_block_equal(&rep->blocks[index], block)
+                ? TDS_MERKLE_STORE_PRESENT_IDENTICAL
+                : TDS_MERKLE_STORE_CONFLICT;
+            tds_mst_store_lock_release(&rep->lock);
+            tds_mst_allocator_deallocate(&rep->allocator, replacement);
+            *result = produced;
+            return produced == TDS_MERKLE_STORE_CONFLICT
+                ? TDS_MERKLE_VERIFICATION_FAILURE
+                : TDS_MERKLE_OK;
+        }
+        if (rep->count < rep->capacity) {
+            tds_mst_memory_insert_locked(rep, index, block);
+            tds_mst_store_lock_release(&rep->lock);
+            tds_mst_allocator_deallocate(&rep->allocator, replacement);
+            *result = TDS_MERKLE_STORE_ADDED;
+            return TDS_MERKLE_OK;
+        }
+        if (rep->count != SIZE_MAX && replacement != NULL &&
+            rep->count + 1 <= replacement_capacity &&
+            replacement_capacity > rep->capacity) {
+            retired = rep->blocks;
+            if (rep->count != 0) {
+                memcpy(
+                    replacement,
+                    rep->blocks,
+                    rep->count * sizeof(*replacement));
+            }
+            rep->blocks = replacement;
+            rep->capacity = replacement_capacity;
+            replacement = NULL;
+            replacement_capacity = 0;
+            index = tds_mst_store_lower_bound(rep, block->rep->digest, &found);
+            (void)found;
+            tds_mst_memory_insert_locked(rep, index, block);
+            tds_mst_store_lock_release(&rep->lock);
+            tds_mst_allocator_deallocate(&rep->allocator, retired);
+            *result = TDS_MERKLE_STORE_ADDED;
+            return TDS_MERKLE_OK;
+        }
+        if (rep->count == SIZE_MAX) {
+            tds_mst_store_lock_release(&rep->lock);
+            tds_mst_allocator_deallocate(&rep->allocator, replacement);
+            return TDS_MERKLE_OVERFLOW;
+        }
+        required = rep->count + 1;
+        current_capacity = rep->capacity;
+        tds_mst_store_lock_release(&rep->lock);
+        tds_mst_allocator_deallocate(&rep->allocator, replacement);
+        replacement = NULL;
+        replacement_capacity = 0;
+        status = tds_mst_memory_growth(
+            current_capacity,
+            required,
+            &replacement_capacity,
+            &replacement_bytes);
+        if (status != TDS_MERKLE_OK) {
+            return status;
+        }
+        replacement = (tds_merkle_block *)tds_mst_allocator_allocate(
+            &rep->allocator,
+            replacement_bytes);
+        if (replacement == NULL) {
+            return TDS_MERKLE_NO_MEMORY;
+        }
+    }
+}
+
+static tds_merkle_status tds_mst_memory_remove(
+    tds_merkle_digest digest,
+    bool *removed,
+    void *context) {
+    struct tds_merkle_memory_block_store_rep *rep =
+        (struct tds_merkle_memory_block_store_rep *)context;
+    tds_merkle_block removed_block = {NULL};
+    size_t index;
+    bool produced;
+    tds_merkle_status status = tds_mst_store_lock_acquire(&rep->lock);
+    if (status != TDS_MERKLE_OK) {
+        return status;
+    }
+    index = tds_mst_store_lower_bound(rep, digest, &produced);
+    if (produced) {
+        removed_block = rep->blocks[index];
+        --rep->count;
+        if (index != rep->count) {
+            memmove(
+                rep->blocks + index,
+                rep->blocks + index + 1,
+                (rep->count - index) * sizeof(*rep->blocks));
+        }
+    }
+    tds_mst_store_lock_release(&rep->lock);
+    tds_merkle_block_dispose(&removed_block);
+    *removed = produced;
+    return TDS_MERKLE_OK;
+}
+
+static tds_merkle_status tds_mst_memory_clear(void *context) {
+    struct tds_merkle_memory_block_store_rep *rep =
+        (struct tds_merkle_memory_block_store_rep *)context;
+    tds_merkle_block *blocks;
+    size_t count;
+    size_t index;
+    tds_merkle_status status = tds_mst_store_lock_acquire(&rep->lock);
+    if (status != TDS_MERKLE_OK) {
+        return status;
+    }
+    blocks = rep->blocks;
+    count = rep->count;
+    rep->blocks = NULL;
+    rep->count = 0;
+    rep->capacity = 0;
+    tds_mst_store_lock_release(&rep->lock);
+    for (index = 0; index != count; ++index) {
+        tds_merkle_block_dispose(&blocks[index]);
+    }
+    tds_mst_allocator_deallocate(&rep->allocator, blocks);
+    return TDS_MERKLE_OK;
+}
+
+tds_merkle_status tds_merkle_memory_block_store_init(
+    tds_merkle_memory_block_store *store,
+    const tds_merkle_allocator *allocator) {
+    tds_merkle_allocator selected;
+    struct tds_merkle_memory_block_store_rep *rep;
+    if (store == NULL || !tds_mst_allocator_valid(allocator)) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    selected = tds_mst_normalize_allocator(allocator);
+    rep = (struct tds_merkle_memory_block_store_rep *)tds_mst_allocator_allocate(
+        &selected,
+        sizeof(*rep));
+    if (rep == NULL) {
+        return TDS_MERKLE_NO_MEMORY;
+    }
+    memset(rep, 0, sizeof(*rep));
+    rep->allocator = selected;
+    if (!tds_mst_store_lock_init(&rep->lock)) {
+        tds_mst_allocator_deallocate(&selected, rep);
+        return TDS_MERKLE_CALLBACK_FAILURE;
+    }
+    tds_mst_ref_init(&rep->refs);
+    store->rep = rep;
+    return TDS_MERKLE_OK;
+}
+
+tds_merkle_status tds_merkle_memory_block_store_copy(
+    const tds_merkle_memory_block_store *source,
+    tds_merkle_memory_block_store *destination) {
+    if (source == NULL || source->rep == NULL || destination == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    if (source != destination) {
+        tds_mst_ref_retain(&source->rep->refs);
+        destination->rep = source->rep;
+    }
+    return TDS_MERKLE_OK;
+}
+
+void tds_merkle_memory_block_store_move(
+    tds_merkle_memory_block_store *destination,
+    tds_merkle_memory_block_store *source) {
+    if (destination != NULL && source != NULL && destination != source) {
+        destination->rep = source->rep;
+        source->rep = NULL;
+    }
+}
+
+void tds_merkle_memory_block_store_dispose(
+    tds_merkle_memory_block_store *store) {
+    struct tds_merkle_memory_block_store_rep *rep;
+    size_t index;
+    if (store == NULL || store->rep == NULL) {
+        return;
+    }
+    rep = store->rep;
+    store->rep = NULL;
+    if (!tds_mst_ref_release(&rep->refs)) {
+        return;
+    }
+    for (index = 0; index != rep->count; ++index) {
+        tds_merkle_block_dispose(&rep->blocks[index]);
+    }
+    tds_mst_allocator_deallocate(&rep->allocator, rep->blocks);
+    tds_mst_store_lock_dispose(&rep->lock);
+    tds_mst_allocator_deallocate(&rep->allocator, rep);
+}
+
+tds_merkle_status tds_merkle_memory_block_store_as_store(
+    const tds_merkle_memory_block_store *memory_store,
+    tds_merkle_block_store *store) {
+    if (memory_store == NULL || memory_store->rep == NULL || store == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    store->count = tds_mst_memory_count;
+    store->contains = tds_mst_memory_contains;
+    store->try_get = tds_mst_memory_try_get;
+    store->put = tds_mst_memory_put;
+    store->remove = tds_mst_memory_remove;
+    store->clear = tds_mst_memory_clear;
+    store->context = memory_store->rep;
+    return TDS_MERKLE_OK;
+}
+
+tds_merkle_status tds_merkle_memory_block_store_visit_digests(
+    const tds_merkle_memory_block_store *store,
+    tds_merkle_digest_visitor visitor,
+    void *context) {
+    tds_merkle_digest *snapshot = NULL;
+    size_t snapshot_capacity = 0;
+    size_t count = 0;
+    size_t bytes;
+    size_t index;
+    tds_merkle_status status = TDS_MERKLE_OK;
+    if (store == NULL || store->rep == NULL || visitor == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    for (;;) {
+        status = tds_mst_store_lock_acquire(&store->rep->lock);
+        if (status != TDS_MERKLE_OK) {
+            break;
+        }
+        count = store->rep->count;
+        if (count <= snapshot_capacity) {
+            for (index = 0; index != count; ++index) {
+                snapshot[index] = store->rep->blocks[index].rep->digest;
+            }
+            tds_mst_store_lock_release(&store->rep->lock);
+            break;
+        }
+        tds_mst_store_lock_release(&store->rep->lock);
+        tds_mst_allocator_deallocate(&store->rep->allocator, snapshot);
+        snapshot = NULL;
+        if (tds_mst_multiply_overflows(count, sizeof(*snapshot), &bytes)) {
+            status = TDS_MERKLE_OVERFLOW;
+            break;
+        }
+        snapshot = (tds_merkle_digest *)tds_mst_allocator_allocate(
+            &store->rep->allocator,
+            bytes);
+        if (snapshot == NULL) {
+            status = TDS_MERKLE_NO_MEMORY;
+            break;
+        }
+        snapshot_capacity = count;
+    }
+    if (status == TDS_MERKLE_OK) {
+        for (index = 0; index != count; ++index) {
+            status = visitor(snapshot[index], context);
+            if (status != TDS_MERKLE_OK) {
+                break;
+            }
+        }
+    }
+    tds_mst_allocator_deallocate(&store->rep->allocator, snapshot);
+    return status;
+}
+
+static uint64_t tds_mst_digest_hash(tds_merkle_digest digest) {
+    uint64_t value = UINT64_C(1469598103934665603);
+    size_t index;
+    for (index = 0; index != TDS_MERKLE_DIGEST_BYTE_LENGTH; ++index) {
+        value ^= digest.bytes[index];
+        value *= UINT64_C(1099511628211);
+    }
+    return value;
+}
+
+static tds_merkle_status tds_mst_digest_table_capacity(
+    size_t count,
+    size_t *capacity) {
+    size_t required;
+    size_t value = 8;
+    if (count > (SIZE_MAX - 1) / 2) {
+        return TDS_MERKLE_OVERFLOW;
+    }
+    required = count * 2 + 1;
+    while (value < required) {
+        if (value > SIZE_MAX / 2) {
+            return TDS_MERKLE_OVERFLOW;
+        }
+        value *= 2;
+    }
+    *capacity = value;
+    return TDS_MERKLE_OK;
+}
+
+static tds_mst_digest_slot *tds_mst_digest_table_find(
+    tds_mst_digest_slot *slots,
+    size_t capacity,
+    tds_merkle_digest digest,
+    bool *found) {
+    size_t index = (size_t)(tds_mst_digest_hash(digest) & (uint64_t)(capacity - 1));
+    for (;;) {
+        if (!slots[index].occupied) {
+            *found = false;
+            return &slots[index];
+        }
+        if (tds_merkle_digest_equal(slots[index].digest, digest)) {
+            *found = true;
+            return &slots[index];
+        }
+        index = (index + 1) & (capacity - 1);
+    }
+}
+
+static void tds_mst_pack_retain(struct tds_merkle_block_pack_rep *pack) {
+    if (pack != NULL) {
+        tds_mst_ref_retain(&pack->refs);
+    }
+}
+
+static void tds_mst_pack_release(struct tds_merkle_block_pack_rep *pack) {
+    tds_merkle_allocator allocator;
+    struct tds_merkle_policy_rep *owner;
+    size_t index;
+    if (pack == NULL || !tds_mst_ref_release(&pack->refs)) {
+        return;
+    }
+    allocator = pack->allocator;
+    owner = pack->policy_owner;
+    for (index = 0; index != pack->block_count; ++index) {
+        tds_merkle_block_dispose(&pack->blocks[index]);
+    }
+    tds_mst_allocator_deallocate(&allocator, pack->blocks);
+    tds_mst_allocator_deallocate(&allocator, pack->algorithm_id);
+    tds_mst_allocator_deallocate(&allocator, pack);
+    tds_mst_policy_release(owner);
+}
+
+tds_merkle_status tds_merkle_block_pack_init(
+    tds_merkle_identifier algorithm_id,
+    tds_merkle_digest domain_digest,
+    tds_merkle_digest root_hash,
+    const tds_merkle_block *blocks,
+    size_t block_count,
+    const tds_merkle_allocator *allocator,
+    tds_merkle_block_pack *pack,
+    tds_merkle_verification_error *error) {
+    tds_merkle_allocator selected;
+    struct tds_merkle_block_pack_rep *rep = NULL;
+    tds_mst_digest_slot *slots = NULL;
+    size_t capacity = 0;
+    size_t bytes;
+    size_t index;
+    tds_merkle_status status;
+    uint64_t total = 0;
+    bool contains_root = false;
+    if (pack == NULL || algorithm_id.bytes == NULL || algorithm_id.size == 0 ||
+        (block_count != 0 && blocks == NULL) || !tds_mst_allocator_valid(allocator)) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    tds_merkle_verification_error_init(error);
+    selected = tds_mst_normalize_allocator(allocator);
+    status = tds_mst_digest_table_capacity(block_count, &capacity);
+    if (status != TDS_MERKLE_OK ||
+        tds_mst_multiply_overflows(capacity, sizeof(*slots), &bytes)) {
+        return TDS_MERKLE_OVERFLOW;
+    }
+    slots = (tds_mst_digest_slot *)tds_mst_allocator_allocate(&selected, bytes);
+    if (slots == NULL) {
+        return TDS_MERKLE_NO_MEMORY;
+    }
+    memset(slots, 0, bytes);
+    for (index = 0; index != block_count; ++index) {
+        tds_mst_digest_slot *slot;
+        bool found;
+        uint64_t length;
+        if (blocks[index].rep == NULL) {
+            status = TDS_MERKLE_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        slot = tds_mst_digest_table_find(
+            slots,
+            capacity,
+            blocks[index].rep->digest,
+            &found);
+        if (found) {
+            status = tds_mst_verification_fail(
+                error,
+                TDS_MERKLE_VERIFY_DUPLICATE_BLOCK,
+                &blocks[index].rep->digest);
+            goto cleanup;
+        }
+        slot->occupied = true;
+        slot->digest = blocks[index].rep->digest;
+        length = (uint64_t)blocks[index].rep->byte_count;
+        if (UINT64_MAX - total < length) {
+            status = TDS_MERKLE_OVERFLOW;
+            goto cleanup;
+        }
+        total += length;
+        contains_root = contains_root ||
+            tds_merkle_digest_equal(blocks[index].rep->digest, root_hash);
+    }
+    rep = (struct tds_merkle_block_pack_rep *)tds_mst_allocator_allocate(
+        &selected,
+        sizeof(*rep));
+    if (rep == NULL) {
+        status = TDS_MERKLE_NO_MEMORY;
+        goto cleanup;
+    }
+    memset(rep, 0, sizeof(*rep));
+    rep->allocator = selected;
+    rep->policy_owner = NULL;
+    rep->algorithm_id = (unsigned char *)tds_mst_allocator_allocate(
+        &selected,
+        algorithm_id.size);
+    if (rep->algorithm_id == NULL) {
+        status = TDS_MERKLE_NO_MEMORY;
+        goto cleanup;
+    }
+    memcpy(rep->algorithm_id, algorithm_id.bytes, algorithm_id.size);
+    rep->algorithm_id_size = algorithm_id.size;
+    rep->domain_digest = domain_digest;
+    rep->root_hash = root_hash;
+    rep->total_byte_count = total;
+    rep->contains_root_block = contains_root;
+    if (block_count != 0) {
+        if (tds_mst_multiply_overflows(block_count, sizeof(*rep->blocks), &bytes)) {
+            status = TDS_MERKLE_OVERFLOW;
+            goto cleanup;
+        }
+        rep->blocks = (tds_merkle_block *)tds_mst_allocator_allocate(&selected, bytes);
+        if (rep->blocks == NULL) {
+            status = TDS_MERKLE_NO_MEMORY;
+            goto cleanup;
+        }
+        memset(rep->blocks, 0, bytes);
+        for (index = 0; index != block_count; ++index) {
+            status = tds_merkle_block_copy(&blocks[index], &rep->blocks[index]);
+            if (status != TDS_MERKLE_OK) {
+                goto cleanup;
+            }
+            ++rep->block_count;
+        }
+    }
+    tds_mst_ref_init(&rep->refs);
+    pack->rep = rep;
+    rep = NULL;
+    status = TDS_MERKLE_OK;
+
+cleanup:
+    if (rep != NULL) {
+        for (index = 0; index != rep->block_count; ++index) {
+            tds_merkle_block_dispose(&rep->blocks[index]);
+        }
+        tds_mst_allocator_deallocate(&selected, rep->blocks);
+        tds_mst_allocator_deallocate(&selected, rep->algorithm_id);
+        tds_mst_allocator_deallocate(&selected, rep);
+    }
+    tds_mst_allocator_deallocate(&selected, slots);
+    return status;
+}
+
+static void tds_mst_pack_attach_policy(
+    tds_merkle_block_pack *pack,
+    struct tds_merkle_policy_rep *policy) {
+    pack->rep->policy_owner = policy;
+    tds_mst_policy_retain(policy);
+}
+
+tds_merkle_status tds_merkle_block_pack_copy(
+    const tds_merkle_block_pack *source,
+    tds_merkle_block_pack *destination) {
+    if (source == NULL || source->rep == NULL || destination == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    if (source != destination) {
+        tds_mst_pack_retain(source->rep);
+        destination->rep = source->rep;
+    }
+    return TDS_MERKLE_OK;
+}
+
+void tds_merkle_block_pack_move(
+    tds_merkle_block_pack *destination,
+    tds_merkle_block_pack *source) {
+    if (destination != NULL && source != NULL && destination != source) {
+        destination->rep = source->rep;
+        source->rep = NULL;
+    }
+}
+
+void tds_merkle_block_pack_dispose(tds_merkle_block_pack *pack) {
+    if (pack != NULL) {
+        tds_mst_pack_release(pack->rep);
+        pack->rep = NULL;
+    }
+}
+
+tds_merkle_identifier tds_merkle_block_pack_algorithm_id(
+    const tds_merkle_block_pack *pack) {
+    tds_merkle_identifier empty = {NULL, 0};
+    return pack == NULL || pack->rep == NULL
+        ? empty
+        : (tds_merkle_identifier){pack->rep->algorithm_id, pack->rep->algorithm_id_size};
+}
+
+tds_merkle_digest tds_merkle_block_pack_domain_digest(
+    const tds_merkle_block_pack *pack) {
+    tds_merkle_digest zero = {{0}};
+    return pack == NULL || pack->rep == NULL ? zero : pack->rep->domain_digest;
+}
+
+tds_merkle_digest tds_merkle_block_pack_root_hash(
+    const tds_merkle_block_pack *pack) {
+    tds_merkle_digest zero = {{0}};
+    return pack == NULL || pack->rep == NULL ? zero : pack->rep->root_hash;
+}
+
+size_t tds_merkle_block_pack_block_count(const tds_merkle_block_pack *pack) {
+    return pack == NULL || pack->rep == NULL ? 0 : pack->rep->block_count;
+}
+
+uint64_t tds_merkle_block_pack_total_byte_count(
+    const tds_merkle_block_pack *pack) {
+    return pack == NULL || pack->rep == NULL ? 0 : pack->rep->total_byte_count;
+}
+
+bool tds_merkle_block_pack_contains_root_block(
+    const tds_merkle_block_pack *pack) {
+    return pack != NULL && pack->rep != NULL && pack->rep->contains_root_block;
+}
+
+const tds_merkle_block *tds_merkle_block_pack_block_at(
+    const tds_merkle_block_pack *pack,
+    size_t index) {
+    return pack == NULL || pack->rep == NULL || index >= pack->rep->block_count
+        ? NULL
+        : &pack->rep->blocks[index];
+}
+
+typedef struct tds_mst_block_vector {
+    const struct tds_merkle_policy_rep *policy;
+    tds_merkle_block *items;
+    size_t count;
+    size_t capacity;
+} tds_mst_block_vector;
+
+typedef struct tds_mst_digest_vector {
+    const struct tds_merkle_policy_rep *policy;
+    tds_merkle_digest *items;
+    size_t count;
+    size_t capacity;
+} tds_mst_digest_vector;
+
+static void tds_mst_block_vector_dispose(tds_mst_block_vector *vector) {
+    size_t index;
+    for (index = 0; index != vector->count; ++index) {
+        tds_merkle_block_dispose(&vector->items[index]);
+    }
+    tds_mst_deallocate(vector->policy, vector->items);
+    memset(vector, 0, sizeof(*vector));
+}
+
+static tds_merkle_status tds_mst_block_vector_reserve(
+    tds_mst_block_vector *vector,
+    size_t required) {
+    tds_merkle_block *items;
+    size_t capacity;
+    size_t bytes;
+    if (required <= vector->capacity) {
+        return TDS_MERKLE_OK;
+    }
+    capacity = vector->capacity == 0 ? 8 : vector->capacity;
+    while (capacity < required) {
+        if (capacity > SIZE_MAX / 2) {
+            return TDS_MERKLE_OVERFLOW;
+        }
+        capacity *= 2;
+    }
+    if (tds_mst_multiply_overflows(capacity, sizeof(*items), &bytes)) {
+        return TDS_MERKLE_OVERFLOW;
+    }
+    items = (tds_merkle_block *)tds_mst_allocate(vector->policy, bytes);
+    if (items == NULL) {
+        return TDS_MERKLE_NO_MEMORY;
+    }
+    if (vector->count != 0) {
+        memcpy(items, vector->items, vector->count * sizeof(*items));
+    }
+    tds_mst_deallocate(vector->policy, vector->items);
+    vector->items = items;
+    vector->capacity = capacity;
+    return TDS_MERKLE_OK;
+}
+
+static tds_merkle_status tds_mst_block_vector_push_node(
+    tds_mst_block_vector *vector,
+    const struct tds_merkle_node *node) {
+    tds_merkle_status status = tds_mst_block_vector_reserve(
+        vector,
+        vector->count + 1);
+    if (status == TDS_MERKLE_OK) {
+        vector->items[vector->count].rep = NULL;
+        status = tds_mst_block_init_policy(
+            vector->policy,
+            node->digest,
+            node->block_bytes->data,
+            node->block_bytes->size,
+            &vector->items[vector->count]);
+        if (status == TDS_MERKLE_OK) {
+            ++vector->count;
+        }
+    }
+    return status;
+}
+
+static void tds_mst_digest_vector_dispose(tds_mst_digest_vector *vector) {
+    tds_mst_deallocate(vector->policy, vector->items);
+    memset(vector, 0, sizeof(*vector));
+}
+
+static tds_merkle_status tds_mst_digest_vector_push(
+    tds_mst_digest_vector *vector,
+    tds_merkle_digest digest) {
+    tds_merkle_digest *items;
+    size_t capacity;
+    size_t bytes;
+    if (vector->count == vector->capacity) {
+        capacity = vector->capacity == 0 ? 8 : vector->capacity;
+        if (vector->capacity != 0) {
+            if (capacity > SIZE_MAX / 2) {
+                return TDS_MERKLE_OVERFLOW;
+            }
+            capacity *= 2;
+        }
+        if (tds_mst_multiply_overflows(capacity, sizeof(*items), &bytes)) {
+            return TDS_MERKLE_OVERFLOW;
+        }
+        items = (tds_merkle_digest *)tds_mst_allocate(vector->policy, bytes);
+        if (items == NULL) {
+            return TDS_MERKLE_NO_MEMORY;
+        }
+        if (vector->count != 0) {
+            memcpy(items, vector->items, vector->count * sizeof(*items));
+        }
+        tds_mst_deallocate(vector->policy, vector->items);
+        vector->items = items;
+        vector->capacity = capacity;
+    }
+    vector->items[vector->count++] = digest;
+    return TDS_MERKLE_OK;
+}
+
+static tds_merkle_status tds_mst_collect_export_blocks(
+    const struct tds_merkle_node *node,
+    tds_mst_block_vector *blocks) {
+    struct tds_merkle_node *const *children;
+    size_t index;
+    tds_merkle_status status;
+    if (node == NULL) {
+        return TDS_MERKLE_OK;
+    }
+    status = tds_mst_block_vector_push_node(blocks, node);
+    if (status != TDS_MERKLE_OK) {
+        return status;
+    }
+    children = tds_mst_node_children_const(node);
+    for (index = 0; index != node->entry_count + 1; ++index) {
+        status = tds_mst_collect_export_blocks(children[index], blocks);
+        if (status != TDS_MERKLE_OK) {
+            return status;
+        }
+    }
+    return TDS_MERKLE_OK;
+}
+
+static tds_merkle_status tds_mst_pack_from_vector(
+    const tds_merkle_search_tree *tree,
+    const tds_mst_block_vector *blocks,
+    tds_merkle_block_pack *pack,
+    tds_merkle_verification_error *error) {
+    const tds_merkle_identifier algorithm = {
+        tds_mst_algorithm_id,
+        sizeof(tds_mst_algorithm_id) - 1};
+    tds_merkle_status status = tds_merkle_block_pack_init(
+        algorithm,
+        tree->policy->domain_digest,
+        tds_merkle_search_tree_root_hash(tree),
+        blocks->items,
+        blocks->count,
+        &tree->policy->config.allocator,
+        pack,
+        error);
+    if (status == TDS_MERKLE_OK) {
+        tds_mst_pack_attach_policy(pack, tree->policy);
+    }
+    return status;
+}
+
+tds_merkle_status tds_merkle_search_tree_export_pack(
+    const tds_merkle_search_tree *tree,
+    tds_merkle_block_pack *pack) {
+    tds_mst_block_vector blocks;
+    tds_merkle_status status;
+    if (!tds_mst_tree_valid(tree) || pack == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    memset(&blocks, 0, sizeof(blocks));
+    blocks.policy = tree->policy;
+    status = tds_mst_collect_export_blocks(tree->root, &blocks);
+    if (status == TDS_MERKLE_OK) {
+        status = tds_mst_pack_from_vector(tree, &blocks, pack, NULL);
+    }
+    tds_mst_block_vector_dispose(&blocks);
+    return status;
+}
+
+static const struct tds_merkle_node *tds_mst_find_block_digest(
+    const struct tds_merkle_node *node,
+    tds_merkle_digest digest) {
+    struct tds_merkle_node *const *children;
+    size_t index;
+    if (node == NULL || tds_merkle_digest_equal(node->digest, digest)) {
+        return node;
+    }
+    children = tds_mst_node_children_const(node);
+    for (index = 0; index != node->entry_count + 1; ++index) {
+        const struct tds_merkle_node *found = tds_mst_find_block_digest(
+            children[index],
+            digest);
+        if (found != NULL) {
+            return found;
+        }
+    }
+    return NULL;
+}
+
+tds_merkle_status tds_merkle_search_tree_export_blocks(
+    const tds_merkle_search_tree *tree,
+    const tds_merkle_digest *digests,
+    size_t digest_count,
+    tds_merkle_block_pack *pack,
+    tds_merkle_verification_error *error) {
+    tds_mst_block_vector blocks;
+    size_t index;
+    tds_merkle_status status = TDS_MERKLE_OK;
+    if (!tds_mst_tree_valid(tree) || pack == NULL ||
+        (digest_count != 0 && digests == NULL)) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    tds_merkle_verification_error_init(error);
+    memset(&blocks, 0, sizeof(blocks));
+    blocks.policy = tree->policy;
+    for (index = 0; index != digest_count; ++index) {
+        const struct tds_merkle_node *node;
+        size_t prior;
+        for (prior = 0; prior != index; ++prior) {
+            if (tds_merkle_digest_equal(digests[prior], digests[index])) {
+                status = tds_mst_verification_fail(
+                    error,
+                    TDS_MERKLE_VERIFY_DUPLICATE_BLOCK,
+                    &digests[index]);
+                goto cleanup;
+            }
+        }
+        node = tds_mst_find_block_digest(tree->root, digests[index]);
+        if (node == NULL) {
+            status = tds_mst_verification_fail(
+                error,
+                TDS_MERKLE_VERIFY_MISSING_BLOCK,
+                &digests[index]);
+            goto cleanup;
+        }
+        status = tds_mst_block_vector_push_node(&blocks, node);
+        if (status != TDS_MERKLE_OK) {
+            goto cleanup;
+        }
+    }
+    status = tds_mst_pack_from_vector(tree, &blocks, pack, error);
+
+cleanup:
+    tds_mst_block_vector_dispose(&blocks);
+    return status;
+}
+
+static tds_merkle_status tds_mst_preflight_blocks(
+    const tds_merkle_block *blocks,
+    size_t block_count,
+    const tds_merkle_block_store *store,
+    tds_merkle_verification_error *error) {
+    size_t index;
+    for (index = 0; index != block_count; ++index) {
+        tds_merkle_block existing = {NULL};
+        bool found = false;
+        tds_merkle_status status = tds_merkle_block_store_try_get(
+            store,
+            blocks[index].rep->digest,
+            &found,
+            &existing);
+        if (status != TDS_MERKLE_OK) {
+            tds_merkle_block_dispose(&existing);
+            return status;
+        }
+        if (found && !tds_merkle_block_equal(&existing, &blocks[index])) {
+            const tds_merkle_digest digest = blocks[index].rep->digest;
+            tds_merkle_block_dispose(&existing);
+            return tds_mst_verification_fail(
+                error,
+                TDS_MERKLE_VERIFY_CONFLICTING_BLOCK,
+                &digest);
+        }
+        tds_merkle_block_dispose(&existing);
+    }
+    return TDS_MERKLE_OK;
+}
+
+tds_merkle_status tds_merkle_search_tree_save(
+    const tds_merkle_search_tree *tree,
+    const tds_merkle_block_store *store,
+    size_t *added_block_count,
+    tds_merkle_verification_error *error) {
+    tds_merkle_block_pack pack = {NULL};
+    size_t added = 0;
+    size_t index;
+    tds_merkle_status status;
+    if (!tds_mst_tree_valid(tree) || !tds_mst_store_valid(store) ||
+        added_block_count == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    tds_merkle_verification_error_init(error);
+    status = tds_merkle_search_tree_export_pack(tree, &pack);
+    if (status == TDS_MERKLE_OK) {
+        status = tds_mst_preflight_blocks(
+            pack.rep->blocks,
+            pack.rep->block_count,
+            store,
+            error);
+    }
+    for (index = 0; status == TDS_MERKLE_OK && index != pack.rep->block_count; ++index) {
+        tds_merkle_store_put_result put_result = TDS_MERKLE_STORE_PRESENT_IDENTICAL;
+        status = tds_merkle_block_store_put(
+            store,
+            &pack.rep->blocks[index],
+            &put_result);
+        if (status == TDS_MERKLE_VERIFICATION_FAILURE ||
+            put_result == TDS_MERKLE_STORE_CONFLICT) {
+            status = tds_mst_verification_fail(
+                error,
+                TDS_MERKLE_VERIFY_CONFLICTING_BLOCK,
+                &pack.rep->blocks[index].rep->digest);
+        } else if (status == TDS_MERKLE_OK && put_result == TDS_MERKLE_STORE_ADDED) {
+            ++added;
+        }
+    }
+    if (status == TDS_MERKLE_OK) {
+        *added_block_count = added;
+    }
+    tds_merkle_block_pack_dispose(&pack);
+    return status;
+}
+
+struct tds_merkle_sync_plan_rep {
+    tds_mst_ref_count refs;
+    tds_merkle_allocator allocator;
+    struct tds_merkle_policy_rep *policy_owner;
+    unsigned char *algorithm_id;
+    size_t algorithm_id_size;
+    tds_merkle_digest domain_digest;
+    tds_merkle_digest local_root_hash;
+    tds_merkle_digest target_root_hash;
+    tds_merkle_digest *requested_blocks;
+    size_t requested_block_count;
+    size_t examined_block_count;
+    uint64_t examined_byte_count;
+};
+
+static void tds_mst_sync_plan_retain(struct tds_merkle_sync_plan_rep *plan) {
+    if (plan != NULL) {
+        tds_mst_ref_retain(&plan->refs);
+    }
+}
+
+static void tds_mst_sync_plan_release(struct tds_merkle_sync_plan_rep *plan) {
+    tds_merkle_allocator allocator;
+    struct tds_merkle_policy_rep *owner;
+    if (plan == NULL || !tds_mst_ref_release(&plan->refs)) {
+        return;
+    }
+    allocator = plan->allocator;
+    owner = plan->policy_owner;
+    tds_mst_allocator_deallocate(&allocator, plan->requested_blocks);
+    tds_mst_allocator_deallocate(&allocator, plan->algorithm_id);
+    tds_mst_allocator_deallocate(&allocator, plan);
+    tds_mst_policy_release(owner);
+}
+
+static tds_merkle_status tds_mst_sync_plan_create(
+    const tds_merkle_search_tree *target,
+    tds_merkle_digest local_root_hash,
+    const tds_mst_digest_vector *requested,
+    size_t examined_block_count,
+    uint64_t examined_byte_count,
+    tds_merkle_sync_plan *plan) {
+    struct tds_merkle_sync_plan_rep *rep;
+    size_t bytes;
+    rep = (struct tds_merkle_sync_plan_rep *)tds_mst_allocate(
+        target->policy,
+        sizeof(*rep));
+    if (rep == NULL) {
+        return TDS_MERKLE_NO_MEMORY;
+    }
+    memset(rep, 0, sizeof(*rep));
+    rep->allocator = target->policy->config.allocator;
+    rep->policy_owner = target->policy;
+    rep->algorithm_id_size = sizeof(tds_mst_algorithm_id) - 1;
+    rep->algorithm_id = (unsigned char *)tds_mst_allocate(
+        target->policy,
+        rep->algorithm_id_size);
+    if (rep->algorithm_id == NULL) {
+        tds_mst_deallocate(target->policy, rep);
+        return TDS_MERKLE_NO_MEMORY;
+    }
+    memcpy(rep->algorithm_id, tds_mst_algorithm_id, rep->algorithm_id_size);
+    if (requested->count != 0) {
+        if (tds_mst_multiply_overflows(
+                requested->count,
+                sizeof(*rep->requested_blocks),
+                &bytes)) {
+            tds_mst_deallocate(target->policy, rep->algorithm_id);
+            tds_mst_deallocate(target->policy, rep);
+            return TDS_MERKLE_OVERFLOW;
+        }
+        rep->requested_blocks = (tds_merkle_digest *)tds_mst_allocate(
+            target->policy,
+            bytes);
+        if (rep->requested_blocks == NULL) {
+            tds_mst_deallocate(target->policy, rep->algorithm_id);
+            tds_mst_deallocate(target->policy, rep);
+            return TDS_MERKLE_NO_MEMORY;
+        }
+        memcpy(rep->requested_blocks, requested->items, bytes);
+    }
+    rep->requested_block_count = requested->count;
+    rep->domain_digest = target->policy->domain_digest;
+    rep->local_root_hash = local_root_hash;
+    rep->target_root_hash = tds_merkle_search_tree_root_hash(target);
+    rep->examined_block_count = examined_block_count;
+    rep->examined_byte_count = examined_byte_count;
+    tds_mst_policy_retain(rep->policy_owner);
+    tds_mst_ref_init(&rep->refs);
+    plan->rep = rep;
+    return TDS_MERKLE_OK;
+}
+
+tds_merkle_status tds_merkle_sync_plan_copy(
+    const tds_merkle_sync_plan *source,
+    tds_merkle_sync_plan *destination) {
+    if (source == NULL || source->rep == NULL || destination == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    if (source != destination) {
+        tds_mst_sync_plan_retain(source->rep);
+        destination->rep = source->rep;
+    }
+    return TDS_MERKLE_OK;
+}
+
+void tds_merkle_sync_plan_move(
+    tds_merkle_sync_plan *destination,
+    tds_merkle_sync_plan *source) {
+    if (destination != NULL && source != NULL && destination != source) {
+        destination->rep = source->rep;
+        source->rep = NULL;
+    }
+}
+
+void tds_merkle_sync_plan_dispose(tds_merkle_sync_plan *plan) {
+    if (plan != NULL) {
+        tds_mst_sync_plan_release(plan->rep);
+        plan->rep = NULL;
+    }
+}
+
+tds_merkle_identifier tds_merkle_sync_plan_algorithm_id(
+    const tds_merkle_sync_plan *plan) {
+    tds_merkle_identifier empty = {NULL, 0};
+    return plan == NULL || plan->rep == NULL
+        ? empty
+        : (tds_merkle_identifier){plan->rep->algorithm_id, plan->rep->algorithm_id_size};
+}
+
+tds_merkle_digest tds_merkle_sync_plan_domain_digest(
+    const tds_merkle_sync_plan *plan) {
+    tds_merkle_digest zero = {{0}};
+    return plan == NULL || plan->rep == NULL ? zero : plan->rep->domain_digest;
+}
+
+tds_merkle_digest tds_merkle_sync_plan_local_root_hash(
+    const tds_merkle_sync_plan *plan) {
+    tds_merkle_digest zero = {{0}};
+    return plan == NULL || plan->rep == NULL ? zero : plan->rep->local_root_hash;
+}
+
+tds_merkle_digest tds_merkle_sync_plan_target_root_hash(
+    const tds_merkle_sync_plan *plan) {
+    tds_merkle_digest zero = {{0}};
+    return plan == NULL || plan->rep == NULL ? zero : plan->rep->target_root_hash;
+}
+
+size_t tds_merkle_sync_plan_requested_block_count(
+    const tds_merkle_sync_plan *plan) {
+    return plan == NULL || plan->rep == NULL ? 0 : plan->rep->requested_block_count;
+}
+
+const tds_merkle_digest *tds_merkle_sync_plan_requested_blocks(
+    const tds_merkle_sync_plan *plan) {
+    return plan == NULL || plan->rep == NULL ? NULL : plan->rep->requested_blocks;
+}
+
+size_t tds_merkle_sync_plan_examined_block_count(
+    const tds_merkle_sync_plan *plan) {
+    return plan == NULL || plan->rep == NULL ? 0 : plan->rep->examined_block_count;
+}
+
+uint64_t tds_merkle_sync_plan_examined_byte_count(
+    const tds_merkle_sync_plan *plan) {
+    return plan == NULL || plan->rep == NULL ? 0 : plan->rep->examined_byte_count;
+}
+
+bool tds_merkle_sync_plan_roots_match(const tds_merkle_sync_plan *plan) {
+    return plan != NULL && plan->rep != NULL && tds_merkle_digest_equal(
+        plan->rep->local_root_hash,
+        plan->rep->target_root_hash);
+}
+
+bool tds_merkle_sync_plan_requires_blocks(const tds_merkle_sync_plan *plan) {
+    return plan != NULL && plan->rep != NULL && plan->rep->requested_block_count != 0;
+}
+
+static tds_merkle_status tds_mst_collect_missing_closure(
+    const struct tds_merkle_node *node,
+    const tds_merkle_block_store *store,
+    tds_mst_block_vector *blocks) {
+    struct tds_merkle_node *const *children;
+    bool contains = false;
+    size_t index;
+    tds_merkle_status status;
+    if (node == NULL) {
+        return TDS_MERKLE_OK;
+    }
+    status = tds_merkle_block_store_contains(store, node->digest, &contains);
+    if (status != TDS_MERKLE_OK || contains) {
+        return status;
+    }
+    status = tds_mst_block_vector_push_node(blocks, node);
+    if (status != TDS_MERKLE_OK) {
+        return status;
+    }
+    children = tds_mst_node_children_const(node);
+    for (index = 0; index != node->entry_count + 1; ++index) {
+        status = tds_mst_collect_missing_closure(children[index], store, blocks);
+        if (status != TDS_MERKLE_OK) {
+            return status;
+        }
+    }
+    return TDS_MERKLE_OK;
+}
+
+tds_merkle_status tds_merkle_search_tree_create_sync_pack(
+    const tds_merkle_search_tree *target,
+    const tds_merkle_block_store *receiver_store,
+    tds_merkle_block_pack *pack) {
+    tds_mst_block_vector blocks;
+    tds_merkle_status status;
+    if (!tds_mst_tree_valid(target) || !tds_mst_store_valid(receiver_store) ||
+        pack == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    memset(&blocks, 0, sizeof(blocks));
+    blocks.policy = target->policy;
+    status = tds_mst_collect_missing_closure(target->root, receiver_store, &blocks);
+    if (status == TDS_MERKLE_OK) {
+        status = tds_mst_pack_from_vector(target, &blocks, pack, NULL);
+    }
+    tds_mst_block_vector_dispose(&blocks);
+    return status;
+}
+
+static tds_merkle_status tds_mst_collect_missing_frontier(
+    const struct tds_merkle_node *node,
+    const tds_merkle_block_store *store,
+    tds_mst_digest_vector *requested,
+    size_t *examined_block_count,
+    uint64_t *examined_byte_count) {
+    struct tds_merkle_node *const *children;
+    bool contains = false;
+    size_t index;
+    tds_merkle_status status;
+    if (node == NULL) {
+        return TDS_MERKLE_OK;
+    }
+    if (*examined_block_count == SIZE_MAX ||
+        UINT64_MAX - *examined_byte_count < (uint64_t)node->block_bytes->size) {
+        return TDS_MERKLE_OVERFLOW;
+    }
+    ++*examined_block_count;
+    *examined_byte_count += (uint64_t)node->block_bytes->size;
+    status = tds_merkle_block_store_contains(store, node->digest, &contains);
+    if (status != TDS_MERKLE_OK) {
+        return status;
+    }
+    if (!contains) {
+        return tds_mst_digest_vector_push(requested, node->digest);
+    }
+    children = tds_mst_node_children_const(node);
+    for (index = 0; index != node->entry_count + 1; ++index) {
+        status = tds_mst_collect_missing_frontier(
+            children[index],
+            store,
+            requested,
+            examined_block_count,
+            examined_byte_count);
+        if (status != TDS_MERKLE_OK) {
+            return status;
+        }
+    }
+    return TDS_MERKLE_OK;
+}
+
+tds_merkle_status tds_merkle_search_tree_plan_sync(
+    const tds_merkle_search_tree *target,
+    const tds_merkle_search_tree *local,
+    const tds_merkle_block_store *receiver_store,
+    tds_merkle_sync_plan *plan) {
+    tds_mst_digest_vector requested;
+    size_t examined_blocks = 0;
+    uint64_t examined_bytes = 0;
+    tds_merkle_status status = TDS_MERKLE_OK;
+    if (!tds_mst_typed_compatible(target, local) ||
+        !tds_mst_store_valid(receiver_store) || plan == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    memset(&requested, 0, sizeof(requested));
+    requested.policy = target->policy;
+    if (!tds_merkle_digest_equal(
+            tds_merkle_search_tree_root_hash(target),
+            tds_merkle_search_tree_root_hash(local))) {
+        status = tds_mst_collect_missing_frontier(
+            target->root,
+            receiver_store,
+            &requested,
+            &examined_blocks,
+            &examined_bytes);
+    }
+    if (status == TDS_MERKLE_OK) {
+        status = tds_mst_sync_plan_create(
+            target,
+            tds_merkle_search_tree_root_hash(local),
+            &requested,
+            examined_blocks,
+            examined_bytes,
+            plan);
+    }
+    tds_mst_digest_vector_dispose(&requested);
+    return status;
+}
+
+typedef struct tds_mst_decoded_block {
+    tds_merkle_block block;
+    unsigned level;
+    size_t subtree_count;
+    tds_mst_entry **entries;
+    size_t entry_count;
+    tds_merkle_digest *child_digests;
+    bool proof_visited;
+} tds_mst_decoded_block;
+
+typedef struct tds_mst_verification_context {
+    const struct tds_merkle_policy_rep *policy;
+    tds_merkle_verification_budget budget;
+    tds_merkle_verification_error *error;
+    tds_mst_digest_slot *slots;
+    size_t slot_capacity;
+    size_t block_count;
+    uint64_t total_byte_count;
+    uint64_t entry_count;
+    tds_merkle_digest *active;
+    size_t active_count;
+    size_t active_capacity;
+} tds_mst_verification_context;
+
+typedef struct tds_mst_wire_cursor {
+    const unsigned char *bytes;
+    size_t size;
+    size_t offset;
+    tds_merkle_digest digest;
+    tds_mst_verification_context *context;
+} tds_mst_wire_cursor;
+
+static void tds_mst_context_publish_counts(tds_mst_verification_context *context) {
+    if (context->error != NULL) {
+        context->error->verified_block_count = context->block_count;
+        context->error->verified_byte_count = context->total_byte_count;
+    }
+}
+
+static tds_merkle_status tds_mst_context_fail(
+    tds_mst_verification_context *context,
+    tds_merkle_verification_failure_kind kind,
+    const tds_merkle_digest *digest) {
+    tds_mst_context_publish_counts(context);
+    return tds_mst_verification_fail(context->error, kind, digest);
+}
+
+static void tds_mst_context_dispose(tds_mst_verification_context *context) {
+    size_t index;
+    if (context->slots != NULL) {
+        for (index = 0; index != context->slot_capacity; ++index) {
+            if (context->slots[index].occupied) {
+                tds_mst_node_release(context->policy, context->slots[index].node);
+            }
+        }
+    }
+    tds_mst_deallocate(context->policy, context->active);
+    tds_mst_deallocate(context->policy, context->slots);
+    memset(context, 0, sizeof(*context));
+}
+
+static tds_merkle_status tds_mst_context_grow_slots(
+    tds_mst_verification_context *context,
+    size_t required_count) {
+    tds_mst_digest_slot *slots;
+    size_t capacity = context->slot_capacity == 0 ? 8 : context->slot_capacity;
+    size_t bytes;
+    size_t index;
+    while (required_count > capacity / 2) {
+        if (capacity > SIZE_MAX / 2) {
+            return TDS_MERKLE_OVERFLOW;
+        }
+        capacity *= 2;
+    }
+    if (capacity == context->slot_capacity) {
+        return TDS_MERKLE_OK;
+    }
+    if (tds_mst_multiply_overflows(capacity, sizeof(*slots), &bytes)) {
+        return TDS_MERKLE_OVERFLOW;
+    }
+    slots = (tds_mst_digest_slot *)tds_mst_allocate(context->policy, bytes);
+    if (slots == NULL) {
+        return TDS_MERKLE_NO_MEMORY;
+    }
+    memset(slots, 0, bytes);
+    for (index = 0; index != context->slot_capacity; ++index) {
+        if (context->slots[index].occupied) {
+            bool found;
+            tds_mst_digest_slot *destination = tds_mst_digest_table_find(
+                slots,
+                capacity,
+                context->slots[index].digest,
+                &found);
+            (void)found;
+            *destination = context->slots[index];
+        }
+    }
+    tds_mst_deallocate(context->policy, context->slots);
+    context->slots = slots;
+    context->slot_capacity = capacity;
+    return TDS_MERKLE_OK;
+}
+
+static tds_mst_digest_slot *tds_mst_context_find_slot(
+    tds_mst_verification_context *context,
+    tds_merkle_digest digest,
+    bool *found) {
+    if (context->slot_capacity == 0) {
+        *found = false;
+        return NULL;
+    }
+    return tds_mst_digest_table_find(
+        context->slots,
+        context->slot_capacity,
+        digest,
+        found);
+}
+
+static tds_merkle_status tds_mst_context_account_block(
+    tds_mst_verification_context *context,
+    const tds_merkle_block *block,
+    size_t depth,
+    bool *first_visit,
+    tds_mst_digest_slot **slot_result) {
+    tds_mst_digest_slot *slot;
+    bool found;
+    size_t byte_count = block->rep->byte_count;
+    tds_merkle_status status;
+    if (depth == 0 || depth > context->budget.max_depth) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_RESOURCE_LIMIT_EXCEEDED,
+            &block->rep->digest);
+    }
+    slot = tds_mst_context_find_slot(context, block->rep->digest, &found);
+    if (found) {
+        *first_visit = false;
+        *slot_result = slot;
+        return TDS_MERKLE_OK;
+    }
+    if (byte_count > context->budget.max_block_byte_count ||
+        context->block_count >= context->budget.max_block_count ||
+        (uint64_t)byte_count >
+            context->budget.max_total_byte_count - context->total_byte_count) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_RESOURCE_LIMIT_EXCEEDED,
+            &block->rep->digest);
+    }
+    status = tds_mst_context_grow_slots(context, context->block_count + 1);
+    if (status != TDS_MERKLE_OK) {
+        return status;
+    }
+    slot = tds_mst_digest_table_find(
+        context->slots,
+        context->slot_capacity,
+        block->rep->digest,
+        &found);
+    if (found) {
+        return TDS_MERKLE_INCONSISTENT_POLICY;
+    }
+    slot->occupied = true;
+    slot->digest = block->rep->digest;
+    slot->value = SIZE_MAX;
+    slot->node = NULL;
+    ++context->block_count;
+    context->total_byte_count += (uint64_t)byte_count;
+    tds_mst_context_publish_counts(context);
+    *first_visit = true;
+    *slot_result = slot;
+    return TDS_MERKLE_OK;
+}
+
+static tds_merkle_status tds_mst_context_account_entries(
+    tds_mst_verification_context *context,
+    size_t count,
+    tds_merkle_digest digest) {
+    if ((uint64_t)count > context->budget.max_entry_count - context->entry_count) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_RESOURCE_LIMIT_EXCEEDED,
+            &digest);
+    }
+    context->entry_count += (uint64_t)count;
+    return TDS_MERKLE_OK;
+}
+
+static bool tds_mst_wire_take(
+    tds_mst_wire_cursor *cursor,
+    size_t count,
+    const unsigned char **bytes) {
+    if (count > cursor->size - cursor->offset) {
+        return false;
+    }
+    *bytes = cursor->bytes + cursor->offset;
+    cursor->offset += count;
+    return true;
+}
+
+static bool tds_mst_wire_read_be32(
+    tds_mst_wire_cursor *cursor,
+    uint32_t *value) {
+    const unsigned char *bytes;
+    if (!tds_mst_wire_take(cursor, 4, &bytes)) {
+        return false;
+    }
+    *value = tds_mst_read_be32(bytes);
+    return true;
+}
+
+static tds_merkle_status tds_mst_decode_object(
+    const struct tds_merkle_policy_rep *policy,
+    bool is_key,
+    const tds_merkle_codec *codec,
+    const unsigned char *encoding,
+    size_t encoding_size,
+    tds_mst_object **object_result,
+    tds_mst_bytes **bytes_result) {
+    const tds_merkle_type_policy *type = tds_mst_object_type(policy, is_key);
+    tds_mst_object *object = NULL;
+    tds_mst_bytes *bytes = NULL;
+    tds_merkle_status status;
+    object = (tds_mst_object *)tds_mst_allocate(policy, sizeof(*object));
+    if (object == NULL) {
+        return TDS_MERKLE_NO_MEMORY;
+    }
+    memset(object, 0, sizeof(*object));
+    object->value = tds_mst_allocate(policy, type->size);
+    if (object->value == NULL) {
+        tds_mst_deallocate(policy, object);
+        return TDS_MERKLE_NO_MEMORY;
+    }
+    status = codec->decode(
+        encoding,
+        encoding_size,
+        object->value,
+        &policy->config.allocator,
+        codec->context);
+    if (status != TDS_MERKLE_OK) {
+        tds_mst_deallocate(policy, object->value);
+        tds_mst_deallocate(policy, object);
+        return status;
+    }
+    tds_mst_ref_init(&object->refs);
+    object->is_key = is_key;
+    status = tds_mst_bytes_allocate(policy, encoding_size, &bytes);
+    if (status != TDS_MERKLE_OK) {
+        tds_mst_object_release(policy, object);
+        return status;
+    }
+    if (encoding_size != 0) {
+        memcpy(bytes->data, encoding, encoding_size);
+    }
+    *object_result = object;
+    *bytes_result = bytes;
+    return TDS_MERKLE_OK;
+}
+
+static bool tds_mst_wire_decode_failure(tds_merkle_status status) {
+    return status == TDS_MERKLE_INVALID_ARGUMENT ||
+        status == TDS_MERKLE_INVALID_ENCODING ||
+        status == TDS_MERKLE_INCONSISTENT_POLICY;
+}
+
+static void tds_mst_decoded_block_dispose(
+    const struct tds_merkle_policy_rep *policy,
+    tds_mst_decoded_block *block) {
+    size_t index;
+    if (block->entries != NULL) {
+        for (index = 0; index != block->entry_count; ++index) {
+            tds_mst_entry_release(policy, block->entries[index]);
+        }
+    }
+    tds_mst_deallocate(policy, block->child_digests);
+    tds_mst_deallocate(policy, block->entries);
+    tds_merkle_block_dispose(&block->block);
+    memset(block, 0, sizeof(*block));
+}
+
+static tds_merkle_status tds_mst_decode_wire_block(
+    const tds_merkle_search_tree *verifier,
+    const tds_merkle_block *block,
+    tds_mst_verification_context *context,
+    size_t depth,
+    tds_mst_decoded_block *decoded) {
+    tds_mst_wire_cursor cursor;
+    tds_mst_digest_slot *slot = NULL;
+    const unsigned char *bytes;
+    tds_merkle_digest actual_digest;
+    uint32_t subtree_count32;
+    uint32_t entry_count32;
+    size_t minimum_length;
+    size_t child_bytes;
+    size_t entries_bytes;
+    size_t children_bytes;
+    size_t index;
+    bool first_visit;
+    tds_merkle_status status;
+    memset(decoded, 0, sizeof(*decoded));
+    status = tds_mst_context_account_block(
+        context,
+        block,
+        depth,
+        &first_visit,
+        &slot);
+    (void)slot;
+    if (status != TDS_MERKLE_OK) {
+        return status;
+    }
+    status = tds_mst_sha256_config(
+        &verifier->policy->config,
+        block->rep->bytes,
+        block->rep->byte_count,
+        &actual_digest);
+    if (status != TDS_MERKLE_OK) {
+        return status;
+    }
+    if (!tds_merkle_digest_equal(actual_digest, block->rep->digest)) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_DIGEST_MISMATCH,
+            &block->rep->digest);
+    }
+    if (block->rep->byte_count <
+        TDS_MST_BLOCK_HEADER_LENGTH + TDS_MERKLE_DIGEST_BYTE_LENGTH) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_MALFORMED_BLOCK,
+            &block->rep->digest);
+    }
+    cursor = (tds_mst_wire_cursor){
+        block->rep->bytes,
+        block->rep->byte_count,
+        0,
+        block->rep->digest,
+        context};
+    if (!tds_mst_wire_take(&cursor, sizeof(tds_mst_block_magic), &bytes) ||
+        memcmp(bytes, tds_mst_block_magic, sizeof(tds_mst_block_magic)) != 0 ||
+        !tds_mst_wire_take(&cursor, 1, &bytes) || bytes[0] != TDS_MST_NODE_BLOCK_TAG) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_MALFORMED_BLOCK,
+            &block->rep->digest);
+    }
+    if (!tds_mst_wire_take(&cursor, TDS_MERKLE_DIGEST_BYTE_LENGTH, &bytes)) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_MALFORMED_BLOCK,
+            &block->rep->digest);
+    }
+    if (memcmp(
+            bytes,
+            verifier->policy->domain_digest.bytes,
+            TDS_MERKLE_DIGEST_BYTE_LENGTH) != 0) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_DOMAIN_MISMATCH,
+            &block->rep->digest);
+    }
+    if (!tds_mst_wire_take(&cursor, 1, &bytes) || bytes[0] > TDS_MST_MAXIMUM_LEVEL ||
+        !tds_mst_wire_read_be32(&cursor, &subtree_count32) ||
+        !tds_mst_wire_read_be32(&cursor, &entry_count32) ||
+        subtree_count32 == 0 || entry_count32 == 0 ||
+        subtree_count32 > INT32_MAX || entry_count32 > INT32_MAX ||
+        subtree_count32 < entry_count32) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_MALFORMED_BLOCK,
+            &block->rep->digest);
+    }
+    decoded->level = bytes[0];
+    decoded->subtree_count = (size_t)subtree_count32;
+    decoded->entry_count = (size_t)entry_count32;
+    if (decoded->entry_count >= context->budget.max_child_references_per_block) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_RESOURCE_LIMIT_EXCEEDED,
+            &block->rep->digest);
+    }
+    if (tds_mst_multiply_overflows(
+            decoded->entry_count + 1,
+            TDS_MERKLE_DIGEST_BYTE_LENGTH,
+            &child_bytes) ||
+        tds_mst_multiply_overflows(
+            decoded->entry_count,
+            8 + TDS_MERKLE_DIGEST_BYTE_LENGTH,
+            &minimum_length) ||
+        tds_mst_add_overflows(
+            minimum_length,
+            TDS_MST_BLOCK_HEADER_LENGTH + TDS_MERKLE_DIGEST_BYTE_LENGTH,
+            &minimum_length) ||
+        minimum_length > block->rep->byte_count) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_MALFORMED_BLOCK,
+            &block->rep->digest);
+    }
+    (void)child_bytes;
+    if (first_visit) {
+        status = tds_mst_context_account_entries(
+            context,
+            decoded->entry_count,
+            block->rep->digest);
+        if (status != TDS_MERKLE_OK) {
+            return status;
+        }
+    }
+    if (tds_mst_multiply_overflows(
+            decoded->entry_count,
+            sizeof(*decoded->entries),
+            &entries_bytes) ||
+        tds_mst_multiply_overflows(
+            decoded->entry_count + 1,
+            sizeof(*decoded->child_digests),
+            &children_bytes)) {
+        return TDS_MERKLE_OVERFLOW;
+    }
+    decoded->entries = (tds_mst_entry **)tds_mst_allocate(
+        verifier->policy,
+        entries_bytes);
+    if (decoded->entries == NULL) {
+        status = TDS_MERKLE_NO_MEMORY;
+        goto cleanup;
+    }
+    memset(decoded->entries, 0, entries_bytes);
+    decoded->child_digests = (tds_merkle_digest *)tds_mst_allocate(
+        verifier->policy,
+        children_bytes);
+    if (decoded->child_digests == NULL) {
+        status = TDS_MERKLE_NO_MEMORY;
+        goto cleanup;
+    }
+    status = tds_merkle_block_copy(block, &decoded->block);
+    if (status != TDS_MERKLE_OK) {
+        goto cleanup;
+    }
+    for (index = 0; index != decoded->entry_count; ++index) {
+        uint32_t key_length;
+        uint32_t value_length;
+        const unsigned char *key_encoding;
+        const unsigned char *value_encoding;
+        tds_mst_object *key = NULL;
+        tds_mst_object *value = NULL;
+        tds_mst_bytes *key_bytes = NULL;
+        tds_mst_bytes *value_bytes = NULL;
+        tds_mst_bytes *canonical = NULL;
+        tds_merkle_digest key_digest;
+        if (!tds_mst_wire_read_be32(&cursor, &key_length) || key_length > INT32_MAX ||
+            !tds_mst_wire_take(&cursor, (size_t)key_length, &key_encoding) ||
+            !tds_mst_wire_read_be32(&cursor, &value_length) || value_length > INT32_MAX ||
+            !tds_mst_wire_take(&cursor, (size_t)value_length, &value_encoding)) {
+            status = tds_mst_context_fail(
+                context,
+                TDS_MERKLE_VERIFY_MALFORMED_BLOCK,
+                &block->rep->digest);
+            goto entry_cleanup;
+        }
+        status = tds_mst_decode_object(
+            verifier->policy,
+            true,
+            &verifier->policy->config.key_codec,
+            key_encoding,
+            (size_t)key_length,
+            &key,
+            &key_bytes);
+        if (status != TDS_MERKLE_OK) {
+            if (tds_mst_wire_decode_failure(status)) {
+                status = tds_mst_context_fail(
+                    context,
+                    TDS_MERKLE_VERIFY_MALFORMED_BLOCK,
+                    &block->rep->digest);
+            }
+            goto entry_cleanup;
+        }
+        status = tds_mst_encode_value(
+            verifier->policy,
+            &verifier->policy->config.key_codec,
+            key->value,
+            &canonical);
+        if (status != TDS_MERKLE_OK || canonical->size != key_bytes->size ||
+            memcmp(canonical->data, key_bytes->data, key_bytes->size) != 0) {
+            if (status == TDS_MERKLE_OK || tds_mst_wire_decode_failure(status)) {
+                status = tds_mst_context_fail(
+                    context,
+                    TDS_MERKLE_VERIFY_NONCANONICAL_BLOCK,
+                    &block->rep->digest);
+            }
+            goto entry_cleanup;
+        }
+        tds_mst_bytes_release(verifier->policy, canonical);
+        canonical = NULL;
+        status = tds_mst_decode_object(
+            verifier->policy,
+            false,
+            &verifier->policy->config.value_codec,
+            value_encoding,
+            (size_t)value_length,
+            &value,
+            &value_bytes);
+        if (status != TDS_MERKLE_OK) {
+            if (tds_mst_wire_decode_failure(status)) {
+                status = tds_mst_context_fail(
+                    context,
+                    TDS_MERKLE_VERIFY_MALFORMED_BLOCK,
+                    &block->rep->digest);
+            }
+            goto entry_cleanup;
+        }
+        status = tds_mst_encode_value(
+            verifier->policy,
+            &verifier->policy->config.value_codec,
+            value->value,
+            &canonical);
+        if (status != TDS_MERKLE_OK || canonical->size != value_bytes->size ||
+            memcmp(canonical->data, value_bytes->data, value_bytes->size) != 0) {
+            if (status == TDS_MERKLE_OK || tds_mst_wire_decode_failure(status)) {
+                status = tds_mst_context_fail(
+                    context,
+                    TDS_MERKLE_VERIFY_NONCANONICAL_BLOCK,
+                    &block->rep->digest);
+            }
+            goto entry_cleanup;
+        }
+        tds_mst_bytes_release(verifier->policy, canonical);
+        canonical = NULL;
+        status = tds_mst_hash_key_bytes(verifier->policy, key_bytes, &key_digest);
+        if (status == TDS_MERKLE_OK && tds_mst_level(key_digest) != decoded->level) {
+            status = tds_mst_context_fail(
+                context,
+                TDS_MERKLE_VERIFY_NONCANONICAL_BLOCK,
+                &block->rep->digest);
+        }
+        if (status == TDS_MERKLE_OK) {
+            status = tds_mst_entry_from_parts(
+                verifier->policy,
+                key,
+                value,
+                key_bytes,
+                value_bytes,
+                decoded->level,
+                &decoded->entries[index]);
+        }
+        if (status == TDS_MERKLE_OK && index != 0) {
+            int comparison = 0;
+            status = tds_mst_key_compare(
+                verifier->policy,
+                decoded->entries[index - 1]->key->value,
+                decoded->entries[index]->key->value,
+                &comparison);
+            if (status == TDS_MERKLE_OK && comparison >= 0) {
+                status = tds_mst_context_fail(
+                    context,
+                    TDS_MERKLE_VERIFY_NONCANONICAL_BLOCK,
+                    &block->rep->digest);
+            }
+        }
+
+entry_cleanup:
+        tds_mst_bytes_release(verifier->policy, canonical);
+        tds_mst_bytes_release(verifier->policy, value_bytes);
+        tds_mst_bytes_release(verifier->policy, key_bytes);
+        tds_mst_object_release(verifier->policy, value);
+        tds_mst_object_release(verifier->policy, key);
+        if (status != TDS_MERKLE_OK) {
+            goto cleanup;
+        }
+    }
+    for (index = 0; index != decoded->entry_count + 1; ++index) {
+        if (!tds_mst_wire_take(
+                &cursor,
+                TDS_MERKLE_DIGEST_BYTE_LENGTH,
+                &bytes)) {
+            status = tds_mst_context_fail(
+                context,
+                TDS_MERKLE_VERIFY_MALFORMED_BLOCK,
+                &block->rep->digest);
+            goto cleanup;
+        }
+        memcpy(
+            decoded->child_digests[index].bytes,
+            bytes,
+            TDS_MERKLE_DIGEST_BYTE_LENGTH);
+    }
+    if (cursor.offset != cursor.size) {
+        status = tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_NONCANONICAL_BLOCK,
+            &block->rep->digest);
+        goto cleanup;
+    }
+    return TDS_MERKLE_OK;
+
+cleanup:
+    tds_mst_decoded_block_dispose(verifier->policy, decoded);
+    return status;
+}
+
+static tds_merkle_status tds_mst_context_push_active(
+    tds_mst_verification_context *context,
+    tds_merkle_digest digest) {
+    tds_merkle_digest *active;
+    size_t capacity;
+    size_t bytes;
+    size_t index;
+    for (index = 0; index != context->active_count; ++index) {
+        if (tds_merkle_digest_equal(context->active[index], digest)) {
+            return tds_mst_context_fail(
+                context,
+                TDS_MERKLE_VERIFY_CYCLE_DETECTED,
+                &digest);
+        }
+    }
+    if (context->active_count == context->active_capacity) {
+        capacity = context->active_capacity == 0 ? 8 : context->active_capacity;
+        if (context->active_capacity != 0) {
+            if (capacity > SIZE_MAX / 2) {
+                return TDS_MERKLE_OVERFLOW;
+            }
+            capacity *= 2;
+        }
+        if (tds_mst_multiply_overflows(capacity, sizeof(*active), &bytes)) {
+            return TDS_MERKLE_OVERFLOW;
+        }
+        active = (tds_merkle_digest *)tds_mst_allocate(context->policy, bytes);
+        if (active == NULL) {
+            return TDS_MERKLE_NO_MEMORY;
+        }
+        if (context->active_count != 0) {
+            memcpy(active, context->active, context->active_count * sizeof(*active));
+        }
+        tds_mst_deallocate(context->policy, context->active);
+        context->active = active;
+        context->active_capacity = capacity;
+    }
+    context->active[context->active_count++] = digest;
+    return TDS_MERKLE_OK;
+}
+
+static tds_merkle_status tds_mst_validate_loaded_reference(
+    const struct tds_merkle_policy_rep *policy,
+    const tds_mst_decoded_block *parent,
+    size_t child_index,
+    const struct tds_merkle_node *child,
+    tds_mst_verification_context *context) {
+    int comparison;
+    tds_merkle_status status;
+    if (child->level >= parent->level) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_INVALID_REFERENCE,
+            &child->digest);
+    }
+    if (child_index != 0) {
+        status = tds_mst_key_compare(
+            policy,
+            child->minimum_entry->key->value,
+            parent->entries[child_index - 1]->key->value,
+            &comparison);
+        if (status != TDS_MERKLE_OK) {
+            return status;
+        }
+        if (comparison <= 0) {
+            return tds_mst_context_fail(
+                context,
+                TDS_MERKLE_VERIFY_INVALID_REFERENCE,
+                &child->digest);
+        }
+    }
+    if (child_index != parent->entry_count) {
+        status = tds_mst_key_compare(
+            policy,
+            child->maximum_entry->key->value,
+            parent->entries[child_index]->key->value,
+            &comparison);
+        if (status != TDS_MERKLE_OK) {
+            return status;
+        }
+        if (comparison >= 0) {
+            return tds_mst_context_fail(
+                context,
+                TDS_MERKLE_VERIFY_INVALID_REFERENCE,
+                &child->digest);
+        }
+    }
+    return TDS_MERKLE_OK;
+}
+
+static tds_merkle_status tds_mst_load_node(
+    const tds_merkle_search_tree *verifier,
+    tds_merkle_digest digest,
+    const tds_merkle_block_store *store,
+    tds_mst_verification_context *context,
+    size_t depth,
+    struct tds_merkle_node **node_result) {
+    tds_mst_digest_slot *slot;
+    tds_mst_decoded_block decoded;
+    tds_merkle_block block = {NULL};
+    struct tds_merkle_node **children = NULL;
+    struct tds_merkle_node *node = NULL;
+    size_t children_bytes;
+    size_t actual_count;
+    size_t index;
+    bool found;
+    bool block_found = false;
+    bool pushed = false;
+    tds_merkle_status status;
+    if (depth == 0 || depth > context->budget.max_depth) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_RESOURCE_LIMIT_EXCEEDED,
+            &digest);
+    }
+    slot = tds_mst_context_find_slot(context, digest, &found);
+    if (found && slot->node != NULL) {
+        tds_mst_node_retain(slot->node);
+        *node_result = slot->node;
+        return TDS_MERKLE_OK;
+    }
+    status = tds_mst_context_push_active(context, digest);
+    if (status != TDS_MERKLE_OK) {
+        return status;
+    }
+    pushed = true;
+    status = tds_merkle_block_store_try_get(
+        store,
+        digest,
+        &block_found,
+        &block);
+    if (status != TDS_MERKLE_OK) {
+        goto cleanup;
+    }
+    if (block_found != (block.rep != NULL)) {
+        status = TDS_MERKLE_CALLBACK_FAILURE;
+        goto cleanup;
+    }
+    if (!block_found) {
+        status = tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_MISSING_BLOCK,
+            &digest);
+        goto cleanup;
+    }
+    if (!tds_merkle_digest_equal(block.rep->digest, digest)) {
+        status = tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_DIGEST_MISMATCH,
+            &digest);
+        goto cleanup;
+    }
+    status = tds_mst_decode_wire_block(verifier, &block, context, depth, &decoded);
+    if (status != TDS_MERKLE_OK) {
+        goto cleanup;
+    }
+    if (tds_mst_multiply_overflows(
+            decoded.entry_count + 1,
+            sizeof(*children),
+            &children_bytes)) {
+        status = TDS_MERKLE_OVERFLOW;
+        goto decoded_cleanup;
+    }
+    children = (struct tds_merkle_node **)tds_mst_allocate(
+        verifier->policy,
+        children_bytes);
+    if (children == NULL) {
+        status = TDS_MERKLE_NO_MEMORY;
+        goto decoded_cleanup;
+    }
+    memset(children, 0, children_bytes);
+    for (index = 0; index != decoded.entry_count + 1; ++index) {
+        if (!tds_merkle_digest_equal(
+                decoded.child_digests[index],
+                verifier->policy->empty_digest)) {
+            status = tds_mst_load_node(
+                verifier,
+                decoded.child_digests[index],
+                store,
+                context,
+                depth + 1,
+                &children[index]);
+            if (status != TDS_MERKLE_OK) {
+                goto decoded_cleanup;
+            }
+            status = tds_mst_validate_loaded_reference(
+                verifier->policy,
+                &decoded,
+                index,
+                children[index],
+                context);
+            if (status != TDS_MERKLE_OK) {
+                goto decoded_cleanup;
+            }
+        }
+    }
+    actual_count = decoded.entry_count;
+    for (index = 0; index != decoded.entry_count + 1; ++index) {
+        if (children[index] != NULL &&
+            tds_mst_add_overflows(actual_count, children[index]->count, &actual_count)) {
+            status = TDS_MERKLE_OVERFLOW;
+            goto decoded_cleanup;
+        }
+    }
+    if (actual_count != decoded.subtree_count) {
+        status = tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_INVALID_REFERENCE,
+            &digest);
+        goto decoded_cleanup;
+    }
+    status = tds_mst_node_create(
+        verifier->policy,
+        decoded.level,
+        decoded.entries,
+        decoded.entry_count,
+        children,
+        &node);
+    if (status != TDS_MERKLE_OK) {
+        goto decoded_cleanup;
+    }
+    if (!tds_merkle_digest_equal(node->digest, digest) ||
+        node->block_bytes->size != block.rep->byte_count ||
+        memcmp(node->block_bytes->data, block.rep->bytes, block.rep->byte_count) != 0) {
+        status = tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_NONCANONICAL_BLOCK,
+            &digest);
+        goto decoded_cleanup;
+    }
+    slot = tds_mst_context_find_slot(context, digest, &found);
+    if (!found || slot == NULL || slot->node != NULL) {
+        status = TDS_MERKLE_INCONSISTENT_POLICY;
+        goto decoded_cleanup;
+    }
+    slot->node = node;
+    tds_mst_node_retain(node);
+    *node_result = node;
+    node = NULL;
+
+decoded_cleanup:
+    tds_mst_node_release(verifier->policy, node);
+    if (children != NULL) {
+        for (index = 0; index != decoded.entry_count + 1; ++index) {
+            tds_mst_node_release(verifier->policy, children[index]);
+        }
+    }
+    tds_mst_deallocate(verifier->policy, children);
+    tds_mst_decoded_block_dispose(verifier->policy, &decoded);
+
+cleanup:
+    tds_merkle_block_dispose(&block);
+    if (pushed) {
+        --context->active_count;
+    }
+    return status;
+}
+
+static tds_merkle_status tds_mst_load_with_context(
+    tds_merkle_digest root_hash,
+    const tds_merkle_policy *policy,
+    const tds_merkle_block_store *store,
+    tds_mst_verification_context *context,
+    tds_merkle_search_tree *tree) {
+    tds_merkle_search_tree verifier = {NULL, NULL};
+    tds_merkle_search_tree loaded = {NULL, NULL};
+    struct tds_merkle_node *root = NULL;
+    bool valid = false;
+    tds_merkle_search_tree_statistics statistics;
+    tds_merkle_status status = tds_merkle_search_tree_init(&verifier, policy);
+    if (status != TDS_MERKLE_OK) {
+        return status;
+    }
+    if (tds_merkle_digest_equal(root_hash, policy->rep->empty_digest)) {
+        *tree = verifier;
+        return TDS_MERKLE_OK;
+    }
+    status = tds_mst_load_node(
+        &verifier,
+        root_hash,
+        store,
+        context,
+        1,
+        &root);
+    if (status == TDS_MERKLE_OK && !tds_merkle_digest_equal(root->digest, root_hash)) {
+        status = tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_ROOT_MISMATCH,
+            &root_hash);
+    }
+    if (status == TDS_MERKLE_OK) {
+        loaded = tds_mst_adopt_tree(policy->rep, root);
+        root = NULL;
+        status = tds_merkle_search_tree_validate(&loaded, &valid, &statistics);
+        if (status == TDS_MERKLE_OK && !valid) {
+            status = tds_mst_context_fail(
+                context,
+                TDS_MERKLE_VERIFY_INVALID_REFERENCE,
+                &root_hash);
+        }
+    }
+    if (status == TDS_MERKLE_OK) {
+        *tree = loaded;
+        memset(&loaded, 0, sizeof(loaded));
+    }
+    tds_merkle_search_tree_dispose(&loaded);
+    tds_mst_node_release(policy->rep, root);
+    tds_merkle_search_tree_dispose(&verifier);
+    return status;
+}
+
+static tds_merkle_status tds_mst_prepare_context(
+    const tds_merkle_policy *policy,
+    const tds_merkle_verification_budget *budget,
+    tds_merkle_verification_error *error,
+    tds_mst_verification_context *context) {
+    tds_merkle_verification_budget selected;
+    if (policy == NULL || policy->rep == NULL || context == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    if (budget == NULL) {
+        tds_merkle_verification_budget_init_default(&selected);
+    } else {
+        selected = *budget;
+    }
+    if (tds_merkle_verification_budget_validate(&selected) != TDS_MERKLE_OK) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    tds_merkle_verification_error_init(error);
+    memset(context, 0, sizeof(*context));
+    context->policy = policy->rep;
+    context->budget = selected;
+    context->error = error;
+    return TDS_MERKLE_OK;
+}
+
+tds_merkle_status tds_merkle_search_tree_load(
+    tds_merkle_digest root_hash,
+    const tds_merkle_policy *policy,
+    const tds_merkle_block_store *store,
+    const tds_merkle_verification_budget *budget,
+    tds_merkle_search_tree *tree,
+    tds_merkle_verification_error *error) {
+    tds_mst_verification_context context;
+    tds_merkle_search_tree loaded = {NULL, NULL};
+    tds_merkle_status status;
+    if (!tds_mst_store_valid(store) || tree == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    status = tds_mst_prepare_context(policy, budget, error, &context);
+    if (status != TDS_MERKLE_OK) {
+        return status;
+    }
+    status = tds_mst_load_with_context(
+        root_hash,
+        policy,
+        store,
+        &context,
+        &loaded);
+    tds_mst_context_publish_counts(&context);
+    if (status == TDS_MERKLE_OK) {
+        *tree = loaded;
+        memset(&loaded, 0, sizeof(loaded));
+    }
+    tds_merkle_search_tree_dispose(&loaded);
+    tds_mst_context_dispose(&context);
+    return status;
+}
+
+typedef struct tds_mst_overlay_store {
+    const struct tds_merkle_block_pack_rep *pack;
+    const tds_merkle_block_store *fallback;
+} tds_mst_overlay_store;
+
+static const tds_merkle_block *tds_mst_overlay_find(
+    const tds_mst_overlay_store *overlay,
+    tds_merkle_digest digest) {
+    size_t index;
+    for (index = 0; index != overlay->pack->block_count; ++index) {
+        if (tds_merkle_digest_equal(
+                overlay->pack->blocks[index].rep->digest,
+                digest)) {
+            return &overlay->pack->blocks[index];
+        }
+    }
+    return NULL;
+}
+
+static tds_merkle_status tds_mst_overlay_count(size_t *count, void *context) {
+    const tds_mst_overlay_store *overlay = (const tds_mst_overlay_store *)context;
+    size_t fallback_count = 0;
+    tds_merkle_status status = overlay->fallback == NULL
+        ? TDS_MERKLE_OK
+        : tds_merkle_block_store_count(overlay->fallback, &fallback_count);
+    if (status == TDS_MERKLE_OK) {
+        if (overlay->pack->block_count > SIZE_MAX - fallback_count) {
+            return TDS_MERKLE_OVERFLOW;
+        }
+        *count = overlay->pack->block_count + fallback_count;
+    }
+    return status;
+}
+
+static tds_merkle_status tds_mst_overlay_contains(
+    tds_merkle_digest digest,
+    bool *contains,
+    void *context) {
+    const tds_mst_overlay_store *overlay = (const tds_mst_overlay_store *)context;
+    if (tds_mst_overlay_find(overlay, digest) != NULL) {
+        *contains = true;
+        return TDS_MERKLE_OK;
+    }
+    if (overlay->fallback == NULL) {
+        *contains = false;
+        return TDS_MERKLE_OK;
+    }
+    return tds_merkle_block_store_contains(overlay->fallback, digest, contains);
+}
+
+static tds_merkle_status tds_mst_overlay_try_get(
+    tds_merkle_digest digest,
+    bool *found,
+    tds_merkle_block *block,
+    void *context) {
+    const tds_mst_overlay_store *overlay = (const tds_mst_overlay_store *)context;
+    const tds_merkle_block *staged = tds_mst_overlay_find(overlay, digest);
+    if (staged != NULL) {
+        *found = true;
+        return tds_merkle_block_copy(staged, block);
+    }
+    if (overlay->fallback == NULL) {
+        *found = false;
+        return TDS_MERKLE_OK;
+    }
+    return tds_merkle_block_store_try_get(overlay->fallback, digest, found, block);
+}
+
+static tds_merkle_status tds_mst_overlay_put(
+    const tds_merkle_block *block,
+    tds_merkle_store_put_result *result,
+    void *context) {
+    (void)block;
+    (void)result;
+    (void)context;
+    return TDS_MERKLE_INVALID_ARGUMENT;
+}
+
+static tds_merkle_status tds_mst_overlay_remove(
+    tds_merkle_digest digest,
+    bool *removed,
+    void *context) {
+    (void)digest;
+    (void)removed;
+    (void)context;
+    return TDS_MERKLE_INVALID_ARGUMENT;
+}
+
+static tds_merkle_status tds_mst_overlay_clear(void *context) {
+    (void)context;
+    return TDS_MERKLE_INVALID_ARGUMENT;
+}
+
+static bool tds_mst_algorithm_matches(tds_merkle_identifier identifier) {
+    return identifier.size == sizeof(tds_mst_algorithm_id) - 1 &&
+        memcmp(identifier.bytes, tds_mst_algorithm_id, identifier.size) == 0;
+}
+
+tds_merkle_status tds_merkle_search_tree_import_pack(
+    const tds_merkle_block_pack *pack,
+    const tds_merkle_policy *policy,
+    const tds_merkle_block_store *destination_store,
+    const tds_merkle_verification_budget *budget,
+    tds_merkle_search_tree *tree,
+    tds_merkle_verification_error *error) {
+    tds_mst_verification_context context;
+    tds_mst_overlay_store overlay;
+    tds_merkle_block_store overlay_store;
+    tds_merkle_search_tree verifier = {NULL, NULL};
+    tds_merkle_search_tree loaded = {NULL, NULL};
+    size_t index;
+    tds_merkle_status status;
+    if (pack == NULL || pack->rep == NULL || policy == NULL || policy->rep == NULL ||
+        tree == NULL || (destination_store != NULL && !tds_mst_store_valid(destination_store))) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    tds_merkle_verification_error_init(error);
+    if (!tds_mst_algorithm_matches(tds_merkle_block_pack_algorithm_id(pack))) {
+        return tds_mst_verification_fail(
+            error,
+            TDS_MERKLE_VERIFY_UNSUPPORTED_ALGORITHM,
+            NULL);
+    }
+    if (!tds_merkle_digest_equal(pack->rep->domain_digest, policy->rep->domain_digest)) {
+        return tds_mst_verification_fail(
+            error,
+            TDS_MERKLE_VERIFY_DOMAIN_MISMATCH,
+            NULL);
+    }
+    status = tds_mst_prepare_context(policy, budget, error, &context);
+    if (status != TDS_MERKLE_OK) {
+        return status;
+    }
+    status = tds_merkle_search_tree_init(&verifier, policy);
+    for (index = 0; status == TDS_MERKLE_OK && index != pack->rep->block_count; ++index) {
+        tds_mst_decoded_block decoded;
+        status = tds_mst_decode_wire_block(
+            &verifier,
+            &pack->rep->blocks[index],
+            &context,
+            1,
+            &decoded);
+        if (status == TDS_MERKLE_OK) {
+            tds_mst_decoded_block_dispose(verifier.policy, &decoded);
+        }
+    }
+    overlay.pack = pack->rep;
+    overlay.fallback = destination_store;
+    overlay_store = (tds_merkle_block_store){
+        tds_mst_overlay_count,
+        tds_mst_overlay_contains,
+        tds_mst_overlay_try_get,
+        tds_mst_overlay_put,
+        tds_mst_overlay_remove,
+        tds_mst_overlay_clear,
+        &overlay};
+    if (status == TDS_MERKLE_OK) {
+        status = tds_mst_load_with_context(
+            pack->rep->root_hash,
+            policy,
+            &overlay_store,
+            &context,
+            &loaded);
+    }
+    if (status == TDS_MERKLE_OK && destination_store != NULL) {
+        status = tds_mst_preflight_blocks(
+            pack->rep->blocks,
+            pack->rep->block_count,
+            destination_store,
+            error);
+    }
+    for (index = 0; status == TDS_MERKLE_OK && destination_store != NULL &&
+        index != pack->rep->block_count; ++index) {
+        tds_merkle_store_put_result put_result = TDS_MERKLE_STORE_PRESENT_IDENTICAL;
+        status = tds_merkle_block_store_put(
+            destination_store,
+            &pack->rep->blocks[index],
+            &put_result);
+        if (status == TDS_MERKLE_VERIFICATION_FAILURE ||
+            put_result == TDS_MERKLE_STORE_CONFLICT) {
+            status = tds_mst_context_fail(
+                &context,
+                TDS_MERKLE_VERIFY_CONFLICTING_BLOCK,
+                &pack->rep->blocks[index].rep->digest);
+        }
+    }
+    tds_mst_context_publish_counts(&context);
+    if (status == TDS_MERKLE_OK) {
+        *tree = loaded;
+        memset(&loaded, 0, sizeof(loaded));
+    }
+    tds_merkle_search_tree_dispose(&loaded);
+    tds_merkle_search_tree_dispose(&verifier);
+    tds_mst_context_dispose(&context);
+    return status;
+}
+
+typedef struct tds_mst_proof_step {
+    tds_merkle_block block;
+    size_t *expanded_child_indexes;
+    size_t expanded_child_count;
+} tds_mst_proof_step;
+
+struct tds_merkle_proof_rep {
+    tds_mst_ref_count refs;
+    tds_merkle_allocator allocator;
+    struct tds_merkle_policy_rep *policy_owner;
+    unsigned char *algorithm_id;
+    size_t algorithm_id_size;
+    tds_merkle_digest domain_digest;
+    tds_merkle_digest root_hash;
+    tds_merkle_proof_kind kind;
+    unsigned char *query;
+    size_t query_byte_count;
+    tds_mst_proof_step *steps;
+    size_t step_count;
+    uint64_t total_byte_count;
+};
+
+static int tds_mst_size_compare(const void *left, const void *right) {
+    const size_t left_value = *(const size_t *)left;
+    const size_t right_value = *(const size_t *)right;
+    return (left_value > right_value) - (left_value < right_value);
+}
+
+static void tds_mst_proof_retain(struct tds_merkle_proof_rep *proof) {
+    if (proof != NULL) {
+        tds_mst_ref_retain(&proof->refs);
+    }
+}
+
+static void tds_mst_proof_release(struct tds_merkle_proof_rep *proof) {
+    tds_merkle_allocator allocator;
+    struct tds_merkle_policy_rep *owner;
+    size_t index;
+    if (proof == NULL || !tds_mst_ref_release(&proof->refs)) {
+        return;
+    }
+    allocator = proof->allocator;
+    owner = proof->policy_owner;
+    for (index = 0; index != proof->step_count; ++index) {
+        tds_merkle_block_dispose(&proof->steps[index].block);
+        tds_mst_allocator_deallocate(
+            &allocator,
+            proof->steps[index].expanded_child_indexes);
+    }
+    tds_mst_allocator_deallocate(&allocator, proof->steps);
+    tds_mst_allocator_deallocate(&allocator, proof->query);
+    tds_mst_allocator_deallocate(&allocator, proof->algorithm_id);
+    tds_mst_allocator_deallocate(&allocator, proof);
+    tds_mst_policy_release(owner);
+}
+
+tds_merkle_status tds_merkle_proof_init(
+    tds_merkle_identifier algorithm_id,
+    tds_merkle_digest domain_digest,
+    tds_merkle_digest root_hash,
+    tds_merkle_proof_kind kind,
+    const unsigned char *query,
+    size_t query_byte_count,
+    const tds_merkle_proof_step_input *steps,
+    size_t step_count,
+    const tds_merkle_allocator *allocator,
+    tds_merkle_proof *proof,
+    tds_merkle_verification_error *error) {
+    tds_merkle_allocator selected;
+    struct tds_merkle_proof_rep *rep = NULL;
+    tds_mst_digest_slot *slots = NULL;
+    size_t slot_capacity = 0;
+    size_t bytes;
+    size_t index;
+    uint64_t total;
+    tds_merkle_status status;
+    if (proof == NULL || algorithm_id.bytes == NULL || algorithm_id.size == 0 ||
+        (query_byte_count != 0 && query == NULL) ||
+        (step_count != 0 && steps == NULL) ||
+        (kind != TDS_MERKLE_PROOF_MEMBERSHIP &&
+            kind != TDS_MERKLE_PROOF_NONMEMBERSHIP &&
+            kind != TDS_MERKLE_PROOF_RANGE) ||
+        !tds_mst_allocator_valid(allocator)) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    tds_merkle_verification_error_init(error);
+    selected = tds_mst_normalize_allocator(allocator);
+    status = tds_mst_digest_table_capacity(step_count, &slot_capacity);
+    if (status != TDS_MERKLE_OK ||
+        tds_mst_multiply_overflows(slot_capacity, sizeof(*slots), &bytes)) {
+        return TDS_MERKLE_OVERFLOW;
+    }
+    slots = (tds_mst_digest_slot *)tds_mst_allocator_allocate(&selected, bytes);
+    if (slots == NULL) {
+        return TDS_MERKLE_NO_MEMORY;
+    }
+    memset(slots, 0, bytes);
+    total = (uint64_t)query_byte_count;
+    for (index = 0; index != step_count; ++index) {
+        tds_mst_digest_slot *slot;
+        bool found;
+        uint64_t block_bytes;
+        if (steps[index].block == NULL || steps[index].block->rep == NULL ||
+            (steps[index].expanded_child_count != 0 &&
+                steps[index].expanded_child_indexes == NULL)) {
+            status = TDS_MERKLE_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        slot = tds_mst_digest_table_find(
+            slots,
+            slot_capacity,
+            steps[index].block->rep->digest,
+            &found);
+        if (found) {
+            status = tds_mst_verification_fail(
+                error,
+                TDS_MERKLE_VERIFY_DUPLICATE_BLOCK,
+                &steps[index].block->rep->digest);
+            goto cleanup;
+        }
+        slot->occupied = true;
+        slot->digest = steps[index].block->rep->digest;
+        block_bytes = (uint64_t)steps[index].block->rep->byte_count;
+        if (UINT64_MAX - total < block_bytes) {
+            status = TDS_MERKLE_OVERFLOW;
+            goto cleanup;
+        }
+        total += block_bytes;
+    }
+    rep = (struct tds_merkle_proof_rep *)tds_mst_allocator_allocate(
+        &selected,
+        sizeof(*rep));
+    if (rep == NULL) {
+        status = TDS_MERKLE_NO_MEMORY;
+        goto cleanup;
+    }
+    memset(rep, 0, sizeof(*rep));
+    rep->allocator = selected;
+    rep->algorithm_id = (unsigned char *)tds_mst_allocator_allocate(
+        &selected,
+        algorithm_id.size);
+    if (rep->algorithm_id == NULL) {
+        status = TDS_MERKLE_NO_MEMORY;
+        goto cleanup;
+    }
+    memcpy(rep->algorithm_id, algorithm_id.bytes, algorithm_id.size);
+    rep->algorithm_id_size = algorithm_id.size;
+    if (query_byte_count != 0) {
+        rep->query = (unsigned char *)tds_mst_allocator_allocate(
+            &selected,
+            query_byte_count);
+        if (rep->query == NULL) {
+            status = TDS_MERKLE_NO_MEMORY;
+            goto cleanup;
+        }
+        memcpy(rep->query, query, query_byte_count);
+    }
+    rep->query_byte_count = query_byte_count;
+    if (step_count != 0) {
+        if (tds_mst_multiply_overflows(step_count, sizeof(*rep->steps), &bytes)) {
+            status = TDS_MERKLE_OVERFLOW;
+            goto cleanup;
+        }
+        rep->steps = (tds_mst_proof_step *)tds_mst_allocator_allocate(&selected, bytes);
+        if (rep->steps == NULL) {
+            status = TDS_MERKLE_NO_MEMORY;
+            goto cleanup;
+        }
+        memset(rep->steps, 0, bytes);
+        for (index = 0; index != step_count; ++index) {
+            size_t expanded_bytes;
+            status = tds_merkle_block_copy(
+                steps[index].block,
+                &rep->steps[index].block);
+            if (status != TDS_MERKLE_OK) {
+                goto cleanup;
+            }
+            ++rep->step_count;
+            rep->steps[index].expanded_child_count = steps[index].expanded_child_count;
+            if (steps[index].expanded_child_count != 0) {
+                if (tds_mst_multiply_overflows(
+                        steps[index].expanded_child_count,
+                        sizeof(*rep->steps[index].expanded_child_indexes),
+                        &expanded_bytes)) {
+                    status = TDS_MERKLE_OVERFLOW;
+                    goto cleanup;
+                }
+                rep->steps[index].expanded_child_indexes = (size_t *)
+                    tds_mst_allocator_allocate(&selected, expanded_bytes);
+                if (rep->steps[index].expanded_child_indexes == NULL) {
+                    status = TDS_MERKLE_NO_MEMORY;
+                    goto cleanup;
+                }
+                memcpy(
+                    rep->steps[index].expanded_child_indexes,
+                    steps[index].expanded_child_indexes,
+                    expanded_bytes);
+                qsort(
+                    rep->steps[index].expanded_child_indexes,
+                    steps[index].expanded_child_count,
+                    sizeof(*rep->steps[index].expanded_child_indexes),
+                    tds_mst_size_compare);
+                {
+                    size_t child_index;
+                    for (child_index = 1;
+                        child_index != steps[index].expanded_child_count;
+                        ++child_index) {
+                        if (rep->steps[index].expanded_child_indexes[child_index - 1] ==
+                            rep->steps[index].expanded_child_indexes[child_index]) {
+                            status = tds_mst_verification_fail(
+                                error,
+                                TDS_MERKLE_VERIFY_PROOF_MISMATCH,
+                                &steps[index].block->rep->digest);
+                            goto cleanup;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    rep->domain_digest = domain_digest;
+    rep->root_hash = root_hash;
+    rep->kind = kind;
+    rep->total_byte_count = total;
+    tds_mst_ref_init(&rep->refs);
+    proof->rep = rep;
+    rep = NULL;
+    status = TDS_MERKLE_OK;
+
+cleanup:
+    if (rep != NULL) {
+        if (rep->steps != NULL) {
+            for (index = 0; index != rep->step_count; ++index) {
+                tds_merkle_block_dispose(&rep->steps[index].block);
+                tds_mst_allocator_deallocate(
+                    &selected,
+                    rep->steps[index].expanded_child_indexes);
+            }
+        }
+        tds_mst_allocator_deallocate(&selected, rep->steps);
+        tds_mst_allocator_deallocate(&selected, rep->query);
+        tds_mst_allocator_deallocate(&selected, rep->algorithm_id);
+        tds_mst_allocator_deallocate(&selected, rep);
+    }
+    tds_mst_allocator_deallocate(&selected, slots);
+    return status;
+}
+
+static void tds_mst_proof_attach_policy(
+    tds_merkle_proof *proof,
+    struct tds_merkle_policy_rep *policy) {
+    proof->rep->policy_owner = policy;
+    tds_mst_policy_retain(policy);
+}
+
+tds_merkle_status tds_merkle_proof_copy(
+    const tds_merkle_proof *source,
+    tds_merkle_proof *destination) {
+    if (source == NULL || source->rep == NULL || destination == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    if (source != destination) {
+        tds_mst_proof_retain(source->rep);
+        destination->rep = source->rep;
+    }
+    return TDS_MERKLE_OK;
+}
+
+void tds_merkle_proof_move(
+    tds_merkle_proof *destination,
+    tds_merkle_proof *source) {
+    if (destination != NULL && source != NULL && destination != source) {
+        destination->rep = source->rep;
+        source->rep = NULL;
+    }
+}
+
+void tds_merkle_proof_dispose(tds_merkle_proof *proof) {
+    if (proof != NULL) {
+        tds_mst_proof_release(proof->rep);
+        proof->rep = NULL;
+    }
+}
+
+tds_merkle_proof_kind tds_merkle_proof_kind_value(const tds_merkle_proof *proof) {
+    return proof == NULL || proof->rep == NULL
+        ? TDS_MERKLE_PROOF_MEMBERSHIP
+        : proof->rep->kind;
+}
+
+tds_merkle_digest tds_merkle_proof_root_hash(const tds_merkle_proof *proof) {
+    tds_merkle_digest zero = {{0}};
+    return proof == NULL || proof->rep == NULL ? zero : proof->rep->root_hash;
+}
+
+tds_merkle_digest tds_merkle_proof_domain_digest(const tds_merkle_proof *proof) {
+    tds_merkle_digest zero = {{0}};
+    return proof == NULL || proof->rep == NULL ? zero : proof->rep->domain_digest;
+}
+
+tds_merkle_identifier tds_merkle_proof_algorithm_id(const tds_merkle_proof *proof) {
+    tds_merkle_identifier empty = {NULL, 0};
+    return proof == NULL || proof->rep == NULL
+        ? empty
+        : (tds_merkle_identifier){proof->rep->algorithm_id, proof->rep->algorithm_id_size};
+}
+
+const unsigned char *tds_merkle_proof_query(const tds_merkle_proof *proof) {
+    return proof == NULL || proof->rep == NULL ? NULL : proof->rep->query;
+}
+
+size_t tds_merkle_proof_query_byte_count(const tds_merkle_proof *proof) {
+    return proof == NULL || proof->rep == NULL ? 0 : proof->rep->query_byte_count;
+}
+
+size_t tds_merkle_proof_step_count(const tds_merkle_proof *proof) {
+    return proof == NULL || proof->rep == NULL ? 0 : proof->rep->step_count;
+}
+
+const tds_merkle_block *tds_merkle_proof_step_block(
+    const tds_merkle_proof *proof,
+    size_t step_index) {
+    return proof == NULL || proof->rep == NULL || step_index >= proof->rep->step_count
+        ? NULL
+        : &proof->rep->steps[step_index].block;
+}
+
+const size_t *tds_merkle_proof_step_expanded_children(
+    const tds_merkle_proof *proof,
+    size_t step_index,
+    size_t *expanded_child_count) {
+    if (proof == NULL || proof->rep == NULL ||
+        step_index >= proof->rep->step_count || expanded_child_count == NULL) {
+        return NULL;
+    }
+    *expanded_child_count = proof->rep->steps[step_index].expanded_child_count;
+    return proof->rep->steps[step_index].expanded_child_indexes;
+}
+
+uint64_t tds_merkle_proof_total_byte_count(const tds_merkle_proof *proof) {
+    return proof == NULL || proof->rep == NULL ? 0 : proof->rep->total_byte_count;
+}
+
+static tds_merkle_status tds_mst_encode_proof_query(
+    const struct tds_merkle_policy_rep *policy,
+    tds_merkle_proof_kind kind,
+    const tds_mst_bytes *first,
+    const tds_mst_bytes *second,
+    unsigned char **query,
+    size_t *query_size) {
+    static const unsigned char magic[] = {'M', 'S', 'P', '2'};
+    size_t size = sizeof(magic) + 1 + 4;
+    size_t offset = 0;
+    unsigned char *bytes;
+    if (first == NULL || first->size > INT32_MAX ||
+        tds_mst_add_overflows(size, first->size, &size)) {
+        return TDS_MERKLE_OVERFLOW;
+    }
+    if (second != NULL &&
+        (second->size > INT32_MAX || tds_mst_add_overflows(size, 4, &size) ||
+            tds_mst_add_overflows(size, second->size, &size))) {
+        return TDS_MERKLE_OVERFLOW;
+    }
+    bytes = (unsigned char *)tds_mst_allocate(policy, size);
+    if (bytes == NULL) {
+        return TDS_MERKLE_NO_MEMORY;
+    }
+    memcpy(bytes + offset, magic, sizeof(magic));
+    offset += sizeof(magic);
+    bytes[offset++] = (unsigned char)kind;
+    tds_mst_write_be32((uint32_t)first->size, bytes + offset);
+    offset += 4;
+    if (first->size != 0) {
+        memcpy(bytes + offset, first->data, first->size);
+        offset += first->size;
+    }
+    if (second != NULL) {
+        tds_mst_write_be32((uint32_t)second->size, bytes + offset);
+        offset += 4;
+        if (second->size != 0) {
+            memcpy(bytes + offset, second->data, second->size);
+            offset += second->size;
+        }
+    }
+    if (offset != size) {
+        tds_mst_deallocate(policy, bytes);
+        return TDS_MERKLE_INCONSISTENT_POLICY;
+    }
+    *query = bytes;
+    *query_size = size;
+    return TDS_MERKLE_OK;
+}
+
+tds_merkle_status tds_merkle_search_tree_create_proof(
+    const tds_merkle_search_tree *tree,
+    const void *key,
+    tds_merkle_proof *proof) {
+    tds_merkle_block blocks[TDS_MST_MAXIMUM_HEIGHT];
+    tds_merkle_proof_step_input steps[TDS_MST_MAXIMUM_HEIGHT];
+    size_t expanded[TDS_MST_MAXIMUM_HEIGHT];
+    const struct tds_merkle_node *node;
+    tds_mst_bytes *key_bytes = NULL;
+    const tds_mst_bytes *value_bytes = NULL;
+    unsigned char *query = NULL;
+    size_t query_size = 0;
+    size_t step_count = 0;
+    size_t index;
+    tds_merkle_proof_kind kind = TDS_MERKLE_PROOF_NONMEMBERSHIP;
+    tds_merkle_status status;
+    if (!tds_mst_tree_valid(tree) || key == NULL || proof == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    memset(blocks, 0, sizeof(blocks));
+    memset(steps, 0, sizeof(steps));
+    status = tds_mst_encode_value(
+        tree->policy,
+        &tree->policy->config.key_codec,
+        key,
+        &key_bytes);
+    node = tree->root;
+    while (status == TDS_MERKLE_OK && node != NULL) {
+        tds_mst_entry *const *entries = tds_mst_node_entries_const(node);
+        struct tds_merkle_node *const *children = tds_mst_node_children_const(node);
+        size_t position = 0;
+        bool found = false;
+        if (step_count == TDS_MST_MAXIMUM_HEIGHT) {
+            status = TDS_MERKLE_OVERFLOW;
+            break;
+        }
+        status = tds_mst_find_position(
+            tree->policy,
+            entries,
+            node->entry_count,
+            key,
+            &position,
+            &found);
+        if (status != TDS_MERKLE_OK) {
+            break;
+        }
+        status = tds_mst_block_init_policy(
+            tree->policy,
+            node->digest,
+            node->block_bytes->data,
+            node->block_bytes->size,
+            &blocks[step_count]);
+        if (status != TDS_MERKLE_OK) {
+            break;
+        }
+        steps[step_count].block = &blocks[step_count];
+        if (!found && children[position] != NULL) {
+            expanded[step_count] = position;
+            steps[step_count].expanded_child_indexes = &expanded[step_count];
+            steps[step_count].expanded_child_count = 1;
+        }
+        ++step_count;
+        if (found) {
+            kind = TDS_MERKLE_PROOF_MEMBERSHIP;
+            value_bytes = entries[position]->value_bytes;
+            break;
+        }
+        node = children[position];
+    }
+    if (status == TDS_MERKLE_OK) {
+        status = tds_mst_encode_proof_query(
+            tree->policy,
+            kind,
+            key_bytes,
+            value_bytes,
+            &query,
+            &query_size);
+    }
+    if (status == TDS_MERKLE_OK) {
+        const tds_merkle_identifier algorithm = {
+            tds_mst_algorithm_id,
+            sizeof(tds_mst_algorithm_id) - 1};
+        status = tds_merkle_proof_init(
+            algorithm,
+            tree->policy->domain_digest,
+            tds_merkle_search_tree_root_hash(tree),
+            kind,
+            query,
+            query_size,
+            steps,
+            step_count,
+            &tree->policy->config.allocator,
+            proof,
+            NULL);
+        if (status == TDS_MERKLE_OK) {
+            tds_mst_proof_attach_policy(proof, tree->policy);
+        }
+    }
+    for (index = 0; index != step_count; ++index) {
+        tds_merkle_block_dispose(&blocks[index]);
+    }
+    tds_mst_deallocate(tree->policy, query);
+    tds_mst_bytes_release(tree->policy, key_bytes);
+    return status;
+}
+
+typedef struct tds_mst_range_proof_builder {
+    const tds_merkle_search_tree *tree;
+    const void *minimum_key;
+    const void *maximum_key;
+    tds_merkle_block *blocks;
+    tds_merkle_proof_step_input *steps;
+    size_t count;
+    size_t capacity;
+} tds_mst_range_proof_builder;
+
+static void tds_mst_range_builder_dispose(tds_mst_range_proof_builder *builder) {
+    size_t index;
+    for (index = 0; index != builder->count; ++index) {
+        tds_merkle_block_dispose(&builder->blocks[index]);
+        tds_mst_deallocate(
+            builder->tree->policy,
+            (void *)builder->steps[index].expanded_child_indexes);
+    }
+    tds_mst_deallocate(builder->tree->policy, builder->steps);
+    tds_mst_deallocate(builder->tree->policy, builder->blocks);
+}
+
+static tds_merkle_status tds_mst_range_interval_intersects(
+    const tds_merkle_search_tree *tree,
+    tds_mst_entry *const *entries,
+    size_t entry_count,
+    size_t child_index,
+    const void *minimum_key,
+    const void *maximum_key,
+    bool *intersects) {
+    int comparison;
+    tds_merkle_status status;
+    *intersects = true;
+    if (child_index != 0) {
+        status = tds_mst_key_compare(
+            tree->policy,
+            entries[child_index - 1]->key->value,
+            maximum_key,
+            &comparison);
+        if (status != TDS_MERKLE_OK) {
+            return status;
+        }
+        *intersects = comparison < 0;
+    }
+    if (*intersects && child_index != entry_count) {
+        status = tds_mst_key_compare(
+            tree->policy,
+            entries[child_index]->key->value,
+            minimum_key,
+            &comparison);
+        if (status != TDS_MERKLE_OK) {
+            return status;
+        }
+        *intersects = comparison > 0;
+    }
+    return TDS_MERKLE_OK;
+}
+
+static tds_merkle_status tds_mst_collect_range_proof(
+    const struct tds_merkle_node *node,
+    tds_mst_range_proof_builder *builder) {
+    tds_mst_entry *const *entries;
+    struct tds_merkle_node *const *children;
+    size_t *expanded = NULL;
+    size_t expanded_count = 0;
+    size_t expanded_bytes;
+    size_t step_index;
+    size_t index;
+    tds_merkle_status status = TDS_MERKLE_OK;
+    if (node == NULL) {
+        return TDS_MERKLE_OK;
+    }
+    if (builder->count == builder->capacity) {
+        return TDS_MERKLE_INCONSISTENT_POLICY;
+    }
+    entries = tds_mst_node_entries_const(node);
+    children = tds_mst_node_children_const(node);
+    if (tds_mst_multiply_overflows(
+            node->entry_count + 1,
+            sizeof(*expanded),
+            &expanded_bytes)) {
+        return TDS_MERKLE_OVERFLOW;
+    }
+    expanded = (size_t *)tds_mst_allocate(builder->tree->policy, expanded_bytes);
+    if (expanded == NULL) {
+        return TDS_MERKLE_NO_MEMORY;
+    }
+    for (index = 0; index != node->entry_count + 1; ++index) {
+        bool intersects = false;
+        status = tds_mst_range_interval_intersects(
+            builder->tree,
+            entries,
+            node->entry_count,
+            index,
+            builder->minimum_key,
+            builder->maximum_key,
+            &intersects);
+        if (status != TDS_MERKLE_OK) {
+            goto cleanup;
+        }
+        if (children[index] != NULL && intersects) {
+            expanded[expanded_count++] = index;
+        }
+    }
+    step_index = builder->count;
+    status = tds_mst_block_init_policy(
+        builder->tree->policy,
+        node->digest,
+        node->block_bytes->data,
+        node->block_bytes->size,
+        &builder->blocks[step_index]);
+    if (status != TDS_MERKLE_OK) {
+        goto cleanup;
+    }
+    builder->steps[step_index].block = &builder->blocks[step_index];
+    builder->steps[step_index].expanded_child_indexes = expanded;
+    builder->steps[step_index].expanded_child_count = expanded_count;
+    ++builder->count;
+    expanded = NULL;
+    for (index = 0; index != expanded_count; ++index) {
+        status = tds_mst_collect_range_proof(
+            children[builder->steps[step_index].expanded_child_indexes[index]],
+            builder);
+        if (status != TDS_MERKLE_OK) {
+            return status;
+        }
+    }
+    return TDS_MERKLE_OK;
+
+cleanup:
+    tds_mst_deallocate(builder->tree->policy, expanded);
+    return status;
+}
+
+tds_merkle_status tds_merkle_search_tree_create_range_proof(
+    const tds_merkle_search_tree *tree,
+    const void *minimum_key,
+    const void *maximum_key,
+    tds_merkle_proof *proof) {
+    tds_mst_range_proof_builder builder;
+    tds_mst_bytes *minimum_bytes = NULL;
+    tds_mst_bytes *maximum_bytes = NULL;
+    unsigned char *query = NULL;
+    size_t query_size = 0;
+    size_t block_bytes;
+    size_t step_bytes;
+    int comparison = 0;
+    tds_merkle_status status;
+    if (!tds_mst_tree_valid(tree) || minimum_key == NULL || maximum_key == NULL ||
+        proof == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    status = tds_mst_key_compare(
+        tree->policy,
+        minimum_key,
+        maximum_key,
+        &comparison);
+    if (status != TDS_MERKLE_OK || comparison > 0) {
+        return status == TDS_MERKLE_OK ? TDS_MERKLE_INVALID_ARGUMENT : status;
+    }
+    memset(&builder, 0, sizeof(builder));
+    builder.tree = tree;
+    builder.minimum_key = minimum_key;
+    builder.maximum_key = maximum_key;
+    builder.capacity = tds_merkle_search_tree_block_count(tree);
+    if (builder.capacity != 0) {
+        if (tds_mst_multiply_overflows(
+                builder.capacity,
+                sizeof(*builder.blocks),
+                &block_bytes) ||
+            tds_mst_multiply_overflows(
+                builder.capacity,
+                sizeof(*builder.steps),
+                &step_bytes)) {
+            return TDS_MERKLE_OVERFLOW;
+        }
+        builder.blocks = (tds_merkle_block *)tds_mst_allocate(tree->policy, block_bytes);
+        builder.steps = (tds_merkle_proof_step_input *)tds_mst_allocate(
+            tree->policy,
+            step_bytes);
+        if (builder.blocks == NULL || builder.steps == NULL) {
+            status = TDS_MERKLE_NO_MEMORY;
+            goto cleanup;
+        }
+        memset(builder.blocks, 0, block_bytes);
+        memset(builder.steps, 0, step_bytes);
+    }
+    status = tds_mst_encode_value(
+        tree->policy,
+        &tree->policy->config.key_codec,
+        minimum_key,
+        &minimum_bytes);
+    if (status == TDS_MERKLE_OK) {
+        status = tds_mst_encode_value(
+            tree->policy,
+            &tree->policy->config.key_codec,
+            maximum_key,
+            &maximum_bytes);
+    }
+    if (status == TDS_MERKLE_OK) {
+        status = tds_mst_collect_range_proof(tree->root, &builder);
+    }
+    if (status == TDS_MERKLE_OK) {
+        status = tds_mst_encode_proof_query(
+            tree->policy,
+            TDS_MERKLE_PROOF_RANGE,
+            minimum_bytes,
+            maximum_bytes,
+            &query,
+            &query_size);
+    }
+    if (status == TDS_MERKLE_OK) {
+        const tds_merkle_identifier algorithm = {
+            tds_mst_algorithm_id,
+            sizeof(tds_mst_algorithm_id) - 1};
+        status = tds_merkle_proof_init(
+            algorithm,
+            tree->policy->domain_digest,
+            tds_merkle_search_tree_root_hash(tree),
+            TDS_MERKLE_PROOF_RANGE,
+            query,
+            query_size,
+            builder.steps,
+            builder.count,
+            &tree->policy->config.allocator,
+            proof,
+            NULL);
+        if (status == TDS_MERKLE_OK) {
+            tds_mst_proof_attach_policy(proof, tree->policy);
+        }
+    }
+
+cleanup:
+    tds_mst_deallocate(tree->policy, query);
+    tds_mst_bytes_release(tree->policy, maximum_bytes);
+    tds_mst_bytes_release(tree->policy, minimum_bytes);
+    tds_mst_range_builder_dispose(&builder);
+    return status;
+}
+
+typedef struct tds_mst_decoded_query {
+    tds_mst_object *first;
+    tds_mst_bytes *first_bytes;
+    tds_mst_object *second;
+    tds_mst_bytes *second_bytes;
+} tds_mst_decoded_query;
+
+static void tds_mst_decoded_query_dispose(
+    const struct tds_merkle_policy_rep *policy,
+    tds_mst_decoded_query *query) {
+    tds_mst_bytes_release(policy, query->second_bytes);
+    tds_mst_object_release(policy, query->second);
+    tds_mst_bytes_release(policy, query->first_bytes);
+    tds_mst_object_release(policy, query->first);
+    memset(query, 0, sizeof(*query));
+}
+
+static tds_merkle_status tds_mst_decode_query_field(
+    const tds_merkle_search_tree *verifier,
+    bool is_key,
+    const tds_merkle_codec *codec,
+    const unsigned char *encoding,
+    size_t encoding_size,
+    tds_mst_object **object,
+    tds_mst_bytes **owned_bytes,
+    tds_mst_verification_context *context,
+    tds_merkle_digest root_hash) {
+    tds_mst_bytes *canonical = NULL;
+    tds_merkle_status status = tds_mst_decode_object(
+        verifier->policy,
+        is_key,
+        codec,
+        encoding,
+        encoding_size,
+        object,
+        owned_bytes);
+    if (status != TDS_MERKLE_OK) {
+        return tds_mst_wire_decode_failure(status)
+            ? tds_mst_context_fail(
+                context,
+                TDS_MERKLE_VERIFY_PROOF_MISMATCH,
+                &root_hash)
+            : status;
+    }
+    status = tds_mst_encode_value(
+        verifier->policy,
+        codec,
+        (*object)->value,
+        &canonical);
+    if (status != TDS_MERKLE_OK || canonical->size != (*owned_bytes)->size ||
+        memcmp(canonical->data, (*owned_bytes)->data, canonical->size) != 0) {
+        if (status == TDS_MERKLE_OK || tds_mst_wire_decode_failure(status)) {
+            status = tds_mst_context_fail(
+                context,
+                TDS_MERKLE_VERIFY_PROOF_MISMATCH,
+                &root_hash);
+        }
+    }
+    tds_mst_bytes_release(verifier->policy, canonical);
+    return status;
+}
+
+static tds_merkle_status tds_mst_decode_proof_query(
+    const tds_merkle_search_tree *verifier,
+    const tds_merkle_proof *proof,
+    tds_mst_verification_context *context,
+    tds_mst_decoded_query *query) {
+    static const unsigned char magic[] = {'M', 'S', 'P', '2'};
+    tds_mst_wire_cursor cursor;
+    const unsigned char *bytes;
+    const unsigned char *first_encoding;
+    const unsigned char *second_encoding = NULL;
+    uint32_t first_length;
+    uint32_t second_length = 0;
+    tds_merkle_status status;
+    memset(query, 0, sizeof(*query));
+    cursor = (tds_mst_wire_cursor){
+        proof->rep->query,
+        proof->rep->query_byte_count,
+        0,
+        proof->rep->root_hash,
+        context};
+    if (!tds_mst_wire_take(&cursor, sizeof(magic), &bytes) ||
+        memcmp(bytes, magic, sizeof(magic)) != 0 ||
+        !tds_mst_wire_take(&cursor, 1, &bytes) ||
+        bytes[0] != (unsigned char)proof->rep->kind ||
+        !tds_mst_wire_read_be32(&cursor, &first_length) || first_length > INT32_MAX ||
+        !tds_mst_wire_take(&cursor, (size_t)first_length, &first_encoding)) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_PROOF_MISMATCH,
+            &proof->rep->root_hash);
+    }
+    if (proof->rep->kind == TDS_MERKLE_PROOF_MEMBERSHIP ||
+        proof->rep->kind == TDS_MERKLE_PROOF_RANGE) {
+        if (!tds_mst_wire_read_be32(&cursor, &second_length) || second_length > INT32_MAX ||
+            !tds_mst_wire_take(&cursor, (size_t)second_length, &second_encoding)) {
+            return tds_mst_context_fail(
+                context,
+                TDS_MERKLE_VERIFY_PROOF_MISMATCH,
+                &proof->rep->root_hash);
+        }
+    }
+    if (cursor.offset != cursor.size) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_PROOF_MISMATCH,
+            &proof->rep->root_hash);
+    }
+    status = tds_mst_decode_query_field(
+        verifier,
+        true,
+        &verifier->policy->config.key_codec,
+        first_encoding,
+        (size_t)first_length,
+        &query->first,
+        &query->first_bytes,
+        context,
+        proof->rep->root_hash);
+    if (status == TDS_MERKLE_OK &&
+        proof->rep->kind == TDS_MERKLE_PROOF_MEMBERSHIP) {
+        status = tds_mst_decode_query_field(
+            verifier,
+            false,
+            &verifier->policy->config.value_codec,
+            second_encoding,
+            (size_t)second_length,
+            &query->second,
+            &query->second_bytes,
+            context,
+            proof->rep->root_hash);
+    } else if (status == TDS_MERKLE_OK &&
+        proof->rep->kind == TDS_MERKLE_PROOF_RANGE) {
+        status = tds_mst_decode_query_field(
+            verifier,
+            true,
+            &verifier->policy->config.key_codec,
+            second_encoding,
+            (size_t)second_length,
+            &query->second,
+            &query->second_bytes,
+            context,
+            proof->rep->root_hash);
+        if (status == TDS_MERKLE_OK) {
+            int comparison = 0;
+            status = tds_mst_key_compare(
+                verifier->policy,
+                query->first->value,
+                query->second->value,
+                &comparison);
+            if (status == TDS_MERKLE_OK && comparison > 0) {
+                status = tds_mst_context_fail(
+                    context,
+                    TDS_MERKLE_VERIFY_PROOF_MISMATCH,
+                    &proof->rep->root_hash);
+            }
+        }
+    }
+    if (status != TDS_MERKLE_OK) {
+        tds_mst_decoded_query_dispose(verifier->policy, query);
+    }
+    return status;
+}
+
+static bool tds_mst_proof_expansion_equals(
+    const tds_mst_proof_step *step,
+    const size_t *expected,
+    size_t expected_count) {
+    return step->expanded_child_count == expected_count &&
+        (expected_count == 0 || memcmp(
+            step->expanded_child_indexes,
+            expected,
+            expected_count * sizeof(*expected)) == 0);
+}
+
+static tds_mst_decoded_block *tds_mst_find_decoded_proof_block(
+    tds_mst_verification_context *context,
+    tds_mst_decoded_block *blocks,
+    tds_merkle_digest digest) {
+    bool found;
+    tds_mst_digest_slot *slot = tds_mst_context_find_slot(context, digest, &found);
+    return !found || slot == NULL || slot->value == SIZE_MAX
+        ? NULL
+        : &blocks[slot->value];
+}
+
+static tds_merkle_status tds_mst_validate_proof_reference(
+    const tds_merkle_search_tree *verifier,
+    const tds_mst_decoded_block *parent,
+    size_t child_index,
+    const tds_mst_decoded_block *child,
+    tds_mst_verification_context *context) {
+    size_t index;
+    if (child->level >= parent->level) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_INVALID_REFERENCE,
+            &child->block.rep->digest);
+    }
+    for (index = 0; index != child->entry_count; ++index) {
+        int comparison;
+        tds_merkle_status status;
+        if (child_index != 0) {
+            status = tds_mst_key_compare(
+                verifier->policy,
+                child->entries[index]->key->value,
+                parent->entries[child_index - 1]->key->value,
+                &comparison);
+            if (status != TDS_MERKLE_OK) {
+                return status;
+            }
+            if (comparison <= 0) {
+                return tds_mst_context_fail(
+                    context,
+                    TDS_MERKLE_VERIFY_INVALID_REFERENCE,
+                    &child->block.rep->digest);
+            }
+        }
+        if (child_index != parent->entry_count) {
+            status = tds_mst_key_compare(
+                verifier->policy,
+                child->entries[index]->key->value,
+                parent->entries[child_index]->key->value,
+                &comparison);
+            if (status != TDS_MERKLE_OK) {
+                return status;
+            }
+            if (comparison >= 0) {
+                return tds_mst_context_fail(
+                    context,
+                    TDS_MERKLE_VERIFY_INVALID_REFERENCE,
+                    &child->block.rep->digest);
+            }
+        }
+    }
+    return TDS_MERKLE_OK;
+}
+
+static tds_merkle_status tds_mst_verify_point_proof(
+    const tds_merkle_search_tree *verifier,
+    const tds_merkle_proof *proof,
+    const tds_mst_decoded_query *query,
+    tds_mst_decoded_block *blocks,
+    tds_mst_verification_context *context,
+    size_t *visited_count) {
+    tds_merkle_digest digest = proof->rep->root_hash;
+    size_t depth = 1;
+    for (;;) {
+        tds_mst_decoded_block *block = tds_mst_find_decoded_proof_block(
+            context,
+            blocks,
+            digest);
+        tds_mst_proof_step *step;
+        size_t position = 0;
+        bool found = false;
+        tds_merkle_status status;
+        if (depth > context->budget.max_depth) {
+            return tds_mst_context_fail(
+                context,
+                TDS_MERKLE_VERIFY_RESOURCE_LIMIT_EXCEEDED,
+                &digest);
+        }
+        if (block == NULL) {
+            return tds_mst_context_fail(
+                context,
+                TDS_MERKLE_VERIFY_MISSING_BLOCK,
+                &digest);
+        }
+        if (block->proof_visited) {
+            return tds_mst_context_fail(
+                context,
+                TDS_MERKLE_VERIFY_CYCLE_DETECTED,
+                &digest);
+        }
+        block->proof_visited = true;
+        ++*visited_count;
+        step = &proof->rep->steps[
+            (size_t)(block - blocks)];
+        status = tds_mst_find_position(
+            verifier->policy,
+            block->entries,
+            block->entry_count,
+            query->first->value,
+            &position,
+            &found);
+        if (status != TDS_MERKLE_OK) {
+            return status;
+        }
+        if (found) {
+            if (!tds_mst_proof_expansion_equals(step, NULL, 0) ||
+                proof->rep->kind != TDS_MERKLE_PROOF_MEMBERSHIP ||
+                query->second_bytes == NULL ||
+                block->entries[position]->value_bytes->size != query->second_bytes->size ||
+                memcmp(
+                    block->entries[position]->value_bytes->data,
+                    query->second_bytes->data,
+                    query->second_bytes->size) != 0) {
+                return tds_mst_context_fail(
+                    context,
+                    TDS_MERKLE_VERIFY_PROOF_MISMATCH,
+                    &digest);
+            }
+            return TDS_MERKLE_OK;
+        }
+        if (tds_merkle_digest_equal(
+                block->child_digests[position],
+                verifier->policy->empty_digest)) {
+            if (!tds_mst_proof_expansion_equals(step, NULL, 0) ||
+                proof->rep->kind != TDS_MERKLE_PROOF_NONMEMBERSHIP) {
+                return tds_mst_context_fail(
+                    context,
+                    TDS_MERKLE_VERIFY_PROOF_MISMATCH,
+                    &digest);
+            }
+            return TDS_MERKLE_OK;
+        }
+        if (!tds_mst_proof_expansion_equals(step, &position, 1)) {
+            return tds_mst_context_fail(
+                context,
+                TDS_MERKLE_VERIFY_PROOF_MISMATCH,
+                &digest);
+        }
+        {
+            tds_mst_decoded_block *child = tds_mst_find_decoded_proof_block(
+                context,
+                blocks,
+                block->child_digests[position]);
+            if (child == NULL) {
+                return tds_mst_context_fail(
+                    context,
+                    TDS_MERKLE_VERIFY_MISSING_BLOCK,
+                    &block->child_digests[position]);
+            }
+            status = tds_mst_validate_proof_reference(
+                verifier,
+                block,
+                position,
+                child,
+                context);
+            if (status != TDS_MERKLE_OK) {
+                return status;
+            }
+            digest = block->child_digests[position];
+        }
+        ++depth;
+    }
+}
+
+static tds_merkle_status tds_mst_verify_range_proof_node(
+    const tds_merkle_search_tree *verifier,
+    const tds_merkle_proof *proof,
+    const tds_mst_decoded_query *query,
+    tds_mst_decoded_block *blocks,
+    tds_mst_verification_context *context,
+    tds_merkle_digest digest,
+    size_t depth,
+    size_t *visited_count) {
+    tds_mst_decoded_block *block;
+    tds_mst_proof_step *step;
+    size_t expected_offset = 0;
+    size_t index;
+    tds_merkle_status status;
+    if (depth == 0 || depth > context->budget.max_depth) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_RESOURCE_LIMIT_EXCEEDED,
+            &digest);
+    }
+    block = tds_mst_find_decoded_proof_block(context, blocks, digest);
+    if (block == NULL) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_MISSING_BLOCK,
+            &digest);
+    }
+    if (block->proof_visited) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_CYCLE_DETECTED,
+            &digest);
+    }
+    block->proof_visited = true;
+    ++*visited_count;
+    step = &proof->rep->steps[(size_t)(block - blocks)];
+    for (index = 0; index != block->entry_count + 1; ++index) {
+        bool intersects = false;
+        status = tds_mst_range_interval_intersects(
+            verifier,
+            block->entries,
+            block->entry_count,
+            index,
+            query->first->value,
+            query->second->value,
+            &intersects);
+        if (status != TDS_MERKLE_OK) {
+            return status;
+        }
+        if (intersects && !tds_merkle_digest_equal(
+                block->child_digests[index],
+                verifier->policy->empty_digest)) {
+            if (expected_offset == step->expanded_child_count ||
+                step->expanded_child_indexes[expected_offset] != index) {
+                return tds_mst_context_fail(
+                    context,
+                    TDS_MERKLE_VERIFY_PROOF_MISMATCH,
+                    &digest);
+            }
+            ++expected_offset;
+        }
+    }
+    if (expected_offset != step->expanded_child_count) {
+        return tds_mst_context_fail(
+            context,
+            TDS_MERKLE_VERIFY_PROOF_MISMATCH,
+            &digest);
+    }
+    for (index = 0; index != step->expanded_child_count; ++index) {
+        const size_t child_index = step->expanded_child_indexes[index];
+        tds_mst_decoded_block *child = tds_mst_find_decoded_proof_block(
+            context,
+            blocks,
+            block->child_digests[child_index]);
+        if (child == NULL) {
+            return tds_mst_context_fail(
+                context,
+                TDS_MERKLE_VERIFY_MISSING_BLOCK,
+                &block->child_digests[child_index]);
+        }
+        status = tds_mst_validate_proof_reference(
+            verifier,
+            block,
+            child_index,
+            child,
+            context);
+        if (status != TDS_MERKLE_OK) {
+            return status;
+        }
+        status = tds_mst_verify_range_proof_node(
+            verifier,
+            proof,
+            query,
+            blocks,
+            context,
+            block->child_digests[child_index],
+            depth + 1,
+            visited_count);
+        if (status != TDS_MERKLE_OK) {
+            return status;
+        }
+    }
+    return TDS_MERKLE_OK;
+}
+
+static tds_merkle_proof_verification_result tds_mst_proof_result(
+    bool valid,
+    tds_merkle_verification_failure_kind kind,
+    tds_merkle_digest root_hash,
+    size_t block_count,
+    uint64_t byte_count) {
+    tds_merkle_proof_verification_result result;
+    result.is_valid = valid;
+    result.failure_kind = kind;
+    result.has_computed_root_hash = true;
+    result.computed_root_hash = root_hash;
+    result.verified_block_count = block_count;
+    result.verified_byte_count = byte_count;
+    return result;
+}
+
+tds_merkle_status tds_merkle_search_tree_verify_proof(
+    const tds_merkle_proof *proof,
+    const tds_merkle_policy *policy,
+    const tds_merkle_verification_budget *budget,
+    tds_merkle_proof_verification_result *result) {
+    tds_merkle_verification_budget selected;
+    tds_merkle_verification_error error;
+    tds_mst_verification_context context;
+    tds_merkle_search_tree verifier = {NULL, NULL};
+    tds_mst_decoded_block *decoded = NULL;
+    tds_mst_decoded_query query;
+    size_t decoded_bytes = 0;
+    size_t visited_count = 0;
+    size_t index;
+    tds_merkle_status status;
+    if (proof == NULL || proof->rep == NULL || policy == NULL || policy->rep == NULL ||
+        result == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    memset(&query, 0, sizeof(query));
+    if (budget == NULL) {
+        tds_merkle_verification_budget_init_default(&selected);
+    } else {
+        selected = *budget;
+    }
+    if (tds_merkle_verification_budget_validate(&selected) != TDS_MERKLE_OK) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    /* Security-sensitive precedence: query gate/accounting, proof structure,
+     * envelope, then and only then verifier allocation/hash/codec work. */
+    if (proof->rep->query_byte_count > selected.max_proof_query_byte_count ||
+        (uint64_t)proof->rep->query_byte_count > selected.max_total_byte_count) {
+        *result = tds_mst_proof_result(
+            false,
+            TDS_MERKLE_VERIFY_RESOURCE_LIMIT_EXCEEDED,
+            proof->rep->root_hash,
+            0,
+            0);
+        return TDS_MERKLE_OK;
+    }
+    if (proof->rep->step_count > selected.max_block_count) {
+        *result = tds_mst_proof_result(
+            false,
+            TDS_MERKLE_VERIFY_RESOURCE_LIMIT_EXCEEDED,
+            proof->rep->root_hash,
+            0,
+            (uint64_t)proof->rep->query_byte_count);
+        return TDS_MERKLE_OK;
+    }
+    for (index = 0; index != proof->rep->step_count; ++index) {
+        if (proof->rep->steps[index].expanded_child_count >
+            selected.max_child_references_per_block) {
+            *result = tds_mst_proof_result(
+                false,
+                TDS_MERKLE_VERIFY_RESOURCE_LIMIT_EXCEEDED,
+                proof->rep->root_hash,
+                0,
+                (uint64_t)proof->rep->query_byte_count);
+            return TDS_MERKLE_OK;
+        }
+    }
+    if (!tds_mst_algorithm_matches(tds_merkle_proof_algorithm_id(proof))) {
+        *result = tds_mst_proof_result(
+            false,
+            TDS_MERKLE_VERIFY_UNSUPPORTED_ALGORITHM,
+            proof->rep->root_hash,
+            0,
+            (uint64_t)proof->rep->query_byte_count);
+        return TDS_MERKLE_OK;
+    }
+    if (!tds_merkle_digest_equal(proof->rep->domain_digest, policy->rep->domain_digest)) {
+        *result = tds_mst_proof_result(
+            false,
+            TDS_MERKLE_VERIFY_DOMAIN_MISMATCH,
+            proof->rep->root_hash,
+            0,
+            (uint64_t)proof->rep->query_byte_count);
+        return TDS_MERKLE_OK;
+    }
+    tds_merkle_verification_error_init(&error);
+    memset(&context, 0, sizeof(context));
+    context.policy = policy->rep;
+    context.budget = selected;
+    context.error = &error;
+    context.total_byte_count = (uint64_t)proof->rep->query_byte_count;
+    tds_mst_context_publish_counts(&context);
+    status = tds_merkle_search_tree_init(&verifier, policy);
+    if (status != TDS_MERKLE_OK) {
+        goto cleanup;
+    }
+    if (proof->rep->step_count != 0) {
+        if (tds_mst_multiply_overflows(
+                proof->rep->step_count,
+                sizeof(*decoded),
+                &decoded_bytes)) {
+            status = TDS_MERKLE_OVERFLOW;
+            goto cleanup;
+        }
+        decoded = (tds_mst_decoded_block *)tds_mst_allocate(
+            policy->rep,
+            decoded_bytes);
+        if (decoded == NULL) {
+            status = TDS_MERKLE_NO_MEMORY;
+            goto cleanup;
+        }
+        memset(decoded, 0, decoded_bytes);
+    }
+    for (index = 0; status == TDS_MERKLE_OK && index != proof->rep->step_count; ++index) {
+        tds_mst_digest_slot *slot;
+        bool found;
+        size_t child_index;
+        status = tds_mst_decode_wire_block(
+            &verifier,
+            &proof->rep->steps[index].block,
+            &context,
+            1,
+            &decoded[index]);
+        if (status != TDS_MERKLE_OK) {
+            break;
+        }
+        slot = tds_mst_context_find_slot(
+            &context,
+            proof->rep->steps[index].block.rep->digest,
+            &found);
+        if (!found || slot == NULL || slot->value != SIZE_MAX) {
+            status = tds_mst_context_fail(
+                &context,
+                TDS_MERKLE_VERIFY_DUPLICATE_BLOCK,
+                &proof->rep->steps[index].block.rep->digest);
+            break;
+        }
+        slot->value = index;
+        for (child_index = 0;
+            child_index != proof->rep->steps[index].expanded_child_count;
+            ++child_index) {
+            const size_t expanded =
+                proof->rep->steps[index].expanded_child_indexes[child_index];
+            if (expanded >= decoded[index].entry_count + 1 ||
+                tds_merkle_digest_equal(
+                    decoded[index].child_digests[expanded],
+                    policy->rep->empty_digest)) {
+                status = tds_mst_context_fail(
+                    &context,
+                    TDS_MERKLE_VERIFY_PROOF_MISMATCH,
+                    &proof->rep->steps[index].block.rep->digest);
+                break;
+            }
+        }
+    }
+    if (status == TDS_MERKLE_OK) {
+        status = tds_mst_decode_proof_query(&verifier, proof, &context, &query);
+    }
+    if (status == TDS_MERKLE_OK &&
+        tds_merkle_digest_equal(proof->rep->root_hash, policy->rep->empty_digest)) {
+        if (proof->rep->step_count != 0 ||
+            proof->rep->kind == TDS_MERKLE_PROOF_MEMBERSHIP) {
+            status = tds_mst_context_fail(
+                &context,
+                TDS_MERKLE_VERIFY_PROOF_MISMATCH,
+                &proof->rep->root_hash);
+        }
+    } else if (status == TDS_MERKLE_OK &&
+        tds_mst_find_decoded_proof_block(
+            &context,
+            decoded,
+            proof->rep->root_hash) == NULL) {
+        status = tds_mst_context_fail(
+            &context,
+            TDS_MERKLE_VERIFY_ROOT_MISMATCH,
+            &proof->rep->root_hash);
+    } else if (status == TDS_MERKLE_OK &&
+        proof->rep->kind == TDS_MERKLE_PROOF_RANGE) {
+        status = tds_mst_verify_range_proof_node(
+            &verifier,
+            proof,
+            &query,
+            decoded,
+            &context,
+            proof->rep->root_hash,
+            1,
+            &visited_count);
+    } else if (status == TDS_MERKLE_OK) {
+        status = tds_mst_verify_point_proof(
+            &verifier,
+            proof,
+            &query,
+            decoded,
+            &context,
+            &visited_count);
+    }
+    if (status == TDS_MERKLE_OK && visited_count != proof->rep->step_count &&
+        !tds_merkle_digest_equal(proof->rep->root_hash, policy->rep->empty_digest)) {
+        status = tds_mst_context_fail(
+            &context,
+            TDS_MERKLE_VERIFY_PROOF_MISMATCH,
+            &proof->rep->root_hash);
+    }
+    if (status == TDS_MERKLE_OK) {
+        *result = tds_mst_proof_result(
+            true,
+            TDS_MERKLE_VERIFY_NONE,
+            proof->rep->root_hash,
+            context.block_count,
+            context.total_byte_count);
+    } else if (status == TDS_MERKLE_VERIFICATION_FAILURE) {
+        *result = tds_mst_proof_result(
+            false,
+            error.kind,
+            proof->rep->root_hash,
+            context.block_count,
+            context.total_byte_count);
+        status = TDS_MERKLE_OK;
+    }
+
+cleanup:
+    tds_mst_decoded_query_dispose(policy->rep, &query);
+    if (decoded != NULL) {
+        for (index = 0; index != proof->rep->step_count; ++index) {
+            tds_mst_decoded_block_dispose(policy->rep, &decoded[index]);
+        }
+    }
+    tds_mst_deallocate(policy->rep, decoded);
+    tds_merkle_search_tree_dispose(&verifier);
+    tds_mst_context_dispose(&context);
+    return status;
+}
+
+typedef struct tds_mst_merge_conflict {
+    tds_mst_entry *key_entry;
+    tds_mst_entry *base;
+    tds_mst_entry *left;
+    tds_mst_entry *right;
+} tds_mst_merge_conflict;
+
+struct tds_merkle_three_way_merge_result_rep {
+    tds_mst_ref_count refs;
+    struct tds_merkle_policy_rep *policy_owner;
+    bool success;
+    tds_merkle_search_tree tree;
+    tds_mst_merge_conflict *conflicts;
+    size_t conflict_count;
+};
+
+static tds_merkle_merge_value_ref tds_mst_merge_value_ref(
+    const tds_mst_entry *entry) {
+    tds_merkle_merge_value_ref result;
+    result.present = entry != NULL;
+    result.value = entry == NULL ? NULL : entry->value->value;
+    return result;
+}
+
+static tds_merkle_three_way_merge_conflict_ref tds_mst_merge_conflict_ref(
+    const tds_mst_entry *key_entry,
+    const tds_mst_entry *base,
+    const tds_mst_entry *left,
+    const tds_mst_entry *right) {
+    tds_merkle_three_way_merge_conflict_ref result;
+    result.key = key_entry->key->value;
+    result.base = tds_mst_merge_value_ref(base);
+    result.left = tds_mst_merge_value_ref(left);
+    result.right = tds_mst_merge_value_ref(right);
+    return result;
+}
+
+static void tds_mst_merge_conflict_release(
+    const struct tds_merkle_policy_rep *policy,
+    tds_mst_merge_conflict *conflict) {
+    if (conflict == NULL) {
+        return;
+    }
+    tds_mst_entry_release(policy, conflict->right);
+    tds_mst_entry_release(policy, conflict->left);
+    tds_mst_entry_release(policy, conflict->base);
+    tds_mst_entry_release(policy, conflict->key_entry);
+    memset(conflict, 0, sizeof(*conflict));
+}
+
+static void tds_mst_merge_result_rep_release(
+    struct tds_merkle_three_way_merge_result_rep *rep) {
+    struct tds_merkle_policy_rep *owner;
+    size_t index;
+    if (rep == NULL || !tds_mst_ref_release(&rep->refs)) {
+        return;
+    }
+    owner = rep->policy_owner;
+    tds_merkle_search_tree_dispose(&rep->tree);
+    for (index = 0; index != rep->conflict_count; ++index) {
+        tds_mst_merge_conflict_release(owner, &rep->conflicts[index]);
+    }
+    tds_mst_deallocate(owner, rep->conflicts);
+    tds_mst_deallocate(owner, rep);
+    tds_mst_policy_release(owner);
+}
+
+tds_merkle_status tds_merkle_three_way_merge_result_copy(
+    const tds_merkle_three_way_merge_result *source,
+    tds_merkle_three_way_merge_result *destination) {
+    if (source == NULL || source->rep == NULL || destination == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    if (source != destination) {
+        tds_mst_ref_retain(&source->rep->refs);
+        destination->rep = source->rep;
+    }
+    return TDS_MERKLE_OK;
+}
+
+void tds_merkle_three_way_merge_result_move(
+    tds_merkle_three_way_merge_result *destination,
+    tds_merkle_three_way_merge_result *source) {
+    if (destination != NULL && source != NULL && destination != source) {
+        destination->rep = source->rep;
+        source->rep = NULL;
+    }
+}
+
+void tds_merkle_three_way_merge_result_dispose(
+    tds_merkle_three_way_merge_result *result) {
+    if (result != NULL) {
+        tds_mst_merge_result_rep_release(result->rep);
+        result->rep = NULL;
+    }
+}
+
+bool tds_merkle_three_way_merge_result_success(
+    const tds_merkle_three_way_merge_result *result) {
+    return result != NULL && result->rep != NULL && result->rep->success;
+}
+
+tds_merkle_status tds_merkle_three_way_merge_result_copy_tree(
+    const tds_merkle_three_way_merge_result *result,
+    tds_merkle_search_tree *tree) {
+    if (result == NULL || result->rep == NULL || !result->rep->success ||
+        tree == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    return tds_merkle_search_tree_copy(&result->rep->tree, tree);
+}
+
+size_t tds_merkle_three_way_merge_result_conflict_count(
+    const tds_merkle_three_way_merge_result *result) {
+    return result == NULL || result->rep == NULL
+        ? 0
+        : result->rep->conflict_count;
+}
+
+tds_merkle_status tds_merkle_three_way_merge_result_conflict_at(
+    const tds_merkle_three_way_merge_result *result,
+    size_t index,
+    tds_merkle_three_way_merge_conflict_ref *conflict) {
+    const tds_mst_merge_conflict *stored;
+    if (result == NULL || result->rep == NULL || conflict == NULL ||
+        index >= result->rep->conflict_count) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    stored = &result->rep->conflicts[index];
+    *conflict = tds_mst_merge_conflict_ref(
+        stored->key_entry,
+        stored->base,
+        stored->left,
+        stored->right);
+    return TDS_MERKLE_OK;
+}
+
+static tds_merkle_status tds_mst_merge_states_equal(
+    const struct tds_merkle_policy_rep *policy,
+    const tds_mst_entry *left,
+    const tds_mst_entry *right,
+    bool *equal) {
+    if (left == NULL || right == NULL) {
+        *equal = left == right;
+        return TDS_MERKLE_OK;
+    }
+    if (left == right) {
+        *equal = true;
+        return TDS_MERKLE_OK;
+    }
+    return tds_mst_values_equal(policy, left, right, equal);
+}
+
+static tds_merkle_status tds_mst_merge_compare_entries(
+    const struct tds_merkle_policy_rep *policy,
+    const tds_mst_entry *left,
+    const tds_mst_entry *right,
+    int *comparison) {
+    if (left == right) {
+        *comparison = 0;
+        return TDS_MERKLE_OK;
+    }
+    return tds_mst_key_compare(
+        policy,
+        left->key->value,
+        right->key->value,
+        comparison);
+}
+
+static tds_merkle_status tds_mst_merge_append_entry(
+    tds_mst_entry *entry,
+    bool already_owned,
+    tds_mst_entry **entries,
+    size_t *entry_count) {
+    if (entry == NULL) {
+        return TDS_MERKLE_OK;
+    }
+    if (!already_owned) {
+        tds_mst_entry_retain(entry);
+    }
+    entries[*entry_count] = entry;
+    ++*entry_count;
+    return TDS_MERKLE_OK;
+}
+
+static void tds_mst_merge_store_conflict(
+    tds_mst_merge_conflict *destination,
+    tds_mst_entry *key_entry,
+    tds_mst_entry *base,
+    tds_mst_entry *left,
+    tds_mst_entry *right) {
+    destination->key_entry = key_entry;
+    destination->base = base;
+    destination->left = left;
+    destination->right = right;
+    tds_mst_entry_retain(destination->key_entry);
+    tds_mst_entry_retain(destination->base);
+    tds_mst_entry_retain(destination->left);
+    tds_mst_entry_retain(destination->right);
+}
+
+tds_merkle_status tds_merkle_search_tree_merge(
+    const tds_merkle_search_tree *base,
+    const tds_merkle_search_tree *left,
+    const tds_merkle_search_tree *right,
+    tds_merkle_merge_resolver resolver,
+    void *resolver_context,
+    tds_merkle_three_way_merge_result *result) {
+    const struct tds_merkle_policy_rep *policy;
+    tds_mst_iterator base_iterator;
+    tds_mst_iterator left_iterator;
+    tds_mst_iterator right_iterator;
+    const tds_mst_entry *base_entry = NULL;
+    const tds_mst_entry *left_entry = NULL;
+    const tds_mst_entry *right_entry = NULL;
+    bool has_base;
+    bool has_left;
+    bool has_right;
+    size_t maximum_count;
+    size_t partial_count;
+    tds_mst_entry **entries = NULL;
+    size_t entry_count = 0;
+    tds_mst_merge_conflict *conflicts = NULL;
+    size_t conflict_count = 0;
+    struct tds_merkle_node *root = NULL;
+    struct tds_merkle_three_way_merge_result_rep *rep = NULL;
+    tds_merkle_status status = TDS_MERKLE_OK;
+    size_t index;
+    if (!tds_mst_tree_valid(base) || !tds_mst_tree_valid(left) ||
+        !tds_mst_tree_valid(right) || result == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    /* Entries embed allocator-owned typed objects. Domain/type compatibility is
+     * insufficient for entry reuse; all three trees must share the exact policy
+     * representation and therefore the exact allocator/callback lifetime. */
+    if (base->policy != left->policy || base->policy != right->policy) {
+        return TDS_MERKLE_INCOMPATIBLE_POLICY;
+    }
+    policy = base->policy;
+    if (tds_mst_add_overflows(
+            tds_merkle_search_tree_size(base),
+            tds_merkle_search_tree_size(left),
+            &partial_count) ||
+        tds_mst_add_overflows(
+            partial_count,
+            tds_merkle_search_tree_size(right),
+            &maximum_count)) {
+        return TDS_MERKLE_OVERFLOW;
+    }
+    status = tds_mst_allocate_pointer_array(
+        policy,
+        maximum_count,
+        sizeof(*entries),
+        (void **)&entries);
+    if (status == TDS_MERKLE_OK && maximum_count != 0) {
+        size_t bytes;
+        if (tds_mst_multiply_overflows(maximum_count, sizeof(*conflicts), &bytes)) {
+            status = TDS_MERKLE_OVERFLOW;
+        } else {
+            conflicts = (tds_mst_merge_conflict *)tds_mst_allocate(policy, bytes);
+            if (conflicts == NULL) {
+                status = TDS_MERKLE_NO_MEMORY;
+            } else {
+                memset(conflicts, 0, bytes);
+            }
+        }
+    }
+    if (status != TDS_MERKLE_OK) {
+        goto cleanup;
+    }
+
+    tds_mst_iterator_init(&base_iterator, base->root);
+    tds_mst_iterator_init(&left_iterator, left->root);
+    tds_mst_iterator_init(&right_iterator, right->root);
+    has_base = tds_mst_iterator_next(&base_iterator, &base_entry);
+    has_left = tds_mst_iterator_next(&left_iterator, &left_entry);
+    has_right = tds_mst_iterator_next(&right_iterator, &right_entry);
+    while (has_base || has_left || has_right) {
+        const tds_mst_entry *minimum = has_base
+            ? base_entry
+            : (has_left ? left_entry : right_entry);
+        tds_mst_entry *current_base = NULL;
+        tds_mst_entry *current_left = NULL;
+        tds_mst_entry *current_right = NULL;
+        tds_mst_entry *representative;
+        tds_mst_entry *selected_entry = NULL;
+        bool selected_owned = false;
+        bool equal;
+        int comparison;
+        tds_merkle_merge_resolution resolution;
+        if (has_left) {
+            status = tds_mst_merge_compare_entries(
+                policy,
+                left_entry,
+                minimum,
+                &comparison);
+            if (status != TDS_MERKLE_OK) {
+                goto cleanup;
+            }
+            if (comparison < 0) {
+                minimum = left_entry;
+            }
+        }
+        if (has_right) {
+            status = tds_mst_merge_compare_entries(
+                policy,
+                right_entry,
+                minimum,
+                &comparison);
+            if (status != TDS_MERKLE_OK) {
+                goto cleanup;
+            }
+            if (comparison < 0) {
+                minimum = right_entry;
+            }
+        }
+        if (has_base) {
+            status = tds_mst_merge_compare_entries(
+                policy,
+                base_entry,
+                minimum,
+                &comparison);
+            if (status != TDS_MERKLE_OK) {
+                goto cleanup;
+            }
+            if (comparison < 0) {
+                status = TDS_MERKLE_INCONSISTENT_POLICY;
+                goto cleanup;
+            }
+            if (comparison == 0) {
+                current_base = (tds_mst_entry *)base_entry;
+            }
+        }
+        if (has_left) {
+            status = tds_mst_merge_compare_entries(
+                policy,
+                left_entry,
+                minimum,
+                &comparison);
+            if (status != TDS_MERKLE_OK) {
+                goto cleanup;
+            }
+            if (comparison < 0) {
+                status = TDS_MERKLE_INCONSISTENT_POLICY;
+                goto cleanup;
+            }
+            if (comparison == 0) {
+                current_left = (tds_mst_entry *)left_entry;
+            }
+        }
+        if (has_right) {
+            status = tds_mst_merge_compare_entries(
+                policy,
+                right_entry,
+                minimum,
+                &comparison);
+            if (status != TDS_MERKLE_OK) {
+                goto cleanup;
+            }
+            if (comparison < 0) {
+                status = TDS_MERKLE_INCONSISTENT_POLICY;
+                goto cleanup;
+            }
+            if (comparison == 0) {
+                current_right = (tds_mst_entry *)right_entry;
+            }
+        }
+        representative = current_left != NULL
+            ? current_left
+            : (current_right != NULL ? current_right : current_base);
+
+        status = tds_mst_merge_states_equal(
+            policy,
+            current_left,
+            current_right,
+            &equal);
+        if (status != TDS_MERKLE_OK) {
+            goto cleanup;
+        }
+        if (equal) {
+            selected_entry = current_left;
+        } else {
+            status = tds_mst_merge_states_equal(
+                policy,
+                current_left,
+                current_base,
+                &equal);
+            if (status != TDS_MERKLE_OK) {
+                goto cleanup;
+            }
+            if (equal) {
+                selected_entry = current_right;
+            } else {
+                status = tds_mst_merge_states_equal(
+                    policy,
+                    current_right,
+                    current_base,
+                    &equal);
+                if (status != TDS_MERKLE_OK) {
+                    goto cleanup;
+                }
+                if (equal) {
+                    selected_entry = current_left;
+                } else {
+                    resolution.kind = TDS_MERKLE_MERGE_UNRESOLVED;
+                    resolution.value = NULL;
+                    if (resolver != NULL) {
+                        status = resolver(
+                            tds_mst_merge_conflict_ref(
+                                representative,
+                                current_base,
+                                current_left,
+                                current_right),
+                            &resolution,
+                            resolver_context);
+                        if (status != TDS_MERKLE_OK) {
+                            goto cleanup;
+                        }
+                    }
+                    switch (resolution.kind) {
+                        case TDS_MERKLE_MERGE_UNRESOLVED:
+                            tds_mst_merge_store_conflict(
+                                &conflicts[conflict_count],
+                                representative,
+                                current_base,
+                                current_left,
+                                current_right);
+                            ++conflict_count;
+                            break;
+                        case TDS_MERKLE_MERGE_USE_BASE:
+                            selected_entry = current_base;
+                            break;
+                        case TDS_MERKLE_MERGE_USE_LEFT:
+                            selected_entry = current_left;
+                            break;
+                        case TDS_MERKLE_MERGE_USE_RIGHT:
+                            selected_entry = current_right;
+                            break;
+                        case TDS_MERKLE_MERGE_SET_VALUE: {
+                            bool changed;
+                            if (resolution.value == NULL) {
+                                status = TDS_MERKLE_INVALID_ARGUMENT;
+                                goto cleanup;
+                            }
+                            status = tds_mst_entry_replace_value(
+                                policy,
+                                representative,
+                                resolution.value,
+                                &changed,
+                                &selected_entry);
+                            if (status != TDS_MERKLE_OK) {
+                                goto cleanup;
+                            }
+                            if (!changed) {
+                                selected_entry = representative;
+                            } else {
+                                selected_owned = true;
+                            }
+                            break;
+                        }
+                        case TDS_MERKLE_MERGE_DELETE:
+                            selected_entry = NULL;
+                            break;
+                        default:
+                            status = TDS_MERKLE_INVALID_ARGUMENT;
+                            goto cleanup;
+                    }
+                }
+            }
+        }
+        status = tds_mst_merge_append_entry(
+            selected_entry,
+            selected_owned,
+            entries,
+            &entry_count);
+        if (status != TDS_MERKLE_OK) {
+            if (selected_owned) {
+                tds_mst_entry_release(policy, selected_entry);
+            }
+            goto cleanup;
+        }
+        if (current_base != NULL) {
+            has_base = tds_mst_iterator_next(&base_iterator, &base_entry);
+        }
+        if (current_left != NULL) {
+            has_left = tds_mst_iterator_next(&left_iterator, &left_entry);
+        }
+        if (current_right != NULL) {
+            has_right = tds_mst_iterator_next(&right_iterator, &right_entry);
+        }
+    }
+
+    if (conflict_count == 0) {
+        status = tds_mst_build_canonical(policy, entries, entry_count, &root);
+        if (status != TDS_MERKLE_OK) {
+            goto cleanup;
+        }
+    }
+    rep = (struct tds_merkle_three_way_merge_result_rep *)tds_mst_allocate(
+        policy,
+        sizeof(*rep));
+    if (rep == NULL) {
+        status = TDS_MERKLE_NO_MEMORY;
+        goto cleanup;
+    }
+    memset(rep, 0, sizeof(*rep));
+    tds_mst_ref_init(&rep->refs);
+    rep->policy_owner = (struct tds_merkle_policy_rep *)policy;
+    tds_mst_policy_retain(rep->policy_owner);
+    rep->success = conflict_count == 0;
+    if (rep->success) {
+        rep->tree = tds_mst_adopt_tree(rep->policy_owner, root);
+        root = NULL;
+    } else {
+        rep->conflicts = conflicts;
+        rep->conflict_count = conflict_count;
+        conflicts = NULL;
+        conflict_count = 0;
+    }
+    result->rep = rep;
+    rep = NULL;
+
+cleanup:
+    if (rep != NULL) {
+        tds_mst_merge_result_rep_release(rep);
+    }
+    tds_mst_node_release(policy, root);
+    for (index = 0; index != entry_count; ++index) {
+        tds_mst_entry_release(policy, entries[index]);
+    }
+    for (index = 0; index != conflict_count; ++index) {
+        tds_mst_merge_conflict_release(policy, &conflicts[index]);
+    }
+    tds_mst_deallocate(policy, conflicts);
+    tds_mst_deallocate(policy, entries);
+    return status;
 }

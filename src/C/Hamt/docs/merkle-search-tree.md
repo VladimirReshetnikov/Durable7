@@ -1,10 +1,10 @@
 # C Merkle Search Tree
 
-- Status: Current core and wire specification
+- Status: Current core, persistence, proof, synchronization, and merge specification
 - Created (UTC): 2026-07-12T05:30:00Z
 - Repository HEAD: 2a2c92d10d308a18793067106b1ef10d3748f0ba
 - Audience: C consumers, maintainers, and cross-language port reviewers
-- Scope: `mst-sha256-b16-v2` policy, canonical MST2 blocks, persistent core API, and ownership
+- Scope: `mst-sha256-b16-v2`, MST2/MSP2, persistent core/store API, verification, sync, and merge
 
 The C17 Merkle search tree is an immutable ordered content-addressed map. It is the type-erased C
 port of the C# reference and implements the exact `mst-sha256-b16-v2` hashing and `MST2` block
@@ -12,8 +12,9 @@ contract. Include [`merkle_search_tree.h`](../include/Tools/DataStructures/Hamt/
 and compile [`merkle_search_tree.c`](../src/merkle_search_tree.c). On Windows link `bcrypt`; on
 non-Windows hosts link OpenSSL Crypto.
 
-This document covers the core/wire milestone. Content-store persistence, proof exchange, sync, and
-three-way merge are intentionally a later layer over the stable block visitor and policy contract.
+The public C17 surface includes the complete persistence tier: immutable block and pack handles,
+generic and in-memory stores, bounded verified load/import, point and range proofs, closure-pruned
+and iterative synchronization, and present-null-safe typed three-way merge.
 
 ## Deterministic Policy
 
@@ -114,6 +115,142 @@ untouched. A distinct successful result owns a policy reference and root referen
 disposed. Replacing a comparator-equivalent key preserves the first stored key representative;
 bulk creation is stable, retaining the first representative and last value.
 
+The same ownership discipline applies to `tds_merkle_block`, `tds_merkle_block_pack`,
+`tds_merkle_sync_plan`, `tds_merkle_proof`, `tds_merkle_memory_block_store`, and
+`tds_merkle_three_way_merge_result`: use the matching `copy`, `move`, and `dispose` operations.
+Handles produced from a tree retain its exact policy representation, including allocator and typed
+object callback lifetime. Public constructors that instead accept a standalone allocator copy that
+allocator value; its context must remain valid until the final handle copy is disposed.
+
+`tds_merkle_memory_block_store_as_store` returns a borrowed callback adapter. At least one owning
+memory-store handle must outlive every adapter call. `try_get` returns an owned block snapshot, not
+a borrowed slot; the snapshot remains valid across concurrent removal, clear, and store disposal.
+The memory store serializes count/contains/get/put/remove/clear, keeps digests sorted, and makes
+same-digest insertion a race-safe three-state operation: `ADDED`, `PRESENT_IDENTICAL`, or
+`CONFLICT`. A conflict also returns `TDS_MERKLE_VERIFICATION_FAILURE`. Its lock is non-recursive,
+but allocator/deallocator callbacks, block destruction, and digest visitors all run outside that
+lock and may reenter live adapter reads. Final owning-handle disposal ends adapter lifetime before
+the allocator tears down the store itself. On non-Windows C11 threads, lock acquisition failure is
+reported as `TDS_MERKLE_CALLBACK_FAILURE`; an impossible unlock failure is a process-fatal internal
+synchronization invariant rather than permission to continue with an unknown lock state.
+
+Generic store wrappers use private scratch outputs. Count/contains/remove outputs are published only
+on `OK`. `try_get` accepts `OK + found` only with a valid owning block and accepts `OK + not found`
+only with an empty block; it disposes callback scratch on failure. `put` accepts only `OK + ADDED`,
+`OK + PRESENT_IDENTICAL`, or `VERIFICATION_FAILURE + CONFLICT`. Inconsistent callback combinations
+become `TDS_MERKLE_CALLBACK_FAILURE`, and caller outputs remain untouched. Callback contexts are
+borrowed for the lifetime of adapter use.
+
+## Verified Persistence
+
+`tds_merkle_search_tree_export_pack` emits the complete closure in deterministic preorder.
+`export_blocks` emits exactly the requested unique digests in caller order and rejects missing or
+duplicate requests. `save` preflights every destination digest before its first put, then reports
+how many blocks were newly added. A generic external store is not transactional: an unexpected
+callback failure during the subsequent put sequence can leave a verified prefix stored, while the
+count output remains untouched. Predictable same-digest conflicts are detected by preflight and
+therefore cause zero puts.
+
+`load` accepts a root digest, policy, store, and optional seven-field verification budget. It hashes
+each unique block before decoding; checks MST2 magic, domain, lengths, canonical codec round trips,
+key layers and ordering; validates child levels and full subtree bounds; reconstructs subtree
+counts and canonical bytes; and publishes only a fully verified immutable tree. The empty digest
+loads as an empty tree but still requires a valid store adapter.
+
+`import_pack` first rejects unsupported algorithms and foreign domains, then authenticates and
+canonically decodes every supplied block. It overlays supplied blocks over the optional destination
+store and requires the declared root's complete closure to verify before any destination put or
+tree publication. Supplied authenticated blocks that are not reachable from the declared root are
+legal and are committed as useful partial-sync state. The declared root closure itself may not be
+partial. Destination conflicts are preflighted across the entire pack before its first put.
+
+Verification failures return `TDS_MERKLE_VERIFICATION_FAILURE` plus a structured kind and optional
+block digest. Operational allocator, crypto, codec, comparator, and store failures retain their
+ordinary status. `verified_block_count` and `verified_byte_count` count unique authenticated input
+work and are published on both success and verification failure.
+
+The seven budgets are independent:
+
+| Field | Bound |
+| --- | --- |
+| `max_block_count` | unique blocks |
+| `max_total_byte_count` | unique block bytes plus proof query bytes |
+| `max_block_byte_count` | one block |
+| `max_depth` | root-to-leaf verification depth |
+| `max_entry_count` | total entries in unique decoded blocks |
+| `max_child_references_per_block` | one block's exact `entry_count + 1` references |
+| `max_proof_query_byte_count` | canonical MSP2 query bytes |
+
+All fields must be nonzero; the per-block and query byte limits may not exceed the total-byte limit.
+Block count/size/depth gates run before verification-table allocation, hashing, or decoding for that
+block.
+
+## Exact MSP2 Proofs
+
+A proof envelope owns the algorithm identifier, domain digest, root digest, proof kind, canonical
+query bytes, and an ordered list of authenticated MST2 step blocks. Each step also owns a sorted,
+duplicate-free list of child indexes expanded by later steps. Point proofs expand at most the one
+search-path child. Range proofs expand exactly the non-empty children whose open separator interval
+intersects the inclusive requested range; all other child digests remain authenticated closures.
+
+The query byte grammar is:
+
+| Field | Encoding |
+| --- | --- |
+| Magic | four bytes, ASCII `MSP2` |
+| Kind | byte `0` membership, `1` nonmembership, or `2` range |
+| First length/value | unsigned big-endian 32-bit length plus canonical key bytes |
+| Second length/value | membership: canonical value; range: canonical maximum key; absent for nonmembership |
+
+Membership creation includes the canonical stored value in the query. Verification therefore proves
+the exact key/value pair, not merely key presence. Nonmembership proves the canonical search stops
+without the key. Range verification checks the complete canonical expansion frontier, so omitting,
+adding, reordering, or redirecting a step/expansion invalidates the proof.
+
+Proof verification returns `TDS_MERKLE_OK` with `is_valid == false` for an untrusted invalid proof;
+operational failures remain non-OK statuses. Its security-sensitive preflight order is fixed:
+
+1. reject an oversized query with zero verified blocks and zero verified bytes;
+2. account accepted query bytes;
+3. reject excessive step count;
+4. reject any excessive expansion count;
+5. check algorithm and domain;
+6. only then allocate, hash, decode, or invoke codecs/comparators.
+
+Thus query-limit failure outranks even a foreign envelope, while step/expansion-limit failure reports
+zero blocks and exactly the accepted query byte count.
+
+## Synchronization
+
+`create_sync_pack` walks a target tree in preorder and prunes an entire subtree whenever the receiver
+reports its root digest present. Use it when receiver presence means a previously verified complete
+closure. The resulting pack is deterministic and contains no redundant descendants.
+
+For a genuinely partial receiver, use `plan_sync`. It compares target and local roots and walks only
+through receiver-present target blocks. The first absent digest on every reachable branch becomes a
+request; descendants below that digest wait for a later round. Export those requested blocks, insert
+them, and repeat until `requires_blocks` is false. The plan records requested digests plus examined
+block/byte counts and owns the exact target policy lifetime. This iterative frontier converges in at
+most one round per target height when every response is delivered.
+
+## Typed Three-Way Merge
+
+`tds_merkle_search_tree_merge(base, left, right, ...)` performs an ordered three-way merge. All
+three operands must retain the exact same policy representation—not merely equal domains and type
+tags—because merged entries reuse allocator-owned typed objects. Per key it applies the usual rules:
+
+- equal left/right states win directly;
+- when left equals base, right wins;
+- when right equals base, left wins;
+- otherwise the resolver chooses base, left, right, a replacement value, deletion, or unresolved.
+
+Presence is explicit. `present == true` with a nullable wrapper whose `has_value == false` is a
+semantic null value; `present == false` is deletion/absence. An ordinary unresolved merge returns
+`TDS_MERKLE_OK` with `success == false`, one or more owned conflict records, and no tree. It is not an
+operational error status. Resolver or allocator failure leaves the result untouched. If every
+conflict resolves, the result owns one canonical tree and no conflicts. A replacement retains the
+chosen key representative and encodes the new value under the shared policy.
+
 ## Core Operations And Relations
 
 The core provides bulk construction, lookup, persistent set/remove/clear, ordered visitation,
@@ -148,6 +285,16 @@ updates allocate a new changed path and share every untouched subtree. Ordered v
 range visitation is O(h + reported entries) under ordinary interval pruning, and bulk construction
 is O(n log n). Block metadata, root digest, size, height, and block count are O(1).
 
-Independent handles may be read concurrently. Atomic reference counts also allow retained snapshots
-to be copied and disposed across threads, provided caller callbacks, contexts, and represented
-objects obey their own concurrency requirements. No operation mutates published content.
+Complete export/save/load/import are O(b + n + z), where `b` is block count and `z` is canonical
+byte volume; store lookup costs are store-defined. Point proof creation/verification is O(h) blocks.
+Range proof work is proportional to its canonical expanded frontier and reported range. Sync-pack
+construction and one frontier-plan round visit only unpruned target blocks. Three-way merge is
+O(nb + nl + nr) ordered entries plus canonical result construction.
+
+Independent handles may be read concurrently. Atomic reference counts also allow retained snapshots,
+blocks, packs, proofs, plans, and merge results to be copied and disposed across threads, provided
+caller callbacks, contexts, and represented objects obey their own concurrency requirements. The
+in-memory store serializes its own operations; its borrowed adapter still requires an owning handle.
+No operation mutates published tree/proof/pack content. As with any finite reference count, callers
+must not create more simultaneously live copies than the platform counter can represent; retaining
+a dead object or overflowing/underflowing that counter is a process-fatal ownership invariant.

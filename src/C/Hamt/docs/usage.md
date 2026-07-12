@@ -2,8 +2,8 @@
 
 - Created (UTC): 2026-07-02T20:07:09Z
 - Repository HEAD: c58fc1159beb94e985ca66861bdc2ed3767eb2da
-- Audience: C consumers and maintainers using `tds_hamt_map` and `tds_hamt_set`
-- Scope: Public include path, policy setup, ownership rules, persistent update patterns, iteration, and set algebra
+- Audience: C consumers and maintainers using the HAMT, Patricia, and Merkle families
+- Scope: Includes, policies, ownership, updates, persistence, iteration, and set algebra
 
 This guide is the practical companion to the [C API specification](api-specification.md). The public
 declarations live in [`hamt.h`](../include/Tools/DataStructures/Hamt/hamt.h).
@@ -49,7 +49,39 @@ tds_merkle_policy_dispose(&policy);
 
 Do not assign live policy/tree handles to create a second owner; use `copy`, `move`, and `dispose`.
 See the [Merkle specification](merkle-search-tree.md) for two-pass codecs, exact wire framing,
-compatibility layers, and failure-atomic aliasing.
+compatibility layers, verified persistence, proofs, synchronization, merge, and failure-atomic
+publication.
+
+To save and verified-load the current root with the synchronized in-memory store:
+
+```c
+tds_merkle_memory_block_store memory = {0};
+tds_merkle_block_store store;
+tds_merkle_search_tree loaded = {0};
+tds_merkle_verification_error verification;
+size_t added = 0;
+
+if (tds_merkle_memory_block_store_init(&memory, NULL) == TDS_MERKLE_OK &&
+    tds_merkle_memory_block_store_as_store(&memory, &store) == TDS_MERKLE_OK &&
+    tds_merkle_search_tree_save(&tree, &store, &added, &verification) == TDS_MERKLE_OK) {
+    tds_merkle_digest root = tds_merkle_search_tree_root_hash(&tree);
+    (void)tds_merkle_search_tree_load(
+        root,
+        &policy,
+        &store,
+        NULL, /* default seven-field verification budget */
+        &loaded,
+        &verification);
+}
+
+tds_merkle_search_tree_dispose(&loaded);
+tds_merkle_memory_block_store_dispose(&memory);
+```
+
+`store` is a borrowed adapter: keep `memory` (or an owning copy of it) alive through every adapter
+call. Store lookups return owning `tds_merkle_block` snapshots that must be disposed. For partial
+synchronization, repeatedly call `tds_merkle_search_tree_plan_sync`, export the requested digests,
+insert those blocks, and repeat until `tds_merkle_sync_plan_requires_blocks` is false.
 
 The workspace builds a static library and test executable through `build.ps1`:
 

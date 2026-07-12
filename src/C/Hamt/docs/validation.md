@@ -112,14 +112,22 @@ and traversal order, root-sharing no-ops, retained snapshots, fixed and callback
 algebra, set algebra, 10,000 deterministic randomized updates against an array model, randomized
 structural set algebra, and value retain/release balance.
 
-`tests/merkle_search_tree_tests.c` is the canonical core/wire executable. It covers every built-in
+`tests/merkle_search_tree_tests.c` is the canonical core/wire/persistence executable. It covers every built-in
 codec, strict malformed-input rejection, digest parsing, policy/tag compatibility, the exact C# and
 Rust MST2 golden vector, history-independent bulk/incremental shape, structural sharing, inclusive
 ranges, digest-pruned diff, stable equivalent-key representatives, retained randomized snapshots,
 deep validation, streaming callback failure, and fail-at-every-allocation unwind/publication for
-policy creation, point updates, bulk construction, validation, and sharing diagnostics. Windows
-validation also runs eight concurrent readers that repeatedly retain, validate, query, and dispose
-shared snapshots.
+policy creation, point updates, bulk construction, validation, sharing diagnostics, block export,
+point/range proofs, verified load/import, sync pack/plan, and three-way merge. It validates all seven
+verification limits, root-closure requirements, legal unreachable authenticated blocks, destination
+preflight, exact MSP2 membership/nonmembership/range proofs, query/step/expansion precedence before
+bomb callbacks, malformed/tampered/foreign/extra/omitted proof material, nullable present-null merge
+semantics, and callback-failure publication. Windows validation also runs eight concurrent tree
+readers. The memory-store race uses eight real workers on both Windows and the C11 `threads.h` lane
+across identical and conflicting puts.
+A reentrant allocator/deallocator regression calls back into the live store during growth, snapshot
+visitation, and clear to prove no user callback executes under the non-recursive store lock; malicious
+store callbacks also verify owning-output and put-state/status shielding.
 
 The suite covers:
 

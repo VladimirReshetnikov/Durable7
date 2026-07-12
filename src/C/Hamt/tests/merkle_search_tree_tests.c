@@ -10,6 +10,8 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#else
+#include <threads.h>
 #endif
 
 #define CHECK(expression) \
@@ -1324,6 +1326,2244 @@ static bool test_concurrent_retained_snapshot_reads(void) {
     return true;
 }
 
+static tds_merkle_status make_i32_sequence_tree(
+    const tds_merkle_policy *policy,
+    size_t count,
+    tds_merkle_search_tree *tree) {
+    enum { maximum_count = 128 };
+    int32_t keys[maximum_count];
+    int32_t values[maximum_count];
+    tds_merkle_search_input inputs[maximum_count];
+    size_t index;
+    if (count > maximum_count) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    for (index = 0; index != count; ++index) {
+        keys[index] = (int32_t)index;
+        values[index] = (int32_t)(index * 17 + 3);
+        inputs[index] = (tds_merkle_search_input){&keys[index], &values[index]};
+    }
+    return tds_merkle_search_tree_from_array(tree, policy, inputs, count);
+}
+
+typedef struct digest_order_capture {
+    tds_merkle_digest previous;
+    size_t count;
+    bool sorted;
+} digest_order_capture;
+
+static tds_merkle_status capture_digest_order(
+    tds_merkle_digest digest,
+    void *context) {
+    digest_order_capture *capture = (digest_order_capture *)context;
+    if (capture->count != 0 &&
+        tds_merkle_digest_compare(capture->previous, digest) >= 0) {
+        capture->sorted = false;
+    }
+    capture->previous = digest;
+    ++capture->count;
+    return TDS_MERKLE_OK;
+}
+
+static bool test_verified_persistence_store_and_iterative_sync(void) {
+    tds_merkle_policy policy = {0};
+    tds_merkle_search_tree tree = {0};
+    tds_merkle_search_tree loaded = {0};
+    tds_merkle_search_tree synchronized = {0};
+    tds_merkle_search_tree local = {0};
+    tds_merkle_memory_block_store memory = {0};
+    tds_merkle_memory_block_store receiver = {0};
+    tds_merkle_memory_block_store tampered_memory = {0};
+    tds_merkle_block_store store;
+    tds_merkle_block_store receiver_store;
+    tds_merkle_block_store tampered_store;
+    tds_merkle_block_pack pack = {0};
+    tds_merkle_block_pack sync_pack = {0};
+    tds_merkle_sync_plan plan = {0};
+    tds_merkle_verification_error error;
+    size_t added = SIZE_MAX;
+    size_t count = 0;
+    size_t round;
+    digest_order_capture order = {{{0}}, 0, true};
+    CHECK_STATUS(make_i32_policy("c-persistence-i32-v1", &policy));
+    CHECK_STATUS(make_i32_sequence_tree(&policy, 96, &tree));
+    CHECK(tds_merkle_search_tree_block_count(&tree) > 1);
+    CHECK(tds_merkle_search_tree_height(&tree) > 1);
+    CHECK_STATUS(tds_merkle_memory_block_store_init(&memory, NULL));
+    CHECK_STATUS(tds_merkle_memory_block_store_as_store(&memory, &store));
+    CHECK_STATUS(tds_merkle_search_tree_save(&tree, &store, &added, &error));
+    CHECK(added == tds_merkle_search_tree_block_count(&tree));
+    CHECK_STATUS(tds_merkle_block_store_count(&store, &count));
+    CHECK(count == added);
+    added = SIZE_MAX;
+    CHECK_STATUS(tds_merkle_search_tree_save(&tree, &store, &added, &error));
+    CHECK(added == 0);
+    CHECK_STATUS(tds_merkle_memory_block_store_visit_digests(
+        &memory,
+        capture_digest_order,
+        &order));
+    CHECK(order.sorted && order.count == count);
+    CHECK_STATUS(tds_merkle_search_tree_load(
+        tds_merkle_search_tree_root_hash(&tree),
+        &policy,
+        &store,
+        NULL,
+        &loaded,
+        &error));
+    CHECK(tds_merkle_search_tree_size(&loaded) == 96);
+    CHECK(tds_merkle_digest_equal(
+        tds_merkle_search_tree_root_hash(&loaded),
+        tds_merkle_search_tree_root_hash(&tree)));
+    CHECK(error.kind == TDS_MERKLE_VERIFY_NONE &&
+        error.verified_block_count == count);
+
+    CHECK_STATUS(tds_merkle_search_tree_export_pack(&tree, &pack));
+    CHECK(tds_merkle_block_pack_block_count(&pack) == count);
+    CHECK(tds_merkle_block_pack_contains_root_block(&pack));
+    CHECK(tds_merkle_block_pack_total_byte_count(&pack) > 0);
+    CHECK(tds_merkle_digest_equal(
+        tds_merkle_block_digest(tds_merkle_block_pack_block_at(&pack, 0)),
+        tds_merkle_search_tree_root_hash(&tree)));
+
+    /* A store lookup returns an owned snapshot that remains alive after clear. */
+    {
+        tds_merkle_block snapshot = {0};
+        bool found = false;
+        const tds_merkle_block *first = tds_merkle_block_pack_block_at(&pack, 0);
+        CHECK_STATUS(tds_merkle_block_store_try_get(
+            &store,
+            tds_merkle_block_digest(first),
+            &found,
+            &snapshot));
+        CHECK(found && tds_merkle_block_equal(first, &snapshot));
+        CHECK_STATUS(tds_merkle_block_store_clear(&store));
+        CHECK(tds_merkle_block_byte_count(&snapshot) > 0 &&
+            memcmp(tds_merkle_block_bytes(&snapshot), "MST2", 4) == 0);
+        tds_merkle_block_dispose(&snapshot);
+        CHECK_STATUS(tds_merkle_search_tree_save(&tree, &store, &added, &error));
+    }
+
+    CHECK_STATUS(tds_merkle_memory_block_store_init(&receiver, NULL));
+    CHECK_STATUS(tds_merkle_memory_block_store_as_store(&receiver, &receiver_store));
+    CHECK_STATUS(tds_merkle_search_tree_init(&local, &policy));
+    for (round = 0; round != 66; ++round) {
+        const tds_merkle_digest *requests;
+        size_t request_count;
+        size_t block_index;
+        CHECK_STATUS(tds_merkle_search_tree_plan_sync(
+            &tree,
+            &local,
+            &receiver_store,
+            &plan));
+        if (!tds_merkle_sync_plan_requires_blocks(&plan)) {
+            break;
+        }
+        request_count = tds_merkle_sync_plan_requested_block_count(&plan);
+        requests = tds_merkle_sync_plan_requested_blocks(&plan);
+        CHECK(request_count != 0 && requests != NULL);
+        CHECK_STATUS(tds_merkle_search_tree_export_blocks(
+            &tree,
+            requests,
+            request_count,
+            &sync_pack,
+            &error));
+        CHECK(tds_merkle_block_pack_block_count(&sync_pack) == request_count);
+        for (block_index = 0; block_index != request_count; ++block_index) {
+            tds_merkle_store_put_result put_result;
+            CHECK_STATUS(tds_merkle_block_store_put(
+                &receiver_store,
+                tds_merkle_block_pack_block_at(&sync_pack, block_index),
+                &put_result));
+            CHECK(put_result == TDS_MERKLE_STORE_ADDED ||
+                put_result == TDS_MERKLE_STORE_PRESENT_IDENTICAL);
+        }
+        tds_merkle_block_pack_dispose(&sync_pack);
+        tds_merkle_sync_plan_dispose(&plan);
+    }
+    CHECK(round < 66);
+    CHECK(!tds_merkle_sync_plan_roots_match(&plan));
+    CHECK(!tds_merkle_sync_plan_requires_blocks(&plan));
+    CHECK_STATUS(tds_merkle_search_tree_load(
+        tds_merkle_search_tree_root_hash(&tree),
+        &policy,
+        &receiver_store,
+        NULL,
+        &synchronized,
+        &error));
+    CHECK(tds_merkle_digest_equal(
+        tds_merkle_search_tree_root_hash(&synchronized),
+        tds_merkle_search_tree_root_hash(&tree)));
+    tds_merkle_sync_plan_dispose(&plan);
+    CHECK_STATUS(tds_merkle_search_tree_create_sync_pack(
+        &tree,
+        &receiver_store,
+        &sync_pack));
+    CHECK(tds_merkle_block_pack_block_count(&sync_pack) == 0);
+    tds_merkle_block_pack_dispose(&sync_pack);
+
+    /* A validly owned block with a forged digest is rejected before decoding. */
+    CHECK_STATUS(tds_merkle_memory_block_store_init(&tampered_memory, NULL));
+    CHECK_STATUS(tds_merkle_memory_block_store_as_store(
+        &tampered_memory,
+        &tampered_store));
+    {
+        const tds_merkle_block *root_block =
+            tds_merkle_block_pack_block_at(&pack, 0);
+        const size_t byte_count = tds_merkle_block_byte_count(root_block);
+        unsigned char *bytes = (unsigned char *)malloc(byte_count);
+        tds_merkle_block forged = {0};
+        tds_merkle_store_put_result put_result;
+        tds_merkle_search_tree rejected = {0};
+        CHECK(bytes != NULL);
+        memcpy(bytes, tds_merkle_block_bytes(root_block), byte_count);
+        bytes[byte_count - 1] ^= 1;
+        CHECK_STATUS(tds_merkle_block_init(
+            tds_merkle_block_digest(root_block),
+            bytes,
+            byte_count,
+            NULL,
+            &forged));
+        free(bytes);
+        CHECK_STATUS(tds_merkle_block_store_put(
+            &tampered_store,
+            &forged,
+            &put_result));
+        CHECK(put_result == TDS_MERKLE_STORE_ADDED);
+        CHECK(tds_merkle_search_tree_load(
+            tds_merkle_search_tree_root_hash(&tree),
+            &policy,
+            &tampered_store,
+            NULL,
+            &rejected,
+            &error) == TDS_MERKLE_VERIFICATION_FAILURE);
+        CHECK(error.kind == TDS_MERKLE_VERIFY_DIGEST_MISMATCH &&
+            rejected.policy == NULL);
+        tds_merkle_block_dispose(&forged);
+    }
+
+    tds_merkle_memory_block_store_dispose(&tampered_memory);
+    tds_merkle_block_pack_dispose(&pack);
+    tds_merkle_search_tree_dispose(&local);
+    tds_merkle_search_tree_dispose(&synchronized);
+    tds_merkle_search_tree_dispose(&loaded);
+    tds_merkle_search_tree_dispose(&tree);
+    tds_merkle_memory_block_store_dispose(&receiver);
+    tds_merkle_memory_block_store_dispose(&memory);
+    tds_merkle_policy_dispose(&policy);
+    return true;
+}
+
+static bool test_msp2_proofs_and_budget_preflight(void) {
+    tds_merkle_policy policy = {0};
+    tds_merkle_search_tree tree = {0};
+    tds_merkle_proof membership = {0};
+    tds_merkle_proof nonmembership = {0};
+    tds_merkle_proof range = {0};
+    tds_merkle_proof forged = {0};
+    tds_merkle_proof_verification_result verification;
+    tds_merkle_verification_budget budget;
+    tds_merkle_verification_error error;
+    int32_t key = 47;
+    int32_t absent = 1001;
+    int32_t minimum = 20;
+    int32_t maximum = 75;
+    size_t index;
+    CHECK_STATUS(make_i32_policy("c-proof-i32-v1", &policy));
+    CHECK_STATUS(make_i32_sequence_tree(&policy, 96, &tree));
+    CHECK_STATUS(tds_merkle_search_tree_create_proof(&tree, &key, &membership));
+    CHECK(tds_merkle_proof_kind_value(&membership) == TDS_MERKLE_PROOF_MEMBERSHIP);
+    CHECK(tds_merkle_proof_query_byte_count(&membership) > 5 &&
+        memcmp(tds_merkle_proof_query(&membership), "MSP2", 4) == 0);
+    CHECK_STATUS(tds_merkle_search_tree_verify_proof(
+        &membership,
+        &policy,
+        NULL,
+        &verification));
+    CHECK(verification.is_valid && verification.failure_kind == TDS_MERKLE_VERIFY_NONE &&
+        verification.verified_block_count == tds_merkle_proof_step_count(&membership));
+
+    CHECK_STATUS(tds_merkle_search_tree_create_proof(&tree, &absent, &nonmembership));
+    CHECK(tds_merkle_proof_kind_value(&nonmembership) ==
+        TDS_MERKLE_PROOF_NONMEMBERSHIP);
+    CHECK_STATUS(tds_merkle_search_tree_verify_proof(
+        &nonmembership,
+        &policy,
+        NULL,
+        &verification));
+    CHECK(verification.is_valid);
+    CHECK_STATUS(tds_merkle_search_tree_create_range_proof(
+        &tree,
+        &minimum,
+        &maximum,
+        &range));
+    CHECK(tds_merkle_proof_kind_value(&range) == TDS_MERKLE_PROOF_RANGE);
+    CHECK_STATUS(tds_merkle_search_tree_verify_proof(
+        &range,
+        &policy,
+        NULL,
+        &verification));
+    CHECK(verification.is_valid);
+
+    /* Query bytes are gated before step/block allocation, hashing, or codecs. */
+    tds_merkle_verification_budget_init_default(&budget);
+    budget.max_proof_query_byte_count = 1;
+    CHECK_STATUS(tds_merkle_search_tree_verify_proof(
+        &membership,
+        &policy,
+        &budget,
+        &verification));
+    CHECK(!verification.is_valid &&
+        verification.failure_kind == TDS_MERKLE_VERIFY_RESOURCE_LIMIT_EXCEEDED &&
+        verification.verified_block_count == 0 &&
+        verification.verified_byte_count == 0);
+
+    /* Step count is checked after query accounting but before verifier work. */
+    tds_merkle_verification_budget_init_default(&budget);
+    CHECK(tds_merkle_proof_step_count(&membership) > 1);
+    budget.max_block_count = 1;
+    CHECK_STATUS(tds_merkle_search_tree_verify_proof(
+        &membership,
+        &policy,
+        &budget,
+        &verification));
+    CHECK(!verification.is_valid &&
+        verification.failure_kind == TDS_MERKLE_VERIFY_RESOURCE_LIMIT_EXCEEDED &&
+        verification.verified_block_count == 0 &&
+        verification.verified_byte_count ==
+            tds_merkle_proof_query_byte_count(&membership));
+
+    /* Replacing one authenticated proof block with forged bytes invalidates it. */
+    {
+        const size_t step_count = tds_merkle_proof_step_count(&membership);
+        tds_merkle_proof_step_input *steps = (tds_merkle_proof_step_input *)calloc(
+            step_count,
+            sizeof(*steps));
+        const tds_merkle_block *original =
+            tds_merkle_proof_step_block(&membership, 0);
+        const size_t byte_count = tds_merkle_block_byte_count(original);
+        unsigned char *bytes = (unsigned char *)malloc(byte_count);
+        tds_merkle_block bad_block = {0};
+        CHECK(steps != NULL && bytes != NULL);
+        memcpy(bytes, tds_merkle_block_bytes(original), byte_count);
+        bytes[byte_count - 1] ^= 0x80;
+        CHECK_STATUS(tds_merkle_block_init(
+            tds_merkle_block_digest(original),
+            bytes,
+            byte_count,
+            NULL,
+            &bad_block));
+        free(bytes);
+        for (index = 0; index != step_count; ++index) {
+            size_t expanded_count;
+            steps[index].block = index == 0
+                ? &bad_block
+                : tds_merkle_proof_step_block(&membership, index);
+            steps[index].expanded_child_indexes =
+                tds_merkle_proof_step_expanded_children(
+                    &membership,
+                    index,
+                    &expanded_count);
+            steps[index].expanded_child_count = expanded_count;
+        }
+        CHECK_STATUS(tds_merkle_proof_init(
+            tds_merkle_proof_algorithm_id(&membership),
+            tds_merkle_proof_domain_digest(&membership),
+            tds_merkle_proof_root_hash(&membership),
+            tds_merkle_proof_kind_value(&membership),
+            tds_merkle_proof_query(&membership),
+            tds_merkle_proof_query_byte_count(&membership),
+            steps,
+            step_count,
+            NULL,
+            &forged,
+            &error));
+        CHECK_STATUS(tds_merkle_search_tree_verify_proof(
+            &forged,
+            &policy,
+            NULL,
+            &verification));
+        CHECK(!verification.is_valid &&
+            verification.failure_kind == TDS_MERKLE_VERIFY_DIGEST_MISMATCH);
+        tds_merkle_block_dispose(&bad_block);
+        free(steps);
+    }
+
+    tds_merkle_proof_dispose(&forged);
+    tds_merkle_proof_dispose(&range);
+    tds_merkle_proof_dispose(&nonmembership);
+    tds_merkle_proof_dispose(&membership);
+    tds_merkle_search_tree_dispose(&tree);
+    tds_merkle_policy_dispose(&policy);
+    return true;
+}
+
+static uint32_t test_read_be32(const unsigned char *bytes) {
+    return ((uint32_t)bytes[0] << 24) |
+        ((uint32_t)bytes[1] << 16) |
+        ((uint32_t)bytes[2] << 8) |
+        (uint32_t)bytes[3];
+}
+
+static bool load_reaches_resource_limit(
+    tds_merkle_digest root,
+    const tds_merkle_policy *policy,
+    const tds_merkle_block_store *store,
+    const tds_merkle_verification_budget *budget) {
+    tds_merkle_search_tree tree = {0};
+    tds_merkle_verification_error error;
+    const tds_merkle_status status = tds_merkle_search_tree_load(
+        root,
+        policy,
+        store,
+        budget,
+        &tree,
+        &error);
+    const bool result = status == TDS_MERKLE_VERIFICATION_FAILURE &&
+        error.kind == TDS_MERKLE_VERIFY_RESOURCE_LIMIT_EXCEEDED &&
+        tree.policy == NULL;
+    tds_merkle_search_tree_dispose(&tree);
+    return result;
+}
+
+static bool test_all_budgets_import_closure_and_preflight(void) {
+    tds_merkle_policy policy = {0};
+    tds_merkle_search_tree tree = {0};
+    tds_merkle_search_tree alternate = {0};
+    tds_merkle_search_tree imported = {0};
+    tds_merkle_memory_block_store source_memory = {0};
+    tds_merkle_memory_block_store destination_memory = {0};
+    tds_merkle_memory_block_store conflict_memory = {0};
+    tds_merkle_block_store source_store;
+    tds_merkle_block_store destination_store;
+    tds_merkle_block_store conflict_store;
+    tds_merkle_block_pack pack = {0};
+    tds_merkle_block_pack alternate_pack = {0};
+    tds_merkle_block_pack partial_pack = {0};
+    tds_merkle_block_pack extended_pack = {0};
+    tds_merkle_verification_budget budget;
+    tds_merkle_verification_error error;
+    tds_merkle_digest root;
+    size_t added;
+    size_t block_count;
+    size_t maximum_block_bytes = 0;
+    size_t maximum_child_references = 0;
+    size_t index;
+    int32_t extra_key = 1000;
+    int32_t extra_value = 17003;
+    CHECK_STATUS(make_i32_policy("c-budget-import-i32-v1", &policy));
+    CHECK_STATUS(make_i32_sequence_tree(&policy, 96, &tree));
+    root = tds_merkle_search_tree_root_hash(&tree);
+    CHECK_STATUS(tds_merkle_memory_block_store_init(&source_memory, NULL));
+    CHECK_STATUS(tds_merkle_memory_block_store_as_store(&source_memory, &source_store));
+    CHECK_STATUS(tds_merkle_search_tree_save(&tree, &source_store, &added, &error));
+    CHECK_STATUS(tds_merkle_search_tree_export_pack(&tree, &pack));
+    block_count = tds_merkle_block_pack_block_count(&pack);
+    CHECK(block_count > 1 && added == block_count);
+    for (index = 0; index != block_count; ++index) {
+        const tds_merkle_block *block = tds_merkle_block_pack_block_at(&pack, index);
+        const unsigned char *bytes = tds_merkle_block_bytes(block);
+        const size_t byte_count = tds_merkle_block_byte_count(block);
+        const size_t child_count = (size_t)test_read_be32(bytes + 42) + 1;
+        if (byte_count > maximum_block_bytes) {
+            maximum_block_bytes = byte_count;
+        }
+        if (child_count > maximum_child_references) {
+            maximum_child_references = child_count;
+        }
+    }
+    CHECK(maximum_child_references > 1 &&
+        tds_merkle_block_pack_total_byte_count(&pack) > maximum_block_bytes);
+
+    tds_merkle_verification_budget_init_default(&budget);
+    budget.max_block_count = block_count - 1;
+    CHECK(load_reaches_resource_limit(root, &policy, &source_store, &budget));
+
+    tds_merkle_verification_budget_init_default(&budget);
+    budget.max_total_byte_count =
+        tds_merkle_block_pack_total_byte_count(&pack) - 1;
+    budget.max_block_byte_count = maximum_block_bytes;
+    budget.max_proof_query_byte_count = maximum_block_bytes;
+    CHECK(load_reaches_resource_limit(root, &policy, &source_store, &budget));
+
+    tds_merkle_verification_budget_init_default(&budget);
+    budget.max_block_byte_count = maximum_block_bytes - 1;
+    CHECK(load_reaches_resource_limit(root, &policy, &source_store, &budget));
+
+    tds_merkle_verification_budget_init_default(&budget);
+    budget.max_depth = 1;
+    CHECK(load_reaches_resource_limit(root, &policy, &source_store, &budget));
+
+    tds_merkle_verification_budget_init_default(&budget);
+    budget.max_entry_count = tds_merkle_search_tree_size(&tree) - 1;
+    CHECK(load_reaches_resource_limit(root, &policy, &source_store, &budget));
+
+    tds_merkle_verification_budget_init_default(&budget);
+    budget.max_child_references_per_block = maximum_child_references - 1;
+    CHECK(load_reaches_resource_limit(root, &policy, &source_store, &budget));
+
+    /* The seventh field is the MSP2 query limit and is exercised before all
+     * block work, including expansion accounting. */
+    {
+        tds_merkle_proof proof = {0};
+        tds_merkle_proof_verification_result verification;
+        int32_t key = 40;
+        CHECK_STATUS(tds_merkle_search_tree_create_proof(&tree, &key, &proof));
+        tds_merkle_verification_budget_init_default(&budget);
+        budget.max_proof_query_byte_count = 1;
+        CHECK_STATUS(tds_merkle_search_tree_verify_proof(
+            &proof,
+            &policy,
+            &budget,
+            &verification));
+        CHECK(!verification.is_valid && verification.verified_block_count == 0 &&
+            verification.verified_byte_count == 0);
+        tds_merkle_proof_dispose(&proof);
+    }
+    {
+        tds_merkle_proof range = {0};
+        tds_merkle_proof_verification_result verification;
+        int32_t minimum = 0;
+        int32_t maximum = 95;
+        size_t maximum_expansion = 0;
+        CHECK_STATUS(tds_merkle_search_tree_create_range_proof(
+            &tree,
+            &minimum,
+            &maximum,
+            &range));
+        for (index = 0; index != tds_merkle_proof_step_count(&range); ++index) {
+            size_t expansion_count;
+            (void)tds_merkle_proof_step_expanded_children(
+                &range,
+                index,
+                &expansion_count);
+            if (expansion_count > maximum_expansion) {
+                maximum_expansion = expansion_count;
+            }
+        }
+        CHECK(maximum_expansion > 1);
+        tds_merkle_verification_budget_init_default(&budget);
+        budget.max_child_references_per_block = maximum_expansion - 1;
+        CHECK_STATUS(tds_merkle_search_tree_verify_proof(
+            &range,
+            &policy,
+            &budget,
+            &verification));
+        CHECK(!verification.is_valid &&
+            verification.failure_kind == TDS_MERKLE_VERIFY_RESOURCE_LIMIT_EXCEEDED &&
+            verification.verified_block_count == 0 &&
+            verification.verified_byte_count ==
+                tds_merkle_proof_query_byte_count(&range));
+        tds_merkle_proof_dispose(&range);
+    }
+
+    CHECK_STATUS(tds_merkle_memory_block_store_init(&destination_memory, NULL));
+    CHECK_STATUS(tds_merkle_memory_block_store_as_store(
+        &destination_memory,
+        &destination_store));
+    CHECK_STATUS(tds_merkle_search_tree_import_pack(
+        &pack,
+        &policy,
+        &destination_store,
+        NULL,
+        &imported,
+        &error));
+    CHECK(tds_merkle_digest_equal(
+        tds_merkle_search_tree_root_hash(&imported),
+        root));
+    tds_merkle_search_tree_dispose(&imported);
+    CHECK_STATUS(tds_merkle_block_store_clear(&destination_store));
+
+    /* A root-only pack is authenticated but cannot publish or write because the
+     * declared root closure is incomplete. */
+    CHECK_STATUS(tds_merkle_block_pack_init(
+        tds_merkle_block_pack_algorithm_id(&pack),
+        tds_merkle_block_pack_domain_digest(&pack),
+        root,
+        tds_merkle_block_pack_block_at(&pack, 0),
+        1,
+        NULL,
+        &partial_pack,
+        &error));
+    CHECK(tds_merkle_search_tree_import_pack(
+        &partial_pack,
+        &policy,
+        &destination_store,
+        NULL,
+        &imported,
+        &error) == TDS_MERKLE_VERIFICATION_FAILURE);
+    CHECK(error.kind == TDS_MERKLE_VERIFY_MISSING_BLOCK && imported.policy == NULL);
+    CHECK_STATUS(tds_merkle_block_store_count(&destination_store, &added));
+    CHECK(added == 0);
+    tds_merkle_block_pack_dispose(&partial_pack);
+
+    /* Canonical blocks not reachable from the declared root are legal partial
+     * synchronization state and are committed after the root closure verifies. */
+    CHECK_STATUS(tds_merkle_search_tree_copy(&tree, &alternate));
+    CHECK_STATUS(tds_merkle_search_tree_set(
+        &alternate,
+        &extra_key,
+        &extra_value,
+        &alternate));
+    CHECK_STATUS(tds_merkle_search_tree_export_pack(&alternate, &alternate_pack));
+    {
+        const tds_merkle_block *unreachable = NULL;
+        tds_merkle_block *blocks = (tds_merkle_block *)calloc(
+            block_count + 1,
+            sizeof(*blocks));
+        size_t alternate_index;
+        CHECK(blocks != NULL);
+        for (alternate_index = 0;
+            alternate_index != tds_merkle_block_pack_block_count(&alternate_pack);
+            ++alternate_index) {
+            const tds_merkle_block *candidate =
+                tds_merkle_block_pack_block_at(&alternate_pack, alternate_index);
+            bool found = false;
+            for (index = 0; index != block_count; ++index) {
+                if (tds_merkle_digest_equal(
+                        tds_merkle_block_digest(candidate),
+                        tds_merkle_block_digest(
+                            tds_merkle_block_pack_block_at(&pack, index)))) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                unreachable = candidate;
+                break;
+            }
+        }
+        CHECK(unreachable != NULL);
+        for (index = 0; index != block_count; ++index) {
+            CHECK_STATUS(tds_merkle_block_copy(
+                tds_merkle_block_pack_block_at(&pack, index),
+                &blocks[index]));
+        }
+        CHECK_STATUS(tds_merkle_block_copy(unreachable, &blocks[block_count]));
+        CHECK_STATUS(tds_merkle_block_pack_init(
+            tds_merkle_block_pack_algorithm_id(&pack),
+            tds_merkle_block_pack_domain_digest(&pack),
+            root,
+            blocks,
+            block_count + 1,
+            NULL,
+            &extended_pack,
+            &error));
+        for (index = 0; index != block_count + 1; ++index) {
+            tds_merkle_block_dispose(&blocks[index]);
+        }
+        free(blocks);
+    }
+    CHECK_STATUS(tds_merkle_search_tree_import_pack(
+        &extended_pack,
+        &policy,
+        &destination_store,
+        NULL,
+        &imported,
+        &error));
+    CHECK_STATUS(tds_merkle_block_store_count(&destination_store, &added));
+    CHECK(added == block_count + 1);
+    tds_merkle_search_tree_dispose(&imported);
+    CHECK_STATUS(tds_merkle_block_store_clear(&destination_store));
+
+    /* A conflict at the final preflight item prevents every destination put. */
+    CHECK_STATUS(tds_merkle_memory_block_store_init(&conflict_memory, NULL));
+    CHECK_STATUS(tds_merkle_memory_block_store_as_store(
+        &conflict_memory,
+        &conflict_store));
+    {
+        const tds_merkle_block *last =
+            tds_merkle_block_pack_block_at(&pack, block_count - 1);
+        const size_t byte_count = tds_merkle_block_byte_count(last);
+        unsigned char *bytes = (unsigned char *)malloc(byte_count);
+        tds_merkle_block conflict_block = {0};
+        tds_merkle_store_put_result put_result;
+        CHECK(bytes != NULL);
+        memcpy(bytes, tds_merkle_block_bytes(last), byte_count);
+        bytes[byte_count - 1] ^= 1;
+        CHECK_STATUS(tds_merkle_block_init(
+            tds_merkle_block_digest(last),
+            bytes,
+            byte_count,
+            NULL,
+            &conflict_block));
+        free(bytes);
+        CHECK_STATUS(tds_merkle_block_store_put(
+            &conflict_store,
+            &conflict_block,
+            &put_result));
+        CHECK(put_result == TDS_MERKLE_STORE_ADDED);
+        CHECK(tds_merkle_search_tree_import_pack(
+            &pack,
+            &policy,
+            &conflict_store,
+            NULL,
+            &imported,
+            &error) == TDS_MERKLE_VERIFICATION_FAILURE);
+        CHECK(error.kind == TDS_MERKLE_VERIFY_CONFLICTING_BLOCK &&
+            imported.policy == NULL);
+        CHECK_STATUS(tds_merkle_block_store_count(&conflict_store, &added));
+        CHECK(added == 1);
+        CHECK(tds_merkle_block_store_put(
+            &conflict_store,
+            last,
+            &put_result) == TDS_MERKLE_VERIFICATION_FAILURE);
+        CHECK(put_result == TDS_MERKLE_STORE_CONFLICT);
+        tds_merkle_block_dispose(&conflict_block);
+    }
+
+    tds_merkle_memory_block_store_dispose(&conflict_memory);
+    tds_merkle_block_pack_dispose(&extended_pack);
+    tds_merkle_block_pack_dispose(&alternate_pack);
+    tds_merkle_search_tree_dispose(&alternate);
+    tds_merkle_memory_block_store_dispose(&destination_memory);
+    tds_merkle_block_pack_dispose(&pack);
+    tds_merkle_memory_block_store_dispose(&source_memory);
+    tds_merkle_search_tree_dispose(&tree);
+    tds_merkle_policy_dispose(&policy);
+    return true;
+}
+
+typedef struct bomb_codec_state {
+    tds_merkle_codec inner;
+    size_t encode_calls;
+    size_t decode_calls;
+    bool fail_encode;
+    bool fail_decode;
+} bomb_codec_state;
+
+static tds_merkle_status bomb_codec_encode(
+    const void *value,
+    unsigned char *destination,
+    size_t destination_size,
+    size_t *bytes_written,
+    const tds_merkle_allocator *allocator,
+    void *context) {
+    bomb_codec_state *state = (bomb_codec_state *)context;
+    ++state->encode_calls;
+    if (state->fail_encode) {
+        return TDS_MERKLE_CALLBACK_FAILURE;
+    }
+    return state->inner.encode(
+        value,
+        destination,
+        destination_size,
+        bytes_written,
+        allocator,
+        state->inner.context);
+}
+
+static tds_merkle_status bomb_codec_decode(
+    const unsigned char *encoding,
+    size_t encoding_size,
+    void *destination,
+    const tds_merkle_allocator *allocator,
+    void *context) {
+    bomb_codec_state *state = (bomb_codec_state *)context;
+    ++state->decode_calls;
+    if (state->fail_decode) {
+        return TDS_MERKLE_CALLBACK_FAILURE;
+    }
+    return state->inner.decode(
+        encoding,
+        encoding_size,
+        destination,
+        allocator,
+        state->inner.context);
+}
+
+static void install_bomb_codec(
+    tds_merkle_codec *codec,
+    bomb_codec_state *state) {
+    state->inner = *codec;
+    state->encode_calls = 0;
+    state->decode_calls = 0;
+    state->fail_encode = false;
+    state->fail_decode = false;
+    codec->encode = bomb_codec_encode;
+    codec->decode = bomb_codec_decode;
+    codec->context = state;
+}
+
+static tds_merkle_proof_step_input *copy_proof_step_inputs(
+    const tds_merkle_proof *proof,
+    size_t extra_count) {
+    const size_t count = tds_merkle_proof_step_count(proof);
+    tds_merkle_proof_step_input *steps =
+        (tds_merkle_proof_step_input *)calloc(count + extra_count, sizeof(*steps));
+    size_t index;
+    if (steps == NULL) {
+        return NULL;
+    }
+    for (index = 0; index != count; ++index) {
+        steps[index].block = tds_merkle_proof_step_block(proof, index);
+        steps[index].expanded_child_indexes =
+            tds_merkle_proof_step_expanded_children(
+                proof,
+                index,
+                &steps[index].expanded_child_count);
+    }
+    return steps;
+}
+
+static bool proof_verifies_invalid(
+    const tds_merkle_proof *proof,
+    const tds_merkle_policy *policy) {
+    tds_merkle_proof_verification_result result;
+    return tds_merkle_search_tree_verify_proof(proof, policy, NULL, &result) ==
+            TDS_MERKLE_OK &&
+        !result.is_valid;
+}
+
+static bool test_msp2_structural_tamper_and_bomb_precedence(void) {
+    static const unsigned char foreign_algorithm_bytes[] = "foreign-mst-v1";
+    tds_merkle_policy policy = {0};
+    tds_merkle_policy bomb_policy = {0};
+    tds_merkle_policy_config bomb_config;
+    bomb_codec_state bomb_key;
+    bomb_codec_state bomb_value;
+    counting_allocator bomb_allocator = {0};
+    tds_merkle_search_tree tree = {0};
+    tds_merkle_proof point = {0};
+    tds_merkle_proof range = {0};
+    tds_merkle_proof variant = {0};
+    tds_merkle_proof unsupported = {0};
+    tds_merkle_proof foreign_domain = {0};
+    tds_merkle_proof foreign_range = {0};
+    tds_merkle_block_pack pack = {0};
+    tds_merkle_verification_error error;
+    tds_merkle_proof_verification_result verification;
+    tds_merkle_verification_budget budget;
+    tds_merkle_digest changed_domain;
+    int32_t key = 47;
+    int32_t minimum = 10;
+    int32_t maximum = 80;
+    size_t point_count;
+    size_t range_count;
+    size_t maximum_expansion = 0;
+    size_t index;
+    const tds_merkle_block *unrelated = NULL;
+    CHECK_STATUS(make_i32_policy("c-proof-tamper-i32-v1", &policy));
+    CHECK_STATUS(make_i32_sequence_tree(&policy, 96, &tree));
+    CHECK_STATUS(tds_merkle_search_tree_create_proof(&tree, &key, &point));
+    CHECK_STATUS(tds_merkle_search_tree_create_range_proof(
+        &tree,
+        &minimum,
+        &maximum,
+        &range));
+    CHECK_STATUS(tds_merkle_search_tree_export_pack(&tree, &pack));
+    point_count = tds_merkle_proof_step_count(&point);
+    range_count = tds_merkle_proof_step_count(&range);
+    CHECK(point_count > 1 && range_count > 1);
+    for (index = 0; index != tds_merkle_block_pack_block_count(&pack); ++index) {
+        const tds_merkle_block *candidate =
+            tds_merkle_block_pack_block_at(&pack, index);
+        size_t step;
+        bool present = false;
+        for (step = 0; step != point_count; ++step) {
+            if (tds_merkle_digest_equal(
+                    tds_merkle_block_digest(candidate),
+                    tds_merkle_block_digest(
+                        tds_merkle_proof_step_block(&point, step)))) {
+                present = true;
+                break;
+            }
+        }
+        if (!present) {
+            unrelated = candidate;
+            break;
+        }
+    }
+    CHECK(unrelated != NULL);
+
+    /* Canonical query tamper. */
+    {
+        tds_merkle_proof_step_input *steps = copy_proof_step_inputs(&point, 0);
+        const size_t query_count = tds_merkle_proof_query_byte_count(&point);
+        unsigned char *query = (unsigned char *)malloc(query_count);
+        CHECK(steps != NULL && query != NULL);
+        memcpy(query, tds_merkle_proof_query(&point), query_count);
+        query[query_count - 1] ^= 1;
+        CHECK_STATUS(tds_merkle_proof_init(
+            tds_merkle_proof_algorithm_id(&point),
+            tds_merkle_proof_domain_digest(&point),
+            tds_merkle_proof_root_hash(&point),
+            tds_merkle_proof_kind_value(&point),
+            query,
+            query_count,
+            steps,
+            point_count,
+            NULL,
+            &variant,
+            &error));
+        CHECK(proof_verifies_invalid(&variant, &policy));
+        tds_merkle_proof_dispose(&variant);
+        free(query);
+        free(steps);
+    }
+
+    /* Wrong authenticated step, omitted step, and extra authenticated step. */
+    {
+        tds_merkle_proof_step_input *steps = copy_proof_step_inputs(&point, 1);
+        CHECK(steps != NULL);
+        steps[0].block = unrelated;
+        CHECK_STATUS(tds_merkle_proof_init(
+            tds_merkle_proof_algorithm_id(&point),
+            tds_merkle_proof_domain_digest(&point),
+            tds_merkle_proof_root_hash(&point),
+            tds_merkle_proof_kind_value(&point),
+            tds_merkle_proof_query(&point),
+            tds_merkle_proof_query_byte_count(&point),
+            steps,
+            point_count,
+            NULL,
+            &variant,
+            &error));
+        CHECK(proof_verifies_invalid(&variant, &policy));
+        tds_merkle_proof_dispose(&variant);
+        steps[0].block = tds_merkle_proof_step_block(&point, 0);
+        CHECK_STATUS(tds_merkle_proof_init(
+            tds_merkle_proof_algorithm_id(&point),
+            tds_merkle_proof_domain_digest(&point),
+            tds_merkle_proof_root_hash(&point),
+            tds_merkle_proof_kind_value(&point),
+            tds_merkle_proof_query(&point),
+            tds_merkle_proof_query_byte_count(&point),
+            steps,
+            point_count - 1,
+            NULL,
+            &variant,
+            &error));
+        CHECK(proof_verifies_invalid(&variant, &policy));
+        tds_merkle_proof_dispose(&variant);
+        steps[point_count].block = unrelated;
+        steps[point_count].expanded_child_indexes = NULL;
+        steps[point_count].expanded_child_count = 0;
+        CHECK_STATUS(tds_merkle_proof_init(
+            tds_merkle_proof_algorithm_id(&point),
+            tds_merkle_proof_domain_digest(&point),
+            tds_merkle_proof_root_hash(&point),
+            tds_merkle_proof_kind_value(&point),
+            tds_merkle_proof_query(&point),
+            tds_merkle_proof_query_byte_count(&point),
+            steps,
+            point_count + 1,
+            NULL,
+            &variant,
+            &error));
+        CHECK(proof_verifies_invalid(&variant, &policy));
+        tds_merkle_proof_dispose(&variant);
+        free(steps);
+    }
+
+    /* Wrong range expansion: omit one required expansion edge. */
+    {
+        tds_merkle_proof_step_input *steps = copy_proof_step_inputs(&range, 0);
+        size_t changed_index = SIZE_MAX;
+        CHECK(steps != NULL);
+        for (index = 0; index != range_count; ++index) {
+            if (steps[index].expanded_child_count != 0) {
+                if (steps[index].expanded_child_count > maximum_expansion) {
+                    maximum_expansion = steps[index].expanded_child_count;
+                }
+                if (changed_index == SIZE_MAX) {
+                    changed_index = index;
+                }
+            }
+        }
+        CHECK(changed_index != SIZE_MAX && maximum_expansion > 1);
+        --steps[changed_index].expanded_child_count;
+        CHECK_STATUS(tds_merkle_proof_init(
+            tds_merkle_proof_algorithm_id(&range),
+            tds_merkle_proof_domain_digest(&range),
+            tds_merkle_proof_root_hash(&range),
+            tds_merkle_proof_kind_value(&range),
+            tds_merkle_proof_query(&range),
+            tds_merkle_proof_query_byte_count(&range),
+            steps,
+            range_count,
+            NULL,
+            &variant,
+            &error));
+        CHECK(proof_verifies_invalid(&variant, &policy));
+        tds_merkle_proof_dispose(&variant);
+        free(steps);
+    }
+
+    changed_domain = tds_merkle_proof_domain_digest(&point);
+    changed_domain.bytes[0] ^= 1;
+    {
+        tds_merkle_proof_step_input *point_steps = copy_proof_step_inputs(&point, 0);
+        tds_merkle_proof_step_input *range_steps = copy_proof_step_inputs(&range, 0);
+        const tds_merkle_identifier foreign_algorithm = {
+            foreign_algorithm_bytes,
+            sizeof(foreign_algorithm_bytes) - 1};
+        CHECK(point_steps != NULL && range_steps != NULL);
+        CHECK_STATUS(tds_merkle_proof_init(
+            foreign_algorithm,
+            tds_merkle_proof_domain_digest(&point),
+            tds_merkle_proof_root_hash(&point),
+            tds_merkle_proof_kind_value(&point),
+            tds_merkle_proof_query(&point),
+            tds_merkle_proof_query_byte_count(&point),
+            point_steps,
+            point_count,
+            NULL,
+            &unsupported,
+            &error));
+        CHECK_STATUS(tds_merkle_proof_init(
+            tds_merkle_proof_algorithm_id(&point),
+            changed_domain,
+            tds_merkle_proof_root_hash(&point),
+            tds_merkle_proof_kind_value(&point),
+            tds_merkle_proof_query(&point),
+            tds_merkle_proof_query_byte_count(&point),
+            point_steps,
+            point_count,
+            NULL,
+            &foreign_domain,
+            &error));
+        CHECK_STATUS(tds_merkle_proof_init(
+            tds_merkle_proof_algorithm_id(&range),
+            changed_domain,
+            tds_merkle_proof_root_hash(&range),
+            tds_merkle_proof_kind_value(&range),
+            tds_merkle_proof_query(&range),
+            tds_merkle_proof_query_byte_count(&range),
+            range_steps,
+            range_count,
+            NULL,
+            &foreign_range,
+            &error));
+        free(range_steps);
+        free(point_steps);
+    }
+    CHECK_STATUS(tds_merkle_search_tree_verify_proof(
+        &unsupported,
+        &policy,
+        NULL,
+        &verification));
+    CHECK(!verification.is_valid &&
+        verification.failure_kind == TDS_MERKLE_VERIFY_UNSUPPORTED_ALGORITHM &&
+        verification.verified_block_count == 0);
+    CHECK_STATUS(tds_merkle_search_tree_verify_proof(
+        &foreign_domain,
+        &policy,
+        NULL,
+        &verification));
+    CHECK(!verification.is_valid &&
+        verification.failure_kind == TDS_MERKLE_VERIFY_DOMAIN_MISMATCH &&
+        verification.verified_block_count == 0);
+
+    /* Same identifiers, but bomb codecs and an allocator that fails its first
+     * attempt prove the three structural preflights precede verifier work. */
+    configure_i32_policy(&bomb_config, "c-proof-tamper-i32-v1");
+    install_bomb_codec(&bomb_config.key_codec, &bomb_key);
+    install_bomb_codec(&bomb_config.value_codec, &bomb_value);
+    bomb_key.fail_encode = true;
+    bomb_key.fail_decode = true;
+    bomb_value.fail_encode = true;
+    bomb_value.fail_decode = true;
+    bomb_config.allocator.allocate = counting_allocate;
+    bomb_config.allocator.deallocate = counting_deallocate;
+    bomb_config.allocator.context = &bomb_allocator;
+    CHECK_STATUS(tds_merkle_policy_create(&bomb_config, &bomb_policy));
+    bomb_allocator.attempts = 0;
+    bomb_allocator.fail_at = 1;
+    tds_merkle_verification_budget_init_default(&budget);
+    budget.max_proof_query_byte_count = 1;
+    CHECK_STATUS(tds_merkle_search_tree_verify_proof(
+        &unsupported,
+        &bomb_policy,
+        &budget,
+        &verification));
+    CHECK(!verification.is_valid &&
+        verification.failure_kind == TDS_MERKLE_VERIFY_RESOURCE_LIMIT_EXCEEDED &&
+        verification.verified_byte_count == 0);
+    tds_merkle_verification_budget_init_default(&budget);
+    budget.max_block_count = 1;
+    CHECK_STATUS(tds_merkle_search_tree_verify_proof(
+        &foreign_domain,
+        &bomb_policy,
+        &budget,
+        &verification));
+    CHECK(!verification.is_valid &&
+        verification.failure_kind == TDS_MERKLE_VERIFY_RESOURCE_LIMIT_EXCEEDED &&
+        verification.verified_byte_count ==
+            tds_merkle_proof_query_byte_count(&foreign_domain));
+    tds_merkle_verification_budget_init_default(&budget);
+    budget.max_child_references_per_block = maximum_expansion - 1;
+    CHECK_STATUS(tds_merkle_search_tree_verify_proof(
+        &foreign_range,
+        &bomb_policy,
+        &budget,
+        &verification));
+    CHECK(!verification.is_valid &&
+        verification.failure_kind == TDS_MERKLE_VERIFY_RESOURCE_LIMIT_EXCEEDED &&
+        verification.verified_byte_count ==
+            tds_merkle_proof_query_byte_count(&foreign_range));
+    CHECK(bomb_allocator.attempts == 0 &&
+        bomb_key.encode_calls == 0 && bomb_key.decode_calls == 0 &&
+        bomb_value.encode_calls == 0 && bomb_value.decode_calls == 0);
+    bomb_allocator.fail_at = 0;
+
+    tds_merkle_policy_dispose(&bomb_policy);
+    CHECK(bomb_allocator.live == 0);
+    tds_merkle_proof_dispose(&foreign_range);
+    tds_merkle_proof_dispose(&foreign_domain);
+    tds_merkle_proof_dispose(&unsupported);
+    tds_merkle_block_pack_dispose(&pack);
+    tds_merkle_proof_dispose(&range);
+    tds_merkle_proof_dispose(&point);
+    tds_merkle_search_tree_dispose(&tree);
+    tds_merkle_policy_dispose(&policy);
+    return true;
+}
+
+typedef struct merge_resolution_context {
+    tds_merkle_merge_resolution_kind kind;
+    int32_t value;
+    size_t calls;
+} merge_resolution_context;
+
+static tds_merkle_status resolve_i32_conflict(
+    tds_merkle_three_way_merge_conflict_ref conflict,
+    tds_merkle_merge_resolution *resolution,
+    void *context) {
+    merge_resolution_context *state = (merge_resolution_context *)context;
+    CHECK(conflict.key != NULL);
+    ++state->calls;
+    resolution->kind = state->kind;
+    resolution->value = state->kind == TDS_MERKLE_MERGE_SET_VALUE
+        ? &state->value
+        : NULL;
+    return TDS_MERKLE_OK;
+}
+
+static bool tree_has_i32_value(
+    const tds_merkle_search_tree *tree,
+    int32_t key,
+    bool expected_found,
+    int32_t expected_value) {
+    bool found = false;
+    tds_merkle_search_entry_ref entry = {0};
+    if (tds_merkle_search_tree_try_get_entry_ref(tree, &key, &found, &entry) !=
+        TDS_MERKLE_OK || found != expected_found) {
+        return false;
+    }
+    return !found || *(const int32_t *)entry.value == expected_value;
+}
+
+static bool test_three_way_merge_results_and_policy_identity(void) {
+    tds_merkle_policy policy = {0};
+    tds_merkle_policy equivalent_policy = {0};
+    tds_merkle_search_tree base = {0};
+    tds_merkle_search_tree left = {0};
+    tds_merkle_search_tree right = {0};
+    tds_merkle_search_tree equivalent = {0};
+    tds_merkle_search_tree merged = {0};
+    tds_merkle_three_way_merge_result result = {0};
+    tds_merkle_three_way_merge_conflict_ref conflict;
+    merge_resolution_context resolver = {
+        TDS_MERKLE_MERGE_USE_RIGHT,
+        999,
+        0};
+    int32_t key1 = 1;
+    int32_t key2 = 2;
+    int32_t key3 = 3;
+    int32_t key4 = 4;
+    int32_t base1 = 10;
+    int32_t base2 = 20;
+    int32_t left1 = 11;
+    int32_t left3 = 30;
+    int32_t right1 = 12;
+    int32_t right4 = 40;
+    CHECK_STATUS(make_i32_policy("c-merge-i32-v1", &policy));
+    CHECK_STATUS(make_i32_policy("c-merge-i32-v1", &equivalent_policy));
+    CHECK_STATUS(tds_merkle_search_tree_init(&base, &policy));
+    CHECK_STATUS(tds_merkle_search_tree_set(&base, &key1, &base1, &base));
+    CHECK_STATUS(tds_merkle_search_tree_set(&base, &key2, &base2, &base));
+    CHECK_STATUS(tds_merkle_search_tree_copy(&base, &left));
+    CHECK_STATUS(tds_merkle_search_tree_copy(&base, &right));
+    CHECK_STATUS(tds_merkle_search_tree_set(&left, &key1, &left1, &left));
+    CHECK_STATUS(tds_merkle_search_tree_set(&left, &key3, &left3, &left));
+    CHECK_STATUS(tds_merkle_search_tree_set(&right, &key1, &right1, &right));
+    CHECK_STATUS(tds_merkle_search_tree_remove(&right, &key2, &right));
+    CHECK_STATUS(tds_merkle_search_tree_set(&right, &key4, &right4, &right));
+
+    CHECK_STATUS(tds_merkle_search_tree_merge(
+        &base,
+        &left,
+        &right,
+        NULL,
+        NULL,
+        &result));
+    CHECK(!tds_merkle_three_way_merge_result_success(&result));
+    CHECK(tds_merkle_three_way_merge_result_conflict_count(&result) == 1);
+    CHECK(tds_merkle_three_way_merge_result_copy_tree(&result, &merged) ==
+        TDS_MERKLE_INVALID_ARGUMENT);
+    CHECK_STATUS(tds_merkle_three_way_merge_result_conflict_at(
+        &result,
+        0,
+        &conflict));
+    CHECK(*(const int32_t *)conflict.key == key1 &&
+        conflict.base.present && *(const int32_t *)conflict.base.value == base1 &&
+        conflict.left.present && *(const int32_t *)conflict.left.value == left1 &&
+        conflict.right.present && *(const int32_t *)conflict.right.value == right1);
+    tds_merkle_three_way_merge_result_dispose(&result);
+
+    CHECK_STATUS(tds_merkle_search_tree_merge(
+        &base,
+        &left,
+        &right,
+        resolve_i32_conflict,
+        &resolver,
+        &result));
+    CHECK(tds_merkle_three_way_merge_result_success(&result) && resolver.calls == 1);
+    CHECK_STATUS(tds_merkle_three_way_merge_result_copy_tree(&result, &merged));
+    CHECK(tree_has_i32_value(&merged, key1, true, right1));
+    CHECK(tree_has_i32_value(&merged, key2, false, 0));
+    CHECK(tree_has_i32_value(&merged, key3, true, left3));
+    CHECK(tree_has_i32_value(&merged, key4, true, right4));
+    tds_merkle_search_tree_dispose(&merged);
+    tds_merkle_three_way_merge_result_dispose(&result);
+
+    resolver.kind = TDS_MERKLE_MERGE_USE_BASE;
+    resolver.calls = 0;
+    CHECK_STATUS(tds_merkle_search_tree_merge(
+        &base,
+        &left,
+        &right,
+        resolve_i32_conflict,
+        &resolver,
+        &result));
+    CHECK_STATUS(tds_merkle_three_way_merge_result_copy_tree(&result, &merged));
+    CHECK(tree_has_i32_value(&merged, key1, true, base1));
+    tds_merkle_search_tree_dispose(&merged);
+    tds_merkle_three_way_merge_result_dispose(&result);
+
+    resolver.kind = TDS_MERKLE_MERGE_USE_LEFT;
+    resolver.calls = 0;
+    CHECK_STATUS(tds_merkle_search_tree_merge(
+        &base,
+        &left,
+        &right,
+        resolve_i32_conflict,
+        &resolver,
+        &result));
+    CHECK_STATUS(tds_merkle_three_way_merge_result_copy_tree(&result, &merged));
+    CHECK(tree_has_i32_value(&merged, key1, true, left1));
+    tds_merkle_search_tree_dispose(&merged);
+    tds_merkle_three_way_merge_result_dispose(&result);
+
+    resolver.kind = TDS_MERKLE_MERGE_SET_VALUE;
+    resolver.calls = 0;
+    CHECK_STATUS(tds_merkle_search_tree_merge(
+        &base,
+        &left,
+        &right,
+        resolve_i32_conflict,
+        &resolver,
+        &result));
+    CHECK(tds_merkle_three_way_merge_result_success(&result));
+    CHECK_STATUS(tds_merkle_three_way_merge_result_copy_tree(&result, &merged));
+    CHECK(tree_has_i32_value(&merged, key1, true, resolver.value));
+    tds_merkle_search_tree_dispose(&merged);
+    tds_merkle_three_way_merge_result_dispose(&result);
+
+    resolver.kind = TDS_MERKLE_MERGE_DELETE;
+    resolver.calls = 0;
+    CHECK_STATUS(tds_merkle_search_tree_merge(
+        &base,
+        &left,
+        &right,
+        resolve_i32_conflict,
+        &resolver,
+        &result));
+    CHECK_STATUS(tds_merkle_three_way_merge_result_copy_tree(&result, &merged));
+    CHECK(tree_has_i32_value(&merged, key1, false, 0));
+    tds_merkle_search_tree_dispose(&merged);
+    tds_merkle_three_way_merge_result_dispose(&result);
+
+    CHECK_STATUS(tds_merkle_search_tree_init(&equivalent, &equivalent_policy));
+    CHECK(tds_merkle_search_tree_merge(
+        &base,
+        &left,
+        &equivalent,
+        NULL,
+        NULL,
+        &result) == TDS_MERKLE_INCOMPATIBLE_POLICY);
+    CHECK(result.rep == NULL);
+
+    tds_merkle_search_tree_dispose(&equivalent);
+    tds_merkle_search_tree_dispose(&right);
+    tds_merkle_search_tree_dispose(&left);
+    tds_merkle_search_tree_dispose(&base);
+    tds_merkle_policy_dispose(&equivalent_policy);
+    tds_merkle_policy_dispose(&policy);
+    return true;
+}
+
+static bool test_merge_present_null_is_not_deletion(void) {
+    tds_merkle_policy policy = {0};
+    tds_merkle_search_tree base = {0};
+    tds_merkle_search_tree left = {0};
+    tds_merkle_search_tree right = {0};
+    tds_merkle_three_way_merge_result result = {0};
+    tds_merkle_three_way_merge_conflict_ref conflict;
+    tds_merkle_nullable_utf8 semantic_null = {false, NULL, 0};
+    tds_merkle_nullable_utf8 text = {true, "right", 5};
+    int32_t key = 7;
+    CHECK_STATUS(make_string_policy(&policy));
+    CHECK_STATUS(tds_merkle_search_tree_init(&base, &policy));
+    CHECK_STATUS(tds_merkle_search_tree_set(
+        &base,
+        &key,
+        &semantic_null,
+        &base));
+    CHECK_STATUS(tds_merkle_search_tree_copy(&base, &left));
+    CHECK_STATUS(tds_merkle_search_tree_copy(&base, &right));
+    CHECK_STATUS(tds_merkle_search_tree_remove(&left, &key, &left));
+    CHECK_STATUS(tds_merkle_search_tree_set(&right, &key, &text, &right));
+    CHECK_STATUS(tds_merkle_search_tree_merge(
+        &base,
+        &left,
+        &right,
+        NULL,
+        NULL,
+        &result));
+    CHECK(!tds_merkle_three_way_merge_result_success(&result));
+    CHECK(tds_merkle_three_way_merge_result_conflict_count(&result) == 1);
+    CHECK_STATUS(tds_merkle_three_way_merge_result_conflict_at(
+        &result,
+        0,
+        &conflict));
+    CHECK(conflict.base.present && conflict.base.value != NULL);
+    CHECK(!((const tds_merkle_nullable_utf8 *)conflict.base.value)->has_value);
+    CHECK(!conflict.left.present && conflict.left.value == NULL);
+    CHECK(conflict.right.present && conflict.right.value != NULL &&
+        ((const tds_merkle_nullable_utf8 *)conflict.right.value)->has_value &&
+        ((const tds_merkle_nullable_utf8 *)conflict.right.value)->size == 5);
+    tds_merkle_three_way_merge_result_dispose(&result);
+    tds_merkle_search_tree_dispose(&right);
+    tds_merkle_search_tree_dispose(&left);
+    tds_merkle_search_tree_dispose(&base);
+    tds_merkle_policy_dispose(&policy);
+    return true;
+}
+
+typedef struct concurrent_store_context {
+    const tds_merkle_block_store *store;
+    const tds_merkle_block *put_block;
+    const tds_merkle_block *expected_block;
+    bool expect_conflict;
+} concurrent_store_context;
+
+static bool concurrent_store_worker(const concurrent_store_context *context) {
+    size_t iteration;
+    for (iteration = 0; iteration != 128; ++iteration) {
+        tds_merkle_store_put_result put_result = TDS_MERKLE_STORE_CONFLICT;
+        tds_merkle_block snapshot = {0};
+        bool found = false;
+        const tds_merkle_status status = tds_merkle_block_store_put(
+            context->store,
+            context->put_block,
+            &put_result);
+        if (context->expect_conflict) {
+            if (status != TDS_MERKLE_VERIFICATION_FAILURE ||
+                put_result != TDS_MERKLE_STORE_CONFLICT) {
+                return false;
+            }
+        } else if (status != TDS_MERKLE_OK ||
+            (put_result != TDS_MERKLE_STORE_ADDED &&
+                put_result != TDS_MERKLE_STORE_PRESENT_IDENTICAL)) {
+            return false;
+        }
+        if (tds_merkle_block_store_try_get(
+                context->store,
+                tds_merkle_block_digest(context->expected_block),
+                &found,
+                &snapshot) != TDS_MERKLE_OK ||
+            !found || !tds_merkle_block_equal(&snapshot, context->expected_block)) {
+            tds_merkle_block_dispose(&snapshot);
+            return false;
+        }
+        tds_merkle_block_dispose(&snapshot);
+    }
+    return true;
+}
+
+#ifdef _WIN32
+static DWORD WINAPI concurrent_store_thread(void *parameter) {
+    return concurrent_store_worker((const concurrent_store_context *)parameter)
+        ? 0u
+        : 1u;
+}
+#else
+static int concurrent_store_thread(void *parameter) {
+    return concurrent_store_worker((const concurrent_store_context *)parameter)
+        ? 0
+        : 1;
+}
+#endif
+
+static bool run_concurrent_store_phase(const concurrent_store_context *context) {
+#ifdef _WIN32
+    enum { thread_count = 8 };
+    HANDLE threads[thread_count];
+    DWORD index;
+    for (index = 0; index != thread_count; ++index) {
+        threads[index] = CreateThread(
+            NULL,
+            0,
+            concurrent_store_thread,
+            (void *)context,
+            0,
+            NULL);
+        if (threads[index] == NULL) {
+            return false;
+        }
+    }
+    if (WaitForMultipleObjects(thread_count, threads, TRUE, INFINITE) !=
+        WAIT_OBJECT_0) {
+        return false;
+    }
+    for (index = 0; index != thread_count; ++index) {
+        DWORD exit_code = 1;
+        if (!GetExitCodeThread(threads[index], &exit_code) || exit_code != 0 ||
+            !CloseHandle(threads[index])) {
+            return false;
+        }
+    }
+#else
+    enum { thread_count = 8 };
+    thrd_t threads[thread_count];
+    bool success = true;
+    size_t created = 0;
+    size_t index;
+    for (index = 0; index != thread_count; ++index) {
+        if (thrd_create(
+                &threads[index],
+                concurrent_store_thread,
+                (void *)context) != thrd_success) {
+            int ignored;
+            while (created != 0) {
+                --created;
+                (void)thrd_join(threads[created], &ignored);
+            }
+            return false;
+        }
+        ++created;
+    }
+    for (index = 0; index != thread_count; ++index) {
+        int exit_code = 1;
+        if (thrd_join(threads[index], &exit_code) != thrd_success ||
+            exit_code != 0) {
+            success = false;
+        }
+    }
+    if (!success) {
+        return false;
+    }
+#endif
+    return true;
+}
+
+static bool test_concurrent_memory_store_puts_and_owned_snapshots(void) {
+    tds_merkle_memory_block_store memory = {0};
+    tds_merkle_memory_block_store owner_copy = {0};
+    tds_merkle_block_store store;
+    tds_merkle_block original = {0};
+    tds_merkle_block conflicting = {0};
+    tds_merkle_block retained = {0};
+    tds_merkle_digest digest = {{0}};
+    concurrent_store_context context;
+    bool found = false;
+    size_t count = 0;
+    digest.bytes[0] = 0x5a;
+    CHECK_STATUS(tds_merkle_block_init(
+        digest,
+        (const unsigned char *)"original",
+        8,
+        NULL,
+        &original));
+    CHECK_STATUS(tds_merkle_block_init(
+        digest,
+        (const unsigned char *)"forged!!",
+        8,
+        NULL,
+        &conflicting));
+    CHECK_STATUS(tds_merkle_memory_block_store_init(&memory, NULL));
+    CHECK_STATUS(tds_merkle_memory_block_store_copy(&memory, &owner_copy));
+    CHECK_STATUS(tds_merkle_memory_block_store_as_store(&memory, &store));
+    context = (concurrent_store_context){&store, &original, &original, false};
+    CHECK(run_concurrent_store_phase(&context));
+    CHECK_STATUS(tds_merkle_block_store_count(&store, &count));
+    CHECK(count == 1);
+    context = (concurrent_store_context){&store, &conflicting, &original, true};
+    CHECK(run_concurrent_store_phase(&context));
+    CHECK_STATUS(tds_merkle_block_store_count(&store, &count));
+    CHECK(count == 1);
+    CHECK_STATUS(tds_merkle_block_store_try_get(
+        &store,
+        digest,
+        &found,
+        &retained));
+    CHECK(found && tds_merkle_block_equal(&retained, &original));
+    /* The adapter remains usable through an owning copied handle. */
+    tds_merkle_memory_block_store_dispose(&memory);
+    CHECK_STATUS(tds_merkle_block_store_count(&store, &count));
+    CHECK(count == 1);
+    tds_merkle_memory_block_store_dispose(&owner_copy);
+    /* Store destruction cannot invalidate a snapshot already returned owned. */
+    CHECK(tds_merkle_block_byte_count(&retained) == 8 &&
+        memcmp(tds_merkle_block_bytes(&retained), "original", 8) == 0);
+    tds_merkle_block_dispose(&retained);
+    tds_merkle_block_dispose(&conflicting);
+    tds_merkle_block_dispose(&original);
+    return true;
+}
+
+typedef struct reentrant_store_allocator {
+    const tds_merkle_block_store *store;
+    bool inside_callback;
+    size_t allocation_calls;
+    size_t deallocation_calls;
+    size_t live_allocations;
+    size_t reentrant_store_calls;
+    size_t reentrant_failures;
+} reentrant_store_allocator;
+
+static void reentrant_store_probe(reentrant_store_allocator *state) {
+    if (state->store != NULL && !state->inside_callback) {
+        size_t count = SIZE_MAX;
+        state->inside_callback = true;
+        ++state->reentrant_store_calls;
+        if (tds_merkle_block_store_count(state->store, &count) != TDS_MERKLE_OK) {
+            ++state->reentrant_failures;
+        }
+        state->inside_callback = false;
+    }
+}
+
+static void *reentrant_store_allocate(size_t size, void *context) {
+    reentrant_store_allocator *state = (reentrant_store_allocator *)context;
+    void *allocation;
+    ++state->allocation_calls;
+    reentrant_store_probe(state);
+    allocation = malloc(size);
+    if (allocation != NULL) {
+        ++state->live_allocations;
+    }
+    return allocation;
+}
+
+static void reentrant_store_deallocate(void *allocation, void *context) {
+    reentrant_store_allocator *state = (reentrant_store_allocator *)context;
+    if (allocation != NULL) {
+        ++state->deallocation_calls;
+        reentrant_store_probe(state);
+        if (state->live_allocations == 0) {
+            abort();
+        }
+        --state->live_allocations;
+        free(allocation);
+    }
+}
+
+typedef struct reentrant_digest_visitor_state {
+    const tds_merkle_block_store *store;
+    digest_order_capture order;
+    size_t calls;
+} reentrant_digest_visitor_state;
+
+static tds_merkle_status reentrant_digest_visitor(
+    tds_merkle_digest digest,
+    void *context) {
+    reentrant_digest_visitor_state *state =
+        (reentrant_digest_visitor_state *)context;
+    size_t count = SIZE_MAX;
+    tds_merkle_status status = tds_merkle_block_store_count(
+        state->store,
+        &count);
+    if (status != TDS_MERKLE_OK) {
+        return status;
+    }
+    ++state->calls;
+    return capture_digest_order(digest, &state->order);
+}
+
+static bool test_memory_store_never_calls_user_code_under_lock(void) {
+    reentrant_store_allocator state = {0};
+    tds_merkle_allocator allocator = {
+        reentrant_store_allocate,
+        reentrant_store_deallocate,
+        &state};
+    tds_merkle_memory_block_store memory = {0};
+    tds_merkle_block_store store;
+    tds_merkle_digest digests[9] = {{{0}}};
+    reentrant_digest_visitor_state visitor_state;
+    size_t count = SIZE_MAX;
+    size_t index;
+    bool removed = false;
+    memset(&visitor_state, 0, sizeof(visitor_state));
+    visitor_state.order.sorted = true;
+    CHECK_STATUS(tds_merkle_memory_block_store_init(&memory, &allocator));
+    CHECK_STATUS(tds_merkle_memory_block_store_as_store(&memory, &store));
+    state.store = &store;
+    visitor_state.store = &store;
+    for (index = 0; index != 9; ++index) {
+        tds_merkle_block block = {0};
+        tds_merkle_store_put_result put_result;
+        size_t deallocations_before_put;
+        digests[index].bytes[0] = (unsigned char)(0x20 + index);
+        CHECK_STATUS(tds_merkle_block_init(
+            digests[index],
+            (const unsigned char *)"reentrant",
+            9,
+            &allocator,
+            &block));
+        deallocations_before_put = state.deallocation_calls;
+        CHECK_STATUS(tds_merkle_block_store_put(&store, &block, &put_result));
+        CHECK(put_result == TDS_MERKLE_STORE_ADDED);
+        if (index == 8) {
+            /* The ninth insert grows 8 -> 16 and retires the old array. */
+            CHECK(state.deallocation_calls > deallocations_before_put);
+        }
+        tds_merkle_block_dispose(&block);
+    }
+    CHECK_STATUS(tds_merkle_memory_block_store_visit_digests(
+        &memory,
+        reentrant_digest_visitor,
+        &visitor_state));
+    CHECK(visitor_state.calls == 9 && visitor_state.order.count == 9 &&
+        visitor_state.order.sorted);
+    CHECK_STATUS(tds_merkle_block_store_remove(
+        &store,
+        digests[4],
+        &removed));
+    CHECK(removed);
+    CHECK_STATUS(tds_merkle_block_store_count(&store, &count));
+    CHECK(count == 8);
+    CHECK_STATUS(tds_merkle_block_store_clear(&store));
+    CHECK_STATUS(tds_merkle_block_store_count(&store, &count));
+    CHECK(count == 0 && state.reentrant_store_calls >= 20 &&
+        state.reentrant_failures == 0);
+    /* Final-handle disposal ends adapter lifetime; disable deliberate reentry. */
+    state.store = NULL;
+    tds_merkle_memory_block_store_dispose(&memory);
+    CHECK(state.live_allocations == 0 &&
+        state.allocation_calls == state.deallocation_calls);
+    return true;
+}
+
+typedef struct failing_store_context {
+    const tds_merkle_block_store *inner;
+    size_t try_get_calls;
+    size_t fail_try_get_at;
+    size_t put_calls;
+    size_t fail_put_at;
+} failing_store_context;
+
+static tds_merkle_status failing_store_count(size_t *count, void *context) {
+    failing_store_context *state = (failing_store_context *)context;
+    return tds_merkle_block_store_count(state->inner, count);
+}
+
+static tds_merkle_status failing_store_contains(
+    tds_merkle_digest digest,
+    bool *contains,
+    void *context) {
+    failing_store_context *state = (failing_store_context *)context;
+    return tds_merkle_block_store_contains(state->inner, digest, contains);
+}
+
+static tds_merkle_status failing_store_try_get(
+    tds_merkle_digest digest,
+    bool *found,
+    tds_merkle_block *block,
+    void *context) {
+    failing_store_context *state = (failing_store_context *)context;
+    ++state->try_get_calls;
+    if (state->fail_try_get_at != 0 &&
+        state->try_get_calls == state->fail_try_get_at) {
+        return TDS_MERKLE_CALLBACK_FAILURE;
+    }
+    return tds_merkle_block_store_try_get(state->inner, digest, found, block);
+}
+
+static tds_merkle_status failing_store_put(
+    const tds_merkle_block *block,
+    tds_merkle_store_put_result *result,
+    void *context) {
+    failing_store_context *state = (failing_store_context *)context;
+    ++state->put_calls;
+    if (state->fail_put_at != 0 && state->put_calls == state->fail_put_at) {
+        return TDS_MERKLE_CALLBACK_FAILURE;
+    }
+    return tds_merkle_block_store_put(state->inner, block, result);
+}
+
+static tds_merkle_status failing_store_remove(
+    tds_merkle_digest digest,
+    bool *removed,
+    void *context) {
+    failing_store_context *state = (failing_store_context *)context;
+    return tds_merkle_block_store_remove(state->inner, digest, removed);
+}
+
+static tds_merkle_status failing_store_clear(void *context) {
+    failing_store_context *state = (failing_store_context *)context;
+    return tds_merkle_block_store_clear(state->inner);
+}
+
+static tds_merkle_status malicious_store_found_without_block(
+    tds_merkle_digest digest,
+    bool *found,
+    tds_merkle_block *block,
+    void *context) {
+    (void)digest;
+    (void)block;
+    (void)context;
+    *found = true;
+    return TDS_MERKLE_OK;
+}
+
+static tds_merkle_status malicious_store_ok_conflict(
+    const tds_merkle_block *block,
+    tds_merkle_store_put_result *result,
+    void *context) {
+    (void)block;
+    (void)context;
+    *result = TDS_MERKLE_STORE_CONFLICT;
+    return TDS_MERKLE_OK;
+}
+
+static tds_merkle_block_store make_failing_store(failing_store_context *context) {
+    tds_merkle_block_store result = {
+        failing_store_count,
+        failing_store_contains,
+        failing_store_try_get,
+        failing_store_put,
+        failing_store_remove,
+        failing_store_clear,
+        context};
+    return result;
+}
+
+static tds_merkle_status fail_merge_resolver(
+    tds_merkle_three_way_merge_conflict_ref conflict,
+    tds_merkle_merge_resolution *resolution,
+    void *context) {
+    (void)conflict;
+    (void)resolution;
+    (void)context;
+    return TDS_MERKLE_CALLBACK_FAILURE;
+}
+
+static bool test_persistence_allocation_failure_sweeps(void) {
+    counting_allocator allocator = {0};
+    tds_merkle_policy_config config;
+    tds_merkle_policy policy = {0};
+    tds_merkle_search_tree tree = {0};
+    tds_merkle_search_tree local = {0};
+    tds_merkle_search_tree left = {0};
+    tds_merkle_search_tree right = {0};
+    tds_merkle_memory_block_store source_memory = {0};
+    tds_merkle_memory_block_store destination_memory = {0};
+    tds_merkle_memory_block_store empty_memory = {0};
+    tds_merkle_block_store source_store;
+    tds_merkle_block_store destination_store;
+    tds_merkle_block_store empty_store;
+    tds_merkle_block_pack pack = {0};
+    tds_merkle_proof verification_proof = {0};
+    tds_merkle_verification_error error;
+    size_t added;
+    size_t failure_index;
+    size_t baseline_live;
+    bool saw_success;
+    int32_t key = 7;
+    int32_t minimum = 2;
+    int32_t maximum = 18;
+    int32_t left_value = 700;
+    int32_t right_value = 701;
+    configure_i32_policy(&config, "c-persistence-failpoint-i32-v1");
+    config.allocator.allocate = counting_allocate;
+    config.allocator.deallocate = counting_deallocate;
+    config.allocator.context = &allocator;
+    CHECK_STATUS(tds_merkle_policy_create(&config, &policy));
+    CHECK_STATUS(make_i32_sequence_tree(&policy, 24, &tree));
+    CHECK_STATUS(tds_merkle_search_tree_init(&local, &policy));
+    CHECK_STATUS(tds_merkle_search_tree_copy(&tree, &left));
+    CHECK_STATUS(tds_merkle_search_tree_copy(&tree, &right));
+    CHECK_STATUS(tds_merkle_search_tree_set(&left, &key, &left_value, &left));
+    CHECK_STATUS(tds_merkle_search_tree_set(&right, &key, &right_value, &right));
+    CHECK_STATUS(tds_merkle_memory_block_store_init(&source_memory, NULL));
+    CHECK_STATUS(tds_merkle_memory_block_store_init(&destination_memory, NULL));
+    CHECK_STATUS(tds_merkle_memory_block_store_init(&empty_memory, NULL));
+    CHECK_STATUS(tds_merkle_memory_block_store_as_store(&source_memory, &source_store));
+    CHECK_STATUS(tds_merkle_memory_block_store_as_store(
+        &destination_memory,
+        &destination_store));
+    CHECK_STATUS(tds_merkle_memory_block_store_as_store(&empty_memory, &empty_store));
+    CHECK_STATUS(tds_merkle_search_tree_save(&tree, &source_store, &added, &error));
+    CHECK_STATUS(tds_merkle_search_tree_export_pack(&tree, &pack));
+    CHECK_STATUS(tds_merkle_search_tree_create_proof(
+        &tree,
+        &key,
+        &verification_proof));
+    baseline_live = allocator.live;
+
+    saw_success = false;
+    for (failure_index = 1; failure_index != 2048; ++failure_index) {
+        tds_merkle_block_pack result = {0};
+        tds_merkle_status status;
+        allocator.attempts = 0;
+        allocator.fail_at = failure_index;
+        status = tds_merkle_search_tree_export_pack(&tree, &result);
+        allocator.fail_at = 0;
+        if (status == TDS_MERKLE_OK) {
+            tds_merkle_block_pack_dispose(&result);
+            CHECK(allocator.live == baseline_live);
+            saw_success = true;
+            break;
+        }
+        CHECK(status == TDS_MERKLE_NO_MEMORY && result.rep == NULL &&
+            allocator.live == baseline_live);
+    }
+    CHECK(saw_success);
+
+    saw_success = false;
+    for (failure_index = 1; failure_index != 2048; ++failure_index) {
+        tds_merkle_proof_verification_result result = {
+            true,
+            TDS_MERKLE_VERIFY_NONE,
+            true,
+            {{0}},
+            777,
+            888};
+        tds_merkle_status status;
+        allocator.attempts = 0;
+        allocator.fail_at = failure_index;
+        status = tds_merkle_search_tree_verify_proof(
+            &verification_proof,
+            &policy,
+            NULL,
+            &result);
+        allocator.fail_at = 0;
+        if (status == TDS_MERKLE_OK) {
+            CHECK(result.is_valid && allocator.live == baseline_live);
+            saw_success = true;
+            break;
+        }
+        CHECK(status == TDS_MERKLE_NO_MEMORY && result.is_valid &&
+            result.verified_block_count == 777 &&
+            result.verified_byte_count == 888 &&
+            allocator.live == baseline_live);
+    }
+    CHECK(saw_success);
+
+    saw_success = false;
+    for (failure_index = 1; failure_index != 2048; ++failure_index) {
+        tds_merkle_proof result = {0};
+        tds_merkle_status status;
+        allocator.attempts = 0;
+        allocator.fail_at = failure_index;
+        status = tds_merkle_search_tree_create_proof(&tree, &key, &result);
+        allocator.fail_at = 0;
+        if (status == TDS_MERKLE_OK) {
+            tds_merkle_proof_dispose(&result);
+            CHECK(allocator.live == baseline_live);
+            saw_success = true;
+            break;
+        }
+        CHECK(status == TDS_MERKLE_NO_MEMORY && result.rep == NULL &&
+            allocator.live == baseline_live);
+    }
+    CHECK(saw_success);
+
+    saw_success = false;
+    for (failure_index = 1; failure_index != 4096; ++failure_index) {
+        tds_merkle_proof result = {0};
+        tds_merkle_status status;
+        allocator.attempts = 0;
+        allocator.fail_at = failure_index;
+        status = tds_merkle_search_tree_create_range_proof(
+            &tree,
+            &minimum,
+            &maximum,
+            &result);
+        allocator.fail_at = 0;
+        if (status == TDS_MERKLE_OK) {
+            tds_merkle_proof_dispose(&result);
+            CHECK(allocator.live == baseline_live);
+            saw_success = true;
+            break;
+        }
+        CHECK(status == TDS_MERKLE_NO_MEMORY && result.rep == NULL &&
+            allocator.live == baseline_live);
+    }
+    CHECK(saw_success);
+
+    saw_success = false;
+    for (failure_index = 1; failure_index != 4096; ++failure_index) {
+        tds_merkle_search_tree result = {0};
+        tds_merkle_status status;
+        allocator.attempts = 0;
+        allocator.fail_at = failure_index;
+        status = tds_merkle_search_tree_load(
+            tds_merkle_search_tree_root_hash(&tree),
+            &policy,
+            &source_store,
+            NULL,
+            &result,
+            &error);
+        allocator.fail_at = 0;
+        if (status == TDS_MERKLE_OK) {
+            tds_merkle_search_tree_dispose(&result);
+            CHECK(allocator.live == baseline_live);
+            saw_success = true;
+            break;
+        }
+        CHECK(status == TDS_MERKLE_NO_MEMORY && result.policy == NULL &&
+            allocator.live == baseline_live);
+    }
+    CHECK(saw_success);
+
+    saw_success = false;
+    for (failure_index = 1; failure_index != 4096; ++failure_index) {
+        tds_merkle_search_tree result = {0};
+        tds_merkle_status status;
+        size_t destination_count = SIZE_MAX;
+        CHECK_STATUS(tds_merkle_block_store_clear(&destination_store));
+        allocator.attempts = 0;
+        allocator.fail_at = failure_index;
+        status = tds_merkle_search_tree_import_pack(
+            &pack,
+            &policy,
+            &destination_store,
+            NULL,
+            &result,
+            &error);
+        allocator.fail_at = 0;
+        if (status == TDS_MERKLE_OK) {
+            tds_merkle_search_tree_dispose(&result);
+            CHECK_STATUS(tds_merkle_block_store_clear(&destination_store));
+            CHECK(allocator.live == baseline_live);
+            saw_success = true;
+            break;
+        }
+        CHECK(status == TDS_MERKLE_NO_MEMORY && result.policy == NULL);
+        CHECK_STATUS(tds_merkle_block_store_count(
+            &destination_store,
+            &destination_count));
+        CHECK(destination_count == 0 && allocator.live == baseline_live);
+    }
+    CHECK(saw_success);
+
+    saw_success = false;
+    for (failure_index = 1; failure_index != 2048; ++failure_index) {
+        tds_merkle_block_pack result = {0};
+        tds_merkle_status status;
+        allocator.attempts = 0;
+        allocator.fail_at = failure_index;
+        status = tds_merkle_search_tree_create_sync_pack(
+            &tree,
+            &empty_store,
+            &result);
+        allocator.fail_at = 0;
+        if (status == TDS_MERKLE_OK) {
+            tds_merkle_block_pack_dispose(&result);
+            CHECK(allocator.live == baseline_live);
+            saw_success = true;
+            break;
+        }
+        CHECK(status == TDS_MERKLE_NO_MEMORY && result.rep == NULL &&
+            allocator.live == baseline_live);
+    }
+    CHECK(saw_success);
+
+    saw_success = false;
+    for (failure_index = 1; failure_index != 2048; ++failure_index) {
+        tds_merkle_sync_plan result = {0};
+        tds_merkle_status status;
+        allocator.attempts = 0;
+        allocator.fail_at = failure_index;
+        status = tds_merkle_search_tree_plan_sync(
+            &tree,
+            &local,
+            &empty_store,
+            &result);
+        allocator.fail_at = 0;
+        if (status == TDS_MERKLE_OK) {
+            tds_merkle_sync_plan_dispose(&result);
+            CHECK(allocator.live == baseline_live);
+            saw_success = true;
+            break;
+        }
+        CHECK(status == TDS_MERKLE_NO_MEMORY && result.rep == NULL &&
+            allocator.live == baseline_live);
+    }
+    CHECK(saw_success);
+
+    saw_success = false;
+    for (failure_index = 1; failure_index != 4096; ++failure_index) {
+        tds_merkle_three_way_merge_result result = {0};
+        tds_merkle_status status;
+        allocator.attempts = 0;
+        allocator.fail_at = failure_index;
+        status = tds_merkle_search_tree_merge(
+            &tree,
+            &left,
+            &right,
+            NULL,
+            NULL,
+            &result);
+        allocator.fail_at = 0;
+        if (status == TDS_MERKLE_OK) {
+            CHECK(!tds_merkle_three_way_merge_result_success(&result));
+            tds_merkle_three_way_merge_result_dispose(&result);
+            CHECK(allocator.live == baseline_live);
+            saw_success = true;
+            break;
+        }
+        CHECK(status == TDS_MERKLE_NO_MEMORY && result.rep == NULL &&
+            allocator.live == baseline_live);
+    }
+    CHECK(saw_success);
+
+    tds_merkle_proof_dispose(&verification_proof);
+    tds_merkle_block_pack_dispose(&pack);
+    tds_merkle_memory_block_store_dispose(&empty_memory);
+    tds_merkle_memory_block_store_dispose(&destination_memory);
+    tds_merkle_memory_block_store_dispose(&source_memory);
+    tds_merkle_search_tree_dispose(&right);
+    tds_merkle_search_tree_dispose(&left);
+    tds_merkle_search_tree_dispose(&local);
+    tds_merkle_search_tree_dispose(&tree);
+    tds_merkle_policy_dispose(&policy);
+    CHECK(allocator.live == 0);
+    return true;
+}
+
+static bool test_persistence_callback_failures_leave_no_result(void) {
+    tds_merkle_policy source_policy = {0};
+    tds_merkle_policy bomb_policy = {0};
+    tds_merkle_policy compare_policy = {0};
+    tds_merkle_policy_config config;
+    tds_merkle_search_tree source = {0};
+    tds_merkle_search_tree base = {0};
+    tds_merkle_search_tree left = {0};
+    tds_merkle_search_tree right = {0};
+    tds_merkle_memory_block_store memory = {0};
+    tds_merkle_memory_block_store failed_destination_memory = {0};
+    tds_merkle_block_store store;
+    tds_merkle_block_store failed_destination_store;
+    tds_merkle_block_store failing_store;
+    failing_store_context store_state;
+    bomb_codec_state key_codec;
+    bomb_codec_state value_codec;
+    failing_compare_state compare_state = {false};
+    tds_merkle_proof proof = {0};
+    tds_merkle_verification_error error;
+    size_t added;
+    int32_t conflict_key = 3;
+    int32_t left_value = 301;
+    int32_t right_value = 302;
+    CHECK_STATUS(make_i32_policy("c-persistence-callback-i32-v1", &source_policy));
+    CHECK_STATUS(make_i32_sequence_tree(&source_policy, 24, &source));
+    CHECK_STATUS(tds_merkle_memory_block_store_init(&memory, NULL));
+    CHECK_STATUS(tds_merkle_memory_block_store_init(
+        &failed_destination_memory,
+        NULL));
+    CHECK_STATUS(tds_merkle_memory_block_store_as_store(&memory, &store));
+    CHECK_STATUS(tds_merkle_memory_block_store_as_store(
+        &failed_destination_memory,
+        &failed_destination_store));
+    CHECK_STATUS(tds_merkle_search_tree_save(&source, &store, &added, &error));
+    CHECK_STATUS(tds_merkle_search_tree_create_proof(
+        &source,
+        &conflict_key,
+        &proof));
+
+    configure_i32_policy(&config, "c-persistence-callback-i32-v1");
+    install_bomb_codec(&config.key_codec, &key_codec);
+    install_bomb_codec(&config.value_codec, &value_codec);
+    CHECK_STATUS(tds_merkle_policy_create(&config, &bomb_policy));
+    key_codec.fail_decode = true;
+    {
+        tds_merkle_proof_verification_result result = {
+            true,
+            TDS_MERKLE_VERIFY_NONE,
+            true,
+            {{0}},
+            91,
+            92};
+        CHECK(tds_merkle_search_tree_verify_proof(
+            &proof,
+            &bomb_policy,
+            NULL,
+            &result) == TDS_MERKLE_CALLBACK_FAILURE);
+        CHECK(result.is_valid && result.verified_block_count == 91 &&
+            result.verified_byte_count == 92);
+    }
+    {
+        tds_merkle_search_tree result = {0};
+        CHECK(tds_merkle_search_tree_load(
+            tds_merkle_search_tree_root_hash(&source),
+            &bomb_policy,
+            &store,
+            NULL,
+            &result,
+            &error) == TDS_MERKLE_CALLBACK_FAILURE);
+        CHECK(result.policy == NULL);
+    }
+    key_codec.fail_decode = false;
+    key_codec.fail_encode = true;
+    {
+        tds_merkle_search_tree result = {0};
+        CHECK(tds_merkle_search_tree_load(
+            tds_merkle_search_tree_root_hash(&source),
+            &bomb_policy,
+            &store,
+            NULL,
+            &result,
+            &error) == TDS_MERKLE_CALLBACK_FAILURE);
+        CHECK(result.policy == NULL);
+    }
+    key_codec.fail_encode = false;
+
+    configure_i32_policy(&config, "c-persistence-callback-i32-v1");
+    config.key_compare = failing_compare;
+    config.key_compare_context = &compare_state;
+    CHECK_STATUS(tds_merkle_policy_create(&config, &compare_policy));
+    compare_state.fail = true;
+    {
+        tds_merkle_search_tree result = {0};
+        CHECK(tds_merkle_search_tree_load(
+            tds_merkle_search_tree_root_hash(&source),
+            &compare_policy,
+            &store,
+            NULL,
+            &result,
+            &error) == TDS_MERKLE_CALLBACK_FAILURE);
+        CHECK(result.policy == NULL);
+    }
+
+    memset(&store_state, 0, sizeof(store_state));
+    store_state.inner = &store;
+    store_state.fail_try_get_at = 1;
+    failing_store = make_failing_store(&store_state);
+    {
+        tds_merkle_search_tree result = {0};
+        CHECK(tds_merkle_search_tree_load(
+            tds_merkle_search_tree_root_hash(&source),
+            &source_policy,
+            &failing_store,
+            NULL,
+            &result,
+            &error) == TDS_MERKLE_CALLBACK_FAILURE);
+        CHECK(result.policy == NULL && store_state.try_get_calls == 1);
+    }
+
+    memset(&store_state, 0, sizeof(store_state));
+    store_state.inner = &store;
+    failing_store = make_failing_store(&store_state);
+    failing_store.try_get = malicious_store_found_without_block;
+    {
+        tds_merkle_search_tree result = {0};
+        bool found = false;
+        tds_merkle_block block = {0};
+        CHECK(tds_merkle_block_store_try_get(
+            &failing_store,
+            tds_merkle_search_tree_root_hash(&source),
+            &found,
+            &block) == TDS_MERKLE_CALLBACK_FAILURE);
+        CHECK(!found && block.rep == NULL);
+        CHECK(tds_merkle_search_tree_load(
+            tds_merkle_search_tree_root_hash(&source),
+            &source_policy,
+            &failing_store,
+            NULL,
+            &result,
+            &error) == TDS_MERKLE_CALLBACK_FAILURE);
+        CHECK(result.policy == NULL);
+    }
+    {
+        tds_merkle_block root_block = {0};
+        bool found = false;
+        tds_merkle_store_put_result put_result = TDS_MERKLE_STORE_ADDED;
+        CHECK_STATUS(tds_merkle_block_store_try_get(
+            &store,
+            tds_merkle_search_tree_root_hash(&source),
+            &found,
+            &root_block));
+        CHECK(found);
+        failing_store.put = malicious_store_ok_conflict;
+        CHECK(tds_merkle_block_store_put(
+            &failing_store,
+            &root_block,
+            &put_result) == TDS_MERKLE_CALLBACK_FAILURE);
+        CHECK(put_result == TDS_MERKLE_STORE_ADDED);
+        tds_merkle_block_dispose(&root_block);
+    }
+
+    CHECK_STATUS(tds_merkle_search_tree_copy(&source, &base));
+    CHECK_STATUS(tds_merkle_search_tree_copy(&source, &left));
+    CHECK_STATUS(tds_merkle_search_tree_copy(&source, &right));
+    CHECK_STATUS(tds_merkle_search_tree_set(
+        &left,
+        &conflict_key,
+        &left_value,
+        &left));
+    CHECK_STATUS(tds_merkle_search_tree_set(
+        &right,
+        &conflict_key,
+        &right_value,
+        &right));
+    {
+        tds_merkle_three_way_merge_result result = {0};
+        CHECK(tds_merkle_search_tree_merge(
+            &base,
+            &left,
+            &right,
+            fail_merge_resolver,
+            NULL,
+            &result) == TDS_MERKLE_CALLBACK_FAILURE);
+        CHECK(result.rep == NULL);
+    }
+
+    memset(&store_state, 0, sizeof(store_state));
+    store_state.inner = &failed_destination_store;
+    store_state.fail_put_at = 1;
+    failing_store = make_failing_store(&store_state);
+    added = SIZE_MAX;
+    CHECK(tds_merkle_search_tree_save(
+        &source,
+        &failing_store,
+        &added,
+        &error) == TDS_MERKLE_CALLBACK_FAILURE);
+    CHECK(added == SIZE_MAX && store_state.put_calls == 1);
+    {
+        size_t destination_count = SIZE_MAX;
+        CHECK_STATUS(tds_merkle_block_store_count(
+            &failed_destination_store,
+            &destination_count));
+        CHECK(destination_count == 0);
+    }
+
+    tds_merkle_proof_dispose(&proof);
+    tds_merkle_search_tree_dispose(&right);
+    tds_merkle_search_tree_dispose(&left);
+    tds_merkle_search_tree_dispose(&base);
+    tds_merkle_policy_dispose(&compare_policy);
+    tds_merkle_policy_dispose(&bomb_policy);
+    tds_merkle_memory_block_store_dispose(&failed_destination_memory);
+    tds_merkle_memory_block_store_dispose(&memory);
+    tds_merkle_search_tree_dispose(&source);
+    tds_merkle_policy_dispose(&source_policy);
+    return true;
+}
+
 int main(void) {
     static const test_case tests[] = {
         {"digest and built-in codecs", test_digest_and_builtin_codecs},
@@ -1337,8 +3577,20 @@ int main(void) {
         {"streaming visitor failures", test_streaming_visitor_failures},
         {"randomized model and snapshots", test_randomized_model_and_snapshots},
         {"concurrent retained snapshot reads", test_concurrent_retained_snapshot_reads},
+        {"verified persistence store and iterative sync", test_verified_persistence_store_and_iterative_sync},
+        {"MSP2 proofs and budget preflight", test_msp2_proofs_and_budget_preflight},
+        {"all budgets import closure and preflight", test_all_budgets_import_closure_and_preflight},
+        {"MSP2 structural tamper and bomb precedence", test_msp2_structural_tamper_and_bomb_precedence},
+        {"three-way merge results and policy identity", test_three_way_merge_results_and_policy_identity},
+        {"merge present null is not deletion", test_merge_present_null_is_not_deletion},
+        {"concurrent memory store puts and owned snapshots", test_concurrent_memory_store_puts_and_owned_snapshots},
+        {"memory store never calls user code under lock", test_memory_store_never_calls_user_code_under_lock},
+        {"persistence allocation failure sweeps", test_persistence_allocation_failure_sweeps},
+        {"persistence callback failures leave no result", test_persistence_callback_failures_leave_no_result},
     };
     size_t index;
+    (void)setvbuf(stdout, NULL, _IONBF, 0);
+    (void)setvbuf(stderr, NULL, _IONBF, 0);
     for (index = 0; index != sizeof(tests) / sizeof(tests[0]); ++index) {
         if (!tests[index].run()) {
             fprintf(stderr, "[FAIL] %s\n", tests[index].name);

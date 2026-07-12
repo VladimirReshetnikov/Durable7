@@ -9,7 +9,7 @@
 For practical policy setup and lifetime examples, start with the [usage guide](usage.md).
 The ordered content-addressed family has its own exact
 [Merkle search tree specification](merkle-search-tree.md), including the MST2 wire bytes and
-fallible ownership hooks.
+fallible ownership hooks, verified persistence, MSP2 proofs, synchronization, and three-way merge.
 
 ## Overview
 
@@ -28,11 +28,36 @@ every unary prefix path into a branch prefix plus its highest differing bit.
 `tds_merkle_search_tree` is a separate persistent ordered family. It assigns keys deterministic
 SHA-256 layers, groups same-layer separators into canonical wide blocks, and preserves exact
 cross-language content addresses. Unlike the borrowed-pointer HAMT defaults, its type-erased policy
-always materializes owned stored representatives and canonical encoded bytes.
+always materializes owned stored representatives and canonical encoded bytes. Its persistence API
+uses atomic owning handles for blocks, packs, proofs, sync plans, and merge results, plus a generic
+callback block-store interface and synchronized in-memory implementation. Store wrappers publish
+outputs only for valid owning/status combinations; the memory implementation never invokes user
+allocator, deallocator, block-destruction, or visitor callbacks while holding its lock.
 
 The C API is type-erased. Keys, values, and set items are `void *` payloads interpreted by policy
 callbacks. A policy may simply store borrowed pointers, or it may retain/release payloads to give
 collections ownership of copied or reference-counted objects.
+
+## Merkle Persistence Contract
+
+The Merkle status family distinguishes operational failure from untrusted verification failure.
+`TDS_MERKLE_VERIFICATION_FAILURE` is accompanied by a structured failure kind and verified
+block/byte counters. Load/import enforce seven caller-configurable limits before publication and
+validate digest, domain, canonical codec round trips, key layers/order, child bounds, subtree counts,
+and exact reconstructed MST2 bytes. Import verifies the declared root closure before destination
+preflight and writes; authenticated unreachable supplied blocks remain legal partial-sync state.
+
+Point/nonmembership/range proofs bind canonical `MSP2` query bytes to an ordered set of MST2 blocks
+and exact expanded-child indexes. Query, step, and expansion limits precede allocator, hash, codec,
+and comparator work. Invalid untrusted proofs return `TDS_MERKLE_OK` with `is_valid == false`;
+allocator or callback failure remains a non-OK operational status.
+
+Three-way merge requires the exact same policy representation across base/left/right because it
+reuses typed entry objects. Absence is represented by `present == false`; a nullable value whose
+wrapper is present but contains semantic null remains distinct. Unresolved conflicts are a normal
+owned result (`TDS_MERKLE_OK`, `success == false`, no tree), not an error status. See the dedicated
+[Merkle specification](merkle-search-tree.md) for the full store, ownership, sync, and complexity
+contracts.
 
 ## Patricia Integer Contract
 
