@@ -59,7 +59,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | CHAMP canonicalization + structural equality/diff | 1 | Strong (implemented across all six languages) | Completed with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
 | `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all six languages) | Completed as proposal Tier C1 | 1 shared core, 4 C# public types, structural map/set algebra |
 | DABA Lite sliding-window aggregator | 1, 3 | Strong (implemented in every applicable language: C#, C, C++, Kotlin/JVM, and Rust; pure Haskell is not applicable) | Reuses the language's monoid abstraction | 1 small type, ~8 members |
-| Merkle search tree | 1 | Strong (C# and Rust complete; C, C++, Haskell, and Kotlin/JVM core/wire implemented) | Completed in full ports: deterministic wire + bounded verification | Largest single item in this catalog |
+| Merkle search tree | 1 | Strong (C#, Kotlin/JVM, and Rust complete; C, C++, and Haskell core/wire implemented) | Completed in full ports: deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
 | Zip tree (canonical sorted set) | 1, 3 | Plausible (implemented across all six languages) | Completed: coherent keyed rank policy | 1 new core, set facade |
 | Brodal-Okasaki heap | 1 | Plausible (implemented across all six languages for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
@@ -348,18 +348,18 @@ visitor failure, fail-at-every-allocation/callback sweeps, stable representative
 reader threads. MSVC Debug/Release, strict GCC/Clang, and the Clang static analyzer are clean. The
 current header deliberately exposes no store, untrusted load/import, proof, sync, or merge claims.
 
-**Kotlin/JVM status (2026-07-12): Core and exact wire implemented with managed reference parity;
-persistence tier remains.** `MerkleSearchTree<K, V>` retains caller key/value objects and immutable
-canonical byte snapshots in path-copied wide nodes. `MerkleSearchTreePolicy<K, V>` uses JVM SHA-256
-and strict integer, nullable UTF-8/bytes, and RFC-4122 UUID codecs to reproduce the common domain,
-empty root, key levels, and complete `MST2` blocks. Stable first-key/last-value grouping, encoded-
-equal identity no-ops, lazy interval-pruned ranges, aligned-digest diff, exact blocks/shape, identity
-sharing diagnostics, and a validator that re-encodes every retained object complete the core. Ten
-focused groups cover the shared golden block, 4,096-entry opposite histories, 8,193-entry path
-sharing, a 12,000-operation retained `TreeMap` model, exact five-level adversarial insertion/removal,
-eight churn histories, nullable values, mutable-representative rejection, and eight JVM readers.
-The Hamt suite is warning-clean under Kotlin 2.4 `-Werror`; store, bounded verification, proof, sync,
-and merge APIs are not yet claimed.
+**Kotlin/JVM status (2026-07-12): Implemented through the complete persistence tier with managed
+reference parity and exact wire compatibility.** `MerkleSearchTree<K, V>` retains caller objects
+and immutable canonical byte snapshots in path-copied wide nodes. The persistence surface adds
+immutable blocks and packs, a concurrent memory store, seven finite verification limits, bounded
+verified load/import, exact `MSP2` point/range proofs, iterative frontier repair and closure-pruned
+sync packs, and typed present-null-aware three-way merge that withholds partial conflicted trees.
+Query and proof-shape limits run before verifier allocation, hashing, or codec work; import verifies
+all supplied blocks and its requested root closure before destination conflict preflight and first
+publication. Twenty-four focused Merkle groups cover the shared golden wire, histories, retained
+sharing, malformed/noncanonical closures, every budget, proof tampering, partial-store repair,
+atomic conflict handling, nullable merge states, and concurrent readers. The complete Kotlin
+HAMT/FingerTree/Tungsten gate is warning-clean under Kotlin 2.4 `-Werror`.
 
 **C++ status (2026-07-12): Core and exact wire implemented with header-first native value
 semantics; persistence tier remains.** `merkle_search_tree<K, V>` binds shared comparator/codec
@@ -1028,7 +1028,8 @@ CHAMP, Patricia, and RRB have also advanced through the sibling-language work re
 entries; the canonical zip-zip set, Brodal-Okasaki heap, and priority-search queue are implemented
 across all six languages, and DABA Lite now exists in every applicable imperative
 language (C#, C, C++, Kotlin/JVM, and Rust). The Ctrie's deliberate parity boundary remains C# and
-Kotlin/JVM. These are current-state implementation records, not candidates awaiting a consumer.
+Kotlin/JVM. The Merkle search tree's full trust-boundary tier is complete in C#, Kotlin/JVM, and
+Rust, with the remaining language checkpoints recorded above. These are current-state implementation records, not candidates awaiting a consumer.
 Future work on them is ordinary hardening, measurement, and demand-driven porting.
 
 ### Remaining candidate sequencing
