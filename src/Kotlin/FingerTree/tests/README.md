@@ -23,6 +23,14 @@ Coverage groups:
 - counting-comparator guards over 65,536-element sorted collections proving bag counting bounds,
   set rank/neighbor navigation, and keyed map lookup each finish within one logarithmic descent;
 - `PriorityQueue` stable minimum-priority dequeue and meld;
+- `BrodalOkasakiHeap` fused-boundary/rank invariants, 4,096-element adversarial drains, a
+  20,000-operation branching retained multiset, comparer-equivalent representatives, exact
+  comparator-identity/no-op sharing, nullable minimums, logarithmic identity retention, comparison
+  ceilings through 65,536 elements, and concurrent immutable readers;
+- `PrioritySearchQueue` replacement and first-key semantics, all AVL rotation/deletion paths, a
+  50,000-key ascending stress, a 20,000-operation retained keyed model, winner/key-order ties,
+  exact no-op and far-subtree identity, range/threshold pruning comparison equations, invalid
+  ranges, nullable key/priority/payload result semantics, and concurrent immutable readers;
 - `IntervalTree` closed overlap, containment, removal, and coalescing;
 - `RrbVector` radix boundaries, regular/relaxed layouts, unequal-height and adversarial
   concatenation, exact leaf sharing, split/insert/remove/pop, 10,000 randomized edits with retained

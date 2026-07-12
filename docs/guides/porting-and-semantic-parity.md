@@ -252,6 +252,11 @@ For finger-tree-family changes, verify these contracts across the relevant C#, C
   measure-before values where the API exposes them.
 - Sorted bag/set/map rank, duplicate, comparer, and range semantics match the local API notes.
 - Priority queues preserve the documented priority ordering and equal-priority tie behavior.
+- Brodal-Okasaki heap ports preserve comparator-identity-gated meld, concrete representatives,
+  O(1) worst-case insert/meld/minimum, logarithmic delete-min, and immutable snapshot sharing.
+- Priority-search-queue ports preserve first equivalent key representatives, exact no-op reuse,
+  priority-then-key winner ordering, nullable-safe result shapes where needed, and winner-pruned
+  inclusive key-range/priority-threshold traversal over one persistent balanced tree.
 - Interval trees use the documented endpoint comparison, overlap, containment, and removal rules.
 - Ropes preserve chunked persistence, split/concat/indexing semantics, and text newline navigation
   rules where exposed.

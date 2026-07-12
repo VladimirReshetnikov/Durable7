@@ -16,11 +16,15 @@ difference.
   `FingerTree<T, M>`, `RrbVector<T>`, `CanonicalSortedSet<T>`, `DabaLite<T>`, measure/monoid policies, sorted facades,
   priority queues, interval trees, ropes, text helpers, Kotlin result shapes, comparator policy
   behavior, measured-tree/RRB persistence, and complexity.
+- [Priority-core notes](priority-cores.md) specify the bootstrapped skew-binomial
+  `BrodalOkasakiHeap<T>` and winner-cached AVL `PrioritySearchQueue<K, P, V>`, including comparator
+  identity, representative/tie rules, operation bounds, validation, and the JVM audit boundary.
 - [Validation](validation.md) records the `src/Kotlin/build.ps1` command shape, local JDK and Kotlin
   compiler bootstrap behavior, generated-output locations, and executable-test coverage boundary.
 - [Tests README](../tests/README.md) maps deterministic coverage for deque operations, reversible
   orientation, measured splits, sorted facades, priority queues, intervals, ropes, measured ropes, text
-  helpers, RRB vectors/builders, canonical zip-zip policies/trees, and adversarial DABA Lite schedules.
+  helpers, RRB vectors/builders, canonical zip-zip policies/trees, Brodal/PSQ adversarial histories,
+  and DABA Lite schedules.
 
 ## Related Repository Docs
 

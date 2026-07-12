@@ -66,8 +66,29 @@ Counting-comparator coverage proves digest inequality returns before semantic co
 readers exercise lazy digest publication. A local reflection-injected cached-count fault verifies
 that structural validation rejects corrupted metadata.
 
+Brodal-Okasaki validation drains ascending, descending, equal-priority, and melded 4,096-element
+shapes while decoding every fused forest boundary. A 20,000-operation branching multiset history
+revisits retained roots; representative ties, comparator-identity rejection, nullable minimum, and
+exact empty-meld/no-op sharing have dedicated cases. Comparison counters through 65,536 elements
+enforce zero comparisons for minimum/iteration, one through five for insert/meld, and the audited
+`32 * log2(n) + 8` delete-min ceiling. A large deletion must share all but logarithmically many tree
+objects, and concurrent readers traverse retained snapshots.
+
+Priority-search validation drives every AVL rotation direction, deletion rebalancing, and a
+50,000-key ascending construction. A 20,000-operation keyed model retains and later rechecks every
+snapshot. Tests distinguish comparator equality from object equality for replacement no-ops,
+preserve first key representatives, enforce key-order tie deletion, and quantify off-path sharing.
+Counting comparators prove an impossible threshold prunes at the root and an exact-key range visits
+at most one AVL path with the expected comparison equation; mixed range/threshold queries remain
+in key order. Custom nullable key/priority comparators prove entry lookup, minimum views, removal
+results, and exact no-ops remain unambiguous when all three stored fields are null. Concurrent
+readers exercise lookup, iteration, winners, and pruned queries.
+
 This workspace has no Kotlin benchmark harness. The executable suite deliberately includes the
 4,096-node degeneracy case, 12,000-node concurrent digest case, and 15,000-command model as workload
 and complexity guardrails, but it does not report timings. Comparative canonical-set benchmarks live
 in the C# BenchmarkDotNet workspace; a Kotlin timing harness should be added only with a reproducible
 JMH setup rather than embedding stopwatch assertions in correctness tests.
+Likewise, the JVM Brodal audit does not copy C# allocated-byte ceilings: HotSpot object layout,
+escape analysis, tiered compilation, and collector choice make them non-portable. Exact comparison
+counts and identity-sharing bounds are the deterministic JVM substitutes.

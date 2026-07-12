@@ -13,6 +13,8 @@ names for the public families:
   min/max, and product policies;
 - `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>`;
 - `PriorityQueue<T, P>` and `PriorityEntry<T, P>`;
+- `BrodalOkasakiHeap<T>`, `BrodalMinimumView<T>`, and `BrodalOkasakiHeapStatistics`;
+- `PrioritySearchQueue<K, P, V>`, `PrioritySearchEntry<K, P, V>`, and result/statistics types;
 - `Interval<T>` and `IntervalTree<T>`;
 - `RrbVector<T>` and its append-only `RrbVector.Builder<T>`;
 - `ZipTreeRankPolicy<T>`, `CanonicalSortedSet<T>`, and `CanonicalSortedSetStatistics`;
@@ -53,6 +55,17 @@ whole active chain in O(1), retired slots/chunks are released promptly, and `val
 audits links, cursor/region invariants, and capacity statistics without invoking the monoid. One
 instance must not be accessed concurrently without external serialization.
 
+`BrodalOkasakiHeap<T>` directly implements the bootstrapped skew-binomial heap: its global
+rank-zero root stores the minimum and its child list fuses primitive skew-tree children with an
+embedded heap forest. Minimum, insert, and meld are O(1) worst-case; minimum deletion is O(log n).
+Custom heaps meld only when they retain the same comparator object. The validator decodes every
+fused boundary and checks ranks, heap order, logical count, and depth.
+
+`PrioritySearchQueue<K, P, V>` is a separate winner-cached persistent AVL core. It retains one
+entry per ordered key, preserves the first equivalent key representative, breaks priority ties by
+key order, and provides O(1) minimum plus O(log n) keyed updates and minimum deletion. Its inclusive
+key-range/priority-threshold sequence prunes subtrees by cached winner and remains key ordered.
+
 `MeasuredRope` exposes the same positional editing vocabulary as `Rope`—front/back, endpoint and
 indexed insertion, range insertion/removal, slicing, splitting, concatenation, replacement, copy,
 and compaction—while maintaining the caller's cached monoidal measure. `SortedMap.from` has both
@@ -72,5 +85,6 @@ Validate from `src/Kotlin`:
 .\build.ps1 -Workspace FingerTree
 ```
 
-See [API notes](docs/api-notes.md), [validation](docs/validation.md), and the
+See [API notes](docs/api-notes.md), [priority-core notes](docs/priority-cores.md),
+[validation](docs/validation.md), and the
 [test map](tests/README.md).

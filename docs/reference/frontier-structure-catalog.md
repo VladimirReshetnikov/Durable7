@@ -62,8 +62,8 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | Merkle search tree | 1 | Strong (C# implemented) | Completed: deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
 | Zip tree (canonical sorted set) | 1, 3 | Plausible (implemented across all six languages) | Completed: coherent keyed rank policy | 1 new core, set facade |
-| Brodal-Okasaki heap | 1 | Plausible (C# and Haskell implemented for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
-| Priority search queue (winner-cached AVL) | 1 | Plausible (C# and Haskell implemented) | Completed as a direct core rather than the addressable composition | 1 new core |
+| Brodal-Okasaki heap | 1 | Plausible (C#, Haskell, and Kotlin/JVM implemented for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
+| Priority search queue (winner-cached AVL) | 1 | Plausible (C#, Haskell, and Kotlin/JVM implemented) | Completed as a direct core rather than the addressable composition | 1 new core |
 | Ctrie (concurrent, O(1) snapshot) | 1 | Managed-only (C# + Kotlin/JVM implemented) | Tracing GC; native ports require reclamation design | 1 new core, concurrency test tier |
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
 | Size-tiered small representations | 2 | Strong (planned, not shipped) | Benchmark gate at tier boundary | Internal tier per facade + representation-forcing tests |
@@ -444,6 +444,18 @@ order, count, and depth. `Data.Structures.FingerTree.PrioritySearchQueue` is a d
 cached AVL rather than a `Map`/heap composition. It retains one entry per ordered key, breaks
 priority ties by key, supports O(1) minimum and O(log n) keyed update/delete-min, validates all
 AVL/winner metadata, and preserves retained snapshots through a 10,000-operation model.
+
+**Kotlin/JVM status (2026-07-11): Brodal-Okasaki heap and priority search queue implemented and
+adversarially audited.** `BrodalOkasakiHeap<T>` directly implements the bootstrapped skew-binomial
+representation with comparator-identity-gated meld, nullable-safe minimum views, explicit-stack
+iteration and validation, and measured comparison ceilings through 65,536 elements. Its retained-
+snapshot model exercises 20,000 branching operations and its adversarial drains cover monotone,
+equal-priority, and melded 4,096-element shapes. `PrioritySearchQueue<K, P, V>` is a persistent
+winner-cached AVL with first-key-representative and last-value semantics, exact no-op reuse,
+nullable-safe result wrappers, deterministic priority/key tie ordering, and an inclusive key-range/
+priority-threshold traversal. Its audit covers all rotation/deletion shapes, 50,000 ascending keys,
+a 20,000-operation retained-history model, pruning comparison equations, structural sharing, and
+concurrent readers.
 
 - **Brodal-Okasaki heap** (JFP 1996; skew binomial queues + data-structural bootstrapping): purely
   functional with O(1) *worst-case* insert, meld, and findMin, O(log n) deleteMin. The shipped
@@ -889,7 +901,7 @@ The implementation wave described by this catalog has already landed these C# re
 
 CHAMP, Patricia, and RRB have also advanced through the sibling-language work recorded in their
 entries; the canonical zip-zip set is implemented across all six languages, the Brodal-Okasaki heap and
-priority-search queue have Haskell ports, and DABA Lite now exists in every applicable imperative
+priority-search queue have Haskell and Kotlin/JVM ports, and DABA Lite now exists in every applicable imperative
 language (C#, C, C++, Kotlin/JVM, and Rust). The Ctrie's deliberate parity boundary remains C# and
 Kotlin/JVM. These are current-state implementation records, not candidates awaiting a consumer.
 Future work on them is ordinary hardening, measurement, and demand-driven porting.

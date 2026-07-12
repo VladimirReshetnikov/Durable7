@@ -13,6 +13,10 @@ Current public families:
   `ProductMeasure<T, A, B>` with `MeasurePair<A, B>`;
 - `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>`;
 - `PriorityQueue<T, P>` and `PriorityEntry<T, P>`;
+- `BrodalOkasakiHeap<T>`, `BrodalMinimumView<T>`, and `BrodalOkasakiHeapStatistics`;
+- `PrioritySearchQueue<K, P, V>`, `PrioritySearchEntry<K, P, V>`,
+  `PrioritySearchAddResult<K, P, V>`, `PrioritySearchRemoveResult<K, P, V>`,
+  `PrioritySearchMinimumView<K, P, V>`, and `PrioritySearchQueueStatistics`;
 - `Interval<T>` and `IntervalTree<T>`;
 - `RrbVector<T>` and `RrbVector.Builder<T>`;
 - `ZipTreeRankPolicy<T>`, `CanonicalSortedSet<T>`, `CanonicalSetLookup<T>`, and
@@ -186,6 +190,26 @@ also compare every operation with an external FIFO model.
 `DabaLite` is mutable and unsynchronized. Calls on one instance must not overlap unless the caller
 provides external serialization. This concurrency boundary is intentionally different from the
 immutable FingerTree and RRB values in the same package.
+
+## Direct priority cores
+
+`BrodalOkasakiHeap<T>` is a direct immutable bootstrapped skew-binomial heap. Its rank-zero global
+root caches the minimum and its forest uses the paper's fused primitive-child/embedded-forest
+encoding. `minimum`, `insert`, and `meld` are O(1) worst-case; `deleteMinimum` is O(log n). Every
+comparator-equivalent element remains a distinct multiset representative. `meld` requires the exact
+same comparator object, with natural-order factories sharing the standard singleton. Iteration is
+structural, stack-safe, and comparator-free. `validateStructure` checks fused boundaries, skew
+ranks, heap order, count, and depth.
+
+`PrioritySearchQueue<K, P, V>` is an immutable winner-cached AVL map. It keeps the first concrete
+key in each comparator-equivalence class and updates its priority/payload last-wins. Priority ties
+break by key order. Minimum is O(1); keyed operations and minimum deletion are O(log n). The
+inclusive `enumerateAtMost` query returns key-ordered results and prunes any subtree whose cached
+winner exceeds the threshold, with O(log n + v) work for `v` unpruned visits and O(n) worst case.
+The validator checks strict key order, AVL metadata/balance, and every cached winner.
+
+See [priority-core notes](priority-cores.md) for the complete policy, no-op, persistence, complexity,
+and JVM comparison-audit contracts.
 
 `PriorityQueue` caches the stable leftmost minimum entry, making peek O(1), enqueue/meld O(log n), and
 dequeue O(log n). `IntervalTree` caches last-low and maximum-high summaries: lower-bound insertion and
