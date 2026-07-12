@@ -24,6 +24,25 @@ private class ModuloTenPolicy : HashPolicy<Int> {
     override fun equivalent(left: Int, right: Int): Boolean = left.mod(10) == right.mod(10)
 }
 
+/**
+ * Spreads Int keys across the trie's 5-bit levels so the canonicalization test builds a genuinely
+ * sparse trie with unary prefix bridges and single-entry-collapsible branches. Identity hashing on
+ * dense keys 0..511 produces a maximally dense two-level trie that structurally cannot contain any
+ * shape the canonicalization validator polices (bridge, collision, leaf-as-bitmap-child, under-full
+ * node), so the guard would pass vacuously. Every ninth key shares one hash to force a collision
+ * run. Mirrors the C# reference's ExplicitHashComparer (`i % 9 == 0 ? 17 : i * 0x01010101`).
+ */
+private class SpreadingHashPolicy : HashPolicy<Int> {
+    override fun hash(key: Int): Int = if (key % 9 == 0) 17 else key * 0x01010101
+    override fun equivalent(left: Int, right: Int): Boolean = left == right
+}
+
+/** Assigns caller-chosen hashes to specific Int keys so a test can build an exact trie shape. */
+private class TableHashPolicy(private val hashes: Map<Int, Int>) : HashPolicy<Int> {
+    override fun hash(key: Int): Int = hashes[key] ?: key
+    override fun equivalent(left: Int, right: Int): Boolean = left == right
+}
+
 private fun check(value: Boolean, message: String) {
     if (!value) {
         throw AssertionError(message)
@@ -111,7 +130,10 @@ private fun collisionsAreStoredAndRemoved() {
 }
 
 private fun champCanonicalizationAndDiff() {
-    val policy = defaultHashPolicy<Int>()
+    // A spreading, partly-colliding hash policy so the canonicalization guards below run against a
+    // genuinely sparse trie (unary bridges, collision runs, single-entry-collapsible branches)
+    // rather than the maximally dense two-level trie identity hashing on 0..511 would produce.
+    val policy = SpreadingHashPolicy()
     val ascending = PersistentHashMap.from((0 until 512).map { it to it }, policy)
     val descending = PersistentHashMap.from((0 until 512).reversed().map { it to it }, policy)
     check(ascending.mapEquals(descending), "independent insertion histories must be semantically equal")
@@ -119,7 +141,8 @@ private fun champCanonicalizationAndDiff() {
     checkEquals(ascending.champTopology(), descending.champTopology(), "independent histories must have identical CHAMP topology")
 
     val statistics = ascending.champStatistics()
-    checkEquals(512, statistics.inlinePayloads, "CHAMP must inline ordinary payloads")
+    checkEquals(512, statistics.inlinePayloads + statistics.collisionPayloads, "every key is stored as an inline payload or a collision entry")
+    check(statistics.collisionPayloads > 0, "spreading policy must exercise collision runs (leaf-vs-collision child handling)")
     check(statistics.bitmapNodes > 1, "test data must exercise nested bitmap nodes")
     checkEquals(0, statistics.invalidLeafChildren, "bitmap child runs must not contain leaf nodes")
     checkEquals(0, statistics.underfullBitmapNodes, "bitmap nodes must be canonically collapsed")
@@ -131,6 +154,24 @@ private fun champCanonicalizationAndDiff() {
     val churnStatistics = churned.champStatistics()
     checkEquals(0, churnStatistics.invalidLeafChildren, "churned bitmap child runs must not contain leaves")
     checkEquals(0, churnStatistics.underfullBitmapNodes, "churned bitmap nodes must be canonically collapsed")
+
+    // Non-vacuity guard for the canonical-collapse rule. Build an exact deep two-entry branch under a
+    // unary prefix bridge: keys 0 and 1 share the low ten hash bits (fragments 0,0 at shifts 0,5) and
+    // diverge at shift 10; key 2 diverges at the root. Removing key 1 leaves the deep branch with a
+    // single entry, which canonicalization MUST inline while collapsing the now-unary bridge. If the
+    // collapse were skipped, underfullBitmapNodes would be non-zero and the topology would diverge
+    // from the direct build of {0, 2} — so these assertions fail loudly on a canonicalization
+    // regression, unlike the dense-key data they replace.
+    val deepPolicy = TableHashPolicy(mapOf(0 to (1 shl 10), 1 to (2 shl 10), 2 to 1))
+    val deep = PersistentHashMap.empty<Int, Int>(deepPolicy).put(0, 0).put(1, 1).put(2, 2)
+    check(deep.champStatistics().bitmapNodes >= 3, "deep-collapse fixture must nest a bridge over a two-entry branch")
+    val collapsed = deep.remove(1)
+    val collapsedStats = collapsed.champStatistics()
+    checkEquals(0, collapsedStats.underfullBitmapNodes, "removing one of a deep pair must collapse the branch, not leave an under-full node")
+    checkEquals(0, collapsedStats.invalidLeafChildren, "collapse must not leave a leaf as a bitmap child")
+    checkEquals(listOf(0, 2), collapsed.keys().toList().sorted(), "collapse preserves the surviving keys")
+    val directBuild = PersistentHashMap.empty<Int, Int>(deepPolicy).put(0, 0).put(2, 2)
+    checkEquals(directBuild.champTopology(), collapsed.champTopology(), "collapsed topology must equal the direct canonical build")
 
     val changed = descending.remove(7).put(9, -9).put(1_000, 1_000)
     val differences = ascending.diff(changed).toList()
