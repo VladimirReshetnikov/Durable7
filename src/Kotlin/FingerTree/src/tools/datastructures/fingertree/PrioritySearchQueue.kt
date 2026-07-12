@@ -4,6 +4,8 @@ import java.util.IdentityHashMap
 import kotlin.math.abs
 import kotlin.math.max
 
+private fun <T> psqValuesEqual(left: T, right: T): Boolean = left === right || left == right
+
 /** One unique ordered key, its priority, and its payload. Lower priorities win. */
 public data class PrioritySearchEntry<K, P, V>(
     val key: K,
@@ -348,7 +350,7 @@ public class PrioritySearchQueue<K, P, V> private constructor(
             comparison == 0 -> {
                 if (!overwrite ||
                     (priorityComparator.compare(entry.priority, node.entry.priority) == 0 &&
-                        entry.priority == node.entry.priority && entry.value == node.entry.value)
+                        psqValuesEqual(entry.priority, node.entry.priority) && psqValuesEqual(entry.value, node.entry.value))
                 ) {
                     SetResult(node, added = false, changed = false)
                 } else {
@@ -471,9 +473,9 @@ public class PrioritySearchQueue<K, P, V> private constructor(
         left: PrioritySearchEntry<K, P, V>,
         right: PrioritySearchEntry<K, P, V>,
     ): Boolean =
-        keyComparator.compare(left.key, right.key) == 0 && left.key == right.key &&
-            priorityComparator.compare(left.priority, right.priority) == 0 && left.priority == right.priority &&
-            left.value == right.value
+        keyComparator.compare(left.key, right.key) == 0 && psqValuesEqual(left.key, right.key) &&
+            priorityComparator.compare(left.priority, right.priority) == 0 && psqValuesEqual(left.priority, right.priority) &&
+            psqValuesEqual(left.value, right.value)
 
     private fun isBefore(
         left: PrioritySearchEntry<K, P, V>,

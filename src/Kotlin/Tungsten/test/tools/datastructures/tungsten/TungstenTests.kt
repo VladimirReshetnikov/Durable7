@@ -203,6 +203,33 @@ private fun associationOrderingExamplesMatchTungstenRules() {
     checkAssociation(listOf("a" to 1, "b" to 2), assoc, "source snapshot")
 }
 
+private class CountingAssociationValue(private val value: Int) {
+    var equalityCalls: Int = 0
+
+    override fun equals(other: Any?): Boolean {
+        equalityCalls++
+        return other is CountingAssociationValue && value == other.value
+    }
+
+    override fun hashCode(): Int = value
+}
+
+private fun associationSameReferenceUpdatesBypassValueEquality() {
+    val value = CountingAssociationValue(1)
+    val association = PersistentAssociation.empty<String, CountingAssociationValue>()
+        .setItem("a", value)
+        .setItem("b", CountingAssociationValue(2))
+
+    association.setItem("a", value)
+    checkEquals(0, value.equalityCalls, "setItem same-reference equality calls")
+
+    association.append("a", value)
+    checkEquals(0, value.equalityCalls, "append same-reference equality calls")
+
+    association.prepend("a", value)
+    checkEquals(0, value.equalityCalls, "prepend same-reference equality calls")
+}
+
 private fun associationPositionOperationsAndSortsMatchModel() {
     val assoc = PersistentAssociation.from(listOf("a" to 1, "b" to 2, "c" to 3))
 
@@ -441,6 +468,7 @@ public fun main() {
         "listGeneratedHistoriesPreserveSnapshots" to ::listGeneratedHistoriesPreserveSnapshots,
         "seqTreeMaintainsAvlBoundThroughLargeSplits" to ::seqTreeMaintainsAvlBoundThroughLargeSplits,
         "associationOrderingExamplesMatchTungstenRules" to ::associationOrderingExamplesMatchTungstenRules,
+        "associationSameReferenceUpdatesBypassValueEquality" to ::associationSameReferenceUpdatesBypassValueEquality,
         "associationPositionOperationsAndSortsMatchModel" to ::associationPositionOperationsAndSortsMatchModel,
         "associationCustomPolicyRecoversStoredKeys" to ::associationCustomPolicyRecoversStoredKeys,
         "associationRelabelStressPreservesPositionsAndLookups" to ::associationRelabelStressPreservesPositionsAndLookups,

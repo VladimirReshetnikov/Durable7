@@ -1751,7 +1751,7 @@ static bool tds_hamt_keys_equal(const tds_hamt_policy *policy, const void *left,
 }
 
 static bool tds_hamt_values_equal(const tds_hamt_policy *policy, const void *left, const void *right) {
-    return policy->value_equal(left, right, policy->context);
+    return left == right || policy->value_equal(left, right, policy->context);
 }
 
 static void *tds_hamt_retain_key(const tds_hamt_policy *policy, const void *key) {

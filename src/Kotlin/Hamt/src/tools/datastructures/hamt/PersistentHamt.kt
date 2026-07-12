@@ -13,6 +13,8 @@ private object DefaultHashPolicy : HashPolicy<Any?> {
 @Suppress("UNCHECKED_CAST")
 public fun <K> defaultHashPolicy(): HashPolicy<K> = DefaultHashPolicy as HashPolicy<K>
 
+private fun <T> hamtValuesEqual(left: T, right: T): Boolean = left === right || left == right
+
 public class DuplicateKeyException(message: String = "An equivalent key is already present.") :
     IllegalArgumentException(message)
 
@@ -169,7 +171,9 @@ public class PersistentHashMap<K, V> private constructor(
     public fun mapEquals(other: PersistentHashMap<K, V>): Boolean {
         require(policy === other.policy) { "Maps must retain the same hash policy object." }
         if (root === other.root) return true
-        return size == other.size && all { entry -> other.getEntry(entry.key)?.value == entry.value }
+        return size == other.size && all { entry ->
+            other.getEntry(entry.key)?.let { hamtValuesEqual(it.value, entry.value) } == true
+        }
     }
 
     /** Reports additions, removals, and value changes between two policy-compatible maps. */
@@ -330,7 +334,7 @@ private fun <K, V> insertLeaf(
 ): InsertResult<K, V> {
     if (node.hash == hash && policy.equivalent(node.key, key)) {
         if (!overwrite) return InsertResult(node, false, false, true)
-        if (node.value == value) return InsertResult(node, false, false, false)
+        if (hamtValuesEqual(node.value, value)) return InsertResult(node, false, false, false)
         return InsertResult(Leaf(hash, node.key, value), false, true, false)
     }
     return InsertResult(mergeNodes(node, node.hash, Leaf(hash, key, value), hash, shift), true, true, false)
@@ -346,7 +350,7 @@ private fun <K, V> insertCollision(
     val index = node.entries.indexOfFirst { policy.equivalent(it.key, key) }
     if (index < 0) return InsertResult(Collision(hash, node.entries + Leaf(hash, key, value)), true, true, false)
     if (!overwrite) return InsertResult(node, false, false, true)
-    if (node.entries[index].value == value) return InsertResult(node, false, false, false)
+    if (hamtValuesEqual(node.entries[index].value, value)) return InsertResult(node, false, false, false)
     val next = node.entries.toMutableList()
     next[index] = Leaf(hash, next[index].key, value)
     return InsertResult(Collision(hash, next.toList()), false, true, false)
@@ -362,7 +366,7 @@ private fun <K, V> insertBitmap(
         val leaf = node.data[dataIndex]
         if (leaf.hash == hash && policy.equivalent(leaf.key, key)) {
             if (!overwrite) return InsertResult(node, false, false, true)
-            if (leaf.value == value) return InsertResult(node, false, false, false)
+            if (hamtValuesEqual(leaf.value, value)) return InsertResult(node, false, false, false)
             return InsertResult(node.copy(data = replaced(node.data, dataIndex, Leaf(hash, leaf.key, value))), false, true, false)
         }
         val child = mergeNodes(leaf, leaf.hash, Leaf(hash, key, value), hash, shift + BitsPerLevel)
@@ -558,7 +562,7 @@ private fun <K, V> combineHashNodes(
     for (leftEntry in leftEntries) {
         val rightEntry = rightEntries.firstOrNull { policy.equivalent(leftEntry.key, it.key) }
         when (operation) {
-            ChampOperation.UNION -> result += if (rightEntry == null || leftEntry.value == rightEntry.value) {
+            ChampOperation.UNION -> result += if (rightEntry == null || hamtValuesEqual(leftEntry.value, rightEntry.value)) {
                 leftEntry
             } else {
                 Leaf(leftEntry.hash, leftEntry.key, rightEntry.value)
@@ -599,7 +603,7 @@ private fun <K, V> sameEntries(
 ): Boolean = left.size == right.size && left.indices.all { index ->
     left[index].hash == right[index].hash &&
         policy.equivalent(left[index].key, right[index].key) &&
-        left[index].value == right[index].value
+        hamtValuesEqual(left[index].value, right[index].value)
 }
 
 private fun <K, V> logicalSlot(node: Node<K, V>, index: Int, shift: Int): Node<K, V>? = when (node) {
@@ -652,7 +656,7 @@ private fun <K, V> logicalSlotsMatch(
     val expected = logicalSlot(original, index, shift)
     val actual = slots[index]
     expected === actual || expected is Leaf && actual is Leaf &&
-        expected.hash == actual.hash && policy.equivalent(expected.key, actual.key) && expected.value == actual.value
+        expected.hash == actual.hash && policy.equivalent(expected.key, actual.key) && hamtValuesEqual(expected.value, actual.value)
 }
 
 private fun <K, V> champTopology(node: Node<K, V>): String = when (node) {

@@ -250,7 +250,7 @@ mapEquals (HashMap _ leftSize leftRoot) (HashMap rightPolicy rightSize rightRoot
     (leftSize == rightSize && all matches (nodeEntries leftRoot))
   where
     right = HashMap rightPolicy rightSize rightRoot
-    matches (key, value) = lookup key right == Just value
+    matches (key, value) = maybe False (valuesEqual value) (lookup key right)
 
 -- | Reports changes between maps whose key policies are semantically compatible.
 diff :: Eq v => HashMap k v -> HashMap k v -> [MapDifference k v]
@@ -260,7 +260,7 @@ diff left right = removedOrChanged ++ added
     removedOrChanged = concatMap classifyLeft (toList left)
     classifyLeft (key, before) = case lookup key right of
       Nothing -> [EntryRemoved key before]
-      Just after | before /= after -> [EntryChanged key before after]
+      Just after | not (valuesEqual before after) -> [EntryChanged key before after]
       _ -> []
     added = [EntryAdded key value | (key, value) <- toList right, not (member key left)]
 
@@ -343,7 +343,7 @@ combineHashEntries hashPolicy operation leftEntries rightEntries = leftResults +
     leftResults = concatMap combineLeft leftEntries
     combineLeft entry@(leftKey, leftValue) = case findEquivalent leftKey rightEntries of
       Just (_, rightValue) -> case operation of
-        CombineUnion -> [(leftKey, if leftValue == rightValue then leftValue else rightValue)]
+        CombineUnion -> [(leftKey, if valuesEqual leftValue rightValue then leftValue else rightValue)]
         CombineIntersection -> [entry]
         CombineDifference -> []
         CombineSymmetricDifference -> []
@@ -361,7 +361,7 @@ entriesMatch hashPolicy left right =
   length left == length right && and (zipWith matches left right)
   where
     matches (leftKey, leftValue) (rightKey, rightValue) =
-      equalKeys hashPolicy leftKey rightKey && leftValue == rightValue
+      equalKeys hashPolicy leftKey rightKey && valuesEqual leftValue rightValue
 
 logicalSlot :: Node k v -> Int -> Int -> Node k v
 logicalSlot EmptyNode _ _ = EmptyNode
@@ -415,7 +415,7 @@ logicalSlotsMatch hashPolicy shift original slots = and
     nodesMatch expected actual
       | ptrEq expected actual = True
     nodesMatch (Leaf leftHash leftKey leftValue) (Leaf rightHash rightKey rightValue) =
-      leftHash == rightHash && equalKeys hashPolicy leftKey rightKey && leftValue == rightValue
+      leftHash == rightHash && equalKeys hashPolicy leftKey rightKey && valuesEqual leftValue rightValue
     nodesMatch EmptyNode EmptyNode = True
     nodesMatch _ _ = False
 
@@ -441,6 +441,10 @@ hashIndex hashValue shift = fromIntegral ((hashValue `shiftR` shift) .&. 0x1f)
 ptrEq :: a -> a -> Bool
 ptrEq left right = isTrue# (reallyUnsafePtrEquality# left right)
 {-# INLINE ptrEq #-}
+
+valuesEqual :: Eq a => a -> a -> Bool
+valuesEqual left right = ptrEq left right || left == right
+{-# INLINE valuesEqual #-}
 
 lookupNode :: HashPolicy k -> Word32 -> k -> Int -> Node k v -> Maybe v
 lookupNode _ _ _ _ EmptyNode = Nothing

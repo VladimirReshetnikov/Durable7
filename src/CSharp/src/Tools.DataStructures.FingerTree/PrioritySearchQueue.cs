@@ -348,8 +348,8 @@ public sealed class PrioritySearchQueue<TKey, TPriority, TValue> :
             added = false;
             if (!overwrite
                 || (PriorityComparer.Compare(entry.Priority, node.Entry.Priority) == 0
-                    && EqualityComparer<TPriority>.Default.Equals(entry.Priority, node.Entry.Priority)
-                    && EqualityComparer<TValue>.Default.Equals(entry.Value, node.Entry.Value)))
+                    && ValuesEqual(entry.Priority, node.Entry.Priority)
+                    && ValuesEqual(entry.Value, node.Entry.Value)))
                 return node;
             return NewNode(new(node.Entry.Key, entry.Priority, entry.Value), node.Left, node.Right);
         }
@@ -453,8 +453,12 @@ public sealed class PrioritySearchQueue<TKey, TPriority, TValue> :
         KeyComparer.Compare(left.Key, right.Key) == 0
         && EqualityComparer<TKey>.Default.Equals(left.Key, right.Key)
         && PriorityComparer.Compare(left.Priority, right.Priority) == 0
-        && EqualityComparer<TPriority>.Default.Equals(left.Priority, right.Priority)
-        && EqualityComparer<TValue>.Default.Equals(left.Value, right.Value);
+        && ValuesEqual(left.Priority, right.Priority)
+        && ValuesEqual(left.Value, right.Value);
+
+    private static bool ValuesEqual<TItem>(TItem? left, TItem? right) =>
+        (!typeof(TItem).IsValueType && ReferenceEquals(left, right)) ||
+        EqualityComparer<TItem>.Default.Equals(left!, right!);
 
     private bool IsBefore(
         PrioritySearchEntry<TKey, TPriority, TValue> left,

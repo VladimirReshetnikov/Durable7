@@ -236,7 +236,7 @@ public:
             return append_new(key, value);
         }
 
-        if (std::invoke(value_equal_, found->value, value)) {
+        if (values_equal(found->value, value)) {
             return *this;
         }
 
@@ -294,7 +294,7 @@ public:
         // Stamps are unique, so an end-stamp comparison decides the no-op fast
         // path in O(1) like the C# reference; only the removal path below
         // still needs the O(log n) position search.
-        if (found->stamp == entries_.back().stamp && std::invoke(value_equal_, found->value, value)) {
+        if (found->stamp == entries_.back().stamp && values_equal(found->value, value)) {
             return *this;
         }
 
@@ -312,7 +312,7 @@ public:
         if (found != nullptr) {
             // Mirrors append: the front-stamp comparison keeps the no-op fast
             // path O(1); only the removal path pays the position search.
-            if (found->stamp == entries_.front().stamp && std::invoke(value_equal_, found->value, value)) {
+            if (found->stamp == entries_.front().stamp && values_equal(found->value, value)) {
                 return *this;
             }
 
@@ -736,6 +736,12 @@ private:
         }
 
         return static_cast<size_type>(found);
+    }
+
+    [[nodiscard]] bool values_equal(const T& left, const T& right) const
+    {
+        return std::addressof(left) == std::addressof(right)
+            || std::invoke(value_equal_, left, right);
     }
 
     void throw_if_empty() const

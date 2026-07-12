@@ -635,7 +635,7 @@ public:
             const auto* actual_key = static_cast<const Key*>(nullptr);
             const auto* other_value = static_cast<const T*>(nullptr);
             if (!other.try_get_entry(key, actual_key, other_value)
-                || !std::invoke(value_equal_, value, *other_value)) {
+                || !values_equal_by_policy(value, *other_value, value_equal_)) {
                 return false;
             }
         }
@@ -653,7 +653,7 @@ public:
             const auto* other_value = static_cast<const T*>(nullptr);
             if (!other.try_get_entry(key, actual_key, other_value)) {
                 result.push_back({map_difference_kind::removed, key, value, std::nullopt});
-            } else if (!std::invoke(value_equal_, value, *other_value)) {
+            } else if (!values_equal_by_policy(value, *other_value, value_equal_)) {
                 result.push_back({map_difference_kind::changed, key, value, *other_value});
             }
         }
@@ -739,6 +739,14 @@ private:
 
     std::uint32_t get_hash(const Key& key) const {
         return static_cast<std::uint32_t>(std::invoke(hash_, key));
+    }
+
+    static bool values_equal_by_policy(
+        const T& left,
+        const T& right,
+        const ValueEqual& values_equal) {
+        return std::addressof(left) == std::addressof(right)
+            || std::invoke(values_equal, left, right);
     }
 
     static leaf_node_ptr make_leaf(std::uint32_t hash, const Key& key, const T& value) {
@@ -919,7 +927,7 @@ private:
             case set_operation::union_values:
                 result.emplace_back(
                     left_entry.first,
-                    found && !std::invoke(values_equal, left_entry.second, right_iterator->second)
+                    found && !values_equal_by_policy(left_entry.second, right_iterator->second, values_equal)
                         ? right_iterator->second
                         : left_entry.second);
                 break;
@@ -977,7 +985,7 @@ private:
         }
         for (auto i = std::size_t{0}; i < left.size(); ++i) {
             if (!std::invoke(equal, left[i].first, right[i].first)
-                || !std::invoke(values_equal, left[i].second, right[i].second)) {
+                || !values_equal_by_policy(left[i].second, right[i].second, values_equal)) {
                 return false;
             }
         }
@@ -1056,7 +1064,7 @@ private:
             const auto right = std::static_pointer_cast<const leaf_node>(actual);
             if (left->hash_ != right->hash_
                 || !std::invoke(equal, left->entry_.first, right->entry_.first)
-                || !std::invoke(values_equal, left->entry_.second, right->entry_.second)) {
+                || !values_equal_by_policy(left->entry_.second, right->entry_.second, values_equal)) {
                 return false;
             }
         }
@@ -1227,7 +1235,7 @@ private:
             bool& added) const override {
             if (this->hash_ == hash && std::invoke(equal, entry_.first, key)) {
                 added = false;
-                if (!overwrite || std::invoke(values_equal, entry_.second, value)) {
+                if (!overwrite || values_equal_by_policy(entry_.second, value, values_equal)) {
                     return this->shared_from_this();
                 }
 
@@ -1314,7 +1322,7 @@ private:
                 }
 
                 added = false;
-                if (!overwrite || std::invoke(values_equal, entries_[i].second, value)) {
+                if (!overwrite || values_equal_by_policy(entries_[i].second, value, values_equal)) {
                     return this->shared_from_this();
                 }
 
@@ -1407,7 +1415,7 @@ private:
                 const auto& existing = data_[data_slot];
                 if (existing.hash == hash && std::invoke(equal, existing.entry.first, key)) {
                     added = false;
-                    if (!overwrite || std::invoke(values_equal, existing.entry.second, value)) {
+                    if (!overwrite || values_equal_by_policy(existing.entry.second, value, values_equal)) {
                         return this->shared_from_this();
                     }
                     auto data = data_;
@@ -1681,7 +1689,7 @@ private:
             bool& added) override {
             if (this->hash_ == hash && std::invoke(equal, entry_.first, key)) {
                 added = false;
-                if (!std::invoke(values_equal, entry_.second, value)) {
+                if (!values_equal_by_policy(entry_.second, value, values_equal)) {
                     entry_.second = value;
                 }
 
@@ -1747,7 +1755,7 @@ private:
                 }
 
                 added = false;
-                if (!std::invoke(values_equal, collision_entry.second, value)) {
+                if (!values_equal_by_policy(collision_entry.second, value, values_equal)) {
                     collision_entry.second = value;
                 }
 
@@ -1793,7 +1801,7 @@ private:
                 auto& existing = data_[data_slot];
                 if (existing.hash == hash && std::invoke(equal, existing.entry.first, key)) {
                     added = false;
-                    if (!std::invoke(values_equal, existing.entry.second, value)) {
+                    if (!values_equal_by_policy(existing.entry.second, value, values_equal)) {
                         existing.entry.second = value;
                     }
                     return self;

@@ -199,6 +199,15 @@ struct counting_hash {
     }
 };
 
+struct counting_string_equal {
+    std::shared_ptr<std::atomic<std::size_t>> calls;
+
+    bool operator()(const std::string& left, const std::string& right) const noexcept {
+        calls->fetch_add(1, std::memory_order_relaxed);
+        return left == right;
+    }
+};
+
 struct few_buckets_hash {
     std::size_t operator()(int value) const noexcept {
         return static_cast<std::uint32_t>(value) & 3u;
@@ -267,6 +276,27 @@ TEST(EmptyMap_HasNoEntries) {
     CHECK(empty.remove(1).shares_root_with(empty));
     CHECK(empty.clear().shares_root_with(empty));
     CHECK_THROWS_AS(empty.at(1), std::out_of_range);
+}
+
+TEST(SameValueReferenceBypassesValuePolicy) {
+    const auto calls = std::make_shared<std::atomic<std::size_t>>(0);
+    using map_type = persistent_hash_map<
+        int,
+        std::string,
+        std::hash<int>,
+        std::equal_to<int>,
+        counting_string_equal>;
+    const auto map = map_type::create(
+        std::hash<int>{}, std::equal_to<int>{}, counting_string_equal{calls})
+        .set_item(1, "one");
+    const auto* stored = map.try_get(1);
+    CHECK(stored != nullptr);
+    calls->store(0, std::memory_order_relaxed);
+
+    const auto same = map.set_item(1, *stored);
+
+    CHECK(same.shares_root_with(map));
+    CHECK_EQ(std::size_t{0}, calls->load(std::memory_order_relaxed));
 }
 
 TEST(SetItem_AddsReplacesAndPreservesOldVersions) {

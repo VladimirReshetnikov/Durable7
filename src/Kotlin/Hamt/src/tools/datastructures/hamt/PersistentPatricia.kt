@@ -1,5 +1,7 @@
 package tools.datastructures.hamt
 
+private fun <T> patriciaValuesEqual(left: T, right: T): Boolean = left === right || left == right
+
 private sealed interface PatriciaNode<K, V> {
     val count: Int
 }
@@ -51,7 +53,7 @@ private class PatriciaCore<K, V>(
     private fun put(node: PatriciaNode<K, V>?, path: ULong, key: K, value: V): PatriciaChange<K, V> = when (node) {
         null -> PatriciaChange(PatriciaLeaf(path, key, value), true, true)
         is PatriciaLeaf -> when {
-            node.path == path && node.value == value -> PatriciaChange(node, false, false)
+            node.path == path && patriciaValuesEqual(node.value, value) -> PatriciaChange(node, false, false)
             node.path == path -> PatriciaChange(PatriciaLeaf(path, node.key, value), true, false)
             else -> PatriciaChange(join(node.path, node, path, PatriciaLeaf(path, key, value)), true, true)
         }
@@ -174,7 +176,7 @@ private fun <K, V> putNode(
     node: PatriciaNode<K, V>, leaf: PatriciaLeaf<K, V>, preferExisting: Boolean,
 ): PatriciaNode<K, V> = when (node) {
     is PatriciaLeaf -> when {
-        node.path == leaf.path && node.value == leaf.value -> if (preferExisting) leaf else node
+        node.path == leaf.path && patriciaValuesEqual(node.value, leaf.value) -> if (preferExisting) leaf else node
         node.path == leaf.path && preferExisting -> node
         node.path == leaf.path -> leaf
         else -> joinPatricia(node.path, node, leaf.path, leaf)
@@ -260,8 +262,8 @@ private fun <K, V> combinedLeaf(
 ): PatriciaLeaf<K, V> {
     val value = combine(left.key, left.value, right.value)
     return when {
-        value == left.value -> left
-        value == right.value -> right
+        patriciaValuesEqual(value, left.value) -> left
+        patriciaValuesEqual(value, right.value) -> right
         else -> PatriciaLeaf(left.path, left.key, value)
     }
 }

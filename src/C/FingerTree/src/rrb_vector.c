@@ -428,7 +428,8 @@ static ft_status ft_rrb_node_set(
     ft_rrb_node** result)
 {
     if (node->kind == FT_RRB_LEAF) {
-        if (policy->equal(ft_rrb_leaf_value(policy, node, index), value, policy->equal_context)) {
+        const void* stored_value = ft_rrb_leaf_value(policy, node, index);
+        if (stored_value == value || policy->equal(stored_value, value, policy->equal_context)) {
             *result = ft_rrb_node_retain(node);
             return FT_STATUS_OK;
         }

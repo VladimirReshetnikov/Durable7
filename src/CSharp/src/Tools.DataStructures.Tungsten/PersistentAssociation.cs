@@ -366,7 +366,7 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
         if (!_index.TryGetValue(key, out var slot))
             return AppendNew(key, value);
 
-        if (EqualityComparer<TValue>.Default.Equals(slot.Value, value))
+        if (ValuesEqual(slot.Value, value))
             return this;
 
         // UpdateAt fuses the fetch and the replacement into one tree walk, and the hash map
@@ -439,7 +439,7 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
         if (!_index.TryGetValue(key, out var slot))
             return AppendNew(key, value);
 
-        if (slot.Stamp == _entries.Last.Stamp && EqualityComparer<TValue>.Default.Equals(slot.Value, value))
+        if (slot.Stamp == _entries.Last.Stamp && ValuesEqual(slot.Value, value))
             return this;
 
         var entries = RemoveAtStamp(slot.Stamp, out _);
@@ -463,7 +463,7 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     {
         if (_index.TryGetValue(key, out var slot))
         {
-            if (slot.Stamp == _entries.First.Stamp && EqualityComparer<TValue>.Default.Equals(slot.Value, value))
+            if (slot.Stamp == _entries.First.Stamp && ValuesEqual(slot.Value, value))
                 return this;
 
             var trimmed = RemoveAtStamp(slot.Stamp, out _);
@@ -961,6 +961,10 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
         Array.Sort(keys, ordered, new StableOrder<TOrder>(comparer));
         return Rebuilt(ordered);
     }
+
+    private static bool ValuesEqual(TValue? left, TValue? right) =>
+        (!typeof(TValue).IsValueType && ReferenceEquals(left, right)) ||
+        EqualityComparer<TValue>.Default.Equals(left!, right!);
 
     private sealed class StableOrder<TOrder>(IComparer<TOrder> comparer) : IComparer<(TOrder Order, long Stamp)>
     {

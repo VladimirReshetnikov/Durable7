@@ -445,6 +445,10 @@ static ft_status ft_psq_priority_equals(
     const void* right,
     bool* equal)
 {
+    if (left == right) {
+        *equal = true;
+        return FT_STATUS_OK;
+    }
     return policy->config.priority.equals(
         left, right, equal, policy->config.priority.context);
 }
@@ -455,6 +459,10 @@ static ft_status ft_psq_value_equals(
     const void* right,
     bool* equal)
 {
+    if (left == right) {
+        *equal = true;
+        return FT_STATUS_OK;
+    }
     return policy->config.value.equals(
         left, right, equal, policy->config.value.context);
 }

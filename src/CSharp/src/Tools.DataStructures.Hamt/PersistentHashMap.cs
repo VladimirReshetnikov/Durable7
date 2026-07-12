@@ -592,6 +592,17 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
 
     private uint GetHash(TKey key) => unchecked((uint)_comparer.GetHashCode(key!));
 
+    private static bool ValuesEqual(TValue? left, TValue? right) =>
+        (!typeof(TValue).IsValueType && ReferenceEquals(left, right)) ||
+        EqualityComparer<TValue>.Default.Equals(left!, right!);
+
+    private static bool ValuesEqual(
+        TValue? left,
+        TValue? right,
+        IEqualityComparer<TValue> comparer) =>
+        (!typeof(TValue).IsValueType && ReferenceEquals(left, right)) ||
+        comparer.Equals(left!, right!);
+
     private static int Index(uint hash, int shift) => (int)((hash >> shift) & BranchMask);
 
     private static uint Bit(int index) => 1u << index;
@@ -691,7 +702,7 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
                         : new Entry(
                             leftEntry.Hash,
                             leftEntry.Key,
-                            EqualityComparer<TValue>.Default.Equals(leftEntry.Value, rightEntries[rightIndex].Value)
+                            ValuesEqual(leftEntry.Value, rightEntries[rightIndex].Value)
                                 ? leftEntry.Value
                                 : rightEntries[rightIndex].Value));
                     break;
@@ -746,7 +757,7 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
         {
             if (left[index].Hash != right[index].Hash
                 || !keyComparer.Equals(left[index].Key, right[index].Key)
-                || !EqualityComparer<TValue>.Default.Equals(left[index].Value, right[index].Value))
+                || !ValuesEqual(left[index].Value, right[index].Value))
                 return false;
         }
         return true;
@@ -828,7 +839,7 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             if (expected is LeafNode leftLeaf && actual is LeafNode rightLeaf
                 && leftLeaf.Hash == rightLeaf.Hash
                 && keyComparer.Equals(leftLeaf.Key, rightLeaf.Key)
-                && EqualityComparer<TValue>.Default.Equals(leftLeaf.Value, rightLeaf.Value))
+                && ValuesEqual(leftLeaf.Value, rightLeaf.Value))
                 continue;
             return false;
         }
@@ -851,7 +862,7 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             var rightLeaf = (LeafNode)right;
             return leftLeaf.Hash == rightLeaf.Hash
                 && keyComparer.Equals(leftLeaf.Key, rightLeaf.Key)
-                && valueComparer.Equals(leftLeaf.Value, rightLeaf.Value);
+                && ValuesEqual(leftLeaf.Value, rightLeaf.Value, valueComparer);
         }
 
         if (left is CollisionNode leftCollision)
@@ -866,7 +877,7 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
                 foreach (var rightEntry in rightCollision.Entries)
                 {
                     if (keyComparer.Equals(leftEntry.Key, rightEntry.Key)
-                        && valueComparer.Equals(leftEntry.Value, rightEntry.Value))
+                        && ValuesEqual(leftEntry.Value, rightEntry.Value, valueComparer))
                     {
                         found = true;
                         break;
@@ -888,7 +899,7 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
         {
             var l = leftBranch.Data[i];
             var r = rightBranch.Data[i];
-            if (l.Hash != r.Hash || !keyComparer.Equals(l.Key, r.Key) || !valueComparer.Equals(l.Value, r.Value))
+            if (l.Hash != r.Hash || !keyComparer.Equals(l.Key, r.Key) || !ValuesEqual(l.Value, r.Value, valueComparer))
                 return false;
         }
 
@@ -1201,7 +1212,7 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             }
 
             var rightEntry = right[rightIndex];
-            if (!valueComparer.Equals(leftEntry.Value, rightEntry.Value))
+            if (!ValuesEqual(leftEntry.Value, rightEntry.Value, valueComparer))
             {
                 differences.Add(MapDifference<TKey, TValue>.Changed(
                     leftEntry.Key,
@@ -1503,7 +1514,7 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
                     if (!_comparer.Equals(entry.Key, key))
                         continue;
 
-                    if (!EqualityComparer<TValue>.Default.Equals(entry.Value, value))
+                    if (!ValuesEqual(entry.Value, value))
                         _entries[index] = new Entry(hash, entry.Key, value);
                     return;
                 }
@@ -1626,7 +1637,7 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             if (Hash == hash && comparer.Equals(Key, key))
             {
                 added = false;
-                if (!overwrite || EqualityComparer<TValue>.Default.Equals(Value, value))
+                if (!overwrite || ValuesEqual(Value, value))
                     return this;
 
                 return new LeafNode(Hash, Key, value);
@@ -1699,7 +1710,7 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
                     continue;
 
                 added = false;
-                if (!overwrite || EqualityComparer<TValue>.Default.Equals(Entries[i].Value, value))
+                if (!overwrite || ValuesEqual(Entries[i].Value, value))
                     return this;
 
                 var replaced = (Entry[])Entries.Clone();
@@ -1798,7 +1809,7 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
                 if (entry.Hash == hash && comparer.Equals(entry.Key, key))
                 {
                     added = false;
-                    if (!overwrite || EqualityComparer<TValue>.Default.Equals(entry.Value, value))
+                    if (!overwrite || ValuesEqual(entry.Value, value))
                         return this;
 
                     var replacedData = (Entry[])Data.Clone();

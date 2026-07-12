@@ -141,7 +141,7 @@ private:
             const auto* leaf = static_cast<const leaf_node*>(current.get());
             if (leaf->path == path) {
                 added = false;
-                if (prefer_existing || leaf->value == value) { changed = false; return current; }
+                if (prefer_existing || same_value(leaf->value, value)) { changed = false; return current; }
                 changed = true; return make_leaf(path, leaf->key, value);
             }
             added = changed = true; return join(leaf->path, current, path, make_leaf(path, key, value));
@@ -202,8 +202,8 @@ private:
             const auto* r = static_cast<const leaf_node*>(right.get());
             if (l->path != r->path) return join(l->path, left, r->path, right);
             T value = combine(l->key, l->value, r->value);
-            if (value == l->value) return left;
-            if (value == r->value) return right;
+            if (same_value(value, l->value)) return left;
+            if (same_value(value, r->value)) return right;
             return make_leaf(l->path, l->key, value);
         }
         if (left->is_leaf()) {
@@ -255,7 +255,7 @@ private:
             const auto* l = static_cast<const leaf_node*>(left.get());
             const auto* r = static_cast<const leaf_node*>(right.get());
             if (l->path != r->path) return join(l->path, left, r->path, right);
-            return l->value == r->value ? left : right;
+            return same_value(l->value, r->value) ? left : right;
         }
         if (left->is_leaf()) {
             const auto* leaf = static_cast<const leaf_node*>(left.get()); bool a{}, c{};
@@ -305,8 +305,8 @@ private:
             const auto* r = static_cast<const leaf_node*>(right_leaf.get());
             if (l->path != r->path) return {};
             T value = combine(l->key, l->value, r->value);
-            if (value == l->value) return left_leaf;
-            if (value == r->value) return right_leaf;
+            if (same_value(value, l->value)) return left_leaf;
+            if (same_value(value, r->value)) return right_leaf;
             return make_leaf(l->path, l->key, value);
         }
         const auto* l = static_cast<const branch_node*>(left.get());
@@ -367,6 +367,10 @@ private:
         const auto* branch = static_cast<const branch_node*>(node.get());
         append(branch->left, output);
         append(branch->right, output);
+    }
+
+    static bool same_value(const T& left, const T& right) {
+        return std::addressof(left) == std::addressof(right) || left == right;
     }
 
     node_ptr root_;

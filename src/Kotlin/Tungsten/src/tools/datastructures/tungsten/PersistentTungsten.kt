@@ -4,6 +4,8 @@ import tools.datastructures.hamt.HashPolicy
 import tools.datastructures.hamt.PersistentHashMap
 import tools.datastructures.hamt.defaultHashPolicy
 
+private fun <T> tungstenValuesEqual(left: T, right: T): Boolean = left === right || left == right
+
 private const val StampGap: Long = 1L shl 20
 
 private class SeqNode<T>(
@@ -515,7 +517,7 @@ public class PersistentAssociation<K, V> private constructor(
 
     public fun setItem(key: K, value: V): PersistentAssociation<K, V> {
         val slot = index[key] ?: return appendNew(key, value)
-        if (slot.value == value) {
+        if (tungstenValuesEqual(slot.value, value)) {
             return this
         }
 
@@ -546,7 +548,7 @@ public class PersistentAssociation<K, V> private constructor(
     public fun append(key: K, value: V): PersistentAssociation<K, V> {
         val slot = index[key] ?: return appendNew(key, value)
         val position = indexOfStamp(slot.stamp)
-        if (position == size - 1 && slot.value == value) {
+        if (position == size - 1 && tungstenValuesEqual(slot.value, value)) {
             return this
         }
 
@@ -558,7 +560,7 @@ public class PersistentAssociation<K, V> private constructor(
         val slot = index[key]
         if (slot != null) {
             val position = indexOfStamp(slot.stamp)
-            if (position == 0 && slot.value == value) {
+            if (position == 0 && tungstenValuesEqual(slot.value, value)) {
                 return this
             }
 

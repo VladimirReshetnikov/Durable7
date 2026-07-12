@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE MagicHash #-}
 
 -- | A persistent ordered map whose AVL nodes cache the minimum-priority entry
 -- in their subtree.  Priority ties are resolved by key order, so the minimum
@@ -30,6 +31,11 @@ module Data.Structures.FingerTree.PrioritySearchQueue
 import Prelude hiding (lookup, null)
 
 import qualified Data.List as List
+import GHC.Exts (isTrue#, reallyUnsafePtrEquality#)
+
+sameValue :: Eq a => a -> a -> Bool
+sameValue left right = isTrue# (reallyUnsafePtrEquality# left right) || left == right
+{-# INLINE sameValue #-}
 
 -- | One keyed payload and its ordering priority.  Lower priorities win; equal
 -- priorities are ordered by 'entryKey'.
@@ -270,8 +276,8 @@ setNode overwrite entry (Just node) = case compare (entryKey entry) (entryKey (n
          else (node, added, False)
   EQ
     | not overwrite -> (node, False, False)
-    | entryPriority entry == entryPriority (nodeEntry node)
-        && entryValue entry == entryValue (nodeEntry node) -> (node, False, False)
+    | sameValue (entryPriority entry) (entryPriority (nodeEntry node))
+        && sameValue (entryValue entry) (entryValue (nodeEntry node)) -> (node, False, False)
     | otherwise ->
         let retained = PrioritySearchEntry
               (entryKey (nodeEntry node))

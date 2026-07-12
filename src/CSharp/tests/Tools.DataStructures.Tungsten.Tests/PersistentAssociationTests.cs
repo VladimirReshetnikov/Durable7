@@ -9,6 +9,26 @@ namespace Tools.DataStructures.Tungsten.Tests;
 /// </summary>
 public sealed class PersistentAssociationTests
 {
+    /// <summary>Verifies that same-reference no-op updates do not invoke user equality.</summary>
+    [Fact]
+    public void SameReferenceNoOps_BypassValueEquality()
+    {
+        var value = new EqualityCountingValue();
+        var association = PersistentAssociation<string, EqualityCountingValue>.Empty.SetItem("key", value);
+
+        Assert.Same(association, association.SetItem("key", value));
+        Assert.Same(association, association.Append("key", value));
+        Assert.Same(association, association.Prepend("key", value));
+        Assert.Equal(0, value.EqualityCalls);
+    }
+
+    private sealed class EqualityCountingValue
+    {
+        public int EqualityCalls { get; private set; }
+        public override bool Equals(object? obj) { EqualityCalls++; return ReferenceEquals(this, obj); }
+        public override int GetHashCode() => 0;
+    }
+
     private static PersistentAssociation<string, int> Assoc(params (string Key, int Value)[] pairs) =>
         PersistentAssociation.CreateRange(pairs.Select(p => KeyValuePair.Create(p.Key, p.Value)));
 

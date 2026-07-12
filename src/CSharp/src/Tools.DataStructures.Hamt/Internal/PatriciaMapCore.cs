@@ -206,7 +206,7 @@ internal sealed class PatriciaMapCore<TKey, TValue, TKeyPolicy>
             if (leaf.Key == key)
             {
                 added = false;
-                if (!overwrite || EqualityComparer<TValue>.Default.Equals(leaf.Value, value))
+                if (!overwrite || ValuesEqual(leaf.Value, value))
                     return leaf;
                 return new Leaf(key, value);
             }
@@ -399,9 +399,9 @@ internal sealed class PatriciaMapCore<TKey, TValue, TKeyPolicy>
         Func<TKey, TValue, TValue, TValue> combine)
     {
         var value = combine(TKeyPolicy.Decode(left.Key), left.Value, right.Value);
-        if (EqualityComparer<TValue>.Default.Equals(value, left.Value))
+        if (ValuesEqual(value, left.Value))
             return left;
-        if (EqualityComparer<TValue>.Default.Equals(value, right.Value))
+        if (ValuesEqual(value, right.Value))
             return right;
         return new Leaf(left.Key, value);
     }
@@ -474,6 +474,10 @@ internal sealed class PatriciaMapCore<TKey, TValue, TKeyPolicy>
     private static bool Matches(ulong key, ulong prefix, ulong mask) => PrefixOf(key, mask) == prefix;
 
     private static bool GoesLeft(ulong key, ulong mask) => (key & mask) == 0;
+
+    private static bool ValuesEqual(TValue? left, TValue? right) =>
+        (!typeof(TValue).IsValueType && ReferenceEquals(left, right)) ||
+        EqualityComparer<TValue>.Default.Equals(left!, right!);
 
     private abstract class Node
     {

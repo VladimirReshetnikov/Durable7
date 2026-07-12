@@ -5,6 +5,25 @@ namespace Tools.DataStructures.FingerTree.Tests;
 /// <summary>Keyed lookup, priority winner, range-query, balance, and model coverage for <see cref="PrioritySearchQueue{TKey,TPriority,TValue}"/>.</summary>
 public sealed class PrioritySearchQueueTests
 {
+    /// <summary>Verifies that replacing a value with itself does not invoke user equality.</summary>
+    [Fact]
+    public void SameReferenceReplacement_BypassesValueEquality()
+    {
+        var value = new EqualityCountingValue();
+        var queue = PrioritySearchQueue<string, int, EqualityCountingValue>.Empty
+            .SetItem("key", 1, value);
+
+        Assert.Same(queue, queue.SetItem("key", 1, value));
+        Assert.Equal(0, value.EqualityCalls);
+    }
+
+    private sealed class EqualityCountingValue
+    {
+        public int EqualityCalls { get; private set; }
+        public override bool Equals(object? obj) { EqualityCalls++; return ReferenceEquals(this, obj); }
+        public override int GetHashCode() => 0;
+    }
+
     /// <summary>Verifies keyed updates and deterministic minimum-priority tie handling.</summary>
     [Fact]
     public void KeyedOperationsAndMinimum_WorkTogether()

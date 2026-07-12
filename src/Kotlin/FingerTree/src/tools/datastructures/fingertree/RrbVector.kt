@@ -517,7 +517,7 @@ private fun getNode(root: RrbNode, initialIndex: Int): Any? {
 
 private fun setNode(node: RrbNode, index: Int, value: Any?): RrbNode {
     if (node is RrbLeaf) {
-        if (node.items[index] == value) {
+        if (rrbValuesEqual(node.items[index], value)) {
             return node
         }
         val items = node.items.copyOf()
@@ -535,6 +535,8 @@ private fun setNode(node: RrbNode, index: Int, value: Any?): RrbNode {
     children[location.index] = child
     return RrbBranch(children)
 }
+
+private fun <T> rrbValuesEqual(left: T, right: T): Boolean = left === right || left == right
 
 private fun concatNodes(left: RrbNode, right: RrbNode): Array<RrbNode> {
     if (left.height == right.height) {

@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE MagicHash #-}
 
 module Data.Structures.FingerTree.RrbVector
   ( RrbVector
@@ -25,12 +26,16 @@ module Data.Structures.FingerTree.RrbVector
 
 import Prelude hiding (null, splitAt)
 import qualified Prelude as P
-
 import Data.Array (Array, (!), bounds, elems, listArray)
 import Data.Bits (finiteBitSize, shiftL, shiftR)
 import Control.Exception (evaluate)
 import Data.Maybe (isNothing)
 import System.Mem.StableName (eqStableName, makeStableName)
+import GHC.Exts (isTrue#, reallyUnsafePtrEquality#)
+
+sameValue :: Eq a => a -> a -> Bool
+sameValue left right = isTrue# (reallyUnsafePtrEquality# left right) || left == right
+{-# INLINE sameValue #-}
 
 branchFactor :: Int
 branchFactor = 32
@@ -194,7 +199,7 @@ indexNode position branch@(Branch _ _ children _) =
 
 setNode :: Eq a => Int -> a -> Node a -> (Node a, Bool)
 setNode position value leaf@(Leaf values)
-  | values ! position == value = (leaf, False)
+  | sameValue (values ! position) value = (leaf, False)
   | otherwise = (Leaf (replaceArray position value values), True)
 setNode position value branch@(Branch _ _ children _) =
   let (childIndex, before) = findChild position branch

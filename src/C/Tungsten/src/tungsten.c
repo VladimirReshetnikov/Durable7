@@ -126,6 +126,9 @@ static bool tds_tungsten_value_equal(
     const void* left,
     const void* right)
 {
+    if (left == right) {
+        return true;
+    }
     if (equal != NULL) {
         return equal(left, right, context);
     }

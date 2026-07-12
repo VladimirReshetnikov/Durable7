@@ -1,3 +1,5 @@
+{-# LANGUAGE MagicHash #-}
+
 module Data.Structures.Tungsten.Association
   ( PersistentAssociation
   , empty
@@ -51,6 +53,11 @@ import qualified Data.List as List
 import Data.Structures.Hamt.Hashable (Hashable)
 import qualified Data.Structures.Hamt.HashMap as HM
 import Data.Structures.Hamt.HashMap (HashPolicy)
+import GHC.Exts (isTrue#, reallyUnsafePtrEquality#)
+
+sameValue :: Eq a => a -> a -> Bool
+sameValue left right = isTrue# (reallyUnsafePtrEquality# left right) || left == right
+{-# INLINE sameValue #-}
 
 stampGap :: Int
 stampGap = 2 ^ (20 :: Int)
@@ -125,7 +132,7 @@ setItem key value association@(PersistentAssociation entries index) =
     Nothing -> appendNew key value association
     -- Equal-value update returns the receiver (spec: no-op identity for the
     -- association's SetItem, test-locked in the C# reference).
-    Just (Slot _ storedValue) | storedValue == value -> association
+    Just (Slot _ storedValue) | sameValue storedValue value -> association
     Just (Slot stamp _) ->
       let position = expectStamp stamp entries
           Entry _ storedKey _ = expectIndex position entries
@@ -148,7 +155,7 @@ append key value association@(PersistentAssociation entries index) =
        in -- Rule-2 terminal no-op fast path (matches the C# reference): a key
           -- already last with an equal value returns the receiver, keeping
           -- the stored key instance and consuming no stamp.
-          if position == treeSize entries - 1 && storedValue == value
+          if position == treeSize entries - 1 && sameValue storedValue value
             then association
             else
               let entries' = expectTree (treeDelete position entries)
@@ -162,7 +169,7 @@ prepend key value association@(PersistentAssociation entries index) =
     Just (Slot stamp storedValue) ->
       let position = expectStamp stamp entries
        in -- Rule-2 terminal no-op fast path; see append.
-          if position == 0 && storedValue == value
+          if position == 0 && sameValue storedValue value
             then association
             else
               let entries' = expectTree (treeDelete position entries)

@@ -28,6 +28,19 @@ private inline fun <reified T : Throwable> rrbCheckThrows(message: String, actio
     throw AssertionError("$message Expected ${T::class.simpleName}.")
 }
 
+private class RrbEqualityCountingValue {
+    var equalityCalls: Int = 0
+    override fun equals(other: Any?): Boolean { equalityCalls++; return this === other }
+    override fun hashCode(): Int = 0
+}
+
+private fun rrbSameReferenceReplacementBypassesEquality() {
+    val value = RrbEqualityCountingValue()
+    val vector = RrbVector.from(listOf(value))
+    rrbCheck(vector.setItem(0, value) === vector, "RRB same-reference replacement reuses vector")
+    rrbCheckEquals(0, value.equalityCalls, "RRB same-reference replacement bypasses equality")
+}
+
 private fun rrbConstructionCrossesRadixBoundaries() {
     for (count in listOf(0, 1, 31, 32, 33, 1_023, 1_024, 1_025, 100_000)) {
         val vector = RrbVector.from(0 until count)
@@ -319,6 +332,7 @@ private fun minimumRrbHeight(count: Int): Int {
 }
 
 internal fun rrbVectorTestCases(): List<Pair<String, () -> Unit>> = listOf(
+    "rrbSameReferenceReplacementBypassesEquality" to ::rrbSameReferenceReplacementBypassesEquality,
     "rrbConstructionCrossesRadixBoundaries" to ::rrbConstructionCrossesRadixBoundaries,
     "rrbConcatenatesUnequalHeights" to ::rrbConcatenatesUnequalHeights,
     "rrbSplitsReuseExactBoundaryLeaves" to ::rrbSplitsReuseExactBoundaryLeaves,

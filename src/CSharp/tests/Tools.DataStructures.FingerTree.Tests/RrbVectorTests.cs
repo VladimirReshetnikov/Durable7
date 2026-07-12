@@ -5,6 +5,24 @@ namespace Tools.DataStructures.FingerTree.Tests;
 /// <summary>Boundary, persistence, concatenation, and randomized model coverage for <see cref="RrbVector{T}"/>.</summary>
 public sealed class RrbVectorTests
 {
+    /// <summary>Verifies that replacing an item with itself does not invoke user equality.</summary>
+    [Fact]
+    public void SameReferenceReplacement_BypassesValueEquality()
+    {
+        var value = new EqualityCountingValue();
+        var vector = RrbVector<EqualityCountingValue>.CreateRange([value]);
+
+        Assert.Same(vector, vector.SetItem(0, value));
+        Assert.Equal(0, value.EqualityCalls);
+    }
+
+    private sealed class EqualityCountingValue
+    {
+        public int EqualityCalls { get; private set; }
+        public override bool Equals(object? obj) { EqualityCalls++; return ReferenceEquals(this, obj); }
+        public override int GetHashCode() => 0;
+    }
+
     /// <summary>Verifies construction and indexing across every branch-factor boundary.</summary>
     [Theory]
     [InlineData(0)]

@@ -270,7 +270,7 @@ public sealed class RrbVector<T> : IReadOnlyList<T>
     {
         if (node is Leaf leaf)
         {
-            if (EqualityComparer<T>.Default.Equals(leaf.Items[index], value))
+            if (ValuesEqual(leaf.Items[index], value))
                 return leaf;
             var items = (T[])leaf.Items.Clone();
             items[index] = value;
@@ -287,6 +287,10 @@ public sealed class RrbVector<T> : IReadOnlyList<T>
         children[childIndex] = child;
         return new Branch(children);
     }
+
+    private static bool ValuesEqual(T? left, T? right) =>
+        (!typeof(T).IsValueType && ReferenceEquals(left, right)) ||
+        EqualityComparer<T>.Default.Equals(left!, right!);
 
     private static Node[] ConcatNodes(Node left, Node right)
     {

@@ -704,7 +704,7 @@ private:
         if (current->kind == node_kind::leaf) {
             const auto& leaf = as_leaf(current.get());
             if constexpr (equality_comparable_value<value_type>) {
-                if (leaf.items[index] == value) {
+                if (std::addressof(leaf.items[index]) == std::addressof(value) || leaf.items[index] == value) {
                     return current;
                 }
             }

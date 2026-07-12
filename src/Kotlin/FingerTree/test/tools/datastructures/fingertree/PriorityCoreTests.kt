@@ -20,8 +20,25 @@ internal fun priorityCoreTestCases(): List<Pair<String, () -> Unit>> = listOf(
     "psqRandomizedRetainedHistoryMatchesModel" to ::psqRandomizedRetainedHistoryMatchesModel,
     "psqRangeThresholdPruningHasAuditedComparisonCounts" to ::psqRangeThresholdPruningHasAuditedComparisonCounts,
     "psqNoOpsPathCopyingAndTiesPreserveIdentity" to ::psqNoOpsPathCopyingAndTiesPreserveIdentity,
+    "psqSameReferenceReplacementBypassesEquality" to ::psqSameReferenceReplacementBypassesEquality,
     "psqConcurrentReadersSeeStableSnapshots" to ::psqConcurrentReadersSeeStableSnapshots,
 )
+
+private class PsqEqualityCountingValue {
+    var equalityCalls: Int = 0
+    override fun equals(other: Any?): Boolean { equalityCalls++; return this === other }
+    override fun hashCode(): Int = 0
+}
+
+private fun psqSameReferenceReplacementBypassesEquality() {
+    val value = PsqEqualityCountingValue()
+    val queue = PrioritySearchQueue.empty<String, Int, PsqEqualityCountingValue>()
+        .setItem("key", 1, value)
+    priorityCheck(queue.setItem("key", 1, value) === queue,
+        "PSQ same-reference replacement reuses queue")
+    priorityCheckEquals(0, value.equalityCalls,
+        "PSQ same-reference replacement bypasses equality")
+}
 
 private fun brodalAdversarialShapesDrainInOrder() {
     val count = 4_096
