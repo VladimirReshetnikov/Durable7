@@ -31,6 +31,7 @@ Library-specific design and API documentation lives beside each workspace under 
 ## Proposals
 
 - [Next data structures (2026-07-09)](proposals/new-data-structures-2026-07-09.md) - prioritized slate of new structures and API additions building on the derived-structure catalog: HAMT update/builder/diff, insertion-ordered set, hash bag, cursor/zipper, Patricia trie family, and numerics extensions.
+- [Persistent set of GUIDs design study (2026-07-12)](proposals/persistent-guid-set-design-study-2026-07-12.md) - which shipped collection fits a persistent GUID set best (`PersistentHashSet<Guid>` by default), whether a custom full-key 128-bit trie beats it (a capability/robustness win, not a faster membership set — decisive only for untrusted GUIDs, ordered/range queries, or structural set algebra), the measured GUID sort-order facts, a workload-indexed decision table, and consumer-gated adoption economics.
 
 ## Reviews
 
