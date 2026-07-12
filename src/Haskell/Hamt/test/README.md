@@ -26,3 +26,14 @@ nullable codecs, malformed decoding, stable first-key/last-value equivalence, op
 preorder block equality, wide blocks, exact replacement no-ops, retained versions, off-path block
 sharing, typed diff, inclusive and reversed ranges, a 10,000-operation ordered model, full
 re-encoding validation, and `forkIO` readers.
+
+Eight persistence groups extend that checkpoint with the shared golden block through pack export;
+complete save/load/import round trips; immutable-store idempotence; empty roots; malformed,
+noncanonical, foreign-domain, unsupported, missing-closure, digest-tamper, and late-conflict
+failures; independent enforcement and construction validation for all seven finite budgets; exact
+query-first and shape-second proof admission using same-domain bomb codecs; accounted failure
+diagnostics; canonical membership, nonmembership, inclusive-range, and empty-root `MSP2` proofs;
+query/block/step/expansion/omission/extra-step tampering; complete, partial, and iterative frontier
+synchronization; disjoint, identical, unresolved, and resolved typed merges; present `Nothing`
+versus deletion; retained roots in one content store; and a 2,000-operation save/load model. Local
+proof and sync construction is separately exercised with decoders that fail if forced.

@@ -15,6 +15,7 @@ library
     Data.Structures.Hamt.HashMap
     Data.Structures.Hamt.HashSet
     Data.Structures.Hamt.MerkleEncoding
+    Data.Structures.Hamt.MerklePersistence
     Data.Structures.Hamt.MerkleSearchTree
     Data.Structures.Hamt.Patricia
   hs-source-dirs: src
@@ -29,6 +30,8 @@ library
 test-suite hamt-test
   type: exitcode-stdio-1.0
   main-is: Main.hs
+  other-modules:
+    PersistenceTests
   hs-source-dirs: test
   build-depends:
     base >=4.21 && <4.22,

@@ -3,7 +3,7 @@
 - Created (UTC): 2026-07-12T07:00:00Z
 - Repository HEAD: 2a2c92d10d308a18793067106b1ef10d3748f0ba
 - Audience: Maintainers implementing or reviewing the Haskell Merkle search tree
-- Scope: Canonical codecs, SHA-256 policy framing, persistent core, and exact `MST2` block bytes
+- Scope: Canonical core, exact wire bytes, verified persistence, proofs, synchronization, and merge
 
 `Data.Structures.Hamt.MerkleSearchTree` is the pure-Haskell core/wire port of the repository's
 canonical Merkle search tree. It is an ordered persistent map whose shape and root address depend
@@ -83,9 +83,90 @@ An absent child uses the policy's empty-manifest digest. The Haskell tests pin t
 byte against C# and Rust, then compare every preorder block produced by opposite insertion
 histories.
 
-The current module is the core and wire checkpoint. Content stores, transfer packs, bounded
-untrusted decoding, `MSP2` proofs, synchronization, and typed merge belong to the persistence tier
-and are not claimed by this checkpoint.
+## Pure authenticated persistence
+
+`Data.Structures.Hamt.MerklePersistence` owns the persistence tier. `MerkleBlock` pairs immutable
+bytes with a claimed address without authenticating it; format-aware operations authenticate the
+pair. `MerkleBlockStore` is an immutable `Map`-backed snapshot. `putBlock` is idempotent for equal
+bytes and rejects a different byte string under an existing address. `saveTree` preflights the
+entire destination before returning an updated store, so a late conflict cannot expose a partially
+published successor.
+
+`exportPack` emits the complete closure in canonical preorder. `exportPackFor` preserves an
+explicit caller order while rejecting duplicate or unknown addresses. A `MerkleBlockPack` can be
+complete or partial and records its algorithm, policy domain, target root, ordered unique blocks,
+and exact transferred byte count. `importPack` first verifies every supplied block, then verifies
+the requested root closure through a staged-first/destination-second overlay, then preflights all
+destination conflicts, and only then returns the loaded tree and successor store. Supplied blocks
+outside the requested root closure must still be individually canonical and authenticated, but may
+remain useful partial synchronization state. Only the requested root closure must be complete.
+
+`loadTree` and `importPack` strictly decode and re-encode keys, values, and blocks; authenticate each
+claimed digest; reject malformed and noncanonical lengths or trailing bytes; validate descending
+levels, separator intervals, declared subtree counts, cycles, and closure completeness; rebuild the
+canonical core; and finally check the requested root and full core structure. No decoded tree or
+successor store is returned after failure.
+
+## Verification budgets
+
+`MerkleVerificationBudget` is opaque and can only be built by
+`makeMerkleVerificationBudget`. Its seven positive finite limits are:
+
+- unique block count;
+- total query-plus-block bytes;
+- bytes in one block;
+- root-to-leaf reference depth;
+- cumulative entries in unique blocks;
+- child references in one block; and
+- bytes in one proof query descriptor.
+
+The cross-language defaults are 1,000,000 blocks, 1 GiB total, 16 MiB per block, depth 256,
+100,000,000 entries, 65,536 child references, and 16 MiB per proof query. Construction rejects a
+per-block or query limit larger than the total-byte limit. Header counts and minimum possible block
+lengths are admitted before entry-list construction or codec callbacks.
+
+Proof verification has a stronger deliberate precedence: query size is checked and accounted
+first; proof step count and every expanded-index count are preflighted second; algorithm/domain
+envelopes come third; verifier maps, hashing, codec callbacks, and block decoding occur only after
+all three admissions. An oversized query reports zero verified blocks and zero bytes. A structural
+proof-limit failure reports zero blocks and query-only bytes.
+
+## Exact `MSP2` proofs
+
+`createProof` emits canonical membership or nonmembership paths. `createRangeProof` emits the exact
+set of child intervals intersecting an inclusive comparator range. Their query descriptors are:
+
+```text
+point := ASCII "MSP2" | kind:byte | key-length:i32be | key bytes
+         | (value-length:i32be | value bytes, membership only)
+range := ASCII "MSP2" | 2 | min-length:i32be | min bytes
+         | max-length:i32be | max bytes
+```
+
+Kinds 0, 1, and 2 mean membership, nonmembership, and range. Every proof step carries one exact
+`MST2` block and sorted unique child indexes expanded elsewhere in the proof. Verification requires
+the declared root, exact canonical query expansion, correct parent/child addresses and separator
+intervals, the authenticated membership value or terminal empty interval, and no unreachable extra
+step. Empty roots canonically prove nonmembership and empty ranges without blocks.
+
+Local proof and synchronization construction use a trusted read-only topology view from the core;
+they neither call codec decoders nor impose network verification budgets on an already-constructed
+tree. Untrusted verification continues to use strict codecs and finite limits.
+
+## Synchronization and merge
+
+`createSyncPack` walks the target in preorder and prunes a whole closure when the receiver already
+has its root address. `planSync` performs one iterative frontier round: a missing address is
+requested without descending through an unavailable block; after that block is transferred, the
+next round discovers its missing children. The plan records deterministic requests and exact target
+blocks/bytes examined. Matching local and target roots converge without examining blocks.
+
+`mergeThreeWay` and `mergeThreeWayWith` compare the base and two descendants in ordered key space.
+One-sided edits and identical descendant edits merge automatically. True conflicts expose typed
+`MergeAbsent`/`MergePresent value` states and accept use-base, use-left, use-right, set-value,
+delete, or unresolved decisions. `MergePresent Nothing` remains distinct from deletion when the
+tree value type is `Maybe a`. The result type is either `MerkleMergeSucceeded tree` or
+`MerkleMergeConflicted conflicts`; an unresolved result cannot carry a partial tree.
 
 ## Validation
 

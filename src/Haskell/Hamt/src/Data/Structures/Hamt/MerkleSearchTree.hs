@@ -10,6 +10,7 @@ module Data.Structures.Hamt.MerkleSearchTree
   , entryValueBytes
   , entryLevel
   , MerkleBlockView(..)
+  , MerklePersistenceBlockView(..)
   , MerkleShapeEntry(..)
   , MerkleMapDifference(..)
   , MerkleSearchTreeStatistics(..)
@@ -36,6 +37,7 @@ module Data.Structures.Hamt.MerkleSearchTree
   , toAscList
   , range
   , blocksPreorder
+  , persistenceBlocksPreorder
   , shape
   , commonBlockCount
   , validateStructure
@@ -113,6 +115,20 @@ data MerkleBlockView = MerkleBlockView
   { blockViewDigest :: !MerkleDigest
   , blockViewBytes :: !ByteString
   } deriving (Eq, Show)
+
+-- | Trusted read-only block detail used by the persistence companion module.
+--
+-- Unlike wire decoding, this view exposes the already-retained entry representatives and child
+-- addresses, so local proof and synchronization construction never calls codecs or applies
+-- untrusted-input budgets to a tree that has already passed core construction.
+data MerklePersistenceBlockView k v = MerklePersistenceBlockView
+  { persistenceBlockDigest :: !MerkleDigest
+  , persistenceBlockBytes :: !ByteString
+  , persistenceBlockLevel :: !Word8
+  , persistenceBlockSubtreeCount :: !Int
+  , persistenceBlockEntries :: ![MerkleEntry k v]
+  , persistenceBlockChildDigests :: ![MerkleDigest]
+  }
 
 -- | Per-entry block-shape diagnostics.
 data MerkleShapeEntry k = MerkleShapeEntry
@@ -347,6 +363,20 @@ blocksPreorder tree = maybe [] go (treeRoot tree)
   where
     go node = MerkleBlockView (nodeDigest node) (nodeBlockBytes node)
       : concatMap (maybe [] go) (elems (nodeChildren node))
+
+-- | Enumerates trusted block topology in canonical preorder for persistence algorithms.
+persistenceBlocksPreorder :: MerkleSearchTree k v -> [MerklePersistenceBlockView k v]
+persistenceBlocksPreorder tree = maybe [] go (treeRoot tree)
+  where
+    go node = MerklePersistenceBlockView
+      { persistenceBlockDigest = nodeDigest node
+      , persistenceBlockBytes = nodeBlockBytes node
+      , persistenceBlockLevel = nodeLevel node
+      , persistenceBlockSubtreeCount = nodeCount node
+      , persistenceBlockEntries = elems (nodeEntries node)
+      , persistenceBlockChildDigests =
+          map (maybe (merkleEmptyDigest (policy tree)) nodeDigest) (elems (nodeChildren node))
+      } : concatMap (maybe [] go) (elems (nodeChildren node))
 
 -- | Returns one shape record per entry in block preorder.
 shape :: MerkleSearchTree k v -> [MerkleShapeEntry k]

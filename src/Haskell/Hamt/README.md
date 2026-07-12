@@ -11,12 +11,16 @@ inline payload runs, immutable equal-hash collision buckets, structural sharing 
 and optional runtime `HashPolicy` values for custom hash/equality behavior. Maps expose semantic
 `mapEquals` and typed `MapDifference` classification.
 
-`Data.Structures.Hamt.MerkleEncoding` and `Data.Structures.Hamt.MerkleSearchTree` add the
-policy-bound canonical Merkle search tree. The pure SHA-256 implementation, strict versioned
-codecs, domain/key framing, empty digest, and complete `MST2` block bytes match C# and Rust exactly.
-The immutable wide tree supports stable first-key/last-value bulk construction, path-copy updates,
-ordered lookup/range enumeration, digest-pruned diff, exact block/shape inspection, shared-content
-diagnostics, and deep re-encoding validation. See the dedicated
+`Data.Structures.Hamt.MerkleEncoding`, `Data.Structures.Hamt.MerkleSearchTree`, and
+`Data.Structures.Hamt.MerklePersistence` provide the policy-bound canonical Merkle search tree.
+The pure SHA-256 implementation, strict versioned codecs, domain/key framing, empty digest,
+complete `MST2` blocks, and `MSP2` proof queries match C#, Rust, and Kotlin exactly. The immutable
+wide tree supports stable first-key/last-value bulk construction, path-copy updates, ordered
+lookup/range enumeration, digest-pruned diff, exact block/shape inspection, shared-content
+diagnostics, and deep re-encoding validation. Its pure persistence tier adds immutable block-store
+snapshots, complete and partial packs, seven-limit bounded verification, atomic-result save/import,
+membership/nonmembership/range proofs, closure-pruned and iterative synchronization, and typed
+present/absent-safe three-way merge. See the dedicated
 [Merkle search-tree guide](docs/merkle-search-tree.md).
 
 The HAMT default factories use the package-local `Hashable` class plus `Eq`, keeping the public

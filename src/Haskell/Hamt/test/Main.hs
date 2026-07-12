@@ -31,6 +31,7 @@ import Data.Structures.Hamt.MerkleEncoding
   )
 import qualified Data.Structures.Hamt.MerkleSearchTree as Merkle
 import qualified Data.Structures.Hamt.Patricia as Patricia
+import PersistenceTests (runPersistenceTests)
 
 main :: IO ()
 main = do
@@ -45,6 +46,7 @@ main = do
   testCrossPolicySetRelations
   testLargeFromList
   testMerkleEncodingAndCore
+  runPersistenceTests
   testConcurrentReads
   putStrLn "tools-data-structures-hamt tests passed"
 
