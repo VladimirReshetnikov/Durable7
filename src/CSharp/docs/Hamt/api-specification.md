@@ -65,6 +65,10 @@ original.
   `Removed`, or `Changed`. Null and comparer-mismatch failures occur eagerly. Removed/changed results
   expose the source's stored key representative; added results expose the target's. Result order is
   deterministic for unchanged operands but remains an implementation detail.
+- `Union(other)`, `Intersect(other)`, `Except(other)`, and `SymmetricExcept(other)` combine compatible
+  maps by logical CHAMP slot. Union is right-value-biased while retaining the receiver's stored key
+  representative; intersection retains receiver entries. All four prune reference-equal roots and
+  descendants and require the same comparer object.
 
 For maps derived from a shared version, equality and diff visit only non-shared trie regions (plus
 reported output). Independently built equal maps still require O(n) comparison because canonical
@@ -100,6 +104,12 @@ mutating a comparer used by `Dictionary<TKey, TValue>`.
 - `IsSubsetOf`, `IsProperSubsetOf`, `IsSupersetOf`, `IsProperSupersetOf`, `Overlaps`, and
   `SetEquals` interpret equality through the set's comparer.
 
+Each algebra and relation has a same-type `PersistentHashSet<T>` overload. These overloads require
+the identical comparer object, operate structurally over stored hashes without rehashing entries,
+and prune reference-equal roots/subtrees. Self union/intersection and unchanged receiver results
+preserve instance identity; self difference/symmetric difference return the comparer-preserving
+empty set. The `IEnumerable<T>` overloads remain the arbitrary-sequence path.
+
 `SetItems` on the map and `Union`/`Except` on the set are the sanctioned bulk updates; there are no
 separate `AddRange`/`RemoveRange` members.
 
@@ -122,8 +132,9 @@ equal-hash collision bucket.
 - `MapEquals`: O(divergent canonical nodes + collision comparisons), with reference-equal subtrees
   skipped in O(1).
 - `Diff`: O(n + m) in the current public implementation, with an O(1) shared-root fast path.
-- Set algebra implemented from public operations: O((n + m) * update-cost) unless the operation only
-  probes membership.
+- Same-type CHAMP map/set algebra: O(divergent nodes + result nodes) for shared ancestry and O(n + m)
+  for independent operands; reference-equal subtrees are skipped in O(1). Arbitrary `IEnumerable<T>`
+  set algebra retains its element-wise/probe-materialization costs.
 
 Update allocation is O(b * depth + c) array storage — O(depth + c) allocated node objects — for the
 changed path and any touched collision bucket. Unchanged subtrees remain shared and are safe for

@@ -197,6 +197,34 @@ public sealed class PersistentHashSet<T> : IReadOnlySet<T>
     /// </returns>
     public PersistentHashSet<T> Clear() => WithMap(_map.Clear());
 
+    /// <summary>Returns the structural union with another set retaining the same comparer object.</summary>
+    public PersistentHashSet<T> Union(PersistentHashSet<T> other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        return WithMap(_map.Union(other._map));
+    }
+
+    /// <summary>Returns the structural intersection with another set retaining the same comparer object.</summary>
+    public PersistentHashSet<T> Intersect(PersistentHashSet<T> other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        return WithMap(_map.Intersect(other._map));
+    }
+
+    /// <summary>Returns the structural difference from another set retaining the same comparer object.</summary>
+    public PersistentHashSet<T> Except(PersistentHashSet<T> other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        return WithMap(_map.Except(other._map));
+    }
+
+    /// <summary>Returns the structural symmetric difference with another compatible set.</summary>
+    public PersistentHashSet<T> SymmetricExcept(PersistentHashSet<T> other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        return WithMap(_map.SymmetricExcept(other._map));
+    }
+
     /// <summary>
     /// Returns the union of this set and the specified items.
     /// </summary>
@@ -287,6 +315,56 @@ public sealed class PersistentHashSet<T> : IReadOnlySet<T>
             result = result.Contains(item) ? result.Remove(item) : result.Add(item);
 
         return result;
+    }
+
+    /// <summary>Determines structurally whether this set is a subset of another compatible set.</summary>
+    public bool IsSubsetOf(PersistentHashSet<T> other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        EnsureCompatible(other);
+        return Count <= other.Count && ReferenceEquals(_map.Intersect(other._map), _map);
+    }
+
+    /// <summary>Determines structurally whether this set is a proper subset of another compatible set.</summary>
+    public bool IsProperSubsetOf(PersistentHashSet<T> other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        EnsureCompatible(other);
+        return Count < other.Count && IsSubsetOf(other);
+    }
+
+    /// <summary>Determines structurally whether this set is a superset of another compatible set.</summary>
+    public bool IsSupersetOf(PersistentHashSet<T> other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        EnsureCompatible(other);
+        return other.IsSubsetOf(this);
+    }
+
+    /// <summary>Determines structurally whether this set is a proper superset of another compatible set.</summary>
+    public bool IsProperSupersetOf(PersistentHashSet<T> other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        EnsureCompatible(other);
+        return Count > other.Count && other.IsSubsetOf(this);
+    }
+
+    /// <summary>Determines structurally whether this set overlaps another compatible set.</summary>
+    public bool Overlaps(PersistentHashSet<T> other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        EnsureCompatible(other);
+        if (ReferenceEquals(_map.RootForTesting, other._map.RootForTesting))
+            return Count != 0;
+        return _map.Intersect(other._map).Count != 0;
+    }
+
+    /// <summary>Determines structurally whether this set equals another compatible set.</summary>
+    public bool SetEquals(PersistentHashSet<T> other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        EnsureCompatible(other);
+        return _map.MapEquals(other._map);
     }
 
     /// <summary>
@@ -477,6 +555,12 @@ public sealed class PersistentHashSet<T> : IReadOnlySet<T>
 
     private PersistentHashSet<T> WithMap(PersistentHashMap<T, Unit> map) =>
         ReferenceEquals(map, _map) ? this : Wrap(map);
+
+    private void EnsureCompatible(PersistentHashSet<T> other)
+    {
+        if (!ReferenceEquals(Comparer, other.Comparer))
+            throw new ArgumentException("Sets must use the same comparer object.", nameof(other));
+    }
 
     /// <summary>
     /// Enumerates the items in a <see cref="PersistentHashSet{T}"/>.

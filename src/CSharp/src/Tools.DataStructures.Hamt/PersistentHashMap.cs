@@ -398,6 +398,22 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     /// </returns>
     public PersistentHashMap<TKey, TValue> Clear() => _count == 0 ? this : EmptyFor(_comparer);
 
+    /// <summary>Returns the right-value-biased structural union with another compatible map.</summary>
+    public PersistentHashMap<TKey, TValue> Union(PersistentHashMap<TKey, TValue> other) =>
+        Combine(other, SetOperation.Union);
+
+    /// <summary>Returns the structural intersection, retaining this map's keys and values.</summary>
+    public PersistentHashMap<TKey, TValue> Intersect(PersistentHashMap<TKey, TValue> other) =>
+        Combine(other, SetOperation.Intersect);
+
+    /// <summary>Returns this map without keys present in another compatible map.</summary>
+    public PersistentHashMap<TKey, TValue> Except(PersistentHashMap<TKey, TValue> other) =>
+        Combine(other, SetOperation.Except);
+
+    /// <summary>Returns entries whose keys occur in exactly one compatible map.</summary>
+    public PersistentHashMap<TKey, TValue> SymmetricExcept(PersistentHashMap<TKey, TValue> other) =>
+        Combine(other, SetOperation.SymmetricExcept);
+
     /// <summary>Determines whether another map has the same comparer, keys, and values.</summary>
     /// <param name="other">The map to compare with this map.</param>
     /// <param name="valueComparer">
@@ -556,6 +572,24 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
             ? Empty
             : new PersistentHashMap<TKey, TValue>(root: null, count: 0, comparer);
 
+    private PersistentHashMap<TKey, TValue> Combine(
+        PersistentHashMap<TKey, TValue> other,
+        SetOperation operation)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        if (!ReferenceEquals(_comparer, other._comparer))
+            throw new ArgumentException("Maps must use the same comparer object.", nameof(other));
+
+        var root = CombineNodes(_root, other._root, shift: 0, operation, _comparer);
+        if (ReferenceEquals(root, _root))
+            return this;
+        if (root is null)
+            return EmptyFor(_comparer);
+        if (ReferenceEquals(root, other._root))
+            return other;
+        return new PersistentHashMap<TKey, TValue>(root, root.Count, _comparer);
+    }
+
     private uint GetHash(TKey key) => unchecked((uint)_comparer.GetHashCode(key!));
 
     private static int Index(uint hash, int shift) => (int)((hash >> shift) & BranchMask);
@@ -563,6 +597,243 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
     private static uint Bit(int index) => 1u << index;
 
     private static int Slot(uint bitmap, uint bit) => BitOperations.PopCount(bitmap & (bit - 1));
+
+    private enum SetOperation
+    {
+        Union,
+        Intersect,
+        Except,
+        SymmetricExcept,
+    }
+
+    private static Node? CombineNodes(
+        Node? left,
+        Node? right,
+        int shift,
+        SetOperation operation,
+        IEqualityComparer<TKey> keyComparer)
+    {
+        if (ReferenceEquals(left, right))
+        {
+            return operation is SetOperation.Union or SetOperation.Intersect ? left : null;
+        }
+        if (left is null)
+        {
+            return operation is SetOperation.Union or SetOperation.SymmetricExcept ? right : null;
+        }
+        if (right is null)
+        {
+            return operation is SetOperation.Union or SetOperation.Except or SetOperation.SymmetricExcept
+                ? left
+                : null;
+        }
+        if (left is HashNode leftHash && right is HashNode rightHash)
+            return CombineHashNodes(leftHash, rightHash, shift, operation, keyComparer);
+
+        var slots = new Node?[32];
+        var childShift = shift + BitsPerLevel;
+        for (var index = 0; index < slots.Length; index++)
+        {
+            slots[index] = CombineNodes(
+                GetLogicalSlot(left, index, shift),
+                GetLogicalSlot(right, index, shift),
+                childShift,
+                operation,
+                keyComparer);
+        }
+        return BuildLogicalNode(slots, left, shift, keyComparer);
+    }
+
+    private static Node? CombineHashNodes(
+        HashNode left,
+        HashNode right,
+        int shift,
+        SetOperation operation,
+        IEqualityComparer<TKey> keyComparer)
+    {
+        if (left.Hash != right.Hash)
+        {
+            if (operation == SetOperation.Intersect)
+                return null;
+            if (operation == SetOperation.Except)
+                return left;
+            var slots = new Node?[32];
+            var leftIndex = Index(left.Hash, shift);
+            var rightIndex = Index(right.Hash, shift);
+            if (leftIndex != rightIndex)
+            {
+                slots[leftIndex] = left;
+                slots[rightIndex] = right;
+            }
+            else
+            {
+                slots[leftIndex] = CombineHashNodes(
+                    left,
+                    right,
+                    shift + BitsPerLevel,
+                    operation,
+                    keyComparer);
+            }
+            return BuildLogicalNode(slots, left, shift, keyComparer);
+        }
+
+        var leftEntries = GetEntries(left);
+        var rightEntries = GetEntries(right);
+        List<Entry> result = [];
+        foreach (var leftEntry in leftEntries)
+        {
+            var rightIndex = FindEntry(rightEntries, leftEntry.Key, keyComparer);
+            switch (operation)
+            {
+                case SetOperation.Union:
+                    result.Add(rightIndex < 0
+                        ? leftEntry
+                        : new Entry(
+                            leftEntry.Hash,
+                            leftEntry.Key,
+                            EqualityComparer<TValue>.Default.Equals(leftEntry.Value, rightEntries[rightIndex].Value)
+                                ? leftEntry.Value
+                                : rightEntries[rightIndex].Value));
+                    break;
+                case SetOperation.Intersect when rightIndex >= 0:
+                    result.Add(leftEntry);
+                    break;
+                case SetOperation.Except when rightIndex < 0:
+                case SetOperation.SymmetricExcept when rightIndex < 0:
+                    result.Add(leftEntry);
+                    break;
+            }
+        }
+        if (operation is SetOperation.Union or SetOperation.SymmetricExcept)
+        {
+            foreach (var rightEntry in rightEntries)
+            {
+                if (FindEntry(leftEntries, rightEntry.Key, keyComparer) < 0)
+                    result.Add(rightEntry);
+            }
+        }
+
+        if (EntriesMatch(leftEntries, result, keyComparer))
+            return left;
+        return CreateHashNode(left.Hash, result);
+    }
+
+    private static Entry[] GetEntries(HashNode node) => node switch
+    {
+        LeafNode leaf => [Entry.From(leaf)],
+        CollisionNode collision => collision.Entries,
+        _ => throw new InvalidOperationException(),
+    };
+
+    private static int FindEntry(IReadOnlyList<Entry> entries, TKey key, IEqualityComparer<TKey> comparer)
+    {
+        for (var index = 0; index < entries.Count; index++)
+        {
+            if (comparer.Equals(entries[index].Key, key))
+                return index;
+        }
+        return -1;
+    }
+
+    private static bool EntriesMatch(
+        IReadOnlyList<Entry> left,
+        IReadOnlyList<Entry> right,
+        IEqualityComparer<TKey> keyComparer)
+    {
+        if (left.Count != right.Count)
+            return false;
+        for (var index = 0; index < left.Count; index++)
+        {
+            if (left[index].Hash != right[index].Hash
+                || !keyComparer.Equals(left[index].Key, right[index].Key)
+                || !EqualityComparer<TValue>.Default.Equals(left[index].Value, right[index].Value))
+                return false;
+        }
+        return true;
+    }
+
+    private static Node? CreateHashNode(uint hash, List<Entry> entries) => entries.Count switch
+    {
+        0 => null,
+        1 => new LeafNode(hash, entries[0].Key, entries[0].Value),
+        _ => new CollisionNode(hash, [.. entries]),
+    };
+
+    private static Node? GetLogicalSlot(Node node, int index, int shift)
+    {
+        if (node is HashNode hashNode)
+            return Index(hashNode.Hash, shift) == index ? hashNode : null;
+
+        var branch = (BitmapIndexedNode)node;
+        var bit = Bit(index);
+        if ((branch.DataMap & bit) != 0)
+        {
+            var entry = branch.Data[Slot(branch.DataMap, bit)];
+            return new LeafNode(entry.Hash, entry.Key, entry.Value);
+        }
+        return (branch.NodeMap & bit) != 0 ? branch.Children[Slot(branch.NodeMap, bit)] : null;
+    }
+
+    private static Node? BuildLogicalNode(
+        Node?[] slots,
+        Node originalLeft,
+        int shift,
+        IEqualityComparer<TKey> keyComparer)
+    {
+        if (LogicalSlotsMatch(slots, originalLeft, shift, keyComparer))
+            return originalLeft;
+
+        var dataMap = 0u;
+        var nodeMap = 0u;
+        List<Entry> data = [];
+        List<Node> children = [];
+        for (var index = 0; index < slots.Length; index++)
+        {
+            var node = slots[index];
+            if (node is null)
+                continue;
+            var bit = Bit(index);
+            if (node is LeafNode leaf)
+            {
+                dataMap |= bit;
+                data.Add(Entry.From(leaf));
+            }
+            else
+            {
+                nodeMap |= bit;
+                children.Add(node);
+            }
+        }
+        if (data.Count == 0 && children.Count == 0)
+            return null;
+        if (data.Count == 1 && children.Count == 0)
+            return new LeafNode(data[0].Hash, data[0].Key, data[0].Value);
+        if (data.Count == 0 && children.Count == 1 && children[0] is HashNode)
+            return children[0];
+        return new BitmapIndexedNode(dataMap, [.. data], nodeMap, [.. children]);
+    }
+
+    private static bool LogicalSlotsMatch(
+        Node?[] slots,
+        Node original,
+        int shift,
+        IEqualityComparer<TKey> keyComparer)
+    {
+        for (var index = 0; index < slots.Length; index++)
+        {
+            var expected = GetLogicalSlot(original, index, shift);
+            var actual = slots[index];
+            if (ReferenceEquals(expected, actual))
+                continue;
+            if (expected is LeafNode leftLeaf && actual is LeafNode rightLeaf
+                && leftLeaf.Hash == rightLeaf.Hash
+                && keyComparer.Equals(leftLeaf.Key, rightLeaf.Key)
+                && EqualityComparer<TValue>.Default.Equals(leftLeaf.Value, rightLeaf.Value))
+                continue;
+            return false;
+        }
+        return true;
+    }
 
     private static bool NodesEqual(
         Node? left,
@@ -1310,6 +1581,8 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
 
     internal abstract class Node
     {
+        internal abstract int Count { get; }
+
         internal abstract Node Set(
             TKey key,
             TValue value,
@@ -1335,6 +1608,8 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
 
     internal sealed class LeafNode(uint hash, TKey key, TValue value) : HashNode(hash)
     {
+        internal override int Count => 1;
+
         internal TKey Key { get; } = key;
 
         internal TValue Value { get; } = value;
@@ -1384,6 +1659,8 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
 
     internal sealed class CollisionNode(uint hash, Entry[] entries) : HashNode(hash)
     {
+        internal override int Count => Entries.Length;
+
         internal Entry[] Entries { get; } = entries;
 
         internal static CollisionNode Create(HashNode left, LeafNode right)
@@ -1486,6 +1763,8 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
         uint nodeMap,
         Node[] children) : Node
     {
+        internal override int Count { get; } = CountEntries(data, children);
+
         internal uint DataMap { get; } = dataMap;
 
         internal Entry[] Data { get; } = data;
@@ -1493,6 +1772,14 @@ public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, 
         internal uint NodeMap { get; } = nodeMap;
 
         internal Node[] Children { get; } = children;
+
+        private static int CountEntries(Entry[] entries, Node[] nodes)
+        {
+            var count = entries.Length;
+            foreach (var node in nodes)
+                count = checked(count + node.Count);
+            return count;
+        }
 
         internal override Node Set(
             TKey key,

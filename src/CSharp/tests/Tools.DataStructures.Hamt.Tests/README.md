@@ -37,6 +37,9 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
   dictionary model under ordinary, shared-prefix, and all-equal-hash policies.
 - `PersistentIntegerPatriciaTests.cs` covers signed boundary ordering, randomized 32/64-bit model
   histories, retained snapshots, structural map algebra, combining overloads, and set relations.
+- `PersistentHashSetStructuralAlgebraTests.cs` covers same-root zero-callback pruning, shared-ancestry
+  no-rehash algebra, comparer admission, representative retention, collision-heavy randomized set
+  models, same-type relations, and the corresponding structural map operations.
 - `MerkleSearchTreeTests.cs` covers canonical codec vectors, independent policy/history shape and
   root-address convergence, typed digest-pruned diff, randomized histories/snapshots, ranges, and domain separation.
 - `MerkleEncodingWireTests.cs` locks built-in codec ids and golden vectors, canonical round trips,
