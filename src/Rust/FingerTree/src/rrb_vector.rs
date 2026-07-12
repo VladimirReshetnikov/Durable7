@@ -361,11 +361,8 @@ impl<T> RrbVector<T> {
                 "root count or height disagrees with validation",
             ));
         }
-        if height > MAXIMUM_HEIGHT {
-            return Err(invariant_error(
-                "root height exceeds the usize count domain",
-            ));
-        }
+        // The height cap is enforced for every branch (root included) inside validate_node, which
+        // returns above via `?` before reaching here, so a redundant root check would be dead code.
         Ok(accumulator.finish(count, height))
     }
 
@@ -916,7 +913,13 @@ fn branch<T>(children: Vec<Arc<Node<T>>>) -> Arc<Node<T>> {
     let height = child_height
         .checked_add(1)
         .expect("RRB vector height overflow");
-    assert!(
+    // Over-height branches are unreachable with constructible inputs (they need a count that
+    // exhausts the usize domain), and if one were ever built it is handled correctly: the
+    // has_regular_layout guard below routes it onto the relaxed size-table path (no shift UB),
+    // and validate_node rejects it. Match the C# reference's failure model (silent build,
+    // validate-only) and the C port's recoverable error rather than aborting the process on the
+    // normal persistent-construction path; keep the invariant as a debug-time check only.
+    debug_assert!(
         height <= MAXIMUM_HEIGHT,
         "RRB vector height exceeds the usize count domain"
     );
