@@ -1,17 +1,23 @@
 #![forbid(unsafe_code)]
 #![doc = "Persistent FingerTree-family data structures for Rust."]
 
+mod brodal_okasaki_heap;
 mod canonical_sorted_set;
 mod daba_lite;
 mod deque;
 mod interval_tree;
 mod measured;
+mod ordering;
 mod priority_queue;
 mod rope;
 mod rrb_vector;
 mod sorted;
 mod text_extras;
 
+pub use brodal_okasaki_heap::{
+    BrodalInvariantError, BrodalIter, BrodalMeldError, BrodalMinimumView, BrodalOkasakiHeap,
+    BrodalOkasakiHeapStatistics,
+};
 pub use canonical_sorted_set::{
     CanonicalSetDifference, CanonicalSetError, CanonicalSetInvariantError, CanonicalSortedSet,
     CanonicalSortedSetIter, CanonicalSortedSetStatistics, NaturalZipTreeComparer, StableRankHash,
@@ -30,6 +36,7 @@ pub use measured::{
     MinMeasure, OrderStatisticMeasure, ProductMeasure, RankedKey, SizeAndMaxMeasure,
     SizeAndMinMeasure, SizeAndSumMeasure, SizeMeasure, SumMeasure,
 };
+pub use ordering::{NaturalOrderComparer, OrderComparer, OrderPolicy};
 pub use priority_queue::{PriorityEntry, PriorityQueue};
 pub use rope::{
     LineColumn, MeasuredRope, MeasuredRopeBuilder, MeasuredRopeLocate, MeasuredRopeSplit,

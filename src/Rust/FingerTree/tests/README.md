@@ -5,7 +5,8 @@
 - Audience: Maintainers navigating Rust FingerTree-family test coverage
 - Scope: Test location, command, and coverage map
 
-Tests currently live inline in the module files under [`../src`](../src). Run them from `src/Rust`:
+Unit tests live inline in the module files under [`../src`](../src); representation-scale
+integration suites live beside this index. Run them from `src/Rust`:
 
 ```powershell
 .\test.ps1 -Workspace FingerTree
@@ -13,6 +14,11 @@ Tests currently live inline in the module files under [`../src`](../src). Run th
 
 Coverage groups:
 
+- `brodal_okasaki_heap.rs`: direct fused-tree invariants; 4,096-element ascending, descending,
+  equal, and melded drains; a 20,000-operation branching retained multiset model; custom-policy
+  identity and canonical-natural interoperability; concrete representatives; root/off-path
+  sharing; `Option` and non-`Clone` values; comparison ceilings through 65,536 elements; and
+  concurrent readers;
 - `daba_lite.rs`: the six-cursor DABA Lite state machine, noncommutative/exhaustive and 100,000-step
   FIFO models, all fixup phases and callback ceilings, 63/64/65 and 127/128/129 chunk boundaries,
   exact callback-panic atomicity, provisional-link rollback, callback-free invariants, deterministic

@@ -14,8 +14,9 @@ Run from `src/Rust`:
 The wrapper locates Cargo on `PATH` or under the default rustup profile and applies inherited,
 non-interactive Windows error handling before Cargo starts the test executable.
 
-The crate uses `#![forbid(unsafe_code)]`. Unit tests are inline in the module files under `FingerTree/src/` and
-cover:
+The crate uses `#![forbid(unsafe_code)]`. Unit tests are inline in the module files under
+`FingerTree/src/`; representation-scale integration tests live under `FingerTree/tests/`. Together
+they cover:
 
 - DABA Lite exhaustive short histories under a noncommutative matrix monoid, a 100,000-operation
   variable-window sum model, all four six-cursor fixup phases, exact three/two/one combine ceilings,
@@ -37,6 +38,11 @@ cover:
   identity, 20,000-operation model replay with retained snapshots, validation statistics,
   stack-safe deep destruction, and barrier-started cold digest publication across `Send + Sync`
   readers;
+- direct Brodal-Okasaki fused-tree validation; ascending, descending, equal, and melded 4,096-item
+  drains; a 20,000-operation branching multiset history with up to 256 retained versions;
+  representative retention; custom-policy identity and canonical-natural interoperability;
+  root/off-path sharing; `Option` and non-`Clone` elements; comparison ceilings through 65,536
+  elements; and concurrent immutable readers;
 - general measured tree cached-measure validation, subtree-sharing splits, randomized prefix-measure locate checks,
   key lower/upper-bound splits, product-measure component splits, cumulative-weight selection, and min/max
   extraction helpers;

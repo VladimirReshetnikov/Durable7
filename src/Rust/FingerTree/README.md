@@ -12,6 +12,8 @@ family. It exposes Rust-native names for the same public families:
 - `DabaLite<T, M>` over a `DabaMonoid<T>`;
 - `RrbVector<T>` and its append-only `RrbVectorBuilder<T>`;
 - `CanonicalSortedSet<T>` over a retained `ZipTreeRankPolicy<T>`;
+- `BrodalOkasakiHeap<T>` over a retained `OrderPolicy<T>`, with owned minimum views and
+  structural validation statistics;
 - `FingerTree<T, P>` over a `MeasurePolicy<T>`, including built-in size, sum, min/max, key,
   order-statistic, and product-measure policies;
 - `ReversibleDeque<T>`;
@@ -49,6 +51,13 @@ operations require a coherent, sufficiently collision-resistant rank hash; full 
 correct and deterministic but produce linear height. Bulk construction, reads, iteration,
 validation, clear, and same- or cross-policy equality accept non-`Clone` elements; only path-copying
 updates, set algebra, and owned diff require `T: Clone`.
+`BrodalOkasakiHeap<T>` directly implements the bootstrapped skew-binomial representation. Its
+rank-zero global minimum fuses primitive tree children with an embedded heap forest; insert and
+meld perform worst-case O(1) comparisons and structural work, while delete-min performs worst-case
+O(log n) work. Trees and values use `Arc`, so persistent operations and owned minimum views do not
+require `T: Clone`. Canonical natural-order policies interoperate across construction; custom heaps
+may meld only when they retain clones of the same `OrderPolicy<T>` identity. Full validation decodes
+every fused boundary and audits ranks, heap order, count, and depth.
 `ReversibleDeque<T>` uses O(1) mirrored tree views over that shared deque, including tree-based
 mixed-orientation concat, split, and endpoint operations after reverse. Its split/pop results retain the
 reversible facade, and borrowed or owned iteration follows logical orientation. `Rope<T>` now uses chunked
@@ -71,7 +80,8 @@ order-statistic measured tree storage with cached count plus last-key measures. 
 not claim the C#/C++ lazy finger-tree asymptotic profile overall; derived algorithms remain
 semantic-checkpoint implementations until the lazy measured spine is ported through the whole family.
 
-See [API notes](docs/api-notes.md), [validation](docs/validation.md), and the
+See the [Brodal-Okasaki heap notes](docs/brodal-okasaki-heap.md),
+[API notes](docs/api-notes.md), [validation](docs/validation.md), and the
 [test map](tests/README.md) for the local contract, checkpoint boundary, and evidence entry points.
 
 Validate from `src/Rust`:

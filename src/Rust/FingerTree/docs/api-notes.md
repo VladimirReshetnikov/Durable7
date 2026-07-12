@@ -15,6 +15,8 @@ Current public families:
 - `RrbVector<T>`, `RrbVectorBuilder<T>`, and the split/pop/statistics result types;
 - `CanonicalSortedSet<T>`, `ZipTreeRankPolicy<T>`, stable comparer/hash traits and built-ins,
   algebra/diff result types, validation statistics, and policy/invariant errors;
+- `BrodalOkasakiHeap<T>`, `BrodalMinimumView<T>`, ordering policy/comparer types,
+  validation statistics, and meld/invariant errors;
 - `FingerTree<T, P>` over `MeasurePolicy<T>`;
 - built-in policies `SizeMeasure`, `SumMeasure<T>`, `MaxMeasure`, `MinMeasure`, `KeyMeasure<T>`,
   `ProductMeasure<T, PFirst, PSecond>` with `MeasurePair<TFirst, TSecond>`, and
@@ -48,6 +50,32 @@ The Rust surface follows Rust conventions:
 - out-of-range positional rope edits and text offset conversions return `None`.
 - out-of-range RRB indexing, splitting, and range edits return `None`; indexing through `Index`
   retains Rust's ordinary panic-on-invalid-index convention.
+
+## Brodal-Okasaki heap
+
+`BrodalOkasakiHeap<T>` is the direct bootstrapped skew-binomial representation, not an adapter over
+the measured priority queue. A rank-zero global tree stores the minimum, and each skew-binomial
+tree fuses its primitive children with the embedded heap forest from Brodal and Okasaki. Insert,
+minimum, and meld are worst-case O(1); delete-min is worst-case O(log n).
+
+`OrderPolicy<T>` retains a `Send + Sync` `OrderComparer<T>`. Natural policies are marked canonical,
+so two independently constructed natural heaps can meld. Cloning a custom policy preserves its
+identity; independently constructed custom policies are rejected by `meld` with
+`BrodalMeldError`, even when their functions happen to compare identically. This is the Rust form
+of the C# comparer-object compatibility contract.
+
+Values and all tree links use `Arc`. Consequently construction, insertion, meld, minimum,
+delete-min, iteration, validation, and sharing diagnostics impose no `T: Clone` bound.
+`minimum` returns `Option<&T>`. `minimum_view` returns `Option<BrodalMinimumView<T>>`; its
+`Arc<T>` minimum is an owned shared handle that remains valid independently of the source and
+remainder. In particular, a stored `Option<T>` value of `None` is distinct from an empty heap.
+
+Structural-order iteration is explicit-stack and comparison-free. `validate_structure` uses an
+explicit worklist to audit the global rank-zero root, every fused primitive/embedded boundary,
+skew-forest rank rules, parent/child order, logical count, maximum rank, and maximum depth.
+`shared_tree_count` and `shares_root_with` are read-only identity diagnostics for persistence
+audits. See [Brodal-Okasaki heap](brodal-okasaki-heap.md) for the representation and validation
+contract in one place.
 
 ## DABA Lite FIFO-window aggregation
 
