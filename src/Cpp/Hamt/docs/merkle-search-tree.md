@@ -13,9 +13,9 @@ block contract. Include
 the public policy and codec layer from
 [`merkle_encoding.hpp`](../include/Tools/DataStructures/Hamt/merkle_encoding.hpp).
 
-This document covers the in-memory core and exact wire output. The C++ workspace does **not** yet
-provide content-store save/load, untrusted block import, proofs, synchronization, or three-way
-merge. Those are later layers over the stable policy and block contracts described here.
+This document covers the in-memory core and exact wire output. The completed persistence, proof,
+synchronization, and merge layer is specified separately in
+[Merkle persistence](merkle-persistence.md); it builds on these stable policy and block contracts.
 
 ## Deterministic Policy And Hash Domain
 

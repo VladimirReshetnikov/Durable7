@@ -130,13 +130,15 @@ private:
             0));
 
     try {
+        auto empty_input = UCHAR{0};
+        auto* input = message.empty()
+            ? &empty_input
+            : reinterpret_cast<PUCHAR>(const_cast<std::byte*>(message.data()));
         require_bcrypt_success(
             "BCryptHashData(SHA-256)",
             BCryptHashData(
                 hash,
-                message.empty()
-                    ? nullptr
-                    : reinterpret_cast<PUCHAR>(const_cast<std::byte*>(message.data())),
+                input,
                 static_cast<ULONG>(message.size()),
                 0));
         auto result = std::array<std::byte, sha256_digest_size>{};

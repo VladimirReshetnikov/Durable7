@@ -1,4 +1,4 @@
-#include <Tools/DataStructures/Hamt/merkle_search_tree.hpp>
+#include <Tools/DataStructures/Hamt/merkle_proofs.hpp>
 #include <tools/data_structures/test_support/headless_test_process.h>
 
 #include <algorithm>
@@ -25,20 +25,39 @@
 
 using tools::data_structures::hamt::int32_merkle_codec;
 using tools::data_structures::hamt::int64_merkle_codec;
+using tools::data_structures::hamt::create_merkle_proof;
+using tools::data_structures::hamt::create_merkle_range_proof;
+using tools::data_structures::hamt::create_merkle_sync_pack;
+using tools::data_structures::hamt::export_merkle_pack;
+using tools::data_structures::hamt::import_merkle_pack;
+using tools::data_structures::hamt::in_memory_merkle_block_store;
+using tools::data_structures::hamt::load_merkle_tree;
 using tools::data_structures::hamt::merkle_bytes;
+using tools::data_structures::hamt::merkle_block;
+using tools::data_structures::hamt::merkle_block_pack;
+using tools::data_structures::hamt::merkle_block_store;
 using tools::data_structures::hamt::merkle_codec;
 using tools::data_structures::hamt::merkle_codec_error;
 using tools::data_structures::hamt::merkle_digest;
 using tools::data_structures::hamt::merkle_map_difference_kind;
 using tools::data_structures::hamt::merkle_policy_mismatch;
+using tools::data_structures::hamt::merkle_proof;
+using tools::data_structures::hamt::merkle_proof_kind;
+using tools::data_structures::hamt::merkle_proof_step;
 using tools::data_structures::hamt::merkle_range_error;
 using tools::data_structures::hamt::merkle_search_tree;
 using tools::data_structures::hamt::merkle_search_tree_policy;
 using tools::data_structures::hamt::merkle_tree_invariant_error;
+using tools::data_structures::hamt::merkle_verification_budget;
+using tools::data_structures::hamt::merkle_verification_error;
+using tools::data_structures::hamt::merkle_verification_failure_kind;
+using tools::data_structures::hamt::merge_merkle_trees;
 using tools::data_structures::hamt::nullable_bytes_merkle_codec;
 using tools::data_structures::hamt::nullable_utf8_merkle_codec;
 using tools::data_structures::hamt::rfc4122_guid;
 using tools::data_structures::hamt::rfc4122_guid_merkle_codec;
+using tools::data_structures::hamt::save_merkle_tree;
+using tools::data_structures::hamt::verify_merkle_proof;
 
 namespace {
 
@@ -193,6 +212,180 @@ void assert_matches(const std::map<std::int32_t, std::int32_t>& model, const int
     }
     CHECK(actual == tree.end());
 }
+
+[[nodiscard]] string_tree make_persistence_tree(
+    const string_tree::policy_type& policy,
+    const std::int32_t count)
+{
+    auto items = std::vector<std::pair<std::int32_t, std::optional<std::string>>>{};
+    items.reserve(static_cast<std::size_t>(count));
+    const auto first = -(count / 2);
+    for (auto key = first; key != first + count; ++key) {
+        items.emplace_back(
+            key,
+            key % 29 == 0
+                ? std::nullopt
+                : std::optional<std::string>{"value:" + std::to_string(key)});
+    }
+    return string_tree::create_range(std::move(items), policy);
+}
+
+template <class Action>
+merkle_verification_error expect_verification_failure(
+    const merkle_verification_failure_kind expected,
+    Action&& action)
+{
+    try {
+        std::invoke(std::forward<Action>(action));
+    } catch (const merkle_verification_error& error) {
+        if (expected != error.kind()) {
+            fail_message(
+                __FILE__,
+                __LINE__,
+                "expected verification kind "
+                    + std::to_string(static_cast<int>(expected))
+                    + ", got " + std::to_string(static_cast<int>(error.kind()))
+                    + ": " + error.what());
+        }
+        CHECK(std::string_view{error.what()}.size() > 0);
+        return error;
+    }
+    fail(__FILE__, __LINE__, "operation throws merkle_verification_error");
+}
+
+class injected_merkle_block_store final : public merkle_block_store {
+public:
+    void inject(merkle_block block)
+    {
+        blocks_.insert_or_assign(block.digest(), std::move(block));
+    }
+    [[nodiscard]] std::size_t put_calls() const noexcept { return put_calls_; }
+
+    [[nodiscard]] std::size_t size() const override { return blocks_.size(); }
+    [[nodiscard]] std::vector<merkle_digest> digests() const override
+    {
+        auto result = std::vector<merkle_digest>{};
+        for (const auto& [digest, block] : blocks_) {
+            (void)block;
+            result.push_back(digest);
+        }
+        return result;
+    }
+    [[nodiscard]] bool contains(const merkle_digest digest) const override
+    {
+        return blocks_.contains(digest);
+    }
+    [[nodiscard]] std::optional<merkle_block> get(const merkle_digest digest) const override
+    {
+        const auto iterator = blocks_.find(digest);
+        return iterator == blocks_.end()
+            ? std::nullopt
+            : std::optional<merkle_block>{iterator->second};
+    }
+    bool put(merkle_block block) override
+    {
+        ++put_calls_;
+        const auto iterator = blocks_.find(block.digest());
+        if (iterator != blocks_.end()) {
+            if (iterator->second == block) {
+                return false;
+            }
+            throw merkle_verification_error::conflicting_block(
+                block.digest(), "injected destination conflict");
+        }
+        blocks_.emplace(block.digest(), std::move(block));
+        return true;
+    }
+    bool remove(const merkle_digest digest) override { return blocks_.erase(digest) != 0; }
+    void clear() override { blocks_.clear(); }
+
+private:
+    std::map<merkle_digest, merkle_block> blocks_;
+    std::size_t put_calls_ = 0;
+};
+
+struct preflight_key final {
+    std::int32_t value;
+
+    friend bool operator<(const preflight_key left, const preflight_key right) noexcept
+    {
+        return left.value < right.value;
+    }
+};
+
+struct preflight_value final {
+    std::int32_t value;
+};
+
+struct preflight_codec_control final {
+    std::atomic<int> encode_calls{0};
+    std::atomic<int> decode_calls{0};
+    std::atomic<bool> bomb{false};
+
+    void reset() noexcept
+    {
+        encode_calls.store(0, std::memory_order_relaxed);
+        decode_calls.store(0, std::memory_order_relaxed);
+    }
+};
+
+class preflight_key_codec final : public merkle_codec<preflight_key> {
+public:
+    explicit preflight_key_codec(std::shared_ptr<preflight_codec_control> control)
+        : control_(std::move(control))
+    {
+    }
+
+    [[nodiscard]] std::string_view encoding_id() const override { return "preflight-key-i32-v1"; }
+    [[nodiscard]] merkle_bytes encode(const preflight_key& value) const override
+    {
+        control_->encode_calls.fetch_add(1, std::memory_order_relaxed);
+        if (control_->bomb.load(std::memory_order_relaxed)) {
+            throw std::runtime_error{"preflight key codec was invoked"};
+        }
+        return int32_merkle_codec{}.encode(value.value);
+    }
+    [[nodiscard]] preflight_key decode(const std::span<const std::byte> encoding) const override
+    {
+        control_->decode_calls.fetch_add(1, std::memory_order_relaxed);
+        if (control_->bomb.load(std::memory_order_relaxed)) {
+            throw std::runtime_error{"preflight key codec was invoked"};
+        }
+        return preflight_key{int32_merkle_codec{}.decode(encoding)};
+    }
+
+private:
+    std::shared_ptr<preflight_codec_control> control_;
+};
+
+class preflight_value_codec final : public merkle_codec<preflight_value> {
+public:
+    explicit preflight_value_codec(std::shared_ptr<preflight_codec_control> control)
+        : control_(std::move(control))
+    {
+    }
+
+    [[nodiscard]] std::string_view encoding_id() const override { return "preflight-value-i32-v1"; }
+    [[nodiscard]] merkle_bytes encode(const preflight_value& value) const override
+    {
+        control_->encode_calls.fetch_add(1, std::memory_order_relaxed);
+        if (control_->bomb.load(std::memory_order_relaxed)) {
+            throw std::runtime_error{"preflight value codec was invoked"};
+        }
+        return int32_merkle_codec{}.encode(value.value);
+    }
+    [[nodiscard]] preflight_value decode(const std::span<const std::byte> encoding) const override
+    {
+        control_->decode_calls.fetch_add(1, std::memory_order_relaxed);
+        if (control_->bomb.load(std::memory_order_relaxed)) {
+            throw std::runtime_error{"preflight value codec was invoked"};
+        }
+        return preflight_value{int32_merkle_codec{}.decode(encoding)};
+    }
+
+private:
+    std::shared_ptr<preflight_codec_control> control_;
+};
 
 TEST(CanonicalCodecsAndDigestRejectMalformedRepresentations)
 {
@@ -1057,6 +1250,755 @@ TEST(ConcurrentReadersObserveConsistentRetainedMerkleSnapshots)
     CHECK_EQ(tree.size(), tree.validate_structure().count);
 }
 
+TEST(PersistenceGoldenPackAndMsp2QueriesMatchEverySiblingPort)
+{
+    const auto policy = make_string_policy("golden-int-string-v1");
+    const auto tree = string_tree::create(policy)
+        .set_item(42, std::optional<std::string>{"forty-two"});
+    const auto pack = export_merkle_pack(tree);
+    CHECK_EQ(std::size_t{1}, pack.block_count());
+    CHECK(pack.contains_root_block());
+    CHECK_EQ(tree.root_hash(), pack.blocks().front().digest());
+    CHECK_EQ(
+        parse_hex(
+            "4d53543201fe140762a080abb39de83f70e7505c8b94c4baa428eea76d468a0f3163bc56c2"
+            "000000000100000001000000040000002a0000000a01666f7274792d74776f"
+            "98900ab6355e8ea553b5cd087d6ec4b976dc3e0953e35c6f46bc756ac75ddcb3"
+            "98900ab6355e8ea553b5cd087d6ec4b976dc3e0953e35c6f46bc756ac75ddcb3"),
+        pack.blocks().front().to_bytes());
+
+    const auto membership = create_merkle_proof(tree, std::int32_t{42});
+    const auto nonmembership = create_merkle_proof(tree, std::int32_t{43});
+    const auto range = create_merkle_range_proof(tree, std::int32_t{40}, std::int32_t{44});
+    const auto membership_query = merkle_bytes{
+        membership.query().begin(), membership.query().end()};
+    const auto nonmembership_query = merkle_bytes{
+        nonmembership.query().begin(), nonmembership.query().end()};
+    const auto range_query = merkle_bytes{range.query().begin(), range.query().end()};
+    CHECK_EQ(
+        parse_hex("4d53503200000000040000002a0000000a01666f7274792d74776f"),
+        membership_query);
+    CHECK_EQ(
+        parse_hex("4d53503201000000040000002b"),
+        nonmembership_query);
+    CHECK_EQ(
+        parse_hex("4d535032020000000400000028000000040000002c"),
+        range_query);
+    CHECK(verify_merkle_proof(membership, policy).valid());
+    CHECK(verify_merkle_proof(nonmembership, policy).valid());
+    CHECK(verify_merkle_proof(range, policy).valid());
+}
+
+TEST(PersistenceSaveLoadImportAndPartialOverlayRoundTripExactClosure)
+{
+    const auto policy = make_string_policy("persistence-algorithms-test-v1");
+    const auto tree = make_persistence_tree(policy, 513);
+    const auto pack = export_merkle_pack(tree);
+    CHECK(tree.block_count() > 2);
+    CHECK_EQ(tree.block_count(), pack.block_count());
+    CHECK_EQ(pack, export_merkle_pack(tree));
+
+    auto store = in_memory_merkle_block_store{};
+    CHECK_EQ(tree.block_count(), save_merkle_tree(tree, store));
+    CHECK_EQ(std::size_t{0}, save_merkle_tree(tree, store));
+    const auto loaded = load_merkle_tree(tree.root_hash(), policy, store);
+    CHECK(tree.content_equals(loaded));
+    CHECK(tree.map_equals(loaded));
+    CHECK_EQ(tree.validate_structure(), loaded.validate_structure());
+
+    auto imported_store = in_memory_merkle_block_store{};
+    const auto imported = import_merkle_pack(pack, policy, &imported_store);
+    CHECK(tree.content_equals(imported));
+    CHECK_EQ(tree.block_count(), imported_store.size());
+    CHECK_EQ(pack, export_merkle_pack(imported));
+
+    const auto root_digest = tree.root_hash();
+    const auto root_only = export_merkle_pack(
+        tree, std::span<const merkle_digest>{&root_digest, 1});
+    CHECK(imported_store.remove(root_digest));
+    const auto from_partial = import_merkle_pack(root_only, policy, &imported_store);
+    CHECK(tree.content_equals(from_partial));
+    CHECK(imported_store.contains(root_digest));
+
+    const auto empty = string_tree::create(policy);
+    const auto empty_import = import_merkle_pack(export_merkle_pack(empty), policy);
+    CHECK(empty.content_equals(empty_import));
+    const auto empty_load = load_merkle_tree(
+        empty.root_hash(), policy, in_memory_merkle_block_store{});
+    CHECK(empty.content_equals(empty_load));
+}
+
+TEST(PersistenceRejectsMissingTamperedMalformedForeignAndCountCorruption)
+{
+    const auto policy = make_string_policy("persistence-rejection-v1");
+    const auto tree = make_persistence_tree(policy, 257);
+    const auto pack = export_merkle_pack(tree);
+    auto missing_blocks = std::vector<merkle_block>{pack.blocks().begin(), pack.blocks().end()};
+    const auto missing_digest = missing_blocks.back().digest();
+    missing_blocks.pop_back();
+    const auto incomplete = merkle_block_pack{
+        pack.algorithm_id(), pack.domain_digest(), pack.root_hash(), std::move(missing_blocks)};
+    expect_verification_failure(merkle_verification_failure_kind::missing_block, [&] {
+        (void)import_merkle_pack(incomplete, policy);
+    });
+
+    const auto root_iterator = std::find_if(
+        pack.blocks().begin(), pack.blocks().end(), [&](const auto& block) {
+            return block.digest() == pack.root_hash();
+        });
+    CHECK(root_iterator != pack.blocks().end());
+    auto changed_bytes = root_iterator->to_bytes();
+    changed_bytes.back() ^= std::byte{0x80};
+    auto changed_blocks = std::vector<merkle_block>{pack.blocks().begin(), pack.blocks().end()};
+    *std::find_if(changed_blocks.begin(), changed_blocks.end(), [&](const auto& block) {
+        return block.digest() == pack.root_hash();
+    }) = merkle_block{pack.root_hash(), std::move(changed_bytes)};
+    const auto changed_pack = merkle_block_pack{
+        pack.algorithm_id(), pack.domain_digest(), pack.root_hash(), std::move(changed_blocks)};
+    expect_verification_failure(merkle_verification_failure_kind::digest_mismatch, [&] {
+        (void)import_merkle_pack(changed_pack, policy);
+    });
+
+    auto wrong_magic_bytes = root_iterator->to_bytes();
+    wrong_magic_bytes.front() ^= std::byte{0xff};
+    const auto wrong_magic_digest = merkle_digest::hash(wrong_magic_bytes);
+    const auto wrong_magic = merkle_block{
+        wrong_magic_digest, std::move(wrong_magic_bytes)};
+    const auto malformed = merkle_block_pack{
+        pack.algorithm_id(), pack.domain_digest(), wrong_magic.digest(), {wrong_magic}};
+    expect_verification_failure(merkle_verification_failure_kind::malformed_block, [&] {
+        (void)import_merkle_pack(malformed, policy);
+    });
+
+    auto trailing_bytes = root_iterator->to_bytes();
+    trailing_bytes.push_back(std::byte{0});
+    const auto trailing_digest = merkle_digest::hash(trailing_bytes);
+    const auto trailing = merkle_block{
+        trailing_digest, std::move(trailing_bytes)};
+    const auto noncanonical = merkle_block_pack{
+        pack.algorithm_id(), pack.domain_digest(), trailing.digest(), {trailing}};
+    expect_verification_failure(merkle_verification_failure_kind::non_canonical_block, [&] {
+        (void)import_merkle_pack(noncanonical, policy);
+    });
+
+    auto count_bytes = root_iterator->to_bytes();
+    CHECK(count_bytes.size() > 41);
+    count_bytes[41] ^= std::byte{1};
+    const auto bad_count_digest = merkle_digest::hash(count_bytes);
+    const auto bad_count = merkle_block{
+        bad_count_digest, std::move(count_bytes)};
+    auto count_blocks = std::vector<merkle_block>{pack.blocks().begin(), pack.blocks().end()};
+    *std::find_if(count_blocks.begin(), count_blocks.end(), [&](const auto& block) {
+        return block.digest() == pack.root_hash();
+    }) = bad_count;
+    const auto count_pack = merkle_block_pack{
+        pack.algorithm_id(), pack.domain_digest(), bad_count.digest(), std::move(count_blocks)};
+    expect_verification_failure(merkle_verification_failure_kind::invalid_reference, [&] {
+        (void)import_merkle_pack(count_pack, policy);
+    });
+
+    const auto wide_tree = make_persistence_tree(policy, 2049);
+    const auto wide_pack = export_merkle_pack(wide_tree);
+    const auto wide_root = std::find_if(
+        wide_pack.blocks().begin(), wide_pack.blocks().end(), [&](const auto& block) {
+            return block.digest() == wide_pack.root_hash();
+        });
+    CHECK(wide_root != wide_pack.blocks().end());
+    auto swapped_bytes = wide_root->to_bytes();
+    CHECK(swapped_bytes.size() > 46);
+    const auto entry_count =
+        (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(swapped_bytes[42])) << 24)
+        | (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(swapped_bytes[43])) << 16)
+        | (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(swapped_bytes[44])) << 8)
+        | static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(swapped_bytes[45]));
+    const auto child_count = static_cast<std::size_t>(entry_count) + 1;
+    CHECK(child_count <= swapped_bytes.size() / merkle_digest::byte_length);
+    const auto child_offset = swapped_bytes.size() - child_count * merkle_digest::byte_length;
+    auto nonempty_children = std::vector<std::size_t>{};
+    const auto empty_digest = policy.empty_digest();
+    for (auto index = std::size_t{0}; index != child_count; ++index) {
+        const auto begin = swapped_bytes.begin()
+            + static_cast<std::ptrdiff_t>(child_offset + index * merkle_digest::byte_length);
+        if (!std::equal(
+                begin,
+                begin + static_cast<std::ptrdiff_t>(merkle_digest::byte_length),
+                empty_digest.bytes().begin())) {
+            nonempty_children.push_back(index);
+        }
+    }
+    CHECK(nonempty_children.size() >= 2);
+    const auto first_child = swapped_bytes.begin() + static_cast<std::ptrdiff_t>(
+        child_offset + nonempty_children[0] * merkle_digest::byte_length);
+    const auto second_child = swapped_bytes.begin() + static_cast<std::ptrdiff_t>(
+        child_offset + nonempty_children[1] * merkle_digest::byte_length);
+    std::swap_ranges(
+        first_child,
+        first_child + static_cast<std::ptrdiff_t>(merkle_digest::byte_length),
+        second_child);
+    const auto swapped_root_digest = merkle_digest::hash(swapped_bytes);
+    auto swapped_blocks = std::vector<merkle_block>{
+        wide_pack.blocks().begin(), wide_pack.blocks().end()};
+    *std::find_if(swapped_blocks.begin(), swapped_blocks.end(), [&](const auto& block) {
+        return block.digest() == wide_pack.root_hash();
+    }) = merkle_block{swapped_root_digest, std::move(swapped_bytes)};
+    const auto swapped_pack = merkle_block_pack{
+        wide_pack.algorithm_id(),
+        wide_pack.domain_digest(),
+        swapped_root_digest,
+        std::move(swapped_blocks)};
+    expect_verification_failure(merkle_verification_failure_kind::invalid_reference, [&] {
+        (void)import_merkle_pack(swapped_pack, policy);
+    });
+
+    const auto foreign_policy = make_string_policy("foreign-persistence-v1");
+    expect_verification_failure(merkle_verification_failure_kind::domain_mismatch, [&] {
+        (void)import_merkle_pack(pack, foreign_policy);
+    });
+    const auto unsupported = merkle_block_pack{
+        "mst-sha256-b16-v999",
+        pack.domain_digest(),
+        pack.root_hash(),
+        {pack.blocks().begin(), pack.blocks().end()}};
+    expect_verification_failure(merkle_verification_failure_kind::unsupported_algorithm, [&] {
+        (void)import_merkle_pack(unsupported, policy);
+    });
+
+    auto conflicting_bytes = pack.blocks().front().to_bytes();
+    conflicting_bytes.back() ^= std::byte{0x20};
+    auto conflicting_store = injected_merkle_block_store{};
+    conflicting_store.inject(merkle_block{
+        pack.blocks().front().digest(), std::move(conflicting_bytes)});
+    expect_verification_failure(merkle_verification_failure_kind::conflicting_block, [&] {
+        (void)import_merkle_pack(pack, policy, &conflicting_store);
+    });
+    CHECK_EQ(std::size_t{0}, conflicting_store.put_calls());
+    expect_verification_failure(merkle_verification_failure_kind::conflicting_block, [&] {
+        (void)save_merkle_tree(tree, conflicting_store);
+    });
+    CHECK_EQ(std::size_t{0}, conflicting_store.put_calls());
+
+    auto missing_store = in_memory_merkle_block_store{};
+    (void)save_merkle_tree(tree, missing_store);
+    CHECK(missing_store.remove(missing_digest));
+    expect_verification_failure(merkle_verification_failure_kind::missing_block, [&] {
+        (void)load_merkle_tree(tree.root_hash(), policy, missing_store);
+    });
+}
+
+TEST(PersistenceSevenBudgetsAndProofShapeArePreflightedStrictly)
+{
+    const auto policy = make_string_policy("persistence-budget-v1");
+    const auto tree = make_persistence_tree(policy, 513);
+    const auto pack = export_merkle_pack(tree);
+    const auto root = std::find_if(pack.blocks().begin(), pack.blocks().end(), [&](const auto& block) {
+        return block.digest() == pack.root_hash();
+    });
+    CHECK(root != pack.blocks().end());
+    const auto maximum_block = std::max_element(
+        pack.blocks().begin(), pack.blocks().end(), [](const auto& left, const auto& right) {
+            return left.size() < right.size();
+        })->size();
+    const auto defaults = merkle_verification_budget{};
+    const auto limits = std::array<merkle_verification_budget, 6>{
+        defaults.with_max_block_count(1),
+        merkle_verification_budget{
+            defaults.max_block_count(), maximum_block, maximum_block,
+            defaults.max_depth(), defaults.max_entry_count(),
+            defaults.max_child_references_per_block(), maximum_block},
+        defaults.with_max_block_byte_count(root->size() - 1),
+        defaults.with_max_depth(1),
+        defaults.with_max_entry_count(1),
+        defaults.with_max_child_references_per_block(1)};
+    for (const auto& budget : limits) {
+        expect_verification_failure(
+            merkle_verification_failure_kind::resource_limit_exceeded,
+            [&] { (void)import_merkle_pack(pack, policy, nullptr, budget); });
+    }
+    CHECK_THROWS_AS(merkle_verification_budget{0}, std::invalid_argument);
+    CHECK_THROWS_AS(
+        (merkle_verification_budget{1, 10, 11, 1, 1, 1, 10}),
+        std::invalid_argument);
+    CHECK_THROWS_AS(
+        (merkle_verification_budget{1, 10, 10, 1, 1, 1, 11}),
+        std::invalid_argument);
+
+    auto deep_proof = create_merkle_proof(tree, std::int32_t{0});
+    if (deep_proof.steps().size() <= 1) {
+        for (auto key = std::int32_t{-256}; key <= 256; ++key) {
+            auto candidate = create_merkle_proof(tree, key);
+            if (candidate.steps().size() > deep_proof.steps().size()) {
+                deep_proof = std::move(candidate);
+            }
+        }
+    }
+    CHECK(deep_proof.steps().size() > 1);
+    const auto query_budget = defaults.with_max_proof_query_byte_count(
+        deep_proof.query().size() - 1);
+    const auto query_result = verify_merkle_proof(deep_proof, policy, query_budget);
+    CHECK(!query_result.valid());
+    CHECK_EQ(merkle_verification_failure_kind::resource_limit_exceeded, query_result.failure_kind());
+    CHECK_EQ(std::size_t{0}, query_result.verified_block_count());
+    CHECK_EQ(std::uint64_t{0}, query_result.verified_byte_count());
+
+    const auto step_result = verify_merkle_proof(
+        deep_proof, policy, defaults.with_max_block_count(1));
+    CHECK(!step_result.valid());
+    CHECK_EQ(merkle_verification_failure_kind::resource_limit_exceeded, step_result.failure_kind());
+    CHECK_EQ(std::size_t{0}, step_result.verified_block_count());
+    CHECK_EQ(
+        static_cast<std::uint64_t>(deep_proof.query().size()),
+        step_result.verified_byte_count());
+
+    auto expanded_steps = std::vector<merkle_proof_step>{
+        deep_proof.steps().begin(), deep_proof.steps().end()};
+    expanded_steps.front() = merkle_proof_step{expanded_steps.front().block(), {0, 1}};
+    const auto expanded_proof = merkle_proof{
+        deep_proof.algorithm_id(),
+        deep_proof.domain_digest(),
+        deep_proof.root_hash(),
+        deep_proof.kind(),
+        merkle_bytes{deep_proof.query().begin(), deep_proof.query().end()},
+        std::move(expanded_steps)};
+    const auto expansion_result = verify_merkle_proof(
+        expanded_proof,
+        policy,
+        defaults.with_max_child_references_per_block(1));
+    CHECK(!expansion_result.valid());
+    CHECK_EQ(merkle_verification_failure_kind::resource_limit_exceeded, expansion_result.failure_kind());
+    CHECK_EQ(std::size_t{0}, expansion_result.verified_block_count());
+    CHECK_EQ(
+        static_cast<std::uint64_t>(expanded_proof.query().size()),
+        expansion_result.verified_byte_count());
+
+    using audit_tree = merkle_search_tree<preflight_key, preflight_value>;
+    const auto codec_control = std::make_shared<preflight_codec_control>();
+    const auto audit_policy = audit_tree::policy_type::natural(
+        "proof-preflight-audit-v1",
+        std::make_shared<preflight_key_codec>(codec_control),
+        std::make_shared<preflight_value_codec>(codec_control));
+    auto audit_items = std::vector<std::pair<preflight_key, preflight_value>>{};
+    for (auto key = std::int32_t{-256}; key <= 256; ++key) {
+        audit_items.emplace_back(preflight_key{key}, preflight_value{key * 3});
+    }
+    const auto audit_tree_value = audit_tree::create_range(std::move(audit_items), audit_policy);
+    auto audit_proof = create_merkle_proof(audit_tree_value, preflight_key{0});
+    for (auto key = std::int32_t{-256}; key <= 256; ++key) {
+        auto candidate = create_merkle_proof(audit_tree_value, preflight_key{key});
+        if (candidate.steps().size() > audit_proof.steps().size()) {
+            audit_proof = std::move(candidate);
+        }
+    }
+    CHECK(audit_proof.steps().size() > 1);
+    codec_control->reset();
+    codec_control->bomb.store(true, std::memory_order_relaxed);
+    const auto check_no_codec_calls = [&] {
+        CHECK_EQ(0, codec_control->encode_calls.load(std::memory_order_relaxed));
+        CHECK_EQ(0, codec_control->decode_calls.load(std::memory_order_relaxed));
+    };
+
+    auto oversized_query = merkle_bytes{audit_proof.query().begin(), audit_proof.query().end()};
+    oversized_query.push_back(std::byte{0});
+    const auto query_first = merkle_proof{
+        "unsupported-before-query-v1",
+        audit_proof.domain_digest(),
+        audit_proof.root_hash(),
+        audit_proof.kind(),
+        std::move(oversized_query),
+        {audit_proof.steps().begin(), audit_proof.steps().end()}};
+    const auto query_first_result = verify_merkle_proof(
+        query_first,
+        audit_policy,
+        merkle_verification_budget{}.with_max_proof_query_byte_count(
+            query_first.query().size() - 1));
+    CHECK_EQ(
+        merkle_verification_failure_kind::resource_limit_exceeded,
+        query_first_result.failure_kind());
+    check_no_codec_calls();
+
+    const auto shape_first = merkle_proof{
+        "unsupported-after-shape-v1",
+        audit_proof.domain_digest(),
+        audit_proof.root_hash(),
+        audit_proof.kind(),
+        {audit_proof.query().begin(), audit_proof.query().end()},
+        {audit_proof.steps().begin(), audit_proof.steps().end()}};
+    const auto step_first_result = verify_merkle_proof(
+        shape_first,
+        audit_policy,
+        merkle_verification_budget{}.with_max_block_count(1));
+    CHECK_EQ(
+        merkle_verification_failure_kind::resource_limit_exceeded,
+        step_first_result.failure_kind());
+    CHECK_EQ(std::size_t{0}, step_first_result.verified_block_count());
+    CHECK_EQ(
+        static_cast<std::uint64_t>(shape_first.query().size()),
+        step_first_result.verified_byte_count());
+    check_no_codec_calls();
+
+    auto audit_expanded_steps = std::vector<merkle_proof_step>{
+        audit_proof.steps().begin(), audit_proof.steps().end()};
+    audit_expanded_steps.front() = merkle_proof_step{
+        audit_expanded_steps.front().block(), {0, 1}};
+    const auto expansion_first = merkle_proof{
+        "unsupported-after-expansion-v1",
+        audit_proof.domain_digest(),
+        audit_proof.root_hash(),
+        audit_proof.kind(),
+        {audit_proof.query().begin(), audit_proof.query().end()},
+        std::move(audit_expanded_steps)};
+    const auto expansion_first_result = verify_merkle_proof(
+        expansion_first,
+        audit_policy,
+        merkle_verification_budget{}.with_max_child_references_per_block(1));
+    CHECK_EQ(
+        merkle_verification_failure_kind::resource_limit_exceeded,
+        expansion_first_result.failure_kind());
+    CHECK_EQ(std::size_t{0}, expansion_first_result.verified_block_count());
+    check_no_codec_calls();
+
+    const auto envelope_before_block = verify_merkle_proof(
+        shape_first,
+        audit_policy,
+        merkle_verification_budget{}.with_max_block_byte_count(
+            shape_first.steps().front().block().size() - 1));
+    CHECK_EQ(
+        merkle_verification_failure_kind::unsupported_algorithm,
+        envelope_before_block.failure_kind());
+    CHECK_EQ(std::size_t{0}, envelope_before_block.verified_block_count());
+    check_no_codec_calls();
+    codec_control->bomb.store(false, std::memory_order_relaxed);
+}
+
+TEST(PersistenceProofsRejectTamperingExtrasMissingStepsAndBadExpansions)
+{
+    const auto policy = make_string_policy("proof-adversarial-v1");
+    const auto tree = make_persistence_tree(policy, 513);
+    auto membership = create_merkle_proof(tree, std::int32_t{0});
+    if (membership.steps().size() <= 1) {
+        for (auto key = std::int32_t{-256}; key <= 256; ++key) {
+            auto candidate = create_merkle_proof(tree, key);
+            if (candidate.kind() == merkle_proof_kind::membership
+                && candidate.steps().size() > membership.steps().size()) {
+                membership = std::move(candidate);
+            }
+        }
+    }
+    const auto nonmembership = create_merkle_proof(tree, std::int32_t{10000});
+    const auto range = create_merkle_range_proof(tree, std::int32_t{-31}, std::int32_t{47});
+    CHECK(verify_merkle_proof(membership, policy).valid());
+    CHECK(verify_merkle_proof(nonmembership, policy).valid());
+    CHECK(verify_merkle_proof(range, policy).valid());
+
+    auto changed_query = merkle_bytes{membership.query().begin(), membership.query().end()};
+    changed_query.back() ^= std::byte{1};
+    const auto query_tampered = merkle_proof{
+        membership.algorithm_id(),
+        membership.domain_digest(),
+        membership.root_hash(),
+        membership.kind(),
+        std::move(changed_query),
+        {membership.steps().begin(), membership.steps().end()}};
+    const auto query_tampered_result = verify_merkle_proof(query_tampered, policy);
+    CHECK(!query_tampered_result.valid());
+    CHECK_EQ(
+        merkle_verification_failure_kind::proof_mismatch,
+        query_tampered_result.failure_kind());
+    CHECK_EQ(query_tampered.steps().size(), query_tampered_result.verified_block_count());
+    CHECK_EQ(query_tampered.total_byte_count(), query_tampered_result.verified_byte_count());
+
+    auto changed_steps = std::vector<merkle_proof_step>{
+        membership.steps().begin(), membership.steps().end()};
+    auto changed_block_bytes = changed_steps.front().block().to_bytes();
+    changed_block_bytes.back() ^= std::byte{0x40};
+    changed_steps.front() = merkle_proof_step{
+        merkle_block{changed_steps.front().block().digest(), std::move(changed_block_bytes)},
+        {changed_steps.front().expanded_child_indexes().begin(),
+         changed_steps.front().expanded_child_indexes().end()}};
+    const auto block_tampered = merkle_proof{
+        membership.algorithm_id(),
+        membership.domain_digest(),
+        membership.root_hash(),
+        membership.kind(),
+        {membership.query().begin(), membership.query().end()},
+        std::move(changed_steps)};
+    const auto block_tampered_result = verify_merkle_proof(block_tampered, policy);
+    CHECK_EQ(
+        merkle_verification_failure_kind::digest_mismatch,
+        block_tampered_result.failure_kind());
+    CHECK_EQ(std::size_t{1}, block_tampered_result.verified_block_count());
+    CHECK_EQ(
+        static_cast<std::uint64_t>(block_tampered.query().size()
+            + block_tampered.steps().front().block().size()),
+        block_tampered_result.verified_byte_count());
+
+    auto missing_steps = std::vector<merkle_proof_step>{
+        membership.steps().begin(), membership.steps().end()};
+    CHECK(missing_steps.size() > 1);
+    missing_steps.pop_back();
+    const auto missing = merkle_proof{
+        membership.algorithm_id(),
+        membership.domain_digest(),
+        membership.root_hash(),
+        membership.kind(),
+        {membership.query().begin(), membership.query().end()},
+        std::move(missing_steps)};
+    CHECK_EQ(
+        merkle_verification_failure_kind::missing_block,
+        verify_merkle_proof(missing, policy).failure_kind());
+
+    auto wrong_expansion = std::vector<merkle_proof_step>{
+        membership.steps().begin(), membership.steps().end()};
+    const auto expanded = std::find_if(
+        wrong_expansion.begin(), wrong_expansion.end(), [](const auto& step) {
+            return !step.expanded_child_indexes().empty();
+        });
+    CHECK(expanded != wrong_expansion.end());
+    *expanded = merkle_proof_step{expanded->block(), {}};
+    const auto expansion = merkle_proof{
+        membership.algorithm_id(),
+        membership.domain_digest(),
+        membership.root_hash(),
+        membership.kind(),
+        {membership.query().begin(), membership.query().end()},
+        std::move(wrong_expansion)};
+    CHECK_EQ(
+        merkle_verification_failure_kind::proof_mismatch,
+        verify_merkle_proof(expansion, policy).failure_kind());
+
+    auto extra_steps = std::vector<merkle_proof_step>{
+        membership.steps().begin(), membership.steps().end()};
+    const auto proof_digests = [&] {
+        auto result = std::set<merkle_digest>{};
+        for (const auto& step : extra_steps) {
+            result.insert(step.block().digest());
+        }
+        return result;
+    }();
+    const auto pack = export_merkle_pack(tree);
+    const auto extra = std::find_if(pack.blocks().begin(), pack.blocks().end(), [&](const auto& block) {
+        return !proof_digests.contains(block.digest());
+    });
+    CHECK(extra != pack.blocks().end());
+    extra_steps.emplace_back(*extra, std::vector<std::size_t>{});
+    const auto extra_proof = merkle_proof{
+        membership.algorithm_id(),
+        membership.domain_digest(),
+        membership.root_hash(),
+        membership.kind(),
+        {membership.query().begin(), membership.query().end()},
+        std::move(extra_steps)};
+    CHECK_EQ(
+        merkle_verification_failure_kind::proof_mismatch,
+        verify_merkle_proof(extra_proof, policy).failure_kind());
+
+    CHECK_THROWS_AS(create_merkle_range_proof(tree, 2, 1), merkle_range_error);
+    const auto empty = string_tree::create(policy);
+    CHECK(verify_merkle_proof(create_merkle_proof(empty, std::int32_t{1}), policy).valid());
+    CHECK(verify_merkle_proof(
+        create_merkle_range_proof(empty, std::int32_t{-1}, std::int32_t{1}), policy).valid());
+}
+
+TEST(PersistenceClosurePrunedPacksAndIterativeSyncConverge)
+{
+    const auto policy = make_string_policy("sync-planning-v1");
+    const auto target = make_persistence_tree(policy, 1025);
+    const auto local = make_persistence_tree(policy, 127);
+    auto receiver = in_memory_merkle_block_store{};
+    CHECK_EQ(export_merkle_pack(target), create_merkle_sync_pack(target, receiver));
+
+    auto rounds = std::size_t{0};
+    while (true) {
+        const auto plan = tools::data_structures::hamt::plan_merkle_sync(
+            target, local, receiver);
+        CHECK_EQ(target.root_hash(), plan.target_root_hash());
+        CHECK_EQ(local.root_hash(), plan.local_root_hash());
+        if (!plan.requires_blocks()) {
+            break;
+        }
+        CHECK(!plan.requested_blocks().empty());
+        const auto transfer = export_merkle_pack(target, plan.requested_blocks());
+        for (const auto& block : transfer.blocks()) {
+            (void)receiver.put(block);
+        }
+        ++rounds;
+        CHECK(rounds <= target.height() + 1);
+    }
+    CHECK(rounds > 1);
+    const auto loaded = load_merkle_tree(target.root_hash(), policy, receiver);
+    CHECK(target.content_equals(loaded));
+    const auto finished = tools::data_structures::hamt::plan_merkle_sync(
+        target, loaded, receiver);
+    CHECK(finished.roots_match());
+    CHECK(!finished.requires_blocks());
+    CHECK_EQ(std::size_t{0}, finished.examined_block_count());
+    CHECK(create_merkle_sync_pack(target, receiver).blocks().empty());
+
+    auto root_only_store = in_memory_merkle_block_store{};
+    const auto root = target.root_hash();
+    const auto root_pack = export_merkle_pack(
+        target, std::span<const merkle_digest>{&root, 1});
+    for (const auto& block : root_pack.blocks()) {
+        (void)root_only_store.put(block);
+    }
+    CHECK(create_merkle_sync_pack(target, root_only_store).blocks().empty());
+}
+
+TEST(PersistenceThreeWayMergeIsPresentNullSafeAndNeverPublishesPartialOutput)
+{
+    const auto policy = make_string_policy("three-way-merge-v1");
+    const auto base = string_tree::create(policy)
+        .set_item(1, std::optional<std::string>{"one"})
+        .set_item(2, std::optional<std::string>{"two"})
+        .set_item(3, std::optional<std::string>{"three"});
+    const auto left = base.set_item(1, std::optional<std::string>{"ONE"});
+    const auto right = base.set_item(2, std::optional<std::string>{"TWO"});
+    const auto disjoint = merge_merkle_trees(base, left, right);
+    CHECK(disjoint.success());
+    CHECK_EQ(std::string{"ONE"}, disjoint.merged_tree()->at(1).value());
+    CHECK_EQ(std::string{"TWO"}, disjoint.merged_tree()->at(2).value());
+    CHECK(disjoint.merged_tree()->get_entry(1)->shares_identity_with(*left.get_entry(1)));
+    CHECK(disjoint.merged_tree()->get_entry(2)->shares_identity_with(*right.get_entry(2)));
+
+    const auto conflict_left = base.set_item(3, std::optional<std::string>{"left"});
+    const auto conflict_right = base.set_item(3, std::optional<std::string>{"right"});
+    const auto unresolved = merge_merkle_trees(base, conflict_left, conflict_right);
+    CHECK(!unresolved.success());
+    CHECK(unresolved.merged_tree() == nullptr);
+    CHECK_EQ(std::size_t{1}, unresolved.unresolved_conflicts().size());
+    CHECK_EQ(std::int32_t{3}, *unresolved.unresolved_conflicts().front().key);
+
+    const auto resolved = merge_merkle_trees(
+        base,
+        conflict_left,
+        conflict_right,
+        [](const auto&) {
+            return tools::data_structures::hamt::merkle_merge_resolution<
+                std::optional<std::string>>::set_value(std::optional<std::string>{"resolved"});
+        });
+    CHECK(resolved.success());
+    CHECK_EQ(std::string{"resolved"}, resolved.merged_tree()->at(3).value());
+
+    const auto present_null = base.set_item(1, std::nullopt);
+    const auto deleted = base.remove(1);
+    const auto null_conflict = merge_merkle_trees(base, present_null, deleted);
+    CHECK(!null_conflict.success());
+    CHECK(null_conflict.unresolved_conflicts().front().left.is_present());
+    CHECK(!null_conflict.unresolved_conflicts().front().left.value()->has_value());
+    CHECK(!null_conflict.unresolved_conflicts().front().right.is_present());
+    const auto keep_null = merge_merkle_trees(
+        base,
+        present_null,
+        deleted,
+        [](const auto&) {
+            return tools::data_structures::hamt::merkle_merge_resolution<
+                std::optional<std::string>>::use_left();
+        });
+    CHECK(keep_null.success());
+    CHECK(keep_null.merged_tree()->contains_key(1));
+    CHECK(!keep_null.merged_tree()->at(1).has_value());
+
+    const auto base_root = base.root_hash();
+    CHECK_THROWS_AS(
+        merge_merkle_trees(
+            base,
+            conflict_left,
+            conflict_right,
+            [](const auto&) -> tools::data_structures::hamt::merkle_merge_resolution<
+                std::optional<std::string>> {
+                throw std::runtime_error{"resolver failure"};
+            }),
+        std::runtime_error);
+    CHECK_EQ(base_root, base.root_hash());
+    CHECK_EQ(std::string{"three"}, base.at(3).value());
+}
+
+TEST(PersistenceMoveOnlyKeysAndValuesLoadProveImportAndMerge)
+{
+    using tree_type = merkle_search_tree<move_only_int, move_only_int>;
+    const auto policy = tree_type::policy_type::natural(
+        "move-only-persistence-v1",
+        std::make_shared<move_only_int_codec>(),
+        std::make_shared<move_only_int_codec>());
+    const auto base = tree_type::create(policy)
+        .set_item(move_only_int{1}, move_only_int{10})
+        .set_item(move_only_int{3}, move_only_int{30});
+    auto store = in_memory_merkle_block_store{};
+    CHECK_EQ(base.block_count(), save_merkle_tree(base, store));
+    const auto loaded = load_merkle_tree(base.root_hash(), policy, store);
+    const auto key_one = move_only_int{1};
+    CHECK_EQ(std::int32_t{10}, loaded.at(key_one).value());
+    CHECK(base.content_equals(loaded));
+    const auto imported = import_merkle_pack(export_merkle_pack(base), policy);
+    CHECK_EQ(std::int32_t{30}, imported.at(move_only_int{3}).value());
+
+    const auto proof = create_merkle_proof(base, key_one);
+    CHECK(verify_merkle_proof(proof, policy).valid());
+    const auto absence = create_merkle_proof(base, move_only_int{2});
+    CHECK(verify_merkle_proof(absence, policy).valid());
+
+    const auto left = base.set_item(move_only_int{1}, move_only_int{11});
+    const auto right = base.set_item(move_only_int{2}, move_only_int{20});
+    const auto merged = merge_merkle_trees(base, left, right);
+    CHECK(merged.success());
+    CHECK_EQ(std::int32_t{11}, merged.merged_tree()->at(move_only_int{1}).value());
+    CHECK_EQ(std::int32_t{20}, merged.merged_tree()->at(move_only_int{2}).value());
+    CHECK(merged.merged_tree()->get_entry(move_only_int{1})->shares_identity_with(
+        *left.get_entry(move_only_int{1})));
+
+    const auto conflict_right = base.set_item(move_only_int{1}, move_only_int{12});
+    const auto unresolved = merge_merkle_trees(base, left, conflict_right);
+    CHECK(!unresolved.success());
+    CHECK(unresolved.merged_tree() == nullptr);
+    CHECK_EQ(std::size_t{1}, unresolved.unresolved_conflicts().size());
+    const auto resolved = merge_merkle_trees(
+        base,
+        left,
+        conflict_right,
+        [](const auto&) {
+            return tools::data_structures::hamt::merkle_merge_resolution<move_only_int>::set_value(
+                move_only_int{13});
+        });
+    CHECK(resolved.success());
+    CHECK_EQ(std::int32_t{13}, resolved.merged_tree()->at(move_only_int{1}).value());
+}
+
+TEST(PersistenceStoreLoadProofAndSyncAreConcurrentSafe)
+{
+    const auto policy = make_string_policy("persistence-concurrency-v1");
+    const auto tree = make_persistence_tree(policy, 513);
+    const auto pack = export_merkle_pack(tree);
+    const auto proof = create_merkle_range_proof(tree, std::int32_t{-20}, std::int32_t{20});
+    auto store = in_memory_merkle_block_store{};
+    auto failures = std::atomic<int>{0};
+    auto threads = std::vector<std::thread>{};
+    threads.reserve(8);
+    for (auto worker = 0; worker != 8; ++worker) {
+        threads.emplace_back([&, worker] {
+            try {
+                for (auto pass = 0; pass != 16; ++pass) {
+                    for (const auto& block : pack.blocks()) {
+                        (void)store.put(block);
+                    }
+                    CHECK(verify_merkle_proof(proof, policy).valid());
+                    const auto loaded = load_merkle_tree(tree.root_hash(), policy, store);
+                    CHECK(tree.content_equals(loaded));
+                    const auto sync = create_merkle_sync_pack(tree, store);
+                    CHECK(sync.blocks().empty());
+                    CHECK(store.contains(pack.blocks()[
+                        static_cast<std::size_t>(worker + pass) % pack.block_count()].digest()));
+                }
+            } catch (...) {
+                failures.fetch_add(1, std::memory_order_relaxed);
+            }
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    CHECK_EQ(0, failures.load(std::memory_order_relaxed));
+    CHECK_EQ(tree.block_count(), store.size());
+}
+
 } // namespace
 
 int main()
@@ -1069,7 +2011,7 @@ int main()
     for (const auto& test : registry()) {
         try {
             test.run();
-            std::cout << "[PASS] " << test.name << '\n';
+            std::cout << "[PASS] " << test.name << '\n' << std::flush;
         } catch (const std::exception& ex) {
             ++failed;
             std::cerr << "[FAIL] " << test.name << ": " << ex.what() << '\n';

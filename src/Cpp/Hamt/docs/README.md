@@ -13,7 +13,10 @@
   Patricia, and Merkle search-tree families.
 - [Merkle Search Tree](merkle-search-tree.md) specifies the exact `mst-sha256-b16-v2` policy and
   `MST2` block contract, canonical B=16 topology, codec rules, structural sharing, and validation
-  surface. Its scope is the in-memory core and wire format, not stores, proofs, sync, or merge.
+  surface.
+- [Merkle Persistence](merkle-persistence.md) specifies immutable blocks and packs, concurrent
+  stores, bounded verified loading/import, exact `MSP2` proofs, iterative synchronization, and
+  typed three-way merge.
 - [Usage guide](usage.md) shows include paths, value-semantics patterns, map/set operations,
   policy objects, Merkle construction and diagnostics, iteration, and set algebra for the C++
   templates.

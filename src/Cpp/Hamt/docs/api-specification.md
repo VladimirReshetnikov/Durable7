@@ -27,9 +27,9 @@ inspection helpers expose that property for tests.
 
 `merkle_search_tree<K, V>` is a third, independent immutable map core. It orders keys through an
 explicit policy, derives canonical geometric levels from policy-bound SHA-256 key hashes, and emits
-exact `MST2` content-addressed blocks. Its C++ milestone covers the in-memory core and wire format.
-It does not yet expose block-store persistence/loading, membership or range proofs,
-synchronization, or three-way merge.
+exact `MST2` content-addressed blocks. `merkle_persistence.hpp` and `merkle_proofs.hpp` add bounded
+verified stores/import, exact `MSP2` proofs, iterative synchronization, and typed three-way merge;
+see the [persistence specification](merkle-persistence.md).
 
 ## Patricia Integer Maps And Sets
 
@@ -128,6 +128,26 @@ insertion history—determine the root, block topology, and bytes. See the
 separator order, child intervals, arity, bounds and cached counts/heights/block counts, reconstructs
 every block, and verifies every SHA-256 digest. It returns `merkle_search_tree_statistics` only
 after the complete tree validates and throws `merkle_tree_invariant_error` on a disagreement.
+
+The persistence surface in `merkle_persistence.hpp` includes:
+
+- immutable `merkle_block`, `merkle_block_pack`, and `merkle_sync_plan` values;
+- the abstract `merkle_block_store` and shared-mutex `in_memory_merkle_block_store`;
+- immutable seven-limit `merkle_verification_budget` values and classified
+  `merkle_verification_error` failures;
+- `export_merkle_pack`, `save_merkle_tree`, bounded `load_merkle_tree`, and complete/partial
+  `import_merkle_pack`; and
+- closure-pruned `create_merkle_sync_pack` plus iterative `plan_merkle_sync`.
+
+The proof/merge surface in `merkle_proofs.hpp` includes immutable `merkle_proof` and
+`merkle_proof_step`, exact point/range proof creation, bounded `verify_merkle_proof`, typed
+`merkle_merge_value`/`merkle_merge_resolution`, and `merge_merkle_trees`. Public sequence-bearing
+values own private vectors and expose const spans only. Load/import/proof validation reconstructs
+through the core's canonical entry/node machinery, so move-only keys/values and exact entry-handle
+reuse survive across the added layer.
+
+See [Merkle persistence](merkle-persistence.md) for verification order, failure precedence,
+publication atomicity, `MSP2` bytes, sync protocol, and present-null merge semantics.
 
 ## Hash Trie Shape
 

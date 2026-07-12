@@ -20,6 +20,12 @@
 
 namespace tools::data_structures::hamt {
 
+// Implementation namespace: unstable and deliberately excluded from the supported API.
+namespace merkle_persistence_detail {
+template <class K, class V>
+struct access;
+} // namespace merkle_persistence_detail
+
 /// One retained key/value representative and its canonical encodings.
 template <class K, class V>
 class merkle_search_tree_entry final {
@@ -51,6 +57,7 @@ public:
 private:
     template <class, class>
     friend class merkle_search_tree;
+    friend struct merkle_persistence_detail::access<K, V>;
 
     merkle_search_tree_entry(
         std::shared_ptr<const K> key,
@@ -202,6 +209,8 @@ public:
 template <class K, class V>
 class merkle_search_tree final {
 private:
+    friend struct merkle_persistence_detail::access<K, V>;
+
     using entry_type_internal = merkle_search_tree_entry<K, V>;
 
     struct node;

@@ -15,7 +15,8 @@ content-addressed ordered-map cores:
 - `persistent_int_map<T>` / `persistent_long_map<T>` and the corresponding explicit-width
   `persistent_int_set` / `persistent_long_set` types.
 - `merkle_search_tree<K, V>`, `merkle_search_tree_policy<K, V>`, canonical codecs, and exact
-  `mst-sha256-b16-v2` / `MST2` block output.
+  `mst-sha256-b16-v2` / `MST2` block output, plus verified persistence, exact `MSP2` proofs,
+  synchronization, and three-way merge.
 
 The implementation preserves the C# library's core shape: 32-way logical branching, five hash bits
 per trie level, canonical CHAMP branches with separate data/node maps, compact inline payload and
@@ -37,9 +38,10 @@ semantics and versioned canonical key/value codecs into the `mst-sha256-b16-v2` 
 Key-derived geometric levels produce canonical B=16 wide blocks independent of update history;
 updates path-copy changed blocks and share untouched subtrees. The C++ core emits byte-for-byte
 cross-language `MST2` blocks, exposes exact block and shape diagnostics, and deeply validates stored
-representatives, cached metadata, canonical bytes, and digests. This milestone is the in-memory core
-and wire contract only; block-store persistence/loading, proofs, synchronization, and merge are not
-part of the C++ surface yet.
+representatives, cached metadata, canonical bytes, and digests. Immutable blocks and packs, a
+thread-safe in-memory store, seven bounded verification limits, complete/partial import, exact
+membership/nonmembership/range proofs, closure-pruned synchronization, and present-null-safe
+three-way merge extend that core without weakening move-only key/value support.
 
 ## Layout
 
@@ -55,12 +57,18 @@ part of the C++ surface yet.
   codecs, comparers, and policy-domain construction.
 - `include/Tools/DataStructures/Hamt/merkle_search_tree.hpp` contains the immutable canonical wide
   tree, ordered-map operations, diagnostics, exact block enumeration, and deep validation.
+- `include/Tools/DataStructures/Hamt/merkle_persistence.hpp` contains immutable transfer values,
+  the concurrent block store, bounded verified load/import, and synchronization algorithms.
+- `include/Tools/DataStructures/Hamt/merkle_proofs.hpp` contains exact `MSP2` proof creation and
+  verification plus typed three-way merge.
 - `tests/` contains the [deterministic native suites and copied-header consumer](tests/README.md).
 - `build.ps1` imports the MSVC toolchain through Scriptorium, stages a package-style include tree,
   and compiles the CHAMP/Patricia suite, Merkle suite, and installed-header consumer.
 - `docs/api-specification.md` documents the C++ API adaptation and complexity guarantees.
 - `docs/merkle-search-tree.md` specifies the policy, codecs, canonical topology, `MST2` wire bytes,
   and core ownership/lifetime contract.
+- `docs/merkle-persistence.md` specifies block stores, packs, seven verification limits, `MSP2`,
+  iterative sync, merge, failure ordering, and publication guarantees.
 - `docs/usage.md` provides practical include, value-semantics, map/set, Merkle policy, iteration,
   diagnostics, and set-algebra examples.
 - `docs/validation.md` records the local build script, warning policy, Debug/Release commands, and

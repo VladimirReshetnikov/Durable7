@@ -141,11 +141,23 @@ The Merkle suite covers:
 - deep validation of entry encodings, key levels, child intervals, cached metadata, exact blocks,
   and digests, including a mutated-representative regression; and
 - multiple concurrent readers over retained immutable trees.
+- exact `MSP2` membership, nonmembership, and inclusive-range query goldens;
+- complete and partial pack save/load/import, immutable block-store snapshots, and destination
+  conflict preflight before publication;
+- all seven verification limits, including query/step/expansion shape precedence before proof
+  maps, hashing, codecs, or decode allocation;
+- missing, digest-tampered, malformed, noncanonical, foreign-domain, unsupported, count-corrupt,
+  extra-proof, missing-proof, and bad-expansion rejection;
+- closure-pruned packs and iterative missing-frontier synchronization;
+- present-null-safe three-way merge, unresolved all-or-nothing output, resolver failure safety, and
+  canonical handle reuse;
+- move-only key/value load, import, proof, and merge instantiation; and
+- concurrent store publication, load, proof verification, and sync reads.
 
 The copied-header consumer includes the installed aggregate header without source-tree include
-paths, creates and validates a one-entry integer tree, checks lookup, and distinguishes the
-nonempty root from the empty root. This verifies public include closure and the required crypto
-link independently from the full native suite.
+paths, pins the one-entry golden root, and instantiates export/save/load, proof verification, and
+merge. This verifies public include closure and the required crypto link independently from the
+full native suite.
 
 For new behavior, prefer adding deterministic model checks here before relying on example-only coverage.
 

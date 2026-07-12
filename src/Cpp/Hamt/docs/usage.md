@@ -16,6 +16,8 @@ the specification.
 #include <Tools/DataStructures/Hamt/persistent_hash_set.hpp>
 #include <Tools/DataStructures/Hamt/persistent_int_map.hpp>
 #include <Tools/DataStructures/Hamt/merkle_search_tree.hpp>
+#include <Tools/DataStructures/Hamt/merkle_persistence.hpp>
+#include <Tools/DataStructures/Hamt/merkle_proofs.hpp>
 
 namespace hamt = tools::data_structures::hamt;
 ```
@@ -340,9 +342,64 @@ for (const auto& block : two.blocks_preorder()) {
 ```
 
 `validate_structure` performs a deep canonical audit; it is not required before ordinary trusted
-reads. This C++ milestone emits exact blocks but does not yet save/load a block store, parse
-untrusted blocks, produce proofs, synchronize peers, or merge divergent roots. See the
-[Merkle specification](merkle-search-tree.md) for the exact policy and wire contract.
+reads. The persistence layer saves and loads exact closures, verifies untrusted packs under finite
+budgets, creates and verifies exact proofs, synchronizes block frontiers, and merges divergent
+roots. See the [Merkle core](merkle-search-tree.md) and
+[persistence specification](merkle-persistence.md) for the complete contracts.
+
+### Merkle Persistence And Proofs
+
+Export/save and verified load use immutable content-addressed blocks:
+
+```cpp
+auto store = hamt::in_memory_merkle_block_store{};
+auto pack = hamt::export_merkle_pack(two);
+std::size_t added = hamt::save_merkle_tree(two, store);
+
+auto loaded = hamt::load_merkle_tree(two.root_hash(), policy, store);
+auto imported = hamt::import_merkle_pack(pack, policy);
+```
+
+Pass a `merkle_verification_budget` to load, import, or proof verification when the defaults are not
+appropriate. Limits are immutable; use a `with_max_*` member to create a modified copy.
+
+```cpp
+auto budget = hamt::merkle_verification_budget{}
+    .with_max_block_count(10000)
+    .with_max_depth(80);
+
+auto bounded = hamt::load_merkle_tree(two.root_hash(), policy, store, budget);
+```
+
+Point and inclusive-range proofs carry exact `MSP2` query descriptors and authenticated `MST2`
+blocks:
+
+```cpp
+auto membership = hamt::create_merkle_proof(two, std::int32_t{42});
+auto range = hamt::create_merkle_range_proof(two, std::int32_t{7}, std::int32_t{42});
+
+auto checked = hamt::verify_merkle_proof(membership, policy, budget);
+if (!checked.valid()) {
+    // Inspect failure_kind(), failure_message(), and verified byte/block counts.
+}
+```
+
+Synchronization is iterative. Transfer the addresses in `requested_blocks()`, store them, and plan
+again until the frontier is empty; then load and publish the target root. A store used to prune
+known subtrees must contain verified closures.
+
+Three-way merge returns a complete tree or conflicts, never partial output:
+
+```cpp
+auto result = hamt::merge_merkle_trees(base, left, right);
+if (result.success()) {
+    const auto& merged = *result.merged_tree();
+} else {
+    for (const auto& conflict : result.unresolved_conflicts()) {
+        // base/left/right distinguish absence from a present nullable value.
+    }
+}
+```
 
 ## Concurrency And Lifetime
 
@@ -366,6 +423,10 @@ caller permits.
 | Custom value semantics | Template hash/equality policy objects plus `create(...)` or `create_range(...)` |
 | Canonical ordered map with a SHA-256 root | `merkle_search_tree<K,V>` |
 | Exact C#/Rust-compatible `MST2` blocks | `blocks_preorder()` under an explicit compatible policy |
+| Verified block-store load/import | `load_merkle_tree` / `import_merkle_pack` |
+| Membership, absence, or range proof | `create_merkle_proof` / `create_merkle_range_proof` |
+| Iterative block synchronization | `plan_merkle_sync` / `create_merkle_sync_pack` |
+| Typed three-way merge | `merge_merkle_trees` |
 | Deep Merkle invariant audit | `validate_structure()` |
 
 For cross-language contract alignment, see the repository

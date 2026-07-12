@@ -62,9 +62,9 @@ The executable registers these cases:
 - `BulkBuilder_RandomizedBuildMatchesPersistentUpdates`
 - `BulkBuilder_CreateRangeAndIntersectionUseBuilderSemantics`
 
-## Merkle Core And Wire Coverage
+## Merkle Core, Wire, And Persistence Coverage
 
-`merkle_search_tree_tests.cpp` covers the in-memory core and exact wire contract only. Its groups
+`merkle_search_tree_tests.cpp` covers the in-memory core, exact wire, and verified persistence tier. Its groups
 exercise:
 
 - exact signed big-endian integer, tagged nullable UTF-8/bytes, RFC-4122 GUID, SHA-256 digest, and
@@ -97,10 +97,24 @@ The registered cases are:
 - `ThrowingComparersAndCodecsLeavePersistentSourcesUntouched`
 - `ValidatorDetectsMutationBehindAConstRepresentative`
 - `ConcurrentReadersObserveConsistentRetainedMerkleSnapshots`
+- `PersistenceGoldenPackAndMsp2QueriesMatchEverySiblingPort`
+- `PersistenceSaveLoadImportAndPartialOverlayRoundTripExactClosure`
+- `PersistenceRejectsMissingTamperedMalformedForeignAndCountCorruption`
+- `PersistenceSevenBudgetsAndProofShapeArePreflightedStrictly`
+- `PersistenceProofsRejectTamperingExtrasMissingStepsAndBadExpansions`
+- `PersistenceClosurePrunedPacksAndIterativeSyncConverge`
+- `PersistenceThreeWayMergeIsPresentNullSafeAndNeverPublishesPartialOutput`
+- `PersistenceMoveOnlyKeysAndValuesLoadProveImportAndMerge`
+- `PersistenceStoreLoadProofAndSyncAreConcurrentSafe`
+
+The persistence groups lock exact `MSP2`, complete/partial closure round trips, destination
+preflight, missing/tampered/noncanonical inputs, all seven limits and proof-preflight precedence,
+proof expansion/tampering, iterative sync, present-null/no-partial merge, move-only values, and
+concurrent store/load/proof/sync.
 
 `merkle_header_consumer.cpp` includes the aggregate header from the copied package tree, creates and
-validates a one-entry integer tree, checks lookup, and verifies that its root differs from the empty
-root. It is an independent public-header closure and crypto-link gate, not a replacement for the
+validates the one-entry golden tree, then instantiates export/save/load, proof verification, and
+merge. It is an independent public-header closure and crypto-link gate, not a replacement for the
 model suite.
 
 ## Build And Run
@@ -121,6 +135,5 @@ Run the built executable directly when changing runner diagnostics or investigat
 
 Use the workspace [validation guide](../docs/validation.md) for Release validation, portable GCC
 and Clang lanes, compiler flags, generated-output locations, and coverage policy. See the
-[Merkle specification](../docs/merkle-search-tree.md) for the exact policy and `MST2` contract under
-test. Persistence stores/import, proofs, sync, and merge are deliberately outside this C++
-milestone and therefore outside this suite.
+[Merkle core](../docs/merkle-search-tree.md) and
+[persistence specification](../docs/merkle-persistence.md) for the exact contracts under test.
