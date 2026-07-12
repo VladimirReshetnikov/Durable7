@@ -20,6 +20,9 @@ The trie follows the existing ports:
 - immutable same-hash collision buckets;
 - `Arc`-shared nodes across persistent versions;
 - no-op replacement and absent removal reuse the existing root;
+- same-policy map/set union, intersection, difference, and symmetric difference combine CHAMP
+  slots directly, prune `Arc`-identical subtries, and cache subtree cardinalities; independently
+  created hash-policy states retain the receiver-policy semantic fallback;
 - map bulk construction uses last-wins semantics.
 - map diff returns owned typed additions, removals, and changes, with a shared-root fast path.
   Equality and diff are deliberately semantic across distinct `BuildHasher` states: Rust key

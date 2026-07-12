@@ -27,7 +27,8 @@ live in `Hamt/tests/merkle_core_wire.rs` and `Hamt/tests/merkle_persistence.rs`.
   key/left/right map combiners, cached subtree-cardinality invariants, and no-op root sharing;
 - streaming iterator exact-size accounting over collision buckets;
 - last-wins bulk map construction while retaining the original stored key;
-- persistent set algebra and proper subset/superset relations;
+- persistent set algebra and proper subset/superset relations, including zero-rehash shared-policy
+  operations, semantic fallback across independent policies, and collision-heavy model histories;
 - transient bulk-builder snapshot detachment, first-key/last-value duplicate identity,
   final-hash-level splitting, and collision-heavy/branch-heavy differential agreement with
   incremental construction;

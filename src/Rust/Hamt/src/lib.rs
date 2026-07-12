@@ -34,6 +34,7 @@ pub use patricia::{PersistentIntMap, PersistentIntSet, PersistentLongMap, Persis
 
 const BITS_PER_LEVEL: u32 = 5;
 const BRANCH_MASK: u32 = 0x1f;
+const BRANCH_FACTOR: usize = 32;
 /// Deepest shift at which a `Branch` node can appear (32-bit hash, 5 bits per level).
 const MAX_BRANCH_SHIFT: u32 = 30;
 
@@ -59,6 +60,7 @@ pub struct PersistentHashMap<K, V, S = RandomState> {
     root: Option<Arc<Node<K, V>>>,
     len: usize,
     hasher: S,
+    policy_identity: Arc<()>,
 }
 
 impl<K, V, S: Clone> Clone for PersistentHashMap<K, V, S> {
@@ -67,6 +69,7 @@ impl<K, V, S: Clone> Clone for PersistentHashMap<K, V, S> {
             root: self.root.clone(),
             len: self.len,
             hasher: self.hasher.clone(),
+            policy_identity: Arc::clone(&self.policy_identity),
         }
     }
 }
@@ -87,7 +90,38 @@ enum Node<K, V> {
         node_map: u32,
         data: Arc<[(u32, K, V)]>,
         children: Arc<[Arc<Node<K, V>>]>,
+        count: usize,
     },
+}
+
+impl<K, V> Node<K, V> {
+    fn entry_count(&self) -> usize {
+        match self {
+            Self::Leaf { .. } => 1,
+            Self::Collision { entries, .. } => entries.len(),
+            Self::Branch { count, .. } => *count,
+        }
+    }
+}
+
+fn make_branch<K, V>(
+    data_map: u32,
+    node_map: u32,
+    data: Arc<[(u32, K, V)]>,
+    children: Arc<[Arc<Node<K, V>>]>,
+) -> Arc<Node<K, V>> {
+    let count = data.len()
+        + children
+            .iter()
+            .map(|child| child.entry_count())
+            .sum::<usize>();
+    Arc::new(Node::Branch {
+        data_map,
+        node_map,
+        data,
+        children,
+        count,
+    })
 }
 
 struct InsertResult<K, V> {
@@ -117,6 +151,7 @@ impl<K, V, S> PersistentHashMap<K, V, S> {
             root: None,
             len: 0,
             hasher,
+            policy_identity: Arc::new(()),
         }
     }
 
@@ -177,6 +212,7 @@ impl<K, V, S: Clone> PersistentHashMap<K, V, S> {
             root: None,
             len: 0,
             hasher: self.hasher.clone(),
+            policy_identity: Arc::clone(&self.policy_identity),
         }
     }
 }
@@ -243,6 +279,7 @@ where
                 root: result.node,
                 len: self.len - 1,
                 hasher: self.hasher.clone(),
+                policy_identity: Arc::clone(&self.policy_identity),
             },
             removed_key,
             removed_value,
@@ -264,6 +301,7 @@ where
                 root: Some(Arc::new(Node::Leaf { hash, key, value })),
                 len: 1,
                 hasher: self.hasher.clone(),
+                policy_identity: Arc::clone(&self.policy_identity),
             },
             Some(root) => {
                 let result = insert_node(root, hash, key, value, 0, true);
@@ -271,6 +309,7 @@ where
                     root: Some(result.node),
                     len: self.len + usize::from(result.added),
                     hasher: self.hasher.clone(),
+                    policy_identity: Arc::clone(&self.policy_identity),
                 }
             }
         }
@@ -290,6 +329,7 @@ where
                     root: Some(Arc::new(Node::Leaf { hash, key, value })),
                     len: 1,
                     hasher: self.hasher.clone(),
+                    policy_identity: Arc::clone(&self.policy_identity),
                 },
                 true,
             ),
@@ -304,6 +344,7 @@ where
                         root: Some(result.node),
                         len: self.len + usize::from(result.added),
                         hasher: self.hasher.clone(),
+                        policy_identity: Arc::clone(&self.policy_identity),
                     },
                     result.added,
                 )
@@ -322,6 +363,71 @@ where
         }
 
         map
+    }
+
+    /// Combines two maps structurally when they descend from the same hash-policy identity.
+    #[must_use]
+    pub fn union_map(&self, other: &Self) -> Self {
+        self.combine_map(other, ChampOperation::Union)
+    }
+
+    #[must_use]
+    pub fn intersect_map(&self, other: &Self) -> Self {
+        self.combine_map(other, ChampOperation::Intersect)
+    }
+
+    #[must_use]
+    pub fn except_map(&self, other: &Self) -> Self {
+        self.combine_map(other, ChampOperation::Except)
+    }
+
+    #[must_use]
+    pub fn symmetric_except_map(&self, other: &Self) -> Self {
+        self.combine_map(other, ChampOperation::SymmetricExcept)
+    }
+
+    fn combine_map(&self, other: &Self, operation: ChampOperation) -> Self {
+        if !Arc::ptr_eq(&self.policy_identity, &other.policy_identity) {
+            return self.combine_map_elementwise(other, operation);
+        }
+        let root = combine_champ_nodes(self.root.as_ref(), other.root.as_ref(), 0, operation);
+        if same_optional_root(&root, &self.root) {
+            return self.clone();
+        }
+        if same_optional_root(&root, &other.root) {
+            return other.clone();
+        }
+        Self {
+            len: root.as_deref().map_or(0, Node::entry_count),
+            root,
+            hasher: self.hasher.clone(),
+            policy_identity: Arc::clone(&self.policy_identity),
+        }
+    }
+
+    fn combine_map_elementwise(&self, other: &Self, operation: ChampOperation) -> Self {
+        match operation {
+            ChampOperation::Union => other.iter().fold(self.clone(), |map, (key, value)| {
+                map.insert(key.clone(), value.clone())
+            }),
+            ChampOperation::Intersect => self.iter().fold(self.clear(), |map, (key, value)| {
+                if other.contains_key(key) {
+                    map.insert(key.clone(), value.clone())
+                } else {
+                    map
+                }
+            }),
+            ChampOperation::Except => other.keys().fold(self.clone(), |map, key| map.remove(key)),
+            ChampOperation::SymmetricExcept => {
+                other.iter().fold(self.clone(), |map, (key, value)| {
+                    if map.contains_key(key) {
+                        map.remove(key)
+                    } else {
+                        map.insert(key.clone(), value.clone())
+                    }
+                })
+            }
+        }
     }
 
     /// Reports semantic additions, removals, and replacements, with a shared-root fast path.
@@ -402,10 +508,11 @@ where
     S: BuildHasher,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.len == other.len
-            && self
-                .iter()
-                .all(|(key, value)| other.get(key) == Some(value))
+        self.shares_root_with(other)
+            || self.len == other.len
+                && self
+                    .iter()
+                    .all(|(key, value)| other.get(key) == Some(value))
     }
 }
 
@@ -444,6 +551,7 @@ pub struct BulkBuilder<K, V, S = RandomState> {
     root: Option<MutableNode<K, V>>,
     len: usize,
     hasher: S,
+    policy_identity: Arc<()>,
 }
 
 enum MutableNode<K, V> {
@@ -484,6 +592,7 @@ impl<K, V, S> BulkBuilder<K, V, S> {
             root: None,
             len: 0,
             hasher,
+            policy_identity: Arc::new(()),
         }
     }
 
@@ -510,6 +619,7 @@ impl<K, V, S> BulkBuilder<K, V, S> {
             root: self.root.map(freeze_owned),
             len: self.len,
             hasher: self.hasher,
+            policy_identity: self.policy_identity,
         }
     }
 }
@@ -561,6 +671,7 @@ where
             root: self.root.as_ref().map(freeze_cloned),
             len: self.len,
             hasher: self.hasher.clone(),
+            policy_identity: Arc::clone(&self.policy_identity),
         }
     }
 }
@@ -852,6 +963,77 @@ where
         result
     }
 
+    /// Uses reference-pruned CHAMP algebra for a shared policy identity and a semantic fallback otherwise.
+    #[must_use]
+    pub fn union_set(&self, other: &Self) -> Self {
+        Self {
+            map: self.map.union_map(&other.map),
+        }
+    }
+
+    #[must_use]
+    pub fn intersect_set(&self, other: &Self) -> Self {
+        Self {
+            map: self.map.intersect_map(&other.map),
+        }
+    }
+
+    #[must_use]
+    pub fn except_set(&self, other: &Self) -> Self {
+        Self {
+            map: self.map.except_map(&other.map),
+        }
+    }
+
+    #[must_use]
+    pub fn symmetric_except_set(&self, other: &Self) -> Self {
+        Self {
+            map: self.map.symmetric_except_map(&other.map),
+        }
+    }
+
+    #[must_use]
+    pub fn is_subset_of_set(&self, other: &Self) -> bool {
+        if Arc::ptr_eq(&self.map.policy_identity, &other.map.policy_identity) {
+            self.len() <= other.len()
+                && self
+                    .map
+                    .intersect_map(&other.map)
+                    .shares_root_with(&self.map)
+        } else {
+            self.is_subset_of(other.iter().cloned())
+        }
+    }
+
+    #[must_use]
+    pub fn is_superset_of_set(&self, other: &Self) -> bool {
+        other.is_subset_of_set(self)
+    }
+
+    #[must_use]
+    pub fn is_proper_subset_of_set(&self, other: &Self) -> bool {
+        self.len() < other.len() && self.is_subset_of_set(other)
+    }
+
+    #[must_use]
+    pub fn is_proper_superset_of_set(&self, other: &Self) -> bool {
+        self.len() > other.len() && other.is_subset_of_set(self)
+    }
+
+    #[must_use]
+    pub fn overlaps_set(&self, other: &Self) -> bool {
+        if Arc::ptr_eq(&self.map.policy_identity, &other.map.policy_identity) {
+            !self.map.intersect_map(&other.map).is_empty()
+        } else {
+            self.overlaps(other.iter().cloned())
+        }
+    }
+
+    #[must_use]
+    pub fn set_equals_set(&self, other: &Self) -> bool {
+        self == other
+    }
+
     #[must_use]
     pub fn is_subset_of<I>(&self, other: I) -> bool
     where
@@ -945,7 +1127,8 @@ where
     S: BuildHasher,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.len() == other.len() && self.iter().all(|value| other.contains(value))
+        self.shares_root_with(other)
+            || self.len() == other.len() && self.iter().all(|value| other.contains(value))
     }
 }
 
@@ -984,6 +1167,275 @@ impl<T> ExactSizeIterator for SetIter<'_, T> {}
 
 impl<T> FusedIterator for SetIter<'_, T> {}
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ChampOperation {
+    Union,
+    Intersect,
+    Except,
+    SymmetricExcept,
+}
+
+fn same_optional_root<K, V>(
+    left: &Option<Arc<Node<K, V>>>,
+    right: &Option<Arc<Node<K, V>>>,
+) -> bool {
+    match (left, right) {
+        (None, None) => true,
+        (Some(left), Some(right)) => Arc::ptr_eq(left, right),
+        _ => false,
+    }
+}
+
+fn combine_champ_nodes<K, V>(
+    left: Option<&Arc<Node<K, V>>>,
+    right: Option<&Arc<Node<K, V>>>,
+    shift: u32,
+    operation: ChampOperation,
+) -> Option<Arc<Node<K, V>>>
+where
+    K: Eq + Clone,
+    V: Clone + PartialEq,
+{
+    match (left, right) {
+        (None, None) => return None,
+        (Some(left), Some(right)) if Arc::ptr_eq(left, right) => {
+            return matches!(operation, ChampOperation::Union | ChampOperation::Intersect)
+                .then(|| Arc::clone(left));
+        }
+        (None, Some(right)) => {
+            return matches!(
+                operation,
+                ChampOperation::Union | ChampOperation::SymmetricExcept
+            )
+            .then(|| Arc::clone(right));
+        }
+        (Some(left), None) => {
+            return (!matches!(operation, ChampOperation::Intersect)).then(|| Arc::clone(left));
+        }
+        _ => {}
+    }
+    let left = left.unwrap();
+    let right = right.unwrap();
+    if node_hash(left.as_ref()).is_some() && node_hash(right.as_ref()).is_some() {
+        return combine_champ_hash_nodes(left, right, shift, operation);
+    }
+
+    let mut slots = vec![None; BRANCH_FACTOR];
+    for (index, slot) in slots.iter_mut().enumerate() {
+        let left_slot = champ_logical_slot(left, index as u32, shift);
+        let right_slot = champ_logical_slot(right, index as u32, shift);
+        *slot = combine_champ_nodes(
+            left_slot.as_ref(),
+            right_slot.as_ref(),
+            shift + BITS_PER_LEVEL,
+            operation,
+        );
+    }
+    build_champ_logical_node(slots, left, shift)
+}
+
+fn combine_champ_hash_nodes<K, V>(
+    left: &Arc<Node<K, V>>,
+    right: &Arc<Node<K, V>>,
+    shift: u32,
+    operation: ChampOperation,
+) -> Option<Arc<Node<K, V>>>
+where
+    K: Eq + Clone,
+    V: Clone + PartialEq,
+{
+    let left_hash = node_hash(left).unwrap();
+    let right_hash = node_hash(right).unwrap();
+    if left_hash != right_hash {
+        if operation == ChampOperation::Intersect {
+            return None;
+        }
+        if operation == ChampOperation::Except {
+            return Some(Arc::clone(left));
+        }
+        let mut slots = vec![None; BRANCH_FACTOR];
+        let left_index = hash_fragment(left_hash, shift) as usize;
+        let right_index = hash_fragment(right_hash, shift) as usize;
+        if left_index != right_index {
+            slots[left_index] = Some(Arc::clone(left));
+            slots[right_index] = Some(Arc::clone(right));
+        } else {
+            slots[left_index] =
+                combine_champ_hash_nodes(left, right, shift + BITS_PER_LEVEL, operation);
+        }
+        return build_champ_logical_node(slots, left, shift);
+    }
+
+    let left_entries = champ_owned_entries(left);
+    let right_entries = champ_owned_entries(right);
+    let mut result = Vec::new();
+    for (left_key, left_value) in &left_entries {
+        let right_entry = right_entries.iter().find(|(key, _)| key == left_key);
+        match operation {
+            ChampOperation::Union => result.push(match right_entry {
+                Some((_, right_value)) if right_value != left_value => {
+                    (left_key.clone(), right_value.clone())
+                }
+                _ => (left_key.clone(), left_value.clone()),
+            }),
+            ChampOperation::Intersect if right_entry.is_some() => {
+                result.push((left_key.clone(), left_value.clone()));
+            }
+            ChampOperation::Except | ChampOperation::SymmetricExcept if right_entry.is_none() => {
+                result.push((left_key.clone(), left_value.clone()));
+            }
+            _ => {}
+        }
+    }
+    if matches!(
+        operation,
+        ChampOperation::Union | ChampOperation::SymmetricExcept
+    ) {
+        for (key, value) in &right_entries {
+            if !left_entries.iter().any(|(left_key, _)| left_key == key) {
+                result.push((key.clone(), value.clone()));
+            }
+        }
+    }
+    if result == left_entries {
+        return Some(Arc::clone(left));
+    }
+    match result.len() {
+        0 => None,
+        1 => {
+            let (key, value) = result.pop().unwrap();
+            Some(Arc::new(Node::Leaf {
+                hash: left_hash,
+                key,
+                value,
+            }))
+        }
+        _ => Some(Arc::new(Node::Collision {
+            hash: left_hash,
+            entries: Arc::from(result),
+        })),
+    }
+}
+
+fn node_hash<K, V>(node: &Node<K, V>) -> Option<u32> {
+    match node {
+        Node::Leaf { hash, .. } | Node::Collision { hash, .. } => Some(*hash),
+        Node::Branch { .. } => None,
+    }
+}
+
+fn champ_owned_entries<K: Clone, V: Clone>(node: &Node<K, V>) -> Vec<(K, V)> {
+    match node {
+        Node::Leaf { key, value, .. } => vec![(key.clone(), value.clone())],
+        Node::Collision { entries, .. } => entries.to_vec(),
+        Node::Branch { .. } => unreachable!("branch is not an equal-hash run"),
+    }
+}
+
+fn champ_logical_slot<K, V>(
+    node: &Arc<Node<K, V>>,
+    index: u32,
+    shift: u32,
+) -> Option<Arc<Node<K, V>>>
+where
+    K: Clone,
+    V: Clone,
+{
+    match node.as_ref() {
+        Node::Leaf { hash, .. } | Node::Collision { hash, .. } => {
+            (hash_fragment(*hash, shift) == index).then(|| Arc::clone(node))
+        }
+        Node::Branch {
+            data_map,
+            node_map,
+            data,
+            children,
+            ..
+        } => {
+            let bit = bit_position(index);
+            if data_map & bit != 0 {
+                let (hash, key, value) = &data[sparse_index(*data_map, bit)];
+                Some(Arc::new(Node::Leaf {
+                    hash: *hash,
+                    key: key.clone(),
+                    value: value.clone(),
+                }))
+            } else if node_map & bit != 0 {
+                Some(Arc::clone(&children[sparse_index(*node_map, bit)]))
+            } else {
+                None
+            }
+        }
+    }
+}
+
+fn build_champ_logical_node<K, V>(
+    slots: Vec<Option<Arc<Node<K, V>>>>,
+    original_left: &Arc<Node<K, V>>,
+    shift: u32,
+) -> Option<Arc<Node<K, V>>>
+where
+    K: Eq + Clone,
+    V: Clone + PartialEq,
+{
+    if champ_logical_slots_match(&slots, original_left, shift) {
+        return Some(Arc::clone(original_left));
+    }
+    let mut data_map = 0_u32;
+    let mut node_map = 0_u32;
+    let mut data = Vec::new();
+    let mut children = Vec::new();
+    for (index, slot) in slots.into_iter().enumerate() {
+        let Some(node) = slot else { continue };
+        let bit = bit_position(index as u32);
+        match node.as_ref() {
+            Node::Leaf { hash, key, value } => {
+                data_map |= bit;
+                data.push((*hash, key.clone(), value.clone()));
+            }
+            _ => {
+                node_map |= bit;
+                children.push(node);
+            }
+        }
+    }
+    normalize_branch(data_map, node_map, data, children)
+}
+
+fn champ_logical_slots_match<K, V>(
+    slots: &[Option<Arc<Node<K, V>>>],
+    original: &Arc<Node<K, V>>,
+    shift: u32,
+) -> bool
+where
+    K: Eq + Clone,
+    V: Clone + PartialEq,
+{
+    slots.iter().enumerate().all(|(index, actual)| {
+        let expected = champ_logical_slot(original, index as u32, shift);
+        match (expected.as_ref(), actual.as_ref()) {
+            (None, None) => true,
+            (Some(left), Some(right)) if Arc::ptr_eq(left, right) => true,
+            (Some(left), Some(right)) => match (left.as_ref(), right.as_ref()) {
+                (
+                    Node::Leaf {
+                        hash: lh,
+                        key: lk,
+                        value: lv,
+                    },
+                    Node::Leaf {
+                        hash: rh,
+                        key: rk,
+                        value: rv,
+                    },
+                ) => lh == rh && lk == rk && lv == rv,
+                _ => false,
+            },
+            _ => false,
+        }
+    })
+}
+
 fn get_in_node<'a, K, V>(
     node: &'a Node<K, V>,
     hash: u32,
@@ -1017,6 +1469,7 @@ where
             node_map,
             data,
             children,
+            ..
         } => {
             let bit = bit_position(hash_fragment(hash, shift));
             if data_map & bit != 0 {
@@ -1171,6 +1624,7 @@ where
             node_map,
             data,
             children,
+            ..
         } => {
             let bit = bit_position(hash_fragment(hash, shift));
             if data_map & bit != 0 {
@@ -1196,12 +1650,12 @@ where
                     let mut next_data = data.to_vec();
                     next_data[index] = (hash, leaf_key.clone(), value);
                     return InsertResult {
-                        node: Arc::new(Node::Branch {
-                            data_map: *data_map,
-                            node_map: *node_map,
-                            data: Arc::from(next_data),
-                            children: Arc::clone(children),
-                        }),
+                        node: make_branch(
+                            *data_map,
+                            *node_map,
+                            Arc::from(next_data),
+                            Arc::clone(children),
+                        ),
                         added: false,
                         changed: true,
                         duplicate: false,
@@ -1224,12 +1678,12 @@ where
                 let mut next_children = children.to_vec();
                 next_children.insert(sparse_index(*node_map, bit), child);
                 return InsertResult {
-                    node: Arc::new(Node::Branch {
-                        data_map: data_map & !bit,
-                        node_map: node_map | bit,
-                        data: Arc::from(next_data),
-                        children: Arc::from(next_children),
-                    }),
+                    node: make_branch(
+                        data_map & !bit,
+                        node_map | bit,
+                        Arc::from(next_data),
+                        Arc::from(next_children),
+                    ),
                     added: true,
                     changed: true,
                     duplicate: false,
@@ -1240,12 +1694,12 @@ where
                 let mut next_data = data.to_vec();
                 next_data.insert(sparse_index(*data_map, bit), (hash, key, value));
                 return InsertResult {
-                    node: Arc::new(Node::Branch {
-                        data_map: data_map | bit,
-                        node_map: *node_map,
-                        data: Arc::from(next_data),
-                        children: Arc::clone(children),
-                    }),
+                    node: make_branch(
+                        data_map | bit,
+                        *node_map,
+                        Arc::from(next_data),
+                        Arc::clone(children),
+                    ),
                     added: true,
                     changed: true,
                     duplicate: false,
@@ -1273,12 +1727,12 @@ where
             let mut next_children = children.to_vec();
             next_children[index] = child_result.node;
             InsertResult {
-                node: Arc::new(Node::Branch {
-                    data_map: *data_map,
-                    node_map: *node_map,
-                    data: Arc::clone(data),
-                    children: Arc::from(next_children),
-                }),
+                node: make_branch(
+                    *data_map,
+                    *node_map,
+                    Arc::clone(data),
+                    Arc::from(next_children),
+                ),
                 added: child_result.added,
                 changed: true,
                 duplicate: false,
@@ -1359,6 +1813,7 @@ where
             node_map,
             data,
             children,
+            ..
         } => {
             let bit = bit_position(hash_fragment(hash, shift));
             if data_map & bit != 0 {
@@ -1464,12 +1919,7 @@ where
 
     if left_bit == right_bit {
         let child = merge_two(left, left_hash, right, right_hash, shift + BITS_PER_LEVEL);
-        return Arc::new(Node::Branch {
-            data_map: 0,
-            node_map: left_bit,
-            data: Arc::from([]),
-            children: Arc::from(vec![child]),
-        });
+        return make_branch(0, left_bit, Arc::from([]), Arc::from(vec![child]));
     }
 
     let mut data = Vec::new();
@@ -1490,21 +1940,21 @@ where
     add(right_bit, right);
     data.sort_by_key(|(bit, ..)| *bit);
     children.sort_by_key(|(bit, _)| *bit);
-    Arc::new(Node::Branch {
+    make_branch(
         data_map,
         node_map,
-        data: Arc::from(
+        Arc::from(
             data.into_iter()
                 .map(|(_, hash, key, value)| (hash, key, value))
                 .collect::<Vec<_>>(),
         ),
-        children: Arc::from(
+        Arc::from(
             children
                 .into_iter()
                 .map(|(_, node)| node)
                 .collect::<Vec<_>>(),
         ),
-    })
+    )
 }
 
 fn collect_owned_entries<K, V>(node: &Node<K, V>, entries: &mut Vec<(K, V)>)
@@ -1567,12 +2017,12 @@ where
     {
         Some(Arc::clone(&children[0]))
     } else {
-        Some(Arc::new(Node::Branch {
+        Some(make_branch(
             data_map,
             node_map,
-            data: Arc::from(data),
-            children: Arc::from(children),
-        }))
+            Arc::from(data),
+            Arc::from(children),
+        ))
     }
 }
 
@@ -1807,12 +2257,23 @@ fn freeze_owned<K, V>(node: MutableNode<K, V>) -> Arc<Node<K, V>> {
             node_map,
             data,
             children,
-        } => Node::Branch {
-            data_map,
-            node_map,
-            data: Arc::from(data),
-            children: Arc::from(children.into_iter().map(freeze_owned).collect::<Vec<_>>()),
-        },
+        } => {
+            let children = Arc::<[Arc<Node<K, V>>]>::from(
+                children.into_iter().map(freeze_owned).collect::<Vec<_>>(),
+            );
+            let count = data.len()
+                + children
+                    .iter()
+                    .map(|child| child.entry_count())
+                    .sum::<usize>();
+            Node::Branch {
+                data_map,
+                node_map,
+                data: Arc::from(data),
+                children,
+                count,
+            }
+        }
     })
 }
 
@@ -1838,12 +2299,23 @@ where
             node_map,
             data,
             children,
-        } => Node::Branch {
-            data_map: *data_map,
-            node_map: *node_map,
-            data: Arc::from(data.clone()),
-            children: Arc::from(children.iter().map(freeze_cloned).collect::<Vec<_>>()),
-        },
+        } => {
+            let children = Arc::<[Arc<Node<K, V>>]>::from(
+                children.iter().map(freeze_cloned).collect::<Vec<_>>(),
+            );
+            let count = data.len()
+                + children
+                    .iter()
+                    .map(|child| child.entry_count())
+                    .sum::<usize>();
+            Node::Branch {
+                data_map: *data_map,
+                node_map: *node_map,
+                data: Arc::from(data.clone()),
+                children,
+                count,
+            }
+        }
     })
 }
 
@@ -1869,7 +2341,9 @@ fn sparse_index(bitmap: u32, bit: u32) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::hash_map::DefaultHasher;
     use std::hash::{BuildHasherDefault, Hasher};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::thread;
 
     #[derive(Default)]
@@ -1884,6 +2358,32 @@ mod tests {
     }
 
     type ConstantState = BuildHasherDefault<ConstantHasher>;
+
+    #[derive(Clone, Default)]
+    struct CountingState {
+        builds: Arc<AtomicUsize>,
+    }
+
+    struct CountingHasher(DefaultHasher);
+
+    impl BuildHasher for CountingState {
+        type Hasher = CountingHasher;
+
+        fn build_hasher(&self) -> Self::Hasher {
+            self.builds.fetch_add(1, Ordering::Relaxed);
+            CountingHasher(DefaultHasher::new())
+        }
+    }
+
+    impl Hasher for CountingHasher {
+        fn finish(&self) -> u64 {
+            self.0.finish()
+        }
+
+        fn write(&mut self, bytes: &[u8]) {
+            self.0.write(bytes);
+        }
+    }
 
     #[test]
     fn map_updates_preserve_old_versions() {
@@ -2148,6 +2648,92 @@ mod tests {
     }
 
     #[test]
+    fn same_policy_set_algebra_prunes_shared_champ_nodes_without_rehashing() {
+        let state = CountingState::default();
+        let basis = PersistentHashSet::with_hasher(state.clone()).union(0..256);
+        let left = basis.insert(1_000);
+        let right = basis.insert(2_000);
+
+        state.builds.store(0, Ordering::Relaxed);
+        let self_union = left.union_set(&left);
+        let self_intersection = left.intersect_set(&left);
+        let self_except = left.except_set(&left);
+        let self_symmetric = left.symmetric_except_set(&left);
+        let union = left.union_set(&right);
+        let intersection = left.intersect_set(&right);
+        let except = left.except_set(&right);
+        let symmetric = left.symmetric_except_set(&right);
+        assert!(left.is_subset_of_set(&union));
+        assert!(union.is_superset_of_set(&right));
+        assert!(left.overlaps_set(&right));
+        assert!(left.set_equals_set(&left));
+        let structural_hashes = state.builds.load(Ordering::Relaxed);
+
+        assert_eq!(structural_hashes, 0);
+        assert!(self_union.shares_root_with(&left));
+        assert!(self_intersection.shares_root_with(&left));
+        assert!(self_except.is_empty());
+        assert!(self_symmetric.is_empty());
+        assert!(union.set_equals((0..256).chain([1_000, 2_000])));
+        assert!(intersection.set_equals(0..256));
+        assert!(except.set_equals([1_000]));
+        assert!(symmetric.set_equals([1_000, 2_000]));
+    }
+
+    #[test]
+    fn independently_created_policies_use_semantic_set_algebra_fallback() {
+        let state = CountingState::default();
+        let left = PersistentHashSet::with_hasher(state.clone()).union(0..64);
+        let right = PersistentHashSet::with_hasher(state.clone()).union(32..96);
+
+        state.builds.store(0, Ordering::Relaxed);
+        let union = left.union_set(&right);
+        let fallback_hashes = state.builds.load(Ordering::Relaxed);
+
+        assert!(fallback_hashes > 0);
+        assert!(union.set_equals(0..96));
+    }
+
+    #[test]
+    fn structural_collision_algebra_matches_set_models() {
+        let basis = PersistentHashSet::with_hasher(ConstantState::default());
+        let mut state = 0x9e37_79b9_u32;
+        for _ in 0..200 {
+            let mut left_model = std::collections::BTreeSet::new();
+            let mut right_model = std::collections::BTreeSet::new();
+            for value in -20..=20 {
+                state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                if state & 1 != 0 {
+                    left_model.insert(value);
+                }
+                state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                if state & 1 != 0 {
+                    right_model.insert(value);
+                }
+            }
+            let left = basis.union(left_model.iter().copied());
+            let right = basis.union(right_model.iter().copied());
+
+            assert!(
+                left.union_set(&right)
+                    .set_equals(left_model.union(&right_model).copied())
+            );
+            assert!(
+                left.intersect_set(&right)
+                    .set_equals(left_model.intersection(&right_model).copied())
+            );
+            assert!(
+                left.except_set(&right)
+                    .set_equals(left_model.difference(&right_model).copied())
+            );
+            assert!(
+                left.symmetric_except_set(&right)
+                    .set_equals(left_model.symmetric_difference(&right_model).copied())
+            );
+        }
+    }
+
+    #[test]
     fn except_and_symmetric_except_preserve_untouched_roots() {
         let set: PersistentHashSet<i32> = (0..64).collect();
 
@@ -2305,16 +2891,19 @@ mod tests {
                     node_map: ln,
                     data: lp,
                     children: lc,
+                    count: lcount,
                 },
                 Node::Branch {
                     data_map: rd,
                     node_map: rn,
                     data: rp,
                     children: rc,
+                    count: rcount,
                 },
             ) => {
                 ld == rd
                     && ln == rn
+                    && lcount == rcount
                     && lp
                         .iter()
                         .map(|entry| entry.0)

@@ -32,13 +32,16 @@ The port follows the repository HAMT semantics:
 - duplicate `add`/`try_add` calls reject the key without changing the root;
 - replacing an existing key retains the originally stored key object;
 - bulk map construction is last-wins.
-- set algebra includes union, intersection, difference, symmetric difference, subset/superset, proper
-  subset/superset, overlap, and equality checks.
+- set algebra includes union, intersection, difference, symmetric difference, subset/superset,
+  proper subset/superset, overlap, and equality checks. Same-type operations whose maps descend
+  from one hash-policy identity use cached-cardinality CHAMP combination and prune `Arc`-identical
+  subtries without rehashing. Independently created policy identities use the existing semantic
+  receiver-policy path, even when their `BuildHasher` values happen to share a type.
 
-Set difference removes each probe element from the receiver, and symmetric difference toggles the
-distinct probe elements on the receiver, so subtrees untouched by the probe stay structurally shared
-and an empty probe preserves the existing root — matching the C# `Except`/`SymmetricExcept`
-complexity contract of O(m) single-element updates.
+Iterable set difference removes each probe element from the receiver, and iterable symmetric
+difference toggles the distinct probe elements on the receiver. The `*_set` same-type variants use
+structural CHAMP algebra when policies are compatible. Both surfaces preserve untouched subtries
+and the receiver root for applicable no-op cases.
 
 `BulkBuilder` mirrors the C# reference's transient bulk builder (commit `c092016`): unpublished
 leaf, collision, and split-map CHAMP branch nodes are mutated in place and frozen into detached persistent nodes, so
