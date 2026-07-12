@@ -2,14 +2,14 @@
 
 - Created (UTC): 2026-07-02T21:06:57Z
 - Repository HEAD: 399710816b9007dde1374aef2043f118beddc225
-- Updated (UTC): 2026-07-11T21:45:54Z
-- Updated Repository HEAD: ee5f888b47fc8d4317fb0209546cb5c9f808039d
+- Updated (UTC): 2026-07-12T00:59:18Z
+- Updated Repository HEAD: 9b4acafb3160f778683095b9ec92b609d66e45f8
 - Audience: Maintainers validating the C++ FingerTree port
 - Scope: Native test executable, source grouping, and stress controls under `src/Cpp/FingerTree/tests`
 
-The C++ FingerTree workspace has one dependency-free native test executable, `fingertree_smoke_tests`. CTest runs
-that executable through 18 subsystem entries (`fingertree.atomic-box`, `fingertree.command-model`,
-`fingertree.concurrency`, `fingertree.daba-lite`, `fingertree.deque`, `fingertree.interval-tree`, `fingertree.lazy-cell`,
+The C++ FingerTree workspace has one repository-owned native test executable, `fingertree_smoke_tests`; it uses no
+third-party test framework. CTest runs that executable through 19 subsystem entries (`fingertree.atomic-box`,
+`fingertree.canonical-sorted-set`, `fingertree.command-model`, `fingertree.concurrency`, `fingertree.daba-lite`, `fingertree.deque`, `fingertree.interval-tree`, `fingertree.lazy-cell`,
 `fingertree.measure`, `fingertree.measured-lazy-cell`, `fingertree.measured-rope`, `fingertree.measured-tree`,
 `fingertree.priority-queue`, `fingertree.reversible-deque`, `fingertree.rope`, `fingertree.rope-text`,
 `fingertree.rrb-vector`,
@@ -37,6 +37,11 @@ listing, and replay-seed selection.
   and endpoint updates, unequal concatenation, exact leaf-boundary identity reuse, split/range edits, retained
   forward iteration, a deterministic 10,000-step vector model, adversarial density/height drift, append-builder
   snapshot isolation, adopted-prefix sharing, and injected-copy strong-exception guarantees.
+- `canonical_sorted_set_tests.cpp` pins the exact C# ZZT2 keyed and public-seed vectors, random/key ownership
+  modes, bulk/incremental canonical convergence, first representatives, incoherent hashes, a fully colliding
+  4,096-node operation chain, allocation-free destruction of a 16,384-node chain, a 20,000-operation retained-snapshot model, identity-gated algebra, receiver-comparer
+  asymmetry, quantified structural sharing, cold concurrent digest publication, move-only values, and callback
+  exception safety.
 - `daba_lite_tests.cpp` exhausts every short insert/evict history with a noncommutative model, runs a deterministic
   100,000-operation variable-window model, covers the 63/64/65 and 127/128/129 block boundaries and long churn,
   reaches all four incremental-fixup phases, proves the three/two/one `combine` ceilings, injects failures at every
@@ -80,6 +85,7 @@ Run one subsystem through the same headless CTest launcher:
 
 ```powershell
 & "$cmakeDir\ctest.exe" --test-dir out\build\msvc-debug --output-on-failure -R '^fingertree\.command-model$'
+& "$cmakeDir\ctest.exe" --test-dir out\build\msvc-debug --output-on-failure -R '^fingertree\.canonical-sorted-set$'
 & "$cmakeDir\ctest.exe" --test-dir out\build\msvc-debug --output-on-failure -R '^fingertree\.daba-lite$'
 ```
 
@@ -89,6 +95,7 @@ iteration outside CTest. The executable enters headless mode itself, so direct f
 ```powershell
 .\out\build\msvc-debug\tests\fingertree_smoke_tests.exe --list
 .\out\build\msvc-debug\tests\fingertree_smoke_tests.exe --group command-model
+.\out\build\msvc-debug\tests\fingertree_smoke_tests.exe --group canonical-sorted-set
 .\out\build\msvc-debug\tests\fingertree_smoke_tests.exe --group daba-lite
 .\out\build\msvc-debug\tests\fingertree_smoke_tests.exe --group rope --filter randomized
 ```

@@ -73,7 +73,7 @@ semantics, not parity failures. A pure Haskell value would not preserve DABA's e
 schedule, so omission there is intentional.
 
 The canonical zip-zip sorted set is a policy-canonical persistent member, currently implemented in
-C#, Haskell, Kotlin/JVM, and Rust. All four ports derive a 32-byte HMAC key as SHA-256 of ASCII `ZZT2`
+C#, C++, Haskell, Kotlin/JVM, and Rust. All five ports derive a 32-byte HMAC key as SHA-256 of ASCII `ZZT2`
 followed by the public seed in big-endian order, feed an eight-byte big-endian equivalence-class hash to
 HMAC-SHA-256, and interpret the first three big-endian words as leading-zero geometric rank,
 unsigned secondary rank, and digest content. Preserve random-key and caller-keyed modes, the
@@ -94,14 +94,21 @@ operations without `unsafePerformIO` while making algebra identity testable; sep
 same-seed/key policies still reproduce topology and digest but remain algebra-incompatible. Its
 digest is eagerly cached in immutable nodes, so shared-reader publication needs no synchronization.
 
+C++ uses operating-system CNG on Windows and OpenSSL Crypto elsewhere, with the dependency carried
+through the exported CMake target. Shared representative objects let moved ranges and rvalue
+insertion support move-only `T`; set algebra and removal share those objects rather than imposing a
+copy bound. Its node destructor uses a fixed ownership worklist so releasing a height-n tree neither
+recurses nor allocates.
+
 FingerTree lineage:
 
 1. [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) is the broadest semantic source:
    tuned deque, general measured tree, derived collections, ropes, text helpers, samples,
    benchmarks, and design notes.
 2. [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) ports the persistent family to a
-   header-first C++ library with local naming, value semantics, and CTest validation, and segregates
-   the noncopyable mutable DABA Lite core with its native ownership constraints.
+   header-first C++ library with local naming, value semantics, the policy-canonical zip-zip set,
+   and CTest validation, and segregates the noncopyable mutable DABA Lite core with its native
+   ownership constraints.
 3. [`src/C/FingerTree`](../../src/C/FingerTree/README.md) follows the native design in C form with
    explicit handles, callback policies, and facade types, including a separately owned mutable DABA
    Lite handle with allocator-failure status semantics.

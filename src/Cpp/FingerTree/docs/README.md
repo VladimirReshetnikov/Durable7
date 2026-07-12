@@ -3,8 +3,8 @@
 - Status: Informational
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-11T21:45:54Z
-- Updated against repository HEAD: ee5f888b47fc8d4317fb0209546cb5c9f808039d
+- Updated (UTC): 2026-07-12T00:59:18Z
+- Updated against repository HEAD: 9b4acafb3160f778683095b9ec92b609d66e45f8
 - Audience: Maintainers and AI agents implementing the C++ port
 - Scope: C++ port documentation under `src/Cpp/FingerTree/docs`
 
@@ -16,8 +16,8 @@
   especially lazy memoization, type erasure, comparator regimes, and C++ memory-model rules.
 - [Implementation notes](implementation-notes.md) records concrete C# comparisons, justified C++ divergences,
   validation observations, and links to any defect reports found during the port.
-- [API notes](api-notes.md) records C++ API conventions, the mutable DABA Lite ownership exception, and active
-  differences from the C# workspace.
+- [API notes](api-notes.md) records C++ API conventions, canonical zip-tree rank/policy semantics, the mutable
+  DABA Lite ownership exception, and active differences from the C# workspace.
 - [Usage guide](usage.md) shows public include paths, value-semantics patterns, mutable sliding-window use,
   common update flows, and facade quick starts.
 - [Validation](validation.md) records build, test, stress, warning-policy, generated-output, and

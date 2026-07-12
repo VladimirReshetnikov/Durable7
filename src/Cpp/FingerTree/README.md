@@ -3,8 +3,8 @@
 - Status: Active C++ workspace
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-11T21:45:54Z
-- Updated against repository HEAD: ee5f888b47fc8d4317fb0209546cb5c9f808039d
+- Updated (UTC): 2026-07-12T00:59:18Z
+- Updated against repository HEAD: 9b4acafb3160f778683095b9ec92b609d66e45f8
 - Audience: Maintainers implementing and reviewing the C++ port
 - Scope: Build entry points, layout, and validation for `src/Cpp/FingerTree`
 
@@ -26,10 +26,16 @@ representation statistics. Throwing monoid callbacks leave the published window 
 destruction is called out explicitly: `clear()` releases all owned values and blocks before returning and is
 therefore O(n + c), unlike the tracing-GC C# reference's constant root swap.
 
-The workspace is intentionally dependency-free beyond the C++ standard library. Its native tests use a small
-local runner and its benchmark harness is repository-owned, so configuring a preset does not implicitly run a
-package manager. There is deliberately no empty `vcpkg.json`; add a manifest only when a real dependency is wired
-into CMake and validation.
+`canonical_sorted_set<T>` is the policy-canonical sorted sibling. Its retained `zip_tree_rank_policy<T>` derives
+the exact C# ZZT2 geometric/unsigned-secondary/content rank tuple through HMAC-SHA-256, with independent random,
+public-seed, and caller-keyed modes. Explicit-stack Cartesian build and zip/unzip updates remain safe on a fully
+colliding linear tree; immutable nodes share both paths and stored representatives, lazy atomic digests accelerate
+same-policy inequality, and semantic equality deliberately follows the receiver's comparer across policy families.
+
+The native runner and benchmark harness remain repository-owned, so configuring a preset does not implicitly run
+a package manager. The canonical rank policy uses the operating-system CNG provider (`bcrypt`) on Windows and the
+system OpenSSL Crypto package elsewhere; these are linked transitively by the exported interface target. There is
+deliberately no `vcpkg.json` because neither platform crypto route is acquired through vcpkg.
 
 The active CMake model is C++23 plus MSVC `/std:c++latest`: the interface library advertises `cxx_std_23`, test
 targets use `CXX_STANDARD 23`, and MSVC targets receive `/std:c++latest` explicitly because the bundled CMake does

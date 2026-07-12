@@ -3,8 +3,8 @@
 - Status: Current validation guide
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-11T21:45:54Z
-- Updated Repository HEAD: ee5f888b47fc8d4317fb0209546cb5c9f808039d
+- Updated (UTC): 2026-07-12T00:59:18Z
+- Updated Repository HEAD: 9b4acafb3160f778683095b9ec92b609d66e45f8
 - Audience: Maintainers validating the C++ port
 - Scope: Local/CI build, test, stress, sample, packaging, sanitizer, and benchmark guidance
 
@@ -21,6 +21,10 @@ header-first interface library `tools_data_structures_finger_tree` and its
 `tools::data_structures::finger_tree` alias. Tests, deterministic samples, and the benchmark harness build by
 default and can be disabled independently with `FINGERTREE_BUILD_TESTS`, `FINGERTREE_BUILD_SAMPLES`, and
 `FINGERTREE_BUILD_BENCHMARKS`.
+
+The canonical rank policy is backed by platform cryptography. Windows builds link the system `bcrypt` library
+and call CNG; other hosts require the OpenSSL Crypto development package, resolved by both the source build and
+the installed package configuration. No package manager is invoked implicitly.
 
 The public interface advertises `cxx_std_23`. MSVC targets also receive `/std:c++latest`,
 `/permissive-`, `/Zc:__cplusplus`, `/external:anglebrackets`, and `/external:W0`. Test targets require
@@ -65,6 +69,7 @@ Use the WinLibs toolchain directly when the current shell has not reloaded `PATH
 
 ```powershell
 $mingw = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin"
+$env:PATH = "$mingw;$env:PATH" # Required at test time for the WinLibs runtime DLLs.
 
 & "$mingw\cmake.exe" -S . -B out\build\gcc-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER="$mingw\g++.exe" -DCMAKE_MAKE_PROGRAM="$mingw\ninja.exe"
 & "$mingw\cmake.exe" --build out\build\gcc-debug
@@ -105,8 +110,9 @@ The current bootstrap tests are self-contained CTest executables. Structure-leve
 honor `FINGERTREE_STRESS_SECONDS`; unset runs use a short default suitable for ordinary `ctest`, while soak runs
 can raise the value without editing source.
 
-The workspace has no package-manager manifest and no third-party build/test dependency. Introduce a manifest only
-when a real dependency is intentionally wired into CMake and this validation matrix.
+The workspace has no package-manager manifest or third-party test framework. CNG is an operating-system library;
+OpenSSL Crypto is the explicit non-Windows build dependency. Keep both provider paths in the compiler matrix and
+introduce a package-manager manifest only if a future dependency actually needs acquisition through one.
 
 ## Portable And Sanitizer Presets
 
@@ -135,12 +141,12 @@ lane does not provide a viable TSan runtime.
 
 ## Current Coverage
 
-CTest registers 20 cases: 18 subsystem cases backed by `tests/fingertree_smoke_tests`, including the focused
-`fingertree.daba-lite` and `fingertree.support` groups. Each case invokes the same local runner with an exact
+CTest registers 21 cases: 19 subsystem cases backed by `tests/fingertree_smoke_tests`, including the focused
+`fingertree.canonical-sorted-set`, `fingertree.daba-lite`, and `fingertree.support` groups. Each case invokes the same local runner with an exact
 `--group` filter through the repository
 headless launcher, so a subsystem failure is isolated without introducing Catch2/GoogleTest or duplicating test
 execution. `fingertree.samples` checks two deterministic transcripts, and `fingertree.installed-consumer` performs
-the staged package integration test. All 20 carry the `fingertree` label and all Windows invocations—including the
+the staged package integration test. All 21 carry the `fingertree` label and all Windows invocations—including the
 nested install/configure/build/test command—inherit the no-dialog error mode. Use
 `ctest --test-dir out/build/msvc-debug -N -L fingertree` to list the cases, or `-R` with one exact case name for a
 focused run. See the [tests README](../tests/README.md) for the complete group list, direct runner options,
@@ -157,6 +163,12 @@ The suite covers:
 - RRB-vector packed construction at every 32-way boundary tier, regular/relaxed metadata, persistent point and
   range edits, unequal concatenation, exact-boundary identity reuse, 10,000-step vector-model histories,
   adversarial density/height sequences, append-builder snapshot isolation, and injected-copy exception safety;
+- canonical zip-zip ranks against exact C# keyed/public-seed vectors, CSPRNG and key-ownership boundaries,
+  bulk/incremental permutation convergence, first-representative retention, comparer/hash incoherence,
+  fully colliding 4,096-node operation stack safety, allocation-free destruction of a 16,384-node chain,
+  a 20,000-operation retained-snapshot model, policy-gated algebra,
+  receiver-comparer equality asymmetry, quantified add/remove sharing, cold concurrent digest publication,
+  move-only incremental and moved-bulk values, and throwing callback snapshot safety;
 - DABA Lite exhaustive short histories and a deterministic 100,000-operation FIFO model, all fixup phases,
   three/two/one callback ceilings, every reachable throwing-policy and value-copy ordinal, compile-time rejection
   of throwing moves, provisional-block rollback, 63/64/65 and 127/128/129 boundaries, bounded chunk retention,
@@ -207,7 +219,7 @@ fresh project with `FINGERTREE_BUILD_TESTS`, `FINGERTREE_BUILD_SAMPLES`, and
 `FINGERTREE_BUILD_BENCHMARKS` all off. The consumer uses only
 `find_package(ToolsDataStructuresFingerTree CONFIG)`, the exported
 `tools::data_structures::finger_tree` target, and installed headers. Its aggregate-header program instantiates
-the DABA Lite policy surface as well as persistent collections:
+the canonical rank policy (thereby proving the transitive crypto link), DABA Lite, and persistent collections:
 
 ```powershell
 ctest --preset msvc-debug -R '^fingertree\.installed-consumer$' --output-on-failure

@@ -1,6 +1,7 @@
 add_executable(
     fingertree_smoke_tests
     atomic_box_tests.cpp
+    canonical_sorted_set_tests.cpp
     command_sequence_tests.cpp
     daba_lite_tests.cpp
     interval_tree_tests.cpp
@@ -46,6 +47,7 @@ fingertree_configure_target(fingertree_smoke_tests)
 set(
     FINGERTREE_TEST_GROUPS
     atomic-box
+    canonical-sorted-set
     command-model
     concurrency
     daba-lite

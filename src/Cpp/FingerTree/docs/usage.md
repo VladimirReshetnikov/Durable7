@@ -2,10 +2,10 @@
 
 - Created (UTC): 2026-07-02T20:03:36Z
 - Repository HEAD: 17d505f18e9e0a5748058701d408ed6642dcba29
-- Updated (UTC): 2026-07-11T21:45:54Z
-- Updated against repository HEAD: ee5f888b47fc8d4317fb0209546cb5c9f808039d
+- Updated (UTC): 2026-07-12T00:59:18Z
+- Updated against repository HEAD: 9b4acafb3160f778683095b9ec92b609d66e45f8
 - Audience: C++ consumers and maintainers using the public FingerTree headers
-- Scope: Public include path, value semantics, common construction/update patterns, and facade quick starts
+- Scope: Public include path, value semantics, canonical ranking, common update patterns, and facade quick starts
 
 This guide is the practical entry point for using the C++ FingerTree port. The [API notes](api-notes.md)
 document the full public surface and C#-to-C++ mapping; this guide focuses on the common code shapes
@@ -109,6 +109,38 @@ auto second = builder.to_immutable();       // first remains [0, 1000); second i
 
 The immutable facade deliberately has no persistent tail buffer. `push_back` and `pop_last` therefore remain
 boundary-spine operations; use the builder for bulk append staging.
+
+## Canonical Sorted Set
+
+Use `canonical_sorted_set<T>` when reproducible same-policy topology, persistent sharing, and a memoized content
+digest matter more than the sorted finger-tree facade's worst-case bounds. Retain one policy handle across every
+version that must participate in structural algebra:
+
+```cpp
+auto policy = ft::zip_tree_rank_policy<int>::seeded(0x1234'5678'9abc'def0ULL);
+auto first = ft::canonical_sorted_set<int>::from_range(std::array{8, 2, 5, 3, 2}, policy);
+auto second = first.add(13).remove(3);
+
+bool has_five = second.contains(5);
+std::uint64_t digest = second.content_hash();
+auto statistics = second.validate_structure();
+```
+
+`seeded` is reproducible but public. Use `random` for an unexposed fresh rank key, or `keyed` with at least 32
+protected caller-retained bytes when predictable ranks are a threat. A custom ordering always travels with an
+equivalence-class-coherent rank hash:
+
+```cpp
+struct item { std::uint32_t key; std::string payload; };
+auto less = [] (const item& left, const item& right) { return left.key < right.key; };
+auto rank_hash = [] (const item& value) { return std::uint64_t{value.key}; };
+auto policy = ft::zip_tree_rank_policy<item>::seeded(7, less, rank_hash);
+```
+
+Pin and test the actual application encoding-to-hash mapping. The bulk factory retains the first
+comparison-equivalent input object. `try_get` recovers that representative. `union_with`,
+`intersect`, and `except` require policy identity, while `set_equals` deliberately compares semantic contents under
+the receiver's comparer even when rank policies differ.
 
 ## DABA Lite Sliding-Window Aggregation
 

@@ -1,5 +1,10 @@
 @PACKAGE_INIT@
 
+if(NOT WIN32)
+    include(CMakeFindDependencyMacro)
+    find_dependency(OpenSSL COMPONENTS Crypto)
+endif()
+
 include("${CMAKE_CURRENT_LIST_DIR}/ToolsDataStructuresFingerTreeTargets.cmake")
 
 check_required_components(ToolsDataStructuresFingerTree)

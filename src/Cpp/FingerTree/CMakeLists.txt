@@ -23,6 +23,13 @@ option(
 add_library(tools_data_structures_finger_tree INTERFACE)
 add_library(tools::data_structures::finger_tree ALIAS tools_data_structures_finger_tree)
 
+if(WIN32)
+    target_link_libraries(tools_data_structures_finger_tree INTERFACE bcrypt)
+else()
+    find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+    target_link_libraries(tools_data_structures_finger_tree INTERFACE OpenSSL::Crypto)
+endif()
+
 target_include_directories(
     tools_data_structures_finger_tree
     INTERFACE

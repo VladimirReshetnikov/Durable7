@@ -3,8 +3,8 @@
 - Status: Current API notes
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-11T21:45:54Z
-- Updated against repository HEAD: ee5f888b47fc8d4317fb0209546cb5c9f808039d
+- Updated (UTC): 2026-07-12T00:59:18Z
+- Updated against repository HEAD: 9b4acafb3160f778683095b9ec92b609d66e45f8
 - Audience: Maintainers implementing and reviewing public C++ APIs
 - Scope: C++ naming, contracts, and intentional differences from the C# workspace
 
@@ -25,6 +25,10 @@ options remain compiler-guarded generator expressions in the export, so an insta
 compiler does not inject those flags into another compiler. Package versions are compatible within major version
 0 only when CMake's `SameMajorVersion` rule accepts them; consumers that require an exact pre-1.0 surface should
 request `EXACT`.
+
+The exported target also publishes the canonical-set cryptography dependency: Windows consumers link the system
+`bcrypt` library, while non-Windows package configuration resolves `OpenSSL::Crypto` before importing the target.
+SHA-256, HMAC-SHA-256, and entropy always come from those vetted providers; the library does not implement crypto.
 
 The C++ port follows the repository's C# semantics, but it uses idiomatic C++ spelling:
 
@@ -106,6 +110,58 @@ Notable C++ differences and limits:
 - the builder is a mutable construction aid but does not expose editable node ownership or transient tokens;
 - there is deliberately no persistent tail buffer, so immutable endpoint append is a boundary-spine operation
   rather than a worst-case O(1) tail write.
+
+## `zip_tree_rank_policy<T>` And `canonical_sorted_set<T>`
+
+`canonical_sorted_set<T>` is the C++ port of C# `CanonicalSortedSet<T>`, with the retained
+`zip_tree_rank_policy<T>` carrying both comparison semantics and an identity-bearing rank space. Copying a policy
+handle preserves compatibility; independently constructing the same seed or key reproduces ranks and topology but
+does not make the handles algebra-compatible.
+
+Policy factories are:
+
+- `random()`, which obtains a fresh unexposed 32-byte key from CNG or OpenSSL for each call;
+- `seeded(seed)`, which derives the HMAC key as `SHA256("ZZT2" || seed_be64)` and records the public seed; and
+- `keyed(rank_key)`, which takes an owned copy of at least 32 caller-retained bytes and exposes no key material.
+
+Each factory has an overload accepting a `std::less`-style strict ordering and a 64-bit rank hash. That hash must
+be constant on the order's equivalence classes; bulk and incremental duplicate paths check the contract and throw
+`std::logic_error` on a mismatch. Natural factories use `stable_zip_tree_rank_hash<T>` for integral, Boolean,
+`std::string`, and `std::string_view` values. Integrals map through their width-specific unsigned bit pattern;
+strings use pinned FNV-1a over bytes. FNV is only the deterministic input mapping—the HMAC layer supplies the
+pseudorandom rank. Custom types and cross-language wire contracts should always pass an explicit pinned mapping.
+
+Rank derivation exactly matches the C# ZZT2 policy: HMAC-SHA-256 receives the rank hash as one big-endian 64-bit
+message, the leading-zero count of its first word is the geometric coordinate, and its second and third
+big-endian words are the unsigned secondary coordinate and digest content word. The secondary comparison is
+unsigned. A comparer-smaller key breaks a complete rank tie, giving one Cartesian topology for one coherent
+policy and set of stored comparison representatives.
+
+Primary set operations are:
+
+- construction: an empty value from a retained policy and `from_range(values, policy)`;
+- lookup and diagnostics: `contains`, `try_get`, `size`, `height`, `content_hash`, `validate_structure`,
+  `topology_signature`, `root_identity`, `node_identities`, and `shared_node_count_with`;
+- persistent update: `add`, `remove`, and `clear`; and
+- set behavior: `union_with`, `intersect`, `except`, `set_equals`, subset/superset relations, and `overlaps`.
+
+Sorted bulk construction is O(n log n) plus a linear Cartesian pass and retains the first input representative
+from every equivalence class. Incremental updates copy O(h) nodes and share every off-path node. Nodes hold the
+representative through `std::shared_ptr<const T>`, so a moved range and rvalue `add` support move-only element
+types; bulk construction from an lvalue range requires copying its elements. Removal, lookup, iteration, set
+algebra, validation, and semantic equality do not copy stored elements.
+
+Algebra requires the exact same retained policy handle and throws `std::invalid_argument` otherwise. Semantic
+`set_equals` is intentionally different: it uses the receiver's comparer across policy families, including when
+the other family has a different equivalence relation. This makes equality potentially asymmetric in the same
+way as comparer-bearing set APIs. Same-policy equality first checks count and the memoized tree digest, then walks
+canonical nodes in lockstep; digest equality is never treated as proof by itself.
+
+All searches, build/freeze, updates, merge/split, traversal, validation, digest computation, equality, and unique
+node reclamation use explicit stacks. Expected height and update cost are O(log n), but a colliding or adversarial
+rank hash can force height and work to O(n). The digest uses atomic acquire/release publication and supports cold
+concurrent readers. Concurrent access additionally requires the caller-supplied comparer and rank hash to be safe
+for overlapping calls. The immutable set is otherwise ordinary value state; mutating one does not exist.
 
 ## `daba_lite<T, MonoidPolicy>`
 
