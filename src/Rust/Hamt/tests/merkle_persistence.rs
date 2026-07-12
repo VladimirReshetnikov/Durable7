@@ -625,6 +625,65 @@ fn proof_query_limit_fails_before_any_codec_or_block_decode() {
 }
 
 #[test]
+fn proof_structure_limits_fail_before_verifier_allocation_or_decode() {
+    let key_counts = Arc::new(CodecCounts::default());
+    let value_counts = Arc::new(CodecCounts::default());
+    let policy = MerkleSearchTreePolicy::natural(
+        "proof-structure-budget-v1",
+        CountingCodec::new(Int32MerkleCodec, Arc::clone(&key_counts)),
+        CountingCodec::new(NullableUtf8MerkleCodec, Arc::clone(&value_counts)),
+    )
+    .unwrap();
+    let proof = create_tree(&policy, 513).create_proof(&0).unwrap();
+    assert!(proof.steps().len() > 1);
+
+    key_counts.reset();
+    value_counts.reset();
+    let defaults = MerkleVerificationBudget::default();
+    let step_budget = MerkleVerificationBudget::new(
+        proof.steps().len() - 1,
+        defaults.max_total_byte_count,
+        defaults.max_block_byte_count,
+        defaults.max_depth,
+        defaults.max_entry_count,
+        defaults.max_child_references_per_block,
+        defaults.max_proof_query_byte_count,
+    )
+    .unwrap();
+    let step_result = Tree::verify_proof_with_budget(&proof, &policy, &step_budget);
+    assert_early_proof_limit_failure(
+        &step_result,
+        proof.query().len() as u64,
+        &key_counts,
+        &value_counts,
+    );
+
+    let mut expanded_steps = proof.steps().to_vec();
+    expanded_steps[0] = MerkleProofStep::new(expanded_steps[0].block().clone(), [0, 1]).unwrap();
+    let expanded_proof = rebuild_proof(&proof, proof.query(), expanded_steps);
+    key_counts.reset();
+    value_counts.reset();
+    let expansion_budget = MerkleVerificationBudget::new(
+        defaults.max_block_count,
+        defaults.max_total_byte_count,
+        defaults.max_block_byte_count,
+        defaults.max_depth,
+        defaults.max_entry_count,
+        1,
+        defaults.max_proof_query_byte_count,
+    )
+    .unwrap();
+    let expansion_result =
+        Tree::verify_proof_with_budget(&expanded_proof, &policy, &expansion_budget);
+    assert_early_proof_limit_failure(
+        &expansion_result,
+        expanded_proof.query().len() as u64,
+        &key_counts,
+        &value_counts,
+    );
+}
+
+#[test]
 fn proof_verification_rejects_tampered_queries_steps_and_expansions() {
     let policy = policy();
     let tree = create_tree(&policy, 513);
@@ -1031,6 +1090,23 @@ fn assert_proof_failure(
             .failure_message()
             .is_some_and(|message| !message.trim().is_empty())
     );
+}
+
+fn assert_early_proof_limit_failure(
+    result: &tools_data_structures_hamt::MerkleProofVerificationResult,
+    expected_query_byte_count: u64,
+    key_counts: &CodecCounts,
+    value_counts: &CodecCounts,
+) {
+    assert!(!result.is_valid());
+    assert_eq!(
+        result.failure_kind(),
+        MerkleVerificationFailureKind::ResourceLimitExceeded
+    );
+    assert_eq!(result.verified_block_count(), 0);
+    assert_eq!(result.verified_byte_count(), expected_query_byte_count);
+    assert_eq!(key_counts.snapshot(), (0, 0));
+    assert_eq!(value_counts.snapshot(), (0, 0));
 }
 
 fn rebuild_proof(

@@ -317,6 +317,54 @@ public sealed class MerklePersistenceAlgorithmsTests
         Assert.Equal(0, valueCodec.DecodeCallCount);
     }
 
+    /// <summary>Rejects excessive proof steps and expansions before verifier-side allocation or decoding.</summary>
+    [Fact]
+    public void ProofVerification_RejectsOversizedStructureBeforeDecode()
+    {
+        var keyCodec = new CountingCodec<int>(MerkleCodecs.Int32);
+        var valueCodec = new CountingCodec<string?>(MerkleCodecs.Utf8String);
+        var policy = MerkleSearchTreePolicy<int, string?>.Create(
+            "proof-structure-budget-v1",
+            Comparer<int>.Default,
+            keyCodec,
+            valueCodec);
+        var proof = CreateTree(policy, 513).CreateProof(0);
+        Assert.True(proof.Steps.Count > 1);
+
+        keyCodec.Reset();
+        valueCodec.Reset();
+        var stepBudget = new MerkleVerificationBudget(
+            maxBlockCount: proof.Steps.Count - 1,
+            maxTotalByteCount: 1L << 30,
+            maxBlockByteCount: 16 << 20,
+            maxDepth: 256,
+            maxEntryCount: 100_000_000,
+            maxChildReferencesPerBlock: 65_536,
+            maxProofQueryByteCount: 16 << 20);
+
+        var stepResult = MerkleSearchTree<int, string?>.VerifyProof(proof, policy, stepBudget);
+
+        AssertEarlyProofLimitFailure(stepResult, proof.Query.Length, keyCodec, valueCodec);
+
+        var expandedSteps = proof.Steps.ToArray();
+        expandedSteps[0] = new MerkleProofStep(expandedSteps[0].Block, [0, 1]);
+        var expandedProof = RebuildProof(proof, proof.Query, expandedSteps);
+        keyCodec.Reset();
+        valueCodec.Reset();
+        var expansionBudget = new MerkleVerificationBudget(
+            maxBlockCount: 1_000,
+            maxTotalByteCount: 1L << 30,
+            maxBlockByteCount: 16 << 20,
+            maxDepth: 256,
+            maxEntryCount: 100_000_000,
+            maxChildReferencesPerBlock: 1,
+            maxProofQueryByteCount: 16 << 20);
+
+        var expansionResult = MerkleSearchTree<int, string?>.VerifyProof(expandedProof, policy, expansionBudget);
+
+        AssertEarlyProofLimitFailure(expansionResult, expandedProof.Query.Length, keyCodec, valueCodec);
+    }
+
     /// <summary>Rejects changed block bytes, changed queries, and authenticated but noncanonical extra steps.</summary>
     [Fact]
     public void ProofVerification_RejectsTamperedQueryAndExtraSteps()
@@ -519,6 +567,22 @@ public sealed class MerklePersistenceAlgorithmsTests
         Assert.False(result.IsValid);
         Assert.Equal(expected, result.FailureKind);
         Assert.False(string.IsNullOrWhiteSpace(result.FailureMessage));
+    }
+
+    private static void AssertEarlyProofLimitFailure(
+        MerkleProofVerificationResult result,
+        int expectedQueryByteCount,
+        CountingCodec<int> keyCodec,
+        CountingCodec<string?> valueCodec)
+    {
+        Assert.False(result.IsValid);
+        Assert.Equal(MerkleVerificationFailureKind.ResourceLimitExceeded, result.FailureKind);
+        Assert.Equal(0, result.VerifiedBlockCount);
+        Assert.Equal(expectedQueryByteCount, result.VerifiedByteCount);
+        Assert.Equal(0, keyCodec.EncodeCallCount);
+        Assert.Equal(0, keyCodec.DecodeCallCount);
+        Assert.Equal(0, valueCodec.EncodeCallCount);
+        Assert.Equal(0, valueCodec.DecodeCallCount);
     }
 
     private static MerkleProof RebuildProof(

@@ -1150,6 +1150,27 @@ impl<'a> VerificationContext<'a> {
         self.total_bytes += byte_count_u64;
         Ok(())
     }
+
+    fn preflight_proof_structure(
+        &self,
+        proof: &MerkleProof,
+    ) -> Result<(), MerkleVerificationError> {
+        if proof.steps.len() > self.budget.max_block_count {
+            return Err(size_limit(
+                "a Merkle proof exceeds its block-count budget",
+                proof.root_hash,
+            ));
+        }
+        for step in proof.steps.iter() {
+            if step.expanded_child_indexes.len() > self.budget.max_child_references_per_block {
+                return Err(size_limit(
+                    "a Merkle proof step exceeds its expanded-child budget",
+                    step.block.digest(),
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 
 struct OverlayBlockStore<'a> {
@@ -1925,9 +1946,10 @@ impl<K, V> MerkleSearchTree<K, V> {
     ) -> MerkleProofVerificationResult {
         let mut context = VerificationContext::new(budget);
         let result = (|| {
-            // This is intentionally the first operation: oversized queries are rejected before
-            // envelope checks, codec callbacks, block hashing, or block decoding.
+            // Query accounting is deliberately first. Proof-shape limits then run before envelope
+            // checks, verifier-side collections, codec callbacks, hashing, or block decoding.
             context.account_proof_query(proof.query.len(), proof.root_hash)?;
+            context.preflight_proof_structure(proof)?;
             verify_envelope::<K, V>(proof.algorithm_id(), proof.domain_digest(), policy)?;
             let verifier = Self::new(policy.clone());
             let mut decoded = HashMap::with_capacity(proof.steps.len());

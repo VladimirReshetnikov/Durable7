@@ -236,7 +236,10 @@ public sealed partial class MerkleSearchTree<TKey, TValue>
         var context = new VerificationContext(budget ?? MerkleVerificationBudget.Default);
         try
         {
+            // Query accounting is deliberately first. Proof-shape limits then run before envelope
+            // checks, verifier-side collections, codec callbacks, hashing, or block decoding.
             context.AccountProofQuery(proof.Query.Length, proof.RootHash);
+            context.PreflightProofStructure(proof);
             VerifyEnvelope(proof.AlgorithmId, proof.DomainDigest, policy);
             var verifier = Create(policy);
             var decoded = new Dictionary<MerkleDigest, DecodedBlock>();
@@ -1091,6 +1094,28 @@ public sealed partial class MerkleSearchTree<TKey, TValue>
                     rootHash);
             }
             TotalBytes += byteCount;
+        }
+
+        internal void PreflightProofStructure(MerkleProof proof)
+        {
+            if (proof.Steps.Count > Budget.MaxBlockCount)
+            {
+                throw Verification(
+                    MerkleVerificationFailureKind.ResourceLimitExceeded,
+                    "A Merkle proof exceeds its block-count budget.",
+                    proof.RootHash);
+            }
+
+            foreach (var step in proof.Steps)
+            {
+                if (step.ExpandedChildIndexes.Count > Budget.MaxChildReferencesPerBlock)
+                {
+                    throw Verification(
+                        MerkleVerificationFailureKind.ResourceLimitExceeded,
+                        "A Merkle proof step exceeds its expanded-child budget.",
+                        step.Block.Digest);
+                }
+            }
         }
 
         internal void AccountEntries(int count, MerkleDigest digest)
