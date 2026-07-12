@@ -56,8 +56,9 @@ class rrb_vector_builder;
 ///
 /// Regular branches omit cumulative tables and use five-bit radix indexing.
 /// Split and concatenation introduce cumulative tables only where child spans
-/// become irregular. There is deliberately no persistent tail buffer; use the
-/// append builder for bulk staging.
+/// become irregular. Concatenation redistributes the boundary seam only and
+/// does not guarantee global minimum occupancy away from it. There is
+/// deliberately no persistent tail buffer; use the append builder for bulk staging.
 template <std::copy_constructible T>
 class rrb_vector final {
 private:

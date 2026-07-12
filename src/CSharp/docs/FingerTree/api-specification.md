@@ -543,7 +543,9 @@ validated by the same cached-count/height/layout invariants.
 - Indexed get and `SetItem` are O(log32 n); equal-value replacement returns the current instance.
 - `AddFirst`/`AddLast` are boundary concatenations. `Concat` recursively merges the right and left
   boundary spines, coalesces leaf payloads, and partitions at most 64 children into balanced nodes,
-  taking O(log32(n + m)) time and storage.
+  taking O(log32(n + m)) time and storage. This is boundary-only redistribution: it does not enforce
+  a global minimum occupancy away from the seam, so density stress bounds are validation evidence
+  for tested histories rather than a representation invariant.
 - `SplitAt` copies one path and returns structurally shared prefix/suffix vectors. A split exactly on
   a leaf or subtree boundary reuses that leaf/subtree rather than slicing an equal replacement.
   `InsertRange` and `RemoveRange` compose split and concat with O(log n + inserted-elements) /

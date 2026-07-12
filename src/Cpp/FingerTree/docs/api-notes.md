@@ -99,7 +99,10 @@ Primary operations:
 Indexing and point update descend O(log32 n) levels. Split, range edits, endpoint operations, and concatenation
 rebuild only boundary spines; concatenation is O(log32(n + m)). Exact root and leaf boundaries preserve the
 corresponding node identities, and equality-comparable no-op `set_item` plus empty insert/remove operations return
-the original root. The append builder freezes full 32-element leaves, copies a partial tail when publishing, and
+the original root. Boundary-only redistribution does not promise global minimum occupancy elsewhere, so the
+adversarial density ceilings are test gates rather than validator invariants. The height cap is
+`(numeric_limits<size_t>::digits - 1) / 5`, or twelve on the supported 64-bit targets. The append builder freezes
+full 32-element leaves, copies a partial tail when publishing, and
 caches a clean immutable snapshot; subsequent staging is isolated from every previously returned snapshot.
 
 Notable C++ differences and limits:

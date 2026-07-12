@@ -27,7 +27,7 @@ import Prelude hiding (null, splitAt)
 import qualified Prelude as P
 
 import Data.Array (Array, (!), bounds, elems, listArray)
-import Data.Bits (shiftL, shiftR)
+import Data.Bits (finiteBitSize, shiftL, shiftR)
 import Control.Exception (evaluate)
 import Data.Maybe (isNothing)
 import System.Mem.StableName (eqStableName, makeStableName)
@@ -39,7 +39,7 @@ radixBits :: Int
 radixBits = 5
 
 maximumHeight :: Int
-maximumHeight = 6
+maximumHeight = (finiteBitSize (0 :: Int) - 1) `div` radixBits
 
 data RrbVector a = RrbVector !(Maybe (Node a))
 

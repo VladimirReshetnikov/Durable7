@@ -5,12 +5,14 @@ use std::sync::Arc;
 
 const RADIX_BITS: u32 = 5;
 const BRANCH_FACTOR: usize = 1 << RADIX_BITS;
+const MAXIMUM_HEIGHT: u8 = ((usize::BITS - 1) / RADIX_BITS) as u8;
 
 /// An immutable relaxed radix-balanced vector with 32-way branching.
 ///
 /// Regular branches use radix arithmetic and allocate no cumulative size table. Splits and
 /// concatenations introduce relaxed branches only where child spans are irregular. All updates
-/// preserve old snapshots through immutable [`Arc`] nodes.
+/// preserve old snapshots through immutable [`Arc`] nodes. Concatenation redistributes only the
+/// boundary seam and does not impose a global minimum occupancy on unrelated nodes.
 pub struct RrbVector<T> {
     root: Option<Arc<Node<T>>>,
 }
@@ -357,6 +359,11 @@ impl<T> RrbVector<T> {
         if count != self.len() || height != self.height() {
             return Err(invariant_error(
                 "root count or height disagrees with validation",
+            ));
+        }
+        if height > MAXIMUM_HEIGHT {
+            return Err(invariant_error(
+                "root height exceeds the usize count domain",
             ));
         }
         Ok(accumulator.finish(count, height))
@@ -909,6 +916,10 @@ fn branch<T>(children: Vec<Arc<Node<T>>>) -> Arc<Node<T>> {
     let height = child_height
         .checked_add(1)
         .expect("RRB vector height overflow");
+    assert!(
+        height <= MAXIMUM_HEIGHT,
+        "RRB vector height exceeds the usize count domain"
+    );
     let count = children
         .iter()
         .try_fold(0_usize, |total, child| total.checked_add(child.count()));
@@ -1034,6 +1045,9 @@ fn validate_node<T>(
             count,
             height,
         } => {
+            if *height == 0 || *height > MAXIMUM_HEIGHT {
+                return Err(invariant_error("branch height is outside the count domain"));
+            }
             if children.is_empty() || children.len() > BRANCH_FACTOR {
                 return Err(invariant_error("branching factor is outside 1..=32"));
             }
@@ -1180,6 +1194,27 @@ mod tests {
         for index in (0..relaxed.len()).step_by(997) {
             assert_eq!(relaxed[index], index + 1);
         }
+    }
+
+    #[test]
+    fn validator_rejects_height_beyond_the_usize_count_domain() {
+        let mut root = leaf(vec![0]);
+        for _ in 0..=MAXIMUM_HEIGHT {
+            let child_count = root.count();
+            let height = root.height() + 1;
+            let children = Arc::<[Arc<Node<_>>]>::from([Arc::clone(&root), root]);
+            root = Arc::new(Node::Branch {
+                cumulative_sizes: Some(Arc::from([child_count, child_count * 2])),
+                children,
+                count: child_count * 2,
+                height,
+            });
+        }
+        let vector = RrbVector { root: Some(root) };
+        assert_eq!(
+            vector.validate_structure().unwrap_err().message,
+            "branch height is outside the count domain"
+        );
     }
 
     #[test]

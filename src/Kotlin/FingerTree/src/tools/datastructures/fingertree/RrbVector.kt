@@ -4,7 +4,7 @@ import java.util.ConcurrentModificationException
 
 private const val RrbRadixBits: Int = 5
 private const val RrbBranchFactor: Int = 32
-private const val RrbMaximumHeight: Int = 6
+private const val RrbMaximumHeight: Int = (Int.SIZE_BITS - 1) / RrbRadixBits
 
 /** A successful removal from the back of an [RrbVector]. */
 public data class RrbPop<T>(
@@ -17,7 +17,8 @@ public data class RrbPop<T>(
  *
  * Regular branches use five-bit radix arithmetic and allocate no size table. Branches made
  * irregular by split or concatenation cache cumulative child sizes. Updates copy one search path;
- * concatenation rebuilds only the two boundary spines.
+ * concatenation rebuilds only the two boundary spines and does not impose a global minimum
+ * occupancy on nodes away from that seam.
  */
 public class RrbVector<T> private constructor(
     private val root: RrbNode?,

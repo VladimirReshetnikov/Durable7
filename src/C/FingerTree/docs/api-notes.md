@@ -325,6 +325,9 @@ Leaves contain one through 32 values. Regular branches have full-capacity childr
 the last and navigate by five-bit shifts without allocating prefix sizes. Split and concat may make
 a branch relaxed; only those branches own cumulative `size_t` sizes. Lookup and replacement visit
 O(log32 n) nodes, while concat/split/range edits rebuild boundary spines and share untouched leaves.
+Concat redistributes only the seam and does not enforce a global minimum occupancy elsewhere;
+adversarial density ceilings are test gates, not validator invariants. The maximum height is derived
+as `(sizeof(size_t) * CHAR_BIT - 1) / 5`, which is twelve on the supported 64-bit targets.
 `ft_rrb_vector_validate`, `ft_rrb_vector_root_identity`, and leaf visitation expose representation
 diagnostics for tests and embedders without exposing mutable node storage.
 

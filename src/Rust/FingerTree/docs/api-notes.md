@@ -277,7 +277,9 @@ replacement, concat, payload-redistributing range edits, owned pops, owned itera
 require `T: Clone` only where Rust ownership requires copying stored values. Equal point
 replacement, empty insertion/removal, empty-side concat, and boundary splits preserve root identity
 where their result is unchanged. `validate_structure` reports count, height, leaf density, branching,
-and regular/relaxed-node statistics while checking every cached layout invariant. The append builder
+and regular/relaxed-node statistics while checking every cached layout invariant and the
+`(usize::BITS - 1) / 5` height cap. Concat redistributes only the boundary seam; it does not certify
+global minimum occupancy, so adversarial density ceilings remain test gates. The append builder
 moves staged leaves into immutable nodes, retains an adopted vector as an O(1) prefix, and returns
 the same root on repeated clean freezes. As in C#, there is no dedicated persistent tail buffer;
 immutable endpoint insertion remains a boundary-spine operation.

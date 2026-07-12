@@ -265,6 +265,14 @@ publication. Validation spans MSVC Debug/Release, warning-strict GCC and Clang, 
 allocation-failure rollback, tracked lifetimes, retained snapshots, concurrent readers, and release
 benchmark smoke coverage.
 
+**Representation boundary.** All six ports deliberately implement boundary-spine concatenation,
+not the full Stucki-et-al. redistribution pass. The two seam child arrays are repartitioned, but no
+global minimum-fullness invariant is promised for leaves or branches away from that seam. The
+adversarial density assertions are regression and benchmark gates for the histories they exercise,
+not a validator-certified representation contract. Validators do certify a size-derived height cap:
+`(count storage bit width - 1) / 5`, namely six for the C#/Kotlin `Int` count domain and twelve on
+the repository's 64-bit `size_t`/`Int`/`usize` C, C++, Haskell, and Rust targets.
+
 **What it is.** The relaxed radix-balanced tree (Bagwell & Rompf 2011; practical treatment with
 transients in Stucki et al., ICFP 2015): a 32-way branching persistent vector where nodes are
 normally full (radix-indexable in O(log32 n) with pure bit arithmetic) and carry small size tables

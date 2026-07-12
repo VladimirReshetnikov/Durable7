@@ -10,15 +10,16 @@ namespace Tools.DataStructures.FingerTree;
 /// Packed branches omit size tables and select children with five-bit radix arithmetic. Only
 /// branches whose child spans have been relaxed by split or concatenation retain cumulative sizes.
 /// Updates copy one root-to-leaf path. Concatenation merges and rebalances only the two boundary
-/// spines and is O(log32(n + m)). Endpoint operations do not currently use a dedicated tail buffer;
-/// use <see cref="Builder"/> for append-heavy bulk construction.
+/// spines and is O(log32(n + m)); it does not impose a global minimum-occupancy invariant on nodes
+/// away from that seam. Endpoint operations do not currently use a dedicated tail buffer; use
+/// <see cref="Builder"/> for append-heavy bulk construction.
 /// </remarks>
 [DebuggerDisplay("Count = {Count}, Height = {Height}")]
 public sealed class RrbVector<T> : IReadOnlyList<T>
 {
     private const int RadixBits = 5;
     private const int BranchFactor = 32;
-    private const int MaximumHeight = 6;
+    private const int MaximumHeight = (sizeof(int) * 8 - 1) / RadixBits;
     private readonly Node? _root;
 
     private RrbVector(Node? root) => _root = root;
