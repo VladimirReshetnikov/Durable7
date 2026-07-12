@@ -5,12 +5,15 @@ import Prelude hiding (lookup, null)
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (SomeException, evaluate, try)
 import Control.Monad (forM_, replicateM)
+import Data.Bits ((.&.))
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Char8 as ByteStringChar8
 import Data.Char (toLower)
 import Data.Int (Int32, Int64)
+import Data.IORef (atomicModifyIORef', newIORef, readIORef, writeIORef)
 import Data.List (sort)
 import Data.Word (Word8)
+import System.IO.Unsafe (unsafePerformIO)
 
 import Data.Structures.Hamt.Hashable (hash)
 import Data.Structures.Hamt.HashMap (HashPolicy(..))
@@ -39,6 +42,7 @@ main = do
   testCollisionPolicy
   testCollisionShrinkCanonicalization
   testChampCanonicalizationAndDiff
+  testChampStructuralAlgebra
   testPatriciaMapsAndSets
   testActualKeyPreservation
   testAdjustAndStrictMapping
@@ -101,6 +105,69 @@ testChampCanonicalizationAndDiff = do
   assertBool "typed diff removal" (HashMap.EntryRemoved 7 7 `elem` differences)
   assertBool "typed diff change" (HashMap.EntryChanged 9 9 (-9) `elem` differences)
   assertBool "typed diff addition" (HashMap.EntryAdded 1000 1000 `elem` differences)
+
+testChampStructuralAlgebra :: IO ()
+testChampStructuralAlgebra = do
+  let casePolicy = HashPolicy (hash . map toLower) (\left right -> map toLower left == map toLower right)
+      base = HashMap.emptyWith casePolicy
+      leftMap = HashMap.insert "left" 10 (HashMap.insert "Alpha" (1 :: Int) base)
+      rightMap = HashMap.insert "right" 20 (HashMap.insert "ALPHA" (2 :: Int) base)
+      unitedMap = HashMap.union leftMap rightMap
+      intersectedMap = HashMap.intersection leftMap rightMap
+      exceptedMap = HashMap.difference leftMap rightMap
+      symmetricMap = HashMap.symmetricDifference leftMap rightMap
+  assertEqual "structural CHAMP union is right-valued" (Just 2) (HashMap.lookup "alpha" unitedMap)
+  assertEqual "structural CHAMP union keeps the left key" (Just "Alpha") (HashMap.actualKey "alpha" unitedMap)
+  assertEqual "structural CHAMP union count" 3 (HashMap.size unitedMap)
+  assertEqual "structural CHAMP intersection count" 1 (HashMap.size intersectedMap)
+  assertEqual "structural CHAMP difference count" 1 (HashMap.size exceptedMap)
+  assertEqual "structural CHAMP symmetric difference count" 2 (HashMap.size symmetricMap)
+  assertBool "structural CHAMP map results stay canonical"
+    (all HashMap.validStructure [unitedMap, intersectedMap, exceptedMap, symmetricMap])
+
+  calls <- newIORef (0 :: Int)
+  let countingHash key = unsafePerformIO $
+        atomicModifyIORef' calls (\count -> (count + 1, hash key))
+      countingPolicy = HashPolicy countingHash (==)
+      basis = HashSet.fromListWith countingPolicy [0 :: Int .. 255]
+      left = HashSet.insert 1000 basis
+      right = HashSet.insert 2000 basis
+  _ <- evaluate (HashSet.size left + HashSet.size right)
+  writeIORef calls 0
+  let united = HashSet.union left right
+      intersected = HashSet.intersection left right
+      excepted = HashSet.difference left right
+      symmetric = HashSet.symmetricDifference left right
+      relationScore =
+        fromEnum (HashSet.isSubsetOf left united) +
+        fromEnum (HashSet.isSupersetOf united right) +
+        fromEnum (HashSet.overlaps left right) +
+        fromEnum (HashSet.setEquals left left)
+  _ <- evaluate
+    (HashSet.size united + HashSet.size intersected + HashSet.size excepted +
+      HashSet.size symmetric + relationScore)
+  structuralHashes <- readIORef calls
+  assertEqual "shared-policy structural CHAMP algebra does not rehash" 0 structuralHashes
+  assertEqual "shared-policy structural union count" 258 (HashSet.size united)
+  assertEqual "shared-policy structural intersection count" 256 (HashSet.size intersected)
+  assertEqual "shared-policy structural difference" [1000] (HashSet.toList excepted)
+  assertEqual "shared-policy structural symmetric difference" [1000, 2000]
+    (sort (HashSet.toList symmetric))
+
+  let collisionPolicy = HashPolicy (const 0) (==)
+      histories = take 200 (iterate (\state -> state * 1664525 + 1013904223) (0x51a7e5 :: Int))
+      modelValues state bit = [value | value <- [-20 .. 20], ((state `div` (bit + value + 21)) .&. 1) /= 0]
+      checkHistory state =
+        let leftValues = modelValues state 1
+            rightValues = modelValues (state * 1103515245 + 12345) 2
+            leftSet = HashSet.fromListWith collisionPolicy leftValues
+            rightSet = HashSet.fromListWith collisionPolicy rightValues
+         in sort (HashSet.toList (HashSet.union leftSet rightSet)) == sort (unique (leftValues ++ rightValues)) &&
+            sort (HashSet.toList (HashSet.intersection leftSet rightSet)) == sort [x | x <- unique leftValues, x `elem` rightValues] &&
+            sort (HashSet.toList (HashSet.difference leftSet rightSet)) == sort [x | x <- unique leftValues, x `notElem` rightValues]
+  assertBool "collision-heavy structural CHAMP histories match list models" (all checkHistory histories)
+  where
+    unique = foldr (\value rest -> if value `elem` rest then rest else value : rest) []
 
 testPatriciaMapsAndSets :: IO ()
 testPatriciaMapsAndSets = do

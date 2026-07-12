@@ -16,6 +16,9 @@ collision buckets, custom hash/equality policy behavior, original-key recovery, 
 `forkIO` concurrent readers over shared immutable snapshots. It also locks in collision-to-leaf
 canonicalization, receiver-policy set relations, one-pass adjustment behavior, strict value mapping,
 independent-history CHAMP equality, typed diff classification, and 100,000-entry bulk construction.
+The CHAMP algebra tier additionally checks right-valued map union with left key representatives,
+all four structural map/set operations, cached-cardinality validity, zero-rehash shared ancestry,
+receiver-policy normalization, and collision-heavy deterministic histories.
 The Patricia tier covers explicit 32/64-bit signed extrema, ascending enumeration, a 10,000-step
 map history, right-biased map algebra, left/right/key-aware combining algebra, cached-subtree
 cardinality validation, and set union/intersection/difference.

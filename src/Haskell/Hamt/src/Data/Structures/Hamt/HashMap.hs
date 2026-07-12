@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE MagicHash #-}
 
 module Data.Structures.Hamt.HashMap
   ( HashMap
@@ -26,6 +27,10 @@ module Data.Structures.Hamt.HashMap
   , tryRemove
   , adjust
   , mapValues
+  , union
+  , intersection
+  , difference
+  , symmetricDifference
   , toList
   , keys
   , elems
@@ -40,6 +45,7 @@ import Prelude hiding (lookup, null)
 import Data.Bits (Bits((.&.), (.|.), complement), popCount, shiftL, shiftR)
 import qualified Data.List as List
 import Data.Word (Word32)
+import GHC.Exts (isTrue#, reallyUnsafePtrEquality#)
 
 import Data.Structures.Hamt.Hashable (Hashable(..))
 
@@ -56,8 +62,8 @@ data HashMap k v = HashMap !(HashPolicy k) !Int !(Node k v)
 data Node k v
   = EmptyNode
   | Leaf !Word32 k v
-  | Collision !Word32 [(k, v)]
-  | Branch !Word32 !Word32 [(Word32, k, v)] [Node k v]
+  | Collision !Int !Word32 [(k, v)]
+  | Branch !Int !Word32 !Word32 [(Word32, k, v)] [Node k v]
 
 data InsertResult k v
   = Inserted !(Node k v)
@@ -113,10 +119,10 @@ sameTopology (HashMap _ _ left) (HashMap _ _ right) = sameNodeTopology left righ
 sameNodeTopology :: Node k v -> Node k' v' -> Bool
 sameNodeTopology EmptyNode EmptyNode = True
 sameNodeTopology (Leaf leftHash _ _) (Leaf rightHash _ _) = leftHash == rightHash
-sameNodeTopology (Collision leftHash leftEntries) (Collision rightHash rightEntries) =
+sameNodeTopology (Collision _ leftHash leftEntries) (Collision _ rightHash rightEntries) =
   leftHash == rightHash && length leftEntries == length rightEntries
-sameNodeTopology (Branch leftDataMap leftNodeMap leftPayloads leftChildren)
-                 (Branch rightDataMap rightNodeMap rightPayloads rightChildren) =
+sameNodeTopology (Branch _ leftDataMap leftNodeMap leftPayloads leftChildren)
+                 (Branch _ rightDataMap rightNodeMap rightPayloads rightChildren) =
   leftDataMap == rightDataMap
     && leftNodeMap == rightNodeMap
     && map payloadHash leftPayloads == map payloadHash rightPayloads
@@ -129,21 +135,24 @@ sameNodeTopology _ _ = False
 nodeCountIfValid :: Node k v -> Maybe Int
 nodeCountIfValid EmptyNode = Just 0
 nodeCountIfValid (Leaf _ _ _) = Just 1
-nodeCountIfValid (Collision _ entries)
-  | length entries >= 2 = Just (length entries)
+nodeCountIfValid (Collision cachedCount _ entries)
+  | length entries >= 2 && cachedCount == length entries = Just cachedCount
   | otherwise = Nothing
-nodeCountIfValid (Branch dataMap nodeMap payloads children)
+nodeCountIfValid (Branch cachedCount dataMap nodeMap payloads children)
   | dataMap .&. nodeMap /= 0 = Nothing
   | dataMap == 0 && nodeMap == 0 = Nothing
   | popCount dataMap /= length payloads = Nothing
   | popCount nodeMap /= length children = Nothing
   | any isLeaf children = Nothing
   | length payloads + length children < 2 && not (List.null payloads && singleBranch children) = Nothing
-  | otherwise = (length payloads +) . sum <$> traverse nodeCountIfValid children
+  | otherwise = do
+      childCount <- sum <$> traverse nodeCountIfValid children
+      let actualCount = length payloads + childCount
+      if cachedCount == actualCount then Just cachedCount else Nothing
   where
     isLeaf (Leaf _ _ _) = True
     isLeaf _ = False
-    singleBranch [Branch _ _ _ _] = True
+    singleBranch [Branch _ _ _ _ _] = True
     singleBranch _ = False
 
 null :: HashMap k v -> Bool
@@ -208,6 +217,18 @@ adjust updater key mapValue@(HashMap hashPolicy count root) =
 mapValues :: (v -> w) -> HashMap k v -> HashMap k w
 mapValues mapper (HashMap hashPolicy count root) = HashMap hashPolicy count (mapNode mapper root)
 
+union :: Eq v => HashMap k v -> HashMap k v -> HashMap k v
+union = combineMaps CombineUnion
+
+intersection :: Eq v => HashMap k v -> HashMap k v -> HashMap k v
+intersection = combineMaps CombineIntersection
+
+difference :: Eq v => HashMap k v -> HashMap k v -> HashMap k v
+difference = combineMaps CombineDifference
+
+symmetricDifference :: Eq v => HashMap k v -> HashMap k v -> HashMap k v
+symmetricDifference = combineMaps CombineSymmetricDifference
+
 toList :: HashMap k v -> [(k, v)]
 toList (HashMap _ _ root) = foldrNode (:) [] root
 
@@ -224,11 +245,16 @@ foldrWithKey folder seed (HashMap _ _ root) = foldrNode (\(k, v) acc -> folder k
 -- independently supplied policies define compatible key equivalence; Haskell
 -- functions have no decidable identity with which to enforce that precondition.
 mapEquals :: Eq v => HashMap k v -> HashMap k v -> Bool
-mapEquals left right =
-  size left == size right && all (\(key, value) -> lookup key right == Just value) (toList left)
+mapEquals (HashMap _ leftSize leftRoot) (HashMap rightPolicy rightSize rightRoot) =
+  ptrEq leftRoot rightRoot ||
+    (leftSize == rightSize && all matches (nodeEntries leftRoot))
+  where
+    right = HashMap rightPolicy rightSize rightRoot
+    matches (key, value) = lookup key right == Just value
 
 -- | Reports changes between maps whose key policies are semantically compatible.
 diff :: Eq v => HashMap k v -> HashMap k v -> [MapDifference k v]
+diff (HashMap _ _ leftRoot) (HashMap _ _ rightRoot) | ptrEq leftRoot rightRoot = []
 diff left right = removedOrChanged ++ added
   where
     removedOrChanged = concatMap classifyLeft (toList left)
@@ -238,15 +264,193 @@ diff left right = removedOrChanged ++ added
       _ -> []
     added = [EntryAdded key value | (key, value) <- toList right, not (member key left)]
 
+data CombineOperation
+  = CombineUnion
+  | CombineIntersection
+  | CombineDifference
+  | CombineSymmetricDifference
+  deriving (Eq)
+
+combineMaps :: Eq v => CombineOperation -> HashMap k v -> HashMap k v -> HashMap k v
+combineMaps operation (HashMap leftPolicy _ leftRoot) (HashMap rightPolicy _ rightRoot)
+  | ptrEq leftRoot rightRoot = fromRoot $ case operation of
+      CombineUnion -> leftRoot
+      CombineIntersection -> leftRoot
+      CombineDifference -> EmptyNode
+      CombineSymmetricDifference -> EmptyNode
+  | ptrEq leftPolicy rightPolicy = fromRoot (combineNodes leftPolicy operation 0 leftRoot rightRoot)
+  | otherwise =
+      let HashMap _ _ normalizedRight = fromListWith leftPolicy (nodeEntries rightRoot)
+       in fromRoot (combineNodes leftPolicy operation 0 leftRoot normalizedRight)
+  where
+    fromRoot root = HashMap leftPolicy (nodeCardinality root) root
+
+combineNodes :: Eq v => HashPolicy k -> CombineOperation -> Int -> Node k v -> Node k v -> Node k v
+combineNodes _ operation _ left right | ptrEq left right = case operation of
+  CombineUnion -> left
+  CombineIntersection -> left
+  CombineDifference -> EmptyNode
+  CombineSymmetricDifference -> EmptyNode
+combineNodes _ operation _ EmptyNode right = case operation of
+  CombineUnion -> right
+  CombineIntersection -> EmptyNode
+  CombineDifference -> EmptyNode
+  CombineSymmetricDifference -> right
+combineNodes _ operation _ left EmptyNode = case operation of
+  CombineIntersection -> EmptyNode
+  _ -> left
+combineNodes hashPolicy operation shift left right
+  | isHashNode left && isHashNode right =
+      combineHashNodes hashPolicy operation shift left right
+  | otherwise =
+      buildLogicalNode hashPolicy shift left
+        [ combineNodes hashPolicy operation (shift + bitsPerLevel)
+            (logicalSlot left index shift)
+            (logicalSlot right index shift)
+        | index <- [0 .. 31]
+        ]
+
+combineHashNodes :: Eq v => HashPolicy k -> CombineOperation -> Int -> Node k v -> Node k v -> Node k v
+combineHashNodes hashPolicy operation shift left right
+  | leftHash /= rightHash = case operation of
+      CombineIntersection -> EmptyNode
+      CombineDifference -> left
+      _
+        | shift >= hashBits -> error "distinct 32-bit hashes exhausted every CHAMP level"
+        | leftIndex /= rightIndex ->
+            buildLogicalNode hashPolicy shift left
+              (replaceAt rightIndex right (replaceAt leftIndex left emptySlots))
+        | otherwise ->
+            buildLogicalNode hashPolicy shift left
+              (replaceAt leftIndex
+                (combineHashNodes hashPolicy operation (shift + bitsPerLevel) left right)
+                emptySlots)
+  | entriesMatch hashPolicy leftEntries resultEntries = left
+  | otherwise = entriesToNode leftHash resultEntries
+  where
+    leftHash = hashNodeHash left
+    rightHash = hashNodeHash right
+    leftIndex = hashIndex leftHash shift
+    rightIndex = hashIndex rightHash shift
+    emptySlots = replicate 32 EmptyNode
+    leftEntries = nodeEntries left
+    rightEntries = nodeEntries right
+    resultEntries = combineHashEntries hashPolicy operation leftEntries rightEntries
+
+combineHashEntries :: Eq v => HashPolicy k -> CombineOperation -> [(k, v)] -> [(k, v)] -> [(k, v)]
+combineHashEntries hashPolicy operation leftEntries rightEntries = leftResults ++ rightOnly
+  where
+    leftResults = concatMap combineLeft leftEntries
+    combineLeft entry@(leftKey, leftValue) = case findEquivalent leftKey rightEntries of
+      Just (_, rightValue) -> case operation of
+        CombineUnion -> [(leftKey, if leftValue == rightValue then leftValue else rightValue)]
+        CombineIntersection -> [entry]
+        CombineDifference -> []
+        CombineSymmetricDifference -> []
+      Nothing -> case operation of
+        CombineIntersection -> []
+        _ -> [entry]
+    rightOnly
+      | operation == CombineUnion || operation == CombineSymmetricDifference =
+          [entry | entry@(key, _) <- rightEntries, not (any (equalKeys hashPolicy key . fst) leftEntries)]
+      | otherwise = []
+    findEquivalent key = List.find (equalKeys hashPolicy key . fst)
+
+entriesMatch :: Eq v => HashPolicy k -> [(k, v)] -> [(k, v)] -> Bool
+entriesMatch hashPolicy left right =
+  length left == length right && and (zipWith matches left right)
+  where
+    matches (leftKey, leftValue) (rightKey, rightValue) =
+      equalKeys hashPolicy leftKey rightKey && leftValue == rightValue
+
+logicalSlot :: Node k v -> Int -> Int -> Node k v
+logicalSlot EmptyNode _ _ = EmptyNode
+logicalSlot node@(Leaf hashValue _ _) index shift
+  | hashIndex hashValue shift == index = node
+  | otherwise = EmptyNode
+logicalSlot node@(Collision _ hashValue _) index shift
+  | hashIndex hashValue shift == index = node
+  | otherwise = EmptyNode
+logicalSlot (Branch _ dataMap nodeMap payloads children) index _
+  | dataMap .&. selectedBit /= 0 =
+      let (hashValue, key, value) = payloads !! childIndex dataMap selectedBit
+       in Leaf hashValue key value
+  | nodeMap .&. selectedBit /= 0 = children !! childIndex nodeMap selectedBit
+  | otherwise = EmptyNode
+  where
+    selectedBit = 1 `shiftL` index
+
+buildLogicalNode :: Eq v => HashPolicy k -> Int -> Node k v -> [Node k v] -> Node k v
+buildLogicalNode hashPolicy shift original slots
+  | logicalSlotsMatch hashPolicy shift original slots = original
+  | otherwise = normalizeBranch dataMap nodeMap (reverse payloads) (reverse children)
+  where
+    (_, dataMap, nodeMap, payloads, children) =
+      List.foldl' addSlot (0 :: Int, 0, 0, [], []) slots
+    addSlot (!index, !currentDataMap, !currentNodeMap, currentPayloads, currentChildren) node =
+      let selectedBit = 1 `shiftL` index
+       in case node of
+            EmptyNode -> (index + 1, currentDataMap, currentNodeMap, currentPayloads, currentChildren)
+            Leaf hashValue key value ->
+              ( index + 1
+              , currentDataMap .|. selectedBit
+              , currentNodeMap
+              , (hashValue, key, value) : currentPayloads
+              , currentChildren
+              )
+            _ ->
+              ( index + 1
+              , currentDataMap
+              , currentNodeMap .|. selectedBit
+              , currentPayloads
+              , node : currentChildren
+              )
+
+logicalSlotsMatch :: Eq v => HashPolicy k -> Int -> Node k v -> [Node k v] -> Bool
+logicalSlotsMatch hashPolicy shift original slots = and
+  [ nodesMatch (logicalSlot original index shift) actual
+  | (index, actual) <- zip [0 .. 31] slots
+  ]
+  where
+    nodesMatch expected actual
+      | ptrEq expected actual = True
+    nodesMatch (Leaf leftHash leftKey leftValue) (Leaf rightHash rightKey rightValue) =
+      leftHash == rightHash && equalKeys hashPolicy leftKey rightKey && leftValue == rightValue
+    nodesMatch EmptyNode EmptyNode = True
+    nodesMatch _ _ = False
+
+nodeCardinality :: Node k v -> Int
+nodeCardinality EmptyNode = 0
+nodeCardinality (Leaf _ _ _) = 1
+nodeCardinality (Collision count _ _) = count
+nodeCardinality (Branch count _ _ _ _) = count
+
+isHashNode :: Node k v -> Bool
+isHashNode (Leaf _ _ _) = True
+isHashNode (Collision _ _ _) = True
+isHashNode _ = False
+
+hashNodeHash :: Node k v -> Word32
+hashNodeHash (Leaf hashValue _ _) = hashValue
+hashNodeHash (Collision _ hashValue _) = hashValue
+hashNodeHash _ = error "branch nodes do not have one full hash"
+
+hashIndex :: Word32 -> Int -> Int
+hashIndex hashValue shift = fromIntegral ((hashValue `shiftR` shift) .&. 0x1f)
+
+ptrEq :: a -> a -> Bool
+ptrEq left right = isTrue# (reallyUnsafePtrEquality# left right)
+{-# INLINE ptrEq #-}
+
 lookupNode :: HashPolicy k -> Word32 -> k -> Int -> Node k v -> Maybe v
 lookupNode _ _ _ _ EmptyNode = Nothing
 lookupNode hashPolicy hashValue key _ (Leaf leafHash leafKey value)
   | hashValue == leafHash && equalKeys hashPolicy key leafKey = Just value
   | otherwise = Nothing
-lookupNode hashPolicy hashValue key _ (Collision collisionHash entries)
+lookupNode hashPolicy hashValue key _ (Collision _ collisionHash entries)
   | hashValue == collisionHash = lookupCollision hashPolicy key entries
   | otherwise = Nothing
-lookupNode hashPolicy hashValue key shift (Branch dataMap nodeMap payloads children)
+lookupNode hashPolicy hashValue key shift (Branch _ dataMap nodeMap payloads children)
   | dataMap .&. bit /= 0 =
       let (_, candidate, value) = payloads !! childIndex dataMap bit
        in if equalKeys hashPolicy key candidate then Just value else Nothing
@@ -267,10 +471,10 @@ actualKeyNode _ _ _ _ EmptyNode = Nothing
 actualKeyNode hashPolicy hashValue key _ (Leaf leafHash leafKey _)
   | hashValue == leafHash && equalKeys hashPolicy key leafKey = Just leafKey
   | otherwise = Nothing
-actualKeyNode hashPolicy hashValue key _ (Collision collisionHash entries)
+actualKeyNode hashPolicy hashValue key _ (Collision _ collisionHash entries)
   | hashValue == collisionHash = actualKeyCollision hashPolicy key entries
   | otherwise = Nothing
-actualKeyNode hashPolicy hashValue key shift (Branch dataMap nodeMap payloads children)
+actualKeyNode hashPolicy hashValue key shift (Branch _ dataMap nodeMap payloads children)
   | dataMap .&. bit /= 0 =
       let (_, candidate, _) = payloads !! childIndex dataMap bit
        in if equalKeys hashPolicy key candidate then Just candidate else Nothing
@@ -292,25 +496,25 @@ insertNode hashPolicy addOnly hashValue key value shift (Leaf leafHash leafKey l
   | hashValue == leafHash && equalKeys hashPolicy key leafKey =
       if addOnly then Duplicate else Replaced (Leaf leafHash leafKey value)
   | otherwise = Inserted (mergeTwo shift leafHash (Leaf leafHash leafKey leafValue) hashValue (Leaf hashValue key value))
-insertNode hashPolicy addOnly hashValue key value shift (Collision collisionHash entries)
+insertNode hashPolicy addOnly hashValue key value shift (Collision _ collisionHash entries)
   | hashValue == collisionHash =
       case insertCollision hashPolicy addOnly key value entries of
-        InsertedEntries entries' -> Inserted (Collision collisionHash entries')
-        ReplacedEntries entries' -> Replaced (Collision collisionHash entries')
+        InsertedEntries entries' -> Inserted (makeCollision collisionHash entries')
+        ReplacedEntries entries' -> Replaced (makeCollision collisionHash entries')
         DuplicateEntry -> Duplicate
-  | otherwise = Inserted (mergeTwo shift collisionHash (Collision collisionHash entries) hashValue (Leaf hashValue key value))
-insertNode hashPolicy addOnly hashValue key value shift (Branch dataMap nodeMap payloads children)
+  | otherwise = Inserted (mergeTwo shift collisionHash (makeCollision collisionHash entries) hashValue (Leaf hashValue key value))
+insertNode hashPolicy addOnly hashValue key value shift (Branch _ dataMap nodeMap payloads children)
   | dataMap .&. bit /= 0 =
       let dataIndex = childIndex dataMap bit
           (leafHash, leafKey, leafValue) = payloads !! dataIndex
        in if hashValue == leafHash && equalKeys hashPolicy key leafKey
             then if addOnly
               then Duplicate
-              else Replaced (Branch dataMap nodeMap (replaceAt dataIndex (leafHash, leafKey, value) payloads) children)
+              else Replaced (makeBranchNode dataMap nodeMap (replaceAt dataIndex (leafHash, leafKey, value) payloads) children)
             else
               let child = mergeTwo (shift + bitsPerLevel) leafHash (Leaf leafHash leafKey leafValue) hashValue (Leaf hashValue key value)
                in Inserted
-                    (Branch
+                    (makeBranchNode
                       (dataMap .&. complement bit)
                       (nodeMap .|. bit)
                       (removeAt dataIndex payloads)
@@ -318,11 +522,11 @@ insertNode hashPolicy addOnly hashValue key value shift (Branch dataMap nodeMap 
   | nodeMap .&. bit /= 0 =
       let nodeIndex = childIndex nodeMap bit
        in case insertNode hashPolicy addOnly hashValue key value (shift + bitsPerLevel) (children !! nodeIndex) of
-            Inserted child -> Inserted (Branch dataMap nodeMap payloads (replaceAt nodeIndex child children))
-            Replaced child -> Replaced (Branch dataMap nodeMap payloads (replaceAt nodeIndex child children))
+            Inserted child -> Inserted (makeBranchNode dataMap nodeMap payloads (replaceAt nodeIndex child children))
+            Replaced child -> Replaced (makeBranchNode dataMap nodeMap payloads (replaceAt nodeIndex child children))
             Duplicate -> Duplicate
   | otherwise =
-      Inserted (Branch (dataMap .|. bit) nodeMap (insertAt (childIndex dataMap bit) (hashValue, key, value) payloads) children)
+      Inserted (makeBranchNode (dataMap .|. bit) nodeMap (insertAt (childIndex dataMap bit) (hashValue, key, value) payloads) children)
   where
     bit = bitFor hashValue shift
 
@@ -347,13 +551,13 @@ removeNode _ _ _ _ EmptyNode = Missing
 removeNode hashPolicy hashValue key _ (Leaf leafHash leafKey value)
   | hashValue == leafHash && equalKeys hashPolicy key leafKey = Removed EmptyNode value
   | otherwise = Missing
-removeNode hashPolicy hashValue key _ (Collision collisionHash entries)
+removeNode hashPolicy hashValue key _ (Collision _ collisionHash entries)
   | hashValue /= collisionHash = Missing
   | otherwise =
       case removeCollision hashPolicy key entries of
         Nothing -> Missing
         Just (value, remaining) -> Removed (entriesToNode collisionHash remaining) value
-removeNode hashPolicy hashValue key shift branch@(Branch dataMap nodeMap payloads children)
+removeNode hashPolicy hashValue key shift branch@(Branch _ dataMap nodeMap payloads children)
   | dataMap .&. bit /= 0 =
       let index = childIndex dataMap bit
           (leafHash, leafKey, value) = payloads !! index
@@ -399,25 +603,25 @@ adjustNode hashPolicy updater hashValue key _ (Leaf leafHash leafKey value)
       let !updated = updater value
        in Adjusted (Leaf leafHash leafKey updated)
   | otherwise = NotFound
-adjustNode hashPolicy updater hashValue key _ (Collision collisionHash entries)
+adjustNode hashPolicy updater hashValue key _ (Collision _ collisionHash entries)
   | hashValue /= collisionHash = NotFound
   | otherwise =
       case adjustCollision hashPolicy updater key entries of
         Nothing -> NotFound
-        Just entries' -> Adjusted (Collision collisionHash entries')
-adjustNode hashPolicy updater hashValue key shift (Branch dataMap nodeMap payloads children)
+        Just entries' -> Adjusted (makeCollision collisionHash entries')
+adjustNode hashPolicy updater hashValue key shift (Branch _ dataMap nodeMap payloads children)
   | dataMap .&. bit /= 0 =
       let index = childIndex dataMap bit
           (leafHash, leafKey, value) = payloads !! index
        in if leafHash == hashValue && equalKeys hashPolicy key leafKey
             then let !updated = updater value
-                  in Adjusted (Branch dataMap nodeMap (replaceAt index (leafHash, leafKey, updated) payloads) children)
+                  in Adjusted (makeBranchNode dataMap nodeMap (replaceAt index (leafHash, leafKey, updated) payloads) children)
             else NotFound
   | nodeMap .&. bit /= 0 =
       let index = childIndex nodeMap bit
        in case adjustNode hashPolicy updater hashValue key (shift + bitsPerLevel) (children !! index) of
             NotFound -> NotFound
-            Adjusted child -> Adjusted (Branch dataMap nodeMap payloads (replaceAt index child children))
+            Adjusted child -> Adjusted (makeBranchNode dataMap nodeMap payloads (replaceAt index child children))
   | otherwise = NotFound
   where
     bit = bitFor hashValue shift
@@ -430,15 +634,24 @@ adjustCollision hashPolicy updater key ((candidate, value) : rest)
        in Just ((candidate, updated) : rest)
   | otherwise = ((candidate, value) :) <$> adjustCollision hashPolicy updater key rest
 
+makeCollision :: Word32 -> [(k, v)] -> Node k v
+makeCollision hashValue entries = Collision (length entries) hashValue entries
+
+makeBranchNode :: Word32 -> Word32 -> [(Word32, k, v)] -> [Node k v] -> Node k v
+makeBranchNode dataMap nodeMap payloads children =
+  Branch count dataMap nodeMap payloads children
+  where
+    count = length payloads + sum (map nodeCardinality children)
+
 entriesToNode :: Word32 -> [(k, v)] -> Node k v
 entriesToNode _ [] = EmptyNode
 entriesToNode hashValue [(key, value)] = Leaf hashValue key value
-entriesToNode hashValue entries = Collision hashValue entries
+entriesToNode hashValue entries = makeCollision hashValue entries
 
 mergeTwo :: Int -> Word32 -> Node k v -> Word32 -> Node k v -> Node k v
 mergeTwo shift leftHash leftNode rightHash rightNode
-  | shift >= hashBits = Collision leftHash (nodeEntries leftNode ++ nodeEntries rightNode)
-  | leftBit == rightBit = Branch 0 leftBit [] [mergeTwo (shift + bitsPerLevel) leftHash leftNode rightHash rightNode]
+  | shift >= hashBits = makeCollision leftHash (nodeEntries leftNode ++ nodeEntries rightNode)
+  | leftBit == rightBit = makeBranchNode 0 leftBit [] [mergeTwo (shift + bitsPerLevel) leftHash leftNode rightHash rightNode]
   | otherwise = makeBranch leftBit leftNode rightBit rightNode
   where
     leftBit = bitFor leftHash shift
@@ -447,13 +660,13 @@ mergeTwo shift leftHash leftNode rightHash rightNode
 nodeEntries :: Node k v -> [(k, v)]
 nodeEntries EmptyNode = []
 nodeEntries (Leaf _ key value) = [(key, value)]
-nodeEntries (Collision _ entries) = entries
-nodeEntries (Branch _ _ payloads children) =
+nodeEntries (Collision _ _ entries) = entries
+nodeEntries (Branch _ _ _ payloads children) =
   [(key, value) | (_, key, value) <- payloads] ++ concatMap nodeEntries children
 
 makeBranch :: Word32 -> Node k v -> Word32 -> Node k v -> Node k v
 makeBranch leftBit leftNode rightBit rightNode =
-  Branch dataMap nodeMap payloads children
+  makeBranchNode dataMap nodeMap payloads children
   where
     slots = if leftBit < rightBit then [(leftBit, leftNode), (rightBit, rightNode)] else [(rightBit, rightNode), (leftBit, leftNode)]
     payloadSlots = [(bit, hashValue, key, value) | (bit, Leaf hashValue key value) <- slots]
@@ -469,13 +682,13 @@ makeBranch leftBit leftNode rightBit rightNode =
 normalizeBranch :: Word32 -> Word32 -> [(Word32, k, v)] -> [Node k v] -> Node k v
 normalizeBranch 0 0 _ _ = EmptyNode
 normalizeBranch _ 0 [(hashValue, key, value)] [] = Leaf hashValue key value
-normalizeBranch 0 _ [] [child@(Collision _ _)] = child
-normalizeBranch dataMap nodeMap payloads children = Branch dataMap nodeMap payloads children
+normalizeBranch 0 _ [] [child@(Collision _ _ _)] = child
+normalizeBranch dataMap nodeMap payloads children = makeBranchNode dataMap nodeMap payloads children
 
 singletonPayload :: Node k v -> Maybe (Word32, k, v)
 singletonPayload (Leaf hashValue key value) = Just (hashValue, key, value)
-singletonPayload (Collision hashValue [(key, value)]) = Just (hashValue, key, value)
-singletonPayload (Branch _ 0 [(hashValue, key, value)] []) = Just (hashValue, key, value)
+singletonPayload (Collision _ hashValue [(key, value)]) = Just (hashValue, key, value)
+singletonPayload (Branch _ _ 0 [(hashValue, key, value)] []) = Just (hashValue, key, value)
 singletonPayload _ = Nothing
 
 mapNode :: (v -> w) -> Node k v -> Node k w
@@ -483,19 +696,19 @@ mapNode _ EmptyNode = EmptyNode
 mapNode mapper (Leaf hashValue key value) =
   let !mapped = mapper value
    in Leaf hashValue key mapped
-mapNode mapper (Collision hashValue entries) =
+mapNode mapper (Collision count hashValue entries) =
   let !mappedEntries = mapEntriesStrict entries
-   in Collision hashValue mappedEntries
+   in Collision count hashValue mappedEntries
   where
     mapEntriesStrict [] = []
     mapEntriesStrict ((key, value) : rest) =
       let !mapped = mapper value
           !mappedRest = mapEntriesStrict rest
        in (key, mapped) : mappedRest
-mapNode mapper (Branch dataMap nodeMap payloads children) =
+mapNode mapper (Branch count dataMap nodeMap payloads children) =
   let !mappedPayloads = mapPayloadsStrict payloads
       !mappedChildren = mapNodesStrict children
-   in Branch dataMap nodeMap mappedPayloads mappedChildren
+   in Branch count dataMap nodeMap mappedPayloads mappedChildren
   where
     mapPayloadsStrict [] = []
     mapPayloadsStrict ((hashValue, key, value) : rest) =
@@ -511,8 +724,8 @@ mapNode mapper (Branch dataMap nodeMap payloads children) =
 foldrNode :: ((k, v) -> b -> b) -> b -> Node k v -> b
 foldrNode _ seed EmptyNode = seed
 foldrNode folder seed (Leaf _ key value) = folder (key, value) seed
-foldrNode folder seed (Collision _ entries) = foldr folder seed entries
-foldrNode folder seed (Branch _ _ payloads children) =
+foldrNode folder seed (Collision _ _ entries) = foldr folder seed entries
+foldrNode folder seed (Branch _ _ _ payloads children) =
   let childSeed = foldr (flip (foldrNode folder)) seed children
    in foldr (\(_, key, value) acc -> folder (key, value) acc) childSeed payloads
 

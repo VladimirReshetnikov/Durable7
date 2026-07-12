@@ -9,7 +9,8 @@ This package ports the repository's persistent map cores to Haskell. It provides
 `HashMap` and `HashSet` values with a canonical 32-way CHAMP trie, strict split data/node maps,
 inline payload runs, immutable equal-hash collision buckets, structural sharing between versions,
 and optional runtime `HashPolicy` values for custom hash/equality behavior. Maps expose semantic
-`mapEquals` and typed `MapDifference` classification.
+`mapEquals`, typed `MapDifference` classification, and right-valued union, left-valued
+intersection, difference, and symmetric difference implemented by direct CHAMP-slot combination.
 
 `Data.Structures.Hamt.MerkleEncoding`, `Data.Structures.Hamt.MerkleSearchTree`, and
 `Data.Structures.Hamt.MerklePersistence` provide the policy-bound canonical Merkle search tree.
@@ -25,7 +26,8 @@ present/absent-safe three-way merge. See the dedicated
 
 The HAMT default factories use the package-local `Hashable` class plus `Eq`, keeping the public
 shape close to Haskell's `containers` style.
-`HashMap.validStructure` provides a key/value-agnostic diagnostic for cached cardinality and
+`HashMap.validStructure` provides a key/value-agnostic diagnostic for cached branch/collision
+cardinality and
 canonical node shape, including child-only node runs, bitmap cardinality, singleton payload
 promotion, and collision-bucket demotion after deletion.
 
@@ -38,10 +40,13 @@ The local [test README](test/README.md) lists the deterministic coverage areas.
 
 Enumeration follows trie bitmap order and collision-bucket order: stable for an unchanged
 version, but neither insertion order nor sorted order (matching the C# reference's documented
-contract). `mapEquals` and `diff` require semantically compatible `HashPolicy` values and interpret
+contract). Structural algebra uses GHC's one-way pointer-identity primitive to prune identical
+immutable roots, subtries, and policy values without hashing. A negative pointer comparison never
+affects semantics: the right operand is normalized under the receiver policy before combination.
+`mapEquals` and `diff` require semantically compatible `HashPolicy` values and interpret
 left keys through the right map where applicable. This is a documented caller precondition because
-Haskell functions have no decidable identity; unlike C#, the library cannot enforce comparer-object
-identity.
+Haskell functions have no semantic equality operation for functions; pointer identity is used only
+as a safe positive optimization, not as a compatibility verdict.
 
 `Data.Structures.Hamt.Patricia` adds `IntMap32`/`IntSet32` and `IntMap64`/`IntSet64`. The shared
 strict big-endian Patricia core sign-flips keys for ascending signed traversal, compresses common

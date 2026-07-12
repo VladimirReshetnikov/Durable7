@@ -91,68 +91,42 @@ tryRemove value (HashSet values) =
     Nothing -> Nothing
 
 union :: HashSet a -> HashSet a -> HashSet a
-union left right = List.foldl' (flip insert) left (toList right)
-
--- Membership in every binary relation below is judged under the receiver's
--- (left operand's) policy, matching the C# reference, which materializes its
--- probe set with this.Comparer; the argument's own policy never decides.
-probeWithReceiverPolicy :: HashSet a -> HashSet a -> HashSet a
-probeWithReceiverPolicy receiver argument =
-  List.foldl' (flip insert) (clear receiver) (toList argument)
+union (HashSet left) (HashSet right) = HashSet (HashMap.union left right)
 
 intersection :: HashSet a -> HashSet a -> HashSet a
-intersection left right = List.foldl' addIfMember (clear left) (toList left)
-  where
-    probe = probeWithReceiverPolicy left right
-    addIfMember result value
-      | member value probe = insert value result
-      | otherwise = result
+intersection (HashSet left) (HashSet right) = HashSet (HashMap.intersection left right)
 
 difference :: HashSet a -> HashSet a -> HashSet a
-difference left right = List.foldl' (flip delete) left (toList right)
+difference (HashSet left) (HashSet right) = HashSet (HashMap.difference left right)
 
--- Toggles the argument's elements on the receiver (matching the C#
--- reference) instead of materializing union/intersection intermediates,
--- so untouched subtrees stay structurally shared. The argument is first
--- deduplicated under the receiver's policy: elements that are duplicates
--- to the receiver must toggle once, not cancel out pairwise.
+-- Structural map combination deduplicates the argument under the receiver's
+-- policy before toggling when the policy objects are not pointer-identical.
 symmetricDifference :: HashSet a -> HashSet a -> HashSet a
-symmetricDifference left right =
-  List.foldl' toggle left (toList (probeWithReceiverPolicy left right))
-  where
-    toggle result value
-      | member value result = delete value result
-      | otherwise = insert value result
+symmetricDifference (HashSet left) (HashSet right) =
+  HashSet (HashMap.symmetricDifference left right)
 
 isSubsetOf :: HashSet a -> HashSet a -> Bool
-isSubsetOf left right = all (`member` probeWithReceiverPolicy left right) (toList left)
+isSubsetOf left right = size (intersection left right) == size left
 
--- The strictness comparisons below use the probe's size, not the argument's
--- raw size: the C# reference counts the probe set materialized under the
--- receiver's comparer, so argument elements that collapse under the
--- receiver's policy count once.
+-- Strictness uses the structurally normalized union/intersection sizes, so
+-- argument elements that collapse under the receiver's policy count once.
 isProperSubsetOf :: HashSet a -> HashSet a -> Bool
 isProperSubsetOf left right =
-  size left < size probe && all (`member` probe) (toList left)
-  where
-    probe = probeWithReceiverPolicy left right
+  isSubsetOf left right && size (union left right) > size left
 
 isSupersetOf :: HashSet a -> HashSet a -> Bool
-isSupersetOf left right = all (`member` left) (toList right)
+isSupersetOf left right = size (union left right) == size left
 
 isProperSupersetOf :: HashSet a -> HashSet a -> Bool
 isProperSupersetOf left right =
-  size left > size (probeWithReceiverPolicy left right) && isSupersetOf left right
+  isSupersetOf left right && size (intersection left right) < size left
 
 overlaps :: HashSet a -> HashSet a -> Bool
-overlaps left right = any (`member` left) (toList right)
+overlaps left right = not (null (intersection left right))
 
 setEquals :: HashSet a -> HashSet a -> Bool
 setEquals left right =
-  size left == probeSize && all (`member` probe) (toList left)
-  where
-    probe = probeWithReceiverPolicy left right
-    probeSize = size probe
+  size (intersection left right) == size left && size (union left right) == size left
 
 toList :: HashSet a -> [a]
 toList (HashSet values) = HashMap.keys values
