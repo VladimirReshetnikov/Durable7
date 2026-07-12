@@ -16,12 +16,15 @@ dependency-free validation.
   and intentional differences from the C# and native ports.
 - [Merkle search tree](merkle-search-tree.md) specifies the `mst-sha256-b16-v2` policy domain,
   strict canonical codecs, SHA-256 key layering, immutable wide-tree operations, exact `MST2`
-  block framing, reference semantics, and validation invariants.
+  block framing, verified persistence, exact `MSP2` proofs, synchronization, three-way merge,
+  reference semantics, and validation invariants.
 - [Validation](validation.md) records the `src/Kotlin/build.ps1` command shape, JDK/Kotlin compiler
   bootstrap behavior, generated-output locations, and the coverage boundary for the executable tests.
 - [Tests README](../tests/README.md) maps deterministic executable coverage for collisions, root
   sharing, replacement, key retention, iteration, set algebra, Merkle golden bytes, canonical
-  history convergence, structural sharing, randomized retained versions, and concurrent readers.
+  history convergence, structural sharing, bounded hostile-input rejection, proof tampering,
+  iterative synchronization, present-null merge conflicts, randomized retained versions, and
+  concurrent readers/stores.
 
 ## Related Repository Docs
 

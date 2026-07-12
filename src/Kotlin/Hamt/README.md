@@ -36,6 +36,11 @@ nibbles select levels, consecutive same-level separators share one immutable wid
 independent histories converge to the same topology, exact `MST2` bytes, and root digest. Persistent
 updates preserve first-equivalent-key/last-value semantics and share untouched node references.
 Strict built-ins cover big-endian `Int`/`Long`, nullable UTF-8, nullable bytes, and RFC-4122 UUIDs.
+The persistence tier adds immutable content-addressed blocks, a concurrent memory store, complete
+and partial transfer packs, bounded verified load/import, exact `MSP2` point and range proofs,
+frontier synchronization, and typed three-way merge that distinguishes deletion from a present
+nullable value. Seven finite verification limits bound untrusted blocks, bytes, depth, entries,
+child references, and proof queries before allocation or codec work.
 See [Merkle search tree](docs/merkle-search-tree.md) for the exact framing and API contract.
 
 Validate from `src/Kotlin`:

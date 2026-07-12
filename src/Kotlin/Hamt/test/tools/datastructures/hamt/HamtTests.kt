@@ -420,6 +420,7 @@ public fun main() {
         "patriciaMapsAndSetsPreserveSignedOrder" to ::patriciaMapsAndSetsPreserveSignedOrder,
         "patriciaCombiningCountsAndNoOps" to ::patriciaCombiningCountsAndNoOps,
         "merkleSearchTreeCoreAndWire" to ::runMerkleSearchTreeTests,
+        "merklePersistenceProofSyncAndMerge" to ::runMerklePersistenceTests,
     )
 
     for ((name, test) in tests) {

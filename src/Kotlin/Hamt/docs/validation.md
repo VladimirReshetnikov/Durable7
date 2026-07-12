@@ -39,3 +39,23 @@ Merkle search-tree coverage includes:
 - a 12,000-operation retained-version model against `TreeMap`, concurrent snapshot readers, exact
   five-level adversarial geometry, and eight independent churn histories converging to identical
   roots, topology, statistics, and block bytes.
+
+The persistence tier additionally validates:
+
+- complete save/load/import round trips, store-completed partial packs, deterministic exports, and
+  exact re-exported closure bytes;
+- missing, tampered, malformed, noncanonical, foreign-domain, unsupported-algorithm, authenticated
+  subtree-count, and crossed-child-reference rejection;
+- each of the seven finite verification limits independently, including proof-query rejection
+  before any codec invocation or block accounting;
+- preflight conflict failures with zero destination writes, iterative missing-frontier repair, and
+  closure-pruned synchronization packs;
+- byte-exact `MSP2` membership, nonmembership, and inclusive-range descriptors, plus altered query,
+  value, block, expansion, omission, duplicate, and unreachable-step failures;
+- disjoint, identical, conflicting, resolved, deleted, and present-null three-way merges with no
+  partial result exposed while any conflict remains; and
+- eight-thread idempotent store writes, conflicting-address rejection, sorted digest snapshots,
+  and defensive block/proof byte ownership.
+
+For the stricter compiler gate used during persistence work, compile the same `Hamt/src` and
+`Hamt/test` source set with Kotlin 2.4.0 and `-Werror`; the workspace is warning-clean.

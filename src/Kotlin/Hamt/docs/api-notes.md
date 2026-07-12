@@ -16,6 +16,10 @@ Primary entry points:
 - `MerkleSearchTree<K, V>`, `MerkleSearchTreePolicy<K, V>`, `MerkleEntry<K, V>`, and the
   `MerkleMapDifference<K, V>` variants.
 - `MerkleCodec<T>`, `MerkleDigest`, the strict built-in codecs, and `MerkleEncodedBlock`.
+- `MerkleBlock`, `MerkleBlockStore`, `InMemoryMerkleBlockStore`, `MerkleBlockPack`, and
+  `MerkleVerificationBudget` for verified persistence.
+- `MerkleProof`, `MerkleProofStep`, `MerkleProofKind`, `MerkleSyncPlan`, and the typed
+  `MerkleMergeValue` / `MerkleMergeResolution` / `MerkleThreeWayMergeResult` family.
 
 The port follows the repository HAMT semantics:
 
@@ -90,4 +94,12 @@ and `sharesRootWith` expose deterministic diagnostics without making nodes mutab
 strict key order, child intervals, cached bounds/counts/heights, exact block bytes, and SHA-256
 content addresses. It therefore rejects caller mutation that makes a retained object disagree with
 the canonical bytes captured at insertion. See [Merkle search tree](merkle-search-tree.md) for the
-complete policy and `MST2` wire contract.
+complete policy, `MST2` block, `MSP2` proof, verified-load, synchronization, and merge contracts.
+
+Persistence operations are exposed through instance extensions (`save`, `exportPack`,
+`createSyncPack`, `planSync`, `createProof`, and `createRangeProof`) and companion members
+(`load`, `importPack`, `verifyProof`, and `merge`). Kotlin uses `importPack` because `import` is a
+language keyword. Load/import never publish a tree before the complete reachable closure has passed
+digest, codec, canonical-byte, count, ordering, level, and child-interval validation. Import may
+overlay a partial pack on an existing store, but it does not write supplied blocks until the full
+closure verifies and every existing address conflict has been preflighted.

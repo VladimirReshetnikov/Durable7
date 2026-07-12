@@ -137,6 +137,39 @@ public class MerkleSearchTree<K, V> private constructor(
             root: MerkleNode<K, V>?,
             policy: MerkleSearchTreePolicy<K, V>,
         ): MerkleSearchTree<K, V> = MerkleSearchTree(root, policy)
+
+        /** Loads and fully verifies a content-addressed block closure under finite limits. */
+        public fun <K, V> load(
+            rootHash: MerkleDigest,
+            policy: MerkleSearchTreePolicy<K, V>,
+            store: MerkleBlockStore,
+            budget: MerkleVerificationBudget = MerkleVerificationBudget(),
+        ): MerkleSearchTree<K, V> = loadMerkleTree(rootHash, policy, store, budget)
+
+        /** Verifies and imports a complete or store-completed partial block pack. */
+        public fun <K, V> importPack(
+            pack: MerkleBlockPack,
+            policy: MerkleSearchTreePolicy<K, V>,
+            destinationStore: MerkleBlockStore? = null,
+            budget: MerkleVerificationBudget = MerkleVerificationBudget(),
+        ): MerkleSearchTree<K, V> = importMerklePack(pack, policy, destinationStore, budget)
+
+        /** Verifies an untrusted exact `MSP2` proof under finite limits. */
+        public fun <K, V> verifyProof(
+            proof: MerkleProof,
+            policy: MerkleSearchTreePolicy<K, V>,
+            budget: MerkleVerificationBudget = MerkleVerificationBudget(),
+        ): MerkleProofVerificationResult = verifyMerkleProof(proof, policy, budget)
+
+        /** Combines two descendants relative to a common base without publishing partial conflicts. */
+        public fun <K, V> merge(
+            baseTree: MerkleSearchTree<K, V>,
+            left: MerkleSearchTree<K, V>,
+            right: MerkleSearchTree<K, V>,
+            resolver: ((MerkleThreeWayMergeConflict<K, V>) -> MerkleMergeResolution<V>)? = null,
+            valuesEqual: (V, V) -> Boolean = { first, second -> first == second },
+        ): MerkleThreeWayMergeResult<K, V> =
+            mergeMerkleTrees(baseTree, left, right, resolver, valuesEqual)
     }
 
     public val size: Int get() = root?.count ?: 0

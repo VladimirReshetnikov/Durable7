@@ -36,3 +36,12 @@ Coverage groups:
 - Merkle structural sharing, nullable values, typed diff, inclusive ranges, first-equivalent-key
   retention, caller reference semantics, mutated-representative validation, randomized retained-
   version models, and concurrent readers.
+- immutable block/store/pack ownership, exact closure save/load/import, partial-pack overlays,
+  deterministic explicit exports, and all seven finite hostile-input budgets;
+- missing/tampered/malformed/noncanonical/foreign blocks, authenticated count and interval
+  corruption, zero-write destination conflict preflight, and concurrent idempotent store access;
+- exact `MSP2` membership, nonmembership, and inclusive-range queries, canonical proof expansion,
+  early query-budget gating, altered/extra/omitted steps, and duplicate-envelope rejection;
+- closure-pruned complete packs and iterative frontier synchronization; and
+- typed three-way merge across disjoint, identical, unresolved, resolver-selected, deletion, and
+  present-null cases, with complete-output withholding and canonical-entry reuse.

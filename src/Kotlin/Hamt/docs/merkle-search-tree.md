@@ -3,12 +3,12 @@
 - Created (UTC): 2026-07-12T05:34:01Z
 - Repository HEAD: 2a2c92d10d308a18793067106b1ef10d3748f0ba
 - Audience: Maintainers and reviewers of the Kotlin Merkle search-tree core
-- Scope: Canonical policy, codec, immutable tree, and `MST2` wire contracts
+- Scope: Canonical policy, immutable tree, `MST2` blocks, persistence, proofs, synchronization, and merge
 
 The Kotlin HAMT workspace includes the safe-JVM port of the repository's paper-style wide Merkle
 search tree. It is an immutable ordered map whose topology and content addresses are functions of
 the final comparator-ordered contents, not the update history. This milestone owns the in-memory
-core and exact block encoding; repository-backed block persistence and loading are separate work.
+core, exact block encoding, verified persistence, succinct proofs, synchronization, and merge.
 
 ## Policy and Hash Domain
 
@@ -119,6 +119,118 @@ comparator order. All counts and lengths are signed 32-bit big-endian values con
 in-memory representation. `MerkleEncodedBlock` returns an owned byte copy and pairs it with the
 SHA-256 address used by its parent.
 
+## Blocks, Stores, and Packs
+
+`MerkleBlock` is the persistence value: a claimed `MerkleDigest` plus defensively copied complete
+bytes. Construction deliberately does not authenticate the pair because a store is format-agnostic;
+verified load/import/proof paths perform that work before constructing trusted tree state.
+
+`MerkleBlockStore` requires concurrent-safe immutable snapshots, idempotent identical writes, and
+typed `CONFLICTING_BLOCK` rejection when different bytes already occupy an address.
+`InMemoryMerkleBlockStore` implements this contract with `ConcurrentHashMap.putIfAbsent`; digest
+enumeration is a sorted point-in-time snapshot. `MerkleBlockPack` is an immutable logical envelope
+containing algorithm ID, domain, target root, and unique ordered blocks. Packs may be complete or
+partial, and there is intentionally no additional pack serialization format.
+
+The main persistence API is:
+
+- `tree.save(store)` after complete conflict preflight;
+- `tree.exportPack()` for deterministic preorder closure and `tree.exportPack(digests)` for unique
+  explicitly ordered addresses;
+- `MerkleSearchTree.load(root, policy, store, budget)` for a store closure; and
+- `MerkleSearchTree.importPack(pack, policy, destination, budget)` for a complete pack or a partial
+  pack whose missing closure is present in `destination`.
+
+Import authenticates every supplied block, verifies the declared reachable closure through a
+read-only staged overlay, runs final deep structure validation, then preflights destination address
+conflicts before its first write. Thus malformed input and known conflicts publish neither a tree
+nor a block prefix. As in the C# and Rust contracts, preflight is not a transaction against a
+concurrent second writer or an arbitrary custom store failure during later `put` calls.
+
+The requested root closure, not every unrelated pack address, is the publication boundary. A
+canonical supplied block outside that closure is authenticated as one block and may be committed to
+the destination as partial synchronization state; its descendants need not yet be present. Such a
+partial store is suitable for `planSync`, while `createSyncPack` may prune at a present address only
+when the receiver knows that address already represents a verified complete descendant closure.
+
+Untrusted decoding recomputes every digest and requires exact magic, tag, domain, unsigned level,
+positive counts, bounded lengths, strict comparator order, canonical codec round trips, key-derived
+levels, child arity, no trailing bytes, and exact block reserialization. Closure loading additionally
+checks cycles, decreasing child levels, complete child subtree bounds, declared subtree counts,
+requested root equality, and final `validateStructure` success.
+
+## Finite Verification Budgets
+
+`MerkleVerificationBudget` has seven positive finite limits. Defaults are one million unique blocks,
+one GiB total query-plus-block bytes, 16 MiB per block, depth 256, 100 million decoded entries,
+65,536 child references per block, and 16 MiB per proof query. Per-block and proof-query byte limits
+cannot exceed the total. When the query limit is omitted it follows the supplied per-block limit,
+matching the six-limit C#/Rust convenience contract.
+
+Verification applies limits before corresponding allocation or codec work. A proof accounts and
+checks its query before envelope validation, hashing, block decoding, or codec invocation. Each
+distinct block is depth/per-block/block-count/total-byte checked before parsing; declared entries
+and child references are checked before their arrays are allocated. Import reuses one accounting
+context across supplied-block predecode and closure traversal, so repeated addresses are not charged
+twice.
+
+## Exact `MSP2` Proof Queries
+
+`createProof` emits the canonical comparator-selected path for membership or nonmembership.
+`createRangeProof` emits every nonempty child interval intersecting an inclusive range. Each proof
+step carries a complete authenticated `MST2` block plus sorted unique indexes of children expanded
+by other steps; opaque child digests authenticate pruned boundaries.
+
+The query descriptor is the only additional canonical proof wire:
+
+```text
+"MSP2" kind:u8
+
+kind = 0 membership:
+  keyLength:int32be keyBytes
+  valueLength:int32be valueBytes
+
+kind = 1 nonmembership:
+  keyLength:int32be keyBytes
+
+kind = 2 inclusive range:
+  minimumLength:int32be minimumKeyBytes
+  maximumLength:int32be maximumKeyBytes
+```
+
+`MerkleSearchTree.verifyProof` authenticates every supplied step, validates exact query codec round
+trips and canonical expansion, checks expanded parent/child levels and separators, requires the
+declared nonempty root, and rejects duplicate, omitted, unreachable, or extra steps. Empty roots can
+prove only nonmembership or ranges and carry zero steps. `MerkleProofVerificationResult` reports a
+stable failure kind plus exactly accounted blocks and bytes without throwing for hostile proof data.
+
+## Synchronization
+
+`createSyncPack(receiverStore)` assumes each receiver-present address names a previously verified
+complete descendant closure and prunes below it. `planSync(localTree, receiverStore)` instead supports
+iterative repair of a partial store: it traverses the in-memory target, requests the first absent
+address on each reachable path, and stops below each request until the next round reveals that block's
+children. Examined block/byte counts describe target work. A caller stages successive explicit packs,
+then calls verified `load` or `importPack` before publishing the target tree.
+
+`requiresBlocks == false` does not by itself mean published roots already match: a staged target may
+be complete but not yet loaded, and an empty target needs no blocks. `rootsMatch` specifically compares
+the local published root with the target.
+
+## Typed Three-Way Merge
+
+`MerkleSearchTree.merge(base, left, right, resolver, valuesEqual)` requires one policy domain and uses
+root equality for whole-tree fast paths. Its ordered merge combines one-sided and equal descendant
+edits without invoking the resolver. Only keys changed differently on both sides become
+`MerkleThreeWayMergeConflict` values.
+
+`MerkleMergeValue.Absent` is distinct from `MerkleMergeValue.Present(null)`. Resolvers may leave a
+conflict unresolved, select base/left/right, delete, or supply a typed replacement value. Existing
+choices retain the exact entry objects and encoded byte snapshots; a custom replacement encodes only
+its new value while retaining the selected key representative and key bytes. Representative
+preference is left, then right, then base. If any conflicts remain, the result exposes every conflict
+and no partial tree; only a conflict-free result is publishable.
+
 The executable tests pin the full policy-domain, empty-tree, root, and node-block bytes to the exact
 C# and Rust golden vectors. This is byte-for-byte interoperability, not merely semantic equality.
 
@@ -141,4 +253,5 @@ Run all Kotlin workspaces with:
 ```
 
 See [validation](validation.md) and the [test map](../tests/README.md) for the model, adversarial,
-history-convergence, structural-sharing, nullable-value, and concurrent-reader coverage.
+history-convergence, structural-sharing, exact persistence/proof, seven-budget, synchronization,
+present-null merge, concurrent-reader, and concurrent-store coverage.
