@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-#![doc = "Persistent hash-array mapped trie map and set."]
+#![doc = "Persistent HAMT, Patricia, and canonical Merkle search-tree collections."]
 
 use std::collections::hash_map::RandomState;
 use std::fmt;
@@ -8,7 +8,20 @@ use std::iter::FusedIterator;
 use std::ops::Index;
 use std::sync::Arc;
 
+mod merkle_encoding;
+mod merkle_search_tree;
 mod patricia;
+pub use merkle_encoding::{
+    Int32MerkleCodec, Int64MerkleCodec, MerkleCodec, MerkleCodecError, MerkleDigest,
+    MerkleDigestParseError, MerkleDigestWriteError, MerkleKeyComparer, MerklePolicyError,
+    MerklePolicyField, MerkleSearchTreePolicy, NaturalMerkleKeyComparer, NullableBytesMerkleCodec,
+    NullableUtf8MerkleCodec, Rfc4122Guid, Rfc4122GuidMerkleCodec,
+};
+pub use merkle_search_tree::{
+    MerkleEntry, MerkleMapDifference, MerkleRangeError, MerkleRangeIter, MerkleSearchTree,
+    MerkleSearchTreeStatistics, MerkleShapeEntry, MerkleTreeError, MerkleTreeInvariantError,
+    MerkleTreeIter,
+};
 pub use patricia::{PersistentIntMap, PersistentIntSet, PersistentLongMap, PersistentLongSet};
 
 const BITS_PER_LEVEL: u32 = 5;

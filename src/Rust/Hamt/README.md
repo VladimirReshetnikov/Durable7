@@ -5,11 +5,12 @@
 - Audience: Maintainers and reviewers of the Rust HAMT port
 - Scope: Public crate shape, semantic parity notes, and validation entry point
 
-`tools-data-structures-hamt` ports the repository HAMT map and set to safe Rust. It exposes
-`PersistentHashMap<K, V, S = RandomState>`, `PersistentHashSet<T, S = RandomState>`, and
-`BulkBuilder<K, V, S = RandomState>`, the transient one-pass bulk constructor mirroring the C#
-reference (mutable unpublished nodes frozen into detached persistent nodes; used by `FromIterator`,
-set intersection, the set-relation probes, and the Tungsten association's index rebuilds).
+`tools-data-structures-hamt` ports the repository HAMT, integer Patricia, and canonical Merkle
+search-tree families to safe Rust. It exposes `PersistentHashMap<K, V, S = RandomState>`,
+`PersistentHashSet<T, S = RandomState>`, and `BulkBuilder<K, V, S = RandomState>`, the transient
+one-pass bulk constructor mirroring the C# reference (mutable unpublished nodes frozen into
+detached persistent nodes; used by `FromIterator`, set intersection, the set-relation probes, and
+the Tungsten association's index rebuilds).
 
 The trie follows the existing ports:
 
@@ -28,6 +29,16 @@ ascending signed iteration, path-compresses on the highest differing bit, shares
 subtrees, caches subtree cardinalities, and implements prefix-aware union, intersection, and
 difference. Map union and intersection also expose key/left/right combining forms without falling
 back to per-entry insertion.
+
+`MerkleSearchTree<K, V>` is the exact paper-style B=16 wide-tree port. A
+`MerkleSearchTreePolicy<K, V>` binds comparer semantics and explicitly versioned canonical codecs
+into the `mst-sha256-b16-v2` SHA-256 domain. Leading zero key-hash nibbles select levels;
+consecutive same-level separators share a wide immutable block. Consequently independently built
+maps with equal canonical content have the same shape, exact `MST2` block bytes, and root address.
+Updates copy one block path through `Arc`, preserve first-equivalent-key/last-value semantics, and
+require neither keys nor values to implement `Clone`. Built-in codecs cover big-endian `i32`/`i64`,
+nullable UTF-8, nullable bytes, and RFC-4122/network-order GUID bytes. See the dedicated
+[Merkle search tree notes](docs/merkle-search-tree.md) for the hash framing and wire manifest.
 
 Rust-specific shape:
 

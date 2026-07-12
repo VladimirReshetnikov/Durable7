@@ -14,10 +14,13 @@ borrowed lookup results, cloned removal results, or Cargo validation.
 - [API notes](api-notes.md) describe `PersistentHashMap<K, V, S>`, `PersistentHashSet<T, S>`,
   `DuplicateKey`, `BuildHasher` policy preservation, collision buckets, root-sharing diagnostics,
   iteration order, and Rust-specific result shapes.
+- [Merkle search tree](merkle-search-tree.md) specifies the Rust B=16 wide-tree API, policy domain,
+  built-in strict codecs, `MST2` block framing, canonical shape, and structural-sharing contract.
 - [Validation](validation.md) records the Cargo command, local rustup fallback path, safe-Rust boundary,
   and coverage map.
-- [Tests README](../tests/README.md) maps unit coverage for collisions, updates, iteration, set algebra,
-  and root-sharing behavior.
+- [Tests README](../tests/README.md) maps unit and integration coverage for collisions, updates,
+  iteration, set algebra, root-sharing behavior, canonical Merkle construction, and golden wire
+  vectors.
 
 ## Related Repository Docs
 

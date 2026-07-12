@@ -5,9 +5,11 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Persistent hash-array mapped trie map and set."
+description = "Persistent HAMT, Patricia, and canonical Merkle search-tree collections."
+
+[dependencies]
+sha2 = "0.10.9"
 
 [lib]
 name = "tools_data_structures_hamt"
 path = "src/lib.rs"
-

@@ -5,8 +5,9 @@
 - Audience: Maintainers navigating Rust HAMT test coverage
 - Scope: Test location, command, and coverage map
 
-Tests currently live inline in [`../src/lib.rs`](../src/lib.rs) and
-[`../src/patricia.rs`](../src/patricia.rs). Run them from `src/Rust`:
+HAMT and Patricia tests live inline in [`../src/lib.rs`](../src/lib.rs) and
+[`../src/patricia.rs`](../src/patricia.rs). Merkle core and wire tests live in
+[`merkle_core_wire.rs`](merkle_core_wire.rs). Run them from `src/Rust`:
 
 ```powershell
 .\test.ps1 -Workspace Hamt
@@ -26,3 +27,6 @@ Coverage groups:
 - 32/64-bit Patricia ordering and randomized histories, structural algebra, key/left/right map
   combiners, cached branch cardinalities, and receiver-root no-op identity;
 - `Send`/`Sync` assertions and spawned-thread readers over shared immutable snapshots.
+- strict Merkle codec and digest parsing, exact domain/empty/root/block golden vectors, canonical
+  wide-tree construction, retained-version model histories, structural sharing, ranges and diff,
+  non-`Clone` values, adversarial hash layers, and spawned-reader safety.

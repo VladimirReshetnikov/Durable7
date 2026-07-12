@@ -120,6 +120,9 @@ dependencies = [
 [[package]]
 name = "tools-data-structures-hamt"
 version = "0.1.0"
+dependencies = [
+ "sha2",
+]
 
 [[package]]
 name = "tools-data-structures-tungsten"

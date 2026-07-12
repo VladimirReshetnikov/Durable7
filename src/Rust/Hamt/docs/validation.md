@@ -14,7 +14,9 @@ Run from `src/Rust`:
 The wrapper locates Cargo on `PATH` or under the default rustup profile and applies inherited,
 non-interactive Windows error handling before Cargo starts the test executable.
 
-The crate uses `#![forbid(unsafe_code)]`. The unit tests are inline in `Hamt/src/lib.rs` and cover:
+The crate uses `#![forbid(unsafe_code)]`. HAMT and Patricia unit tests are inline in
+`Hamt/src/lib.rs` and `Hamt/src/patricia.rs`; Merkle core/wire integration tests live in
+`Hamt/tests/merkle_core_wire.rs`. Coverage includes:
 
 - persistent snapshot preservation;
 - no-op root sharing for equal-value replacement and absent removal;
@@ -28,4 +30,11 @@ The crate uses `#![forbid(unsafe_code)]`. The unit tests are inline in `Hamt/src
 - persistent set algebra and proper subset/superset relations;
 - transient bulk-builder snapshot detachment, first-key/last-value duplicate identity,
   final-hash-level splitting, and collision-heavy/branch-heavy differential agreement with
-  incremental construction.
+  incremental construction;
+- strict big-endian integer, nullable UTF-8/byte, and RFC-4122 GUID codec vectors and malformed
+  input rejection;
+- exact C#-shared domain, root, and `MST2` single-block golden bytes;
+- history-independent wide-tree construction, removal/reinsertion canonicality, inclusive ranges,
+  typed diff, path-copy sharing, and invariant re-encoding;
+- non-`Clone` values, retained randomized versions against `BTreeMap`, independently discovered
+  SHA-256 layers, and concurrent readers.

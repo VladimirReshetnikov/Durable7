@@ -14,8 +14,11 @@ Primary entry points:
 - `PersistentHashSet<T, S = RandomState>`;
 - `BulkBuilder<K, V, S = RandomState>`;
 - `DuplicateKey`;
-- `MapDifference<K, V>`.
+- `MapDifference<K, V>`;
 - `PersistentIntMap<V>` / `PersistentIntSet` and `PersistentLongMap<V>` / `PersistentLongSet`.
+- `MerkleSearchTree<K, V>`, `MerkleSearchTreePolicy<K, V>`, `MerkleEntry<K, V>`, and
+  `MerkleMapDifference<K, V>`;
+- `MerkleCodec<T>`, `MerkleDigest`, the strict built-in codecs, and `Rfc4122Guid`.
 
 The port follows the repository HAMT semantics:
 
@@ -86,3 +89,20 @@ and no key-set change is needed, the receiver root is preserved.
 Every Patricia branch caches its subtree cardinality. Updates maintain that invariant while
 rebuilding the affected path, and structural algebra reads the result count from the root in O(1)
 instead of traversing the merged tree after the operation.
+
+## Merkle search tree
+
+The Merkle family deliberately uses its own `MerkleKeyComparer<K>` and `MerkleCodec<T>` policy
+instead of Rust hashing. `MerkleSearchTreePolicy` retains those objects in `Arc`, hashes the
+algorithm ID, application policy ID, and both codec IDs into a domain digest, and rejects codec IDs
+without an explicit terminal `-v<digits>` suffix. Key codecs must be injective over comparer
+equivalence classes; value codecs must be canonical. Built-in decoders consume exactly one value
+and reject wrong widths, invalid nullable tags, null trailing data, and malformed UTF-8.
+
+Entries retain key/value objects and their encodings behind shared handles. `set_item`, `remove`,
+`clear`, canonical bulk construction, in-order/range iteration, map equality, semantic diff,
+shape/block diagnostics, and full invariant validation impose no `Clone` bound on `K` or `V`.
+Equivalent replacement keys preserve the first stored representative; the final value wins.
+Equal encoded replacements and absent removals preserve root identity.
+
+The complete format and shape contract is in [Merkle search tree](merkle-search-tree.md).
