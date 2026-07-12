@@ -536,6 +536,64 @@ static void test_deep_collisions_and_stack_safe_lifecycle(void)
     REQUIRE(context.outstanding_allocations == 0);
 }
 
+static void test_interior_removal_merge_seam(void)
+{
+    /*
+     * Regression for the removal-merge scratch overflow. ft_canonical_merge zips
+     * the right spine of a removed node's left child against the left spine of
+     * its right child, so its scratch path can reach roughly 2 * height steps -
+     * not the single root-to-leaf height. A prior revision sized that buffer for
+     * one path (height + 1), so removing an interior node of a tree taller than
+     * three wrote past the buffer. Build a tall pseudo-random treap and drain it
+     * in a scrambled order (which repeatedly removes near-root nodes with long
+     * merge seams), validating structure throughout. Under AddressSanitizer the
+     * prior sizing fails here; the corrected two-spine sizing plus the in-merge
+     * capacity guard keep it clean.
+     */
+    enum { count = 8192 };
+    test_context context;
+    ft_canonical_policy_config config;
+    ft_canonical_policy policy;
+    ft_canonical_sorted_set set;
+    test_value* values = (test_value*)malloc(count * sizeof(*values));
+    uint64_t random = UINT64_C(0x5eed5eed0badf00d);
+    size_t remaining = count;
+    bool valid = false;
+    ft_canonical_sorted_set_statistics statistics;
+    REQUIRE(values != NULL);
+    (void)memset(&context, 0, sizeof(context));
+    init_config(&config, &context);
+    REQUIRE_STATUS(
+        ft_canonical_policy_create_seeded(&policy, &config, UINT64_C(0xa11ce5ee0badf00d)),
+        FT_STATUS_OK);
+    for (int index = 0; index != count; ++index) {
+        values[index] = make_value(index, index);
+    }
+    REQUIRE_STATUS(ft_canonical_sorted_set_from_array(&set, &policy, values, count), FT_STATUS_OK);
+    /*
+     * Any tree of 8192 nodes is at least 14 levels tall, so removal seams for
+     * near-root interior nodes far exceed the old height + 1 scratch bound.
+     */
+    REQUIRE(ft_canonical_sorted_set_height(&set) >= 14);
+    shuffle(values, count, &random);
+    for (size_t index = 0; index != count; ++index) {
+        REQUIRE_STATUS(ft_canonical_sorted_set_remove(&set, &values[index], &set), FT_STATUS_OK);
+        --remaining;
+        REQUIRE(ft_canonical_sorted_set_size(&set) == remaining);
+        if (index % 256 == 0) {
+            REQUIRE_STATUS(ft_canonical_sorted_set_validate(&set, &valid, &statistics), FT_STATUS_OK);
+            REQUIRE(valid);
+            REQUIRE(statistics.count == remaining);
+        }
+    }
+    REQUIRE(ft_canonical_sorted_set_size(&set) == 0);
+    ft_canonical_sorted_set_dispose(&set);
+    ft_canonical_policy_dispose(&policy);
+    free(values);
+    REQUIRE(context.successful_copies == context.destroy_calls);
+    REQUIRE(context.outstanding_allocations == 0);
+}
+
 typedef struct key_collector {
     int* keys;
     size_t capacity;
@@ -1244,6 +1302,7 @@ int main(void)
     run_test("canonical crypto vectors and unsigned priority", test_crypto_vectors_and_priority);
     run_test("canonical topology and representatives", test_canonical_topology_and_representatives);
     run_test("canonical deep collisions and lifecycle", test_deep_collisions_and_stack_safe_lifecycle);
+    run_test("canonical interior removal merge seam", test_interior_removal_merge_seam);
     run_test("canonical randomized histories and snapshots", test_randomized_histories_and_snapshots);
     run_test("canonical algebra relations aliasing and sharing", test_algebra_relations_aliasing_and_sharing);
     run_test("canonical allocation and callback atomicity", test_allocation_and_callback_failure_atomicity);
