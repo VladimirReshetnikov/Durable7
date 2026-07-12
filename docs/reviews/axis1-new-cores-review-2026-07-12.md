@@ -377,6 +377,21 @@ All actionable findings from this review have been resolved on `codex/axis1-new-
 - All other findings are static-analysis findings with concrete failure scenarios; none was fixed in
   code this round, so no further build was required for them.
 
+Remediation validation on `codex/axis1-new-cores` after the table above:
+
+- `src/CSharp/test.ps1`: 968 tests pass across Numerics (319), Hamt (130), FingerTree (468), and
+  Tungsten (51).
+- `src/C/build.ps1 -Workspace Hamt -RunTests`: 27 HAMT groups, the Patricia executable, and 22 Merkle
+  groups pass; `-Workspace FingerTree -RunTests` passes all 8 CTest targets.
+- `src/Cpp/build.ps1 -Workspace Hamt -RunTests`: 36 HAMT/Patricia and 20 Merkle groups pass;
+  `-Workspace FingerTree -RunTests` passes all 23 CTest targets, including installed-consumer and
+  packaging coverage.
+- `src/Kotlin/build.ps1`: every Hamt, FingerTree, and Tungsten test group passes, including the new
+  Ctrie linearizability, CHAMP topology, wide Merkle, and RRB gates.
+- `src/Haskell/test.ps1`: Hamt, FingerTree, and Tungsten suites pass under GHC 9.12.4.
+- `src/Rust/test.ps1`: all 178 unit/integration tests and the compile-fail documentation test pass,
+  including Hamt wire/persistence and the new RRB over-height rejection.
+
 ## Relationship to other documents
 
 - [Frontier structure catalog](../reference/frontier-structure-catalog.md) — the intended per-language
