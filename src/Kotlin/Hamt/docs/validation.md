@@ -22,7 +22,9 @@ the test JVM in AWT headless mode so failures stay on the console and return a n
 The test executable covers map persistence, no-op root sharing, duplicate-key rejection, equal-hash
 collision buckets, trie-order iteration, last-wins replacement with original-key retention, and set
 algebra, including relations between sets built with different policies where the receiver's policy
-is authoritative.
+is authoritative. Same-policy tests additionally pin self-operation instance identity, zero
+rehashing, reference-pruned shared ancestry, all four structural algebra truth tables, and randomized
+set models.
 It also covers the mutable Ctrie's node-local GCAS and root/main RDCSS helping, a deterministic
 snapshot-versus-committed-writer schedule, deep and equal-hash tomb contraction, lazy renewal after
 snapshot, contended same-key updates, explicit conversion back to persistent CHAMP, and a 250-round

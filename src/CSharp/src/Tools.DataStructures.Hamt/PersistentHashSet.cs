@@ -321,7 +321,8 @@ public sealed class PersistentHashSet<T> : IReadOnlySet<T>
     public bool IsSubsetOf(PersistentHashSet<T> other)
     {
         ArgumentNullException.ThrowIfNull(other);
-        EnsureCompatible(other);
+        if (!ReferenceEquals(Comparer, other.Comparer))
+            return IsSubsetOf((IEnumerable<T>)other);
         return Count <= other.Count && ReferenceEquals(_map.Intersect(other._map), _map);
     }
 
@@ -329,7 +330,8 @@ public sealed class PersistentHashSet<T> : IReadOnlySet<T>
     public bool IsProperSubsetOf(PersistentHashSet<T> other)
     {
         ArgumentNullException.ThrowIfNull(other);
-        EnsureCompatible(other);
+        if (!ReferenceEquals(Comparer, other.Comparer))
+            return IsProperSubsetOf((IEnumerable<T>)other);
         return Count < other.Count && IsSubsetOf(other);
     }
 
@@ -337,7 +339,8 @@ public sealed class PersistentHashSet<T> : IReadOnlySet<T>
     public bool IsSupersetOf(PersistentHashSet<T> other)
     {
         ArgumentNullException.ThrowIfNull(other);
-        EnsureCompatible(other);
+        if (!ReferenceEquals(Comparer, other.Comparer))
+            return IsSupersetOf((IEnumerable<T>)other);
         return other.IsSubsetOf(this);
     }
 
@@ -345,7 +348,8 @@ public sealed class PersistentHashSet<T> : IReadOnlySet<T>
     public bool IsProperSupersetOf(PersistentHashSet<T> other)
     {
         ArgumentNullException.ThrowIfNull(other);
-        EnsureCompatible(other);
+        if (!ReferenceEquals(Comparer, other.Comparer))
+            return IsProperSupersetOf((IEnumerable<T>)other);
         return Count > other.Count && other.IsSubsetOf(this);
     }
 
@@ -353,7 +357,8 @@ public sealed class PersistentHashSet<T> : IReadOnlySet<T>
     public bool Overlaps(PersistentHashSet<T> other)
     {
         ArgumentNullException.ThrowIfNull(other);
-        EnsureCompatible(other);
+        if (!ReferenceEquals(Comparer, other.Comparer))
+            return Overlaps((IEnumerable<T>)other);
         if (ReferenceEquals(_map.RootForTesting, other._map.RootForTesting))
             return Count != 0;
         return _map.Intersect(other._map).Count != 0;
@@ -363,7 +368,8 @@ public sealed class PersistentHashSet<T> : IReadOnlySet<T>
     public bool SetEquals(PersistentHashSet<T> other)
     {
         ArgumentNullException.ThrowIfNull(other);
-        EnsureCompatible(other);
+        if (!ReferenceEquals(Comparer, other.Comparer))
+            return SetEquals((IEnumerable<T>)other);
         return _map.MapEquals(other._map);
     }
 
@@ -555,12 +561,6 @@ public sealed class PersistentHashSet<T> : IReadOnlySet<T>
 
     private PersistentHashSet<T> WithMap(PersistentHashMap<T, Unit> map) =>
         ReferenceEquals(map, _map) ? this : Wrap(map);
-
-    private void EnsureCompatible(PersistentHashSet<T> other)
-    {
-        if (!ReferenceEquals(Comparer, other.Comparer))
-            throw new ArgumentException("Sets must use the same comparer object.", nameof(other));
-    }
 
     /// <summary>
     /// Enumerates the items in a <see cref="PersistentHashSet{T}"/>.

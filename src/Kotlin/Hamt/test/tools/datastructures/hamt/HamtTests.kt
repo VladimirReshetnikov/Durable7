@@ -24,6 +24,14 @@ private class ModuloTenPolicy : HashPolicy<Int> {
     override fun equivalent(left: Int, right: Int): Boolean = left.mod(10) == right.mod(10)
 }
 
+private class CountingIntPolicy : HashPolicy<Int> {
+    var hashCalls: Int = 0
+    var equalityCalls: Int = 0
+    override fun hash(key: Int): Int { hashCalls++; return key * -0x61c88647 }
+    override fun equivalent(left: Int, right: Int): Boolean { equalityCalls++; return left == right }
+    fun reset() { hashCalls = 0; equalityCalls = 0 }
+}
+
 private fun check(value: Boolean, message: String) {
     if (!value) {
         throw AssertionError(message)
@@ -175,6 +183,40 @@ private fun setAlgebraUsesSetMembership() {
     check(left.isProperSupersetOf(listOf(1, 3, 3)), "proper superset")
     check(!left.isProperSubsetOf(listOf(1, 2, 3)), "non-proper subset")
     check(!left.isProperSupersetOf(listOf(1, 2, 3)), "non-proper superset")
+}
+
+private fun structuralSetAlgebraPrunesSharedNodesAndMatchesModels() {
+    val policy = CountingIntPolicy()
+    val basis = PersistentHashSet.from((0 until 2_048).toList(), policy)
+    val left = basis.add(-1)
+    val right = basis.add(-2)
+    policy.reset()
+
+    check(left.union(left) === left, "self union must preserve the set instance")
+    check(left.intersect(left) === left, "self intersection must preserve the set instance")
+    check(left.except(left).isEmpty, "self difference must be empty")
+    check(left.symmetricExcept(left).isEmpty, "self symmetric difference must be empty")
+    checkEquals(2_050, left.union(right).size, "shared union count")
+    checkEquals(2_048, left.intersect(right).size, "shared intersection count")
+    checkEquals(listOf(-1), left.except(right).toList(), "shared difference")
+    checkEquals(listOf(-2, -1), left.symmetricExcept(right).toList().sorted(), "shared symmetric difference")
+    check(left.isSubsetOf(left) && left.isSupersetOf(left) && left.overlaps(left) && left.setEquals(left),
+        "same-type structural relations")
+    checkEquals(0, policy.hashCalls, "structural algebra must use stored hashes")
+    check(policy.equalityCalls < 256, "shared descendants must be pruned")
+
+    val random = Random(20260712)
+    repeat(200) {
+        val leftModel = MutableList(random.nextInt(140)) { random.nextInt(401) - 200 }.toSet()
+        val rightModel = MutableList(random.nextInt(140)) { random.nextInt(401) - 200 }.toSet()
+        val leftSet = PersistentHashSet.from(leftModel, policy)
+        val rightSet = PersistentHashSet.from(rightModel, policy)
+        checkEquals(leftModel union rightModel, leftSet.union(rightSet).toSet(), "structural union model")
+        checkEquals(leftModel intersect rightModel, leftSet.intersect(rightSet).toSet(), "structural intersection model")
+        checkEquals(leftModel subtract rightModel, leftSet.except(rightSet).toSet(), "structural difference model")
+        checkEquals((leftModel subtract rightModel) union (rightModel subtract leftModel),
+            leftSet.symmetricExcept(rightSet).toSet(), "structural symmetric model")
+    }
 }
 
 private fun crossPolicyRelationsUseReceiverPolicy() {
@@ -701,6 +743,7 @@ public fun main() {
         "iterationStreamsTrieOrder" to ::iterationStreamsTrieOrder,
         "setItemsAreLastWinsAndRetainOriginalKey" to ::setItemsAreLastWinsAndRetainOriginalKey,
         "setAlgebraUsesSetMembership" to ::setAlgebraUsesSetMembership,
+        "structuralSetAlgebraPrunesSharedNodesAndMatchesModels" to ::structuralSetAlgebraPrunesSharedNodesAndMatchesModels,
         "crossPolicyRelationsUseReceiverPolicy" to ::crossPolicyRelationsUseReceiverPolicy,
         "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,
         "ctrieSnapshotsAndAtomicUpdates" to ::ctrieSnapshotsAndAtomicUpdates,

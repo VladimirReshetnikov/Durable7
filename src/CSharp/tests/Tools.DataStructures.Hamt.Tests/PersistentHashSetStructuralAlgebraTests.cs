@@ -74,9 +74,9 @@ public sealed class PersistentHashSetStructuralAlgebraTests
         Assert.Throws<ArgumentException>(() => left.Intersect(foreign));
         Assert.Throws<ArgumentException>(() => left.Except(foreign));
         Assert.Throws<ArgumentException>(() => left.SymmetricExcept(foreign));
-        Assert.Throws<ArgumentException>(() => left.IsSubsetOf(foreign));
-        Assert.Throws<ArgumentException>(() => left.Overlaps(foreign));
-        Assert.Throws<ArgumentException>(() => left.SetEquals(foreign));
+        Assert.False(left.IsSubsetOf(foreign));
+        Assert.True(left.Overlaps(foreign));
+        Assert.False(left.SetEquals(foreign));
     }
 
     /// <summary>Checks every operation against collision-heavy randomized mathematical models.</summary>

@@ -38,6 +38,13 @@ The port follows the repository HAMT semantics:
 - `mapEquals` requires the same `HashPolicy` object and compares map contents; `diff` reports typed
   added, removed, and changed entries and returns immediately for a shared root.
 
+Same-type map/set algebra requires the same `HashPolicy` object, aligns CHAMP bitmap slots, uses
+stored hashes, and returns immediately for reference-identical roots or subtrees. Nodes cache entry
+counts so results do not need a finishing traversal. Shared-ancestry work is proportional to
+divergent/result nodes; independent operands require O(n + m). Same-policy relations use structural
+intersection; cross-policy relation overloads deliberately fall back to the established receiver-
+policy iterable semantics.
+
 Kotlin-specific differences:
 
 - default equality is Kotlin/JVM `equals`; custom behavior is supplied through `HashPolicy<K>`;

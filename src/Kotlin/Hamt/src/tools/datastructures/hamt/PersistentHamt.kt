@@ -44,9 +44,13 @@ internal data class ChampStatistics(
 private const val BitsPerLevel: Int = 5
 private const val BranchMask: Int = 0x1f
 
-private sealed interface Node<K, V>
-private data class Leaf<K, V>(val hash: Int, val key: K, val value: V) : Node<K, V>
-private data class Collision<K, V>(val hash: Int, val entries: List<Leaf<K, V>>) : Node<K, V>
+private sealed interface Node<K, V> { val entryCount: Int }
+private data class Leaf<K, V>(val hash: Int, val key: K, val value: V) : Node<K, V> {
+    override val entryCount: Int get() = 1
+}
+private data class Collision<K, V>(val hash: Int, val entries: List<Leaf<K, V>>) : Node<K, V> {
+    override val entryCount: Int get() = entries.size
+}
 
 /** CHAMP sparse node: payloads and child nodes occupy independent compact runs. */
 private data class BitmapNode<K, V>(
@@ -55,6 +59,9 @@ private data class BitmapNode<K, V>(
     val data: List<Leaf<K, V>>,
     val nodes: List<Node<K, V>>,
 ) : Node<K, V>
+{
+    override val entryCount: Int = data.size + nodes.sumOf { it.entryCount }
+}
 
 private data class InsertResult<K, V>(
     val node: Node<K, V>,
@@ -140,12 +147,28 @@ public class PersistentHashMap<K, V> private constructor(
 
     public fun clear(): PersistentHashMap<K, V> = if (isEmpty) this else PersistentHashMap(null, 0, policy)
 
+    public fun union(other: PersistentHashMap<K, V>): PersistentHashMap<K, V> = combine(other, ChampOperation.UNION)
+    public fun intersect(other: PersistentHashMap<K, V>): PersistentHashMap<K, V> = combine(other, ChampOperation.INTERSECT)
+    public fun except(other: PersistentHashMap<K, V>): PersistentHashMap<K, V> = combine(other, ChampOperation.EXCEPT)
+    public fun symmetricExcept(other: PersistentHashMap<K, V>): PersistentHashMap<K, V> =
+        combine(other, ChampOperation.SYMMETRIC_EXCEPT)
+
+    private fun combine(other: PersistentHashMap<K, V>, operation: ChampOperation): PersistentHashMap<K, V> {
+        require(policy === other.policy) { "Maps must retain the same hash policy object." }
+        val combined = combineNodes(root, other.root, 0, operation, policy)
+        if (combined === root) return this
+        if (combined == null) return PersistentHashMap(null, 0, policy)
+        if (combined === other.root) return other
+        return PersistentHashMap(combined, combined.entryCount, policy)
+    }
+
     internal fun champStatistics(): ChampStatistics = root?.let(::champStatistics) ?: ChampStatistics(0, 0, 0, 0, 0)
     internal fun champTopology(): String = root?.let(::champTopology) ?: "E"
 
     /** Semantic equality for maps retaining the same hash/equality policy object. */
     public fun mapEquals(other: PersistentHashMap<K, V>): Boolean {
         require(policy === other.policy) { "Maps must retain the same hash policy object." }
+        if (root === other.root) return true
         return size == other.size && all { entry -> other.getEntry(entry.key)?.value == entry.value }
     }
 
@@ -190,40 +213,62 @@ public class PersistentHashSet<T> private constructor(private val map: Persisten
     public fun sharesRootWith(other: PersistentHashSet<T>): Boolean = map.sharesRootWith(other.map)
     public fun contains(value: T): Boolean = map.containsKey(value)
     public fun get(value: T): T? = map.getEntry(value)?.key
-    public fun add(value: T): PersistentHashSet<T> = PersistentHashSet(map.add(value, Unit))
+    public fun add(value: T): PersistentHashSet<T> = withMap(map.add(value, Unit))
     public fun tryAdd(value: T): AddResult<PersistentHashSet<T>> {
         val result = map.tryAdd(value, Unit)
-        return AddResult(PersistentHashSet(result.value), result.added)
+        return AddResult(withMap(result.value), result.added)
     }
-    public fun put(value: T): PersistentHashSet<T> = PersistentHashSet(map.put(value, Unit))
-    public fun remove(value: T): PersistentHashSet<T> = PersistentHashSet(map.remove(value))
+    public fun put(value: T): PersistentHashSet<T> = withMap(map.put(value, Unit))
+    public fun remove(value: T): PersistentHashSet<T> = withMap(map.remove(value))
     public fun tryRemove(value: T): SetRemoveResult<T>? {
         val removed = map.tryRemoveEntry(value) ?: return null
-        return SetRemoveResult(PersistentHashSet(removed.map), removed.entry.key)
+        return SetRemoveResult(withMap(removed.map), removed.entry.key)
     }
-    public fun clear(): PersistentHashSet<T> = PersistentHashSet(map.clear())
+    public fun clear(): PersistentHashSet<T> = withMap(map.clear())
     public fun union(values: Iterable<T>): PersistentHashSet<T> {
         var result = this
         for (value in values) result = result.put(value)
         return result
     }
+    public fun union(other: PersistentHashSet<T>): PersistentHashSet<T> = withMap(map.union(other.map))
     public fun intersect(values: Iterable<T>): PersistentHashSet<T> {
         val probe = empty<T>(policy).union(values)
         var result = empty<T>(policy)
         for (value in this) if (probe.contains(value)) result = result.put(value)
         return result
     }
+    public fun intersect(other: PersistentHashSet<T>): PersistentHashSet<T> = withMap(map.intersect(other.map))
     public fun except(values: Iterable<T>): PersistentHashSet<T> {
         var result = this
         for (value in values) result = result.remove(value)
         return result
     }
+    public fun except(other: PersistentHashSet<T>): PersistentHashSet<T> = withMap(map.except(other.map))
     public fun symmetricExcept(values: Iterable<T>): PersistentHashSet<T> {
         val distinct = empty<T>(policy).union(values)
         var result = this
         for (value in distinct) result = if (result.contains(value)) result.remove(value) else result.put(value)
         return result
     }
+    public fun symmetricExcept(other: PersistentHashSet<T>): PersistentHashSet<T> =
+        withMap(map.symmetricExcept(other.map))
+
+    public fun isSubsetOf(other: PersistentHashSet<T>): Boolean {
+        if (policy !== other.policy) return isSubsetOf(other as Iterable<T>)
+        return size <= other.size && map.intersect(other.map).sharesRootWith(map)
+    }
+    public fun isProperSubsetOf(other: PersistentHashSet<T>): Boolean =
+        if (policy === other.policy) size < other.size && isSubsetOf(other) else isProperSubsetOf(other as Iterable<T>)
+    public fun isSupersetOf(other: PersistentHashSet<T>): Boolean =
+        if (policy === other.policy) other.isSubsetOf(this) else isSupersetOf(other as Iterable<T>)
+    public fun isProperSupersetOf(other: PersistentHashSet<T>): Boolean =
+        if (policy === other.policy) size > other.size && other.isSubsetOf(this) else isProperSupersetOf(other as Iterable<T>)
+    public fun overlaps(other: PersistentHashSet<T>): Boolean {
+        if (policy !== other.policy) return overlaps(other as Iterable<T>)
+        return map.intersect(other.map).size != 0
+    }
+    public fun setEquals(other: PersistentHashSet<T>): Boolean =
+        if (policy === other.policy) map.mapEquals(other.map) else setEquals(other as Iterable<T>)
     public fun isSubsetOf(values: Iterable<T>): Boolean {
         val probe = empty<T>(policy).union(values)
         return all { probe.contains(it) }
@@ -244,6 +289,8 @@ public class PersistentHashSet<T> private constructor(private val map: Persisten
     }
     public fun asSequence(): Sequence<T> = map.keys()
     override fun iterator(): Iterator<T> = asSequence().iterator()
+    private fun withMap(value: PersistentHashMap<T, Unit>): PersistentHashSet<T> =
+        if (value === map) this else PersistentHashSet(value)
 }
 
 private fun <K, V> getInNode(
@@ -450,6 +497,162 @@ private fun <K, V> champStatistics(node: Node<K, V>): ChampStatistics = when (no
                 children.sumOf { it.underfullBitmapNodes },
         )
     }
+}
+
+private enum class ChampOperation { UNION, INTERSECT, EXCEPT, SYMMETRIC_EXCEPT }
+
+private fun <K, V> combineNodes(
+    left: Node<K, V>?,
+    right: Node<K, V>?,
+    shift: Int,
+    operation: ChampOperation,
+    policy: HashPolicy<K>,
+): Node<K, V>? {
+    if (left === right) return if (operation == ChampOperation.UNION || operation == ChampOperation.INTERSECT) left else null
+    if (left == null) return if (operation == ChampOperation.UNION || operation == ChampOperation.SYMMETRIC_EXCEPT) right else null
+    if (right == null) return if (operation != ChampOperation.INTERSECT) left else null
+    if (left is Leaf || left is Collision) {
+        if (right is Leaf || right is Collision) return combineHashNodes(left, right, shift, operation, policy)
+    }
+
+    val slots = arrayOfNulls<Node<K, V>>(32)
+    for (index in slots.indices) {
+        slots[index] = combineNodes(
+            logicalSlot(left, index, shift),
+            logicalSlot(right, index, shift),
+            shift + BitsPerLevel,
+            operation,
+            policy,
+        )
+    }
+    return buildLogicalNode(slots, left, shift, policy)
+}
+
+private fun <K, V> combineHashNodes(
+    left: Node<K, V>,
+    right: Node<K, V>,
+    shift: Int,
+    operation: ChampOperation,
+    policy: HashPolicy<K>,
+): Node<K, V>? {
+    val leftHash = hashOf(left)
+    val rightHash = hashOf(right)
+    if (leftHash != rightHash) {
+        if (operation == ChampOperation.INTERSECT) return null
+        if (operation == ChampOperation.EXCEPT) return left
+        val slots = arrayOfNulls<Node<K, V>>(32)
+        val leftIndex = hashFragment(leftHash, shift)
+        val rightIndex = hashFragment(rightHash, shift)
+        if (leftIndex != rightIndex) {
+            slots[leftIndex] = left
+            slots[rightIndex] = right
+        } else {
+            slots[leftIndex] = combineHashNodes(left, right, shift + BitsPerLevel, operation, policy)
+        }
+        return buildLogicalNode(slots, left, shift, policy)
+    }
+
+    val leftEntries = entriesOf(left)
+    val rightEntries = entriesOf(right)
+    val result = mutableListOf<Leaf<K, V>>()
+    for (leftEntry in leftEntries) {
+        val rightEntry = rightEntries.firstOrNull { policy.equivalent(leftEntry.key, it.key) }
+        when (operation) {
+            ChampOperation.UNION -> result += if (rightEntry == null || leftEntry.value == rightEntry.value) {
+                leftEntry
+            } else {
+                Leaf(leftEntry.hash, leftEntry.key, rightEntry.value)
+            }
+            ChampOperation.INTERSECT -> if (rightEntry != null) result += leftEntry
+            ChampOperation.EXCEPT, ChampOperation.SYMMETRIC_EXCEPT -> if (rightEntry == null) result += leftEntry
+        }
+    }
+    if (operation == ChampOperation.UNION || operation == ChampOperation.SYMMETRIC_EXCEPT) {
+        for (rightEntry in rightEntries) {
+            if (leftEntries.none { policy.equivalent(it.key, rightEntry.key) }) result += rightEntry
+        }
+    }
+    if (sameEntries(leftEntries, result, policy)) return left
+    return when (result.size) {
+        0 -> null
+        1 -> result[0]
+        else -> Collision(leftHash, result)
+    }
+}
+
+private fun <K, V> hashOf(node: Node<K, V>): Int = when (node) {
+    is Leaf -> node.hash
+    is Collision -> node.hash
+    is BitmapNode -> error("bitmap node has no single hash")
+}
+
+private fun <K, V> entriesOf(node: Node<K, V>): List<Leaf<K, V>> = when (node) {
+    is Leaf -> listOf(node)
+    is Collision -> node.entries
+    is BitmapNode -> error("bitmap node is not an entry run")
+}
+
+private fun <K, V> sameEntries(
+    left: List<Leaf<K, V>>,
+    right: List<Leaf<K, V>>,
+    policy: HashPolicy<K>,
+): Boolean = left.size == right.size && left.indices.all { index ->
+    left[index].hash == right[index].hash &&
+        policy.equivalent(left[index].key, right[index].key) &&
+        left[index].value == right[index].value
+}
+
+private fun <K, V> logicalSlot(node: Node<K, V>, index: Int, shift: Int): Node<K, V>? = when (node) {
+    is Leaf -> if (hashFragment(node.hash, shift) == index) node else null
+    is Collision -> if (hashFragment(node.hash, shift) == index) node else null
+    is BitmapNode -> {
+        val bit = bitPosition(index)
+        when {
+            node.dataMap and bit != 0 -> node.data[sparseIndex(node.dataMap, bit)]
+            node.nodeMap and bit != 0 -> node.nodes[sparseIndex(node.nodeMap, bit)]
+            else -> null
+        }
+    }
+}
+
+private fun <K, V> buildLogicalNode(
+    slots: Array<Node<K, V>?>,
+    originalLeft: Node<K, V>,
+    shift: Int,
+    policy: HashPolicy<K>,
+): Node<K, V>? {
+    if (logicalSlotsMatch(slots, originalLeft, shift, policy)) return originalLeft
+    var dataMap = 0
+    var nodeMap = 0
+    val data = mutableListOf<Leaf<K, V>>()
+    val nodes = mutableListOf<Node<K, V>>()
+    for (index in slots.indices) {
+        val node = slots[index] ?: continue
+        val bit = bitPosition(index)
+        if (node is Leaf) {
+            dataMap = dataMap or bit
+            data += node
+        } else {
+            nodeMap = nodeMap or bit
+            nodes += node
+        }
+    }
+    if (data.isEmpty() && nodes.isEmpty()) return null
+    if (data.size == 1 && nodes.isEmpty()) return data[0]
+    if (data.isEmpty() && nodes.size == 1 && nodes[0] !is BitmapNode) return nodes[0]
+    return BitmapNode(dataMap, nodeMap, data, nodes)
+}
+
+private fun <K, V> logicalSlotsMatch(
+    slots: Array<Node<K, V>?>,
+    original: Node<K, V>,
+    shift: Int,
+    policy: HashPolicy<K>,
+): Boolean = slots.indices.all { index ->
+    val expected = logicalSlot(original, index, shift)
+    val actual = slots[index]
+    expected === actual || expected is Leaf && actual is Leaf &&
+        expected.hash == actual.hash && policy.equivalent(expected.key, actual.key) && expected.value == actual.value
 }
 
 private fun <K, V> champTopology(node: Node<K, V>): String = when (node) {

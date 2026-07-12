@@ -104,11 +104,12 @@ mutating a comparer used by `Dictionary<TKey, TValue>`.
 - `IsSubsetOf`, `IsProperSubsetOf`, `IsSupersetOf`, `IsProperSupersetOf`, `Overlaps`, and
   `SetEquals` interpret equality through the set's comparer.
 
-Each algebra and relation has a same-type `PersistentHashSet<T>` overload. These overloads require
-the identical comparer object, operate structurally over stored hashes without rehashing entries,
-and prune reference-equal roots/subtrees. Self union/intersection and unchanged receiver results
-preserve instance identity; self difference/symmetric difference return the comparer-preserving
-empty set. The `IEnumerable<T>` overloads remain the arbitrary-sequence path.
+Each algebra and relation has a same-type `PersistentHashSet<T>` overload. Algebra requires the
+identical comparer object. Same-comparer overloads operate structurally over stored hashes without
+rehashing entries and prune reference-equal roots/subtrees; cross-comparer relations fall back to
+the established receiver-comparer `IEnumerable<T>` semantics. Self union/intersection and unchanged
+receiver results preserve instance identity; self difference/symmetric difference return the
+comparer-preserving empty set. The `IEnumerable<T>` overloads remain the arbitrary-sequence path.
 
 `SetItems` on the map and `Union`/`Except` on the set are the sanctioned bulk updates; there are no
 separate `AddRange`/`RemoveRange` members.

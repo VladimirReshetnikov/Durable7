@@ -10,6 +10,10 @@ This workspace ports the repository HAMT map and set family to Kotlin/JVM. It pr
 separate data/node bitmaps, inline payload runs, immutable equal-hash collision buckets, structural
 sharing between versions, and optional runtime `HashPolicy<K>` values for custom hash/equality
 behavior. Maps expose policy-compatible semantic equality and typed added/removed/changed diff.
+Maps and sets also expose same-type structural union, intersection, difference, and symmetric
+difference. CHAMP nodes cache subtree cardinality, align logical bitmap slots without rehashing,
+and prune JVM-reference-identical roots and descendants; same-policy set relations use the same
+structural path while cross-policy relations retain receiver-policy semantics.
 
 `ConcurrentHashTrie<K,V>` is the deliberately mutable JVM member. It uses generation-stamped
 indirection nodes, helping node-local GCAS, and a root/main RDCSS transition for lock-free updates
