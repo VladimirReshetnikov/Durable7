@@ -47,4 +47,7 @@ left-valued intersection, and difference. Every branch caches its subtree cardin
 structurally pruned algebra operation can publish the result count without traversing the retained
 subtrees. `unionWith`/`unionWithKey` and `intersectionWith`/`intersectionWithKey` receive left and
 right values in argument order; the keyed forms additionally receive the shared integer key.
-`validStructure` verifies both the root count and every cached branch count.
+`validStructure` verifies both the root count and every cached branch count. The unconstrained
+`insert` deliberately does not require `Eq` for values, so replacement rebuilds the affected leaf
+and path even when the new value is extensionally equal; callers that need equality-gated no-op
+identity must compare first.

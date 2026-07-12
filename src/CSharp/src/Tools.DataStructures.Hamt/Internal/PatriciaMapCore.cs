@@ -137,6 +137,22 @@ internal sealed class PatriciaMapCore<TKey, TValue, TKeyPolicy>
         return new PatriciaMapCore<TKey, TValue, TKeyPolicy>(root, root.Count);
     }
 
+    internal PatriciaMapCore<TKey, TValue, TKeyPolicy> Union(
+        PatriciaMapCore<TKey, TValue, TKeyPolicy> other,
+        Func<TKey, TValue, TValue, TValue> combine)
+    {
+        if (_root is null)
+            return other;
+        if (other._root is null)
+            return this;
+        var root = Union(_root, other._root, combine);
+        if (ReferenceEquals(root, _root))
+            return this;
+        if (ReferenceEquals(root, other._root))
+            return other;
+        return new PatriciaMapCore<TKey, TValue, TKeyPolicy>(root, root.Count);
+    }
+
     internal PatriciaMapCore<TKey, TValue, TKeyPolicy> IntersectLeft(
         PatriciaMapCore<TKey, TValue, TKeyPolicy> other)
     {
@@ -149,6 +165,22 @@ internal sealed class PatriciaMapCore<TKey, TValue, TKeyPolicy>
             return Empty;
         if (ReferenceEquals(root, _root))
             return this;
+        return new PatriciaMapCore<TKey, TValue, TKeyPolicy>(root, root.Count);
+    }
+
+    internal PatriciaMapCore<TKey, TValue, TKeyPolicy> Intersect(
+        PatriciaMapCore<TKey, TValue, TKeyPolicy> other,
+        Func<TKey, TValue, TValue, TValue> combine)
+    {
+        if (_root is null || other._root is null)
+            return Empty;
+        var root = Intersect(_root, other._root, combine);
+        if (root is null)
+            return Empty;
+        if (ReferenceEquals(root, _root))
+            return this;
+        if (ReferenceEquals(root, other._root))
+            return other;
         return new PatriciaMapCore<TKey, TValue, TKeyPolicy>(root, root.Count);
     }
 
@@ -273,6 +305,50 @@ internal sealed class PatriciaMapCore<TKey, TValue, TKeyPolicy>
         return Join(l.Prefix, l, r.Prefix, r);
     }
 
+    private static Node Union(Node left, Node right, Func<TKey, TValue, TValue, TValue> combine)
+    {
+        if (left is Leaf leftOnly && right is Leaf rightOnly)
+        {
+            return leftOnly.Key == rightOnly.Key
+                ? CombinedLeaf(leftOnly, rightOnly, combine)
+                : Join(leftOnly.Key, leftOnly, rightOnly.Key, rightOnly);
+        }
+        if (left is Leaf leftLeaf)
+        {
+            var matchingRight = FindLeaf(right, leftLeaf.Key);
+            var value = matchingRight is null
+                ? leftLeaf.Value
+                : combine(TKeyPolicy.Decode(leftLeaf.Key), leftLeaf.Value, matchingRight.Value);
+            return Set(right, leftLeaf.Key, value, overwrite: true, out _);
+        }
+        if (right is Leaf rightLeaf)
+        {
+            var matchingLeft = FindLeaf(left, rightLeaf.Key);
+            var value = matchingLeft is null
+                ? rightLeaf.Value
+                : combine(TKeyPolicy.Decode(rightLeaf.Key), matchingLeft.Value, rightLeaf.Value);
+            return Set(left, rightLeaf.Key, value, overwrite: true, out _);
+        }
+
+        var l = (Branch)left;
+        var r = (Branch)right;
+        if (l.Mask == r.Mask && l.Prefix == r.Prefix)
+            return Rebuild(l, Union(l.Left, r.Left, combine), Union(l.Right, r.Right, combine));
+        if (l.Mask > r.Mask && Matches(r.Prefix, l.Prefix, l.Mask))
+        {
+            return GoesLeft(r.Prefix, l.Mask)
+                ? Rebuild(l, Union(l.Left, right, combine), l.Right)
+                : Rebuild(l, l.Left, Union(l.Right, right, combine));
+        }
+        if (r.Mask > l.Mask && Matches(l.Prefix, r.Prefix, r.Mask))
+        {
+            return GoesLeft(l.Prefix, r.Mask)
+                ? Rebuild(r, Union(left, r.Left, combine), r.Right)
+                : Rebuild(r, r.Left, Union(left, r.Right, combine));
+        }
+        return Join(l.Prefix, l, r.Prefix, r);
+    }
+
     private static Node? IntersectLeft(Node left, Node right)
     {
         if (ReferenceEquals(left, right))
@@ -291,6 +367,43 @@ internal sealed class PatriciaMapCore<TKey, TValue, TKeyPolicy>
         if (r.Mask > l.Mask && Matches(l.Prefix, r.Prefix, r.Mask))
             return IntersectLeft(left, GoesLeft(l.Prefix, r.Mask) ? r.Left : r.Right);
         return null;
+    }
+
+    private static Node? Intersect(Node left, Node right, Func<TKey, TValue, TValue, TValue> combine)
+    {
+        if (left is Leaf leftLeaf)
+        {
+            var matchingRight = FindLeaf(right, leftLeaf.Key);
+            return matchingRight is null ? null : CombinedLeaf(leftLeaf, matchingRight, combine);
+        }
+        if (right is Leaf rightLeaf)
+        {
+            var matchingLeft = FindLeaf(left, rightLeaf.Key);
+            return matchingLeft is null ? null : CombinedLeaf(matchingLeft, rightLeaf, combine);
+        }
+
+        var l = (Branch)left;
+        var r = (Branch)right;
+        if (l.Mask == r.Mask && l.Prefix == r.Prefix)
+            return Collapse(l, Intersect(l.Left, r.Left, combine), Intersect(l.Right, r.Right, combine));
+        if (l.Mask > r.Mask && Matches(r.Prefix, l.Prefix, l.Mask))
+            return Intersect(GoesLeft(r.Prefix, l.Mask) ? l.Left : l.Right, right, combine);
+        if (r.Mask > l.Mask && Matches(l.Prefix, r.Prefix, r.Mask))
+            return Intersect(left, GoesLeft(l.Prefix, r.Mask) ? r.Left : r.Right, combine);
+        return null;
+    }
+
+    private static Leaf CombinedLeaf(
+        Leaf left,
+        Leaf right,
+        Func<TKey, TValue, TValue, TValue> combine)
+    {
+        var value = combine(TKeyPolicy.Decode(left.Key), left.Value, right.Value);
+        if (EqualityComparer<TValue>.Default.Equals(value, left.Value))
+            return left;
+        if (EqualityComparer<TValue>.Default.Equals(value, right.Value))
+            return right;
+        return new Leaf(left.Key, value);
     }
 
     private static Node? Except(Node left, Node right)

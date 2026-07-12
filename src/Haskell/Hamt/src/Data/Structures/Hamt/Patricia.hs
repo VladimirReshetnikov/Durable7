@@ -104,6 +104,9 @@ lookupNode path (Branch _ prefix mask left right)
   | path .&. mask == 0 = lookupNode path left
   | otherwise = lookupNode path right
 
+-- | Inserts or replaces a value. Because the unconstrained map does not require
+-- @Eq v@, replacing a key rebuilds its leaf and search path even when the new
+-- value happens to be equal to the old value.
 insert :: PatriciaKey k => k -> v -> PatriciaMap k v -> PatriciaMap k v
 insert key value (PatriciaMap count root) =
   let path = encodeKey key

@@ -131,6 +131,27 @@ public sealed class PersistentIntegerPatriciaTests
         Assert.Equal(new[] { (-1L, 199L), (2L, 402L) }, combinedLongs.Select(pair => (pair.Key, pair.Value)));
     }
 
+    /// <summary>Verifies combining algebra preserves unchanged structurally aligned roots.</summary>
+    [Fact]
+    public void CombiningAlgebra_ReusesReceiverRootWhenValuesRemainUnchanged()
+    {
+        var ints = PersistentIntMap<int>.CreateRange(
+            new[] { KeyValuePair.Create(-8, 80), KeyValuePair.Create(1, 10), KeyValuePair.Create(4, 40) });
+        var intSubset = PersistentIntMap<int>.CreateRange(
+            new[] { KeyValuePair.Create(1, -10), KeyValuePair.Create(4, -40) });
+        var intSuperset = intSubset.SetItem(-8, -80).SetItem(100, 1000);
+        Assert.Same(ints.RootIdentity, ints.Union(intSubset, static (_, left, _) => left).RootIdentity);
+        Assert.Same(ints.RootIdentity, ints.Intersect(intSuperset, static (_, left, _) => left).RootIdentity);
+
+        var longs = PersistentLongMap<long>.CreateRange(
+            new[] { KeyValuePair.Create(long.MinValue, 1L), KeyValuePair.Create(0L, 2L), KeyValuePair.Create(long.MaxValue, 3L) });
+        var longSubset = PersistentLongMap<long>.CreateRange(
+            new[] { KeyValuePair.Create(0L, -2L), KeyValuePair.Create(long.MaxValue, -3L) });
+        var longSuperset = longSubset.SetItem(long.MinValue, -1L).SetItem(17L, 4L);
+        Assert.Same(longs.RootIdentity, longs.Union(longSubset, static (_, left, _) => left).RootIdentity);
+        Assert.Same(longs.RootIdentity, longs.Intersect(longSuperset, static (_, left, _) => left).RootIdentity);
+    }
+
     /// <summary>Verifies both set widths implement persistent algebra and IReadOnlySet relations.</summary>
     [Fact]
     public void Sets_ProvideOrderedPersistentAlgebra()
@@ -171,11 +192,28 @@ public sealed class PersistentIntegerPatriciaTests
                 unionModel[pair.Key] = pair.Value;
             var intersectionModel = leftModel.Where(pair => rightModel.ContainsKey(pair.Key)).ToDictionary();
             var exceptModel = leftModel.Where(pair => !rightModel.ContainsKey(pair.Key)).ToDictionary();
+            var combinedUnionModel = new Dictionary<int, int>(leftModel);
+            foreach (var pair in rightModel)
+            {
+                combinedUnionModel[pair.Key] = leftModel.TryGetValue(pair.Key, out var leftValue)
+                    ? Combine(pair.Key, leftValue, pair.Value)
+                    : pair.Value;
+            }
+            var combinedIntersectionModel = leftModel
+                .Where(pair => rightModel.ContainsKey(pair.Key))
+                .ToDictionary(pair => pair.Key, pair => Combine(pair.Key, pair.Value, rightModel[pair.Key]));
 
             AssertMap(unionModel, left.Union(right));
             AssertMap(intersectionModel, left.Intersect(right));
             AssertMap(exceptModel, left.Except(right));
+            AssertMap(combinedUnionModel, left.Union(right, Combine));
+            AssertMap(combinedIntersectionModel, left.Intersect(right, Combine));
         }
+
+        static int Combine(int key, int left, int right) =>
+            unchecked(key * 397
+                ^ (int)System.Numerics.BitOperations.RotateLeft((uint)left, 7)
+                ^ (int)System.Numerics.BitOperations.RotateRight((uint)right, 11));
     }
 
     private static void AssertMap(Dictionary<int, int> expected, PersistentIntMap<int> actual)

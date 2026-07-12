@@ -273,11 +273,9 @@ fn mst2_wide_multi_level_root_matches_every_sibling_port() {
     )
     .unwrap();
     let keys = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 38, 44, 59, 464];
-    let tree = MerkleSearchTree::from_entries(
-        keys.into_iter().map(|key| (key, -key - 1)),
-        policy.clone(),
-    )
-    .unwrap();
+    let tree =
+        MerkleSearchTree::from_entries(keys.into_iter().map(|key| (key, -key - 1)), policy.clone())
+            .unwrap();
     assert_eq!(
         policy.domain_digest().to_string(),
         "eb6b2bada16d3464d24f5b4b3d54bb5bca33f00d88164de27e95c920c2a1b917"

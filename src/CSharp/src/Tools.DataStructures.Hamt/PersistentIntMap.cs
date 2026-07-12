@@ -128,10 +128,7 @@ public sealed class PersistentIntMap<TValue> : IReadOnlyDictionary<int, TValue>
     {
         ArgumentNullException.ThrowIfNull(other);
         ArgumentNullException.ThrowIfNull(combine);
-        var result = this;
-        foreach (var (key, right) in other)
-            result = result.SetItem(key, TryGetValue(key, out var left) ? combine(key, left, right) : right);
-        return result;
+        return WithCore(_core.Union(other._core, combine));
     }
 
     /// <summary>Intersects with another map, retaining receiver values.</summary>
@@ -150,13 +147,7 @@ public sealed class PersistentIntMap<TValue> : IReadOnlyDictionary<int, TValue>
     {
         ArgumentNullException.ThrowIfNull(other);
         ArgumentNullException.ThrowIfNull(combine);
-        var result = Empty;
-        foreach (var (key, left) in this)
-        {
-            if (other.TryGetValue(key, out var right))
-                result = result.SetItem(key, combine(key, left, right));
-        }
-        return result;
+        return WithCore(_core.Intersect(other._core, combine));
     }
 
     /// <summary>Removes every key present in another map.</summary>

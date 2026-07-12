@@ -101,14 +101,28 @@ impl<K: Copy + Eq, V: Clone + PartialEq> Core<K, V> {
         if same_root(&self.root, &other.root) {
             return self.clone();
         }
-        self.union_with(other, |_, _, right| right.clone())
+        let mut use_right = |_: K, _: &V, right: &V| right.clone();
+        let root = union_with_nodes(
+            self.root.as_ref(),
+            other.root.as_ref(),
+            &mut use_right,
+            true,
+        );
+        if same_root(&root, &self.root) {
+            return self.clone();
+        }
+        Self {
+            len: node_len(root.as_deref()),
+            root,
+            encode: self.encode,
+        }
     }
 
     fn union_with<F>(&self, other: &Self, mut combine: F) -> Self
     where
         F: FnMut(K, &V, &V) -> V,
     {
-        let root = union_with_nodes(self.root.as_ref(), other.root.as_ref(), &mut combine);
+        let root = union_with_nodes(self.root.as_ref(), other.root.as_ref(), &mut combine, false);
         if same_root(&root, &self.root) {
             return self.clone();
         }
@@ -123,14 +137,25 @@ impl<K: Copy + Eq, V: Clone + PartialEq> Core<K, V> {
         if same_root(&self.root, &other.root) {
             return self.clone();
         }
-        self.intersect_with(other, |_, left, _| left.clone())
+        let mut use_left = |_: K, left: &V, _: &V| left.clone();
+        let root =
+            intersect_with_nodes(self.root.as_ref(), other.root.as_ref(), &mut use_left, true);
+        if same_root(&root, &self.root) {
+            return self.clone();
+        }
+        Self {
+            len: node_len(root.as_deref()),
+            root,
+            encode: self.encode,
+        }
     }
 
     fn intersect_with<F>(&self, other: &Self, mut combine: F) -> Self
     where
         F: FnMut(K, &V, &V) -> V,
     {
-        let root = intersect_with_nodes(self.root.as_ref(), other.root.as_ref(), &mut combine);
+        let root =
+            intersect_with_nodes(self.root.as_ref(), other.root.as_ref(), &mut combine, false);
         if same_root(&root, &self.root) {
             return self.clone();
         }
@@ -316,6 +341,7 @@ fn union_with_nodes<K: Copy + Eq, V: Clone + PartialEq, F>(
     left: Option<&Arc<Node<K, V>>>,
     right: Option<&Arc<Node<K, V>>>,
     combine: &mut F,
+    short_circuit_shared: bool,
 ) -> Option<Arc<Node<K, V>>>
 where
     F: FnMut(K, &V, &V) -> V,
@@ -323,6 +349,9 @@ where
     match (left, right) {
         (None, _) => right.cloned(),
         (_, None) => left.cloned(),
+        (Some(left), Some(right)) if short_circuit_shared && Arc::ptr_eq(left, right) => {
+            Some(Arc::clone(left))
+        }
         (Some(left), Some(right)) => Some(match (left.as_ref(), right.as_ref()) {
             (Node::Leaf { path: lp, .. }, Node::Leaf { path: rp, .. }) => {
                 if lp == rp {
@@ -358,8 +387,10 @@ where
                         left,
                         *lp,
                         *lm,
-                        union_with_nodes(Some(ll), Some(rl), combine).unwrap(),
-                        union_with_nodes(Some(lr), Some(rr), combine).unwrap(),
+                        union_with_nodes(Some(ll), Some(rl), combine, short_circuit_shared)
+                            .unwrap(),
+                        union_with_nodes(Some(lr), Some(rr), combine, short_circuit_shared)
+                            .unwrap(),
                     )
                 } else if lm > rm && prefix_of(*rp, *lm) == *lp {
                     if rp & lm == 0 {
@@ -367,7 +398,8 @@ where
                             left,
                             *lp,
                             *lm,
-                            union_with_nodes(Some(ll), Some(right), combine).unwrap(),
+                            union_with_nodes(Some(ll), Some(right), combine, short_circuit_shared)
+                                .unwrap(),
                             Arc::clone(lr),
                         )
                     } else {
@@ -376,7 +408,8 @@ where
                             *lp,
                             *lm,
                             Arc::clone(ll),
-                            union_with_nodes(Some(lr), Some(right), combine).unwrap(),
+                            union_with_nodes(Some(lr), Some(right), combine, short_circuit_shared)
+                                .unwrap(),
                         )
                     }
                 } else if rm > lm && prefix_of(*lp, *rm) == *rp {
@@ -385,7 +418,8 @@ where
                             right,
                             *rp,
                             *rm,
-                            union_with_nodes(Some(left), Some(rl), combine).unwrap(),
+                            union_with_nodes(Some(left), Some(rl), combine, short_circuit_shared)
+                                .unwrap(),
                             Arc::clone(rr),
                         )
                     } else {
@@ -394,7 +428,8 @@ where
                             *rp,
                             *rm,
                             Arc::clone(rl),
-                            union_with_nodes(Some(left), Some(rr), combine).unwrap(),
+                            union_with_nodes(Some(left), Some(rr), combine, short_circuit_shared)
+                                .unwrap(),
                         )
                     }
                 } else {
@@ -599,6 +634,7 @@ fn intersect_with_nodes<K: Copy + Eq, V: Clone + PartialEq, F>(
     left: Option<&Arc<Node<K, V>>>,
     right: Option<&Arc<Node<K, V>>>,
     combine: &mut F,
+    short_circuit_shared: bool,
 ) -> Option<Arc<Node<K, V>>>
 where
     F: FnMut(K, &V, &V) -> V,
@@ -606,6 +642,9 @@ where
     let (Some(left), Some(right)) = (left, right) else {
         return None;
     };
+    if short_circuit_shared && Arc::ptr_eq(left, right) {
+        return Some(Arc::clone(left));
+    }
     match (left.as_ref(), right.as_ref()) {
         (Node::Leaf { path, .. }, _) => {
             find_leaf(right, *path).map(|right_leaf| combine_leaves(left, &right_leaf, combine))
@@ -634,20 +673,20 @@ where
                     left,
                     *lp,
                     *lm,
-                    intersect_with_nodes(Some(ll), Some(rl), combine),
-                    intersect_with_nodes(Some(lr), Some(rr), combine),
+                    intersect_with_nodes(Some(ll), Some(rl), combine, short_circuit_shared),
+                    intersect_with_nodes(Some(lr), Some(rr), combine, short_circuit_shared),
                 )
             } else if lm > rm && prefix_of(*rp, *lm) == *lp {
                 if rp & lm == 0 {
-                    intersect_with_nodes(Some(ll), Some(right), combine)
+                    intersect_with_nodes(Some(ll), Some(right), combine, short_circuit_shared)
                 } else {
-                    intersect_with_nodes(Some(lr), Some(right), combine)
+                    intersect_with_nodes(Some(lr), Some(right), combine, short_circuit_shared)
                 }
             } else if rm > lm && prefix_of(*lp, *rm) == *rp {
                 if lp & rm == 0 {
-                    intersect_with_nodes(Some(left), Some(rl), combine)
+                    intersect_with_nodes(Some(left), Some(rl), combine, short_circuit_shared)
                 } else {
-                    intersect_with_nodes(Some(left), Some(rr), combine)
+                    intersect_with_nodes(Some(left), Some(rr), combine, short_circuit_shared)
                 }
             } else {
                 None
@@ -1169,6 +1208,22 @@ mod tests {
         assert!(left.shares_root_with(&unchanged_intersection));
         assert!(left.shares_root_with(&left.union(&left)));
         assert!(left.shares_root_with(&left.intersect(&left)));
+
+        let mut self_union_calls = 0;
+        let self_union = left.union_with(&left, |_, left, _| {
+            self_union_calls += 1;
+            *left
+        });
+        assert_eq!(self_union_calls, left.len());
+        assert!(left.shares_root_with(&self_union));
+
+        let mut self_intersection_calls = 0;
+        let self_intersection = left.intersect_with(&left, |_, left, _| {
+            self_intersection_calls += 1;
+            *left
+        });
+        assert_eq!(self_intersection_calls, left.len());
+        assert!(left.shares_root_with(&self_intersection));
 
         let one_left = PersistentIntMap::new().insert(1, 10);
         let one_right = PersistentIntMap::new().insert(1, 20);
