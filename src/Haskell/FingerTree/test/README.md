@@ -35,3 +35,12 @@ append, regular-versus-relaxed metadata, split round-trips, optimized root reuse
 list model with retained snapshots, 2,000 adversarial split/rejoin operations, uneven fragments,
 and concurrent pure readers. Every history checks cached count/height/size-table invariants and
 density ceilings.
+
+Canonical zip-zip-set coverage pins caller-keyed and `ZZT2` public-seed HMAC rank vectors, unsigned
+secondary-word priority, hidden random-key separation, construction-order-independent bulk and
+incremental topology, first-representative retention, incoherent equivalence hashing, and separate
+same-seed policy identity. A 10,000-command `Data.Set` model retains immutable snapshots; a fully
+colliding 4,096-node chain exercises stack-safe deletion, reinsertion, enumeration, digesting, and
+validation. Algebra and all set relations cover policy gating plus receiver-defined cross-policy
+asymmetry. `StableName` diagnostics require at least 90 percent off-path node retention for edits,
+and a hostile mutable test hash proves the validator detects non-reproducible ranks.

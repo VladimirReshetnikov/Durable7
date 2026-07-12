@@ -18,6 +18,13 @@ module Data.Structures.FingerTree
   , PriorityQueue.PriorityQueue
   , BrodalOkasakiHeap.BrodalOkasakiHeap
   , BrodalOkasakiHeap.BrodalOkasakiHeapStatistics(..)
+  , CanonicalSortedSet.ZipTreeRankPolicy
+  , CanonicalSortedSet.ZipTreeRank(..)
+  , CanonicalSortedSet.ZipTreePolicyError(..)
+  , CanonicalSortedSet.CanonicalSetError(..)
+  , CanonicalSortedSet.CanonicalInvariantError(..)
+  , CanonicalSortedSet.CanonicalSortedSet
+  , CanonicalSortedSet.CanonicalSortedSetStatistics
   , PrioritySearchQueue.PrioritySearchQueue
   , PrioritySearchQueue.PrioritySearchEntry(..)
   , PrioritySearchQueue.PrioritySearchQueueStatistics(..)
@@ -39,6 +46,7 @@ import qualified Data.Structures.FingerTree.MeasuredRope as MeasuredRope
 import qualified Data.Structures.FingerTree.Measures as Measures
 import qualified Data.Structures.FingerTree.PriorityQueue as PriorityQueue
 import qualified Data.Structures.FingerTree.BrodalOkasakiHeap as BrodalOkasakiHeap
+import qualified Data.Structures.FingerTree.CanonicalSortedSet as CanonicalSortedSet
 import qualified Data.Structures.FingerTree.PrioritySearchQueue as PrioritySearchQueue
 import qualified Data.Structures.FingerTree.ReversibleDeque as ReversibleDeque
 import qualified Data.Structures.FingerTree.Rope as Rope

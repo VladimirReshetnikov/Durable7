@@ -3,6 +3,7 @@ name: tools-data-structures-fingertree
 version: 0.1.0.0
 synopsis: Persistent finger-tree data structures and derived collections
 description: Haskell port of the DataStructures repository finger-tree family.
+category: Data
 license: MIT-0
 author: Vladimir Reshetnikov
 maintainer: Vladimir Reshetnikov
@@ -12,6 +13,7 @@ library
   exposed-modules:
     Data.Structures.FingerTree
     Data.Structures.FingerTree.BrodalOkasakiHeap
+    Data.Structures.FingerTree.CanonicalSortedSet
     Data.Structures.FingerTree.Deque
     Data.Structures.FingerTree.IntervalTree
     Data.Structures.FingerTree.Measured
@@ -30,7 +32,10 @@ library
   build-depends:
     base >=4.21 && <4.22,
     array >=0.5 && <0.6,
+    bytestring >=0.12 && <0.13,
     containers >=0.7 && <0.8,
+    crypton >=1.0.6 && <1.1,
+    memory >=0.18 && <0.19,
     text >=2.1 && <2.2
   default-language: Haskell2010
 
@@ -38,9 +43,12 @@ test-suite ft-test
   type: exitcode-stdio-1.0
   main-is: Main.hs
   hs-source-dirs: test
+  other-modules:
+    CanonicalSortedSetTests
   build-depends:
     base >=4.21 && <4.22,
     array >=0.5 && <0.6,
+    bytestring >=0.12 && <0.13,
     containers >=0.7 && <0.8,
     text >=2.1 && <2.2,
     tools-data-structures-fingertree

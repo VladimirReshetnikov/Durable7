@@ -73,7 +73,7 @@ semantics, not parity failures. A pure Haskell value would not preserve DABA's e
 schedule, so omission there is intentional.
 
 The canonical zip-zip sorted set is a policy-canonical persistent member, currently implemented in
-C#, Kotlin/JVM, and Rust. All three ports derive a 32-byte HMAC key as SHA-256 of ASCII `ZZT2`
+C#, Haskell, Kotlin/JVM, and Rust. All four ports derive a 32-byte HMAC key as SHA-256 of ASCII `ZZT2`
 followed by the public seed in big-endian order, feed an eight-byte big-endian equivalence-class hash to
 HMAC-SHA-256, and interpret the first three big-endian words as leading-zero geometric rank,
 unsigned secondary rank, and digest content. Preserve random-key and caller-keyed modes, the
@@ -88,6 +88,12 @@ not inherit `DefaultHasher`, `usize`, or `isize` as reproducibility contracts. I
 equality surface accepts non-`Clone` values, while path-copying edits, algebra, and owned diff
 require `Clone`. Treat these as honest type-system boundaries rather than parity gaps.
 
+Haskell requires callers to supply the rank hash and creates every policy in `IO`, allocating an
+opaque `Data.Unique` token even for deterministic seeded/keyed modes. This preserves pure set
+operations without `unsafePerformIO` while making algebra identity testable; separately created
+same-seed/key policies still reproduce topology and digest but remain algebra-incompatible. Its
+digest is eagerly cached in immutable nodes, so shared-reader publication needs no synchronization.
+
 FingerTree lineage:
 
 1. [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) is the broadest semantic source:
@@ -100,8 +106,9 @@ FingerTree lineage:
    explicit handles, callback policies, and facade types, including a separately owned mutable DABA
    Lite handle with allocator-failure status semantics.
 4. [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) ports the family to Haskell
-   with a general measured tree, size-measured deque, reversible deque, derived collections,
-   priority queue, intervals, ropes, and text helpers.
+   with a general measured tree, size-measured deque, reversible deque, derived collections, the
+   explicitly identified policy-canonical zip-zip set, priority queues, intervals, ropes, and text
+   helpers.
 5. [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) ports the family to Kotlin/JVM over
    structurally shared measured AVL sequences with cached monoidal summaries and runtime
    measure/comparator policies, plus the policy-canonical zip-zip sorted set; its API notes state

@@ -33,6 +33,7 @@ import qualified Data.Structures.FingerTree.RrbVector as RrbVector
 import qualified Data.Structures.FingerTree.SortedBag as SortedBag
 import qualified Data.Structures.FingerTree.SortedMap as SortedMap
 import qualified Data.Structures.FingerTree.SortedSet as SortedSet
+import qualified CanonicalSortedSetTests
 
 main :: IO ()
 main = do
@@ -47,6 +48,7 @@ main = do
   testPriorityQueue
   testBrodalOkasakiHeap
   testPrioritySearchQueue
+  CanonicalSortedSetTests.run
   testIntervalTree
   testRrbVector
   testRopes

@@ -9,7 +9,15 @@ This package ports the repository finger-tree family to Haskell. It includes a g
 finger tree, a size-and-rightmost-leaf-measured deque, a reversible deque, sorted bag/set/map
 facades, a stable meldable priority queue, a worst-case-optimal Brodal-Okasaki heap, a keyed
 priority-search queue, interval tree helpers, positional ropes, measured ropes, text-rope navigation
-helpers, and a persistent RRB vector.
+helpers, a persistent RRB vector, and a policy-canonical zip-zip-tree sorted set.
+
+[`CanonicalSortedSet`](docs/canonical-sorted-set.md) derives exact HMAC-SHA-256 ranks from a caller's
+equivalence-class hash and a retained seeded, keyed, or fresh-random policy. Policy creation is an
+explicit `IO` boundary that allocates honest algebra-family identity; all persistent set operations
+are pure. Stable bulk construction and incremental histories converge on one topology, first
+representatives are retained, cross-policy equality uses the receiver's comparison semantics, and
+same-family algebra preserves canonicality. Iterative construction, updates, equality, enumeration,
+digesting, and validation remain stack-safe even when a constant rank hash forces a linear tree.
 
 `BrodalOkasakiHeap a` directly implements the bootstrapped skew-binomial representation: the
 rank-zero global root stores the minimum while its child list fuses primitive skew-tree children
