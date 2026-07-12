@@ -79,7 +79,7 @@ ordering, and documentation obligations that should remain recognizable across l
 | [C# HAMT](../../src/CSharp/docs/Hamt/overview.md) | Canonical managed HAMT library | `DataStructures.sln`, `src/Tools.DataStructures.Hamt/`, `tests/Tools.DataStructures.Hamt.Tests/` | [`docs`](../../src/CSharp/docs/Hamt/README.md) |
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | C17 HAMT port | `include/Tools/DataStructures/Hamt/hamt.h`, `build.ps1` | [`docs`](../../src/C/Hamt/docs/README.md) |
 | [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | C++20 HAMT port | `include/Tools/DataStructures/Hamt/*.hpp`, `build.ps1` | [`docs`](../../src/Cpp/Hamt/docs/README.md) |
-| [`src/Haskell/Hamt`](../../src/Haskell/Hamt/README.md) | Haskell HAMT port | `tools-data-structures-hamt.cabal`, `src/Data/Structures/Hamt/` | [`README`](../../src/Haskell/Hamt/README.md) |
+| [`src/Haskell/Hamt`](../../src/Haskell/Hamt/README.md) | Haskell HAMT/Patricia port and exact-wire Merkle core | `tools-data-structures-hamt.cabal`, `src/Data/Structures/Hamt/` | [`README`](../../src/Haskell/Hamt/README.md), [Merkle guide](../../src/Haskell/Hamt/docs/merkle-search-tree.md) |
 | [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | Kotlin/JVM HAMT port | `src/tools/datastructures/hamt/`, `test/tools/datastructures/hamt/` | [`docs`](../../src/Kotlin/Hamt/docs/README.md) |
 | [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | Rust HAMT/Patricia port and wire-compatible Merkle search tree | `Cargo.toml`, `src/lib.rs`, `src/merkle_search_tree.rs` | [`docs`](../../src/Rust/Hamt/docs/README.md) |
 | [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | Canonical managed FingerTree library | `DataStructures.sln`, `src/Tools.DataStructures.FingerTree/`, `tests/Tools.DataStructures.FingerTree.Tests/`, `samples/`, `benchmarks/` | [`docs`](../../src/CSharp/docs/FingerTree/README.md) |
@@ -102,7 +102,9 @@ HAMT lineage:
 1. C# HAMT (`src/CSharp/src/Tools.DataStructures.Hamt`) defines the managed public contract and model-test baseline.
 2. `src/Cpp/Hamt` ports the HAMT semantics to C++ value types, templates, and `std::shared_ptr` node sharing.
 3. `src/C/Hamt` ports the same structure to a type-erased C API with explicit clone/destroy ownership.
-4. `src/Haskell/Hamt` ports the same persistent HAMT semantics to Haskell values, with a package-local `Hashable` class and optional runtime `HashPolicy`.
+4. `src/Haskell/Hamt` ports the persistent HAMT semantics to Haskell values with a package-local
+   `Hashable` class and optional runtime `HashPolicy`, and ports the Merkle core through the exact
+   SHA-256 domain and `MST2` wire while its persistence tier remains a separate checkpoint.
 5. `src/Kotlin/Hamt` ports the HAMT contract to Kotlin/JVM values, runtime `HashPolicy` objects, and JVM-reference structural sharing.
 6. `src/Rust/Hamt` ports the HAMT contract to Rust value types, `BuildHasher` hash policies, and
    `Arc` structural sharing, and ports the C# Merkle search tree through the exact `MST2` wire,

@@ -5,14 +5,22 @@
 - Audience: Maintainers and AI agents reviewing the Haskell persistent HAMT port
 - Scope: `tools-data-structures-hamt` package
 
-This package ports the repository HAMT map and set family to Haskell. It provides persistent
+This package ports the repository's persistent map cores to Haskell. It provides persistent
 `HashMap` and `HashSet` values with a canonical 32-way CHAMP trie, strict split data/node maps,
 inline payload runs, immutable equal-hash collision buckets, structural sharing between versions,
 and optional runtime `HashPolicy` values for custom hash/equality behavior. Maps expose semantic
 `mapEquals` and typed `MapDifference` classification.
 
-The default factories use the package-local `Hashable` class plus `Eq`, avoiding third-party
-dependencies while keeping the public shape close to Haskell's `containers` style.
+`Data.Structures.Hamt.MerkleEncoding` and `Data.Structures.Hamt.MerkleSearchTree` add the
+policy-bound canonical Merkle search tree. The pure SHA-256 implementation, strict versioned
+codecs, domain/key framing, empty digest, and complete `MST2` block bytes match C# and Rust exactly.
+The immutable wide tree supports stable first-key/last-value bulk construction, path-copy updates,
+ordered lookup/range enumeration, digest-pruned diff, exact block/shape inspection, shared-content
+diagnostics, and deep re-encoding validation. See the dedicated
+[Merkle search-tree guide](docs/merkle-search-tree.md).
+
+The HAMT default factories use the package-local `Hashable` class plus `Eq`, keeping the public
+shape close to Haskell's `containers` style.
 `HashMap.validStructure` provides a key/value-agnostic diagnostic for cached cardinality and
 canonical node shape, including child-only node runs, bitmap cardinality, singleton payload
 promotion, and collision-bucket demotion after deletion.

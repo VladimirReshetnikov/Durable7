@@ -41,7 +41,7 @@ patterns.
 | C# HAMT | [src/CSharp/docs/Hamt/usage.md](../../src/CSharp/docs/Hamt/usage.md) | `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` construction, comparers, persistent updates, set algebra |
 | C HAMT | [src/C/Hamt/docs/usage.md](../../src/C/Hamt/docs/usage.md) | `tds_hamt_map` / `tds_hamt_set` policies, borrowed versus owned pointers, status/cleanup patterns |
 | C++ HAMT | [src/Cpp/Hamt/docs/usage.md](../../src/Cpp/Hamt/docs/usage.md) | Header inclusion, value semantics, custom hash/equality policy objects, set algebra |
-| Haskell HAMT | [src/Haskell/Hamt/README.md](../../src/Haskell/Hamt/README.md) | `HashMap`, `HashSet`, `HashPolicy`, package-local `Hashable`, and cabal validation |
+| Haskell HAMT | [src/Haskell/Hamt/README.md](../../src/Haskell/Hamt/README.md) and [Merkle guide](../../src/Haskell/Hamt/docs/merkle-search-tree.md) | HAMT/Patricia values plus canonical Merkle policy, codecs, persistent core, exact blocks, and cabal validation |
 | Kotlin HAMT | [src/Kotlin/Hamt/docs/api-notes.md](../../src/Kotlin/Hamt/docs/api-notes.md) | `PersistentHashMap`, `PersistentHashSet`, runtime `HashPolicy`, and executable validation |
 | Rust HAMT | [src/Rust/Hamt/docs/api-notes.md](../../src/Rust/Hamt/docs/api-notes.md) and [Merkle guide](../../src/Rust/Hamt/docs/merkle-search-tree.md) | Persistent HAMT/Patricia maps plus Merkle construction, persistence, proofs, synchronization, and merge |
 | C# FingerTree | [src/CSharp/docs/FingerTree/usage.md](../../src/CSharp/docs/FingerTree/usage.md) | Deques, reversible deques, sorted collections, priority queues, intervals, ropes/text, raw measured trees |
@@ -66,7 +66,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | C# HAMT | [API specification](../../src/CSharp/docs/Hamt/api-specification.md) | Normative C# HAMT map/set contract |
 | C HAMT | [API specification](../../src/C/Hamt/docs/api-specification.md) | C API ownership, callback policy, and complexity contract |
 | C++ HAMT | [API specification](../../src/Cpp/Hamt/docs/api-specification.md) | C++ template API and C# parity notes |
-| Haskell HAMT | [Workspace README](../../src/Haskell/Hamt/README.md) and [source](../../src/Haskell/Hamt/src/Data/Structures/Hamt/HashMap.hs) | Haskell HAMT map/set API shape |
+| Haskell HAMT | [Workspace README](../../src/Haskell/Hamt/README.md), [Merkle guide](../../src/Haskell/Hamt/docs/merkle-search-tree.md), and [sources](../../src/Haskell/Hamt/src/Data/Structures/Hamt/MerkleSearchTree.hs) | Haskell HAMT/Patricia APIs and the exact `MST2` Merkle core/wire contract |
 | Kotlin HAMT | [API notes](../../src/Kotlin/Hamt/docs/api-notes.md) and [source](../../src/Kotlin/Hamt/src/tools/datastructures/hamt/PersistentHamt.kt) | Kotlin HAMT map/set API shape, runtime policy, and root-sharing diagnostics |
 | Rust HAMT | [API notes](../../src/Rust/Hamt/docs/api-notes.md), [Merkle guide](../../src/Rust/Hamt/docs/merkle-search-tree.md), and [source](../../src/Rust/Hamt/src/lib.rs) | Rust map APIs plus the canonical `MST2`/`MSP2` wire, verification budgets, block-store, proof, sync, and merge contracts |
 | C# FingerTree | [API specification](../../src/CSharp/docs/FingerTree/api-specification.md) | Deque contract plus measured-tree, reversible-deque, rope, and related surface notes |
@@ -116,7 +116,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | C FingerTree samples | [Samples README](../../src/C/FingerTree/samples/README.md) | Deterministic C sample executables and CTest smoke-test names |
 | C FingerTree benchmarks | [Benchmarks README](../../src/C/FingerTree/benchmarks/README.md) | Dependency-light timing harness workloads and output shape |
 | C++ FingerTree tests | [Tests README](../../src/Cpp/FingerTree/tests/README.md) | Native group map including canonical, Brodal, and PSQ vectors/models/bounds/sharing/move-only/concurrency/destruction, DABA failures, direct runner paths, packaging, and tearable stress controls |
-| Haskell HAMT tests | [Tests README](../../src/Haskell/Hamt/test/README.md) | Cabal executable covering collision buckets, custom policies, key recovery, and set algebra |
+| Haskell HAMT tests | [Tests README](../../src/Haskell/Hamt/test/README.md) | Cabal executable covering HAMT/Patricia behavior plus exact Merkle hashing/wire, histories, models, sharing, range/diff, validation, and concurrent readers |
 | Haskell FingerTree tests | [Tests README](../../src/Haskell/FingerTree/test/README.md) | Cabal executable covering measured/derived families plus canonical rank vectors, policy identity, receiver relations, models, sharing, deep chains, and validation faults |
 | Haskell Tungsten tests | [Test source](../../src/Haskell/Tungsten/test/Main.hs) | Cabal executable covering list operations, Association ordering examples, policies, relabel stress, and generated histories |
 | Kotlin HAMT tests | [Tests README](../../src/Kotlin/Hamt/tests/README.md) | Kotlin executable covering collisions, root sharing, replacement, iteration, set algebra, and receiver-policy cross-policy relations |

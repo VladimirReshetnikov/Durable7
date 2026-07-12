@@ -59,7 +59,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | CHAMP canonicalization + structural equality/diff | 1 | Strong (implemented across all six languages) | Completed with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
 | `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all six languages) | Completed as proposal Tier C1 | 1 shared core, 4 C# public types, structural map/set algebra |
 | DABA Lite sliding-window aggregator | 1, 3 | Strong (implemented in every applicable language: C#, C, C++, Kotlin/JVM, and Rust; pure Haskell is not applicable) | Reuses the language's monoid abstraction | 1 small type, ~8 members |
-| Merkle search tree | 1 | Strong (C# and Rust implemented) | Completed: deterministic wire + bounded verification | Largest single item in this catalog |
+| Merkle search tree | 1 | Strong (C# and Rust complete; Haskell core/wire implemented) | Completed in full ports: deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
 | Zip tree (canonical sorted set) | 1, 3 | Plausible (implemented across all six languages) | Completed: coherent keyed rank policy | 1 new core, set facade |
 | Brodal-Okasaki heap | 1 | Plausible (implemented across all six languages for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
@@ -322,6 +322,18 @@ value and withholds the merged tree until every conflict is resolved. Fifty-seve
 tests plus doctests cover the shared golden vector, malformed and noncanonical closures, every
 budget, proof tampering, partial-store repair, concurrent stores, retained snapshots, and
 non-`Clone` values; clippy and rustdoc are warning-clean.
+
+**Haskell status (2026-07-12): Core and exact wire implemented; persistence tier remains.**
+`Data.Structures.Hamt.MerkleSearchTree` is a pure immutable wide tree over a policy whose application
+id, comparator, and strict codecs produce the same SHA-256 domain, empty root, key levels, and
+`MST2` blocks as C# and Rust. Stable bulk grouping keeps the first equivalent key and last value;
+path-copy insert/delete, interval-pruned ranges, aligned-block digest-pruned diff, block/shape
+inspection, and full re-encoding validation preserve the core semantics in Haskell's ordinary
+shared-value model. The package-owned pure SHA-256 implementation removes any platform hash or FFI
+dependency. Its warning-denied test gate pins the shared complete golden block, opposite-history
+preorder bytes, wide blocks, retained versions, a 10,000-operation ordered model, and `forkIO`
+readers. Stores, bounded load/import, `MSP2` proofs, synchronization, and merge are intentionally not
+claimed until the second Haskell checkpoint lands.
 
 **What they are.** Two convergent designs for *uniquely represented, content-addressed* search
 trees. Merkle search trees (Auvolat & Taïani, SRDS 2019) place each key at a layer derived from its
