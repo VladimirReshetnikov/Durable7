@@ -187,6 +187,34 @@ public sealed class MerkleEncodingWireTests
         Assert.Equal(expected, MerkleSearchTree<int, int>.Create(policy).RootHash);
     }
 
+    /// <summary>Pins a wide, multi-level root block to the shared six-language MST2 vector.</summary>
+    [Fact]
+    public void WideMultiLevelBlock_MatchesCrossLanguageGoldenVector()
+    {
+        var policy = MerkleSearchTreePolicy<int, int>.Create(
+            "golden-wide-i32-i32-v1",
+            Comparer<int>.Default,
+            MerkleCodecs.Int32,
+            MerkleCodecs.Int32);
+        int[] keys = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 38, 44, 59, 464];
+        var tree = MerkleSearchTree<int, int>.CreateRange(
+            keys.Select(key => KeyValuePair.Create(key, -key - 1)),
+            policy);
+        var blocks = tree.BlocksForTesting();
+
+        Assert.Equal("eb6b2bada16d3464d24f5b4b3d54bb5bca33f00d88164de27e95c920c2a1b917", policy.DomainDigest.ToString());
+        Assert.Equal("9afd7ba98ec91f72074c5f2c272ca1334244fb43a631e0fb440e02799eee8755", tree.RootHash.ToString());
+        Assert.Equal(14, tree.Count);
+        Assert.Equal(4, tree.BlockCount);
+        Assert.Equal(3, tree.Height);
+        Assert.Equal(tree.RootHash, blocks[0].Digest);
+        Assert.Equal(
+            "4d53543201eb6b2bada16d3464d24f5b4b3d54bb5bca33f00d88164de27e95c920c2a1b917020000000e00000002000000040000003b00000004ffffffc400000004000001d000000004fffffe2f790b862e0ef81c9e6debdf38c1099c565887fe87aed84f26dfba736de256d4d5018b1ddc596548b5389c9523ed8ddc027d166d82540611be117f8452a685a608018b1ddc596548b5389c9523ed8ddc027d166d82540611be117f8452a685a608",
+            Convert.ToHexString(blocks[0].Bytes).ToLowerInvariant());
+        Assert.Equal(2, blocks[0].Bytes[37]);
+        tree.ValidateStructure();
+    }
+
     /// <summary>Round-trips raw and hexadecimal digests through allocating and span-writing APIs.</summary>
     [Fact]
     public void MerkleDigest_ParsesAndWritesBytesAndHex()

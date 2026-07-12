@@ -122,6 +122,35 @@ private fun policyDomainAndGoldenBlockMatchCSharpAndRust(): Unit {
     )
     mstEquals(tree.rootHash, MerkleDigest.hash(block.toByteArray()), "block digest")
     mstEquals(1, tree.validateStructure().count, "golden structure")
+
+    val widePolicy = MerkleSearchTreePolicy.natural(
+        "golden-wide-i32-i32-v1",
+        Int32MerkleCodec,
+        Int32MerkleCodec,
+    )
+    val wideKeys = listOf(0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 38, 44, 59, 464)
+    val wideTree = MerkleSearchTree.from(wideKeys.map { key -> key to -key - 1 }, widePolicy)
+    val wideRoot = wideTree.blocksPreorder().first()
+    mstEquals(
+        "eb6b2bada16d3464d24f5b4b3d54bb5bca33f00d88164de27e95c920c2a1b917",
+        widePolicy.domainDigest.toString(),
+        "wide golden policy domain",
+    )
+    mstEquals(
+        "9afd7ba98ec91f72074c5f2c272ca1334244fb43a631e0fb440e02799eee8755",
+        wideTree.rootHash.toString(),
+        "wide golden root",
+    )
+    mstEquals(14, wideTree.size, "wide golden count")
+    mstEquals(4, wideTree.blockCount, "wide golden block count")
+    mstEquals(3, wideTree.height, "wide golden height")
+    mstEquals(
+        "4d53543201eb6b2bada16d3464d24f5b4b3d54bb5bca33f00d88164de27e95c920c2a1b917020000000e00000002000000040000003b00000004ffffffc400000004000001d000000004fffffe2f790b862e0ef81c9e6debdf38c1099c565887fe87aed84f26dfba736de256d4d5018b1ddc596548b5389c9523ed8ddc027d166d82540611be117f8452a685a608018b1ddc596548b5389c9523ed8ddc027d166d82540611be117f8452a685a608",
+        mstHex(wideRoot.toByteArray()),
+        "wide multi-level MST2 root block",
+    )
+    mstEquals(2.toByte(), wideRoot.toByteArray()[37], "wide root level byte")
+    mstEquals(14, wideTree.validateStructure().count, "wide golden structure")
 }
 
 private fun constructionAndChurnAreHistoryIndependent(): Unit {

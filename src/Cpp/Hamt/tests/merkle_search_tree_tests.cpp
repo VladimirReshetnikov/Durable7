@@ -566,6 +566,41 @@ TEST(SingleEntryMst2GoldenLocksDomainRootAndExactBlockBytes)
     CHECK_EQ(statistics.minimum_block_bytes, statistics.maximum_block_bytes);
 }
 
+TEST(WideMultiLevelMst2GoldenMatchesEverySiblingPort)
+{
+    constexpr auto expected_root_block_hex = std::string_view{
+        "4d53543201eb6b2bada16d3464d24f5b4b3d54bb5bca33f00d88164de27e95c920c2a1b917"
+        "020000000e00000002000000040000003b00000004ffffffc400000004000001d000000004fffffe2f"
+        "790b862e0ef81c9e6debdf38c1099c565887fe87aed84f26dfba736de256d4d5"
+        "018b1ddc596548b5389c9523ed8ddc027d166d82540611be117f8452a685a608"
+        "018b1ddc596548b5389c9523ed8ddc027d166d82540611be117f8452a685a608"};
+    const auto policy = make_int_policy("golden-wide-i32-i32-v1");
+    const auto keys = std::array<std::int32_t, 14>{0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 38, 44, 59, 464};
+    auto items = std::vector<std::pair<std::int32_t, std::int32_t>>{};
+    items.reserve(keys.size());
+    for (const auto key : keys) {
+        items.emplace_back(key, -key - 1);
+    }
+
+    const auto tree = int_tree::create_range(std::move(items), policy);
+    CHECK_EQ(
+        std::string{"eb6b2bada16d3464d24f5b4b3d54bb5bca33f00d88164de27e95c920c2a1b917"},
+        policy.domain_digest().to_hex());
+    CHECK_EQ(
+        std::string{"9afd7ba98ec91f72074c5f2c272ca1334244fb43a631e0fb440e02799eee8755"},
+        tree.root_hash().to_hex());
+    const auto blocks = tree.blocks_preorder();
+    CHECK_EQ(std::size_t{4}, blocks.size());
+    CHECK_EQ(tree.root_hash(), blocks.front().digest);
+    CHECK_EQ(std::byte{2}, blocks.front().bytes->at(37));
+    CHECK_EQ(parse_hex(expected_root_block_hex), *blocks.front().bytes);
+
+    const auto statistics = tree.validate_structure();
+    CHECK_EQ(std::size_t{14}, statistics.count);
+    CHECK_EQ(std::size_t{4}, statistics.block_count);
+    CHECK_EQ(std::size_t{3}, statistics.height);
+}
+
 TEST(CanonicalConstructionIsIndependentOfHistoryAndPolicyIdentity)
 {
     constexpr auto entry_count = std::int32_t{1024};

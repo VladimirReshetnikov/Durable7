@@ -362,10 +362,12 @@ typedef struct block_capture {
 
 static tds_merkle_status capture_block(tds_merkle_block_ref block, void *context) {
     block_capture *capture = (block_capture *)context;
+    if (capture->count == 0) {
+        capture->digest = block.digest;
+        capture->bytes = block.bytes;
+        capture->size = block.byte_count;
+    }
     ++capture->count;
-    capture->digest = block.digest;
-    capture->bytes = block.bytes;
-    capture->size = block.byte_count;
     return TDS_MERKLE_OK;
 }
 
@@ -412,6 +414,55 @@ static bool test_golden_single_entry_wire(void) {
         statistics.minimum_block_bytes == sizeof(expected));
     tds_merkle_search_tree_dispose(&tree);
     tds_merkle_search_tree_dispose(&empty);
+    tds_merkle_policy_dispose(&policy);
+    return true;
+}
+
+static bool test_golden_wide_multi_level_wire(void) {
+    static const char expected_hex[] =
+        "4d53543201eb6b2bada16d3464d24f5b4b3d54bb5bca33f00d88164de27e95c920c2a1b917"
+        "020000000e00000002000000040000003b00000004ffffffc400000004000001d000000004fffffe2f"
+        "790b862e0ef81c9e6debdf38c1099c565887fe87aed84f26dfba736de256d4d5"
+        "018b1ddc596548b5389c9523ed8ddc027d166d82540611be117f8452a685a608"
+        "018b1ddc596548b5389c9523ed8ddc027d166d82540611be117f8452a685a608";
+    static const int32_t keys[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 38, 44, 59, 464};
+    int32_t values[sizeof(keys) / sizeof(keys[0])];
+    tds_merkle_search_input inputs[sizeof(keys) / sizeof(keys[0])];
+    tds_merkle_policy policy = {NULL};
+    tds_merkle_search_tree tree = {NULL, NULL};
+    block_capture capture = {0};
+    unsigned char expected[(sizeof(expected_hex) - 1) / 2];
+    tds_merkle_search_tree_statistics statistics;
+    bool valid = false;
+    size_t index;
+
+    for (index = 0; index != sizeof(keys) / sizeof(keys[0]); ++index) {
+        values[index] = -keys[index] - 1;
+        inputs[index].key = &keys[index];
+        inputs[index].value = &values[index];
+    }
+    CHECK_STATUS(make_i32_policy("golden-wide-i32-i32-v1", &policy));
+    CHECK(digest_equals_hex(
+        tds_merkle_policy_domain_digest(&policy),
+        "eb6b2bada16d3464d24f5b4b3d54bb5bca33f00d88164de27e95c920c2a1b917"));
+    CHECK_STATUS(tds_merkle_search_tree_from_array(
+        &tree,
+        &policy,
+        inputs,
+        sizeof(inputs) / sizeof(inputs[0])));
+    CHECK(digest_equals_hex(
+        tds_merkle_search_tree_root_hash(&tree),
+        "9afd7ba98ec91f72074c5f2c272ca1334244fb43a631e0fb440e02799eee8755"));
+    CHECK_STATUS(tds_merkle_search_tree_visit_blocks(&tree, capture_block, &capture));
+    CHECK(capture.count == 4 && capture.size == sizeof(expected));
+    CHECK(tds_merkle_digest_equal(capture.digest, tds_merkle_search_tree_root_hash(&tree)));
+    CHECK(capture.bytes[37] == 2);
+    CHECK(parse_hex_bytes(expected_hex, expected, sizeof(expected)));
+    CHECK(memcmp(capture.bytes, expected, sizeof(expected)) == 0);
+    CHECK_STATUS(tds_merkle_search_tree_validate(&tree, &valid, &statistics));
+    CHECK(valid && statistics.count == 14 && statistics.block_count == 4 &&
+        statistics.height == 3);
+    tds_merkle_search_tree_dispose(&tree);
     tds_merkle_policy_dispose(&policy);
     return true;
 }
@@ -3568,6 +3619,7 @@ int main(void) {
     static const test_case tests[] = {
         {"digest and built-in codecs", test_digest_and_builtin_codecs},
         {"MST2 single-entry golden wire", test_golden_single_entry_wire},
+        {"MST2 wide multi-level golden wire", test_golden_wide_multi_level_wire},
         {"policy validation and typed compatibility", test_policy_validation_and_typed_compatibility},
         {"history independence and structure", test_history_independence_and_structure},
         {"persistence range diff and sharing", test_persistence_range_diff_and_sharing},

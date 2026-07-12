@@ -230,6 +230,19 @@ testMerkleEncodingAndCore = do
     "pure SHA-256 matches the standard abc vector"
     "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
     (digestHex (hashBytes (ByteStringChar8.pack "abc")))
+  let sequentialBytes length' = ByteString.pack (take length' [0 ..])
+  assertEqual "pure SHA-256 handles a 55-byte padding boundary"
+    "463eb28e72f82e0a96c0a4cc53690c571281131f672aa229e0d45ae59b598b59"
+    (digestHex (hashBytes (sequentialBytes 55)))
+  assertEqual "pure SHA-256 handles a 56-byte padding boundary"
+    "da2ae4d6b36748f2a318f23e7ab1dfdf45acdc9d049bd80e59de82a60895f562"
+    (digestHex (hashBytes (sequentialBytes 56)))
+  assertEqual "pure SHA-256 handles an exact 64-byte block"
+    "fdeab9acf3710362bd2658cdc9a29e8f9c757fcf9811603a8c447cd1d9151108"
+    (digestHex (hashBytes (sequentialBytes 64)))
+  assertEqual "pure SHA-256 handles a 65-byte multi-block input"
+    "4bfd2c8b6f1eec7a2afeb48b934ee4b2694182027e6d0fc075074f2fabb31781"
+    (digestHex (hashBytes (sequentialBytes 65)))
   assertEqual "Int32 codec big-endian vector"
     (Right (ByteString.pack [1, 2, 3, 4]))
     (encodeMerkleValue int32MerkleCodec 0x01020304)
@@ -264,6 +277,30 @@ testMerkleEncodingAndCore = do
     [Merkle.MerkleBlockView (Merkle.rootDigest goldenTree) expectedGoldenBlock]
     (Merkle.blocksPreorder goldenTree)
   assertBool "golden tree validates" (isRight (Merkle.validateStructure goldenTree))
+
+  widePolicy <- expectRight "construct wide golden Merkle policy"
+    (makeMerkleSearchTreePolicy "golden-wide-i32-i32-v1" compare int32MerkleCodec int32MerkleCodec)
+  let wideKeys = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 38, 44, 59, 464] :: [Int32]
+  wideTree <- expectRight "construct wide multi-level golden Merkle tree"
+    (Merkle.fromList [(key, negate key - 1) | key <- wideKeys] widePolicy)
+  assertEqual "wide golden policy domain"
+    "eb6b2bada16d3464d24f5b4b3d54bb5bca33f00d88164de27e95c920c2a1b917"
+    (digestHex (merkleDomainDigest widePolicy))
+  assertEqual "wide multi-level golden root"
+    "9afd7ba98ec91f72074c5f2c272ca1334244fb43a631e0fb440e02799eee8755"
+    (digestHex (Merkle.rootDigest wideTree))
+  assertEqual "wide multi-level golden size" 14 (Merkle.size wideTree)
+  assertEqual "wide multi-level golden block count" 4 (Merkle.blockCount wideTree)
+  assertEqual "wide multi-level golden height" 3 (Merkle.height wideTree)
+  let expectedWideRootBlock = decodeHex
+        "4d53543201eb6b2bada16d3464d24f5b4b3d54bb5bca33f00d88164de27e95c920c2a1b917020000000e00000002000000040000003b00000004ffffffc400000004000001d000000004fffffe2f790b862e0ef81c9e6debdf38c1099c565887fe87aed84f26dfba736de256d4d5018b1ddc596548b5389c9523ed8ddc027d166d82540611be117f8452a685a608018b1ddc596548b5389c9523ed8ddc027d166d82540611be117f8452a685a608"
+  case Merkle.blocksPreorder wideTree of
+    Merkle.MerkleBlockView rootDigest rootBytes : _ -> do
+      assertEqual "wide multi-level preorder starts at root" (Merkle.rootDigest wideTree) rootDigest
+      assertEqual "wide multi-level root level byte" 2 (ByteString.index rootBytes 37)
+      assertEqual "wide multi-level root block bytes" expectedWideRootBlock rootBytes
+    [] -> fail "wide multi-level golden tree unexpectedly has no blocks"
+  assertBool "wide multi-level golden tree validates" (isRight (Merkle.validateStructure wideTree))
 
   intPolicy <- expectRight "construct integer Merkle policy"
     (makeMerkleSearchTreePolicy "haskell-core-model-v1" compare int32MerkleCodec int32MerkleCodec)

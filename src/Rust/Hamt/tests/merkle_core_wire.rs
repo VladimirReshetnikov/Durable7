@@ -265,6 +265,49 @@ fn mst2_single_entry_bytes_match_the_csharp_golden_vector() {
 }
 
 #[test]
+fn mst2_wide_multi_level_root_matches_every_sibling_port() {
+    let policy = MerkleSearchTreePolicy::natural(
+        "golden-wide-i32-i32-v1",
+        Int32MerkleCodec,
+        Int32MerkleCodec,
+    )
+    .unwrap();
+    let keys = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 38, 44, 59, 464];
+    let tree = MerkleSearchTree::from_entries(
+        keys.into_iter().map(|key| (key, -key - 1)),
+        policy.clone(),
+    )
+    .unwrap();
+    assert_eq!(
+        policy.domain_digest().to_string(),
+        "eb6b2bada16d3464d24f5b4b3d54bb5bca33f00d88164de27e95c920c2a1b917"
+    );
+    assert_eq!(
+        tree.root_hash().to_string(),
+        "9afd7ba98ec91f72074c5f2c272ca1334244fb43a631e0fb440e02799eee8755"
+    );
+    assert_eq!(tree.len(), 14);
+    assert_eq!(tree.block_count(), 4);
+    assert_eq!(tree.height(), 3);
+    let root = &tree.blocks_preorder()[0];
+    assert_eq!(root.0, tree.root_hash());
+    assert_eq!(root.1[37], 2);
+    assert_eq!(
+        root.1.as_ref(),
+        decode_hex(
+            "4d53543201eb6b2bada16d3464d24f5b4b3d54bb5bca33f00d88164de27e95c920c2a1b917\
+             020000000e00000002000000040000003b00000004ffffffc400000004000001d000000004fffffe2f\
+             790b862e0ef81c9e6debdf38c1099c565887fe87aed84f26dfba736de256d4d5\
+             018b1ddc596548b5389c9523ed8ddc027d166d82540611be117f8452a685a608\
+             018b1ddc596548b5389c9523ed8ddc027d166d82540611be117f8452a685a608"
+                .replace(|character: char| character.is_ascii_whitespace(), "")
+                .as_str(),
+        )
+    );
+    assert_eq!(tree.validate_structure().unwrap().count, 14);
+}
+
+#[test]
 fn construction_and_churn_are_history_independent() {
     let entries = (0..4_096)
         .map(|key| (key, Some(format!("value-{key}"))))
