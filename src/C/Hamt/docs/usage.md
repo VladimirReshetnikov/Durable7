@@ -309,6 +309,9 @@ Available operations:
 - `tds_hamt_set_except_many`
 - `tds_hamt_set_symmetric_except_many`
 - subset/superset, overlap, and equality predicates over `*_many` inputs
+- corresponding two-set operations (`tds_hamt_set_union`, `tds_hamt_set_intersect`,
+  `tds_hamt_set_except`, and `tds_hamt_set_symmetric_except`) and relation predicates, which use
+  structural CHAMP combination for callback-compatible operands
 
 Operations that need distinct right-side membership materialize a temporary set under the receiver's
 policy. Superset and overlap checks stream the input and can exit early.

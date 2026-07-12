@@ -145,7 +145,8 @@ The suite covers:
 - a long scripted collision and deep-prefix scenario with retained snapshots and no-op root reuse checks;
 - randomized histories with deliberately colliding hashes;
 - set add/remove/contains persistence;
-- set algebra against model sets, including duplicate treatment for symmetric difference.
+- set algebra against model sets, including structural two-set overloads, zero-rehash shared-node
+  pruning, cached-cardinality validation, and duplicate treatment for symmetric difference.
 
 For new behavior, prefer adding deterministic model checks here before relying on example-only coverage.
 

@@ -153,6 +153,22 @@ tds_hamt_status tds_hamt_map_try_remove(
     bool *removed,
     const void **removed_value);
 tds_hamt_status tds_hamt_map_clear(const tds_hamt_map *map, tds_hamt_map *result);
+tds_hamt_status tds_hamt_map_union(
+    const tds_hamt_map *left,
+    const tds_hamt_map *right,
+    tds_hamt_map *result);
+tds_hamt_status tds_hamt_map_intersect(
+    const tds_hamt_map *left,
+    const tds_hamt_map *right,
+    tds_hamt_map *result);
+tds_hamt_status tds_hamt_map_except(
+    const tds_hamt_map *left,
+    const tds_hamt_map *right,
+    tds_hamt_map *result);
+tds_hamt_status tds_hamt_map_symmetric_except(
+    const tds_hamt_map *left,
+    const tds_hamt_map *right,
+    tds_hamt_map *result);
 
 void tds_hamt_map_iterator_init(const tds_hamt_map *map, tds_hamt_map_iterator *iterator);
 bool tds_hamt_map_iterator_next(
@@ -211,6 +227,22 @@ tds_hamt_status tds_hamt_set_try_remove(
     tds_hamt_set *result,
     bool *removed);
 tds_hamt_status tds_hamt_set_clear(const tds_hamt_set *set, tds_hamt_set *result);
+tds_hamt_status tds_hamt_set_union(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    tds_hamt_set *result);
+tds_hamt_status tds_hamt_set_intersect(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    tds_hamt_set *result);
+tds_hamt_status tds_hamt_set_except(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    tds_hamt_set *result);
+tds_hamt_status tds_hamt_set_symmetric_except(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    tds_hamt_set *result);
 
 tds_hamt_status tds_hamt_set_union_many(
     const tds_hamt_set *set,
@@ -266,6 +298,30 @@ tds_hamt_status tds_hamt_set_equals_many(
     const tds_hamt_set *set,
     const void *const *items,
     size_t item_count,
+    bool *result);
+tds_hamt_status tds_hamt_set_is_subset_of(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    bool *result);
+tds_hamt_status tds_hamt_set_is_proper_subset_of(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    bool *result);
+tds_hamt_status tds_hamt_set_is_superset_of(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    bool *result);
+tds_hamt_status tds_hamt_set_is_proper_superset_of(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    bool *result);
+tds_hamt_status tds_hamt_set_overlaps(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    bool *result);
+tds_hamt_status tds_hamt_set_equals(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
     bool *result);
 
 void tds_hamt_set_iterator_init(const tds_hamt_set *set, tds_hamt_set_iterator *iterator);

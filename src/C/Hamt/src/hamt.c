@@ -40,6 +40,7 @@ typedef struct tds_hamt_node tds_hamt_node;
 struct tds_hamt_node {
     tds_hamt_node_kind kind;
     size_t ref_count;
+    size_t subtree_count;
 };
 
 typedef struct tds_hamt_leaf_node {
@@ -69,6 +70,13 @@ typedef struct tds_hamt_bitmap_node {
     size_t node_count;
     unsigned char storage[];
 } tds_hamt_bitmap_node;
+
+typedef enum tds_hamt_combine_operation {
+    TDS_HAMT_COMBINE_UNION,
+    TDS_HAMT_COMBINE_INTERSECT,
+    TDS_HAMT_COMBINE_EXCEPT,
+    TDS_HAMT_COMBINE_SYMMETRIC_EXCEPT
+} tds_hamt_combine_operation;
 
 static tds_hamt_inline_entry *tds_hamt_bitmap_data(tds_hamt_bitmap_node *node);
 static const tds_hamt_inline_entry *tds_hamt_bitmap_data_const(const tds_hamt_bitmap_node *node);
@@ -165,6 +173,16 @@ static tds_hamt_status tds_hamt_bitmap_rebuild(
     size_t data_count,
     tds_hamt_node *const *children,
     size_t child_count,
+    tds_hamt_node **result);
+static bool tds_hamt_policy_callbacks_compatible(
+    const tds_hamt_policy *left,
+    const tds_hamt_policy *right);
+static tds_hamt_status tds_hamt_combine_nodes(
+    const tds_hamt_policy *policy,
+    const tds_hamt_node *left,
+    const tds_hamt_node *right,
+    int shift,
+    tds_hamt_combine_operation operation,
     tds_hamt_node **result);
 
 static bool tds_hamt_try_get_entry(
@@ -524,6 +542,92 @@ tds_hamt_status tds_hamt_map_clear(const tds_hamt_map *map, tds_hamt_map *result
     return TDS_HAMT_OK;
 }
 
+static tds_hamt_status tds_hamt_map_combine(
+    const tds_hamt_map *left,
+    const tds_hamt_map *right,
+    tds_hamt_combine_operation operation,
+    tds_hamt_map *result) {
+    if (left == NULL || right == NULL || result == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    tds_hamt_map normalized_right;
+    const tds_hamt_map *compatible_right = right;
+    bool owns_normalized_right = false;
+    tds_hamt_status status = TDS_HAMT_OK;
+    if (!tds_hamt_policy_callbacks_compatible(&left->policy, &right->policy)) {
+        normalized_right = tds_hamt_map_create(&left->policy);
+        owns_normalized_right = true;
+        tds_hamt_map_iterator iterator;
+        tds_hamt_map_iterator_init(right, &iterator);
+        const void *key = NULL;
+        const void *value = NULL;
+        while (status == TDS_HAMT_OK &&
+               tds_hamt_map_iterator_next(&iterator, &key, &value)) {
+            status = tds_hamt_map_set(&normalized_right, key, value, &normalized_right);
+        }
+        compatible_right = &normalized_right;
+    }
+
+    tds_hamt_node *root = NULL;
+    if (status == TDS_HAMT_OK) {
+        status = tds_hamt_combine_nodes(
+            &left->policy,
+            left->root,
+            compatible_right->root,
+            0,
+            operation,
+            &root);
+    }
+    if (owns_normalized_right) {
+        tds_hamt_map_destroy(&normalized_right);
+    }
+    if (status != TDS_HAMT_OK) {
+        return status;
+    }
+
+    const size_t count = root == NULL ? 0 : root->subtree_count;
+    if (result == left) {
+        tds_hamt_node_release(&left->policy, left->root);
+    }
+    if (result == right && right != left) {
+        tds_hamt_node_release(&right->policy, right->root);
+    }
+    result->root = root;
+    result->count = count;
+    result->policy = left->policy;
+    return TDS_HAMT_OK;
+}
+
+tds_hamt_status tds_hamt_map_union(
+    const tds_hamt_map *left,
+    const tds_hamt_map *right,
+    tds_hamt_map *result) {
+    return tds_hamt_map_combine(left, right, TDS_HAMT_COMBINE_UNION, result);
+}
+
+tds_hamt_status tds_hamt_map_intersect(
+    const tds_hamt_map *left,
+    const tds_hamt_map *right,
+    tds_hamt_map *result) {
+    return tds_hamt_map_combine(left, right, TDS_HAMT_COMBINE_INTERSECT, result);
+}
+
+tds_hamt_status tds_hamt_map_except(
+    const tds_hamt_map *left,
+    const tds_hamt_map *right,
+    tds_hamt_map *result) {
+    return tds_hamt_map_combine(left, right, TDS_HAMT_COMBINE_EXCEPT, result);
+}
+
+tds_hamt_status tds_hamt_map_symmetric_except(
+    const tds_hamt_map *left,
+    const tds_hamt_map *right,
+    tds_hamt_map *result) {
+    return tds_hamt_map_combine(
+        left, right, TDS_HAMT_COMBINE_SYMMETRIC_EXCEPT, result);
+}
+
 void tds_hamt_map_iterator_init(const tds_hamt_map *map, tds_hamt_map_iterator *iterator) {
     if (iterator == NULL) {
         return;
@@ -743,12 +847,12 @@ static bool tds_hamt_debug_validate_node(const tds_hamt_node *node, size_t *entr
     }
     if (node->kind == TDS_HAMT_NODE_LEAF) {
         *entry_count = 1;
-        return true;
+        return node->subtree_count == 1;
     }
     if (node->kind == TDS_HAMT_NODE_COLLISION) {
         const tds_hamt_collision_node *collision = (const tds_hamt_collision_node *)node;
         *entry_count = collision->count;
-        return collision->count >= 2;
+        return collision->count >= 2 && node->subtree_count == collision->count;
     }
 
     const tds_hamt_bitmap_node *branch = (const tds_hamt_bitmap_node *)node;
@@ -775,7 +879,7 @@ static bool tds_hamt_debug_validate_node(const tds_hamt_node *node, size_t *entr
         total += child_count;
     }
     *entry_count = total;
-    return true;
+    return node->subtree_count == total;
 }
 
 bool tds_hamt_map_debug_validate_canonical(const tds_hamt_map *map) {
@@ -979,6 +1083,42 @@ tds_hamt_status tds_hamt_set_clear(const tds_hamt_set *set, tds_hamt_set *result
     }
 
     return tds_hamt_map_clear(&set->map, &result->map);
+}
+
+tds_hamt_status tds_hamt_set_union(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    tds_hamt_set *result) {
+    return left == NULL || right == NULL || result == NULL
+        ? TDS_HAMT_INVALID_ARGUMENT
+        : tds_hamt_map_union(&left->map, &right->map, &result->map);
+}
+
+tds_hamt_status tds_hamt_set_intersect(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    tds_hamt_set *result) {
+    return left == NULL || right == NULL || result == NULL
+        ? TDS_HAMT_INVALID_ARGUMENT
+        : tds_hamt_map_intersect(&left->map, &right->map, &result->map);
+}
+
+tds_hamt_status tds_hamt_set_except(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    tds_hamt_set *result) {
+    return left == NULL || right == NULL || result == NULL
+        ? TDS_HAMT_INVALID_ARGUMENT
+        : tds_hamt_map_except(&left->map, &right->map, &result->map);
+}
+
+tds_hamt_status tds_hamt_set_symmetric_except(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    tds_hamt_set *result) {
+    return left == NULL || right == NULL || result == NULL
+        ? TDS_HAMT_INVALID_ARGUMENT
+        : tds_hamt_map_symmetric_except(&left->map, &right->map, &result->map);
 }
 
 tds_hamt_status tds_hamt_set_union_many(
@@ -1293,6 +1433,146 @@ tds_hamt_status tds_hamt_set_equals_many(
         && tds_hamt_set_contains_all_of(&probe, set);
     tds_hamt_set_destroy(&probe);
     return TDS_HAMT_OK;
+}
+
+static tds_hamt_status tds_hamt_set_structural_relation_parts(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    bool need_union,
+    tds_hamt_set *intersection,
+    tds_hamt_set *united) {
+    tds_hamt_status status = tds_hamt_set_intersect(left, right, intersection);
+    if (status != TDS_HAMT_OK || !need_union) {
+        return status;
+    }
+    status = tds_hamt_set_union(left, right, united);
+    if (status != TDS_HAMT_OK) {
+        tds_hamt_set_destroy(intersection);
+    }
+    return status;
+}
+
+tds_hamt_status tds_hamt_set_is_subset_of(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    bool *result) {
+    if (left == NULL || right == NULL || result == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+    *result = false;
+    tds_hamt_set intersection;
+    const tds_hamt_status status = tds_hamt_set_structural_relation_parts(
+        left, right, false, &intersection, NULL);
+    if (status == TDS_HAMT_OK) {
+        *result = intersection.map.count == left->map.count;
+        tds_hamt_set_destroy(&intersection);
+    }
+    return status;
+}
+
+tds_hamt_status tds_hamt_set_is_proper_subset_of(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    bool *result) {
+    if (left == NULL || right == NULL || result == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+    *result = false;
+    tds_hamt_set intersection;
+    tds_hamt_set united;
+    const tds_hamt_status status = tds_hamt_set_structural_relation_parts(
+        left, right, true, &intersection, &united);
+    if (status == TDS_HAMT_OK) {
+        *result = intersection.map.count == left->map.count &&
+            united.map.count > left->map.count;
+        tds_hamt_set_destroy(&intersection);
+        tds_hamt_set_destroy(&united);
+    }
+    return status;
+}
+
+tds_hamt_status tds_hamt_set_is_superset_of(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    bool *result) {
+    if (left == NULL || right == NULL || result == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+    *result = false;
+    tds_hamt_set intersection;
+    tds_hamt_set united;
+    const tds_hamt_status status = tds_hamt_set_structural_relation_parts(
+        left, right, true, &intersection, &united);
+    if (status == TDS_HAMT_OK) {
+        *result = united.map.count == left->map.count;
+        tds_hamt_set_destroy(&intersection);
+        tds_hamt_set_destroy(&united);
+    }
+    return status;
+}
+
+tds_hamt_status tds_hamt_set_is_proper_superset_of(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    bool *result) {
+    if (left == NULL || right == NULL || result == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+    *result = false;
+    tds_hamt_set intersection;
+    tds_hamt_set united;
+    const tds_hamt_status status = tds_hamt_set_structural_relation_parts(
+        left, right, true, &intersection, &united);
+    if (status == TDS_HAMT_OK) {
+        *result = united.map.count == left->map.count &&
+            intersection.map.count < left->map.count;
+        tds_hamt_set_destroy(&intersection);
+        tds_hamt_set_destroy(&united);
+    }
+    return status;
+}
+
+tds_hamt_status tds_hamt_set_overlaps(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    bool *result) {
+    if (left == NULL || right == NULL || result == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+    *result = false;
+    tds_hamt_set intersection;
+    const tds_hamt_status status = tds_hamt_set_structural_relation_parts(
+        left, right, false, &intersection, NULL);
+    if (status == TDS_HAMT_OK) {
+        *result = intersection.map.count != 0;
+        tds_hamt_set_destroy(&intersection);
+    }
+    return status;
+}
+
+tds_hamt_status tds_hamt_set_equals(
+    const tds_hamt_set *left,
+    const tds_hamt_set *right,
+    bool *result) {
+    if (left == NULL || right == NULL || result == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+    *result = false;
+    if (left->map.root == right->map.root) {
+        *result = true;
+        return TDS_HAMT_OK;
+    }
+    tds_hamt_set intersection;
+    tds_hamt_set united;
+    const tds_hamt_status status = tds_hamt_set_structural_relation_parts(
+        left, right, true, &intersection, &united);
+    if (status == TDS_HAMT_OK) {
+        *result = intersection.map.count == left->map.count &&
+            united.map.count == left->map.count;
+        tds_hamt_set_destroy(&intersection);
+        tds_hamt_set_destroy(&united);
+    }
+    return status;
 }
 
 void tds_hamt_set_iterator_init(const tds_hamt_set *set, tds_hamt_set_iterator *iterator) {
@@ -1622,6 +1902,7 @@ static tds_hamt_status tds_hamt_leaf_create_from_retained(
 
     leaf->base.kind = TDS_HAMT_NODE_LEAF;
     leaf->base.ref_count = 1;
+    leaf->base.subtree_count = 1;
     leaf->hash = hash;
     leaf->key = key;
     leaf->value = value;
@@ -1685,6 +1966,7 @@ static tds_hamt_status tds_hamt_collision_create(
 
     collision->base.kind = TDS_HAMT_NODE_COLLISION;
     collision->base.ref_count = 1;
+    collision->base.subtree_count = total_count;
     collision->hash = hash;
     collision->count = total_count;
 
@@ -1753,6 +2035,10 @@ static tds_hamt_status tds_hamt_bitmap_create(
     for (size_t i = 0; i < child_count; ++i) {
         target_children[i] = children[i];
     }
+    branch->base.subtree_count = data_count;
+    for (size_t i = 0; i < child_count; ++i) {
+        branch->base.subtree_count += children[i]->subtree_count;
+    }
 
     *result = &branch->base;
     return TDS_HAMT_OK;
@@ -1803,6 +2089,10 @@ static tds_hamt_status tds_hamt_bitmap_copy_create(
     while (branch->node_count < child_count) {
         target_children[branch->node_count] = tds_hamt_node_retain(children[branch->node_count]);
         ++branch->node_count;
+    }
+    branch->base.subtree_count = data_count;
+    for (size_t i = 0; i < child_count; ++i) {
+        branch->base.subtree_count += children[i]->subtree_count;
     }
     *result = &branch->base;
     return TDS_HAMT_OK;
@@ -1967,6 +2257,7 @@ static tds_hamt_status tds_hamt_node_set(
 
             replaced->base.kind = TDS_HAMT_NODE_COLLISION;
             replaced->base.ref_count = 1;
+            replaced->base.subtree_count = collision->count;
             replaced->hash = collision->hash;
             replaced->count = collision->count;
             tds_hamt_status status = TDS_HAMT_OK;
@@ -1999,6 +2290,7 @@ static tds_hamt_status tds_hamt_node_set(
 
         expanded->base.kind = TDS_HAMT_NODE_COLLISION;
         expanded->base.ref_count = 1;
+        expanded->base.subtree_count = collision->count + 1;
         expanded->hash = collision->hash;
         expanded->count = collision->count + 1u;
         tds_hamt_status status = TDS_HAMT_OK;
@@ -2212,6 +2504,7 @@ static tds_hamt_status tds_hamt_node_remove(
 
             shrunk->base.kind = TDS_HAMT_NODE_COLLISION;
             shrunk->base.ref_count = 1;
+            shrunk->base.subtree_count = collision->count - 1;
             shrunk->hash = collision->hash;
             shrunk->count = collision->count - 1u;
             tds_hamt_status status = TDS_HAMT_OK;
@@ -2385,6 +2678,409 @@ static tds_hamt_status tds_hamt_bitmap_rebuild(
     }
     return tds_hamt_bitmap_copy_create(
         policy, data_map, node_map, data, data_count, children, child_count, result);
+}
+
+static bool tds_hamt_policy_callbacks_compatible(
+    const tds_hamt_policy *left,
+    const tds_hamt_policy *right) {
+    return left->hash == right->hash &&
+        left->key_equal == right->key_equal &&
+        left->value_equal == right->value_equal &&
+        left->retain_key == right->retain_key &&
+        left->retain_value == right->retain_value &&
+        left->release_key == right->release_key &&
+        left->release_value == right->release_value &&
+        left->context == right->context;
+}
+
+static uint32_t tds_hamt_hash_node_hash(const tds_hamt_node *node) {
+    return node->kind == TDS_HAMT_NODE_LEAF
+        ? ((const tds_hamt_leaf_node *)node)->hash
+        : ((const tds_hamt_collision_node *)node)->hash;
+}
+
+static size_t tds_hamt_hash_node_entry_count(const tds_hamt_node *node) {
+    return node->kind == TDS_HAMT_NODE_LEAF
+        ? 1u
+        : ((const tds_hamt_collision_node *)node)->count;
+}
+
+static tds_hamt_entry tds_hamt_hash_node_entry_at(
+    const tds_hamt_node *node,
+    size_t index) {
+    if (node->kind == TDS_HAMT_NODE_LEAF) {
+        const tds_hamt_leaf_node *leaf = (const tds_hamt_leaf_node *)node;
+        return (tds_hamt_entry){ leaf->key, leaf->value };
+    }
+    return ((const tds_hamt_collision_node *)node)->entries[index];
+}
+
+static tds_hamt_status tds_hamt_hash_result_create(
+    const tds_hamt_policy *policy,
+    uint32_t hash,
+    const tds_hamt_entry *entries,
+    size_t count,
+    tds_hamt_node **result) {
+    if (count == 0) {
+        *result = NULL;
+        return TDS_HAMT_OK;
+    }
+    if (count == 1) {
+        return tds_hamt_leaf_create(
+            policy, hash, entries[0].key, entries[0].value, result);
+    }
+    if (count > (SIZE_MAX - sizeof(tds_hamt_collision_node)) / sizeof(tds_hamt_entry)) {
+        *result = NULL;
+        return TDS_HAMT_OUT_OF_MEMORY;
+    }
+    tds_hamt_collision_node *collision =
+        (tds_hamt_collision_node *)tds_hamt_allocate(
+            sizeof(*collision) + count * sizeof(tds_hamt_entry));
+    if (collision == NULL) {
+        *result = NULL;
+        return TDS_HAMT_OUT_OF_MEMORY;
+    }
+    collision->base.kind = TDS_HAMT_NODE_COLLISION;
+    collision->base.ref_count = 1;
+    collision->base.subtree_count = count;
+    collision->hash = hash;
+    collision->count = 0;
+    tds_hamt_status status = TDS_HAMT_OK;
+    while (status == TDS_HAMT_OK && collision->count < count) {
+        status = tds_hamt_collision_write_entry(
+            policy,
+            collision,
+            &collision->count,
+            entries[collision->count].key,
+            entries[collision->count].value);
+    }
+    if (status != TDS_HAMT_OK) {
+        tds_hamt_node_release(policy, &collision->base);
+        *result = NULL;
+        return status;
+    }
+    *result = &collision->base;
+    return TDS_HAMT_OK;
+}
+
+static tds_hamt_status tds_hamt_logical_slot(
+    const tds_hamt_policy *policy,
+    const tds_hamt_node *node,
+    int slot_index,
+    int shift,
+    tds_hamt_node **result) {
+    if (node == NULL) {
+        *result = NULL;
+        return TDS_HAMT_OK;
+    }
+    if (node->kind != TDS_HAMT_NODE_BITMAP_INDEXED) {
+        *result = tds_hamt_index(tds_hamt_hash_node_hash(node), shift) == slot_index
+            ? tds_hamt_node_retain(node)
+            : NULL;
+        return TDS_HAMT_OK;
+    }
+    const tds_hamt_bitmap_node *branch = (const tds_hamt_bitmap_node *)node;
+    const uint32_t selected_bit = tds_hamt_bit(slot_index);
+    if ((branch->data_map & selected_bit) != 0) {
+        const tds_hamt_inline_entry *entry =
+            &tds_hamt_bitmap_data_const(branch)[tds_hamt_slot(branch->data_map, selected_bit)];
+        return tds_hamt_leaf_create(
+            policy, entry->hash, entry->entry.key, entry->entry.value, result);
+    }
+    *result = (branch->node_map & selected_bit) != 0
+        ? tds_hamt_node_retain(
+            tds_hamt_bitmap_children_const(branch)[tds_hamt_slot(branch->node_map, selected_bit)])
+        : NULL;
+    return TDS_HAMT_OK;
+}
+
+static void tds_hamt_release_slots(
+    const tds_hamt_policy *policy,
+    tds_hamt_node **slots) {
+    for (size_t index = 0; index < 32; ++index) {
+        tds_hamt_node_release(policy, slots[index]);
+        slots[index] = NULL;
+    }
+}
+
+static bool tds_hamt_slot_matches_inline(
+    const tds_hamt_policy *policy,
+    const tds_hamt_node *actual,
+    const tds_hamt_inline_entry *expected) {
+    if (actual == NULL || actual->kind != TDS_HAMT_NODE_LEAF) {
+        return false;
+    }
+    const tds_hamt_leaf_node *leaf = (const tds_hamt_leaf_node *)actual;
+    return leaf->hash == expected->hash &&
+        tds_hamt_keys_equal(policy, leaf->key, expected->entry.key) &&
+        tds_hamt_values_equal(policy, leaf->value, expected->entry.value);
+}
+
+static bool tds_hamt_logical_slots_match(
+    const tds_hamt_policy *policy,
+    tds_hamt_node *const *slots,
+    const tds_hamt_node *original,
+    int shift) {
+    if (original->kind != TDS_HAMT_NODE_BITMAP_INDEXED) {
+        const int occupied = tds_hamt_index(tds_hamt_hash_node_hash(original), shift);
+        for (int index = 0; index < 32; ++index) {
+            if ((index == occupied && slots[index] != original) ||
+                (index != occupied && slots[index] != NULL)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    const tds_hamt_bitmap_node *branch = (const tds_hamt_bitmap_node *)original;
+    const tds_hamt_inline_entry *data = tds_hamt_bitmap_data_const(branch);
+    tds_hamt_node *const *children = tds_hamt_bitmap_children_const(branch);
+    for (int index = 0; index < 32; ++index) {
+        const uint32_t selected_bit = tds_hamt_bit(index);
+        if ((branch->data_map & selected_bit) != 0) {
+            if (!tds_hamt_slot_matches_inline(
+                    policy,
+                    slots[index],
+                    &data[tds_hamt_slot(branch->data_map, selected_bit)])) {
+                return false;
+            }
+        } else if ((branch->node_map & selected_bit) != 0) {
+            if (slots[index] != children[tds_hamt_slot(branch->node_map, selected_bit)]) {
+                return false;
+            }
+        } else if (slots[index] != NULL) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static tds_hamt_status tds_hamt_build_logical_node(
+    const tds_hamt_policy *policy,
+    tds_hamt_node **slots,
+    const tds_hamt_node *original_left,
+    int shift,
+    tds_hamt_node **result) {
+    if (tds_hamt_logical_slots_match(policy, slots, original_left, shift)) {
+        *result = tds_hamt_node_retain(original_left);
+        tds_hamt_release_slots(policy, slots);
+        return TDS_HAMT_OK;
+    }
+    uint32_t data_map = 0;
+    uint32_t node_map = 0;
+    tds_hamt_inline_entry data[32];
+    tds_hamt_node *children[32];
+    size_t data_count = 0;
+    size_t child_count = 0;
+    for (int index = 0; index < 32; ++index) {
+        const tds_hamt_node *node = slots[index];
+        if (node == NULL) {
+            continue;
+        }
+        if (node->kind == TDS_HAMT_NODE_LEAF) {
+            const tds_hamt_leaf_node *leaf = (const tds_hamt_leaf_node *)node;
+            data_map |= tds_hamt_bit(index);
+            data[data_count++] = (tds_hamt_inline_entry){
+                leaf->hash, { leaf->key, leaf->value }
+            };
+        } else {
+            node_map |= tds_hamt_bit(index);
+            children[child_count++] = slots[index];
+        }
+    }
+    const tds_hamt_status status = tds_hamt_bitmap_rebuild(
+        policy,
+        data_map,
+        node_map,
+        data,
+        data_count,
+        children,
+        child_count,
+        result);
+    tds_hamt_release_slots(policy, slots);
+    return status;
+}
+
+static tds_hamt_status tds_hamt_combine_hash_nodes(
+    const tds_hamt_policy *policy,
+    const tds_hamt_node *left,
+    const tds_hamt_node *right,
+    int shift,
+    tds_hamt_combine_operation operation,
+    tds_hamt_node **result) {
+    const uint32_t left_hash = tds_hamt_hash_node_hash(left);
+    const uint32_t right_hash = tds_hamt_hash_node_hash(right);
+    if (left_hash != right_hash) {
+        if (operation == TDS_HAMT_COMBINE_INTERSECT) {
+            *result = NULL;
+            return TDS_HAMT_OK;
+        }
+        if (operation == TDS_HAMT_COMBINE_EXCEPT) {
+            *result = tds_hamt_node_retain(left);
+            return TDS_HAMT_OK;
+        }
+        if (shift >= 32) {
+            *result = NULL;
+            return TDS_HAMT_INVALID_ARGUMENT;
+        }
+        tds_hamt_node *slots[32] = { NULL };
+        const int left_index = tds_hamt_index(left_hash, shift);
+        const int right_index = tds_hamt_index(right_hash, shift);
+        tds_hamt_status status = TDS_HAMT_OK;
+        if (left_index != right_index) {
+            slots[left_index] = tds_hamt_node_retain(left);
+            slots[right_index] = tds_hamt_node_retain(right);
+        } else {
+            status = tds_hamt_combine_hash_nodes(
+                policy,
+                left,
+                right,
+                shift + TDS_HAMT_BITS_PER_LEVEL,
+                operation,
+                &slots[left_index]);
+        }
+        if (status != TDS_HAMT_OK) {
+            tds_hamt_release_slots(policy, slots);
+            return status;
+        }
+        return tds_hamt_build_logical_node(policy, slots, left, shift, result);
+    }
+
+    const size_t left_count = tds_hamt_hash_node_entry_count(left);
+    const size_t right_count = tds_hamt_hash_node_entry_count(right);
+    if (left_count > SIZE_MAX - right_count ||
+        left_count + right_count > SIZE_MAX / sizeof(tds_hamt_entry)) {
+        *result = NULL;
+        return TDS_HAMT_OUT_OF_MEMORY;
+    }
+    tds_hamt_entry *entries = (tds_hamt_entry *)tds_hamt_allocate(
+        (left_count + right_count) * sizeof(*entries));
+    if (entries == NULL) {
+        *result = NULL;
+        return TDS_HAMT_OUT_OF_MEMORY;
+    }
+    size_t written = 0;
+    for (size_t i = 0; i < left_count; ++i) {
+        const tds_hamt_entry left_entry = tds_hamt_hash_node_entry_at(left, i);
+        bool found = false;
+        tds_hamt_entry matching_right = { NULL, NULL };
+        for (size_t j = 0; j < right_count; ++j) {
+            const tds_hamt_entry candidate = tds_hamt_hash_node_entry_at(right, j);
+            if (tds_hamt_keys_equal(policy, left_entry.key, candidate.key)) {
+                found = true;
+                matching_right = candidate;
+                break;
+            }
+        }
+        if (operation == TDS_HAMT_COMBINE_UNION) {
+            entries[written++] = (tds_hamt_entry){
+                left_entry.key,
+                found && !tds_hamt_values_equal(
+                    policy, left_entry.value, matching_right.value)
+                    ? matching_right.value
+                    : left_entry.value
+            };
+        } else if (operation == TDS_HAMT_COMBINE_INTERSECT && found) {
+            entries[written++] = left_entry;
+        } else if ((operation == TDS_HAMT_COMBINE_EXCEPT ||
+                    operation == TDS_HAMT_COMBINE_SYMMETRIC_EXCEPT) && !found) {
+            entries[written++] = left_entry;
+        }
+    }
+    if (operation == TDS_HAMT_COMBINE_UNION ||
+        operation == TDS_HAMT_COMBINE_SYMMETRIC_EXCEPT) {
+        for (size_t j = 0; j < right_count; ++j) {
+            const tds_hamt_entry right_entry = tds_hamt_hash_node_entry_at(right, j);
+            bool found = false;
+            for (size_t i = 0; i < left_count; ++i) {
+                const tds_hamt_entry left_entry = tds_hamt_hash_node_entry_at(left, i);
+                if (tds_hamt_keys_equal(policy, left_entry.key, right_entry.key)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                entries[written++] = right_entry;
+            }
+        }
+    }
+    bool matches_left = written == left_count;
+    for (size_t i = 0; matches_left && i < written; ++i) {
+        const tds_hamt_entry original = tds_hamt_hash_node_entry_at(left, i);
+        matches_left = tds_hamt_keys_equal(policy, original.key, entries[i].key) &&
+            tds_hamt_values_equal(policy, original.value, entries[i].value);
+    }
+    tds_hamt_status status;
+    if (matches_left) {
+        *result = tds_hamt_node_retain(left);
+        status = TDS_HAMT_OK;
+    } else {
+        status = tds_hamt_hash_result_create(
+            policy, left_hash, entries, written, result);
+    }
+    free(entries);
+    return status;
+}
+
+static tds_hamt_status tds_hamt_combine_nodes(
+    const tds_hamt_policy *policy,
+    const tds_hamt_node *left,
+    const tds_hamt_node *right,
+    int shift,
+    tds_hamt_combine_operation operation,
+    tds_hamt_node **result) {
+    if (left == right) {
+        *result = operation == TDS_HAMT_COMBINE_UNION ||
+                operation == TDS_HAMT_COMBINE_INTERSECT
+            ? tds_hamt_node_retain(left)
+            : NULL;
+        return TDS_HAMT_OK;
+    }
+    if (left == NULL) {
+        *result = operation == TDS_HAMT_COMBINE_UNION ||
+                operation == TDS_HAMT_COMBINE_SYMMETRIC_EXCEPT
+            ? tds_hamt_node_retain(right)
+            : NULL;
+        return TDS_HAMT_OK;
+    }
+    if (right == NULL) {
+        *result = operation == TDS_HAMT_COMBINE_INTERSECT
+            ? NULL
+            : tds_hamt_node_retain(left);
+        return TDS_HAMT_OK;
+    }
+    if (left->kind != TDS_HAMT_NODE_BITMAP_INDEXED &&
+        right->kind != TDS_HAMT_NODE_BITMAP_INDEXED) {
+        return tds_hamt_combine_hash_nodes(
+            policy, left, right, shift, operation, result);
+    }
+
+    tds_hamt_node *slots[32] = { NULL };
+    tds_hamt_status status = TDS_HAMT_OK;
+    for (int index = 0; status == TDS_HAMT_OK && index < 32; ++index) {
+        tds_hamt_node *left_slot = NULL;
+        tds_hamt_node *right_slot = NULL;
+        status = tds_hamt_logical_slot(policy, left, index, shift, &left_slot);
+        if (status == TDS_HAMT_OK) {
+            status = tds_hamt_logical_slot(policy, right, index, shift, &right_slot);
+        }
+        if (status == TDS_HAMT_OK) {
+            status = tds_hamt_combine_nodes(
+                policy,
+                left_slot,
+                right_slot,
+                shift + TDS_HAMT_BITS_PER_LEVEL,
+                operation,
+                &slots[index]);
+        }
+        tds_hamt_node_release(policy, left_slot);
+        tds_hamt_node_release(policy, right_slot);
+    }
+    if (status != TDS_HAMT_OK) {
+        tds_hamt_release_slots(policy, slots);
+        *result = NULL;
+        return status;
+    }
+    return tds_hamt_build_logical_node(policy, slots, left, shift, result);
 }
 
 static bool tds_hamt_try_get_entry(

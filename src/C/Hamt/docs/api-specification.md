@@ -148,6 +148,9 @@ source map or set remains alive.
 - `tds_hamt_map_try_get_key` returns the stored equivalent key pointer, or echoes the query pointer
   on miss.
 - `tds_hamt_map_clear` returns an empty map preserving the current policy.
+- `tds_hamt_map_union`, `tds_hamt_map_intersect`, `tds_hamt_map_except`, and
+  `tds_hamt_map_symmetric_except` combine two maps. Union retains receiver key representatives and
+  uses right values for unequal overlaps; intersection retains receiver entries.
 - `tds_hamt_map_equals` compares contents when the callback/context policy identities match.
 - `tds_hamt_map_diff` calls a visitor with `ADDED`, `REMOVED`, and `CHANGED` records. It performs no
   result allocation and returns `TDS_HAMT_INVALID_ARGUMENT` for incompatible policies.
@@ -165,11 +168,19 @@ reused and the stored value pointer is retained.
   behavior.
 - `union_many`, `intersect_many`, `except_many`, and `symmetric_except_many` return new persistent
   sets.
+- `tds_hamt_set_union`, `tds_hamt_set_intersect`, `tds_hamt_set_except`, and
+  `tds_hamt_set_symmetric_except` accept another set and combine CHAMP slots directly when every
+  callback and context pointer matches. Their same-set relation counterparts use the same path.
 - `is_subset_of_many`, `is_proper_subset_of_many`, `is_superset_of_many`,
   `is_proper_superset_of_many`, `overlaps_many`, and `equals_many` interpret equality through the
   set's policy callbacks. They report the relation through a `bool *result` out-parameter and
   return `tds_hamt_status`, so an allocation failure while materializing the internal probe set is
   distinguishable from a genuine negative answer.
+
+Compatible structural algebra caches cardinality in every node, retains pointer-identical nodes
+without invoking the hash callback, and otherwise performs a failure-atomic O(n + m) slot merge.
+When policy callbacks or context differ, the right operand is first normalized under the receiver's
+policy so the established receiver-policy semantics remain intact.
 
 Set operations that need distinct right-side membership materialize their argument into a temporary
 `tds_hamt_set` using the receiver's policy. Superset and overlap checks stream their argument.

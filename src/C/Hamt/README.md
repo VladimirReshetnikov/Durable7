@@ -22,7 +22,8 @@ The implementation preserves the C# and C++ libraries' core shape: 32-way logica
 hash bits per trie level, canonical CHAMP branches with separate data/node maps, inline type-erased
 payload runs and child-only subtrie runs, immutable equal-hash collision
 buckets, custom hash/equality policy callbacks, first equivalent key/item retention, no-op root
-reuse, and structural sharing across versions. Because this is C, ownership is explicit: maps and
+reuse, cached subtree cardinalities, and slot-aligned structural map/set algebra that prunes
+pointer-identical subtries. Because this is C, ownership is explicit: maps and
 sets are value structs whose roots are reference-counted, and callers use `clone`/`destroy` to manage
 version lifetimes.
 

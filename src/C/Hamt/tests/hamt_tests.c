@@ -1346,6 +1346,53 @@ static void test_set_custom_comparer_retains_first_item(void) {
     tds_hamt_set_destroy(&set);
 }
 
+static void test_champ_map_algebra_preserves_representatives_and_bias(void) {
+    tds_hamt_policy policy = tds_hamt_policy_default();
+    policy.hash = ci_hash;
+    policy.key_equal = ci_equal;
+    policy.value_equal = int_equal;
+    char alpha[] = "Alpha";
+    const tds_hamt_entry left_entries[] = {
+        { alpha, int_value(1) },
+        { "left", int_value(10) }
+    };
+    const tds_hamt_entry right_entries[] = {
+        { "ALPHA", int_value(2) },
+        { "right", int_value(20) }
+    };
+    tds_hamt_map left;
+    tds_hamt_map right;
+    CHECK_STATUS(tds_hamt_map_create_range(&policy, left_entries, 2, &left));
+    CHECK_STATUS(tds_hamt_map_create_range(&policy, right_entries, 2, &right));
+
+    tds_hamt_map actual;
+    CHECK_STATUS(tds_hamt_map_union(&left, &right, &actual));
+    CHECK(tds_hamt_map_count(&actual) == 3);
+    const void *stored_key = NULL;
+    CHECK(tds_hamt_map_try_get_key(&actual, "alpha", &stored_key));
+    CHECK(stored_key == alpha);
+    const void *stored_value = NULL;
+    CHECK(tds_hamt_map_try_get(&actual, "alpha", &stored_value));
+    CHECK(*(const int *)stored_value == 2);
+    tds_hamt_map_destroy(&actual);
+
+    CHECK_STATUS(tds_hamt_map_intersect(&left, &right, &actual));
+    CHECK(tds_hamt_map_count(&actual) == 1);
+    tds_hamt_map_destroy(&actual);
+    CHECK_STATUS(tds_hamt_map_except(&left, &right, &actual));
+    CHECK(tds_hamt_map_count(&actual) == 1);
+    tds_hamt_map_destroy(&actual);
+    CHECK_STATUS(tds_hamt_map_symmetric_except(&left, &right, &actual));
+    CHECK(tds_hamt_map_count(&actual) == 2);
+    tds_hamt_map_destroy(&actual);
+    CHECK_STATUS(tds_hamt_map_union(&left, &left, &actual));
+    CHECK(tds_hamt_map_shares_root(&left, &actual));
+    tds_hamt_map_destroy(&actual);
+
+    tds_hamt_map_destroy(&right);
+    tds_hamt_map_destroy(&left);
+}
+
 static void model_from_items(const void *const *items, size_t item_count, bool model[61]) {
     memset(model, 0, 61 * sizeof(bool));
     for (size_t i = 0; i < item_count; ++i) {
@@ -1378,6 +1425,9 @@ static void test_set_algebra_matches_model(void) {
 
         tds_hamt_set set;
         CHECK_STATUS(tds_hamt_set_create_range(&policy, left_items, left_count, &set));
+        tds_hamt_set right_set;
+        CHECK_STATUS(tds_hamt_set_create_range(
+            &policy, right_items, right_count, &right_set));
 
         bool expected[61];
         for (size_t i = 0; i < 61; ++i) {
@@ -1387,11 +1437,17 @@ static void test_set_algebra_matches_model(void) {
         CHECK_STATUS(tds_hamt_set_union_many(&set, right_items, right_count, &actual));
         assert_set_model_matches(expected, &actual);
         tds_hamt_set_destroy(&actual);
+        CHECK_STATUS(tds_hamt_set_union(&set, &right_set, &actual));
+        assert_set_model_matches(expected, &actual);
+        tds_hamt_set_destroy(&actual);
 
         for (size_t i = 0; i < 61; ++i) {
             expected[i] = left_model[i] && right_model[i];
         }
         CHECK_STATUS(tds_hamt_set_intersect_many(&set, right_items, right_count, &actual));
+        assert_set_model_matches(expected, &actual);
+        tds_hamt_set_destroy(&actual);
+        CHECK_STATUS(tds_hamt_set_intersect(&set, &right_set, &actual));
         assert_set_model_matches(expected, &actual);
         tds_hamt_set_destroy(&actual);
 
@@ -1401,11 +1457,17 @@ static void test_set_algebra_matches_model(void) {
         CHECK_STATUS(tds_hamt_set_except_many(&set, right_items, right_count, &actual));
         assert_set_model_matches(expected, &actual);
         tds_hamt_set_destroy(&actual);
+        CHECK_STATUS(tds_hamt_set_except(&set, &right_set, &actual));
+        assert_set_model_matches(expected, &actual);
+        tds_hamt_set_destroy(&actual);
 
         for (size_t i = 0; i < 61; ++i) {
             expected[i] = left_model[i] != right_model[i];
         }
         CHECK_STATUS(tds_hamt_set_symmetric_except_many(&set, right_items, right_count, &actual));
+        assert_set_model_matches(expected, &actual);
+        tds_hamt_set_destroy(&actual);
+        CHECK_STATUS(tds_hamt_set_symmetric_except(&set, &right_set, &actual));
         assert_set_model_matches(expected, &actual);
         tds_hamt_set_destroy(&actual);
 
@@ -1439,7 +1501,20 @@ static void test_set_algebra_matches_model(void) {
         CHECK(relation == overlaps);
         CHECK_STATUS(tds_hamt_set_equals_many(&set, right_items, right_count, &relation));
         CHECK(relation == (left_distinct == right_distinct && subset));
+        CHECK_STATUS(tds_hamt_set_is_subset_of(&set, &right_set, &relation));
+        CHECK(relation == subset);
+        CHECK_STATUS(tds_hamt_set_is_proper_subset_of(&set, &right_set, &relation));
+        CHECK(relation == (subset && left_distinct < right_distinct));
+        CHECK_STATUS(tds_hamt_set_is_superset_of(&set, &right_set, &relation));
+        CHECK(relation == superset);
+        CHECK_STATUS(tds_hamt_set_is_proper_superset_of(&set, &right_set, &relation));
+        CHECK(relation == (superset && left_distinct > right_distinct));
+        CHECK_STATUS(tds_hamt_set_overlaps(&set, &right_set, &relation));
+        CHECK(relation == overlaps);
+        CHECK_STATUS(tds_hamt_set_equals(&set, &right_set, &relation));
+        CHECK(relation == (left_distinct == right_distinct && subset));
 
+        tds_hamt_set_destroy(&right_set);
         tds_hamt_set_destroy(&set);
     }
 }
@@ -1522,11 +1597,18 @@ static void test_concurrent_retained_snapshot_reads(void) {
 }
 
 typedef struct counting_policy_state {
+    long hash_calls;
     long key_retains;
     long key_releases;
     long value_retains;
     long value_releases;
 } counting_policy_state;
+
+static uint32_t counting_int_hash(const void *item, void *context) {
+    counting_policy_state *state = (counting_policy_state *)context;
+    ++state->hash_calls;
+    return int_hash(item, NULL);
+}
 
 static void *counting_retain_key(const void *key, void *context) {
     counting_policy_state *state = (counting_policy_state *)context;
@@ -1559,7 +1641,7 @@ static void counting_release_value(void *value, void *context) {
 }
 
 static void test_counting_policy_stays_balanced_and_aliasing_updates_are_safe(void) {
-    counting_policy_state state = { 0, 0, 0, 0 };
+    counting_policy_state state = { 0, 0, 0, 0, 0 };
     tds_hamt_policy policy = int_map_policy(int_hash);
     policy.retain_key = counting_retain_key;
     policy.release_key = counting_release_key;
@@ -1596,8 +1678,100 @@ static void test_counting_policy_stays_balanced_and_aliasing_updates_are_safe(vo
     CHECK(state.key_retains > 0);
 }
 
+static void test_structural_set_algebra_prunes_shared_nodes_without_rehashing(void) {
+    counting_policy_state state = { 0, 0, 0, 0, 0 };
+    tds_hamt_set_policy policy = int_set_policy(counting_int_hash);
+    policy.retain_item = counting_retain_key;
+    policy.release_item = counting_release_key;
+    policy.context = &state;
+
+    tds_hamt_set basis = tds_hamt_set_create(&policy);
+    for (int value = 0; value < 100; ++value) {
+        CHECK_STATUS(tds_hamt_set_add(&basis, int_key(value), &basis));
+    }
+    tds_hamt_set left;
+    tds_hamt_set right;
+    CHECK_STATUS(tds_hamt_set_add(&basis, int_key(120), &left));
+    CHECK_STATUS(tds_hamt_set_add(&basis, int_key(121), &right));
+
+    state.hash_calls = 0;
+    tds_hamt_set actual;
+    CHECK_STATUS(tds_hamt_set_union(&left, &right, &actual));
+    CHECK(tds_hamt_set_count(&actual) == 102);
+    tds_hamt_set_destroy(&actual);
+    CHECK_STATUS(tds_hamt_set_intersect(&left, &right, &actual));
+    CHECK(tds_hamt_set_count(&actual) == 100);
+    tds_hamt_set_destroy(&actual);
+    CHECK_STATUS(tds_hamt_set_except(&left, &right, &actual));
+    CHECK(tds_hamt_set_count(&actual) == 1);
+    tds_hamt_set_destroy(&actual);
+    CHECK_STATUS(tds_hamt_set_symmetric_except(&left, &right, &actual));
+    CHECK(tds_hamt_set_count(&actual) == 2);
+    tds_hamt_set_destroy(&actual);
+    bool relation = false;
+    CHECK_STATUS(tds_hamt_set_is_subset_of(&basis, &left, &relation));
+    CHECK(relation);
+    CHECK_STATUS(tds_hamt_set_overlaps(&left, &right, &relation));
+    CHECK(relation);
+    CHECK_STATUS(tds_hamt_set_equals(&left, &left, &relation));
+    CHECK(relation);
+    CHECK(state.hash_calls == 0);
+
+    CHECK_STATUS(tds_hamt_set_union(&left, &left, &actual));
+    CHECK(tds_hamt_set_shares_root(&left, &actual));
+    tds_hamt_set_destroy(&actual);
+    CHECK_STATUS(tds_hamt_set_intersect(&left, &left, &actual));
+    CHECK(tds_hamt_set_shares_root(&left, &actual));
+    tds_hamt_set_destroy(&actual);
+
+    tds_hamt_set_destroy(&right);
+    tds_hamt_set_destroy(&left);
+    tds_hamt_set_destroy(&basis);
+    CHECK(state.key_retains == state.key_releases);
+}
+
+static void test_structural_set_algebra_allocation_failures_are_atomic(void) {
+    counting_policy_state state = { 0, 0, 0, 0, 0 };
+    tds_hamt_set_policy policy = int_set_policy(few_buckets_int_hash);
+    policy.retain_item = counting_retain_key;
+    policy.release_item = counting_release_key;
+    policy.context = &state;
+    const void *left_items[24];
+    const void *right_items[24];
+    for (int index = 0; index < 24; ++index) {
+        left_items[index] = int_key(index);
+        right_items[index] = int_key(index + 12);
+    }
+    tds_hamt_set left;
+    tds_hamt_set right;
+    CHECK_STATUS(tds_hamt_set_create_range(&policy, left_items, 24, &left));
+    CHECK_STATUS(tds_hamt_set_create_range(&policy, right_items, 24, &right));
+
+    bool completed = false;
+    for (size_t fail_after = 0; fail_after < 512 && !completed; ++fail_after) {
+        tds_hamt_set result = { 0 };
+        tds_hamt_test_fail_allocations_after(fail_after);
+        const tds_hamt_status status = tds_hamt_set_union(&left, &right, &result);
+        tds_hamt_test_reset_allocator();
+        CHECK(tds_hamt_map_debug_validate_canonical(&left.map));
+        CHECK(tds_hamt_map_debug_validate_canonical(&right.map));
+        if (status == TDS_HAMT_OK) {
+            CHECK(tds_hamt_set_count(&result) == 36);
+            tds_hamt_set_destroy(&result);
+            completed = true;
+        } else {
+            CHECK(status == TDS_HAMT_OUT_OF_MEMORY);
+            CHECK(result.map.root == NULL);
+        }
+    }
+    CHECK(completed);
+    tds_hamt_set_destroy(&right);
+    tds_hamt_set_destroy(&left);
+    CHECK(state.key_retains == state.key_releases);
+}
+
 static void test_aliased_set_add_keeps_item_refcounts_balanced(void) {
-    counting_policy_state state = { 0, 0, 0, 0 };
+    counting_policy_state state = { 0, 0, 0, 0, 0 };
     tds_hamt_set_policy policy = int_set_policy(int_hash);
     policy.retain_item = counting_retain_key;
     policy.release_item = counting_release_key;
@@ -1632,7 +1806,7 @@ static void test_aliased_set_add_keeps_item_refcounts_balanced(void) {
 }
 
 static void test_aliased_map_add_duplicate_preserves_source(void) {
-    counting_policy_state state = { 0, 0, 0, 0 };
+    counting_policy_state state = { 0, 0, 0, 0, 0 };
     tds_hamt_policy policy = int_map_policy(int_hash);
     policy.retain_key = counting_retain_key;
     policy.release_key = counting_release_key;
@@ -1674,7 +1848,7 @@ static void test_aliased_map_add_duplicate_preserves_source(void) {
 }
 
 static void test_aliased_try_remove_reports_null_removed_value(void) {
-    counting_policy_state state = { 0, 0, 0, 0 };
+    counting_policy_state state = { 0, 0, 0, 0, 0 };
     tds_hamt_policy policy = int_map_policy(int_hash);
     policy.retain_key = counting_retain_key;
     policy.release_key = counting_release_key;
@@ -1744,11 +1918,17 @@ static const test_case tests[] = {
     { "random history with colliding hashes matches model", test_random_history_with_colliding_hashes_matches_model },
     { "set add remove contains and persistence", test_set_add_remove_contains_and_persistence },
     { "set custom comparer retains first item", test_set_custom_comparer_retains_first_item },
+    { "CHAMP map algebra preserves representatives and bias",
+      test_champ_map_algebra_preserves_representatives_and_bias },
     { "set algebra matches model", test_set_algebra_matches_model },
     { "set symmetric_except treats duplicates as one item", test_set_symmetric_except_treats_duplicates_as_one_item },
     { "concurrent retained snapshot reads", test_concurrent_retained_snapshot_reads },
     { "counting policy stays balanced and aliasing updates are safe",
       test_counting_policy_stays_balanced_and_aliasing_updates_are_safe },
+    { "structural set algebra prunes shared nodes without rehashing",
+      test_structural_set_algebra_prunes_shared_nodes_without_rehashing },
+    { "structural set algebra allocation failures are atomic",
+      test_structural_set_algebra_allocation_failures_are_atomic },
     { "aliased set_add keeps item refcounts balanced",
       test_aliased_set_add_keeps_item_refcounts_balanced },
     { "aliased map_add duplicate preserves source",
