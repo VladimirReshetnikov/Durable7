@@ -102,3 +102,24 @@ target_include_directories(
 fingertree_c_configure_target(brodal_okasaki_heap_c_tests)
 
 tds_add_headless_test(NAME fingertree_c.brodal_okasaki_heap TARGET brodal_okasaki_heap_c_tests)
+
+add_executable(
+    priority_search_queue_c_tests
+    priority_search_queue_tests.c
+)
+
+target_link_libraries(
+    priority_search_queue_c_tests
+    PRIVATE
+        tools::data_structures::finger_tree_c
+)
+
+target_include_directories(
+    priority_search_queue_c_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+fingertree_c_configure_target(priority_search_queue_c_tests)
+
+tds_add_headless_test(NAME fingertree_c.priority_search_queue TARGET priority_search_queue_c_tests)

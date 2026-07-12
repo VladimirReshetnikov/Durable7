@@ -63,7 +63,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
 | Zip tree (canonical sorted set) | 1, 3 | Plausible (implemented across all six languages) | Completed: coherent keyed rank policy | 1 new core, set facade |
 | Brodal-Okasaki heap | 1 | Plausible (implemented across all six languages for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
-| Priority search queue (winner-cached AVL) | 1 | Plausible (C#, Haskell, Kotlin/JVM, and Rust implemented) | Completed as a direct core rather than the addressable composition | 1 new core |
+| Priority search queue (winner-cached AVL) | 1 | Plausible (C#, C, Haskell, Kotlin/JVM, and Rust implemented) | Completed as a direct core rather than the addressable composition | 1 new core |
 | Ctrie (concurrent, O(1) snapshot) | 1 | Managed-only (C# + Kotlin/JVM implemented) | Tracing GC; native ports require reclamation design | 1 new core, concurrency test tier |
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
 | Size-tiered small representations | 2 | Strong (planned, not shipped) | Benchmark gate at tier boundary | Internal tier per facade + representation-forcing tests |
@@ -495,6 +495,17 @@ cached winner. Eight focused groups cover every rotation/deletion direction, 50,
 a 20,000-operation retained model, `Option`-valued and non-`Clone` components, exact comparison
 equations, path sharing, custom-policy ties, and concurrent readers; the full debug/release gate is
 111/111 with warnings-denied clippy and rustdoc.
+
+**C priority-search status (2026-07-11): implemented with erased-type ownership and exhaustive
+failure atomicity.** `ft_priority_search_queue` uses separate stable key, priority, and value type
+tags, callback contexts, and immutable reference-counted representatives. Key ordering alone defines
+the equivalence class and the first stored key; exact no-op reuse requires priority-order equivalence,
+priority equality, and value equality, while `key.equals` is deliberately never invoked. Minimum,
+removal, and delete-minimum return owned exact-representative handles; lookup and visits borrow.
+Iterative AVL updates, traversal, validation, and intrusive reclamation remain stack-safe. Six focused
+groups cover 50,000 ascending keys, every rotation/deletion, 20,000 retained operations, exact pruning
+equations, exhaustive allocation/copy/equality/comparator failpoints, alias publication, lifetimes,
+nullable representations, sharing, and concurrent readers under the full five-lane C matrix.
 
 - **Brodal-Okasaki heap** (JFP 1996; skew binomial queues + data-structural bootstrapping): purely
   functional with O(1) *worst-case* insert, meld, and findMin, O(log n) deleteMin. The shipped
@@ -940,7 +951,7 @@ The implementation wave described by this catalog has already landed these C# re
 
 CHAMP, Patricia, and RRB have also advanced through the sibling-language work recorded in their
 entries; the canonical zip-zip set and Brodal-Okasaki heap are implemented across all six languages,
-the priority-search queue has Haskell, Kotlin/JVM, and Rust ports, and DABA Lite now exists in every applicable imperative
+the priority-search queue has C, Haskell, Kotlin/JVM, and Rust ports, and DABA Lite now exists in every applicable imperative
 language (C#, C, C++, Kotlin/JVM, and Rust). The Ctrie's deliberate parity boundary remains C# and
 Kotlin/JVM. These are current-state implementation records, not candidates awaiting a consumer.
 Future work on them is ordinary hardening, measurement, and demand-driven porting.

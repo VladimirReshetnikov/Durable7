@@ -23,6 +23,7 @@ target_sources(
         src/canonical_sorted_set.c
         src/daba_lite.c
         src/fingertree.c
+        src/priority_search_queue.c
         src/rrb_vector.c
 )
 

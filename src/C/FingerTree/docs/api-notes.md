@@ -9,6 +9,7 @@
 The public C API lives in `tools/data_structures/finger_tree/fingertree.h` and the focused
 `tools/data_structures/finger_tree/canonical_sorted_set.h`,
 `tools/data_structures/finger_tree/brodal_okasaki_heap.h`,
+`tools/data_structures/finger_tree/priority_search_queue.h`,
 `tools/data_structures/finger_tree/rrb_vector.h`, and
 `tools/data_structures/finger_tree/daba_lite.h` headers. For setup and handle-lifetime examples, start with the
 [usage guide](usage.md). The API uses opaque handles plus explicit policy callbacks rather than C++ templates:
@@ -61,6 +62,9 @@ Implemented in this checkpoint:
 - independent persistent Brodal-Okasaki bootstrapped skew-binomial min-heap with fallible type-erased values,
   constant worst-case insert/meld/minimum, logarithmic worst-case delete-minimum, retained representatives,
   policy-identity-gated melding, and fused-representation diagnostics;
+- independent persistent winner-cached priority search queue with fallible type-erased keys, priorities, and
+  values, comparer-defined key identity, exact stored representatives, logarithmic keyed updates, constant-time
+  minimum selection, logarithmic delete-minimum, key-order traversal, and inclusive range/threshold traversal;
 - generic persistent minimum-priority queue with caller-supplied value and priority copy policies;
 - generic closed-interval tree facade, plus a signed 64-bit convenience facade, with insertion, removal,
   containment, first-overlap, and overlap count;
@@ -206,6 +210,67 @@ rank-zero global root, the fused primitive/embedded boundary of every ranked tre
 parent/child heap order, logical cardinality, and traversal depth. It returns count, root-forest length, maximum
 rank, and maximum depth. Structural invalidity is `FT_STATUS_OK` with `valid == false`; allocator and comparator
 failures remain explicit statuses and leave validation outputs unchanged.
+
+## Winner-Cached Priority Search Queue Contract
+
+`ft_priority_search_queue` is an immutable type-erased AVL search tree keyed by the configured key comparator.
+Every node caches the winning entry in its subtree, ordered first by the priority comparator and then by the
+retained key comparator. That second comparison makes the minimum deterministic when several priorities compare
+equivalent. Keyed lookup, set, add, and removal are O(log n); minimum selection is O(1), and deleting the cached
+minimum is O(log n). These bounds assume logarithmic AVL height.
+
+An `ft_psq_policy_config` describes key, priority, and value as three independent types. Each has its own required
+stable non-null type-identity tag, size, optional fallible copy/infallible destroy pair, equality-callback slot,
+and callback context. Key and priority ordering callbacks are separate. Priority equality and value equality are
+required for replacement no-op detection. `key.equals` is deliberately optional and is never
+invoked: comparer-equivalent keys designate one map slot, and an incoming key's ordinary equality cannot replace
+or otherwise affect the first stored key representative. A destroy callback requires a copy callback. Failed
+copies leave destinations ownership-free; destroy, allocator, and deallocator hooks return normally.
+
+Policies are reference-counted identity-bearing handles retained by queues and owned entries. Copying a policy
+handle preserves identity; independently recreating an equivalent config does not. Type tags, callback contexts,
+allocator context, and all referenced state remain caller-owned and must outlive every retaining handle. Hooks
+must not reenter an operation in flight through the same policy, queue, or entry handles. Immutable operations
+through distinct handles may run concurrently only when every reachable hook and context is safe for that call
+pattern. Moving, disposing, or otherwise writing one handle object concurrently requires external
+synchronization.
+
+Key, priority, and value representatives are separately allocated immutable reference-counted components. Entry
+and AVL-node reps are likewise immutable and atomically reference counted. Updating an existing comparer-
+equivalent key shares the original key component into the new entry, while changed priority/value components and
+the search path are rebuilt. Untouched subtrees share nodes. `set` applies last-wins priority/value semantics but
+shares the complete source root only when the stored and incoming priorities compare equal, priority equality is
+true, and value equality is true. `try_add` on an existing key and `remove` on an absent key are root-sharing
+no-ops. `from_array` applies entries in array order, retaining the first key representative and the last
+priority/value for each key equivalence class.
+
+`try_get_entry_ref` returns borrowed pointers valid only while the source queue version remains alive. Minimum,
+try-remove, and delete-minimum operations instead return an `ft_priority_search_entry` that owns the exact stored
+key, priority, and value representatives independently of either queue. Dispose that handle when finished. This
+owned result is intentionally reference retention rather than user-component copying. Exact source/result queue
+aliasing is supported, including operations that also publish an owned entry.
+
+`visit` exposes entries in strict key order without copying components. `visit_at_most` first validates
+`minimum_key <= maximum_key`, then visits in key order every entry in the inclusive key interval whose priority is
+less than or equal to the supplied threshold. Cached subtree winners prune any subtree whose minimum priority is
+already above the threshold. Cost is O(log n + v) for v visited candidate nodes, with O(n) worst case when the
+range and threshold admit the whole tree. No Hinze-style pennant output bound is claimed. The focused tests pin
+the pruning equations for an exact-key query: if `v` is the number of candidate nodes whose winner is inspected
+and `e` is the number emitted, priority comparisons equal `v + e`, and key comparisons equal `1 + 2v`, including
+the eager range-order comparison. A threshold below the root winner performs exactly one key and one priority
+comparison and visits nothing.
+
+Root identity, per-key node identity, and exact shared-node count are representation diagnostics. Shared-node
+count requires exact policy identity. `validate` checks strict key order, AVL balance, cached count/height,
+maximum absolute balance factor, and exact cached-winner pointer identity. Structural invalidity returns
+`FT_STATUS_OK` with `valid == false`; allocation or comparator failure remains an explicit status and leaves
+outputs untouched.
+
+Persistent update, traversal, validation, and release paths use explicit arrays or intrusive nonallocating
+worklists rather than recursive C calls. Every operation stages all allocation, component copies, equality tests,
+comparisons, and successor construction before success-only output publication. Failure therefore preserves
+source handles, exact aliases, and distinct outputs. The API intentionally has no split or slice operation; the
+range/threshold visitor is the complete bounded-query surface for this checkpoint.
 
 ## DABA Lite Contract
 

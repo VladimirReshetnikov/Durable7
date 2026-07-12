@@ -5,19 +5,20 @@
 - Audience: Maintainers validating the C FingerTree port
 - Scope: Native test executable and source organization under `src/C/FingerTree/tests`
 
-The C FingerTree workspace has five focused native test executables. `fingertree_c_tests` is
+The C FingerTree workspace has six focused native test executables. `fingertree_c_tests` is
 registered as `fingertree_c.core`; `rrb_vector_c_tests` is registered as
 `fingertree_c.rrb_vector`; `daba_lite_c_tests` is registered as `fingertree_c.daba_lite`;
-`canonical_sorted_set_c_tests` is registered as `fingertree_c.canonical_sorted_set`; and
-`brodal_okasaki_heap_c_tests` is registered as `fingertree_c.brodal_okasaki_heap`. Each source
+`canonical_sorted_set_c_tests` is registered as `fingertree_c.canonical_sorted_set`;
+`brodal_okasaki_heap_c_tests` is registered as `fingertree_c.brodal_okasaki_heap`;
+and `priority_search_queue_c_tests` is registered as `fingertree_c.priority_search_queue`. Each source
 contains its runner, assertion macros, policy helpers, and test cases. The canonical executable uses
 the library's Windows CNG or OpenSSL Crypto backend but no test-framework dependency.
 
 The runner prints one `[pass]` line per named test case, writes failed requirements to standard error with file and
-line information, and exits non-zero if any test increments the failure count. A successful direct run ends with
-`all C FingerTree tests passed`. The focused runners end with `all C RRB vector tests passed` and
-`all C DABA Lite tests passed`, `all C canonical sorted-set tests passed`, or
-`all C Brodal-Okasaki heap tests passed`, respectively.
+line information, and exits non-zero if any test increments the failure count. A successful core run ends with
+`all C FingerTree tests passed`. Focused runners identify their surface in the corresponding final marker:
+`all C RRB vector tests passed`, `all C DABA Lite tests passed`, `all C canonical sorted-set tests passed`,
+`all C Brodal-Okasaki heap tests passed`, or `all C priority search queue tests passed`.
 
 ## Test Cases
 
@@ -96,6 +97,24 @@ line information, and exits non-zero if any test increments the failure count. A
 - `Brodal concurrent readers` runs eight independent copy/minimum/validate/dispose readers over a shared
   10,000-value immutable heap.
 
+`priority_search_queue_tests.c` registers these cases:
+
+- `PSQ representatives no-ops and minimum` covers first key-representative retention, comparer-versus-exact
+  priority equality, exact value no-ops, nullable representations, try-add/remove, owned-entry lifetime,
+  descending key policies, deterministic priority/key winner order, and policy/type mismatch.
+- `PSQ rotations deletions stack safety and sharing` exercises all AVL rotations, deletion repairs, exact
+  root/node sharing, a 4,095-key adversarial insertion order, and 50,000 ascending inserts without recursive
+  stack growth.
+- `PSQ range threshold pruning equations` checks inclusive mixed ranges in key order and exact key/priority
+  comparison equations for impossible thresholds and exact-key searches through cached-winner pruning.
+- `PSQ twenty-thousand retained model` runs a 20,000-operation randomized keyed model while retaining and
+  revisiting 96 immutable snapshots.
+- `PSQ failure atomicity and callback sweeps` exhausts every observed allocation, key/priority/value copy,
+  priority/value equality, key/priority comparison, visit, validation, sharing, point-update, deletion, and
+  array-construction failpoint, including alias rollback, untouched outputs, and exact lifetime accounting.
+- `PSQ concurrent distinct-handle readers` runs eight independent copy/lookup/minimum/validate/visit/dispose
+  readers over a shared 10,000-entry immutable queue.
+
 `daba_lite_tests.c` covers:
 
 - all 1,024 ten-step insert/evict histories against a noncommutative matrix FIFO model;
@@ -126,6 +145,7 @@ Run the built executables directly when changing runner diagnostics or a focused
 .\out\build\msvc-debug\tests\fingertree_c_tests.exe
 .\out\build\msvc-debug\tests\canonical_sorted_set_c_tests.exe
 .\out\build\msvc-debug\tests\brodal_okasaki_heap_c_tests.exe
+.\out\build\msvc-debug\tests\priority_search_queue_c_tests.exe
 .\out\build\msvc-debug\tests\rrb_vector_c_tests.exe
 .\out\build\msvc-debug\tests\daba_lite_c_tests.exe
 ```

@@ -15,16 +15,21 @@ with the [API notes](api-notes.md) and [usage guide](usage.md).
 The workspace uses CMake presets. The `msvc-*` presets use Visual Studio's bundled Ninja by absolute path;
 the `ninja-*` presets use `cmake` and `ninja` from `PATH` for host-agnostic validation. `CMakeLists.txt` builds the
 `tools_data_structures_finger_tree_c` static library from `src/fingertree.c`,
-`src/brodal_okasaki_heap.c`, `src/canonical_sorted_set.c`, `src/rrb_vector.c`, and `src/daba_lite.c`,
+`src/brodal_okasaki_heap.c`, `src/canonical_sorted_set.c`, `src/priority_search_queue.c`,
+`src/rrb_vector.c`, and `src/daba_lite.c`,
 with these options enabled by default:
 
 - `FINGERTREE_C_BUILD_TESTS`: builds `tests/fingertree_c_tests`,
-  `tests/brodal_okasaki_heap_c_tests`, `tests/canonical_sorted_set_c_tests`, `tests/rrb_vector_c_tests`, and
-  `tests/daba_lite_c_tests`, registering `fingertree_c.core`, `fingertree_c.brodal_okasaki_heap`,
-  `fingertree_c.canonical_sorted_set`, `fingertree_c.rrb_vector`, and `fingertree_c.daba_lite`.
+  `tests/brodal_okasaki_heap_c_tests`, `tests/canonical_sorted_set_c_tests`,
+  `tests/priority_search_queue_c_tests`, `tests/rrb_vector_c_tests`, and `tests/daba_lite_c_tests`, registering
+  `fingertree_c.core`, `fingertree_c.brodal_okasaki_heap`, `fingertree_c.canonical_sorted_set`,
+  `fingertree_c.priority_search_queue`, `fingertree_c.rrb_vector`, and `fingertree_c.daba_lite`.
 - `FINGERTREE_C_BUILD_SAMPLES`: builds `samples/fingertree_c_showcase` and
   `samples/fingertree_c_snapshots`, both registered as CTest smoke tests.
 - `FINGERTREE_C_BUILD_BENCHMARKS`: builds `benchmarks/fingertree_c_benchmarks`.
+
+With tests and samples enabled, a complete CTest run contains eight targets: six library test executables and
+two sample smoke tests.
 
 The project is C11 (`C_STANDARD 11`, required, extensions off). MSVC targets build with `/permissive-`,
 `/W4`, `/WX`, `/external:anglebrackets`, and `/external:W0`; non-MSVC targets use `-Wall -Wextra
@@ -159,6 +164,24 @@ but logical count and representative multiplicity still double. The policy/tag/c
 caller-owned, callback reentrancy through in-flight handles is unsupported, and concurrent distinct-handle use
 requires thread-safe hooks.
 
+The independent `fingertree_c.priority_search_queue` executable covers:
+
+- comparer-equivalent key replacement with first-representative retention; priority comparer/equality
+  independence; exact value no-ops; nullable representations; deterministic priority/key minimum order;
+  try-add/remove behavior; policy/tag mismatch; and owned removed-entry lifetime across exact queue aliasing;
+- AVL rotations and deletion repairs, a 50,000-key ascending stack-safety history, a 4,095-key adversarial
+  insertion order, exact root/node sharing diagnostics, absent-remove no-ops, validation, and height bounds;
+- inclusive key-range/priority-threshold traversal in key order, winner-cache pruning, and exact comparison
+  equations, including the one-key/one-priority impossible-threshold path and logarithmic exact-key descent;
+- a 20,000-operation randomized keyed model with 96 retained immutable snapshots and repeated minimum,
+  lookup, count, order, and invariant checks;
+- every observed allocator, key/priority/value copy, priority/value equality, key/priority comparator,
+  visitor, validator, shared-node, point-update, deletion, and array-construction failpoint, including exact
+  alias rollback, success-only outputs, a trap proving `key.equals` is never invoked, and exact ownership
+  accounting; and
+- eight concurrent distinct-handle readers copying, looking up, selecting minima, validating, traversing, and
+  disposing snapshots of a shared 10,000-entry queue.
+
 The independent `fingertree_c.canonical_sorted_set` executable covers:
 
 - exact SHA-256/HMAC-based `ZZT2` rank vectors, unsigned secondary ordering, random-policy hidden-key
@@ -224,9 +247,9 @@ $env:UBSAN_OPTIONS = "halt_on_error=1:print_stacktrace=1"
 ```
 
 Using `detect_leaks=1` on this platform terminates each executable before `main` with an unsupported-option
-diagnostic; that is an environment limitation, not a test failure. Canonical-set and Brodal-heap leak liveness is
-independently covered by deterministic allocator-failure sweeps and exact outstanding-allocation/copy-destroy
-accounting.
+diagnostic; that is an environment limitation, not a test failure. Canonical-set, Brodal-heap, and priority-search
+queue leak liveness is independently covered by deterministic allocator-failure sweeps and exact
+outstanding-allocation/copy-destroy accounting.
 
 ## Evidence To Record
 

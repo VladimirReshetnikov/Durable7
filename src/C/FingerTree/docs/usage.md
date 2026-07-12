@@ -15,9 +15,12 @@ C use cases. The normative public declarations live in
 Include the public header:
 
 ```c
+#include <stdio.h>
+
 #include <tools/data_structures/finger_tree/fingertree.h>
 #include <tools/data_structures/finger_tree/brodal_okasaki_heap.h>
 #include <tools/data_structures/finger_tree/canonical_sorted_set.h>
+#include <tools/data_structures/finger_tree/priority_search_queue.h>
 #include <tools/data_structures/finger_tree/daba_lite.h>
 #include <tools/data_structures/finger_tree/rrb_vector.h>
 ```
@@ -298,6 +301,143 @@ Callbacks and allocator hooks must not reenter an operation in flight through th
 must be thread-safe when independent immutable handles are used concurrently. `visit` is structural,
 not sorted; drain by repeated delete-minimum for priority order. `validate` checks the complete fused
 bootstrapped representation and returns rank/depth/forest statistics.
+
+## Winner-Cached Priority Search Queue
+
+Use `ft_priority_search_queue` when entries need both dictionary-style access by key and minimum-first access by
+priority. The key comparator defines key identity. The priority comparator orders winners, with retained key order
+as the deterministic tie-breaker. Priority and value equality independently decide whether a set is an exact
+root-sharing no-op.
+
+```c
+static ft_status compare_i32(
+    const void* left,
+    const void* right,
+    int* comparison,
+    void* context)
+{
+    int a = *(const int*)left;
+    int b = *(const int*)right;
+    (void)context;
+    *comparison = (a > b) - (a < b);
+    return FT_STATUS_OK;
+}
+
+static ft_status equal_i32(
+    const void* left,
+    const void* right,
+    bool* equal,
+    void* context)
+{
+    (void)context;
+    *equal = *(const int*)left == *(const int*)right;
+    return FT_STATUS_OK;
+}
+
+static ft_status print_due_entry(
+    ft_priority_search_entry_ref entry,
+    void* context)
+{
+    (void)context;
+    printf("key=%d priority=%d value=%d\n",
+        *(const int*)entry.key,
+        *(const int*)entry.priority,
+        *(const int*)entry.value);
+    return FT_STATUS_OK;
+}
+
+static const unsigned char key_type_identity = 0;
+static const unsigned char priority_type_identity = 0;
+static const unsigned char value_type_identity = 0;
+
+ft_psq_policy_config config;
+ft_psq_policy_config_init(
+    &config,
+    sizeof(int), &key_type_identity, compare_i32,
+    sizeof(int), &priority_type_identity, compare_i32, equal_i32,
+    sizeof(int), &value_type_identity, equal_i32);
+
+ft_psq_policy policy = { 0 };
+ft_priority_search_queue queue = { 0 };
+ft_status status = ft_psq_policy_create(&policy, &config);
+if (status == FT_STATUS_OK) {
+    status = ft_priority_search_queue_init(&queue, &policy);
+}
+ft_psq_policy_dispose(&policy); /* the queue retained the policy identity */
+
+int key = 42;
+int priority = 3;
+int value = 9001;
+if (status == FT_STATUS_OK) {
+    status = ft_priority_search_queue_set(
+        &queue, &key, &priority, &value, &queue);
+}
+
+bool found = false;
+ft_priority_search_entry_ref borrowed = { 0 };
+if (status == FT_STATUS_OK) {
+    status = ft_priority_search_queue_try_get_entry_ref(
+        &queue, &key, &found, &borrowed);
+}
+/* When found, borrowed points into queue and must not outlive this version. */
+
+ft_priority_search_entry minimum = { 0 };
+if (status == FT_STATUS_OK) {
+    status = ft_priority_search_queue_try_get_minimum(
+        &queue, &found, &minimum);
+}
+if (status == FT_STATUS_OK && found) {
+    ft_priority_search_entry_ref owned_ref;
+    status = ft_priority_search_entry_get_ref(&minimum, &owned_ref);
+}
+ft_priority_search_entry_dispose(&minimum);
+
+int minimum_key = 0;
+int maximum_key = 100;
+int maximum_priority = 5;
+if (status == FT_STATUS_OK) {
+    status = ft_priority_search_queue_visit_at_most(
+        &queue,
+        &minimum_key,
+        &maximum_key,
+        &maximum_priority,
+        print_due_entry,
+        NULL);
+}
+
+ft_priority_search_entry removed = { 0 };
+bool did_remove = false;
+if (status == FT_STATUS_OK) {
+    status = ft_priority_search_queue_try_delete_minimum(
+        &queue, &did_remove, &removed, &queue);
+}
+/* removed owns the exact stored representatives even after queue changes. */
+ft_priority_search_entry_dispose(&removed);
+ft_priority_search_queue_dispose(&queue);
+return status;
+```
+
+For trivial C values, leaving each component's copy and destroy hooks null selects byte copying and no
+destruction. Nontrivial components provide a fallible copy that constructs an independent owned object in
+uninitialized storage and an infallible destroy. The priority and value equality callbacks are required; a
+priority comparison of zero alone does not make a replacement a no-op. `config.key.equals` may be left null and
+is never called. Comparer-equivalent incoming keys update only priority/value and always retain the first stored
+key representative.
+
+Each of the three type-identity tags is separate even when all three C representations happen to be `int`.
+Their addresses identify which objects may safely cross the type-erased boundary; keep them and all callback or
+allocator contexts alive while any copied policy, queue, or owned entry exists. Nullable logical values should be
+represented explicitly—such as a `{ bool has_value; T value; }` struct—rather than by passing a null component
+pointer, because operation inputs themselves are required.
+
+`try_get_entry_ref` is the borrowed lookup form. `try_get_minimum`, successful `try_remove`, and successful
+`try_delete_minimum` return owned entry handles and do not invoke component-copy callbacks; dispose them after
+the last read. Queue-producing operations accept exact source/result aliasing and publish only on success.
+`try_add` on an existing key and `remove` on an absent key share the source root.
+
+`visit` traverses every entry in key order. `visit_at_most` traverses an inclusive key range and emits only
+priorities less than or equal to its threshold, pruning subtrees through cached winners. A reversed range is an
+error even for an empty queue. The checkpoint intentionally offers no split or slice operation.
 
 ## DABA Lite Sliding Aggregate
 
@@ -657,6 +797,7 @@ including from a destroy callback during disposal, is unsupported.
 | Unique sorted values | `ft_sorted_set` |
 | Canonical keyed topology, reproducible shape, or persistent set algebra | `ft_canonical_sorted_set` |
 | Worst-case O(1) persistent heap insert and meld | `ft_brodal_heap` |
+| Persistent keyed lookup plus cached minimum and range/priority filtering | `ft_priority_search_queue` |
 | Sorted values with duplicates | `ft_sorted_multiset` |
 | Sorted key/value lookup and rank access | `ft_sorted_map` |
 | Minimum-priority draining with stable equal priorities | `ft_priority_queue` |
