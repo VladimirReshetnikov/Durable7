@@ -190,6 +190,15 @@ struct explicit_equal {
     }
 };
 
+struct counting_hash {
+    std::shared_ptr<std::atomic<std::size_t>> calls;
+
+    std::size_t operator()(int value) const noexcept {
+        calls->fetch_add(1, std::memory_order_relaxed);
+        return std::hash<int>{}(value);
+    }
+};
+
 struct few_buckets_hash {
     std::size_t operator()(int value) const noexcept {
         return static_cast<std::uint32_t>(value) & 3u;
@@ -1044,13 +1053,16 @@ TEST(Set_AlgebraMatchesUnorderedSet) {
             right.push_back(value_dist(rng));
         }
 
-        const auto persistent = persistent_hash_set<int>::create_range(left);
+        const auto policy = persistent_hash_set<int>::empty();
+        const auto persistent = policy.union_with(left);
+        const auto persistent_right = policy.union_with(right);
         const std::unordered_set<int> left_model(left.begin(), left.end());
         const std::unordered_set<int> right_model(right.begin(), right.end());
 
         auto union_model = left_model;
         union_model.insert(right_model.begin(), right_model.end());
         assert_equal_set(union_model, persistent.union_with(right));
+        assert_equal_set(union_model, persistent.union_with(persistent_right));
 
         std::unordered_set<int> intersection_model;
         for (const auto item : left_model) {
@@ -1059,12 +1071,14 @@ TEST(Set_AlgebraMatchesUnorderedSet) {
             }
         }
         assert_equal_set(intersection_model, persistent.intersect_with(right));
+        assert_equal_set(intersection_model, persistent.intersect_with(persistent_right));
 
         auto except_model = left_model;
         for (const auto item : right_model) {
             except_model.erase(item);
         }
         assert_equal_set(except_model, persistent.except_with(right));
+        assert_equal_set(except_model, persistent.except_with(persistent_right));
 
         auto symmetric_model = left_model;
         for (const auto item : right_model) {
@@ -1075,6 +1089,7 @@ TEST(Set_AlgebraMatchesUnorderedSet) {
             }
         }
         assert_equal_set(symmetric_model, persistent.symmetric_except_with(right));
+        assert_equal_set(symmetric_model, persistent.symmetric_except_with(persistent_right));
 
         const bool subset = std::all_of(left_model.begin(), left_model.end(), [&](int item) {
             return right_model.find(item) != right_model.end();
@@ -1093,7 +1108,76 @@ TEST(Set_AlgebraMatchesUnorderedSet) {
         CHECK_EQ(superset && left_model.size() > right_model.size(), persistent.is_proper_superset_of(right));
         CHECK_EQ(overlaps, persistent.overlaps(right));
         CHECK_EQ(left_model == right_model, persistent.set_equals(right));
+        CHECK_EQ(subset, persistent.is_subset_of(persistent_right));
+        CHECK_EQ(superset, persistent.is_superset_of(persistent_right));
+        CHECK_EQ(overlaps, persistent.overlaps(persistent_right));
+        CHECK_EQ(left_model == right_model, persistent.set_equals(persistent_right));
     }
+}
+
+TEST(Champ_SamePolicyAlgebraPrunesSharedNodesWithoutRehashing) {
+    const auto calls = std::make_shared<std::atomic<std::size_t>>(0);
+    using set_type = persistent_hash_set<int, counting_hash>;
+    auto basis = set_type::create(counting_hash{calls});
+    for (auto value = 0; value < 256; ++value) {
+        basis = basis.add(value);
+    }
+    const auto left = basis.add(1000);
+    const auto right = basis.add(2000);
+
+    calls->store(0, std::memory_order_relaxed);
+    const auto self_union = left.union_with(left);
+    const auto self_intersection = left.intersect_with(left);
+    const auto self_except = left.except_with(left);
+    const auto self_symmetric = left.symmetric_except_with(left);
+    const auto united = left.union_with(right);
+    const auto intersected = left.intersect_with(right);
+    const auto excepted = left.except_with(right);
+    const auto symmetric = left.symmetric_except_with(right);
+    CHECK(left.is_subset_of(united));
+    CHECK(united.is_superset_of(right));
+    CHECK(left.overlaps(right));
+    CHECK(left.set_equals(left));
+    const auto structural_hashes = calls->load(std::memory_order_relaxed);
+
+    CHECK_EQ(std::size_t{0}, structural_hashes);
+    CHECK(self_union.shares_root_with(left));
+    CHECK(self_intersection.shares_root_with(left));
+    CHECK(self_except.is_empty());
+    CHECK(self_symmetric.is_empty());
+    CHECK_EQ(std::size_t{258}, united.count());
+    CHECK_EQ(std::size_t{256}, intersected.count());
+    CHECK_EQ(std::size_t{1}, excepted.count());
+    CHECK_EQ(std::size_t{2}, symmetric.count());
+
+    const auto independent = set_type::create(counting_hash{calls}).union_with(
+        std::vector<int>{2000, 3000});
+    calls->store(0, std::memory_order_relaxed);
+    const auto fallback = left.union_with(independent);
+    CHECK(calls->load(std::memory_order_relaxed) > 0);
+    CHECK_EQ(std::size_t{259}, fallback.count());
+}
+
+TEST(Champ_MapAlgebraKeepsLeftKeyRepresentativeAndRightUnionValue) {
+    using map_type = persistent_hash_map<
+        std::string,
+        int,
+        case_insensitive_hash,
+        case_insensitive_equal>;
+    const auto policy = map_type::create(
+        case_insensitive_hash{}, case_insensitive_equal{});
+    const auto left = policy.set_item("Alpha", 1).set_item("left", 10);
+    const auto right = policy.set_item("ALPHA", 2).set_item("right", 20);
+
+    const auto united = left.union_with(right);
+    CHECK_EQ(std::size_t{3}, united.count());
+    CHECK_EQ(std::string("Alpha"), *united.try_get_key("alpha"));
+    CHECK_EQ(2, united.at("alpha"));
+    CHECK_EQ(std::size_t{1}, left.intersect_with(right).count());
+    CHECK_EQ(std::size_t{1}, left.except_with(right).count());
+    CHECK_EQ(std::size_t{2}, left.symmetric_except_with(right).count());
+    CHECK(left.union_with(left).shares_root_with(left));
+    CHECK(left.intersect_with(left).shares_root_with(left));
 }
 
 TEST(Set_AlgebraHonorsCustomComparer) {

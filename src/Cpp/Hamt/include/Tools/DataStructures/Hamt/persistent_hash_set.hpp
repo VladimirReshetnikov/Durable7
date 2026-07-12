@@ -126,6 +126,10 @@ public:
         return with_map(map_.clear());
     }
 
+    [[nodiscard]] persistent_hash_set union_with(const persistent_hash_set& other) const {
+        return with_map(map_.union_with(other.map_));
+    }
+
     [[nodiscard]] persistent_hash_set union_with(std::initializer_list<T> items) const {
         auto result = *this;
         for (const auto& item : items) {
@@ -149,6 +153,10 @@ public:
         return intersect_with_range(items);
     }
 
+    [[nodiscard]] persistent_hash_set intersect_with(const persistent_hash_set& other) const {
+        return with_map(map_.intersect_with(other.map_));
+    }
+
     template <class Range>
     [[nodiscard]] persistent_hash_set intersect_with(const Range& items) const {
         return intersect_with_range(items);
@@ -161,6 +169,10 @@ public:
         }
 
         return result;
+    }
+
+    [[nodiscard]] persistent_hash_set except_with(const persistent_hash_set& other) const {
+        return with_map(map_.except_with(other.map_));
     }
 
     template <class Range>
@@ -177,6 +189,11 @@ public:
         return symmetric_except_with_range(items);
     }
 
+    [[nodiscard]] persistent_hash_set symmetric_except_with(
+        const persistent_hash_set& other) const {
+        return with_map(map_.symmetric_except_with(other.map_));
+    }
+
     template <class Range>
     [[nodiscard]] persistent_hash_set symmetric_except_with(const Range& items) const {
         return symmetric_except_with_range(items);
@@ -184,6 +201,14 @@ public:
 
     [[nodiscard]] bool is_subset_of(std::initializer_list<T> items) const {
         return is_subset_of_range(items);
+    }
+
+    [[nodiscard]] bool is_subset_of(const persistent_hash_set& other) const {
+        if (!map_.shares_policy_with(other.map_)) {
+            return is_subset_of_range(other);
+        }
+        return count() <= other.count()
+            && map_.intersect_with(other.map_).shares_root_with(map_);
     }
 
     template <class Range>
@@ -195,6 +220,10 @@ public:
         return is_proper_subset_of_range(items);
     }
 
+    [[nodiscard]] bool is_proper_subset_of(const persistent_hash_set& other) const {
+        return count() < other.count() && is_subset_of(other);
+    }
+
     template <class Range>
     [[nodiscard]] bool is_proper_subset_of(const Range& items) const {
         return is_proper_subset_of_range(items);
@@ -202,6 +231,10 @@ public:
 
     [[nodiscard]] bool is_superset_of(std::initializer_list<T> items) const {
         return is_superset_of_range(items);
+    }
+
+    [[nodiscard]] bool is_superset_of(const persistent_hash_set& other) const {
+        return other.is_subset_of(*this);
     }
 
     template <class Range>
@@ -213,6 +246,10 @@ public:
         return is_proper_superset_of_range(items);
     }
 
+    [[nodiscard]] bool is_proper_superset_of(const persistent_hash_set& other) const {
+        return count() > other.count() && other.is_subset_of(*this);
+    }
+
     template <class Range>
     [[nodiscard]] bool is_proper_superset_of(const Range& items) const {
         return is_proper_superset_of_range(items);
@@ -222,6 +259,13 @@ public:
         return overlaps_range(items);
     }
 
+    [[nodiscard]] bool overlaps(const persistent_hash_set& other) const {
+        if (!map_.shares_policy_with(other.map_)) {
+            return overlaps_range(other);
+        }
+        return !map_.intersect_with(other.map_).is_empty();
+    }
+
     template <class Range>
     [[nodiscard]] bool overlaps(const Range& items) const {
         return overlaps_range(items);
@@ -229,6 +273,11 @@ public:
 
     [[nodiscard]] bool set_equals(std::initializer_list<T> items) const {
         return set_equals_range(items);
+    }
+
+    [[nodiscard]] bool set_equals(const persistent_hash_set& other) const {
+        return shares_root_with(other)
+            || count() == other.count() && is_subset_of(other);
     }
 
     template <class Range>

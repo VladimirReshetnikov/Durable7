@@ -22,7 +22,8 @@ The implementation preserves the C# library's core shape: 32-way logical branchi
 per trie level, canonical CHAMP branches with separate data/node maps, compact inline payload and
 child-only vectors, immutable equal-hash collision buckets, custom
 hash/equality policy objects, structural sharing across versions, first equivalent key/item
-retention, and no-op root reuse. A transient `bulk_builder` (mirroring the C# reference's bulk
+retention, no-op root reuse, cached subtree cardinalities, and slot-aligned structural map/set
+algebra that prunes pointer-identical subtries. A transient `bulk_builder` (mirroring the C# reference's bulk
 construction) mutates unpublished nodes in place and freezes them into detached persistent maps;
 `create_range` and set intersection build through it. Maps also expose `map_equals` and owned typed
 added/removed/changed diff. Those two operations have a caller precondition that stateful `Hash` and

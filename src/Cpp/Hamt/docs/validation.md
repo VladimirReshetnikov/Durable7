@@ -115,7 +115,9 @@ The suite covers:
 - a long scripted collision and deep-prefix scenario with retained snapshots and no-op root reuse checks;
 - randomized histories with deliberately colliding hashes;
 - set add/remove/contains persistence;
-- set algebra against `std::unordered_set`, including duplicate treatment for symmetric difference;
+- set algebra against `std::unordered_set`, including same-policy structural overloads, zero-hash
+  shared-ancestry pruning, independent-policy fallback, and duplicate treatment for symmetric
+  difference;
 - bulk-builder construction: freeze isolation across later builder mutations, first-key and
   equal-value retention for duplicates, final-hash-level branching, a collision-heavy randomized
   build checked against persistent updates, and builder-backed `create_range`/`intersect_with`

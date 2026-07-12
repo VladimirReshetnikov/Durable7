@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cassert>
@@ -72,6 +73,7 @@ private:
     struct collision_node;
     struct bitmap_indexed_node;
     struct payload;
+    struct policy_identity final {};
 
     using node_ptr = std::shared_ptr<const node>;
     using hash_node_ptr = std::shared_ptr<const hash_node>;
@@ -120,7 +122,8 @@ public:
           count_(std::exchange(other.count_, 0)),
           hash_(std::move(other.hash_)),
           key_equal_(std::move(other.key_equal_)),
-          value_equal_(std::move(other.value_equal_)) {
+          value_equal_(std::move(other.value_equal_)),
+          policy_identity_(std::move(other.policy_identity_)) {
     }
 
     persistent_hash_map& operator=(persistent_hash_map&& other) noexcept(
@@ -133,6 +136,7 @@ public:
             hash_ = std::move(other.hash_);
             key_equal_ = std::move(other.key_equal_);
             value_equal_ = std::move(other.value_equal_);
+            policy_identity_ = std::move(other.policy_identity_);
         }
 
         return *this;
@@ -164,7 +168,8 @@ public:
         explicit bulk_builder(Hash hash = {}, KeyEqual equal = {}, ValueEqual values_equal = {})
             : hash_(std::move(hash)),
               key_equal_(std::move(equal)),
-              value_equal_(std::move(values_equal)) {
+              value_equal_(std::move(values_equal)),
+              policy_identity_(std::make_shared<const policy_identity>()) {
         }
 
         [[nodiscard]] size_type count() const noexcept {
@@ -189,10 +194,12 @@ public:
 
         [[nodiscard]] persistent_hash_map to_immutable() const {
             if (!root_) {
-                return persistent_hash_map(nullptr, 0, hash_, key_equal_, value_equal_);
+                return persistent_hash_map(
+                    nullptr, 0, hash_, key_equal_, value_equal_, policy_identity_);
             }
 
-            return persistent_hash_map(root_->freeze(), count_, hash_, key_equal_, value_equal_);
+            return persistent_hash_map(
+                root_->freeze(), count_, hash_, key_equal_, value_equal_, policy_identity_);
         }
 
     private:
@@ -201,6 +208,7 @@ public:
         TOOLS_DATA_STRUCTURES_HAMT_NO_UNIQUE_ADDRESS Hash hash_{};
         TOOLS_DATA_STRUCTURES_HAMT_NO_UNIQUE_ADDRESS KeyEqual key_equal_{};
         TOOLS_DATA_STRUCTURES_HAMT_NO_UNIQUE_ADDRESS ValueEqual value_equal_{};
+        std::shared_ptr<const policy_identity> policy_identity_;
     };
 
     static bulk_builder create_bulk_builder(
@@ -294,7 +302,8 @@ public:
                 1,
                 hash_,
                 key_equal_,
-                value_equal_);
+                value_equal_,
+                policy_identity_);
         }
 
         bool added = false;
@@ -308,7 +317,8 @@ public:
             count_ + (added ? 1u : 0u),
             hash_,
             key_equal_,
-            value_equal_);
+            value_equal_,
+            policy_identity_);
     }
 
     [[nodiscard]] persistent_hash_map add(const Key& key, const T& value) const {
@@ -329,7 +339,8 @@ public:
                     1,
                     hash_,
                     key_equal_,
-                    value_equal_),
+                    value_equal_,
+                    policy_identity_),
                 true,
             };
         }
@@ -346,7 +357,8 @@ public:
                 count_ + 1,
                 hash_,
                 key_equal_,
-                value_equal_),
+                value_equal_,
+                policy_identity_),
             true,
         };
     }
@@ -389,7 +401,8 @@ public:
         }
 
         return {
-            from_root(std::move(new_root), count_ - 1, hash_, key_equal_, value_equal_),
+            from_root(
+                std::move(new_root), count_ - 1, hash_, key_equal_, value_equal_, policy_identity_),
             true,
             std::move(value),
         };
@@ -400,7 +413,24 @@ public:
             return *this;
         }
 
-        return persistent_hash_map(nullptr, 0, hash_, key_equal_, value_equal_);
+        return persistent_hash_map(nullptr, 0, hash_, key_equal_, value_equal_, policy_identity_);
+    }
+
+    [[nodiscard]] persistent_hash_map union_with(const persistent_hash_map& other) const {
+        return combine(other, set_operation::union_values);
+    }
+
+    [[nodiscard]] persistent_hash_map intersect_with(const persistent_hash_map& other) const {
+        return combine(other, set_operation::intersect);
+    }
+
+    [[nodiscard]] persistent_hash_map except_with(const persistent_hash_map& other) const {
+        return combine(other, set_operation::except);
+    }
+
+    [[nodiscard]] persistent_hash_map symmetric_except_with(
+        const persistent_hash_map& other) const {
+        return combine(other, set_operation::symmetric_except);
     }
 
     class const_iterator {
@@ -588,6 +618,10 @@ public:
         return root_.get() == other.root_.get();
     }
 
+    [[nodiscard]] bool shares_policy_with(const persistent_hash_map& other) const noexcept {
+        return policy_identity_.get() == other.policy_identity_.get();
+    }
+
     // Precondition: both maps' stateful Hash/KeyEqual objects define compatible key semantics.
     // Policy objects use C++ value semantics and have no general identity/equality operation.
     [[nodiscard]] bool map_equals(const persistent_hash_map& other) const {
@@ -667,17 +701,28 @@ public:
     }
 
 private:
+    enum class set_operation {
+        union_values,
+        intersect,
+        except,
+        symmetric_except,
+    };
+
     persistent_hash_map(
         node_ptr root,
         size_type count,
         Hash hash,
         KeyEqual equal,
-        ValueEqual values_equal)
+        ValueEqual values_equal,
+        std::shared_ptr<const policy_identity> policy_token = {})
         : root_(std::move(root)),
           count_(count),
           hash_(std::move(hash)),
           key_equal_(std::move(equal)),
-          value_equal_(std::move(values_equal)) {
+          value_equal_(std::move(values_equal)),
+          policy_identity_(policy_token
+              ? std::move(policy_token)
+              : std::make_shared<const policy_identity>()) {
     }
 
     static int index(std::uint32_t hash, int shift) noexcept {
@@ -705,12 +750,317 @@ private:
         size_type count,
         Hash hash,
         KeyEqual equal,
-        ValueEqual values_equal) {
+        ValueEqual values_equal,
+        std::shared_ptr<const policy_identity> policy_token) {
         if (count == 0) {
-            return persistent_hash_map(nullptr, 0, std::move(hash), std::move(equal), std::move(values_equal));
+            return persistent_hash_map(
+                nullptr,
+                0,
+                std::move(hash),
+                std::move(equal),
+                std::move(values_equal),
+                std::move(policy_token));
         }
 
-        return persistent_hash_map(std::move(root), count, std::move(hash), std::move(equal), std::move(values_equal));
+        return persistent_hash_map(
+            std::move(root),
+            count,
+            std::move(hash),
+            std::move(equal),
+            std::move(values_equal),
+            std::move(policy_token));
+    }
+
+    [[nodiscard]] persistent_hash_map combine(
+        const persistent_hash_map& other,
+        set_operation operation) const {
+        if (policy_identity_.get() != other.policy_identity_.get()) {
+            return combine_elementwise(other, operation);
+        }
+
+        auto root = combine_nodes(
+            root_, other.root_, 0, operation, key_equal_, value_equal_);
+        if (root.get() == root_.get()) {
+            return *this;
+        }
+        if (root.get() == other.root_.get()) {
+            return other;
+        }
+        const auto result_count = root ? root->entry_count() : 0;
+        return persistent_hash_map(
+            std::move(root),
+            result_count,
+            hash_,
+            key_equal_,
+            value_equal_,
+            policy_identity_);
+    }
+
+    [[nodiscard]] persistent_hash_map combine_elementwise(
+        const persistent_hash_map& other,
+        set_operation operation) const {
+        auto result = operation == set_operation::intersect ? clear() : *this;
+        switch (operation) {
+        case set_operation::union_values:
+            for (const auto& [key, value] : other) {
+                result = result.set_item(key, value);
+            }
+            break;
+        case set_operation::intersect:
+            for (const auto& [key, value] : *this) {
+                if (other.contains_key(key)) {
+                    result = result.set_item(key, value);
+                }
+            }
+            break;
+        case set_operation::except:
+            for (const auto& [key, value] : other) {
+                (void)value;
+                result = result.remove(key);
+            }
+            break;
+        case set_operation::symmetric_except:
+            for (const auto& [key, value] : other) {
+                result = result.contains_key(key)
+                    ? result.remove(key)
+                    : result.set_item(key, value);
+            }
+            break;
+        }
+        return result;
+    }
+
+    static node_ptr combine_nodes(
+        const node_ptr& left,
+        const node_ptr& right,
+        int shift,
+        set_operation operation,
+        const KeyEqual& equal,
+        const ValueEqual& values_equal) {
+        if (left.get() == right.get()) {
+            return operation == set_operation::union_values
+                    || operation == set_operation::intersect
+                ? left
+                : nullptr;
+        }
+        if (!left) {
+            return operation == set_operation::union_values
+                    || operation == set_operation::symmetric_except
+                ? right
+                : nullptr;
+        }
+        if (!right) {
+            return operation != set_operation::intersect ? left : nullptr;
+        }
+
+        const auto left_hash = std::dynamic_pointer_cast<const hash_node>(left);
+        const auto right_hash = std::dynamic_pointer_cast<const hash_node>(right);
+        if (left_hash && right_hash) {
+            return combine_hash_nodes(
+                left_hash, right_hash, shift, operation, equal, values_equal);
+        }
+
+        auto slots = std::array<node_ptr, 32>{};
+        for (auto index_value = 0; index_value < 32; ++index_value) {
+            slots[static_cast<std::size_t>(index_value)] = combine_nodes(
+                logical_slot(left, index_value, shift),
+                logical_slot(right, index_value, shift),
+                shift + bits_per_level,
+                operation,
+                equal,
+                values_equal);
+        }
+        return build_logical_node(slots, left, shift, equal, values_equal);
+    }
+
+    static node_ptr combine_hash_nodes(
+        const hash_node_ptr& left,
+        const hash_node_ptr& right,
+        int shift,
+        set_operation operation,
+        const KeyEqual& equal,
+        const ValueEqual& values_equal) {
+        if (left->hash_ != right->hash_) {
+            if (operation == set_operation::intersect) {
+                return nullptr;
+            }
+            if (operation == set_operation::except) {
+                return left;
+            }
+            auto slots = std::array<node_ptr, 32>{};
+            const auto left_index = index(left->hash_, shift);
+            const auto right_index = index(right->hash_, shift);
+            if (left_index != right_index) {
+                slots[static_cast<std::size_t>(left_index)] = left;
+                slots[static_cast<std::size_t>(right_index)] = right;
+            } else {
+                slots[static_cast<std::size_t>(left_index)] = combine_hash_nodes(
+                    left,
+                    right,
+                    shift + bits_per_level,
+                    operation,
+                    equal,
+                    values_equal);
+            }
+            return build_logical_node(slots, left, shift, equal, values_equal);
+        }
+
+        const auto left_entries = hash_entries(left);
+        const auto right_entries = hash_entries(right);
+        auto result = std::vector<value_type>{};
+        result.reserve(left_entries.size() + right_entries.size());
+        for (const auto& left_entry : left_entries) {
+            const auto right_iterator = std::find_if(
+                right_entries.begin(), right_entries.end(), [&](const value_type& candidate) {
+                    return std::invoke(equal, left_entry.first, candidate.first);
+                });
+            const auto found = right_iterator != right_entries.end();
+            switch (operation) {
+            case set_operation::union_values:
+                result.emplace_back(
+                    left_entry.first,
+                    found && !std::invoke(values_equal, left_entry.second, right_iterator->second)
+                        ? right_iterator->second
+                        : left_entry.second);
+                break;
+            case set_operation::intersect:
+                if (found) {
+                    result.push_back(left_entry);
+                }
+                break;
+            case set_operation::except:
+            case set_operation::symmetric_except:
+                if (!found) {
+                    result.push_back(left_entry);
+                }
+                break;
+            }
+        }
+        if (operation == set_operation::union_values
+            || operation == set_operation::symmetric_except) {
+            for (const auto& right_entry : right_entries) {
+                const auto found = std::any_of(
+                    left_entries.begin(), left_entries.end(), [&](const value_type& candidate) {
+                        return std::invoke(equal, candidate.first, right_entry.first);
+                    });
+                if (!found) {
+                    result.push_back(right_entry);
+                }
+            }
+        }
+        if (entries_match(left_entries, result, equal, values_equal)) {
+            return left;
+        }
+        if (result.empty()) {
+            return nullptr;
+        }
+        if (result.size() == 1) {
+            return make_leaf(left->hash_, result[0].first, result[0].second);
+        }
+        return std::make_shared<collision_node>(left->hash_, std::move(result));
+    }
+
+    static std::vector<value_type> hash_entries(const hash_node_ptr& candidate) {
+        if (candidate->kind() == persistent_hamt_node_kind::leaf) {
+            return {std::static_pointer_cast<const leaf_node>(candidate)->entry_};
+        }
+        return std::static_pointer_cast<const collision_node>(candidate)->entries_;
+    }
+
+    static bool entries_match(
+        const std::vector<value_type>& left,
+        const std::vector<value_type>& right,
+        const KeyEqual& equal,
+        const ValueEqual& values_equal) {
+        if (left.size() != right.size()) {
+            return false;
+        }
+        for (auto i = std::size_t{0}; i < left.size(); ++i) {
+            if (!std::invoke(equal, left[i].first, right[i].first)
+                || !std::invoke(values_equal, left[i].second, right[i].second)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static node_ptr logical_slot(const node_ptr& candidate, int slot_index, int shift) {
+        if (!candidate) {
+            return nullptr;
+        }
+        if (candidate->kind() != persistent_hamt_node_kind::bitmap_indexed) {
+            const auto hash = std::static_pointer_cast<const hash_node>(candidate);
+            return index(hash->hash_, shift) == slot_index ? candidate : nullptr;
+        }
+        const auto branch = std::static_pointer_cast<const bitmap_indexed_node>(candidate);
+        const auto selected_bit = bit(slot_index);
+        if ((branch->data_map_ & selected_bit) != 0) {
+            const auto& entry = branch->data_[slot(branch->data_map_, selected_bit)];
+            return make_leaf(entry.hash, entry.entry.first, entry.entry.second);
+        }
+        return (branch->node_map_ & selected_bit) != 0
+            ? branch->children_[slot(branch->node_map_, selected_bit)]
+            : nullptr;
+    }
+
+    static node_ptr build_logical_node(
+        const std::array<node_ptr, 32>& slots,
+        const node_ptr& original_left,
+        int shift,
+        const KeyEqual& equal,
+        const ValueEqual& values_equal) {
+        if (logical_slots_match(slots, original_left, shift, equal, values_equal)) {
+            return original_left;
+        }
+        auto data_map = std::uint32_t{0};
+        auto node_map = std::uint32_t{0};
+        auto data = std::vector<payload>{};
+        auto children = std::vector<node_ptr>{};
+        for (auto index_value = 0; index_value < 32; ++index_value) {
+            const auto& candidate = slots[static_cast<std::size_t>(index_value)];
+            if (!candidate) {
+                continue;
+            }
+            const auto selected_bit = bit(index_value);
+            if (candidate->kind() == persistent_hamt_node_kind::leaf) {
+                const auto leaf = std::static_pointer_cast<const leaf_node>(candidate);
+                data_map |= selected_bit;
+                data.push_back(payload{leaf->hash_, leaf->entry_});
+            } else {
+                node_map |= selected_bit;
+                children.push_back(candidate);
+            }
+        }
+        return bitmap_indexed_node::rebuild(
+            data_map, node_map, std::move(data), std::move(children));
+    }
+
+    static bool logical_slots_match(
+        const std::array<node_ptr, 32>& slots,
+        const node_ptr& original,
+        int shift,
+        const KeyEqual& equal,
+        const ValueEqual& values_equal) {
+        for (auto index_value = 0; index_value < 32; ++index_value) {
+            const auto expected = logical_slot(original, index_value, shift);
+            const auto& actual = slots[static_cast<std::size_t>(index_value)];
+            if (expected.get() == actual.get()) {
+                continue;
+            }
+            if (!expected || !actual
+                || expected->kind() != persistent_hamt_node_kind::leaf
+                || actual->kind() != persistent_hamt_node_kind::leaf) {
+                return false;
+            }
+            const auto left = std::static_pointer_cast<const leaf_node>(expected);
+            const auto right = std::static_pointer_cast<const leaf_node>(actual);
+            if (left->hash_ != right->hash_
+                || !std::invoke(equal, left->entry_.first, right->entry_.first)
+                || !std::invoke(values_equal, left->entry_.second, right->entry_.second)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     static persistent_hamt_node_kind kind_of(const node* candidate) noexcept {
@@ -819,6 +1169,7 @@ private:
         virtual ~node() = default;
 
         [[nodiscard]] virtual persistent_hamt_node_kind kind() const noexcept = 0;
+        [[nodiscard]] virtual size_type entry_count() const noexcept = 0;
 
         [[nodiscard]] virtual node_ptr set(
             const Key& key,
@@ -859,6 +1210,10 @@ private:
 
         [[nodiscard]] persistent_hamt_node_kind kind() const noexcept override {
             return persistent_hamt_node_kind::leaf;
+        }
+
+        [[nodiscard]] size_type entry_count() const noexcept override {
+            return 1;
         }
 
         [[nodiscard]] node_ptr set(
@@ -914,6 +1269,10 @@ private:
 
         [[nodiscard]] persistent_hamt_node_kind kind() const noexcept override {
             return persistent_hamt_node_kind::collision;
+        }
+
+        [[nodiscard]] size_type entry_count() const noexcept override {
+            return entries_.size();
         }
 
         // Precondition: an equal-hash merge only ever combines two leaves whose
@@ -1018,11 +1377,19 @@ private:
             : data_map_(data_map),
               node_map_(node_map),
               data_(std::move(data)),
-              children_(std::move(children)) {
+              children_(std::move(children)),
+              count_(data_.size()) {
+            for (const auto& child : children_) {
+                count_ += child->entry_count();
+            }
         }
 
         [[nodiscard]] persistent_hamt_node_kind kind() const noexcept override {
             return persistent_hamt_node_kind::bitmap_indexed;
+        }
+
+        [[nodiscard]] size_type entry_count() const noexcept override {
+            return count_;
         }
 
         [[nodiscard]] node_ptr set(
@@ -1188,6 +1555,7 @@ private:
         std::uint32_t node_map_;
         std::vector<payload> data_;
         std::vector<node_ptr> children_;
+        size_type count_;
     };
 
     static bool debug_validate_node(const node* candidate, size_type& entries) noexcept {
@@ -1224,7 +1592,7 @@ private:
                 }
                 entries += child_entries;
             }
-            return true;
+            return entries == branch->count_;
         }
         case persistent_hamt_node_kind::empty:
             break;
@@ -1535,6 +1903,8 @@ private:
     TOOLS_DATA_STRUCTURES_HAMT_NO_UNIQUE_ADDRESS Hash hash_{};
     TOOLS_DATA_STRUCTURES_HAMT_NO_UNIQUE_ADDRESS KeyEqual key_equal_{};
     TOOLS_DATA_STRUCTURES_HAMT_NO_UNIQUE_ADDRESS ValueEqual value_equal_{};
+    std::shared_ptr<const policy_identity> policy_identity_ =
+        std::make_shared<const policy_identity>();
 };
 
 } // namespace tools::data_structures::hamt

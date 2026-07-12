@@ -195,6 +195,9 @@ the containing version is alive.
 - `try_get_key(equal_key)` returns a pointer to the stored equivalent key, or `nullptr` when absent.
 - `at(key)` returns the stored value reference or throws `std::out_of_range`.
 - `clear()` returns an empty map preserving the current policy objects.
+- `union_with`, `intersect_with`, `except_with`, and `symmetric_except_with` combine maps. Union is
+  right-biased for unequal values while retaining the receiver's stored key representative;
+  intersection retains receiver entries.
 - `map_equals(other)` performs content equality with a shared-root fast path.
 - `diff(other)` returns owned `map_difference<Key,T>` records classified as `added`, `removed`, or
   `changed`, also returning immediately for a shared root.
@@ -203,19 +206,27 @@ When replacing an existing key, the originally stored key object inside the trie
 the existing value compares equal under `ValueEqual`, the root is reused and the stored value object
 is retained.
 
+Each map creation owns an internal policy-identity token that is copied into persistent descendants
+and builder snapshots. Algebra over one identity aligns CHAMP slots directly, uses cached subtree
+cardinalities, and prunes pointer-identical subtries without invoking `Hash`. Algebra between
+independently created identities uses the receiver-policy element-wise path because arbitrary C++
+policy objects have no generally available equality operation.
+
 ## Set Contract
 
 - `empty()`, `create`, and `create_range` mirror the map factories.
 - `add`, `try_add`, `remove`, `try_remove`, `contains`, `try_get_value`, and `clear` mirror map
   behavior.
 - `union_with`, `intersect_with`, `except_with`, and `symmetric_except_with` return new persistent
-  sets.
+  sets. Same-type operands use the map's structural path when their policy identity matches.
 - `is_subset_of`, `is_proper_subset_of`, `is_superset_of`, `is_proper_superset_of`, `overlaps`, and
   `set_equals` interpret equality through the set's `Hash` and `KeyEqual` policy objects.
 
-`intersect_with`, `symmetric_except_with`, `is_subset_of`, `is_proper_subset_of`,
-`is_proper_superset_of`, and `set_equals` materialize their argument into `std::unordered_set` using
-the set's policy objects. `is_superset_of` and `overlaps` stream their argument and exit early.
+Range overloads of `intersect_with`, `symmetric_except_with`, `is_subset_of`,
+`is_proper_subset_of`, `is_proper_superset_of`, and `set_equals` materialize their argument into
+`std::unordered_set` using the set's policy objects. Same-type relations use structural
+intersection for a shared policy identity and preserve receiver-policy range semantics otherwise.
+Range `is_superset_of` and `overlaps` stream their argument and exit early.
 Set `create_range` and `intersect_with` assemble their result through the map bulk builder and
 freeze it once.
 
