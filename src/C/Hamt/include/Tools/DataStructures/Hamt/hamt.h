@@ -173,6 +173,10 @@ size_t tds_hamt_map_debug_root_child_identities(
     const tds_hamt_map *map,
     const void **children,
     size_t child_capacity);
+bool tds_hamt_map_debug_validate_canonical(const tds_hamt_map *map);
+bool tds_hamt_map_debug_topology_equal(
+    const tds_hamt_map *left,
+    const tds_hamt_map *right);
 
 tds_hamt_set tds_hamt_set_create(const tds_hamt_set_policy *policy);
 tds_hamt_status tds_hamt_set_create_range(

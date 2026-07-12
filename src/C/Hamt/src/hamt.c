@@ -736,6 +736,98 @@ size_t tds_hamt_map_debug_root_child_identities(
     return branch->node_count;
 }
 
+static bool tds_hamt_debug_validate_node(const tds_hamt_node *node, size_t *entry_count) {
+    if (node == NULL) {
+        *entry_count = 0;
+        return true;
+    }
+    if (node->kind == TDS_HAMT_NODE_LEAF) {
+        *entry_count = 1;
+        return true;
+    }
+    if (node->kind == TDS_HAMT_NODE_COLLISION) {
+        const tds_hamt_collision_node *collision = (const tds_hamt_collision_node *)node;
+        *entry_count = collision->count;
+        return collision->count >= 2;
+    }
+
+    const tds_hamt_bitmap_node *branch = (const tds_hamt_bitmap_node *)node;
+    if ((branch->data_map & branch->node_map) != 0 ||
+        tds_hamt_popcount(branch->data_map) != branch->data_count ||
+        tds_hamt_popcount(branch->node_map) != branch->node_count ||
+        branch->data_count + branch->node_count == 0) {
+        return false;
+    }
+    tds_hamt_node *const *children = tds_hamt_bitmap_children_const(branch);
+    if (branch->data_count + branch->node_count < 2 &&
+        !(branch->data_count == 0 && branch->node_count == 1 &&
+          children[0]->kind == TDS_HAMT_NODE_BITMAP_INDEXED)) {
+        return false;
+    }
+    size_t total = branch->data_count;
+    for (size_t index = 0; index != branch->node_count; ++index) {
+        size_t child_count = 0;
+        if (children[index]->kind == TDS_HAMT_NODE_LEAF ||
+            !tds_hamt_debug_validate_node(children[index], &child_count) ||
+            SIZE_MAX - total < child_count) {
+            return false;
+        }
+        total += child_count;
+    }
+    *entry_count = total;
+    return true;
+}
+
+bool tds_hamt_map_debug_validate_canonical(const tds_hamt_map *map) {
+    size_t entries = 0;
+    return map != NULL && tds_hamt_debug_validate_node(map->root, &entries) && entries == map->count;
+}
+
+static bool tds_hamt_debug_nodes_topology_equal(
+    const tds_hamt_node *left,
+    const tds_hamt_node *right) {
+    if (left == NULL || right == NULL) {
+        return left == right;
+    }
+    if (left->kind != right->kind) {
+        return false;
+    }
+    if (left->kind == TDS_HAMT_NODE_LEAF) {
+        return ((const tds_hamt_leaf_node *)left)->hash == ((const tds_hamt_leaf_node *)right)->hash;
+    }
+    if (left->kind == TDS_HAMT_NODE_COLLISION) {
+        const tds_hamt_collision_node *l = (const tds_hamt_collision_node *)left;
+        const tds_hamt_collision_node *r = (const tds_hamt_collision_node *)right;
+        return l->hash == r->hash && l->count == r->count;
+    }
+    const tds_hamt_bitmap_node *l = (const tds_hamt_bitmap_node *)left;
+    const tds_hamt_bitmap_node *r = (const tds_hamt_bitmap_node *)right;
+    if (l->data_map != r->data_map || l->node_map != r->node_map ||
+        l->data_count != r->data_count || l->node_count != r->node_count) {
+        return false;
+    }
+    const tds_hamt_inline_entry *left_data = tds_hamt_bitmap_data_const(l);
+    const tds_hamt_inline_entry *right_data = tds_hamt_bitmap_data_const(r);
+    for (size_t index = 0; index != l->data_count; ++index) {
+        if (left_data[index].hash != right_data[index].hash) {
+            return false;
+        }
+    }
+    tds_hamt_node *const *left_children = tds_hamt_bitmap_children_const(l);
+    tds_hamt_node *const *right_children = tds_hamt_bitmap_children_const(r);
+    for (size_t index = 0; index != l->node_count; ++index) {
+        if (!tds_hamt_debug_nodes_topology_equal(left_children[index], right_children[index])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool tds_hamt_map_debug_topology_equal(const tds_hamt_map *left, const tds_hamt_map *right) {
+    return left != NULL && right != NULL &&
+        tds_hamt_debug_nodes_topology_equal(left->root, right->root);
+}
+
 tds_hamt_set tds_hamt_set_create(const tds_hamt_set_policy *policy) {
     tds_hamt_set set;
     const tds_hamt_policy map_policy = tds_hamt_map_policy_from_set_policy(policy);

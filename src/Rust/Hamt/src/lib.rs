@@ -2210,11 +2210,31 @@ mod tests {
         assert_eq!(ascending, descending);
         assert!(ascending.diff(&descending).is_empty());
 
-        let (inline, bitmap_nodes, invalid_leaf_children) =
+        let (inline, bitmap_nodes, invalid_leaf_children, underfull_bitmap_nodes) =
             champ_statistics(ascending.root.as_deref().unwrap());
         assert_eq!(inline, 512);
         assert!(bitmap_nodes > 1);
         assert_eq!(invalid_leaf_children, 0);
+        assert_eq!(underfull_bitmap_nodes, 0);
+        assert!(champ_topology_equal(
+            ascending.root.as_deref().unwrap(),
+            descending.root.as_deref().unwrap()
+        ));
+
+        let mut churned = ascending.clone();
+        for key in (0..512).step_by(3) {
+            churned = churned.remove(&key);
+        }
+        for key in (0..512).step_by(3).rev() {
+            churned = churned.insert(key, key);
+        }
+        let (_, _, churn_leaf_children, churn_underfull) =
+            champ_statistics(churned.root.as_deref().unwrap());
+        assert_eq!((churn_leaf_children, churn_underfull), (0, 0));
+        assert!(champ_topology_equal(
+            ascending.root.as_deref().unwrap(),
+            churned.root.as_deref().unwrap()
+        ));
 
         let changed = descending.remove(&7).insert(9, -9).insert(1_000, 1_000);
         let diff = ascending.diff(&changed);
@@ -2233,10 +2253,10 @@ mod tests {
         );
     }
 
-    fn champ_statistics<K, V>(node: &Node<K, V>) -> (usize, usize, usize) {
+    fn champ_statistics<K, V>(node: &Node<K, V>) -> (usize, usize, usize, usize) {
         match node {
-            Node::Leaf { .. } => (1, 0, 0),
-            Node::Collision { entries, .. } => (entries.len(), 0, 0),
+            Node::Leaf { .. } => (1, 0, 0, 0),
+            Node::Collision { entries, .. } => (entries.len(), 0, 0, 0),
             Node::Branch { data, children, .. } => {
                 let mut result = (
                     data.len(),
@@ -2245,15 +2265,67 @@ mod tests {
                         .iter()
                         .filter(|child| matches!(child.as_ref(), Node::Leaf { .. }))
                         .count(),
+                    usize::from(
+                        data.len() + children.len() < 2
+                            && !(data.is_empty()
+                                && matches!(
+                                    children.first().map(Arc::as_ref),
+                                    Some(Node::Branch { .. })
+                                )),
+                    ),
                 );
                 for child in children.iter() {
                     let child_stats = champ_statistics(child);
                     result.0 += child_stats.0;
                     result.1 += child_stats.1;
                     result.2 += child_stats.2;
+                    result.3 += child_stats.3;
                 }
                 result
             }
+        }
+    }
+
+    fn champ_topology_equal<K, V, K2, V2>(left: &Node<K, V>, right: &Node<K2, V2>) -> bool {
+        match (left, right) {
+            (Node::Leaf { hash: left, .. }, Node::Leaf { hash: right, .. }) => left == right,
+            (
+                Node::Collision {
+                    hash: left_hash,
+                    entries: left_entries,
+                },
+                Node::Collision {
+                    hash: right_hash,
+                    entries: right_entries,
+                },
+            ) => left_hash == right_hash && left_entries.len() == right_entries.len(),
+            (
+                Node::Branch {
+                    data_map: ld,
+                    node_map: ln,
+                    data: lp,
+                    children: lc,
+                },
+                Node::Branch {
+                    data_map: rd,
+                    node_map: rn,
+                    data: rp,
+                    children: rc,
+                },
+            ) => {
+                ld == rd
+                    && ln == rn
+                    && lp
+                        .iter()
+                        .map(|entry| entry.0)
+                        .eq(rp.iter().map(|entry| entry.0))
+                    && lc.len() == rc.len()
+                    && lc
+                        .iter()
+                        .zip(rc.iter())
+                        .all(|(l, r)| champ_topology_equal(l, r))
+            }
+            _ => false,
         }
     }
 

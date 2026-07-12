@@ -116,11 +116,21 @@ private fun champCanonicalizationAndDiff() {
     val descending = PersistentHashMap.from((0 until 512).reversed().map { it to it }, policy)
     check(ascending.mapEquals(descending), "independent insertion histories must be semantically equal")
     checkEquals(0, ascending.diff(descending).count(), "equal canonical maps have an empty diff")
+    checkEquals(ascending.champTopology(), descending.champTopology(), "independent histories must have identical CHAMP topology")
 
     val statistics = ascending.champStatistics()
     checkEquals(512, statistics.inlinePayloads, "CHAMP must inline ordinary payloads")
     check(statistics.bitmapNodes > 1, "test data must exercise nested bitmap nodes")
     checkEquals(0, statistics.invalidLeafChildren, "bitmap child runs must not contain leaf nodes")
+    checkEquals(0, statistics.underfullBitmapNodes, "bitmap nodes must be canonically collapsed")
+
+    var churned = ascending
+    for (key in 0 until 512 step 3) churned = churned.remove(key)
+    for (key in (0 until 512 step 3).reversed()) churned = churned.put(key, key)
+    checkEquals(ascending.champTopology(), churned.champTopology(), "delete/reinsert churn must recover canonical topology")
+    val churnStatistics = churned.champStatistics()
+    checkEquals(0, churnStatistics.invalidLeafChildren, "churned bitmap child runs must not contain leaves")
+    checkEquals(0, churnStatistics.underfullBitmapNodes, "churned bitmap nodes must be canonically collapsed")
 
     val changed = descending.remove(7).put(9, -9).put(1_000, 1_000)
     val differences = ascending.diff(changed).toList()

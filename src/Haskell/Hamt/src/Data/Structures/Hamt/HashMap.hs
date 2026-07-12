@@ -12,6 +12,7 @@ module Data.Structures.Hamt.HashMap
   , fromListWith
   , size
   , validStructure
+  , sameTopology
   , null
   , clear
   , policy
@@ -104,6 +105,27 @@ size (HashMap _ count _) = count
 validStructure :: HashMap k v -> Bool
 validStructure (HashMap _ expectedCount root) = nodeCountIfValid root == Just expectedCount
 
+-- | Compares canonical node kinds, bitmap placement, stored hashes, and child
+-- topology without consulting either map's key or value semantics.
+sameTopology :: HashMap k v -> HashMap k' v' -> Bool
+sameTopology (HashMap _ _ left) (HashMap _ _ right) = sameNodeTopology left right
+
+sameNodeTopology :: Node k v -> Node k' v' -> Bool
+sameNodeTopology EmptyNode EmptyNode = True
+sameNodeTopology (Leaf leftHash _ _) (Leaf rightHash _ _) = leftHash == rightHash
+sameNodeTopology (Collision leftHash leftEntries) (Collision rightHash rightEntries) =
+  leftHash == rightHash && length leftEntries == length rightEntries
+sameNodeTopology (Branch leftDataMap leftNodeMap leftPayloads leftChildren)
+                 (Branch rightDataMap rightNodeMap rightPayloads rightChildren) =
+  leftDataMap == rightDataMap
+    && leftNodeMap == rightNodeMap
+    && map payloadHash leftPayloads == map payloadHash rightPayloads
+    && length leftChildren == length rightChildren
+    && and (zipWith sameNodeTopology leftChildren rightChildren)
+  where
+    payloadHash (entryHash, _, _) = entryHash
+sameNodeTopology _ _ = False
+
 nodeCountIfValid :: Node k v -> Maybe Int
 nodeCountIfValid EmptyNode = Just 0
 nodeCountIfValid (Leaf _ _ _) = Just 1
@@ -116,10 +138,13 @@ nodeCountIfValid (Branch dataMap nodeMap payloads children)
   | popCount dataMap /= length payloads = Nothing
   | popCount nodeMap /= length children = Nothing
   | any isLeaf children = Nothing
+  | length payloads + length children < 2 && not (List.null payloads && singleBranch children) = Nothing
   | otherwise = (length payloads +) . sum <$> traverse nodeCountIfValid children
   where
     isLeaf (Leaf _ _ _) = True
     isLeaf _ = False
+    singleBranch [Branch _ _ _ _] = True
+    singleBranch _ = False
 
 null :: HashMap k v -> Bool
 null mapValue = size mapValue == 0

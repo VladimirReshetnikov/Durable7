@@ -882,6 +882,9 @@ static void test_champ_independent_histories_and_typed_diff(void) {
         CHECK_STATUS(tds_hamt_map_set(&descending, int_key(-key), int_value(-key), &descending));
     }
     CHECK(tds_hamt_map_equals(&ascending, &descending));
+    CHECK(tds_hamt_map_debug_validate_canonical(&ascending));
+    CHECK(tds_hamt_map_debug_validate_canonical(&descending));
+    CHECK(tds_hamt_map_debug_topology_equal(&ascending, &descending));
     diff_counts empty_counts = { 0 };
     CHECK_STATUS(tds_hamt_map_diff(&ascending, &descending, count_difference, &empty_counts));
     CHECK(empty_counts.added == 0 && empty_counts.removed == 0 && empty_counts.changed == 0);
@@ -893,6 +896,17 @@ static void test_champ_independent_histories_and_typed_diff(void) {
     diff_counts counts = { 0 };
     CHECK_STATUS(tds_hamt_map_diff(&ascending, &changed, count_difference, &counts));
     CHECK(counts.added == 1 && counts.removed == 1 && counts.changed == 1);
+
+    tds_hamt_map churned = tds_hamt_map_clone(&ascending);
+    for (int key = -99; key <= 99; key += 3) {
+        CHECK_STATUS(tds_hamt_map_remove(&churned, int_key(key), &churned));
+    }
+    for (int key = 99; key >= -99; key -= 3) {
+        CHECK_STATUS(tds_hamt_map_set(&churned, int_key(key), int_value(key), &churned));
+    }
+    CHECK(tds_hamt_map_debug_validate_canonical(&churned));
+    CHECK(tds_hamt_map_debug_topology_equal(&ascending, &churned));
+    tds_hamt_map_destroy(&churned);
     tds_hamt_map_destroy(&changed);
     tds_hamt_map_destroy(&descending);
     tds_hamt_map_destroy(&ascending);

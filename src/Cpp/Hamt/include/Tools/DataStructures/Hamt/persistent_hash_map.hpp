@@ -654,6 +654,15 @@ public:
         return children;
     }
 
+    [[nodiscard]] bool debug_validate_canonical() const noexcept {
+        auto entries = size_type{0};
+        return debug_validate_node(root_.get(), entries) && entries == count();
+    }
+
+    [[nodiscard]] bool debug_topology_equal(const persistent_hash_map& other) const noexcept {
+        return debug_nodes_topology_equal(root_.get(), other.root_.get());
+    }
+
 private:
     persistent_hash_map(
         node_ptr root,
@@ -1177,6 +1186,83 @@ private:
         std::vector<payload> data_;
         std::vector<node_ptr> children_;
     };
+
+    static bool debug_validate_node(const node* candidate, size_type& entries) noexcept {
+        if (candidate == nullptr) {
+            entries = 0;
+            return true;
+        }
+        switch (candidate->kind()) {
+        case persistent_hamt_node_kind::leaf:
+            entries = 1;
+            return true;
+        case persistent_hamt_node_kind::collision: {
+            const auto* collision = static_cast<const collision_node*>(candidate);
+            entries = collision->entries_.size();
+            return entries >= 2;
+        }
+        case persistent_hamt_node_kind::bitmap_indexed: {
+            const auto* branch = static_cast<const bitmap_indexed_node*>(candidate);
+            if ((branch->data_map_ & branch->node_map_) != 0
+                || std::popcount(branch->data_map_) != branch->data_.size()
+                || std::popcount(branch->node_map_) != branch->children_.size()
+                || branch->data_.size() + branch->children_.size() == 0
+                || (branch->data_.size() + branch->children_.size() < 2
+                    && !(branch->data_.empty() && branch->children_.size() == 1
+                        && branch->children_[0]->kind() == persistent_hamt_node_kind::bitmap_indexed))) {
+                return false;
+            }
+            entries = branch->data_.size();
+            for (const auto& child : branch->children_) {
+                auto child_entries = size_type{0};
+                if (child->kind() == persistent_hamt_node_kind::leaf
+                    || !debug_validate_node(child.get(), child_entries)) {
+                    return false;
+                }
+                entries += child_entries;
+            }
+            return true;
+        }
+        case persistent_hamt_node_kind::empty:
+            break;
+        }
+        return false;
+    }
+
+    static bool debug_nodes_topology_equal(const node* left, const node* right) noexcept {
+        if (left == nullptr || right == nullptr) {
+            return left == right;
+        }
+        if (left->kind() != right->kind()) {
+            return false;
+        }
+        switch (left->kind()) {
+        case persistent_hamt_node_kind::leaf:
+            return static_cast<const leaf_node*>(left)->hash_ == static_cast<const leaf_node*>(right)->hash_;
+        case persistent_hamt_node_kind::collision: {
+            const auto* l = static_cast<const collision_node*>(left);
+            const auto* r = static_cast<const collision_node*>(right);
+            return l->hash_ == r->hash_ && l->entries_.size() == r->entries_.size();
+        }
+        case persistent_hamt_node_kind::bitmap_indexed: {
+            const auto* l = static_cast<const bitmap_indexed_node*>(left);
+            const auto* r = static_cast<const bitmap_indexed_node*>(right);
+            return l->data_map_ == r->data_map_
+                && l->node_map_ == r->node_map_
+                && l->data_.size() == r->data_.size()
+                && std::equal(l->data_.begin(), l->data_.end(), r->data_.begin(),
+                    [](const payload& a, const payload& b) { return a.hash == b.hash; })
+                && l->children_.size() == r->children_.size()
+                && std::equal(l->children_.begin(), l->children_.end(), r->children_.begin(),
+                    [](const node_ptr& a, const node_ptr& b) {
+                        return debug_nodes_topology_equal(a.get(), b.get());
+                    });
+        }
+        case persistent_hamt_node_kind::empty:
+            break;
+        }
+        return false;
+    }
 
     // Unpublished bulk-builder nodes. They are uniquely owned by exactly one
     // builder, are mutated in place, and never escape: `freeze` copies a

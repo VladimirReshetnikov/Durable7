@@ -540,6 +540,19 @@ TEST(Champ_IndependentHistoriesAndTypedDiff) {
 
     CHECK(ascending.map_equals(descending));
     CHECK(ascending.diff(descending).empty());
+    CHECK(ascending.debug_validate_canonical());
+    CHECK(descending.debug_validate_canonical());
+    CHECK(ascending.debug_topology_equal(descending));
+
+    auto churned = ascending;
+    for (int key = 0; key < 512; key += 3) {
+        churned = churned.remove(key);
+    }
+    for (int key = 510; key >= 0; key -= 3) {
+        churned = churned.set_item(key, key);
+    }
+    CHECK(churned.debug_validate_canonical());
+    CHECK(ascending.debug_topology_equal(churned));
     const auto changed = descending.remove(7).set_item(9, -9).set_item(1000, 1000);
     const auto differences = ascending.diff(changed);
     CHECK_EQ(std::size_t{3}, differences.size());

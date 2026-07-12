@@ -38,6 +38,7 @@ internal data class ChampStatistics(
     val bitmapNodes: Int,
     val collisionPayloads: Int,
     val invalidLeafChildren: Int,
+    val underfullBitmapNodes: Int,
 )
 
 private const val BitsPerLevel: Int = 5
@@ -139,7 +140,8 @@ public class PersistentHashMap<K, V> private constructor(
 
     public fun clear(): PersistentHashMap<K, V> = if (isEmpty) this else PersistentHashMap(null, 0, policy)
 
-    internal fun champStatistics(): ChampStatistics = root?.let(::champStatistics) ?: ChampStatistics(0, 0, 0, 0)
+    internal fun champStatistics(): ChampStatistics = root?.let(::champStatistics) ?: ChampStatistics(0, 0, 0, 0, 0)
+    internal fun champTopology(): String = root?.let(::champTopology) ?: "E"
 
     /** Semantic equality for maps retaining the same hash/equality policy object. */
     public fun mapEquals(other: PersistentHashMap<K, V>): Boolean {
@@ -434,8 +436,8 @@ private fun <K, V> collectLeaves(node: Node<K, V>): List<Leaf<K, V>> = when (nod
 }
 
 private fun <K, V> champStatistics(node: Node<K, V>): ChampStatistics = when (node) {
-    is Leaf -> ChampStatistics(1, 0, 0, 0)
-    is Collision -> ChampStatistics(0, 0, node.entries.size, 0)
+    is Leaf -> ChampStatistics(1, 0, 0, 0, 0)
+    is Collision -> ChampStatistics(0, 0, node.entries.size, 0, 0)
     is BitmapNode -> {
         val children = node.nodes.map(::champStatistics)
         ChampStatistics(
@@ -443,7 +445,22 @@ private fun <K, V> champStatistics(node: Node<K, V>): ChampStatistics = when (no
             1 + children.sumOf { it.bitmapNodes },
             children.sumOf { it.collisionPayloads },
             node.nodes.count { it is Leaf } + children.sumOf { it.invalidLeafChildren },
+            (if (node.data.size + node.nodes.size < 2 &&
+                !(node.data.isEmpty() && node.nodes.singleOrNull() is BitmapNode)) 1 else 0) +
+                children.sumOf { it.underfullBitmapNodes },
         )
+    }
+}
+
+private fun <K, V> champTopology(node: Node<K, V>): String = when (node) {
+    is Leaf -> "L${node.hash}"
+    is Collision -> "C${node.hash}:${node.entries.size}"
+    is BitmapNode -> buildString {
+        append("B${node.dataMap}:${node.nodeMap}[")
+        node.data.forEach { append(it.hash).append(',') }
+        append('|')
+        node.nodes.forEach { append(champTopology(it)).append(';') }
+        append(']')
     }
 }
 

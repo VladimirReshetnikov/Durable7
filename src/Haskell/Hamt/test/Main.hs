@@ -94,6 +94,7 @@ testChampCanonicalizationAndDiff = do
       changed = HashMap.insert 1000 1000 (HashMap.insert 9 (-9) (HashMap.delete 7 descending))
       differences = HashMap.diff ascending changed
   assertBool "independent histories have canonical valid shape" (HashMap.validStructure ascending && HashMap.validStructure descending)
+  assertBool "independent histories have identical CHAMP topology" (HashMap.sameTopology ascending descending)
   assertBool "independent histories compare equal" (HashMap.mapEquals ascending descending)
   assertEqual "equal histories have empty diff" [] (HashMap.diff ascending descending)
   assertEqual "typed diff count" 3 (length differences)
