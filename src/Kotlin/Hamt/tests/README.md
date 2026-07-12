@@ -24,8 +24,9 @@ Coverage groups:
 - set algebra, equality, and proper subset/superset relations;
 - cross-policy subset/superset/equality/overlap relations under the receiver's `HashPolicy`;
 - JVM concurrent readers over shared immutable map/set snapshots;
-- Ctrie node-local GCAS updates, O(1) retained generations, lazy renewal, contended unique adds and
-  counters, equal-hash collision nodes, and snapshot-to-CHAMP conversion.
+- Ctrie node-local GCAS and root/main RDCSS helping, a deterministic snapshot/write race, O(1)
+  retained generations, lazy renewal, deep/equal-hash tomb contraction, contended same-key updates,
+  250-round short-history linearizability, structural validation, and snapshot-to-CHAMP conversion.
 - 32/64-bit big-endian Patricia boundary ordering, randomized histories, cached-cardinality
   structural map/set algebra, right-biased and combining map semantics, and receiver identity on
   semantic no-ops;

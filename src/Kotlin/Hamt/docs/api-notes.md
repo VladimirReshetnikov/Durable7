@@ -52,11 +52,16 @@ The hash contract is the standard hash-map contract: keys considered equivalent 
 ## Concurrent Ctrie
 
 The mutable Ctrie stores bitmap C-nodes behind generation-stamped indirection nodes. Updates install
-helping GCAS descriptors on the owning indirection node. `snapshot()` replaces only the root
-generation and returns the frozen predecessor in O(1); later writers copy old-generation child
-indirections only along paths they modify. `Snapshot.toPersistentHashMap()` performs the explicit
-O(n) conversion into canonical CHAMP form. `getOrPut` and `compute` callbacks can run repeatedly
-after a lost GCAS and must therefore be repeatable. Progress is lock-free, not wait-free.
+helping GCAS descriptors on the owning indirection node. `snapshot()` installs a helping root/main
+RDCSS descriptor and advances the root generation only while the predecessor's raw main slot is
+still the exact node it observed; a writer committed in that window therefore cannot be lost.
+Every root consumer helps pending descriptors through `readRoot()`. Empty and singleton tomb nodes
+are promoted through their parents after removal, preserving the invariant that the root is never a
+tomb and that live lookup depth does not grow with historical churn. Later writers copy
+old-generation child indirections only along paths they modify. `Snapshot.toPersistentHashMap()`
+performs the explicit O(n) conversion into canonical CHAMP form. `getOrPut` and `compute` callbacks
+can run repeatedly after a lost GCAS and must therefore be repeatable. Progress is lock-free, not
+wait-free.
 
 ## Integer Patricia Family
 

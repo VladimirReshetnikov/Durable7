@@ -1,6 +1,11 @@
 package tools.datastructures.hamt
 
 import java.util.Collections
+import java.util.Random
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 private class ConstantPolicy<T> : HashPolicy<T> {
     override fun hash(key: T): Int = 0
@@ -247,6 +252,280 @@ private fun ctrieCollisionNodesRemainStable() {
     checkEquals(1_599, snapshot[1_599], "collision snapshot lookup")
 }
 
+private fun ctrieSnapshotDoesNotLoseCommittedWriter() {
+    val trie = ConcurrentHashTrie<Int, Int>()
+    val mainRead = CountDownLatch(1)
+    val releaseSnapshot = CountDownLatch(1)
+    val firstInvocation = AtomicInteger(1)
+    val captured = AtomicReference<ConcurrentHashTrie.Snapshot<Int, Int>?>()
+    val failure = AtomicReference<Throwable?>()
+    trie.snapshotMainReadHookForTesting = {
+        if (firstInvocation.getAndSet(0) == 1) {
+            mainRead.countDown()
+            check(releaseSnapshot.await(30, TimeUnit.SECONDS)) { "snapshot race release timed out" }
+        }
+    }
+
+    val thread = Thread {
+        try {
+            captured.set(trie.snapshot())
+        } catch (error: Throwable) {
+            failure.set(error)
+        }
+    }.apply { name = "ctrie-snapshot-rdcss" }
+    thread.start()
+    try {
+        check(mainRead.await(30, TimeUnit.SECONDS)) { "snapshot did not reach the post-main-read hook" }
+        trie.set(42, 420)
+    } finally {
+        releaseSnapshot.countDown()
+    }
+    thread.join(30_000)
+    trie.snapshotMainReadHookForTesting = null
+    check(!thread.isAlive) { "snapshot race thread did not terminate" }
+    failure.get()?.let { throw AssertionError("snapshot race failed", it) }
+    val snapshot = captured.get() ?: throw AssertionError("snapshot race produced no snapshot")
+    checkEquals(420, snapshot[42], "snapshot linearizes after the racing committed writer")
+    checkEquals(420, trie[42], "live trie retains the racing committed writer")
+    val statistics = trie.validateStructureForTesting()
+    checkEquals(1, statistics.entryCount, "snapshot race entry count")
+    checkEquals(0, statistics.tombNodeCount, "snapshot race leaves no tomb")
+}
+
+private fun ctrieReaderHelpsInstalledGcas() {
+    val trie = ConcurrentHashTrie<Int, Int>()
+    val installed = CountDownLatch(1)
+    val releaseWriter = CountDownLatch(1)
+    val firstInvocation = AtomicInteger(1)
+    val failure = AtomicReference<Throwable?>()
+    trie.gcasInstalledHookForTesting = {
+        if (firstInvocation.getAndSet(0) == 1) {
+            installed.countDown()
+            check(releaseWriter.await(30, TimeUnit.SECONDS)) { "GCAS writer release timed out" }
+        }
+    }
+    val writer = Thread {
+        try {
+            trie.set(7, 70)
+        } catch (error: Throwable) {
+            failure.set(error)
+        }
+    }.apply { name = "ctrie-gcas-writer" }
+    writer.start()
+    try {
+        check(installed.await(30, TimeUnit.SECONDS)) { "writer did not install a GCAS descriptor" }
+        checkEquals(70, trie[7], "reader helps the installed GCAS descriptor")
+    } finally {
+        releaseWriter.countDown()
+    }
+    writer.join(30_000)
+    trie.gcasInstalledHookForTesting = null
+    check(!writer.isAlive) { "GCAS writer did not terminate" }
+    failure.get()?.let { throw AssertionError("GCAS writer failed", it) }
+    checkEquals(70, trie[7], "helped GCAS remains committed")
+    val statistics = trie.validateStructureForTesting()
+    checkEquals(1, statistics.entryCount, "helped GCAS structure entry count")
+    checkEquals(0, statistics.tombNodeCount, "helped GCAS leaves no tomb")
+}
+
+private fun ctrieRemovalContractsDeepTombs() {
+    val trie = ConcurrentHashTrie<Int, Int>()
+    val deepKey = 1 shl 30
+    repeat(512) { iteration ->
+        trie.set(0, iteration)
+        trie.set(deepKey, iteration)
+        checkEquals(iteration, trie.remove(deepKey)?.value, "deep-key removal")
+        val singleton = trie.validateStructureForTesting()
+        checkEquals(1, singleton.entryCount, "deep contraction retains the survivor")
+        checkEquals(0, singleton.tombNodeCount, "deep contraction cleans tombs")
+        checkEquals(1, singleton.indirectionNodeCount, "deep contraction pulls the survivor to the root")
+        checkEquals(iteration, trie.remove(0)?.value, "survivor removal")
+        val empty = trie.validateStructureForTesting()
+        checkEquals(0, empty.entryCount, "empty contraction entry count")
+        checkEquals(0, empty.tombNodeCount, "empty contraction cleans tombs")
+        checkEquals(1, empty.indirectionNodeCount, "empty contraction retains only the root indirection")
+    }
+
+    val collisions = ConcurrentHashTrie<Int, Int>(ConstantPolicy())
+    repeat(32) { collisions.set(it, it) }
+    repeat(31) { checkEquals(it, collisions.remove(it)?.value, "collision contraction removal") }
+    val collisionSingleton = collisions.validateStructureForTesting()
+    checkEquals(1, collisionSingleton.entryCount, "collision contraction survivor")
+    checkEquals(0, collisionSingleton.collisionNodeCount, "singleton collision node is eliminated")
+    checkEquals(0, collisionSingleton.tombNodeCount, "collision contraction cleans tombs")
+}
+
+private fun ctrieMixedShortHistoriesAreLinearizable() {
+    val random = Random(0x43545249)
+    repeat(250) { round ->
+        val trie = ConcurrentHashTrie<Int, Int>(CtrieScenarioPolicy(round % 3))
+        val initial = mutableMapOf<Int, Int>()
+        repeat(random.nextInt(3)) { key ->
+            val value = random.nextInt(8)
+            initial[key] = value
+            trie.set(key, value)
+        }
+        val operations = List(5) { CtrieHistoryOperation.create(random) }
+        val start = CountDownLatch(1)
+        val clock = AtomicInteger()
+        val failures = Collections.synchronizedList(mutableListOf<Throwable>())
+        val threads = operations.mapIndexed { index, operation ->
+            Thread {
+                try {
+                    start.await()
+                    operation.start = clock.incrementAndGet()
+                    operation.execute(trie)
+                    operation.end = clock.incrementAndGet()
+                } catch (error: Throwable) {
+                    failures.add(error)
+                }
+            }.apply { name = "ctrie-linearizability-$round-$index" }
+        }
+        threads.forEach { it.start() }
+        start.countDown()
+        threads.forEach { it.join() }
+        if (failures.isNotEmpty()) {
+            throw AssertionError("Ctrie linearizability round $round had a worker failure", failures.first())
+        }
+        val final = trie.snapshot().associate { it.key to it.value }
+        check(hasCtrieLinearization(operations, initial, final, 0)) {
+            "Non-linearizable Ctrie history in round $round. Initial=$initial operations=$operations final=$final"
+        }
+        val statistics = trie.validateStructureForTesting()
+        checkEquals(final.size, statistics.entryCount, "linearizability structure entry count")
+        checkEquals(0, statistics.tombNodeCount, "linearizability structure tomb count")
+    }
+}
+
+private fun hasCtrieLinearization(
+    operations: List<CtrieHistoryOperation>,
+    state: Map<Int, Int>,
+    final: Map<Int, Int>,
+    completedMask: Int,
+): Boolean {
+    val allCompleted = (1 shl operations.size) - 1
+    if (completedMask == allCompleted) return state == final
+    for (candidate in operations.indices) {
+        val candidateBit = 1 shl candidate
+        if (completedMask and candidateBit != 0 ||
+            hasUncompletedCtriePredecessor(operations, candidate, completedMask)) {
+            continue
+        }
+        val next = state.toMutableMap()
+        if (!tryApplyCtrieOperation(operations[candidate], next)) continue
+        if (hasCtrieLinearization(operations, next, final, completedMask or candidateBit)) return true
+    }
+    return false
+}
+
+private fun hasUncompletedCtriePredecessor(
+    operations: List<CtrieHistoryOperation>,
+    candidate: Int,
+    completedMask: Int,
+): Boolean = operations.indices.any { index ->
+    completedMask and (1 shl index) == 0 && operations[index].end < operations[candidate].start
+}
+
+private fun tryApplyCtrieOperation(operation: CtrieHistoryOperation, state: MutableMap<Int, Int>): Boolean =
+    when (operation.kind) {
+        CtrieOperationKind.SET -> {
+            state[operation.key] = operation.argument
+            true
+        }
+        CtrieOperationKind.TRY_ADD -> {
+            val expected = !state.containsKey(operation.key)
+            if (expected) state[operation.key] = operation.argument
+            operation.booleanResult == expected
+        }
+        CtrieOperationKind.REMOVE -> {
+            val expected = state.remove(operation.key)
+            operation.booleanResult == (expected != null) &&
+                (expected == null || operation.valueResult == expected)
+        }
+        CtrieOperationKind.READ -> {
+            val expected = state[operation.key]
+            operation.booleanResult == (expected != null) &&
+                (expected == null || operation.valueResult == expected)
+        }
+        CtrieOperationKind.GET_OR_PUT -> {
+            val expected = state.getOrPut(operation.key) { operation.argument }
+            operation.valueResult == expected
+        }
+        CtrieOperationKind.COMPUTE -> {
+            val expected = state[operation.key]?.plus(operation.comparison) ?: operation.argument
+            state[operation.key] = expected
+            operation.valueResult == expected
+        }
+        CtrieOperationKind.SNAPSHOT -> operation.snapshotResult == state
+        CtrieOperationKind.CLEAR -> {
+            state.clear()
+            true
+        }
+    }
+
+private enum class CtrieOperationKind { SET, TRY_ADD, REMOVE, READ, GET_OR_PUT, COMPUTE, SNAPSHOT, CLEAR }
+
+private class CtrieHistoryOperation(
+    val kind: CtrieOperationKind,
+    val key: Int,
+    val argument: Int,
+    val comparison: Int,
+) {
+    var start: Int = 0
+    var end: Int = 0
+    var booleanResult: Boolean = false
+    var valueResult: Int? = null
+    var snapshotResult: Map<Int, Int>? = null
+
+    fun execute(trie: ConcurrentHashTrie<Int, Int>) {
+        when (kind) {
+            CtrieOperationKind.SET -> trie.set(key, argument)
+            CtrieOperationKind.TRY_ADD -> booleanResult = trie.tryAdd(key, argument)
+            CtrieOperationKind.REMOVE -> {
+                val removed = trie.remove(key)
+                booleanResult = removed != null
+                valueResult = removed?.value
+            }
+            CtrieOperationKind.READ -> {
+                val entry = trie.getEntry(key)
+                booleanResult = entry != null
+                valueResult = entry?.value
+            }
+            CtrieOperationKind.GET_OR_PUT -> valueResult = trie.getOrPut(key) { argument }
+            CtrieOperationKind.COMPUTE -> valueResult = trie.compute(
+                key,
+                add = { argument },
+                update = { _, current -> current + comparison },
+            )
+            CtrieOperationKind.SNAPSHOT -> snapshotResult = trie.snapshot().associate { it.key to it.value }
+            CtrieOperationKind.CLEAR -> trie.clear()
+        }
+    }
+
+    override fun toString(): String =
+        "[$start,$end] $kind(key=$key,arg=$argument,cmp=$comparison)" +
+            " => success=$booleanResult value=$valueResult snapshot=$snapshotResult"
+
+    companion object {
+        fun create(random: Random): CtrieHistoryOperation = CtrieHistoryOperation(
+            CtrieOperationKind.entries[random.nextInt(CtrieOperationKind.entries.size)],
+            random.nextInt(4),
+            random.nextInt(8),
+            random.nextInt(3) + 1,
+        )
+    }
+}
+
+private class CtrieScenarioPolicy(private val scenario: Int) : HashPolicy<Int> {
+    override fun hash(key: Int): Int = when (scenario) {
+        0 -> key
+        1 -> key shl 5
+        else -> 0
+    }
+
+    override fun equivalent(left: Int, right: Int): Boolean = left == right
+}
+
 private fun patriciaMapsAndSetsPreserveSignedOrder() {
     val intKeys = listOf(Int.MIN_VALUE, -1, 0, 1, Int.MAX_VALUE)
     val intMap = PersistentIntMap.from(intKeys.reversed().map { it to it.toString() })
@@ -417,6 +696,10 @@ public fun main() {
         "ctrieSnapshotsAndAtomicUpdates" to ::ctrieSnapshotsAndAtomicUpdates,
         "ctrieContentionAndGenerationRenewal" to ::ctrieContentionAndGenerationRenewal,
         "ctrieCollisionNodesRemainStable" to ::ctrieCollisionNodesRemainStable,
+        "ctrieSnapshotDoesNotLoseCommittedWriter" to ::ctrieSnapshotDoesNotLoseCommittedWriter,
+        "ctrieReaderHelpsInstalledGcas" to ::ctrieReaderHelpsInstalledGcas,
+        "ctrieRemovalContractsDeepTombs" to ::ctrieRemovalContractsDeepTombs,
+        "ctrieMixedShortHistoriesAreLinearizable" to ::ctrieMixedShortHistoriesAreLinearizable,
         "patriciaMapsAndSetsPreserveSignedOrder" to ::patriciaMapsAndSetsPreserveSignedOrder,
         "patriciaCombiningCountsAndNoOps" to ::patriciaCombiningCountsAndNoOps,
         "merkleSearchTreeCoreAndWire" to ::runMerkleSearchTreeTests,

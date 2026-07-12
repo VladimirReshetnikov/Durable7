@@ -23,8 +23,10 @@ The test executable covers map persistence, no-op root sharing, duplicate-key re
 collision buckets, trie-order iteration, last-wins replacement with original-key retention, and set
 algebra, including relations between sets built with different policies where the receiver's policy
 is authoritative.
-It also covers the mutable Ctrie's generation snapshots, node-local GCAS contention, collision
-nodes, lazy renewal after snapshot, and explicit conversion back to persistent CHAMP.
+It also covers the mutable Ctrie's node-local GCAS and root/main RDCSS helping, a deterministic
+snapshot-versus-committed-writer schedule, deep and equal-hash tomb contraction, lazy renewal after
+snapshot, contended same-key updates, explicit conversion back to persistent CHAMP, and a 250-round
+short-history linearizability oracle under ordinary, shared-prefix, and all-equal-hash policies.
 
 Merkle search-tree coverage includes:
 

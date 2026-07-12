@@ -8,12 +8,20 @@ import java.util.concurrent.atomic.AtomicReference
 public class ConcurrentHashTrie<K, V>(
     public val policy: HashPolicy<K> = defaultHashPolicy(),
 ) : Iterable<HamtEntry<K, V>> {
-    private val root: AtomicReference<Root<K, V>>
+    private val root: AtomicReference<Any>
     private val revision = AtomicLong()
+
+    @Volatile
+    internal var snapshotMainReadHookForTesting: (() -> Unit)? = null
+
+    @Volatile
+    internal var gcasInstalledHookForTesting: (() -> Unit)? = null
 
     init {
         val generation = Generation()
-        root = AtomicReference(Root(INode(CNode.empty(), generation), generation))
+        root = AtomicReference<Any>(
+            Root<K, V>(INode<K, V>(CNode.empty<K, V>(), generation), generation),
+        )
     }
 
     public val generation: Long get() = revision.get()
@@ -21,7 +29,7 @@ public class ConcurrentHashTrie<K, V>(
     public val isEmpty: Boolean get() = snapshot().none()
 
     public operator fun get(key: K): V? = getEntry(key)?.value
-    public fun getEntry(key: K): HamtEntry<K, V>? = getEntry(root.get(), key)
+    public fun getEntry(key: K): HamtEntry<K, V>? = getEntry(readRoot(), key)
     public fun containsKey(key: K): Boolean = getEntry(key) != null
 
     public fun set(key: K, value: V) {
@@ -68,7 +76,7 @@ public class ConcurrentHashTrie<K, V>(
 
     public fun clear() {
         while (true) {
-            val observed = root.get()
+            val observed = readRoot()
             val main = readMain(observed.node)
             if (main is CNode && main.bitmap == 0) return
             if (gcas(observed.node, main, CNode.empty(), observed)) {
@@ -81,11 +89,17 @@ public class ConcurrentHashTrie<K, V>(
     /** Advances the root generation and returns the frozen previous generation in O(1). */
     public fun snapshot(): Snapshot<K, V> {
         while (true) {
-            val before = root.get()
+            val before = readRoot()
             val main = readMain(before.node)
+            snapshotMainReadHookForTesting?.invoke()
             val generation = Generation()
             val after = Root(INode(main, generation), generation)
-            if (root.compareAndSet(before, after)) return Snapshot(this, before)
+            val descriptor = RootDescriptor(before, main, after)
+            if (!root.compareAndSet(before, descriptor)) continue
+            complete(descriptor)
+            if (descriptor.status.get() == RootDescriptor.COMMITTED) {
+                return Snapshot(this, before)
+            }
         }
     }
 
@@ -98,11 +112,30 @@ public class ConcurrentHashTrie<K, V>(
     ): MutationResult<V> {
         val hash = policy.hash(key)
         while (true) {
-            val observed = root.get()
+            val observed = readRoot()
             var node = observed.node
+            var parentNode: INode<K, V>? = null
+            var parentMain: CNode<K, V>? = null
+            var parentPosition = 0
+            var parentBit = 0
             var shift = 0
             while (true) {
                 when (val main = readMain(node)) {
+                    is TNode -> {
+                        val parent = parentNode
+                            ?: error("The root indirection node cannot contain a tomb.")
+                        val parentCNode = parentMain
+                            ?: error("A tomb must have a C-node parent.")
+                        val cleaned = main.entry?.let { parentCNode.replace(parentPosition, it) }
+                            ?: parentCNode.remove(parentPosition, parentBit)
+                        gcas(
+                            parent,
+                            parentCNode,
+                            contract(cleaned, parent === observed.node),
+                            observed,
+                        )
+                        break
+                    }
                     is LNode -> {
                         val index = main.entries.indexOfFirst {
                             it.hash == hash && policy.equivalent(it.key, key)
@@ -114,21 +147,31 @@ public class ConcurrentHashTrie<K, V>(
                         if (decision.kind == DecisionKind.NONE) {
                             return MutationResult(false, decision.result ?: current)
                         }
-                        val entries = main.entries.toMutableList()
-                        when (decision.kind) {
-                            DecisionKind.REMOVE -> entries.removeAt(index)
+                        val replacement: MainNode<K, V> = when (decision.kind) {
+                            DecisionKind.REMOVE -> contractCollision(
+                                main.entries.toMutableList().also { it.removeAt(index) },
+                                main.entries[index].hash,
+                                node === observed.node,
+                            )
                             DecisionKind.SET -> {
-                                val entry = SNode(hash, if (exists) storedKey!! else key, decision.value as V)
-                                if (exists) entries[index] = entry else entries.add(entry)
+                                val entry = SNode(
+                                    if (exists) main.entries[index].hash else hash,
+                                    if (exists) storedKey!! else key,
+                                    decision.value as V,
+                                )
+                                if (exists) {
+                                    LNode(main.entries.toMutableList().also { it[index] = entry })
+                                } else if (main.entries[0].hash == hash) {
+                                    LNode(main.entries + entry)
+                                } else {
+                                    merge(main, entry, shift, observed.generation)
+                                }
                             }
                             DecisionKind.NONE -> error("handled above")
                         }
-                        val replacement: MainNode<K, V> = when (entries.size) {
-                            0 -> CNode.empty()
-                            else -> LNode(entries.toList())
-                        }
                         if (!gcas(node, main, replacement, observed)) break
                         revision.incrementAndGet()
+                        if (decision.kind == DecisionKind.REMOVE) cleanTombs(hash)
                         return MutationResult(true, decision.result)
                     }
                     is CNode -> {
@@ -150,12 +193,13 @@ public class ConcurrentHashTrie<K, V>(
                                         return MutationResult(false, decision.result ?: branch.value)
                                     }
                                     val replacement = if (decision.kind == DecisionKind.REMOVE) {
-                                        main.remove(position, bit)
+                                        contract(main.remove(position, bit), node === observed.node)
                                     } else {
                                         main.replace(position, SNode(hash, branch.key, decision.value as V))
                                     }
                                     if (!gcas(node, main, replacement, observed)) break
                                     revision.incrementAndGet()
+                                    if (decision.kind == DecisionKind.REMOVE) cleanTombs(hash)
                                     return MutationResult(true, decision.result)
                                 }
                                 val decision = transform(false, null, null)
@@ -167,11 +211,18 @@ public class ConcurrentHashTrie<K, V>(
                             }
                             is INode -> {
                                 var child = branch
+                                var descentMain = main
                                 if (child.generation !== observed.generation) {
                                     val renewed = INode(readMain(child), observed.generation)
-                                    if (!gcas(node, main, main.replace(position, renewed), observed)) break
+                                    val renewedParent = main.replace(position, renewed)
+                                    if (!gcas(node, main, renewedParent, observed)) break
                                     child = renewed
+                                    descentMain = renewedParent
                                 }
+                                parentNode = node
+                                parentMain = descentMain
+                                parentPosition = position
+                                parentBit = bit
                                 node = child
                                 shift += 5
                                 continue
@@ -192,6 +243,9 @@ public class ConcurrentHashTrie<K, V>(
         var shift = 0
         while (true) {
             when (val main = readMain(node)) {
+                is TNode -> return main.entry?.takeIf {
+                    it.hash == hash && policy.equivalent(it.key, key)
+                }?.let { HamtEntry(it.key, it.value) }
                 is LNode -> return main.entries.firstOrNull {
                     it.hash == hash && policy.equivalent(it.key, key)
                 }?.let { HamtEntry(it.key, it.value) }
@@ -212,6 +266,78 @@ public class ConcurrentHashTrie<K, V>(
         }
     }
 
+    private fun cleanTombs(hash: Int) {
+        while (true) {
+            val observed = readRoot()
+            var node = observed.node
+            var parentNode: INode<K, V>? = null
+            var parentMain: CNode<K, V>? = null
+            var parentPosition = 0
+            var parentBit = 0
+            var shift = 0
+            while (true) {
+                when (val main = readMain(node)) {
+                    is TNode -> {
+                        val parent = parentNode
+                            ?: error("The root indirection node cannot contain a tomb.")
+                        val parentCNode = parentMain
+                            ?: error("A tomb must have a C-node parent.")
+                        val cleaned = main.entry?.let { parentCNode.replace(parentPosition, it) }
+                            ?: parentCNode.remove(parentPosition, parentBit)
+                        gcas(
+                            parent,
+                            parentCNode,
+                            contract(cleaned, parent === observed.node),
+                            observed,
+                        )
+                        break
+                    }
+                    is LNode -> return
+                    is CNode -> {
+                        val bit = 1 shl ((hash ushr shift) and 31)
+                        if (main.bitmap and bit == 0) return
+                        val position = Integer.bitCount(main.bitmap and (bit - 1))
+                        when (val branch = main.branches[position]) {
+                            is SNode -> return
+                            is INode -> {
+                                var child = branch
+                                var descentMain = main
+                                if (child.generation !== observed.generation) {
+                                    val renewed = INode(readMain(child), observed.generation)
+                                    val renewedParent = main.replace(position, renewed)
+                                    if (!gcas(node, main, renewedParent, observed)) break
+                                    child = renewed
+                                    descentMain = renewedParent
+                                }
+                                parentNode = node
+                                parentMain = descentMain
+                                parentPosition = position
+                                parentBit = bit
+                                node = child
+                                shift += 5
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun contract(node: CNode<K, V>, isRoot: Boolean): MainNode<K, V> {
+        if (isRoot || node.branches.size > 1) return node
+        if (node.branches.isEmpty()) return TNode.empty()
+        val only = node.branches[0]
+        return if (only is SNode) TNode(only) else node
+    }
+
+    private fun contractCollision(entries: List<SNode<K, V>>, hash: Int, isRoot: Boolean): MainNode<K, V> {
+        if (entries.size > 1) return LNode(entries)
+        if (entries.isEmpty()) return if (isRoot) CNode.empty() else TNode.empty()
+        if (!isRoot) return TNode(entries[0])
+        val bit = 1 shl (hash and 31)
+        return CNode(bit, listOf(entries[0]))
+    }
+
     private fun merge(left: SNode<K, V>, right: SNode<K, V>, shift: Int, generation: Generation): INode<K, V> {
         if (left.hash == right.hash || shift >= 32) return INode(LNode(listOf(left, right)), generation)
         val leftBit = 1 shl ((left.hash ushr shift) and 31)
@@ -223,9 +349,35 @@ public class ConcurrentHashTrie<K, V>(
         return INode(CNode(leftBit or rightBit, branches), generation)
     }
 
+    private fun merge(
+        collision: LNode<K, V>,
+        singleton: SNode<K, V>,
+        shift: Int,
+        generation: Generation,
+    ): MainNode<K, V> {
+        val collisionHash = collision.entries[0].hash
+        check(collision.entries.all { it.hash == collisionHash })
+        check(collisionHash != singleton.hash)
+        require(shift < 32) { "Different 32-bit hashes cannot share every Ctrie level." }
+        val collisionBit = 1 shl ((collisionHash ushr shift) and 31)
+        val singletonBit = 1 shl ((singleton.hash ushr shift) and 31)
+        if (collisionBit != singletonBit) {
+            val collisionBranch = INode(collision, generation)
+            val branches: List<Branch<K, V>> = if (Integer.compareUnsigned(collisionBit, singletonBit) < 0) {
+                listOf(collisionBranch, singleton)
+            } else {
+                listOf(singleton, collisionBranch)
+            }
+            return CNode(collisionBit or singletonBit, branches)
+        }
+        val child = INode(merge(collision, singleton, shift + 5, generation), generation)
+        return CNode(collisionBit, listOf(child))
+    }
+
     private fun gcas(node: INode<K, V>, before: MainNode<K, V>, after: MainNode<K, V>, observed: Root<K, V>): Boolean {
         val descriptor = Descriptor(before, after, observed)
         if (!node.main.compareAndSet(before, descriptor)) return false
+        gcasInstalledHookForTesting?.invoke()
         complete(descriptor)
         return descriptor.status.get() == Descriptor.COMMITTED
     }
@@ -246,13 +398,41 @@ public class ConcurrentHashTrie<K, V>(
     }
 
     private fun complete(descriptor: Descriptor<K, V>) {
-        val status = if (root.get() === descriptor.root) Descriptor.COMMITTED else Descriptor.ABORTED
+        val status = if (readRoot() === descriptor.root) Descriptor.COMMITTED else Descriptor.ABORTED
         descriptor.status.compareAndSet(Descriptor.UNDECIDED, status)
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun readRoot(): Root<K, V> {
+        while (true) {
+            when (val value = root.get()) {
+                is Root<*, *> -> return value as Root<K, V>
+                else -> complete(value as RootDescriptor<K, V>)
+            }
+        }
+    }
+
+    private fun complete(descriptor: RootDescriptor<K, V>) {
+        // Inspect the raw main slot rather than helping a node-local descriptor. Helping it would
+        // need to read the root and create a cycle with this root-descriptor completion.
+        val status = if (descriptor.before.node.main.get() === descriptor.expectedMain) {
+            RootDescriptor.COMMITTED
+        } else {
+            RootDescriptor.ABORTED
+        }
+        descriptor.status.compareAndSet(RootDescriptor.UNDECIDED, status)
+        val selected = if (descriptor.status.get() == RootDescriptor.COMMITTED) {
+            descriptor.after
+        } else {
+            descriptor.before
+        }
+        root.compareAndSet(descriptor, selected)
     }
 
     private fun entries(observed: Root<K, V>): Sequence<HamtEntry<K, V>> = sequence {
         suspend fun SequenceScope<HamtEntry<K, V>>.walk(node: INode<K, V>) {
             when (val main = readMain(node)) {
+                is TNode -> if (main.entry != null) yield(HamtEntry(main.entry.key, main.entry.value))
                 is LNode -> for (entry in main.entries) yield(HamtEntry(entry.key, entry.value))
                 is CNode -> for (branch in main.branches) when (branch) {
                     is SNode -> yield(HamtEntry(branch.key, branch.value))
@@ -261,6 +441,100 @@ public class ConcurrentHashTrie<K, V>(
             }
         }
         walk(observed.node)
+    }
+
+    internal fun validateStructureForTesting(): CtrieStatistics {
+        val observed = readRoot()
+        check(observed.node.generation === observed.generation) {
+            "The root indirection node has the wrong generation."
+        }
+        val counters = ValidationCounters()
+        validateNode(
+            observed.node,
+            shift = 0,
+            isRoot = true,
+            visited = mutableSetOf(),
+            counters = counters,
+        )
+        return CtrieStatistics(
+            counters.indirectionNodes,
+            counters.collisionNodes,
+            counters.tombNodes,
+            counters.entries,
+            counters.maxDepth,
+        )
+    }
+
+    private fun validateNode(
+        node: INode<K, V>,
+        shift: Int,
+        isRoot: Boolean,
+        visited: MutableSet<INode<K, V>>,
+        counters: ValidationCounters,
+    ): List<Int> {
+        check(visited.add(node)) { "The Ctrie contains an indirection-node cycle." }
+        counters.indirectionNodes++
+        counters.maxDepth = maxOf(counters.maxDepth, shift / 5)
+        return when (val main = readMain(node)) {
+            is TNode -> {
+                check(!isRoot) { "The root indirection node contains a tomb." }
+                counters.tombNodes++
+                main.entry?.let {
+                    counters.entries++
+                    listOf(it.hash)
+                } ?: emptyList()
+            }
+            is LNode -> {
+                check(main.entries.size >= 2) { "A collision node contains fewer than two entries." }
+                counters.collisionNodes++
+                val hash = main.entries[0].hash
+                main.entries.forEachIndexed { index, entry ->
+                    check(entry.hash == hash) { "A collision node contains mixed full hashes." }
+                    check(main.entries.take(index).none { policy.equivalent(it.key, entry.key) }) {
+                        "A collision node contains equivalent duplicate keys."
+                    }
+                }
+                counters.entries += main.entries.size
+                main.entries.map { it.hash }
+            }
+            is CNode -> {
+                check(Integer.bitCount(main.bitmap) == main.branches.size) {
+                    "A C-node bitmap disagrees with its compact branch list."
+                }
+                check(isRoot || (main.branches.isNotEmpty() &&
+                    (main.branches.size != 1 || main.branches[0] !is SNode))) {
+                    "A non-root C-node was not contracted into a tomb."
+                }
+                check(main.branches.isEmpty() || shift < 32) {
+                    "A C-node consumes more than 32 hash bits."
+                }
+                val hashes = mutableListOf<Int>()
+                var position = 0
+                for (index in 0 until 32) {
+                    val bit = 1 shl index
+                    if (main.bitmap and bit == 0) continue
+                    val branch = main.branches[position++]
+                    val branchHashes = when (branch) {
+                        is SNode -> {
+                            counters.entries++
+                            listOf(branch.hash)
+                        }
+                        is INode -> validateNode(
+                            branch,
+                            shift + 5,
+                            isRoot = false,
+                            visited,
+                            counters,
+                        )
+                    }
+                    check(branchHashes.all { (it ushr shift) and 31 == index }) {
+                        "A branch contains an entry in the wrong hash partition."
+                    }
+                    hashes.addAll(branchHashes)
+                }
+                hashes
+            }
+        }
     }
 
     public class Snapshot<K, V> internal constructor(
@@ -278,6 +552,13 @@ public class ConcurrentHashTrie<K, V>(
 
     internal class Generation
     internal class Root<K, V>(val node: INode<K, V>, val generation: Generation)
+    internal data class CtrieStatistics(
+        val indirectionNodeCount: Int,
+        val collisionNodeCount: Int,
+        val tombNodeCount: Int,
+        val entryCount: Int,
+        val maxDepth: Int,
+    )
     internal sealed interface Branch<K, V>
     internal sealed interface MainNode<K, V>
     internal class INode<K, V>(main: MainNode<K, V>, val generation: Generation) : Branch<K, V> {
@@ -296,10 +577,23 @@ public class ConcurrentHashTrie<K, V>(
         }
     }
     private data class LNode<K, V>(val entries: List<SNode<K, V>>) : MainNode<K, V>
+    private data class TNode<K, V>(val entry: SNode<K, V>?) : MainNode<K, V> {
+        companion object {
+            fun <K, V> empty(): TNode<K, V> = TNode(null)
+        }
+    }
     private class Descriptor<K, V>(
         val before: MainNode<K, V>,
         val after: MainNode<K, V>,
         val root: Root<K, V>,
+    ) {
+        val status = AtomicInteger(UNDECIDED)
+        companion object { const val UNDECIDED = 0; const val COMMITTED = 1; const val ABORTED = 2 }
+    }
+    private class RootDescriptor<K, V>(
+        val before: Root<K, V>,
+        val expectedMain: MainNode<K, V>,
+        val after: Root<K, V>,
     ) {
         val status = AtomicInteger(UNDECIDED)
         companion object { const val UNDECIDED = 0; const val COMMITTED = 1; const val ABORTED = 2 }
@@ -314,4 +608,11 @@ public class ConcurrentHashTrie<K, V>(
         }
     }
     private data class MutationResult<V>(val changed: Boolean, val value: V?)
+    private class ValidationCounters {
+        var indirectionNodes: Int = 0
+        var collisionNodes: Int = 0
+        var tombNodes: Int = 0
+        var entries: Int = 0
+        var maxDepth: Int = 0
+    }
 }

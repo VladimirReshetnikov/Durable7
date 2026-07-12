@@ -729,11 +729,13 @@ The gate includes deterministic descriptor schedules and an exhaustive serializa
 mixed short histories under ordinary, shared-prefix, and all-equal-hash policies. Immutable snapshot
 views convert explicitly to canonical `PersistentHashMap` form in O(n).
 
-**Kotlin/JVM status (2026-07-10): Implemented.** `ConcurrentHashTrie<K,V>` mirrors the C# node
-protocol with JVM atomics: bitmap C-nodes, singleton/collision nodes, helping GCAS descriptors,
-O(1) root-generation snapshots, and lazy child renewal. Its contention suite covers unique-key
-publication, a contended atomic counter, equal-hash collision nodes, retained generations, and
-explicit snapshot-to-CHAMP conversion.
+**Kotlin/JVM status (2026-07-12): Implemented with node GCAS, root/main RDCSS, and tomb cleanup.**
+`ConcurrentHashTrie<K,V>` mirrors the C# protocol with JVM atomics: bitmap C-nodes,
+singleton/collision/tomb nodes, helping node-local descriptors, linearizable O(1) generation
+snapshots, deletion-path contraction, and lazy child renewal. Its gate includes the deterministic
+committed-writer/snapshot schedule, deep and equal-hash contraction churn, contended same-key
+updates, a 250-round short-history serialization oracle under three hash policies, structural
+validation, retained generations, and explicit snapshot-to-CHAMP conversion.
 
 **Other-language status: Not applicable without a separate reclamation project.** C and C++ need
 epochs or hazard pointers before indirection-node CAS can reclaim safely. Rust's `Arc` ownership

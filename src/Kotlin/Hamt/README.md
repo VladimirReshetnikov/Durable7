@@ -12,9 +12,10 @@ sharing between versions, and optional runtime `HashPolicy<K>` values for custom
 behavior. Maps expose policy-compatible semantic equality and typed added/removed/changed diff.
 
 `ConcurrentHashTrie<K,V>` is the deliberately mutable JVM member. It uses generation-stamped
-indirection nodes and helping GCAS descriptors for lock-free updates, captures immutable generations
-in O(1), lazily renews old-generation children on later write paths, and converts snapshots to the
-canonical persistent CHAMP representation explicitly in O(n).
+indirection nodes, helping node-local GCAS, and a root/main RDCSS transition for lock-free updates
+and linearizable O(1) immutable snapshots. Empty/singleton tombs contract deletion paths instead of
+retaining historical skeletons; later writers lazily renew old-generation children only along paths
+they modify. Snapshots convert to the canonical persistent CHAMP representation explicitly in O(n).
 
 The integer-specialized family provides `PersistentIntMap`/`PersistentIntSet` and
 `PersistentLongMap`/`PersistentLongSet`. A shared big-endian Patricia engine path-compresses on the
