@@ -3,8 +3,8 @@
 - Status: Informational
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-12T00:59:18Z
-- Updated against repository HEAD: 9b4acafb3160f778683095b9ec92b609d66e45f8
+- Updated (UTC): 2026-07-12T04:31:10Z
+- Updated against repository HEAD: 8a926e3bdb0cc37da0c8a15c4c32352c2ebcb1f5
 - Audience: Maintainers and AI agents implementing the C++ port
 - Scope: C++ port documentation under `src/Cpp/FingerTree/docs`
 
@@ -16,10 +16,10 @@
   especially lazy memoization, type erasure, comparator regimes, and C++ memory-model rules.
 - [Implementation notes](implementation-notes.md) records concrete C# comparisons, justified C++ divergences,
   validation observations, and links to any defect reports found during the port.
-- [API notes](api-notes.md) records C++ API conventions, canonical zip-tree rank/policy semantics, the mutable
-  DABA Lite ownership exception, and active differences from the C# workspace.
-- [Usage guide](usage.md) shows public include paths, value-semantics patterns, mutable sliding-window use,
-  common update flows, and facade quick starts.
+- [API notes](api-notes.md) records C++ API conventions, canonical zip-tree and Brodal-Okasaki policy semantics,
+  the mutable DABA Lite ownership exception, and active differences from the C# workspace.
+- [Usage guide](usage.md) shows public include paths, value-semantics patterns, Brodal-Okasaki melding and
+  representative handles, mutable sliding-window use, common update flows, and facade quick starts.
 - [Validation](validation.md) records build, test, stress, warning-policy, generated-output, and
   benchmark-harness-status guidance for this workspace.
 - [Tests README](../tests/README.md) maps the native smoke runner, domain test files, direct executable path, and

@@ -2,14 +2,15 @@
 
 - Created (UTC): 2026-07-02T21:06:57Z
 - Repository HEAD: 399710816b9007dde1374aef2043f118beddc225
-- Updated (UTC): 2026-07-12T00:59:18Z
-- Updated Repository HEAD: 9b4acafb3160f778683095b9ec92b609d66e45f8
+- Updated (UTC): 2026-07-12T04:31:10Z
+- Updated Repository HEAD: 8a926e3bdb0cc37da0c8a15c4c32352c2ebcb1f5
 - Audience: Maintainers validating the C++ FingerTree port
 - Scope: Native test executable, source grouping, and stress controls under `src/Cpp/FingerTree/tests`
 
 The C++ FingerTree workspace has one repository-owned native test executable, `fingertree_smoke_tests`; it uses no
-third-party test framework. CTest runs that executable through 19 subsystem entries (`fingertree.atomic-box`,
-`fingertree.canonical-sorted-set`, `fingertree.command-model`, `fingertree.concurrency`, `fingertree.daba-lite`, `fingertree.deque`, `fingertree.interval-tree`, `fingertree.lazy-cell`,
+third-party test framework. CTest runs that executable through 20 subsystem entries (`fingertree.atomic-box`,
+`fingertree.brodal-okasaki-heap`, `fingertree.canonical-sorted-set`, `fingertree.command-model`,
+`fingertree.concurrency`, `fingertree.daba-lite`, `fingertree.deque`, `fingertree.interval-tree`, `fingertree.lazy-cell`,
 `fingertree.measure`, `fingertree.measured-lazy-cell`, `fingertree.measured-rope`, `fingertree.measured-tree`,
 `fingertree.priority-queue`, `fingertree.reversible-deque`, `fingertree.rope`, `fingertree.rope-text`,
 `fingertree.rrb-vector`,
@@ -42,6 +43,11 @@ listing, and replay-seed selection.
   4,096-node operation chain, allocation-free destruction of a 16,384-node chain, a 20,000-operation retained-snapshot model, identity-gated algebra, receiver-comparer
   asymmetry, quantified structural sharing, cold concurrent digest publication, move-only values, and callback
   exception safety.
+- `brodal_okasaki_heap_tests.cpp` covers ascending, descending, equal, and shuffled 8,192-element shapes;
+  randomized meld forests; a 15,000-operation retained multiset history; the audited five-comparison insert/meld
+  ceiling; comparator-object compatibility; logical self-meld DAGs; exact off-path sharing; tied representatives;
+  move-only insertion and representative-returning deletion; logarithmic delete-min comparison/allocation growth;
+  injected comparator failures; concurrent readers; and iterative destruction of deep immutable root chains.
 - `daba_lite_tests.cpp` exhausts every short insert/evict history with a noncommutative model, runs a deterministic
   100,000-operation variable-window model, covers the 63/64/65 and 127/128/129 block boundaries and long churn,
   reaches all four incremental-fixup phases, proves the three/two/one `combine` ceilings, injects failures at every

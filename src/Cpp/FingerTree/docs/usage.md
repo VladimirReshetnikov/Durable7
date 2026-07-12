@@ -2,10 +2,10 @@
 
 - Created (UTC): 2026-07-02T20:03:36Z
 - Repository HEAD: 17d505f18e9e0a5748058701d408ed6642dcba29
-- Updated (UTC): 2026-07-12T00:59:18Z
-- Updated against repository HEAD: 9b4acafb3160f778683095b9ec92b609d66e45f8
+- Updated (UTC): 2026-07-12T04:31:10Z
+- Updated against repository HEAD: 8a926e3bdb0cc37da0c8a15c4c32352c2ebcb1f5
 - Audience: C++ consumers and maintainers using the public FingerTree headers
-- Scope: Public include path, value semantics, canonical ranking, common update patterns, and facade quick starts
+- Scope: Public include path, value semantics, canonical ranking, priority cores, and facade quick starts
 
 This guide is the practical entry point for using the C++ FingerTree port. The [API notes](api-notes.md)
 document the full public surface and C#-to-C++ mapping; this guide focuses on the common code shapes
@@ -264,6 +264,26 @@ auto descending = ft::sorted_set<int, std::greater<>>::from_range(
     std::greater<>{});
 ```
 
+## Brodal-Okasaki Heap
+
+Use `brodal_okasaki_heap<T, Less>` when worst-case constant-time persistent insertion and melding matter. Values
+that compare equivalent remain distinct, and heaps can meld only when they retain the same comparator object.
+Derive related heaps from one empty value (or pass its `comparer_policy()` handle) when melding is planned:
+
+```cpp
+auto empty = ft::brodal_okasaki_heap<int>{};
+auto left = empty.insert(8).insert(2).insert(5);
+auto right = empty.insert(7).insert(1);
+auto merged = left.meld(right);
+
+auto removed = merged.try_delete_minimum();
+// *removed->first == 1; removed->second.minimum() == 2
+```
+
+`minimum()` returns a snapshot-owned reference. `minimum_handle()` and the removed handle returned by
+`try_delete_minimum()` can outlive the heap snapshot and are the move-only-friendly representative surfaces.
+`delete_minimum()` throws `std::logic_error` on an empty heap; the `try_` form returns `std::nullopt`.
+
 ## Priority Queue
 
 `priority_queue<Element, Priority, Comparison>` is a persistent minimum-priority queue. Equal
@@ -384,6 +404,7 @@ data-race rules still apply to your variables.
 | Sorted values with duplicates | `sorted_bag<T, Less>` |
 | Unique sorted values and set algebra | `sorted_set<T, Less>` |
 | Sorted key/value lookup and rank access | `sorted_map<Key, T, Less>` |
+| Worst-case O(1) persistent insertion and meld | `brodal_okasaki_heap<T, Less>` |
 | Minimum-priority draining and meld | `priority_queue<T, Priority, Comparison>` |
 | Closed-interval overlap and containment queries | `interval_tree<T, Comparison>` |
 | Chunked persistent positional sequence | `rope<T>` |

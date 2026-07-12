@@ -39,6 +39,8 @@ int main()
     const auto rrb = ft::rrb_vector<int>::from_range(source).set_item(2, 30).concat(ft::rrb_vector<int>{5, 6});
     const auto canonical_policy = ft::zip_tree_rank_policy<int>::seeded(0x1234);
     const auto canonical = ft::canonical_sorted_set<int>::from_range(source, canonical_policy).add(5);
+    const auto brodal = ft::brodal_okasaki_heap<int>::from_range(source).insert(0);
+    const auto brodal_deletion = brodal.try_delete_minimum();
     const auto text = ft::to_text_rope("alpha\nbeta\ngamma");
     auto daba = ft::daba_lite<int, sum_monoid>{};
     daba.insert(7);
@@ -48,6 +50,8 @@ int main()
     if (deque.size() != 6 || deque.front() != 0 || deque.back() != 5 || !selected.has_value()
         || selected->value != 1 || rrb.size() != 6 || rrb[2] != 30 || rrb.back() != 6
         || canonical.size() != 5 || canonical.content_hash() == 0 || !canonical.contains(3)
+        || brodal.minimum() != 0 || !brodal_deletion.has_value()
+        || *brodal_deletion->first != 0 || brodal_deletion->second.minimum() != 1
         || ft::line_count(text) != 3 || ft::get_line(text, 1) != "beta" || daba.aggregate() != 11) {
         std::cerr << "installed public API smoke check failed\n";
         return 1;

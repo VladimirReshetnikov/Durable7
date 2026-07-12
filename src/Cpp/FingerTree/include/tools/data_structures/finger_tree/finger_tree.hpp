@@ -1,6 +1,7 @@
 #pragma once
 
 #include <tools/data_structures/finger_tree/built_in_measures.hpp>
+#include <tools/data_structures/finger_tree/brodal_okasaki_heap.hpp>
 #include <tools/data_structures/finger_tree/canonical_sorted_set.hpp>
 #include <tools/data_structures/finger_tree/comparisons.hpp>
 #include <tools/data_structures/finger_tree/daba_lite.hpp>

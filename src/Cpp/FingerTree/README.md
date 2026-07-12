@@ -3,8 +3,8 @@
 - Status: Active C++ workspace
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-12T00:59:18Z
-- Updated against repository HEAD: 9b4acafb3160f778683095b9ec92b609d66e45f8
+- Updated (UTC): 2026-07-12T04:31:10Z
+- Updated against repository HEAD: 8a926e3bdb0cc37da0c8a15c4c32352c2ebcb1f5
 - Audience: Maintainers implementing and reviewing the C++ port
 - Scope: Build entry points, layout, and validation for `src/Cpp/FingerTree`
 
@@ -31,6 +31,14 @@ the exact C# ZZT2 geometric/unsigned-secondary/content rank tuple through HMAC-S
 public-seed, and caller-keyed modes. Explicit-stack Cartesian build and zip/unzip updates remain safe on a fully
 colliding linear tree; immutable nodes share both paths and stored representatives, lazy atomic digests accelerate
 same-policy inequality, and semantic equality deliberately follows the receiver's comparer across policy families.
+
+`brodal_okasaki_heap<T, Less>` is the immutable bootstrapped skew-binomial priority core. Insert, minimum, and
+meld are worst-case O(1), delete-minimum is worst-case O(log n), and the audited insertion/meld path performs no
+more than five comparator calls. Heaps derived from one retained comparator policy can meld while preserving all
+comparer-tied representatives and exact shared subtrees. Move-only values are owned behind immutable handles;
+the result-returning delete-minimum surface preserves the exact removed handle with its persistent remainder.
+Allocation-free iterative reclamation keeps the C#-faithful decreasing-root and equal-root shapes stack-safe in
+deterministic C++ destruction.
 
 The native runner and benchmark harness remain repository-owned, so configuring a preset does not implicitly run
 a package manager. The canonical rank policy uses the operating-system CNG provider (`bcrypt`) on Windows and the

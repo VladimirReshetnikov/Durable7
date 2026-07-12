@@ -1,6 +1,7 @@
 add_executable(
     fingertree_smoke_tests
     atomic_box_tests.cpp
+    brodal_okasaki_heap_tests.cpp
     canonical_sorted_set_tests.cpp
     command_sequence_tests.cpp
     daba_lite_tests.cpp
@@ -47,6 +48,7 @@ fingertree_configure_target(fingertree_smoke_tests)
 set(
     FINGERTREE_TEST_GROUPS
     atomic-box
+    brodal-okasaki-heap
     canonical-sorted-set
     command-model
     concurrency

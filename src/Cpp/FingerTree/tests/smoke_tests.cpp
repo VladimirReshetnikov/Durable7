@@ -23,6 +23,7 @@ void add_measure_tests(suite& tests);
 void add_interval_tree_tests(suite& tests);
 void add_lazy_cell_tests(suite& tests);
 void add_atomic_box_tests(suite& tests);
+void add_brodal_okasaki_heap_tests(suite& tests);
 void add_canonical_sorted_set_tests(suite& tests);
 void add_command_sequence_tests(suite& tests);
 void add_daba_lite_tests(suite& tests);
@@ -126,6 +127,9 @@ int main(const int argument_count, const char* const* arguments)
 
     tests.set_group("atomic-box");
     add_atomic_box_tests(tests);
+
+    tests.set_group("brodal-okasaki-heap");
+    add_brodal_okasaki_heap_tests(tests);
 
     tests.set_group("canonical-sorted-set");
     add_canonical_sorted_set_tests(tests);

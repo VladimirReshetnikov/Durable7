@@ -62,8 +62,8 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | Merkle search tree | 1 | Strong (C# implemented) | Completed: deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
 | Zip tree (canonical sorted set) | 1, 3 | Plausible (implemented across all six languages) | Completed: coherent keyed rank policy | 1 new core, set facade |
-| Brodal-Okasaki heap | 1 | Plausible (C#, Haskell, and Kotlin/JVM implemented for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
-| Priority search queue (winner-cached AVL) | 1 | Plausible (C#, Haskell, and Kotlin/JVM implemented) | Completed as a direct core rather than the addressable composition | 1 new core |
+| Brodal-Okasaki heap | 1 | Plausible (implemented across all six languages for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
+| Priority search queue (winner-cached AVL) | 1 | Plausible (C#, Haskell, Kotlin/JVM, and Rust implemented) | Completed as a direct core rather than the addressable composition | 1 new core |
 | Ctrie (concurrent, O(1) snapshot) | 1 | Managed-only (C# + Kotlin/JVM implemented) | Tracing GC; native ports require reclamation design | 1 new core, concurrency test tier |
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
 | Size-tiered small representations | 2 | Strong (planned, not shipped) | Benchmark gate at tier boundary | Internal tier per facade + representation-forcing tests |
@@ -456,6 +456,45 @@ nullable-safe result wrappers, deterministic priority/key tie ordering, and an i
 priority-threshold traversal. Its audit covers all rotation/deletion shapes, 50,000 ascending keys,
 a 20,000-operation retained-history model, pruning comparison equations, structural sharing, and
 concurrent readers.
+
+**C++ status (2026-07-11): Brodal-Okasaki heap implemented with native value-policy parity.**
+`brodal_okasaki_heap<T, Less>` retains immutable trees, forests, comparator policy, and concrete
+element representatives through `shared_ptr`; this permits move-only elements while keeping old
+versions and removed-minimum handles alive. Comparator identity gates meld, independently created
+default heaps share a canonical policy, and the direct fused bootstrapped skew-binomial core keeps
+minimum/insert/meld worst-case O(1) and delete-min O(log n). Explicit-stack iteration, validation,
+and destruction cover self-meld DAGs without silently collapsing logical occurrences. Native audits
+pin comparison and allocation growth, off-path sharing, throwing-comparator publication, retained
+models, adversarial drains, and concurrent readers.
+
+**C status (2026-07-11): Brodal-Okasaki heap implemented with explicit ownership and failure
+atomicity.** `ft_brodal_heap` uses an identity-bearing, reference-counted policy with a stable erased-
+type tag and fallible value-copy, comparator, and allocator hooks. Values, trees, and forest cells
+are immutable reference-counted objects; an intrusive nonallocating release worklist keeps deep and
+self-melded DAG reclamation stack-safe. Point operations support result/source aliasing, and every
+allocation or callback failure withholds the successor; try-delete additionally withholds both the
+copied removed representative and remainder if either cannot be published. Exhaustive failpoint and
+lifetime sweeps accompany retained models, comparison ceilings, structural validation, and concurrent
+distinct-handle readers under MSVC, GCC, Clang, and ASan/UBSan.
+
+**Rust status (2026-07-11): Brodal-Okasaki heap implemented without an element-cloning bound.**
+`BrodalOkasakiHeap<T>` stores representatives and the fused bootstrapped skew-binomial graph behind
+`Arc`. Owned minimum views retain the exact representative; independently constructed natural-order
+policies interoperate, while custom heaps must clone the same `OrderPolicy<T>` identity to meld.
+Typed invariant and policy errors, explicit-stack iteration/validation, `Option`-valued and non-
+`Clone` elements, a 20,000-operation retained-history model, comparison ceilings through 65,536
+elements, sharing probes, and concurrent readers pass the full 103-test debug/release gate plus
+strict clippy, rustdoc, and doctests.
+
+**Rust priority-search status (2026-07-11): winner-cached AVL implemented without cloning stored
+components.** `PrioritySearchQueue<K, P, V>` retains each key, priority, and payload behind `Arc`,
+so lookup, removal, minimum views, and iteration borrow or return exact representative handles.
+Only exact replacement reuse adds ordinary priority/payload equality bounds. Its borrowing
+`enumerate_at_most` iterator eagerly rejects inverted bounds, emits in key order, and prunes by the
+cached winner. Eight focused groups cover every rotation/deletion direction, 50,000 ascending keys,
+a 20,000-operation retained model, `Option`-valued and non-`Clone` components, exact comparison
+equations, path sharing, custom-policy ties, and concurrent readers; the full debug/release gate is
+111/111 with warnings-denied clippy and rustdoc.
 
 - **Brodal-Okasaki heap** (JFP 1996; skew binomial queues + data-structural bootstrapping): purely
   functional with O(1) *worst-case* insert, meld, and findMin, O(log n) deleteMin. The shipped
@@ -900,8 +939,8 @@ The implementation wave described by this catalog has already landed these C# re
 - the managed Ctrie with O(1) immutable snapshots.
 
 CHAMP, Patricia, and RRB have also advanced through the sibling-language work recorded in their
-entries; the canonical zip-zip set is implemented across all six languages, the Brodal-Okasaki heap and
-priority-search queue have Haskell and Kotlin/JVM ports, and DABA Lite now exists in every applicable imperative
+entries; the canonical zip-zip set and Brodal-Okasaki heap are implemented across all six languages,
+the priority-search queue has Haskell, Kotlin/JVM, and Rust ports, and DABA Lite now exists in every applicable imperative
 language (C#, C, C++, Kotlin/JVM, and Rust). The Ctrie's deliberate parity boundary remains C# and
 Kotlin/JVM. These are current-state implementation records, not candidates awaiting a consumer.
 Future work on them is ordinary hardening, measurement, and demand-driven porting.

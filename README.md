@@ -197,13 +197,13 @@ language-first layout.
   `tds_hamt_map` and `tds_hamt_set` value structs with callback-driven hash/equality/ownership
   policy, reference-counted immutable nodes, structural sharing across versions, and deterministic
   native model tests.
-- [src/C/FingerTree](src/C/FingerTree/README.md) is the C11 port from the C++ workspace. It provides the measured-tree/deque family, RRB vectors, derived sorted/priority/interval collections, a type-erased CNG/OpenSSL-backed policy-canonical zip-zip set, ropes/text, and a separate mutable DABA Lite with allocation-atomic updates and O(n+c) deterministic clear, all covered by CTest and a dependency-light benchmark harness.
+- [src/C/FingerTree](src/C/FingerTree/README.md) is the C11 port from the C++ workspace. It provides the measured-tree/deque family, RRB vectors, derived sorted/priority/interval collections, a type-erased CNG/OpenSSL-backed policy-canonical zip-zip set, a failure-atomic type-erased Brodal-Okasaki heap, ropes/text, and a separate mutable DABA Lite with allocation-atomic updates and O(n+c) deterministic clear, all covered by CTest and a dependency-light benchmark harness.
 - [src/C/Tungsten](src/C/Tungsten/README.md) is the C17 port of the Tungsten collections. It provides type-erased `tds_tungsten_list` and `tds_tungsten_association` value structs, composing the C FingerTree deque, C HAMT, and an internal ref-counted AVL stamp sequence for C#-parity keyed and positional Association operations.
 - [src/Cpp/Hamt](src/Cpp/Hamt/README.md) is a C++20 port of the persistent HAMT library. It provides
   header-only `persistent_hash_map` and `persistent_hash_set` templates with bitmap-indexed
   branching, immutable equal-hash collision buckets, custom hash/equality policy objects, structural
   sharing via immutable `std::shared_ptr` nodes, and deterministic native model tests.
-- [src/Cpp/FingerTree](src/Cpp/FingerTree/README.md) is the native C++ port of the FingerTree workspace and newer sequence/streaming cores. It is a header-first CMake/Ninja library with the persistent engines and facades, RRB vectors, a CNG/OpenSSL-backed policy-canonical zip-zip set supporting move-only values, ropes/text, and a noncopyable mutable DABA Lite whose planned no-throw publication and O(n+c) deterministic clear are covered by CTest and benchmarks.
+- [src/Cpp/FingerTree](src/Cpp/FingerTree/README.md) is the native C++ port of the FingerTree workspace and newer sequence/streaming cores. It is a header-first CMake/Ninja library with the persistent engines and facades, RRB vectors, a CNG/OpenSSL-backed policy-canonical zip-zip set, a move-only-capable bootstrapped skew-binomial Brodal-Okasaki heap, ropes/text, and a noncopyable mutable DABA Lite whose no-throw publication and O(n+c) deterministic clear are covered by CTest and benchmarks.
 - [src/Cpp/Tungsten](src/Cpp/Tungsten/README.md) is the C++23 header-first Tungsten-collections port. It provides `persistent_list<T>` and `persistent_association<Key, T, Hash, KeyEqual, ValueEqual>` over the C++ FingerTree and HAMT substrates, with CTest coverage for the Tungsten ordering rules and relabel path.
 - [src/Haskell/Hamt](src/Haskell/Hamt/README.md) is a Haskell port of the persistent HAMT library. It provides `HashMap` and `HashSet` values with bitmap-indexed 32-way branching, immutable collision buckets, policy-preserving factories, structural sharing, and dependency-free cabal tests.
 - [src/Haskell/FingerTree](src/Haskell/FingerTree/README.md) is a Haskell port of the FingerTree family. It provides a general measured tree, size-measured deque, reversible deque, sorted bag/set/map facades, an IO-created/purely operated policy-canonical zip-zip set, Brodal-Okasaki and measured priority queues, a keyed priority-search queue, interval tree, positional and measured ropes, and text helpers.
@@ -216,8 +216,9 @@ language-first layout.
   buckets, `Arc` structural sharing, `BuildHasher` hash policy support, and Cargo unit tests.
 - [src/Rust/FingerTree](src/Rust/FingerTree/README.md) is the Rust checkpoint port of the FingerTree
   family and newer sequence/streaming cores. Its persistent deque, measured sequence, RRB vector,
-  policy-canonical zip-zip sorted set, reversible deque, sorted bag/set/map, priority queue,
-  interval tree, and rope/text facades use structurally shared Rust storage. The separate mutable
+  policy-canonical zip-zip sorted set, non-`Clone` bootstrapped skew-binomial heap, winner-cached
+  priority-search queue, reversible deque, sorted bag/set/map, priority queue, interval tree, and
+  rope/text facades use structurally shared Rust storage. The separate mutable
   `DabaLite<T, M>` preserves bounded FIFO aggregation callbacks and prompt deterministic
   reclamation; it is `!Send`/`!Sync`, and `clear` is explicitly O(n + c) because owned values must
   be dropped.

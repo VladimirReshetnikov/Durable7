@@ -3,8 +3,8 @@
 - Status: Current API notes
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-12T00:59:18Z
-- Updated against repository HEAD: 9b4acafb3160f778683095b9ec92b609d66e45f8
+- Updated (UTC): 2026-07-12T04:31:10Z
+- Updated against repository HEAD: 8a926e3bdb0cc37da0c8a15c4c32352c2ebcb1f5
 - Audience: Maintainers implementing and reviewing public C++ APIs
 - Scope: C++ naming, contracts, and intentional differences from the C# workspace
 
@@ -397,6 +397,35 @@ Notable C++ differences from C#:
   Set-algebra merge walks stream comparator-compatible operands without temporary operand vectors. Incompatible
   runtime comparator state still requires rebuilding and sorting the right operand under the receiver's order
   before that streaming merge.
+
+## `brodal_okasaki_heap<T, Less>`
+
+`brodal_okasaki_heap<T, Less>` is the C++23 port of C# `BrodalOkasakiHeap<T>`. It retains the fused
+bootstrapped skew-binomial representation rather than substituting a conventional binomial heap:
+
+- `insert`, `minimum`, `try_minimum`, and compatible `meld` are worst-case O(1); `delete_minimum` and
+  `try_delete_minimum` are worst-case O(log n);
+- insert and nonempty meld perform at most five `Less` invocations. Minimum lookup and traversal do not invoke
+  the comparator;
+- comparator-object identity is representation policy. Default-constructed heaps share one policy object, and
+  copies/updates retain it; independently supplied comparator objects are deliberately incompatible even when
+  their runtime state compares equal. Compatibility is checked before empty-heap identities;
+- comparer-equivalent values are never coalesced. C# `Compare(left, right) <= 0` is represented by one reverse
+  strict-less call, so ties retain the same root-choice semantics and every distinct stored representative;
+- values live behind `std::shared_ptr<const T>`, permitting rvalue insertion, moved bulk construction, and meld
+  for move-only `T`. `minimum_handle()` and the first component of `try_delete_minimum()` retain the exact
+  representative independently of later remainder destruction;
+- empty-side meld and empty `clear` preserve exact versions. Validators report logical count, root-forest
+  length, maximum rank, and maximum depth, and deliberately count repeated logical occurrences in self-melded
+  shared DAGs;
+- tree/forest control blocks use an allocation-free deferred deleter. This preserves the C#-faithful chain that
+  arises under decreasing or tied root insertion while making deterministic C++ reclamation iterative and stack
+  safe. Nodes remain immutable and concurrent reads of independently retained snapshots are safe.
+
+`try_delete_minimum()` returns
+`std::optional<std::pair<std::shared_ptr<const T>, brodal_okasaki_heap>>`; the pair is the removed representative
+handle followed by the persistent remainder. The source snapshot is never modified. Comparator exceptions during
+insert, meld, deletion, or validation cannot publish a partial version.
 
 ## `priority_queue<T, Priority, Comparison>`
 

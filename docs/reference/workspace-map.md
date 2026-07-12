@@ -83,11 +83,11 @@ ordering, and documentation obligations that should remain recognizable across l
 | [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | Kotlin/JVM HAMT port | `src/tools/datastructures/hamt/`, `test/tools/datastructures/hamt/` | [`docs`](../../src/Kotlin/Hamt/docs/README.md) |
 | [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | Rust HAMT port | `Cargo.toml`, `src/lib.rs` | [`docs`](../../src/Rust/Hamt/docs/README.md) |
 | [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | Canonical managed FingerTree library | `DataStructures.sln`, `src/Tools.DataStructures.FingerTree/`, `tests/Tools.DataStructures.FingerTree.Tests/`, `samples/`, `benchmarks/` | [`docs`](../../src/CSharp/docs/FingerTree/README.md) |
-| [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | C++23 FingerTree/RRB/canonical-set family plus native DABA Lite | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/Cpp/FingerTree/docs/README.md) |
-| [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | C11 FingerTree/RRB/canonical-set family plus type-erased DABA Lite | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/C/FingerTree/docs/README.md) |
+| [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | C++23 FingerTree/RRB/canonical-set family with a Brodal-Okasaki heap plus native DABA Lite | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/Cpp/FingerTree/docs/README.md) |
+| [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | C11 FingerTree/RRB/canonical-set family with a type-erased Brodal heap plus DABA Lite | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/C/FingerTree/docs/README.md) |
 | [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) | Haskell FingerTree/RRB/canonical-set family port | `tools-data-structures-fingertree.cabal`, `src/Data/Structures/FingerTree/` | [`README`](../../src/Haskell/FingerTree/README.md) |
 | [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | Kotlin/JVM persistent measured-tree/RRB/canonical-set/optimal-priority family plus managed DABA Lite | `src/tools/datastructures/fingertree/`, `test/tools/datastructures/fingertree/` | [`docs`](../../src/Kotlin/FingerTree/docs/README.md) |
-| [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | Rust FingerTree/RRB/canonical-set checkpoint plus single-threaded DABA Lite | `Cargo.toml`, `src/` | [`docs`](../../src/Rust/FingerTree/docs/README.md) |
+| [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | Rust FingerTree/RRB/canonical-set checkpoint with non-`Clone` Brodal/PSQ cores plus single-threaded DABA Lite | `Cargo.toml`, `src/` | [`docs`](../../src/Rust/FingerTree/docs/README.md) |
 | [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) | Canonical managed Tungsten-semantics collections (list facade and insertion-ordered association) composed from the HAMT and FingerTree families | `DataStructures.sln`, `src/Tools.DataStructures.Tungsten/`, `tests/Tools.DataStructures.Tungsten.Tests/` | [`docs`](../../src/CSharp/docs/Tungsten/README.md) |
 | [`src/C/Tungsten`](../../src/C/Tungsten/README.md) | C17 Tungsten `List` and `Association` port | `include/tools/data_structures/tungsten/tungsten.h`, `CMakePresets.json` | [`README`](../../src/C/Tungsten/README.md) |
 | [`src/Cpp/Tungsten`](../../src/Cpp/Tungsten/README.md) | C++23 Tungsten `List` and `Association` port | `include/tools/data_structures/tungsten/`, `CMakePresets.json` | [`README`](../../src/Cpp/Tungsten/README.md) |
@@ -110,11 +110,11 @@ FingerTree lineage:
 
 1. C# FingerTree (`src/CSharp/src/Tools.DataStructures.FingerTree`) is the broadest implementation and documentation source: tuned deque, general measured tree, derived sorted/priority/interval collections, ropes, text helpers, samples, benchmarks, and design notes.
 2. `src/Cpp/FingerTree` ports the persistent family to a header-first C++23 library, adds the
-   system-crypto-backed policy-canonical zip-zip set, and separately exposes native DABA Lite with
-   deterministic reclamation and CMake/CTest validation.
+   system-crypto-backed policy-canonical zip-zip set and move-only-capable Brodal-Okasaki heap, and
+   separately exposes native DABA Lite with deterministic reclamation and CMake/CTest validation.
 3. `src/C/FingerTree` starts from the C++ port and exposes a C11 API with explicit handles,
-   ownership, persistent facades, RRB vectors, an erased-type-safe policy-canonical zip-zip set, and
-   mutable DABA Lite.
+   ownership, persistent facades, RRB vectors, an erased-type-safe policy-canonical zip-zip set, a
+   failure-atomic type-erased Brodal-Okasaki heap, and mutable DABA Lite.
 4. `src/Haskell/FingerTree` ports the family to Haskell with a general measured tree,
    deque/reversible deque, derived collections, the explicitly identified policy-canonical zip-zip
    set, intervals, ropes, and text helpers.
@@ -123,8 +123,9 @@ FingerTree lineage:
    bootstrapped skew-binomial Brodal-Okasaki heap and winner-cached AVL priority-search queue, and
    separately exposes the mutable six-cursor DABA Lite streaming aggregator.
 6. `src/Rust/FingerTree` is a Rust semantic checkpoint for the persistent family names over shared
-   tree/RRB storage, includes the keyed policy-canonical zip-zip sorted set, and keeps a separate
-   single-threaded DABA Lite whose deterministic-drop clear cost is documented locally.
+   tree/RRB storage, includes the keyed policy-canonical zip-zip sorted set and `Arc`-owned
+   Brodal-Okasaki heap and winner-cached priority-search queue, and keeps a separate single-threaded
+   DABA Lite whose deterministic-drop clear cost is documented locally.
 
 Tungsten collections lineage:
 
