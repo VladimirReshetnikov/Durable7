@@ -135,7 +135,6 @@ internal fun <K, V> verifyMerkleProof(
     val context = MerkleVerificationContext(budget)
     return try {
         context.accountProofQuery(proof.queryInternal().size, proof.rootHash)
-        verifyMerkleEnvelope(proof.algorithmId, proof.domainDigest, policy)
         if (proof.steps.size > budget.maxBlockCount) {
             throw verificationFailure(
                 MerkleVerificationFailureKind.RESOURCE_LIMIT_EXCEEDED,
@@ -153,6 +152,7 @@ internal fun <K, V> verifyMerkleProof(
                 proof.rootHash,
             )
         }
+        verifyMerkleEnvelope(proof.algorithmId, proof.domainDigest, policy)
         val verifier = MerkleSearchTree.empty(policy)
         val decoded = HashMap<MerkleDigest, DecodedMerkleBlock<K, V>>(proof.steps.size)
         val steps = HashMap<MerkleDigest, MerkleProofStep>(proof.steps.size)

@@ -326,7 +326,7 @@ private fun pointRangeAndEmptyProofsVerifyCanonically(): Unit {
     assertPersistenceProofValid(empty.createRangeProof(-1, 1), policy)
 }
 
-private fun proofQueryBudgetPrecedesEveryCodecAndBlock(): Unit {
+private fun proofQueryAndShapeBudgetsPrecedeEnvelopeCodecsAndBlocks(): Unit {
     val keyCodec = CountingMerkleCodec(Int32MerkleCodec)
     val valueCodec = CountingMerkleCodec(NullableUtf8MerkleCodec)
     val policy = MerkleSearchTreePolicy.natural(
@@ -365,6 +365,51 @@ private fun proofQueryBudgetPrecedesEveryCodecAndBlock(): Unit {
     persistEquals(deepProof.query().size.toLong(), stepResult.verifiedByteCount, "proof step preflight bytes")
     persistEquals(0 to 0, keyCodec.counts(), "proof step preflight key codec")
     persistEquals(0 to 0, valueCodec.counts(), "proof step preflight value codec")
+
+    val foreignOversizedProof = MerkleProof(
+        "foreign-merkle-algorithm-v1",
+        deepProof.domainDigest,
+        deepProof.rootHash,
+        deepProof.kind,
+        deepProof.query(),
+        deepProof.steps,
+    )
+    val precedenceResult = MerkleSearchTree.verifyProof(foreignOversizedProof, policy, stepBudget)
+    persistEquals(
+        MerkleVerificationFailureKind.RESOURCE_LIMIT_EXCEEDED,
+        precedenceResult.failureKind,
+        "proof shape precedes envelope",
+    )
+    persistEquals(0, precedenceResult.verifiedBlockCount, "proof shape precedence blocks")
+    persistEquals(
+        foreignOversizedProof.query().size.toLong(),
+        precedenceResult.verifiedByteCount,
+        "proof shape precedence bytes",
+    )
+
+    val expandedSteps = deepProof.steps.toMutableList()
+    expandedSteps[0] = MerkleProofStep(expandedSteps[0].block, listOf(0, 1))
+    val expandedProof = rebuildProof(deepProof, steps = expandedSteps)
+    keyCodec.reset()
+    valueCodec.reset()
+    val expansionResult = MerkleSearchTree.verifyProof(
+        expandedProof,
+        policy,
+        MerkleVerificationBudget(maxChildReferencesPerBlock = 1),
+    )
+    persistEquals(
+        MerkleVerificationFailureKind.RESOURCE_LIMIT_EXCEEDED,
+        expansionResult.failureKind,
+        "proof expansion preflight",
+    )
+    persistEquals(0, expansionResult.verifiedBlockCount, "proof expansion preflight blocks")
+    persistEquals(
+        expandedProof.query().size.toLong(),
+        expansionResult.verifiedByteCount,
+        "proof expansion preflight bytes",
+    )
+    persistEquals(0 to 0, keyCodec.counts(), "proof expansion preflight key codec")
+    persistEquals(0 to 0, valueCodec.counts(), "proof expansion preflight value codec")
 }
 
 private fun proofsRejectTamperingExtrasAndBadExpansions(): Unit {
@@ -629,7 +674,8 @@ internal fun runMerklePersistenceTests(): Unit {
         "saveAndImportPreflightBeforeAnyWrite" to ::saveAndImportPreflightBeforeAnyWrite,
         "completePartialAndIterativeSynchronizationConverge" to ::completePartialAndIterativeSynchronizationConverge,
         "pointRangeAndEmptyProofsVerifyCanonically" to ::pointRangeAndEmptyProofsVerifyCanonically,
-        "proofQueryBudgetPrecedesEveryCodecAndBlock" to ::proofQueryBudgetPrecedesEveryCodecAndBlock,
+        "proofQueryAndShapeBudgetsPrecedeEnvelopeCodecsAndBlocks" to
+            ::proofQueryAndShapeBudgetsPrecedeEnvelopeCodecsAndBlocks,
         "proofsRejectTamperingExtrasAndBadExpansions" to ::proofsRejectTamperingExtrasAndBadExpansions,
         "threeWayMergeCombinesResolvesAndWithholds" to ::threeWayMergeCombinesResolvesAndWithholds,
         "mergePreservesPresentNullAndReusesCanonicalEntries" to ::mergePreservesPresentNullAndReusesCanonicalEntries,
