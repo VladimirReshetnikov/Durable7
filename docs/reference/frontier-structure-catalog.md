@@ -59,7 +59,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | CHAMP canonicalization + structural equality/diff | 1 | Strong (implemented across all six languages) | Completed with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
 | `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all six languages) | Completed as proposal Tier C1 | 1 shared core, 4 C# public types, structural map/set algebra |
 | DABA Lite sliding-window aggregator | 1, 3 | Strong (implemented in every applicable language: C#, C, C++, Kotlin/JVM, and Rust; pure Haskell is not applicable) | Reuses the language's monoid abstraction | 1 small type, ~8 members |
-| Merkle search tree | 1 | Strong (C#, Kotlin/JVM, and Rust complete; C, C++, and Haskell core/wire implemented) | Completed in full ports: deterministic wire + bounded verification | Largest single item in this catalog |
+| Merkle search tree | 1 | Strong (C#, Haskell, Kotlin/JVM, and Rust complete; C and C++ core/wire implemented) | Completed in full ports: deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
 | Zip tree (canonical sorted set) | 1, 3 | Plausible (implemented across all six languages) | Completed: coherent keyed rank policy | 1 new core, set facade |
 | Brodal-Okasaki heap | 1 | Plausible (implemented across all six languages for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
@@ -323,17 +323,19 @@ tests plus doctests cover the shared golden vector, malformed and noncanonical c
 budget, proof tampering, partial-store repair, concurrent stores, retained snapshots, and
 non-`Clone` values; clippy and rustdoc are warning-clean.
 
-**Haskell status (2026-07-12): Core and exact wire implemented; persistence tier remains.**
-`Data.Structures.Hamt.MerkleSearchTree` is a pure immutable wide tree over a policy whose application
-id, comparator, and strict codecs produce the same SHA-256 domain, empty root, key levels, and
-`MST2` blocks as C# and Rust. Stable bulk grouping keeps the first equivalent key and last value;
-path-copy insert/delete, interval-pruned ranges, aligned-block digest-pruned diff, block/shape
-inspection, and full re-encoding validation preserve the core semantics in Haskell's ordinary
-shared-value model. The package-owned pure SHA-256 implementation removes any platform hash or FFI
-dependency. Its warning-denied test gate pins the shared complete golden block, opposite-history
-preorder bytes, wide blocks, retained versions, a 10,000-operation ordered model, and `forkIO`
-readers. Stores, bounded load/import, `MSP2` proofs, synchronization, and merge are intentionally not
-claimed until the second Haskell checkpoint lands.
+**Haskell status (2026-07-12): Implemented through the complete pure persistence tier with exact
+wire compatibility.** `Data.Structures.Hamt.MerklePersistence` adds immutable block-store
+snapshots, deterministic complete/partial packs, whole-result save/import publication, strict
+bounded closure reconstruction, exact `MSP2` point/range proofs, closure-pruned and iterative
+frontier synchronization, and present/absent-safe typed merge. Its opaque budget admits seven
+validated limits; proof verification fixes query, shape, and envelope precedence before decoder or
+codec work. Local proof/sync construction consumes a read-only trusted topology view rather than
+applying network budgets or decoding already-retained values. Eight persistence scenario groups
+with 93 direct assertions cover shared golden bytes, hostile closures, every budget, bomb-codec
+admission, proof accounting/tampering, partial repair, `MergePresent Nothing` versus deletion,
+retained roots, and a 2,000-operation persistence model. The wrapper and a clean warning-denied
+build of all eight library and two test modules pass; pure successor stores are the intentional
+language-local replacement for a concurrent mutable store.
 
 **C status (2026-07-12): Core and exact wire implemented with type-erased failure atomicity;
 persistence tier remains.** `tds_merkle_search_tree` binds stable key/value type tags, fallible
@@ -1028,8 +1030,9 @@ CHAMP, Patricia, and RRB have also advanced through the sibling-language work re
 entries; the canonical zip-zip set, Brodal-Okasaki heap, and priority-search queue are implemented
 across all six languages, and DABA Lite now exists in every applicable imperative
 language (C#, C, C++, Kotlin/JVM, and Rust). The Ctrie's deliberate parity boundary remains C# and
-Kotlin/JVM. The Merkle search tree's full trust-boundary tier is complete in C#, Kotlin/JVM, and
-Rust, with the remaining language checkpoints recorded above. These are current-state implementation records, not candidates awaiting a consumer.
+Kotlin/JVM. The Merkle search tree's full trust-boundary tier is complete in C#, Haskell,
+Kotlin/JVM, and Rust, with the remaining language checkpoints recorded above. These are
+current-state implementation records, not candidates awaiting a consumer.
 Future work on them is ordinary hardening, measurement, and demand-driven porting.
 
 ### Remaining candidate sequencing

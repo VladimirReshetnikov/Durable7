@@ -79,7 +79,7 @@ ordering, and documentation obligations that should remain recognizable across l
 | [C# HAMT](../../src/CSharp/docs/Hamt/overview.md) | Canonical managed HAMT library | `DataStructures.sln`, `src/Tools.DataStructures.Hamt/`, `tests/Tools.DataStructures.Hamt.Tests/` | [`docs`](../../src/CSharp/docs/Hamt/README.md) |
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | C17 HAMT/Patricia port and type-erased exact-wire Merkle core | `include/Tools/DataStructures/Hamt/*.h`, `build.ps1` | [`docs`](../../src/C/Hamt/docs/README.md) |
 | [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | C++20 HAMT/Patricia port and exact-wire Merkle core | `include/Tools/DataStructures/Hamt/*.hpp`, `build.ps1` | [`docs`](../../src/Cpp/Hamt/docs/README.md), [Merkle guide](../../src/Cpp/Hamt/docs/merkle-search-tree.md) |
-| [`src/Haskell/Hamt`](../../src/Haskell/Hamt/README.md) | Haskell HAMT/Patricia port and exact-wire Merkle core | `tools-data-structures-hamt.cabal`, `src/Data/Structures/Hamt/` | [`README`](../../src/Haskell/Hamt/README.md), [Merkle guide](../../src/Haskell/Hamt/docs/merkle-search-tree.md) |
+| [`src/Haskell/Hamt`](../../src/Haskell/Hamt/README.md) | Haskell HAMT/Patricia port and complete pure wire-compatible Merkle search tree | `tools-data-structures-hamt.cabal`, `src/Data/Structures/Hamt/` | [`README`](../../src/Haskell/Hamt/README.md), [Merkle guide](../../src/Haskell/Hamt/docs/merkle-search-tree.md) |
 | [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | Kotlin/JVM HAMT/Ctrie/Patricia port and complete wire-compatible Merkle search tree | `src/tools/datastructures/hamt/`, `test/tools/datastructures/hamt/` | [`docs`](../../src/Kotlin/Hamt/docs/README.md) |
 | [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | Rust HAMT/Patricia port and wire-compatible Merkle search tree | `Cargo.toml`, `src/lib.rs`, `src/merkle_search_tree.rs` | [`docs`](../../src/Rust/Hamt/docs/README.md) |
 | [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | Canonical managed FingerTree library | `DataStructures.sln`, `src/Tools.DataStructures.FingerTree/`, `tests/Tools.DataStructures.FingerTree.Tests/`, `samples/`, `benchmarks/` | [`docs`](../../src/CSharp/docs/FingerTree/README.md) |
@@ -107,8 +107,9 @@ HAMT lineage:
    ownership, and ports the Merkle core/wire to fallible erased-type codecs and failure-atomic
    handles while leaving its persistence tier separate.
 4. `src/Haskell/Hamt` ports the persistent HAMT semantics to Haskell values with a package-local
-   `Hashable` class and optional runtime `HashPolicy`, and ports the Merkle core through the exact
-   SHA-256 domain and `MST2` wire while its persistence tier remains a separate checkpoint.
+   `Hashable` class and optional runtime `HashPolicy`, and ports the Merkle search tree through exact
+   `MST2` blocks, pure immutable store snapshots, bounded verified persistence, `MSP2` proofs,
+   iterative synchronization, and present/absent-safe typed merge.
 5. `src/Kotlin/Hamt` ports the HAMT contract to Kotlin/JVM values, runtime `HashPolicy` objects, and
    JVM-reference structural sharing, owns the managed Ctrie, and ports the C# Merkle search tree
    through exact `MST2` blocks, bounded verified persistence, `MSP2` proofs, iterative

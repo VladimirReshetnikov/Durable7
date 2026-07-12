@@ -51,11 +51,11 @@ HAMT lineage:
    `BuildHasher` hash policies, `Eq` key equality, `Arc` structural sharing, and `Result`/`Option`
    result shapes.
 
-The policy-bound Merkle search tree has complete C#/Kotlin/Rust ports and C/C++/Haskell core/wire
+The policy-bound Merkle search tree has complete C#/Haskell/Kotlin/Rust ports and C/C++ core/wire
 ports. All six pin the SHA-256 domain, key framing, empty digest, and canonical `MST2` block bytes.
-C#, Kotlin, and Rust additionally align on seven verification budgets, `MSP2` point/range proofs,
-closure-pruned synchronization, and no-partial-result three-way merge; those trust-boundary
-surfaces remain explicitly pending in C, C++, and Haskell. Language-local ownership and callback shapes may
+C#, Haskell, Kotlin, and Rust additionally align on seven verification budgets, `MSP2` point/range
+proofs, closure-pruned synchronization, and no-partial-result three-way merge; those trust-boundary
+surfaces remain explicitly pending in C and C++. Language-local ownership and callback shapes may
 differ, but golden blocks and every implemented accepted/rejected trust-boundary input must remain
 cross-language compatible.
 
