@@ -13,6 +13,11 @@
 maps and sets. The build script compiles it with `src/patricia.c` into
 `build/<Configuration>/patricia_tests.exe` and runs it after the HAMT suite.
 
+`merkle_search_tree_tests.c` is the focused executable for the ordered content-addressed map. It
+compiles with `src/merkle_search_tree.c` into
+`build/<Configuration>/merkle_search_tree_tests.exe`, links CNG through `bcrypt.lib`, and runs after
+the HAMT and Patricia suites.
+
 The runner keeps a static table of named test cases, prints `[PASS]` after each successful case, and exits on the
 first failed check with file, line, and expression diagnostics. A successful run ends with `<N> test(s) passed`.
 
@@ -44,6 +49,20 @@ The executable registers these cases:
 - `set symmetric_except treats duplicates as one item`
 - `concurrent retained snapshot reads`
 
+The Merkle executable registers:
+
+- `digest and built-in codecs`
+- `MST2 single-entry golden wire`
+- `policy validation and typed compatibility`
+- `history independence and structure`
+- `persistence range diff and sharing`
+- `allocation failure atomicity`
+- `callback failure atomicity`
+- `equivalent keys retain first representative`
+- `streaming visitor failures`
+- `randomized model and snapshots`
+- `concurrent retained snapshot reads`
+
 ## Build And Run
 
 From `src/C/Hamt`, build and run the Debug test executable:
@@ -70,3 +89,10 @@ Run the Patricia executable directly when investigating integer-trie behavior:
 Its deterministic coverage includes 32-/64-bit signed ordering, persistent snapshots, no-op root
 identity, fixed and callback-combining map algebra, set algebra, randomized model histories, and
 retain/release accounting.
+
+Run the Merkle executable directly when investigating canonical block bytes, codec failures,
+history independence, or allocator unwind:
+
+```powershell
+.\build\Debug\merkle_search_tree_tests.exe
+```

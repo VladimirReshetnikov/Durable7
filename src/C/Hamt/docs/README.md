@@ -15,5 +15,7 @@
   patterns, iteration, and set algebra for `tds_hamt_map` and `tds_hamt_set`.
 - [Validation](validation.md) records the local MSVC build script, Debug/Release commands, warning
   policy, generated outputs, and native model-test coverage.
+- [Merkle search tree](merkle-search-tree.md) specifies the type-erased persistent ordered map,
+  exact `mst-sha256-b16-v2` domain framing, canonical MST2 node blocks, ownership, and diagnostics.
 - [Tests README](../tests/README.md) maps the native executable, named test cases, direct executable path,
   and runner failure behavior.

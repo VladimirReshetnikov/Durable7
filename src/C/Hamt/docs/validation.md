@@ -16,7 +16,10 @@ the [API specification](api-specification.md) and [usage guide](usage.md).
 `C:\Scriptorium\windows\Import-VisualCppEnvironment.ps1 -IncludePrerelease`, then compiles
 `src/hamt.c` and `tests/hamt_tests.c` into `build/<Configuration>/hamt_tests.exe`, then compiles
 `src/patricia.c` and `tests/patricia_tests.c` into
-`build/<Configuration>/patricia_tests.exe`.
+`build/<Configuration>/patricia_tests.exe`, and finally compiles `src/merkle_search_tree.c` and
+`tests/merkle_search_tree_tests.c` into
+`build/<Configuration>/merkle_search_tree_tests.exe`. The Merkle target links Windows CNG through
+`bcrypt.lib`; portable non-Windows builds link OpenSSL Crypto.
 
 The script uses these project-level compiler gates:
 
@@ -67,6 +70,17 @@ gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -DTDS_HAMT_TESTING -Iinclude src\h
 .\build\portable\hamt_tests_gcc.exe
 ```
 
+The Merkle lane on Windows uses CNG:
+
+```powershell
+gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -Iinclude `
+    src\merkle_search_tree.c tests\merkle_search_tree_tests.c -lbcrypt `
+    -o build\portable\merkle_search_tree_tests_gcc.exe
+.\build\portable\merkle_search_tree_tests_gcc.exe
+```
+
+On non-Windows hosts replace `-lbcrypt` with the OpenSSL Crypto link flags (normally `-lcrypto`).
+
 Typical Clang lane on Windows, using the Visual Studio developer environment for MSVC ABI headers and libraries:
 
 ```powershell
@@ -97,6 +111,15 @@ executable path, and runner failure behavior.
 and traversal order, root-sharing no-ops, retained snapshots, fixed and callback-combining map
 algebra, set algebra, 10,000 deterministic randomized updates against an array model, randomized
 structural set algebra, and value retain/release balance.
+
+`tests/merkle_search_tree_tests.c` is the canonical core/wire executable. It covers every built-in
+codec, strict malformed-input rejection, digest parsing, policy/tag compatibility, the exact C# and
+Rust MST2 golden vector, history-independent bulk/incremental shape, structural sharing, inclusive
+ranges, digest-pruned diff, stable equivalent-key representatives, retained randomized snapshots,
+deep validation, streaming callback failure, and fail-at-every-allocation unwind/publication for
+policy creation, point updates, bulk construction, validation, and sharing diagnostics. Windows
+validation also runs eight concurrent readers that repeatedly retain, validate, query, and dispose
+shared snapshots.
 
 The suite covers:
 

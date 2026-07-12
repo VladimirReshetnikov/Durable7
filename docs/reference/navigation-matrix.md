@@ -39,7 +39,7 @@ patterns.
 | --- | --- | --- |
 | C# Numerics | [src/CSharp/docs/Numerics/overview.md](../../src/CSharp/docs/Numerics/overview.md) | Fixed-width integer types, sparse integers, binary conversion, and wide-integer maintenance entry points |
 | C# HAMT | [src/CSharp/docs/Hamt/usage.md](../../src/CSharp/docs/Hamt/usage.md) | `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` construction, comparers, persistent updates, set algebra |
-| C HAMT | [src/C/Hamt/docs/usage.md](../../src/C/Hamt/docs/usage.md) | `tds_hamt_map` / `tds_hamt_set` policies, borrowed versus owned pointers, status/cleanup patterns |
+| C HAMT | [src/C/Hamt/docs/usage.md](../../src/C/Hamt/docs/usage.md) and [Merkle guide](../../src/C/Hamt/docs/merkle-search-tree.md) | Type-erased HAMT/Patricia values plus Merkle policy/codecs, persistent handles, exact blocks, visitors, and status/cleanup patterns |
 | C++ HAMT | [src/Cpp/Hamt/docs/usage.md](../../src/Cpp/Hamt/docs/usage.md) | Header inclusion, value semantics, custom hash/equality policy objects, set algebra |
 | Haskell HAMT | [src/Haskell/Hamt/README.md](../../src/Haskell/Hamt/README.md) and [Merkle guide](../../src/Haskell/Hamt/docs/merkle-search-tree.md) | HAMT/Patricia values plus canonical Merkle policy, codecs, persistent core, exact blocks, and cabal validation |
 | Kotlin HAMT | [src/Kotlin/Hamt/docs/api-notes.md](../../src/Kotlin/Hamt/docs/api-notes.md) | `PersistentHashMap`, `PersistentHashSet`, runtime `HashPolicy`, and executable validation |
@@ -64,7 +64,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | --- | --- | --- |
 | C# Numerics | [API and behavior reference](../../src/CSharp/docs/Numerics/api-and-behavior-reference.md) | Normative fixed-width integer behavior, conversion, parse/format, and binary representation contract |
 | C# HAMT | [API specification](../../src/CSharp/docs/Hamt/api-specification.md) | Normative C# HAMT map/set contract |
-| C HAMT | [API specification](../../src/C/Hamt/docs/api-specification.md) | C API ownership, callback policy, and complexity contract |
+| C HAMT | [API specification](../../src/C/Hamt/docs/api-specification.md), [Merkle specification](../../src/C/Hamt/docs/merkle-search-tree.md), and [Merkle header](../../src/C/Hamt/include/Tools/DataStructures/Hamt/merkle_search_tree.h) | C ownership/callback contracts plus failure-atomic canonical Merkle core and `MST2` wire |
 | C++ HAMT | [API specification](../../src/Cpp/Hamt/docs/api-specification.md) | C++ template API and C# parity notes |
 | Haskell HAMT | [Workspace README](../../src/Haskell/Hamt/README.md), [Merkle guide](../../src/Haskell/Hamt/docs/merkle-search-tree.md), and [sources](../../src/Haskell/Hamt/src/Data/Structures/Hamt/MerkleSearchTree.hs) | Haskell HAMT/Patricia APIs and the exact `MST2` Merkle core/wire contract |
 | Kotlin HAMT | [API notes](../../src/Kotlin/Hamt/docs/api-notes.md) and [source](../../src/Kotlin/Hamt/src/tools/datastructures/hamt/PersistentHamt.kt) | Kotlin HAMT map/set API shape, runtime policy, and root-sharing diagnostics |
@@ -87,7 +87,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | Whole repository | [Build and validation](../guides/build-and-validation.md) / [Test suite map](test-suite-map.md) | Canonical commands for C#, C, C++, CMake presets, Markdown checks, and test-suite entry points |
 | C# Numerics | [Validation](../../src/CSharp/docs/Numerics/validation.md) | .NET restore/build/test commands, XML-documentation warning gate, and xUnit wide-integer coverage |
 | C# HAMT | [Validation](../../src/CSharp/docs/Hamt/validation.md) | .NET restore/build/test commands, XML-documentation warning gate, and xUnit/CsCheck coverage |
-| C HAMT | [Validation](../../src/C/Hamt/docs/validation.md) | MSVC C17 build script, Debug/Release commands, warning policy, and native model tests |
+| C HAMT | [Validation](../../src/C/Hamt/docs/validation.md) | MSVC C17 Debug/Release, portable compiler/static-analysis lanes, and HAMT/Patricia/Merkle model, failpoint, wire, validation, and reader coverage |
 | C++ HAMT | [Validation](../../src/Cpp/Hamt/docs/validation.md) | MSVC C++20 build script, Debug/Release commands, warning policy, and native model tests |
 | Rust HAMT | [Validation](../../src/Rust/Hamt/docs/validation.md) | Cargo test, clippy, and rustdoc gates for HAMT/Patricia behavior and full Merkle core, wire, persistence, proof, sync, and merge coverage |
 | C# FingerTree | [Validation](../../src/CSharp/docs/FingerTree/validation.md) | .NET restore/build/test commands, sample smoke coverage, benchmark boundary, stress controls, and xUnit/CsCheck coverage |
@@ -110,7 +110,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | C# Tungsten collections tests | [Tests README](../../src/CSharp/tests/Tools.DataStructures.Tungsten.Tests/README.md) | xUnit/CsCheck project covering kernel-verified ordering examples, ordered-model histories, and relabel stress |
 | C Tungsten tests | [Test source](../../src/C/Tungsten/tests/tungsten_c_tests.c) | CTest executable covering list operations, Association ordering examples, policies, relabel stress, and generated histories |
 | C++ Tungsten tests | [Test source](../../src/Cpp/Tungsten/tests/tungsten_tests.cpp) | CTest executable covering list operations, Association ordering examples, policies, relabel stress, and generated histories |
-| C HAMT tests | [Tests README](../../src/C/Hamt/tests/README.md) | C native HAMT executable, named test cases, direct executable path, and runner failure behavior |
+| C HAMT tests | [Tests README](../../src/C/Hamt/tests/README.md) | Three native executables covering HAMT, Patricia, and exact-wire Merkle core semantics, models, failpoints, sharing, and concurrent readers |
 | C++ HAMT tests | [Tests README](../../src/Cpp/Hamt/tests/README.md) | C++ native HAMT executable, named test cases, direct executable path, and runner failure behavior |
 | C FingerTree tests | [Tests README](../../src/C/FingerTree/tests/README.md) | Core/RRB/DABA/canonical/Brodal/PSQ executable map, including vectors/models/type tags/failpoints/readers, direct paths, and runner behavior |
 | C FingerTree samples | [Samples README](../../src/C/FingerTree/samples/README.md) | Deterministic C sample executables and CTest smoke-test names |

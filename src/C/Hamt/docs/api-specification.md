@@ -7,6 +7,9 @@
 - Scope: Public C API, ownership semantics, persistence behavior, and complexity guarantees
 
 For practical policy setup and lifetime examples, start with the [usage guide](usage.md).
+The ordered content-addressed family has its own exact
+[Merkle search tree specification](merkle-search-tree.md), including the MST2 wire bytes and
+fallible ownership hooks.
 
 ## Overview
 
@@ -21,6 +24,11 @@ uses a unit value.
 `tds_int_map` / `tds_long_map` and their set wrappers are a separate explicit-width family backed
 by one big-endian Patricia engine. They use integer keys directly rather than hashing and compress
 every unary prefix path into a branch prefix plus its highest differing bit.
+
+`tds_merkle_search_tree` is a separate persistent ordered family. It assigns keys deterministic
+SHA-256 layers, groups same-layer separators into canonical wide blocks, and preserves exact
+cross-language content addresses. Unlike the borrowed-pointer HAMT defaults, its type-erased policy
+always materializes owned stored representatives and canonical encoded bytes.
 
 The C API is type-erased. Keys, values, and set items are `void *` payloads interpreted by policy
 callbacks. A policy may simply store borrowed pointers, or it may retain/release payloads to give

@@ -59,7 +59,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | CHAMP canonicalization + structural equality/diff | 1 | Strong (implemented across all six languages) | Completed with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
 | `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all six languages) | Completed as proposal Tier C1 | 1 shared core, 4 C# public types, structural map/set algebra |
 | DABA Lite sliding-window aggregator | 1, 3 | Strong (implemented in every applicable language: C#, C, C++, Kotlin/JVM, and Rust; pure Haskell is not applicable) | Reuses the language's monoid abstraction | 1 small type, ~8 members |
-| Merkle search tree | 1 | Strong (C# and Rust complete; Haskell core/wire implemented) | Completed in full ports: deterministic wire + bounded verification | Largest single item in this catalog |
+| Merkle search tree | 1 | Strong (C# and Rust complete; C and Haskell core/wire implemented) | Completed in full ports: deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
 | Zip tree (canonical sorted set) | 1, 3 | Plausible (implemented across all six languages) | Completed: coherent keyed rank policy | 1 new core, set facade |
 | Brodal-Okasaki heap | 1 | Plausible (implemented across all six languages for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
@@ -334,6 +334,19 @@ dependency. Its warning-denied test gate pins the shared complete golden block, 
 preorder bytes, wide blocks, retained versions, a 10,000-operation ordered model, and `forkIO`
 readers. Stores, bounded load/import, `MSP2` proofs, synchronization, and merge are intentionally not
 claimed until the second Haskell checkpoint lands.
+
+**C status (2026-07-12): Core and exact wire implemented with type-erased failure atomicity;
+persistence tier remains.** `tds_merkle_search_tree` binds stable key/value type tags, fallible
+copy/destroy/equality/comparison/codec hooks, and an injected allocator into a reference-counted
+policy. CNG on Windows and OpenSSL elsewhere produce the common SHA-256 domain, empty digest, key
+levels, and `MST2` blocks. Immutable entries and nodes use atomic references and an intrusive,
+allocation-free release worklist; aliased updates publish only after every allocation, callback,
+encoding, and block hash succeeds. Ordered/range visitors, aligned-digest diff, exact block/shape
+visitors, pointer-sharing diagnostics, and deep re-encoding validation complete the core. Eleven
+focused groups include the shared golden block, opposite histories, retained randomized models,
+visitor failure, fail-at-every-allocation/callback sweeps, stable representatives, and eight Windows
+reader threads. MSVC Debug/Release, strict GCC/Clang, and the Clang static analyzer are clean. The
+current header deliberately exposes no store, untrusted load/import, proof, sync, or merge claims.
 
 **What they are.** Two convergent designs for *uniquely represented, content-addressed* search
 trees. Merkle search trees (Auvolat & Taïani, SRDS 2019) place each key at a layer derived from its

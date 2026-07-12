@@ -13,7 +13,43 @@ declarations live in [`hamt.h`](../include/Tools/DataStructures/Hamt/hamt.h).
 ```c
 #include <Tools/DataStructures/Hamt/hamt.h>
 #include <Tools/DataStructures/Hamt/patricia.h>
+#include <Tools/DataStructures/Hamt/merkle_search_tree.h>
 ```
+
+For the content-addressed ordered map, configure a `tds_merkle_policy_config`, create one owning
+policy handle, then derive tree versions. Built-in helpers cover canonical signed integers,
+nullable UTF-8/bytes, and RFC 4122 GUIDs:
+
+```c
+static int key_tag;
+static int value_tag;
+
+tds_merkle_policy_config config;
+tds_merkle_policy_config_init(&config);
+config.policy_id = (tds_merkle_identifier){
+    (const unsigned char *)"example-int-map-v1",
+    sizeof("example-int-map-v1") - 1};
+tds_merkle_i32_type_policy_init(&config.key_type, &key_tag);
+tds_merkle_i32_type_policy_init(&config.value_type, &value_tag);
+config.key_compare = compare_i32; /* fallible three-way comparator */
+tds_merkle_i32_codec_init(&config.key_codec);
+tds_merkle_i32_codec_init(&config.value_codec);
+
+tds_merkle_policy policy = {0};
+tds_merkle_search_tree tree = {0};
+if (tds_merkle_policy_create(&config, &policy) == TDS_MERKLE_OK &&
+    tds_merkle_search_tree_init(&tree, &policy) == TDS_MERKLE_OK) {
+    int32_t key = 42;
+    int32_t value = 100;
+    (void)tds_merkle_search_tree_set(&tree, &key, &value, &tree);
+}
+tds_merkle_search_tree_dispose(&tree);
+tds_merkle_policy_dispose(&policy);
+```
+
+Do not assign live policy/tree handles to create a second owner; use `copy`, `move`, and `dispose`.
+See the [Merkle specification](merkle-search-tree.md) for two-pass codecs, exact wire framing,
+compatibility layers, and failure-atomic aliasing.
 
 The workspace builds a static library and test executable through `build.ps1`:
 

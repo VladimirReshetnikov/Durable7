@@ -51,13 +51,13 @@ HAMT lineage:
    `BuildHasher` hash policies, `Eq` key equality, `Arc` structural sharing, and `Result`/`Option`
    result shapes.
 
-The policy-bound Merkle search tree has complete C#/Rust ports and a Haskell core/wire port. All
-three pin the SHA-256 domain, key framing, empty digest, and canonical `MST2` block bytes. C# and
-Rust additionally align on seven verification budgets, `MSP2` point/range proofs, closure-pruned
+The policy-bound Merkle search tree has complete C#/Rust ports and C/Haskell core/wire ports. All
+four pin the SHA-256 domain, key framing, empty digest, and canonical `MST2` block bytes. C# and Rust
+additionally align on seven verification budgets, `MSP2` point/range proofs, closure-pruned
 synchronization, and no-partial-result three-way merge; those trust-boundary surfaces remain
-explicitly pending in Haskell. Language-local ownership and callback shapes may differ, but golden
-blocks and every implemented accepted/rejected trust-boundary input must remain cross-language
-compatible.
+explicitly pending in C and Haskell. Language-local ownership and callback shapes may differ, but
+golden blocks and every implemented accepted/rejected trust-boundary input must remain cross-
+language compatible.
 
 The Ctrie is an intentional parity exception. `ConcurrentHashTrie<TKey, TValue>` and its
 Kotlin/JVM counterpart are managed-runtime mutable structures whose lock-free indirection-node
