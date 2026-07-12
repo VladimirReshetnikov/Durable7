@@ -45,7 +45,7 @@ patterns.
 | Kotlin HAMT | [src/Kotlin/Hamt/docs/api-notes.md](../../src/Kotlin/Hamt/docs/api-notes.md) | `PersistentHashMap`, `PersistentHashSet`, runtime `HashPolicy`, and executable validation |
 | Rust HAMT | [src/Rust/Hamt/docs/api-notes.md](../../src/Rust/Hamt/docs/api-notes.md) | `PersistentHashMap`, `PersistentHashSet`, hash policies, and Cargo validation |
 | C# FingerTree | [src/CSharp/docs/FingerTree/usage.md](../../src/CSharp/docs/FingerTree/usage.md) | Deques, reversible deques, sorted collections, priority queues, intervals, ropes/text, raw measured trees |
-| C FingerTree | [src/C/FingerTree/docs/usage.md](../../src/C/FingerTree/docs/usage.md) | C handle lifetime, policy setup, persistent updates, DABA ownership/allocator semantics, facades, and text ropes |
+| C FingerTree | [src/C/FingerTree/docs/usage.md](../../src/C/FingerTree/docs/usage.md) | C handle lifetime, canonical erased-type/rank policy, persistent updates, DABA ownership/allocator semantics, facades, and text ropes |
 | C++ FingerTree | [src/Cpp/FingerTree/docs/usage.md](../../src/Cpp/FingerTree/docs/usage.md) | Aggregate include path, persistent values, policy-canonical zip-zip set, DABA Lite ownership/exception constraints, ropes/text, and publication patterns |
 | Haskell FingerTree | [src/Haskell/FingerTree/README.md](../../src/Haskell/FingerTree/README.md) and [canonical-set guide](../../src/Haskell/FingerTree/docs/canonical-sorted-set.md) | General measured tree, deque, reversible deque, policy-canonical zip-zip set, sorted/priority facades, intervals, ropes, and text helpers |
 | Kotlin FingerTree | [src/Kotlin/FingerTree/docs/api-notes.md](../../src/Kotlin/FingerTree/docs/api-notes.md) | Kotlin measured-AVL/RRB persistence, policy-canonical zip-zip set, derived collections, ropes/text, and mutable DABA Lite aggregation |
@@ -70,7 +70,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | Kotlin HAMT | [API notes](../../src/Kotlin/Hamt/docs/api-notes.md) and [source](../../src/Kotlin/Hamt/src/tools/datastructures/hamt/PersistentHamt.kt) | Kotlin HAMT map/set API shape, runtime policy, and root-sharing diagnostics |
 | Rust HAMT | [API notes](../../src/Rust/Hamt/docs/api-notes.md) and [source](../../src/Rust/Hamt/src/lib.rs) | Rust value API, `BuildHasher`, `Arc` sharing, and trie-order iteration |
 | C# FingerTree | [API specification](../../src/CSharp/docs/FingerTree/api-specification.md) | Deque contract plus measured-tree, reversible-deque, rope, and related surface notes |
-| C FingerTree | [API notes](../../src/C/FingerTree/docs/api-notes.md) | C API shape, type-erased ownership, DABA callback/clear semantics, and C++ port differences |
+| C FingerTree | [API notes](../../src/C/FingerTree/docs/api-notes.md) and [canonical header](../../src/C/FingerTree/include/tools/data_structures/finger_tree/canonical_sorted_set.h) | C API shape, erased-type identity, fallible callbacks, canonical rank/digest/algebra contracts, ownership/status semantics, and C++ port differences |
 | C++ FingerTree | [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) and [canonical header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/canonical_sorted_set.hpp) | C++ conventions, canonical crypto/policy/digest/move-only contracts, DABA no-throw commit and deterministic clear semantics, and active C# differences |
 | C# Tungsten collections | [API specification](../../src/CSharp/docs/Tungsten/api-specification.md) | List facade and association contracts, kernel-verified ordering rules, complexity and no-op identity tables |
 | C Tungsten collections | [Workspace README](../../src/C/Tungsten/README.md) and [public header](../../src/C/Tungsten/include/tools/data_structures/tungsten/tungsten.h) | C value-struct API, explicit lifetime, policy callbacks, and stamp-sequence representation |
@@ -90,7 +90,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | C HAMT | [Validation](../../src/C/Hamt/docs/validation.md) | MSVC C17 build script, Debug/Release commands, warning policy, and native model tests |
 | C++ HAMT | [Validation](../../src/Cpp/Hamt/docs/validation.md) | MSVC C++20 build script, Debug/Release commands, warning policy, and native model tests |
 | C# FingerTree | [Validation](../../src/CSharp/docs/FingerTree/validation.md) | .NET restore/build/test commands, sample smoke coverage, benchmark boundary, stress controls, and xUnit/CsCheck coverage |
-| C FingerTree | [Validation](../../src/C/FingerTree/docs/validation.md) | CMake/CTest validation, DABA allocation/ownership gates, sample smokes, and benchmarks |
+| C FingerTree | [Validation](../../src/C/FingerTree/docs/validation.md) | CMake/CTest validation, canonical crypto/type-tag/failure/concurrency gates, DABA allocation/ownership gates, compiler/sanitizer matrix, sample smokes, and benchmarks |
 | C++ FingerTree | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | CMake/CTest validation, canonical rank/topology/sharing/move-only/destruction gates, DABA failures, stress controls, crypto packaging, and benchmarks |
 | C# Tungsten collections | [Validation](../../src/CSharp/docs/Tungsten/validation.md) | .NET build/test commands, kernel-verified semantics coverage, model histories, relabel stress |
 | C Tungsten collections | [Workspace README](../../src/C/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten -RunTests` and Release validation for the C CTest executable |
@@ -111,7 +111,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | C++ Tungsten tests | [Test source](../../src/Cpp/Tungsten/tests/tungsten_tests.cpp) | CTest executable covering list operations, Association ordering examples, policies, relabel stress, and generated histories |
 | C HAMT tests | [Tests README](../../src/C/Hamt/tests/README.md) | C native HAMT executable, named test cases, direct executable path, and runner failure behavior |
 | C++ HAMT tests | [Tests README](../../src/Cpp/Hamt/tests/README.md) | C++ native HAMT executable, named test cases, direct executable path, and runner failure behavior |
-| C FingerTree tests | [Tests README](../../src/C/FingerTree/tests/README.md) | Core/RRB/DABA executable map, named cases, direct paths, and runner failure behavior |
+| C FingerTree tests | [Tests README](../../src/C/FingerTree/tests/README.md) | Core/RRB/DABA/canonical executable map, including vectors/models/type tags/failpoints/readers, direct paths, and runner behavior |
 | C FingerTree samples | [Samples README](../../src/C/FingerTree/samples/README.md) | Deterministic C sample executables and CTest smoke-test names |
 | C FingerTree benchmarks | [Benchmarks README](../../src/C/FingerTree/benchmarks/README.md) | Dependency-light timing harness workloads and output shape |
 | C++ FingerTree tests | [Tests README](../../src/Cpp/FingerTree/tests/README.md) | Native group map including canonical vectors/models/concurrency/destruction, DABA failures, direct runner paths, packaging, and tearable stress controls |

@@ -8,10 +8,10 @@
 
 ## Current Documents
 
-- [API notes](api-notes.md) records the measured-tree, RRB, and DABA Lite C API shapes, ownership rules, and
-  active differences from the C++ port.
+- [API notes](api-notes.md) records the measured-tree, canonical zip-zip set, RRB, and DABA Lite C API shapes,
+  ownership rules, and active differences from the C++ port.
 - [Usage guide](usage.md) shows public API setup, lifetime patterns, persistent update ownership, and facade quick starts.
 - [Validation](validation.md) records local build, test, sample-smoke, benchmark, warning-policy, and
   generated-output guidance for the C workspace.
-- [Tests README](../tests/README.md) maps the core, RRB, and DABA Lite CTest executables, named test cases, direct
-  executable paths, and runner failure behavior.
+- [Tests README](../tests/README.md) maps the core, canonical zip-zip set, RRB, and DABA Lite CTest executables,
+  named test cases, direct executable paths, and runner failure behavior.

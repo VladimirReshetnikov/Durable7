@@ -72,8 +72,8 @@ mutable core `!Send` and `!Sync`. Treat these ownership/concurrency differences 
 semantics, not parity failures. A pure Haskell value would not preserve DABA's ephemeral incremental
 schedule, so omission there is intentional.
 
-The canonical zip-zip sorted set is a policy-canonical persistent member, currently implemented in
-C#, C++, Haskell, Kotlin/JVM, and Rust. All five ports derive a 32-byte HMAC key as SHA-256 of ASCII `ZZT2`
+The canonical zip-zip sorted set is a policy-canonical persistent member implemented in all six
+languages. Every port derives a 32-byte HMAC key as SHA-256 of ASCII `ZZT2`
 followed by the public seed in big-endian order, feed an eight-byte big-endian equivalence-class hash to
 HMAC-SHA-256, and interpret the first three big-endian words as leading-zero geometric rank,
 unsigned secondary rank, and digest content. Preserve random-key and caller-keyed modes, the
@@ -100,6 +100,13 @@ insertion support move-only `T`; set algebra and removal share those objects rat
 copy bound. Its node destructor uses a fixed ownership worklist so releasing a height-n tree neither
 recurses nor allocates.
 
+C uses the same platform crypto split through status-returning functions, atomic reference counts,
+and type-erased callbacks. Distinct policy identities may compare semantically only when their
+required caller-owned value-type identity tags match; this is the runtime equivalent of sharing one
+generic element type. Preserve output atomicity, exact-operand aliasing, callback status propagation,
+key zeroing, non-reentrancy, and the rule that concurrent distinct-handle reads require thread-safe
+caller hooks.
+
 FingerTree lineage:
 
 1. [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) is the broadest semantic source:
@@ -110,8 +117,9 @@ FingerTree lineage:
    and CTest validation, and segregates the noncopyable mutable DABA Lite core with its native
    ownership constraints.
 3. [`src/C/FingerTree`](../../src/C/FingerTree/README.md) follows the native design in C form with
-   explicit handles, callback policies, and facade types, including a separately owned mutable DABA
-   Lite handle with allocator-failure status semantics.
+   explicit handles, callback policies, and facade types, including the erased-type-safe canonical
+   zip-zip set and a separately owned mutable DABA Lite handle with allocator-failure status
+   semantics.
 4. [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) ports the family to Haskell
    with a general measured tree, size-measured deque, reversible deque, derived collections, the
    explicitly identified policy-canonical zip-zip set, priority queues, intervals, ropes, and text

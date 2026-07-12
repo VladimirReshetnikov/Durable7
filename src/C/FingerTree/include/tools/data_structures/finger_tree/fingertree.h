@@ -17,7 +17,11 @@ typedef enum ft_status {
     FT_STATUS_NOT_FOUND = 4,
     FT_STATUS_NO_MEMORY = 5,
     FT_STATUS_OVERFLOW = 6,
-    FT_STATUS_ALREADY_EXISTS = 7
+    FT_STATUS_ALREADY_EXISTS = 7,
+    FT_STATUS_CALLBACK_FAILURE = 8,
+    FT_STATUS_CRYPTO_FAILURE = 9,
+    FT_STATUS_INCOMPATIBLE_POLICY = 10,
+    FT_STATUS_INCONSISTENT_POLICY = 11
 } ft_status;
 
 typedef void (*ft_copy_fn)(void* destination, const void* source, void* context);

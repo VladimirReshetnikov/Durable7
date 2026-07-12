@@ -16,13 +16,15 @@ Include the public header:
 
 ```c
 #include <tools/data_structures/finger_tree/fingertree.h>
+#include <tools/data_structures/finger_tree/canonical_sorted_set.h>
 #include <tools/data_structures/finger_tree/daba_lite.h>
 #include <tools/data_structures/finger_tree/rrb_vector.h>
 ```
 
 The workspace builds a static C library through the CMake presets documented in
 [validation.md](validation.md). Sample executables under [`samples`](../samples/) are also registered
-as CTest smoke tests.
+as CTest smoke tests. The canonical set's cryptographic rank policy links Windows CNG (`bcrypt`) on
+Windows and OpenSSL Crypto on other hosts; CMake supplies that transitive link dependency.
 
 ## Status And Cleanup Pattern
 
@@ -112,6 +114,111 @@ lifetime discipline.
 Use `copy` and `destroy` callbacks in `ft_value_type` when elements own memory or reference-counted
 resources. If the callbacks are null, the library byte-copies values of `size` bytes and does not
 perform element cleanup.
+
+## Canonical Zip-Zip Sorted Set
+
+Use `ft_canonical_sorted_set` when set topology must be determined by a policy rather than update
+history. Its callbacks are independently fallible, and the set retains a reference-counted policy
+handle. This minimal integer policy uses a public seed so builds and test runs reproduce the same
+shape:
+
+```c
+static ft_status compare_ints(
+    const void* left,
+    const void* right,
+    int* comparison,
+    void* context)
+{
+    int a = *(const int*)left;
+    int b = *(const int*)right;
+    (void)context;
+    *comparison = (a > b) - (a < b);
+    return FT_STATUS_OK;
+}
+
+static ft_status rank_hash_int(
+    const void* value,
+    uint64_t* rank_hash,
+    void* context)
+{
+    uint64_t bits = (uint32_t)*(const int*)value;
+    (void)context;
+    *rank_hash = bits * UINT64_C(0x9e3779b97f4a7c15);
+    return FT_STATUS_OK;
+}
+
+ft_canonical_policy_config config;
+static const unsigned char int_value_type_identity = 0;
+ft_canonical_policy_config_init(
+    &config,
+    sizeof(int),
+    &int_value_type_identity,
+    compare_ints,
+    rank_hash_int,
+    NULL);
+
+ft_canonical_policy policy;
+ft_status status = ft_canonical_policy_create_seeded(
+    &policy, &config, UINT64_C(0x0123456789abcdef));
+if (status != FT_STATUS_OK) {
+    return status;
+}
+
+ft_canonical_sorted_set set;
+status = ft_canonical_sorted_set_init(&set, &policy);
+if (status != FT_STATUS_OK) {
+    ft_canonical_policy_dispose(&policy);
+    return status;
+}
+
+/* The set retained the policy; this handle is no longer needed. */
+ft_canonical_policy_dispose(&policy);
+
+int value = 42;
+status = ft_canonical_sorted_set_add(&set, &value, &set); /* exact aliasing is supported */
+if (status == FT_STATUS_OK) {
+    bool found = false;
+    status = ft_canonical_sorted_set_contains(&set, &value, &found);
+}
+
+ft_canonical_sorted_set_dispose(&set);
+return status;
+```
+
+Prefer `ft_canonical_policy_create_random` when untrusted inputs should not predict tree priorities.
+Use `create_seeded` for reproducible public topology, or `create_keyed` with a caller-owned secret of
+at least 32 bytes when topology must be reproducible only for holders of that key. Keyed creation
+copies the bytes; the source buffer may be cleared immediately afterward. Seeded ranks follow the
+cross-port `ZZT2` derivation exactly. The comparer defines equality, so comparer-equal values must
+produce the same rank hash. Bulk `from_array` construction is insertion-order independent in shape
+and preserves the first input representative of each equality class.
+
+The non-null value-type identity argument is a pointer tag, not data consumed by the library. Use one
+stable object address for every policy whose stored representation may safely be passed to the same
+family of callbacks; a file-scope static object is the usual choice. Cross-policy equality and relation
+queries reject mismatched tags before invoking receiver callbacks, even when both values have the same
+byte size. The tag object must outlive every policy and set that references it.
+
+When a value copy callback is present, it constructs a new owned value in uninitialized destination
+storage. On failure it must leave that storage uninitialized and ownership-free. Compare and rank
+callbacks have the same status-returning shape; the library publishes no result until every required
+allocation and callback has succeeded. The configured allocator must return storage with fundamental
+C alignment. Contexts, callbacks, and allocator hooks remain caller-owned, must outlive all policies
+and sets that retain them, and must not reenter an operation in flight on the same policy/set handles.
+
+Union, intersection, and difference require handles derived from the same policy identity. Copy the
+policy handle when independently constructing compatible operands; recreating the same seed produces
+the same ranks but deliberately not the same algebra identity. Equality and all subset, superset, and
+overlap queries accept different policy identities with matching value-type tags by normalizing the
+other operand with the receiver's policy. A tag mismatch returns `FT_STATUS_INCOMPATIBLE_POLICY`.
+If the two comparators define different equality classes, these queries are receiver-relative and may
+be asymmetric.
+
+`ft_canonical_sorted_set_try_get_ref` returns a borrowed representative. Do not modify or destroy it,
+and retain the source set version for the entire borrow. Content hashes and identity/sharing/shape
+members are representation diagnostics, not serialized cryptographic identities. `validate` checks
+the full tree and reports structural failure with `valid == false`; ordinary callback, allocation,
+and crypto failures remain explicit `ft_status` values.
 
 ## DABA Lite Sliding Aggregate
 
@@ -455,6 +562,12 @@ external synchronization. The library protects shared immutable reps, not unsync
 your local `ft_*` structs. User value-copy/destroy, measure, predicate, comparison, and visitor callbacks must
 also be safe for the concurrent call pattern the application permits.
 
+The canonical set additionally publishes lazy content digests atomically. Two readers may perform
+the same uncached digest work, but neither observes a partial digest. Its callbacks and allocator are
+also reachable from logically read-only operations and therefore must be thread-safe for any permitted
+parallel use. Reentrancy into an in-flight canonical operation through the same policy or set handles,
+including from a destroy callback during disposal, is unsupported.
+
 ## Choosing A Surface
 
 | Need | Start with |
@@ -463,6 +576,7 @@ also be safe for the concurrent call pattern the application permits.
 | Custom monoid measure, measure-guided locate, or split | `ft_tree` |
 | O(1) logical reverse over a persistent sequence | `ft_reversible_deque` |
 | Unique sorted values | `ft_sorted_set` |
+| Canonical keyed topology, reproducible shape, or persistent set algebra | `ft_canonical_sorted_set` |
 | Sorted values with duplicates | `ft_sorted_multiset` |
 | Sorted key/value lookup and rank access | `ft_sorted_map` |
 | Minimum-priority draining with stable equal priorities | `ft_priority_queue` |

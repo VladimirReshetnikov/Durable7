@@ -60,3 +60,24 @@ target_include_directories(
 fingertree_c_configure_target(daba_lite_c_tests)
 
 tds_add_headless_test(NAME fingertree_c.daba_lite TARGET daba_lite_c_tests)
+
+add_executable(
+    canonical_sorted_set_c_tests
+    canonical_sorted_set_tests.c
+)
+
+target_link_libraries(
+    canonical_sorted_set_c_tests
+    PRIVATE
+        tools::data_structures::finger_tree_c
+)
+
+target_include_directories(
+    canonical_sorted_set_c_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+fingertree_c_configure_target(canonical_sorted_set_c_tests)
+
+tds_add_headless_test(NAME fingertree_c.canonical_sorted_set TARGET canonical_sorted_set_c_tests)

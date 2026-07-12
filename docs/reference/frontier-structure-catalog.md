@@ -61,7 +61,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | DABA Lite sliding-window aggregator | 1, 3 | Strong (implemented in every applicable language: C#, C, C++, Kotlin/JVM, and Rust; pure Haskell is not applicable) | Reuses the language's monoid abstraction | 1 small type, ~8 members |
 | Merkle search tree | 1 | Strong (C# implemented) | Completed: deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
-| Zip tree (canonical sorted set) | 1, 3 | Plausible (C#, C++, Haskell, Kotlin/JVM, and Rust implemented) | Completed: coherent keyed rank policy | 1 new core, set facade |
+| Zip tree (canonical sorted set) | 1, 3 | Plausible (implemented across all six languages) | Completed: coherent keyed rank policy | 1 new core, set facade |
 | Brodal-Okasaki heap | 1 | Plausible (C# and Haskell implemented for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
 | Priority search queue (winner-cached AVL) | 1 | Plausible (C# and Haskell implemented) | Completed as a direct core rather than the addressable composition | 1 new core |
 | Ctrie (concurrent, O(1) snapshot) | 1 | Managed-only (C# + Kotlin/JVM implemented) | Tracing GC; native ports require reclamation design | 1 new core, concurrency test tier |
@@ -354,6 +354,16 @@ reproducibility, metadata, depth, and priority collisions. Set equality is seman
 families while canonical algebra remains policy-identity gated. Adversarial tests cover keyed-rank
 reproduction, comparer/hash incoherence, ordinary `IReadOnlySet<T>` interoperability, randomized
 retained histories, exact sharing, and maximally deep delete/reinsert/digest traversal.
+
+**C status (2026-07-11): Implemented with explicit erased-type and failure contracts.** The C11
+port owns values and immutable nodes through atomic reference counts, exposes random/seeded/keyed
+identity-bearing policy handles, and uses CNG on Windows or OpenSSL Crypto elsewhere. A required
+caller-owned value-type identity prevents distinct same-size erased representations from reaching
+receiver callbacks during cross-policy equality/relations. Copy/compare/rank-hash and allocator
+failures propagate without publishing partial successors; aliasing an operand as the output is
+supported. Atomic lazy digests, allocation-free intrusive release, first-representative bulk build,
+validator/statistics, sharing diagnostics, and the complete set-relation surface preserve the
+managed contract in an idiomatic status-returning API.
 
 **C++ status (2026-07-11): Implemented and cross-toolchain hardened.** The C++23 header-first port
 uses system CNG on Windows and OpenSSL Crypto elsewhere, exports the dependency through its CMake
@@ -878,7 +888,7 @@ The implementation wave described by this catalog has already landed these C# re
 - the managed Ctrie with O(1) immutable snapshots.
 
 CHAMP, Patricia, and RRB have also advanced through the sibling-language work recorded in their
-entries; the canonical zip-zip set has C++, Haskell, Kotlin/JVM, and Rust ports, the Brodal-Okasaki heap and
+entries; the canonical zip-zip set is implemented across all six languages, the Brodal-Okasaki heap and
 priority-search queue have Haskell ports, and DABA Lite now exists in every applicable imperative
 language (C#, C, C++, Kotlin/JVM, and Rust). The Ctrie's deliberate parity boundary remains C# and
 Kotlin/JVM. These are current-state implementation records, not candidates awaiting a consumer.

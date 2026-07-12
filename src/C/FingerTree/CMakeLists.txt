@@ -19,10 +19,18 @@ add_library(tools::data_structures::finger_tree_c ALIAS tools_data_structures_fi
 target_sources(
     tools_data_structures_finger_tree_c
     PRIVATE
+        src/canonical_sorted_set.c
         src/daba_lite.c
         src/fingertree.c
         src/rrb_vector.c
 )
+
+if(WIN32)
+    target_link_libraries(tools_data_structures_finger_tree_c PUBLIC bcrypt)
+else()
+    find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+    target_link_libraries(tools_data_structures_finger_tree_c PUBLIC OpenSSL::Crypto)
+endif()
 
 target_include_directories(
     tools_data_structures_finger_tree_c

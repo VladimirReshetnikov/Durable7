@@ -11,8 +11,10 @@ This workspace contains the C port of the native FingerTree work. It starts from
 finger-tree core.
 
 The C workspace is intentionally dependency-light: the library is ordinary C, builds as a static library, and uses
-a small local C test executable registered with CTest. The core preserves immutable structural sharing through
-atomic reference-counted tree reps, shared lazy middle cells, lazy deep-measure publication, digits, 2/3 nodes,
+focused native test executables registered with CTest. The canonical zip-zip set uses the platform cryptography
+backend (Windows CNG or OpenSSL Crypto); the remaining surfaces have no external runtime dependency. The measured
+core preserves immutable structural sharing through atomic reference-counted tree reps, shared lazy middle cells,
+lazy deep-measure publication, digits, 2/3 nodes,
 concatenation, split, locate, indexed replacement, and endpoint operations. The related C-facing surfaces currently
 included are:
 
@@ -21,6 +23,9 @@ included are:
   edits over shared snapshots;
 - `ft_sorted_set`, `ft_sorted_multiset`, and `ft_sorted_map`, persistent sorted wrappers over the deque/tree
   surface;
+- `ft_canonical_sorted_set`, a type-erased persistent canonical zip-zip sorted set with cryptographically keyed
+  deterministic ranks, reproducible seeded topology, fallible callbacks, policy-gated algebra, semantic
+  cross-policy relations, concurrent lazy content digests, and structural-sharing diagnostics;
 - `ft_priority_queue`, a generic persistent minimum-priority queue with FIFO tie-breaking for equal priorities;
 - `ft_interval_tree`, a generic closed-interval tree facade over caller-supplied endpoint policies;
 - `ft_interval_tree_i64`, a convenience closed-interval facade for signed 64-bit endpoints;
@@ -54,18 +59,23 @@ absolute path, so CMake and Ninja do not need to be on `PATH` for that route. Ke
 setup, configure, build, and CTest run in one `cmd.exe` chain when starting from plain PowerShell; invoking
 `VsDevCmd.bat` directly from PowerShell does not persist its environment changes in that process. Host-agnostic
 `ninja-debug`, `ninja-release`, and `ninja-asan` presets are also available when CMake, Ninja, and a suitable
-compiler are on `PATH`. For release commands, sanitizer validation, benchmark entry points, warning policy, and
-generated-output locations, see the [validation guide](docs/validation.md).
+compiler are on `PATH`. CMake links `bcrypt` on Windows and resolves the maintained OpenSSL Crypto package on
+other hosts for canonical-rank SHA-256, HMAC-SHA-256, and secure random bytes. For release commands, sanitizer
+validation, benchmark entry points, warning policy, and generated-output locations, see the
+[validation guide](docs/validation.md).
 
 ## Layout
 
 - `include/tools/data_structures/finger_tree/fingertree.h` contains the public C API.
+- `include/tools/data_structures/finger_tree/canonical_sorted_set.h` contains the independent canonical zip-zip
+  sorted-set and rank-policy API.
 - `include/tools/data_structures/finger_tree/rrb_vector.h` contains the separate RRB vector API.
 - `include/tools/data_structures/finger_tree/daba_lite.h` contains the separate mutable DABA Lite API.
 - `src/fingertree.c` contains the measured-tree implementation and its wrappers;
+  `src/canonical_sorted_set.c` contains the immutable zip-zip core and cryptographic policy implementation;
   `src/rrb_vector.c` contains the independent RRB core and builder; and `src/daba_lite.c` contains
   the independent sliding-window aggregator.
-- `tests/` contains the [bootstrap CTest executable](tests/README.md).
+- `tests/` contains the [core and focused CTest executables](tests/README.md).
 - `samples/` contains deterministic C sample executables that are also registered as CTest smoke tests; see
   [`samples/README.md`](samples/README.md).
 - `benchmarks/` contains a dependency-light timing harness for quick local comparisons; see

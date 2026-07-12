@@ -197,7 +197,7 @@ language-first layout.
   `tds_hamt_map` and `tds_hamt_set` value structs with callback-driven hash/equality/ownership
   policy, reference-counted immutable nodes, structural sharing across versions, and deterministic
   native model tests.
-- [src/C/FingerTree](src/C/FingerTree/README.md) is the C11 port from the C++ workspace. It provides the measured-tree/deque family, RRB vectors, derived sorted/priority/interval collections, ropes/text, and a separate mutable type-erased DABA Lite with allocation-atomic updates and O(n+c) deterministic clear, all covered by CTest and a dependency-light benchmark harness.
+- [src/C/FingerTree](src/C/FingerTree/README.md) is the C11 port from the C++ workspace. It provides the measured-tree/deque family, RRB vectors, derived sorted/priority/interval collections, a type-erased CNG/OpenSSL-backed policy-canonical zip-zip set, ropes/text, and a separate mutable DABA Lite with allocation-atomic updates and O(n+c) deterministic clear, all covered by CTest and a dependency-light benchmark harness.
 - [src/C/Tungsten](src/C/Tungsten/README.md) is the C17 port of the Tungsten collections. It provides type-erased `tds_tungsten_list` and `tds_tungsten_association` value structs, composing the C FingerTree deque, C HAMT, and an internal ref-counted AVL stamp sequence for C#-parity keyed and positional Association operations.
 - [src/Cpp/Hamt](src/Cpp/Hamt/README.md) is a C++20 port of the persistent HAMT library. It provides
   header-only `persistent_hash_map` and `persistent_hash_set` templates with bitmap-indexed

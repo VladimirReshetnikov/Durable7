@@ -14,11 +14,14 @@ with the [API notes](api-notes.md) and [usage guide](usage.md).
 
 The workspace uses CMake presets. The `msvc-*` presets use Visual Studio's bundled Ninja by absolute path;
 the `ninja-*` presets use `cmake` and `ninja` from `PATH` for host-agnostic validation. `CMakeLists.txt` builds the
-`tools_data_structures_finger_tree_c` static library from `src/fingertree.c` and `src/rrb_vector.c`,
+`tools_data_structures_finger_tree_c` static library from `src/fingertree.c`,
+`src/canonical_sorted_set.c`, `src/rrb_vector.c`, and `src/daba_lite.c`,
 with these options enabled by default:
 
-- `FINGERTREE_C_BUILD_TESTS`: builds `tests/fingertree_c_tests` and `tests/rrb_vector_c_tests`,
-  registering `fingertree_c.core` and `fingertree_c.rrb_vector`.
+- `FINGERTREE_C_BUILD_TESTS`: builds `tests/fingertree_c_tests`,
+  `tests/canonical_sorted_set_c_tests`, `tests/rrb_vector_c_tests`, and `tests/daba_lite_c_tests`,
+  registering `fingertree_c.core`, `fingertree_c.canonical_sorted_set`, `fingertree_c.rrb_vector`,
+  and `fingertree_c.daba_lite`.
 - `FINGERTREE_C_BUILD_SAMPLES`: builds `samples/fingertree_c_showcase` and
   `samples/fingertree_c_snapshots`, both registered as CTest smoke tests.
 - `FINGERTREE_C_BUILD_BENCHMARKS`: builds `benchmarks/fingertree_c_benchmarks`.
@@ -26,6 +29,8 @@ with these options enabled by default:
 The project is C11 (`C_STANDARD 11`, required, extensions off). MSVC targets build with `/permissive-`,
 `/W4`, `/WX`, `/external:anglebrackets`, and `/external:W0`; non-MSVC targets use `-Wall -Wextra
 -Wpedantic -Werror`. Generated files live under `out/build/<preset>/`, which is ignored by the repository.
+Canonical rank derivation and random-key creation use Windows CNG and link `bcrypt` on Windows. Other
+platforms require the maintained OpenSSL Crypto package discovered by CMake and link `OpenSSL::Crypto`.
 
 ## Compiler Matrix Policy
 
@@ -135,6 +140,27 @@ and clear with state/leak rollback assertions. Handle-move coverage verifies pop
 transfer, moved-from queries/destruction, continued destination use, and final destruction. The C callback policy is infallible by type; callbacks
 must return normally, while injected library allocation failure is fully status-tested.
 
+The independent `fingertree_c.canonical_sorted_set` executable covers:
+
+- exact SHA-256/HMAC-based `ZZT2` rank vectors, unsigned secondary ordering, random-policy hidden-key
+  separation, keyed-input copying, and public-seed diagnostics;
+- bulk versus incremental canonical topology, stable first-representative selection, nullable payloads,
+  delete/reinsert convergence, and same-seed shape agreement across distinct policy identities;
+- 4,096 fully priority-colliding elements, explicit-stack lookup/update/digest/validation/disposal, and
+  10,000 randomized persistent operations checked against a sorted model with retained snapshots;
+- union/intersection/difference, exact policy-identity rejection, semantic equality, every proper/nonproper
+  subset/superset/overlap relation, same-size/different-type-tag rejection, matching-tag receiver-policy
+  asymmetry, exact aliasing, and shared-node diagnostics;
+- deterministic allocator, copy, compare, and rank-hash failures across bulk construction, point updates,
+  algebra, content hashing, and validation, with output atomicity and exact ownership balance; and
+- concurrent independent-handle copy/read/digest/dispose stress, including benign duplicate lazy-digest
+  computation and atomic publication.
+
+The callback concurrency contract is part of this coverage boundary: immutable operations through distinct
+handles are supported only when user callbacks, allocator hooks, and their contexts are safe for the permitted
+parallel calls. Hooks must not reenter an operation in flight through the same policy/set handles, and moving,
+disposing, or writing one handle object concurrently remains unsupported.
+
 The sample executables are registered as CTest smoke tests:
 
 - `fingertree_c.sample.showcase` exercises the priority queue, sorted set, interval tree, and text rope.
@@ -166,6 +192,21 @@ ctest --preset ninja-asan --output-on-failure
 
 `ninja-asan` enables AddressSanitizer and UndefinedBehaviorSanitizer flags for compilers that support the GCC-style
 sanitizer options. Prefer it when changing handle lifetime, copy/dispose paths, or persistent update code.
+
+Windows Clang provides ASan and UBSan but not LeakSanitizer. A Clang/MSVC-ABI instrumented build may use the
+same `-fsanitize=address,undefined -fno-omit-frame-pointer` compile flags and
+`-fsanitize=address,undefined` executable-link flags shown by the `ninja-asan` preset. Run its tests with
+supported options only:
+
+```powershell
+$env:ASAN_OPTIONS = "detect_leaks=0:halt_on_error=1:strict_string_checks=1"
+$env:UBSAN_OPTIONS = "halt_on_error=1:print_stacktrace=1"
+& "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe" --test-dir out\build\clang-asan --output-on-failure
+```
+
+Using `detect_leaks=1` on this platform terminates each executable before `main` with an unsupported-option
+diagnostic; that is an environment limitation, not a test failure. Canonical-set leak liveness is independently
+covered by deterministic allocator-failure sweeps and exact outstanding-allocation/copy-destroy accounting.
 
 ## Evidence To Record
 

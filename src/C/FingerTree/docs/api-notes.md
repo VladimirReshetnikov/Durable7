@@ -7,9 +7,10 @@
 - Scope: C naming, contracts, ownership, and intentional differences from `src/Cpp/FingerTree`
 
 The public C API lives in `tools/data_structures/finger_tree/fingertree.h` and the focused
-`tools/data_structures/finger_tree/rrb_vector.h` and `tools/data_structures/finger_tree/daba_lite.h` headers. For setup and handle-lifetime
-examples, start with the [usage guide](usage.md). The API uses opaque handles plus explicit policy callbacks
-rather than C++ templates:
+`tools/data_structures/finger_tree/canonical_sorted_set.h`,
+`tools/data_structures/finger_tree/rrb_vector.h`, and
+`tools/data_structures/finger_tree/daba_lite.h` headers. For setup and handle-lifetime examples, start with the
+[usage guide](usage.md). The API uses opaque handles plus explicit policy callbacks rather than C++ templates:
 
 - `ft_value_type` describes element size and optional copy/destroy callbacks.
 - `ft_measure_policy` describes the monoid identity, element measure, and measure combine operations.
@@ -29,6 +30,8 @@ released with `ft_tree_dispose`. Wrappers that reference caller-owned policies (
 Self-owned facades (`ft_sorted_map`, `ft_rope`, `ft_measured_rope`, `ft_priority_queue`,
 `ft_interval_tree_i64`, `ft_interval_tree`, and `ft_text_rope`) embed policy state referenced by their nested
 tree handles; use their `ft_*_move` helpers when relocating an initialized value into another variable.
+The independent `ft_canonical_policy` is instead an identity-bearing reference-counted handle retained by every
+canonical set initialized from it. Its callback contexts remain caller-owned.
 
 Most allocation failures are reported as `FT_STATUS_NO_MEMORY`. The current `ft_copy_fn` callback contract is
 void-returning, so allocations performed inside library-provided deep-copy callbacks for compound facade values
@@ -51,6 +54,9 @@ Implemented in this checkpoint:
   operations, concat, split, and traversal. Deep reps and grouping nodes carry reversal bits so mixed-orientation
   concat/split paths keep tree shape instead of reifying the sequence;
 - persistent sorted set, sorted multiset, and sorted map wrappers using a runtime comparator;
+- independent persistent canonical zip-zip sorted set with cryptographically keyed deterministic ranks,
+  fallible callbacks and allocation, reproducible seeded topology, alias-safe updates, bulk construction,
+  policy-gated algebra, receiver-policy relations, lazy content digests, and structural diagnostics;
 - generic persistent minimum-priority queue with caller-supplied value and priority copy policies;
 - generic closed-interval tree facade, plus a signed 64-bit convenience facade, with insertion, removal,
   containment, first-overlap, and overlap count;
@@ -74,6 +80,80 @@ Deferred from the original measured-tree port:
   supplies an allocator) and typed macro-generation helpers.
 
 The core now carries the C++ port's shared lazy-middle shape in C form.
+
+## Canonical Zip-Zip Sorted-Set Contract
+
+`ft_canonical_sorted_set` is an immutable type-erased binary-search tree whose heap priorities are derived from
+the set's policy. A `ft_canonical_policy_config` supplies the stored value size, a required non-null value-type
+identity tag, optional copy/destroy hooks, required comparator and 64-bit rank-hash callbacks, callback context,
+and allocator. Copy, compare, rank-hash,
+visitor, and shape-visitor callbacks are fallible and their status is propagated unchanged. A failing value-copy
+callback must leave its destination uninitialized and ownership-free; destroy and deallocation hooks must return
+normally. Values may require fundamental C alignment, but extended-aligned values are unsupported.
+
+Policy handles are reference counted and carry algebra compatibility identity. `ft_canonical_policy_copy` preserves that
+identity, and sets retain it, so the caller may dispose the original policy handle before the last set. Creating a
+second policy with the same configuration and seed intentionally creates a different identity even though it
+reproduces ranks and shape. The value-type tag is pointer identity shared by policies whose values may safely cross
+into one another's callbacks; its address must remain stable and valid for every retaining handle. Callback
+contexts and referenced objects are not copied or owned and must likewise outlive all retaining policy/set
+handles. Callbacks and allocator hooks must not reenter an in-flight operation through the
+same policy or set handles, including from destroy during disposal. Immutable operations through distinct handles
+may run concurrently only when all hooks and contexts they can invoke are thread-safe; moving, disposing, or
+otherwise writing the same handle object concurrently requires external synchronization.
+
+The rank derivation is the cross-port `ZZT2` contract:
+
+- random policies obtain a private 32-byte key from the operating-system cryptographic random source;
+- seeded policies derive the 32-byte key as `SHA-256("ZZT2" || seed-be64)` and expose the public seed;
+- keyed policies copy a caller-supplied key of at least 32 bytes and do not expose it or retain the input buffer;
+- for each value, the policy HMACs the big-endian 64-bit callback rank hash with HMAC-SHA-256. The leading-zero
+  count of digest bytes 0-7 is the geometric rank, bytes 8-15 are the unsigned secondary rank, and bytes 16-23
+  are the content component, all interpreted big-endian.
+
+Windows builds use CNG (`BCrypt`) and non-Windows builds use the maintained OpenSSL Crypto APIs. Cryptographic
+backend failures return `FT_STATUS_CRYPTO_FAILURE`. Seeded policies are intended for reproducibility and test
+vectors, not adversarial-input hardening: the seed and derived key are public. Random or secret keyed policies
+make priorities unpredictable provided the key and the caller's rank-hash domain are appropriate. Key bytes are
+zeroed before policy release, but the API does not claim locked memory, resistance to process inspection, or a
+general-purpose cryptographic set digest.
+
+The comparator defines set equivalence and ordering. Comparer-equivalent values must return the same rank hash;
+detectable violations return `FT_STATUS_INCONSISTENT_POLICY`. Different values may share a rank hash. The heap
+order compares geometric rank, then the secondary `uint64_t` using unsigned ordering, then the value comparator,
+which makes topology canonical for a policy despite insertion order or rank collisions. `from_array` performs a
+stable sort and retains the first representative of every comparer-equivalence class. Incremental add likewise
+keeps an existing representative when an equal value is already present.
+
+Nodes and representatives are immutable, separately allocated, atomically reference counted, and shared across
+versions. Add, remove, and clear accept exact source/result aliasing and publish only after a complete successor
+exists; allocation, callback, or cryptographic failure leaves the original handle and a distinct output untouched.
+Bulk construction and every explicit output follow the same success-only publication rule. Disposal and all
+tree walks use explicit stacks or intrusive release worklists, so even a fully colliding, comparator-chained tree
+does not recurse through the C call stack.
+
+Union, intersection, and difference require the exact same policy identity and otherwise return
+`FT_STATUS_INCOMPATIBLE_POLICY`; this preserves rank coherence and structural sharing. Equality, subset/proper
+subset, superset/proper superset, and overlap are semantic across identities only when both policies carry the
+same value-type tag; a tag mismatch returns `FT_STATUS_INCOMPATIBLE_POLICY` before any value crosses the type-erased
+boundary. With a matching tag, the other operand is normalized under the receiver's comparator and rank policy.
+These relations are intentionally receiver-relative when two
+comparators define different equivalence classes, so reversing the operands can change the answer. Boolean and
+set outputs are written only on success.
+
+`try_get_ref` returns a borrowed representative that remains valid only while the source version is retained.
+`content_hash` lazily computes a topology/content diagnostic and atomically publishes each immutable node's cache;
+concurrent readers may duplicate the computation, but observe only a fully published digest. It is not a stable
+cross-policy or collision-resistant serialization hash. Root/node identity, exact shared-node count, preorder
+shape visitation, height, and statistics are diagnostic APIs. `validate` checks ordering, re-derived ranks, heap
+order, cached counts/digests, cycles, duplicate nodes, and priority-collision statistics; structural invalidity is
+reported as `FT_STATUS_OK` with `valid == false`, while allocation, callback, and crypto failures remain statuses.
+
+Expected lookup and persistent point-update cost is O(log n), with O(log n) new nodes on a change; an adversarial
+or deliberately colliding rank stream can produce O(n) height and operation cost. Bulk construction is
+O(n log n) for stable sorting followed by O(n) Cartesian construction. Algebra and cross-policy normalization use
+ordered visitation plus persistent point operations. A first uncached content hash and full validation are O(n),
+while a cached root hash is O(1). Explicit-stack implementation preserves stack safety at the O(n) worst case.
 
 ## DABA Lite Contract
 

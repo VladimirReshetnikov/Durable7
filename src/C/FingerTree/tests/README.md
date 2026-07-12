@@ -5,15 +5,17 @@
 - Audience: Maintainers validating the C FingerTree port
 - Scope: Native test executable and source organization under `src/C/FingerTree/tests`
 
-The C FingerTree workspace has three dependency-free native test executables. `fingertree_c_tests` is
+The C FingerTree workspace has four focused native test executables. `fingertree_c_tests` is
 registered as `fingertree_c.core`; `rrb_vector_c_tests` is registered as
-`fingertree_c.rrb_vector`; and `daba_lite_c_tests` is registered as `fingertree_c.daba_lite`. Each
-source contains its runner, assertion macros, policy helpers, and test cases.
+`fingertree_c.rrb_vector`; `daba_lite_c_tests` is registered as `fingertree_c.daba_lite`; and
+`canonical_sorted_set_c_tests` is registered as `fingertree_c.canonical_sorted_set`. Each source
+contains its runner, assertion macros, policy helpers, and test cases. The canonical executable uses
+the library's Windows CNG or OpenSSL Crypto backend but no test-framework dependency.
 
 The runner prints one `[pass]` line per named test case, writes failed requirements to standard error with file and
 line information, and exits non-zero if any test increments the failure count. A successful direct run ends with
 `all C FingerTree tests passed`. The focused runners end with `all C RRB vector tests passed` and
-`all C DABA Lite tests passed` respectively.
+`all C DABA Lite tests passed`, or `all C canonical sorted-set tests passed`, respectively.
 
 ## Test Cases
 
@@ -59,6 +61,26 @@ line information, and exits non-zero if any test increments the failure count. A
 - deterministic failpoint allocation rollback for construction, updates, and builder staging; and
 - concurrent vector copy/read/validate/dispose over atomic node references.
 
+`canonical_sorted_set_tests.c` registers these cases:
+
+- `canonical crypto vectors and unsigned priority` verifies exact keyed and seeded `ZZT2` SHA-256/HMAC vectors,
+  unsigned secondary comparison, random-policy separation, copied keyed input, and public-seed diagnostics.
+- `canonical topology and representatives` compares bulk and incremental shape, first-representative retention,
+  nullable payloads, delete/reinsert convergence, borrowed lookup, identity diagnostics, content hashes, and
+  validator statistics.
+- `canonical deep collisions and lifecycle` forces one priority across 4,096 ordered values and exercises
+  explicit-stack construction, lookup, removal/reinsertion, hashing, validation, and disposal.
+- `canonical randomized histories and snapshots` checks 10,000 persistent updates against a sorted reference
+  model while retaining and revisiting old versions.
+- `canonical algebra relations aliasing and sharing` covers union/intersection/difference, exact policy identity,
+  all proper and nonproper set relations, same-size/different-type-tag rejection, matching-tag asymmetric
+  receiver comparators, exact result aliasing, canonical same-seed shape, and exact shared-node counts.
+- `canonical allocation and callback atomicity` sweeps allocator and callback failures across bulk construction,
+  point updates, algebra, normalization, hashing, and validation while checking output immutability and ownership
+  balance.
+- `canonical concurrent digest copy and readers` stresses distinct-handle copy/read/hash/validate/dispose across
+  eight readers and verifies atomic lazy-digest publication.
+
 `daba_lite_tests.c` covers:
 
 - all 1,024 ten-step insert/evict histories against a noncommutative matrix FIFO model;
@@ -87,6 +109,7 @@ Run the built executables directly when changing runner diagnostics or a focused
 
 ```powershell
 .\out\build\msvc-debug\tests\fingertree_c_tests.exe
+.\out\build\msvc-debug\tests\canonical_sorted_set_c_tests.exe
 .\out\build\msvc-debug\tests\rrb_vector_c_tests.exe
 .\out\build\msvc-debug\tests\daba_lite_c_tests.exe
 ```
