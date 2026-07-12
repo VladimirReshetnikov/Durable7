@@ -195,10 +195,11 @@ language-first layout.
 - [C# Tungsten collections](src/CSharp/docs/Tungsten/overview.md) is a .NET 10 library under [src/CSharp/src/Tools.DataStructures.Tungsten](src/CSharp/src/Tools.DataStructures.Tungsten/Tools.DataStructures.Tungsten.csproj) composing the HAMT and FingerTree families into persistent collections with Tungsten Language semantics: `PersistentList<T>` (the `List` operation vocabulary over the catenable deque) and `PersistentAssociation<TKey, TValue>` (an insertion-ordered map with keyed and positional access following the kernel-verified `Association` ordering rules). The primary external client is the Tungsten engine in the Smithereens repository; the C# implementation is the semantic reference for sibling language ports.
 - [src/C/Hamt](src/C/Hamt/README.md) is a C17 port of the persistent HAMT library. It provides type-erased
   `tds_hamt_map` and `tds_hamt_set` value structs with callback-driven hash/equality/ownership
-  policy, Patricia integer maps/sets, and a type-erased Merkle search-tree core with exact C#/Rust
-  `MST2` bytes. Reference-counted immutable nodes, failure-atomic publication, fallible codecs and
-  allocators, structural sharing, and deterministic native model/failpoint tests define its C
-  ownership surface.
+  policy, Patricia integer maps/sets, and a type-erased Merkle search tree with exact cross-language
+  `MST2` blocks, bounded verified persistence, `MSP2` proofs, synchronization, and present-null-safe
+  merge. Atomic immutable handles, a synchronized block store, fallible callbacks and allocators,
+  failure-atomic publication, exhaustive failpoints, and native concurrency tests define its C
+  ownership and trust-boundary surface.
 - [src/C/FingerTree](src/C/FingerTree/README.md) is the C11 port from the C++ workspace. It provides the measured-tree/deque family, RRB vectors, derived sorted/priority/interval collections, a type-erased CNG/OpenSSL-backed policy-canonical zip-zip set, failure-atomic type-erased Brodal-Okasaki and winner-cached priority-search cores, ropes/text, and a separate mutable DABA Lite with allocation-atomic updates and O(n+c) deterministic clear, all covered by CTest and a dependency-light benchmark harness.
 - [src/C/Tungsten](src/C/Tungsten/README.md) is the C17 port of the Tungsten collections. It provides type-erased `tds_tungsten_list` and `tds_tungsten_association` value structs, composing the C FingerTree deque, C HAMT, and an internal ref-counted AVL stamp sequence for C#-parity keyed and positional Association operations.
 - [src/Cpp/Hamt](src/Cpp/Hamt/README.md) is a C++20 port of the persistent HAMT library. It provides

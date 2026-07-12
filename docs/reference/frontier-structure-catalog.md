@@ -59,7 +59,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | CHAMP canonicalization + structural equality/diff | 1 | Strong (implemented across all six languages) | Completed with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
 | `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all six languages) | Completed as proposal Tier C1 | 1 shared core, 4 C# public types, structural map/set algebra |
 | DABA Lite sliding-window aggregator | 1, 3 | Strong (implemented in every applicable language: C#, C, C++, Kotlin/JVM, and Rust; pure Haskell is not applicable) | Reuses the language's monoid abstraction | 1 small type, ~8 members |
-| Merkle search tree | 1 | Strong (C#, C++, Haskell, Kotlin/JVM, and Rust complete; C core/wire implemented) | Completed in full ports: deterministic wire + bounded verification | Largest single item in this catalog |
+| Merkle search tree | 1 | Strong (implemented completely across all six languages) | Deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
 | Zip tree (canonical sorted set) | 1, 3 | Plausible (implemented across all six languages) | Completed: coherent keyed rank policy | 1 new core, set facade |
 | Brodal-Okasaki heap | 1 | Plausible (implemented across all six languages for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
@@ -318,7 +318,7 @@ non-`Clone` API. `MerkleBlockStore` and its concurrent in-memory implementation 
 save/import, complete and requested packs, closure-pruned synchronization, and iterative frontier
 repair. Strict load/import and `MSP2` point/range verification enforce seven finite budgets before
 publishing trusted nodes. Typed three-way merge distinguishes a deleted key from a present `None`
-value and withholds the merged tree until every conflict is resolved. Fifty-seven Debug and Release
+value and withholds the merged tree until every conflict is resolved. Fifty-eight Debug and Release
 tests plus doctests cover the shared golden vector, malformed and noncanonical closures, every
 budget, proof tampering, partial-store repair, concurrent stores, retained snapshots, and
 non-`Clone` values; clippy and rustdoc are warning-clean.
@@ -337,18 +337,18 @@ retained roots, and a 2,000-operation persistence model. The wrapper and a clean
 build of all eight library and two test modules pass; pure successor stores are the intentional
 language-local replacement for a concurrent mutable store.
 
-**C status (2026-07-12): Core and exact wire implemented with type-erased failure atomicity;
-persistence tier remains.** `tds_merkle_search_tree` binds stable key/value type tags, fallible
-copy/destroy/equality/comparison/codec hooks, and an injected allocator into a reference-counted
-policy. CNG on Windows and OpenSSL elsewhere produce the common SHA-256 domain, empty digest, key
-levels, and `MST2` blocks. Immutable entries and nodes use atomic references and an intrusive,
-allocation-free release worklist; aliased updates publish only after every allocation, callback,
-encoding, and block hash succeeds. Ordered/range visitors, aligned-digest diff, exact block/shape
-visitors, pointer-sharing diagnostics, and deep re-encoding validation complete the core. Eleven
-focused groups include the shared golden block, opposite histories, retained randomized models,
-visitor failure, fail-at-every-allocation/callback sweeps, stable representatives, and eight Windows
-reader threads. MSVC Debug/Release, strict GCC/Clang, and the Clang static analyzer are clean. The
-current header deliberately exposes no store, untrusted load/import, proof, sync, or merge claims.
+**C status (2026-07-12): Implemented through the complete type-erased persistence tier with exact
+wire compatibility and failure atomicity.** `tds_merkle_search_tree` binds stable type tags,
+fallible copy/destroy/equality/comparison/codec/store hooks, and an injected allocator into atomic
+immutable handles. The public tier adds a synchronized three-state block store, complete/requested
+packs, seven verification budgets, bounded closure-checked load/import, exact `MSP2` point/range
+proofs, closure-pruned and iterative synchronization, and exact-policy present-null-safe merge.
+Generic store outputs are shielded; allocator, destructor, and visitor callbacks run outside the
+non-recursive store lock; query/shape limits precede proof allocation/hash/codec work; and every
+allocation/callback failure leaves result handles unpublished. Twenty-one Merkle groups cover the
+shared wire, hostile closures and proofs, all limits, late-conflict preflight, sync, every merge
+state, exhaustive allocation unwinds, malicious/reentrant callbacks, and eight-thread store races.
+MSVC Debug/Release, strict GCC/Clang, AddressSanitizer, and the Clang analyzer are clean.
 
 **Kotlin/JVM status (2026-07-12): Implemented through the complete persistence tier with managed
 reference parity and exact wire compatibility.** `MerkleSearchTree<K, V>` retains caller objects
@@ -363,18 +363,18 @@ sharing, malformed/noncanonical closures, every budget, proof tampering, partial
 atomic conflict handling, nullable merge states, and concurrent readers. The complete Kotlin
 HAMT/FingerTree/Tungsten gate is warning-clean under Kotlin 2.4 `-Werror`.
 
-**C++ status (2026-07-12): Core and exact wire implemented with header-first native value
-semantics; persistence tier remains.** `merkle_search_tree<K, V>` binds shared comparator/codec
-objects into the common SHA-256 policy domain, retains immutable key/value/encoding handles, and
-emits byte-identical `MST2` blocks through CNG on Windows or OpenSSL elsewhere. Bulk and incremental
-construction, replacement, deletion/contraction, ordered iteration and ranges, aligned-digest diff,
-block/shape inspection, sharing diagnostics, and deep re-encoding validation preserve canonical
-B=16 topology while supporting move-only keys and values. Ten focused groups pin the shared golden,
-Unicode identifier rules, exact levels zero through four, independent histories, equivalent
-representatives, nullable values, a 12,000-operation retained model, callback exceptions, mutated
-representatives, and eight concurrent readers. Separate MSVC/GCC/Clang Debug/Release lanes, a silent
-Clang analyzer, and a copied aggregate-header golden consumer close the core/wire gate; stores,
-bounded load/import, `MSP2` proofs, synchronization, and merge are not yet claimed.
+**C++ status (2026-07-12): Implemented through the complete header-first persistence tier with
+native value semantics and exact wire compatibility.** `merkle_persistence.hpp` adds immutable
+blocks/packs/plans, a shared-mutex store, seven finite budgets, strict `MST2` export/save/load/import,
+destination preflight, partial-overlay import, and iterative synchronization. `merkle_proofs.hpp`
+adds exact `MSP2` point/range proofs and typed three-way merge that preserves present-null values,
+withholds unresolved trees, and supports move-only keys and values. Proof structure limits precede
+allocation, hashing, and codecs; untrusted blocks are re-decoded, re-encoded, and reconstructed
+through the canonical
+node factory. Nineteen Merkle groups cover all limits, hostile closures/proofs, authenticated
+reference tampering, sync convergence, concurrent stores, and present-null/move-only merge.
+MSVC Debug/Release, strict GCC/Clang lanes, both analyzers, and copied aggregate-header consumers are
+clean.
 
 **What they are.** Two convergent designs for *uniquely represented, content-addressed* search
 trees. Merkle search trees (Auvolat & Taïani, SRDS 2019) place each key at a layer derived from its
@@ -1030,9 +1030,8 @@ CHAMP, Patricia, and RRB have also advanced through the sibling-language work re
 entries; the canonical zip-zip set, Brodal-Okasaki heap, and priority-search queue are implemented
 across all six languages, and DABA Lite now exists in every applicable imperative
 language (C#, C, C++, Kotlin/JVM, and Rust). The Ctrie's deliberate parity boundary remains C# and
-Kotlin/JVM. The Merkle search tree's full trust-boundary tier is complete in C#, C++, Haskell,
-Kotlin/JVM, and Rust, with the remaining C checkpoint recorded above. These are
-current-state implementation records, not candidates awaiting a consumer.
+Kotlin/JVM. The Merkle search tree's full trust-boundary tier is complete across all six languages.
+These are current-state implementation records, not candidates awaiting a consumer.
 Future work on them is ordinary hardening, measurement, and demand-driven porting.
 
 ### Remaining candidate sequencing
