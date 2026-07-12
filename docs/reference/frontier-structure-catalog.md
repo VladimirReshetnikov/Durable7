@@ -63,7 +63,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
 | Zip tree (canonical sorted set) | 1, 3 | Plausible (implemented across all six languages) | Completed: coherent keyed rank policy | 1 new core, set facade |
 | Brodal-Okasaki heap | 1 | Plausible (implemented across all six languages for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
-| Priority search queue (winner-cached AVL) | 1 | Plausible (C#, C, Haskell, Kotlin/JVM, and Rust implemented) | Completed as a direct core rather than the addressable composition | 1 new core |
+| Priority search queue (winner-cached AVL) | 1 | Plausible (implemented across all six languages) | Completed as a direct core rather than the addressable composition | 1 new core |
 | Ctrie (concurrent, O(1) snapshot) | 1 | Managed-only (C# + Kotlin/JVM implemented) | Tracing GC; native ports require reclamation design | 1 new core, concurrency test tier |
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
 | Size-tiered small representations | 2 | Strong (planned, not shipped) | Benchmark gate at tier boundary | Internal tier per facade + representation-forcing tests |
@@ -469,7 +469,8 @@ priority-threshold traversal. Its audit covers all rotation/deletion shapes, 50,
 a 20,000-operation retained-history model, pruning comparison equations, structural sharing, and
 concurrent readers.
 
-**C++ status (2026-07-11): Brodal-Okasaki heap implemented with native value-policy parity.**
+**C++ status (2026-07-11): Brodal-Okasaki heap and priority search queue implemented with native
+value-policy parity.**
 `brodal_okasaki_heap<T, Less>` retains immutable trees, forests, comparator policy, and concrete
 element representatives through `shared_ptr`; this permits move-only elements while keeping old
 versions and removed-minimum handles alive. Comparator identity gates meld, independently created
@@ -478,6 +479,17 @@ minimum/insert/meld worst-case O(1) and delete-min O(log n). Explicit-stack iter
 and destruction cover self-meld DAGs without silently collapsing logical occurrences. Native audits
 pin comparison and allocation growth, off-path sharing, throwing-comparator publication, retained
 models, adversarial drains, and concurrent readers.
+
+`priority_search_queue<K, P, V, KeyLess, PriorityLess>` is the direct persistent winner-cached AVL
+counterpart. Shared component records preserve exact move-only key, priority, and payload
+representatives; key-order equivalence retains the first key and replacement retains the last
+priority/payload, with exact equal replacements reusing the instance. It provides O(1) minimum,
+O(log n) keyed update/removal/delete-minimum, and eager-bound-validated inclusive key-range/
+priority-threshold enumeration with cached-winner pruning. Twelve focused groups cover every
+rotation and deletion shape, 50,000 ascending keys, a 20,000-operation retained model, exact pruning
+equations, policy/callback exceptions, allocation and sharing, move-only components, and concurrent
+readers. The aggregate header and installed-consumer package both exercise the public surface under
+MSVC, GCC, and Clang in Debug and Release.
 
 **C status (2026-07-11): Brodal-Okasaki heap implemented with explicit ownership and failure
 atomicity.** `ft_brodal_heap` uses an identity-bearing, reference-counted policy with a stable erased-

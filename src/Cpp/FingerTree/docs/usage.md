@@ -2,8 +2,8 @@
 
 - Created (UTC): 2026-07-02T20:03:36Z
 - Repository HEAD: 17d505f18e9e0a5748058701d408ed6642dcba29
-- Updated (UTC): 2026-07-12T04:31:10Z
-- Updated against repository HEAD: 8a926e3bdb0cc37da0c8a15c4c32352c2ebcb1f5
+- Updated (UTC): 2026-07-12T05:22:05Z
+- Updated against repository HEAD: 2b2f91177a7c90ddfc4769d86f0a928fdede6f03
 - Audience: C++ consumers and maintainers using the public FingerTree headers
 - Scope: Public include path, value semantics, canonical ranking, priority cores, and facade quick starts
 
@@ -284,6 +284,30 @@ auto removed = merged.try_delete_minimum();
 `try_delete_minimum()` can outlive the heap snapshot and are the move-only-friendly representative surfaces.
 `delete_minimum()` throws `std::logic_error` on an empty heap; the `try_` form returns `std::nullopt`.
 
+## Priority Search Queue
+
+Use `priority_search_queue<Key, Priority, Value>` when each ordered key has one replaceable payload and priority,
+and both keyed lookup and global minimum selection must remain logarithmic or better:
+
+```cpp
+auto queue = ft::priority_search_queue<std::string, int, std::string>{}
+    .set_item("compile", 20, "compiler")
+    .set_item("review", 10, "reviewer")
+    .set_item("publish", 30, "publisher");
+
+auto current = queue.minimum();              // key == "review", O(1)
+auto deletion = queue.delete_minimum();      // exact shared entry + persistent remainder
+auto urgent = queue.enumerate_at_most("compile", "review", 20);
+```
+
+Results from `try_get_entry_handle`, `try_remove`, `try_minimum`, `delete_minimum`, and `enumerate_at_most` retain
+shared component handles, so move-only key/priority/payload types are supported. Equivalent key updates keep the
+first key representative. Derive queues from one custom-policy value or pass retained policy handles when runtime
+comparator state matters; unlike heap meld, PSQ has no cross-queue algebra and therefore no compatibility gate.
+
+`enumerate_at_most` validates the range immediately and returns an eager vector in key order. Its bounds and
+priority threshold are inclusive. Cached winners prune subtrees, but an unselective query still visits O(n) nodes.
+
 ## Priority Queue
 
 `priority_queue<Element, Priority, Comparison>` is a persistent minimum-priority queue. Equal
@@ -405,6 +429,7 @@ data-race rules still apply to your variables.
 | Unique sorted values and set algebra | `sorted_set<T, Less>` |
 | Sorted key/value lookup and rank access | `sorted_map<Key, T, Less>` |
 | Worst-case O(1) persistent insertion and meld | `brodal_okasaki_heap<T, Less>` |
+| Keyed lookup plus cached global priority winner | `priority_search_queue<Key, Priority, Value>` |
 | Minimum-priority draining and meld | `priority_queue<T, Priority, Comparison>` |
 | Closed-interval overlap and containment queries | `interval_tree<T, Comparison>` |
 | Chunked persistent positional sequence | `rope<T>` |

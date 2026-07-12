@@ -3,8 +3,8 @@
 - Status: Current validation guide
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-12T04:31:10Z
-- Updated Repository HEAD: 8a926e3bdb0cc37da0c8a15c4c32352c2ebcb1f5
+- Updated (UTC): 2026-07-12T05:22:05Z
+- Updated Repository HEAD: 2b2f91177a7c90ddfc4769d86f0a928fdede6f03
 - Audience: Maintainers validating the C++ port
 - Scope: Local/CI build, test, stress, sample, packaging, sanitizer, and benchmark guidance
 
@@ -141,13 +141,13 @@ lane does not provide a viable TSan runtime.
 
 ## Current Coverage
 
-CTest registers 22 cases: 20 subsystem cases backed by `tests/fingertree_smoke_tests`, including the focused
+CTest registers 23 cases: 21 subsystem cases backed by `tests/fingertree_smoke_tests`, including the focused
 `fingertree.brodal-okasaki-heap`, `fingertree.canonical-sorted-set`, `fingertree.daba-lite`, and
-`fingertree.support` groups. Each case invokes the same local runner with an exact
+`fingertree.priority-search-queue` groups. Each case invokes the same local runner with an exact
 `--group` filter through the repository
 headless launcher, so a subsystem failure is isolated without introducing Catch2/GoogleTest or duplicating test
 execution. `fingertree.samples` checks two deterministic transcripts, and `fingertree.installed-consumer` performs
-the staged package integration test. All 22 carry the `fingertree` label and all Windows invocations—including the
+the staged package integration test. All 23 carry the `fingertree` label and all Windows invocations—including the
 nested install/configure/build/test command—inherit the no-dialog error mode. Use
 `ctest --test-dir out/build/msvc-debug -N -L fingertree` to list the cases, or `-R` with one exact case name for a
 focused run. See the [tests README](../tests/README.md) for the complete group list, direct runner options,
@@ -175,6 +175,11 @@ The suite covers:
   comparator-policy identity; logical self-meld DAGs; quantified sharing; move-only representative handles;
   logarithmic delete-min comparison/allocation growth; injected comparator failures; concurrent snapshot reads;
   and stack-safe deterministic reclamation of deep C#-faithful root chains;
+- the winner-cached priority-search AVL across every rotation and deletion-rebalance shape, 50,000 ascending
+  keys, a 20,000-operation retained dictionary/priority model, first-key and last-priority/payload semantics,
+  exact no-op identity, optional and move-only components, priority/key tie policies, exact full-query and
+  impossible-threshold pruning equations, logarithmic allocation/sharing bounds, comparator/equality/component
+  exceptions, installed-package use, and concurrent readers;
 - DABA Lite exhaustive short histories and a deterministic 100,000-operation FIFO model, all fixup phases,
   three/two/one callback ceilings, every reachable throwing-policy and value-copy ordinal, compile-time rejection
   of throwing moves, provisional-block rollback, 63/64/65 and 127/128/129 boundaries, bounded chunk retention,
@@ -225,8 +230,8 @@ fresh project with `FINGERTREE_BUILD_TESTS`, `FINGERTREE_BUILD_SAMPLES`, and
 `FINGERTREE_BUILD_BENCHMARKS` all off. The consumer uses only
 `find_package(ToolsDataStructuresFingerTree CONFIG)`, the exported
 `tools::data_structures::finger_tree` target, and installed headers. Its aggregate-header program instantiates
-the canonical rank policy (thereby proving the transitive crypto link), Brodal-Okasaki heap, DABA Lite, and
-persistent collections:
+the canonical rank policy (thereby proving the transitive crypto link), Brodal-Okasaki heap, winner-cached
+priority-search queue, DABA Lite, and persistent collections:
 
 ```powershell
 ctest --preset msvc-debug -R '^fingertree\.installed-consumer$' --output-on-failure

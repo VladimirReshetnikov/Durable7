@@ -3,8 +3,8 @@
 - Status: Current API notes
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-12T04:31:10Z
-- Updated against repository HEAD: 8a926e3bdb0cc37da0c8a15c4c32352c2ebcb1f5
+- Updated (UTC): 2026-07-12T05:22:05Z
+- Updated against repository HEAD: 2b2f91177a7c90ddfc4769d86f0a928fdede6f03
 - Audience: Maintainers implementing and reviewing public C++ APIs
 - Scope: C++ naming, contracts, and intentional differences from the C# workspace
 
@@ -426,6 +426,38 @@ bootstrapped skew-binomial representation rather than substituting a conventiona
 `std::optional<std::pair<std::shared_ptr<const T>, brodal_okasaki_heap>>`; the pair is the removed representative
 handle followed by the persistent remainder. The source snapshot is never modified. Comparator exceptions during
 insert, meld, deletion, or validation cannot publish a partial version.
+
+## `priority_search_queue<Key, Priority, Value, KeyLess, PriorityLess>`
+
+This is the C++23 port of C# `PrioritySearchQueue<TKey, TPriority, TValue>`. It is one immutable AVL tree ordered
+by key; every node caches its entry, children, count, height, and the full priority-then-key winner of its subtree.
+There is no auxiliary heap or second key index.
+
+Primary operations and bounds:
+
+- `contains_key`, `try_get_entry`, `try_get_entry_handle`, `set_item`, `try_add`, `remove`, and `try_remove` are
+  O(log n); absent removal, duplicate `try_add`, and exact replacement no-ops retain the original root;
+- `minimum` and `try_minimum` read the root's cached winner in O(1). `delete_minimum` returns a named
+  `{ entry, remainder }` view and removes the winner by retained key in O(log n);
+- the retained key comparator defines one equivalence class. The first stored key handle is never replaced;
+  priority and payload are last-wins. A replacement is an exact no-op only when both priority-comparator
+  directions report equivalence and ordinary `operator==` agrees for priority and payload;
+- comparator-equivalent priorities break ties by retained key order, including custom descending key policies;
+- `enumerate_at_most(minimum_key, maximum_key, maximum_priority)` eagerly rejects an inverted inclusive key
+  range, prunes a subtree when its cached winner exceeds the inclusive threshold, and materializes a
+  `std::vector<entry_type>` in key order. The vector copies only shared entry handles, never `Key`, `Priority`, or
+  `Value`; its cost is O(log n + v) for the visited nodes and may be O(n) when unselective;
+- the forward iterator is an explicit-stack in-order traversal retaining the root. Validators independently check
+  strict key bounds, AVL balance, cached count/height, and exact winner-handle identity. Node identity and shared
+  node-count diagnostics quantify path copying.
+
+`priority_search_entry<Key, Priority, Value>` owns independent `std::shared_ptr<const ...>` component handles.
+Lookup, removal, minimum, range-query, and deletion results therefore preserve exact representatives and support
+move-only components. An outer `std::optional<entry_type>` remains distinct from an entry whose key, priority, or
+payload is itself an empty `std::optional`. Comparator/equality exceptions and component construction failures can
+discard unpublished path copies but never mutate an existing queue. AVL height bounds make recursive updates and
+ordinary `shared_ptr` reclamation stack-safe; unlike the potentially linear Brodal root chain, this core needs no
+deferred deleter.
 
 ## `priority_queue<T, Priority, Comparison>`
 

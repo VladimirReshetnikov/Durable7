@@ -41,6 +41,11 @@ int main()
     const auto canonical = ft::canonical_sorted_set<int>::from_range(source, canonical_policy).add(5);
     const auto brodal = ft::brodal_okasaki_heap<int>::from_range(source).insert(0);
     const auto brodal_deletion = brodal.try_delete_minimum();
+    const auto priority_search = ft::priority_search_queue<int, int, int>{}
+        .set_item(2, 20, 200)
+        .set_item(1, 10, 100)
+        .set_item(3, 5, 300);
+    const auto priority_search_deletion = priority_search.delete_minimum();
     const auto text = ft::to_text_rope("alpha\nbeta\ngamma");
     auto daba = ft::daba_lite<int, sum_monoid>{};
     daba.insert(7);
@@ -52,6 +57,9 @@ int main()
         || canonical.size() != 5 || canonical.content_hash() == 0 || !canonical.contains(3)
         || brodal.minimum() != 0 || !brodal_deletion.has_value()
         || *brodal_deletion->first != 0 || brodal_deletion->second.minimum() != 1
+        || priority_search.minimum().key() != 3
+        || priority_search_deletion.entry.value() != 300
+        || priority_search_deletion.remainder.minimum().key() != 1
         || ft::line_count(text) != 3 || ft::get_line(text, 1) != "beta" || daba.aggregate() != 11) {
         std::cerr << "installed public API smoke check failed\n";
         return 1;

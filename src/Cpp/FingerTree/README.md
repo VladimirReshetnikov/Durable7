@@ -3,8 +3,8 @@
 - Status: Active C++ workspace
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-12T04:31:10Z
-- Updated against repository HEAD: 8a926e3bdb0cc37da0c8a15c4c32352c2ebcb1f5
+- Updated (UTC): 2026-07-12T05:22:05Z
+- Updated against repository HEAD: 2b2f91177a7c90ddfc4769d86f0a928fdede6f03
 - Audience: Maintainers implementing and reviewing the C++ port
 - Scope: Build entry points, layout, and validation for `src/Cpp/FingerTree`
 
@@ -39,6 +39,14 @@ comparer-tied representatives and exact shared subtrees. Move-only values are ow
 the result-returning delete-minimum surface preserves the exact removed handle with its persistent remainder.
 Allocation-free iterative reclamation keeps the C#-faithful decreasing-root and equal-root shapes stack-safe in
 deterministic C++ destruction.
+
+`priority_search_queue<Key, Priority, Value, KeyLess, PriorityLess>` is the immutable keyed priority core. Its
+direct AVL nodes cache both size/height and the priority-then-key subtree winner, giving O(log n) keyed updates,
+O(1) minimum lookup, and O(log n) minimum deletion without a second index. Comparator-equivalent updates retain
+the first concrete key representative while replacing priority and payload; exact no-ops additionally require
+ordinary priority and payload equality. Shared component handles support move-only keys, priorities, and payloads,
+and the inclusive range/priority query prunes whole subtrees from cached winners while returning key-ordered entry
+handles.
 
 The native runner and benchmark harness remain repository-owned, so configuring a preset does not implicitly run
 a package manager. The canonical rank policy uses the operating-system CNG provider (`bcrypt`) on Windows and the

@@ -13,6 +13,7 @@
 #include <tools/data_structures/finger_tree/measured_rope.hpp>
 #include <tools/data_structures/finger_tree/persistent_deque.hpp>
 #include <tools/data_structures/finger_tree/priority_queue.hpp>
+#include <tools/data_structures/finger_tree/priority_search_queue.hpp>
 #include <tools/data_structures/finger_tree/product_measure.hpp>
 #include <tools/data_structures/finger_tree/reversible_deque.hpp>
 #include <tools/data_structures/finger_tree/rope.hpp>

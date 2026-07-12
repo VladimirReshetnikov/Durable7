@@ -120,8 +120,8 @@ FingerTree lineage:
    benchmarks, and design notes.
 2. [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) ports the persistent family to a
    header-first C++ library with local naming, value semantics, the policy-canonical zip-zip set,
-   and CTest validation, and segregates the noncopyable mutable DABA Lite core with its native
-   ownership constraints.
+   move-only-capable Brodal-Okasaki and winner-cached priority-search cores, and CTest validation,
+   and segregates the noncopyable mutable DABA Lite core with its native ownership constraints.
 3. [`src/C/FingerTree`](../../src/C/FingerTree/README.md) follows the native design in C form with
    explicit handles, callback policies, and facade types, including the erased-type-safe canonical
    zip-zip set and a separately owned mutable DABA Lite handle with allocator-failure status

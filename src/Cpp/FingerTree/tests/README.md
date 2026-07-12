@@ -2,17 +2,17 @@
 
 - Created (UTC): 2026-07-02T21:06:57Z
 - Repository HEAD: 399710816b9007dde1374aef2043f118beddc225
-- Updated (UTC): 2026-07-12T04:31:10Z
-- Updated Repository HEAD: 8a926e3bdb0cc37da0c8a15c4c32352c2ebcb1f5
+- Updated (UTC): 2026-07-12T05:22:05Z
+- Updated Repository HEAD: 2b2f91177a7c90ddfc4769d86f0a928fdede6f03
 - Audience: Maintainers validating the C++ FingerTree port
 - Scope: Native test executable, source grouping, and stress controls under `src/Cpp/FingerTree/tests`
 
 The C++ FingerTree workspace has one repository-owned native test executable, `fingertree_smoke_tests`; it uses no
-third-party test framework. CTest runs that executable through 20 subsystem entries (`fingertree.atomic-box`,
+third-party test framework. CTest runs that executable through 21 subsystem entries (`fingertree.atomic-box`,
 `fingertree.brodal-okasaki-heap`, `fingertree.canonical-sorted-set`, `fingertree.command-model`,
 `fingertree.concurrency`, `fingertree.daba-lite`, `fingertree.deque`, `fingertree.interval-tree`, `fingertree.lazy-cell`,
 `fingertree.measure`, `fingertree.measured-lazy-cell`, `fingertree.measured-rope`, `fingertree.measured-tree`,
-`fingertree.priority-queue`, `fingertree.reversible-deque`, `fingertree.rope`, `fingertree.rope-text`,
+`fingertree.priority-queue`, `fingertree.priority-search-queue`, `fingertree.reversible-deque`, `fingertree.rope`, `fingertree.rope-text`,
 `fingertree.rrb-vector`,
 `fingertree.sorted-collections`, and `fingertree.support`). This preserves the small runner in
 `test_support/test_runner.hpp` while making CTest failures identify the affected subsystem.
@@ -63,6 +63,11 @@ listing, and replay-seed selection.
   persistence-aware set algebra, and randomized model checks.
 - `priority_queue_tests.cpp` covers ordering, duplicate priorities, stability, forward traversal/copy, semantic
   dequeue-result equality, and command-model behavior.
+- `priority_search_queue_tests.cpp` covers all AVL rotation/deletion paths, 50,000 ascending keys, a retained
+  20,000-operation keyed/priority model, first-key and last-priority/payload semantics, exact no-op and result
+  handles, custom ties, eager inclusive range pruning with exact comparator equations, optional and move-only
+  components, quantified sharing/allocation growth, injected comparator/equality/component failures, and
+  concurrent readers.
 - `interval_tree_tests.cpp` covers insertion, forward traversal/copy, overlap, containment, streaming coalescing,
   removal, and sweep-model checks.
 - `rope_tests.cpp`, `measured_rope_tests.cpp`, and `rope_text_tests.cpp` cover chunked sequence editing, retained
