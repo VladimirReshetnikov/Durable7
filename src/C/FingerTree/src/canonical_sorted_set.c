@@ -1093,6 +1093,38 @@ static ft_status ft_canonical_allocate_path(
     return *result == NULL ? FT_STATUS_NO_MEMORY : FT_STATUS_OK;
 }
 
+/*
+ * The removal merge zips the right spine of a node's left child against the left
+ * spine of its right child, so its scratch path can reach height(left) +
+ * height(right) steps - up to 2 * root->height, not the single root-to-leaf
+ * height that ft_canonical_allocate_path sizes for. Size the merge scratch for
+ * two spines (2 * (height + 1), matching the digest traversal's sizing) and
+ * report the capacity so ft_canonical_merge can bounds-check every push.
+ */
+static ft_status ft_canonical_allocate_merge_path(
+    const ft_canonical_sorted_set* set,
+    ft_canonical_merge_step** result,
+    size_t* capacity)
+{
+    size_t height = 0;
+    size_t entries = 0;
+    size_t bytes = 0;
+    if (set->root != NULL && set->root->height == SIZE_MAX) {
+        return FT_STATUS_OVERFLOW;
+    }
+    height = set->root == NULL ? 0 : set->root->height;
+    if (ft_canonical_multiply_overflows(height + 1, 2, &entries) ||
+        ft_canonical_multiply_overflows(entries, sizeof(**result), &bytes)) {
+        return FT_STATUS_OVERFLOW;
+    }
+    *result = ft_canonical_allocate(set->policy, bytes);
+    if (*result == NULL) {
+        return FT_STATUS_NO_MEMORY;
+    }
+    *capacity = entries;
+    return FT_STATUS_OK;
+}
+
 static ft_status ft_canonical_split(
     const ft_canonical_sorted_set* set,
     ft_canonical_node* root,
@@ -1316,6 +1348,7 @@ static ft_status ft_canonical_merge(
     ft_canonical_node* initial_left,
     ft_canonical_node* initial_right,
     ft_canonical_merge_step* path,
+    size_t path_capacity,
     ft_canonical_node** result_root)
 {
     ft_canonical_node* left = initial_left;
@@ -1325,6 +1358,9 @@ static ft_status ft_canonical_merge(
     ft_status status = FT_STATUS_OK;
     while (left != NULL && right != NULL) {
         bool higher = false;
+        if (path_count >= path_capacity) {
+            return FT_STATUS_OVERFLOW;
+        }
         status = ft_canonical_higher_nodes(set->policy, left, right, &higher);
         if (status != FT_STATUS_OK) {
             return status;
@@ -1376,6 +1412,7 @@ ft_status ft_canonical_sorted_set_remove(
 {
     ft_canonical_path_step* search_path = NULL;
     ft_canonical_merge_step* merge_path = NULL;
+    size_t merge_capacity = 0;
     ft_canonical_node* cursor = NULL;
     ft_canonical_node* root = NULL;
     size_t path_count = 0;
@@ -1388,7 +1425,7 @@ ft_status ft_canonical_sorted_set_remove(
     if (status != FT_STATUS_OK) {
         return status;
     }
-    status = ft_canonical_allocate_path(set, sizeof(*merge_path), (void**)&merge_path);
+    status = ft_canonical_allocate_merge_path(set, &merge_path, &merge_capacity);
     if (status != FT_STATUS_OK) {
         ft_canonical_deallocate(set->policy, search_path);
         return status;
@@ -1415,7 +1452,7 @@ ft_status ft_canonical_sorted_set_remove(
         }
         goto cleanup;
     }
-    status = ft_canonical_merge(set, cursor->left, cursor->right, merge_path, &root);
+    status = ft_canonical_merge(set, cursor->left, cursor->right, merge_path, merge_capacity, &root);
     if (status != FT_STATUS_OK) {
         goto cleanup;
     }
