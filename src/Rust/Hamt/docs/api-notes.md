@@ -116,7 +116,9 @@ complete or partial when a destination store supplies the rest of the closure.
 
 `load_with_budget`, `import_with_budget`, and `verify_proof_with_budget` use
 `MerkleVerificationBudget` to bound distinct blocks, cumulative bytes, one-block bytes, reference
-depth, cumulative decoded entries, child references per block, and proof-query bytes. The decoder
+depth, cumulative decoded entries, child references per block, and proof-query bytes. Its fields are
+readable, but the non-exhaustive value must be constructed through `new`, `with_six_limits`, or
+`default`, so external code cannot bypass positivity and byte-limit relationship checks. The decoder
 authenticates each digest, domain, entry codec round trip, key-derived level, comparer order, exact
 trailing-free `MST2` bytes, child interval, subtree count, and final reconstructed root. Failures
 return `MerkleVerificationError` with `MerkleVerificationFailureKind` and an offending digest when

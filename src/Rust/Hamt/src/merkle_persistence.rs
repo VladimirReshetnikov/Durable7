@@ -776,6 +776,7 @@ impl Error for MerkleBudgetError {}
 
 /// Seven finite limits applied before allocation, decoding, and reference traversal.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub struct MerkleVerificationBudget {
     /// Maximum uniquely decoded blocks.
     pub max_block_count: usize,
