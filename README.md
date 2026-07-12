@@ -202,9 +202,11 @@ language-first layout.
 - [src/C/FingerTree](src/C/FingerTree/README.md) is the C11 port from the C++ workspace. It provides the measured-tree/deque family, RRB vectors, derived sorted/priority/interval collections, a type-erased CNG/OpenSSL-backed policy-canonical zip-zip set, failure-atomic type-erased Brodal-Okasaki and winner-cached priority-search cores, ropes/text, and a separate mutable DABA Lite with allocation-atomic updates and O(n+c) deterministic clear, all covered by CTest and a dependency-light benchmark harness.
 - [src/C/Tungsten](src/C/Tungsten/README.md) is the C17 port of the Tungsten collections. It provides type-erased `tds_tungsten_list` and `tds_tungsten_association` value structs, composing the C FingerTree deque, C HAMT, and an internal ref-counted AVL stamp sequence for C#-parity keyed and positional Association operations.
 - [src/Cpp/Hamt](src/Cpp/Hamt/README.md) is a C++20 port of the persistent HAMT library. It provides
-  header-only `persistent_hash_map` and `persistent_hash_set` templates with bitmap-indexed
-  branching, immutable equal-hash collision buckets, custom hash/equality policy objects, structural
-  sharing via immutable `std::shared_ptr` nodes, and deterministic native model tests.
+  header-first CHAMP hash maps/sets and Patricia integer maps/sets, plus a policy-bound Merkle
+  search-tree core with CNG/OpenSSL SHA-256, strict codecs, move-only representative handles, and
+  byte-identical cross-language `MST2` blocks. Immutable `std::shared_ptr` nodes provide structural
+  sharing; strict MSVC/GCC/Clang model, wire, failure, validation, and reader tests cover the native
+  value-semantics surface.
 - [src/Cpp/FingerTree](src/Cpp/FingerTree/README.md) is the native C++ port of the FingerTree workspace and newer sequence/streaming cores. It is a header-first CMake/Ninja library with the persistent engines and facades, RRB vectors, a CNG/OpenSSL-backed policy-canonical zip-zip set, move-only-capable Brodal-Okasaki and winner-cached priority-search cores, ropes/text, and a noncopyable mutable DABA Lite whose no-throw publication and O(n+c) deterministic clear are covered by CTest and benchmarks.
 - [src/Cpp/Tungsten](src/Cpp/Tungsten/README.md) is the C++23 header-first Tungsten-collections port. It provides `persistent_list<T>` and `persistent_association<Key, T, Hash, KeyEqual, ValueEqual>` over the C++ FingerTree and HAMT substrates, with CTest coverage for the Tungsten ordering rules and relabel path.
 - [src/Haskell/Hamt](src/Haskell/Hamt/README.md) is a Haskell persistent-map workspace. It provides CHAMP hash maps/sets and Patricia integer maps/sets, plus a pure policy-bound Merkle search-tree core whose SHA-256 domain, canonical codecs, and `MST2` blocks are byte-compatible with C# and Rust.
@@ -294,7 +296,7 @@ Release configuration is required for meaningful benchmark numbers.
 - [src/CSharp/docs/Hamt/README.md](src/CSharp/docs/Hamt/README.md) indexes the HAMT library's usage guide, API specification, validation guide, and implementation review.
 - [src/C/Hamt/docs/README.md](src/C/Hamt/docs/README.md) indexes the C HAMT port's usage guide, API specification, and validation guide.
 - [src/Cpp/Hamt/docs/README.md](src/Cpp/Hamt/docs/README.md) indexes the C++ HAMT port's usage
-  guide, API specification, and validation guide.
+  guide, API specification, exact-wire Merkle specification, and validation guide.
 - [src/CSharp/docs/FingerTree/README.md](src/CSharp/docs/FingerTree/README.md) indexes the library's usage guide, specifications, validation guide, design notes, benchmark notes, and external references.
 - [src/CSharp/docs/Tungsten/README.md](src/CSharp/docs/Tungsten/README.md) indexes the Tungsten-collections library's overview, usage guide, API specification, and validation guide.
 - [src/C/Tungsten/README.md](src/C/Tungsten/README.md) indexes the C Tungsten-collections port.

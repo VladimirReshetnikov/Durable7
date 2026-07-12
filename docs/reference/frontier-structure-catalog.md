@@ -59,7 +59,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | CHAMP canonicalization + structural equality/diff | 1 | Strong (implemented across all six languages) | Completed with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
 | `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all six languages) | Completed as proposal Tier C1 | 1 shared core, 4 C# public types, structural map/set algebra |
 | DABA Lite sliding-window aggregator | 1, 3 | Strong (implemented in every applicable language: C#, C, C++, Kotlin/JVM, and Rust; pure Haskell is not applicable) | Reuses the language's monoid abstraction | 1 small type, ~8 members |
-| Merkle search tree | 1 | Strong (C# and Rust complete; C, Haskell, and Kotlin/JVM core/wire implemented) | Completed in full ports: deterministic wire + bounded verification | Largest single item in this catalog |
+| Merkle search tree | 1 | Strong (C# and Rust complete; C, C++, Haskell, and Kotlin/JVM core/wire implemented) | Completed in full ports: deterministic wire + bounded verification | Largest single item in this catalog |
 | RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
 | Zip tree (canonical sorted set) | 1, 3 | Plausible (implemented across all six languages) | Completed: coherent keyed rank policy | 1 new core, set facade |
 | Brodal-Okasaki heap | 1 | Plausible (implemented across all six languages for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
@@ -360,6 +360,19 @@ sharing, a 12,000-operation retained `TreeMap` model, exact five-level adversari
 eight churn histories, nullable values, mutable-representative rejection, and eight JVM readers.
 The Hamt suite is warning-clean under Kotlin 2.4 `-Werror`; store, bounded verification, proof, sync,
 and merge APIs are not yet claimed.
+
+**C++ status (2026-07-12): Core and exact wire implemented with header-first native value
+semantics; persistence tier remains.** `merkle_search_tree<K, V>` binds shared comparator/codec
+objects into the common SHA-256 policy domain, retains immutable key/value/encoding handles, and
+emits byte-identical `MST2` blocks through CNG on Windows or OpenSSL elsewhere. Bulk and incremental
+construction, replacement, deletion/contraction, ordered iteration and ranges, aligned-digest diff,
+block/shape inspection, sharing diagnostics, and deep re-encoding validation preserve canonical
+B=16 topology while supporting move-only keys and values. Ten focused groups pin the shared golden,
+Unicode identifier rules, exact levels zero through four, independent histories, equivalent
+representatives, nullable values, a 12,000-operation retained model, callback exceptions, mutated
+representatives, and eight concurrent readers. Separate MSVC/GCC/Clang Debug/Release lanes, a silent
+Clang analyzer, and a copied aggregate-header golden consumer close the core/wire gate; stores,
+bounded load/import, `MSP2` proofs, synchronization, and merge are not yet claimed.
 
 **What they are.** Two convergent designs for *uniquely represented, content-addressed* search
 trees. Merkle search trees (Auvolat & Taïani, SRDS 2019) place each key at a layer derived from its
@@ -1012,8 +1025,8 @@ The implementation wave described by this catalog has already landed these C# re
 - the managed Ctrie with O(1) immutable snapshots.
 
 CHAMP, Patricia, and RRB have also advanced through the sibling-language work recorded in their
-entries; the canonical zip-zip set and Brodal-Okasaki heap are implemented across all six languages,
-the priority-search queue has C, Haskell, Kotlin/JVM, and Rust ports, and DABA Lite now exists in every applicable imperative
+entries; the canonical zip-zip set, Brodal-Okasaki heap, and priority-search queue are implemented
+across all six languages, and DABA Lite now exists in every applicable imperative
 language (C#, C, C++, Kotlin/JVM, and Rust). The Ctrie's deliberate parity boundary remains C# and
 Kotlin/JVM. These are current-state implementation records, not candidates awaiting a consumer.
 Future work on them is ordinary hardening, measurement, and demand-driven porting.
