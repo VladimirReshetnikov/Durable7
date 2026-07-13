@@ -11,6 +11,36 @@ internal static class Axis2BenchmarkPolicy
     internal const double PracticalAllocationMargin = 0.10;
     internal const double PracticalRetainedMemoryMargin = 0.10;
 
+    // C2 is decided at the same representative edit point and sample cadence selected for C1.
+    // These constants were locked before any measured-cursor result was collected; do not tune
+    // them in response to benchmark output.
+    internal const int MeasuredCursorGateDocumentSize = 65_536;
+    internal const int MeasuredCursorGateEditCount = 256;
+    internal const int MeasuredCursorGateLocalityWindow = 8;
+    internal const int MeasuredCursorGateSnapshotCadence = 16;
+    internal const double MeasuredCursorGateLatencyImprovement = 0.10;
+    internal const double MeasuredCursorGateAllocationImprovement = 0.10;
+
+    // Query guardrails are intentionally separate from the local-edit win. Every constant below
+    // was fixed before collecting C2 results, including prepared and freshly dirty cursor lanes.
+    internal const double MeasuredCursorMaximumPositionSeekRatio = 1.25;
+    internal const double MeasuredCursorMaximumPositionSeekAllocationRatio = 1.10;
+    internal const double MeasuredCursorMaximumSourceMeasureSeekRatio = 2.00;
+    internal const long MeasuredCursorMaximumSourceMeasureSeekAllocationBytes = 16 * 1_024;
+    internal const double MeasuredCursorMaximumPreparedMeasureSeekRatio = 2.00;
+    internal const long MeasuredCursorMaximumPreparedMeasureSeekAllocationBytes = 16 * 1_024;
+    internal const int MeasuredCursorMaximumLocateMeasureCallbacks = 2_048;
+    internal const int MeasuredCursorMaximumFocusMeasureCallbacks = 16;
+    internal const int MeasuredCursorMaximumMeasureSeekMeasureCallbacks =
+        MeasuredCursorMaximumLocateMeasureCallbacks + MeasuredCursorMaximumFocusMeasureCallbacks;
+    internal const double MeasuredCursorMaximumLineColumnRatio = 1.25;
+    internal const long MeasuredCursorMaximumLineColumnAllocationBytes = 64;
+    internal const double MeasuredCursorMaximumDirtyQueryRatio = 1.25;
+    internal const double MeasuredCursorMaximumDirtyQueryAllocationRatio = 1.10;
+
+    internal const int MeasuredCursorSparseNewlineInterval = 256;
+    internal const int MeasuredCursorDenseNewlineInterval = 8;
+
     internal static readonly int[] HashCounts = [0, 1, 8, 32, 1_024, 100_000];
     internal static readonly int[] CursorDocumentSizes = [1_024, 65_536, 1_048_576];
     internal static readonly int[] CursorLocalityWindows = [1, 8, 256, int.MaxValue];
@@ -26,6 +56,12 @@ internal static class Axis2BenchmarkPolicy
 
     internal static double RequiredAllocationImprovement(double measuredRelativeNoiseFloor) =>
         Math.Max(measuredRelativeNoiseFloor, PracticalAllocationMargin);
+
+    internal static double RequiredMeasuredCursorLatencyImprovement(double measuredRelativeNoiseFloor) =>
+        Math.Max(measuredRelativeNoiseFloor, MeasuredCursorGateLatencyImprovement);
+
+    internal static double RequiredMeasuredCursorAllocationImprovement(double measuredRelativeNoiseFloor) =>
+        Math.Max(measuredRelativeNoiseFloor, MeasuredCursorGateAllocationImprovement);
 
     internal static KeyValuePair<Axis2HashKey, int>[] CreateHashEntries(int count, Axis2HashShape shape)
     {

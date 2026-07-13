@@ -77,7 +77,7 @@ the owning workspace's decision or benchmark document, including
 | `MeasuredRopeBenchmarks` | `MeasuredRope<char,…>` line navigation in O(log n) (offset↔line) | `string` newline scan (O(n)) |
 | `RopeCursorBenchmarks` | Axis 2 positional local-edit, locality, branch, and snapshot-cadence gate (baseline skeleton in P0; cursor lanes arrive in C0/C1) | indexed persistent `Rope<char>` and `StringBuilder` mutable control |
 | `RopeCursorCarryTuningBenchmarks` | Axis 2 C0 focus/flush tuning under actual left/right carry publication, backspace, and forward-delete pressure | the common zipper engine through its readonly-struct wrapper |
-| `MeasuredRopeCursorBenchmarks` | Axis 2 measured-text edit, absolute measure-seek, and line/column gate (baseline skeleton in P0; cursor lanes arrive in C2) | indexed `MeasuredRope<char, int, NewlineMeasure>` |
+| `MeasuredRopeCursorBenchmarks`, `MeasuredRopeCursorGateBenchmarks`, `MeasuredRopeCursorQueryBenchmarks`, `MeasuredRopeCursorDirtyQueryBenchmarks` | Axis 2 C2 public measured-text cursor: cadence-matched local-edit matrix and compact shipment gate, positional seek, delegate/struct absolute measure seek, clean and freshly dirty line/column/query paths, and untimed callback diagnostics across sparse/dense newlines | indexed `MeasuredRope<char, int, NewlineMeasure>` edits, explicit snapshot queries, and the existing locate/line-column helpers |
 | `SortedBuilderBenchmarks` | sorted builder batch-edit freeze constants and allocation | repeated immutable edits, caller-side BCL staging, BCL immutable builders |
 | `RopeBuilderBenchmarks` | append-only rope builder construction and snapshot constants | `Create`, `AddLast` loop, text `StringBuilder` materialization, `ImmutableList<T>.Builder` |
 | `ChampBenchmarks` | CHAMP lookup, payload-dense iteration, shared-single-change diff, and independent-history equality/diff | `Dictionary` and `ImmutableDictionary` |
@@ -155,6 +155,28 @@ types another 2,304 immediately to the right of a fixed gap and forward-deletes 
 is divisible by the cadence and exceeds the largest flush-size-plus-focus candidate, so every one of
 the sixteen focus/flush pairs must publish an ordinary chunk on both sides. Global setup verifies
 those transitions and exact sequence restoration outside the timed region.
+
+The C2 edit gate is locked at 65,536 UTF-16 elements, 256 replacements, locality window 8, and
+snapshot cadence 16—the C1 representative point and the predeclared target cadence for C3 sample
+integration. The public
+measured cursor must improve both mean latency and allocation over indexed measured-rope edits by
+at least the larger of the measured noise floor and 10%. Sparse text places one newline every 256
+elements; dense text places one every eight. The exploratory matrix also crosses 1K/64K/1M
+documents, locality 1/8/256, and cadences 1/16/256.
+
+Query guardrails are independent of the edit win and were fixed before results were collected.
+Clean positional seek must remain at or below 1.25 times direct `GetCursor`, with no more than a
+1.10 allocation ratio. Source-to-cursor and prepared-cursor measure seek must each remain at or
+below 2.0 times the matching existing locate mean and allocate no more than 16 KiB; the untimed
+diagnostic may invoke `Measure` at most 2,048 times for the located ordinary chunk plus 16 times for
+focus preparation. Prepared-cursor `LineColumnOf` must remain at or below 1.25 times the existing
+rope helper mean and allocate no more than 64 bytes. Delegate and constrained-struct predicate lanes
+are measured separately. Freshly dirty position, measure, and line/column queries compare direct
+cursor operations with the equivalent explicit-snapshot path; each must remain at or below a 1.25
+mean ratio and a 1.10 allocation ratio. Global setup proves result parity and records `Measure`/`Combine` callback
+counts; those diagnostics never execute in a timed method. Global cleanup writes one stable
+`AXIS2_C2_CALLBACK_V1` line into the run log, including edit, snapshot, source-seek, and
+prepared-seek callback totals. Snapshot diagnostics fail setup if publication remeasures an element.
 
 Comparable lanes receive the same generated entries, stored comparer object, hit/miss probes,
 warmup/job configuration, and result-consumption shape. A control that cannot represent a semantic
