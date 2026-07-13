@@ -18,13 +18,16 @@ Coverage groups:
 - root-sharing no-op behavior;
 - duplicate-key rejection;
 - equal-hash collision buckets through a constant `HashPolicy`;
-- CHAMP split-bitmap invariants, canonical independent-history equality, and typed map diff;
+- CHAMP split-bitmap invariants, full hash-prefix routing through shift 30, malformed-depth and
+  bitmap-cardinality rejection, policy-aware collision topology, canonical independent-history
+  equality, and typed map diff;
 - streaming trie-order iteration;
 - last-wins replacement and original-key retention through an equivalence policy;
 - set algebra, equality, and proper subset/superset relations;
 - cross-policy subset/superset/equality/overlap relations under the receiver's `HashPolicy`;
 - JVM concurrent readers over shared immutable map/set snapshots;
-- Ctrie node-local GCAS and root/main RDCSS helping, a deterministic snapshot/write race, O(1)
+- Ctrie node-local GCAS and root/main RDCSS helping, deterministic snapshot/write races in both
+  linearization directions, O(1)
   retained generations, lazy renewal, deep/equal-hash tomb contraction, contended same-key updates,
   250-round short-history linearizability, structural validation, and snapshot-to-CHAMP conversion.
 - 32/64-bit big-endian Patricia boundary ordering, randomized histories, cached-cardinality

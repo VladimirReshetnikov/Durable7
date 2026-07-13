@@ -40,6 +40,7 @@ The executable registers these cases:
 - `Structure_RootShapeTracksContentsAndCollapse`
 - `Structure_UpdateSharesUntouchedSiblingSubtrees`
 - `Champ_IndependentHistoriesAndTypedDiff`
+- `Champ_TopologyComparatorRejectsDifferentCollisionKeys`
 - `Patricia_SignedOrderingHistoriesAndStructuralAlgebra`
 - `PatriciaMap_CachedCountsAndNoOpAlgebraPreserveRoots`
 - `Enumerator_CopiedIteratorAdvancesIndependently`
@@ -61,6 +62,11 @@ The executable registers these cases:
 - `BulkBuilder_DeepPrefixKeysBranchAtFinalHashLevel`
 - `BulkBuilder_RandomizedBuildMatchesPersistentUpdates`
 - `BulkBuilder_CreateRangeAndIntersectionUseBuilderSemantics`
+
+The CHAMP canonicalization fixture uses explicit spreading hashes on every standard library, an
+exact deep-bridge collapse case, and all four reachable terminal fragments. Validation checks full
+hash-prefix routing; topology comparison matches collision keys through `KeyEqual` without depending
+on collision insertion order.
 
 ## Merkle Core, Wire, And Persistence Coverage
 

@@ -33,6 +33,7 @@ The executable registers these cases:
 - `set_many and clear preserve contracts`
 - `create_range last wins and retains first equivalent key`
 - `equal hash collision bucket preserves every key`
+- `topology comparator rejects different collision keys`
 - `deep shared hash prefixes lookup and remove correctly`
 - `depth seven iterator traversal`
 - `allocation failures unwind node_set and merge`
@@ -49,6 +50,10 @@ The executable registers these cases:
 - `set algebra matches model`
 - `set symmetric_except treats duplicates as one item`
 - `concurrent retained snapshot reads`
+
+The CHAMP structure cases validate every stored hash prefix against its bitmap slot, including all
+four reachable fragments at shift 30, and compare equal-hash collision key sets independently of
+insertion order.
 
 The Merkle executable registers:
 

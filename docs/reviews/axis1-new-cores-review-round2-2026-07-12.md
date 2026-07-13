@@ -8,6 +8,13 @@
   review of the Axis 1 cores across all six languages, hunting for new defects and for regressions the
   remediation introduced; fixes applied this round
 
+> **Current-state note (resolved 2026-07-12): no pending work remains in this report.** The original
+> findings and recommendations below are retained as review provenance. Commits `48bb943` and
+> `0a70600` close every Low/informational follow-up, add the missing deterministic and malformed-state
+> gates, and incorporate two defects found while implementing the review: native RRB cap-level shift
+> overflow and Kotlin CHAMP diagnostic shift masking. See the
+> [resolution addendum](#resolution-addendum--2026-07-12) for item-by-item evidence.
+
 ## Summary
 
 The remediation pass (commits `87b763f`, `a5e63c0`, `3e23cf4`, `bae48c0`, `dfa89d7`, `eaf8b8d`, merged
@@ -92,6 +99,7 @@ fails loudly on a regression.
 
 **Recommended follow-up (C++):** apply the same spreading-hash treatment to the C++ canonicalization test so
 the guard is exercised on the GCC/Clang lanes, not only MSVC.
+**Resolution:** completed by `0a70600`; all three strict compiler lanes pass the non-vacuous fixture.
 
 #### RRB Rust height enforcement diverged from the reference failure model (Low, fixed this round `4ef23a6`)
 
@@ -107,7 +115,7 @@ a dead duplicate root-height check in `validate_structure` (`validate_node` alre
 `?` first). Validated: `cargo test -p tools-data-structures-fingertree --lib rrb` 12/12 (including the
 over-height rejection test), full crate test + clippy warning-clean.
 
-### Findings for follow-up (Low / informational)
+### Historical findings for follow-up (resolved)
 
 - **CHAMP port validators omit the hash-prefix routing check (Low).** The C# reference asserts every payload/
   child sits in the slot its hash prefix selects; none of the five port canonical validators verify routing
@@ -138,6 +146,36 @@ over-height rejection test), full crate test + clippy warning-clean.
   value). Snapshot/writer mutual-abort liveness is inherent lock-free progress, identical to C#.
 - **Patricia unasserted branches (informational).** C# self-union-with-combine call count and Rust's built-in
   partial-shared-subtree reference-return are correct by construction but not directly asserted.
+
+## Resolution addendum — 2026-07-12
+
+Every follow-up above is resolved. The historical severity labels describe the reviewed state, not
+the current tree.
+
+| Finding | Resolution |
+| --- | --- |
+| C++ CHAMP canonicalization coverage | `0a70600` replaces library-dependent integer hashing with the explicit spreading policy used by the reference and adds an exact deep-bridge collapse fixture. MSVC, GCC, and Clang strict suites pass. |
+| CHAMP hash-prefix routing | `0a70600` threads prefix/mask state through the C, C++, Haskell, Kotlin, and Rust diagnostics, rejects invalid terminal slots and over-depth paths, and covers valid shift-30 slots 0–3 in every practical port. Rust directly constructs a misrouted node; Kotlin additionally pins over-depth and bitmap/run-cardinality rejection. |
+| CHAMP collision topology comparison | `0a70600` compares collision key sets without insertion-order dependence through each port's key policy. Kotlin's collision-blind topology string was also replaced by policy-aware comparison after the cross-port audit found the same latent weakness there. |
+| RRB top-band height slack | `48bb943` changes the absolute cap to `floor((countBits - 1) / 5) + 1` (7/13), preserving the documented legal `minimumHeight + 1` seam slack. C and C++ now guard cap-level capacity shifts and force relaxed layout before any oversized native shift; Rust pins cap acceptance and cap+1 rejection. |
+| Rust Brodal comparer identity | `48bb943` adds caller-shared `Arc<dyn OrderComparer<T>>` construction, so independently constructed heaps retaining one comparer object may meld while distinct custom policies remain incompatible. |
+| C++ PSQ range pruning | `48bb943` gates child pushes at inclusive key boundaries and adds exact-key comparison ceilings proving only the search path is visited. |
+| C Patricia right-result sharing | `48bb943` retains the right leaf when an intersection combiner returns a right-equal value, with direct root-sharing coverage. |
+| Kotlin Ctrie reverse snapshot race | `0a70600` adds a deterministic post-root-advance schedule proving a later writer is absent from the frozen view and present in the live trie. |
+| Patricia assertion gaps | `48bb943` pins exact C# self-union callback counts at both widths and Rust `Arc` identity for partially shared built-in union and intersection subtrees. |
+
+The implementation was independently reviewed after editing. That review confirmed the prefix-mask
+arithmetic through shift 30, compact-array/bitmap ordering, policy compatibility, collision-key
+semantics, and C++ exception behavior. It also found the native RRB and Kotlin CHAMP edge cases
+described above before the commits were accepted.
+
+Post-resolution validation is green: C# 976 tests; every Kotlin and Haskell workspace; the complete
+Rust workspace (96 FingerTree unit tests, Brodal/PSQ integration, 30 HAMT unit tests, 15 Merkle wire,
+19 Merkle persistence, 8 Tungsten, and doctests); C HAMT/Patricia/Merkle plus all eight FingerTree
+CTest targets; C++ HAMT/Merkle under MSVC, GCC, and Clang plus all 23 FingerTree CTest targets.
+Rust formatting and warning-denied Clippy also pass. A parallel C# run first encountered an MSBuild
+worker-process exit (`MSB4166`) under five-way compiler contention; the immediate isolated full rerun
+passed, confirming an infrastructure failure rather than a product/test failure.
 
 ## Verified clean (re-derived this round)
 
@@ -180,6 +218,5 @@ The cores the first review found clean were independently re-derived, not assume
   cores; the RRB density/height and CHAMP entries reflect the remediation's documentation.
 - [Cross-language implementation review (2026-07-11)](cross-language-implementation-review-2026-07-11.md) — the
   engine-core review that predates the Axis 1 cores.
-- [Porting and semantic parity](../guides/porting-and-semantic-parity.md) — the workflow the remaining
-  cross-language nits (C++ CHAMP test coverage, C++ PSQ pruning parity, Rust Brodal comparator identity) would
-  be resolved through.
+- [Porting and semantic parity](../guides/porting-and-semantic-parity.md) — the workflow used to
+  resolve the former cross-language nits and validate the resulting parity changes.

@@ -16,6 +16,8 @@ collision buckets, custom hash/equality policy behavior, original-key recovery, 
 `forkIO` concurrent readers over shared immutable snapshots. It also locks in collision-to-leaf
 canonicalization, receiver-policy set relations, one-pass adjustment behavior, strict value mapping,
 independent-history CHAMP equality, typed diff classification, and 100,000-entry bulk construction.
+The CHAMP diagnostics additionally validate full hash-prefix routing through terminal shift-30
+fragments and compare collision key sets independently of insertion order under the map's policy.
 The CHAMP algebra tier additionally checks right-valued map union with left key representatives,
 all four structural map/set operations, cached-cardinality validity, zero-rehash shared ancestry,
 receiver-policy normalization, and collision-heavy deterministic histories.

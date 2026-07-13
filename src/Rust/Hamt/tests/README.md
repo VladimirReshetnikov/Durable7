@@ -19,7 +19,9 @@ Coverage groups:
 - map persistence and version isolation;
 - root-sharing no-op behavior;
 - duplicate-key rejection;
-- equal-hash collision buckets;
+- equal-hash collision buckets and insertion-order-independent collision-key topology comparison;
+- CHAMP hash-prefix routing through the final two-bit level, with deliberately malformed routing,
+  over-depth, and compact-run fixtures proving the diagnostics reject invalid shapes;
 - streaming trie-order iteration and exact-size accounting;
 - last-wins replacement and original-key retention;
 - set algebra, equality, and proper subset/superset relations;
