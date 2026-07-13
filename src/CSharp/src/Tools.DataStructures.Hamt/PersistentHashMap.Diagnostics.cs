@@ -10,7 +10,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
     {
         var nodes = new HashSet<Node>(ReferenceEqualityComparer.Instance);
         var arrays = new HashSet<object>(ReferenceEqualityComparer.Instance);
-        CollectIdentities(_root, nodes, arrays);
+        var ownedArrays = new HashSet<object>(ReferenceEqualityComparer.Instance);
 
         var leafNodes = 0;
         var collisionNodes = 0;
@@ -18,7 +18,6 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         var separateCollisionNodes = 0;
         var separateBranchNodes = 0;
         var ownerTaggedNodes = 0;
-        var ownerTaggedArrays = 0;
         var maximumDepth = 0;
         var ownerTokens = new HashSet<EditToken>(ReferenceEqualityComparer.Instance);
         var retainedBytes = EstimateMapWrapperBytes();
@@ -30,66 +29,95 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             pending.Push((_root, 1));
             while (pending.TryPop(out var item))
             {
+                if (!nodes.Add(item.Node))
+                    continue;
+
                 maximumDepth = Math.Max(maximumDepth, item.Depth);
                 switch (item.Node)
                 {
                     case LeafNode:
                         leafNodes++;
-                        retainedBytes += EstimateLeafNodeBytes();
+                        AddEstimatedBytes(ref retainedBytes, EstimateLeafNodeBytes());
                         break;
                     case CollisionNodeBase collision:
                         collisionNodes++;
                         if (collision is CollisionNode collisionOwnerFields)
                         {
-                            estimatedOwnerMetadataBytes += IntPtr.Size;
+                            AddEstimatedBytes(
+                                ref estimatedOwnerMetadataBytes,
+                                EstimateOwnerFieldCollisionNodeBytes() - EstimateOrdinaryCollisionNodeBytes());
                             if (collisionOwnerFields.Owner is not null)
                             {
                                 ownerTaggedNodes++;
                                 ownerTokens.Add(collisionOwnerFields.Owner);
-                                if (collisionOwnerFields.EntriesOwned)
-                                    ownerTaggedArrays++;
+                                if (collisionOwnerFields.EntriesOwned && collision.Entries.Length != 0)
+                                    AddOwnedArray(ownedArrays, collision.Entries);
                             }
+                            AddEstimatedBytes(ref retainedBytes, EstimateOwnerFieldCollisionNodeBytes());
                         }
                         else if (collision is SeparateTransientCollisionNode separateCollision)
                         {
                             separateCollisionNodes++;
-                            estimatedSeparateNodeMetadataBytes += IntPtr.Size;
+                            AddEstimatedBytes(
+                                ref estimatedSeparateNodeMetadataBytes,
+                                EstimateSeparateCollisionNodeBytes() - EstimateOrdinaryCollisionNodeBytes());
                             ownerTaggedNodes++;
-                            ownerTaggedArrays++;
+                            if (collision.Entries.Length != 0)
+                                AddOwnedArray(ownedArrays, collision.Entries);
                             ownerTokens.Add(separateCollision.Owner);
+                            AddEstimatedBytes(ref retainedBytes, EstimateSeparateCollisionNodeBytes());
                         }
-                        retainedBytes += EstimateCollisionNodeBytes();
-                        retainedBytes += EstimateArrayBytes(collision.Entries.Length, Unsafe.SizeOf<Entry>());
+                        if (arrays.Add(collision.Entries))
+                        {
+                            AddEstimatedBytes(
+                                ref retainedBytes,
+                                EstimateArrayBytes(collision.Entries.Length, Unsafe.SizeOf<Entry>()));
+                        }
                         break;
                     case BranchNode branch:
                         branchNodes++;
                         if (branch is BitmapIndexedNode branchOwnerFields)
                         {
-                            estimatedOwnerMetadataBytes += IntPtr.Size;
+                            AddEstimatedBytes(
+                                ref estimatedOwnerMetadataBytes,
+                                EstimateOwnerFieldBranchNodeBytes() - EstimateOrdinaryBranchNodeBytes());
                             if (branchOwnerFields.Owner is not null)
                             {
                                 ownerTaggedNodes++;
                                 ownerTokens.Add(branchOwnerFields.Owner);
-                                if (branchOwnerFields.DataOwned)
-                                    ownerTaggedArrays++;
-                                if (branchOwnerFields.ChildrenOwned)
-                                    ownerTaggedArrays++;
+                                if (branchOwnerFields.DataOwned && branch.Data.Length != 0)
+                                    AddOwnedArray(ownedArrays, branch.Data);
+                                if (branchOwnerFields.ChildrenOwned && branch.Children.Length != 0)
+                                    AddOwnedArray(ownedArrays, branch.Children);
                             }
+                            AddEstimatedBytes(ref retainedBytes, EstimateOwnerFieldBranchNodeBytes());
                         }
                         else if (branch is SeparateTransientBranchNode separateBranch)
                         {
                             separateBranchNodes++;
-                            estimatedSeparateNodeMetadataBytes += IntPtr.Size;
+                            AddEstimatedBytes(
+                                ref estimatedSeparateNodeMetadataBytes,
+                                EstimateSeparateBranchNodeBytes() - EstimateOrdinaryBranchNodeBytes());
                             ownerTaggedNodes++;
                             if (branch.Data.Length != 0)
-                                ownerTaggedArrays++;
+                                AddOwnedArray(ownedArrays, branch.Data);
                             if (branch.Children.Length != 0)
-                                ownerTaggedArrays++;
+                                AddOwnedArray(ownedArrays, branch.Children);
                             ownerTokens.Add(separateBranch.Owner);
+                            AddEstimatedBytes(ref retainedBytes, EstimateSeparateBranchNodeBytes());
                         }
-                        retainedBytes += EstimateBranchNodeBytes();
-                        retainedBytes += EstimateArrayBytes(branch.Data.Length, Unsafe.SizeOf<Entry>());
-                        retainedBytes += EstimateArrayBytes(branch.Children.Length, IntPtr.Size);
+                        if (arrays.Add(branch.Data))
+                        {
+                            AddEstimatedBytes(
+                                ref retainedBytes,
+                                EstimateArrayBytes(branch.Data.Length, Unsafe.SizeOf<Entry>()));
+                        }
+                        if (arrays.Add(branch.Children))
+                        {
+                            AddEstimatedBytes(
+                                ref retainedBytes,
+                                EstimateArrayBytes(branch.Children.Length, IntPtr.Size));
+                        }
                         for (var index = 0; index < branch.Children.Length; index++)
                             pending.Push((branch.Children[index], item.Depth + 1));
                         break;
@@ -98,7 +126,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         }
 
         var estimatedOwnerTokenBytes = checked(ownerTokens.Count * EstimateEditTokenBytes());
-        retainedBytes = checked(retainedBytes + estimatedOwnerTokenBytes);
+        AddEstimatedBytes(ref retainedBytes, estimatedOwnerTokenBytes);
 
         return new PersistentHashMapStructureDiagnostics(
             EntryCount: _count,
@@ -111,7 +139,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             ArrayCount: arrays.Count,
             MaximumDepth: maximumDepth,
             OwnerTaggedNodeCount: ownerTaggedNodes,
-            OwnerTaggedArrayCount: ownerTaggedArrays,
+            OwnerTaggedArrayCount: ownedArrays.Count,
             OwnerTokenCount: ownerTokens.Count,
             EstimatedOwnerMetadataBytes: estimatedOwnerMetadataBytes,
             EstimatedSeparateNodeMetadataBytes: estimatedSeparateNodeMetadataBytes,
@@ -248,17 +276,41 @@ public sealed partial class PersistentHashMap<TKey, TValue>
     private static long EstimateLeafNodeBytes() =>
         Align(checked((2L * IntPtr.Size) + sizeof(uint) + Unsafe.SizeOf<TKey>() + Unsafe.SizeOf<TValue>()));
 
-    private static long EstimateCollisionNodeBytes() =>
+    private static long EstimateOrdinaryCollisionNodeBytes() =>
+        Align(checked((2L * IntPtr.Size) + sizeof(uint) + IntPtr.Size));
+
+    private static long EstimateOwnerFieldCollisionNodeBytes() =>
         Align(checked((2L * IntPtr.Size) + sizeof(uint) + (2L * IntPtr.Size) + sizeof(byte)));
 
-    private static long EstimateBranchNodeBytes() =>
+    private static long EstimateSeparateCollisionNodeBytes() =>
+        Align(checked((2L * IntPtr.Size) + sizeof(uint) + (2L * IntPtr.Size)));
+
+    private static long EstimateOrdinaryBranchNodeBytes() =>
+        Align(checked((2L * IntPtr.Size) + (3L * sizeof(int)) + (2L * IntPtr.Size)));
+
+    private static long EstimateOwnerFieldBranchNodeBytes() =>
         Align(checked((2L * IntPtr.Size) + (3L * sizeof(int)) + (3L * IntPtr.Size) + sizeof(byte)));
+
+    private static long EstimateSeparateBranchNodeBytes() =>
+        Align(checked((2L * IntPtr.Size) + (3L * sizeof(int)) + (3L * IntPtr.Size)));
 
     private static long EstimateEditTokenBytes() =>
         Align(checked((2L * IntPtr.Size) + sizeof(int)));
 
     private static long EstimateArrayBytes(int length, int elementSize) =>
         Align(checked((3L * IntPtr.Size) + ((long)length * elementSize)));
+
+    private static void AddEstimatedBytes(ref long total, long value) =>
+        total = checked(total + value);
+
+    private static void AddOwnedArray(HashSet<object> ownedArrays, object array)
+    {
+        if (!ownedArrays.Add(array))
+        {
+            throw new InvalidOperationException(
+                "Two transient-editable CHAMP nodes claim the same nonempty array.");
+        }
+    }
 
     private static long Align(long bytes)
     {

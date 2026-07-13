@@ -292,8 +292,16 @@ public sealed class PersistentHashMapOwnerTokenKernelTests
         Assert.Equal(0, ordinaryDiagnostics.OwnerTaggedNodeCount);
         Assert.Equal(0, ordinaryDiagnostics.OwnerTaggedArrayCount);
         Assert.Equal(0, ordinaryDiagnostics.OwnerTokenCount);
+        var collisionMetadataBytes =
+            AlignObject((2L * IntPtr.Size) + sizeof(uint) + (2L * IntPtr.Size) + sizeof(byte))
+            - AlignObject((2L * IntPtr.Size) + sizeof(uint) + IntPtr.Size);
+        var branchMetadataBytes =
+            AlignObject((2L * IntPtr.Size) + (3L * sizeof(int)) + (3L * IntPtr.Size) + sizeof(byte))
+            - AlignObject((2L * IntPtr.Size) + (3L * sizeof(int)) + (2L * IntPtr.Size));
         Assert.Equal(
-            (long)(ordinaryDiagnostics.BranchNodeCount + ordinaryDiagnostics.CollisionNodeCount) * IntPtr.Size,
+            checked(
+                (ordinaryDiagnostics.BranchNodeCount * branchMetadataBytes)
+                + (ordinaryDiagnostics.CollisionNodeCount * collisionMetadataBytes)),
             ordinaryDiagnostics.EstimatedOwnerMetadataBytes);
 
         var kernel = ordinary.CreateOwnerTokenTransientKernel();
@@ -308,6 +316,9 @@ public sealed class PersistentHashMapOwnerTokenKernelTests
         Assert.True(publishedDiagnostics.EstimatedOwnerTokenBytes > 0);
         Assert.True(publishedDiagnostics.EstimatedRetainedBytes > ordinaryDiagnostics.EstimatedRetainedBytes);
     }
+
+    private static long AlignObject(long bytes) =>
+        checked((bytes + IntPtr.Size - 1) & ~(IntPtr.Size - 1));
 
     private static string NewString(string value) => new(value.ToCharArray());
 

@@ -71,6 +71,111 @@ public sealed class PersistentHashMapDiagnosticsTests
         Assert.Equal(1, map.CountNodeVisitsForDiagnostics(7));
     }
 
+    /// <summary>Verifies shared empty arrays are charged once in the retained graph.</summary>
+    [Fact]
+    public void StructureDiagnostics_CountDistinctArrayIdentities()
+    {
+        var map = PersistentHashMap<int, int>.CreateRange(
+            Enumerable.Range(0, 1_024).Select(index => KeyValuePair.Create(index, index)));
+
+        var expected = CountArrayIdentities(map.RootForTesting);
+        var diagnostics = map.GetStructureDiagnostics();
+
+        Assert.True(expected.ReferenceCount > expected.DistinctCount);
+        Assert.True(expected.EmptyReferenceCount > 1);
+        Assert.Equal(expected.DistinctCount, diagnostics.ArrayCount);
+    }
+
+    /// <summary>Verifies both T1 layouts exclude empty arrays from writable-storage counts.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void StructureDiagnostics_ExcludeEmptyArraysFromOwnerTaggedCount(bool separateNodes)
+    {
+        var kernel = separateNodes
+            ? PersistentHashMap<int, int>.Empty.CreateSeparateNodeTransientKernel()
+            : PersistentHashMap<int, int>.Empty.CreateOwnerTokenTransientKernel();
+        kernel.SetItem(0, 0);
+        kernel.SetItem(1, 1);
+
+        var map = kernel.Persist();
+        var diagnostics = map.GetStructureDiagnostics();
+
+        Assert.Equal(1, diagnostics.BranchNodeCount);
+        Assert.Equal(2, diagnostics.ArrayCount);
+        Assert.Equal(1, diagnostics.OwnerTaggedNodeCount);
+        Assert.Equal(1, diagnostics.OwnerTaggedArrayCount);
+        Assert.Equal(1, diagnostics.OwnerTokenCount);
+    }
+
+    /// <summary>Verifies collision arrays are charged once and recognized as writable storage.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void StructureDiagnostics_ChargeOwnedCollisionArrayOnce(bool separateNodes)
+    {
+        var empty = PersistentHashMap<int, int>.Create(new ConstantHashComparer());
+        var kernel = separateNodes
+            ? empty.CreateSeparateNodeTransientKernel()
+            : empty.CreateOwnerTokenTransientKernel();
+        kernel.SetItem(0, 0);
+        kernel.SetItem(1, 1);
+
+        var diagnostics = kernel.Persist().GetStructureDiagnostics();
+
+        Assert.Equal(1, diagnostics.CollisionNodeCount);
+        Assert.Equal(1, diagnostics.ArrayCount);
+        Assert.Equal(1, diagnostics.OwnerTaggedNodeCount);
+        Assert.Equal(1, diagnostics.OwnerTaggedArrayCount);
+        Assert.Equal(1, diagnostics.OwnerTokenCount);
+    }
+
+    private static ArrayIdentityCounts CountArrayIdentities(PersistentHashMap<int, int>.Node? root)
+    {
+        if (root is null)
+            return default;
+
+        var nodes = new HashSet<PersistentHashMap<int, int>.Node>(ReferenceEqualityComparer.Instance);
+        var arrays = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        var pending = new Stack<PersistentHashMap<int, int>.Node>();
+        var referenceCount = 0;
+        var emptyReferenceCount = 0;
+        pending.Push(root);
+        while (pending.TryPop(out var node))
+        {
+            if (!nodes.Add(node))
+                continue;
+
+            switch (node)
+            {
+                case PersistentHashMap<int, int>.CollisionNodeBase collision:
+                    referenceCount++;
+                    if (collision.Entries.Length == 0)
+                        emptyReferenceCount++;
+                    arrays.Add(collision.Entries);
+                    break;
+                case PersistentHashMap<int, int>.BranchNode branch:
+                    referenceCount += 2;
+                    if (branch.Data.Length == 0)
+                        emptyReferenceCount++;
+                    if (branch.Children.Length == 0)
+                        emptyReferenceCount++;
+                    arrays.Add(branch.Data);
+                    arrays.Add(branch.Children);
+                    for (var index = 0; index < branch.Children.Length; index++)
+                        pending.Push(branch.Children[index]);
+                    break;
+            }
+        }
+
+        return new ArrayIdentityCounts(referenceCount, arrays.Count, emptyReferenceCount);
+    }
+
+    private readonly record struct ArrayIdentityCounts(
+        int ReferenceCount,
+        int DistinctCount,
+        int EmptyReferenceCount);
+
     private sealed class ConstantHashComparer : IEqualityComparer<int>
     {
         public bool Equals(int left, int right) => left == right;
