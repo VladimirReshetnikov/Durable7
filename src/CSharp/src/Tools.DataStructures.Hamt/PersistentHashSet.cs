@@ -15,7 +15,7 @@ namespace Tools.DataStructures.Hamt;
 /// </remarks>
 [DebuggerDisplay("Count = {Count}")]
 [DebuggerTypeProxy(typeof(PersistentHashSetDebugView<>))]
-public sealed class PersistentHashSet<T> : IReadOnlySet<T>
+public sealed partial class PersistentHashSet<T> : IReadOnlySet<T>
 {
     /// <summary>
     /// Gets the shared empty set that uses <see cref="EqualityComparer{T}.Default"/>.
@@ -45,6 +45,9 @@ public sealed class PersistentHashSet<T> : IReadOnlySet<T>
     public IEqualityComparer<T> Comparer => _map.Comparer;
 
     internal object? RootForTesting => _map.RootForTesting;
+
+    internal PersistentHashMapCanonicalityDiagnostics ValidateCanonicalityForDiagnostics() =>
+        _map.ValidateCanonicalityForDiagnostics();
 
     /// <summary>
     /// Creates an empty set with the specified item comparer.

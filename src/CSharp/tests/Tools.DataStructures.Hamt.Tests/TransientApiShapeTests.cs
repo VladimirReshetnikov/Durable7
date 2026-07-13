@@ -50,4 +50,48 @@ public sealed class TransientApiShapeTests
         foreach (var name in forbidden)
             Assert.Null(transient.GetMethod(name, BindingFlags.Public | BindingFlags.Instance));
     }
+
+    /// <summary>Locks the set facade and excludes reusable-builder or algebra mutation extras.</summary>
+    [Fact]
+    public void SetTransient_HasOnlyTheApprovedPublicSurface()
+    {
+        var outer = typeof(PersistentHashSet<>);
+        var transient = outer.GetNestedType("Transient", BindingFlags.Public)!;
+
+        Assert.True(transient.IsClass);
+        Assert.True(transient.IsSealed);
+        Assert.Empty(transient.GetConstructors(BindingFlags.Public | BindingFlags.Instance));
+        Assert.Contains(
+            transient.GetInterfaces(),
+            type => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IReadOnlySet<>));
+        Assert.Equal(
+            new[] { "Comparer", "Count" },
+            transient.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                .Select(property => property.Name)
+                .OrderBy(name => name));
+        Assert.Equal(
+            new[]
+            {
+                "Add", "Clear", "Contains", "GetEnumerator", "IsProperSubsetOf", "IsProperSupersetOf",
+                "IsSubsetOf", "IsSupersetOf", "Overlaps", "Persist", "Remove", "SetEquals", "TryGetValue",
+                "get_Comparer", "get_Count",
+            }.OrderBy(name => name),
+            transient.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                .Select(method => method.Name)
+                .OrderBy(name => name));
+
+        var create = outer.GetMethod("CreateTransient", BindingFlags.Public | BindingFlags.Static)!;
+        var adopt = outer.GetMethod("ToTransient", BindingFlags.Public | BindingFlags.Instance)!;
+        Assert.Equal(transient, create.ReturnType.GetGenericTypeDefinition());
+        Assert.Equal(transient, adopt.ReturnType.GetGenericTypeDefinition());
+        Assert.Equal(typeof(bool), transient.GetMethod("Add")!.ReturnType);
+
+        var forbidden = new[]
+        {
+            "ExceptWith", "Freeze", "IntersectWith", "Snapshot", "SymmetricExceptWith", "ToBuilder",
+            "ToImmutable", "TryAdd", "UnionWith",
+        };
+        foreach (var name in forbidden)
+            Assert.Null(transient.GetMethod(name, BindingFlags.Public | BindingFlags.Instance));
+    }
 }

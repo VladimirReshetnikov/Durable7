@@ -1577,6 +1577,9 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 ThrowModified();
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void EnsureActiveForFacade() => EnsureActive();
+
         [DoesNotReturn]
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void ThrowModified() =>
