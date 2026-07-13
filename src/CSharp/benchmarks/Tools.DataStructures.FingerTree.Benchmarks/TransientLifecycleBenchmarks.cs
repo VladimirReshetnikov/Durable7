@@ -6,7 +6,7 @@ namespace Tools.DataStructures.FingerTree.Benchmarks;
 
 /// <summary>
 /// Qualifies the Axis 2 T0 owner-token opportunity and compares its named workloads with the
-/// private owner-free/separate-node T1 kernel. Structural validation runs only in setup/cleanup.
+/// public one-way CHAMP transient selected by T1. Structural validation runs only in setup/cleanup.
 /// </summary>
 [MemoryDiagnoser]
 public class TransientLifecycleBenchmarks
@@ -51,7 +51,7 @@ public class TransientLifecycleBenchmarks
     [GlobalSetup(Target = nameof(BulkBuilderHistory))]
     public void SetupBulkBuilderHistory() => SetupCore();
 
-    /// <summary>Initializes and validates the private separate-editable-node T1 lane.</summary>
+    /// <summary>Initializes and validates the public transient lane and its selected T1 layout.</summary>
     [GlobalSetup(Target = nameof(SeparateNodeKernelHistory))]
     public void SetupSeparateNodeKernelHistory()
     {
@@ -113,11 +113,11 @@ public class TransientLifecycleBenchmarks
     }
 
     /// <summary>
-    /// Applies the same history and publication cadence through distinct transient-editable branch
-    /// and collision classes while ordinary persistent nodes remain physically owner-free.
+    /// Applies the same history and publication cadence through the public one-way transient API.
+    /// The compatibility method name preserves the filters used by the historical T1 evidence.
     /// </summary>
     [Benchmark]
-    [BenchmarkCategory("Axis2T1", "EditPublication", "SeparateNodeKernel")]
+    [BenchmarkCategory("Axis2T2", "EditPublication", "PublicTransient")]
     public Axis2HistoryResult SeparateNodeKernelHistory()
     {
         var map = _base;
@@ -126,7 +126,7 @@ public class TransientLifecycleBenchmarks
         for (var start = 0; start < _edits.Length; start += batchSize)
         {
             var end = Math.Min(start + batchSize, _edits.Length);
-            var kernel = map.CreateSeparateNodeTransientKernel(enableDiagnostics: false);
+            var kernel = map.ToTransient();
             for (var index = start; index < end; index++)
                 Apply(kernel, _edits[index]);
             map = kernel.Persist();
@@ -288,7 +288,7 @@ public class TransientLifecycleBenchmarks
         for (var start = 0; start < _edits.Length; start += batchSize)
         {
             var end = Math.Min(start + batchSize, _edits.Length);
-            var kernel = map.CreateSeparateNodeTransientKernel(enableDiagnostics: false);
+            var kernel = map.ToTransient();
             for (var index = start; index < end; index++)
                 Apply(kernel, _edits[index]);
             map = kernel.Persist();
@@ -300,7 +300,7 @@ public class TransientLifecycleBenchmarks
             || ComputeSemanticChecksum(oracle.Map) != ComputeSemanticChecksum(map))
         {
             throw new InvalidOperationException(
-                "The diagnostics-disabled T1 replay diverged from the persistent T0 lane.");
+                "The public T2 replay diverged from the persistent T0 lane.");
         }
 
         map.ValidateCanonicalityForDiagnostics();
