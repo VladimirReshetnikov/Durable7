@@ -84,12 +84,14 @@ though they were the same execution.
 
 ## Exact single-worker commands
 
-Run from this worktree. These settings disable NuGet parallel restore, MSBuild project parallelism,
-compiler-server sharing, MSBuild node reuse, and .NET build servers. BenchmarkDotNet executes cases
-sequentially; do not launch the commands concurrently.
+Run from the direct-separate worktree. Resolve its root rather than copying a machine-specific path.
+These settings disable NuGet parallel restore, MSBuild project parallelism, compiler-server sharing,
+MSBuild node reuse, and .NET build servers. BenchmarkDotNet executes cases sequentially; do not
+launch the commands concurrently.
 
 ```powershell
-Set-Location C:\Users\vresh\.codex\worktrees\5cd5\DataStructures\src\CSharp
+$repo = (git rev-parse --show-toplevel).Trim()
+Set-Location (Join-Path $repo 'src\CSharp')
 $env:DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER = '1'
 $env:DOTNET_CLI_USE_MSBUILD_SERVER = '0'
 $env:MSBUILDDISABLENODEREUSE = '1'
@@ -97,9 +99,15 @@ $env:BuildInParallel = 'false'
 $env:UseSharedCompilation = 'false'
 $env:RestoreDisableParallel = 'true'
 
-dotnet restore DataStructures.sln --disable-parallel
-dotnet build DataStructures.sln -c Release --no-restore --disable-build-servers -m:1 `
+dotnet restore DataStructures.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
+    -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
+dotnet build DataStructures.sln -c Release --no-restore --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false
+
+# Scrub credentials before any BenchmarkDotNet child process captures its environment.
+Get-ChildItem Env: | Where-Object {
+    $_.Name -match '(?i)(TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL|CONNECTION|COOKIE|AUTH|IGCCSVC)'
+} | Remove-Item -ErrorAction SilentlyContinue
 
 Set-Location benchmarks\Tools.DataStructures.FingerTree.Benchmarks
 $driver = '.\bin\Release\net10.0\Tools.DataStructures.FingerTree.Benchmarks.dll'
@@ -119,37 +127,66 @@ alongside that sanitized CSV.
 The exact deciding filters, locked before any T1 timing, are:
 
 ```powershell
-$persistentFilter = '*TransientLifecycleBenchmarks.PersistentHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512*'
+$persistentEndFilter = '*TransientLifecycleBenchmarks.PersistentHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512*'
 $builderFilter = '*TransientLifecycleBenchmarks.BulkBuilderHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512*'
-$ownerFieldsFilter = '*TransientLifecycleBenchmarks.OwnerTokenKernelHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512*'
-$separateNodesFilter = '*TransientLifecycleBenchmarks.SeparateNodeKernelHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512*'
+$directEndFilter = '*TransientLifecycleBenchmarks.SeparateNodeKernelHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512*'
 
-dotnet $driver --filter $persistentFilter --job short `
+dotnet $driver --filter $persistentEndFilter --job short `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t0\candidate-persistent-short'
 dotnet $driver --filter $builderFilter --job short `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t0\candidate-bulk-builder-short'
-dotnet $driver --filter $ownerFieldsFilter --job short `
-    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t1\candidate-owner-fields-short'
-dotnet $driver --filter $separateNodesFilter --job short `
-    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t1\candidate-separate-nodes-short'
+dotnet $driver --filter $directEndFilter --job short `
+    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t1\candidate-direct-separate-short'
 ```
 
-The two T1 methods share one prepare/commit engine and differ only at node allocation, ownership
-tests, and retained layout: `OwnerTokenKernelHistory` uses owner-capable persistent nodes, while
-`SeparateNodeKernelHistory` uses distinct editable branch/collision classes whose arrays are owned
-as a unit. Their versioned counter rows include `layout=owner-fields` or
-`layout=separate-nodes`, so evidence cannot silently combine the two representations.
+The surviving measurement branch is `codex/axis2-t1-direct-separate-gate`.
+`SeparateNodeKernelHistory` uses direct editable branch/collision classes with no shared abstract
+branch or collision base. Ordinary `CollisionNode` and `BitmapIndexedNode` retain their b590 source
+and physical shape. A two-bit mask records data-array and child-array ownership independently, so
+wrapping one newly copied array does not falsely claim or eagerly copy the other shared array. Its
+versioned counter row remains `layout=separate-nodes` for artifact compatibility.
 
-After the counter report names a candidate workload, collect its unchanged persistent control in
-five independent processes. Preserve the selected benchmark filter verbatim in the curated record;
-`<candidate-filter>` is replaced once, before any T1 result is inspected.
+The owner-field evidence is historical and belongs to
+`codex/axis2-t1-owner-fields-gate`; it is not a second method on this branch. Likewise, the earlier
+abstract-base owner-free formulation belongs to `codex/axis2-t1-separate-gate`. Do not combine
+their artifacts with the direct-separate candidate or rerun their filters from this worktree. This
+document records no direct-separate gate outcome until the locked correctness, ordinary-regression,
+and candidate measurements have completed.
+
+The full T1 command matrix below is also locked before direct-separate timing is inspected. Commands
+intentionally omit `--job`, selecting BenchmarkDotNet's default full job. The deciding persistent
+control runs in five independent processes; every other lane runs in its own process. The Every64
+pair corroborates repeated publication, the EveryEdit pair guards the sparse case, and the ordinary
+lookup/update controls guard the unchanged persistent surface. Preserve every filter verbatim in the
+curated record.
 
 ```powershell
+$persistentEvery64Filter = '*TransientLifecycleBenchmarks.PersistentHistory*History: ClusteredPrefix*PublicationCadence: Every64*Workload: N100000_E512*'
+$directEvery64Filter = '*TransientLifecycleBenchmarks.SeparateNodeKernelHistory*History: ClusteredPrefix*PublicationCadence: Every64*Workload: N100000_E512*'
+$ordinaryUpdateFilter = '*TransientLifecycleBenchmarks.PersistentHistory*History: ClusteredPrefix*PublicationCadence: EveryEdit*Workload: N100000_E1*'
+$directSparseFilter = '*TransientLifecycleBenchmarks.SeparateNodeKernelHistory*History: ClusteredPrefix*PublicationCadence: EveryEdit*Workload: N100000_E1*'
+$ordinaryLookupFilter = '*ChampBenchmarks.ChampLookup*'
+
 1..5 | ForEach-Object {
-    dotnet run -c Release --no-build -- `
-        --filter $persistentFilter `
-        --artifacts ".\BenchmarkDotNet.Artifacts\axis2-t0\noise-persistent-$($_)"
+    dotnet $driver --filter $persistentEndFilter `
+        --artifacts ".\BenchmarkDotNet.Artifacts\axis2-t1\noise-persistent-$($_)"
 }
+
+dotnet $driver --filter $directEndFilter `
+    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t1\candidate-direct-separate-full'
+
+dotnet $driver --filter $persistentEvery64Filter `
+    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t1\corroboration-persistent-every64-full'
+dotnet $driver --filter $directEvery64Filter `
+    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t1\corroboration-direct-every64-full'
+
+dotnet $driver --filter $ordinaryUpdateFilter `
+    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t1\ordinary-update-every-edit-full'
+dotnet $driver --filter $directSparseFilter `
+    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t1\guard-direct-every-edit-full'
+
+dotnet $driver --filter $ordinaryLookupFilter `
+    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t1\ordinary-lookup-full'
 ```
 
 ## Artifact contract
@@ -160,6 +197,12 @@ five independent processes. Preserve the selected benchmark filter verbatim in t
 | Selected persistent short control | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/candidate-persistent-short/` | Complete |
 | Selected `BulkBuilder` short control | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/candidate-bulk-builder-short/` | Complete |
 | Five independent selected-control noise runs | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/noise-persistent-*/` | Required by T1; not part of the opportunity decision |
+| Full direct-separate deciding candidate | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/candidate-direct-separate-full/` | Required by T1; pending |
+| Full Every64 persistent corroboration | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/corroboration-persistent-every64-full/` | Required by T1; pending |
+| Full Every64 direct-separate corroboration | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/corroboration-direct-every64-full/` | Required by T1; pending |
+| Full sparse ordinary update guard | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/ordinary-update-every-edit-full/` | Required by T1; pending |
+| Full sparse direct-separate guard | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/guard-direct-every-edit-full/` | Required by T1; pending |
+| Full ordinary lookup regression control | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/ordinary-lookup-full/` | Required by T1; pending |
 | Curated matrix and counter table | This document, section `Curated evidence` | Complete |
 | T0 advance/defer result | This document | **Advance to T1** |
 

@@ -17,15 +17,14 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
   executable semantic baseline for comparer identity, stored representatives, collisions, nullable keys/items,
   stable enumeration, no-op identity, retained versions, and callback-exception atomicity.
 - `PersistentHashMapDiagnosticsTests.cs` pins the benchmark-only root, node/array sharing, path-copy,
-  ownership, retained-size, lookup-visit, and canonical bulk-builder diagnostic seam.
-- `PersistentHashMapOwnerTokenKernelTests.cs` validates the private Axis 2 T1 kernel: O(1)
-  adoption/sealing, copy-on-first-write ownership, base and published-version isolation, recursive
-  CHAMP canonicality/counts, representatives/collisions, consumed sessions, and callback,
-  allocation-boundary, in-place-commit, and publication failure atomicity.
-- `PersistentHashMapSeparateNodeKernelTests.cs` repeats those T1 contracts against the second
-  ownership layout, whose transient-editable branch/collision classes own their arrays separately
-  from ordinary persistent nodes; it also exercises mixed published hierarchies through ordinary
-  lookup, enumeration, persistent update, semantic equality, and recursive validation.
+  ownership, retained-size, lookup-visit, canonical bulk-builder diagnostic seam, exact ordinary
+  field layout, and b590 source fingerprints for the ordinary nodes and monomorphic lookup loop.
+- `PersistentHashMapSeparateNodeKernelTests.cs` validates the private Axis 2 T1 owner-free gate
+  build: O(1) adoption/sealing, copy-on-first-write ownership in separate transient-editable
+  branch/collision classes, base and published-version isolation, recursive CHAMP canonicality/counts,
+  representatives/collisions, consumed sessions, callback/allocation/publication failure atomicity,
+  and mixed published hierarchies through alternating exact-type lookup, enumeration, persistent
+  update/remove, semantic equality, bidirectional structural diff, and all four map-algebra paths.
 - `PersistentHashMapEnumeratorTests.cs` covers allocation-free struct enumerators, copied enumerator independence,
   and key/value/pair enumeration.
 - `PersistentHashSetEnumeratorTests.cs` covers the set wrapper's default, before-first, active, exhausted,

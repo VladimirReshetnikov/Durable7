@@ -6,7 +6,7 @@ namespace Tools.DataStructures.FingerTree.Benchmarks;
 
 /// <summary>
 /// Qualifies the Axis 2 T0 owner-token opportunity and compares its named workloads with the
-/// private production-layout T1 kernel. Structural validation runs only in setup/cleanup.
+/// private owner-free/separate-node T1 kernel. Structural validation runs only in setup/cleanup.
 /// </summary>
 [MemoryDiagnoser]
 public class TransientLifecycleBenchmarks
@@ -16,7 +16,6 @@ public class TransientLifecycleBenchmarks
     private Axis2HashEdit[] _edits = null!;
     private int _collisionBucketSize;
     private Axis2TransientOpportunityCounters _opportunityCounters;
-    private Axis2OwnerTokenKernelEvidence _ownerTokenEvidence;
     private Axis2OwnerTokenKernelEvidence _separateNodeEvidence;
 
     [ParamsSource(nameof(WorkloadValues))]
@@ -52,20 +51,12 @@ public class TransientLifecycleBenchmarks
     [GlobalSetup(Target = nameof(BulkBuilderHistory))]
     public void SetupBulkBuilderHistory() => SetupCore();
 
-    /// <summary>Initializes and validates the private production-layout T1 owner-token lane.</summary>
-    [GlobalSetup(Target = nameof(OwnerTokenKernelHistory))]
-    public void SetupOwnerTokenKernelHistory()
-    {
-        SetupCore();
-        _ownerTokenEvidence = CollectKernelEvidence(separateNodes: false);
-    }
-
     /// <summary>Initializes and validates the private separate-editable-node T1 lane.</summary>
     [GlobalSetup(Target = nameof(SeparateNodeKernelHistory))]
     public void SetupSeparateNodeKernelHistory()
     {
         SetupCore();
-        _separateNodeEvidence = CollectKernelEvidence(separateNodes: true);
+        _separateNodeEvidence = CollectKernelEvidence();
     }
 
     /// <summary>Writes one machine-readable counter row to the raw BenchmarkDotNet log.</summary>
@@ -73,10 +64,10 @@ public class TransientLifecycleBenchmarks
     public void EmitPersistentOpportunityCounters() =>
         Console.WriteLine(_opportunityCounters.ToCsv());
 
-    /// <summary>Writes T1 adoption, ownership, copying, publication, and retained-size counters.</summary>
-    [GlobalCleanup(Target = nameof(OwnerTokenKernelHistory))]
-    public void EmitOwnerTokenKernelCounters() =>
-        Console.WriteLine(_ownerTokenEvidence.ToCsv());
+    /// <summary>Writes the separate-node layout's directly comparable T1 evidence row.</summary>
+    [GlobalCleanup(Target = nameof(SeparateNodeKernelHistory))]
+    public void EmitSeparateNodeKernelCounters() =>
+        Console.WriteLine(_separateNodeEvidence.ToCsv());
 
     /// <summary>Writes the separate-node layout's directly comparable T1 evidence row.</summary>
     [GlobalCleanup(Target = nameof(SeparateNodeKernelHistory))]
@@ -127,12 +118,12 @@ public class TransientLifecycleBenchmarks
     }
 
     /// <summary>
-    /// Applies the identical T0 history through the private owner-token kernel and publishes at the
-    /// same cadence. Each publication is a real O(1) seal followed by O(1) adoption of its result.
+    /// Applies the same history and publication cadence through distinct transient-editable branch
+    /// and collision classes while ordinary persistent nodes remain physically owner-free.
     /// </summary>
     [Benchmark]
-    [BenchmarkCategory("Axis2T1", "EditPublication", "OwnerTokenKernel")]
-    public Axis2HistoryResult OwnerTokenKernelHistory()
+    [BenchmarkCategory("Axis2T1", "EditPublication", "SeparateNodeKernel")]
+    public Axis2HistoryResult SeparateNodeKernelHistory()
     {
         var map = _base;
         var checksum = (long)Axis2BenchmarkPolicy.Seed;
@@ -140,7 +131,7 @@ public class TransientLifecycleBenchmarks
         for (var start = 0; start < _edits.Length; start += batchSize)
         {
             var end = Math.Min(start + batchSize, _edits.Length);
-            var kernel = map.CreateOwnerTokenTransientKernel();
+            var kernel = map.CreateSeparateNodeTransientKernel();
             for (var index = start; index < end; index++)
                 Apply(kernel, _edits[index]);
             map = kernel.Persist();
@@ -258,7 +249,7 @@ public class TransientLifecycleBenchmarks
             countingComparer.EqualityCallbackCount);
     }
 
-    private Axis2OwnerTokenKernelEvidence CollectKernelEvidence(bool separateNodes)
+    private Axis2OwnerTokenKernelEvidence CollectKernelEvidence()
     {
         var map = _base;
         var checksum = (long)Axis2BenchmarkPolicy.Seed;
@@ -267,9 +258,7 @@ public class TransientLifecycleBenchmarks
         for (var start = 0; start < _edits.Length; start += batchSize)
         {
             var end = Math.Min(start + batchSize, _edits.Length);
-            var kernel = separateNodes
-                ? map.CreateSeparateNodeTransientKernel()
-                : map.CreateOwnerTokenTransientKernel();
+            var kernel = map.CreateSeparateNodeTransientKernel();
             for (var index = start; index < end; index++)
                 Apply(kernel, _edits[index]);
             map = kernel.Persist();
@@ -288,8 +277,15 @@ public class TransientLifecycleBenchmarks
         var canonicality = map.ValidateCanonicalityForDiagnostics();
         var baseStructure = _base.GetStructureDiagnostics();
         var resultStructure = map.GetStructureDiagnostics();
+        if (baseStructure.EstimatedOwnerMetadataBytes != 0
+            || resultStructure.EstimatedOwnerMetadataBytes != 0)
+        {
+            throw new InvalidOperationException(
+                "The owner-free separate-node gate unexpectedly retained ordinary owner metadata.");
+        }
+
         return new Axis2OwnerTokenKernelEvidence(
-            separateNodes ? "separate-nodes" : "owner-fields",
+            "separate-nodes",
             Workload.BaseCount,
             Workload.EditCount,
             History,
@@ -298,15 +294,14 @@ public class TransientLifecycleBenchmarks
             counters,
             separateNodes ? 0 : baseStructure.EstimatedOwnerMetadataBytes,
             baseStructure.EstimatedRetainedBytes,
-            separateNodes
-                ? checked(baseStructure.EstimatedRetainedBytes - baseStructure.EstimatedOwnerMetadataBytes)
-                : baseStructure.EstimatedRetainedBytes,
+            baseStructure.EstimatedRetainedBytes,
             resultStructure.OwnerTaggedNodeCount,
             resultStructure.OwnerTaggedArrayCount,
             resultStructure.OwnerTokenCount,
             resultStructure.SeparateCollisionNodeCount,
             resultStructure.SeparateBranchNodeCount,
             resultStructure.EstimatedSeparateNodeMetadataBytes,
+            resultStructure.EstimatedRetainedBytes,
             resultStructure.EstimatedRetainedBytes,
             separateNodes
                 ? checked(resultStructure.EstimatedRetainedBytes - resultStructure.EstimatedOwnerMetadataBytes)

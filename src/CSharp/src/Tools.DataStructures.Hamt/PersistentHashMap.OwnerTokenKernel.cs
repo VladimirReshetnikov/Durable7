@@ -63,25 +63,12 @@ public sealed partial class PersistentHashMap<TKey, TValue>
     }
 
     /// <summary>
-    /// Creates the private T1 owner-token kernel over this persistent version in O(1). This is an
-    /// evidence seam, not the proposed public transient API.
-    /// </summary>
-    internal OwnerTokenTransientKernel CreateOwnerTokenTransientKernel() =>
-        new(this, TransientOwnershipLayout.OwnerFields);
-
-    /// <summary>
     /// Creates the private T1 kernel whose editable branch and collision nodes are separate from
-    /// the ordinary persistent-node classes. The common engine keeps both benchmark lanes
-    /// semantically and operationally identical while allocation selects a different hierarchy.
+    /// the owner-free ordinary persistent-node classes. This is an evidence seam, not the proposed
+    /// public transient API.
     /// </summary>
     internal OwnerTokenTransientKernel CreateSeparateNodeTransientKernel() =>
-        new(this, TransientOwnershipLayout.SeparateNodes);
-
-    internal enum TransientOwnershipLayout
-    {
-        OwnerFields,
-        SeparateNodes,
-    }
+        new(this);
 
     /// <summary>
     /// Private production-layout experiment for one-way CHAMP mutation. The session is deliberately
@@ -251,10 +238,19 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 {
                     result = _source!;
                 }
+                else if (_count == 0
+                    && ReferenceEquals(_comparer, EqualityComparer<TKey>.Default))
+                {
+                    // The default-policy empty is already allocated. Publication still reaches
+                    // PublicationPrepared below, but there is no allocation boundary to inject.
+                    result = Empty;
+                }
                 else
                 {
                     Hit(OwnerTokenKernelFailurePoint.BeforePublicationAllocation);
-                    result = new PersistentHashMap<TKey, TValue>(_root, _count, _comparer);
+                    result = _count == 0
+                        ? EmptyFor(_comparer)
+                        : new PersistentHashMap<TKey, TValue>(_root, _count, _comparer);
                     _counters.PersistentWrapperAllocationCount++;
                 }
 
@@ -327,60 +323,97 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             var shift = 0;
             while (node is not null)
             {
-                switch (node)
+                if (node is LeafNode leaf)
                 {
-                    case LeafNode leaf:
-                        if (leaf.Hash == hash && comparer.Equals(leaf.Key, key))
+                    if (leaf.Hash == hash && comparer.Equals(leaf.Key, key))
+                    {
+                        actualKey = leaf.Key;
+                        value = leaf.Value;
+                        return true;
+                    }
+
+                    actualKey = key;
+                    value = default;
+                    return false;
+                }
+
+                Entry[]? collisionEntries = null;
+                uint collisionHash = 0;
+                if (node is CollisionNode ordinaryCollision)
+                {
+                    collisionHash = ordinaryCollision.Hash;
+                    collisionEntries = ordinaryCollision.Entries;
+                }
+                else if (node is SeparateTransientCollisionNode separateCollision)
+                {
+                    collisionHash = separateCollision.Hash;
+                    collisionEntries = separateCollision.Entries;
+                }
+
+                if (collisionEntries is not null)
+                {
+                    if (collisionHash == hash)
+                    {
+                        foreach (var entry in collisionEntries)
                         {
-                            actualKey = leaf.Key;
-                            value = leaf.Value;
+                            if (!comparer.Equals(entry.Key, key))
+                                continue;
+                            actualKey = entry.Key;
+                            value = entry.Value;
                             return true;
                         }
-                        actualKey = key;
-                        value = default;
-                        return false;
+                    }
 
-                    case CollisionNodeBase collision:
-                        if (collision.Hash == hash)
-                        {
-                            foreach (var entry in collision.Entries)
-                            {
-                                if (!comparer.Equals(entry.Key, key))
-                                    continue;
-                                actualKey = entry.Key;
-                                value = entry.Value;
-                                return true;
-                            }
-                        }
-                        actualKey = key;
-                        value = default;
-                        return false;
-
-                    case BranchNode branch:
-                        var bit = Bit(Index(hash, shift));
-                        if ((branch.DataMap & bit) != 0)
-                        {
-                            var entry = branch.Data[Slot(branch.DataMap, bit)];
-                            if (entry.Hash == hash && comparer.Equals(entry.Key, key))
-                            {
-                                actualKey = entry.Key;
-                                value = entry.Value;
-                                return true;
-                            }
-                            actualKey = key;
-                            value = default;
-                            return false;
-                        }
-                        if ((branch.NodeMap & bit) == 0)
-                        {
-                            actualKey = key;
-                            value = default;
-                            return false;
-                        }
-                        node = branch.Children[Slot(branch.NodeMap, bit)];
-                        shift += BitsPerLevel;
-                        break;
+                    actualKey = key;
+                    value = default;
+                    return false;
                 }
+
+                uint dataMap;
+                Entry[] data;
+                uint nodeMap;
+                Node[] children;
+                if (node is BitmapIndexedNode ordinaryBranch)
+                {
+                    dataMap = ordinaryBranch.DataMap;
+                    data = ordinaryBranch.Data;
+                    nodeMap = ordinaryBranch.NodeMap;
+                    children = ordinaryBranch.Children;
+                }
+                else
+                {
+                    var separateBranch = (SeparateTransientBranchNode)node;
+                    dataMap = separateBranch.DataMap;
+                    data = separateBranch.Data;
+                    nodeMap = separateBranch.NodeMap;
+                    children = separateBranch.Children;
+                }
+
+                var bit = Bit(Index(hash, shift));
+                if ((dataMap & bit) != 0)
+                {
+                    var entry = data[Slot(dataMap, bit)];
+                    if (entry.Hash == hash && comparer.Equals(entry.Key, key))
+                    {
+                        actualKey = entry.Key;
+                        value = entry.Value;
+                        return true;
+                    }
+
+                    actualKey = key;
+                    value = default;
+                    return false;
+                }
+
+                if ((nodeMap & bit) == 0)
+                {
+                    actualKey = key;
+                    value = default;
+                    return false;
+                }
+
+                node = children[Slot(nodeMap, bit)];
+                shift += BitsPerLevel;
             }
 
             actualKey = key;
@@ -404,7 +437,17 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                     foreach (var entry in collision.Entries)
                         destination[index++] = KeyValuePair.Create(entry.Key, entry.Value);
                     return;
-                case BranchNode branch:
+                case SeparateTransientCollisionNode collision:
+                    foreach (var entry in collision.Entries)
+                        destination[index++] = KeyValuePair.Create(entry.Key, entry.Value);
+                    return;
+                case BitmapIndexedNode branch:
+                    foreach (var entry in branch.Data)
+                        destination[index++] = KeyValuePair.Create(entry.Key, entry.Value);
+                    foreach (var child in branch.Children)
+                        CopyEntries(child, destination, ref index);
+                    return;
+                case SeparateTransientBranchNode branch:
                     foreach (var entry in branch.Data)
                         destination[index++] = KeyValuePair.Create(entry.Key, entry.Value);
                     foreach (var child in branch.Children)
@@ -422,8 +465,14 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             bool overwrite) => node switch
         {
             LeafNode leaf => PrepareLeafSet(leaf, key, value, hash, shift, overwrite),
-            CollisionNodeBase collision => PrepareCollisionSet(collision, key, value, hash, shift, overwrite),
-            BranchNode branch => PrepareBranchSet(branch, key, value, hash, shift, overwrite),
+            CollisionNode collision =>
+                PrepareCollisionSet(collision, collision.Entries, key, value, hash, shift, overwrite),
+            SeparateTransientCollisionNode collision =>
+                PrepareCollisionSet(collision, collision.Entries, key, value, hash, shift, overwrite),
+            BitmapIndexedNode branch =>
+                PrepareBranchSet(BranchView.Create(branch), key, value, hash, shift, overwrite),
+            SeparateTransientBranchNode branch =>
+                PrepareBranchSet(BranchView.Create(branch), key, value, hash, shift, overwrite),
             _ => throw new InvalidOperationException("Unknown CHAMP node kind."),
         };
 
@@ -455,7 +504,8 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         }
 
         private SetPreparation PrepareCollisionSet(
-            CollisionNodeBase collision,
+            HashNode collision,
+            Entry[] collisionEntries,
             TKey key,
             TValue value,
             uint hash,
@@ -472,9 +522,9 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                     CountDelta: 1);
             }
 
-            for (var index = 0; index < collision.Entries.Length; index++)
+            for (var index = 0; index < collisionEntries.Length; index++)
             {
-                var stored = collision.Entries[index];
+                var stored = collisionEntries[index];
                 if (!_comparer.Equals(stored.Key, key))
                     continue;
                 if (!overwrite || ValuesEqual(stored.Value, value))
@@ -485,15 +535,15 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 {
                     var result = FinishCollision(
                         collision,
-                        collision.Entries,
+                        collisionEntries,
                         writeEntry: true,
                         entryIndex: index,
                         entry: replacement);
                     return new SetPreparation(result, Changed: true, Added: false, CountDelta: 0);
                 }
 
-                var entries = AllocateCollisionArray(collision.Entries.Length, copiesExisting: true);
-                Array.Copy(collision.Entries, entries, entries.Length);
+                var entries = AllocateCollisionArray(collisionEntries.Length, copiesExisting: true);
+                Array.Copy(collisionEntries, entries, entries.Length);
                 entries[index] = replacement;
                 return new SetPreparation(
                     FinishCollision(collision, entries),
@@ -502,8 +552,8 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                     CountDelta: 0);
             }
 
-            var appended = AllocateCollisionArray(collision.Entries.Length + 1, copiesExisting: true);
-            Array.Copy(collision.Entries, appended, collision.Entries.Length);
+            var appended = AllocateCollisionArray(collisionEntries.Length + 1, copiesExisting: true);
+            Array.Copy(collisionEntries, appended, collisionEntries.Length);
             appended[^1] = new Entry(hash, key, value);
             return new SetPreparation(
                 FinishCollision(collision, appended),
@@ -513,7 +563,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         }
 
         private SetPreparation PrepareBranchSet(
-            BranchNode branch,
+            BranchView branch,
             TKey key,
             TValue value,
             uint hash,
@@ -528,7 +578,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 if (stored.Hash == hash && _comparer.Equals(stored.Key, key))
                 {
                     if (!overwrite || ValuesEqual(stored.Value, value))
-                        return new SetPreparation(branch, Changed: false, Added: false, CountDelta: 0);
+                        return new SetPreparation(branch.Source, Changed: false, Added: false, CountDelta: 0);
 
                     var replacement = new Entry(hash, stored.Key, value);
                     if (CanWriteData(branch))
@@ -584,13 +634,13 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 var oldChild = branch.Children[slot];
                 var prepared = PrepareSet(oldChild, key, value, hash, shift + BitsPerLevel, overwrite);
                 if (!prepared.Changed)
-                    return new SetPreparation(branch, Changed: false, Added: prepared.Added, CountDelta: 0);
+                    return new SetPreparation(branch.Source, Changed: false, Added: prepared.Added, CountDelta: 0);
 
                 var count = checked(branch.Count + prepared.CountDelta);
                 if (ReferenceEquals(prepared.Node, oldChild))
                 {
                     if (prepared.CountDelta == 0)
-                        return new SetPreparation(branch, Changed: true, Added: prepared.Added, CountDelta: 0);
+                        return new SetPreparation(branch.Source, Changed: true, Added: prepared.Added, CountDelta: 0);
                     if (!IsOwned(branch))
                         throw new InvalidOperationException("An active child cannot occur beneath an unowned branch.");
                     var countState = StateOf(branch, count);
@@ -651,8 +701,12 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         private RemovePreparation PrepareRemove(Node node, TKey key, uint hash, int shift) => node switch
         {
             LeafNode leaf => PrepareLeafRemove(leaf, key, hash),
-            CollisionNodeBase collision => PrepareCollisionRemove(collision, key, hash),
-            BranchNode branch => PrepareBranchRemove(branch, key, hash, shift),
+            CollisionNode collision => PrepareCollisionRemove(collision, collision.Entries, key, hash),
+            SeparateTransientCollisionNode collision =>
+                PrepareCollisionRemove(collision, collision.Entries, key, hash),
+            BitmapIndexedNode branch => PrepareBranchRemove(BranchView.Create(branch), key, hash, shift),
+            SeparateTransientBranchNode branch =>
+                PrepareBranchRemove(BranchView.Create(branch), key, hash, shift),
             _ => throw new InvalidOperationException("Unknown CHAMP node kind."),
         };
 
@@ -662,34 +716,38 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             return new RemovePreparation(removed ? null : leaf, removed);
         }
 
-        private RemovePreparation PrepareCollisionRemove(CollisionNodeBase collision, TKey key, uint hash)
+        private RemovePreparation PrepareCollisionRemove(
+            HashNode collision,
+            Entry[] collisionEntries,
+            TKey key,
+            uint hash)
         {
             if (collision.Hash != hash)
                 return new RemovePreparation(collision, Removed: false);
 
-            for (var index = 0; index < collision.Entries.Length; index++)
+            for (var index = 0; index < collisionEntries.Length; index++)
             {
-                if (!_comparer.Equals(collision.Entries[index].Key, key))
+                if (!_comparer.Equals(collisionEntries[index].Key, key))
                     continue;
-                if (collision.Entries.Length == 2)
+                if (collisionEntries.Length == 2)
                 {
-                    var remaining = collision.Entries[1 - index];
+                    var remaining = collisionEntries[1 - index];
                     return new RemovePreparation(
                         AllocateLeaf(remaining.Hash, remaining.Key, remaining.Value),
                         Removed: true);
                 }
 
-                var entries = AllocateCollisionArray(collision.Entries.Length - 1, copiesExisting: true);
+                var entries = AllocateCollisionArray(collisionEntries.Length - 1, copiesExisting: true);
                 if (index > 0)
-                    Array.Copy(collision.Entries, 0, entries, 0, index);
-                if (index < collision.Entries.Length - 1)
+                    Array.Copy(collisionEntries, 0, entries, 0, index);
+                if (index < collisionEntries.Length - 1)
                 {
                     Array.Copy(
-                        collision.Entries,
+                        collisionEntries,
                         index + 1,
                         entries,
                         index,
-                        collision.Entries.Length - index - 1);
+                        collisionEntries.Length - index - 1);
                 }
                 return new RemovePreparation(FinishCollision(collision, entries), Removed: true);
             }
@@ -698,7 +756,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         }
 
         private RemovePreparation PrepareBranchRemove(
-            BranchNode branch,
+            BranchView branch,
             TKey key,
             uint hash,
             int shift)
@@ -709,7 +767,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 var slot = Slot(branch.DataMap, bit);
                 var entry = branch.Data[slot];
                 if (entry.Hash != hash || !_comparer.Equals(entry.Key, key))
-                    return new RemovePreparation(branch, Removed: false);
+                    return new RemovePreparation(branch.Source, Removed: false);
 
                 var data = RemoveData(branch.Data, slot);
                 var state = StateOf(branch, checked(branch.Count - 1)) with
@@ -722,13 +780,13 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             }
 
             if ((branch.NodeMap & bit) == 0)
-                return new RemovePreparation(branch, Removed: false);
+                return new RemovePreparation(branch.Source, Removed: false);
 
             var childSlot = Slot(branch.NodeMap, bit);
             var oldChild = branch.Children[childSlot];
             var prepared = PrepareRemove(oldChild, key, hash, shift + BitsPerLevel);
             if (!prepared.Removed)
-                return new RemovePreparation(branch, Removed: false);
+                return new RemovePreparation(branch.Source, Removed: false);
 
             var count = checked(branch.Count - 1);
             if (prepared.Node is null)
@@ -766,6 +824,16 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 return new RemovePreparation(FinishBranch(branch, state), Removed: true);
             }
 
+            // Replacing the sole branch child with a hash node contracts this parent outright.
+            // Do not enqueue an in-place parent write: publication must expose the promoted hash
+            // node, while any already-prepared descendant commits remain valid within that node.
+            if (branch.Data.Length == 0
+                && branch.Children.Length == 1
+                && prepared.Node is HashNode)
+            {
+                return new RemovePreparation(prepared.Node, Removed: true);
+            }
+
             if (CanWriteChildren(branch))
             {
                 var state = StateOf(branch, count);
@@ -786,7 +854,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 Children = replacedChildren,
                 ChildrenOwned = true,
             };
-            return new RemovePreparation(FinishBranch(branch, replacedState), Removed: true);
+            return new RemovePreparation(RebuildBranch(branch, replacedState), Removed: true);
         }
 
         private LeafNode AllocateLeaf(uint hash, TKey key, TValue value)
@@ -797,22 +865,24 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             return result;
         }
 
-        private CollisionNodeBase AllocateCollision(
+        private HashNode AllocateCollision(
             uint hash,
             Entry[] entries,
             bool copiedNode)
         {
             Hit(OwnerTokenKernelFailurePoint.BeforeNodeAllocation);
-            CollisionNodeBase result = _layout == TransientOwnershipLayout.OwnerFields
-                ? new CollisionNode(hash, entries, _token, entriesOwned: true)
-                : new SeparateTransientCollisionNode(hash, entries, _token);
+            HashNode result = new SeparateTransientCollisionNode(
+                hash,
+                entries,
+                _token,
+                entriesOwned: true);
             _counters.AllocatedNodeCount++;
             if (copiedNode)
                 _counters.CopiedNodeCount++;
             return result;
         }
 
-        private BranchNode AllocateBranch(
+        private Node AllocateBranch(
             BranchState state,
             bool copiedNode)
         {
@@ -833,23 +903,15 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             }
 
             Hit(OwnerTokenKernelFailurePoint.BeforeNodeAllocation);
-            BranchNode result = _layout == TransientOwnershipLayout.OwnerFields
-                ? new BitmapIndexedNode(
-                    state.DataMap,
-                    state.Data,
-                    state.NodeMap,
-                    state.Children,
-                    state.Count,
-                    _token,
-                    state.DataOwned,
-                    state.ChildrenOwned)
-                : new SeparateTransientBranchNode(
-                    state.DataMap,
-                    state.Data,
-                    state.NodeMap,
-                    state.Children,
-                    state.Count,
-                    _token);
+            Node result = new SeparateTransientBranchNode(
+                state.DataMap,
+                state.Data,
+                state.DataOwned,
+                state.NodeMap,
+                state.Children,
+                state.ChildrenOwned,
+                state.Count,
+                _token);
             _counters.AllocatedNodeCount++;
             if (copiedNode)
                 _counters.CopiedNodeCount++;
@@ -946,24 +1008,24 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             return result;
         }
 
-        private CollisionNodeBase FinishCollision(
-            CollisionNodeBase source,
+        private HashNode FinishCollision(
+            HashNode source,
             Entry[] entries,
             bool writeEntry = false,
             int entryIndex = 0,
             Entry entry = default)
         {
-            if (IsOwned(source))
+            if (source is SeparateTransientCollisionNode owned && IsOwned(owned))
             {
-                AddCommit(CommitStep.ForCollision(source, entries, writeEntry, entryIndex, entry));
-                return source;
+                AddCommit(CommitStep.ForCollision(owned, entries, writeEntry, entryIndex, entry));
+                return owned;
             }
 
             return AllocateCollision(source.Hash, entries, copiedNode: true);
         }
 
-        private BranchNode FinishBranch(
-            BranchNode source,
+        private Node FinishBranch(
+            BranchView source,
             BranchState state,
             bool writeData = false,
             int dataIndex = 0,
@@ -972,10 +1034,10 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             int childIndex = 0,
             Node? child = null)
         {
-            if (IsOwned(source))
+            if (source.Source is SeparateTransientBranchNode owned && IsOwned(source))
             {
                 AddCommit(CommitStep.ForBranch(
-                    source,
+                    owned,
                     state,
                     writeData,
                     dataIndex,
@@ -983,13 +1045,13 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                     writeChild,
                     childIndex,
                     child));
-                return source;
+                return owned;
             }
 
             return AllocateBranch(state, copiedNode: true);
         }
 
-        private Node? RebuildBranch(BranchNode source, BranchState state)
+        private Node? RebuildBranch(BranchView source, BranchState state)
         {
             if (state.Data.Length == 0 && state.Children.Length == 0)
                 return null;
@@ -1058,61 +1120,38 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 copiedNode: false);
         }
 
-        private bool IsOwned(CollisionNodeBase collision) => collision switch
-        {
-            CollisionNode ownerFields => ReferenceEquals(ownerFields.Owner, _token),
-            SeparateTransientCollisionNode separate => ReferenceEquals(separate.Owner, _token),
-            _ => false,
-        };
+        private bool IsOwned(HashNode collision) =>
+            collision is SeparateTransientCollisionNode separate
+            && ReferenceEquals(separate.Owner, _token);
 
-        private bool CanWriteEntries(CollisionNodeBase collision) => collision switch
-        {
-            CollisionNode ownerFields => ownerFields.CanWriteEntries(_token),
-            SeparateTransientCollisionNode separate => separate.CanWriteEntries(_token),
-            _ => false,
-        };
+        private bool CanWriteEntries(HashNode collision) =>
+            collision is SeparateTransientCollisionNode separate
+            && separate.CanWriteEntries(_token);
 
-        private bool IsOwned(BranchNode branch) => branch switch
-        {
-            BitmapIndexedNode ownerFields => ReferenceEquals(ownerFields.Owner, _token),
-            SeparateTransientBranchNode separate => ReferenceEquals(separate.Owner, _token),
-            _ => false,
-        };
+        private bool IsOwned(BranchView branch) =>
+            branch.Source is SeparateTransientBranchNode separate
+            && ReferenceEquals(separate.Owner, _token);
 
-        private bool CanWriteData(BranchNode branch) => branch switch
-        {
-            BitmapIndexedNode ownerFields => ownerFields.CanWriteData(_token),
-            SeparateTransientBranchNode separate => separate.CanWriteData(_token),
-            _ => false,
-        };
+        private bool CanWriteData(BranchView branch) =>
+            branch.Source is SeparateTransientBranchNode separate
+            && separate.CanWriteData(_token);
 
-        private bool CanWriteChildren(BranchNode branch) => branch switch
-        {
-            BitmapIndexedNode ownerFields => ownerFields.CanWriteChildren(_token),
-            SeparateTransientBranchNode separate => separate.CanWriteChildren(_token),
-            _ => false,
-        };
+        private bool CanWriteChildren(BranchView branch) =>
+            branch.Source is SeparateTransientBranchNode separate
+            && separate.CanWriteChildren(_token);
 
-        private BranchState StateOf(BranchNode source, int count) =>
+        private BranchState StateOf(BranchView source, int count) =>
             new(
                 source.DataMap,
                 source.Data,
-                source switch
-                {
-                    BitmapIndexedNode ownerFields =>
-                        ReferenceEquals(ownerFields.Owner, _token) && ownerFields.DataOwned,
-                    SeparateTransientBranchNode separate => ReferenceEquals(separate.Owner, _token),
-                    _ => false,
-                },
+                source.Source is SeparateTransientBranchNode separateData
+                    && ReferenceEquals(separateData.Owner, _token)
+                    && separateData.DataOwned,
                 source.NodeMap,
                 source.Children,
-                source switch
-                {
-                    BitmapIndexedNode ownerFields =>
-                        ReferenceEquals(ownerFields.Owner, _token) && ownerFields.ChildrenOwned,
-                    SeparateTransientBranchNode separate => ReferenceEquals(separate.Owner, _token),
-                    _ => false,
-                },
+                source.Source is SeparateTransientBranchNode separateChildren
+                    && ReferenceEquals(separateChildren.Owner, _token)
+                    && separateChildren.ChildrenOwned,
                 count);
 
         private void AddCommit(CommitStep step)
@@ -1161,8 +1200,8 @@ public sealed partial class PersistentHashMap<TKey, TValue>
 
         private readonly struct CommitStep
         {
-            private readonly BranchNode? _branch;
-            private readonly CollisionNodeBase? _collision;
+            private readonly SeparateTransientBranchNode? _branch;
+            private readonly SeparateTransientCollisionNode? _collision;
             private readonly BranchState _branchState;
             private readonly Entry[]? _collisionEntries;
             private readonly Entry _entry;
@@ -1172,8 +1211,8 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             private readonly byte _flags;
 
             private CommitStep(
-                BranchNode? branch,
-                CollisionNodeBase? collision,
+                SeparateTransientBranchNode? branch,
+                SeparateTransientCollisionNode? collision,
                 BranchState branchState,
                 Entry[]? collisionEntries,
                 Entry entry,
@@ -1196,7 +1235,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             internal bool WritesArray => (_flags & 3) != 0;
 
             internal static CommitStep ForCollision(
-                CollisionNodeBase collision,
+                SeparateTransientCollisionNode collision,
                 Entry[] entries,
                 bool writeEntry,
                 int entryIndex,
@@ -1213,7 +1252,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                     flags: (byte)(writeEntry ? 1 : 0));
 
             internal static CommitStep ForBranch(
-                BranchNode branch,
+                SeparateTransientBranchNode branch,
                 BranchState state,
                 bool writeData,
                 int dataIndex,
@@ -1371,74 +1410,103 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 ValidateEntryHashAndPrefix(new Entry(leaf.Hash, leaf.Key, leaf.Value), prefixMask, prefix);
                 return 1;
 
-            case CollisionNodeBase collision:
-                if (collision.Entries.Length < 2)
-                    throw new InvalidOperationException("A collision node must contain at least two entries.");
-                if ((collision is CollisionNode ownerCollision && ownerCollision.Owner is { IsActive: true })
-                    || (collision is SeparateTransientCollisionNode separateCollision
-                        && separateCollision.Owner.IsActive))
+            case CollisionNode collision:
+                return ValidateCollision(collision.Hash, collision.Entries, prefixMask, prefix);
+
+            case SeparateTransientCollisionNode collision:
+                if (collision.Owner.IsActive)
                     throw new InvalidOperationException("A published collision node retains an active edit token.");
-                for (var left = 0; left < collision.Entries.Length; left++)
-                {
-                    var entry = collision.Entries[left];
-                    if (entry.Hash != collision.Hash)
-                        throw new InvalidOperationException("A collision entry has a different full hash.");
-                    ValidateEntryHashAndPrefix(entry, prefixMask, prefix);
-                    for (var right = 0; right < left; right++)
-                    {
-                        if (_comparer.Equals(collision.Entries[right].Key, entry.Key))
-                            throw new InvalidOperationException("A collision node contains equivalent keys.");
-                    }
-                }
-                return collision.Entries.Length;
+                return ValidateCollision(collision.Hash, collision.Entries, prefixMask, prefix);
 
-            case BranchNode branch:
-                if ((branch is BitmapIndexedNode ownerBranch && ownerBranch.Owner is { IsActive: true })
-                    || (branch is SeparateTransientBranchNode separateBranch && separateBranch.Owner.IsActive))
+            case BitmapIndexedNode branch:
+                return ValidateBranch(
+                    BranchView.Create(branch),
+                    shift,
+                    prefix,
+                    ref nodeCount);
+
+            case SeparateTransientBranchNode branch:
+                if (branch.Owner.IsActive)
                     throw new InvalidOperationException("A published branch retains an active edit token.");
-                if ((branch.DataMap & branch.NodeMap) != 0)
-                    throw new InvalidOperationException("Branch data and node bitmaps overlap.");
-                if (System.Numerics.BitOperations.PopCount(branch.DataMap) != branch.Data.Length)
-                    throw new InvalidOperationException("Branch data bitmap and array length differ.");
-                if (System.Numerics.BitOperations.PopCount(branch.NodeMap) != branch.Children.Length)
-                    throw new InvalidOperationException("Branch node bitmap and array length differ.");
-                if (branch.Data.Length == 0 && branch.Children.Length == 0)
-                    throw new InvalidOperationException("An empty branch must be contracted.");
-                if (branch.Data.Length == 1 && branch.Children.Length == 0)
-                    throw new InvalidOperationException("A singleton data branch must be a leaf.");
-                if (branch.Data.Length == 0 && branch.Children.Length == 1 && branch.Children[0] is HashNode)
-                    throw new InvalidOperationException("A singleton hash child must be promoted.");
-
-                var recursiveCount = branch.Data.Length;
-                var dataIndex = 0;
-                var childIndex = 0;
-                var nextShift = shift + BitsPerLevel;
-                var nextMask = nextShift >= 32 ? uint.MaxValue : ((1u << nextShift) - 1);
-                for (var slot = 0; slot < 32; slot++)
-                {
-                    var bit = Bit(slot);
-                    var nextPrefix = prefix | ((uint)slot << shift);
-                    if ((branch.DataMap & bit) != 0)
-                        ValidateEntryHashAndPrefix(branch.Data[dataIndex++], nextMask, nextPrefix);
-                    if ((branch.NodeMap & bit) == 0)
-                        continue;
-                    var child = branch.Children[childIndex++];
-                    if (child is LeafNode)
-                        throw new InvalidOperationException("A leaf child must be inlined into its parent.");
-                    recursiveCount = checked(
-                        recursiveCount + ValidateNode(child, nextShift, nextMask, nextPrefix, ref nodeCount));
-                }
-
-                if (recursiveCount != branch.Count)
-                {
-                    throw new InvalidOperationException(
-                        $"Branch cached count {branch.Count} differs from recursive count {recursiveCount}.");
-                }
-                return recursiveCount;
+                return ValidateBranch(
+                    BranchView.Create(branch),
+                    shift,
+                    prefix,
+                    ref nodeCount);
 
             default:
                 throw new InvalidOperationException("Unknown CHAMP node kind.");
         }
+    }
+
+    private int ValidateCollision(
+        uint hash,
+        Entry[] entries,
+        uint prefixMask,
+        uint prefix)
+    {
+        if (entries.Length < 2)
+            throw new InvalidOperationException("A collision node must contain at least two entries.");
+        for (var left = 0; left < entries.Length; left++)
+        {
+            var entry = entries[left];
+            if (entry.Hash != hash)
+                throw new InvalidOperationException("A collision entry has a different full hash.");
+            ValidateEntryHashAndPrefix(entry, prefixMask, prefix);
+            for (var right = 0; right < left; right++)
+            {
+                if (_comparer.Equals(entries[right].Key, entry.Key))
+                    throw new InvalidOperationException("A collision node contains equivalent keys.");
+            }
+        }
+        return entries.Length;
+    }
+
+    private int ValidateBranch(
+        BranchView branch,
+        int shift,
+        uint prefix,
+        ref int nodeCount)
+    {
+        if ((branch.DataMap & branch.NodeMap) != 0)
+            throw new InvalidOperationException("Branch data and node bitmaps overlap.");
+        if (System.Numerics.BitOperations.PopCount(branch.DataMap) != branch.Data.Length)
+            throw new InvalidOperationException("Branch data bitmap and array length differ.");
+        if (System.Numerics.BitOperations.PopCount(branch.NodeMap) != branch.Children.Length)
+            throw new InvalidOperationException("Branch node bitmap and array length differ.");
+        if (branch.Data.Length == 0 && branch.Children.Length == 0)
+            throw new InvalidOperationException("An empty branch must be contracted.");
+        if (branch.Data.Length == 1 && branch.Children.Length == 0)
+            throw new InvalidOperationException("A singleton data branch must be a leaf.");
+        if (branch.Data.Length == 0 && branch.Children.Length == 1 && branch.Children[0] is HashNode)
+            throw new InvalidOperationException("A singleton hash child must be promoted.");
+
+        var recursiveCount = branch.Data.Length;
+        var dataIndex = 0;
+        var childIndex = 0;
+        var nextShift = shift + BitsPerLevel;
+        var nextMask = nextShift >= 32 ? uint.MaxValue : ((1u << nextShift) - 1);
+        for (var slot = 0; slot < 32; slot++)
+        {
+            var bit = Bit(slot);
+            var nextPrefix = prefix | ((uint)slot << shift);
+            if ((branch.DataMap & bit) != 0)
+                ValidateEntryHashAndPrefix(branch.Data[dataIndex++], nextMask, nextPrefix);
+            if ((branch.NodeMap & bit) == 0)
+                continue;
+            var child = branch.Children[childIndex++];
+            if (child is LeafNode)
+                throw new InvalidOperationException("A leaf child must be inlined into its parent.");
+            recursiveCount = checked(
+                recursiveCount + ValidateNode(child, nextShift, nextMask, nextPrefix, ref nodeCount));
+        }
+
+        if (recursiveCount != branch.Count)
+        {
+            throw new InvalidOperationException(
+                $"Branch cached count {branch.Count} differs from recursive count {recursiveCount}.");
+        }
+        return recursiveCount;
     }
 
     private void ValidateEntryHashAndPrefix(Entry entry, uint prefixMask, uint prefix)

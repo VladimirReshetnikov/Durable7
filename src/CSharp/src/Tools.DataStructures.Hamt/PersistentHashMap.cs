@@ -526,12 +526,32 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
                 shift += BitsPerLevel;
             }
 
-            while (node is BranchNode branch)
+            while (node is SeparateTransientBranchNode or BitmapIndexedNode)
             {
-                var bit = Bit(Index(hash, shift));
-                if ((branch.DataMap & bit) != 0)
+                uint dataMap;
+                Entry[] data;
+                uint nodeMap;
+                Node[] children;
+                if (node is SeparateTransientBranchNode separate)
                 {
-                    var entry = branch.Data[Slot(branch.DataMap, bit)];
+                    dataMap = separate.DataMap;
+                    data = separate.Data;
+                    nodeMap = separate.NodeMap;
+                    children = separate.Children;
+                }
+                else
+                {
+                    var ordinary = (BitmapIndexedNode)node;
+                    dataMap = ordinary.DataMap;
+                    data = ordinary.Data;
+                    nodeMap = ordinary.NodeMap;
+                    children = ordinary.Children;
+                }
+
+                var bit = Bit(Index(hash, shift));
+                if ((dataMap & bit) != 0)
+                {
+                    var entry = data[Slot(dataMap, bit)];
                     if (entry.Hash == hash && _comparer.Equals(entry.Key, key))
                     {
                         actualKey = entry.Key;
@@ -544,14 +564,14 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
                     return false;
                 }
 
-                if ((branch.NodeMap & bit) == 0)
+                if ((nodeMap & bit) == 0)
                 {
                     actualKey = default;
                     value = default;
                     return false;
                 }
 
-                node = branch.Children[Slot(branch.NodeMap, bit)];
+                node = children[Slot(nodeMap, bit)];
                 shift += BitsPerLevel;
             }
 
@@ -566,10 +586,16 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
             }
             else
             {
-                var collision = (CollisionNodeBase)node;
+                var collision = (HashNode)node;
+                var entries = collision switch
+                {
+                    CollisionNode ordinary => ordinary.Entries,
+                    SeparateTransientCollisionNode separate => separate.Entries,
+                    _ => throw new InvalidOperationException("Unknown CHAMP hash node kind."),
+                };
                 if (collision.Hash == hash)
                 {
-                    foreach (var entry in collision.Entries)
+                    foreach (var entry in entries)
                     {
                         if (_comparer.Equals(entry.Key, key))
                         {
@@ -763,7 +789,8 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
     private static Entry[] GetEntries(HashNode node) => node switch
     {
         LeafNode leaf => [Entry.From(leaf)],
-        CollisionNodeBase collision => collision.Entries,
+        CollisionNode collision => collision.Entries,
+        SeparateTransientCollisionNode collision => collision.Entries,
         _ => throw new InvalidOperationException(),
     };
 
@@ -806,7 +833,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         if (node is HashNode hashNode)
             return Index(hashNode.Hash, shift) == index ? hashNode : null;
 
-        var branch = (BranchNode)node;
+        var branch = BranchView.Create(node);
         var bit = Bit(index);
         if ((branch.DataMap & bit) != 0)
         {
@@ -890,23 +917,26 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
 
         if (left is LeafNode leftLeaf)
         {
-            return right is LeafNode rightLeaf
-                && leftLeaf.Hash == rightLeaf.Hash
+            if (right is not LeafNode rightLeaf)
+                return false;
+            return leftLeaf.Hash == rightLeaf.Hash
                 && keyComparer.Equals(leftLeaf.Key, rightLeaf.Key)
                 && ValuesEqual(leftLeaf.Value, rightLeaf.Value, valueComparer);
         }
+        if (right is LeafNode)
+            return false;
 
-        if (left is CollisionNodeBase leftCollision)
+        if (TryGetCollision(left, out var leftHash, out var leftEntries))
         {
-            if (right is not CollisionNodeBase rightCollision)
-                return false;
-            if (leftCollision.Hash != rightCollision.Hash || leftCollision.Entries.Length != rightCollision.Entries.Length)
+            if (!TryGetCollision(right, out var rightHash, out var rightEntries)
+                || leftHash != rightHash
+                || leftEntries.Length != rightEntries.Length)
                 return false;
 
-            foreach (var leftEntry in leftCollision.Entries)
+            foreach (var leftEntry in leftEntries)
             {
                 var found = false;
-                foreach (var rightEntry in rightCollision.Entries)
+                foreach (var rightEntry in rightEntries)
                 {
                     if (keyComparer.Equals(leftEntry.Key, rightEntry.Key)
                         && ValuesEqual(leftEntry.Value, rightEntry.Value, valueComparer))
@@ -922,8 +952,11 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
 
             return true;
         }
+        if (TryGetCollision(right, out _, out _))
+            return false;
 
-        if (left is not BranchNode leftBranch || right is not BranchNode rightBranch)
+        if (!BranchView.TryCreate(left, out var leftBranch)
+            || !BranchView.TryCreate(right, out var rightBranch))
             return false;
         if (leftBranch.DataMap != rightBranch.DataMap || leftBranch.NodeMap != rightBranch.NodeMap)
             return false;
@@ -942,6 +975,27 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         }
 
         return true;
+    }
+
+    private static bool TryGetCollision(Node node, out uint hash, out Entry[] entries)
+    {
+        if (node is CollisionNode ordinary)
+        {
+            hash = ordinary.Hash;
+            entries = ordinary.Entries;
+            return true;
+        }
+
+        if (node is SeparateTransientCollisionNode separate)
+        {
+            hash = separate.Hash;
+            entries = separate.Entries;
+            return true;
+        }
+
+        hash = 0;
+        entries = null!;
+        return false;
     }
 
     private static void DiffNodes(
@@ -972,14 +1026,14 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
             if (right is HashNode rightHash)
                 DiffEntryRuns(leftRun, new EntryRun(rightHash), keyComparer, valueComparer, differences);
             else
-                DiffRunAndBranch(leftRun, (BranchNode)right, shift, keyComparer, valueComparer, differences);
+                DiffRunAndBranch(leftRun, BranchView.Create(right), shift, keyComparer, valueComparer, differences);
             return;
         }
 
         if (right is HashNode rightHashNode)
         {
             DiffBranchAndRun(
-                (BranchNode)left,
+                BranchView.Create(left),
                 new EntryRun(rightHashNode),
                 shift,
                 keyComparer,
@@ -989,8 +1043,8 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         }
 
         DiffBranches(
-            (BranchNode)left,
-            (BranchNode)right,
+            BranchView.Create(left),
+            BranchView.Create(right),
             shift,
             keyComparer,
             valueComparer,
@@ -998,8 +1052,8 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
     }
 
     private static void DiffBranches(
-        BranchNode left,
-        BranchNode right,
+        BranchView left,
+        BranchView right,
         int shift,
         IEqualityComparer<TKey> keyComparer,
         IEqualityComparer<TValue> valueComparer,
@@ -1097,7 +1151,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
             return;
         }
 
-        DiffRunAndBranch(left, (BranchNode)right, shift, keyComparer, valueComparer, differences);
+        DiffRunAndBranch(left, BranchView.Create(right), shift, keyComparer, valueComparer, differences);
     }
 
     private static void DiffNodeAndRun(
@@ -1114,12 +1168,12 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
             return;
         }
 
-        DiffBranchAndRun((BranchNode)left, right, shift, keyComparer, valueComparer, differences);
+        DiffBranchAndRun(BranchView.Create(left), right, shift, keyComparer, valueComparer, differences);
     }
 
     private static void DiffRunAndBranch(
         EntryRun left,
-        BranchNode right,
+        BranchView right,
         int shift,
         IEqualityComparer<TKey> keyComparer,
         IEqualityComparer<TValue> valueComparer,
@@ -1169,7 +1223,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
     }
 
     private static void DiffBranchAndRun(
-        BranchNode left,
+        BranchView left,
         EntryRun right,
         int shift,
         IEqualityComparer<TKey> keyComparer,
@@ -1327,7 +1381,8 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         {
             null => 1,
             LeafNode => 1,
-            CollisionNodeBase collision => collision.Entries.Length,
+            CollisionNode collision => collision.Entries.Length,
+            SeparateTransientCollisionNode collision => collision.Entries.Length,
             _ => throw new UnreachableException(),
         };
 
@@ -1347,7 +1402,12 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
                     return Entry.From(leaf);
                 }
 
-                return ((CollisionNodeBase)_node).Entries[index];
+                return _node switch
+                {
+                    CollisionNode collision => collision.Entries[index],
+                    SeparateTransientCollisionNode collision => collision.Entries[index],
+                    _ => throw new UnreachableException(),
+                };
             }
         }
     }
@@ -1475,15 +1535,23 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
                     return true;
                 }
 
-                if (node is BitmapIndexedNode ordinaryBranch)
+                if (node is SeparateTransientCollisionNode separateCollision)
                 {
-                    _frames[_depth++] = new Frame(ordinaryBranch.Data, ordinaryBranch.Children);
+                    _collisionEntries = separateCollision.Entries;
+                    _collisionIndex = 0;
+                    MoveNextCollisionEntry();
+                    return true;
                 }
-                else
+
+                if (node is BitmapIndexedNode branch)
                 {
-                    var separateBranch = (SeparateTransientBranchNode)node;
-                    _frames[_depth++] = new Frame(separateBranch.Data, separateBranch.Children);
+                    _frames[_depth++] = new Frame(branch.Data, branch.Children);
+                    node = null;
+                    continue;
                 }
+
+                var separateBranch = (SeparateTransientBranchNode)node;
+                _frames[_depth++] = new Frame(separateBranch.Data, separateBranch.Children);
                 node = null;
             }
         }
@@ -1707,15 +1775,11 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         }
     }
 
-    /// <summary>
-    /// Supplies the immutable collision-node behavior shared by the ordinary owner-field layout
-    /// and the separate transient-editable layout. The abstraction itself carries no edit token.
-    /// </summary>
-    internal abstract class CollisionNodeBase(uint hash) : HashNode(hash)
+    internal sealed class CollisionNode(uint hash, Entry[] entries) : HashNode(hash)
     {
         internal override int Count => Entries.Length;
 
-        internal abstract Entry[] Entries { get; }
+        internal Entry[] Entries { get; } = entries;
 
         internal static CollisionNode Create(HashNode left, LeafNode right)
         {
@@ -1811,21 +1875,23 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         }
     }
 
-    /// <summary>
-    /// Supplies immutable CHAMP branch behavior without imposing either experimental ownership
-    /// representation on the common semantic hierarchy.
-    /// </summary>
-    internal abstract class BranchNode : Node
+    internal sealed class BitmapIndexedNode(
+        uint dataMap,
+        Entry[] data,
+        uint nodeMap,
+        Node[] children) : Node
     {
-        internal abstract uint DataMap { get; }
+        internal override int Count { get; } = CountEntries(data, children);
 
-        internal abstract Entry[] Data { get; }
+        internal uint DataMap { get; } = dataMap;
 
-        internal abstract uint NodeMap { get; }
+        internal Entry[] Data { get; } = data;
 
-        internal abstract Node[] Children { get; }
+        internal uint NodeMap { get; } = nodeMap;
 
-        protected static int CountEntries(Entry[] entries, Node[] nodes)
+        internal Node[] Children { get; } = children;
+
+        private static int CountEntries(Entry[] entries, Node[] nodes)
         {
             var count = entries.Length;
             foreach (var node in nodes)

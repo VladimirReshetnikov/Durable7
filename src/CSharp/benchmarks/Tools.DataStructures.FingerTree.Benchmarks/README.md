@@ -53,7 +53,7 @@ Results are written under `BenchmarkDotNet.Artifacts/` (git-ignored); curated ta
 | `RopeBuilderBenchmarks` | append-only rope builder construction and snapshot constants | `Create`, `AddLast` loop, text `StringBuilder` materialization, `ImmutableList<T>.Builder` |
 | `ChampBenchmarks` | CHAMP lookup, payload-dense iteration, shared-single-change diff, and independent-history equality/diff | `Dictionary` and `ImmutableDictionary` |
 | `CtrieBenchmarks` | lock-free lookup and O(1) immutable snapshot publication | `ConcurrentDictionary` lookup and O(n) immutable copy |
-| `TransientLifecycleBenchmarks` | Axis 2 edit-locality/publication matrix, structural path-copy counters, and identical private T1 lanes for owner fields versus separate transient-editable branch/collision nodes, both with O(1) adoption/seal and ownership/copy/retained-size evidence | direct persistent edits and canonical `BulkBuilder` construction |
+| `TransientLifecycleBenchmarks` | Axis 2 edit-locality/publication matrix, structural path-copy counters, and the direct-separate T1 gate build for exact-type transient-editable branch/collision nodes, with O(1) adoption/seal and actual ownership/copy/retained-size evidence | direct persistent edits and canonical `BulkBuilder` construction |
 | `FrozenLookupBenchmarks`, `FrozenClusteredLookupBenchmarks`, `FrozenCollisionLookupBenchmarks`, `FrozenNullLookupBenchmarks` | Axis 2 F1 fixed-layout bake-off across lookup mixes, enumeration, construction, retained arrays, null/stored representatives, collision shapes, and break-even | persistent CHAMP, linear/Robin-Hood/quadratic repository prototypes, `Dictionary`, `ImmutableDictionary`, and BCL `FrozenDictionary` where semantically representable |
 | `PatriciaMapBenchmarks` | integer-key lookup and prefix-aware structural union | CHAMP and `ImmutableDictionary` lookup |
 | `RrbVectorBenchmarks` | uniform middle indexing and boundary-spine concatenation | `Rope<T>` indexing/concat and `ImmutableList<T>` indexing/concat |
@@ -128,12 +128,20 @@ lane—most notably a null-key lane—is omitted and called out rather than give
 BenchmarkDotNet's `MemoryDiagnoser` supplies allocation data; retained graph bytes come from the
 internal structural estimators and are never relabeled as allocation bytes.
 
-The T1 owner-field and separate-node methods execute the same prepared edit plan and differ only in
-allocation/ownership representation. `AXIS2_T1_COUNTER_V1` rows identify that representation and
-report both physical retained bytes in the side-by-side experimental assembly and layout-adjusted
-bytes. The adjusted separate-node figure subtracts the ordinary-node owner-field attribution that
-would not exist when that layout is selected alone; it does not subtract the token references on
-actual separate editable nodes. Adoption and publication node-visit counters must remain zero.
+On branch `codex/axis2-t1-direct-separate-gate`, the `SeparateNodeKernelHistory` method is the
+filterable T1 measurement lane. Ordinary collision and bitmap nodes retain the b590 sealed,
+readonly source shape and physically contain no owner token or ownership flags. Direct
+`SeparateTransientCollisionNode : HashNode` and `SeparateTransientBranchNode : Node` types carry
+the token; a two-bit mask gives data and child arrays independent write ownership without a shared
+abstract node-property hierarchy. `AXIS2_T1_COUNTER_V1`
+therefore reports `ordinary_owner_metadata_bytes=0`, and both retained-byte fields estimate the
+actual reachable layout. The `*_layout_adjusted_retained_bytes` names remain as CSV-compatibility
+aliases and equal their corresponding actual retained-byte fields; no subtraction or modeled
+adjustment occurs. Adoption and publication node-visit counters must remain zero.
+The owner-field lane and evidence recorded in the T0 decision document are historical and run on
+`codex/axis2-t1-owner-fields-gate`; the earlier abstract-base separate formulation runs on
+`codex/axis2-t1-separate-gate`. This branch intentionally exposes only the direct-separate lane,
+and no advance/defer result is claimed before its locked measurements complete.
 
 The F1 frozen-layout bake-off keeps one packed source-order entry array and compares three fixed
 offline indexes: simple linear probing, Robin-Hood linear probing, and power-of-two triangular

@@ -13,9 +13,6 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
             Enumerable.Range(0, 512).Select(index => KeyValuePair.Create(index, index * 7)));
         var kernel = source.CreateSeparateNodeTransientKernel();
 
-        Assert.Equal(
-            PersistentHashMap<int, int>.TransientOwnershipLayout.SeparateNodes,
-            kernel.LayoutForDiagnostics);
         Assert.Equal(source.Count, kernel.Count);
         Assert.Same(source.Comparer, kernel.Comparer);
         kernel.SetItem(17, 17 * 7);
@@ -36,6 +33,69 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         Assert.Throws<ObjectDisposedException>(() => _ = kernel.Count);
         Assert.Throws<ObjectDisposedException>(() => kernel.SetItem(1, -1));
         Assert.Throws<ObjectDisposedException>(() => kernel.Persist());
+    }
+
+    /// <summary>Verifies dirty empty publication preserves canonical/default and custom policies.</summary>
+    [Fact]
+    public void DirtyEmptyPublication_CanonicalizesDefaultAndPreservesCustomComparer()
+    {
+        var defaultAfterClear = PersistentHashMap<int, int>.Empty.SetItem(1, 1)
+            .CreateSeparateNodeTransientKernel();
+        defaultAfterClear.Clear();
+        var clearedDefault = defaultAfterClear.Persist();
+        Assert.Same(PersistentHashMap<int, int>.Empty, clearedDefault);
+        Assert.Equal(0, defaultAfterClear.GetCountersForDiagnostics().PersistentWrapperAllocationCount);
+
+        var defaultAfterRemove = PersistentHashMap<int, int>.Empty.SetItem(1, 1)
+            .CreateSeparateNodeTransientKernel();
+        Assert.True(defaultAfterRemove.Remove(1));
+        Assert.Same(PersistentHashMap<int, int>.Empty, defaultAfterRemove.Persist());
+        Assert.Equal(0, defaultAfterRemove.GetCountersForDiagnostics().PersistentWrapperAllocationCount);
+
+        var comparer = new ConstantHashIntComparer();
+        var customAfterClear = PersistentHashMap<int, int>.Create(comparer).SetItem(1, 1)
+            .CreateSeparateNodeTransientKernel();
+        customAfterClear.Clear();
+        var clearedCustom = customAfterClear.Persist();
+        Assert.Empty(clearedCustom);
+        Assert.Same(comparer, clearedCustom.Comparer);
+        Assert.NotSame(PersistentHashMap<int, int>.Empty, clearedCustom);
+        Assert.Equal(1, customAfterClear.GetCountersForDiagnostics().PersistentWrapperAllocationCount);
+
+        var customAfterRemove = PersistentHashMap<int, int>.Create(comparer).SetItem(1, 1)
+            .CreateSeparateNodeTransientKernel();
+        Assert.True(customAfterRemove.Remove(1));
+        var removedCustom = customAfterRemove.Persist();
+        Assert.Empty(removedCustom);
+        Assert.Same(comparer, removedCustom.Comparer);
+        Assert.NotSame(PersistentHashMap<int, int>.Empty, removedCustom);
+        Assert.Equal(1, customAfterRemove.GetCountersForDiagnostics().PersistentWrapperAllocationCount);
+    }
+
+    /// <summary>Verifies canonical-empty publication has no synthetic allocation failpoint.</summary>
+    [Fact]
+    public void DefaultEmptyPublication_SkipsAllocationBoundaryButKeepsPreparedBoundaryAtomic()
+    {
+        var kernel = PersistentHashMap<int, int>.Empty.SetItem(1, 1)
+            .CreateSeparateNodeTransientKernel();
+        kernel.Clear();
+        var sawAllocationBoundary = false;
+        kernel.FailureInjector = point =>
+        {
+            if (point == PersistentHashMap<int, int>.OwnerTokenKernelFailurePoint.BeforePublicationAllocation)
+                sawAllocationBoundary = true;
+            if (point == PersistentHashMap<int, int>.OwnerTokenKernelFailurePoint.PublicationPrepared)
+                throw new TestFailureException();
+        };
+
+        Assert.Throws<TestFailureException>(kernel.Persist);
+        Assert.False(sawAllocationBoundary);
+        Assert.True(kernel.IsActiveForDiagnostics);
+        Assert.True(kernel.TokenIsActiveForDiagnostics);
+        Assert.Equal(0, kernel.Count);
+
+        kernel.FailureInjector = null;
+        Assert.Same(PersistentHashMap<int, int>.Empty, kernel.Persist());
     }
 
     /// <summary>Verifies the edited graph uses separate classes and then reuses its owned path.</summary>
@@ -65,16 +125,24 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         Assert.True(counters.CopiedArrayCount > 0);
         Assert.True(counters.InPlaceNodeMutationCount >= 127);
         Assert.True(counters.InPlaceArrayWriteCount >= 127);
+        Assert.Equal(1, counters.AdoptionCount);
+        Assert.Equal(0, counters.AdoptionNodeVisits);
+        Assert.Equal(1, counters.PublicationCount);
+        Assert.Equal(0, counters.PublicationNodeVisits);
         Assert.Equal(1, counters.PersistentWrapperAllocationCount);
         Assert.Equal(0, sourceStructure.SeparateBranchNodeCount);
         Assert.Equal(0, sourceStructure.SeparateCollisionNodeCount);
+        Assert.Equal(0, sourceStructure.EstimatedOwnerMetadataBytes);
         Assert.Equal(0, sourceStructure.EstimatedSeparateNodeMetadataBytes);
         Assert.True(structure.SeparateBranchNodeCount > 0);
         Assert.Equal(0, structure.SeparateCollisionNodeCount);
         Assert.True(structure.EstimatedSeparateNodeMetadataBytes > 0);
+        Assert.Equal(0, structure.EstimatedOwnerMetadataBytes);
         Assert.Equal(1, structure.OwnerTokenCount);
-        Assert.NotSame(ordinaryRoot.Data, separateRoot.Data);
+        Assert.Same(ordinaryRoot.Data, separateRoot.Data);
         Assert.NotSame(ordinaryRoot.Children, separateRoot.Children);
+        Assert.False(separateRoot.DataOwned);
+        Assert.True(separateRoot.ChildrenOwned);
         result.ValidateCanonicalityForDiagnostics();
 
         var secondKernel = result.CreateSeparateNodeTransientKernel();
@@ -83,6 +151,37 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         Assert.Equal(-128, result[513]);
         Assert.Equal(42, second[513]);
         second.ValidateCanonicalityForDiagnostics();
+    }
+
+    /// <summary>Verifies a data edit owns only data while retaining an independently shared child array.</summary>
+    [Fact]
+    public void DataEdit_OwnsDataButRetainsSharedChildren()
+    {
+        var comparer = new ExplicitHashComparer();
+        var first = new ExplicitHashKey(0, 0);
+        var second = new ExplicitHashKey(1, 32);
+        var direct = new ExplicitHashKey(2, 1);
+        var source = PersistentHashMap<ExplicitHashKey, int>.Create(comparer)
+            .SetItem(first, 10)
+            .SetItem(second, 20)
+            .SetItem(direct, 30);
+        var ordinaryRoot = Assert.IsType<PersistentHashMap<ExplicitHashKey, int>.BitmapIndexedNode>(
+            source.RootForTesting);
+        var kernel = source.CreateSeparateNodeTransientKernel();
+
+        kernel.SetItem(direct, -30);
+        var result = kernel.Persist();
+        var separateRoot = Assert.IsType<
+            PersistentHashMap<ExplicitHashKey, int>.SeparateTransientBranchNode>(
+                result.RootForTesting);
+
+        Assert.Equal(-30, result[direct]);
+        Assert.Equal(30, source[direct]);
+        Assert.NotSame(ordinaryRoot.Data, separateRoot.Data);
+        Assert.Same(ordinaryRoot.Children, separateRoot.Children);
+        Assert.True(separateRoot.DataOwned);
+        Assert.False(separateRoot.ChildrenOwned);
+        result.ValidateCanonicalityForDiagnostics();
     }
 
     /// <summary>Verifies collisions, representatives, comparer identity, no-ops, and contraction.</summary>
@@ -119,6 +218,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         Assert.Equal("four", result["DELTA"]);
         Assert.False(result.ContainsKey("Beta"));
         Assert.True(structure.SeparateCollisionNodeCount > 0);
+        Assert.Equal(0, structure.EstimatedOwnerMetadataBytes);
         Assert.Equal(1, structure.OwnerTokenCount);
         result.ValidateCanonicalityForDiagnostics();
 
@@ -129,6 +229,133 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         Assert.Single(singleton);
         Assert.IsType<PersistentHashMap<string, string>.LeafNode>(singleton.RootForTesting);
         singleton.ValidateCanonicalityForDiagnostics();
+    }
+
+    /// <summary>Exercises every persistent consumer over a published separate collision root.</summary>
+    [Fact]
+    public void PublishedSeparateCollision_SupportsPersistentEditsDiffEqualityAndAlgebra()
+    {
+        var comparer = new ConstantHashIntComparer();
+        var source = PersistentHashMap<int, int>.Create(comparer);
+        for (var index = 0; index < 6; index++)
+            source = source.SetItem(index, index * 10);
+
+        var oracle = source.SetItem(1, -10).SetItem(6, 60).Remove(2);
+        var kernel = source.CreateSeparateNodeTransientKernel();
+        kernel.SetItem(1, -10);
+        kernel.SetItem(6, 60);
+        Assert.True(kernel.Remove(2));
+        var mixed = kernel.Persist();
+
+        Assert.IsType<PersistentHashMap<int, int>.SeparateTransientCollisionNode>(
+            mixed.RootForTesting);
+        Assert.True(mixed.MapEquals(oracle));
+        Assert.True(oracle.MapEquals(mixed));
+        Assert.Equal(oracle.Diff(source).ToArray(), mixed.Diff(source).ToArray());
+        Assert.Equal(source.Diff(oracle).ToArray(), source.Diff(mixed).ToArray());
+
+        var persistentlySet = mixed.SetItem(3, -30);
+        var persistentlySetOracle = oracle.SetItem(3, -30);
+        Assert.True(persistentlySet.MapEquals(persistentlySetOracle));
+        Assert.True(persistentlySetOracle.MapEquals(persistentlySet));
+        persistentlySet.ValidateCanonicalityForDiagnostics();
+
+        var persistentlyRemoved = mixed.Remove(4);
+        var persistentlyRemovedOracle = oracle.Remove(4);
+        Assert.True(persistentlyRemoved.MapEquals(persistentlyRemovedOracle));
+        Assert.True(persistentlyRemovedOracle.MapEquals(persistentlyRemoved));
+        Assert.Equal(-10, mixed[1]);
+        Assert.Equal(40, mixed[4]);
+        persistentlyRemoved.ValidateCanonicalityForDiagnostics();
+
+        var right = PersistentHashMap<int, int>.Create(comparer);
+        for (var index = 4; index < 10; index++)
+            right = right.SetItem(index, index * 100);
+
+        var union = mixed.Union(right);
+        var intersection = mixed.Intersect(right);
+        var except = mixed.Except(right);
+        var symmetric = mixed.SymmetricExcept(right);
+        Assert.True(union.MapEquals(oracle.Union(right)));
+        Assert.True(intersection.MapEquals(oracle.Intersect(right)));
+        Assert.True(except.MapEquals(oracle.Except(right)));
+        Assert.True(symmetric.MapEquals(oracle.SymmetricExcept(right)));
+        Assert.True(right.Union(mixed).MapEquals(right.Union(oracle)));
+        Assert.True(right.Intersect(mixed).MapEquals(right.Intersect(oracle)));
+        Assert.True(right.Except(mixed).MapEquals(right.Except(oracle)));
+        Assert.True(right.SymmetricExcept(mixed).MapEquals(right.SymmetricExcept(oracle)));
+        Assert.Equal(right[4], union[4]);
+        Assert.Equal(mixed[4], intersection[4]);
+        Assert.Same(mixed, mixed.Union(mixed));
+        Assert.Same(mixed, mixed.Intersect(mixed));
+        Assert.Empty(mixed.Except(mixed));
+        Assert.Empty(mixed.SymmetricExcept(mixed));
+
+        union.ValidateCanonicalityForDiagnostics();
+        intersection.ValidateCanonicalityForDiagnostics();
+        except.ValidateCanonicalityForDiagnostics();
+        symmetric.ValidateCanonicalityForDiagnostics();
+    }
+
+    /// <summary>Verifies removal promotes a sole non-leaf hash child through its parent.</summary>
+    [Fact]
+    public void Remove_PromotesCollisionWhenParentWouldContainOnlyThatHashChild()
+    {
+        var comparer = new ExplicitHashComparer();
+        var first = new ExplicitHashKey(0, 0);
+        var second = new ExplicitHashKey(1, 0);
+        var split = new ExplicitHashKey(2, 32);
+        var source = PersistentHashMap<ExplicitHashKey, int>.Create(comparer)
+            .SetItem(first, 10)
+            .SetItem(second, 20)
+            .SetItem(split, 30);
+        var kernel = source.CreateSeparateNodeTransientKernel();
+
+        Assert.True(kernel.Remove(split));
+        var result = kernel.Persist();
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal(10, result[first]);
+        Assert.Equal(20, result[second]);
+        Assert.False(result.ContainsKey(split));
+        Assert.IsAssignableFrom<PersistentHashMap<ExplicitHashKey, int>.HashNode>(
+            result.RootForTesting);
+        result.ValidateCanonicalityForDiagnostics();
+    }
+
+    /// <summary>Compares a randomized equal-full-hash history with the persistent-map oracle.</summary>
+    [Fact]
+    public void MixedCollisionHistory_MatchesPersistentOracleAndCanonicalCounts()
+    {
+        var comparer = new ConstantHashIntComparer();
+        var source = PersistentHashMap<int, int>.Create(comparer);
+        for (var index = 0; index < 64; index++)
+            source = source.SetItem(index, index);
+
+        var oracle = source;
+        var kernel = source.CreateSeparateNodeTransientKernel();
+        var random = new Random(0x51a2);
+        for (var operation = 0; operation < 600; operation++)
+        {
+            var key = random.Next(96);
+            if (random.Next(4) == 0)
+            {
+                Assert.Equal(oracle.ContainsKey(key), kernel.Remove(key));
+                oracle = oracle.Remove(key);
+            }
+            else
+            {
+                var value = random.Next();
+                kernel.SetItem(key, value);
+                oracle = oracle.SetItem(key, value);
+            }
+        }
+
+        var result = kernel.Persist();
+        Assert.Equal(oracle.ToArray(), result.ToArray());
+        var diagnostics = result.ValidateCanonicalityForDiagnostics();
+        Assert.Equal(result.Count, diagnostics.RecursiveEntryCount);
+        Assert.True(result.GetStructureDiagnostics().SeparateCollisionNodeCount > 0);
     }
 
     /// <summary>Compares mixed edits and subsequent persistent operations with a persistent oracle.</summary>
@@ -173,6 +400,90 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         persistentResult.ValidateCanonicalityForDiagnostics();
     }
 
+    /// <summary>Exercises lookup across both possible ordinary/separate branch transitions.</summary>
+    [Fact]
+    public void MixedBranchLookup_AlternatesExactNodeKindsUntilTheTerminal()
+    {
+        var source = PersistentHashMap<int, int>.CreateRange(
+            Enumerable.Range(0, 1_024).Select(index => KeyValuePair.Create(index, index)));
+        var kernel = source.CreateSeparateNodeTransientKernel();
+        kernel.SetItem(513, -513);
+        var separateRootMap = kernel.Persist();
+        var separateRoot = Assert.IsType<PersistentHashMap<int, int>.SeparateTransientBranchNode>(
+            separateRootMap.RootForTesting);
+
+        Assert.Contains(
+            separateRoot.Children,
+            child => child is PersistentHashMap<int, int>.BitmapIndexedNode);
+        Assert.Equal(100, separateRootMap[100]);
+        Assert.True(separateRootMap.CountNodeVisitsForDiagnostics(100) > 1);
+
+        var ordinaryRootMap = separateRootMap.SetItem(100, -100);
+        var ordinaryRoot = Assert.IsType<PersistentHashMap<int, int>.BitmapIndexedNode>(
+            ordinaryRootMap.RootForTesting);
+        Assert.Contains(
+            ordinaryRoot.Children,
+            child => child is PersistentHashMap<int, int>.SeparateTransientBranchNode);
+        Assert.Equal(-513, ordinaryRootMap[513]);
+        Assert.True(ordinaryRootMap.CountNodeVisitsForDiagnostics(513) > 1);
+        ordinaryRootMap.ValidateCanonicalityForDiagnostics();
+    }
+
+    /// <summary>Verifies diff and all structural algebra paths over published mixed graphs.</summary>
+    [Fact]
+    public void PublishedMixedGraph_SupportsDiffAndStructuralAlgebra()
+    {
+        var comparer = new ExplicitHashComparer();
+        var source = PersistentHashMap<ExplicitHashKey, int>.Create(comparer);
+        for (var index = 0; index < 256; index++)
+            source = source.SetItem(new ExplicitHashKey(index, ClusteredHash(index)), index);
+
+        var oracle = source;
+        var kernel = source.CreateSeparateNodeTransientKernel();
+        for (var index = 0; index < 96; index++)
+        {
+            var key = new ExplicitHashKey(index, ClusteredHash(index));
+            kernel.SetItem(key, -index - 1);
+            oracle = oracle.SetItem(key, -index - 1);
+        }
+        for (var index = 256; index < 288; index++)
+        {
+            var key = new ExplicitHashKey(index, ClusteredHash(index));
+            kernel.SetItem(key, -index - 1);
+            oracle = oracle.SetItem(key, -index - 1);
+        }
+        var mixed = kernel.Persist();
+
+        var right = PersistentHashMap<ExplicitHashKey, int>.Create(comparer);
+        for (var index = 64; index < 320; index++)
+            right = right.SetItem(new ExplicitHashKey(index, ClusteredHash(index)), index * 17);
+
+        Assert.Equal(oracle.Diff(right).ToArray(), mixed.Diff(right).ToArray());
+        Assert.Equal(right.Diff(oracle).ToArray(), right.Diff(mixed).ToArray());
+
+        var union = mixed.Union(right);
+        var intersection = mixed.Intersect(right);
+        var except = mixed.Except(right);
+        var symmetric = mixed.SymmetricExcept(right);
+        Assert.True(union.MapEquals(oracle.Union(right)));
+        Assert.True(intersection.MapEquals(oracle.Intersect(right)));
+        Assert.True(except.MapEquals(oracle.Except(right)));
+        Assert.True(symmetric.MapEquals(oracle.SymmetricExcept(right)));
+
+        var overlap = new ExplicitHashKey(80, ClusteredHash(80));
+        Assert.Equal(right[overlap], union[overlap]);
+        Assert.Equal(mixed[overlap], intersection[overlap]);
+        Assert.Same(mixed, mixed.Union(mixed));
+        Assert.Same(mixed, mixed.Intersect(mixed));
+        Assert.Empty(mixed.Except(mixed));
+        Assert.Empty(mixed.SymmetricExcept(mixed));
+
+        union.ValidateCanonicalityForDiagnostics();
+        intersection.ValidateCanonicalityForDiagnostics();
+        except.ValidateCanonicalityForDiagnostics();
+        symmetric.ValidateCanonicalityForDiagnostics();
+    }
+
     /// <summary>Verifies every deterministic preparation boundary leaves state untouched.</summary>
     [Fact]
     public void EveryPreparationFailpoint_LeavesRootContentVersionAndCountersUnchanged()
@@ -214,9 +525,70 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
             }
         }
 
-        // The separate hierarchy additionally prepares ownership copies for independently shared
-        // data and child arrays, so it exposes at least the owner-field layout's failure boundaries.
+        // The separate hierarchy prepares ownership copies for independently shared data and child
+        // arrays, so this path must expose several deterministic allocation boundaries.
         Assert.True(observedFailures >= 4);
+    }
+
+    /// <summary>Verifies every mutation failpoint is reached by a representative owner-free shape.</summary>
+    [Fact]
+    public void MutationFailpoints_AreIndividuallyFailureAtomicAcrossNodeShapes()
+    {
+        var branched = PersistentHashMap<int, int>.CreateRange(
+            Enumerable.Range(0, 256).Select(index => KeyValuePair.Create(index, index)));
+        var collision = PersistentHashMap<int, int>.Create(new ConstantHashIntComparer())
+            .SetItem(0, 0)
+            .SetItem(1, 1);
+        var removableCollision = collision.SetItem(2, 2);
+        var explicitComparer = new ExplicitHashComparer();
+        var collidingFirst = new ExplicitHashKey(0, 0);
+        var collidingSecond = new ExplicitHashKey(1, 0);
+        var split = new ExplicitHashKey(2, 32);
+        var contracting = PersistentHashMap<ExplicitHashKey, int>.Create(explicitComparer)
+            .SetItem(collidingFirst, 0)
+            .SetItem(collidingSecond, 1)
+            .SetItem(split, 2);
+
+        AssertMutationFailpointAtomic(
+            PersistentHashMap<int, int>.Empty,
+            kernel => kernel.SetItem(0, 1),
+            PersistentHashMap<int, int>.OwnerTokenKernelFailurePoint.BeforeNodeAllocation);
+        AssertMutationFailpointAtomic(
+            branched,
+            kernel => kernel.SetItem(129, -1),
+            PersistentHashMap<int, int>.OwnerTokenKernelFailurePoint.BeforeDataArrayAllocation);
+        AssertMutationFailpointAtomic(
+            branched,
+            kernel => kernel.SetItem(129, -1),
+            PersistentHashMap<int, int>.OwnerTokenKernelFailurePoint.BeforeChildArrayAllocation);
+        AssertMutationFailpointAtomic(
+            collision,
+            kernel => kernel.SetItem(0, -1),
+            PersistentHashMap<int, int>.OwnerTokenKernelFailurePoint.BeforeCollisionArrayAllocation);
+        AssertMutationFailpointAtomic(
+            collision,
+            kernel => kernel.SetItem(0, -1),
+            PersistentHashMap<int, int>.OwnerTokenKernelFailurePoint.BeforeNodeAllocation);
+        AssertMutationFailpointAtomic(
+            removableCollision,
+            kernel => Assert.True(kernel.Remove(1)),
+            PersistentHashMap<int, int>.OwnerTokenKernelFailurePoint.BeforeCollisionArrayAllocation);
+        AssertMutationFailpointAtomic(
+            removableCollision,
+            kernel => Assert.True(kernel.Remove(1)),
+            PersistentHashMap<int, int>.OwnerTokenKernelFailurePoint.BeforeNodeAllocation);
+        AssertMutationFailpointAtomic(
+            removableCollision,
+            kernel => Assert.True(kernel.Remove(1)),
+            PersistentHashMap<int, int>.OwnerTokenKernelFailurePoint.MutationPrepared);
+        AssertMutationFailpointAtomic(
+            branched,
+            kernel => kernel.SetItem(129, -1),
+            PersistentHashMap<int, int>.OwnerTokenKernelFailurePoint.MutationPrepared);
+        AssertMutationFailpointAtomic(
+            contracting,
+            kernel => Assert.True(kernel.Remove(split)),
+            PersistentHashMap<ExplicitHashKey, int>.OwnerTokenKernelFailurePoint.MutationPrepared);
     }
 
     /// <summary>Verifies a failed second edit cannot partly mutate an already-owned separate node.</summary>
@@ -246,6 +618,40 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         Assert.Equal(counters, kernel.GetCountersForDiagnostics());
         kernel.SetItem(257, -3);
         Assert.Equal(-3, kernel.TryGetValue(257, out var value) ? value : 0);
+    }
+
+    /// <summary>Verifies MutationPrepared protects an already-owned collision array.</summary>
+    [Fact]
+    public void FailedPreparedInPlaceCollisionWrite_DoesNotChangeOwnedStorage()
+    {
+        var source = PersistentHashMap<int, int>.Create(new ConstantHashIntComparer())
+            .SetItem(0, 0)
+            .SetItem(1, 1)
+            .SetItem(2, 2);
+        var kernel = source.CreateSeparateNodeTransientKernel();
+        kernel.SetItem(1, -1);
+        Assert.IsType<PersistentHashMap<int, int>.SeparateTransientCollisionNode>(
+            kernel.RootIdentityForDiagnostics);
+        var root = kernel.RootIdentityForDiagnostics;
+        var expected = kernel.ToArrayForDiagnostics();
+        var version = kernel.VersionForDiagnostics;
+        var counters = kernel.GetCountersForDiagnostics();
+        kernel.FailureInjector = point =>
+        {
+            if (point == PersistentHashMap<int, int>.OwnerTokenKernelFailurePoint.MutationPrepared)
+                throw new TestFailureException();
+        };
+
+        Assert.Throws<TestFailureException>(() => kernel.SetItem(1, -2));
+        kernel.FailureInjector = null;
+
+        Assert.Same(root, kernel.RootIdentityForDiagnostics);
+        Assert.Equal(expected, kernel.ToArrayForDiagnostics());
+        Assert.Equal(version, kernel.VersionForDiagnostics);
+        Assert.Equal(counters, kernel.GetCountersForDiagnostics());
+        Assert.Equal(1, source[1]);
+        kernel.SetItem(1, -3);
+        Assert.Equal(-3, kernel.TryGetValue(1, out var value) ? value : 0);
     }
 
     /// <summary>Verifies throwing hash/equality/value callbacks cannot mutate owned nodes.</summary>
@@ -317,8 +723,48 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
 
         kernel.FailureInjector = null;
         var result = kernel.Persist();
+        var counters = kernel.GetCountersForDiagnostics();
         Assert.Equal(2, result[1]);
+        Assert.Equal(1, counters.AdoptionCount);
+        Assert.Equal(0, counters.AdoptionNodeVisits);
+        Assert.Equal(1, counters.PublicationCount);
+        Assert.Equal(0, counters.PublicationNodeVisits);
+        Assert.Equal(1, counters.PersistentWrapperAllocationCount);
         result.ValidateCanonicalityForDiagnostics();
+    }
+
+    private static void AssertMutationFailpointAtomic<TKey>(
+        PersistentHashMap<TKey, int> source,
+        Action<PersistentHashMap<TKey, int>.OwnerTokenTransientKernel> mutation,
+        PersistentHashMap<TKey, int>.OwnerTokenKernelFailurePoint target)
+        where TKey : notnull
+    {
+        var expectedSource = source.ToArray();
+        var kernel = source.CreateSeparateNodeTransientKernel();
+        var root = kernel.RootIdentityForDiagnostics;
+        var expectedKernel = kernel.ToArrayForDiagnostics();
+        var version = kernel.VersionForDiagnostics;
+        var counters = kernel.GetCountersForDiagnostics();
+        var reached = false;
+        kernel.FailureInjector = point =>
+        {
+            if (point != target)
+                return;
+            reached = true;
+            throw new TestFailureException();
+        };
+
+        Assert.Throws<TestFailureException>(() => mutation(kernel));
+        kernel.FailureInjector = null;
+
+        Assert.True(reached, $"The representative edit did not reach {target}.");
+        Assert.True(kernel.IsActiveForDiagnostics);
+        Assert.True(kernel.TokenIsActiveForDiagnostics);
+        Assert.Same(root, kernel.RootIdentityForDiagnostics);
+        Assert.Equal(version, kernel.VersionForDiagnostics);
+        Assert.Equal(counters, kernel.GetCountersForDiagnostics());
+        Assert.Equal(expectedKernel, kernel.ToArrayForDiagnostics());
+        Assert.Equal(expectedSource, source.ToArray());
     }
 
     private static string NewString(string value) => new(value.ToCharArray());
@@ -340,6 +786,13 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
             StringComparer.OrdinalIgnoreCase.Equals(left, right);
 
         public int GetHashCode(string value) => 0;
+    }
+
+    private sealed class ConstantHashIntComparer : IEqualityComparer<int>
+    {
+        public bool Equals(int left, int right) => left == right;
+
+        public int GetHashCode(int value) => 0;
     }
 
     private sealed class SwitchableThrowingComparer : IEqualityComparer<string>

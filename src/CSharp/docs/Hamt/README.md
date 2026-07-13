@@ -21,8 +21,8 @@
   source files, filter commands, wire vectors, proof/persistence adversarial cases, concurrency
   histories, and model/property coverage.
 - [CHAMP transient T0 decision](transient-t0-decision.md) locks the private T1 deciding tuple,
-  single-worker commands, owner-field and separate-editable-node filters, counter contract, and
-  the still-pending material-win gate before any public transient API.
+  single-worker direct-separate command, historical owner-field evidence boundary, counter
+  contract, and the still-pending material-win gate before any public transient API.
 - [Frozen hash F1 fixed-layout decision](frozen-f1-layout-decision.md) locks the benchmark-local
   linear, Robin-Hood, and quadratic packed-index candidates, semantic setup oracle, retained-array
   diagnostics, single-worker evidence commands, and the still-pending select/defer gate.
