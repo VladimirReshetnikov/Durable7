@@ -13,6 +13,11 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
 
 - `PersistentHashMapTests.cs` covers construction, lookup, insertion, replacement, removal, no-op behavior,
   comparer preservation, value materialization, concurrent snapshot readers, and immutable-version publication.
+- `PersistentHashMapContractOracleTests.cs` and `PersistentHashSetContractOracleTests.cs` are the Axis 2
+  executable semantic baseline for comparer identity, stored representatives, collisions, nullable keys/items,
+  stable enumeration, no-op identity, retained versions, and callback-exception atomicity.
+- `PersistentHashMapDiagnosticsTests.cs` pins the benchmark-only root, node/array sharing, path-copy,
+  ownership, retained-size, lookup-visit, and canonical bulk-builder diagnostic seam.
 - `PersistentHashMapEnumeratorTests.cs` covers allocation-free struct enumerators, copied enumerator independence,
   and key/value/pair enumeration.
 - `PersistentHashSetEnumeratorTests.cs` covers the set wrapper's default, before-first, active, exhausted,

@@ -30,7 +30,7 @@ namespace Tools.DataStructures.Hamt;
 /// </remarks>
 [DebuggerDisplay("Count = {Count}")]
 [DebuggerTypeProxy(typeof(PersistentHashMapDebugView<,>))]
-public sealed class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, TValue>
+public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionary<TKey, TValue>
 {
     private const int BitsPerLevel = 5;
     private const int BranchMask = (1 << BitsPerLevel) - 1;

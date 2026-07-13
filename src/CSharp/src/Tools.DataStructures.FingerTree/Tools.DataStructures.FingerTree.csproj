@@ -7,5 +7,6 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Tools.DataStructures.FingerTree.Tests" />
     <InternalsVisibleTo Include="Tools.DataStructures.Tungsten" />
+    <InternalsVisibleTo Include="Tools.DataStructures.FingerTree.Benchmarks" />
   </ItemGroup>
 </Project>
