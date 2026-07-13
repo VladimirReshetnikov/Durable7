@@ -20,6 +20,7 @@ routes a reader to the narrowest document that owns the question.
 | Plan a new derived structure or API extension | [Derived structure catalog](derived-structure-catalog.md) | [Porting and semantic parity](../guides/porting-and-semantic-parity.md), affected workspace API specs |
 | Plan a new core, representation tier, or specialized sibling | [Frontier structure catalog](frontier-structure-catalog.md) | [Axis 2 final lifecycle/cursor plan](../proposals/axis2-lifecycle-and-sequence-cursors.md), [derived structure catalog](derived-structure-catalog.md), [next-data-structures proposal](../proposals/new-data-structures-2026-07-09.md), [porting guide](../guides/porting-and-semantic-parity.md) |
 | Use an existing collection | The relevant usage guide below | Source tests for executable examples when behavior is subtle |
+| Batch-edit a C# CHAMP map or set | [C# HAMT usage guide](../../src/CSharp/docs/Hamt/usage.md) | [API specification](../../src/CSharp/docs/Hamt/api-specification.md), [T2 shipment decision](../../src/CSharp/docs/Hamt/transient-t2-decision.md), and public transient tests |
 | Build or validate a workspace | [Build and validation](../guides/build-and-validation.md) | [Test suite map](test-suite-map.md), workspace validation docs, and workspace README |
 | Understand test coverage | [Test suite map](test-suite-map.md) | Workspace tests README and validation guide |
 | Change public API or semantics | [Porting and semantic parity](../guides/porting-and-semantic-parity.md) | [Semantic contracts](semantic-contracts.md), API specs/notes for all affected language workspaces, catalog rows, tests |
@@ -38,7 +39,7 @@ patterns.
 | Workspace | Usage guide | Best for |
 | --- | --- | --- |
 | C# Numerics | [src/CSharp/docs/Numerics/overview.md](../../src/CSharp/docs/Numerics/overview.md) | Fixed-width integer types, sparse integers, binary conversion, and wide-integer maintenance entry points |
-| C# HAMT | [src/CSharp/docs/Hamt/usage.md](../../src/CSharp/docs/Hamt/usage.md) | `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` construction, comparers, persistent updates, set algebra |
+| C# HAMT | [src/CSharp/docs/Hamt/usage.md](../../src/CSharp/docs/Hamt/usage.md) | `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` construction, comparers, persistent updates, one-way transient editing/publication, and set algebra |
 | C HAMT | [src/C/Hamt/docs/usage.md](../../src/C/Hamt/docs/usage.md) and [Merkle guide](../../src/C/Hamt/docs/merkle-search-tree.md) | Type-erased HAMT/Patricia values plus Merkle policies/codecs, stores, budgets, proofs, sync, merge, persistent handles, and status/cleanup patterns |
 | C++ HAMT | [src/Cpp/Hamt/docs/usage.md](../../src/Cpp/Hamt/docs/usage.md), [Merkle core](../../src/Cpp/Hamt/docs/merkle-search-tree.md), and [persistence guide](../../src/Cpp/Hamt/docs/merkle-persistence.md) | Header inclusion, CHAMP/Patricia values, canonical Merkle codecs/topology, stores, budgets, proofs, synchronization, move-only merge, and diagnostics |
 | Haskell HAMT | [src/Haskell/Hamt/README.md](../../src/Haskell/Hamt/README.md) and [Merkle guide](../../src/Haskell/Hamt/docs/merkle-search-tree.md) | HAMT/Patricia values plus pure Merkle construction, immutable stores, bounded verification, proofs, synchronization, and merge |
@@ -63,7 +64,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | Workspace | Contract document | Notes |
 | --- | --- | --- |
 | C# Numerics | [API and behavior reference](../../src/CSharp/docs/Numerics/api-and-behavior-reference.md) | Normative fixed-width integer behavior, conversion, parse/format, and binary representation contract |
-| C# HAMT | [API specification](../../src/CSharp/docs/Hamt/api-specification.md) | Normative C# HAMT map/set contract |
+| C# HAMT | [API specification](../../src/CSharp/docs/Hamt/api-specification.md) and [T2 shipment decision](../../src/CSharp/docs/Hamt/transient-t2-decision.md) | Normative C# HAMT map/set contract, including the C#-only single-owner transient lifecycle and its evidence boundary |
 | C HAMT | [API specification](../../src/C/Hamt/docs/api-specification.md), [Merkle specification](../../src/C/Hamt/docs/merkle-search-tree.md), and [Merkle header](../../src/C/Hamt/include/Tools/DataStructures/Hamt/merkle_search_tree.h) | C ownership/callback contracts plus failure-atomic `MST2`/`MSP2`, bounded stores/import, proofs, sync, and present-null-safe merge |
 | C++ HAMT | [API specification](../../src/Cpp/Hamt/docs/api-specification.md), [Merkle core](../../src/Cpp/Hamt/docs/merkle-search-tree.md), [persistence specification](../../src/Cpp/Hamt/docs/merkle-persistence.md), and [aggregate header](../../src/Cpp/Hamt/include/Tools/DataStructures/Hamt/hamt.hpp) | C++ template contracts plus exact `MST2`/`MSP2`, finite budgets, stores, proofs, sync, merge, and native ownership rules |
 | Haskell HAMT | [Workspace README](../../src/Haskell/Hamt/README.md), [Merkle guide](../../src/Haskell/Hamt/docs/merkle-search-tree.md), [core](../../src/Haskell/Hamt/src/Data/Structures/Hamt/MerkleSearchTree.hs), and [persistence module](../../src/Haskell/Hamt/src/Data/Structures/Hamt/MerklePersistence.hs) | Haskell HAMT/Patricia APIs plus exact `MST2`/`MSP2`, opaque budgets, pure store snapshots, proofs, sync, and merge |
@@ -86,7 +87,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | --- | --- | --- |
 | Whole repository | [Build and validation](../guides/build-and-validation.md) / [Test suite map](test-suite-map.md) | Canonical commands for C#, C, C++, CMake presets, Markdown checks, and test-suite entry points |
 | C# Numerics | [Validation](../../src/CSharp/docs/Numerics/validation.md) | .NET restore/build/test commands, XML-documentation warning gate, and xUnit wide-integer coverage |
-| C# HAMT | [Validation](../../src/CSharp/docs/Hamt/validation.md) | .NET restore/build/test commands, XML-documentation warning gate, and xUnit/CsCheck coverage |
+| C# HAMT | [Validation](../../src/CSharp/docs/Hamt/validation.md) | .NET restore/build/test commands, XML-documentation warning gate, and xUnit/CsCheck persistent, transient-lifecycle, failpoint, model, and concurrency coverage |
 | C HAMT | [Validation](../../src/C/Hamt/docs/validation.md) | MSVC C17 Debug/Release, strict GCC/Clang, sanitizer/analyzer lanes, and HAMT/Patricia plus complete Merkle wire/persistence/proof/sync/merge/failpoint/concurrency coverage |
 | C++ HAMT | [Validation](../../src/Cpp/Hamt/docs/validation.md) | MSVC/GCC/Clang Debug/Release lanes, strict warnings/static analysis, CHAMP/Patricia models, complete Merkle wire/persistence/proof/sync/merge/concurrency coverage, and copied-header consumption |
 | Rust HAMT | [Validation](../../src/Rust/Hamt/docs/validation.md) | Cargo test, clippy, and rustdoc gates for HAMT/Patricia behavior and full Merkle core, wire, persistence, proof, sync, and merge coverage |
@@ -105,7 +106,7 @@ For a cross-family checklist before drilling into a local spec, start with the
 | C# FingerTree benchmarks | [Benchmark notes](../../src/CSharp/docs/FingerTree/benchmarks.md) | Curated BenchmarkDotNet results and interpretation |
 | C# FingerTree samples | [Samples README](../../src/CSharp/samples/README.md) | Runnable tours covering text, measured-tree facades, and editor-grade text extras |
 | C# Numerics tests | [Tests README](../../src/CSharp/tests/Tools.Numerics.Tests/README.md) | xUnit project covering fixed-width integer behavior, binary conversion, public API coverage, and declaration parity |
-| C# HAMT tests | [Tests README](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests/README.md) | xUnit/CsCheck project, source-file grouping, filter commands, and property coverage |
+| C# HAMT tests | [Tests README](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests/README.md) | xUnit/CsCheck project covering persistent collections plus public map/set transient API shape, clean identity, model histories, version-bound enumeration, consumed aliases, failure atomicity, and retained-base readers |
 | C# FingerTree tests | [Tests README](../../src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/README.md) | xUnit/CsCheck project, source-file grouping, sample smoke hooks, stress controls, and model tests |
 | C# Tungsten collections tests | [Tests README](../../src/CSharp/tests/Tools.DataStructures.Tungsten.Tests/README.md) | xUnit/CsCheck project covering kernel-verified ordering examples, ordered-model histories, and relabel stress |
 | C Tungsten tests | [Test source](../../src/C/Tungsten/tests/tungsten_c_tests.c) | CTest executable covering list operations, Association ordering examples, policies, relabel stress, and generated histories |

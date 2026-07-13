@@ -31,6 +31,7 @@ behavior change through sibling workspaces.
 | Term | Meaning in this repository |
 | --- | --- |
 | Persistent value | An operation that looks like an update returns a new value or handle while preserving every retained old version. |
+| Single-owner transient | A mutable editing session over persistent-capable nodes. It is unsynchronized, permits only one logical owner, and has an explicitly documented publication lifecycle; it is not a reusable staging builder. |
 | Structural sharing | Versions reuse immutable substructure where possible; no-op updates often preserve the same root or instance when the local API exposes that diagnostic. |
 | Reference-first equality | When two stored/incoming references are provably identical, implementations may accept equality without invoking user equality. A non-identical reference never proves semantic inequality. |
 | Policy preservation | Hash, equality, comparison, measure, allocator, ownership, and callback policies flow into derived versions unless a local API explicitly creates a new policy. |
@@ -77,7 +78,7 @@ Public surfaces:
 
 | Language | Map | Set | Policy shape |
 | --- | --- | --- | --- |
-| C# | `PersistentHashMap<TKey, TValue>` | `PersistentHashSet<T>` | `IEqualityComparer<T>` |
+| C# | `PersistentHashMap<TKey, TValue>` and its nested `Transient` | `PersistentHashSet<T>` and its nested `Transient` | `IEqualityComparer<T>` |
 | C | `tds_hamt_map` | `tds_hamt_set` | callback tables and context pointers |
 | C++ | `persistent_hash_map<Key, T, Hash, KeyEqual, ValueEqual>` | `persistent_hash_set<T, Hash, KeyEqual>` | template policy objects |
 | Haskell | `HashMap k v` | `HashSet a` | `Hashable`, `Eq`, optional `HashPolicy` |
@@ -117,6 +118,36 @@ Language-specific obligations:
 | Haskell | `HashPolicy` and package-local `Hashable` shape are part of the port, avoiding third-party dependencies while preserving persistent HAMT behavior. |
 | Kotlin | Miss paths and duplicate results should use idiomatic Kotlin null/result/exception shapes documented in API notes. |
 | Rust | Keys that compare equal under `Eq` must hash equally under the chosen `BuildHasher`; removal returns owned cloned values where exposed. |
+
+### C# owner-token transient lifecycle
+
+C# alone currently exposes the public owner-token transient lifecycle for CHAMP maps and sets. This
+surface is not an implicit parity requirement for C, C++, Haskell, Kotlin, or Rust:
+
+- `CreateTransient(comparer)` creates an empty session, while `source.ToTransient()` adopts an
+  existing persistent map or set. Adoption and successful publication are O(1), do not walk the
+  trie, and preserve the exact comparer object and CHAMP representative/enumeration semantics.
+- A transient is unsynchronized and has one logical owner. Sequential transfer between threads is
+  valid only under caller-provided synchronization; concurrent access is unsupported. Retained
+  persistent source and published values remain immutable and safe for concurrent readers.
+- The first successful `Persist()` consumes the session. Every later read, mutation, relation query,
+  enumeration request, or publication attempt throws `ObjectDisposedException`; views and
+  enumerators obtained before publication are invalidated as well and cannot expose the published
+  graph through a mutable alias.
+- Enumerators and map key/value views are version-bound and fail fast after a successful content
+  change. Duplicate adds, absent removes, equal-value replacements, and clearing an empty session
+  are logical no-ops and do not advance the version.
+- The no-op identity contract is exact: a clean `source.ToTransient().Persist()` returns `source` by
+  reference, including after any number of logical no-op edits. A clean factory session publishes
+  its comparer-preserving empty source.
+- Point mutations have the strong exception guarantee. Publication prepares all fallible wrapper
+  work before consuming the session, so preparation failure leaves it active, unchanged, and
+  retryable.
+
+The normative API and evidence boundary are in the
+[C# HAMT API specification](../../src/CSharp/docs/Hamt/api-specification.md),
+[usage guide](../../src/CSharp/docs/Hamt/usage.md), and
+[T2 shipment decision](../../src/CSharp/docs/Hamt/transient-t2-decision.md).
 
 ## Finger-Tree Core
 
@@ -285,7 +316,7 @@ Shared obligations:
 
 | Language | Ownership model | Documentation focus |
 | --- | --- | --- |
-| C# | Garbage-collected references and immutable public collection values | Exceptions, nullable/miss behavior, XML documentation, structural sharing, builder publication |
+| C# | Garbage-collected references, immutable public collection values, and explicitly single-owner transient sessions where exposed | Exceptions, nullable/miss behavior, XML documentation, structural sharing, builder publication versus one-way transient consumption |
 | C | Opaque handles/value structs with explicit copy/destroy and callback policies | Status codes, allocation failure, retained versus borrowed values, cleanup obligations, callback lifetime |
 | C++ | RAII values over shared immutable nodes | Move/copy cost, exception behavior, policy object lifetime, iterator/materialization behavior |
 | Haskell | Pure immutable values | Total versus `Maybe` operations, package-local type classes, dependency-light design, strictness where relevant |
