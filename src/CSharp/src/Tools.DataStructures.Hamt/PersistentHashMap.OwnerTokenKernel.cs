@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -105,6 +106,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         private int _count;
         private int _version;
         private int _state = ActiveState;
+        private bool _useProductionFirstEditFastPath;
         private bool _hasPersistentMutation;
         private bool _dirty;
 
@@ -120,6 +122,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             _comparer = source._comparer;
             _deferOwnershipUntilReuse = deferOwnershipUntilReuse;
             _diagnosticsEnabled = enableDiagnostics;
+            _useProductionFirstEditFastPath = !enableDiagnostics && deferOwnershipUntilReuse;
             if (enableDiagnostics)
             {
                 _diagnostics = new KernelDiagnostics();
@@ -232,10 +235,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void SetItem(TKey key, TValue value)
         {
-            if (_diagnostics is null
-                && _deferOwnershipUntilReuse
-                && !_hasPersistentMutation
-                && !_dirty)
+            if (_useProductionFirstEditFastPath)
             {
                 SetFirstPersistentFast(key, value);
                 return;
@@ -247,10 +247,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal bool TryAdd(TKey key, TValue value)
         {
-            if (_diagnostics is null
-                && _deferOwnershipUntilReuse
-                && !_hasPersistentMutation
-                && !_dirty)
+            if (_useProductionFirstEditFastPath)
             {
                 return TryAddFirstPersistentFast(key, value);
             }
@@ -270,10 +267,11 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             if (_root is null)
                 return false;
 
+            if (_useProductionFirstEditFastPath)
+                return RemoveFirstPersistentFast(key);
+
             if (_deferOwnershipUntilReuse && !_hasPersistentMutation && !_dirty)
             {
-                if (_diagnostics is null)
-                    return RemoveFirstPersistentFast(key);
                 return RemoveFirstPersistent(key);
             }
 
@@ -331,6 +329,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 _source = result;
                 _root = result._root;
                 _count = result._count;
+                _useProductionFirstEditFastPath = false;
                 _hasPersistentMutation = true;
                 _version = newVersion;
                 if (_diagnostics is { } firstDiagnostics)
@@ -512,6 +511,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             _source = result;
             _root = result._root;
             _count = result._count;
+            _useProductionFirstEditFastPath = false;
             _hasPersistentMutation = true;
             _version = newVersion;
         }
@@ -527,6 +527,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             _source = result;
             _root = result._root;
             _count = result._count;
+            _useProductionFirstEditFastPath = false;
             _hasPersistentMutation = true;
             _version = newVersion;
             return true;
@@ -543,6 +544,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             _source = result;
             _root = result._root;
             _count = result._count;
+            _useProductionFirstEditFastPath = false;
             _hasPersistentMutation = true;
             _version = newVersion;
             return true;
@@ -553,7 +555,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         {
             var result = _source!;
             var newVersion = checked(_version + 1);
-            _token?.Seal();
+            Debug.Assert(_token is null, "Owner-free publication cannot have allocated an edit token.");
             _version = newVersion;
             Volatile.Write(ref _state, InactiveState);
             _root = null;
@@ -1508,11 +1510,17 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             _commitCount = 0;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void EnsureActive()
         {
             if (Volatile.Read(ref _state) != ActiveState)
-                throw new ObjectDisposedException(nameof(OwnerTokenTransientKernel));
+                ThrowInactive();
         }
+
+        [DoesNotReturn]
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void ThrowInactive() =>
+            throw new ObjectDisposedException(nameof(OwnerTokenTransientKernel));
 
         private EditToken GetOrCreateToken()
         {

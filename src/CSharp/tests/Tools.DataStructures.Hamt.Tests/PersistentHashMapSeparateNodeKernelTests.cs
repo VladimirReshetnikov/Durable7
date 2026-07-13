@@ -128,6 +128,8 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
             kernel.SetItem(17, -18);
             Assert.False(kernel.TryAdd(17, 0));
             Assert.False(kernel.Remove(-1));
+            kernel.Clear();
+            Assert.True(kernel.TryAdd(2_048, 2_048));
         }
     }
 
