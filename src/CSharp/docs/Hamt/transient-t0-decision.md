@@ -121,12 +121,24 @@ The exact deciding filters, locked before any T1 timing, are:
 ```powershell
 $persistentFilter = '*TransientLifecycleBenchmarks.PersistentHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512*'
 $builderFilter = '*TransientLifecycleBenchmarks.BulkBuilderHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512*'
+$ownerFieldsFilter = '*TransientLifecycleBenchmarks.OwnerTokenKernelHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512*'
+$separateNodesFilter = '*TransientLifecycleBenchmarks.SeparateNodeKernelHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512*'
 
 dotnet $driver --filter $persistentFilter --job short `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t0\candidate-persistent-short'
 dotnet $driver --filter $builderFilter --job short `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t0\candidate-bulk-builder-short'
+dotnet $driver --filter $ownerFieldsFilter --job short `
+    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t1\candidate-owner-fields-short'
+dotnet $driver --filter $separateNodesFilter --job short `
+    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t1\candidate-separate-nodes-short'
 ```
+
+The two T1 methods share one prepare/commit engine and differ only at node allocation, ownership
+tests, and retained layout: `OwnerTokenKernelHistory` uses owner-capable persistent nodes, while
+`SeparateNodeKernelHistory` uses distinct editable branch/collision classes whose arrays are owned
+as a unit. Their versioned counter rows include `layout=owner-fields` or
+`layout=separate-nodes`, so evidence cannot silently combine the two representations.
 
 After the counter report names a candidate workload, collect its unchanged persistent control in
 five independent processes. Preserve the selected benchmark filter verbatim in the curated record;

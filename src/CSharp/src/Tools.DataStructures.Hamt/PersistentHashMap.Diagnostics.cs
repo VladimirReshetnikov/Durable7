@@ -15,12 +15,15 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         var leafNodes = 0;
         var collisionNodes = 0;
         var branchNodes = 0;
+        var separateCollisionNodes = 0;
+        var separateBranchNodes = 0;
         var ownerTaggedNodes = 0;
         var ownerTaggedArrays = 0;
         var maximumDepth = 0;
         var ownerTokens = new HashSet<EditToken>(ReferenceEqualityComparer.Instance);
         var retainedBytes = EstimateMapWrapperBytes();
         long estimatedOwnerMetadataBytes = 0;
+        long estimatedSeparateNodeMetadataBytes = 0;
         if (_root is not null)
         {
             var pending = new Stack<(Node Node, int Depth)>();
@@ -34,30 +37,55 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                         leafNodes++;
                         retainedBytes += EstimateLeafNodeBytes();
                         break;
-                    case CollisionNode collision:
+                    case CollisionNodeBase collision:
                         collisionNodes++;
-                        estimatedOwnerMetadataBytes += IntPtr.Size;
-                        if (collision.Owner is not null)
+                        if (collision is CollisionNode collisionOwnerFields)
                         {
+                            estimatedOwnerMetadataBytes += IntPtr.Size;
+                            if (collisionOwnerFields.Owner is not null)
+                            {
+                                ownerTaggedNodes++;
+                                ownerTokens.Add(collisionOwnerFields.Owner);
+                                if (collisionOwnerFields.EntriesOwned)
+                                    ownerTaggedArrays++;
+                            }
+                        }
+                        else if (collision is SeparateTransientCollisionNode separateCollision)
+                        {
+                            separateCollisionNodes++;
+                            estimatedSeparateNodeMetadataBytes += IntPtr.Size;
                             ownerTaggedNodes++;
-                            ownerTokens.Add(collision.Owner);
-                            if (collision.EntriesOwned)
-                                ownerTaggedArrays++;
+                            ownerTaggedArrays++;
+                            ownerTokens.Add(separateCollision.Owner);
                         }
                         retainedBytes += EstimateCollisionNodeBytes();
                         retainedBytes += EstimateArrayBytes(collision.Entries.Length, Unsafe.SizeOf<Entry>());
                         break;
-                    case BitmapIndexedNode branch:
+                    case BranchNode branch:
                         branchNodes++;
-                        estimatedOwnerMetadataBytes += IntPtr.Size;
-                        if (branch.Owner is not null)
+                        if (branch is BitmapIndexedNode branchOwnerFields)
                         {
+                            estimatedOwnerMetadataBytes += IntPtr.Size;
+                            if (branchOwnerFields.Owner is not null)
+                            {
+                                ownerTaggedNodes++;
+                                ownerTokens.Add(branchOwnerFields.Owner);
+                                if (branchOwnerFields.DataOwned)
+                                    ownerTaggedArrays++;
+                                if (branchOwnerFields.ChildrenOwned)
+                                    ownerTaggedArrays++;
+                            }
+                        }
+                        else if (branch is SeparateTransientBranchNode separateBranch)
+                        {
+                            separateBranchNodes++;
+                            estimatedSeparateNodeMetadataBytes += IntPtr.Size;
                             ownerTaggedNodes++;
-                            ownerTokens.Add(branch.Owner);
-                            if (branch.DataOwned)
+                            if (branch.Data.Length != 0)
                                 ownerTaggedArrays++;
-                            if (branch.ChildrenOwned)
+                            if (branch.Children.Length != 0)
                                 ownerTaggedArrays++;
+                            ownerTokens.Add(separateBranch.Owner);
                         }
                         retainedBytes += EstimateBranchNodeBytes();
                         retainedBytes += EstimateArrayBytes(branch.Data.Length, Unsafe.SizeOf<Entry>());
@@ -78,12 +106,15 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             LeafNodeCount: leafNodes,
             CollisionNodeCount: collisionNodes,
             BranchNodeCount: branchNodes,
+            SeparateCollisionNodeCount: separateCollisionNodes,
+            SeparateBranchNodeCount: separateBranchNodes,
             ArrayCount: arrays.Count,
             MaximumDepth: maximumDepth,
             OwnerTaggedNodeCount: ownerTaggedNodes,
             OwnerTaggedArrayCount: ownerTaggedArrays,
             OwnerTokenCount: ownerTokens.Count,
             EstimatedOwnerMetadataBytes: estimatedOwnerMetadataBytes,
+            EstimatedSeparateNodeMetadataBytes: estimatedSeparateNodeMetadataBytes,
             EstimatedOwnerTokenBytes: estimatedOwnerTokenBytes,
             EstimatedRetainedBytes: retainedBytes);
     }
@@ -143,7 +174,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         var hash = GetHash(key);
         var shift = 0;
         var visits = 0;
-        while (node is BitmapIndexedNode branch)
+        while (node is BranchNode branch)
         {
             visits++;
             var bit = Bit(Index(hash, shift));
@@ -168,7 +199,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             return visits;
         }
 
-        var collision = (CollisionNode)node;
+        var collision = (CollisionNodeBase)node;
         if (collision.Hash == hash)
         {
             foreach (var entry in collision.Entries)
@@ -198,10 +229,10 @@ public sealed partial class PersistentHashMap<TKey, TValue>
 
             switch (node)
             {
-                case CollisionNode collision:
+                case CollisionNodeBase collision:
                     arrays.Add(collision.Entries);
                     break;
-                case BitmapIndexedNode branch:
+                case BranchNode branch:
                     arrays.Add(branch.Data);
                     arrays.Add(branch.Children);
                     for (var index = 0; index < branch.Children.Length; index++)
@@ -242,12 +273,15 @@ internal readonly record struct PersistentHashMapStructureDiagnostics(
     int LeafNodeCount,
     int CollisionNodeCount,
     int BranchNodeCount,
+    int SeparateCollisionNodeCount,
+    int SeparateBranchNodeCount,
     int ArrayCount,
     int MaximumDepth,
     int OwnerTaggedNodeCount,
     int OwnerTaggedArrayCount,
     int OwnerTokenCount,
     long EstimatedOwnerMetadataBytes,
+    long EstimatedSeparateNodeMetadataBytes,
     long EstimatedOwnerTokenBytes,
     long EstimatedRetainedBytes);
 

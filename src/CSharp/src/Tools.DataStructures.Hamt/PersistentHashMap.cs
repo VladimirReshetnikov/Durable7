@@ -495,7 +495,38 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         {
             var hash = GetHash(key);
             var shift = 0;
+            // Keep the ordinary sealed branch as the first, monomorphic path. Published separate
+            // transient nodes fall through to the polymorphic continuation below.
             while (node is BitmapIndexedNode branch)
+            {
+                var bit = Bit(Index(hash, shift));
+                if ((branch.DataMap & bit) != 0)
+                {
+                    var entry = branch.Data[Slot(branch.DataMap, bit)];
+                    if (entry.Hash == hash && _comparer.Equals(entry.Key, key))
+                    {
+                        actualKey = entry.Key;
+                        value = entry.Value;
+                        return true;
+                    }
+
+                    actualKey = default;
+                    value = default;
+                    return false;
+                }
+
+                if ((branch.NodeMap & bit) == 0)
+                {
+                    actualKey = default;
+                    value = default;
+                    return false;
+                }
+
+                node = branch.Children[Slot(branch.NodeMap, bit)];
+                shift += BitsPerLevel;
+            }
+
+            while (node is BranchNode branch)
             {
                 var bit = Bit(Index(hash, shift));
                 if ((branch.DataMap & bit) != 0)
@@ -535,7 +566,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
             }
             else
             {
-                var collision = (CollisionNode)node;
+                var collision = (CollisionNodeBase)node;
                 if (collision.Hash == hash)
                 {
                     foreach (var entry in collision.Entries)
@@ -732,7 +763,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
     private static Entry[] GetEntries(HashNode node) => node switch
     {
         LeafNode leaf => [Entry.From(leaf)],
-        CollisionNode collision => collision.Entries,
+        CollisionNodeBase collision => collision.Entries,
         _ => throw new InvalidOperationException(),
     };
 
@@ -775,7 +806,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         if (node is HashNode hashNode)
             return Index(hashNode.Hash, shift) == index ? hashNode : null;
 
-        var branch = (BitmapIndexedNode)node;
+        var branch = (BranchNode)node;
         var bit = Bit(index);
         if ((branch.DataMap & bit) != 0)
         {
@@ -854,20 +885,21 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
     {
         if (ReferenceEquals(left, right))
             return true;
-        if (left is null || right is null || left.GetType() != right.GetType())
+        if (left is null || right is null)
             return false;
 
         if (left is LeafNode leftLeaf)
         {
-            var rightLeaf = (LeafNode)right;
-            return leftLeaf.Hash == rightLeaf.Hash
+            return right is LeafNode rightLeaf
+                && leftLeaf.Hash == rightLeaf.Hash
                 && keyComparer.Equals(leftLeaf.Key, rightLeaf.Key)
                 && ValuesEqual(leftLeaf.Value, rightLeaf.Value, valueComparer);
         }
 
-        if (left is CollisionNode leftCollision)
+        if (left is CollisionNodeBase leftCollision)
         {
-            var rightCollision = (CollisionNode)right;
+            if (right is not CollisionNodeBase rightCollision)
+                return false;
             if (leftCollision.Hash != rightCollision.Hash || leftCollision.Entries.Length != rightCollision.Entries.Length)
                 return false;
 
@@ -891,8 +923,8 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
             return true;
         }
 
-        var leftBranch = (BitmapIndexedNode)left;
-        var rightBranch = (BitmapIndexedNode)right;
+        if (left is not BranchNode leftBranch || right is not BranchNode rightBranch)
+            return false;
         if (leftBranch.DataMap != rightBranch.DataMap || leftBranch.NodeMap != rightBranch.NodeMap)
             return false;
         for (var i = 0; i < leftBranch.Data.Length; i++)
@@ -940,14 +972,14 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
             if (right is HashNode rightHash)
                 DiffEntryRuns(leftRun, new EntryRun(rightHash), keyComparer, valueComparer, differences);
             else
-                DiffRunAndBranch(leftRun, (BitmapIndexedNode)right, shift, keyComparer, valueComparer, differences);
+                DiffRunAndBranch(leftRun, (BranchNode)right, shift, keyComparer, valueComparer, differences);
             return;
         }
 
         if (right is HashNode rightHashNode)
         {
             DiffBranchAndRun(
-                (BitmapIndexedNode)left,
+                (BranchNode)left,
                 new EntryRun(rightHashNode),
                 shift,
                 keyComparer,
@@ -957,8 +989,8 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         }
 
         DiffBranches(
-            (BitmapIndexedNode)left,
-            (BitmapIndexedNode)right,
+            (BranchNode)left,
+            (BranchNode)right,
             shift,
             keyComparer,
             valueComparer,
@@ -966,8 +998,8 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
     }
 
     private static void DiffBranches(
-        BitmapIndexedNode left,
-        BitmapIndexedNode right,
+        BranchNode left,
+        BranchNode right,
         int shift,
         IEqualityComparer<TKey> keyComparer,
         IEqualityComparer<TValue> valueComparer,
@@ -1065,7 +1097,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
             return;
         }
 
-        DiffRunAndBranch(left, (BitmapIndexedNode)right, shift, keyComparer, valueComparer, differences);
+        DiffRunAndBranch(left, (BranchNode)right, shift, keyComparer, valueComparer, differences);
     }
 
     private static void DiffNodeAndRun(
@@ -1082,12 +1114,12 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
             return;
         }
 
-        DiffBranchAndRun((BitmapIndexedNode)left, right, shift, keyComparer, valueComparer, differences);
+        DiffBranchAndRun((BranchNode)left, right, shift, keyComparer, valueComparer, differences);
     }
 
     private static void DiffRunAndBranch(
         EntryRun left,
-        BitmapIndexedNode right,
+        BranchNode right,
         int shift,
         IEqualityComparer<TKey> keyComparer,
         IEqualityComparer<TValue> valueComparer,
@@ -1137,7 +1169,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
     }
 
     private static void DiffBranchAndRun(
-        BitmapIndexedNode left,
+        BranchNode left,
         EntryRun right,
         int shift,
         IEqualityComparer<TKey> keyComparer,
@@ -1295,7 +1327,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         {
             null => 1,
             LeafNode => 1,
-            CollisionNode collision => collision.Entries.Length,
+            CollisionNodeBase collision => collision.Entries.Length,
             _ => throw new UnreachableException(),
         };
 
@@ -1315,7 +1347,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
                     return Entry.From(leaf);
                 }
 
-                return ((CollisionNode)_node).Entries[index];
+                return ((CollisionNodeBase)_node).Entries[index];
             }
         }
     }
@@ -1434,7 +1466,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
                     return true;
                 }
 
-                if (node is CollisionNode collision)
+                if (node is CollisionNodeBase collision)
                 {
                     // Collision buckets always hold at least two entries.
                     _collisionEntries = collision.Entries;
@@ -1443,8 +1475,15 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
                     return true;
                 }
 
-                var branch = (BitmapIndexedNode)node;
-                _frames[_depth++] = new Frame(branch.Data, branch.Children);
+                if (node is BitmapIndexedNode ordinaryBranch)
+                {
+                    _frames[_depth++] = new Frame(ordinaryBranch.Data, ordinaryBranch.Children);
+                }
+                else
+                {
+                    var separateBranch = (SeparateTransientBranchNode)node;
+                    _frames[_depth++] = new Frame(separateBranch.Data, separateBranch.Children);
+                }
                 node = null;
             }
         }
@@ -1668,45 +1707,15 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         }
     }
 
-    internal sealed class CollisionNode : HashNode
+    /// <summary>
+    /// Supplies the immutable collision-node behavior shared by the ordinary owner-field layout
+    /// and the separate transient-editable layout. The abstraction itself carries no edit token.
+    /// </summary>
+    internal abstract class CollisionNodeBase(uint hash) : HashNode(hash)
     {
-        internal CollisionNode(uint hash, Entry[] entries)
-            : this(hash, entries, owner: null, entriesOwned: false)
-        {
-        }
-
-        internal CollisionNode(uint hash, Entry[] entries, EditToken? owner, bool entriesOwned)
-            : base(hash)
-        {
-            Entries = entries;
-            Owner = owner;
-            EntriesOwned = entriesOwned;
-        }
-
         internal override int Count => Entries.Length;
 
-        internal Entry[] Entries { get; private set; }
-
-        internal EditToken? Owner { get; }
-
-        internal bool EntriesOwned { get; private set; }
-
-        internal bool CanWriteEntries(EditToken token) =>
-            ReferenceEquals(Owner, token) && token.IsActive && EntriesOwned;
-
-        internal void CommitTransient(
-            Entry[] entries,
-            bool entriesOwned,
-            bool writeEntry,
-            int entryIndex,
-            Entry entry)
-        {
-            if (writeEntry)
-                entries[entryIndex] = entry;
-
-            Entries = entries;
-            EntriesOwned = entriesOwned;
-        }
+        internal abstract Entry[] Entries { get; }
 
         internal static CollisionNode Create(HashNode left, LeafNode right)
         {
@@ -1802,103 +1811,21 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         }
     }
 
-    internal sealed class BitmapIndexedNode : Node
+    /// <summary>
+    /// Supplies immutable CHAMP branch behavior without imposing either experimental ownership
+    /// representation on the common semantic hierarchy.
+    /// </summary>
+    internal abstract class BranchNode : Node
     {
-        private const byte DataOwnedFlag = 1;
-        private const byte ChildrenOwnedFlag = 2;
+        internal abstract uint DataMap { get; }
 
-        internal BitmapIndexedNode(
-            uint dataMap,
-            Entry[] data,
-            uint nodeMap,
-            Node[] children)
-            : this(
-                dataMap,
-                data,
-                nodeMap,
-                children,
-                CountEntries(data, children),
-                owner: null,
-                dataOwned: false,
-                childrenOwned: false)
-        {
-        }
+        internal abstract Entry[] Data { get; }
 
-        internal BitmapIndexedNode(
-            uint dataMap,
-            Entry[] data,
-            uint nodeMap,
-            Node[] children,
-            int count,
-            EditToken? owner,
-            bool dataOwned,
-            bool childrenOwned)
-        {
-            DataMap = dataMap;
-            Data = data;
-            NodeMap = nodeMap;
-            Children = children;
-            _count = count;
-            Owner = owner;
-            _ownedArrays = (byte)((dataOwned ? DataOwnedFlag : 0) |
-                (childrenOwned ? ChildrenOwnedFlag : 0));
-        }
+        internal abstract uint NodeMap { get; }
 
-        private int _count;
-        private byte _ownedArrays;
+        internal abstract Node[] Children { get; }
 
-        internal override int Count => _count;
-
-        internal uint DataMap { get; private set; }
-
-        internal Entry[] Data { get; private set; }
-
-        internal uint NodeMap { get; private set; }
-
-        internal Node[] Children { get; private set; }
-
-        internal EditToken? Owner { get; }
-
-        internal bool DataOwned => (_ownedArrays & DataOwnedFlag) != 0;
-
-        internal bool ChildrenOwned => (_ownedArrays & ChildrenOwnedFlag) != 0;
-
-        internal bool CanWriteData(EditToken token) =>
-            ReferenceEquals(Owner, token) && token.IsActive && DataOwned;
-
-        internal bool CanWriteChildren(EditToken token) =>
-            ReferenceEquals(Owner, token) && token.IsActive && ChildrenOwned;
-
-        internal void CommitTransient(
-            uint dataMap,
-            Entry[] data,
-            bool dataOwned,
-            uint nodeMap,
-            Node[] children,
-            bool childrenOwned,
-            int count,
-            bool writeData,
-            int dataIndex,
-            Entry dataEntry,
-            bool writeChild,
-            int childIndex,
-            Node? child)
-        {
-            if (writeData)
-                data[dataIndex] = dataEntry;
-            if (writeChild)
-                children[childIndex] = child!;
-
-            DataMap = dataMap;
-            Data = data;
-            NodeMap = nodeMap;
-            Children = children;
-            _count = count;
-            _ownedArrays = (byte)((dataOwned ? DataOwnedFlag : 0) |
-                (childrenOwned ? ChildrenOwnedFlag : 0));
-        }
-
-        private static int CountEntries(Entry[] entries, Node[] nodes)
+        protected static int CountEntries(Entry[] entries, Node[] nodes)
         {
             var count = entries.Length;
             foreach (var node in nodes)
@@ -2058,6 +1985,388 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
             if (index < source.Length - 1)
                 Array.Copy(source, index + 1, result, index, source.Length - index - 1);
             return result;
+        }
+    }
+
+    /// <summary>
+    /// Represents the owner-field T1 layout. Ordinary persistent nodes use a null owner; nodes
+    /// prepared by that private kernel retain their sealed token after O(1) publication.
+    /// </summary>
+    internal sealed class CollisionNode : CollisionNodeBase
+    {
+        internal CollisionNode(uint hash, Entry[] entries)
+            : this(hash, entries, owner: null, entriesOwned: false)
+        {
+        }
+
+        internal CollisionNode(uint hash, Entry[] entries, EditToken? owner, bool entriesOwned)
+            : base(hash)
+        {
+            _entries = entries;
+            Owner = owner;
+            EntriesOwned = entriesOwned;
+        }
+
+        private Entry[] _entries;
+
+        internal override Entry[] Entries => _entries;
+
+        internal EditToken? Owner { get; }
+
+        internal bool EntriesOwned { get; private set; }
+
+        internal bool CanWriteEntries(EditToken token) =>
+            ReferenceEquals(Owner, token) && token.IsActive && EntriesOwned;
+
+        // Keep the ordinary/published owner-field layout's update path on this sealed concrete
+        // type. The shared base implementation exists for separately editable published nodes;
+        // ordinary CHAMP updates should not pay abstract-property dispatch for the experiment.
+        internal override Node Set(
+            TKey key,
+            TValue value,
+            uint hash,
+            int shift,
+            IEqualityComparer<TKey> comparer,
+            bool overwrite,
+            out bool added)
+        {
+            if (Hash != hash)
+            {
+                added = true;
+                return MergeHashNodes(this, new LeafNode(hash, key, value), shift);
+            }
+
+            for (var index = 0; index < _entries.Length; index++)
+            {
+                if (!comparer.Equals(_entries[index].Key, key))
+                    continue;
+
+                added = false;
+                if (!overwrite || ValuesEqual(_entries[index].Value, value))
+                    return this;
+
+                var replaced = (Entry[])_entries.Clone();
+                replaced[index] = new Entry(Hash, _entries[index].Key, value);
+                return new CollisionNode(Hash, replaced);
+            }
+
+            var entries = new Entry[_entries.Length + 1];
+            Array.Copy(_entries, entries, _entries.Length);
+            entries[^1] = new Entry(hash, key, value);
+            added = true;
+            return new CollisionNode(Hash, entries);
+        }
+
+        internal override Node? Remove(
+            TKey key,
+            uint hash,
+            int shift,
+            IEqualityComparer<TKey> comparer,
+            out bool removed,
+            out TValue value)
+        {
+            if (Hash != hash)
+            {
+                removed = false;
+                value = default!;
+                return this;
+            }
+
+            for (var index = 0; index < _entries.Length; index++)
+            {
+                if (!comparer.Equals(_entries[index].Key, key))
+                    continue;
+
+                removed = true;
+                value = _entries[index].Value;
+                if (_entries.Length == 2)
+                {
+                    var remaining = _entries[1 - index];
+                    return new LeafNode(Hash, remaining.Key, remaining.Value);
+                }
+
+                var entries = new Entry[_entries.Length - 1];
+                if (index > 0)
+                    Array.Copy(_entries, 0, entries, 0, index);
+                if (index < _entries.Length - 1)
+                    Array.Copy(_entries, index + 1, entries, index, _entries.Length - index - 1);
+                return new CollisionNode(Hash, entries);
+            }
+
+            removed = false;
+            value = default!;
+            return this;
+        }
+
+        internal void CommitTransient(
+            Entry[] entries,
+            bool entriesOwned,
+            bool writeEntry,
+            int entryIndex,
+            Entry entry)
+        {
+            if (writeEntry)
+                entries[entryIndex] = entry;
+
+            _entries = entries;
+            EntriesOwned = entriesOwned;
+        }
+    }
+
+    /// <summary>Represents the ordinary/owner-field bitmap branch used by the first T1 layout.</summary>
+    internal sealed class BitmapIndexedNode : BranchNode
+    {
+        private const byte DataOwnedFlag = 1;
+        private const byte ChildrenOwnedFlag = 2;
+
+        internal BitmapIndexedNode(
+            uint dataMap,
+            Entry[] data,
+            uint nodeMap,
+            Node[] children)
+            : this(
+                dataMap,
+                data,
+                nodeMap,
+                children,
+                CountEntries(data, children),
+                owner: null,
+                dataOwned: false,
+                childrenOwned: false)
+        {
+        }
+
+        internal BitmapIndexedNode(
+            uint dataMap,
+            Entry[] data,
+            uint nodeMap,
+            Node[] children,
+            int count,
+            EditToken? owner,
+            bool dataOwned,
+            bool childrenOwned)
+        {
+            _dataMap = dataMap;
+            _data = data;
+            _nodeMap = nodeMap;
+            _children = children;
+            _count = count;
+            Owner = owner;
+            _ownedArrays = (byte)((dataOwned ? DataOwnedFlag : 0) |
+                (childrenOwned ? ChildrenOwnedFlag : 0));
+        }
+
+        private int _count;
+        private byte _ownedArrays;
+        private uint _dataMap;
+        private Entry[] _data;
+        private uint _nodeMap;
+        private Node[] _children;
+
+        internal override int Count => _count;
+
+        internal override uint DataMap => _dataMap;
+
+        internal override Entry[] Data => _data;
+
+        internal override uint NodeMap => _nodeMap;
+
+        internal override Node[] Children => _children;
+
+        internal EditToken? Owner { get; }
+
+        internal bool DataOwned => (_ownedArrays & DataOwnedFlag) != 0;
+
+        internal bool ChildrenOwned => (_ownedArrays & ChildrenOwnedFlag) != 0;
+
+        internal bool CanWriteData(EditToken token) =>
+            ReferenceEquals(Owner, token) && token.IsActive && DataOwned;
+
+        internal bool CanWriteChildren(EditToken token) =>
+            ReferenceEquals(Owner, token) && token.IsActive && ChildrenOwned;
+
+        // Preserve the pre-experiment sealed concrete update path for ordinary maps. Separate
+        // published nodes use BranchNode's semantically identical implementation.
+        internal override Node Set(
+            TKey key,
+            TValue value,
+            uint hash,
+            int shift,
+            IEqualityComparer<TKey> comparer,
+            bool overwrite,
+            out bool added)
+        {
+            var bit = Bit(Index(hash, shift));
+            if ((_dataMap & bit) != 0)
+            {
+                var slot = Slot(_dataMap, bit);
+                var entry = _data[slot];
+                if (entry.Hash == hash && comparer.Equals(entry.Key, key))
+                {
+                    added = false;
+                    if (!overwrite || ValuesEqual(entry.Value, value))
+                        return this;
+
+                    var replacedData = (Entry[])_data.Clone();
+                    replacedData[slot] = new Entry(hash, entry.Key, value);
+                    return new BitmapIndexedNode(_dataMap, replacedData, _nodeMap, _children);
+                }
+
+                var child = MergeHashNodes(
+                    new LeafNode(entry.Hash, entry.Key, entry.Value),
+                    new LeafNode(hash, key, value),
+                    shift + BitsPerLevel);
+                added = true;
+                return MoveConcreteDataToNode(bit, slot, child);
+            }
+
+            if ((_nodeMap & bit) != 0)
+            {
+                var slot = Slot(_nodeMap, bit);
+                var oldChild = _children[slot];
+                var newChild = oldChild.Set(key, value, hash, shift + BitsPerLevel, comparer, overwrite, out added);
+                if (ReferenceEquals(newChild, oldChild))
+                    return this;
+
+                var replaced = (Node[])_children.Clone();
+                replaced[slot] = newChild;
+                return new BitmapIndexedNode(_dataMap, _data, _nodeMap, replaced);
+            }
+
+            var dataSlot = Slot(_dataMap, bit);
+            var inserted = InsertConcrete(_data, dataSlot, new Entry(hash, key, value));
+            added = true;
+            return new BitmapIndexedNode(_dataMap | bit, inserted, _nodeMap, _children);
+        }
+
+        internal override Node? Remove(
+            TKey key,
+            uint hash,
+            int shift,
+            IEqualityComparer<TKey> comparer,
+            out bool removed,
+            out TValue value)
+        {
+            var bit = Bit(Index(hash, shift));
+            if ((_dataMap & bit) != 0)
+            {
+                var slot = Slot(_dataMap, bit);
+                var entry = _data[slot];
+                if (entry.Hash != hash || !comparer.Equals(entry.Key, key))
+                {
+                    removed = false;
+                    value = default!;
+                    return this;
+                }
+
+                removed = true;
+                value = entry.Value;
+                return RebuildConcrete(_dataMap ^ bit, RemoveConcreteAt(_data, slot), _nodeMap, _children);
+            }
+
+            if ((_nodeMap & bit) == 0)
+            {
+                removed = false;
+                value = default!;
+                return this;
+            }
+
+            var nodeSlot = Slot(_nodeMap, bit);
+            var oldChild = _children[nodeSlot];
+            var newChild = oldChild.Remove(key, hash, shift + BitsPerLevel, comparer, out removed, out value);
+            if (!removed)
+                return this;
+
+            if (newChild is null)
+                return RebuildConcrete(_dataMap, _data, _nodeMap ^ bit, RemoveConcreteAt(_children, nodeSlot));
+
+            if (newChild is LeafNode leaf)
+            {
+                var dataSlot = Slot(_dataMap, bit);
+                return RebuildConcrete(
+                    _dataMap | bit,
+                    InsertConcrete(_data, dataSlot, Entry.From(leaf)),
+                    _nodeMap ^ bit,
+                    RemoveConcreteAt(_children, nodeSlot));
+            }
+
+            var replaced = (Node[])_children.Clone();
+            replaced[nodeSlot] = newChild;
+            return RebuildConcrete(_dataMap, _data, _nodeMap, replaced);
+        }
+
+        private Node MoveConcreteDataToNode(uint bit, int dataSlot, Node child)
+        {
+            var nodeSlot = Slot(_nodeMap, bit);
+            return new BitmapIndexedNode(
+                _dataMap ^ bit,
+                RemoveConcreteAt(_data, dataSlot),
+                _nodeMap | bit,
+                InsertConcrete(_children, nodeSlot, child));
+        }
+
+        private static Node? RebuildConcrete(uint dataMap, Entry[] data, uint nodeMap, Node[] children)
+        {
+            if (data.Length == 0 && children.Length == 0)
+                return null;
+            if (data.Length == 1 && children.Length == 0)
+            {
+                var entry = data[0];
+                return new LeafNode(entry.Hash, entry.Key, entry.Value);
+            }
+            if (data.Length == 0 && children.Length == 1 && children[0] is HashNode hashNode)
+                return hashNode;
+            return new BitmapIndexedNode(dataMap, data, nodeMap, children);
+        }
+
+        private static T[] InsertConcrete<T>(T[] source, int index, T value)
+        {
+            var result = new T[source.Length + 1];
+            if (index > 0)
+                Array.Copy(source, 0, result, 0, index);
+            result[index] = value;
+            if (index < source.Length)
+                Array.Copy(source, index, result, index + 1, source.Length - index);
+            return result;
+        }
+
+        private static T[] RemoveConcreteAt<T>(T[] source, int index)
+        {
+            var result = new T[source.Length - 1];
+            if (index > 0)
+                Array.Copy(source, 0, result, 0, index);
+            if (index < source.Length - 1)
+                Array.Copy(source, index + 1, result, index, source.Length - index - 1);
+            return result;
+        }
+
+        internal void CommitTransient(
+            uint dataMap,
+            Entry[] data,
+            bool dataOwned,
+            uint nodeMap,
+            Node[] children,
+            bool childrenOwned,
+            int count,
+            bool writeData,
+            int dataIndex,
+            Entry dataEntry,
+            bool writeChild,
+            int childIndex,
+            Node? child)
+        {
+            if (writeData)
+                data[dataIndex] = dataEntry;
+            if (writeChild)
+                children[childIndex] = child!;
+
+            _dataMap = dataMap;
+            _data = data;
+            _nodeMap = nodeMap;
+            _children = children;
+            _count = count;
+            _ownedArrays = (byte)((dataOwned ? DataOwnedFlag : 0) |
+                (childrenOwned ? ChildrenOwnedFlag : 0));
         }
     }
 }

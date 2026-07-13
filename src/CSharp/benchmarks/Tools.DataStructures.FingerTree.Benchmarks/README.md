@@ -53,7 +53,7 @@ Results are written under `BenchmarkDotNet.Artifacts/` (git-ignored); curated ta
 | `RopeBuilderBenchmarks` | append-only rope builder construction and snapshot constants | `Create`, `AddLast` loop, text `StringBuilder` materialization, `ImmutableList<T>.Builder` |
 | `ChampBenchmarks` | CHAMP lookup, payload-dense iteration, shared-single-change diff, and independent-history equality/diff | `Dictionary` and `ImmutableDictionary` |
 | `CtrieBenchmarks` | lock-free lookup and O(1) immutable snapshot publication | `ConcurrentDictionary` lookup and O(n) immutable copy |
-| `TransientLifecycleBenchmarks` | Axis 2 edit-locality/publication matrix, structural path-copy counters, and the private T1 owner-token kernel with O(1) adoption/seal and ownership/copy/retained-size evidence | direct persistent edits and canonical `BulkBuilder` construction |
+| `TransientLifecycleBenchmarks` | Axis 2 edit-locality/publication matrix, structural path-copy counters, and identical private T1 lanes for owner fields versus separate transient-editable branch/collision nodes, both with O(1) adoption/seal and ownership/copy/retained-size evidence | direct persistent edits and canonical `BulkBuilder` construction |
 | `FrozenLookupBenchmarks`, `FrozenClusteredLookupBenchmarks`, `FrozenCollisionLookupBenchmarks`, `FrozenNullLookupBenchmarks` | Axis 2 F1 fixed-layout bake-off across lookup mixes, enumeration, construction, retained arrays, null/stored representatives, collision shapes, and break-even | persistent CHAMP, linear/Robin-Hood/quadratic repository prototypes, `Dictionary`, `ImmutableDictionary`, and BCL `FrozenDictionary` where semantically representable |
 | `PatriciaMapBenchmarks` | integer-key lookup and prefix-aware structural union | CHAMP and `ImmutableDictionary` lookup |
 | `RrbVectorBenchmarks` | uniform middle indexing and boundary-spine concatenation | `Rope<T>` indexing/concat and `ImmutableList<T>` indexing/concat |
@@ -127,6 +127,13 @@ warmup/job configuration, and result-consumption shape. A control that cannot re
 lane—most notably a null-key lane—is omitted and called out rather than given different input.
 BenchmarkDotNet's `MemoryDiagnoser` supplies allocation data; retained graph bytes come from the
 internal structural estimators and are never relabeled as allocation bytes.
+
+The T1 owner-field and separate-node methods execute the same prepared edit plan and differ only in
+allocation/ownership representation. `AXIS2_T1_COUNTER_V1` rows identify that representation and
+report both physical retained bytes in the side-by-side experimental assembly and layout-adjusted
+bytes. The adjusted separate-node figure subtracts the ordinary-node owner-field attribution that
+would not exist when that layout is selected alone; it does not subtract the token references on
+actual separate editable nodes. Adoption and publication node-visit counters must remain zero.
 
 The F1 frozen-layout bake-off keeps one packed source-order entry array and compares three fixed
 offline indexes: simple linear probing, Robin-Hood linear probing, and power-of-two triangular

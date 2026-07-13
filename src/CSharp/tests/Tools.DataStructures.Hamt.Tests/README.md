@@ -22,6 +22,10 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
   adoption/sealing, copy-on-first-write ownership, base and published-version isolation, recursive
   CHAMP canonicality/counts, representatives/collisions, consumed sessions, and callback,
   allocation-boundary, in-place-commit, and publication failure atomicity.
+- `PersistentHashMapSeparateNodeKernelTests.cs` repeats those T1 contracts against the second
+  ownership layout, whose transient-editable branch/collision classes own their arrays separately
+  from ordinary persistent nodes; it also exercises mixed published hierarchies through ordinary
+  lookup, enumeration, persistent update, semantic equality, and recursive validation.
 - `PersistentHashMapEnumeratorTests.cs` covers allocation-free struct enumerators, copied enumerator independence,
   and key/value/pair enumeration.
 - `PersistentHashSetEnumeratorTests.cs` covers the set wrapper's default, before-first, active, exhausted,

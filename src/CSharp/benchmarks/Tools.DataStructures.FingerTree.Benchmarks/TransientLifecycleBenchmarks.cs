@@ -17,6 +17,7 @@ public class TransientLifecycleBenchmarks
     private int _collisionBucketSize;
     private Axis2TransientOpportunityCounters _opportunityCounters;
     private Axis2OwnerTokenKernelEvidence _ownerTokenEvidence;
+    private Axis2OwnerTokenKernelEvidence _separateNodeEvidence;
 
     [ParamsSource(nameof(WorkloadValues))]
     public Axis2TransientWorkload Workload { get; set; }
@@ -56,7 +57,15 @@ public class TransientLifecycleBenchmarks
     public void SetupOwnerTokenKernelHistory()
     {
         SetupCore();
-        _ownerTokenEvidence = CollectOwnerTokenEvidence();
+        _ownerTokenEvidence = CollectKernelEvidence(separateNodes: false);
+    }
+
+    /// <summary>Initializes and validates the private separate-editable-node T1 lane.</summary>
+    [GlobalSetup(Target = nameof(SeparateNodeKernelHistory))]
+    public void SetupSeparateNodeKernelHistory()
+    {
+        SetupCore();
+        _separateNodeEvidence = CollectKernelEvidence(separateNodes: true);
     }
 
     /// <summary>Writes one machine-readable counter row to the raw BenchmarkDotNet log.</summary>
@@ -68,6 +77,11 @@ public class TransientLifecycleBenchmarks
     [GlobalCleanup(Target = nameof(OwnerTokenKernelHistory))]
     public void EmitOwnerTokenKernelCounters() =>
         Console.WriteLine(_ownerTokenEvidence.ToCsv());
+
+    /// <summary>Writes the separate-node layout's directly comparable T1 evidence row.</summary>
+    [GlobalCleanup(Target = nameof(SeparateNodeKernelHistory))]
+    public void EmitSeparateNodeKernelCounters() =>
+        Console.WriteLine(_separateNodeEvidence.ToCsv());
 
     /// <summary>Applies every edit as an ordinary persistent operation and observes requested publications.</summary>
     [Benchmark(Baseline = true)]
@@ -127,6 +141,31 @@ public class TransientLifecycleBenchmarks
         {
             var end = Math.Min(start + batchSize, _edits.Length);
             var kernel = map.CreateOwnerTokenTransientKernel();
+            for (var index = start; index < end; index++)
+                Apply(kernel, _edits[index]);
+            map = kernel.Persist();
+            checksum = Axis2BenchmarkPolicy.AddPublicationChecksum(checksum, map.Count, end);
+        }
+
+        return new Axis2HistoryResult(map, checksum);
+    }
+
+    /// <summary>
+    /// Applies the same history and publication cadence through distinct transient-editable branch
+    /// and collision classes. The locked N100000_E512/ClusteredPrefix/End tuple therefore differs
+    /// from <see cref="OwnerTokenKernelHistory"/> only in ownership representation.
+    /// </summary>
+    [Benchmark]
+    [BenchmarkCategory("Axis2T1", "EditPublication", "SeparateNodeKernel")]
+    public Axis2HistoryResult SeparateNodeKernelHistory()
+    {
+        var map = _base;
+        var checksum = (long)Axis2BenchmarkPolicy.Seed;
+        var batchSize = Axis2BenchmarkPolicy.GetPublicationBatchSize(PublicationCadence, _edits.Length);
+        for (var start = 0; start < _edits.Length; start += batchSize)
+        {
+            var end = Math.Min(start + batchSize, _edits.Length);
+            var kernel = map.CreateSeparateNodeTransientKernel();
             for (var index = start; index < end; index++)
                 Apply(kernel, _edits[index]);
             map = kernel.Persist();
@@ -219,7 +258,7 @@ public class TransientLifecycleBenchmarks
             countingComparer.EqualityCallbackCount);
     }
 
-    private Axis2OwnerTokenKernelEvidence CollectOwnerTokenEvidence()
+    private Axis2OwnerTokenKernelEvidence CollectKernelEvidence(bool separateNodes)
     {
         var map = _base;
         var checksum = (long)Axis2BenchmarkPolicy.Seed;
@@ -228,7 +267,9 @@ public class TransientLifecycleBenchmarks
         for (var start = 0; start < _edits.Length; start += batchSize)
         {
             var end = Math.Min(start + batchSize, _edits.Length);
-            var kernel = map.CreateOwnerTokenTransientKernel();
+            var kernel = separateNodes
+                ? map.CreateSeparateNodeTransientKernel()
+                : map.CreateOwnerTokenTransientKernel();
             for (var index = start; index < end; index++)
                 Apply(kernel, _edits[index]);
             map = kernel.Persist();
@@ -241,25 +282,35 @@ public class TransientLifecycleBenchmarks
             || oracle.Map.Count != map.Count
             || ComputeSemanticChecksum(oracle.Map) != ComputeSemanticChecksum(map))
         {
-            throw new InvalidOperationException("The owner-token replay diverged from the persistent T0 lane.");
+            throw new InvalidOperationException("The T1 kernel replay diverged from the persistent T0 lane.");
         }
 
         var canonicality = map.ValidateCanonicalityForDiagnostics();
         var baseStructure = _base.GetStructureDiagnostics();
         var resultStructure = map.GetStructureDiagnostics();
         return new Axis2OwnerTokenKernelEvidence(
+            separateNodes ? "separate-nodes" : "owner-fields",
             Workload.BaseCount,
             Workload.EditCount,
             History,
             PublicationCadence,
             _collisionBucketSize,
             counters,
-            baseStructure.EstimatedOwnerMetadataBytes,
+            separateNodes ? 0 : baseStructure.EstimatedOwnerMetadataBytes,
             baseStructure.EstimatedRetainedBytes,
+            separateNodes
+                ? checked(baseStructure.EstimatedRetainedBytes - baseStructure.EstimatedOwnerMetadataBytes)
+                : baseStructure.EstimatedRetainedBytes,
             resultStructure.OwnerTaggedNodeCount,
             resultStructure.OwnerTaggedArrayCount,
             resultStructure.OwnerTokenCount,
+            resultStructure.SeparateCollisionNodeCount,
+            resultStructure.SeparateBranchNodeCount,
+            resultStructure.EstimatedSeparateNodeMetadataBytes,
             resultStructure.EstimatedRetainedBytes,
+            separateNodes
+                ? checked(resultStructure.EstimatedRetainedBytes - resultStructure.EstimatedOwnerMetadataBytes)
+                : resultStructure.EstimatedRetainedBytes,
             canonicality.RecursiveEntryCount);
     }
 
@@ -368,6 +419,7 @@ internal readonly record struct Axis2TransientOpportunityCounters(
 }
 
 internal readonly record struct Axis2OwnerTokenKernelEvidence(
+    string Layout,
     int BaseCount,
     int EditCount,
     Axis2EditHistory History,
@@ -376,15 +428,21 @@ internal readonly record struct Axis2OwnerTokenKernelEvidence(
     PersistentHashMap<Axis2HashKey, int>.OwnerTokenKernelCounters Counters,
     long OrdinaryOwnerMetadataBytes,
     long OrdinaryEstimatedRetainedBytes,
+    long OrdinaryLayoutAdjustedRetainedBytes,
     int PublishedOwnerTaggedNodes,
     int PublishedOwnerTaggedArrays,
     int PublishedOwnerTokenCount,
+    int PublishedSeparateCollisionNodes,
+    int PublishedSeparateBranchNodes,
+    long PublishedSeparateNodeMetadataBytes,
     long PublishedEstimatedRetainedBytes,
+    long PublishedLayoutAdjustedRetainedBytes,
     int RecursiveEntryCount)
 {
     internal string ToCsv() => string.Join(
         ',',
         "AXIS2_T1_COUNTER_V1",
+        $"layout={Layout}",
         $"base_count={BaseCount.ToString(CultureInfo.InvariantCulture)}",
         $"edits={EditCount.ToString(CultureInfo.InvariantCulture)}",
         $"history={History}",
@@ -404,9 +462,14 @@ internal readonly record struct Axis2OwnerTokenKernelEvidence(
         $"wrapper_allocations={Counters.PersistentWrapperAllocationCount.ToString(CultureInfo.InvariantCulture)}",
         $"ordinary_owner_metadata_bytes={OrdinaryOwnerMetadataBytes.ToString(CultureInfo.InvariantCulture)}",
         $"ordinary_retained_bytes={OrdinaryEstimatedRetainedBytes.ToString(CultureInfo.InvariantCulture)}",
+        $"ordinary_layout_adjusted_retained_bytes={OrdinaryLayoutAdjustedRetainedBytes.ToString(CultureInfo.InvariantCulture)}",
         $"published_owner_nodes={PublishedOwnerTaggedNodes.ToString(CultureInfo.InvariantCulture)}",
         $"published_owner_arrays={PublishedOwnerTaggedArrays.ToString(CultureInfo.InvariantCulture)}",
         $"published_owner_tokens={PublishedOwnerTokenCount.ToString(CultureInfo.InvariantCulture)}",
+        $"published_separate_collision_nodes={PublishedSeparateCollisionNodes.ToString(CultureInfo.InvariantCulture)}",
+        $"published_separate_branch_nodes={PublishedSeparateBranchNodes.ToString(CultureInfo.InvariantCulture)}",
+        $"published_separate_node_metadata_bytes={PublishedSeparateNodeMetadataBytes.ToString(CultureInfo.InvariantCulture)}",
         $"published_retained_bytes={PublishedEstimatedRetainedBytes.ToString(CultureInfo.InvariantCulture)}",
+        $"published_layout_adjusted_retained_bytes={PublishedLayoutAdjustedRetainedBytes.ToString(CultureInfo.InvariantCulture)}",
         $"recursive_entries={RecursiveEntryCount.ToString(CultureInfo.InvariantCulture)}");
 }
