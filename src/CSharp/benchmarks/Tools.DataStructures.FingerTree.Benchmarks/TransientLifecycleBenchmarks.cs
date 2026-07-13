@@ -69,11 +69,6 @@ public class TransientLifecycleBenchmarks
     public void EmitSeparateNodeKernelCounters() =>
         Console.WriteLine(_separateNodeEvidence.ToCsv());
 
-    /// <summary>Writes the separate-node layout's directly comparable T1 evidence row.</summary>
-    [GlobalCleanup(Target = nameof(SeparateNodeKernelHistory))]
-    public void EmitSeparateNodeKernelCounters() =>
-        Console.WriteLine(_separateNodeEvidence.ToCsv());
-
     /// <summary>Applies every edit as an ordinary persistent operation and observes requested publications.</summary>
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("Axis2T0", "EditPublication", "Persistent")]
@@ -132,31 +127,6 @@ public class TransientLifecycleBenchmarks
         {
             var end = Math.Min(start + batchSize, _edits.Length);
             var kernel = map.CreateSeparateNodeTransientKernel(enableDiagnostics: false);
-            for (var index = start; index < end; index++)
-                Apply(kernel, _edits[index]);
-            map = kernel.Persist();
-            checksum = Axis2BenchmarkPolicy.AddPublicationChecksum(checksum, map.Count, end);
-        }
-
-        return new Axis2HistoryResult(map, checksum);
-    }
-
-    /// <summary>
-    /// Applies the same history and publication cadence through distinct transient-editable branch
-    /// and collision classes. The locked N100000_E512/ClusteredPrefix/End tuple therefore differs
-    /// from <see cref="OwnerTokenKernelHistory"/> only in ownership representation.
-    /// </summary>
-    [Benchmark]
-    [BenchmarkCategory("Axis2T1", "EditPublication", "SeparateNodeKernel")]
-    public Axis2HistoryResult SeparateNodeKernelHistory()
-    {
-        var map = _base;
-        var checksum = (long)Axis2BenchmarkPolicy.Seed;
-        var batchSize = Axis2BenchmarkPolicy.GetPublicationBatchSize(PublicationCadence, _edits.Length);
-        for (var start = 0; start < _edits.Length; start += batchSize)
-        {
-            var end = Math.Min(start + batchSize, _edits.Length);
-            var kernel = map.CreateSeparateNodeTransientKernel();
             for (var index = start; index < end; index++)
                 Apply(kernel, _edits[index]);
             map = kernel.Persist();
@@ -294,7 +264,7 @@ public class TransientLifecycleBenchmarks
             PublicationCadence,
             _collisionBucketSize,
             counters,
-            separateNodes ? 0 : baseStructure.EstimatedOwnerMetadataBytes,
+            baseStructure.EstimatedOwnerMetadataBytes,
             baseStructure.EstimatedRetainedBytes,
             baseStructure.EstimatedRetainedBytes,
             resultStructure.OwnerTaggedNodeCount,
@@ -305,9 +275,6 @@ public class TransientLifecycleBenchmarks
             resultStructure.EstimatedSeparateNodeMetadataBytes,
             resultStructure.EstimatedRetainedBytes,
             resultStructure.EstimatedRetainedBytes,
-            separateNodes
-                ? checked(resultStructure.EstimatedRetainedBytes - resultStructure.EstimatedOwnerMetadataBytes)
-                : resultStructure.EstimatedRetainedBytes,
             canonicality.RecursiveEntryCount);
     }
 

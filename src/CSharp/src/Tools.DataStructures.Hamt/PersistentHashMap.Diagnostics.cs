@@ -208,7 +208,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         var hash = GetHash(key);
         var shift = 0;
         var visits = 0;
-        while (node is BranchNode branch)
+        while (node is BitmapIndexedNode branch)
         {
             visits++;
             var bit = Bit(Index(hash, shift));
@@ -307,7 +307,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
 
             switch (node)
             {
-                case CollisionNodeBase collision:
+                case CollisionNode collision:
                     arrays.Add(collision.Entries);
                     break;
                 case SeparateTransientCollisionNode collision:
@@ -346,9 +346,6 @@ public sealed partial class PersistentHashMap<TKey, TValue>
 
     private static long EstimateSeparateBranchNodeBytes() =>
         Align(checked((2L * IntPtr.Size) + (3L * sizeof(int)) + (3L * IntPtr.Size) + sizeof(byte)));
-
-    private static long EstimateSeparateBranchNodeBytes() =>
-        Align(checked((2L * IntPtr.Size) + (3L * sizeof(int)) + (3L * IntPtr.Size)));
 
     private static long EstimateEditTokenBytes() =>
         Align(checked((2L * IntPtr.Size) + sizeof(int)));

@@ -183,8 +183,6 @@ public sealed partial class PersistentHashMap<TKey, TValue>
 
         internal bool CommitPlanIsAllocatedForDiagnostics => _commits is not null;
 
-        internal TransientOwnershipLayout LayoutForDiagnostics => _layout;
-
         internal int VersionForDiagnostics => _version;
 
         internal object? RootIdentityForDiagnostics => _root;
@@ -732,7 +730,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 case LeafNode leaf:
                     destination[index++] = KeyValuePair.Create(leaf.Key, leaf.Value);
                     return;
-                case CollisionNodeBase collision:
+                case CollisionNode collision:
                     foreach (var entry in collision.Entries)
                         destination[index++] = KeyValuePair.Create(entry.Key, entry.Value);
                     return;
@@ -1189,22 +1187,6 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             BranchState state,
             bool copiedNode)
         {
-            if (_layout == TransientOwnershipLayout.SeparateNodes)
-            {
-                // A separate editable node owns both of its arrays by construction. It cannot
-                // inherit an independently shared array merely because the wrapper is new.
-                if (!state.DataOwned)
-                {
-                    var ownedData = CloneData(state.Data);
-                    state = state with { Data = ownedData, DataOwned = true };
-                }
-                if (!state.ChildrenOwned)
-                {
-                    var ownedChildren = CloneChildren(state.Children);
-                    state = state with { Children = ownedChildren, ChildrenOwned = true };
-                }
-            }
-
             Hit(OwnerTokenKernelFailurePoint.BeforeNodeAllocation);
             Node result = new SeparateTransientBranchNode(
                 state.DataMap,
@@ -1646,64 +1628,29 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             {
                 if (_collision is not null)
                 {
-                    switch (_collision)
-                    {
-                        case CollisionNode ownerFields:
-                            ownerFields.CommitTransient(
-                                _collisionEntries!,
-                                entriesOwned: true,
-                                writeEntry: (_flags & 1) != 0,
-                                entryIndex: _entryIndex,
-                                entry: _entry);
-                            break;
-                        case SeparateTransientCollisionNode separate:
-                            separate.CommitTransient(
-                                _collisionEntries!,
-                                writeEntry: (_flags & 1) != 0,
-                                entryIndex: _entryIndex,
-                                entry: _entry);
-                            break;
-                        default:
-                            throw new InvalidOperationException("Commit targets a non-editable collision node.");
-                    }
+                    _collision.CommitTransient(
+                        _collisionEntries!,
+                        entriesOwned: true,
+                        writeEntry: (_flags & 1) != 0,
+                        entryIndex: _entryIndex,
+                        entry: _entry);
                     return;
                 }
 
-                switch (_branch)
-                {
-                    case BitmapIndexedNode ownerFields:
-                        ownerFields.CommitTransient(
-                            _branchState.DataMap,
-                            _branchState.Data,
-                            _branchState.DataOwned,
-                            _branchState.NodeMap,
-                            _branchState.Children,
-                            _branchState.ChildrenOwned,
-                            _branchState.Count,
-                            writeData: (_flags & 1) != 0,
-                            dataIndex: _entryIndex,
-                            dataEntry: _entry,
-                            writeChild: (_flags & 2) != 0,
-                            childIndex: _childIndex,
-                            child: _child);
-                        break;
-                    case SeparateTransientBranchNode separate:
-                        separate.CommitTransient(
-                            _branchState.DataMap,
-                            _branchState.Data,
-                            _branchState.NodeMap,
-                            _branchState.Children,
-                            _branchState.Count,
-                            writeData: (_flags & 1) != 0,
-                            dataIndex: _entryIndex,
-                            dataEntry: _entry,
-                            writeChild: (_flags & 2) != 0,
-                            childIndex: _childIndex,
-                            child: _child);
-                        break;
-                    default:
-                        throw new InvalidOperationException("Commit targets a non-editable branch node.");
-                }
+                _branch!.CommitTransient(
+                    _branchState.DataMap,
+                    _branchState.Data,
+                    _branchState.DataOwned,
+                    _branchState.NodeMap,
+                    _branchState.Children,
+                    _branchState.ChildrenOwned,
+                    _branchState.Count,
+                    writeData: (_flags & 1) != 0,
+                    dataIndex: _entryIndex,
+                    dataEntry: _entry,
+                    writeChild: (_flags & 2) != 0,
+                    childIndex: _childIndex,
+                    child: _child);
             }
         }
 
