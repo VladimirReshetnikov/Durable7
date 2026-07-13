@@ -1668,11 +1668,45 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         }
     }
 
-    internal sealed class CollisionNode(uint hash, Entry[] entries) : HashNode(hash)
+    internal sealed class CollisionNode : HashNode
     {
+        internal CollisionNode(uint hash, Entry[] entries)
+            : this(hash, entries, owner: null, entriesOwned: false)
+        {
+        }
+
+        internal CollisionNode(uint hash, Entry[] entries, EditToken? owner, bool entriesOwned)
+            : base(hash)
+        {
+            Entries = entries;
+            Owner = owner;
+            EntriesOwned = entriesOwned;
+        }
+
         internal override int Count => Entries.Length;
 
-        internal Entry[] Entries { get; } = entries;
+        internal Entry[] Entries { get; private set; }
+
+        internal EditToken? Owner { get; }
+
+        internal bool EntriesOwned { get; private set; }
+
+        internal bool CanWriteEntries(EditToken token) =>
+            ReferenceEquals(Owner, token) && token.IsActive && EntriesOwned;
+
+        internal void CommitTransient(
+            Entry[] entries,
+            bool entriesOwned,
+            bool writeEntry,
+            int entryIndex,
+            Entry entry)
+        {
+            if (writeEntry)
+                entries[entryIndex] = entry;
+
+            Entries = entries;
+            EntriesOwned = entriesOwned;
+        }
 
         internal static CollisionNode Create(HashNode left, LeafNode right)
         {
@@ -1768,21 +1802,101 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         }
     }
 
-    internal sealed class BitmapIndexedNode(
-        uint dataMap,
-        Entry[] data,
-        uint nodeMap,
-        Node[] children) : Node
+    internal sealed class BitmapIndexedNode : Node
     {
-        internal override int Count { get; } = CountEntries(data, children);
+        private const byte DataOwnedFlag = 1;
+        private const byte ChildrenOwnedFlag = 2;
 
-        internal uint DataMap { get; } = dataMap;
+        internal BitmapIndexedNode(
+            uint dataMap,
+            Entry[] data,
+            uint nodeMap,
+            Node[] children)
+            : this(
+                dataMap,
+                data,
+                nodeMap,
+                children,
+                CountEntries(data, children),
+                owner: null,
+                dataOwned: false,
+                childrenOwned: false)
+        {
+        }
 
-        internal Entry[] Data { get; } = data;
+        internal BitmapIndexedNode(
+            uint dataMap,
+            Entry[] data,
+            uint nodeMap,
+            Node[] children,
+            int count,
+            EditToken? owner,
+            bool dataOwned,
+            bool childrenOwned)
+        {
+            DataMap = dataMap;
+            Data = data;
+            NodeMap = nodeMap;
+            Children = children;
+            _count = count;
+            Owner = owner;
+            _ownedArrays = (byte)((dataOwned ? DataOwnedFlag : 0) |
+                (childrenOwned ? ChildrenOwnedFlag : 0));
+        }
 
-        internal uint NodeMap { get; } = nodeMap;
+        private int _count;
+        private byte _ownedArrays;
 
-        internal Node[] Children { get; } = children;
+        internal override int Count => _count;
+
+        internal uint DataMap { get; private set; }
+
+        internal Entry[] Data { get; private set; }
+
+        internal uint NodeMap { get; private set; }
+
+        internal Node[] Children { get; private set; }
+
+        internal EditToken? Owner { get; }
+
+        internal bool DataOwned => (_ownedArrays & DataOwnedFlag) != 0;
+
+        internal bool ChildrenOwned => (_ownedArrays & ChildrenOwnedFlag) != 0;
+
+        internal bool CanWriteData(EditToken token) =>
+            ReferenceEquals(Owner, token) && token.IsActive && DataOwned;
+
+        internal bool CanWriteChildren(EditToken token) =>
+            ReferenceEquals(Owner, token) && token.IsActive && ChildrenOwned;
+
+        internal void CommitTransient(
+            uint dataMap,
+            Entry[] data,
+            bool dataOwned,
+            uint nodeMap,
+            Node[] children,
+            bool childrenOwned,
+            int count,
+            bool writeData,
+            int dataIndex,
+            Entry dataEntry,
+            bool writeChild,
+            int childIndex,
+            Node? child)
+        {
+            if (writeData)
+                data[dataIndex] = dataEntry;
+            if (writeChild)
+                children[childIndex] = child!;
+
+            DataMap = dataMap;
+            Data = data;
+            NodeMap = nodeMap;
+            Children = children;
+            _count = count;
+            _ownedArrays = (byte)((dataOwned ? DataOwnedFlag : 0) |
+                (childrenOwned ? ChildrenOwnedFlag : 0));
+        }
 
         private static int CountEntries(Entry[] entries, Node[] nodes)
         {

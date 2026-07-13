@@ -15,8 +15,12 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         var leafNodes = 0;
         var collisionNodes = 0;
         var branchNodes = 0;
+        var ownerTaggedNodes = 0;
+        var ownerTaggedArrays = 0;
         var maximumDepth = 0;
+        var ownerTokens = new HashSet<EditToken>(ReferenceEqualityComparer.Instance);
         var retainedBytes = EstimateMapWrapperBytes();
+        long estimatedOwnerMetadataBytes = 0;
         if (_root is not null)
         {
             var pending = new Stack<(Node Node, int Depth)>();
@@ -32,11 +36,29 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                         break;
                     case CollisionNode collision:
                         collisionNodes++;
+                        estimatedOwnerMetadataBytes += IntPtr.Size;
+                        if (collision.Owner is not null)
+                        {
+                            ownerTaggedNodes++;
+                            ownerTokens.Add(collision.Owner);
+                            if (collision.EntriesOwned)
+                                ownerTaggedArrays++;
+                        }
                         retainedBytes += EstimateCollisionNodeBytes();
                         retainedBytes += EstimateArrayBytes(collision.Entries.Length, Unsafe.SizeOf<Entry>());
                         break;
                     case BitmapIndexedNode branch:
                         branchNodes++;
+                        estimatedOwnerMetadataBytes += IntPtr.Size;
+                        if (branch.Owner is not null)
+                        {
+                            ownerTaggedNodes++;
+                            ownerTokens.Add(branch.Owner);
+                            if (branch.DataOwned)
+                                ownerTaggedArrays++;
+                            if (branch.ChildrenOwned)
+                                ownerTaggedArrays++;
+                        }
                         retainedBytes += EstimateBranchNodeBytes();
                         retainedBytes += EstimateArrayBytes(branch.Data.Length, Unsafe.SizeOf<Entry>());
                         retainedBytes += EstimateArrayBytes(branch.Children.Length, IntPtr.Size);
@@ -47,6 +69,9 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             }
         }
 
+        var estimatedOwnerTokenBytes = checked(ownerTokens.Count * EstimateEditTokenBytes());
+        retainedBytes = checked(retainedBytes + estimatedOwnerTokenBytes);
+
         return new PersistentHashMapStructureDiagnostics(
             EntryCount: _count,
             NodeCount: nodes.Count,
@@ -55,7 +80,11 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             BranchNodeCount: branchNodes,
             ArrayCount: arrays.Count,
             MaximumDepth: maximumDepth,
-            OwnerTaggedNodeCount: 0,
+            OwnerTaggedNodeCount: ownerTaggedNodes,
+            OwnerTaggedArrayCount: ownerTaggedArrays,
+            OwnerTokenCount: ownerTokens.Count,
+            EstimatedOwnerMetadataBytes: estimatedOwnerMetadataBytes,
+            EstimatedOwnerTokenBytes: estimatedOwnerTokenBytes,
             EstimatedRetainedBytes: retainedBytes);
     }
 
@@ -189,10 +218,13 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         Align(checked((2L * IntPtr.Size) + sizeof(uint) + Unsafe.SizeOf<TKey>() + Unsafe.SizeOf<TValue>()));
 
     private static long EstimateCollisionNodeBytes() =>
-        Align(checked((2L * IntPtr.Size) + sizeof(uint) + IntPtr.Size));
+        Align(checked((2L * IntPtr.Size) + sizeof(uint) + (2L * IntPtr.Size) + sizeof(byte)));
 
     private static long EstimateBranchNodeBytes() =>
-        Align(checked((2L * IntPtr.Size) + (3L * sizeof(int)) + (2L * IntPtr.Size)));
+        Align(checked((2L * IntPtr.Size) + (3L * sizeof(int)) + (3L * IntPtr.Size) + sizeof(byte)));
+
+    private static long EstimateEditTokenBytes() =>
+        Align(checked((2L * IntPtr.Size) + sizeof(int)));
 
     private static long EstimateArrayBytes(int length, int elementSize) =>
         Align(checked((3L * IntPtr.Size) + ((long)length * elementSize)));
@@ -213,6 +245,10 @@ internal readonly record struct PersistentHashMapStructureDiagnostics(
     int ArrayCount,
     int MaximumDepth,
     int OwnerTaggedNodeCount,
+    int OwnerTaggedArrayCount,
+    int OwnerTokenCount,
+    long EstimatedOwnerMetadataBytes,
+    long EstimatedOwnerTokenBytes,
     long EstimatedRetainedBytes);
 
 internal readonly record struct PersistentHashMapMutationDiagnostics(

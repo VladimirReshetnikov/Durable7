@@ -5,8 +5,8 @@ using Tools.DataStructures.Hamt;
 namespace Tools.DataStructures.FingerTree.Benchmarks;
 
 /// <summary>
-/// Qualifies the Axis 2 T0 owner-token opportunity without implementing or timing a transient.
-/// Structural and callback counters run only in setup and are emitted from cleanup.
+/// Qualifies the Axis 2 T0 owner-token opportunity and compares its named workloads with the
+/// private production-layout T1 kernel. Structural validation runs only in setup/cleanup.
 /// </summary>
 [MemoryDiagnoser]
 public class TransientLifecycleBenchmarks
@@ -16,6 +16,7 @@ public class TransientLifecycleBenchmarks
     private Axis2HashEdit[] _edits = null!;
     private int _collisionBucketSize;
     private Axis2TransientOpportunityCounters _opportunityCounters;
+    private Axis2OwnerTokenKernelEvidence _ownerTokenEvidence;
 
     [ParamsSource(nameof(WorkloadValues))]
     public Axis2TransientWorkload Workload { get; set; }
@@ -50,10 +51,23 @@ public class TransientLifecycleBenchmarks
     [GlobalSetup(Target = nameof(BulkBuilderHistory))]
     public void SetupBulkBuilderHistory() => SetupCore();
 
+    /// <summary>Initializes and validates the private production-layout T1 owner-token lane.</summary>
+    [GlobalSetup(Target = nameof(OwnerTokenKernelHistory))]
+    public void SetupOwnerTokenKernelHistory()
+    {
+        SetupCore();
+        _ownerTokenEvidence = CollectOwnerTokenEvidence();
+    }
+
     /// <summary>Writes one machine-readable counter row to the raw BenchmarkDotNet log.</summary>
     [GlobalCleanup(Target = nameof(PersistentHistory))]
     public void EmitPersistentOpportunityCounters() =>
         Console.WriteLine(_opportunityCounters.ToCsv());
+
+    /// <summary>Writes T1 adoption, ownership, copying, publication, and retained-size counters.</summary>
+    [GlobalCleanup(Target = nameof(OwnerTokenKernelHistory))]
+    public void EmitOwnerTokenKernelCounters() =>
+        Console.WriteLine(_ownerTokenEvidence.ToCsv());
 
     /// <summary>Applies every edit as an ordinary persistent operation and observes requested publications.</summary>
     [Benchmark(Baseline = true)]
@@ -92,6 +106,30 @@ public class TransientLifecycleBenchmarks
         {
             var end = Math.Min(start + batchSize, _edits.Length);
             map = RebuildWithBulkBuilder(map, _edits.AsSpan(start, end - start));
+            checksum = Axis2BenchmarkPolicy.AddPublicationChecksum(checksum, map.Count, end);
+        }
+
+        return new Axis2HistoryResult(map, checksum);
+    }
+
+    /// <summary>
+    /// Applies the identical T0 history through the private owner-token kernel and publishes at the
+    /// same cadence. Each publication is a real O(1) seal followed by O(1) adoption of its result.
+    /// </summary>
+    [Benchmark]
+    [BenchmarkCategory("Axis2T1", "EditPublication", "OwnerTokenKernel")]
+    public Axis2HistoryResult OwnerTokenKernelHistory()
+    {
+        var map = _base;
+        var checksum = (long)Axis2BenchmarkPolicy.Seed;
+        var batchSize = Axis2BenchmarkPolicy.GetPublicationBatchSize(PublicationCadence, _edits.Length);
+        for (var start = 0; start < _edits.Length; start += batchSize)
+        {
+            var end = Math.Min(start + batchSize, _edits.Length);
+            var kernel = map.CreateOwnerTokenTransientKernel();
+            for (var index = start; index < end; index++)
+                Apply(kernel, _edits[index]);
+            map = kernel.Persist();
             checksum = Axis2BenchmarkPolicy.AddPublicationChecksum(checksum, map.Count, end);
         }
 
@@ -181,6 +219,50 @@ public class TransientLifecycleBenchmarks
             countingComparer.EqualityCallbackCount);
     }
 
+    private Axis2OwnerTokenKernelEvidence CollectOwnerTokenEvidence()
+    {
+        var map = _base;
+        var checksum = (long)Axis2BenchmarkPolicy.Seed;
+        var counters = default(PersistentHashMap<Axis2HashKey, int>.OwnerTokenKernelCounters);
+        var batchSize = Axis2BenchmarkPolicy.GetPublicationBatchSize(PublicationCadence, _edits.Length);
+        for (var start = 0; start < _edits.Length; start += batchSize)
+        {
+            var end = Math.Min(start + batchSize, _edits.Length);
+            var kernel = map.CreateOwnerTokenTransientKernel();
+            for (var index = start; index < end; index++)
+                Apply(kernel, _edits[index]);
+            map = kernel.Persist();
+            counters += kernel.GetCountersForDiagnostics();
+            checksum = Axis2BenchmarkPolicy.AddPublicationChecksum(checksum, map.Count, end);
+        }
+
+        var oracle = PersistentHistory();
+        if (oracle.PublicationChecksum != checksum
+            || oracle.Map.Count != map.Count
+            || ComputeSemanticChecksum(oracle.Map) != ComputeSemanticChecksum(map))
+        {
+            throw new InvalidOperationException("The owner-token replay diverged from the persistent T0 lane.");
+        }
+
+        var canonicality = map.ValidateCanonicalityForDiagnostics();
+        var baseStructure = _base.GetStructureDiagnostics();
+        var resultStructure = map.GetStructureDiagnostics();
+        return new Axis2OwnerTokenKernelEvidence(
+            Workload.BaseCount,
+            Workload.EditCount,
+            History,
+            PublicationCadence,
+            _collisionBucketSize,
+            counters,
+            baseStructure.EstimatedOwnerMetadataBytes,
+            baseStructure.EstimatedRetainedBytes,
+            resultStructure.OwnerTaggedNodeCount,
+            resultStructure.OwnerTaggedArrayCount,
+            resultStructure.OwnerTokenCount,
+            resultStructure.EstimatedRetainedBytes,
+            canonicality.RecursiveEntryCount);
+    }
+
     private static PersistentHashMap<Axis2HashKey, int> RebuildWithBulkBuilder(
         PersistentHashMap<Axis2HashKey, int> source,
         ReadOnlySpan<Axis2HashEdit> edits)
@@ -215,6 +297,16 @@ public class TransientLifecycleBenchmarks
         edit.Kind == Axis2HashEditKind.Set
             ? map.SetItem(edit.Key, edit.Value)
             : map.Remove(edit.Key);
+
+    private static void Apply(
+        PersistentHashMap<Axis2HashKey, int>.OwnerTokenTransientKernel kernel,
+        Axis2HashEdit edit)
+    {
+        if (edit.Kind == Axis2HashEditKind.Set)
+            kernel.SetItem(edit.Key, edit.Value);
+        else
+            kernel.Remove(edit.Key);
+    }
 
     private static long ComputeSemanticChecksum(PersistentHashMap<Axis2HashKey, int> map)
     {
@@ -273,4 +365,48 @@ internal readonly record struct Axis2TransientOpportunityCounters(
         $"potentially_reusable_arrays_upper={PotentiallyReusableCopiedArrayUpperBound.ToString(CultureInfo.InvariantCulture)}",
         $"hash_callbacks={HashCallbackCount.ToString(CultureInfo.InvariantCulture)}",
         $"equality_callbacks={EqualityCallbackCount.ToString(CultureInfo.InvariantCulture)}");
+}
+
+internal readonly record struct Axis2OwnerTokenKernelEvidence(
+    int BaseCount,
+    int EditCount,
+    Axis2EditHistory History,
+    Axis2PublicationCadence PublicationCadence,
+    int CollisionBucketSize,
+    PersistentHashMap<Axis2HashKey, int>.OwnerTokenKernelCounters Counters,
+    long OrdinaryOwnerMetadataBytes,
+    long OrdinaryEstimatedRetainedBytes,
+    int PublishedOwnerTaggedNodes,
+    int PublishedOwnerTaggedArrays,
+    int PublishedOwnerTokenCount,
+    long PublishedEstimatedRetainedBytes,
+    int RecursiveEntryCount)
+{
+    internal string ToCsv() => string.Join(
+        ',',
+        "AXIS2_T1_COUNTER_V1",
+        $"base_count={BaseCount.ToString(CultureInfo.InvariantCulture)}",
+        $"edits={EditCount.ToString(CultureInfo.InvariantCulture)}",
+        $"history={History}",
+        $"cadence={PublicationCadence}",
+        $"collision_bucket_size={CollisionBucketSize.ToString(CultureInfo.InvariantCulture)}",
+        $"adoptions={Counters.AdoptionCount.ToString(CultureInfo.InvariantCulture)}",
+        $"adoption_node_visits={Counters.AdoptionNodeVisits.ToString(CultureInfo.InvariantCulture)}",
+        $"publications={Counters.PublicationCount.ToString(CultureInfo.InvariantCulture)}",
+        $"publication_node_visits={Counters.PublicationNodeVisits.ToString(CultureInfo.InvariantCulture)}",
+        $"prepared_mutations={Counters.PreparedMutationCount.ToString(CultureInfo.InvariantCulture)}",
+        $"copied_nodes={Counters.CopiedNodeCount.ToString(CultureInfo.InvariantCulture)}",
+        $"allocated_nodes={Counters.AllocatedNodeCount.ToString(CultureInfo.InvariantCulture)}",
+        $"copied_arrays={Counters.CopiedArrayCount.ToString(CultureInfo.InvariantCulture)}",
+        $"allocated_arrays={Counters.AllocatedArrayCount.ToString(CultureInfo.InvariantCulture)}",
+        $"inplace_node_mutations={Counters.InPlaceNodeMutationCount.ToString(CultureInfo.InvariantCulture)}",
+        $"inplace_array_writes={Counters.InPlaceArrayWriteCount.ToString(CultureInfo.InvariantCulture)}",
+        $"wrapper_allocations={Counters.PersistentWrapperAllocationCount.ToString(CultureInfo.InvariantCulture)}",
+        $"ordinary_owner_metadata_bytes={OrdinaryOwnerMetadataBytes.ToString(CultureInfo.InvariantCulture)}",
+        $"ordinary_retained_bytes={OrdinaryEstimatedRetainedBytes.ToString(CultureInfo.InvariantCulture)}",
+        $"published_owner_nodes={PublishedOwnerTaggedNodes.ToString(CultureInfo.InvariantCulture)}",
+        $"published_owner_arrays={PublishedOwnerTaggedArrays.ToString(CultureInfo.InvariantCulture)}",
+        $"published_owner_tokens={PublishedOwnerTokenCount.ToString(CultureInfo.InvariantCulture)}",
+        $"published_retained_bytes={PublishedEstimatedRetainedBytes.ToString(CultureInfo.InvariantCulture)}",
+        $"recursive_entries={RecursiveEntryCount.ToString(CultureInfo.InvariantCulture)}");
 }

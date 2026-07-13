@@ -18,6 +18,10 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
   stable enumeration, no-op identity, retained versions, and callback-exception atomicity.
 - `PersistentHashMapDiagnosticsTests.cs` pins the benchmark-only root, node/array sharing, path-copy,
   ownership, retained-size, lookup-visit, and canonical bulk-builder diagnostic seam.
+- `PersistentHashMapOwnerTokenKernelTests.cs` validates the private Axis 2 T1 kernel: O(1)
+  adoption/sealing, copy-on-first-write ownership, base and published-version isolation, recursive
+  CHAMP canonicality/counts, representatives/collisions, consumed sessions, and callback,
+  allocation-boundary, in-place-commit, and publication failure atomicity.
 - `PersistentHashMapEnumeratorTests.cs` covers allocation-free struct enumerators, copied enumerator independence,
   and key/value/pair enumeration.
 - `PersistentHashSetEnumeratorTests.cs` covers the set wrapper's default, before-first, active, exhausted,
