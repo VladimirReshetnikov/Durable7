@@ -29,6 +29,16 @@ public abstract class FrozenF0AxisBenchmarksBase
 
     [Benchmark]
     [BenchmarkCategory("LookupMix")]
+    public long RobinHoodPrototypeLookupMix() =>
+        FrozenF0Operations.SumLookups(_fixture.RobinHood, _fixture.Probes);
+
+    [Benchmark]
+    [BenchmarkCategory("LookupMix")]
+    public long QuadraticPrototypeLookupMix() =>
+        FrozenF0Operations.SumLookups(_fixture.Quadratic, _fixture.Probes);
+
+    [Benchmark]
+    [BenchmarkCategory("LookupMix")]
     public long DictionaryLookupMix() =>
         FrozenF0Operations.SumLookups(_fixture.Dictionary, _fixture.Probes);
 
@@ -52,6 +62,14 @@ public abstract class FrozenF0AxisBenchmarksBase
 
     [Benchmark]
     [BenchmarkCategory("Enumeration")]
+    public long RobinHoodPrototypeEnumeration() => FrozenF0Operations.SumEntries(_fixture.RobinHood);
+
+    [Benchmark]
+    [BenchmarkCategory("Enumeration")]
+    public long QuadraticPrototypeEnumeration() => FrozenF0Operations.SumEntries(_fixture.Quadratic);
+
+    [Benchmark]
+    [BenchmarkCategory("Enumeration")]
     public long DictionaryEnumeration() => FrozenF0Operations.SumEntries(_fixture.Dictionary);
 
     [Benchmark]
@@ -70,6 +88,14 @@ public abstract class FrozenF0AxisBenchmarksBase
     [Benchmark]
     [BenchmarkCategory("Construction")]
     public object PackedPrototypeConstructionFromSourceMap() => _fixture.ConstructPacked();
+
+    [Benchmark]
+    [BenchmarkCategory("Construction")]
+    public object RobinHoodPrototypeConstructionFromSourceMap() => _fixture.ConstructRobinHood();
+
+    [Benchmark]
+    [BenchmarkCategory("Construction")]
+    public object QuadraticPrototypeConstructionFromSourceMap() => _fixture.ConstructQuadratic();
 
     [Benchmark]
     [BenchmarkCategory("Construction")]
@@ -100,6 +126,22 @@ public class FrozenLookupBenchmarks : FrozenF0AxisBenchmarksBase
 
     [GlobalSetup]
     public void Setup() => Initialize(Count, Axis2HashShape.Uniform, "uniform");
+}
+
+/// <summary>
+/// A shared-low-prefix lane for indexes whose home-slot calculation may react differently to weak
+/// low hash bits. It is capped at 1,024 entries so a deliberately fixed quadratic layout remains a
+/// usable evidence case rather than turning setup into a multi-billion-probe stress run.
+/// </summary>
+[MemoryDiagnoser]
+[GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
+public class FrozenClusteredLookupBenchmarks : FrozenF0AxisBenchmarksBase
+{
+    [Params(8, 32, 1_024)]
+    public int Count { get; set; }
+
+    [GlobalSetup]
+    public void Setup() => Initialize(Count, Axis2HashShape.ClusteredPrefix, "clustered-prefix");
 }
 
 /// <summary>
@@ -147,6 +189,16 @@ public class FrozenNullLookupBenchmarks
     public long PackedPrototypeNullLookupMix() =>
         FrozenF0Operations.SumLookups(_fixture.Packed, _fixture.Probes);
 
+    [Benchmark]
+    [BenchmarkCategory("NullLookupMix")]
+    public long RobinHoodPrototypeNullLookupMix() =>
+        FrozenF0Operations.SumLookups(_fixture.RobinHood, _fixture.Probes);
+
+    [Benchmark]
+    [BenchmarkCategory("NullLookupMix")]
+    public long QuadraticPrototypeNullLookupMix() =>
+        FrozenF0Operations.SumLookups(_fixture.Quadratic, _fixture.Probes);
+
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("NullEnumeration")]
     public long PersistentNullEnumeration() => FrozenF0Operations.SumEntries(_fixture.Persistent);
@@ -154,6 +206,14 @@ public class FrozenNullLookupBenchmarks
     [Benchmark]
     [BenchmarkCategory("NullEnumeration")]
     public long PackedPrototypeNullEnumeration() => FrozenF0Operations.SumEntries(_fixture.Packed);
+
+    [Benchmark]
+    [BenchmarkCategory("NullEnumeration")]
+    public long RobinHoodPrototypeNullEnumeration() => FrozenF0Operations.SumEntries(_fixture.RobinHood);
+
+    [Benchmark]
+    [BenchmarkCategory("NullEnumeration")]
+    public long QuadraticPrototypeNullEnumeration() => FrozenF0Operations.SumEntries(_fixture.Quadratic);
 
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("NullConstruction")]
@@ -163,6 +223,14 @@ public class FrozenNullLookupBenchmarks
     [Benchmark]
     [BenchmarkCategory("NullConstruction")]
     public object PackedPrototypeNullConstructionFromSourceMap() => _fixture.ConstructPacked();
+
+    [Benchmark]
+    [BenchmarkCategory("NullConstruction")]
+    public object RobinHoodPrototypeNullConstructionFromSourceMap() => _fixture.ConstructRobinHood();
+
+    [Benchmark]
+    [BenchmarkCategory("NullConstruction")]
+    public object QuadraticPrototypeNullConstructionFromSourceMap() => _fixture.ConstructQuadratic();
 }
 
 /// <summary>
@@ -187,6 +255,34 @@ internal static class FrozenF0Operations
 
     internal static long SumLookups(
         PackedFrozenMapPrototype<Axis2HashKey, int> map,
+        Axis2HashKey[] probes)
+    {
+        long sum = 0;
+        foreach (var probe in probes)
+        {
+            if (map.TryGetValue(probe, out var value))
+                sum += value;
+        }
+
+        return sum;
+    }
+
+    internal static long SumLookups(
+        RobinHoodFrozenMapPrototype<Axis2HashKey, int> map,
+        Axis2HashKey[] probes)
+    {
+        long sum = 0;
+        foreach (var probe in probes)
+        {
+            if (map.TryGetValue(probe, out var value))
+                sum += value;
+        }
+
+        return sum;
+    }
+
+    internal static long SumLookups(
+        QuadraticFrozenMapPrototype<Axis2HashKey, int> map,
         Axis2HashKey[] probes)
     {
         long sum = 0;
@@ -265,6 +361,30 @@ internal static class FrozenF0Operations
         return sum;
     }
 
+    internal static long SumLookups(RobinHoodFrozenMapPrototype<string?, int> map, string?[] probes)
+    {
+        long sum = 0;
+        foreach (var probe in probes)
+        {
+            if (map.TryGetValue(probe, out var value))
+                sum += value;
+        }
+
+        return sum;
+    }
+
+    internal static long SumLookups(QuadraticFrozenMapPrototype<string?, int> map, string?[] probes)
+    {
+        long sum = 0;
+        foreach (var probe in probes)
+        {
+            if (map.TryGetValue(probe, out var value))
+                sum += value;
+        }
+
+        return sum;
+    }
+
     internal static long SumEntries(PersistentHashMap<Axis2HashKey, int> map)
     {
         long sum = 0;
@@ -274,6 +394,22 @@ internal static class FrozenF0Operations
     }
 
     internal static long SumEntries(PackedFrozenMapPrototype<Axis2HashKey, int> map)
+    {
+        long sum = 0;
+        foreach (var entry in map)
+            sum += entry.Value;
+        return sum;
+    }
+
+    internal static long SumEntries(RobinHoodFrozenMapPrototype<Axis2HashKey, int> map)
+    {
+        long sum = 0;
+        foreach (var entry in map)
+            sum += entry.Value;
+        return sum;
+    }
+
+    internal static long SumEntries(QuadraticFrozenMapPrototype<Axis2HashKey, int> map)
     {
         long sum = 0;
         foreach (var entry in map)
@@ -314,6 +450,22 @@ internal static class FrozenF0Operations
     }
 
     internal static long SumEntries(PackedFrozenMapPrototype<string?, int> map)
+    {
+        long sum = 0;
+        foreach (var entry in map)
+            sum += entry.Value;
+        return sum;
+    }
+
+    internal static long SumEntries(RobinHoodFrozenMapPrototype<string?, int> map)
+    {
+        long sum = 0;
+        foreach (var entry in map)
+            sum += entry.Value;
+        return sum;
+    }
+
+    internal static long SumEntries(QuadraticFrozenMapPrototype<string?, int> map)
     {
         long sum = 0;
         foreach (var entry in map)

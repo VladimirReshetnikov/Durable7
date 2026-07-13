@@ -270,21 +270,34 @@ internal sealed class FrozenF0AxisFixture
         Probes = CreateProbes(Entries, ProbeCount, hitPercentage, shape);
         Persistent = PersistentHashMap<Axis2HashKey, int>.CreateRange(Entries, comparer);
         Packed = PackedFrozenMapPrototype<Axis2HashKey, int>.Create(Persistent);
+        RobinHood = RobinHoodFrozenMapPrototype<Axis2HashKey, int>.Create(Persistent);
+        Quadratic = QuadraticFrozenMapPrototype<Axis2HashKey, int>.Create(Persistent);
         Dictionary = CreateDictionary(Persistent, comparer);
         Immutable = CreateImmutable(Persistent, comparer);
         BclFrozen = Persistent.ToFrozenDictionary(comparer);
 
         if (!ReferenceEquals(Persistent.Comparer, comparer)
             || !ReferenceEquals(Packed.Comparer, comparer)
+            || !ReferenceEquals(RobinHood.Comparer, comparer)
+            || !ReferenceEquals(Quadratic.Comparer, comparer)
             || !ReferenceEquals(Dictionary.Comparer, comparer)
             || !ReferenceEquals(Immutable.KeyComparer, comparer)
             || !ReferenceEquals(BclFrozen.Comparer, comparer))
         {
-            throw new InvalidOperationException("Every F0 control must retain the exact comparer object.");
+            throw new InvalidOperationException("Every F0/F1 control must retain the exact comparer object.");
         }
 
+        ValidateSemanticParity();
         ValidatePackedEnumeration(Persistent, Packed);
-        ReportRetainedArrays(lane, Persistent.GetStructureDiagnostics().EstimatedRetainedBytes, Packed.Diagnostics);
+        ValidateRobinHoodEnumeration(Persistent, RobinHood);
+        ValidateQuadraticEnumeration(Persistent, Quadratic);
+        ReportRetainedArrays(
+            lane,
+            Persistent.GetStructureDiagnostics().EstimatedRetainedBytes,
+            Packed.Diagnostics,
+            RobinHood.Diagnostics,
+            Quadratic.Diagnostics,
+            FrozenLayoutMemory.EstimateBclFrozenArrayBytes(BclFrozen));
     }
 
     internal KeyValuePair<Axis2HashKey, int>[] Entries { get; }
@@ -294,6 +307,10 @@ internal sealed class FrozenF0AxisFixture
     internal PersistentHashMap<Axis2HashKey, int> Persistent { get; }
 
     internal PackedFrozenMapPrototype<Axis2HashKey, int> Packed { get; }
+
+    internal RobinHoodFrozenMapPrototype<Axis2HashKey, int> RobinHood { get; }
+
+    internal QuadraticFrozenMapPrototype<Axis2HashKey, int> Quadratic { get; }
 
     internal Dictionary<Axis2HashKey, int> Dictionary { get; }
 
@@ -306,6 +323,12 @@ internal sealed class FrozenF0AxisFixture
 
     internal PackedFrozenMapPrototype<Axis2HashKey, int> ConstructPacked() =>
         PackedFrozenMapPrototype<Axis2HashKey, int>.Create(Persistent);
+
+    internal RobinHoodFrozenMapPrototype<Axis2HashKey, int> ConstructRobinHood() =>
+        RobinHoodFrozenMapPrototype<Axis2HashKey, int>.Create(Persistent);
+
+    internal QuadraticFrozenMapPrototype<Axis2HashKey, int> ConstructQuadratic() =>
+        QuadraticFrozenMapPrototype<Axis2HashKey, int>.Create(Persistent);
 
     internal Dictionary<Axis2HashKey, int> ConstructDictionary() =>
         CreateDictionary(Persistent, Axis2HashKeyComparer.Instance);
@@ -392,6 +415,82 @@ internal sealed class FrozenF0AxisFixture
         }
     }
 
+    private void ValidateSemanticParity()
+    {
+        if (Packed.Count != Persistent.Count
+            || RobinHood.Count != Persistent.Count
+            || Quadratic.Count != Persistent.Count
+            || BclFrozen.Count != Persistent.Count)
+        {
+            throw new InvalidOperationException("Every frozen layout must preserve the source-map count.");
+        }
+
+        foreach (var probe in Probes)
+        {
+            var expectedFound = Persistent.TryGetValue(probe, out var expectedValue);
+            ValidateLookup(
+                "linear",
+                expectedFound,
+                expectedValue,
+                Packed.TryGetValue(probe, out var linearValue),
+                linearValue);
+            ValidateLookup(
+                "Robin-Hood",
+                expectedFound,
+                expectedValue,
+                RobinHood.TryGetValue(probe, out var robinHoodValue),
+                robinHoodValue);
+            ValidateLookup(
+                "quadratic",
+                expectedFound,
+                expectedValue,
+                Quadratic.TryGetValue(probe, out var quadraticValue),
+                quadraticValue);
+            ValidateLookup(
+                "BCL FrozenDictionary",
+                expectedFound,
+                expectedValue,
+                BclFrozen.TryGetValue(probe, out var bclValue),
+                bclValue);
+        }
+
+        foreach (var pair in Persistent)
+        {
+            if (!Packed.TryGetKey(pair.Key, out var linearKey)
+                || !RobinHood.TryGetKey(pair.Key, out var robinHoodKey)
+                || !Quadratic.TryGetKey(pair.Key, out var quadraticKey)
+                || !pair.Key.Equals(linearKey)
+                || !pair.Key.Equals(robinHoodKey)
+                || !pair.Key.Equals(quadraticKey))
+            {
+                throw new InvalidOperationException(
+                    "Every repository frozen layout must retain the source map's stored key representative.");
+            }
+        }
+
+        var bclEntryCount = 0;
+        foreach (var pair in BclFrozen)
+        {
+            if (!Persistent.TryGetValue(pair.Key, out var expectedValue) || expectedValue != pair.Value)
+                throw new InvalidOperationException("The BCL FrozenDictionary control changed source content.");
+            bclEntryCount++;
+        }
+
+        if (bclEntryCount != Persistent.Count)
+            throw new InvalidOperationException("The BCL FrozenDictionary control enumerated the wrong count.");
+    }
+
+    private static void ValidateLookup(
+        string layout,
+        bool expectedFound,
+        int expectedValue,
+        bool actualFound,
+        int actualValue)
+    {
+        if (actualFound != expectedFound || (actualFound && actualValue != expectedValue))
+            throw new InvalidOperationException($"The {layout} lookup result differs from the source map.");
+    }
+
     private static void ValidatePackedEnumeration(
         PersistentHashMap<Axis2HashKey, int> source,
         PackedFrozenMapPrototype<Axis2HashKey, int> packed)
@@ -408,19 +507,70 @@ internal sealed class FrozenF0AxisFixture
             throw new InvalidOperationException("The packed prototype enumerated more entries than its source map.");
     }
 
+    private static void ValidateRobinHoodEnumeration(
+        PersistentHashMap<Axis2HashKey, int> source,
+        RobinHoodFrozenMapPrototype<Axis2HashKey, int> robinHood)
+    {
+        var sourceEnumerator = source.GetEnumerator();
+        var frozenEnumerator = robinHood.GetEnumerator();
+        while (sourceEnumerator.MoveNext())
+        {
+            if (!frozenEnumerator.MoveNext() || !sourceEnumerator.Current.Equals(frozenEnumerator.Current))
+            {
+                throw new InvalidOperationException(
+                    "The Robin-Hood prototype must preserve source-map enumeration exactly.");
+            }
+        }
+
+        if (frozenEnumerator.MoveNext())
+            throw new InvalidOperationException("The Robin-Hood prototype enumerated too many entries.");
+    }
+
+    private static void ValidateQuadraticEnumeration(
+        PersistentHashMap<Axis2HashKey, int> source,
+        QuadraticFrozenMapPrototype<Axis2HashKey, int> quadratic)
+    {
+        var sourceEnumerator = source.GetEnumerator();
+        var frozenEnumerator = quadratic.GetEnumerator();
+        while (sourceEnumerator.MoveNext())
+        {
+            if (!frozenEnumerator.MoveNext() || !sourceEnumerator.Current.Equals(frozenEnumerator.Current))
+            {
+                throw new InvalidOperationException(
+                    "The quadratic prototype must preserve source-map enumeration exactly.");
+            }
+        }
+
+        if (frozenEnumerator.MoveNext())
+            throw new InvalidOperationException("The quadratic prototype enumerated too many entries.");
+    }
+
     internal static void ReportRetainedArrays(
         string lane,
         long persistentEstimatedRetainedBytes,
-        PackedFrozenMapPrototypeDiagnostics packed)
+        PackedFrozenMapPrototypeDiagnostics linear,
+        PackedFrozenMapPrototypeDiagnostics robinHood,
+        PackedFrozenMapPrototypeDiagnostics quadratic,
+        long? bclFrozenEstimatedArrayBytes)
     {
         Console.WriteLine(
-            $"F0 retained-memory report: lane={lane}; entries={packed.EntryCount}; slots={packed.SlotCount}; " +
-            $"load={packed.LoadFactor:F4}; packed-entry-array={packed.EstimatedEntryArrayBytes}; " +
-            $"packed-slot-array={packed.EstimatedSlotArrayBytes}; " +
-            $"packed-retained-arrays={packed.EstimatedRetainedArrayBytes}; " +
-            $"packed-array-bytes/entry={packed.EstimatedRetainedArrayBytesPerEntry:F2}; " +
-            $"persistent-estimated-graph={persistentEstimatedRetainedBytes}. " +
-            "Packed bytes exclude wrapper/comparer and key/value object graphs.");
+            $"AXIS2_F1_RETAINED_V1,lane={lane},entries={linear.EntryCount}," +
+            $"persistent-estimated-graph={persistentEstimatedRetainedBytes}," +
+            $"linear-slots={linear.SlotCount},linear-load={linear.LoadFactor:F4}," +
+            $"linear-entry-array={linear.EstimatedEntryArrayBytes}," +
+            $"linear-slot-array={linear.EstimatedSlotArrayBytes}," +
+            $"linear-retained-arrays={linear.EstimatedRetainedArrayBytes}," +
+            $"robin-hood-slots={robinHood.SlotCount},robin-hood-load={robinHood.LoadFactor:F4}," +
+            $"robin-hood-entry-array={robinHood.EstimatedEntryArrayBytes}," +
+            $"robin-hood-slot-array={robinHood.EstimatedSlotArrayBytes}," +
+            $"robin-hood-retained-arrays={robinHood.EstimatedRetainedArrayBytes}," +
+            $"quadratic-slots={quadratic.SlotCount},quadratic-load={quadratic.LoadFactor:F4}," +
+            $"quadratic-entry-array={quadratic.EstimatedEntryArrayBytes}," +
+            $"quadratic-slot-array={quadratic.EstimatedSlotArrayBytes}," +
+            $"quadratic-retained-arrays={quadratic.EstimatedRetainedArrayBytes}," +
+            $"bcl-frozen-retained-arrays={bclFrozenEstimatedArrayBytes?.ToString() ?? "omitted-null-semantics"}. " +
+            "Array estimates exclude wrappers, comparers, and key/value payload object graphs; " +
+            "the BCL value reflects arrays reachable through this runtime's Frozen implementation objects.");
     }
 }
 
@@ -457,28 +607,28 @@ internal sealed class FrozenF0NullCollisionFixture
 
         Persistent = PersistentHashMap<string?, int>.CreateRange(input, _comparer);
         Packed = PackedFrozenMapPrototype<string?, int>.Create(Persistent);
+        RobinHood = RobinHoodFrozenMapPrototype<string?, int>.Create(Persistent);
+        Quadratic = QuadraticFrozenMapPrototype<string?, int>.Create(Persistent);
         Probes = CreateProbes(count, hitPercentage);
 
         if (!ReferenceEquals(Persistent.Comparer, _comparer)
-            || !ReferenceEquals(Packed.Comparer, _comparer))
+            || !ReferenceEquals(Packed.Comparer, _comparer)
+            || !ReferenceEquals(RobinHood.Comparer, _comparer)
+            || !ReferenceEquals(Quadratic.Comparer, _comparer))
         {
             throw new InvalidOperationException("The null/collision lane must retain the exact comparer object.");
         }
 
-        if (!Persistent.TryGetKey("key-00001", out var persistentRepresentative)
-            || !Packed.TryGetKey("key-00001", out var packedRepresentative)
-            || !ReferenceEquals(persistentRepresentative, originalRepresentatives[1])
-            || !ReferenceEquals(packedRepresentative, originalRepresentatives[1]))
-        {
-            throw new InvalidOperationException("Freezing must retain the source map's first stored key representative.");
-        }
-
-        ValidatePackedEnumeration();
+        ValidateSemanticParity(originalRepresentatives);
+        ValidateRepositoryEnumeration();
 
         FrozenF0AxisFixture.ReportRetainedArrays(
             "null-full-collision",
             Persistent.GetStructureDiagnostics().EstimatedRetainedBytes,
-            Packed.Diagnostics);
+            Packed.Diagnostics,
+            RobinHood.Diagnostics,
+            Quadratic.Diagnostics,
+            bclFrozenEstimatedArrayBytes: null);
     }
 
     internal string?[] Probes { get; }
@@ -487,29 +637,108 @@ internal sealed class FrozenF0NullCollisionFixture
 
     internal PackedFrozenMapPrototype<string?, int> Packed { get; }
 
+    internal RobinHoodFrozenMapPrototype<string?, int> RobinHood { get; }
+
+    internal QuadraticFrozenMapPrototype<string?, int> Quadratic { get; }
+
     internal PersistentHashMap<string?, int> ConstructPersistent() =>
         PersistentHashMap<string?, int>.CreateRange(Persistent, _comparer);
 
     internal PackedFrozenMapPrototype<string?, int> ConstructPacked() =>
         PackedFrozenMapPrototype<string?, int>.Create(Persistent);
 
-    private void ValidatePackedEnumeration()
+    internal RobinHoodFrozenMapPrototype<string?, int> ConstructRobinHood() =>
+        RobinHoodFrozenMapPrototype<string?, int>.Create(Persistent);
+
+    internal QuadraticFrozenMapPrototype<string?, int> ConstructQuadratic() =>
+        QuadraticFrozenMapPrototype<string?, int>.Create(Persistent);
+
+    private void ValidateSemanticParity(string?[] originalRepresentatives)
+    {
+        if (Packed.Count != Persistent.Count
+            || RobinHood.Count != Persistent.Count
+            || Quadratic.Count != Persistent.Count)
+        {
+            throw new InvalidOperationException("Every repository frozen layout must preserve the source-map count.");
+        }
+
+        foreach (var probe in Probes)
+        {
+            var expectedFound = Persistent.TryGetValue(probe, out var expectedValue);
+            ValidateLookup(
+                "linear",
+                expectedFound,
+                expectedValue,
+                Packed.TryGetValue(probe, out var linearValue),
+                linearValue);
+            ValidateLookup(
+                "Robin-Hood",
+                expectedFound,
+                expectedValue,
+                RobinHood.TryGetValue(probe, out var robinHoodValue),
+                robinHoodValue);
+            ValidateLookup(
+                "quadratic",
+                expectedFound,
+                expectedValue,
+                Quadratic.TryGetValue(probe, out var quadraticValue),
+                quadraticValue);
+        }
+
+        for (var index = 0; index < originalRepresentatives.Length; index++)
+        {
+            var query = index == 0 ? null : $"key-{index:D5}";
+            if (!Persistent.TryGetKey(query, out var persistentRepresentative)
+                || !Packed.TryGetKey(query, out var linearRepresentative)
+                || !RobinHood.TryGetKey(query, out var robinHoodRepresentative)
+                || !Quadratic.TryGetKey(query, out var quadraticRepresentative)
+                || !ReferenceEquals(persistentRepresentative, originalRepresentatives[index])
+                || !ReferenceEquals(linearRepresentative, originalRepresentatives[index])
+                || !ReferenceEquals(robinHoodRepresentative, originalRepresentatives[index])
+                || !ReferenceEquals(quadraticRepresentative, originalRepresentatives[index]))
+            {
+                throw new InvalidOperationException(
+                    "Freezing must retain every first stored key representative, including null.");
+            }
+        }
+    }
+
+    private static void ValidateLookup(
+        string layout,
+        bool expectedFound,
+        int expectedValue,
+        bool actualFound,
+        int actualValue)
+    {
+        if (actualFound != expectedFound || (actualFound && actualValue != expectedValue))
+            throw new InvalidOperationException($"The {layout} null/collision lookup differs from the source map.");
+    }
+
+    private void ValidateRepositoryEnumeration()
     {
         var sourceEnumerator = Persistent.GetEnumerator();
         var packedEnumerator = Packed.GetEnumerator();
+        var robinHoodEnumerator = RobinHood.GetEnumerator();
+        var quadraticEnumerator = Quadratic.GetEnumerator();
         while (sourceEnumerator.MoveNext())
         {
             if (!packedEnumerator.MoveNext()
+                || !robinHoodEnumerator.MoveNext()
+                || !quadraticEnumerator.MoveNext()
                 || !ReferenceEquals(sourceEnumerator.Current.Key, packedEnumerator.Current.Key)
-                || sourceEnumerator.Current.Value != packedEnumerator.Current.Value)
+                || !ReferenceEquals(sourceEnumerator.Current.Key, robinHoodEnumerator.Current.Key)
+                || !ReferenceEquals(sourceEnumerator.Current.Key, quadraticEnumerator.Current.Key)
+                || sourceEnumerator.Current.Value != packedEnumerator.Current.Value
+                || sourceEnumerator.Current.Value != robinHoodEnumerator.Current.Value
+                || sourceEnumerator.Current.Value != quadraticEnumerator.Current.Value)
             {
                 throw new InvalidOperationException(
-                    "The packed prototype must retain source-map order and stored key representatives exactly.");
+                    "Every repository frozen prototype must retain source-map order and key representatives exactly.");
             }
         }
 
-        if (packedEnumerator.MoveNext())
-            throw new InvalidOperationException("The packed prototype enumerated more entries than its source map.");
+        if (packedEnumerator.MoveNext() || robinHoodEnumerator.MoveNext() || quadraticEnumerator.MoveNext())
+            throw new InvalidOperationException("A repository frozen prototype enumerated too many entries.");
     }
 
     private static string?[] CreateProbes(int count, int hitPercentage)

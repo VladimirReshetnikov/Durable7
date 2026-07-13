@@ -54,7 +54,7 @@ Results are written under `BenchmarkDotNet.Artifacts/` (git-ignored); curated ta
 | `ChampBenchmarks` | CHAMP lookup, payload-dense iteration, shared-single-change diff, and independent-history equality/diff | `Dictionary` and `ImmutableDictionary` |
 | `CtrieBenchmarks` | lock-free lookup and O(1) immutable snapshot publication | `ConcurrentDictionary` lookup and O(n) immutable copy |
 | `TransientLifecycleBenchmarks` | Axis 2 edit-locality/publication matrix and structural path-copy counters (persistent/bulk baselines in P0; private transient lanes arrive in T1) | direct persistent edits and canonical `BulkBuilder` construction |
-| `FrozenLookupBenchmarks` | Axis 2 lookup mixes, enumeration, construction, retained memory, conversion, and break-even gate (control skeleton in P0; packed layouts arrive in F0/F1) | `PersistentHashMap`, `Dictionary`, `ImmutableDictionary`, and BCL `FrozenDictionary` |
+| `FrozenLookupBenchmarks`, `FrozenClusteredLookupBenchmarks`, `FrozenCollisionLookupBenchmarks`, `FrozenNullLookupBenchmarks` | Axis 2 F1 fixed-layout bake-off across lookup mixes, enumeration, construction, retained arrays, null/stored representatives, collision shapes, and break-even | persistent CHAMP, linear/Robin-Hood/quadratic repository prototypes, `Dictionary`, `ImmutableDictionary`, and BCL `FrozenDictionary` where semantically representable |
 | `PatriciaMapBenchmarks` | integer-key lookup and prefix-aware structural union | CHAMP and `ImmutableDictionary` lookup |
 | `RrbVectorBenchmarks` | uniform middle indexing and boundary-spine concatenation | `Rope<T>` indexing/concat and `ImmutableList<T>` indexing/concat |
 | `DabaLiteBenchmarks` | worst-case O(1) FIFO slide-and-query aggregation, callback-free structure validation, and 63/64/65 chunk-boundary behavior | `Queue<T>` plus O(n) reaggregation |
@@ -127,3 +127,12 @@ warmup/job configuration, and result-consumption shape. A control that cannot re
 lane—most notably a null-key lane—is omitted and called out rather than given different input.
 BenchmarkDotNet's `MemoryDiagnoser` supplies allocation data; retained graph bytes come from the
 internal structural estimators and are never relabeled as allocation bytes.
+
+The F1 frozen-layout bake-off keeps one packed source-order entry array and compares three fixed
+offline indexes: simple linear probing, Robin-Hood linear probing, and power-of-two triangular
+quadratic probing. Global setup validates comparer identity, lookup/content parity, exact repository
+prototype enumeration order, stored representatives, nulls, and equal-full-hash buckets before a
+timed method can run. Setup also emits `AXIS2_F1_RETAINED_V1` rows for each prototype and for arrays
+reachable through the current runtime's BCL Frozen implementation. These are retained-array
+estimates, not construction allocation. The exact single-worker evidence protocol and pending gate
+are recorded in the [F1 decision document](../../docs/Hamt/frozen-f1-layout-decision.md).
