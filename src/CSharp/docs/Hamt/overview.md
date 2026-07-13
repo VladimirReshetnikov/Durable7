@@ -81,8 +81,9 @@ and canonical topology alone does not confer reference identity.
   and CsCheck-backed model tests.
 - [`benchmarks/Tools.DataStructures.FingerTree.Benchmarks/`](../../benchmarks/Tools.DataStructures.FingerTree.Benchmarks/README.md)
   is the shared C# persistent-collections harness. Its `ChampBenchmarks`, `CtrieBenchmarks`,
-  `PatriciaMapBenchmarks`, and `MerkleSearchTreeBenchmarks` classes cover this workspace; Release
-  configuration is required for meaningful measurements.
+  `TransientLifecycleBenchmarks`, `PatriciaMapBenchmarks`, and `MerkleSearchTreeBenchmarks` classes
+  cover this workspace; Release configuration is required for meaningful measurements. The
+  [CHAMP T1 decision](transient-t1-decision.md) curates the selected private transient evidence.
 - `docs/api-specification.md` documents public contracts and complexity guarantees.
 - `docs/usage.md` provides practical construction, comparer, persistent update, iteration, and
   set-algebra examples.

@@ -29,7 +29,9 @@ dotnet run -c Release -- --filter *PriorityQueueBenchmarks.Ours_Meld*
 
 Release configuration is mandatory for meaningful numbers; BenchmarkDotNet refuses to trust a Debug build.
 Results are written under `BenchmarkDotNet.Artifacts/` (git-ignored); curated tables live in
-[`../../docs/FingerTree/benchmarks.md`](../../docs/FingerTree/benchmarks.md).
+the owning workspace's decision or benchmark document, including
+[`../../docs/FingerTree/benchmarks.md`](../../docs/FingerTree/benchmarks.md) and the
+[CHAMP T1 decision](../../docs/Hamt/transient-t1-decision.md).
 
 ## Benchmark classes
 
@@ -53,7 +55,7 @@ Results are written under `BenchmarkDotNet.Artifacts/` (git-ignored); curated ta
 | `RopeBuilderBenchmarks` | append-only rope builder construction and snapshot constants | `Create`, `AddLast` loop, text `StringBuilder` materialization, `ImmutableList<T>.Builder` |
 | `ChampBenchmarks` | CHAMP lookup, payload-dense iteration, shared-single-change diff, and independent-history equality/diff | `Dictionary` and `ImmutableDictionary` |
 | `CtrieBenchmarks` | lock-free lookup and O(1) immutable snapshot publication | `ConcurrentDictionary` lookup and O(n) immutable copy |
-| `TransientLifecycleBenchmarks` | Axis 2 edit-locality/publication matrix, structural path-copy counters, and the direct-separate T1 gate build: first-edit ordinary deferral, later reusable-path promotion, exact-type transient-editable branch/collision nodes, O(1) adoption/seal, and actual ownership/copy/retained-size evidence | direct persistent edits and canonical `BulkBuilder` construction |
+| `TransientLifecycleBenchmarks` | Axis 2 edit-locality/publication matrix, structural path-copy counters, and the selected direct-separate T1 kernel: first-edit ordinary deferral, later reusable-path promotion, exact-type transient-editable branch/collision nodes, O(1) adoption/seal, and actual ownership/copy/retained-size evidence | direct persistent edits and canonical `BulkBuilder` construction |
 | `FrozenLookupBenchmarks`, `FrozenClusteredLookupBenchmarks`, `FrozenCollisionLookupBenchmarks`, `FrozenNullLookupBenchmarks` | Axis 2 F1 fixed-layout bake-off across lookup mixes, enumeration, construction, retained arrays, null/stored representatives, collision shapes, and break-even | persistent CHAMP, linear/Robin-Hood/quadratic repository prototypes, `Dictionary`, `ImmutableDictionary`, and BCL `FrozenDictionary` where semantically representable |
 | `PatriciaMapBenchmarks` | integer-key lookup and prefix-aware structural union | CHAMP and `ImmutableDictionary` lookup |
 | `RrbVectorBenchmarks` | uniform middle indexing and boundary-spine concatenation | `Rope<T>` indexing/concat and `ImmutableList<T>` indexing/concat |
@@ -133,8 +135,8 @@ lane—most notably a null-key lane—is omitted and called out rather than give
 BenchmarkDotNet's `MemoryDiagnoser` supplies allocation data; retained graph bytes come from the
 internal structural estimators and are never relabeled as allocation bytes.
 
-On branch `codex/axis2-t1-direct-separate-gate`, the `SeparateNodeKernelHistory` method is the
-filterable T1 measurement lane. Ordinary collision and bitmap nodes retain the b590 sealed,
+The `SeparateNodeKernelHistory` method is the filterable lane for the selected private T1
+representation. Ordinary collision and bitmap nodes retain the b590 sealed,
 readonly source shape and physically contain no owner token or ownership flags. Direct
 `SeparateTransientCollisionNode : HashNode` and `SeparateTransientBranchNode : Node` types carry
 the token; a two-bit mask gives data and child arrays independent write ownership without a shared
@@ -150,8 +152,9 @@ their corresponding actual retained-byte fields; no subtraction or modeled adjus
 Adoption and publication node-visit counters must remain zero.
 The owner-field lane and evidence recorded in the T0 decision document are historical and run on
 `codex/axis2-t1-owner-fields-gate`; the earlier abstract-base separate formulation runs on
-`codex/axis2-t1-separate-gate`. This branch intentionally exposes only the direct-separate lane,
-and no advance/defer result is claimed before its locked measurements complete.
+`codex/axis2-t1-separate-gate`. Only the direct-separate lane contributes to the completed gate. The
+[T1 decision](../../docs/Hamt/transient-t1-decision.md) records the pinned noise calculation,
+material End/Every64 wins, bounded sparse cost, retained graph, and advance to T2.
 
 The F1 frozen-layout bake-off keeps one packed source-order entry array and compares three fixed
 offline indexes: simple linear probing, Robin-Hood linear probing, and power-of-two triangular

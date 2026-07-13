@@ -52,6 +52,14 @@ The suite covers:
 
 - map construction, lookup, replacement, removal, no-op behavior, and enumeration;
 - set construction, membership, add/remove, set algebra, and `IReadOnlySet<T>` behavior;
+- Axis 2 map/set contract oracles for comparer identity, stored representatives, nullable keys/items,
+  collisions, stable enumeration, no-op identity, retained versions, and callback-exception atomicity;
+- benchmark-only CHAMP diagnostics that pin root/path sharing, retained size, exact ordinary field
+  layout, and the b590 source fingerprints for ordinary nodes and the monomorphic lookup loop;
+- the selected 26-test private T1 direct-separate kernel, including first-edit deferral, reusable-path
+  promotion, independent array ownership, production/diagnostic parity, O(1) adoption/publication,
+  recursive canonicality, base/version isolation, consumed sessions, and deterministic callback,
+  allocation, promotion, and publication failure rollback;
 - comparer preservation, first equivalent key/item retention, and custom equality;
 - equal-hash collision buckets, deep shared hash prefixes, and collision splitting;
 - allocation-free copy-safe enumerators;

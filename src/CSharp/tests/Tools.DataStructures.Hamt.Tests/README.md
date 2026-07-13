@@ -19,8 +19,9 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
 - `PersistentHashMapDiagnosticsTests.cs` pins the benchmark-only root, node/array sharing, path-copy,
   ownership, retained-size, lookup-visit, canonical bulk-builder diagnostic seam, exact ordinary
   field layout, and b590 source fingerprints for the ordinary nodes and monomorphic lookup loop.
-- `PersistentHashMapSeparateNodeKernelTests.cs` validates the private Axis 2 T1 owner-free gate
-  build: O(1) adoption/sealing, first-edit ordinary deferral, reusable-path promotion on a later edit,
+- `PersistentHashMapSeparateNodeKernelTests.cs` validates the
+  [selected private Axis 2 T1 direct-separate kernel](../../docs/Hamt/transient-t1-decision.md): O(1)
+  adoption/sealing, first-edit ordinary deferral, reusable-path promotion on a later edit,
   copy-on-first-write ownership in separate transient-editable branch/collision classes, lazy token
   and commit-plan allocation, production/diagnostic mode parity, base and published-version isolation,
   recursive CHAMP canonicality/counts, representatives/collisions, consumed sessions,

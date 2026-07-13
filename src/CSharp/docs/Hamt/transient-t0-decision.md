@@ -1,6 +1,6 @@
 # CHAMP transient T0 workload-qualification decision
 
-- Status: T0 advanced; T1 deciding tuple locked
+- Status: T0 advanced; T1 subsequently selected the direct separate-node kernel
 - Created (UTC): 2026-07-13T06:24:55Z
 - Repository HEAD: 098ceb6fed880edcbd4902c2b5940f43d005e3da
 - Evidence commit: a82818e9d2a53f314ad7e89a7b3180d6f5507c0f
@@ -16,10 +16,10 @@ arrays in that tuple. Those counts plausibly clear the predeclared 10% materiali
 justify measuring a production-representative private kernel.
 
 This is an opportunity result, not a transient performance claim. The tuple and exact filter were
-selected and committed before any owner-kernel timing was observed. T1 must still compare the two
-locked ownership layouts, charge ordinary-map and edited-graph retention, establish failure
-atomicity and O(1) adoption/publication, and beat the unchanged persistent control beyond its
-measured noise floor before any public API is authorized.
+selected and committed before any owner-kernel timing was observed. T1 subsequently selected the
+direct separate-node layout after charging ordinary-map and edited-graph retention, establishing
+failure atomicity and O(1) adoption/publication, and clearing the locked materiality gate. The
+[T1 decision](transient-t1-decision.md) is the authoritative performance and representation record.
 
 The distinction is load-bearing:
 
@@ -30,10 +30,10 @@ The distinction is load-bearing:
   costs, and still beat the identical persistent workload by more than the larger of the measured
   noise floor and the 10% practical latency/allocation margin.
 
-T0 advances only on the first claim. Direct persistent operations remain the shipped answer while
-T1 is evaluated. The existing `BulkBuilder` is not a competitive editing substitute in the deciding
-tuple: its short-run construction control was about 151 times slower and allocated about 107 times
-as much as the direct persistent history.
+T0 advanced only on the first claim. Direct persistent operations remain the shipped answer until
+T2 itself clears its public-surface shipment gate. The existing `BulkBuilder` is not a competitive
+editing substitute in the deciding tuple: its short-run construction control was about 151 times
+slower and allocated about 107 times as much as the direct persistent history.
 
 ## Locked baseline matrix
 
@@ -167,9 +167,10 @@ silently begin reporting partial counters.
 The owner-field evidence is historical and belongs to
 `codex/axis2-t1-owner-fields-gate`; it is not a second method on this branch. Likewise, the earlier
 abstract-base owner-free formulation belongs to `codex/axis2-t1-separate-gate`. Do not combine
-their artifacts with the direct-separate candidate or rerun their filters from this worktree. This
-document records no direct-separate gate outcome until the locked correctness, ordinary-regression,
-and candidate measurements have completed.
+their artifacts with the direct-separate candidate or rerun their filters from this worktree. The
+locked correctness, ordinary-regression, retained-layout, and candidate measurements have since
+completed; their outcome belongs to the [T1 decision](transient-t1-decision.md), not this historical
+T0 opportunity record.
 
 The T1 parameter and filter matrix below was locked before direct-separate timing was inspected.
 Commands intentionally omit `--job`, selecting BenchmarkDotNet's default full job. An exact-SHA
@@ -227,14 +228,14 @@ all final evidence uses the exact filter above.
 | Selected persistent short control | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/candidate-persistent-short/` | Complete |
 | Selected `BulkBuilder` short control | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/candidate-bulk-builder-short/` | Complete |
 | Unpinned exact-SHA hybrid-core pilot | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1-unpinned-1befaa2/` | Complete; archived as inconclusive and excluded from the gate |
-| Five independent selected-control noise runs | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/noise-persistent-*/` | Required by T1; not part of the opportunity decision |
-| Full direct-separate deciding candidate | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/candidate-direct-separate-full/` | Required by T1; pending |
-| Full Every64 persistent corroboration | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/corroboration-persistent-every64-full/` | Required by T1; pending |
-| Full Every64 direct-separate corroboration | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/corroboration-direct-every64-full/` | Required by T1; pending |
-| Full sparse ordinary update guard | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/ordinary-update-every-edit-full/` | Required by T1; pending |
-| Full sparse direct-separate guard | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/guard-direct-every-edit-full/` | Required by T1; pending |
-| Full ordinary lookup regression control | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/ordinary-lookup-full/` | Required by T1; pending |
-| Curated matrix and counter table | This document, section `Curated evidence` | Complete |
+| Five independent selected-control noise runs | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/noise-persistent-*/` | Complete; curated in the T1 decision |
+| Full direct-separate deciding candidate | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/candidate-direct-separate-full/` | Complete; selected by T1 |
+| Full Every64 persistent corroboration | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/corroboration-persistent-every64-full/` | Complete |
+| Full Every64 direct-separate corroboration | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/corroboration-direct-every64-full/` | Complete |
+| Full sparse ordinary update guard | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/ordinary-update-every-edit-full/` | Complete |
+| Full sparse direct-separate guard | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/guard-direct-every-edit-full/` | Complete |
+| Full ordinary lookup regression control | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/ordinary-lookup-full/` | Complete |
+| Curated T1 matrix and counter table | [T1 decision](transient-t1-decision.md) | Complete |
 | T0 advance/defer result | This document | **Advance to T1** |
 
 Raw BenchmarkDotNet artifacts are git-ignored. The curated evidence must retain the executed commit,
@@ -276,8 +277,8 @@ controls do that after this tuple lock.
 
 ## Exit outcomes
 
-T0 exits with **Advance to T1** for `N100000_E512 / ClusteredPrefix / End`. This authorizes only the
-two private production-representative ownership layouts and their gate. It does not establish an
-owner-token win. T1 must still run five full persistent controls, compare both layouts on this exact
-tuple, corroborate `Every64`, reject regression at `N100000_E1/EveryEdit`, and charge ordinary and
-published retained memory. Only that later decision can authorize T2 public API design.
+T0 exits with **Advance to T1** for `N100000_E512 / ClusteredPrefix / End`. This historical result
+authorized only private production-representative ownership work and did not itself establish a
+transient win. T1 has now completed the five-control noise measurement, direct-layout selection,
+`Every64` corroboration, `N100000_E1/EveryEdit` sparse guard, and ordinary/published retained-memory
+charge. The separate [T1 decision](transient-t1-decision.md) advances to T2 public API design.
