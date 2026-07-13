@@ -177,6 +177,42 @@ insert; and `string` random indexing is O(1) versus the rope's O(log n). The rop
 versus `string`/`StringBuilder`, on build throughput, and on bulk range operations — which is exactly the
 text-editor / large-buffer workload it is meant for.
 
+### Axis 2 C0 rope cursor
+
+The C0 decision used a full BenchmarkDotNet job at one predeclared local-edit gate: a 65,536-character
+rope, 256 replacements within a window of eight positions, and a canonical snapshot every sixteen
+edits. The selected zipper has a sixteen-element active focus and a 256-element carry flush threshold.
+
+| Lane | Mean | 99.9% CI half-width | Allocated | Versus indexed mean | Versus indexed allocation |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Indexed `Rope<char>` | 572.3 us | 21.50 us | 1,559.93 KB | baseline | baseline |
+| Immutable class cursor | 117.9 us | 5.89 us | 265.38 KB | 79.4% lower | 83.0% lower |
+| **Readonly-struct cursor** | **107.6 us** | **4.62 us** | **210.84 KB** | **81.2% lower** | **86.5% lower** |
+| Mutable-session control | 116.5 us | 3.62 us | 210.92 KB | 79.6% lower | 86.5% lower |
+| `StringBuilder` + `ToString` cadence | 1,000.7 us | 54.67 us | 2,176.64 KB | 74.8% higher | 39.5% higher |
+
+Five independent indexed-control processes had medians 655.753, 699.040, 672.770, 677.905, and
+612.715 us. Three scaled median absolute deviations give an 11.25% process noise floor, larger than
+the predeclared 10% practical margin. The struct cursor's adverse interval comparison still improves
+latency by 79.6%; allocation was identical across the five controls and the cursor reduces it by
+86.5%. These data select the struct representation on a material positional-edit win. They do not
+claim p99 latency from iteration-level BenchmarkDotNet samples.
+
+The bilateral carry sweep types and removes 2,304 elements on both sides of a fixed gap. At focus
+sixteen, allocation rose from 10.92 MB with flush 256 to 12.50, 15.30, and 20.32 MB with flush 512,
+1,024, and 2,048. At flush 256, focus sixteen allocated less than focus 32/64/128; their ShortRun
+latency intervals overlap. This locks focus/flush at 16/256 without pretending the noisy means prove
+a latency ordering.
+
+Untimed fan-out counters start with a 255-element carry. At document sizes 1,024, 65,536, and
+1,048,576, branch counts 1/8/64/256 produced exactly 3/24/192/768 spine publications and one snapshot
+normalization per branch. Each boundary child retained an estimated 88 bytes of private cursor
+buffers and shared every source backing store. The supported complexity claim is therefore
+amortized O(1) within a linear lineage, O(log n) worst case per boundary repair, and O(b log n)
+worst-case aggregate work for `b` siblings—not unqualified amortized O(1) over an arbitrary version
+DAG. The full protocol, environment, counter tables, and exact commands are in the
+[C0 decision](rope-cursor-c0-decision.md).
+
 ### Line navigation (measured rope)
 
 `MeasuredRope<char, int, NewlineMeasure>` navigates by line in O(log n) by descending its cached newline measure,

@@ -1,23 +1,31 @@
 # Rope cursor C0 representation and proof decision
 
-- Status: Evidence collection pending
+- Status: Selected — readonly-struct zipper-as-version, focus 16, flush 256
 - Created (UTC): 2026-07-13T06:10:29Z
 - Repository HEAD: 439b83e7738907c2ff01e66da1c232ab70a80388
+- Evidence commit: db05d492d2027afc44f551f886d5f91b3d42959e
+- Decision closed (UTC): 2026-07-13T07:20:50Z
 - Audience: Maintainers deciding whether the Axis 2 rope cursor can advance to C1
 - Scope: C# positional-rope zipper prototypes, their proof boundary, and the locked C0 evidence protocol
 
 ## Decision status
 
-**Evidence collection pending.** This record deliberately makes no selection among the immutable
-class cursor, readonly-struct cursor, mutable-session control, focused-root escalation, and deferral.
-The semantic tests, structural counters, retained-version experiment, five-process noise floor, and
-Release benchmark artifacts named below must exist before this status changes.
+**Select the readonly-struct zipper-as-version with `FocusCapacity = 16` and
+`FlushChunkSize = 256`; advance to C1.** The selected named gate is 256 replacements in a 65,536
+element document, locality window eight, with a canonical snapshot every sixteen edits. Against
+ordinary indexed `Rope<char>` updates, the struct cursor reduced mean latency by 81.2% and allocated
+bytes by 86.5%. Even the adverse confidence-interval comparison clears the 11.25% measured latency
+noise floor by a wide margin. The run does not claim a p99 improvement; the 15% p99 rule therefore
+does not enter the selection.
 
-C0 advances only when one persistent representation clears the predeclared materiality rule in the
-named workload without contradicting the complexity scope proved here. The rule is the larger of the
-measured noise floor and the practical margin in the benchmark README: 10% for mean latency,
-allocated bytes, and retained bytes, and 15% for p99 latency. An interval that crosses the threshold
-is inconclusive. Mutable-session results are a control, not a candidate for the C1 persistent API.
+The struct is selected over the class carrier because it removes the class wrapper while retaining
+the same immutable version/context engine: allocated bytes fell from 265.38 KB to 210.84 KB per
+256-edit burst (20.6%), with no measured latency regression. The mutable-session result remains a
+control and supplied no unique engine benefit. Dirty snapshot normalization was not the blocker, so
+focused-root escalation is rejected. The retained-branch artifact preserves the narrower proof
+scope: linear-lineage amortization and O(b log n) worst-case aggregate repair for fan-out from a
+boundary version. C1 must publish that scope verbatim and must not claim arbitrary-version-DAG
+amortized O(1).
 
 ## Prototype representations
 
@@ -128,6 +136,18 @@ values, navigation rule, focus/flush configuration, and snapshot timing.
 sizes 256, 512, 1,024, and 2,048 for all three prototype carriers. This preserves the complete tuning
 obligation without multiplying the full document/locality/cadence matrix by another factor of four.
 
+The exploratory replacement sweep could not select a flush threshold because replacement does not
+grow either carry. That omission was found before selection and corrected by
+`RopeCursorCarryTuningBenchmarks`: every one of its sixteen focus/flush combinations performs a
+2,304-element typing/backspace cycle on the left and the same insert/forward-delete cycle on the
+right. Even the 128/2,048 candidate must therefore publish ordinary chunks on both sides.
+
+`RopeCursorGateBenchmarks` is the predeclared compact full-job gate. It fixes the named workload at
+65,536 elements, window eight, cadence sixteen, 256 replacements, focus sixteen, and flush 256, then
+compares indexed Rope, class cursor, struct cursor, mutable-session control, and `StringBuilder`.
+This avoids rerunning the 720-case exploratory matrix merely to obtain tight intervals at the one
+shipment point.
+
 The timed methods do not start diagnostic sessions, traverse retained object graphs, or validate
 invariants. Retained bytes, adversarial branch counts, and operation counters belong in separate
 artifacts and cannot be inferred from `MemoryDiagnoser`'s allocation columns.
@@ -158,9 +178,13 @@ dotnet run -c Release --no-build -- `
 dotnet run -c Release --no-build -- `
     --filter '*RopeCursorTuningBenchmarks*' --job short `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-c0\short-tuning'
+dotnet run -c Release --no-build -- `
+    --filter '*RopeCursorCarryTuningBenchmarks*' --job short `
+    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-c0\short-carry'
 ```
 
-The full evidence collection uses the default BenchmarkDotNet job:
+The decision-critical comparison uses the default BenchmarkDotNet job, and the counter/retention
+collector executes separately from all timed methods:
 
 ```powershell
 Set-Location C:\Users\vresh\.codex\worktrees\5cd5\DataStructures\src\CSharp\benchmarks\Tools.DataStructures.FingerTree.Benchmarks
@@ -171,11 +195,11 @@ $env:BuildInParallel = 'false'
 $env:UseSharedCompilation = 'false'
 
 dotnet run -c Release --no-build -- `
-    --filter '*RopeCursorBenchmarks*' `
-    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-c0\full-main'
+    --filter '*RopeCursorGateBenchmarks*' `
+    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-c0\full-gate'
 dotnet run -c Release --no-build -- `
-    --filter '*RopeCursorTuningBenchmarks*' `
-    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-c0\full-tuning'
+    --axis2-c0-evidence '.\BenchmarkDotNet.Artifacts\axis2-c0' 16 256 `
+    db05d492d2027afc44f551f886d5f91b3d42959e
 ```
 
 Before comparing prototype/control differences, collect the control noise floor in five independent
@@ -184,7 +208,7 @@ processes. These runs retain the same single-worker environment:
 ```powershell
 1..5 | ForEach-Object {
     dotnet run -c Release --no-build -- `
-        --filter '*RopeCursorBenchmarks.IndexedRopeEditBurst*' `
+        --filter '*RopeCursorGateBenchmarks.IndexedRope*' `
         --artifacts ".\BenchmarkDotNet.Artifacts\axis2-c0\noise-rope-$($_)"
 }
 ```
@@ -193,31 +217,103 @@ processes. These runs retain the same single-worker environment:
 
 | Evidence | Required location | Current state |
 | --- | --- | --- |
-| Short timing/allocation smoke run | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/short-*` | Pending |
-| Full comparison and tuning runs | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/full-*` | Pending |
-| Five independent control runs | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/noise-rope-*` | Pending |
-| Untimed counters and adversarial branch traces | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/counters/` | Pending |
-| Retained-version graph measurements | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/retained/` | Pending |
-| Curated tables and environment summary | `src/CSharp/docs/FingerTree/benchmarks.md`, section `Axis 2 C0 rope cursor` | Pending |
-| Final select/escalate/defer rationale | This document, replacing the pending status without rewriting the original provenance | Pending |
+| Replacement and bilateral-carry tuning | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/short-*` | Complete |
+| Full selected-point comparison | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/full-gate/` | Complete |
+| Five independent control runs | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/noise-rope-*` | Complete |
+| Untimed counters and adversarial branch traces | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/counters/` | Complete |
+| Retained-version graph measurements | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/retained/` | Complete |
+| Curated tables and environment summary | `src/CSharp/docs/FingerTree/benchmarks.md`, section `Axis 2 C0 rope cursor` | Complete |
+| Final select/escalate/defer rationale | This document | Complete — select struct zipper |
 
-Raw BenchmarkDotNet directories are git-ignored working artifacts. The curated table must record the
+Raw BenchmarkDotNet directories are git-ignored working artifacts. The curated table records the
 exact runtime/SDK, CPU, GC mode, commands, selected parameter rows, confidence intervals, measured
-noise floor, and the threshold calculation. Counter and retained-memory collectors must identify the
-commit they executed and serialize their inputs; neither may be folded into the timed benchmark
-methods.
+noise floor, and threshold calculation. Counter and retained-memory collectors identify commit
+`db05d492d2027afc44f551f886d5f91b3d42959e` and serialize their inputs; neither is folded into a
+timed method.
 
-## Exit outcomes
+## Curated evidence
 
-After every artifact above is populated, this record must choose exactly one result:
+The machine was Windows 11 `10.0.26300.8758`, 13th Gen Intel Core i7-1355U, BenchmarkDotNet
+0.14.0, .NET SDK `11.0.100-preview.5.26302.115`, and .NET runtime 10.0.5, x64 RyuJIT AVX2 with
+concurrent workstation GC. Every generated restore/build printed `/m:1`,
+`BuildInParallel=false`, and `UseSharedCompilation=false`.
 
-1. **Select class zipper-as-version** or **select readonly-struct zipper-as-version**, with the named
-   workload/cadence and the proven branch scope carried verbatim into C1.
-2. **Escalate to a focused-root spike** only if dirty snapshot normalization is measured as the
-   blocker and the ordinary-rope regression matrix is funded.
-3. **Defer C1** if neither persistent carrier clears the locked gate or if retained branching
-   invalidates the proof/space bound.
+### Full named gate
 
-The mutable-session control can explain wrapper overhead, but it cannot by itself justify selection.
-Until one of these outcomes is supported by committed evidence, the status remains **evidence
-collection pending**.
+| Lane | Mean | 99.9% CI half-width | Allocated | Mean versus indexed | Allocation versus indexed |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Indexed `Rope<char>` | 572.3 us | 21.50 us | 1,559.93 KB | baseline | baseline |
+| Class cursor | 117.9 us | 5.89 us | 265.38 KB | 79.4% lower | 83.0% lower |
+| **Readonly-struct cursor** | **107.6 us** | **4.62 us** | **210.84 KB** | **81.2% lower** | **86.5% lower** |
+| Mutable-session control | 116.5 us | 3.62 us | 210.92 KB | 79.6% lower | 86.5% lower |
+| `StringBuilder` control | 1,000.7 us | 54.67 us | 2,176.64 KB | 74.8% higher | 39.5% higher |
+
+The struct/class mean difference is not used as a latency claim because their intervals nearly
+touch. The representation choice instead uses the exact 54.54 KB allocation reduction (20.6%) and
+the counter result: 698 class wrappers versus zero struct wrappers over the same 256 edits. The
+struct has no compensating latency or retained-space regression.
+
+### Five-process indexed-control noise floor
+
+| Process | Mean | Median | 99.9% CI half-width | Allocated |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 649.6 us | 655.753 us | 26.10 us | 1.52 MB |
+| 2 | 695.5 us | 699.040 us | 11.54 us | 1.52 MB |
+| 3 | 650.6 us | 672.770 us | 21.79 us | 1.52 MB |
+| 4 | 666.4 us | 677.905 us | 17.21 us | 1.52 MB |
+| 5 | 609.1 us | 612.715 us | 23.14 us | 1.52 MB |
+
+The median of process medians is 672.770 us. Their median absolute deviation is 17.017 us;
+`3 * 1.4826 * MAD` is 75.687 us, or **11.25%**. The largest relative per-process 99.9% interval is
+4.02%, so the locked latency threshold is 11.25%, the larger of measured noise and the 10% practical
+margin. Even comparing the struct's upper interval bound (112.204 us) with the gate baseline's lower
+bound (550.8 us) leaves a 79.6% improvement. Allocation was identical in all five controls, so its
+threshold remains the 10% practical margin; the measured 86.5% reduction clears it. No p99 claim is
+made from BenchmarkDotNet iteration means.
+
+### Carry tuning
+
+| Focus | Flush | Mean | Allocated |
+| ---: | ---: | ---: | ---: |
+| **16** | **256** | **5.474 ms** | **10.92 MB** |
+| 16 | 512 | 5.844 ms | 12.50 MB |
+| 16 | 1,024 | 5.814 ms | 15.30 MB |
+| 16 | 2,048 | 7.188 ms | 20.32 MB |
+| 32 | 256 | 5.285 ms | 11.25 MB |
+| 64 | 256 | 5.784 ms | 12.15 MB |
+| 128 | 256 | 5.710 ms | 14.06 MB |
+
+ShortRun timing intervals overlap, so the decision does not manufacture a latency ranking. Flush
+256 has the lowest allocation for every focus and avoids the quadratic carry-copy constant exposed
+by larger thresholds. Focus 16 has the lowest allocation; focus 32's 3.5% mean advantage is below
+both the practical margin and ShortRun noise. The bounded-window constants are therefore locked at
+16/256.
+
+### Counters, branching, and retention
+
+At the named replacement gate all carriers recorded 32 spine allocations, 4,352 focus elements
+copied, sixteen snapshot normalizations, and no node visits; only the class recorded 698 wrapper
+allocations. Bilateral typing at 16/256 produced two ordinary chunks on the edited side. Forward
+typing copied 65,801 carry elements and published four spines; reversing the completed history
+produced two right chunks, copied 74,252 carry elements, and published 72 spines.
+
+The adversarial parent had `LeftCarry.Length == 255`. Branch counts 1, 8, 64, and 256 produced
+respectively 3, 24, 192, and 768 spine publications and one snapshot normalization per child at all
+three document sizes (1,024, 65,536, and 1,048,576). The boundary-child buffer estimate was 88 bytes
+per child. In the 65,536-element retention artifact, each materialized child retained all 32 source
+backing stores by identity; the conservative parent-plus-child cursor-buffer totals were 1,224,
+1,840, 6,768, and 23,664 bytes. Snapshot-storage totals deliberately double-count those shared
+source arrays and are not presented as unique retained bytes.
+
+This establishes bounded branch-local state and genuine source sharing, but it does not prove that
+potential consumed by one child pays for a sibling. C1 therefore publishes linear-lineage
+amortization and an O(b log n) fan-out worst-case aggregate, plus bounded per-child focus/carry
+copying. That is the selected proof boundary.
+
+## Exit outcome
+
+**Select the readonly-struct zipper-as-version with focus 16 and flush 256.** C1 is authorized for
+the positional Rope surface and the proof scope above. Focused-root escalation and deferral are
+closed for C1. Any later attempt to broaden the branch-amortization claim or change the focus/carry
+bounds requires a new counter, retention, and benchmark decision rather than silently editing this
+record.
