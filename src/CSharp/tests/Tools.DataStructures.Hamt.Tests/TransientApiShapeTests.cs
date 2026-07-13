@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Diagnostics.CodeAnalysis;
 using Xunit;
 
 namespace Tools.DataStructures.Hamt.Tests;
@@ -19,6 +20,10 @@ public sealed class TransientApiShapeTests
         Assert.Contains(
             transient.GetInterfaces(),
             type => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>));
+        Assert.DoesNotContain(
+            transient.GetInterfaces(),
+            type => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IDictionary<,>));
+        Assert.True(transient.GetNestedType("Enumerator", BindingFlags.Public)!.IsValueType);
 
         Assert.Equal(
             new[] { "Comparer", "Count", "Item", "Keys", "Values" },
@@ -40,7 +45,18 @@ public sealed class TransientApiShapeTests
         var adopt = outer.GetMethod("ToTransient", BindingFlags.Public | BindingFlags.Instance)!;
         Assert.Equal(transient, create.ReturnType.GetGenericTypeDefinition());
         Assert.Equal(transient, adopt.ReturnType.GetGenericTypeDefinition());
-        Assert.Single(create.GetParameters());
+        var comparerParameter = Assert.Single(create.GetParameters());
+        Assert.True(comparerParameter.IsOptional);
+        Assert.Null(comparerParameter.DefaultValue);
+        Assert.Equal(typeof(void), transient.GetMethod("Add")!.ReturnType);
+        Assert.Equal(typeof(bool), transient.GetMethod("TryAdd")!.ReturnType);
+        Assert.Equal(typeof(void), transient.GetMethod("SetItem")!.ReturnType);
+        Assert.Equal(typeof(bool), transient.GetMethod("Remove")!.ReturnType);
+        Assert.Equal(typeof(void), transient.GetMethod("Clear")!.ReturnType);
+        var maybeNull = transient.GetMethod("TryGetValue")!.GetParameters()[1]
+            .GetCustomAttribute<MaybeNullWhenAttribute>();
+        Assert.NotNull(maybeNull);
+        Assert.False(maybeNull.ReturnValue);
 
         var forbidden = new[]
         {
@@ -64,6 +80,10 @@ public sealed class TransientApiShapeTests
         Assert.Contains(
             transient.GetInterfaces(),
             type => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IReadOnlySet<>));
+        Assert.DoesNotContain(
+            transient.GetInterfaces(),
+            type => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ISet<>));
+        Assert.True(transient.GetNestedType("Enumerator", BindingFlags.Public)!.IsValueType);
         Assert.Equal(
             new[] { "Comparer", "Count" },
             transient.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
@@ -84,7 +104,12 @@ public sealed class TransientApiShapeTests
         var adopt = outer.GetMethod("ToTransient", BindingFlags.Public | BindingFlags.Instance)!;
         Assert.Equal(transient, create.ReturnType.GetGenericTypeDefinition());
         Assert.Equal(transient, adopt.ReturnType.GetGenericTypeDefinition());
+        var comparerParameter = Assert.Single(create.GetParameters());
+        Assert.True(comparerParameter.IsOptional);
+        Assert.Null(comparerParameter.DefaultValue);
         Assert.Equal(typeof(bool), transient.GetMethod("Add")!.ReturnType);
+        Assert.Equal(typeof(bool), transient.GetMethod("Remove")!.ReturnType);
+        Assert.Equal(typeof(void), transient.GetMethod("Clear")!.ReturnType);
 
         var forbidden = new[]
         {

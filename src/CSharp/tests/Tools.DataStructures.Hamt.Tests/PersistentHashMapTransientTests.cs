@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Xunit;
 
 namespace Tools.DataStructures.Hamt.Tests;
@@ -117,6 +118,53 @@ public sealed class PersistentHashMapTransientTests
         var later = next.Persist();
         Assert.False(published.ContainsKey(200));
         Assert.Equal("later", later[200]);
+    }
+
+    /// <summary>Verifies the retained immutable base remains safe while its transient owner edits.</summary>
+    [Fact]
+    public async Task RetainedBase_RemainsReadableWhileTransientOwnerEdits()
+    {
+        var source = PersistentHashMap<int, int>.CreateRange(
+            Enumerable.Range(0, 256).Select(key => KeyValuePair.Create(key, key * 3)));
+        var transient = source.ToTransient();
+        var stop = 0;
+        var failures = new ConcurrentQueue<Exception>();
+        using var started = new ManualResetEventSlim();
+        var reader = Task.Run(() =>
+        {
+            try
+            {
+                started.Set();
+                while (Volatile.Read(ref stop) == 0)
+                {
+                    Assert.Equal(256, source.Count);
+                    for (var key = 0; key < 256; key += 17)
+                        Assert.Equal(key * 3, source[key]);
+                }
+            }
+            catch (Exception exception)
+            {
+                failures.Enqueue(exception);
+            }
+        });
+        started.Wait();
+
+        try
+        {
+            for (var key = 0; key < 256; key++)
+                transient.SetItem(key, -key);
+            for (var key = 0; key < 128; key++)
+                transient.Remove(key);
+        }
+        finally
+        {
+            Volatile.Write(ref stop, 1);
+        }
+
+        await reader;
+        Assert.Empty(failures);
+        Assert.Equal(256, source.Count);
+        Assert.Equal(128, transient.Persist().Count);
     }
 
     /// <summary>Verifies public operations against a deterministic dictionary model history.</summary>

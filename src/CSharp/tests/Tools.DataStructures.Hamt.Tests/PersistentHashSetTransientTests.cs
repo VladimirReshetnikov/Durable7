@@ -211,6 +211,37 @@ public sealed class PersistentHashSetTransientTests
         Assert.Equal(new[] { 1, 2, 3, 4, 5 }, transient.Persist().OrderBy(item => item));
     }
 
+    /// <summary>Verifies point-mutation failpoints remain atomic through the public set verb.</summary>
+    [Fact]
+    public void MutationFailure_IsAtomicThroughSetAdd()
+    {
+        var transient = PersistentHashSet<int>.Empty.Add(1).CreateTransientForDiagnostics();
+        var map = transient.MapForDiagnostics;
+        var version = map.VersionForDiagnostics;
+        var root = map.RootIdentityForDiagnostics;
+        var counters = map.GetCountersForDiagnostics();
+        var enumerator = transient.GetEnumerator();
+        map.FailureInjector = point =>
+        {
+            if (point == PersistentHashMap<int, PersistentHashSet<int>.Unit>
+                .OwnerTokenKernelFailurePoint.MutationPrepared)
+            {
+                throw new InjectedFailureException();
+            }
+        };
+
+        Assert.Throws<InjectedFailureException>(() => transient.Add(2));
+        Assert.Equal(version, map.VersionForDiagnostics);
+        Assert.Same(root, map.RootIdentityForDiagnostics);
+        Assert.Equal(counters, map.GetCountersForDiagnostics());
+        Assert.True(enumerator.MoveNext());
+        Assert.False(transient.Contains(2));
+
+        map.FailureInjector = null;
+        Assert.True(transient.Add(2));
+        Assert.Equal(new[] { 1, 2 }, transient.Persist().OrderBy(item => item));
+    }
+
     /// <summary>Verifies successful changes invalidate enumerators while logical no-ops do not.</summary>
     [Fact]
     public void Enumerators_AreVersionBoundAndCopySafe()

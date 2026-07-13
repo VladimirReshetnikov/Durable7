@@ -464,13 +464,15 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             }
 
             Hit(OwnerTokenKernelFailurePoint.PublicationPrepared);
-            return new PreparedPublication(result, _version, newVersion, allocatedPersistentWrapper);
+            return new PreparedPublication(this, result, _version, newVersion, allocatedPersistentWrapper);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal PersistentHashMap<TKey, TValue> CommitPublication(PreparedPublication prepared)
         {
             EnsureActive();
+            if (!ReferenceEquals(prepared.Owner, this))
+                ThrowForeignPublication();
             if (_version != prepared.ExpectedVersion)
                 ThrowModified();
 
@@ -1585,6 +1587,11 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         private static void ThrowModified() =>
             throw new InvalidOperationException("The transient was modified after the enumerator or view was created.");
 
+        [DoesNotReturn]
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void ThrowForeignPublication() =>
+            throw new InvalidOperationException("The prepared publication belongs to a different transient.");
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void EnsureActive()
         {
@@ -1632,6 +1639,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             _diagnostics?.FailureInjector?.Invoke(point);
 
         internal readonly record struct PreparedPublication(
+            Transient Owner,
             PersistentHashMap<TKey, TValue> Result,
             long ExpectedVersion,
             long PublishedVersion,
