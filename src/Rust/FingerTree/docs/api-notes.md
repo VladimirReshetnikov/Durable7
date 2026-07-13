@@ -62,7 +62,9 @@ minimum, and meld are worst-case O(1); delete-min is worst-case O(log n).
 
 `OrderPolicy<T>` retains a `Send + Sync` `OrderComparer<T>`. Natural policies are marked canonical,
 so two independently constructed natural heaps can meld. Cloning a custom policy preserves its
-identity; independently constructed custom policies are rejected by `meld` with
+identity; `with_shared_comparer` also lets independently constructed heaps retain clones of the same
+caller-owned comparer `Arc`, matching comparer-object identity in the managed reference.
+Independently constructed custom policies are rejected by `meld` with
 `BrodalMeldError`, even when their functions happen to compare identically. This is the Rust form
 of the C# comparer-object compatibility contract.
 
@@ -278,7 +280,9 @@ require `T: Clone` only where Rust ownership requires copying stored values. Equ
 replacement, empty insertion/removal, empty-side concat, and boundary splits preserve root identity
 where their result is unchanged. `validate_structure` reports count, height, leaf density, branching,
 and regular/relaxed-node statistics while checking every cached layout invariant and the
-`(usize::BITS - 1) / 5` height cap. Concat redistributes only the boundary seam; it does not certify
+`floor((usize::BITS - 1) / 5) + 1` height cap (thirteen on supported 64-bit targets). The extra
+level admits the legal boundary-only `minimum height + 1` slack in the top count band. Concat
+redistributes only the boundary seam; it does not certify
 global minimum occupancy, so adversarial density ceilings remain test gates. The append builder
 moves staged leaves into immutable nodes, retains an adopted vector as an O(1) prefix, and returns
 the same root on repeated clean freezes. As in C#, there is no dedicated persistent tail buffer;

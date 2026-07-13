@@ -101,7 +101,8 @@ rebuild only boundary spines; concatenation is O(log32(n + m)). Exact root and l
 corresponding node identities, and equality-comparable no-op `set_item` plus empty insert/remove operations return
 the original root. Boundary-only redistribution does not promise global minimum occupancy elsewhere, so the
 adversarial density ceilings are test gates rather than validator invariants. The height cap is
-`(numeric_limits<size_t>::digits - 1) / 5`, or twelve on the supported 64-bit targets. The append builder freezes
+`floor((numeric_limits<size_t>::digits - 1) / 5) + 1`, or thirteen on the supported 64-bit targets.
+The extra level admits the legal boundary-only `minimum height + 1` slack in the top count band. The append builder freezes
 full 32-element leaves, copies a partial tail when publishing, and
 caches a clean immutable snapshot; subsequent staging is isolated from every previously returned snapshot.
 
@@ -451,7 +452,8 @@ Primary operations and bounds:
   directions report equivalence and ordinary `operator==` agrees for priority and payload;
 - comparator-equivalent priorities break ties by retained key order, including custom descending key policies;
 - `enumerate_at_most(minimum_key, maximum_key, maximum_priority)` eagerly rejects an inverted inclusive key
-  range, prunes a subtree when its cached winner exceeds the inclusive threshold, and materializes a
+  range, prunes a subtree when its cached winner exceeds the inclusive threshold, avoids enqueuing either
+  out-of-range child at an exact boundary key, and materializes a
   `std::vector<entry_type>` in key order. The vector copies only shared entry handles, never `Key`, `Priority`, or
   `Value`; its cost is O(log n + v) for the visited nodes and may be O(n) when unselective;
 - the forward iterator is an explicit-stack in-order traversal retaining the root. Validators independently check

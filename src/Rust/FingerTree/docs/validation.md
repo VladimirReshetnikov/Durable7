@@ -40,7 +40,7 @@ they cover:
   readers;
 - direct Brodal-Okasaki fused-tree validation; ascending, descending, equal, and melded 4,096-item
   drains; a 20,000-operation branching multiset history with up to 256 retained versions;
-  representative retention; custom-policy identity and canonical-natural interoperability;
+  representative retention; custom-policy identity, caller-shared comparer identity, and canonical-natural interoperability;
   root/off-path sharing; `Option` and non-`Clone` elements; comparison ceilings through 65,536
   elements; and concurrent immutable readers;
 - winner-cached PSQ replacement semantics, first-key representatives, custom comparator policies,

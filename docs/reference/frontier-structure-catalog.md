@@ -275,8 +275,11 @@ not the full Stucki-et-al. redistribution pass. The two seam child arrays are re
 global minimum-fullness invariant is promised for leaves or branches away from that seam. The
 adversarial density assertions are regression and benchmark gates for the histories they exercise,
 not a validator-certified representation contract. Validators do certify a size-derived height cap:
-`(count storage bit width - 1) / 5`, namely six for the C#/Kotlin `Int` count domain and twelve on
-the repository's 64-bit `size_t`/`Int`/`usize` C, C++, Haskell, and Rust targets.
+`floor((count storage bit width - 1) / 5) + 1`. The first term is the greatest minimum height
+required anywhere in the count domain; the extra level admits the boundary-only concatenation
+contract's legal `minimum height + 1` slack even in the top count band. The resulting caps are seven
+for the C#/Kotlin `Int` count domain and thirteen on the repository's 64-bit
+`size_t`/`Int`/`usize` C, C++, Haskell, and Rust targets.
 
 **What it is.** The relaxed radix-balanced tree (Bagwell & Rompf 2011; practical treatment with
 transients in Stucki et al., ICFP 2015): a 32-way branching persistent vector where nodes are

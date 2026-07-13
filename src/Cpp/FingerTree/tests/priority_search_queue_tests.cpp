@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -492,7 +493,7 @@ void add_priority_search_queue_tests_impl(suite& tests)
         FT_REQUIRE_EQUAL(all.size(), static_cast<std::size_t>(count));
         FT_REQUIRE_EQUAL(
             key_calls->load(std::memory_order_relaxed),
-            std::size_t{1} + 2 * static_cast<std::size_t>(count));
+            3 * static_cast<std::size_t>(count));
         FT_REQUIRE_EQUAL(
             priority_calls->load(std::memory_order_relaxed),
             2 * static_cast<std::size_t>(count));
@@ -630,6 +631,43 @@ void add_priority_search_queue_tests_impl(suite& tests)
 #endif
         FT_REQUIRE(unchanged.is_same_version(queue));
         require_valid(updated);
+    });
+
+    tests.add("Priority-search exact-bound enumeration visits only its search path", [] {
+        constexpr auto count = 1'024;
+        auto key_calls = std::make_shared<std::atomic<std::size_t>>(0);
+        auto priority_calls = std::make_shared<std::atomic<std::size_t>>(0);
+        using counting_queue = ft::priority_search_queue<
+            int,
+            int,
+            int,
+            counting_less,
+            counting_less>;
+        auto queue = counting_queue{counting_less{key_calls}, counting_less{priority_calls}};
+        for (auto key = 0; key != count; ++key) {
+            queue = queue.set_item(key, key, key * 2);
+        }
+        const auto maximum_search_nodes = queue.height() + 1;
+
+        for (auto key = 0; key != count; ++key) {
+            key_calls->store(0, std::memory_order_relaxed);
+            priority_calls->store(0, std::memory_order_relaxed);
+            const auto selected = queue.enumerate_at_most(
+                key,
+                key,
+                std::numeric_limits<int>::max());
+            FT_REQUIRE_EQUAL(selected.size(), std::size_t{1});
+            FT_REQUIRE_EQUAL(selected.front().key(), key);
+
+            // Every visited node performs one cached-winner comparison; the matching entry
+            // performs one additional priority comparison. Exact bounds must not enqueue either
+            // out-of-range child of the matching node.
+            FT_REQUIRE(priority_calls->load(std::memory_order_relaxed)
+                <= maximum_search_nodes + 1);
+            FT_REQUIRE(key_calls->load(std::memory_order_relaxed)
+                <= 4 * maximum_search_nodes + 1);
+        }
+        require_valid(queue);
     });
 
     tests.add("Priority-search comparator equality and payload exceptions preserve snapshots", [] {

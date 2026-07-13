@@ -24,7 +24,8 @@ live in `Hamt/tests/merkle_core_wire.rs` and `Hamt/tests/merkle_persistence.rs`.
 - same-hash collision insertion, lookup, and removal;
 - CHAMP inline-payload/child-run invariants, independent insertion histories, and typed diff;
 - 32/64-bit Patricia signed boundaries, randomized `BTreeMap` histories, structural map/set algebra,
-  key/left/right map combiners, cached subtree-cardinality invariants, and no-op root sharing;
+  key/left/right map combiners, cached subtree-cardinality invariants, no-op root sharing, and direct
+  union/intersection identity checks for a partially shared subtree;
 - streaming iterator exact-size accounting over collision buckets;
 - last-wins bulk map construction while retaining the original stored key;
 - persistent set algebra and proper subset/superset relations, including zero-rehash shared-policy

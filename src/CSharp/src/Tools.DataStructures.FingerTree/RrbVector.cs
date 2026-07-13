@@ -19,7 +19,9 @@ public sealed class RrbVector<T> : IReadOnlyList<T>
 {
     private const int RadixBits = 5;
     private const int BranchFactor = 32;
-    private const int MaximumHeight = (sizeof(int) * 8 - 1) / RadixBits;
+    // The first term is the greatest minimum height required anywhere in the count domain;
+    // boundary-only concatenation may legally retain one additional level of slack.
+    private const int MaximumHeight = (sizeof(int) * 8 - 1) / RadixBits + 1;
     private readonly Node? _root;
 
     private RrbVector(Node? root) => _root = root;

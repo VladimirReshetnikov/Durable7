@@ -33,7 +33,9 @@ Iteration is structural rather than sorted. Repeated minimum views provide a sor
 ## Ordering-policy compatibility
 
 `OrderPolicy<T>` owns a `Send + Sync` `OrderComparer<T>`. A cloned custom policy preserves identity,
-and heaps may meld only when those identities match. Independently constructed custom policies are
+and heaps may meld only when those identities match. `with_shared_comparer` accepts clones of one
+caller-owned `Arc<dyn OrderComparer<T>>`, preserving comparer-object identity across independent
+heap construction just as the C# reference does. Independently constructed custom policies are
 rejected even if their comparison functions happen to agree, because comparer identity is retained
 representation policy in the C# contract.
 

@@ -1240,6 +1240,57 @@ mod tests {
     }
 
     #[test]
+    fn built_in_algebra_reuses_shared_partial_subtrees() {
+        let base = PersistentIntMap::new().insert(-1, 10).insert(0, 20);
+        let extended = base.insert(1, 30);
+
+        let Some(base_root) = base.core.root.as_ref() else {
+            panic!("base map must have a root")
+        };
+        let Some(extended_root) = extended.core.root.as_ref() else {
+            panic!("extended map must have a root")
+        };
+        let (
+            Node::Branch {
+                left: base_left, ..
+            },
+            Node::Branch {
+                left: extended_left,
+                ..
+            },
+        ) = (base_root.as_ref(), extended_root.as_ref())
+        else {
+            panic!("signed-key maps must branch at the sign boundary")
+        };
+        assert!(Arc::ptr_eq(base_left, extended_left));
+
+        let union = base.union(&extended);
+        let Some(union_root) = union.core.root.as_ref() else {
+            panic!("union must have a root")
+        };
+        let Node::Branch {
+            left: union_left, ..
+        } = union_root.as_ref()
+        else {
+            panic!("union must retain the sign-boundary branch")
+        };
+        assert!(Arc::ptr_eq(base_left, union_left));
+
+        let intersection = extended.intersect(&base);
+        let Some(intersection_root) = intersection.core.root.as_ref() else {
+            panic!("intersection must have a root")
+        };
+        let Node::Branch {
+            left: intersection_left,
+            ..
+        } = intersection_root.as_ref()
+        else {
+            panic!("intersection must retain the sign-boundary branch")
+        };
+        assert!(Arc::ptr_eq(base_left, intersection_left));
+    }
+
+    #[test]
     fn combining_map_algebra_matches_btree_map() {
         fn combine(key: i32, left: u32, right: u32) -> u32 {
             left.rotate_left(5) ^ right.rotate_right(3) ^ key as u32

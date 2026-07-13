@@ -44,7 +44,9 @@ radixBits :: Int
 radixBits = 5
 
 maximumHeight :: Int
-maximumHeight = (finiteBitSize (0 :: Int) - 1) `div` radixBits
+-- The base term is the greatest minimum height in the count domain; boundary-only
+-- concatenation may legally retain one additional level of slack.
+maximumHeight = (finiteBitSize (0 :: Int) - 1) `div` radixBits + 1
 
 data RrbVector a = RrbVector !(Maybe (Node a))
 

@@ -129,6 +129,15 @@ impl<T> BrodalOkasakiHeap<T> {
         Self::with_policy(OrderPolicy::custom(comparer))
     }
 
+    /// Creates an empty heap retaining a caller-shared comparer identity.
+    ///
+    /// Heaps constructed with clones of the same `Arc` may meld. This is the direct analogue of
+    /// retaining the same comparer object in managed ports.
+    #[must_use]
+    pub fn with_shared_comparer(comparer: Arc<dyn OrderComparer<T>>) -> Self {
+        Self::with_policy(OrderPolicy::shared(comparer))
+    }
+
     /// Creates an empty heap retaining `policy`.
     #[must_use]
     pub fn with_policy(policy: OrderPolicy<T>) -> Self {

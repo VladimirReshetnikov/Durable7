@@ -15,7 +15,7 @@ integration suites live beside this index. Run them from `src/Rust`:
 Coverage groups:
 
 - `brodal_okasaki_heap.rs`: direct fused-tree invariants; 4,096-element ascending, descending,
-  equal, and melded drains; a 20,000-operation branching retained multiset model; custom-policy
+  equal, and melded drains; a 20,000-operation branching retained multiset model; shared-comparer and custom-policy
   identity and canonical-natural interoperability; concrete representatives; root/off-path
   sharing; `Option` and non-`Clone` values; comparison ceilings through 65,536 elements; and
   concurrent readers;

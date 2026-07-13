@@ -64,8 +64,10 @@ class rrb_vector final {
 private:
     static constexpr std::size_t radix_bits_value = 5;
     static constexpr std::size_t branch_factor_value = 32;
+    // The base term is the greatest minimum height in the count domain; boundary-only
+    // concatenation may legally retain one additional level of slack.
     static constexpr std::size_t maximum_height_value =
-        ((std::numeric_limits<std::size_t>::digits) - 1) / radix_bits_value;
+        ((std::numeric_limits<std::size_t>::digits) - 1) / radix_bits_value + 1;
 
     enum class node_kind {
         leaf,
@@ -124,7 +126,13 @@ private:
                 return false;
             }
 
-            const auto child_capacity = std::size_t{1} << (height * radix_bits_value);
+            const auto shift = height * radix_bits_value;
+            // The legal slack height can exceed size_t's radix capacity. Such a branch is
+            // necessarily relaxed; avoid an oversized shift while deciding whether it needs sizes.
+            if (shift >= std::numeric_limits<std::size_t>::digits) {
+                return false;
+            }
+            const auto child_capacity = std::size_t{1} << shift;
             for (auto index = std::size_t{0}; index + 1 < values.size(); ++index) {
                 if (values[index]->count != child_capacity) {
                     return false;

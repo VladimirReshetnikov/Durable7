@@ -5,7 +5,9 @@ use std::sync::Arc;
 
 const RADIX_BITS: u32 = 5;
 const BRANCH_FACTOR: usize = 1 << RADIX_BITS;
-const MAXIMUM_HEIGHT: u8 = ((usize::BITS - 1) / RADIX_BITS) as u8;
+// The first term is the greatest minimum height required anywhere in the count domain;
+// boundary-only concatenation may legally retain one additional level of slack.
+const MAXIMUM_HEIGHT: u8 = ((usize::BITS - 1) / RADIX_BITS) as u8 + 1;
 
 /// An immutable relaxed radix-balanced vector with 32-way branching.
 ///
@@ -1200,9 +1202,9 @@ mod tests {
     }
 
     #[test]
-    fn validator_rejects_height_beyond_the_usize_count_domain() {
+    fn validator_admits_slack_cap_and_rejects_the_next_height() {
         let mut root = leaf(vec![0]);
-        for _ in 0..=MAXIMUM_HEIGHT {
+        for _ in 0..MAXIMUM_HEIGHT {
             let child_count = root.count();
             let height = root.height() + 1;
             let children = Arc::<[Arc<Node<_>>]>::from([Arc::clone(&root), root]);
@@ -1213,6 +1215,23 @@ mod tests {
                 height,
             });
         }
+        let maximum_height_vector = RrbVector {
+            root: Some(Arc::clone(&root)),
+        };
+        assert_eq!(
+            maximum_height_vector.validate_structure().unwrap().height,
+            MAXIMUM_HEIGHT
+        );
+
+        let child_count = root.count();
+        let height = root.height() + 1;
+        let children = Arc::<[Arc<Node<_>>]>::from([Arc::clone(&root), root]);
+        let root = Arc::new(Node::Branch {
+            cumulative_sizes: Some(Arc::from([child_count, child_count * 2])),
+            children,
+            count: child_count * 2,
+            height,
+        });
         let vector = RrbVector { root: Some(root) };
         assert_eq!(
             vector.validate_structure().unwrap_err().message,

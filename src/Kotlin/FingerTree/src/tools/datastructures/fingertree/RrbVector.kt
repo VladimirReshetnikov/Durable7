@@ -4,7 +4,9 @@ import java.util.ConcurrentModificationException
 
 private const val RrbRadixBits: Int = 5
 private const val RrbBranchFactor: Int = 32
-private const val RrbMaximumHeight: Int = (Int.SIZE_BITS - 1) / RrbRadixBits
+// The first term is the greatest minimum height required anywhere in the count domain;
+// boundary-only concatenation may legally retain one additional level of slack.
+private const val RrbMaximumHeight: Int = (Int.SIZE_BITS - 1) / RrbRadixBits + 1
 
 /** A successful removal from the back of an [RrbVector]. */
 public data class RrbPop<T>(

@@ -37,7 +37,8 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
   five-operation histories and exhaustively checks all real-time-compatible serializations against a
   dictionary model under ordinary, shared-prefix, and all-equal-hash policies.
 - `PersistentIntegerPatriciaTests.cs` covers signed boundary ordering, randomized 32/64-bit model
-  histories, retained snapshots, structural map algebra, combining overloads, and set relations.
+  histories, retained snapshots, structural map algebra, combining overloads including exact self-operation
+  callback counts, and set relations.
 - `PersistentHashSetStructuralAlgebraTests.cs` covers same-root zero-callback pruning, shared-ancestry
   no-rehash algebra, comparer admission, representative retention, collision-heavy randomized set
   models, same-type relations, and the corresponding structural map operations.

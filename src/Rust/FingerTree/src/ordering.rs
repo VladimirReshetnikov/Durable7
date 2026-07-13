@@ -76,6 +76,20 @@ impl<T> OrderPolicy<T> {
         }
     }
 
+    /// Creates a custom ordering policy retaining a caller-shared comparer identity.
+    ///
+    /// Independently constructed policies that receive clones of the same `Arc` are compatible
+    /// for representation-level operations such as Brodal-Okasaki melding.
+    #[must_use]
+    pub fn shared(comparer: Arc<dyn OrderComparer<T>>) -> Self {
+        Self {
+            inner: Arc::new(OrderPolicyInner {
+                comparer,
+                natural: false,
+            }),
+        }
+    }
+
     /// Compares two values using the retained policy.
     #[must_use]
     pub fn compare(&self, left: &T, right: &T) -> Ordering {
@@ -91,7 +105,7 @@ impl<T> OrderPolicy<T> {
     /// Returns whether two policies have the same retained identity.
     #[must_use]
     pub fn has_same_identity(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.inner, &other.inner)
+        Arc::ptr_eq(&self.inner.comparer, &other.inner.comparer)
     }
 
     /// Returns whether two policies may safely participate in representation-level operations.

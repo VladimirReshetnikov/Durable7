@@ -149,6 +149,15 @@ static const void *choose_left_value(
     return left;
 }
 
+static const void *choose_right_value(
+    int32_t key, const void *left, const void *right, void *context)
+{
+    (void)key;
+    (void)left;
+    (void)context;
+    return right;
+}
+
 static void test_map_algebra(void)
 {
     static const int left_minus = 10;
@@ -207,6 +216,17 @@ static void test_map_algebra(void)
         &left, &left, choose_left_value, NULL, &no_change));
     CHECK(tds_int_map_shares_root(&left, &no_change));
     tds_int_map_destroy(&no_change);
+
+    tds_int_map one_left = tds_int_map_create(NULL);
+    tds_int_map one_right = tds_int_map_create(NULL);
+    CHECK_STATUS(tds_int_map_set(&one_left, 0, &left_zero, &one_left));
+    CHECK_STATUS(tds_int_map_set(&one_right, 0, &right_zero, &one_right));
+    CHECK_STATUS(tds_int_map_intersect_with(
+        &one_left, &one_right, choose_right_value, NULL, &no_change));
+    CHECK(tds_int_map_shares_root(&one_right, &no_change));
+    tds_int_map_destroy(&no_change);
+    tds_int_map_destroy(&one_right);
+    tds_int_map_destroy(&one_left);
 
     tds_int_map alias_right = tds_int_map_clone(&right);
     CHECK_STATUS(tds_int_map_union(&left, &alias_right, &alias_right));

@@ -47,7 +47,9 @@ static bool ft_rrb_ref_release(ft_rrb_ref_count* count)
 enum {
     FT_RRB_RADIX_BITS = 5,
     FT_RRB_BRANCH_FACTOR = 32,
-    FT_RRB_MAX_HEIGHT = (sizeof(size_t) * CHAR_BIT - 1) / FT_RRB_RADIX_BITS
+    /* The base term is the greatest minimum height in the count domain; boundary-only
+       concatenation may legally retain one additional level of slack. */
+    FT_RRB_MAX_HEIGHT = (sizeof(size_t) * CHAR_BIT - 1) / FT_RRB_RADIX_BITS + 1
 };
 
 typedef enum ft_rrb_node_kind {
@@ -255,6 +257,11 @@ static bool ft_rrb_regular_layout(ft_rrb_node* const* children, size_t child_cou
         return false;
     }
     const unsigned shift = height * FT_RRB_RADIX_BITS;
+    /* The legal slack height can exceed size_t's radix capacity. Such a branch is relaxed;
+       never perform an oversized shift merely to decide whether a size table is required. */
+    if (shift >= sizeof(size_t) * CHAR_BIT) {
+        return false;
+    }
     const size_t capacity = (size_t)1 << shift;
     for (size_t index = 0; index + 1 < child_count; ++index) {
         if (children[index]->count != capacity) {

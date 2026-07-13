@@ -330,7 +330,8 @@ a branch relaxed; only those branches own cumulative `size_t` sizes. Lookup and 
 O(log32 n) nodes, while concat/split/range edits rebuild boundary spines and share untouched leaves.
 Concat redistributes only the seam and does not enforce a global minimum occupancy elsewhere;
 adversarial density ceilings are test gates, not validator invariants. The maximum height is derived
-as `(sizeof(size_t) * CHAR_BIT - 1) / 5`, which is twelve on the supported 64-bit targets.
+as `floor((sizeof(size_t) * CHAR_BIT - 1) / 5) + 1`, which is thirteen on the supported 64-bit
+targets. The extra level admits the legal boundary-only `minimum height + 1` slack in the top count band.
 `ft_rrb_vector_validate`, `ft_rrb_vector_root_identity`, and leaf visitation expose representation
 diagnostics for tests and embedders without exposing mutable node storage.
 

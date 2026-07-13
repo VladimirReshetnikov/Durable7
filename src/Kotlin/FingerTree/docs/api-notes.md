@@ -69,7 +69,8 @@ size table; only a relaxed branch stores cumulative child sizes. Lookup and `set
 O(log32 n), and split, insertion, removal, append/prepend, and boundary-spine concatenation are
 O(log32(n + m)) with fixed-arity array copying. Exact leaf-boundary splits and full-leaf
 concatenations retain original leaves. Counts and cumulative sizes use checked `Int` arithmetic;
-the size-derived maximum valid height is `(Int.SIZE_BITS - 1) / 5`, or six. Concatenation performs
+the size-derived maximum valid height is `floor((Int.SIZE_BITS - 1) / 5) + 1`, or seven. The extra
+level admits the legal boundary-only `minimum height + 1` slack in the top count band. Concatenation performs
 boundary-only redistribution and does not promise global minimum occupancy away from the seam;
 the adversarial density bounds are test gates, not validator invariants.
 

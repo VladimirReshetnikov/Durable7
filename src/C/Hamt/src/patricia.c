@@ -315,6 +315,9 @@ static tds_hamt_status intersect_nodes(
         if (policy->equal(left_leaf->value, resolved, policy->context)) {
             *result = retain_node(left_leaf); return TDS_HAMT_OK;
         }
+        if (policy->equal(right_leaf->value, resolved, policy->context)) {
+            *result = retain_node(right_leaf); return TDS_HAMT_OK;
+        }
         return leaf_create(
             policy, left_leaf->path_or_prefix, left_leaf->key, resolved, result);
     }

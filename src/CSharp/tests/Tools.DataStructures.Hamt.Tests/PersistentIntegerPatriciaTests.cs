@@ -103,14 +103,32 @@ public sealed class PersistentIntegerPatriciaTests
         Assert.Equal(new[] { 1 }, left.Except(right).Keys);
     }
 
-    /// <summary>Verifies a self-intersection still invokes a supplied non-idempotent combiner.</summary>
+    /// <summary>Verifies self-algebra still invokes a supplied non-idempotent combiner once per key.</summary>
     [Fact]
-    public void CombiningIntersection_WithSameMapCombinesValuesAtBothWidths()
+    public void CombiningAlgebra_WithSameMapCombinesValuesAtBothWidths()
     {
         var ints = PersistentIntMap<int>.CreateRange(
             new[] { KeyValuePair.Create(-1, 10), KeyValuePair.Create(2, 20) });
         var longs = PersistentLongMap<long>.CreateRange(
             new[] { KeyValuePair.Create(-1L, 100L), KeyValuePair.Create(2L, 200L) });
+
+        var intUnionCalls = 0;
+        var unitedInts = ints.Union(ints, (key, left, right) =>
+        {
+            intUnionCalls++;
+            return key + left + right;
+        });
+        var longUnionCalls = 0;
+        var unitedLongs = longs.Union(longs, (key, left, right) =>
+        {
+            longUnionCalls++;
+            return key + left + right;
+        });
+
+        Assert.Equal(ints.Count, intUnionCalls);
+        Assert.Equal(new[] { (-1, 19), (2, 42) }, unitedInts.Select(pair => (pair.Key, pair.Value)));
+        Assert.Equal(longs.Count, longUnionCalls);
+        Assert.Equal(new[] { (-1L, 199L), (2L, 402L) }, unitedLongs.Select(pair => (pair.Key, pair.Value)));
 
         var intCalls = 0;
         var combinedInts = ints.Intersect(ints, (key, left, right) =>

@@ -447,7 +447,8 @@ public:
                 continue;
             }
 
-            if (current.right != nullptr) {
+            if (current.right != nullptr
+                && std::invoke(*key_comparer_, current.entry.key(), maximum_key)) {
                 pending.push_back(query_frame{current.right.get(), false});
             }
             if (!std::invoke(
@@ -456,7 +457,8 @@ public:
                     current.entry.priority())) {
                 pending.push_back(query_frame{&current, true});
             }
-            if (current.left != nullptr) {
+            if (current.left != nullptr
+                && std::invoke(*key_comparer_, minimum_key, current.entry.key())) {
                 pending.push_back(query_frame{current.left.get(), false});
             }
         }

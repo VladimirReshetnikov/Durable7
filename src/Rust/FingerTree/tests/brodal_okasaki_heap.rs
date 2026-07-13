@@ -147,6 +147,15 @@ fn representatives_sharing_and_policy_identity_are_exact() {
     let first = BrodalOkasakiHeap::with_comparer(NaturalOrderComparer).insert(1);
     let second = BrodalOkasakiHeap::with_comparer(NaturalOrderComparer).insert(2);
     assert!(first.meld(&second).is_err());
+    let shared_comparer: Arc<dyn OrderComparer<i32>> = Arc::new(NaturalOrderComparer);
+    let shared_first =
+        BrodalOkasakiHeap::with_shared_comparer(Arc::clone(&shared_comparer)).insert(1);
+    let shared_second =
+        BrodalOkasakiHeap::with_shared_comparer(Arc::clone(&shared_comparer)).insert(2);
+    assert_eq!(
+        drain_i32(shared_first.meld(&shared_second).unwrap()),
+        [1, 2]
+    );
     let natural_first = BrodalOkasakiHeap::new().insert(1);
     let natural_second = BrodalOkasakiHeap::new().insert(2);
     assert_eq!(natural_first.meld(&natural_second).unwrap().len(), 2);

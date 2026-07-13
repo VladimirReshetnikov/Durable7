@@ -39,7 +39,7 @@ root-sharing diagnostic for tests. `fromList` is the idiomatic pure bulk-constru
 the strict-language ports, Haskell does not expose a public mutable transient builder. Append
 redistributes only the boundary seam, so the test suite's density ceilings are regression gates and
 not a global minimum-occupancy invariant. The validator's height cap is derived from the `Int` bit
-width and is twelve on the repository's 64-bit targets.
+width plus one legal boundary-only slack level and is thirteen on the repository's 64-bit targets.
 
 `ReversibleDeque a` uses its own orientation-aware strict finger-tree core. `reverse` is an O(1)
 mirror of the root, and `append` glues logical digits through mirrored middle views, so

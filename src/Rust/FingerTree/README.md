@@ -58,7 +58,8 @@ rank-zero global minimum fuses primitive tree children with an embedded heap for
 meld perform worst-case O(1) comparisons and structural work, while delete-min performs worst-case
 O(log n) work. Trees and values use `Arc`, so persistent operations and owned minimum views do not
 require `T: Clone`. Canonical natural-order policies interoperate across construction; custom heaps
-may meld only when they retain clones of the same `OrderPolicy<T>` identity. Full validation decodes
+may meld only when they retain clones of the same `OrderPolicy<T>` identity or clones of the same
+caller-owned comparer `Arc` passed to `with_shared_comparer`. Full validation decodes
 every fused boundary and audits ranks, heap order, count, and depth.
 `PrioritySearchQueue<K, P, V>` is a separate persistent winner-cached AVL map. It retains the first
 concrete representative of each key-order equivalence class and replaces priority/payload last;
