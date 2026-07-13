@@ -1,17 +1,25 @@
 # CHAMP transient T0 workload-qualification decision
 
-- Status: Evidence collection pending
+- Status: T0 advanced; T1 deciding tuple locked
 - Created (UTC): 2026-07-13T06:24:55Z
 - Repository HEAD: 098ceb6fed880edcbd4902c2b5940f43d005e3da
+- Evidence commit: a82818e9d2a53f314ad7e89a7b3180d6f5507c0f
 - Audience: Maintainers deciding whether an owner-token CHAMP experiment is justified
 - Scope: C# persistent-map and `BulkBuilder` baselines for the Axis 2 T0 opportunity gate
 
 ## Decision status
 
-**Evidence collection pending.** T0 has not established that a transient is faster, allocates less,
-or should be implemented. The committed matrix and counters only qualify whether the shipped
-persistent map creates enough repeated wrapper and path-copy pressure in a named workload to justify
-T1, the production-representative private owner-token kernel.
+**Advance to T1** on one locked deciding tuple: a 100,000-entry base, 512 clustered-prefix
+replacements, and one publication at the end. The exhaustive persistent census found 511
+non-publication wrappers and upper bounds of 448 repeatedly copied nodes and 448 repeatedly copied
+arrays in that tuple. Those counts plausibly clear the predeclared 10% materiality threshold and
+justify measuring a production-representative private kernel.
+
+This is an opportunity result, not a transient performance claim. The tuple and exact filter were
+selected and committed before any owner-kernel timing was observed. T1 must still compare the two
+locked ownership layouts, charge ordinary-map and edited-graph retention, establish failure
+atomicity and O(1) adoption/publication, and beat the unchanged persistent control beyond its
+measured noise floor before any public API is authorized.
 
 The distinction is load-bearing:
 
@@ -22,9 +30,10 @@ The distinction is load-bearing:
   costs, and still beat the identical persistent workload by more than the larger of the measured
   noise floor and the 10% practical latency/allocation margin.
 
-T0 may advance only on the first claim. It cannot make the second claim because no transient kernel
-exists in this phase. If the counter and timing artifacts do not identify a credible named regime,
-Track T is deferred and direct persistent operations plus `BulkBuilder` remain authoritative.
+T0 advances only on the first claim. Direct persistent operations remain the shipped answer while
+T1 is evaluated. The existing `BulkBuilder` is not a competitive editing substitute in the deciding
+tuple: its short-run construction control was about 151 times slower and allocated about 107 times
+as much as the direct persistent history.
 
 ## Locked baseline matrix
 
@@ -93,21 +102,30 @@ dotnet build DataStructures.sln -c Release --no-restore --disable-build-servers 
     -p:BuildInParallel=false -p:UseSharedCompilation=false
 
 Set-Location benchmarks\Tools.DataStructures.FingerTree.Benchmarks
-dotnet run -c Release --no-build -- `
-    --filter '*TransientLifecycleBenchmarks*' --job short `
-    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t0\short'
+$driver = '.\bin\Release\net10.0\Tools.DataStructures.FingerTree.Benchmarks.dll'
+
+# Exhaustive opportunity-counter census. Dry timings are not deciding evidence.
+dotnet $driver `
+    --filter '*TransientLifecycleBenchmarks.PersistentHistory*' --job Dry `
+    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t0\dry-persistent'
 ```
 
-Collect the full persistent and `BulkBuilder` matrix in separate sequential processes so an
-interrupted builder control does not invalidate persistent evidence:
+The class-wide filter used by the initial pending protocol is no longer valid after the private T1
+lane was added: it would expose owner-kernel results before the T0 tuple was locked. The census above
+therefore selects only `PersistentHistory`. It completed all 456 combinations. Its environment log
+was reduced to the 456 versioned counter rows after collection; the exported timing reports remain
+alongside that sanitized CSV.
+
+The exact deciding filters, locked before any T1 timing, are:
 
 ```powershell
-dotnet run -c Release --no-build -- `
-    --filter '*TransientLifecycleBenchmarks.PersistentHistory*' `
-    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t0\full-persistent'
-dotnet run -c Release --no-build -- `
-    --filter '*TransientLifecycleBenchmarks.BulkBuilderHistory*' `
-    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t0\full-bulk-builder'
+$persistentFilter = '*TransientLifecycleBenchmarks.PersistentHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512*'
+$builderFilter = '*TransientLifecycleBenchmarks.BulkBuilderHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512*'
+
+dotnet $driver --filter $persistentFilter --job short `
+    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t0\candidate-persistent-short'
+dotnet $driver --filter $builderFilter --job short `
+    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t0\candidate-bulk-builder-short'
 ```
 
 After the counter report names a candidate workload, collect its unchanged persistent control in
@@ -117,7 +135,7 @@ five independent processes. Preserve the selected benchmark filter verbatim in t
 ```powershell
 1..5 | ForEach-Object {
     dotnet run -c Release --no-build -- `
-        --filter '<candidate-filter>' `
+        --filter $persistentFilter `
         --artifacts ".\BenchmarkDotNet.Artifacts\axis2-t0\noise-persistent-$($_)"
 }
 ```
@@ -126,12 +144,12 @@ five independent processes. Preserve the selected benchmark filter verbatim in t
 
 | Evidence | Required location | Current state |
 | --- | --- | --- |
-| Short matrix smoke run | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/short/` | Pending |
-| Full persistent timings, allocations, and `AXIS2_T0_COUNTER_V1` log rows | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/full-persistent/` | Pending |
-| Full `BulkBuilder` control | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/full-bulk-builder/` | Pending |
-| Five independent selected-control noise runs | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/noise-persistent-*/` | Pending |
-| Curated matrix, counter table, environment, and threshold calculation | This document, section `Curated evidence` | Pending |
-| T0 advance/defer result | This document, replacing the pending status without rewriting provenance | Pending |
+| Exhaustive 456-case persistent counter census | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/dry-persistent/` | Complete; 456 sanitized CSV rows plus reports |
+| Selected persistent short control | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/candidate-persistent-short/` | Complete |
+| Selected `BulkBuilder` short control | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/candidate-bulk-builder-short/` | Complete |
+| Five independent selected-control noise runs | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/noise-persistent-*/` | Required by T1; not part of the opportunity decision |
+| Curated matrix and counter table | This document, section `Curated evidence` | Complete |
+| T0 advance/defer result | This document | **Advance to T1** |
 
 Raw BenchmarkDotNet artifacts are git-ignored. The curated evidence must retain the executed commit,
 runtime/SDK, CPU, GC mode, exact filters, all selected parameter values, confidence intervals,
@@ -140,18 +158,40 @@ untimed copied-graph counters.
 
 ## Curated evidence
 
-Pending. No timings, allocation results, counter rows, or threshold comparisons have been collected
-for this record.
+The census and short controls ran on Windows 11 `10.0.26300.8758`, a 13th Gen Intel Core i7-1355U
+(10 physical, 12 logical cores), .NET SDK `11.0.100-preview.5.26302.115`, and .NET runtime `10.0.5`
+with concurrent workstation GC. BenchmarkDotNet `0.14.0` built each generated harness with `/m:1`,
+`BuildInParallel=false`, and `UseSharedCompilation=false`; cases ran sequentially.
+
+The three load-bearing counter rows are:
+
+| Role | Base | Edits | History | Cadence | Publications | Wrappers | Non-publication wrappers | Sampled node visits | Copied nodes | Copied arrays | Reusable-node upper bound | Reusable-array upper bound | Hash/equality callbacks |
+| --- | ---: | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Deciding tuple | 100,000 | 512 | Clustered prefix | End | 1 | 512 | 511 | 448 | 448 | 448 | 448 | 448 | 512 / 512 |
+| Publication corroboration | 100,000 | 512 | Clustered prefix | Every 64 | 8 | 512 | 504 | 448 | 448 | 448 | 441 | 441 | 512 / 512 |
+| Sparse guardrail | 100,000 | 1 | Clustered prefix | Every edit | 1 | 1 | 0 | 7 | 7 | 7 | 0 | 0 | 1 / 1 |
+
+The contrast is the T0 decision. A sparse edit offers no reusable pre-publication work, while the
+deciding tuple makes essentially every sampled path copy and all but one map wrapper intermediate.
+The 64-edit cadence retains nearly the same opportunity across eight sessions, so the signal is not
+dependent on a single token living for the entire history.
+
+Short-run timings are contextual only because three samples give wide 99.9% intervals:
+
+| Lane | Mean | Error | Median | Allocated |
+| --- | ---: | ---: | ---: | ---: |
+| Direct persistent | 614.743 us | 302.076 us | 609.845 us | 728 KB |
+| `BulkBuilder` rebuild | 92.611 ms | 113.060 ms | 92.169 ms | 76.25 MB |
+
+The builder is approximately 150.65 times slower and allocates 107.25 times as much in this
+editing history. It remains the canonical fresh-construction tool, but it does not remove the need
+to test T1. These Dry/Short timings do not set the T1 threshold; five independent full persistent
+controls do that after this tuple lock.
 
 ## Exit outcomes
 
-Once every required artifact exists, replace the pending status with exactly one conclusion:
-
-1. **Advance to T1**, naming the base size, edit history, edit count, publication cadence, and gross
-   wrapper/path-copy opportunity that plausibly clears the locked threshold. This authorizes only a
-   private production-representative kernel and does not claim a transient win.
-2. **Defer Track T** because no named baseline regime has sufficient opportunity or because the
-   credible regimes are already better served by direct persistent operations or `BulkBuilder`.
-
-Only a later T1 record can establish an actual owner-token performance win or authorize T2 public
-API design.
+T0 exits with **Advance to T1** for `N100000_E512 / ClusteredPrefix / End`. This authorizes only the
+two private production-representative ownership layouts and their gate. It does not establish an
+owner-token win. T1 must still run five full persistent controls, compare both layouts on this exact
+tuple, corroborate `Every64`, reject regression at `N100000_E1/EveryEdit`, and charge ordinary and
+published retained memory. Only that later decision can authorize T2 public API design.
