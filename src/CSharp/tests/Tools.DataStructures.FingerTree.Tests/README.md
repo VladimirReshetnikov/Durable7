@@ -33,6 +33,9 @@ reasonable oracle.
 - `RopeTests.cs`, `RopeModelTests.cs`, `MeasuredRopeTests.cs`, `RopeTextTests.cs`, `RopeTextExtrasTests.cs`, and
   `RopeBuilderTests.cs` / `RopeAppendBuilderTests.cs` cover chunked ropes, measured ropes, text helpers,
   Unicode/newline extras, and builders.
+- `RopeContractOracleTests.cs` and `MeasuredRopeContractOracleTests.cs` are the Axis 2 executable baseline for
+  logical order, chunk bounds and proportionality, backing-store sharing, snapshot identity, noncommutative
+  measures, overflow rejection, and strong exception behavior for user measure callbacks.
 - `RopeBoundaryCoverageTests.cs` covers legal sub-minimum split chunks, concatenation seam re-coalescing, and
   mixed `TextReader` peek/single/buffered reads across chunk boundaries.
 - `RrbVectorTests.cs` covers branch-factor boundaries, unequal-height boundary-spine concatenation,

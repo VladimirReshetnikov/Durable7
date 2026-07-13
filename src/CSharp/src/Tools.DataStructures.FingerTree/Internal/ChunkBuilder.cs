@@ -103,10 +103,16 @@ internal sealed class MeasuredChunkBuilder<T, TMeasure, TMeasureOps>
         if (_tailLength == RopeChunking.MaxChunkSize)
             RetireFullTail();
 
-        _tail[_tailLength++] = item;
         var itemMeasure = TMeasureOps.Measure(item);
-        _tailMeasure = TMeasureOps.Combine(_tailMeasure, itemMeasure);
-        Measure = TMeasureOps.Combine(Measure, itemMeasure);
+        var tailMeasure = TMeasureOps.Combine(_tailMeasure, itemMeasure);
+        var measure = TMeasureOps.Combine(Measure, itemMeasure);
+
+        // Publish only after every user-supplied measure operation has succeeded. Advancing the
+        // tail length first would leave a ghost element behind when Measure or Combine throws.
+        _tail[_tailLength] = item;
+        _tailLength++;
+        _tailMeasure = tailMeasure;
+        Measure = measure;
         Count++;
     }
 
