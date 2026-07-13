@@ -104,6 +104,7 @@ internal sealed class LazyMeasuredMiddle<TElement, TNode, TMeasure, TMonoid>
         if (state is MeasuredTree<TElement, TNode, TMeasure, TMonoid> computed)
             return computed;
 
+        RopeCursorDiagnostics.RecordForcedSuspension();
         var result = ((PendingMeasured<TElement, TNode, TMeasure, TMonoid>)state).Run();
         var witnessed = Interlocked.CompareExchange(ref _state, result, state);
         return ReferenceEquals(witnessed, state) ? result : (MeasuredTree<TElement, TNode, TMeasure, TMonoid>)witnessed;

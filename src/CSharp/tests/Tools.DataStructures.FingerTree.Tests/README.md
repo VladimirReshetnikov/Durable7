@@ -36,6 +36,10 @@ reasonable oracle.
 - `RopeContractOracleTests.cs` and `MeasuredRopeContractOracleTests.cs` are the Axis 2 executable baseline for
   logical order, chunk bounds and proportionality, backing-store sharing, snapshot identity, noncommutative
   measures, overflow rejection, and strong exception behavior for user measure callbacks.
+- `RopeCursorPrototypeContractTests.cs`, `RopeCursorPrototypeModelTests.cs`, and
+  `RopeCursorPrototypeBoundaryTests.cs` validate the private Axis 2 C0 zipper across all focus/flush candidates,
+  retained branches, class/struct/mutable representations, snapshot-cache races, every source chunk length,
+  seam oscillation, and long typing/backspace histories before any cursor surface becomes public.
 - `RopeBoundaryCoverageTests.cs` covers legal sub-minimum split chunks, concatenation seam re-coalescing, and
   mixed `TextReader` peek/single/buffered reads across chunk boundaries.
 - `RrbVectorTests.cs` covers branch-factor boundaries, unequal-height boundary-spine concatenation,
