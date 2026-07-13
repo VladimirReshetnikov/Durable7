@@ -89,6 +89,8 @@ The suite covers:
 - `RopeCursorModelTests.cs` compares 2,100 deterministic mixed commands against `List<T>` plus an integer gap,
   retains and branches old cursor versions, covers positions and lengths 0/1/15/16/255/256/257/2047/2048/2049,
   and exercises long typing, carry flush, seam oscillation, and full backspace histories;
+- the [C0 decision record](rope-cursor-c0-decision.md) connects those C1 tests to the selected 16/256
+  representation, named benchmark gate, and published linear-lineage/O(b log n) complexity scope;
 - `RrbVector<T>` radix boundaries, regular-versus-relaxed representation invariants, exact-boundary
   leaf reuse, unequal-height and adversarial-fragment concatenation, density/height ceilings,
   builder snapshot isolation, retained snapshots, and randomized mixed-edit histories;

@@ -419,6 +419,11 @@ worst-case. Retaining and editing `b` independent boundary branches has the cons
 bound. Callers that need a canonical rope after every edit should include that O(log n) snapshot work in
 their workload model.
 
+The [API specification](api-specification.md#positional-edit-cursor) is normative for the shipped
+surface; the [C0 decision](rope-cursor-c0-decision.md) records the benchmark selection and the exact
+linear-lineage/branched-history proof boundary. `MeasuredRope` and text cursors are not part of this C1
+surface.
+
 Use `MeasuredRope<T, TMeasure, TMeasureOps>` when the sequence also needs cumulative-measure
 navigation:
 

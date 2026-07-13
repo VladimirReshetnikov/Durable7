@@ -1,6 +1,6 @@
 # Frontier Structure Catalog
 
-- Status: Current-state catalog - shipped Axis 1 cores and remaining frontier candidates
+- Status: Current-state catalog - shipped Axis 1 cores, shipped C# Axis 2 C1, and remaining frontier candidates
 - Created (UTC): 2026-07-11T03:31:23Z
 - Repository HEAD: f40e301e8faf26d748f33d8546d7d9216657301e
 - Audience: Maintainers and AI agents planning new repository-owned cores, representation tiers, and specialized sibling collections
@@ -10,7 +10,8 @@ This document began as a catalog of candidate work that the
 [derived structure catalog](derived-structure-catalog.md) deliberately does not cover. That catalog
 records what can be built *by composing* the shipped HAMT and FingerTree families; this one records
 three complementary axes. Axis 1 now includes both implemented reference cores and unimplemented
-candidates, while axes 2 and 3 remain primarily planning material:
+candidates. Axis 2 now includes the shipped C# positional rope cursor as well as unimplemented
+lifecycle and cursor phases; the rest of Axis 2 and Axis 3 remain planning material:
 
 1. **New cores** - structures that need their own node layer, including several invented or refined
    in the last decade.
@@ -36,8 +37,9 @@ claims and bounds. The [references](#references) section lists what to pull.
 committed, prioritized slate from the derived catalog plus review-observed gaps; this catalog maps
 the *frontier* candidate space beyond it. Three items originally overlapped: the Patricia trie
 family (proposal Tier C1), the cursor/zipper (proposal A3), and the RRB vector (then deferred on
-benchmark-first grounds). Patricia and RRB have since shipped; the cursor/zipper remains planned.
-The cursor and the temporal-lifecycle work now have a dedicated
+benchmark-first grounds). Patricia and RRB have since shipped across the language workspaces, and
+the positional cursor has shipped as C# Axis 2 C1; measured/text cursors and later cursor families
+remain planned. The cursor and the temporal-lifecycle work have a dedicated
 [Axis 2 final plan](../proposals/axis2-lifecycle-and-sequence-cursors.md), which is authoritative where
 its API, complexity, or sequencing detail differs from the older proposal. The entries below are
 the current-state record, while the 2026-07-09 proposal remains useful historical scheduling
@@ -71,7 +73,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
 | Size-tiered small representations | 2 | Strong, explicitly postponed | Re-entry benchmark after the Axis 2 fixed-layout evidence decision | Internal tier per selected facade + representation-forcing tests |
 | Transient -> persistent -> frozen lifecycle | 2 | Strong candidates (planned, C#-first, not shipped) | Shared P0 plus independent T0/T1 and F0/F1 evidence gates | Owner-token transient + frozen map/set types |
-| Version-bound cursor / zipper | 2, 3 | Strong with defer outcome (planned, C#-first, not shipped) | Zipper-first C0 proof/performance gate; focused root only for a measured required blocker | Rope cursor first; measured cursor second |
+| Version-bound cursor / zipper | 2, 3 | C1 positional `RopeCursor<T>` implemented in C#; C2/C3 planned; C4 consumer-gated | C0 selected the readonly-struct zipper-as-version; measured/text work has its own gate | Shipped positional cursor; measured/text cursor and sample integration remain |
 | Key-type-specialized map factories | 2 | Plausible, explicitly postponed | Named consumer after explicit Patricia consideration | Factory layer; ART only if independently justified |
 | Self-adjusting (splay-style) structures | 2 | Reject | - | Reads allocate under path copying; cursors + freeze substitute |
 | Range-update sequence (lazy propagation) | 3 | Strong | Measure action interface | 1 sibling core + tag algebra + property tests |
@@ -788,8 +790,8 @@ required concurrency-validation tier; the native reclamation exception remains e
 ### Size-tiered small representations
 
 **Status: Explicitly postponed; the current persistent facades do not switch to flat small-size
-tiers. The independent Axis 2 cursor, transient, and fixed-layout evidence gates precede any
-re-entry.**
+tiers. The Axis 2 cursor gate has produced the independent shipped C1 positional cursor, while the
+transient and fixed-layout evidence gates still precede any size-tier re-entry.**
 
 **The pattern.** Below a threshold, represent the collection as a flat array; promote to the tree
 representation at the threshold; demote on shrink with hysteresis. Precedents: Clojure's
@@ -876,54 +878,74 @@ all postponed. Benchmarks may contain tiny and string datasets, but those are wo
 permission to select a representation. This isolates the value of the temporal lifecycle before
 combining it with size or key specialization.
 
-**Verdict: Strong candidates, independently evidence-gated.** After shared P0 contracts and
-instrumentation, T0 and F0 may run beside the lead cursor work. Advance only through the final plan's
-workload, production-representation, semantic, failure-atomicity, retained-memory, lookup,
-construction, and break-even gates. Evaluate RRB transients, Ctrie snapshot-to-frozen conversion,
-and other frozen families only after the corresponding C# reference contract settles.
+**Verdict: Strong candidates, independently evidence-gated.** The positional cursor's independent
+C1 shipment does not imply that either lifecycle candidate has cleared its gate. Advance Track T and
+Track F only through the final plan's workload, production-representation, semantic, failure-
+atomicity, retained-memory, lookup, construction, and break-even gates. Evaluate RRB transients,
+Ctrie snapshot-to-frozen conversion, and other frozen families only after the corresponding C#
+reference contract settles.
 
 ### Cursor / zipper over the sequence family
 
-**Status: Planned, C#-first, and not shipped; the current sequence APIs expose no editable
-version-bound cursor, and no sibling-language parity is committed. The
-[Axis 2 final cursor plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) supersedes proposal
-A3's original path-stack sketch.**
+**Status (2026-07-13): C# C1 is shipped.** `Rope<T>.GetCursor(position)` and the public readonly
+`RopeCursor<T>` implement the positional version-bound gap cursor. C2 measured/text cursors and C3
+Editor/Tour integration remain planned behind their own evidence gates; C4 cursor adapters remain
+consumer-gated. No sibling-language cursor parity is committed. The
+[Axis 2 final cursor plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) remains normative for
+the unshipped phases, while the [C0 decision record](../../src/CSharp/docs/FingerTree/rope-cursor-c0-decision.md)
+records the selected representation and proof boundary for C1.
 
-**The correction.** A retained path provides O(log n) initial descent, O(1) movement inside a
-chunk, and O(1) amortized sequential movement, but rebuilding a canonical immutable root after an
-edit is O(log n). A `readonly struct` also does not make an arbitrary-depth path allocation-free.
-The API must therefore choose honestly between:
+**Selected representation.** C0 selected the zipper-as-version representation as a readonly struct
+over immutable version and navigation-context references; it did not select the focused-root
+alternative. The shipped zipper has a bounded 16-element active focus and at most one partial carry
+smaller than 256 elements on each side. Movement and edits return cursor values. Navigation shares
+the logical sequence version and snapshot memo; an edit creates a new version state. The public
+[source](../../src/CSharp/src/Tools.DataStructures.FingerTree/Rope.Cursor.cs),
+[usage guide](../../src/CSharp/docs/FingerTree/usage.md), and
+[API specification](../../src/CSharp/docs/FingerTree/api-specification.md) describe that current
+surface.
 
-1. a persistent zipper as the working version, with explicit O(log n) `Snapshot()`; or
-2. a hybrid `Rope<T>` root that can hold left tree + bounded focus + right tree and canonicalizes
-   lazily for nonlocal operations.
+**Gap and version semantics.** A cursor denotes a boundary `0 .. Count`, not an element. Previous
+peek/movement/backspace address `p - 1`; next peek/movement/delete/replace address `p`. Insertion
+returns the gap after the inserted values, backspace returns `p - 1`, and forward deletion or
+replacement keeps `p`. Empty, start, and end gaps are first-class. `Seek(Position)` and empty
+`InsertRange` preserve the exact shared version/context state; `ReplaceNext` deliberately creates an
+edit version without an element-equality check. Every retained cursor remains valid and may be
+edited to create an independent branch. There is no implicit redirection to a later rope, bookmark
+rebase, or cross-version application. The default struct is invalid; the initialized empty cursor
+comes from `Rope<T>.Empty.GetCursor()`.
 
-The C# design begins with one minimally complete zipper-as-version spike. The conservative contract
-makes cursor edits return another cursor and makes dirty `Snapshot()` O(log n), while repeated clean
-snapshots are cached O(1). A focused-root spike is conditional: snapshot-after-every-edit must be a
-predeclared required workload, dirty canonicalization must be the measured blocker, and the wider
-root representation must not regress ordinary Rope operations. C0 may instead select the zipper or
-defer the public cursor. Its branch-complexity claim requires a version-DAG potential argument that
-charges branch-specific repair; benchmarks and counters test the argument but do not prove it.
+**Snapshots, sharing, and reads.** A cursor created from a rope starts with that exact rope as its
+clean cached snapshot. A dirty first `Snapshot()` performs bounded focus/carry packing plus a
+canonical tree join and publishes one winner through `Interlocked.CompareExchange`; racing callers
+return that same rope reference. A failed candidate publishes nothing, so the cursor remains
+reusable. Later snapshots from any navigation cursor over the logical version are O(1) and
+reference-identical. Edited snapshots retain untouched immutable chunk storage; ancestors and
+sibling branches remain independently readable. Initialized cursor values are immutable and safe
+for concurrent reads, including concurrent first-snapshot publication.
 
-**Gap semantics.** The cursor denotes a boundary `0..Count`. Previous/next peek and movement,
-insert, backspace/delete-next, replace-next, and absolute seek all have unambiguous boundary
-behavior. Every cursor owns its immutable version/context; an old cursor stays valid and editing it
-creates a branch. There is no automatic redirection to a newer rope and no arbitrary-version
-bookmark rebase.
+**Proven complexity scope.** Creation and arbitrary `Seek` are O(log n); seeking a dirty edit
+version may first materialize its canonical snapshot. Focus-local peeks and movement and local
+single-element edits are O(1) amortized along one **linear version lineage**, with O(log n)
+worst-case boundary repair. `InsertRange` of `m` elements is O(m + log n) amortized. Dirty
+`Snapshot()` is bounded focus/carry packing plus an O(log n) tree join; clean repeated snapshots are
+O(1). C0 did not prove an arbitrary-version-DAG amortized bound: editing `b` independently retained
+cursors at a carry/chunk or lazy-spine boundary has the conservative O(b log n) aggregate bound,
+plus bounded focus/carry copying per branch. Potential consumed by one child cannot pay for a
+sibling.
 
-**Scope.** `Rope<T>` first, then `MeasuredRope`; the Editor/Tour samples are future integration
-targets, not measured localized-edit consumers today. Both remain on
-`MeasuredRope<char, int, NewlineMeasure>`. The measured cursor exposes measures before/after the gap:
-newline count gives the zero-based line in O(1), while the UTF-16 column uses a line-start lookup in
-O(log n). Deque follows only after the rope representation settles. Editable RRB,
-reversible-deque, raw-FingerTree, and Tungsten cursors remain consumer-gated.
+**Remaining phases.** C2 would add a measured cursor over
+`MeasuredRope<T, TMeasure, TMeasureOps>` and the newline-measured text specialization; neither type
+nor its measure-before/after, measure-seek, line, or column cursor API is shipped. C3 would then
+integrate that measured cursor into the existing Editor and Tour samples; the samples have not been
+migrated by C1. C4 separately evaluates `FingerTreeDeque<T>` and leaves editable RRB,
+`ReversibleDeque`, raw `FingerTree`, Tungsten, bookmark/rebase, and range-update cursors deferred
+until a consumer and benchmark justify them.
 
-**Verdict: Strong, with an explicit defer outcome.** It is the honest per-consumer substitute for
-self-adjusting shared state, but shipment is gated on a proved history-class bound, model histories,
-retained-version branching, chunk/seam boundaries, noncommutative measures, snapshot failure/races,
-allocation/node-visit counters, and separate material positional and measured-text wins over indexed
-rope edits. It does not depend on the range-update sequence.
+**Verdict: C1 implemented; C2 and C3 remain evidence-gated, and C4 remains consumer-gated.** The
+shipped positional cursor cleared its named local-edit benchmark and validation gate. That result
+does not pre-approve measured/text state, sample integration, later sequence adapters, or a broader
+branched-history complexity claim.
 
 ### Key-type-specialized map construction
 
@@ -958,8 +980,9 @@ persistence, for two independent reasons worth recording so the idea is not re-l
    would each want it shaped for *their* access sequence; the amortized potential arguments assume
    one linear history (the same failure mode as the derived catalog's rule 2).
 
-The planned substitutes in this catalog are cursors (per-consumer locality, axis 2) and `Freeze()`
-(explicit read-phase optimization, axis 2). Neither is a shipped API yet. **Reject.**
+The substitutes in this catalog are the shipped C# positional rope cursor (per-consumer locality,
+Axis 2 C1), later consumer-gated cursors, and the planned `Freeze()` read-phase optimization.
+Self-adjusting shared state remains unnecessary. **Reject.**
 
 ## Axis 3: Niche Specializations
 
@@ -1086,7 +1109,7 @@ New rules this survey adds to the derived catalog's seven:
 
 ## Implementation Status And Remaining Sequencing
 
-### Shipped Axis 1 reference cores
+### Shipped reference cores and cursor surface
 
 The implementation wave described by this catalog has already landed these C# reference surfaces:
 
@@ -1098,7 +1121,8 @@ The implementation wave described by this catalog has already landed these C# re
 - `CanonicalSortedSet<T>` with keyed zip-zip ranks;
 - `BrodalOkasakiHeap<T>` and `PrioritySearchQueue<TKey, TPriority, TValue>`;
 - `DabaLite<T, TMonoid>`; and
-- the managed Ctrie with O(1) immutable snapshots.
+- the managed Ctrie with O(1) immutable snapshots; and
+- the Axis 2 C1 positional `RopeCursor<T>`.
 
 CHAMP, Patricia, and RRB have also advanced through the sibling-language work recorded in their
 entries; the canonical zip-zip set, Brodal-Okasaki heap, and priority-search queue are implemented
@@ -1106,7 +1130,8 @@ across all six languages, and DABA Lite now exists in every applicable imperativ
 language (C#, C, C++, Kotlin/JVM, and Rust). The Ctrie's deliberate parity boundary remains C# and
 Kotlin/JVM. The Merkle search tree's full trust-boundary tier is complete across all six languages.
 These are current-state implementation records, not candidates awaiting a consumer.
-Future work on them is ordinary hardening, measurement, and demand-driven porting.
+Future work on the Axis 1 cores is ordinary hardening, measurement, and demand-driven porting. The
+cursor's C2/C3/C4 extensions retain the separate status recorded in its entry above.
 
 ### Remaining candidate sequencing
 
@@ -1115,30 +1140,29 @@ a C# reference first, and promote it only with proven value. Items shared with t
 [2026-07-09 proposal](../proposals/new-data-structures-2026-07-09.md) keep that proposal's scheduling
 slot unless a later dedicated plan says otherwise. The
 [Axis 2 final plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) now owns lifecycle/cursor detail.
-The remaining plausible work is sequenced as follows:
+The positional cursor's P0/C0/C1 tranche is complete; remaining work is sequenced as follows:
 
-1. **Axis 2 P0 contract/instrumentation lock**: exact builder/transient/persistent/frozen vocabulary,
-   consuming transient publication, gap-cursor semantics, contract oracles, internal diagnostics,
-   benchmark skeletons, and a predeclared materiality rule.
-2. Begin **C0, T0, and F0 independently**. The zipper-first C0 representation/proof spike is the lead
-   public priority; T0 qualifies a transient workload and F0 tests one faithful packed-index signal,
-   without committing either performance tier to an API.
-3. Take **C0** through select/escalate/defer. A selected cursor representation proceeds to the C#
-   positional Rope cursor, then the measured/text cursor and Editor/Tour integration; a focused-root
-   spike occurs only for a predeclared snapshot-every-edit blocker.
-4. Advance **T0 -> T1 -> T2** only through workload and production-representation gates, ending in a
+1. **C1 is shipped:** C0 selected the readonly-struct zipper-as-version with focus 16 and flush 256,
+   closed focused-root escalation, and published the linear-lineage/O(b log n) branch scope.
+2. Advance **C2 measured/text cursor** only through its measure-law, failure/race, text-helper, and
+   measured-workload gate. C1 alone does not make this surface current.
+3. Advance **C3 Editor/Tour integration** only after C2, with smoke-locked histories and a measured
+   snapshot cadence. Neither sample currently demonstrates the positional cursor as a substitute.
+4. Evaluate **C4 later sequence cursors** separately and only for a named consumer; do not infer a
+   deque, RRB, reversible-deque, raw-FingerTree, or Tungsten cursor from C1.
+5. Advance **T0 -> T1 -> T2** only through workload and production-representation gates, ending in a
    one-way C# CHAMP transient only after failure, ownership, retained-memory, and material-win evidence.
-5. Advance **F0 -> F1 -> F2 -> F3** only through signal, layout, and shipment gates, ending in one
+6. Advance **F0 -> F1 -> F2 -> F3** only through signal, layout, and shipment gates, ending in one
    general C# frozen hash layout and then Ctrie snapshot conversion only after named
    lookup/enumeration/memory and construction break-even evidence.
-6. **Range-update sequence**, independently reviewing and law-testing the measure-action interface.
+7. **Range-update sequence**, independently reviewing and law-testing the measure-action interface.
    It is not a cursor prerequisite; the later styled-text sample depends on both tracks.
-7. **Order-maintenance list** and **persistent chunked bitset**, each only for a concrete client not
+8. **Order-maintenance list** and **persistent chunked bitset**, each only for a concrete client not
    served by existing composition.
-8. **Styled-text rope sample**, after cursor and range-update foundations settle.
+9. **Styled-text rope sample**, after measured cursor and range-update foundations settle.
 
-This numbering expresses dependencies and gates, not a ceremonial landing order: a proven T2 or F2
-change need not wait behind a deferred cursor, while “cursor-first” identifies the lead public target.
+This numbering expresses dependencies and gates, not a ceremonial landing order: C1's shipment does
+not make C2/C3/C4 prerequisites for a separately proven T2 or F2 change.
 
 Automatic size tiers, count/key-specific frozen strategies, key-type-specialized factories, and
 unrequested sequence cursor families are postponed rather than placed in this active sequence.

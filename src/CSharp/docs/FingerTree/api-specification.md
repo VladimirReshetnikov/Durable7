@@ -553,6 +553,11 @@ The implementation should keep XML documentation aligned with this file. XML sum
   cursors are immutable and safe for concurrent reads. Snapshot memoization is the only internal
   publication and does not change the cursor's logical sequence or position.
 
+The [C0 decision record](rope-cursor-c0-decision.md) owns the representation selection, measured gate,
+and proof boundary; the [validation guide](validation.md#test-coverage) maps the public command model,
+identity/sharing, boundary, failure, and concurrency evidence. This section describes only the shipped
+positional cursor: measured/text cursors and sample adoption remain later Axis 2 phases.
+
 ## The Measured Rope
 
 `MeasuredRope<T, TMeasure, TMeasureOps>` is the measured sibling of `Rope<T>`: a persistent chunked sequence that also tracks an arbitrary monoidal user measure, so it navigates by that measure as well as by position. Its headline application is a text buffer with a line measure, giving O(log n) offset↔line navigation; the same machinery serves weighted selection and byte-offset addressing over variable-width elements.

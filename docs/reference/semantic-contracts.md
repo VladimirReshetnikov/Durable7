@@ -36,6 +36,7 @@ behavior change through sibling workspaces.
 | Policy preservation | Hash, equality, comparison, measure, allocator, ownership, and callback policies flow into derived versions unless a local API explicitly creates a new policy. |
 | Stable but unspecified order | Enumeration order is deterministic for unchanged structure versions, but callers must not treat the exact trie/tree traversal order as a sorted or insertion order unless the API says so. |
 | Measure | A monoidal summary cached on a finger-tree node, chunk, or facade element and used for split, locate, rank, priority, interval, rope, or text navigation. |
+| Version-bound cursor | An immutable working value that owns one persistent sequence version and a position within it; navigation and editing never redirect it to a different version implicitly. |
 | Checkpoint port | A port that preserves observable API semantics and tests while documenting a remaining representation or asymptotic parity boundary. |
 | Facade | A public collection built on a shared core engine, such as sorted sets on measured trees or text ropes on measured ropes. |
 
@@ -219,6 +220,37 @@ Shared obligations:
   invalid offset behavior.
 - Builders must document mutation, snapshot publication, and whether later builder changes can affect
   previously produced immutable ropes.
+
+C# additionally ships the positional `RopeCursor<T>`; no measured-rope, text, deque, RRB, raw-
+finger-tree, or Tungsten cursor is implied by that surface. Its current obligations are:
+
+- A cursor position is a gap in `0 .. Count`: previous operations address `p - 1`, next operations
+  address `p`, insertion returns the gap after the inserted values, backspace moves the gap left,
+  and forward deletion or replacement keeps it fixed. Empty, start, and end gaps are valid states.
+- The initialized cursor is an immutable value over one logical version and navigation context.
+  Navigation retains the version and its snapshot cache; every edit creates an independent version.
+  Retained cursors and snapshots stay valid, and editing any retained cursor creates a branch without
+  changing its ancestor or siblings.
+- `Seek(Position)` and an empty `InsertRange` preserve the exact shared version and context state.
+  `ReplaceNext` always creates a new logical version and does not consult element equality.
+- A cursor created from a rope has that source object as its clean snapshot. A dirty first
+  `Snapshot()` publishes one canonical rope through a thread-safe winner-returning memo cell;
+  repeated clean snapshots from any navigation context over the version are O(1) and return the same
+  rope reference. A failed construction publishes nothing and leaves the version reusable.
+- Initialized cursor values are safe for concurrent reads, including racing first snapshots. The
+  default `RopeCursor<T>` value is deliberately invalid; the initialized empty state comes from
+  `Rope<T>.Empty.GetCursor()`.
+- The proven complexity scope is linear-lineage only: local movement and single-element edits are
+  O(1) amortized along one lineage and O(log n) worst-case, while dirty snapshot materialization is
+  bounded focus/carry packing plus an O(log n) tree join. Editing `b` independently retained cursors
+  at a boundary has the conservative O(b log n) aggregate bound; there is no unqualified
+  arbitrary-version-DAG O(1)-amortized claim.
+
+The normative C# details and evidence are in the
+[FingerTree API specification](../../src/CSharp/docs/FingerTree/api-specification.md),
+[usage guide](../../src/CSharp/docs/FingerTree/usage.md),
+[validation guide](../../src/CSharp/docs/FingerTree/validation.md), and
+[C0 decision record](../../src/CSharp/docs/FingerTree/rope-cursor-c0-decision.md).
 
 ## Tungsten Collections
 
