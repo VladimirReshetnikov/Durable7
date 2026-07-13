@@ -39,7 +39,11 @@ reasonable oracle.
 - `RopeCursorPrototypeContractTests.cs`, `RopeCursorPrototypeModelTests.cs`, and
   `RopeCursorPrototypeBoundaryTests.cs` validate the private Axis 2 C0 zipper across all focus/flush candidates,
   retained branches, class/struct/mutable representations, snapshot-cache races, every source chunk length,
-  seam oscillation, and long typing/backspace histories before any cursor surface becomes public.
+  seam oscillation, and long typing/backspace histories retained as the representation/tuning oracle.
+- `RopeCursorTests.cs` and `RopeCursorModelTests.cs` validate the public Axis 2 C1 readonly-struct cursor:
+  `List<T>` gap-model parity, the selected 16/256 focus/carry bounds, exact named boundaries, all operations,
+  retained branches, version/context/snapshot identity, overflow and failure atomicity, cache races, structural
+  sharing, and adversarial fan-out under the published conservative branch bound.
 - `RopeBoundaryCoverageTests.cs` covers legal sub-minimum split chunks, concatenation seam re-coalescing, and
   mixed `TextReader` peek/single/buffered reads across chunk boundaries.
 - `RrbVectorTests.cs` covers branch-factor boundaries, unequal-height boundary-spine concatenation,

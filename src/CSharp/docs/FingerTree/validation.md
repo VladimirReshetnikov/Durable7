@@ -80,8 +80,15 @@ The suite covers:
   named operations, and `TryLocate`/`TrySplitFind` equivalence;
 - derived sorted bag/set/dictionary, sorted mutable builders, priority queue, interval tree, and reversible deque
   behavior against BCL or brute-force models where appropriate;
-- `Rope<T>`, `MeasuredRope<T, TMeasure, TMeasureOps>`, text helpers, editor-grade Unicode/newline helpers,
-  `RopeBuilder`, and nested append-only rope builders;
+- `Rope<T>`, its public immutable `RopeCursor<T>` gap editor, `MeasuredRope<T, TMeasure, TMeasureOps>`,
+  text helpers, editor-grade Unicode/newline helpers, `RopeBuilder`, and nested append-only rope builders;
+- `RopeCursorTests.cs` locks default-value rejection, gap and edit semantics, no-op/version/context/snapshot
+  identity, equality-free replacement, retained branches, concurrent winner-returning snapshot publication,
+  failure-atomic caching, overflow-before-allocation counters, structural sharing, and independently scaled
+  boundary fan-out under the published O(b log n) scope;
+- `RopeCursorModelTests.cs` compares 2,100 deterministic mixed commands against `List<T>` plus an integer gap,
+  retains and branches old cursor versions, covers positions and lengths 0/1/15/16/255/256/257/2047/2048/2049,
+  and exercises long typing, carry flush, seam oscillation, and full backspace histories;
 - `RrbVector<T>` radix boundaries, regular-versus-relaxed representation invariants, exact-boundary
   leaf reuse, unequal-height and adversarial-fragment concatenation, density/height ceilings,
   builder snapshot isolation, retained snapshots, and randomized mixed-edit histories;

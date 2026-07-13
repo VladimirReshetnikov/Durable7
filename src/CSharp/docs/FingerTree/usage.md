@@ -389,6 +389,36 @@ var slice = edited.Slice(1, 2);
 var joined = slice.Concat(Rope<int>.Create(7, 8));
 ```
 
+For a run of localized edits, retain an immutable `RopeCursor<T>` and materialize a rope only at the
+checkpoint cadence the application actually needs. The cursor denotes a gap: insertion leaves the gap
+after the inserted values, backspace (`DeletePrevious`) moves it left, while `DeleteNext` and
+`ReplaceNext` keep it fixed.
+
+```csharp
+var source = Rope<int>.Create(1, 2, 3, 4);
+var atMiddle = source.GetCursor(2);                 // 1, 2 | 3, 4
+var typed = atMiddle.InsertRange([90, 91]);         // 1, 2, 90, 91 | 3, 4
+var erased = typed.DeletePrevious();                // 1, 2, 90 | 3, 4
+var checkpoint = erased.Snapshot();                 // [1, 2, 90, 3, 4]
+
+// Every cursor is a persistent version. Branching never changes the retained cursor.
+var alternate = atMiddle.ReplaceNext(30).Snapshot(); // [1, 2, 30, 4]
+var unchanged = atMiddle.Snapshot();                  // the original source object
+```
+
+`TryPeekPrevious` and `TryPeekNext` inspect either side without moving. `MovePrevious`, `MoveNext`,
+`DeletePrevious`, `DeleteNext`, and `ReplaceNext` throw `InvalidOperationException` when the required
+neighbor does not exist; `Seek` and `GetCursor` reject positions outside `0 .. Count`.
+`Seek(cursor.Position)` and empty `InsertRange` preserve the exact cursor state. A dirty first
+`Snapshot()` performs the canonical tree join, while every later snapshot of that edit version—including
+from a differently positioned navigation cursor—returns the same rope reference in O(1). The default
+`RopeCursor<T>` value is invalid; use `Rope<T>.Empty.GetCursor()` for a real empty cursor.
+
+The cursor is tuned for a linear lineage of local edits: those operations are O(1) amortized and O(log n)
+worst-case. Retaining and editing `b` independent boundary branches has the conservative O(b log n)
+bound. Callers that need a canonical rope after every edit should include that O(log n) snapshot work in
+their workload model.
+
 Use `MeasuredRope<T, TMeasure, TMeasureOps>` when the sequence also needs cumulative-measure
 navigation:
 
@@ -548,6 +578,7 @@ an `AddLast` loop for bulk append construction.
 | Minimum-priority draining and meld | `PriorityQueue<TElement, TPriority>` |
 | Closed-interval overlap and containment queries | `IntervalTree<T>` |
 | Chunked persistent positional sequence | `Rope<T>` |
+| Localized persistent positional editing with retained branches | `RopeCursor<T>` from `Rope<T>.GetCursor()` |
 | Uniform random-access persistent sequence | `RrbVector<T>` |
 | Mutable FIFO window aggregate with worst-case O(1) operations | `DabaLite<T, TMonoid>` |
 | Policy-scoped canonical sorted shape and memoized digest | `CanonicalSortedSet<T>` |

@@ -516,6 +516,43 @@ The implementation should keep XML documentation aligned with this file. XML sum
 - **Persistence.** Immutable and structurally shared: every edit returns a new rope cheaply, old versions stay valid, and slices share backing arrays (an explicit `Compact()` rebuilds into fresh chunks when a slice-heavy history retains large buffers). This is what makes a `Rope<char>` a natural editor buffer with free snapshots and undo.
 - **Generality.** This rope is positional (general over the element type). For an arbitrary monoidal secondary measure — line counts for text, byte weights, custom navigation — use `MeasuredRope<T, TMeasure, TMeasureOps>` (below), the measured sibling.
 
+### Positional Edit Cursor
+
+`Rope<T>.GetCursor(position)` creates a public readonly `RopeCursor<T>` whose position is a gap in
+`0 .. Count`. At gap `p`, `[0, p)` lies before the gap and `[p, Count)` lies after it.
+
+- **Gap operations.** `TryPeekPrevious` observes `p - 1`, and `TryPeekNext` observes `p`.
+  `MovePrevious` and `MoveNext` move the gap by one. `Insert` and `InsertRange` place values at the gap
+  and return the gap after them. `DeletePrevious` is backspace and returns `p - 1`; `DeleteNext`
+  removes `p` and keeps the position; `ReplaceNext` replaces `p` and keeps the position. A missing
+  neighbor makes a non-`Try` operation throw `InvalidOperationException`. Creation and `Seek` reject
+  positions outside `0 .. Count`.
+- **Persistence and identity.** The cursor is logically immutable. Navigation shares one logical
+  version and its snapshot cache; an edit creates a new version while every retained cursor remains
+  valid. `Seek(Position)` and empty `InsertRange` preserve the exact version and context state.
+  `ReplaceNext` always creates a new edit version, even for an equal or identical value, and invokes no
+  element-equality callback. The default struct value is invalid and every member throws
+  `InvalidOperationException`; `Rope<T>.Empty.GetCursor()` is the initialized empty state.
+- **Representation.** The zipper holds a bounded 16-element active window between left and right
+  ordinary-chunk trees. Each side has at most one partial carry of 0 through 255 elements; overflow
+  flushes a 256-element ordinary chunk. The cursor value holds immutable context references plus a
+  `CursorVersionState<T>`; copying the struct never aliases mutable edit state.
+- **Snapshot.** A dirty `Snapshot()` packs the two bounded carries and focus and joins them to the
+  retained trees in O(log n). Each logical edit version owns a thread-safe memo cell. Concurrent first
+  callers build candidates, publish with compare/exchange, and all return the winner; a thrown candidate
+  publishes nothing. Repeated snapshots, including snapshots through different navigation contexts over
+  that version, are O(1) and reference-identical. A cursor created from a rope starts with that rope as
+  its clean cached snapshot.
+- **Complexity scope.** Creation and arbitrary `Seek` are O(log n). Peeks, focus-local movement, and
+  single-element edits are O(1) amortized along a linear lineage and O(log n) worst-case when a boundary
+  repair forces a suspended spine. `InsertRange` of m elements is O(m + log n) amortized. Dirty snapshot
+  is bounded packing plus an O(log n) join. The C0 evidence does not prove constant-amortized work over
+  arbitrary version-DAG fan-out: editing b independently retained boundary descendants has the published
+  O(b log n) bound.
+- **Failures and concurrency.** Insert count overflow is checked before edit allocation. Initialized
+  cursors are immutable and safe for concurrent reads. Snapshot memoization is the only internal
+  publication and does not change the cursor's logical sequence or position.
+
 ## The Measured Rope
 
 `MeasuredRope<T, TMeasure, TMeasureOps>` is the measured sibling of `Rope<T>`: a persistent chunked sequence that also tracks an arbitrary monoidal user measure, so it navigates by that measure as well as by position. Its headline application is a text buffer with a line measure, giving O(log n) offset↔line navigation; the same machinery serves weighted selection and byte-offset addressing over variable-width elements.
