@@ -28,6 +28,12 @@ new family, and (D) numerics extensions. Within each tier, items are ordered by 
 
 ### A1. HAMT `Update` / `GetOrAdd` and transient builder
 
+> **Current-state terminology note (2026-07-12):** the shipped HAMT bulk builders are staging
+> builders, not owner-token transients. The genuine transient -> persistent -> frozen lifecycle is
+> specified separately by the
+> [Axis 2 lifecycle plan](axis2-lifecycle-and-sequence-cursors.md); this historical item must not be
+> used to infer O(1) persistent-root adoption or publication.
+
 Already identified as the two top recurring gaps in the catalog. `Update(key, func)` halves every
 read-modify-write (one trie walk instead of two); the builder removes the `O(n · update)`
 per-insert path allocation from every `CreateRange` in the repository, including the Tungsten
@@ -61,17 +67,25 @@ lack.
 
 ### A3. FingerTree cursor / zipper over the measured tree
 
-New since the catalog. Repeated local edits via `Split`/`Concat` pay `O(log n)` each; an editor
-cursor (the Editor sample is the in-repo consumer) pays amortized `O(1)` for moves and edits near
-the point. A finger-tree zipper is the canonical formulation and needs no core changes — it is a
-path stack over the existing nodes — but it wants the internal node types, so it ships inside each
-FingerTree workspace rather than as a consumer composition.
+> **Superseded design detail (2026-07-12):** the
+> [Axis 2 cursor plan](axis2-lifecycle-and-sequence-cursors.md) is authoritative. A path stack alone
+> cannot both return a canonical immutable rope after every edit and preserve an amortized O(1)
+> local-edit claim: rebuilding the root is O(log n). The C# work therefore begins with a
+> zipper-as-version versus focused-root spike, uses gap positions, and gives dirty snapshot costs
+> explicitly.
 
-- Surface: one `Cursor`/`Zipper` type per workspace (~8 members: move left/right, seek by
-  measure/index, read, replace, insert, remove, rebuild).
-- Staging: C# first with the Editor sample rewritten on it; port only after the API stabilizes.
-- Risk: medium — persistent-zipper sharing semantics (rebuilding the spine on snapshot) must be
-  specified honestly.
+Repeated local edits via `Split`/`Concat` pay `O(log n)` each. A finger-tree zipper retains locality,
+but the working zipper and a canonical `Rope<T>` are different representations: nearby movement
+and focus edits can be O(1) amortized while rebuilding the rope spine remains O(log n). The Axis 2
+spike decides whether that rebuild is an explicit `Snapshot()` boundary or a lazily normalized
+focused-root variant inside `Rope<T>`.
+
+- Surface: C# `RopeCursor<T>` first, with gap movement/editing and explicit snapshot; measured/text
+  cursor second. Deque and raw-FingerTree surfaces are consumer-gated.
+- Staging: C# first with the Editor/Tour samples as consumers; port only after the API and measured
+  complexity stabilize.
+- Risk: medium-high — the representation choice affects allocation, snapshot cost, cached
+  normalization, structural sharing, and every ordinary Rope operation if focused roots are used.
 
 ### A4. Small parity completions (fold into ongoing port maintenance)
 

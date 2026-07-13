@@ -875,11 +875,15 @@ caching/version, fail-fast enumeration, and freeze-invariant tests before becomi
 
 ## Owner-Token Transients: Status And Feasibility
 
-Recorded for completeness; nothing above depends on it.
+Nothing above depends on this tier. The repository-wide
+[Axis 2 lifecycle plan](../../../../docs/proposals/axis2-lifecycle-and-sequence-cursors.md) now owns
+the exact staging-builder/transient/persistent/frozen vocabulary and selects eager C# CHAMP, not the
+lazy FingerTree core, as the first owner-token experiment.
 
-The transient tier would tag freshly built internal nodes with a builder identity, mutate in place on tag
-match, path-copy otherwise, and freeze by clearing tags. Its hazards in this library are structural, not
-incidental:
+An owner-token transient tags freshly built nodes with an edit identity, mutates in place on a token
+match, and path-copies otherwise. Publication must seal the token in O(1), not clear tags by walking
+the graph; a later transient treats every sealed-token node as shared. Its hazards in this lazy,
+measured library are structural, not incidental:
 
 - adopted nodes (from `ToBuilder`) are shared and may be reachable from **unforced suspensions captured by
   previously published values**; the ownership discipline that keeps every such node outside the mutable

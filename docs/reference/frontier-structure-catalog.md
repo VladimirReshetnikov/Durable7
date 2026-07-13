@@ -37,8 +37,11 @@ committed, prioritized slate from the derived catalog plus review-observed gaps;
 the *frontier* candidate space beyond it. Three items originally overlapped: the Patricia trie
 family (proposal Tier C1), the cursor/zipper (proposal A3), and the RRB vector (then deferred on
 benchmark-first grounds). Patricia and RRB have since shipped; the cursor/zipper remains planned.
-The entries below are the current-state record, while the proposal remains useful historical
-scheduling context.
+The cursor and the temporal-lifecycle work now have a dedicated
+[Axis 2 plan](../proposals/axis2-lifecycle-and-sequence-cursors.md), which is authoritative where
+its API, complexity, or sequencing detail differs from the older proposal. The entries below are
+the current-state record, while the 2026-07-09 proposal remains useful historical scheduling
+context.
 
 Verdicts use the derived catalog's scale:
 
@@ -66,10 +69,10 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | Priority search queue (winner-cached AVL) | 1 | Plausible (implemented across all six languages) | Completed as a direct core rather than the addressable composition | 1 new core |
 | Ctrie (concurrent, O(1) snapshot) | 1 | Managed-only (C# + Kotlin/JVM implemented) | Tracing GC; native ports require reclamation design | 1 new core, concurrency test tier |
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
-| Size-tiered small representations | 2 | Strong (planned, not shipped) | Benchmark gate at tier boundary | Internal tier per facade + representation-forcing tests |
-| `Freeze()` read-optimized tier | 2 | Strong (planned, not shipped) | Optional: fuse filter, PGM for sorted | 1 frozen type per family + strategy selection |
-| Cursor / zipper over rope and deque | 2, 3 | Strong (planned; proposal A3) | - | 1 cursor type per sequence family |
-| Key-type-specialized map factories | 2 | Plausible | `PersistentIntMap`, optionally ART | Factory layer, no new core beyond the above |
+| Size-tiered small representations | 2 | Strong, explicitly postponed | Re-entry benchmark after the fixed-layout lifecycle work | Internal tier per selected facade + representation-forcing tests |
+| Transient -> persistent -> frozen lifecycle | 2 | Strong (planned, not shipped) | C# CHAMP contract/prototype and fixed-layout benchmark gates | Owner-token transient + frozen map/set types |
+| Version-bound cursor / zipper | 2, 3 | Strong (planned; detailed Axis 2 plan) | C# zipper/focused-root complexity spike | Rope cursor first; measured cursor second |
+| Key-type-specialized map factories | 2 | Plausible, explicitly postponed | Named consumer after explicit Patricia consideration | Factory layer; ART only if independently justified |
 | Self-adjusting (splay-style) structures | 2 | Reject | - | Reads allocate under path copying; cursors + freeze substitute |
 | Range-update sequence (lazy propagation) | 3 | Strong | Measure action interface | 1 sibling core + tag algebra + property tests |
 | Order-maintenance list | 3 | Plausible | - | 1 public type; Tungsten stamps could layer on it |
@@ -784,7 +787,8 @@ required concurrency-validation tier; the native reclamation exception remains e
 
 ### Size-tiered small representations
 
-**Status: Planned; the current persistent facades do not switch to flat small-size tiers.**
+**Status: Explicitly postponed; the current persistent facades do not switch to flat small-size
+tiers. The fixed-layout lifecycle and cursor work proceeds first.**
 
 **The pattern.** Below a threshold, represent the collection as a flat array; promote to the tree
 representation at the threshold; demote on shrink with hysteresis. Precedents: Clojure's
@@ -821,64 +825,95 @@ array speed. Most real programs hold *many small* collections and *few large* on
   flat tier is just another node kind) keeps the check to the existing virtual dispatch rather than
   adding a branch per operation.
 
-**Verdict: Strong.** Apply first to `PersistentHashMap`/`PersistentHashSet`; the sequence facades
-already have a partial answer in the rope's chunking.
+**Verdict: Strong but postponed.** If reactivated, apply first to
+`PersistentHashMap`/`PersistentHashSet`; the sequence facades already have a partial answer in the
+rope's chunking. A re-entry benchmark must distinguish the gain from size selection from the gain
+already delivered by the fixed-layout frozen tier.
 
 ### The transient -> persistent -> frozen lifecycle
 
-**Status: Planned; no repository-owned frozen collection tier has shipped.**
+**Status: Planned; no public owner-token transient or repository-owned frozen collection tier has
+shipped. The [Axis 2 lifecycle plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) is the
+normative design.**
 
-**The idea.** Hybridize across *time* rather than size. The repository already ships two-thirds of
-the lifecycle: internal transient builders (HAMT bulk builder; rope and sorted-set/dictionary
-builders) cover the write-optimized unpublished phase, and the persistent structures cover the
-many-versions phase. The missing tier is **`Freeze()`**: an O(n) conversion to a read-optimized
-immutable snapshot for the "this exact version will be read millions of times" phase.
+**The correction.** Existing HAMT bulk construction, sorted builders, and rope/RRB frozen-prefix
+builders are staging or pattern-specific builders, not transients in the persistent-collection
+sense. They do not adopt an arbitrary persistent root, mutate uniquely owned paths, and publish the
+same nodes in O(1). The Ctrie's generation snapshot is a third mechanism again. Axis 2 keeps five
+terms distinct: staging builder, owner-token transient, persistent version, Ctrie snapshot view,
+and read-optimized frozen collection.
 
-**Strategy selection at freeze time** (the `FrozenDictionary` precedent - .NET 8 selects among
-specialized layouts by key type and count):
+**First lifecycle.** C# CHAMP map/set is the reference family:
 
-| Input | Frozen layout |
-| --- | --- |
-| Tiny (n <= ~10) | Flat array, linear or binary scan; no hashing at all |
-| General hashed | Dense open-addressed table sized offline; optional binary fuse filter (Graf & Lemire 2022) in front so negative lookups cost one filter probe |
-| String keys | Length/prefix bucketing before hashing (the `FrozenDictionary` trick) |
-| Sorted | Packed sorted array with Eytzinger layout; optionally a PGM-index (Ferragina & Vinciguerra 2020) for very large n |
+```text
+Persistent --O(1) ToTransient--> single-owner Transient --O(1) Persist--> Persistent
+Persistent --O(n) Freeze-------> fixed-layout Frozen --O(n) ToPersistent--> Persistent
+```
 
-**Contract decisions.** Frozen types are *separate types*, not a hidden tier: their persistent
-update operations either do not exist or are documented O(n) (thaw + edit). Conversions both ways
-are O(n); `Freeze()` on an already-frozen instance is identity. This keeps the persistent types'
-complexity table honest and makes the lifecycle explicit in signatures.
+The first transient is one-way. `Persist()` seals its edit token, publishes without traversing the
+graph, and invalidates the mutable object. Edits mutate only nodes owned by the active token and
+path-copy shared/sealed nodes. A later reusable owner-token builder, if justified, is a separate
+surface rather than a semantic change to the existing staging builders.
 
-**Verdict: Strong.** Together with size tiers, this attacks both regimes where persistent
-collections currently concede to mutable ones - tiny collections and read-forever snapshots.
+The first frozen types are separate `FrozenHashMap<TKey, TValue>` and `FrozenHashSet<T>` types with
+no update-shaped API. They use one offline-built general hash layout for every count and key type,
+preserve comparer identity and stored representatives, enumerate in canonical CHAMP trie order
+regardless of construction path, and perform no library-controlled allocation on lookup (user
+comparer callbacks remain outside that guarantee). Frozen-to-persistent conversion is visibly O(n);
+`Freeze()` on an already-frozen value is identity.
+
+**Deliberate non-adaptivity in v1.** Tiny flat layouts, string prefix/length dispatch, integer-key
+routing, binary-fuse/ribbon filters, Eytzinger/PGM sorted layouts, and count-derived selectors are
+all postponed. Benchmarks may contain tiny and string datasets, but those are workloads, not
+permission to select a representation. This isolates the value of the temporal lifecycle before
+combining it with size or key specialization.
+
+**Verdict: Strong.** Build the C# CHAMP transient and fixed-layout frozen hash tier behind separate
+semantic, failure-atomicity, retained-memory, lookup, construction, and break-even gates. Evaluate
+RRB transients, Ctrie snapshot-to-frozen conversion, and other frozen families only after that
+reference contract settles.
 
 ### Cursor / zipper over the sequence family
 
-**Status: Planned; the current rope and deque APIs do not expose version-bound cursors.**
+**Status: Planned; the current sequence APIs expose no editable version-bound cursor. The
+[Axis 2 cursor plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) supersedes proposal A3's
+original path-stack sketch.**
 
-**The idea.** Self-adjustment is impossible under persistence (below), but *per-consumer* locality
-is not: a cursor is a value holding the root-to-position path (plus the current chunk for
-`Rope<T>`), making reads and edits *near the last touch point* O(1) amortized instead of
-O(log n). Sequential typing into a rope-backed text buffer - the dominant editor workload - becomes
-O(1) per keystroke; the cursor's edit returns the new version plus a refreshed cursor.
+**The correction.** A retained path provides O(log n) initial descent, O(1) movement inside a
+chunk, and O(1) amortized sequential movement, but rebuilding a canonical immutable root after an
+edit is O(log n). A `readonly struct` also does not make an arbitrary-depth path allocation-free.
+The API must therefore choose honestly between:
 
-**Why persistence makes this clean.** In a mutable tree, cursor invalidation is the hard problem.
-Here a cursor is bound to the version it was created against, which is immutable - so a stale
-cursor is never *wrong*, merely a cursor into an older version. The natural API returns
-`(NewVersion, NewCursor)` pairs from cursor edits; committing to a `readonly struct` cursor keeps
-it allocation-free on the stack.
+1. a persistent zipper as the working version, with explicit O(log n) `Snapshot()`; or
+2. a hybrid `Rope<T>` root that can hold left tree + bounded focus + right tree and canonicalizes
+   lazily for nonlocal operations.
 
-**Scope.** `Rope<T>` first (text editing is the motivating consumer), then `FingerTreeDeque<T>` and
-`MeasuredRope`. The measured variant's cursor can also carry the accumulated left measure, giving
-O(1) "current line/column" during sequential edits - a feature editors ask for constantly.
+The C# design begins with an instrumented spike of both. The conservative contract makes cursor
+edits return another cursor and makes dirty `Snapshot()` O(log n), while repeated clean snapshots
+are cached O(1). The focused-root alternative earns a `(new Rope, new cursor)` contract only if it
+does not regress ordinary rope workloads.
 
-**Verdict: Strong.** No new core, high leverage for the existing rope family, and it is the honest
-substitute for self-adjusting structures. Already scheduled as the
-[2026-07-09 proposal](../proposals/new-data-structures-2026-07-09.md)'s item A3 (C#-first, with the
-Editor sample rewritten on it); this entry adds the rope-chunk cursor, the version-bound validity
-argument, and the accumulated-left-measure feature to that item's design space.
+**Gap semantics.** The cursor denotes a boundary `0..Count`. Previous/next peek and movement,
+insert, backspace/delete-next, replace-next, and absolute seek all have unambiguous boundary
+behavior. Every cursor owns its immutable version/context; an old cursor stays valid and editing it
+creates a branch. There is no automatic redirection to a newer rope and no arbitrary-version
+bookmark rebase.
+
+**Scope.** `Rope<T>` first, then `MeasuredRope`; the Editor/Tour samples become the first consumers.
+The measured cursor exposes measures before/after the gap. Newline count gives a line number but
+not a column, so O(1) line-and-column requires a richer law-tested text-extent monoid. Deque follows
+only after the rope representation settles. Editable RRB, reversible-deque, raw-FingerTree, and
+Tungsten cursors remain consumer-gated.
+
+**Verdict: Strong.** It is the honest per-consumer substitute for self-adjusting shared state, but
+shipment is gated on model histories, retained-version branching, chunk/seam boundaries,
+noncommutative measures, allocation/node-visit counters, and a material win over indexed rope
+edits. It does not depend on the range-update sequence.
 
 ### Key-type-specialized map construction
+
+**Status: Explicitly postponed.** The Patricia types remain explicit and no general factory chooses
+a core from runtime key type.
 
 **The idea.** A factory-level hybrid: integer keys route to the Patricia trie, byte-comparable keys
 could route to an adaptive-radix-flavored ordered trie (ART; Leis, Kemper & Neumann, ICDE 2013 -
@@ -892,8 +927,9 @@ documentation-level decision table ("int keys -> `PersistentIntMap`; need orderi
 on strings -> ART; otherwise -> `PersistentHashMap`"), reserving the runtime hybrid for a future
 `object`-keyed dynamic scenario if one ever appears.
 
-**Verdict: Plausible,** in the separate-types form. The ART core itself is a meaningful project;
-gate it on a consumer with real prefix-query or byte-ordered-key needs.
+**Verdict: Plausible but postponed,** in the separate-types form. The ART core itself is a
+meaningful project; gate it on a consumer with real prefix-query or byte-ordered-key needs after the
+existing Patricia option has been considered explicitly.
 
 ### Self-adjusting structures: the recorded rejection
 
@@ -1062,19 +1098,30 @@ Future work on them is ordinary hardening, measurement, and demand-driven portin
 For work that has not shipped, continue applying the derived catalog's parity-economics rule: stage
 a C# reference first, and promote it only with proven value. Items shared with the
 [2026-07-09 proposal](../proposals/new-data-structures-2026-07-09.md) keep that proposal's scheduling
-slot. The remaining plausible work is sequenced as follows:
+slot unless a later dedicated plan says otherwise. The
+[Axis 2 plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) now owns lifecycle/cursor detail.
+The remaining plausible work is sequenced as follows:
 
-1. **Size tiers + `Freeze()`** for the HAMT family. Begin with the small-size benchmark suite
-   (n in 1..64 versus `Dictionary`, `FrozenDictionary`, and `ImmutableDictionary`) so measurements
-   fix the thresholds.
-2. **Range-update sequence**, coordinated with the proposal's A3 cursor work. Review the measure-action
-   interface before committing the representation; the styled-text sample depends on this decision.
-3. **Cursor / zipper** over rope and deque, in the proposal's A3 slot and validated against editor
-   navigation histories.
-4. **Order-maintenance list**, only when a concrete client needs insertion-stable positional handles.
-5. **Persistent chunked bitset**, gated by a workload where measured-tree composition is insufficient.
-6. **Key-type-specialized factories**, justified by profiles after the Patricia family is considered.
-7. **Styled-text rope sample**, after the range-update and cursor foundations settle.
+1. **Axis 2 contract lock**: exact builder/transient/persistent/frozen vocabulary, consuming
+   transient publication, gap-cursor semantics, benchmark skeletons, and complexity review.
+2. **C# CHAMP owner-token transient**, with O(1) adoption/publication counters, retained-version
+   isolation, exception injection, and map/set semantic parity.
+3. **C# rope cursor representation spike**, comparing an explicit O(log n) zipper snapshot with a
+   focused-root Rope hybrid before locking the public complexity surface.
+4. **Fixed-layout frozen hash bake-off and C# map/set MVP**, using one general layout for all counts
+   and key types; ship only behind named lookup/enumeration/memory and break-even gates.
+5. **C# positional Rope cursor**, followed by the measured/text cursor after the positional
+   contract stabilizes, then Editor/Tour integration (both samples currently use measured text).
+6. **Range-update sequence**, independently reviewing and law-testing the measure-action interface.
+   It is not a cursor prerequisite; the later styled-text sample depends on both tracks.
+7. **Order-maintenance list** and **persistent chunked bitset**, each only for a concrete client not
+   served by existing composition.
+8. **Styled-text rope sample**, after cursor and range-update foundations settle.
+
+Automatic size tiers, count/key-specific frozen strategies, key-type-specialized factories, and
+unrequested sequence cursor families are postponed rather than placed in this active sequence.
+They require a named consumer or benchmark demonstrating that the fixed general representation is
+the bottleneck.
 
 The rejected structures remain rejected; none should silently re-enter the schedule without new
 evidence addressing the objection recorded in its entry.
@@ -1123,7 +1170,10 @@ catalog's summary alone.
   CHAMP's equality/diff entry here is the core-level realization of that catalog's top-ranked gap.
 - [Next data structures proposal (2026-07-09)](../proposals/new-data-structures-2026-07-09.md) -
   the original committed slate this catalog complements. Patricia and RRB are now implemented;
-  the cursor/zipper retains the proposal's planned slot.
+  its cursor/zipper item is historical and refined by the Axis 2 plan.
+- [Axis 2 lifecycle and sequence-cursor plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) -
+  the normative C#-first state machine, API sketches, complexity corrections, benchmark gates,
+  deferrals, and rollout for the active lifecycle/cursor work.
 - [Data structure catalog](data-structure-catalog.md) - the concise shipped-surface index. Implemented
   entries here retain frontier design rationale while their public entry points belong in that index.
 - [Porting and semantic parity](../guides/porting-and-semantic-parity.md) - the parity workflow a
