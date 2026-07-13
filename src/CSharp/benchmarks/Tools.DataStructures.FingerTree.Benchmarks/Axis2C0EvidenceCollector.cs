@@ -156,7 +156,9 @@ internal static class Axis2C0EvidenceCollector
             // Fill the active window and the left carry to one element before a flush. Every child
             // must then pay its own boundary repair; potential consumed in one branch cannot pay for
             // a sibling.
-            var primingCount = checked(focusCapacity + flushSize - 1);
+            // A nonempty source cursor starts with a full active focus. Each insertion therefore
+            // spills one element into the near carry; K - 1 edits leave the exact pre-flush state.
+            var primingCount = flushSize - 1;
             for (var index = 0; index < primingCount; index++)
                 parent = parent.Insert(-index - 1);
 
@@ -195,7 +197,7 @@ internal static class Axis2C0EvidenceCollector
         {
             var source = Rope<int>.Create(Enumerable.Range(0, documentSize).ToArray());
             var parent = source.GetClassCursorPrototype(documentSize / 2, focusCapacity, flushSize);
-            for (var index = 0; index < focusCapacity + flushSize - 1; index++)
+            for (var index = 0; index < flushSize - 1; index++)
                 parent = parent.Insert(-index - 1);
 
             var children = new RopeCursorPrototype<int>[branchCount];
