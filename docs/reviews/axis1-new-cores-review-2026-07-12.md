@@ -7,6 +7,14 @@
   safety of the "Axis 1: New Cores" from the [frontier structure catalog](../reference/frontier-structure-catalog.md),
   across C, C++, C#, Haskell, Kotlin, and Rust; the fix applied during this review
 
+> **Current-state note (verified 2026-07-12): resolved, then superseded by a fresh review.** Every
+> finding in this report's original follow-up list is closed by the commits and live implementation
+> evidence in [Remediation status](#remediation-status-2026-07-12), including Kotlin Ctrie RDCSS and
+> contraction (`87b763f`), the six-language Merkle vector (`a5e63c0`), structural Patricia algebra
+> (`3e23cf4`), the RRB contract (`bae48c0`), and five-port CHAMP validators (`dfa89d7`). The later
+> [round-2 report](axis1-new-cores-review-round2-2026-07-12.md) is the authoritative review of that
+> remediated state; do not treat the historical findings below as open work.
+
 ## Scope
 
 This review covers the cores that shipped after the [2026-07-11 review](cross-language-implementation-review-2026-07-11.md)

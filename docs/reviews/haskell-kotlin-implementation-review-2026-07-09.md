@@ -5,6 +5,16 @@
 - Audience: Maintainers of the Haskell and Kotlin ports
 - Scope: Correctness, semantic parity, language-idiom soundness, and API quality of the Haskell and Kotlin workspaces; fixes applied; deferred follow-ups
 
+> **Current-state note (verified 2026-07-12): all four deferred groups are resolved.** The
+> historical parity and follow-up sections below describe reviewed HEAD `55457de`; the
+> [resolution addendum](#resolution-addendum--2026-07-10) records measured Haskell ropes and
+> intervals (`1640a68`), Kotlin's persistent measured-tree graduation (`a86ce83`), Haskell
+> strictness/single-pass HAMT adjustment (`524d193`), and the corresponding stress and structural
+> coverage. The live implementations are indexed by the
+> [Haskell FingerTree README](../../src/Haskell/FingerTree/README.md) and the
+> [Kotlin FingerTree README](../../src/Kotlin/FingerTree/README.md); the old deferred list is not
+> current work.
+
 ## Summary
 
 The third and final installment of the 2026-07-09 cross-language review, completing coverage of

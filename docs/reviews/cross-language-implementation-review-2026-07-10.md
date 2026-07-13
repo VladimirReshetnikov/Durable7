@@ -6,6 +6,14 @@
 - Scope: Correctness, semantic parity, and complexity parity of the FingerTree, HAMT, Tungsten, and
   Numerics families across C, C++, C#, Haskell, Kotlin, and Rust; fixes applied during this review
 
+> **Current-state note (verified 2026-07-12): all actionable backlog is resolved.** “Recorded, not
+> fixed/applied” and “Open items” below describe the reviewed HEAD, not the present tree. The
+> [resolution addendum](#resolution-addendum--2026-07-10) maps every item to its implementation
+> commit: C structural search (`a1f3ad0`), Rust interval/set descent (`19848eb`), C++ reversible
+> traversal (`aae1f6d`), Haskell logarithmic bounds (`58c300f`, `e05b76e`), Kotlin facade completion
+> (`85da13a`), Numerics hot paths (`7115a65`), and C# transient HAMT construction (`c092016`).
+> Deliberate language-specific design boundaries identified there remain contracts, not pending fixes.
+
 ## Method
 
 Nine parallel deep-review passes covered every workspace, each instructed to report only findings it

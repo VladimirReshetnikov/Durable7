@@ -5,6 +5,14 @@
 - Audience: Maintainers of the C and C++ ports
 - Scope: Correctness, memory safety, semantic parity, and API quality of the C and C++ workspaces; fixes applied; deferred follow-ups
 
+> **Current-state note (verified 2026-07-12): all deferred follow-ups are resolved.** The original
+> backlog below is a historical snapshot of HEAD `29ea8e1`; its seven groups were subsequently
+> implemented and validated as recorded in the [resolution addendum](#resolution-addendum--2026-07-10).
+> Representative implementation evidence is the C measured-search and facade work in
+> [`fingertree.c`](../../src/C/FingerTree/src/fingertree.c) (`e374c12`, `ca5041d`) and the C++
+> iterator/cost work in [`reversible_deque.hpp`](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/reversible_deque.hpp)
+> (`29f1130`, `6120df1`). None of this report's “deferred” labels denotes current pending work.
+
 ## Summary
 
 The companion to the [C#/Rust review](csharp-rust-implementation-review-2026-07-09.md), run the

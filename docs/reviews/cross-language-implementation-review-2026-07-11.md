@@ -6,6 +6,13 @@
 - Scope: Correctness, semantic parity, and complexity parity of the FingerTree, HAMT, Tungsten, and
   Numerics families across C, C++, C#, Haskell, Kotlin, and Rust; fixes applied during this review
 
+> **Current-state note (verified 2026-07-12): the three-item recorded backlog is resolved.** Rust and
+> C++ now have transient HAMT bulk builders (`c3f7ce6`, `15772f1`), Kotlin sorted bounds use one
+> guided O(log n) descent (`832dd1b`), and the allocation-free C# read guard rejects repeatable
+> allocations while filtering one-off tiered-JIT/OSR noise (`2b16781`). See the
+> [resolution addendum](#resolution-addendum--2026-07-12) and live source links there. The original
+> “not fixed this round” text remains below solely as review history.
+
 ## Method
 
 Seven parallel deep-review passes covered every workspace: C# FingerTree; C# HAMT + Tungsten +
@@ -234,3 +241,34 @@ Each pass listed the areas it re-derived and found correct; the recurring, load-
 - Kotlin: `build.ps1` compiles all three workspaces; all executable tests pass (exit 0).
 - Rust: workspace suite passes (81 tests across the three crates).
 - C++: FingerTree CTest suite passes (18 tests); Tungsten CTest suite passes.
+
+## Resolution addendum — 2026-07-12
+
+This addendum preserves the original review and its contemporaneous “not fixed this round” wording
+while recording the subsequently shipped state. **All three recorded backlog items are resolved.**
+
+1. **Transient HAMT bulk-builder parity — resolved by `c3f7ce6` (Rust) and `15772f1` (C++).**
+   Rust exposes [`BulkBuilder`](../../src/Rust/Hamt/src/lib.rs), routes map/set bulk construction
+   through it, and uses detached immutable freezes; the builder and snapshot-isolation regressions
+   live in the same module. C++ exposes `persistent_hash_map::bulk_builder` in
+   [`persistent_hash_map.hpp`](../../src/Cpp/Hamt/include/Tools/DataStructures/Hamt/persistent_hash_map.hpp),
+   routes range factories and set intersection through it, and covers leaf, collision, bitmap,
+   replacement, snapshot, and scale paths in
+   [`persistent_hamt_tests.cpp`](../../src/Cpp/Hamt/tests/persistent_hamt_tests.cpp). The Tungsten
+   association rebuild paths in both languages consume the corresponding bulk construction path.
+2. **Kotlin logarithmic sorted bounds — resolved by `832dd1b`.**
+   [`Sorted.kt`](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Sorted.kt) expresses
+   lower/upper bounds as monotone-prefix searches, while
+   [`Core.kt`](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Core.kt) delegates
+   `prefixLength` to one measured-tree root-to-leaf descent. Counting-comparator gates over 65,536
+   elements in the FingerTree tests distinguish this O(log n) path from the former O(log² n)
+   binary search over logarithmic indexing.
+3. **C# allocation-read guard flake — resolved by `2b16781`.**
+   [`AllocationFreeReadTests.cs`](../../src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/AllocationFreeReadTests.cs)
+   still uses the tight 256-byte ceiling, but now measures three post-warmup passes and takes their
+   minimum. A real per-read allocation appears in every pass and still fails; a one-time tiered-JIT
+   or OSR transition under machine load no longer creates a false failure. No recurrence is recorded
+   after that focused de-flake.
+
+These resolutions are independent of the later Axis 1 work: they modify the pre-existing collection
+families and remain present in the current tree.

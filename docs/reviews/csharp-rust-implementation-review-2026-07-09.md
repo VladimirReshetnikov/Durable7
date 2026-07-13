@@ -5,6 +5,15 @@
 - Audience: Maintainers of the C# reference libraries and the Rust ports
 - Scope: Correctness, semantic parity, API quality, and test coverage of the C# and Rust workspaces; fixes applied; deferred follow-ups
 
+> **Current-state note (verified 2026-07-12): all seven deferred groups are resolved.** The
+> “remaining” and “deferred” passages below describe reviewed HEAD `2c7b1f2`. The
+> [resolution addendum](#resolution-addendum--2026-07-10) records the shipped Rust FingerTree
+> completion (`ac16eed`), C# Numerics contract work (`44a1b6a`, `20eb680`, `b8c580c`), and coverage
+> closure (`3303967`, `129522c`). Current implementations are indexed by the
+> [Rust FingerTree README](../../src/Rust/FingerTree/README.md) and the
+> [C# Numerics overview](../../src/CSharp/docs/Numerics/overview.md); none of the historical
+> follow-up list is still pending.
+
 ## Summary
 
 A full-depth review of the C# workspaces (Numerics, HAMT, FingerTree, Tungsten — the semantic
