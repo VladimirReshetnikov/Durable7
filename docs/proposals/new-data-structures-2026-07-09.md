@@ -1,12 +1,17 @@
 # Proposal: Next Data Structures for the Repository
 
-- Status: Proposal — nothing here is committed work
+- Status: Historical, partially realized proposal — not the current execution schedule
 - Created (UTC): 2026-07-09T00:00:00Z
 - Repository HEAD: 7ccfa24e0b6444de950aef69c7b2bb485bab41f2
-- Audience: Vladimir and maintainers deciding what to build next
+- Audience: Maintainers studying the 2026-07-09 slate and its later disposition
 - Scope: A prioritized slate of new structures and API additions, building on the
   [derived-structure catalog](../reference/derived-structure-catalog.md) and on gaps observed
   during the 2026-07-09 [C#/Rust implementation review](../reviews/csharp-rust-implementation-review-2026-07-09.md)
+
+> **Current disposition:** A2's structural equality/diff work and C1's Patricia family have shipped.
+> The [Axis 2 final plan](axis2-lifecycle-and-sequence-cursors.md) supersedes A3's cursor sequencing
+> and sample integration. Consult the current derived/frontier catalogs before reactivating any
+> remaining item; the body below preserves proposal-time rationale and order.
 
 ## Framing
 
@@ -31,7 +36,7 @@ new family, and (D) numerics extensions. Within each tier, items are ordered by 
 > **Current-state terminology note (2026-07-12):** the shipped HAMT bulk builders are staging
 > builders, not owner-token transients. The genuine transient -> persistent -> frozen lifecycle is
 > specified separately by the
-> [Axis 2 lifecycle plan](axis2-lifecycle-and-sequence-cursors.md); this historical item must not be
+> [Axis 2 final lifecycle plan](axis2-lifecycle-and-sequence-cursors.md); this historical item must not be
 > used to infer O(1) persistent-root adoption or publication.
 
 Already identified as the two top recurring gaps in the catalog. `Update(key, func)` halves every
@@ -67,23 +72,25 @@ lack.
 
 ### A3. FingerTree cursor / zipper over the measured tree
 
-> **Superseded design detail (2026-07-12):** the
-> [Axis 2 cursor plan](axis2-lifecycle-and-sequence-cursors.md) is authoritative. A path stack alone
+> **Final design disposition (2026-07-13):** the
+> [Axis 2 final cursor plan](axis2-lifecycle-and-sequence-cursors.md) is authoritative. A path stack alone
 > cannot both return a canonical immutable rope after every edit and preserve an amortized O(1)
-> local-edit claim: rebuilding the root is O(log n). The C# work therefore begins with a
-> zipper-as-version versus focused-root spike, uses gap positions, and gives dirty snapshot costs
-> explicitly.
+> local-edit claim: rebuilding the root is O(log n). C0 therefore begins with one minimally complete
+> zipper-as-version, uses gap positions, proves the applicable history class, and gives dirty snapshot
+> costs explicitly. A focused-root spike occurs only if snapshot-after-every-edit is a predeclared
+> required workload and canonicalization is the measured blocker; C0 may also defer the public cursor.
 
 Repeated local edits via `Split`/`Concat` pay `O(log n)` each. A finger-tree zipper retains locality,
 but the working zipper and a canonical `Rope<T>` are different representations: nearby movement
 and focus edits can be O(1) amortized while rebuilding the rope spine remains O(log n). The Axis 2
-spike decides whether that rebuild is an explicit `Snapshot()` boundary or a lazily normalized
-focused-root variant inside `Rope<T>`.
+baseline makes that rebuild an explicit `Snapshot()` boundary; a lazily normalized focused-root
+variant inside `Rope<T>` is only the conditional escalation described above.
 
 - Surface: C# `RopeCursor<T>` first, with gap movement/editing and explicit snapshot; measured/text
   cursor second. Deque and raw-FingerTree surfaces are consumer-gated.
-- Staging: C# first with the Editor/Tour samples as consumers; port only after the API and measured
-  complexity stabilize.
+- Staging: C# first, with Editor/Tour as future measured-text integration targets rather than current
+  localized-edit consumers; port only after the positional and measured-text gates clear and the API
+  and proved complexity scope stabilize.
 - Risk: medium-high — the representation choice affects allocation, snapshot cost, cached
   normalization, structural sharing, and every ordinary Rope operation if focused roots are used.
 
@@ -181,13 +188,18 @@ the repository. A Rust port of `UInt256/512/1024` (+signed) is the natural first
 interfaces, `MinValue / -1` policy, hex/format surface), so ports don't inherit unsettled
 contracts.
 
-## Recommended order
+## Historical recommended order
+
+> **Current sequencing note (2026-07-13):** This list records the proposal's original slate. The
+> [Axis 2 final plan](axis2-lifecycle-and-sequence-cursors.md) now owns A3's C#
+> select/escalate/defer sequence and its later Editor/Tour integration; the slot below is not an
+> unconditional cursor or sample commitment.
 
 1. **A1** (HAMT `Update`/`GetOrAdd` + builder) — unblocks B1/B3 and speeds every workspace.
 2. **B2** (insertion-ordered set) — cheapest new family; all substrate shipped; high everyday value.
 3. **B1** (hash bag) — small, symmetric, immediately useful.
 4. **A2 phase 1** (HAMT `MapEquals` + `Diff`) — highest-leverage core work; phases 2–3 follow demand.
-5. **A3** (cursor/zipper) + Editor sample rewrite — C#-first.
+5. **A3** (cursor/zipper) + Editor sample rewrite — historical C#-first slot, superseded by Axis 2.
 6. **C1** (Patricia trie family) — the one big new structure; C#-first with a consumer.
 7. **D1/D2** (BigRational, modular arithmetic) — as numerics interest dictates.
 8. **B3/B4, D3** — opportunistic.
@@ -200,8 +212,8 @@ Items A4 (parity completions) ride along with ongoing maintenance and need no sc
   space this proposal selects from; verdicts there are not repeated here.
 - [Frontier structure catalog](../reference/frontier-structure-catalog.md) (added 2026-07-11) —
   surveys the candidate space *beyond* composition (new cores, hybrid representation tiers, niche
-  specializations); overlapping items (C1 Patricia trie, A3 cursor/zipper, the RRB deferral) keep
-  this proposal's scheduling, with added design detail there.
+  specializations). Patricia and RRB now follow their current-state catalog entries; the Axis 2 final
+  plan explicitly supersedes this proposal's A3 cursor/zipper sequencing and sample-integration slot.
 - [C#/Rust implementation review (2026-07-09)](../reviews/csharp-rust-implementation-review-2026-07-09.md)
   — source of the parity-gap and testing-pattern observations cited above.
 - [Porting and semantic parity](../guides/porting-and-semantic-parity.md) — the bill every shipped

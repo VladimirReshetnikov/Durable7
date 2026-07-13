@@ -34,15 +34,16 @@ at all. This proposal is therefore structured as two decoupled deliverables:
 Equally important is what this proposal does **not** deliver, stated up front rather than discovered later:
 
 - **The edit–snapshot loop is not accelerated, outside the rope family.** The BCL's
-  `ImmutableList<T>.Builder` and `ImmutableSortedSet<T>.Builder` are *transient trees*: they adopt the
+  `ImmutableList<T>.Builder` and `ImmutableSortedSet<T>.Builder` are *reusable owner-token tree builders*:
+  they adopt the
   immutable value's own nodes (`ToBuilder()` is O(1)), mutate uniquely owned nodes in place (O(log n) per
   edit), and refreeze in O(1) by flipping ownership. The builders proposed here are *staging* builders: they
   rebuild on a dirty freeze — with one exception, the append-only rope builders, whose frozen-prefix design
   keeps snapshots at O(k + log n). For any other workload that alternates small edit batches with snapshots,
   the persistent operations you already have are asymptotically better than these builders, and the
-  complexity tables below say so explicitly. A transient tier over this library's lazy-memoized cores is
-  deferred indefinitely and may prove not worth building
-  (see [Owner-Token Transients](#owner-token-transients-status-and-feasibility)).
+  complexity tables below say so explicitly. A reusable owner-token builder tier over this library's
+  lazy-memoized cores is deferred indefinitely and may prove not worth building (see
+  [Reusable Owner-Token FingerTree Builder](#reusable-owner-token-fingertree-builder-status-and-feasibility)).
 
 - **No builder is added for API symmetry.** The applicability review found that most of the collection family
   is already served by one-pass `CreateRange` factories and, for text, by the existing `RopeBuilder`. Builders
@@ -108,10 +109,10 @@ The BCL has two distinct builder engines, and the distinction drives everything 
 | BCL builder | Engine | `ToBuilder()` | Per edit | `ToImmutable()` |
 | --- | --- | --- | --- | --- |
 | `ImmutableArray<T>.Builder` | Mutable array staging | O(n) copy | O(1)/O(n) | O(n) copy (or `MoveToImmutable` transfer) |
-| `ImmutableList<T>.Builder`, `ImmutableSortedSet<T>.Builder`, `ImmutableSortedDictionary<…>.Builder` | **Transient tree** (adopts the immutable value's own AVL nodes; mutates uniquely owned nodes in place) | **O(1)** | O(log n) | **O(1)** (ownership flip) |
+| `ImmutableList<T>.Builder`, `ImmutableSortedSet<T>.Builder`, `ImmutableSortedDictionary<…>.Builder` | **Reusable owner-token tree builder** (adopts the immutable value's own AVL nodes; mutates uniquely owned nodes in place) | **O(1)** | O(log n) | **O(1)** (ownership flip) |
 
 This proposal adopts the **first** model (staging + rebuild-on-dirty-freeze, with one structural exception for
-ropes) and defers the second. That choice is deliberate: the transient model requires mutating the same node
+ropes) and defers the second. That choice is deliberate: the reusable owner-token model requires mutating the same node
 types the immutable values share, and this library's cores keep their middles behind lazy memoized suspensions
 with cached measures — exactly the machinery in-place mutation endangers. The staging model has the same
 publication safety as `CreateRange`: immutable values never share mutable state with a builder.
@@ -141,7 +142,7 @@ these recommendations.
 | Build incrementally when the input arrives piecemeal (append-heavy) | Rope/measured-rope builder (`RopeBuilder` for text) | Amortized O(1) staged appends; no boundary-chunk copies; frozen-prefix freeze is O(appended + log n). |
 | Many set/map mutations, then one snapshot | Sorted builder | O(log n) staged edits, one O(n) trust-sorted freeze; avoids m persistent-edit allocations and `CreateRange`'s redundant re-sort. |
 | Merge a small batch m into a large collection (m ≪ n) | Immutable `AddRange` / `Add` / `SetItem` | O(m log n) beats any rebuild-on-freeze builder, whose dirty freeze alone is O(n) or worse. |
-| Alternate small edit batches with frequent snapshots | Persistent operations directly (sorted family); rope builder for append-only loops | Sorted staging builders cost O(E·log n + B·n) vs O(E·log n) persistent with free snapshots — the transient-builder workload the first wave does not serve. The frozen-prefix rope builder is the exception at O(E + B·log n). |
+| Alternate small edit batches with frequent snapshots | Persistent operations directly (sorted family); rope builder for append-only loops | Sorted staging builders cost O(E·log n + B·n) vs O(E·log n) persistent with free snapshots — the reusable-owner-token-builder workload the first wave does not serve. The frozen-prefix rope builder is the exception at O(E + B·log n). |
 | Repeated snapshot of an unchanged builder | Any builder | O(1): the caching contract returns the same instance. |
 
 ## Builder Taxonomy
@@ -164,13 +165,15 @@ The rope builders extend this one structural step further: the cache *is* the bu
 freeze does not discard staging work already published (see
 [the frozen-prefix design](#ropetbuilder-and-measuredropebuilder-append-only-b2)).
 
-### Owner-token transient tree builder
+### Reusable owner-token tree builder
 
 Mutable internal nodes tagged with a builder identity; edits mutate in place only when the tag matches,
-otherwise path-copy; freeze clears tags. This is the `ImmutableList<T>.Builder` model. It is **deferred
-indefinitely**, with its hazards and feasibility doubts recorded in
-[Owner-Token Transients](#owner-token-transients-status-and-feasibility). No part of Part I or Part II depends
-on it.
+otherwise path-copy. Publication seals the current token in O(1); a reusable builder would continue under a
+fresh token, never clear tags by walking the graph. This lazy-FingerTree Phase D is **deferred indefinitely**,
+with its hazards and feasibility doubts recorded in
+[Reusable Owner-Token FingerTree Builder](#reusable-owner-token-fingertree-builder-status-and-feasibility).
+It is a repeated-snapshot builder, not Axis 2's one-way consuming `Transient`; no part of Part I or Part II
+depends on it.
 
 ## Non-Goals
 
@@ -184,7 +187,8 @@ The work proposed here must not:
   read surface is honest read-only interfaces, the mutation surface is class-declared (see the
   [interface rule](#interfaces-read-surface-only));
 - promise O(1) freeze after arbitrary edits, O(1) `ToBuilder()` (outside the rope family), or any acceleration
-  of the edit–snapshot loop — those belong to the deferred transient tier;
+  of the edit–snapshot loop — those belong to this proposal's deferred reusable-owner-token
+  lazy-FingerTree Phase D, not the independent eager-CHAMP Axis 2 transient track;
 - add a builder solely for API symmetry.
 
 ---
@@ -856,7 +860,7 @@ Estimates are velocity-independent (files, members, tests), per repository conve
 | **B1** | `SortedSet<T>.Builder`, `SortedDictionary<…>.Builder` (+ `partial` on owners, 2 files each) | `SortedBuilderBenchmarks` constants win over both baselines | ~6 files, **~30 public members** (all XML-documented; `CS1591` is an error), ~50–70 tests incl. model-based commands |
 | **B2** | `Rope<T>.Builder`, `MeasuredRope<…>.Builder` (frozen-prefix) | `RopeBuilderBenchmarks` | ~5 files, **~19 public members**, ~40 tests |
 | **C** | Deferred builders (deque, raw tree, bag, PQ, interval, indexed rope edits) | Adoption criteria + the per-builder evidence recorded above | per builder |
-| **D** | Owner-token transients | See below; may never run | — |
+| **D** | Reusable owner-token builder over the lazy FingerTree core | See below; may never run | — |
 
 ## Adoption Criteria
 
@@ -873,17 +877,19 @@ caller:
 Never for API symmetry. Every builder ships with snapshot-isolation, comparer/order-preservation,
 caching/version, fail-fast enumeration, and freeze-invariant tests before becoming public.
 
-## Owner-Token Transients: Status And Feasibility
+## Reusable Owner-Token FingerTree Builder: Status And Feasibility
 
 Nothing above depends on this tier. The repository-wide
-[Axis 2 lifecycle plan](../../../../docs/proposals/axis2-lifecycle-and-sequence-cursors.md) now owns
-the exact staging-builder/transient/persistent/frozen vocabulary and selects eager C# CHAMP, not the
-lazy FingerTree core, as the first owner-token experiment.
+[Axis 2 final lifecycle plan](../../../../docs/proposals/axis2-lifecycle-and-sequence-cursors.md) now
+owns the exact staging-builder/transient/persistent/frozen vocabulary. It keeps eager C# CHAMP—not
+the lazy FingerTree core—as the first transient candidate, behind T0 workload qualification and a
+production-representative T1 ownership kernel before any public T2 surface.
 
-An owner-token transient tags freshly built nodes with an edit identity, mutates in place on a token
-match, and path-copies otherwise. Publication must seal the token in O(1), not clear tags by walking
-the graph; a later transient treats every sealed-token node as shared. Its hazards in this lazy,
-measured library are structural, not incidental:
+This separate reusable builder would tag freshly built nodes with an edit identity, mutate in place on
+a token match, and path-copy otherwise. Publication must seal the token in O(1), not clear tags by
+walking the graph; the continuing builder rotates to a fresh token and treats every sealed-token node
+as shared. It is not Axis 2's one-way `Transient`. Its hazards in this lazy, measured library are
+structural, not incidental:
 
 - adopted nodes (from `ToBuilder`) are shared and may be reachable from **unforced suspensions captured by
   previously published values**; the ownership discipline that keeps every such node outside the mutable
@@ -895,9 +901,10 @@ measured library are structural, not incidental:
 - the payoff exists only for the edit–snapshot loop, whose staging-builder gap is quantified in the workload
   table — and whose rope-family instance is already solved by the frozen-prefix design.
 
-Phase D therefore runs only if `SnapshotBenchmarks` demonstrates a workload where the O(B·n) rebuild term is a
-measured, user-reported bottleneck that neither the persistent operations nor the frozen-prefix pattern
-serves — and it must be treated as potentially infeasible to verify, not merely expensive to build.
+This lazy-FingerTree Phase D therefore runs only if `SnapshotBenchmarks` demonstrates a workload where the
+O(B·n) rebuild term is a measured, user-reported bottleneck that neither the persistent operations nor the
+frozen-prefix pattern serves—and it must be treated as potentially infeasible to verify, not merely expensive
+to build. That decision does not defer or gate the separate eager-CHAMP T0/T1/T2 track owned by Axis 2.
 
 ## Resolved Design Questions
 
@@ -920,7 +927,7 @@ Decisions previously listed as open, now committed (rationales inline above):
    packing; post-construction persistent edits stay lazy as today.
 8. **Empty freeze under a custom comparer** — `Create(comparer)` equivalence; singleton only for the
    reference-default comparer.
-9. **`ToBuilder` cost honesty** — per-builder rows both directions; the "not the BCL transient model"
+9. **`ToBuilder` cost honesty** — per-builder rows both directions; the "not the BCL owner-token model"
    statement; workload guidance table.
 10. **Verb scheme** — one library-wide table; verbs from the closest mutable BCL analogue, preferring the
     immutable counterpart's verb where the operations correspond one-to-one (`Insert`, `Enqueue`,

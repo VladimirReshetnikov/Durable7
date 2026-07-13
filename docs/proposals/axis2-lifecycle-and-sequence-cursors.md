@@ -4,6 +4,8 @@
 - Repository HEAD: b600a208395fd16e73b620cfda4eca20d372bd75
 - Final synthesis (UTC): 2026-07-13T04:31:40Z
 - Repository HEAD (final synthesis): 6dbe754bd6166462beae226621511ddbcb24aaad
+- Final review closure (UTC): 2026-07-13T05:03:55Z
+- Repository HEAD (final review closure): 387e24c9ce07631a6fa331693e34bc25afb459be
 - Status: Final authoritative Axis 2 plan
 - Audience: Maintainers designing the next C# persistent-collection wave
 - Scope: Detailed C#-first plan for owner-token transients, persistent collections,
@@ -391,10 +393,11 @@ order. Equal-full-hash collision buckets and retained representatives are intent
 history-dependent in CHAMP.
 
 `CreateRange` is semantically equivalent to
-`PersistentHashMap.CreateRange(items, comparer).Freeze()`: it preserves first stored key/last value
-behavior and the resulting persistent version's traversal sequence. A fused implementation is
-allowed only if it produces that same sequence. `SnapshotView.Freeze()` is semantically equivalent
-to `snapshot.ToPersistentHashMap().Freeze()` rather than exposing Ctrie traversal order.
+`PersistentHashMap.CreateRange(items, comparer).Freeze()`: it preserves the first stored key and last
+distinct value; an equal incoming value retains the stored value representative. It also preserves
+the resulting persistent version's traversal sequence. A fused implementation is allowed only if it
+produces that same sequence. `SnapshotView.Freeze()` is semantically equivalent to
+`snapshot.ToPersistentHashMap().Freeze()` rather than exposing Ctrie traversal order.
 `ToPersistent` uses the canonical-topology bulk-construction path and preserves comparer identity;
 freezing the result must reproduce the frozen sequence, including collision-bucket order. Empty
 singleton reuse is allowed because it is an identity policy, not adaptive layout selection.
@@ -590,10 +593,12 @@ public sealed class RopeCursor<T>
 }
 ```
 
-The class is logically immutable: every operation returns a new cursor state. The sketch uses a
-class because the arbitrary-depth path/context and cached snapshot are reference-shaped; C0 may
-justify a small struct holding an immutable context reference, but no allocation claim follows from
-that spelling.
+The cursor is logically immutable: no operation changes the receiver's observable sequence,
+position, or version identity in place; navigation and editing return cursor values subject to the
+no-op identity rules below. `Snapshot()` may populate the shared version state's internal thread-safe
+memo without changing that logical value. The sketch uses a class because the arbitrary-depth path/
+context and cached snapshot are reference-shaped; C0 may justify a small struct holding an immutable
+context reference, but no allocation claim follows from that spelling.
 
 Identity rules are explicit:
 

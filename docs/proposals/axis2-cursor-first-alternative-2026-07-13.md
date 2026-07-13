@@ -1,19 +1,29 @@
-# Axis 2, Cursor-First: An Alternative Sequencing And Gating
+# Axis 2, Cursor-First: Historical Alternative Sequencing And Gating
 
-- Status: Alternative proposal — nothing here is committed work
+- Status: Historical alternative — incorporated with corrections into the authoritative final plan
 - Created (UTC): 2026-07-13T04:01:36Z
 - Repository HEAD: 4376db84b198ee5be7d3ee9dc62cb3e9c8b46149
-- Audience: Vladimir and maintainers deciding how to execute Axis 2
-- Scope: An alternative rollout of the same three Axis 2 deliverables (rope cursor, CHAMP transient,
+- Audience: Maintainers studying the review-time Axis 2 sequencing rationale
+- Scope: A historical alternative rollout of the same three Axis 2 deliverables (rope cursor, CHAMP transient,
   frozen hash tier) that re-sequences and re-gates them; it adopts the engineering of the
-  [Axis 2 lifecycle and sequence-cursor plan](axis2-lifecycle-and-sequence-cursors.md) and changes
-  only the order of execution and the evidence gates
+  [reviewed Axis 2 plan at `4376db8`](https://github.com/VladimirReshetnikov/DataStructures/blob/4376db84b198ee5be7d3ee9dc62cb3e9c8b46149/docs/proposals/axis2-lifecycle-and-sequence-cursors.md)
+  and changes only the order of execution and the evidence gates
+
+> **Current disposition (2026-07-13):** The
+> [Axis 2 final plan](axis2-lifecycle-and-sequence-cursors.md) is authoritative. It accepts cursor
+> priority, a frozen signal gate, and a proof obligation for branched cursor histories. It qualifies
+> the Editor/Tour as future integration targets rather than measured current consumers, replaces the
+> calendar-sized throwaway transient spike with T0 workload qualification plus a
+> production-representative T1 kernel, corrects the transient win regime, and rejects canonical
+> frozen enumeration order. The review-time argument below is preserved as rationale, not current
+> execution instruction.
 
 ## What this is and is not
 
 This is **not a competing design.** The transient owner-token mechanics, the frozen packed-CHAMP-order
 layout, the Ctrie `SnapshotView.Freeze()` addition, and the rope gap/zipper model in the
-[original plan](axis2-lifecycle-and-sequence-cursors.md) are all sound, and this alternative keeps
+[reviewed plan](https://github.com/VladimirReshetnikov/DataStructures/blob/4376db84b198ee5be7d3ee9dc62cb3e9c8b46149/docs/proposals/axis2-lifecycle-and-sequence-cursors.md)
+are all sound, and this alternative keeps
 them verbatim. It changes three things:
 
 1. **Order:** ship the rope cursor first, not fourth.
@@ -185,8 +195,8 @@ re-entry rule. The alternative changes sequencing and adds gates; it does not to
 
 ## References
 
-- [Axis 2 lifecycle and sequence-cursor plan](axis2-lifecycle-and-sequence-cursors.md) — the plan whose
-  designs this alternative adopts and re-sequences.
+- [Axis 2 final lifecycle and sequence-cursor plan](axis2-lifecycle-and-sequence-cursors.md) — the
+  authoritative synthesis that incorporates and corrects this alternative.
 - [Review of the Axis 2 plan](../reviews/axis2-lifecycle-and-cursors-review-2026-07-13.md) — the
   findings (F1 sequencing, F2 frozen risk, F3 branched-cursor gap, F4 transient win regime) this
   alternative operationalizes.

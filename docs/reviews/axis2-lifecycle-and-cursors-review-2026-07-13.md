@@ -1,17 +1,27 @@
 # Review: Axis 2 Lifecycle And Sequence-Cursor Plan
 
+- Status: Historical review — dispositioned in the authoritative final plan
 - Created (UTC): 2026-07-13T04:01:36Z
 - Repository HEAD (reviewed): 4376db84b198ee5be7d3ee9dc62cb3e9c8b46149
-- Audience: Maintainers deciding whether and how to execute the Axis 2 plan
-- Scope: A design review of [`docs/proposals/axis2-lifecycle-and-sequence-cursors.md`](../proposals/axis2-lifecycle-and-sequence-cursors.md)
-  — soundness, feasibility against the current C# representations, gaps and risks, and a
+- Audience: Maintainers studying the historical Axis 2 design review and its disposition
+- Scope: A design review of the
+  [`docs/proposals/axis2-lifecycle-and-sequence-cursors.md` revision at `4376db8`](https://github.com/VladimirReshetnikov/DataStructures/blob/4376db84b198ee5be7d3ee9dc62cb3e9c8b46149/docs/proposals/axis2-lifecycle-and-sequence-cursors.md)
+  — soundness, feasibility against the then-current C# representations, gaps and risks, and a
   sequencing/scoping recommendation. A companion re-sequenced alternative is proposed separately in
   [`docs/proposals/axis2-cursor-first-alternative-2026-07-13.md`](../proposals/axis2-cursor-first-alternative-2026-07-13.md).
+
+> **Final disposition (2026-07-13):** The
+> [Axis 2 final plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) incorporates this review's
+> cursor priority, frozen signal gate, branched-history proof obligation, transient workload
+> qualification, and documentation duties. It corrects the review's claims about the samples as
+> current consumers, a cheap calendar-sized transient spike, few-edit transient wins, canonical
+> frozen order, and measurement alone proving amortized branching. The findings below remain the
+> review of the pinned SHA, not the current execution plan.
 
 ## Overall assessment
 
 This is a strong, unusually honest plan, and its designs should be adopted. It correctly separates
-the four lifecycle states that were previously conflated (builder / transient / persistent / frozen /
+the five lifecycle states that were previously conflated (builder / transient / persistent / frozen /
 snapshot view), it retracts the naive "cursor makes a canonical rope reappear in O(1)" claim that the
 [2026-07-09 proposal's A3](../proposals/new-data-structures-2026-07-09.md) implied, it gates every
 speculative tier on measured evidence, and it defers automatic size-tiering and key-type dispatch
@@ -175,10 +185,10 @@ kept.
 
 ## Relationship to other documents
 
-- [Axis 2 lifecycle and sequence-cursor plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) —
-  the document under review.
-- [Axis 2 cursor-first alternative](../proposals/axis2-cursor-first-alternative-2026-07-13.md) — the
-  re-sequenced plan this review recommends.
+- [Axis 2 final lifecycle and sequence-cursor plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) —
+  the authoritative synthesis; this review examined its pinned earlier revision.
+- [Axis 2 cursor-first historical alternative](../proposals/axis2-cursor-first-alternative-2026-07-13.md) —
+  the review-time re-sequencing proposal incorporated with corrections by the final plan.
 - [Frontier structure catalog](../reference/frontier-structure-catalog.md) — the Axis 2 survey rows
   the plan refines.
 - [Next data structures proposal (2026-07-09)](../proposals/new-data-structures-2026-07-09.md) — item
