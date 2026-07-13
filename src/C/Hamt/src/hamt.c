@@ -840,28 +840,47 @@ size_t tds_hamt_map_debug_root_child_identities(
     return branch->node_count;
 }
 
-static bool tds_hamt_debug_validate_node(const tds_hamt_node *node, size_t *entry_count) {
+static bool tds_hamt_debug_hash_has_prefix(uint32_t hash, uint32_t prefix, uint32_t mask) {
+    return (hash & mask) == prefix;
+}
+
+static uint32_t tds_hamt_debug_next_prefix_mask(int shift) {
+    return shift >= 27 ? UINT32_MAX : (tds_hamt_bit(shift + TDS_HAMT_BITS_PER_LEVEL) - 1u);
+}
+
+static bool tds_hamt_debug_validate_node(
+    const tds_hamt_node *node,
+    int shift,
+    uint32_t prefix,
+    uint32_t prefix_mask,
+    size_t *entry_count) {
     if (node == NULL) {
         *entry_count = 0;
         return true;
     }
     if (node->kind == TDS_HAMT_NODE_LEAF) {
+        const tds_hamt_leaf_node *leaf = (const tds_hamt_leaf_node *)node;
         *entry_count = 1;
-        return node->subtree_count == 1;
+        return node->subtree_count == 1 &&
+            tds_hamt_debug_hash_has_prefix(leaf->hash, prefix, prefix_mask);
     }
     if (node->kind == TDS_HAMT_NODE_COLLISION) {
         const tds_hamt_collision_node *collision = (const tds_hamt_collision_node *)node;
         *entry_count = collision->count;
-        return collision->count >= 2 && node->subtree_count == collision->count;
+        return collision->count >= 2 && node->subtree_count == collision->count &&
+            tds_hamt_debug_hash_has_prefix(collision->hash, prefix, prefix_mask);
     }
 
     const tds_hamt_bitmap_node *branch = (const tds_hamt_bitmap_node *)node;
-    if ((branch->data_map & branch->node_map) != 0 ||
+    if (shift > 30 ||
+        (branch->data_map & branch->node_map) != 0 ||
         tds_hamt_popcount(branch->data_map) != branch->data_count ||
         tds_hamt_popcount(branch->node_map) != branch->node_count ||
         branch->data_count + branch->node_count == 0) {
         return false;
     }
+    const uint32_t next_mask = tds_hamt_debug_next_prefix_mask(shift);
+    const tds_hamt_inline_entry *data = tds_hamt_bitmap_data_const(branch);
     tds_hamt_node *const *children = tds_hamt_bitmap_children_const(branch);
     if (branch->data_count + branch->node_count < 2 &&
         !(branch->data_count == 0 && branch->node_count == 1 &&
@@ -869,14 +888,37 @@ static bool tds_hamt_debug_validate_node(const tds_hamt_node *node, size_t *entr
         return false;
     }
     size_t total = branch->data_count;
-    for (size_t index = 0; index != branch->node_count; ++index) {
-        size_t child_count = 0;
-        if (children[index]->kind == TDS_HAMT_NODE_LEAF ||
-            !tds_hamt_debug_validate_node(children[index], &child_count) ||
-            SIZE_MAX - total < child_count) {
+    size_t data_index = 0;
+    size_t child_index = 0;
+    for (int slot = 0; slot != TDS_HAMT_BRANCH_MASK + 1; ++slot) {
+        const uint32_t slot_bit = tds_hamt_bit(slot);
+        if (shift == 30 && slot > 3 && ((branch->data_map | branch->node_map) & slot_bit) != 0) {
             return false;
         }
-        total += child_count;
+        const uint32_t slot_prefix = prefix | ((uint32_t)slot << shift);
+        if ((branch->data_map & slot_bit) != 0) {
+            if (data_index >= branch->data_count ||
+                !tds_hamt_debug_hash_has_prefix(data[data_index].hash, slot_prefix, next_mask)) {
+                return false;
+            }
+            ++data_index;
+        }
+        if ((branch->node_map & slot_bit) != 0) {
+            size_t child_count = 0;
+            if (child_index >= branch->node_count ||
+                children[child_index]->kind == TDS_HAMT_NODE_LEAF ||
+                !tds_hamt_debug_validate_node(
+                    children[child_index], shift + TDS_HAMT_BITS_PER_LEVEL,
+                    slot_prefix, next_mask, &child_count) ||
+                SIZE_MAX - total < child_count) {
+                return false;
+            }
+            total += child_count;
+            ++child_index;
+        }
+    }
+    if (data_index != branch->data_count || child_index != branch->node_count) {
+        return false;
     }
     *entry_count = total;
     return node->subtree_count == total;
@@ -884,12 +926,15 @@ static bool tds_hamt_debug_validate_node(const tds_hamt_node *node, size_t *entr
 
 bool tds_hamt_map_debug_validate_canonical(const tds_hamt_map *map) {
     size_t entries = 0;
-    return map != NULL && tds_hamt_debug_validate_node(map->root, &entries) && entries == map->count;
+    return map != NULL &&
+        tds_hamt_debug_validate_node(map->root, 0, 0, 0, &entries) &&
+        entries == map->count;
 }
 
 static bool tds_hamt_debug_nodes_topology_equal(
     const tds_hamt_node *left,
-    const tds_hamt_node *right) {
+    const tds_hamt_node *right,
+    const tds_hamt_policy *policy) {
     if (left == NULL || right == NULL) {
         return left == right;
     }
@@ -902,7 +947,25 @@ static bool tds_hamt_debug_nodes_topology_equal(
     if (left->kind == TDS_HAMT_NODE_COLLISION) {
         const tds_hamt_collision_node *l = (const tds_hamt_collision_node *)left;
         const tds_hamt_collision_node *r = (const tds_hamt_collision_node *)right;
-        return l->hash == r->hash && l->count == r->count;
+        if (l->hash != r->hash || l->count != r->count) {
+            return false;
+        }
+        for (size_t left_index = 0; left_index != l->count; ++left_index) {
+            bool found = false;
+            for (size_t right_index = 0; right_index != r->count; ++right_index) {
+                if (tds_hamt_keys_equal(
+                        policy,
+                        l->entries[left_index].key,
+                        r->entries[right_index].key)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        return true;
     }
     const tds_hamt_bitmap_node *l = (const tds_hamt_bitmap_node *)left;
     const tds_hamt_bitmap_node *r = (const tds_hamt_bitmap_node *)right;
@@ -920,7 +983,8 @@ static bool tds_hamt_debug_nodes_topology_equal(
     tds_hamt_node *const *left_children = tds_hamt_bitmap_children_const(l);
     tds_hamt_node *const *right_children = tds_hamt_bitmap_children_const(r);
     for (size_t index = 0; index != l->node_count; ++index) {
-        if (!tds_hamt_debug_nodes_topology_equal(left_children[index], right_children[index])) {
+        if (!tds_hamt_debug_nodes_topology_equal(
+                left_children[index], right_children[index], policy)) {
             return false;
         }
     }
@@ -928,8 +992,8 @@ static bool tds_hamt_debug_nodes_topology_equal(
 }
 
 bool tds_hamt_map_debug_topology_equal(const tds_hamt_map *left, const tds_hamt_map *right) {
-    return left != NULL && right != NULL &&
-        tds_hamt_debug_nodes_topology_equal(left->root, right->root);
+    return left != NULL && right != NULL && tds_hamt_policies_compatible(left, right) &&
+        tds_hamt_debug_nodes_topology_equal(left->root, right->root, &left->policy);
 }
 
 tds_hamt_set tds_hamt_set_create(const tds_hamt_set_policy *policy) {

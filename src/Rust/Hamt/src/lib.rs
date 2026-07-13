@@ -2586,17 +2586,26 @@ mod tests {
 
         type IdentityState = BuildHasherDefault<IdentityHasher>;
 
-        // 0 and 1 << 31 share every 5-bit fragment below shift 30 and split
-        // only at the final branch level.
+        // These hashes share every 5-bit fragment below shift 30 and occupy
+        // slots 0, 2, and 3 at the final branch level.
         let mut builder: BulkBuilder<u32, u32, IdentityState> = BulkBuilder::default();
         builder.set_item(0, 1);
         builder.set_item(1 << 31, 2);
+        builder.set_item(3 << 30, 4);
         builder.set_item(0, 3);
 
         let map = builder.into_immutable();
-        assert_eq!(map.len(), 2);
+        assert_eq!(map.len(), 3);
         assert_eq!(map.get(&0), Some(&3));
         assert_eq!(map.get(&(1 << 31)), Some(&2));
+        assert_eq!(map.get(&(3 << 30)), Some(&4));
+        let (_, bitmap_nodes, invalid_leaf_children, underfull, invalid_routing) =
+            champ_statistics(map.root.as_deref().unwrap(), 0, 0, 0);
+        assert!(bitmap_nodes >= 7);
+        assert_eq!(
+            (invalid_leaf_children, underfull, invalid_routing),
+            (0, 0, 0)
+        );
     }
 
     #[test]
@@ -2796,12 +2805,13 @@ mod tests {
         assert_eq!(ascending, descending);
         assert!(ascending.diff(&descending).is_empty());
 
-        let (inline, bitmap_nodes, invalid_leaf_children, underfull_bitmap_nodes) =
-            champ_statistics(ascending.root.as_deref().unwrap());
+        let (inline, bitmap_nodes, invalid_leaf_children, underfull_bitmap_nodes, invalid_routing) =
+            champ_statistics(ascending.root.as_deref().unwrap(), 0, 0, 0);
         assert_eq!(inline, 512);
         assert!(bitmap_nodes > 1);
         assert_eq!(invalid_leaf_children, 0);
         assert_eq!(underfull_bitmap_nodes, 0);
+        assert_eq!(invalid_routing, 0);
         assert!(champ_topology_equal(
             ascending.root.as_deref().unwrap(),
             descending.root.as_deref().unwrap()
@@ -2814,9 +2824,12 @@ mod tests {
         for key in (0..512).step_by(3).rev() {
             churned = churned.insert(key, key);
         }
-        let (_, _, churn_leaf_children, churn_underfull) =
-            champ_statistics(churned.root.as_deref().unwrap());
-        assert_eq!((churn_leaf_children, churn_underfull), (0, 0));
+        let (_, _, churn_leaf_children, churn_underfull, churn_invalid_routing) =
+            champ_statistics(churned.root.as_deref().unwrap(), 0, 0, 0);
+        assert_eq!(
+            (churn_leaf_children, churn_underfull, churn_invalid_routing),
+            (0, 0, 0)
+        );
         assert!(champ_topology_equal(
             ascending.root.as_deref().unwrap(),
             churned.root.as_deref().unwrap()
@@ -2839,11 +2852,28 @@ mod tests {
         );
     }
 
-    fn champ_statistics<K, V>(node: &Node<K, V>) -> (usize, usize, usize, usize) {
+    fn champ_statistics<K, V>(
+        node: &Node<K, V>,
+        shift: u32,
+        prefix: u32,
+        prefix_mask: u32,
+    ) -> (usize, usize, usize, usize, usize) {
         match node {
-            Node::Leaf { .. } => (1, 0, 0, 0),
-            Node::Collision { entries, .. } => (entries.len(), 0, 0, 0),
-            Node::Branch { data, children, .. } => {
+            Node::Leaf { hash, .. } => (1, 0, 0, 0, usize::from(hash & prefix_mask != prefix)),
+            Node::Collision { hash, entries } => (
+                entries.len(),
+                0,
+                0,
+                0,
+                usize::from(hash & prefix_mask != prefix),
+            ),
+            Node::Branch {
+                data_map,
+                node_map,
+                data,
+                children,
+                ..
+            } => {
                 let mut result = (
                     data.len(),
                     1,
@@ -2859,20 +2889,65 @@ mod tests {
                                     Some(Node::Branch { .. })
                                 )),
                     ),
+                    0,
                 );
-                for child in children.iter() {
-                    let child_stats = champ_statistics(child);
-                    result.0 += child_stats.0;
-                    result.1 += child_stats.1;
-                    result.2 += child_stats.2;
-                    result.3 += child_stats.3;
+                if shift > MAX_BRANCH_SHIFT {
+                    result.4 = 1;
+                    return result;
+                }
+                let next_mask = if shift >= 27 {
+                    u32::MAX
+                } else {
+                    (1u32 << (shift + BITS_PER_LEVEL)) - 1
+                };
+                let mut data_index = 0;
+                let mut child_index = 0;
+                for slot in 0..BRANCH_FACTOR {
+                    let bit = 1u32 << slot;
+                    let invalid_terminal_slot = shift == 30 && slot > 3;
+                    let slot_prefix = prefix | ((slot as u32) << shift);
+                    if data_map & bit != 0 {
+                        let routed = !invalid_terminal_slot
+                            && data
+                                .get(data_index)
+                                .is_some_and(|entry| entry.0 & next_mask == slot_prefix);
+                        result.4 += usize::from(!routed);
+                        data_index += 1;
+                    }
+                    if node_map & bit != 0 {
+                        if invalid_terminal_slot {
+                            result.4 += 1;
+                        }
+                        if let Some(child) = children.get(child_index) {
+                            let child_stats = champ_statistics(
+                                child,
+                                shift + BITS_PER_LEVEL,
+                                slot_prefix,
+                                next_mask,
+                            );
+                            result.0 += child_stats.0;
+                            result.1 += child_stats.1;
+                            result.2 += child_stats.2;
+                            result.3 += child_stats.3;
+                            result.4 += child_stats.4;
+                        } else {
+                            result.4 += 1;
+                        }
+                        child_index += 1;
+                    }
+                }
+                if data_index < data.len() {
+                    result.4 += data.len() - data_index;
+                }
+                if child_index < children.len() {
+                    result.4 += children.len() - child_index;
                 }
                 result
             }
         }
     }
 
-    fn champ_topology_equal<K, V, K2, V2>(left: &Node<K, V>, right: &Node<K2, V2>) -> bool {
+    fn champ_topology_equal<K: Eq, V, V2>(left: &Node<K, V>, right: &Node<K, V2>) -> bool {
         match (left, right) {
             (Node::Leaf { hash: left, .. }, Node::Leaf { hash: right, .. }) => left == right,
             (
@@ -2884,7 +2959,15 @@ mod tests {
                     hash: right_hash,
                     entries: right_entries,
                 },
-            ) => left_hash == right_hash && left_entries.len() == right_entries.len(),
+            ) => {
+                left_hash == right_hash
+                    && left_entries.len() == right_entries.len()
+                    && left_entries.iter().all(|(left_key, _)| {
+                        right_entries
+                            .iter()
+                            .any(|(right_key, _)| left_key == right_key)
+                    })
+            }
             (
                 Node::Branch {
                     data_map: ld,
@@ -2916,6 +2999,64 @@ mod tests {
             }
             _ => false,
         }
+    }
+
+    #[test]
+    fn champ_validator_and_topology_comparator_reject_mismatches() {
+        let misrouted = Node::Branch {
+            data_map: (1u32 << 1) | (1u32 << 2),
+            node_map: 0,
+            data: Arc::from([(2u32, 1i32, ()), (1u32, 2i32, ())]),
+            children: Arc::from([]),
+            count: 2,
+        };
+        let (_, _, _, _, invalid_routing) = champ_statistics(&misrouted, 0, 0, 0);
+        assert_eq!(invalid_routing, 2);
+
+        let trailing_data = Node::Branch {
+            data_map: 1,
+            node_map: 0,
+            data: Arc::from([(0u32, 1i32, ()), (1u32, 2i32, ())]),
+            children: Arc::from([]),
+            count: 2,
+        };
+        let (_, _, _, _, trailing_routing) = champ_statistics(&trailing_data, 0, 0, 0);
+        assert!(trailing_routing > 0);
+
+        let missing_child: Node<i32, ()> = Node::Branch {
+            data_map: 0,
+            node_map: 1,
+            data: Arc::from([]),
+            children: Arc::from([]),
+            count: 0,
+        };
+        let (_, _, _, _, missing_routing) = champ_statistics(&missing_child, 0, 0, 0);
+        assert!(missing_routing > 0);
+
+        let over_depth = Node::Branch {
+            data_map: 1,
+            node_map: 0,
+            data: Arc::from([(0u32, 1i32, ())]),
+            children: Arc::from([]),
+            count: 1,
+        };
+        let (_, _, _, _, depth_routing) = champ_statistics(&over_depth, 35, 0, u32::MAX);
+        assert!(depth_routing > 0);
+
+        let left = Node::Collision {
+            hash: 7,
+            entries: Arc::from([(1i32, ()), (2i32, ())]),
+        };
+        let same_reversed = Node::Collision {
+            hash: 7,
+            entries: Arc::from([(2i32, "b"), (1i32, "a")]),
+        };
+        let different = Node::Collision {
+            hash: 7,
+            entries: Arc::from([(1i32, "a"), (3i32, "c")]),
+        };
+        assert!(champ_topology_equal(&left, &same_reversed));
+        assert!(!champ_topology_equal(&left, &different));
     }
 
     #[test]

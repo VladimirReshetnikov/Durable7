@@ -41,6 +41,7 @@ internal data class ChampStatistics(
     val collisionPayloads: Int,
     val invalidLeafChildren: Int,
     val underfullBitmapNodes: Int,
+    val invalidHashRouting: Int,
 )
 
 private const val BitsPerLevel: Int = 5
@@ -164,8 +165,10 @@ public class PersistentHashMap<K, V> private constructor(
         return PersistentHashMap(combined, combined.entryCount, policy)
     }
 
-    internal fun champStatistics(): ChampStatistics = root?.let(::champStatistics) ?: ChampStatistics(0, 0, 0, 0, 0)
-    internal fun champTopology(): String = root?.let(::champTopology) ?: "E"
+    internal fun champStatistics(): ChampStatistics =
+        root?.let { champStatistics(it, 0, 0, 0) } ?: ChampStatistics(0, 0, 0, 0, 0, 0)
+    internal fun <V2> champTopologyEquals(other: PersistentHashMap<K, V2>): Boolean =
+        policy === other.policy && champTopologyEqual(root, other.root, policy)
 
     /** Semantic equality for maps retaining the same hash/equality policy object. */
     public fun mapEquals(other: PersistentHashMap<K, V>): Boolean {
@@ -486,22 +489,78 @@ private fun <K, V> collectLeaves(node: Node<K, V>): List<Leaf<K, V>> = when (nod
     is BitmapNode -> node.data + node.nodes.flatMap(::collectLeaves)
 }
 
-private fun <K, V> champStatistics(node: Node<K, V>): ChampStatistics = when (node) {
-    is Leaf -> ChampStatistics(1, 0, 0, 0, 0)
-    is Collision -> ChampStatistics(0, 0, node.entries.size, 0, 0)
+private fun <K, V> champStatistics(
+    node: Node<K, V>,
+    shift: Int,
+    prefix: Int,
+    prefixMask: Int,
+): ChampStatistics = when (node) {
+    is Leaf -> ChampStatistics(
+        1, 0, 0, 0, 0,
+        if (hashHasPrefix(node.hash, prefix, prefixMask)) 0 else 1,
+    )
+    is Collision -> ChampStatistics(
+        0, 0, node.entries.size, 0, 0,
+        (if (hashHasPrefix(node.hash, prefix, prefixMask)) 0 else 1) +
+            node.entries.count { it.hash != node.hash },
+    )
     is BitmapNode -> {
-        val children = node.nodes.map(::champStatistics)
-        ChampStatistics(
-            node.data.size + children.sumOf { it.inlinePayloads },
-            1 + children.sumOf { it.bitmapNodes },
-            children.sumOf { it.collisionPayloads },
-            node.nodes.count { it is Leaf } + children.sumOf { it.invalidLeafChildren },
-            (if (node.data.size + node.nodes.size < 2 &&
-                !(node.data.isEmpty() && node.nodes.singleOrNull() is BitmapNode)) 1 else 0) +
-                children.sumOf { it.underfullBitmapNodes },
-        )
+        val bitmapCardinalityMismatch =
+            cardinalityDifference(Integer.bitCount(node.dataMap), node.data.size) +
+                cardinalityDifference(Integer.bitCount(node.nodeMap), node.nodes.size)
+        if (shift > 30) {
+            ChampStatistics(
+                node.data.size,
+                1,
+                0,
+                node.nodes.count { it is Leaf },
+                if (node.data.size + node.nodes.size < 2 &&
+                    !(node.data.isEmpty() && node.nodes.singleOrNull() is BitmapNode)) 1 else 0,
+                1 + bitmapCardinalityMismatch,
+            )
+        } else {
+            val nextMask = if (shift >= 27) -1 else (1 shl (shift + BitsPerLevel)) - 1
+            val dataSlots = bitmapSlots(node.dataMap)
+            val nodeSlots = bitmapSlots(node.nodeMap)
+            fun slotPrefix(slot: Int): Int = prefix or (slot shl shift)
+            val children = node.nodes.zip(nodeSlots).map { (child, slot) ->
+                champStatistics(child, shift + BitsPerLevel, slotPrefix(slot), nextMask)
+            }
+            val invalidDataRouting = node.data.zip(dataSlots).count { (entry, slot) ->
+                (shift == 30 && slot > 3) || !hashHasPrefix(entry.hash, slotPrefix(slot), nextMask)
+            }
+            val invalidChildSlots = nodeSlots.count { shift == 30 && it > 3 }
+            ChampStatistics(
+                node.data.size + children.sumOf { it.inlinePayloads },
+                1 + children.sumOf { it.bitmapNodes },
+                children.sumOf { it.collisionPayloads },
+                node.nodes.count { it is Leaf } + children.sumOf { it.invalidLeafChildren },
+                (if (node.data.size + node.nodes.size < 2 &&
+                    !(node.data.isEmpty() && node.nodes.singleOrNull() is BitmapNode)) 1 else 0) +
+                    children.sumOf { it.underfullBitmapNodes },
+                bitmapCardinalityMismatch + invalidDataRouting + invalidChildSlots +
+                    children.sumOf { it.invalidHashRouting },
+            )
+        }
     }
 }
+
+private fun cardinalityDifference(expected: Int, actual: Int): Int =
+    if (expected >= actual) expected - actual else actual - expected
+
+internal fun champMalformedDiagnosticsForTesting(): Pair<Int, Int> {
+    val leaf = Leaf(0, 0, Unit)
+    val overDepth = BitmapNode(1, 0, listOf(leaf), emptyList())
+    val mismatchedBitmap = BitmapNode(3, 0, listOf(leaf), emptyList())
+    return champStatistics(overDepth, 35, 0, -1).invalidHashRouting to
+        champStatistics(mismatchedBitmap, 0, 0, 0).invalidHashRouting
+}
+
+private fun hashHasPrefix(hash: Int, prefix: Int, prefixMask: Int): Boolean =
+    (hash and prefixMask) == prefix
+
+private fun bitmapSlots(bitmap: Int): List<Int> =
+    (0 until 32).filter { slot -> bitmap and (1 shl slot) != 0 }
 
 private enum class ChampOperation { UNION, INTERSECT, EXCEPT, SYMMETRIC_EXCEPT }
 
@@ -659,16 +718,28 @@ private fun <K, V> logicalSlotsMatch(
         expected.hash == actual.hash && policy.equivalent(expected.key, actual.key) && hamtValuesEqual(expected.value, actual.value)
 }
 
-private fun <K, V> champTopology(node: Node<K, V>): String = when (node) {
-    is Leaf -> "L${node.hash}"
-    is Collision -> "C${node.hash}:${node.entries.size}"
-    is BitmapNode -> buildString {
-        append("B${node.dataMap}:${node.nodeMap}[")
-        node.data.forEach { append(it.hash).append(',') }
-        append('|')
-        node.nodes.forEach { append(champTopology(it)).append(';') }
-        append(']')
-    }
+private fun <K, V, V2> champTopologyEqual(
+    left: Node<K, V>?,
+    right: Node<K, V2>?,
+    policy: HashPolicy<K>,
+): Boolean = when {
+    left == null || right == null -> left == null && right == null
+    left is Leaf && right is Leaf -> left.hash == right.hash
+    left is Collision && right is Collision ->
+        left.hash == right.hash &&
+            left.entries.size == right.entries.size &&
+            left.entries.all { leftEntry ->
+                right.entries.any { rightEntry -> policy.equivalent(leftEntry.key, rightEntry.key) }
+            }
+    left is BitmapNode && right is BitmapNode ->
+        left.dataMap == right.dataMap &&
+            left.nodeMap == right.nodeMap &&
+            left.data.map { it.hash } == right.data.map { it.hash } &&
+            left.nodes.size == right.nodes.size &&
+            left.nodes.zip(right.nodes).all { (leftChild, rightChild) ->
+                champTopologyEqual(leftChild, rightChild, policy)
+            }
+    else -> false
 }
 
 private suspend fun <K, V> SequenceScope<HamtEntry<K, V>>.yieldEntries(node: Node<K, V>) {

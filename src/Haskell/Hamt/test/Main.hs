@@ -5,7 +5,7 @@ import Prelude hiding (lookup, null)
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (SomeException, evaluate, try)
 import Control.Monad (forM_, replicateM)
-import Data.Bits ((.&.))
+import Data.Bits ((.&.), shiftL)
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Char8 as ByteStringChar8
 import Data.Char (toLower)
@@ -42,6 +42,8 @@ main = do
   testCollisionPolicy
   testCollisionShrinkCanonicalization
   testChampCanonicalizationAndDiff
+  testChampTopologyRejectsDifferentCollisionKeys
+  testChampTerminalHashFragments
   testChampStructuralAlgebra
   testPatriciaMapsAndSets
   testActualKeyPreservation
@@ -105,6 +107,28 @@ testChampCanonicalizationAndDiff = do
   assertBool "typed diff removal" (HashMap.EntryRemoved 7 7 `elem` differences)
   assertBool "typed diff change" (HashMap.EntryChanged 9 9 (-9) `elem` differences)
   assertBool "typed diff addition" (HashMap.EntryAdded 1000 1000 `elem` differences)
+
+testChampTopologyRejectsDifferentCollisionKeys :: IO ()
+testChampTopologyRejectsDifferentCollisionKeys = do
+  let collisionPolicy = HashPolicy (const 7) (==)
+      left = HashMap.fromListWith collisionPolicy [(1 :: Int, "a"), (2, "b")]
+      sameReversed = HashMap.fromListWith collisionPolicy [(2 :: Int, "b"), (1, "a")]
+      different = HashMap.fromListWith collisionPolicy [(1 :: Int, "a"), (3, "c")]
+  assertBool "collision topology ignores insertion order" (HashMap.sameTopology left sameReversed)
+  assertBool "collision topology compares key contents" (not (HashMap.sameTopology left different))
+
+testChampTerminalHashFragments :: IO ()
+testChampTerminalHashFragments = do
+  let explicitPolicy = HashPolicy snd (\left right -> fst left == fst right)
+      keys =
+        [ (0 :: Int, 0)
+        , (1, 1 `shiftL` 30)
+        , (2, 1 `shiftL` 31)
+        , (3, 3 `shiftL` 30)
+        ]
+      values = HashMap.fromListWith explicitPolicy [(key, fst key) | key <- keys]
+  assertBool "terminal hash slots 0 through 3 form a valid CHAMP" (HashMap.validStructure values)
+  assertEqual "terminal slot 3 remains reachable" (Just 3) (HashMap.lookup (3, 3 `shiftL` 30) values)
 
 testChampStructuralAlgebra :: IO ()
 testChampStructuralAlgebra = do

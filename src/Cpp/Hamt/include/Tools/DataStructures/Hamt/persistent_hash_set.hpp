@@ -277,7 +277,7 @@ public:
 
     [[nodiscard]] bool set_equals(const persistent_hash_set& other) const {
         return shares_root_with(other)
-            || count() == other.count() && is_subset_of(other);
+            || (count() == other.count() && is_subset_of(other));
     }
 
     template <class Range>

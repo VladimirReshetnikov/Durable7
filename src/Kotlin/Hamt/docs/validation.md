@@ -25,8 +25,8 @@ algebra, including relations between sets built with different policies where th
 is authoritative. Same-policy tests additionally pin self-operation instance identity, zero
 rehashing, reference-pruned shared ancestry, all four structural algebra truth tables, and randomized
 set models.
-It also covers the mutable Ctrie's node-local GCAS and root/main RDCSS helping, a deterministic
-snapshot-versus-committed-writer schedule, deep and equal-hash tomb contraction, lazy renewal after
+It also covers the mutable Ctrie's node-local GCAS and root/main RDCSS helping, deterministic
+snapshot-versus-writer schedules in both linearization directions, deep and equal-hash tomb contraction, lazy renewal after
 snapshot, same-reference no-op updates without equality callbacks, contended same-key updates,
 explicit conversion back to persistent CHAMP, and a 250-round short-history linearizability oracle
 under ordinary, shared-prefix, and all-equal-hash policies.

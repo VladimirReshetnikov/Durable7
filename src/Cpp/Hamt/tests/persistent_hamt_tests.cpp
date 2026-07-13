@@ -190,6 +190,13 @@ struct explicit_equal {
     }
 };
 
+explicit_hash_key spreading_champ_key(int id) noexcept {
+    return explicit_hash_key{
+        id,
+        id % 9 == 0 ? 17u : static_cast<std::uint32_t>(id) * 0x01010101u,
+    };
+}
+
 struct counting_hash {
     std::shared_ptr<std::atomic<std::size_t>> calls;
 
@@ -444,6 +451,7 @@ TEST(DeepSharedHashPrefixes_LookupAndRemoveCorrectly) {
         .set_item(c, "c")
         .set_item(d, "d");
 
+    CHECK(map.debug_validate_canonical());
     CHECK_EQ(std::string("a"), map.at(a));
     CHECK_EQ(std::string("b"), map.at(b));
     CHECK_EQ(std::string("c"), map.at(c));
@@ -451,6 +459,7 @@ TEST(DeepSharedHashPrefixes_LookupAndRemoveCorrectly) {
     CHECK_EQ(std::vector<std::string>({"a", "b", "c", "d"}), sorted(map.values()));
 
     const auto reduced = map.remove(b).remove(c).remove(d);
+    CHECK(reduced.debug_validate_canonical());
     CHECK_EQ(std::size_t{1}, reduced.count());
     CHECK_EQ(persistent_hamt_node_kind::leaf, reduced.debug_root_kind());
     CHECK_EQ(std::string("a"), reduced.at(a));
@@ -569,12 +578,12 @@ TEST(Structure_UpdateSharesUntouchedSiblingSubtrees) {
 }
 
 TEST(Champ_IndependentHistoriesAndTypedDiff) {
-    using map_type = persistent_hash_map<int, int>;
-    auto ascending = map_type::empty();
-    auto descending = map_type::empty();
+    using map_type = persistent_hash_map<explicit_hash_key, int, explicit_hash, explicit_equal>;
+    auto ascending = map_type::create(explicit_hash{}, explicit_equal{});
+    auto descending = map_type::create(explicit_hash{}, explicit_equal{});
     for (int key = 0; key < 512; ++key) {
-        ascending = ascending.set_item(key, key);
-        descending = descending.set_item(511 - key, 511 - key);
+        ascending = ascending.set_item(spreading_champ_key(key), key);
+        descending = descending.set_item(spreading_champ_key(511 - key), 511 - key);
     }
 
     CHECK(ascending.map_equals(descending));
@@ -585,25 +594,61 @@ TEST(Champ_IndependentHistoriesAndTypedDiff) {
 
     auto churned = ascending;
     for (int key = 0; key < 512; key += 3) {
-        churned = churned.remove(key);
+        churned = churned.remove(spreading_champ_key(key));
     }
     for (int key = 510; key >= 0; key -= 3) {
-        churned = churned.set_item(key, key);
+        churned = churned.set_item(spreading_champ_key(key), key);
     }
     CHECK(churned.debug_validate_canonical());
     CHECK(ascending.debug_topology_equal(churned));
-    const auto changed = descending.remove(7).set_item(9, -9).set_item(1000, 1000);
+    const auto changed = descending.remove(spreading_champ_key(7))
+        .set_item(spreading_champ_key(9), -9)
+        .set_item(spreading_champ_key(1000), 1000);
     const auto differences = ascending.diff(changed);
     CHECK_EQ(std::size_t{3}, differences.size());
     CHECK(std::ranges::any_of(differences, [](const auto& item) {
-        return item.kind == map_difference_kind::removed && item.key == 7;
+        return item.kind == map_difference_kind::removed && item.key.id == 7;
     }));
     CHECK(std::ranges::any_of(differences, [](const auto& item) {
-        return item.kind == map_difference_kind::changed && item.key == 9;
+        return item.kind == map_difference_kind::changed && item.key.id == 9;
     }));
     CHECK(std::ranges::any_of(differences, [](const auto& item) {
-        return item.kind == map_difference_kind::added && item.key == 1000;
+        return item.kind == map_difference_kind::added && item.key.id == 1000;
     }));
+
+    // Exact non-vacuity fixture: two keys share the first ten hash bits and diverge
+    // below a unary bridge, while the third key diverges at the root. Removing one
+    // deep key must inline the survivor and recover the direct-build topology.
+    const auto deep_a = explicit_hash_key{10'000, 1u << 10};
+    const auto deep_b = explicit_hash_key{10'001, 2u << 10};
+    const auto root_sibling = explicit_hash_key{10'002, 1u};
+    const auto deep = map_type::create(explicit_hash{}, explicit_equal{})
+        .set_item(deep_a, 1)
+        .set_item(deep_b, 2)
+        .set_item(root_sibling, 3);
+    const auto collapsed = deep.remove(deep_b);
+    const auto direct = map_type::create(explicit_hash{}, explicit_equal{})
+        .set_item(deep_a, 1)
+        .set_item(root_sibling, 3);
+    CHECK(deep.debug_validate_canonical());
+    CHECK(collapsed.debug_validate_canonical());
+    CHECK(collapsed.debug_topology_equal(direct));
+}
+
+TEST(Champ_TopologyComparatorRejectsDifferentCollisionKeys) {
+    using map_type = persistent_hash_map<collision_key, int, collision_key_hash, collision_key_equal>;
+    const auto left = map_type::create(collision_key_hash{}, collision_key_equal{})
+        .set_item(collision_key{1}, 10)
+        .set_item(collision_key{2}, 20);
+    const auto same_reversed = map_type::create(collision_key_hash{}, collision_key_equal{})
+        .set_item(collision_key{2}, 20)
+        .set_item(collision_key{1}, 10);
+    const auto different = map_type::create(collision_key_hash{}, collision_key_equal{})
+        .set_item(collision_key{1}, 10)
+        .set_item(collision_key{3}, 30);
+
+    CHECK(left.debug_topology_equal(same_reversed));
+    CHECK(!left.debug_topology_equal(different));
 }
 
 TEST(Patricia_SignedOrderingHistoriesAndStructuralAlgebra) {

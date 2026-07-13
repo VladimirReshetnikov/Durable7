@@ -15,6 +15,9 @@ public class ConcurrentHashTrie<K, V>(
     internal var snapshotMainReadHookForTesting: (() -> Unit)? = null
 
     @Volatile
+    internal var snapshotRootAdvancedHookForTesting: (() -> Unit)? = null
+
+    @Volatile
     internal var gcasInstalledHookForTesting: (() -> Unit)? = null
 
     init {
@@ -98,6 +101,7 @@ public class ConcurrentHashTrie<K, V>(
             if (!root.compareAndSet(before, descriptor)) continue
             complete(descriptor)
             if (descriptor.status.get() == RootDescriptor.COMMITTED) {
+                snapshotRootAdvancedHookForTesting?.invoke()
                 return Snapshot(this, before)
             }
         }

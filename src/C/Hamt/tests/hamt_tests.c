@@ -582,6 +582,35 @@ static void test_equal_hash_collision_bucket_preserves_every_key(void) {
     tds_hamt_map_destroy(&map);
 }
 
+static void test_topology_comparator_rejects_different_collision_keys(void) {
+    tds_hamt_policy policy = tds_hamt_policy_default();
+    policy.hash = collision_key_hash;
+    policy.key_equal = collision_key_equal;
+    policy.value_equal = int_equal;
+
+    collision_key left_keys[] = { { 1 }, { 2 } };
+    collision_key reversed_keys[] = { { 2 }, { 1 } };
+    collision_key different_keys[] = { { 1 }, { 3 } };
+    tds_hamt_map left = tds_hamt_map_create(&policy);
+    tds_hamt_map reversed = tds_hamt_map_create(&policy);
+    tds_hamt_map different = tds_hamt_map_create(&policy);
+    for (size_t index = 0; index != 2; ++index) {
+        CHECK_STATUS(tds_hamt_map_set(
+            &left, &left_keys[index], int_value((int)index), &left));
+        CHECK_STATUS(tds_hamt_map_set(
+            &reversed, &reversed_keys[index], int_value((int)index), &reversed));
+        CHECK_STATUS(tds_hamt_map_set(
+            &different, &different_keys[index], int_value((int)index), &different));
+    }
+
+    CHECK(tds_hamt_map_debug_topology_equal(&left, &reversed));
+    CHECK(!tds_hamt_map_debug_topology_equal(&left, &different));
+
+    tds_hamt_map_destroy(&different);
+    tds_hamt_map_destroy(&reversed);
+    tds_hamt_map_destroy(&left);
+}
+
 static void test_deep_shared_hash_prefixes_lookup_and_remove_correctly(void) {
     tds_hamt_policy policy = explicit_map_policy();
     explicit_hash_key a = { 1, 0u };
@@ -603,6 +632,7 @@ static void test_deep_shared_hash_prefixes_lookup_and_remove_correctly(void) {
     CHECK_STATUS(tds_hamt_map_set(&map, &d, int_value(4), &next));
     tds_hamt_map_destroy(&map);
     map = next;
+    CHECK(tds_hamt_map_debug_validate_canonical(&map));
 
     const void *actual = NULL;
     CHECK(tds_hamt_map_try_get(&map, &a, &actual) && *(const int *)actual == 1);
@@ -620,6 +650,7 @@ static void test_deep_shared_hash_prefixes_lookup_and_remove_correctly(void) {
     reduced = next;
 
     CHECK(tds_hamt_map_count(&reduced) == 1);
+    CHECK(tds_hamt_map_debug_validate_canonical(&reduced));
     CHECK(tds_hamt_map_debug_root_kind(&reduced) == TDS_HAMT_NODE_LEAF);
     CHECK(tds_hamt_map_try_get(&reduced, &a, &actual) && *(const int *)actual == 1);
     CHECK(!tds_hamt_map_contains_key(&reduced, &b));
@@ -1905,6 +1936,8 @@ static const test_case tests[] = {
     { "set_many and clear preserve contracts", test_set_many_and_clear_preserve_contracts },
     { "create_range last wins and retains first equivalent key", test_create_range_last_wins_and_retains_first_equivalent_key },
     { "equal hash collision bucket preserves every key", test_equal_hash_collision_bucket_preserves_every_key },
+    { "topology comparator rejects different collision keys",
+      test_topology_comparator_rejects_different_collision_keys },
     { "deep shared hash prefixes lookup and remove correctly", test_deep_shared_hash_prefixes_lookup_and_remove_correctly },
     { "depth seven iterator traversal", test_depth_seven_iterator_traversal },
     { "allocation failures unwind node_set and merge", test_allocation_failures_unwind_node_set_and_merge },

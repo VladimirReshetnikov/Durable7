@@ -109,51 +109,84 @@ size (HashMap _ count _) = count
 -- key or value equality. In particular, collision buckets must contain at
 -- least two entries; deletion demotes a singleton bucket to a 'Leaf'.
 validStructure :: HashMap k v -> Bool
-validStructure (HashMap _ expectedCount root) = nodeCountIfValid root == Just expectedCount
+validStructure (HashMap _ expectedCount root) = nodeCountIfValid 0 0 0 root == Just expectedCount
 
--- | Compares canonical node kinds, bitmap placement, stored hashes, and child
--- topology without consulting either map's key or value semantics.
-sameTopology :: HashMap k v -> HashMap k' v' -> Bool
-sameTopology (HashMap _ _ left) (HashMap _ _ right) = sameNodeTopology left right
+-- | Compares canonical node kinds, bitmap placement, stored hashes, collision
+-- key sets, and child topology. Both maps must use compatible key policies;
+-- values remain irrelevant to topology.
+sameTopology :: HashMap k v -> HashMap k v' -> Bool
+sameTopology (HashMap leftPolicy _ left) (HashMap _ _ right) =
+  sameNodeTopology leftPolicy left right
 
-sameNodeTopology :: Node k v -> Node k' v' -> Bool
-sameNodeTopology EmptyNode EmptyNode = True
-sameNodeTopology (Leaf leftHash _ _) (Leaf rightHash _ _) = leftHash == rightHash
-sameNodeTopology (Collision _ leftHash leftEntries) (Collision _ rightHash rightEntries) =
-  leftHash == rightHash && length leftEntries == length rightEntries
-sameNodeTopology (Branch _ leftDataMap leftNodeMap leftPayloads leftChildren)
-                 (Branch _ rightDataMap rightNodeMap rightPayloads rightChildren) =
+sameNodeTopology :: HashPolicy k -> Node k v -> Node k v' -> Bool
+sameNodeTopology _ EmptyNode EmptyNode = True
+sameNodeTopology _ (Leaf leftHash _ _) (Leaf rightHash _ _) = leftHash == rightHash
+sameNodeTopology hashPolicy (Collision _ leftHash leftEntries) (Collision _ rightHash rightEntries) =
+  leftHash == rightHash
+    && length leftEntries == length rightEntries
+    && all (hasEquivalentKey rightEntries . fst) leftEntries
+  where
+    hasEquivalentKey entries key = any (equalKeys hashPolicy key . fst) entries
+sameNodeTopology hashPolicy (Branch _ leftDataMap leftNodeMap leftPayloads leftChildren)
+                               (Branch _ rightDataMap rightNodeMap rightPayloads rightChildren) =
   leftDataMap == rightDataMap
     && leftNodeMap == rightNodeMap
     && map payloadHash leftPayloads == map payloadHash rightPayloads
     && length leftChildren == length rightChildren
-    && and (zipWith sameNodeTopology leftChildren rightChildren)
+    && and (zipWith (sameNodeTopology hashPolicy) leftChildren rightChildren)
   where
     payloadHash (entryHash, _, _) = entryHash
-sameNodeTopology _ _ = False
+sameNodeTopology _ _ _ = False
 
-nodeCountIfValid :: Node k v -> Maybe Int
-nodeCountIfValid EmptyNode = Just 0
-nodeCountIfValid (Leaf _ _ _) = Just 1
-nodeCountIfValid (Collision cachedCount _ entries)
-  | length entries >= 2 && cachedCount == length entries = Just cachedCount
+nodeCountIfValid :: Int -> Word32 -> Word32 -> Node k v -> Maybe Int
+nodeCountIfValid _ _ _ EmptyNode = Just 0
+nodeCountIfValid _ prefix prefixMask (Leaf entryHash _ _)
+  | hashHasPrefix entryHash prefix prefixMask = Just 1
   | otherwise = Nothing
-nodeCountIfValid (Branch cachedCount dataMap nodeMap payloads children)
+nodeCountIfValid _ prefix prefixMask (Collision cachedCount entryHash entries)
+  | length entries >= 2
+      && cachedCount == length entries
+      && hashHasPrefix entryHash prefix prefixMask = Just cachedCount
+  | otherwise = Nothing
+nodeCountIfValid shift prefix _prefixMask (Branch cachedCount dataMap nodeMap payloads children)
+  | shift > 30 = Nothing
   | dataMap .&. nodeMap /= 0 = Nothing
   | dataMap == 0 && nodeMap == 0 = Nothing
   | popCount dataMap /= length payloads = Nothing
   | popCount nodeMap /= length children = Nothing
   | any isLeaf children = Nothing
   | length payloads + length children < 2 && not (List.null payloads && singleBranch children) = Nothing
+  | any invalidTerminalSlot (dataSlots ++ nodeSlots) = Nothing
+  | not (and (zipWith payloadRoutesTo dataSlots payloads)) = Nothing
   | otherwise = do
-      childCount <- sum <$> traverse nodeCountIfValid children
+      childCount <- sum <$> traverse validateChild (zip nodeSlots children)
       let actualCount = length payloads + childCount
       if cachedCount == actualCount then Just cachedCount else Nothing
   where
+    dataSlots = bitmapSlots dataMap
+    nodeSlots = bitmapSlots nodeMap
+    nextMask = nextPrefixMask shift
+    slotPrefix slot = prefix .|. (fromIntegral slot `shiftL` shift)
+    payloadRoutesTo slot (entryHash, _, _) =
+      hashHasPrefix entryHash (slotPrefix slot) nextMask
+    validateChild (slot, child) =
+      nodeCountIfValid (shift + 5) (slotPrefix slot) nextMask child
+    invalidTerminalSlot slot = shift == 30 && slot > 3
     isLeaf (Leaf _ _ _) = True
     isLeaf _ = False
     singleBranch [Branch _ _ _ _ _] = True
     singleBranch _ = False
+
+hashHasPrefix :: Word32 -> Word32 -> Word32 -> Bool
+hashHasPrefix entryHash prefix prefixMask = entryHash .&. prefixMask == prefix
+
+nextPrefixMask :: Int -> Word32
+nextPrefixMask shift
+  | shift >= 27 = maxBound
+  | otherwise = (1 `shiftL` (shift + 5)) - 1
+
+bitmapSlots :: Word32 -> [Int]
+bitmapSlots bitmap = [slot | slot <- [0 .. 31], bitmap .&. (1 `shiftL` slot) /= 0]
 
 null :: HashMap k v -> Bool
 null mapValue = size mapValue == 0

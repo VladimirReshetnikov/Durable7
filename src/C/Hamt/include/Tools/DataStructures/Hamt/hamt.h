@@ -190,6 +190,9 @@ size_t tds_hamt_map_debug_root_child_identities(
     const void **children,
     size_t child_capacity);
 bool tds_hamt_map_debug_validate_canonical(const tds_hamt_map *map);
+/* Returns false unless both maps have compatible hash/equality callbacks and context.
+ * Equal-hash collision contents are matched without regard to insertion order by
+ * invoking the receiver map's key-equality callback. */
 bool tds_hamt_map_debug_topology_equal(
     const tds_hamt_map *left,
     const tds_hamt_map *right);

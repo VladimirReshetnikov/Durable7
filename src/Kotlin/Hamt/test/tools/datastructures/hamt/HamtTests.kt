@@ -146,7 +146,7 @@ private fun champCanonicalizationAndDiff() {
     val descending = PersistentHashMap.from((0 until 512).reversed().map { it to it }, policy)
     check(ascending.mapEquals(descending), "independent insertion histories must be semantically equal")
     checkEquals(0, ascending.diff(descending).count(), "equal canonical maps have an empty diff")
-    checkEquals(ascending.champTopology(), descending.champTopology(), "independent histories must have identical CHAMP topology")
+    check(ascending.champTopologyEquals(descending), "independent histories must have identical CHAMP topology")
 
     val statistics = ascending.champStatistics()
     checkEquals(512, statistics.inlinePayloads + statistics.collisionPayloads, "every key is stored as an inline payload or a collision entry")
@@ -154,14 +154,16 @@ private fun champCanonicalizationAndDiff() {
     check(statistics.bitmapNodes > 1, "test data must exercise nested bitmap nodes")
     checkEquals(0, statistics.invalidLeafChildren, "bitmap child runs must not contain leaf nodes")
     checkEquals(0, statistics.underfullBitmapNodes, "bitmap nodes must be canonically collapsed")
+    checkEquals(0, statistics.invalidHashRouting, "payloads and children must follow every stored hash prefix")
 
     var churned = ascending
     for (key in 0 until 512 step 3) churned = churned.remove(key)
     for (key in (0 until 512 step 3).reversed()) churned = churned.put(key, key)
-    checkEquals(ascending.champTopology(), churned.champTopology(), "delete/reinsert churn must recover canonical topology")
+    check(ascending.champTopologyEquals(churned), "delete/reinsert churn must recover canonical topology")
     val churnStatistics = churned.champStatistics()
     checkEquals(0, churnStatistics.invalidLeafChildren, "churned bitmap child runs must not contain leaves")
     checkEquals(0, churnStatistics.underfullBitmapNodes, "churned bitmap nodes must be canonically collapsed")
+    checkEquals(0, churnStatistics.invalidHashRouting, "churned payloads and children retain hash-prefix routing")
 
     // Non-vacuity guard for the canonical-collapse rule. Build an exact deep two-entry branch under a
     // unary prefix bridge: keys 0 and 1 share the low ten hash bits (fragments 0,0 at shifts 0,5) and
@@ -177,9 +179,24 @@ private fun champCanonicalizationAndDiff() {
     val collapsedStats = collapsed.champStatistics()
     checkEquals(0, collapsedStats.underfullBitmapNodes, "removing one of a deep pair must collapse the branch, not leave an under-full node")
     checkEquals(0, collapsedStats.invalidLeafChildren, "collapse must not leave a leaf as a bitmap child")
+    checkEquals(0, collapsedStats.invalidHashRouting, "collapsed bridge preserves hash-prefix routing")
     checkEquals(listOf(0, 2), collapsed.keys().toList().sorted(), "collapse preserves the surviving keys")
     val directBuild = PersistentHashMap.empty<Int, Int>(deepPolicy).put(0, 0).put(2, 2)
-    checkEquals(directBuild.champTopology(), collapsed.champTopology(), "collapsed topology must equal the direct canonical build")
+    check(directBuild.champTopologyEquals(collapsed), "collapsed topology must equal the direct canonical build")
+
+    // Consume every reachable fragment at the final (shift-30) level, including slot 3.
+    val terminalPolicy = TableHashPolicy(
+        mapOf(10 to 0, 11 to (1 shl 30), 12 to (1 shl 31), 13 to (3 shl 30)),
+    )
+    val terminal = PersistentHashMap.empty<Int, Int>(terminalPolicy)
+        .put(10, 0)
+        .put(11, 1)
+        .put(12, 2)
+        .put(13, 3)
+    val terminalStats = terminal.champStatistics()
+    check(terminalStats.bitmapNodes >= 7, "terminal-fragment fixture reaches the shift-30 branch")
+    checkEquals(0, terminalStats.invalidHashRouting, "terminal slots 0 through 3 preserve hash-prefix routing")
+    checkEquals(3, terminal[13], "terminal slot 3 remains reachable")
 
     val changed = descending.remove(7).put(9, -9).put(1_000, 1_000)
     val differences = ascending.diff(changed).toList()
@@ -187,6 +204,22 @@ private fun champCanonicalizationAndDiff() {
     check(differences.any { it.kind == MapDifferenceKind.REMOVED && it.key == 7 }, "removed difference")
     check(differences.any { it.kind == MapDifferenceKind.CHANGED && it.key == 9 }, "changed difference")
     check(differences.any { it.kind == MapDifferenceKind.ADDED && it.key == 1_000 }, "added difference")
+}
+
+private fun champTopologyComparatorRejectsDifferentCollisionKeys() {
+    val policy = ConstantPolicy<Int>()
+    val left = PersistentHashMap.from(listOf(1 to "a", 2 to "b"), policy)
+    val sameReversed = PersistentHashMap.from(listOf(2 to "b", 1 to "a"), policy)
+    val different = PersistentHashMap.from(listOf(1 to "a", 3 to "c"), policy)
+
+    check(left.champTopologyEquals(sameReversed), "collision topology ignores insertion order")
+    check(!left.champTopologyEquals(different), "collision topology compares key contents")
+}
+
+private fun champValidatorRejectsMalformedDepthAndBitmapCardinality() {
+    val (overDepth, mismatchedBitmap) = champMalformedDiagnosticsForTesting()
+    check(overDepth > 0, "over-depth bitmap nodes must be reported before JVM shift-count masking")
+    check(mismatchedBitmap > 0, "bitmap/list cardinality mismatches must not be hidden by zip truncation")
 }
 
 private fun iterationStreamsTrieOrder() {
@@ -408,6 +441,45 @@ private fun ctrieSnapshotDoesNotLoseCommittedWriter() {
     val statistics = trie.validateStructureForTesting()
     checkEquals(1, statistics.entryCount, "snapshot race entry count")
     checkEquals(0, statistics.tombNodeCount, "snapshot race leaves no tomb")
+}
+
+private fun ctrieSnapshotExcludesWriterAfterRootAdvance() {
+    val trie = ConcurrentHashTrie<Int, Int>()
+    trie.set(1, 10)
+    val rootAdvanced = CountDownLatch(1)
+    val releaseSnapshot = CountDownLatch(1)
+    val firstInvocation = AtomicInteger(1)
+    val captured = AtomicReference<ConcurrentHashTrie.Snapshot<Int, Int>?>()
+    val failure = AtomicReference<Throwable?>()
+    trie.snapshotRootAdvancedHookForTesting = {
+        if (firstInvocation.getAndSet(0) == 1) {
+            rootAdvanced.countDown()
+            check(releaseSnapshot.await(30, TimeUnit.SECONDS)) { "snapshot root-advance release timed out" }
+        }
+    }
+
+    val thread = Thread {
+        try {
+            captured.set(trie.snapshot())
+        } catch (error: Throwable) {
+            failure.set(error)
+        }
+    }.apply { name = "ctrie-snapshot-after-root-advance" }
+    thread.start()
+    try {
+        check(rootAdvanced.await(30, TimeUnit.SECONDS)) { "snapshot did not advance the root" }
+        trie.set(42, 420)
+    } finally {
+        releaseSnapshot.countDown()
+    }
+    thread.join(30_000)
+    trie.snapshotRootAdvancedHookForTesting = null
+    check(!thread.isAlive) { "snapshot root-advance race thread did not terminate" }
+    failure.get()?.let { throw AssertionError("snapshot root-advance race failed", it) }
+    val snapshot = captured.get() ?: throw AssertionError("snapshot root-advance race produced no snapshot")
+    checkEquals(null, snapshot[42], "snapshot excludes the writer that linearized after its root advance")
+    checkEquals(420, trie[42], "live trie retains the post-snapshot writer")
+    checkEquals(10, snapshot[1], "snapshot retains its preexisting entry")
 }
 
 private fun ctrieReaderHelpsInstalledGcas() {
@@ -806,6 +878,8 @@ public fun main() {
         "addRejectsDuplicates" to ::addRejectsDuplicates,
         "collisionsAreStoredAndRemoved" to ::collisionsAreStoredAndRemoved,
         "champCanonicalizationAndDiff" to ::champCanonicalizationAndDiff,
+        "champTopologyComparatorRejectsDifferentCollisionKeys" to ::champTopologyComparatorRejectsDifferentCollisionKeys,
+        "champValidatorRejectsMalformedDepthAndBitmapCardinality" to ::champValidatorRejectsMalformedDepthAndBitmapCardinality,
         "iterationStreamsTrieOrder" to ::iterationStreamsTrieOrder,
         "setItemsAreLastWinsAndRetainOriginalKey" to ::setItemsAreLastWinsAndRetainOriginalKey,
         "setAlgebraUsesSetMembership" to ::setAlgebraUsesSetMembership,
@@ -817,6 +891,7 @@ public fun main() {
         "ctrieContentionAndGenerationRenewal" to ::ctrieContentionAndGenerationRenewal,
         "ctrieCollisionNodesRemainStable" to ::ctrieCollisionNodesRemainStable,
         "ctrieSnapshotDoesNotLoseCommittedWriter" to ::ctrieSnapshotDoesNotLoseCommittedWriter,
+        "ctrieSnapshotExcludesWriterAfterRootAdvance" to ::ctrieSnapshotExcludesWriterAfterRootAdvance,
         "ctrieReaderHelpsInstalledGcas" to ::ctrieReaderHelpsInstalledGcas,
         "ctrieRemovalContractsDeepTombs" to ::ctrieRemovalContractsDeepTombs,
         "ctrieMixedShortHistoriesAreLinearizable" to ::ctrieMixedShortHistoriesAreLinearizable,

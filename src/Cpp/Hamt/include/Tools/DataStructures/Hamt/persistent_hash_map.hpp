@@ -693,11 +693,12 @@ public:
 
     [[nodiscard]] bool debug_validate_canonical() const noexcept {
         auto entries = size_type{0};
-        return debug_validate_node(root_.get(), entries) && entries == count();
+        return debug_validate_node(root_.get(), 0, 0, 0, entries) && entries == count();
     }
 
-    [[nodiscard]] bool debug_topology_equal(const persistent_hash_map& other) const noexcept {
-        return debug_nodes_topology_equal(root_.get(), other.root_.get());
+    // Precondition: both maps' stateful KeyEqual objects define compatible key semantics.
+    [[nodiscard]] bool debug_topology_equal(const persistent_hash_map& other) const {
+        return debug_nodes_topology_equal(root_.get(), other.root_.get(), key_equal_);
     }
 
 private:
@@ -1566,41 +1567,84 @@ private:
         size_type count_;
     };
 
-    static bool debug_validate_node(const node* candidate, size_type& entries) noexcept {
+    static bool debug_hash_has_prefix(
+        std::uint32_t hash, std::uint32_t prefix, std::uint32_t prefix_mask) noexcept {
+        return (hash & prefix_mask) == prefix;
+    }
+
+    static std::uint32_t debug_next_prefix_mask(int shift) noexcept {
+        return shift >= 27 ? ~std::uint32_t{0} : bit(shift + bits_per_level) - 1u;
+    }
+
+    static bool debug_validate_node(
+        const node* candidate,
+        int shift,
+        std::uint32_t prefix,
+        std::uint32_t prefix_mask,
+        size_type& entries) noexcept {
         if (candidate == nullptr) {
             entries = 0;
             return true;
         }
         switch (candidate->kind()) {
-        case persistent_hamt_node_kind::leaf:
+        case persistent_hamt_node_kind::leaf: {
+            const auto* leaf = static_cast<const leaf_node*>(candidate);
             entries = 1;
-            return true;
+            return debug_hash_has_prefix(leaf->hash_, prefix, prefix_mask);
+        }
         case persistent_hamt_node_kind::collision: {
             const auto* collision = static_cast<const collision_node*>(candidate);
             entries = collision->entries_.size();
-            return entries >= 2;
+            return entries >= 2
+                && debug_hash_has_prefix(collision->hash_, prefix, prefix_mask);
         }
         case persistent_hamt_node_kind::bitmap_indexed: {
             const auto* branch = static_cast<const bitmap_indexed_node*>(candidate);
-            if ((branch->data_map_ & branch->node_map_) != 0
-                || std::popcount(branch->data_map_) != branch->data_.size()
-                || std::popcount(branch->node_map_) != branch->children_.size()
+            if (shift > 30
+                || (branch->data_map_ & branch->node_map_) != 0
+                || static_cast<size_type>(std::popcount(branch->data_map_)) != branch->data_.size()
+                || static_cast<size_type>(std::popcount(branch->node_map_)) != branch->children_.size()
                 || branch->data_.size() + branch->children_.size() == 0
                 || (branch->data_.size() + branch->children_.size() < 2
                     && !(branch->data_.empty() && branch->children_.size() == 1
                         && branch->children_[0]->kind() == persistent_hamt_node_kind::bitmap_indexed))) {
                 return false;
             }
+            const auto next_mask = debug_next_prefix_mask(shift);
             entries = branch->data_.size();
-            for (const auto& child : branch->children_) {
-                auto child_entries = size_type{0};
-                if (child->kind() == persistent_hamt_node_kind::leaf
-                    || !debug_validate_node(child.get(), child_entries)) {
+            auto data_index = size_type{0};
+            auto child_index = size_type{0};
+            for (auto slot = 0; slot <= branch_mask; ++slot) {
+                const auto slot_bit = bit(slot);
+                if (shift == 30 && slot > 3
+                    && ((branch->data_map_ | branch->node_map_) & slot_bit) != 0) {
                     return false;
                 }
-                entries += child_entries;
+                const auto slot_prefix = prefix | (static_cast<std::uint32_t>(slot) << shift);
+                if ((branch->data_map_ & slot_bit) != 0) {
+                    if (data_index >= branch->data_.size()
+                        || !debug_hash_has_prefix(
+                            branch->data_[data_index].hash, slot_prefix, next_mask)) {
+                        return false;
+                    }
+                    ++data_index;
+                }
+                if ((branch->node_map_ & slot_bit) != 0) {
+                    auto child_entries = size_type{0};
+                    if (child_index >= branch->children_.size()
+                        || branch->children_[child_index]->kind() == persistent_hamt_node_kind::leaf
+                        || !debug_validate_node(
+                            branch->children_[child_index].get(), shift + bits_per_level,
+                            slot_prefix, next_mask, child_entries)) {
+                        return false;
+                    }
+                    entries += child_entries;
+                    ++child_index;
+                }
             }
-            return entries == branch->count_;
+            return data_index == branch->data_.size()
+                && child_index == branch->children_.size()
+                && entries == branch->count_;
         }
         case persistent_hamt_node_kind::empty:
             break;
@@ -1608,7 +1652,8 @@ private:
         return false;
     }
 
-    static bool debug_nodes_topology_equal(const node* left, const node* right) noexcept {
+    static bool debug_nodes_topology_equal(
+        const node* left, const node* right, const KeyEqual& equal) {
         if (left == nullptr || right == nullptr) {
             return left == right;
         }
@@ -1621,7 +1666,13 @@ private:
         case persistent_hamt_node_kind::collision: {
             const auto* l = static_cast<const collision_node*>(left);
             const auto* r = static_cast<const collision_node*>(right);
-            return l->hash_ == r->hash_ && l->entries_.size() == r->entries_.size();
+            return l->hash_ == r->hash_
+                && l->entries_.size() == r->entries_.size()
+                && std::ranges::all_of(l->entries_, [&](const value_type& left_entry) {
+                    return std::ranges::any_of(r->entries_, [&](const value_type& right_entry) {
+                        return std::invoke(equal, left_entry.first, right_entry.first);
+                    });
+                });
         }
         case persistent_hamt_node_kind::bitmap_indexed: {
             const auto* l = static_cast<const bitmap_indexed_node*>(left);
@@ -1633,8 +1684,8 @@ private:
                     [](const payload& a, const payload& b) { return a.hash == b.hash; })
                 && l->children_.size() == r->children_.size()
                 && std::equal(l->children_.begin(), l->children_.end(), r->children_.begin(),
-                    [](const node_ptr& a, const node_ptr& b) {
-                        return debug_nodes_topology_equal(a.get(), b.get());
+                    [&](const node_ptr& a, const node_ptr& b) {
+                        return debug_nodes_topology_equal(a.get(), b.get(), equal);
                     });
         }
         case persistent_hamt_node_kind::empty:
