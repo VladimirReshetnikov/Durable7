@@ -171,12 +171,18 @@ their artifacts with the direct-separate candidate or rerun their filters from t
 document records no direct-separate gate outcome until the locked correctness, ordinary-regression,
 and candidate measurements have completed.
 
-The full T1 command matrix below is also locked before direct-separate timing is inspected. Commands
-intentionally omit `--job`, selecting BenchmarkDotNet's default full job. The deciding persistent
-control runs in five independent processes; every other lane runs in its own process. The Every64
-pair corroborates repeated publication, the EveryEdit pair guards the sparse case, and the ordinary
-lookup/update controls guard the unchanged persistent surface. Preserve every filter verbatim in the
-curated record.
+The T1 parameter and filter matrix below was locked before direct-separate timing was inspected.
+Commands intentionally omit `--job`, selecting BenchmarkDotNet's default full job. An exact-SHA
+unpinned control pilot later exposed scheduler placement across this machine's heterogeneous core
+classes: five process medians spanned roughly 417 us through 1 ms. That pilot is archived as
+inconclusive under `axis2-t1-unpinned-1befaa2/`. Before any affinity-pinned direct candidate was run,
+the execution protocol was amended to bind every final lane to logical processor 0 with affinity
+mask `1`; the entire matrix, including all controls, is rerun rather than mixing observations.
+
+The deciding persistent control runs in five independent processes; every other lane runs in its own
+process. The Every64 pair corroborates repeated publication, the EveryEdit pair guards the sparse
+case, and the ordinary lookup/update controls guard the unchanged persistent surface. Preserve every
+filter and the affinity mask verbatim in the curated record.
 
 ```powershell
 $persistentEvery64Filter = '*TransientLifecycleBenchmarks.PersistentHistory*History: ClusteredPrefix*PublicationCadence: Every64*Workload: N100000_E512)'
@@ -184,26 +190,27 @@ $directEvery64Filter = '*TransientLifecycleBenchmarks.SeparateNodeKernelHistory*
 $ordinaryUpdateFilter = '*TransientLifecycleBenchmarks.PersistentHistory*History: ClusteredPrefix*PublicationCadence: EveryEdit*Workload: N100000_E1)'
 $directSparseFilter = '*TransientLifecycleBenchmarks.SeparateNodeKernelHistory*History: ClusteredPrefix*PublicationCadence: EveryEdit*Workload: N100000_E1)'
 $ordinaryLookupFilter = '*ChampBenchmarks.ChampLookup*'
+$affinityMask = 1
 
 1..5 | ForEach-Object {
-    dotnet $driver --filter $persistentEndFilter `
+    dotnet $driver --filter $persistentEndFilter --affinity $affinityMask `
         --artifacts ".\BenchmarkDotNet.Artifacts\axis2-t1\noise-persistent-$($_)"
 }
 
-dotnet $driver --filter $directEndFilter `
+dotnet $driver --filter $directEndFilter --affinity $affinityMask `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t1\candidate-direct-separate-full'
 
-dotnet $driver --filter $persistentEvery64Filter `
+dotnet $driver --filter $persistentEvery64Filter --affinity $affinityMask `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t1\corroboration-persistent-every64-full'
-dotnet $driver --filter $directEvery64Filter `
+dotnet $driver --filter $directEvery64Filter --affinity $affinityMask `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t1\corroboration-direct-every64-full'
 
-dotnet $driver --filter $ordinaryUpdateFilter `
+dotnet $driver --filter $ordinaryUpdateFilter --affinity $affinityMask `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t1\ordinary-update-every-edit-full'
-dotnet $driver --filter $directSparseFilter `
+dotnet $driver --filter $directSparseFilter --affinity $affinityMask `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t1\guard-direct-every-edit-full'
 
-dotnet $driver --filter $ordinaryLookupFilter `
+dotnet $driver --filter $ordinaryLookupFilter --affinity $affinityMask `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t1\ordinary-lookup-full'
 ```
 
@@ -219,6 +226,7 @@ all final evidence uses the exact filter above.
 | Exhaustive 456-case persistent counter census | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/dry-persistent/` | Complete; 456 sanitized CSV rows plus reports |
 | Selected persistent short control | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/candidate-persistent-short/` | Complete |
 | Selected `BulkBuilder` short control | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/candidate-bulk-builder-short/` | Complete |
+| Unpinned exact-SHA hybrid-core pilot | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1-unpinned-1befaa2/` | Complete; archived as inconclusive and excluded from the gate |
 | Five independent selected-control noise runs | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/noise-persistent-*/` | Required by T1; not part of the opportunity decision |
 | Full direct-separate deciding candidate | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/candidate-direct-separate-full/` | Required by T1; pending |
 | Full Every64 persistent corroboration | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/corroboration-persistent-every64-full/` | Required by T1; pending |

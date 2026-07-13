@@ -94,6 +94,11 @@ interval and three scaled median absolute deviations of the five process medians
 the prototype/control difference itself for the noise estimate. A result whose confidence interval
 crosses the required threshold is inconclusive, not a win.
 
+On a heterogeneous-core processor, predeclare one logical-processor affinity mask and pass it to
+every control and candidate process. Record the mask with the hardware summary. If an unpinned pilot
+reveals cross-core-class scheduling noise, archive that complete pilot as inconclusive and rerun the
+entire deciding matrix at the fixed affinity; never combine pinned and unpinned observations.
+
 Every advance or defer record must name the exact workload, dataset, snapshot/publication cadence,
 and metric that decided the gate; include the exact command, environment summary, raw artifact path,
 and curated table. Correctness tests and structural-counter runs are separate from timed runs.
