@@ -17,7 +17,8 @@ subtrees are shared by reference, so retaining many versions costs only the chan
 new or replaced leaves.
 
 `PersistentHashSet<T>` is a value set built on the same HAMT core. It preserves the same comparer and
-structural-sharing semantics as the map.
+structural-sharing semantics as the map. Both persistent CHAMP types expose a C#-only, one-way
+`Transient` session for many single-owner point edits followed by one O(1) publication.
 
 `ConcurrentHashTrie<TKey, TValue>` is a lock-free mutable map built from bitmap C-nodes, singleton
 leaves, collision nodes, and generation-stamped indirection nodes. Its public mutation surface is
@@ -119,6 +120,95 @@ separate `AddRange`/`RemoveRange` members.
 time and space cost documented on each member. `IsSupersetOf` and `Overlaps` stream their argument
 and exit early.
 
+## CHAMP Transient Contract
+
+The map exposes the following deliberately closed lifecycle surface:
+
+```csharp
+public static PersistentHashMap<TKey, TValue>.Transient CreateTransient(
+    IEqualityComparer<TKey>? comparer = null);
+
+public PersistentHashMap<TKey, TValue>.Transient ToTransient();
+
+public sealed class PersistentHashMap<TKey, TValue>.Transient
+    : IReadOnlyDictionary<TKey, TValue>
+{
+    public int Count { get; }
+    public IEqualityComparer<TKey> Comparer { get; }
+    public TValue this[TKey key] { get; }
+    public IEnumerable<TKey> Keys { get; }
+    public IEnumerable<TValue> Values { get; }
+
+    public bool ContainsKey(TKey key);
+    public bool TryGetValue(TKey key, out TValue value);
+    public bool TryGetKey(TKey equalKey, out TKey actualKey);
+    public void Add(TKey key, TValue value);
+    public bool TryAdd(TKey key, TValue value);
+    public void SetItem(TKey key, TValue value);
+    public bool Remove(TKey key);
+    public void Clear();
+    public Enumerator GetEnumerator();
+    public PersistentHashMap<TKey, TValue> Persist();
+}
+```
+
+The set exposes `CreateTransient(comparer)`, `ToTransient()`, and a sealed
+`PersistentHashSet<T>.Transient : IReadOnlySet<T>` with `Count`, `Comparer`, `Contains`,
+`TryGetValue`, bool-returning `Add` and `Remove`, `Clear`, the six `IReadOnlySet<T>` relation methods,
+`GetEnumerator`, and `Persist`. Neither surface has range edits, repeated snapshots, `ToImmutable`,
+or mutable algebra methods. A reusable builder, if ever added, is a separate type with a different
+lifecycle.
+
+`CreateTransient` starts empty under the supplied comparer, or `EqualityComparer<T>.Default` when
+the argument is null. `ToTransient` adopts the persistent root without visiting or copying a node.
+The map's public nested type is the selected direct separate-node edit engine itself, so adoption
+does not pay an additional public facade allocation. The set session is a thin facade over the map
+session.
+
+The following lifecycle rules are normative:
+
+- The transient is active until its first successful `Persist()` call. Publication atomically makes
+  it inactive and increments its version as part of invalidation.
+- After publication, every property read, lookup, mutation, relation query, enumeration request,
+  and second publication attempt through any direct or interface alias throws
+  `ObjectDisposedException`.
+- Map `Keys`/`Values` views and map/set enumerators capture their owner and version. A successful
+  changed edit invalidates previously obtained aliases with `InvalidOperationException`; successful
+  publication invalidates them with `ObjectDisposedException`. They cannot drain the newly
+  persistent graph.
+- A logical no-op does not advance the version and does not allocate or copy a path. No-ops include
+  duplicate `TryAdd`/set `Add`, absent removal, clearing an empty session, and setting a value equal
+  under `EqualityComparer<TValue>.Default`.
+- A clean `source.ToTransient().Persist()` returns `source` by reference, including after any number
+  of logical no-ops. A clean factory session returns its comparer-preserving empty; the default-
+  comparer result is the canonical `Empty` object.
+- The transient is unsynchronized and has one logical owner. Sequential transfer between threads is
+  permitted only with caller-provided synchronization. Concurrent access is unsupported. The
+  retained persistent base remains immutable and concurrently readable.
+
+Transient point edits preserve all persistent CHAMP semantics: comparer identity, comparer-defined
+null behavior, the first equivalent key/item representative, equal-value object retention, stable
+trie-order enumeration, collision-bucket ordering, recursive counts, branch contraction, and
+default/custom empty canonicalization. `Clear()` retains comparer identity. Map and set concrete
+enumerators are allocation-free copy-safe structs; interface enumeration may box them. Set relation
+queries interpret their argument through the receiver's comparer and have the same probe-
+materialization/streaming behavior as the persistent set.
+
+Every point edit has the strong exception guarantee. All potentially throwing hash/equality/value
+callbacks and replacement allocations complete before the operation performs an in-place write;
+commit consists only of non-throwing reference/field assignments. On failure, contents, root
+identity, ownership resources, version, and captured-enumerator validity are unchanged. Publication
+likewise prepares its immutable map wrapper and, for a set, its set wrapper before its non-throwing
+consume step. A preparation failure leaves the transient active and retryable.
+
+The selected representation keeps ordinary persistent leaf, collision, and bitmap-node layouts free
+of owner fields. The first changed edit is performed as an ordinary persistent edit; a later changed
+edit promotes only reusable branch/collision paths into exact-type transient-editable nodes. Nodes
+and arrays may be changed in place only under the active edit token and explicit array-ownership
+bits. Published edited nodes retain a sealed token reference and separate-node metadata; publication
+does not traverse the graph to clear tags. A later transient uses a different token and therefore
+copies before writing those paths.
+
 ## Complexity
 
 Let `w` be the hash width (32 bits), `b` be the branch factor (32), and `c` be the length of an
@@ -136,11 +226,26 @@ equal-hash collision bucket.
 - Same-type CHAMP map/set algebra: O(divergent nodes + result nodes) for shared ancestry and O(n + m)
   for independent operands; reference-equal subtrees are skipped in O(1). Arbitrary `IEnumerable<T>`
   set algebra retains its element-wise/probe-materialization costs.
+- Persistent map/set to transient: O(1), with no graph walk. The map allocates its session object;
+  the set allocates its thin facade and map session.
+- Transient lookup: O(w / log2(b) + c), matching persistent lookup depth and collision work.
+- First changed edit of a shared path: O(w / log2(b) + c), copying only that path. A later edit of an
+  already owned path has the same time bound and may reuse owned nodes/arrays in place.
+- Transient publication: O(1), with no graph walk or ownership-tag clearing. A dirty non-default
+  result prepares the required immutable wrapper allocation before consumption.
 
 Update allocation is O(b * depth + c) array storage — O(depth + c) allocated node objects — for the
 changed path and any touched collision bucket. Unchanged subtrees remain shared and are safe for
 concurrent readers because all node arrays are privately created before publication and never
 mutated afterward.
+
+Transient publication trades that O(1) bound for retained edit metadata in graphs that reused
+paths. In the pinned T1 100,000-entry/512-edit End lane, the published graph retained 8,488 extra
+bytes (0.1971%); Every64 retained 8,544 extra bytes (0.1984%). The sparse one-edit guard retained no
+extra graph metadata but cost 88 additional allocated bytes and higher latency. Those figures are
+workload evidence, not universal constants: direct persistent updates remain preferable for sparse
+one-off edits, and callers retaining many transient-produced versions should account for sealed
+metadata rather than assuming publication removes it.
 
 ## Concurrent Hash Trie Contract
 

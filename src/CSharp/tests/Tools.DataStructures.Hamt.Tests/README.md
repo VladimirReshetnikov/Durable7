@@ -28,6 +28,22 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
   callback/allocation/publication failure atomicity including deferred promotion rollback,
   and mixed published hierarchies through alternating exact-type lookup, enumeration, persistent
   update/remove, semantic equality, bidirectional structural diff, and all four map-algebra paths.
+- `PersistentHashMapTransientTests.cs` validates the shipped public map lifecycle: O(1)
+  factory/adoption, comparer-preserving custom empties, exact clean source identity, complete point
+  verbs, key/value representative retention, nulls, collision-heavy canonical publication,
+  deterministic dictionary-model histories, base/later-generation isolation, callback/publication
+  failure retryability, and consumption of every direct and interface alias.
+- `PersistentHashMapTransientEnumeratorTests.cs` locks persistent trie-order parity for pair/key/value
+  enumeration, allocation-free copied struct-enumerator independence, changed-edit fail-fast
+  invalidation, no-op validity, post-publication disposal, default-enumerator behavior, collisions,
+  and full-depth branches.
+- `PersistentHashSetTransientTests.cs` validates the thin public `IReadOnlySet<T>` transient facade:
+  comparer and clean wrapper identity, bool-returning mutable verbs, stored representatives, nulls,
+  collisions, receiver-comparer relations, retained-base and generation isolation, deterministic
+  `HashSet<T>` histories, map/set-wrapper publication failure atomicity, version-bound copy-safe
+  enumeration, and complete alias consumption.
+- `TransientApiShapeTests.cs` reflection-locks the intentionally small map/set surfaces and excludes
+  reusable-builder, repeated-snapshot, range-edit, freeze, and mutable set-algebra additions.
 - `PersistentHashMapEnumeratorTests.cs` covers allocation-free struct enumerators, copied enumerator independence,
   and key/value/pair enumeration.
 - `PersistentHashSetEnumeratorTests.cs` covers the set wrapper's default, before-first, active, exhausted,
@@ -73,24 +89,43 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
 From `src/CSharp`, run the full solution test gate:
 
 ```powershell
-.\test.ps1
+$env:DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER = '1'
+$env:DOTNET_CLI_USE_MSBUILD_SERVER = '0'
+$env:MSBUILDDISABLENODEREUSE = '1'
+$env:BuildInParallel = 'false'
+$env:UseSharedCompilation = 'false'
+$env:RestoreDisableParallel = 'true'
+
+dotnet restore .\DataStructures.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
+    -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
+dotnet build .\DataStructures.sln -c Release --no-restore --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false
+dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+    -c Release --no-restore --no-build --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false `
+    -- RunConfiguration.MaxCpuCount=1
 ```
 
-Run only this test project when iterating on test code:
+Run a focused public-transient pass after the Release build:
 
 ```powershell
-.\test.ps1 -Project .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj
+dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+    -c Release --no-restore --no-build --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false `
+    --filter 'FullyQualifiedName~PersistentHashMapTransientTests|FullyQualifiedName~PersistentHashMapTransientEnumeratorTests|FullyQualifiedName~PersistentHashSetTransientTests|FullyQualifiedName~TransientApiShapeTests' `
+    -- RunConfiguration.MaxCpuCount=1
 ```
 
-Filter a class while developing a focused change:
-
-```powershell
-.\test.ps1 -Filter FullyQualifiedName~PersistentHashMapPropertyTests
-```
-
-The launcher suppresses modal Windows loader/crash reporting for the complete `dotnet` child-process tree. The
-test assembly repeats the headless process configuration during module initialization, so direct test-runner and
+Run restore, build, and test sequentially. These commands disable NuGet restore parallelism, MSBuild
+project parallelism/node reuse, compiler and .NET build servers, and test-host parallelism, bounding
+both process count and memory use. The repository launcher still suppresses modal Windows
+loader/crash reporting for its complete `dotnet` child-process tree; the test assembly independently
+repeats the headless process configuration during module initialization, so direct test-runner and
 Test Explorer execution is non-interactive after the assembly loads as well.
+
+The T2 shipment checkpoint is **223 passed, 0 failed** for this complete project. The final focused
+public transient/API filter passed 33 tests, and the selected T1 kernel suite remained 26 tests.
+These counts record the shipment evidence and are not a ceiling for later test growth.
 
 Use the workspace [validation guide](../../docs/Hamt/validation.md) for restore/build split commands, warning policy,
 and evidence expectations.

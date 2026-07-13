@@ -3,7 +3,7 @@
 - Created (UTC): 2026-07-02T20:12:28Z
 - Repository HEAD: f448af2c7626e4f3b06f74701c3f9f9383db7446
 - Audience: .NET consumers and maintainers using the C# HAMT, Ctrie, Patricia, and Merkle families
-- Scope: Construction, persistent updates, comparer behavior, iteration, concurrency, and content-addressed workflows
+- Scope: Construction, persistent and transient updates, comparer behavior, iteration, concurrency, and content-addressed workflows
 
 This guide is the practical companion to the [C# API specification](api-specification.md). It shows
 the common usage patterns for the CHAMP, Ctrie, Patricia, and Merkle families; the API specification
@@ -20,7 +20,21 @@ using Tools.DataStructures.Hamt;
 Validate the workspace through the solution:
 
 ```powershell
-.\test.ps1
+$env:DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER = '1'
+$env:DOTNET_CLI_USE_MSBUILD_SERVER = '0'
+$env:MSBUILDDISABLENODEREUSE = '1'
+$env:BuildInParallel = 'false'
+$env:UseSharedCompilation = 'false'
+$env:RestoreDisableParallel = 'true'
+
+dotnet restore .\DataStructures.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
+    -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
+dotnet build .\DataStructures.sln -c Release --no-restore --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false
+dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+    -c Release --no-restore --no-build --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false `
+    -- RunConfiguration.MaxCpuCount=1
 ```
 
 The repository currently builds the library from source under
@@ -225,6 +239,91 @@ if (set.TryGetValue("ALPHA", out var actualValue))
     // actualValue is "Alpha".
 }
 ```
+
+## One-Way Transient Editing
+
+Use a transient when one logical owner will apply many point edits before publishing the next
+persistent version. `ToTransient()` adopts an existing map in O(1), without walking or copying its
+trie. The source remains immutable and safe for concurrent readers:
+
+```csharp
+var baseline = PersistentHashMap<int, string>.CreateRange(
+    Enumerable.Range(0, 100_000).Select(i => KeyValuePair.Create(i, $"v{i}")));
+
+var edit = baseline.ToTransient();
+for (int i = 0; i < 512; i++)
+    edit.SetItem(i * 3, $"changed-{i}");
+
+edit.Remove(40_000);
+edit.TryAdd(100_001, "new");
+PersistentHashMap<int, string> published = edit.Persist();
+
+// baseline is unchanged; edit has been consumed.
+Console.WriteLine(baseline[0]);
+```
+
+`PersistentHashMap<TKey, TValue>.CreateTransient(comparer)` starts an empty session. The map
+transient implements `IReadOnlyDictionary<TKey, TValue>` and exposes `Count`, `Comparer`, the
+indexer, `Keys`, `Values`, `ContainsKey`, `TryGetValue`, `TryGetKey`, `Add`, `TryAdd`, `SetItem`,
+`Remove`, `Clear`, `GetEnumerator`, and `Persist`. It deliberately has no range methods, reusable
+snapshot method, or `ToImmutable` builder lifecycle.
+
+Equivalent keys keep the first stored key object. `SetItem` replaces only the value; a replacement
+equal under `EqualityComparer<TValue>.Default` retains the stored value object and is a logical
+no-op. Duplicate `TryAdd`, absent `Remove`, and clearing an empty session are also no-ops. They do
+not invalidate existing enumerators or key/value views, and a session containing only such edits
+publishes its exact source map by reference:
+
+```csharp
+var source = PersistentHashMap<string, int>
+    .Create(StringComparer.OrdinalIgnoreCase)
+    .SetItem("Alpha", 1);
+
+var edit = source.ToTransient();
+edit.SetItem("ALPHA", 1);       // no-op; representative and value are retained
+edit.TryAdd("alpha", 99);       // false; no-op
+edit.Remove("missing");         // false; no-op
+
+var same = edit.Persist();
+Debug.Assert(ReferenceEquals(source, same));
+Debug.Assert(ReferenceEquals(source.Comparer, same.Comparer));
+```
+
+The set facade follows the same lifecycle and implements `IReadOnlySet<T>`. `Add` and `Remove`
+return whether membership changed; `TryGetValue` recovers the first stored representative; and the
+six read-only relation methods use the receiver's comparer:
+
+```csharp
+var edit = PersistentHashSet<string>
+    .CreateTransient(StringComparer.OrdinalIgnoreCase);
+
+edit.Add("Alpha");              // true
+edit.Add("ALPHA");              // false; keeps "Alpha"
+edit.Add("Beta");
+bool includesAlpha = edit.IsSupersetOf(new[] { "alpha" });
+PersistentHashSet<string> published = edit.Persist();
+```
+
+`Persist()` is terminal and O(1). After a successful call, every property read, lookup, mutation,
+relation query, enumeration request, and second `Persist()` through any direct or interface alias
+throws `ObjectDisposedException`. Map `Keys`/`Values` views and map/set enumerators obtained before
+publication throw the same exception; they cannot be used to drain an alias of the published graph.
+A changed edit instead invalidates previously captured enumerators/views with
+`InvalidOperationException`. Concrete enumeration uses the allocation-free struct enumerator and
+follows the same stable-but-unspecified trie order as the persistent collection.
+
+Each point edit has the strong exception guarantee. Hash/equality callbacks and replacement
+allocations complete before any session-owned node is changed. Publication prepares the immutable
+map and, for a set, its wrapper before the non-throwing consume step; a preparation failure leaves
+the session active, unchanged, and retryable.
+
+The session is unsynchronized and has one logical owner. Transfer it between threads only
+sequentially and under caller-provided synchronization; concurrent access is unsupported. Prefer
+ordinary persistent operations for a sparse one-off edit. The selected implementation defers its
+editable machinery until a later changed edit can reuse a path, but a measured one-edit session was
+still slower and allocated 88 more bytes than the direct persistent operation. Long edited graphs
+may also retain sealed ownership metadata after publication; `Persist()` never hides that cost with
+an O(n) tag-clearing walk.
 
 ## Set Algebra
 
@@ -491,10 +590,12 @@ unresolved, the result exposes every unresolved conflict and no partial tree.
 | Need | Start with |
 | --- | --- |
 | Immutable unordered key/value collection | `PersistentHashMap<TKey, TValue>` |
+| Many single-owner map edits per publication | `PersistentHashMap<TKey, TValue>.Transient` |
 | Add-or-replace update | `SetItem` or `SetItems` |
 | Duplicate-rejecting insert | `Add` or `TryAdd` |
 | Stored equivalent key recovery | `TryGetKey` |
 | Immutable unordered value set | `PersistentHashSet<T>` |
+| Many single-owner set edits per publication | `PersistentHashSet<T>.Transient` |
 | Stored equivalent item recovery | `TryGetValue` |
 | Union/intersection/difference | `Union`, `Intersect`, `Except`, `SymmetricExcept` |
 | Custom value semantics | `Create(comparer)` or `CreateRange(items, comparer)` |

@@ -12,26 +12,53 @@ constant-factor claims into measured evidence, comparing against the BCL's persi
 ## Running
 
 The project is an executable that uses `BenchmarkSwitcher`, so the command line selects what runs.
+Prepare it with one restore/build worker, then invoke the already-built driver directly. Do not
+overlap restore, build, or benchmark processes.
 
 ```powershell
-cd C:\DataStructures\src\CSharp\benchmarks\Tools.DataStructures.FingerTree.Benchmarks
+cd C:\DataStructures\src\CSharp
+$env:DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER = '1'
+$env:DOTNET_CLI_USE_MSBUILD_SERVER = '0'
+$env:MSBUILDDISABLENODEREUSE = '1'
+$env:BuildInParallel = 'false'
+$env:UseSharedCompilation = 'false'
+$env:RestoreDisableParallel = 'true'
+
+dotnet restore .\DataStructures.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
+    -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
+dotnet build .\benchmarks\Tools.DataStructures.FingerTree.Benchmarks\Tools.DataStructures.FingerTree.Benchmarks.csproj `
+    -c Release --no-restore --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false
+
+# Prevent BenchmarkDotNet child processes from inheriting credentials.
+Get-ChildItem Env: | Where-Object {
+    $_.Name -match '(?i)(TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL|CONNECTION|COOKIE|AUTH|IGCCSVC)'
+} | Remove-Item -ErrorAction SilentlyContinue
+
+cd .\benchmarks\Tools.DataStructures.FingerTree.Benchmarks
+$driver = '.\bin\Release\net10.0\Tools.DataStructures.FingerTree.Benchmarks.dll'
 
 # Everything, full (default) job — the trustworthy but slow run.
-dotnet run -c Release -- --filter *
+dotnet $driver --filter '*'
 
 # A quick pass (ShortRun: 3 warmups, 3 iterations) — good enough to see the asymptotic shape.
-dotnet run -c Release -- --filter * --job short
+dotnet $driver --filter '*' --job short
 
 # One class or one method (the filter matches the full namespace.type.method name).
-dotnet run -c Release -- --filter *ReverseBenchmarks* --job short
-dotnet run -c Release -- --filter *PriorityQueueBenchmarks.Ours_Meld*
+dotnet $driver --filter '*ReverseBenchmarks*' --job short
+dotnet $driver --filter '*PriorityQueueBenchmarks.Ours_Meld*'
 ```
 
 Release configuration is mandatory for meaningful numbers; BenchmarkDotNet refuses to trust a Debug build.
+For an Axis 2 decision matrix on a heterogeneous-core host, pass the same predeclared affinity mask
+to every control and candidate process (the locked T1/T2 evidence used `--affinity 1`). The
+environment and build properties above also constrain BenchmarkDotNet's generated-harness builds
+to one MSBuild node without compiler/build-server reuse.
 Results are written under `BenchmarkDotNet.Artifacts/` (git-ignored); curated tables live in
 the owning workspace's decision or benchmark document, including
 [`../../docs/FingerTree/benchmarks.md`](../../docs/FingerTree/benchmarks.md) and the
-[CHAMP T1 decision](../../docs/Hamt/transient-t1-decision.md).
+[CHAMP T1](../../docs/Hamt/transient-t1-decision.md) and
+[T2](../../docs/Hamt/transient-t2-decision.md) decisions.
 
 ## Benchmark classes
 
@@ -55,7 +82,7 @@ the owning workspace's decision or benchmark document, including
 | `RopeBuilderBenchmarks` | append-only rope builder construction and snapshot constants | `Create`, `AddLast` loop, text `StringBuilder` materialization, `ImmutableList<T>.Builder` |
 | `ChampBenchmarks` | CHAMP lookup, payload-dense iteration, shared-single-change diff, and independent-history equality/diff | `Dictionary` and `ImmutableDictionary` |
 | `CtrieBenchmarks` | lock-free lookup and O(1) immutable snapshot publication | `ConcurrentDictionary` lookup and O(n) immutable copy |
-| `TransientLifecycleBenchmarks` | Axis 2 edit-locality/publication matrix, structural path-copy counters, and the selected direct-separate T1 kernel: first-edit ordinary deferral, later reusable-path promotion, exact-type transient-editable branch/collision nodes, O(1) adoption/seal, and actual ownership/copy/retained-size evidence | direct persistent edits and canonical `BulkBuilder` construction |
+| `TransientLifecycleBenchmarks` | Axis 2 edit-locality/publication matrix and the shipped public C# transient path: O(1) `ToTransient`/`Persist`, first-edit ordinary deferral, later reusable-path promotion, exact-type transient-editable branch/collision nodes, plus untimed structural copy/ownership/retained-size diagnostics | direct persistent edits and canonical `BulkBuilder` construction |
 | `FrozenLookupBenchmarks`, `FrozenClusteredLookupBenchmarks`, `FrozenCollisionLookupBenchmarks`, `FrozenNullLookupBenchmarks` | Axis 2 F1 fixed-layout bake-off across lookup mixes, enumeration, construction, retained arrays, null/stored representatives, collision shapes, and break-even | persistent CHAMP, linear/Robin-Hood/quadratic repository prototypes, `Dictionary`, `ImmutableDictionary`, and BCL `FrozenDictionary` where semantically representable |
 | `PatriciaMapBenchmarks` | integer-key lookup and prefix-aware structural union | CHAMP and `ImmutableDictionary` lookup |
 | `RrbVectorBenchmarks` | uniform middle indexing and boundary-spine concatenation | `Rope<T>` indexing/concat and `ImmutableList<T>` indexing/concat |
@@ -135,8 +162,17 @@ lane—most notably a null-key lane—is omitted and called out rather than give
 BenchmarkDotNet's `MemoryDiagnoser` supplies allocation data; retained graph bytes come from the
 internal structural estimators and are never relabeled as allocation bytes.
 
-The `SeparateNodeKernelHistory` method is the filterable lane for the selected private T1
-representation. Ordinary collision and bitmap nodes retain the b590 sealed,
+The `SeparateNodeKernelHistory` method retains its historical compatibility name so the locked T1
+filters and archived artifacts stay reproducible. Its timed body is now the shipped public T2 path:
+each publication batch calls `map.ToTransient()`, applies edits through the public point verbs, and
+calls `Persist()`. It carries the `Axis2T2`, `EditPublication`, and `PublicTransient` categories. The
+public map type is the selected engine itself, so this timed path does not add a facade/session
+wrapper beyond the object users receive.
+
+Setup replays a diagnostics-enabled instance of the same engine solely to prove semantic,
+canonical, counter, and retained-layout parity with production. That untimed replay emits
+`AXIS2_T1_COUNTER_V2`; diagnostic work is never folded into the public latency method. Ordinary
+collision and bitmap nodes retain the b590 sealed,
 readonly source shape and physically contain no owner token or ownership flags. Direct
 `SeparateTransientCollisionNode : HashNode` and `SeparateTransientBranchNode : Node` types carry
 the token; a two-bit mask gives data and child arrays independent write ownership without a shared
@@ -154,7 +190,26 @@ The owner-field lane and evidence recorded in the T0 decision document are histo
 `codex/axis2-t1-owner-fields-gate`; the earlier abstract-base separate formulation runs on
 `codex/axis2-t1-separate-gate`. Only the direct-separate lane contributes to the completed gate. The
 [T1 decision](../../docs/Hamt/transient-t1-decision.md) records the pinned noise calculation,
-material End/Every64 wins, bounded sparse cost, retained graph, and advance to T2.
+material End/Every64 wins, bounded sparse cost, retained graph, and advance to T2. The full public-
+path confirmation used this exact compatibility filter and artifact directory:
+
+```powershell
+$publicEnd = '*TransientLifecycleBenchmarks.SeparateNodeKernelHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512)'
+dotnet $driver --filter $publicEnd --affinity 1 `
+    --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t2-public-end-full'
+```
+
+Across 100 samples, the public path measured 236.700 us mean, 220.608 us median, a
+222.285–251.115 us 99.9% confidence interval, and 253.67 KB allocated. Its entire interval is below
+the locked 283.132 us cutoff; the mean is 46.60% below the 443.293 us persistent-control center and
+the upper confidence endpoint is 43.35% below it. Adoption/publication node visits remain zero, and
+the actual retained graph is 4,314,808 bytes versus 4,306,320 bytes for the ordinary result
+(+8,488 bytes, +0.1971%). See the
+[T2 decision](../../docs/Hamt/transient-t2-decision.md) for shipment context.
+
+An earlier pinned one-case BenchmarkDotNet Dry-job run was only a public-path harness smoke. It
+proved setup/replay completion and zero adoption/publication node visits, but supplies no statistical
+performance evidence and is not combined with the full public-path result.
 
 The F1 frozen-layout bake-off keeps one packed source-order entry array and compares three fixed
 offline indexes: simple linear probing, Robin-Hood linear probing, and power-of-two triangular

@@ -10,7 +10,12 @@
 `Tools.DataStructures.Hamt`, a persistent and concurrent trie/search-tree library led by canonical
 CHAMP. `PersistentHashMap<TKey, TValue>` is an immutable unordered dictionary with structural
 sharing across versions. `PersistentHashSet<T>` is built on the same core and implements
-`IReadOnlySet<T>`.
+`IReadOnlySet<T>`. Both expose a C#-only one-way `Transient` editing session for many edits per
+publication. `CreateTransient` starts empty and `ToTransient` adopts a persistent value in O(1);
+`Persist` publishes in O(1), consumes the session, and returns the exact source object when the
+session remained logically clean. The map surface is the selected direct separate-node engine
+itself, not an additional public facade allocation; the set surface is a thin `IReadOnlySet<T>`
+facade over that map engine.
 
 `ConcurrentHashTrie<TKey, TValue>` is the deliberately mutable member of the family. It applies
 GCAS descriptors to generation-stamped indirection nodes and a root/main RDCSS transition for
@@ -55,6 +60,22 @@ freezes them directly into canonical CHAMP topology, avoiding a persistent path 
 The same internal facility is available to the sibling Tungsten assembly
 for association relabel/sort/reverse rebuilds; no mutable storage is ever shared with a published map.
 
+Transient sessions preserve the persistent CHAMP comparer, stored-representative, collision,
+enumeration, and no-op rules. They are unsynchronized and have one logical owner; sequential transfer
+between threads requires external synchronization, and concurrent access is unsupported. A changed
+edit invalidates captured enumerators and map key/value views, while a logical no-op does not.
+Successful publication invalidates every direct, interface, view, and enumerator alias with
+`ObjectDisposedException`; no alias can continue reading the newly persistent graph. The retained
+base remains immutable and concurrently readable throughout the session.
+
+The first changed edit stays on the ordinary persistent path. A later changed edit may promote only
+reusable branch or collision paths into separate transient-editable node types. Published edited
+graphs retain sealed ownership metadata so adoption and publication never walk the graph or clear
+tags. This is a measured space cost: the pinned 100,000-entry/512-edit End lane retained 8,488 extra
+bytes (0.1971%), and the Every64 lane retained 8,544 extra bytes (0.1984%). A one-edit sparse session
+retained no extra graph bytes but was slower and allocated 88 more bytes than the direct persistent
+operation, so direct persistent methods remain the recommended one-off path.
+
 `MapEquals` and `Diff` walk that topology in lockstep and prune reference-equal descendants. This is
 especially effective for versions with shared ancestry. Independently built equal maps still need a
 full semantic traversal: collision order and stored representatives are intentionally not canonical,
@@ -65,6 +86,8 @@ and canonical topology alone does not confer reference identity.
 - `DataStructures.sln` is the solution entry point.
 - `src/Tools.DataStructures.Hamt/` contains the public library.
   - `PersistentHashMap.cs` is the bitmap-indexed HAMT map implementation.
+  - `PersistentHashMap.Transient.cs` and `PersistentHashMap.OwnerTokenKernel.cs` expose and implement
+    the public one-way map transient.
   - `MapDifference.cs` defines the added/removed/changed result vocabulary used by structural diff.
   - `ConcurrentHashTrie.cs` is the lock-free mutable map with O(1) immutable snapshots.
   - `PersistentIntMap.cs`, `PersistentLongMap.cs`, and their set facades expose the Patricia family.
@@ -77,13 +100,15 @@ and canonical topology alone does not confer reference identity.
   - `MerkleSearchTree.PersistenceAlgorithms.cs` implements save/load/import, one-shot and iterative
     synchronization, point/range proofs, and three-way merge.
   - `PersistentHashSet.cs` is the set wrapper over the map core.
+  - `PersistentHashSet.Transient.cs` is the public one-way set facade.
 - [`tests/Tools.DataStructures.Hamt.Tests/`](../../tests/Tools.DataStructures.Hamt.Tests/README.md) contains xUnit
   and CsCheck-backed model tests.
 - [`benchmarks/Tools.DataStructures.FingerTree.Benchmarks/`](../../benchmarks/Tools.DataStructures.FingerTree.Benchmarks/README.md)
   is the shared C# persistent-collections harness. Its `ChampBenchmarks`, `CtrieBenchmarks`,
   `TransientLifecycleBenchmarks`, `PatriciaMapBenchmarks`, and `MerkleSearchTreeBenchmarks` classes
   cover this workspace; Release configuration is required for meaningful measurements. The
-  [CHAMP T1 decision](transient-t1-decision.md) curates the selected private transient evidence.
+  [CHAMP T1 decision](transient-t1-decision.md) curates the selected representation evidence, and
+  the [T2 decision](transient-t2-decision.md) records public shipment.
 - `docs/api-specification.md` documents public contracts and complexity guarantees.
 - `docs/usage.md` provides practical construction, comparer, persistent update, iteration, and
   set-algebra examples.
@@ -94,8 +119,18 @@ and canonical topology alone does not confer reference identity.
 Use the local .NET SDK:
 
 ```powershell
-.\test.ps1
+$env:DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER = '1'
+$env:DOTNET_CLI_USE_MSBUILD_SERVER = '0'
+$env:MSBUILDDISABLENODEREUSE = '1'
+$env:BuildInParallel = 'false'
+$env:UseSharedCompilation = 'false'
+$env:RestoreDisableParallel = 'true'
+
+dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+    -c Release --disable-build-servers -m:1 -nr:false `
+    -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false `
+    -- RunConfiguration.MaxCpuCount=1
 ```
 
 See [`docs/validation.md`](validation.md) for the restore/build/test split, XML documentation
-warning gate, and xUnit/CsCheck coverage.
+warning gate, complete single-node commands, and the 223-test C# HAMT checkpoint.

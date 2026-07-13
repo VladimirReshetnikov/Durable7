@@ -34,14 +34,39 @@ The test project references the library project and uses `xunit`, `xunit.runner.
 From `src/CSharp`:
 
 ```powershell
-dotnet restore
-dotnet build .\DataStructures.sln
-.\test.ps1
+$env:DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER = '1'
+$env:DOTNET_CLI_USE_MSBUILD_SERVER = '0'
+$env:MSBUILDDISABLENODEREUSE = '1'
+$env:BuildInParallel = 'false'
+$env:UseSharedCompilation = 'false'
+$env:RestoreDisableParallel = 'true'
+
+dotnet restore .\DataStructures.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
+    -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
+dotnet build .\DataStructures.sln -c Release --no-restore --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false
+dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+    -c Release --no-restore --no-build --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false `
+    -- RunConfiguration.MaxCpuCount=1
 ```
 
-For ordinary behavior changes, `.\test.ps1` is the main gate because it restores and builds as needed before running
-the test projects while suppressing modal Windows failure UI throughout the child-process tree. Use the explicit
-restore/build steps when validating toolchain or warning-policy changes, or when you want a clearer failure boundary.
+Run these commands sequentially; do not overlap restore, build, test, or BenchmarkDotNet processes.
+NuGet parallel restore, MSBuild project parallelism and node reuse, compiler-server sharing, .NET
+build servers, and test-host parallelism are all disabled to keep the process count and memory bound.
+The repository `.\test.ps1` launcher remains useful for unattended full-workspace validation, but
+the explicit commands above are the reproducible single-node HAMT gate and give each phase a clear
+failure boundary.
+
+For a focused public-transient pass after the Release build, substitute this final command:
+
+```powershell
+dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+    -c Release --no-restore --no-build --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false `
+    --filter 'FullyQualifiedName~PersistentHashMapTransientTests|FullyQualifiedName~PersistentHashMapTransientEnumeratorTests|FullyQualifiedName~PersistentHashSetTransientTests|FullyQualifiedName~TransientApiShapeTests' `
+    -- RunConfiguration.MaxCpuCount=1
+```
 
 ## Test Coverage
 
@@ -60,6 +85,19 @@ The suite covers:
   promotion, independent array ownership, production/diagnostic parity, O(1) adoption/publication,
   recursive canonicality, base/version isolation, consumed sessions, and deterministic callback,
   allocation, promotion, and publication failure rollback;
+- the shipped public map transient: exact reflection-locked surface, O(1) factory/adoption, clean
+  source identity, default/custom comparer empties, point verbs, nullable keys/values, first key/value
+  representative retention, collisions and deep prefixes, deterministic model histories, base and
+  later-generation isolation, public callback/publication failure atomicity, and complete direct,
+  interface, key-view, value-view, enumerator, copied-enumerator, and second-publication consumption;
+- the shipped public set transient: exact `IReadOnlySet<T>` facade shape, comparer and clean set
+  identity, bool-returning mutable verbs, representative/null/collision behavior, receiver-comparer
+  relations, deterministic `HashSet<T>` model histories, map/set wrapper publication failpoints,
+  base isolation, version-bound copy-safe enumeration, and complete post-publication alias
+  invalidation;
+- transient enumeration parity: concrete/interface/key/value traversal follows persistent trie order,
+  changed edits fail fast, logical no-ops preserve captured aliases, and successful publication
+  changes failure precedence to `ObjectDisposedException`;
 - comparer preservation, first equivalent key/item retention, and custom equality;
 - equal-hash collision buckets, deep shared hash prefixes, and collision splitting;
 - allocation-free copy-safe enumerators;
@@ -95,12 +133,40 @@ The suite covers:
 For a new public operation, add both direct examples and model/property coverage when there is a natural
 BCL or simple in-memory oracle.
 
+The T2 shipment checkpoint is **223 passed, 0 failed** for the complete C# HAMT project under the
+single-worker command above. The final focused public transient/API filter passed 33 tests, and the
+existing selected-kernel suite remained 26 tests. Treat these as a named checkpoint rather than a
+permanent expected-count assertion; new tests should increase the total.
+
+## Public Transient Benchmark Validation
+
+`TransientLifecycleBenchmarks.SeparateNodeKernelHistory` retains its historical name so the locked
+T1 filters and archived artifacts remain reproducible, but the timed method now calls the public
+`map.ToTransient()` / `Persist()` path and is categorized `Axis2T2`, `EditPublication`, and
+`PublicTransient`. Setup separately replays the diagnostics-enabled engine to validate semantic,
+canonical, and retained-layout parity and to emit structural counters; diagnostic work is outside
+the timed method.
+
+The decisive public confirmation used affinity 1 and the locked
+`N100000_E512 / ClusteredPrefix / End` tuple. Across 100 samples, the public path measured
+236.700 us mean, 220.608 us median, a 222.285–251.115 us 99.9% confidence interval, and 253.67 KB
+allocated. The entire interval is below the locked 283.132 us cutoff: the mean is 46.60% below the
+443.293 us persistent-control center, and the upper endpoint is 43.35% below it. Counters retain zero
+adoption/publication node visits; the published graph is 4,314,808 bytes versus 4,306,320 ordinary
+bytes (+8,488, +0.1971%). This is full public-path performance evidence; the complete command and
+artifact contract are in the [T2 decision](transient-t2-decision.md).
+
+An earlier pinned one-case BenchmarkDotNet Dry-job run completed the same public
+semantic/canonical setup and zero-visit checks. It remains a harness smoke only: a Dry job supplies
+no statistical performance evidence and is not combined with either the affinity-pinned T1 matrix
+or the 100-sample public result.
+
 ## Evidence To Record
 
 When reporting validation, include the workspace and exact command, for example:
 
 ```text
-src/CSharp> .\test.ps1
+src/CSharp> dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj -c Release --no-restore --no-build --disable-build-servers -m:1 -nr:false -p:BuildInParallel=false -p:UseSharedCompilation=false -- RunConfiguration.MaxCpuCount=1
 ```
 
 If a docs-only change only updates links or wording and does not alter commands, API claims, or XML
