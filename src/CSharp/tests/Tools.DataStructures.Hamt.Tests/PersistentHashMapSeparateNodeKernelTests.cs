@@ -120,7 +120,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         diagnosticResult.ValidateCanonicalityForDiagnostics();
         productionResult.ValidateCanonicalityForDiagnostics();
 
-        static void ApplyHistory(PersistentHashMap<int, int>.OwnerTokenTransientKernel kernel)
+        static void ApplyHistory(PersistentHashMap<int, int>.Transient kernel)
         {
             kernel.SetItem(17, -17);
             Assert.True(kernel.TryAdd(1_024, 1_024));
@@ -176,7 +176,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         static void AssertChanged(
             PersistentHashMap<int, int> source,
             bool diagnosticsEnabled,
-            Action<PersistentHashMap<int, int>.OwnerTokenTransientKernel> mutation,
+            Action<PersistentHashMap<int, int>.Transient> mutation,
             Func<PersistentHashMap<int, int>, PersistentHashMap<int, int>> persistentMutation)
         {
             var expected = persistentMutation(source);
@@ -184,7 +184,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
                 enableDiagnostics: diagnosticsEnabled);
             mutation(kernel);
 
-            Assert.Equal(1, kernel.VersionForDiagnostics);
+            Assert.Equal(1L, kernel.VersionForDiagnostics);
             Assert.False(kernel.TokenIsAllocatedForDiagnostics);
             Assert.False(kernel.CommitPlanIsAllocatedForDiagnostics);
             var deferred = Assert.IsType<PersistentHashMap<int, int>>(
@@ -215,14 +215,14 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         static void AssertNoOp(
             PersistentHashMap<int, int> source,
             bool diagnosticsEnabled,
-            Action<PersistentHashMap<int, int>.OwnerTokenTransientKernel> mutation)
+            Action<PersistentHashMap<int, int>.Transient> mutation)
         {
             var kernel = source.CreateSeparateNodeTransientKernel(
                 enableDiagnostics: diagnosticsEnabled);
             var root = kernel.RootIdentityForDiagnostics;
             mutation(kernel);
 
-            Assert.Equal(0, kernel.VersionForDiagnostics);
+            Assert.Equal(0L, kernel.VersionForDiagnostics);
             Assert.Null(kernel.DeferredPersistentIdentityForDiagnostics);
             Assert.Same(root, kernel.RootIdentityForDiagnostics);
             Assert.False(kernel.TokenIsAllocatedForDiagnostics);
@@ -288,7 +288,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         Assert.False(sawAllocationBoundary);
         Assert.True(kernel.IsActiveForDiagnostics);
         Assert.True(kernel.TokenIsActiveForDiagnostics);
-        Assert.Equal(0, kernel.Count);
+        Assert.Empty(kernel);
 
         kernel.FailureInjector = null;
         Assert.Same(PersistentHashMap<int, int>.Empty, kernel.Persist());
@@ -793,7 +793,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
                 Assert.True(kernel.IsActiveForDiagnostics);
                 Assert.True(kernel.TokenIsActiveForDiagnostics);
                 Assert.Same(root, kernel.RootIdentityForDiagnostics);
-                Assert.Equal(0, kernel.VersionForDiagnostics);
+                Assert.Equal(0L, kernel.VersionForDiagnostics);
                 Assert.Equal(before, kernel.GetCountersForDiagnostics());
                 Assert.Equal(expected, kernel.ToArrayForDiagnostics());
                 Assert.Equal(129, source[129]);
@@ -820,7 +820,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         AssertAtomic(kernel => Assert.True(kernel.Remove(2)));
         AssertAtomic(kernel => kernel.Clear());
 
-        void AssertAtomic(Action<PersistentHashMap<int, int>.OwnerTokenTransientKernel> mutation)
+        void AssertAtomic(Action<PersistentHashMap<int, int>.Transient> mutation)
         {
             var kernel = source.CreateSeparateNodeTransientKernel();
             var root = kernel.RootIdentityForDiagnostics;
@@ -836,7 +836,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
             kernel.FailureInjector = null;
 
             Assert.Same(root, kernel.RootIdentityForDiagnostics);
-            Assert.Equal(0, kernel.VersionForDiagnostics);
+            Assert.Equal(0L, kernel.VersionForDiagnostics);
             Assert.Null(kernel.DeferredPersistentIdentityForDiagnostics);
             Assert.False(kernel.TokenIsAllocatedForDiagnostics);
             Assert.False(kernel.CommitPlanIsAllocatedForDiagnostics);
@@ -1030,7 +1030,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         comparer.ThrowEquals = false;
 
         Assert.Same(root, kernel.RootIdentityForDiagnostics);
-        Assert.Equal(0, kernel.VersionForDiagnostics);
+        Assert.Equal(0L, kernel.VersionForDiagnostics);
         Assert.Null(kernel.DeferredPersistentIdentityForDiagnostics);
         Assert.False(kernel.TokenIsAllocatedForDiagnostics);
         Assert.False(kernel.CommitPlanIsAllocatedForDiagnostics);
@@ -1125,7 +1125,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
 
     private static void AssertMutationFailpointAtomic<TKey>(
         PersistentHashMap<TKey, int> source,
-        Action<PersistentHashMap<TKey, int>.OwnerTokenTransientKernel> mutation,
+        Action<PersistentHashMap<TKey, int>.Transient> mutation,
         PersistentHashMap<TKey, int>.OwnerTokenKernelFailurePoint target)
         where TKey : notnull
     {

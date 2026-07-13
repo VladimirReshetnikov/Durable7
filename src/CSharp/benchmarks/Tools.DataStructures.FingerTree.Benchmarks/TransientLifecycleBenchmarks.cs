@@ -349,7 +349,7 @@ public class TransientLifecycleBenchmarks
             : map.Remove(edit.Key);
 
     private static void Apply(
-        PersistentHashMap<Axis2HashKey, int>.OwnerTokenTransientKernel kernel,
+        PersistentHashMap<Axis2HashKey, int>.Transient kernel,
         Axis2HashEdit edit)
     {
         if (edit.Kind == Axis2HashEditKind.Set)

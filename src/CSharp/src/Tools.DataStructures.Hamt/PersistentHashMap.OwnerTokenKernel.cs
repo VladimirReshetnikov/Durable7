@@ -74,21 +74,36 @@ public sealed partial class PersistentHashMap<TKey, TValue>
     }
 
     /// <summary>
-    /// Creates the private T1 kernel whose editable branch and collision nodes are separate from
-    /// the owner-free ordinary persistent-node classes. This is an evidence seam, not the proposed
-    /// public transient API.
+    /// Creates a diagnostic instance of the selected separate-node transient engine.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal OwnerTokenTransientKernel CreateSeparateNodeTransientKernel(
+    internal Transient CreateSeparateNodeTransientKernel(
         bool enableDiagnostics = true,
         bool deferOwnershipUntilReuse = true) =>
         new(this, enableDiagnostics, deferOwnershipUntilReuse);
 
     /// <summary>
-    /// Private production-layout experiment for one-way CHAMP mutation. The session is deliberately
-    /// absent from the public API until the T1 evidence gate is decided.
+    /// Provides a single-owner mutable editing session over a persistent hash map.
     /// </summary>
-    internal sealed class OwnerTokenTransientKernel
+    /// <remarks>
+    /// <para>
+    /// A transient is a one-way lifecycle object. Call <see cref="Persist"/> exactly once to publish
+    /// an immutable map and consume the session. Every subsequent read, mutation, enumeration
+    /// request, or publication attempt throws <see cref="ObjectDisposedException"/>. Enumerators
+    /// fail fast after a successful content change; logical no-op edits leave them valid.
+    /// </para>
+    /// <para>
+    /// The session is unsynchronized and has one logical owner. Sequential transfer between threads
+    /// requires caller-provided synchronization; concurrent access is unsupported. Persistent maps
+    /// retained before or returned after the session remain immutable and safe for concurrent reads.
+    /// </para>
+    /// <para>
+    /// Adoption and publication are O(1) and do not walk the trie. The first edit of a shared path
+    /// copies that path; later edits may update session-owned nodes in place. Published edited nodes
+    /// retain sealed ownership metadata so publication never needs a tag-clearing traversal.
+    /// </para>
+    /// </remarks>
+    public sealed partial class Transient : IReadOnlyDictionary<TKey, TValue>
     {
         private const int ActiveState = 1;
         private const int InactiveState = 0;
@@ -104,14 +119,14 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         private KernelDiagnostics? _diagnostics;
         private int _commitCount;
         private int _count;
-        private int _version;
+        private long _version;
         private int _state = ActiveState;
         private bool _useProductionFirstEditFastPath;
         private bool _hasPersistentMutation;
         private bool _dirty;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal OwnerTokenTransientKernel(
+        internal Transient(
             PersistentHashMap<TKey, TValue> source,
             bool enableDiagnostics,
             bool deferOwnershipUntilReuse)
@@ -156,7 +171,9 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             }
         }
 
-        internal int Count
+        /// <summary>Gets the number of key/value pairs in the active session.</summary>
+        /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
+        public int Count
         {
             get
             {
@@ -165,7 +182,9 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             }
         }
 
-        internal IEqualityComparer<TKey> Comparer
+        /// <summary>Gets the comparer that defines key hashing and equality.</summary>
+        /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
+        public IEqualityComparer<TKey> Comparer
         {
             get
             {
@@ -183,7 +202,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
 
         internal bool CommitPlanIsAllocatedForDiagnostics => _commits is not null;
 
-        internal int VersionForDiagnostics => _version;
+        internal long VersionForDiagnostics => _version;
 
         internal object? RootIdentityForDiagnostics => _root;
 
@@ -201,21 +220,37 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             return _diagnostics!.Counters.Snapshot();
         }
 
-        internal bool ContainsKey(TKey key) => TryGetValue(key, out _);
+        /// <summary>Determines whether the active session contains the specified key.</summary>
+        /// <param name="key">The key to locate.</param>
+        /// <returns><see langword="true"/> when the key is present; otherwise, <see langword="false"/>.</returns>
+        /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
+        public bool ContainsKey(TKey key) => TryGetValue(key, out _);
 
-        internal bool TryGetValue(TKey key, [MaybeNullWhen(false)] out TValue value)
+        /// <summary>Gets the value associated with a key when it is present.</summary>
+        /// <param name="key">The key to locate.</param>
+        /// <param name="value">The stored value when found; otherwise, the default value.</param>
+        /// <returns><see langword="true"/> when the key is present; otherwise, <see langword="false"/>.</returns>
+        /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
+        public bool TryGetValue(TKey key, [MaybeNullWhen(false)] out TValue value)
         {
             EnsureActive();
             return TryGetEntry(_root, key, GetHash(key), _comparer, out _, out value);
         }
 
-        internal bool TryGetKey(TKey key, out TKey actualKey)
+        /// <summary>Finds the originally stored key representative equivalent to a supplied key.</summary>
+        /// <param name="equalKey">The key whose equivalent representative is requested.</param>
+        /// <param name="actualKey">
+        /// The stored representative when found; otherwise, <paramref name="equalKey"/> itself.
+        /// </param>
+        /// <returns><see langword="true"/> when an equivalent key is present.</returns>
+        /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
+        public bool TryGetKey(TKey equalKey, out TKey actualKey)
         {
             EnsureActive();
-            if (TryGetEntry(_root, key, GetHash(key), _comparer, out actualKey, out _))
+            if (TryGetEntry(_root, equalKey, GetHash(equalKey), _comparer, out actualKey, out _))
                 return true;
 
-            actualKey = key;
+            actualKey = equalKey;
             return false;
         }
 
@@ -230,8 +265,17 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             return entries;
         }
 
+        /// <summary>Adds or replaces a key/value pair in the active session.</summary>
+        /// <param name="key">The key to add or replace.</param>
+        /// <param name="value">The value to associate with the key.</param>
+        /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
+        /// <remarks>
+        /// Equivalent keys retain the first stored key object. A value equal to the stored value
+        /// under <see cref="EqualityComparer{T}.Default"/> is a logical no-op that retains the stored
+        /// value object and does not invalidate enumerators.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void SetItem(TKey key, TValue value)
+        public void SetItem(TKey key, TValue value)
         {
             if (_useProductionFirstEditFastPath)
             {
@@ -242,8 +286,14 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             SetCore(key, value, overwrite: true);
         }
 
+        /// <summary>Adds a key/value pair when no equivalent key is present.</summary>
+        /// <param name="key">The key to add.</param>
+        /// <param name="value">The value to associate with the key.</param>
+        /// <returns><see langword="true"/> when the pair was added; otherwise, <see langword="false"/>.</returns>
+        /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
+        /// <remarks>A duplicate is a logical no-op and does not invalidate enumerators.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal bool TryAdd(TKey key, TValue value)
+        public bool TryAdd(TKey key, TValue value)
         {
             if (_useProductionFirstEditFastPath)
             {
@@ -253,13 +303,23 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             return SetCore(key, value, overwrite: false).Added;
         }
 
-        internal void Add(TKey key, TValue value)
+        /// <summary>Adds a key/value pair to the active session.</summary>
+        /// <param name="key">The key to add.</param>
+        /// <param name="value">The value to associate with the key.</param>
+        /// <exception cref="ArgumentException">An equivalent key is already present.</exception>
+        /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
+        public void Add(TKey key, TValue value)
         {
             if (!TryAdd(key, value))
                 throw new ArgumentException($"An equivalent key '{key}' is already present.", nameof(key));
         }
 
-        internal bool Remove(TKey key)
+        /// <summary>Removes a key and its value from the active session.</summary>
+        /// <param name="key">The key to remove.</param>
+        /// <returns><see langword="true"/> when an entry was removed; otherwise, <see langword="false"/>.</returns>
+        /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
+        /// <remarks>An absent key is a logical no-op and does not invalidate enumerators.</remarks>
+        public bool Remove(TKey key)
         {
             EnsureActive();
             if (_root is null)
@@ -277,7 +337,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             var tokenBefore = _token;
             var commitPlanBefore = _commits;
             var promotesEditablePath = _hasPersistentMutation && !_dirty;
-            var newVersion = checked(_version + 1);
+            var newVersion = unchecked(_version + 1);
             _commitCount = 0;
             try
             {
@@ -313,7 +373,10 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             }
         }
 
-        internal void Clear()
+        /// <summary>Removes every key/value pair from the active session.</summary>
+        /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
+        /// <remarks>Clearing an already empty session is a logical no-op.</remarks>
+        public void Clear()
         {
             EnsureActive();
             if (_root is null)
@@ -321,7 +384,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
 
             if (_deferOwnershipUntilReuse && !_hasPersistentMutation && !_dirty)
             {
-                var newVersion = checked(_version + 1);
+                var newVersion = unchecked(_version + 1);
                 var result = _source!.Clear();
                 Hit(OwnerTokenKernelFailurePoint.MutationPrepared);
                 _source = result;
@@ -343,7 +406,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 return;
             }
 
-            _version = checked(_version + 1);
+            _version = unchecked(_version + 1);
             _root = null;
             _count = 0;
             _dirty = true;
@@ -352,65 +415,79 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 diagnostics.Counters.PreparedMutationCount++;
         }
 
+        /// <summary>Publishes the active contents as an immutable map and consumes this session.</summary>
+        /// <returns>
+        /// The published map. A clean session adopted from an existing map returns that exact map
+        /// instance; a clean factory session returns the comparer-preserving empty map.
+        /// </returns>
+        /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
+        /// <remarks>
+        /// Publication is O(1), does not walk the trie, and prepares every throwing allocation before
+        /// consuming the session. If preparation fails, the session remains active and unchanged.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal PersistentHashMap<TKey, TValue> Persist()
+        public PersistentHashMap<TKey, TValue> Persist()
         {
             EnsureActive();
             if (_diagnostics is null && !_dirty)
                 return PersistOrdinaryFast();
 
-            return PersistPrepared();
+            var prepared = PreparePublication();
+            return CommitPublication(prepared);
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private PersistentHashMap<TKey, TValue> PersistPrepared()
+        internal PreparedPublication PreparePublication()
         {
-            var countersBefore = CaptureCounters();
-            var newVersion = checked(_version + 1);
-            try
+            EnsureActive();
+            var newVersion = unchecked(_version + 1);
+            PersistentHashMap<TKey, TValue> result;
+            var allocatedPersistentWrapper = false;
+            if (!_dirty)
             {
-                PersistentHashMap<TKey, TValue> result;
-                if (!_dirty)
-                {
-                    result = _source!;
-                }
-                else if (_count == 0
-                    && ReferenceEquals(_comparer, EqualityComparer<TKey>.Default))
-                {
-                    // The default-policy empty is already allocated. Publication still reaches
-                    // PublicationPrepared below, but there is no allocation boundary to inject.
-                    result = Empty;
-                }
-                else
-                {
-                    Hit(OwnerTokenKernelFailurePoint.BeforePublicationAllocation);
-                    result = _count == 0
-                        ? EmptyFor(_comparer)
-                        : new PersistentHashMap<TKey, TValue>(_root, _count, _comparer);
-                    if (_diagnostics is { } allocationDiagnostics)
-                        allocationDiagnostics.Counters.PersistentWrapperAllocationCount++;
-                }
-
-                Hit(OwnerTokenKernelFailurePoint.PublicationPrepared);
-
-                // From this point onward publication consists only of non-throwing state changes.
-                _token?.Seal();
-                _version = newVersion;
-                Volatile.Write(ref _state, InactiveState);
-                _root = null;
-                _source = null;
-                if (_diagnostics is { } diagnostics)
-                {
-                    diagnostics.Counters.PublicationCount++;
-                    diagnostics.Counters.PublicationNodeVisits = 0;
-                }
-                return result;
+                result = _source!;
             }
-            catch
+            else if (_count == 0
+                && ReferenceEquals(_comparer, EqualityComparer<TKey>.Default))
             {
-                RestoreCounters(countersBefore);
-                throw;
+                // The default-policy empty is already allocated. Publication still reaches
+                // PublicationPrepared below, but there is no allocation boundary to inject.
+                result = Empty;
             }
+            else
+            {
+                Hit(OwnerTokenKernelFailurePoint.BeforePublicationAllocation);
+                result = _count == 0
+                    ? EmptyFor(_comparer)
+                    : new PersistentHashMap<TKey, TValue>(_root, _count, _comparer);
+                allocatedPersistentWrapper = true;
+            }
+
+            Hit(OwnerTokenKernelFailurePoint.PublicationPrepared);
+            return new PreparedPublication(result, _version, newVersion, allocatedPersistentWrapper);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal PersistentHashMap<TKey, TValue> CommitPublication(PreparedPublication prepared)
+        {
+            EnsureActive();
+            if (_version != prepared.ExpectedVersion)
+                ThrowModified();
+
+            // From this point onward publication consists only of non-throwing state changes.
+            _token?.Seal();
+            _version = prepared.PublishedVersion;
+            Volatile.Write(ref _state, InactiveState);
+            _root = null;
+            _source = null;
+            if (_diagnostics is { } diagnostics)
+            {
+                if (prepared.AllocatedPersistentWrapper)
+                    diagnostics.Counters.PersistentWrapperAllocationCount++;
+                diagnostics.Counters.PublicationCount++;
+                diagnostics.Counters.PublicationNodeVisits = 0;
+            }
+            return prepared.Result;
         }
 
         private SetPreparation SetCore(TKey key, TValue value, bool overwrite)
@@ -423,7 +500,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             var tokenBefore = _token;
             var commitPlanBefore = _commits;
             var promotesEditablePath = _hasPersistentMutation && !_dirty;
-            var newVersion = checked(_version + 1);
+            var newVersion = unchecked(_version + 1);
             _commitCount = 0;
             try
             {
@@ -465,7 +542,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         private bool RemoveFirstPersistent(TKey key)
         {
             var countersBefore = CaptureCounters();
-            var newVersion = checked(_version + 1);
+            var newVersion = unchecked(_version + 1);
             try
             {
                 var result = _source!.Remove(key);
@@ -501,7 +578,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         private void SetFirstPersistentFast(TKey key, TValue value)
         {
             EnsureActive();
-            var newVersion = checked(_version + 1);
+            var newVersion = unchecked(_version + 1);
             var result = _source!.SetItem(key, value);
             if (ReferenceEquals(result, _source))
                 return;
@@ -518,7 +595,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         private bool TryAddFirstPersistentFast(TKey key, TValue value)
         {
             EnsureActive();
-            var newVersion = checked(_version + 1);
+            var newVersion = unchecked(_version + 1);
             if (!_source!.TryAdd(key, value, out var result))
                 return false;
 
@@ -534,7 +611,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool RemoveFirstPersistentFast(TKey key)
         {
-            var newVersion = checked(_version + 1);
+            var newVersion = unchecked(_version + 1);
             var result = _source!.Remove(key);
             if (ReferenceEquals(result, _source))
                 return false;
@@ -552,7 +629,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         private PersistentHashMap<TKey, TValue> PersistOrdinaryFast()
         {
             var result = _source!;
-            var newVersion = checked(_version + 1);
+            var newVersion = unchecked(_version + 1);
             Debug.Assert(_token is null, "Owner-free publication cannot have allocated an edit token.");
             _version = newVersion;
             Volatile.Write(ref _state, InactiveState);
@@ -564,7 +641,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         private SetPreparation SetFirstPersistent(TKey key, TValue value, bool overwrite)
         {
             var countersBefore = CaptureCounters();
-            var newVersion = checked(_version + 1);
+            var newVersion = unchecked(_version + 1);
             try
             {
                 PersistentHashMap<TKey, TValue> result;
@@ -1493,6 +1570,19 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void ValidateEnumerationVersion(long expectedVersion)
+        {
+            EnsureActive();
+            if (_version != expectedVersion)
+                ThrowModified();
+        }
+
+        [DoesNotReturn]
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void ThrowModified() =>
+            throw new InvalidOperationException("The transient was modified after the enumerator or view was created.");
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void EnsureActive()
         {
             if (Volatile.Read(ref _state) != ActiveState)
@@ -1502,7 +1592,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         [DoesNotReturn]
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void ThrowInactive() =>
-            throw new ObjectDisposedException(nameof(OwnerTokenTransientKernel));
+            throw new ObjectDisposedException(nameof(Transient));
 
         private EditToken GetOrCreateToken()
         {
@@ -1537,6 +1627,12 @@ public sealed partial class PersistentHashMap<TKey, TValue>
 
         private void Hit(OwnerTokenKernelFailurePoint point) =>
             _diagnostics?.FailureInjector?.Invoke(point);
+
+        internal readonly record struct PreparedPublication(
+            PersistentHashMap<TKey, TValue> Result,
+            long ExpectedVersion,
+            long PublishedVersion,
+            bool AllocatedPersistentWrapper);
 
         private readonly record struct SetPreparation(Node Node, bool Changed, bool Added, int CountDelta);
 

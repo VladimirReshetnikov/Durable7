@@ -505,7 +505,7 @@ public sealed class PersistentHashMapDiagnosticsTests
         total = checked(total + bytes);
 
     private static PersistentHashMap<int, int> WrapActiveKernelRoot(
-        PersistentHashMap<int, int>.OwnerTokenTransientKernel kernel)
+        PersistentHashMap<int, int>.Transient kernel)
         => WrapRoot(
             (PersistentHashMap<int, int>.Node)kernel.RootIdentityForDiagnostics!,
             kernel.Count,
