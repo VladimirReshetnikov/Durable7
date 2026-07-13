@@ -47,6 +47,7 @@ Results are written under `BenchmarkDotNet.Artifacts/` (git-ignored); curated ta
 | `RopeBenchmarks` | `Rope<char>` large-buffer editing in O(log n) (insert/remove/split mid-buffer) | `string` (O(n) copy) and `ImmutableList<char>` |
 | `MeasuredRopeBenchmarks` | `MeasuredRope<char,…>` line navigation in O(log n) (offset↔line) | `string` newline scan (O(n)) |
 | `RopeCursorBenchmarks` | Axis 2 positional local-edit, locality, branch, and snapshot-cadence gate (baseline skeleton in P0; cursor lanes arrive in C0/C1) | indexed persistent `Rope<char>` and `StringBuilder` mutable control |
+| `RopeCursorCarryTuningBenchmarks` | Axis 2 C0 focus/flush tuning under actual left/right carry publication, backspace, and forward-delete pressure | the common zipper engine through its readonly-struct wrapper |
 | `MeasuredRopeCursorBenchmarks` | Axis 2 measured-text edit, absolute measure-seek, and line/column gate (baseline skeleton in P0; cursor lanes arrive in C2) | indexed `MeasuredRope<char, int, NewlineMeasure>` |
 | `SortedBuilderBenchmarks` | sorted builder batch-edit freeze constants and allocation | repeated immutable edits, caller-side BCL staging, BCL immutable builders |
 | `RopeBuilderBenchmarks` | append-only rope builder construction and snapshot constants | `Create`, `AddLast` loop, text `StringBuilder` materialization, `ImmutableList<T>.Builder` |
@@ -113,6 +114,13 @@ instances, input generation, and these matrices:
 - cursor tuning candidates: focus capacities 16, 32, 64, and 128 independently crossed with
   flush sizes 256, 512, 1,024, and 2,048; and
 - measured-text data: the same deterministic documents with newline-sparse and newline-dense variants.
+
+The C0 carry-tuning sublane fixes the representative point at 65,536 UTF-16 elements, locality
+window 8, and snapshot cadence 16. Each invocation types 2,304 elements and backspaces them, then
+types another 2,304 immediately to the right of a fixed gap and forward-deletes them. The run length
+is divisible by the cadence and exceeds the largest flush-size-plus-focus candidate, so every one of
+the sixteen focus/flush pairs must publish an ordinary chunk on both sides. Global setup verifies
+those transitions and exact sequence restoration outside the timed region.
 
 Comparable lanes receive the same generated entries, stored comparer object, hit/miss probes,
 warmup/job configuration, and result-consumption shape. A control that cannot represent a semantic

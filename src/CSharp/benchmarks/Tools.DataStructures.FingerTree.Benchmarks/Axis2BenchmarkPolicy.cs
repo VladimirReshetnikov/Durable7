@@ -3,6 +3,10 @@ namespace Tools.DataStructures.FingerTree.Benchmarks;
 internal static class Axis2BenchmarkPolicy
 {
     internal const int Seed = 0x5EED_2026;
+    internal const int FullCollisionHash = 0x51A7;
+    internal const int ClusteredPrefixBits = 15;
+    internal const int TransientCollisionBucketSize = 32;
+    internal const int TransientDiagnosticEditLimit = 64;
     internal const double PracticalLatencyMargin = 0.10;
     internal const double PracticalAllocationMargin = 0.10;
     internal const double PracticalRetainedMemoryMargin = 0.10;
@@ -15,6 +19,7 @@ internal static class Axis2BenchmarkPolicy
     internal static readonly int[] FlushSizeCandidates = [256, 512, 1_024, 2_048];
     internal static readonly int[] PublicationCadences = [1, 8, 64, int.MaxValue];
     internal static readonly int[] LookupHitPercentages = [0, 50, 100];
+    internal static readonly Axis2TransientWorkload[] TransientWorkloads = CreateTransientWorkloads();
 
     internal static double RequiredLatencyImprovement(double measuredRelativeNoiseFloor) =>
         Math.Max(measuredRelativeNoiseFloor, PracticalLatencyMargin);
@@ -26,19 +31,43 @@ internal static class Axis2BenchmarkPolicy
     {
         var entries = new KeyValuePair<Axis2HashKey, int>[count];
         for (var index = 0; index < count; index++)
-        {
-            var hash = shape switch
-            {
-                Axis2HashShape.Uniform => Mix(index),
-                Axis2HashShape.ClusteredPrefix => Mix(index) & unchecked((int)0xffffffe0),
-                Axis2HashShape.FullCollision => 0x51a7,
-                _ => throw new ArgumentOutOfRangeException(nameof(shape)),
-            };
-            entries[index] = KeyValuePair.Create(new Axis2HashKey(index, hash), index * 17);
-        }
+            entries[index] = KeyValuePair.Create(CreateHashKey(index, shape), index * 17);
 
         return entries;
     }
+
+    internal static Axis2TransientDataset CreateTransientDataset(
+        Axis2TransientWorkload workload,
+        Axis2EditHistory history)
+    {
+        var entries = CreateTransientBaseEntries(workload.BaseCount, history, out var collisionBucketSize);
+        var edits = new Axis2HashEdit[workload.EditCount];
+        for (var index = 0; index < edits.Length; index++)
+            edits[index] = CreateTransientEdit(entries, collisionBucketSize, history, index);
+
+        return new Axis2TransientDataset(entries, edits, collisionBucketSize);
+    }
+
+    internal static int GetPublicationBatchSize(Axis2PublicationCadence cadence, int editCount) =>
+        cadence == Axis2PublicationCadence.End
+            ? Math.Max(editCount, 1)
+            : (int)cadence;
+
+    internal static bool IsPublicationBoundary(
+        int completedEditCount,
+        int totalEditCount,
+        Axis2PublicationCadence cadence) =>
+        completedEditCount == totalEditCount ||
+        (cadence != Axis2PublicationCadence.End && completedEditCount % (int)cadence == 0);
+
+    internal static int GetPublicationCount(int editCount, Axis2PublicationCadence cadence)
+    {
+        var batchSize = GetPublicationBatchSize(cadence, editCount);
+        return checked((editCount + batchSize - 1) / batchSize);
+    }
+
+    internal static long AddPublicationChecksum(long checksum, int count, int completedEditCount) =>
+        unchecked(((checksum * 1_099_511_628_211L) ^ count) + completedEditCount);
 
     internal static Axis2HashKey[] CreateLookupProbes(int count, int hitPercentage, Axis2HashShape shape)
     {
@@ -51,14 +80,7 @@ internal static class Axis2BenchmarkPolicy
         for (var index = 0; index < probes.Length; index++)
         {
             var value = index < hitCount && count > 0 ? index % count : checked(count + index + 1);
-            var hash = shape switch
-            {
-                Axis2HashShape.Uniform => Mix(value),
-                Axis2HashShape.ClusteredPrefix => Mix(value) & unchecked((int)0xffffffe0),
-                Axis2HashShape.FullCollision => 0x51a7,
-                _ => throw new ArgumentOutOfRangeException(nameof(shape)),
-            };
-            probes[index] = new Axis2HashKey(value, hash);
+            probes[index] = CreateHashKey(value, shape);
         }
 
         Shuffle(probes);
@@ -73,6 +95,134 @@ internal static class Axis2BenchmarkPolicy
                 ? '\n'
                 : (char)('a' + (Mix(index) & 15));
         return text;
+    }
+
+    private static Axis2TransientWorkload[] CreateTransientWorkloads()
+    {
+        var workloads = new List<Axis2TransientWorkload>();
+        foreach (var count in HashCounts)
+        {
+            var fullCount = Math.Max(count, 1);
+            var editCount = 1;
+            while (editCount < fullCount)
+            {
+                workloads.Add(new Axis2TransientWorkload(count, editCount));
+                editCount = checked(editCount * 8);
+            }
+
+            workloads.Add(new Axis2TransientWorkload(count, fullCount));
+        }
+
+        return [.. workloads];
+    }
+
+    private static KeyValuePair<Axis2HashKey, int>[] CreateTransientBaseEntries(
+        int count,
+        Axis2EditHistory history,
+        out int collisionBucketSize)
+    {
+        var shape = history == Axis2EditHistory.ClusteredPrefix
+            ? Axis2HashShape.ClusteredPrefix
+            : Axis2HashShape.Uniform;
+        var entries = CreateHashEntries(count, shape);
+        collisionBucketSize = 0;
+        if (history != Axis2EditHistory.FullCollision)
+            return entries;
+
+        collisionBucketSize = Math.Min(count, TransientCollisionBucketSize);
+        for (var index = 0; index < collisionBucketSize; index++)
+        {
+            var entry = entries[index];
+            entries[index] = KeyValuePair.Create(
+                new Axis2HashKey(entry.Key.Value, FullCollisionHash),
+                entry.Value);
+        }
+
+        // Do not accidentally extend the collision bucket with a uniformly generated hash.
+        for (var index = collisionBucketSize; index < entries.Length; index++)
+        {
+            var entry = entries[index];
+            if (entry.Key.Hash == FullCollisionHash)
+            {
+                entries[index] = KeyValuePair.Create(
+                    new Axis2HashKey(entry.Key.Value, entry.Key.Hash ^ int.MinValue),
+                    entry.Value);
+            }
+        }
+
+        return entries;
+    }
+
+    private static Axis2HashEdit CreateTransientEdit(
+        KeyValuePair<Axis2HashKey, int>[] entries,
+        int collisionBucketSize,
+        Axis2EditHistory history,
+        int index)
+    {
+        var count = entries.Length;
+        var replacementValue = unchecked(-1 - (index * 31));
+        return history switch
+        {
+            Axis2EditHistory.RepeatedKey => Axis2HashEdit.Set(
+                count == 0 ? CreateHashKey(0, Axis2HashShape.Uniform) : entries[0].Key,
+                replacementValue),
+            Axis2EditHistory.ClusteredPrefix => Axis2HashEdit.Set(
+                count == 0
+                    ? CreateHashKey(index, Axis2HashShape.ClusteredPrefix)
+                    : entries[index % count].Key,
+                replacementValue),
+            Axis2EditHistory.DisjointInsert => Axis2HashEdit.Set(
+                CreateHashKey(checked(count + index + 1), Axis2HashShape.Uniform),
+                replacementValue),
+            Axis2EditHistory.FullCollision => Axis2HashEdit.Set(
+                collisionBucketSize == 0
+                    ? CreateHashKey(index, Axis2HashShape.FullCollision)
+                    : entries[index % collisionBucketSize].Key,
+                replacementValue),
+            Axis2EditHistory.Removal => Axis2HashEdit.Remove(
+                count == 0
+                    ? CreateHashKey(index, Axis2HashShape.Uniform)
+                    : entries[index % count].Key),
+            Axis2EditHistory.Mixed => CreateMixedTransientEdit(entries, index, replacementValue),
+            _ => throw new ArgumentOutOfRangeException(nameof(history)),
+        };
+    }
+
+    private static Axis2HashEdit CreateMixedTransientEdit(
+        KeyValuePair<Axis2HashKey, int>[] entries,
+        int index,
+        int replacementValue)
+    {
+        var count = entries.Length;
+        if (count == 0)
+        {
+            var key = CreateHashKey(index, Axis2HashShape.Uniform);
+            return index % 4 == 1 ? Axis2HashEdit.Remove(key) : Axis2HashEdit.Set(key, replacementValue);
+        }
+
+        return (index % 4) switch
+        {
+            0 => Axis2HashEdit.Set(entries[index % count].Key, replacementValue),
+            1 => Axis2HashEdit.Remove(entries[index % count].Key),
+            2 => Axis2HashEdit.Set(
+                CreateHashKey(checked(count + index + 1), Axis2HashShape.Uniform),
+                replacementValue),
+            _ => Axis2HashEdit.Set(entries[index % count].Key, replacementValue),
+        };
+    }
+
+    private static Axis2HashKey CreateHashKey(int value, Axis2HashShape shape)
+    {
+        var hash = shape switch
+        {
+            Axis2HashShape.Uniform => Mix(value),
+            // CHAMP consumes hashes from the low bits, so fifteen zero low bits force three
+            // shared 5-bit levels before any two clustered keys may diverge.
+            Axis2HashShape.ClusteredPrefix => unchecked(value << ClusteredPrefixBits),
+            Axis2HashShape.FullCollision => FullCollisionHash,
+            _ => throw new ArgumentOutOfRangeException(nameof(shape)),
+        };
+        return new Axis2HashKey(value, hash);
     }
 
     private static int Mix(int value)
@@ -104,7 +254,7 @@ internal enum Axis2HashShape
     FullCollision,
 }
 
-internal readonly record struct Axis2HashKey(int Value, int Hash);
+public readonly record struct Axis2HashKey(int Value, int Hash);
 
 internal sealed class Axis2HashKeyComparer : IEqualityComparer<Axis2HashKey>
 {
@@ -117,4 +267,75 @@ internal sealed class Axis2HashKeyComparer : IEqualityComparer<Axis2HashKey>
     public bool Equals(Axis2HashKey left, Axis2HashKey right) => left.Value == right.Value;
 
     public int GetHashCode(Axis2HashKey value) => value.Hash;
+}
+
+internal sealed class Axis2CountingHashKeyComparer : IEqualityComparer<Axis2HashKey>
+{
+    internal long HashCallbackCount { get; private set; }
+
+    internal long EqualityCallbackCount { get; private set; }
+
+    public bool Equals(Axis2HashKey left, Axis2HashKey right)
+    {
+        EqualityCallbackCount++;
+        return left.Value == right.Value;
+    }
+
+    public int GetHashCode(Axis2HashKey value)
+    {
+        HashCallbackCount++;
+        return value.Hash;
+    }
+
+    internal void Reset()
+    {
+        HashCallbackCount = 0;
+        EqualityCallbackCount = 0;
+    }
+}
+
+internal sealed record Axis2TransientDataset(
+    KeyValuePair<Axis2HashKey, int>[] BaseEntries,
+    Axis2HashEdit[] Edits,
+    int CollisionBucketSize);
+
+internal enum Axis2HashEditKind
+{
+    Set,
+    Remove,
+}
+
+internal readonly record struct Axis2HashEdit(
+    Axis2HashEditKind Kind,
+    Axis2HashKey Key,
+    int Value)
+{
+    internal static Axis2HashEdit Set(Axis2HashKey key, int value) =>
+        new(Axis2HashEditKind.Set, key, value);
+
+    internal static Axis2HashEdit Remove(Axis2HashKey key) =>
+        new(Axis2HashEditKind.Remove, key, default);
+}
+
+public readonly record struct Axis2TransientWorkload(int BaseCount, int EditCount)
+{
+    public override string ToString() => $"N{BaseCount}_E{EditCount}";
+}
+
+public enum Axis2EditHistory
+{
+    RepeatedKey,
+    ClusteredPrefix,
+    DisjointInsert,
+    FullCollision,
+    Removal,
+    Mixed,
+}
+
+public enum Axis2PublicationCadence
+{
+    EveryEdit = 1,
+    Every8 = 8,
+    Every64 = 64,
+    End = int.MaxValue,
 }
