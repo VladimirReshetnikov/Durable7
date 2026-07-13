@@ -1,28 +1,61 @@
-# Axis 2 Lifecycle And Sequence-Cursor Plan
+# Axis 2 Final Plan: Lifecycle And Sequence Cursors
 
 - Created (UTC): 2026-07-13T03:22:20Z
 - Repository HEAD: b600a208395fd16e73b620cfda4eca20d372bd75
+- Final synthesis (UTC): 2026-07-13T04:31:40Z
+- Repository HEAD (final synthesis): 6dbe754bd6166462beae226621511ddbcb24aaad
+- Status: Final authoritative Axis 2 plan
 - Audience: Maintainers designing the next C# persistent-collection wave
 - Scope: Detailed C#-first plan for owner-token transients, persistent collections,
   read-optimized frozen collections, and version-bound rope cursors
 
 ## Decision
 
-The active Axis 2 work is two independent C#-first tracks:
+Axis 2 has three independent C#-first tracks after one shared contract/instrumentation phase:
 
-1. an explicit **transient -> persistent -> frozen** lifecycle, beginning with CHAMP map/set; and
-2. a **version-bound gap cursor** over `Rope<T>`, followed by `MeasuredRope` and only then any
-   deque/general-measured surface.
+1. **Track C leads:** a version-bound gap cursor over `Rope<T>`, immediately followed by the
+   `MeasuredRope`/text surface and Editor/Tour integration. This is the first intended public Axis 2
+   capability.
+2. **Track T is evidence-gated:** a one-way owner-token CHAMP transient, beginning with workload and
+   representation gates before any public API is committed.
+3. **Track F is evidence-gated:** a fixed-layout read-optimized frozen hash tier, beginning with one
+   minimally faithful packed-index signal before a layout bake-off or public API.
+
+“Cursor-first” is a priority, not a synthetic implementation dependency. C0, T0, and F0 may run in
+parallel after P0; a track that clears its evidence gate does not wait merely to preserve document
+order. The cursor is the lead public target because it adds a new sequence capability and has clear
+sample integration targets. The Editor and Tour are not claimed as existing production hot paths:
+today they are measured-text demonstrations, and both require C2 before they can exercise the cursor
+end to end.
 
 Automatic size-tier switching and key-type dispatch are intentionally postponed. The first frozen
 hash implementation uses one general layout for every count and key type. The first cursor does not
-depend on the planned range-update sequence. Neither track is a commitment to port a public surface
+depend on the planned range-update sequence. No track is a commitment to port a public surface
 until the C# contracts and measurements stabilize.
 
 This document refines the survey-level entries in the
 [frontier structure catalog](../reference/frontier-structure-catalog.md) and supersedes the API and
 complexity sketch in item A3 of the
-[2026-07-09 proposal](new-data-structures-2026-07-09.md). It does not describe shipped APIs.
+[2026-07-09 proposal](new-data-structures-2026-07-09.md). It incorporates the conclusions of the
+[2026-07-13 review](../reviews/axis2-lifecycle-and-cursors-review-2026-07-13.md) and the useful parts
+of its [cursor-first alternative](axis2-cursor-first-alternative-2026-07-13.md). It does not
+describe shipped APIs.
+
+## Disposition Of The Review And Alternative
+
+| Reviewed conclusion | Final decision | Qualification or correction |
+| --- | --- | --- |
+| Preserve the builder/transient/persistent/frozen/snapshot-view vocabulary and lifecycle designs | **Agree** | There are five distinct mechanisms, not four; none is a synonym for another. |
+| Make the cursor the lead Axis 2 deliverable | **Agree** | It is the first intended public target, but C0/T0/F0 remain independent and may proceed in parallel. |
+| Treat Editor and Tour as named current consumers | **Qualify** | They are credible integration targets, not measured localized-edit workloads today; both use `MeasuredRope` and therefore wait for C2. |
+| Add a frozen pre-gate | **Agree** | F0 measures lookup, enumeration, retained memory, construction, and break-even. One layout failing one lookup mix cannot disprove every frozen benefit. |
+| Add a cheap throwaway owner-token pre-gate | **Disagree as stated; replace** | Current CHAMP nodes and arrays are readonly-shaped. A faithful owner-token experiment already entails load-bearing ownership and prepare/commit work. T0 first proves a target workload; T1 then builds a production-representative private kernel before T2 exposes an API. |
+| Gate branched-cursor amortization | **Strongly agree** | A potential/invariant argument is required; counters and adversarial histories validate or falsify it but do not prove an asymptotic bound alone. |
+| Target “few edits to a large retained base” for transients | **Disagree; correct the workload** | The plausible win is many edits per publication, especially repeated/clustered paths and wrapper/path-allocation pressure. Sparse one-off edits are normally a wash or loss. |
+| Promise canonical CHAMP order for frozen enumeration | **Reject** | Equal-full-hash collision order is intentionally history-dependent. Frozen order is stable for an unchanged instance but otherwise unspecified and never promised as insertion, sorted, or serialization order. |
+| Treat cursor risk as design-only | **Reject** | Immutable wrapper allocation and snapshot-every-edit O(log n) work can still produce no worthwhile win. C0 has an explicit defer outcome. |
+| Use “one-day” spikes | **Reject** | Spikes are bounded by files, prototype surfaces, workloads, and exit evidence, never calendar estimates. |
+| Update current-state contracts and catalogs when a surface ships | **Agree** | Each public phase updates its workspace overview/usage/API/validation docs, both repository catalogs, the frontier status, and shared semantic contracts in the same tranche. |
 
 ## Why The Vocabulary Must Be Exact
 
@@ -57,20 +90,14 @@ Documentation must qualify the first two and reserve an unqualified type name su
 ## Lifecycle State Machine
 
 ```text
-                    O(1) adopt                  O(1) consume/publish
-PersistentHashMap -------> PersistentHashMap.Transient ------------> PersistentHashMap
-         |                              |
-         | O(n) Freeze                  | no direct Freeze in v1
-         v                              v
- FrozenHashMap <---------------- PersistentHashMap
-         |
-         | O(n) ToPersistent
-         v
- PersistentHashMap
+PersistentHashMap -- O(1) adopt --> Transient -- O(1) Persist (consumes) --> PersistentHashMap
+
+PersistentHashMap -- O(n) Freeze --> FrozenHashMap -- O(n) ToPersistent --> PersistentHashMap
 
 staging Builder -- family-specific construction/publication cost --> Persistent
 
-Ctrie -- O(1) Snapshot --> SnapshotView -- O(n) --> Persistent or Frozen
+Ctrie -- O(1) Snapshot --> SnapshotView -- O(n) --> PersistentHashMap
+                                      `-- O(n) --> FrozenHashMap
 ```
 
 The cycle is asymmetric on purpose:
@@ -85,16 +112,75 @@ The cycle is asymmetric on purpose:
 Builders remain useful. They are construction APIs with family-specific costs, not aliases for the
 transient state.
 
-## Track L: CHAMP Transient -> Persistent -> Frozen
+## P0: Shared Contract And Instrumentation Lock
 
-### L0. Contract lock
-
-Before node changes, add benchmark skeletons and executable contract tests for the current
+Before representation changes, add benchmark skeletons and executable contract tests for the current
 `PersistentHashMap` and `PersistentHashSet`. The tests pin comparer identity, first stored key
 representative, collision behavior, null handling, stable enumeration, no-op identity, retained old
-versions, and callback exception behavior. These become the oracle for both conversions.
+versions, and callback exception behavior. Add corresponding Rope/MeasuredRope oracles for logical
+sequence, chunk bounds/counts, sharing, snapshot identity, noncommutative measure order, overflow,
+and callback behavior. These become the oracle for all three tracks.
 
-### L1. One-way C# CHAMP transient
+P0 also establishes common instrumentation before any spike is interpreted:
+
+- node visits, array clones, wrapper allocations, focus/carry copies, forced suspensions, and
+  retained bytes;
+- identical data generation, comparer instances, hit/miss mixes, warmup, and result-consumption
+  rules within each comparable lane, with controls that cannot represent a semantic lane explicitly
+  omitted rather than fed different data;
+- a predeclared materiality rule in the benchmark README, at least the larger of the measured noise
+  floor and a maintainer-chosen practical margin, so a threshold is not selected after seeing data;
+- separate correctness and performance runs—no prototype may skip semantic checks to obtain a
+  favorable number; and
+- decision records for every advance/defer result, including the exact command and raw/curated
+  benchmark artifact.
+
+## Track T: One-Way CHAMP Transient
+
+### T0. Workload qualification
+
+Do not begin by calling a toy mutable node a transient. Extend `ChampBenchmarks` and structural
+counters over the shipped persistent map to identify whether the repository has a credible target
+regime. Sweep:
+
+- base sizes 0, 1, 8, 32, 1K, and 100K;
+- edits per publication from 1 through the full count;
+- repeated same-key edits, clustered hashes/shared prefixes, uniformly disjoint keys, collision
+  buckets, removals, and mixed operations; and
+- publication cadence 1, 8, 64, and end-of-batch.
+
+The expected win regime is **many edits per publication**, especially repeated or clustered paths
+where owned nodes can be reused and intermediate persistent wrappers/path arrays dominate. One or a
+few sparse edits normally favor direct persistent operations because the first shared path must be
+copied either way and a transient adds session/token overhead.
+
+T0 advances only when counters identify a named regime in which eliminating repeated wrappers/path
+copies can plausibly clear the predeclared materiality threshold. Otherwise Track T is deferred and
+the existing persistent operations plus `BulkBuilder` remain the answer.
+
+### T1. Production-representative private kernel
+
+A faithful value spike cannot be a disposable parallel toy: current `LeafNode`, `CollisionNode`, and
+`BitmapIndexedNode` are readonly-shaped, branch nodes cache counts, and `Data`/`Children` arrays can
+be shared independently of their wrapper. Build an internal experimental kernel against the real
+node semantics, with no public `Transient` API yet, and compare two ownership layouts:
+
+1. a nullable owner token on every mutable-capable persistent node/array owner; and
+2. separate transient-editable branch/collision nodes that publish into the persistent hierarchy.
+
+The kernel must establish array ownership before an in-place element/child write, keep cached counts
+correct, define leaf and collision replacement/mutation explicitly, seal publication without a graph
+walk, and implement the same operation-wide prepare/commit rule required below. Measure the baseline
+retained-size regression on ordinary persistent maps as well as the edited transient graph. A
+prototype that omits failure atomicity or mutates an array merely because its wrapper token matches
+is not production-representative evidence.
+
+T1 advances only if the real kernel produces a material throughput and/or allocation win in the T0
+regime after charging token/editable-node retained memory, without regressing ordinary persistent
+lookup/update beyond the locked tolerance. If it fails, remove or quarantine the experiment and do
+not expose a public lifecycle merely for API symmetry.
+
+### T2. One-way C# CHAMP transient API
 
 The initial surface is intentionally smaller than a reusable BCL-style builder:
 
@@ -146,14 +232,17 @@ mutation checks are fail-fast through one version counter.
 
 ### Edit-token mechanics
 
-Each mutable-capable CHAMP node carries an optional owner token. The token has a small active/sealed
-state and no back-reference to the transient.
+The selected T1 representation gives every mutable node **and every array that may be written in
+place** unambiguous ownership under one edit token. A wrapper token alone is not proof that its
+`Data` or `Children` array is private, because persistent branch construction currently reuses
+unchanged arrays. The token has a small active/sealed state and no back-reference to the transient.
 
 1. `ToTransient()` creates a transient over the persistent root and a fresh active token. It does
    not traverse the graph.
 2. A mutation may change a node in place only when the node's token is the active token.
 3. An unowned node or a node owned by another/sealed token is copied along the edited path; the copy
-   receives the active token.
+   and any array it may mutate receive the active token. Immutable leaf/collision objects may be
+   replaced rather than mutated if T1 shows that policy is faster or safer.
 4. A point edit uses an operation-wide prepare/commit protocol. It performs every failure-prone
    hash/equality callback and allocates every replacement array/path before the first in-place
    write. The commit phase consists only of non-throwing field/reference assignments. Per-node
@@ -165,6 +254,10 @@ state and no back-reference to the transient.
    the transient active and unchanged. It never clears tags by traversing the graph.
 6. A later transient from the published root gets a different token and therefore path-copies on
    its first write.
+
+Every prepare plan computes the resulting subtree counts before commit. Non-throwing commit writes
+array slots/references and cached counts in an order that cannot leave a reachable transient with a
+mixed old/new count. Publication tests recursively validate counts and canonical CHAMP contraction.
 
 The transient retains its source persistent object and a dirty flag. A clean
 `source.ToTransient().Persist()` returns `source` by reference, including after any number of
@@ -196,7 +289,8 @@ The transient preserves the current CHAMP rules exactly:
 - stable trie-order enumeration is preserved;
 - `Clear()` preserves comparer identity;
 - default-policy empty results may use the canonical empty, while a custom comparer is retained;
-- collision nodes remain canonical and branch contraction matches persistent deletion;
+- collision-node structural invariants and branch contraction match persistent deletion, while
+  equal-full-hash bucket order remains stable but unspecified;
 - a single-item edit has the strong exception guarantee through the operation-wide prepare/commit
   protocol; no owned node is changed until every potentially throwing step succeeds;
 - a range operation, if added later, is incrementally committed and documents the item at which a
@@ -208,7 +302,25 @@ every publication boundary that can be made deterministic. In-place shifting fol
 failure-prone work is prohibited. Tests must fail each preparation step and prove that content,
 root identity, token activity, version, and enumerator validity are unchanged.
 
-### L2. Frozen-layout bake-off
+## Track F: Fixed-Layout Frozen Hash Tier
+
+### F0. Packed-index signal gate
+
+Before a multi-layout bake-off or public surface, build one minimally faithful internal packed-entry
+array plus offline integer slot table in the existing benchmark project. It must use real keys,
+hashes, comparer calls, stored representatives, collision/null lanes, and source-map enumeration;
+synthetic precomputed probe integers alone are not evidence.
+
+Compare with `PersistentHashMap`, `Dictionary`, `ImmutableDictionary`, and BCL
+`FrozenDictionary` over positive, negative, and mixed lookup, full enumeration, retained bytes,
+construction, and calculated break-even reads. A credible signal is a predeclared material win in a
+**named read-heavy regime** across lookup and/or enumeration/memory, with no unacceptable regression
+in the regime's other load-bearing metrics. A single layout losing one hit ratio does not disprove
+all frozen representations; conversely, a micro-win without a realistic construction break-even or
+memory story does not justify a public family. If no credible regime appears, defer Track F before
+the bake-off.
+
+### F1. Frozen-layout bake-off
 
 `System.Collections.Frozen` is a performance baseline, not the repository type's implementation or
 contract. The BCL explicitly treats frozen collections as expensive-to-construct, read-optimized
@@ -225,7 +337,7 @@ Counts and key datasets vary in the benchmarks, but v1 may not select a represen
 runtime key type, or comparer type. That restriction keeps the lifecycle experiment independent of
 the postponed specialization tracks.
 
-### L3. Fixed-layout frozen hash map/set
+### F2. Fixed-layout frozen hash map/set
 
 The provisional public surface is:
 
@@ -261,7 +373,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
 
 Version 1 has one representation:
 
-- a packed entry array in canonical CHAMP trie order;
+- a packed entry array preserving the source persistent version's exact enumeration sequence;
 - each entry stores the already computed 32-bit hash, stored key, and value;
 - an offline-built integer slot table maps probes to packed-entry indexes;
 - one benchmark-selected load factor applies to all nonempty instances;
@@ -269,12 +381,18 @@ Version 1 has one representation:
 - the library performs no lookup-time allocation and never mutates/memoizes shared state; user
   comparer callbacks remain outside that allocation guarantee.
 
+The public ordering contract is **stable but unspecified**: unchanged frozen instances enumerate
+repeatably, but callers must not treat the order as insertion, sorted, canonical, or serialization
+order. Equal-full-hash collision buckets and retained representatives are intentionally
+history-dependent in CHAMP.
+
 `CreateRange` is semantically equivalent to
 `PersistentHashMap.CreateRange(items, comparer).Freeze()`: it preserves first stored key/last value
-behavior and canonicalizes enumeration to CHAMP trie order, not source insertion order. A fused
-implementation is allowed only if it produces that same order. `SnapshotView.Freeze()` similarly
-canonicalizes through the persistent contract rather than exposing Ctrie traversal order.
-`ToPersistent` uses the canonical bulk-construction path and preserves comparer identity. Empty
+behavior and the resulting persistent version's traversal sequence. A fused implementation is
+allowed only if it produces that same sequence. `SnapshotView.Freeze()` is semantically equivalent
+to `snapshot.ToPersistentHashMap().Freeze()` rather than exposing Ctrie traversal order.
+`ToPersistent` uses the canonical-topology bulk-construction path and preserves comparer identity;
+freezing the result must reproduce the frozen sequence, including collision-bucket order. Empty
 singleton reuse is allowed because it is an identity policy, not adaptive layout selection.
 
 The frozen surface has no `SetItem`, `Add`, `Remove`, builder, or update-shaped convenience. Editing
@@ -285,15 +403,15 @@ var persistent = frozen.ToPersistent(); // O(n)
 var transient = persistent.ToTransient();
 ```
 
-### L4. Ctrie snapshot conversion
+### F3. Ctrie snapshot conversion
 
 Retain the already shipped `SnapshotView.ToPersistentHashMap()` and add
 `SnapshotView.Freeze()`, not `Freeze()` on the live Ctrie. The receiver name must make clear that the
-concurrent structure continues to accept writes. Both conversions enumerate exactly the same
+concurrent structure continues to accept writes. Each conversion independently enumerates one
 captured generation once; later live-trie writes cannot affect either result. Tests and benchmarks
-compare persistent and frozen conversion from one snapshot rather than taking two live snapshots.
+invoke both conversions on the same snapshot rather than taking two live snapshots.
 
-### Lifecycle benchmark gates
+### T/F benchmark matrices
 
 `TransientLifecycleBenchmarks` covers counts 0, 1, 8, 32, 1K, and 100K, with:
 
@@ -302,8 +420,10 @@ compare persistent and frozen conversion from one snapshot rather than taking tw
 - the current canonical bulk builder;
 - transient construction;
 - persistent -> transient with edit counts ranging from one to the full count;
+- repeated-key, clustered-prefix, disjoint-key, and collision-heavy batches;
 - edit/publish cycles and retained-base branching;
-- collision-heavy and custom-comparer datasets.
+- publication cadence and custom-comparer datasets; and
+- direct persistent edits plus the current `BulkBuilder` where its construction semantics apply.
 
 Record throughput, allocated bytes, copied/owned node counts, retained bytes, and publication
 latency. Structural counters must demonstrate that adoption and `Persist()` do not traverse.
@@ -313,7 +433,7 @@ latency. Structural counters must demonstrate that adoption and `Persist()` do n
 - positive, negative, and mixed hit ratios;
 - enumeration throughput;
 - construction cost and retained bytes per entry;
-- thaw cost;
+- `ToPersistent` conversion cost;
 - random, colliding, null-capable, string, and custom-comparer datasets; and
 - the read count at which construction cost breaks even.
 
@@ -323,12 +443,13 @@ repository types; omit BCL controls that reject that key domain rather than chan
 reporting incomparable failures. A key-type dataset is a workload, not permission to dispatch on
 key type.
 
-### Lifecycle shipment gate
+### T/F shipment gates
 
 The transient ships only when it demonstrates all semantic rules, failure atomicity, base-version
-isolation, post-publication invalidation, and O(1) adoption/publication counters. The frozen map/set
-ships only with a documented lookup/enumeration/memory win in a named read-heavy regime, or a
-separately documented semantic reason strong enough to justify a new public family.
+isolation, post-publication invalidation, O(1) adoption/publication counters, and a material net win
+in the T0 regime after ordinary-map and edited-node retained memory is charged. The frozen map/set
+ships only with a documented lookup/enumeration/memory win and realistic construction break-even in
+a named read-heavy regime. A merely hypothetical semantic distinction does not override F0/F1.
 
 ## Track C: Version-Bound Rope Cursor/Zipper
 
@@ -355,17 +476,59 @@ bounded partial carries/focus + right ordinary-chunk tree) and canonicalize lazi
 could return `(Rope, Cursor)` after local edits in O(1) amortized time, but it broadens every rope
 operation's representation contract. It is an experiment in C0, not a pre-written complexity claim.
 
-### C0. Persistent-zipper and focused-root spike
+### C0. Zipper-first representation and proof spike
 
-Build test-only prototypes for both alternatives:
+Start with one minimally complete **zipper-as-version** prototype: split state remains in the cursor
+and `Snapshot()` rebuilds a canonical root. Do not build a symmetric full focused-root implementation
+up front. Instrument node visits, spine allocations, forced suspensions, focus/carry copies, cursor
+wrapper allocations, retained memory, and snapshot cadence 1/16/256 across long local-edit histories.
 
-1. **zipper-as-version**: split state remains in the cursor; `Snapshot()` rebuilds a canonical root;
-2. **focused Rope root**: `Rope<T>` internally holds either a canonical root or a focused root and
-   memoizes canonicalization for nonlocal operations.
+Separate logical version identity from navigation state:
 
-Instrument node visits, spine allocations, forced suspensions, focus-array copies, and retained
-memory across long local-edit histories. The API/complexity review chooses one before public types
-ship. Zipper-as-version is the conservative default because it does not tax unrelated rope users.
+- `CursorVersionState<T>` identifies one immutable logical sequence, owns the count and a
+  thread-safe winner-returning `Snapshot()` memo cell, and stores the decomposition seed needed to
+  build the canonical rope;
+- `CursorContext<T>` owns the gap position/path/focus decomposition used for navigation;
+- pure navigation returns a new context over the same version state and therefore the same canonical
+  snapshot reference;
+- an edit creates a new version state plus its refreshed context; and
+- snapshot memoization publishes with `Interlocked.CompareExchange`; racing losers discard their
+  candidate and return the winner rather than exposing two reference-distinct snapshots.
+
+Snapshot construction is failure-atomic: an exception leaves the memo empty and the cursor/version
+reusable, so a later call can retry. C2 prepares and retains per-focus, per-carry, and per-chunk
+measures as edits succeed; building a measured snapshot recombines those prepared aggregates instead
+of calling `TMeasureOps.Measure` again for existing elements. Racing snapshot candidates may repeat
+pure structural combination work, but they do not duplicate element-measure callbacks. A failed edit
+does not publish a new version state.
+
+C0 compares the logically immutable class, a small readonly struct over immutable heap state, and a
+mutable single-owner session as an explicit throughput control. The mutable form is not silently
+substituted for the persistent cursor contract. A class that allocates one wrapper per move is not
+marketed as an enumerator replacement.
+
+Branched-history complexity is a proof obligation, not merely a benchmark. Write a potential/invariant
+argument over the version DAG in which focus and each partial carry are bounded, but explicitly charge
+every branch-specific endpoint repair, rebuilt spine, and forced suspension; memoized work counts as
+shared only when the relevant suspension really is shared by those branches. The proposition to prove
+is whether editing `b` descendants from one retained boundary cursor costs O(b) amortized bounded work
+plus genuinely shared forcing, while each individual operation retains an O(log n) worst case. Validate
+or falsify that proposition with fan-out across increasing sizes and branch counts. If distinct branches
+instead incur independent logarithmic repair, publish O(b log n) for that history—or retain only the
+linear-lineage amortized contract—rather than assuming persistence supplied the stronger bound.
+
+C0 has three outcomes:
+
+1. **Select zipper-as-version** when it materially beats indexed Rope edits in a predeclared named
+   local workload at that workload's required snapshot cadence. Cadences 1, 16, and 256 are all
+   measured to expose tradeoffs; the zipper need not win every cadence to clear a narrower named gate.
+2. **Escalate conditionally to focused-root** only when snapshot-after-every-edit is itself a
+   predeclared required workload, cadence 1 misses the gate, and dirty canonicalization is the measured
+   blocker that a focused root can address. That escalation must then implement and benchmark every
+   ordinary Rope operation over the representation union.
+3. **Defer the editable cursor** when neither representation clears the shipment gate without
+   unacceptable non-cursor regressions. A read-only retained navigator would be a separate,
+   consumer-gated proposal, not a consolation API under the same claims.
 
 ### Gap semantics
 
@@ -425,8 +588,9 @@ that spelling.
 
 Identity rules are explicit:
 
-- `Seek(Position)` and empty `InsertRange` return the exact cursor object and preserve its cached
-  snapshot;
+- `Seek(Position)` and empty `InsertRange` return the unchanged cursor value and preserve the exact
+  shared version/context state and cached snapshot; if C0 selects a class this additionally means
+  `ReferenceEquals` with the receiver, while a struct makes no object-identity promise;
 - pure navigation returns a different cursor object under the class prototype but shares the same
   immutable sequence state and therefore the same clean snapshot object;
 - moving away and back does not promise the original cursor object by reference;
@@ -434,9 +598,10 @@ Identity rules are explicit:
   would compare equal, and invokes no hidden element-equality callback; and
 - failed `TryPeek` operations do not change state.
 
-Any later range-move convenience defines a zero-distance move as exact-object identity. C0 counters
-and C1 tests pin cursor-object, context-root, and snapshot identity separately so one is not inferred
-from another.
+Any later range-move convenience defines a zero-distance move as an unchanged value with the same
+shared state, and as exact-object identity only under a class representation. C0 counters and C1 tests
+pin representation-appropriate cursor identity, context-root identity, and snapshot identity
+separately so one is not inferred from another.
 
 Name the public abstraction `Cursor`; use “zipper” for the internal decomposition. Do not add a
 separate `Rope` argument to cursor operations. The cursor owns its source/context, so it cannot be
@@ -467,14 +632,24 @@ The active edit window is bounded independently of the normal rope chunk maximum
 would satisfy Big-O notation while failing the feature's purpose.
 
 Focus-sized fragments cannot be appended directly as ordinary rope chunks: repeated typing would
-then accumulate arbitrarily many chunks below the rope's normal minimum target and invalidate the
-“chunk count approximately n / target” performance policy. The zipper therefore maintains at most
-one partial carry between the active window and each adjacent ordinary-chunk tree. Overflow merges
-into the near carry; only a target-sized/full carry is flushed as an ordinary chunk. Pulling from a
-tree merges an underfilled boundary chunk into the carry. `Snapshot()` packs the two bounded carries
-plus the active window into ordinary chunks before joining the trees. Thus there are at most two
-partial fragments outside the active window, and snapshot repair remains bounded chunk work plus
-the documented O(log n) tree join rather than an O(n) global `Compact()`.
+then accumulate arbitrarily many sub-minimum chunks and violate the existing proportional
+chunk-count policy. `RopeChunking` currently defines only `MinChunkSize = 256` and
+`MaxChunkSize = 2048`; it has no hidden target constant. C0 therefore treats
+`FlushChunkSize` as an explicit candidate in `{256, 512, 1024, 2048}`, independent of the focus cap,
+and locks one value from measurements before C1.
+
+The zipper maintains at most one partial carry between the active window and each adjacent
+ordinary-chunk tree, with `0 <= carry.Length < FlushChunkSize`. Overflow merges into the near carry,
+flushes as many full `FlushChunkSize` ordinary chunks as needed, and retains only the sub-threshold
+remainder. Pulling an endpoint chunk first takes the bounded near-focus slice; any remaining valid
+ordinary chunk is reattached immediately, while only a remainder smaller than `MinChunkSize` can
+enter the carry (and is therefore smaller than every flush candidate). `Snapshot()` packs the two
+bounded carries plus the active window into chunks within `[MinChunkSize, MaxChunkSize]` except for
+the unavoidable final boundary chunk before joining the trees. Thus there are at most two partial
+fragments outside the active window, and snapshot repair remains bounded chunk work plus the
+documented O(log n) tree join rather than an O(n) global `Compact()`. C0 exhaustively tests every
+flush candidate against endpoint chunk lengths 1 through `MaxChunkSize`, including existing chunks
+larger than the candidate.
 
 - Cursor creation splits to the containing chunk in O(log n).
 - Movement inside the active window changes only the gap.
@@ -501,7 +676,7 @@ finger-tree engine itself remains unchanged.
 | Move within active window | O(1), no new tree spine | One cursor wrapper; a struct spelling may remove it |
 | Cross focus/chunk boundary | O(1) amortized; O(log n) worst case | Wrapper plus changed context/carry storage |
 | Single local insert/delete/replace | O(1) amortized with bounded focus copy; O(log n) worst case on boundary repair | Wrapper plus bounded focus/state storage |
-| `InsertRange` of m elements | O(m + log n) amortized after positioning; necessarily Omega(m) | O(m / chunk-target) packed storage plus bounded context |
+| `InsertRange` of m elements | O(m + log n) amortized after positioning; necessarily Omega(m) | O(m / `FlushChunkSize`) packed storage plus bounded context |
 | Dirty `Snapshot()` | Bounded carry packing plus O(log n) amortized tree join | Packed seam chunks plus rebuilt spine |
 | Repeated clean `Snapshot()` | O(1), same `Rope<T>` reference | None |
 | Sequential traversal of k elements | O(k + log n) | Theta(k) wrappers for the class prototype |
@@ -521,30 +696,89 @@ selection objects, text line/column helpers, and a raw `FingerTree` cursor.
 
 ### C2. Measured and text cursors
 
-After positional semantics stabilize, add `MeasuredRopeCursor<T, TMeasure, TMeasureOps>` with:
+After positional semantics stabilize, mirror the selected C1 representation:
 
-- `MeasureBefore`: measure of `[0, Position)`;
-- `MeasureAfter`: measure of `[Position, Count)`; and
-- seek by the existing closure-free monotone predicate contract.
+```csharp
+public sealed partial class MeasuredRope<T, TMeasure, TMeasureOps>
+    where TMeasureOps : IMeasure<T, TMeasure>
+{
+    public MeasuredRopeCursor<T, TMeasure, TMeasureOps> GetCursor(int position = 0);
+
+    public bool TryGetCursorByMeasure(
+        Func<TMeasure, bool> predicate,
+        out MeasuredRopeCursor<T, TMeasure, TMeasureOps> cursor);
+    public bool TryGetCursorByMeasure<TPredicate>(
+        TPredicate predicate,
+        out MeasuredRopeCursor<T, TMeasure, TMeasureOps> cursor)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>;
+}
+
+public sealed class MeasuredRopeCursor<T, TMeasure, TMeasureOps>
+    where TMeasureOps : IMeasure<T, TMeasure>
+{
+    public int Count { get; }
+    public int Position { get; }
+    public TMeasure MeasureBefore { get; } // [0, Position)
+    public TMeasure MeasureAfter { get; }  // [Position, Count)
+
+    public MeasuredRopeCursor<T, TMeasure, TMeasureOps> Seek(int position);
+    public bool TrySeekByMeasure(
+        Func<TMeasure, bool> predicate,
+        out MeasuredRopeCursor<T, TMeasure, TMeasureOps> cursor);
+    public bool TrySeekByMeasure<TPredicate>(
+        TPredicate predicate,
+        out MeasuredRopeCursor<T, TMeasure, TMeasureOps> cursor)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>;
+
+    // Every C1 peek, move, and edit member is mirrored; movement and edits return
+    // MeasuredRopeCursor<T, TMeasure, TMeasureOps>.
+    public MeasuredRope<T, TMeasure, TMeasureOps> Snapshot();
+}
+```
+
+The class spelling is provisional and mirrors C1's sketch; C0 may select a readonly struct over
+shared immutable state without changing these semantic members.
+
+Measure seek follows the existing `TryLocateByMeasure` boundary exactly: the predicate is evaluated
+over prefixes of the whole version from the monoid identity (it is absolute, not relative to the
+current gap), must be false for `TMeasureOps.Empty`, and must remain false then true over successively
+longer prefixes. Success returns a cursor immediately before the first element whose inclusion makes
+the predicate true, so `MeasureBefore` excludes that element. When no such element exists—including
+an empty rope—the method returns `false` and the out cursor is the end cursor with
+`Position == Count` and `MeasureBefore == total measure`. The delegate overload preserves the existing
+measured-rope convenience surface; the constrained struct overload is its closure-free hot-path form.
+Positional `Seek` remains O(log n); measure seek is O(log n) plus a bounded focus scan;
+`MeasureBefore` and `MeasureAfter` are O(1) after cursor creation/movement state is prepared.
+
+Because the existing public `SplitByMeasure`/`TryLocateByMeasure` prose currently says only
+“monotone,” C2 also corrects their XML and API documentation to state the false-at-identity
+precondition and adds shared conformance tests for the delegate and struct-predicate forms. The
+cursor does not silently impose a different predicate algebra from the rope it navigates.
 
 For a noninvertible monoid, moving left cannot subtract one element's measure. The active window
 therefore caches prefix and suffix measure arrays; rebuilding them performs at most the bounded
 focus-cap number of callbacks. Across tree boundaries, combination order must remain correct for a
 noncommutative monoid.
 
-The current newline-count measure yields a line number but not a column. An O(1) line-and-column
-claim requires a richer composable text extent, for example line-break count plus trailing-column
-length (and total length where needed). C2 either adds and law-tests that monoid or documents column
-as O(log n); it does not overclaim the current measure.
+The text specialization remains `MeasuredRope<char, int, NewlineMeasure>`. C2 deliberately does not
+introduce a second `TextExtent` rope family that would require duplicate factories, builders, string,
+line, Unicode, and grapheme helpers. For a text cursor, `MeasureBefore` is the zero-based line in O(1);
+the UTF-16-code-unit column is `Position` minus the current line's start, located by the same absolute
+newline-measure search as `LineStartOffset`, in O(log n). A cursor-local line-start cache may be
+measured as a separate optimization, but is not part of the baseline complexity claim. Grapheme
+navigation remains the existing text-helper concern and is not conflated with UTF-16 columns.
 
 ### C3. Samples
 
-Both text samples use `MeasuredRope<char, int, NewlineMeasure>` today, so integration follows C2;
-C1 is validated by its dedicated positional model tests and benchmarks rather than by silently
-changing a sample away from measured text.
+Both text samples remain on `MeasuredRope<char, int, NewlineMeasure>` and adopt its measured cursor
+after C2; no parallel text-rope type or helper migration is required. C1 is validated by its dedicated
+positional model tests and benchmarks rather than by silently changing a sample away from measured
+text. Sample line/column output uses the cursor's newline prefix and O(log n) line-start lookup.
 
-- Update the Tour's measured undo/redo text-buffer path to consume committed cursor snapshots and
-  rename its current “cursor” history index to “history position,” preventing two unrelated cursor
+- Update the Tour's measured undo/redo text-buffer path to retain measured cursor versions as history
+  and materialize snapshots only at explicit display/commit boundaries. That cadence is predeclared
+  and measured; the demonstration does not silently redefine cadence 1 as a required workload.
+  Rename its current “cursor” history index to “history position,” preventing two unrelated cursor
   meanings.
 - Update the Editor sample to demonstrate localized insertion, deletion, movement, Unicode,
   line/column behavior, and branching from an old cursor.
@@ -569,6 +803,8 @@ The command-model suite compares against `List<T>` plus an integer gap and cover
 
 - movement, seek, peeks, insertion/range insertion, both deletes, and replacement;
 - retained old cursors and branches from stale-but-valid versions;
+- adversarial fan-out from one retained cursor exactly at focus/carry/chunk boundaries, with branch
+  count and sequence size scaled independently and checked against the C0 potential argument;
 - empty/start/end and focus-cap boundaries;
 - rope boundaries 255/256/257 and 2,047/2,048/2,049;
 - repeated seam oscillation and insert/delete churn;
@@ -588,20 +824,43 @@ and random; typing/backspace bursts; alternating move/edit; absolute seek; and s
 node visits, spine allocations, retained memory, and normalization cost. Sweep focus caps rather
 than choosing one by intuition.
 
-Porting begins only after the C# cursor materially beats indexed rope edits on named local histories
+`MeasuredRopeCursorBenchmarks` repeats the selected local-edit and snapshot-cadence lanes against
+indexed `MeasuredRope<char, int, NewlineMeasure>`, then adds positional/measure seeks and line/column
+queries over newline-sparse and newline-dense text. It records `Measure`/`Combine` callback counts as
+well as latency and allocation. C2 advances to sample integration only if it preserves C1's material
+local-edit win in a predeclared measured-text workload at that workload's snapshot cadence, while
+measure navigation and line/column queries remain within their separately locked acceptable-overhead
+tolerance. A positional win does not waive regressions introduced by prefix/suffix measure state.
+
+Porting begins only after C1 and C2 clear their respective named positional and measured-text gates
 without regressing non-cursor rope workloads.
 
 ## Dependency And Rollout Order
 
-The tracks share contract review and benchmark infrastructure but no implementation dependency:
+The tracks share P0 contracts/instrumentation but have no implementation dependency. Track C is the
+lead public priority; T and F advance independently only when their private gates clear:
 
 ```text
-P0 contract lock
-├── L1 CHAMP transient
-├── L2 frozen bake-off ──> L3 frozen map/set ──> L4 Ctrie SnapshotView conversion
-└── C0 zipper/focused-root spike ──> C1 Rope cursor ──> C2 measured/text cursor
-                                         │                    └──> C3 Editor + Tour
-                                         └──> C4 deque evaluation
+P0 contract oracles + benchmark/counter skeletons
+│
+├── TRACK C (lead public target)
+│     C0 zipper-first representation/proof spike
+│       ├── select zipper-as-version ─────────────┐
+│       ├── measured blocker -> focused-root spike│
+│       └── neither clears -> DEFER              │
+│                                                v
+│     C1 positional Rope cursor -> C2 measured/text cursor -> C3 Editor + Tour
+│                       └────────────────────────────> C4 deque evaluation (consumer-gated)
+│
+├── TRACK T (private evidence before API)
+│     T0 workload qualification
+│       └── [credible] T1 production-representative internal kernel
+│              └── [material net win] T2 public one-way transient
+│
+└── TRACK F (private evidence before API)
+      F0 one-layout packed-index signal
+        └── [credible regime] F1 layout bake-off
+               └── [select layout] F2 implement + shipment gate -> F3 SnapshotView.Freeze()
 ```
 
 Frozen conversion does not depend on a transient implementation; both meet at persistent CHAMP.
@@ -610,19 +869,58 @@ separately designed/law-tested range-update action, so it remains later work.
 
 The recommended execution order is:
 
-1. **P0 Axis 2 contract lock**: this proposal, catalog corrections, benchmark skeleton design, and
-   API/complexity review.
-2. **L1 C# CHAMP one-way transient**.
-3. **C0 persistent-zipper/focused-root spike**, in parallel with frozen measurements once L1
-   contracts are stable.
-4. **L2/L3 fixed-layout frozen hash map/set** if the measurements meet the shipment gate.
-5. **C1 C# positional rope cursor**, validated by dedicated model tests and benchmarks.
-6. **L4 Ctrie snapshot conversion**, **C2 measured/text cursor**, and then **C3 Editor/Tour
-   integration**.
-7. Evaluate C# RRB transient, packed sorted frozen types, and deque cursor separately; none is
-   automatically implied by the first families.
-8. Consider sibling-language promotion only after a C# compatibility round and explicit scope
-   decision.
+1. Complete **P0** and lock measurement materiality before reading prototype results.
+2. Begin **C0**, **T0**, and **F0** independently. C0 is the lead engineering priority; T0/F0 are
+   bounded private evidence work, not public-surface commitments.
+3. Take C0 through its explicit select/escalate/defer decision. When selected, implement and ship
+   **C1**, then complete **C2/C3** as the first end-to-end Axis 2 vertical slice.
+4. Advance T0 -> T1 -> T2 only at its two gates. A T1 failure leaves current persistent operations
+   and `BulkBuilder` authoritative.
+5. Advance F0 -> F1 -> F2 -> F3 only at its gates. An F0/F1 failure leaves
+   `PersistentHashMap` and BCL `FrozenDictionary` as the documented choices.
+6. Evaluate C4, an RRB transient, packed sorted frozen types, and any sibling-language promotion
+   separately; none is implied by success of the first C# families.
+
+Landing order follows evidence, not a ceremonial sequence number. “Cursor-first” means maintainer
+attention and first intended public capability, not that a proven T2/F2 change must sit idle behind a
+blocked cursor decision.
+
+## Required Phase-Exit Evidence
+
+Every shipping phase—C1, T2, and F2—updates the affected C# workspace overview, usage, API, and
+validation documents; `docs/reference/data-structure-catalog.md`; the relevant planned row in the
+frontier catalog; and `docs/reference/semantic-contracts.md`. T2 adds clean
+`ToTransient().Persist()` reference identity to the no-op contract. These are phase deliverables,
+not follow-up documentation debt.
+
+| Phase | Evidence required to advance or ship |
+| --- | --- |
+| P0 | Contract-oracle tests green; benchmark/counter skeletons build; materiality/noise rule and datasets committed before result collection |
+| C0 | Zipper benchmark/counter artifact; version-state/cache design; focus/carry invariants; version-DAG potential argument; adversarial branching results; explicit select/escalate/defer decision |
+| Focused-root escalation | Evidence that dirty snapshot is the blocker; ordinary Rope operation matrix over both root variants; concurrency-safe normalization; no unacceptable non-cursor regression |
+| C1 | Public XML/API and current-state document set; `List<T>` gap command model; boundary/overflow/representation-appropriate identity/sharing/concurrency tests; `RopeCursorBenchmarks` clearing the locked materiality gate in a predeclared named workload/cadence |
+| C2 | Noncommutative measure model; exact measure-seek identity/miss/boundary tests; existing measured-search XML/precondition correction; delegate/struct-predicate parity; callback ceilings and failed/racing snapshot tests; existing `NewlineMeasure` text-helper compatibility; UTF-16 line O(1)/column O(log n) examples; measured-text edit/seek/line-column benchmark gate at the sample cadence |
+| C3 | Editor/Tour smoke tests and transcripts; undo/branch histories distinguish edit cursor from history position; snapshot cadence in samples matches a measured workload |
+| T0 | Baseline edit-locality/publication matrix and counter report naming a credible win regime or recording deferral |
+| T1 | Production-representative ownership layout; ordinary-map size regression; strong-exception failpoints; base isolation; recursive count/canonicality validation; O(1) adopt/seal counters; net benchmark result |
+| T2 | Public API/XML and current-state document set; public-surface strong-exception and publication-allocation failpoints; consumed-alias/post-publication invalidation tests; comparer/representative/clean-persist-identity/no-op/enumeration parity; retained-memory disclosure; explicit ship/defer record |
+| F0 | One faithful packed-index result across lookup mixes, enumeration, bytes/entry, construction, and break-even; explicit advance/defer record |
+| F1 | Fixed-layout comparison under identical semantics/datasets; selected one-layout rationale; no count/key selector hidden in v1 |
+| F2 | Public API/XML and current-state document set; stable-unspecified order, `Freeze()` identity, exact freeze -> persistent -> freeze sequence, policy/representative/null/collision/copy/`ToPersistent`, and concurrent-read tests; API-shape check excluding update methods; library-allocation-free point lookup with enumeration allocation measured and documented separately; named-regime shipment evidence |
+| F3 | Each conversion independently enumerates the same captured Ctrie generation once; later-write isolation; semantic parity with `ToPersistentHashMap().Freeze()`; conversion benchmark |
+
+Every implementation tranche runs the C# build and unattended suite from `src/CSharp`:
+
+```powershell
+dotnet build
+.\test.ps1
+```
+
+Performance decisions use Release BenchmarkDotNet runs from the existing benchmark project, with
+the relevant filters (`RopeCursorBenchmarks`, `MeasuredRopeCursorBenchmarks`,
+`TransientLifecycleBenchmarks`, or `FrozenLookupBenchmarks`) and curated results recorded in the
+benchmark notes. Documentation-only
+decision changes run the repository Markdown link checker, stale-path scan, and `git diff --check`.
 
 ## Cross-Language Posture
 
@@ -670,6 +968,12 @@ the bottleneck. Merely observing a different strategy in another library is not 
 
 ## References
 
+- [Axis 2 plan review (2026-07-13)](../reviews/axis2-lifecycle-and-cursors-review-2026-07-13.md) -
+  source of the cursor-priority, frozen-signal, branched-history, and transient-workload findings
+  dispositioned by this final plan.
+- [Cursor-first alternative (2026-07-13)](axis2-cursor-first-alternative-2026-07-13.md) - retained
+  rationale whose ordering is incorporated here with corrected sample, gate, scope, and estimate
+  claims.
 - [Clojure transients](https://clojure.org/reference/transients) - owner-isolated mutation and the
   one-way persistent publication precedent.
 - [.NET frozen collections](https://learn.microsoft.com/en-us/dotnet/api/system.collections.frozen?view=net-10.0) - the separate, construction-heavy read-optimized tier used as a benchmark baseline.
