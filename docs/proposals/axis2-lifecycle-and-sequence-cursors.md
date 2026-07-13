@@ -105,7 +105,8 @@ The cycle is asymmetric on purpose:
 - persistent -> transient and transient -> persistent can be O(1) because the nodes are designed
   for token-governed copy-on-write;
 - persistent -> frozen and frozen -> persistent are O(n) representation changes;
-- frozen -> transient therefore routes through persistent and is O(n);
+- frozen -> transient, when T2 exists, routes through persistent and is O(n); otherwise ordinary
+  persistent editing remains available after `ToPersistent()`;
 - v1 does not add `Transient.Freeze()`: the persistent phase boundary stays visible;
 - `Freeze()` on a frozen value, if exposed, returns the same object.
 
@@ -128,6 +129,9 @@ P0 also establishes common instrumentation before any spike is interpreted:
 - identical data generation, comparer instances, hit/miss mixes, warmup, and result-consumption
   rules within each comparable lane, with controls that cannot represent a semantic lane explicitly
   omitted rather than fed different data;
+- an `InternalsVisibleTo` grant from the HAMT project to the existing
+  `Tools.DataStructures.FingerTree.Benchmarks` assembly, plus internal-only diagnostic hooks for roots,
+  ownership, copied-node counts, and `BulkBuilder`; benchmark access does not become public API;
 - a predeclared materiality rule in the benchmark README, at least the larger of the measured noise
   floor and a maintainer-chosen practical margin, so a threshold is not selected after seeing data;
 - separate correctness and performance runs—no prototype may skip semantic checks to obtain a
@@ -399,8 +403,10 @@ The frozen surface has no `SetItem`, `Add`, `Remove`, builder, or update-shaped 
 is explicitly expensive:
 
 ```csharp
-var persistent = frozen.ToPersistent(); // O(n)
-var transient = persistent.ToTransient();
+var edited = frozen.ToPersistent().SetItem(key, value); // O(n) conversion, then persistent edit
+
+// Optional batch-edit path only if Track T2 has shipped:
+var transient = frozen.ToPersistent().ToTransient();
 ```
 
 ### F3. Ctrie snapshot conversion
@@ -495,12 +501,15 @@ Separate logical version identity from navigation state:
 - snapshot memoization publishes with `Interlocked.CompareExchange`; racing losers discard their
   candidate and return the winner rather than exposing two reference-distinct snapshots.
 
-Snapshot construction is failure-atomic: an exception leaves the memo empty and the cursor/version
-reusable, so a later call can retry. C2 prepares and retains per-focus, per-carry, and per-chunk
-measures as edits succeed; building a measured snapshot recombines those prepared aggregates instead
-of calling `TMeasureOps.Measure` again for existing elements. Racing snapshot candidates may repeat
-pure structural combination work, but they do not duplicate element-measure callbacks. A failed edit
-does not publish a new version state.
+Snapshot construction is failure-atomic: a failing call publishes nothing; absent a concurrent
+winner the memo remains empty, and in either case the cursor/version remains reusable. C2 retains
+each element measure plus ordered prefix/suffix
+aggregates for the active focus, both carries, and every fragment cut from a pulled ordinary chunk;
+whole untouched chunks retain their existing cached aggregate. Snapshot repacking can therefore split
+a carry or fragment at a new boundary and recombine prepared measures without calling
+`TMeasureOps.Measure` again for those elements. Racing snapshot candidates may repeat structural and
+`Combine` work, but they do not duplicate element-measure callbacks. A failed edit does not publish a
+new version state.
 
 C0 compares the logically immutable class, a small readonly struct over immutable heap state, and a
 mutable single-owner session as an explicit throughput control. The mutable form is not silently
@@ -674,8 +683,8 @@ finger-tree engine itself remains unchanged.
 | Create cursor or arbitrary `Seek` | O(log n) | Path/context plus cursor wrapper |
 | Position/start/end/peek in focus | O(1) | None |
 | Move within active window | O(1), no new tree spine | One cursor wrapper; a struct spelling may remove it |
-| Cross focus/chunk boundary | O(1) amortized; O(log n) worst case | Wrapper plus changed context/carry storage |
-| Single local insert/delete/replace | O(1) amortized with bounded focus copy; O(log n) worst case on boundary repair | Wrapper plus bounded focus/state storage |
+| Cross focus/chunk boundary | O(1) amortized in the C0-proven history class; O(log n) worst case | Wrapper plus changed context/carry storage |
+| Single local insert/delete/replace | O(1) amortized with bounded focus copy in the C0-proven history class; O(log n) worst case on boundary repair | Wrapper plus bounded focus/state storage |
 | `InsertRange` of m elements | O(m + log n) amortized after positioning; necessarily Omega(m) | O(m / `FlushChunkSize`) packed storage plus bounded context |
 | Dirty `Snapshot()` | Bounded carry packing plus O(log n) amortized tree join | Packed seam chunks plus rebuilt spine |
 | Repeated clean `Snapshot()` | O(1), same `Rope<T>` reference | None |
@@ -687,6 +696,11 @@ changing state, and an empty range returns the same cursor. Cursor-wrapper alloc
 selection criterion, not incidental noise: the spike must compare an immutable class, a small
 readonly struct over immutable heap context, and any mutable-session alternative without inferring
 that a struct makes the path itself allocation-free.
+
+“C0-proven history class” is deliberate. C1 XML/API documentation publishes the selected scope—fully
+branched histories, linear lineages only, or a weaker branch bound such as O(b log n)—from the proof
+and counters. The unqualified amortized rows do not survive a C0 result that establishes only the
+narrower scope.
 
 ### C1. Positional rope cursor
 
@@ -740,25 +754,23 @@ The class spelling is provisional and mirrors C1's sketch; C0 may select a reado
 shared immutable state without changing these semantic members.
 
 Measure seek follows the existing `TryLocateByMeasure` boundary exactly: the predicate is evaluated
-over prefixes of the whole version from the monoid identity (it is absolute, not relative to the
-current gap), must be false for `TMeasureOps.Empty`, and must remain false then true over successively
-longer prefixes. Success returns a cursor immediately before the first element whose inclusion makes
-the predicate true, so `MeasureBefore` excludes that element. When no such element exists—including
-an empty rope—the method returns `false` and the out cursor is the end cursor with
+over accumulated prefixes of the whole version from the monoid identity (it is absolute, not relative
+to the current gap) and must be monotone—once true, it remains true for every longer prefix. Success
+returns a cursor immediately before the first element whose inclusive prefix satisfies the predicate,
+so `MeasureBefore` excludes that element. A predicate already true for `TMeasureOps.Empty` returns
+position 0 on a nonempty rope, matching the existing API. When no element satisfies the predicate,
+including for an empty rope, the method returns `false` and the out cursor is the end cursor with
 `Position == Count` and `MeasureBefore == total measure`. The delegate overload preserves the existing
 measured-rope convenience surface; the constrained struct overload is its closure-free hot-path form.
-Positional `Seek` remains O(log n); measure seek is O(log n) plus a bounded focus scan;
-`MeasureBefore` and `MeasureAfter` are O(1) after cursor creation/movement state is prepared.
+Positional `Seek` remains O(log n). Measure seek is O(log n) plus a bounded scan of the located
+ordinary chunk—up to `MaxChunkSize`, currently 2,048 elements—and any separate focus-preparation pass;
+`MeasureBefore` and `MeasureAfter` are O(1) after that cursor state is prepared.
 
-Because the existing public `SplitByMeasure`/`TryLocateByMeasure` prose currently says only
-“monotone,” C2 also corrects their XML and API documentation to state the false-at-identity
-precondition and adds shared conformance tests for the delegate and struct-predicate forms. The
-cursor does not silently impose a different predicate algebra from the rope it navigates.
-
-For a noninvertible monoid, moving left cannot subtract one element's measure. The active window
-therefore caches prefix and suffix measure arrays; rebuilding them performs at most the bounded
-focus-cap number of callbacks. Across tree boundaries, combination order must remain correct for a
-noncommutative monoid.
+For a noninvertible monoid, moving left cannot subtract one element's measure. The active focus,
+partial carries, and pulled chunk fragments therefore retain per-element measures and ordered prefix/
+suffix aggregates; preparing a newly pulled fragment performs at most `MaxChunkSize` element-measure
+callbacks, and rebuilding the focus performs at most the smaller focus-cap count. Across tree
+boundaries, combination order must remain correct for a noncommutative monoid.
 
 The text specialization remains `MeasuredRope<char, int, NewlineMeasure>`. C2 deliberately does not
 introduce a second `TextExtent` rope family that would require duplicate factories, builders, string,
@@ -895,11 +907,11 @@ not follow-up documentation debt.
 
 | Phase | Evidence required to advance or ship |
 | --- | --- |
-| P0 | Contract-oracle tests green; benchmark/counter skeletons build; materiality/noise rule and datasets committed before result collection |
+| P0 | Contract-oracle tests green; benchmark IVT/internal diagnostics and counter skeletons build; materiality/noise rule and datasets committed before result collection |
 | C0 | Zipper benchmark/counter artifact; version-state/cache design; focus/carry invariants; version-DAG potential argument; adversarial branching results; explicit select/escalate/defer decision |
 | Focused-root escalation | Evidence that dirty snapshot is the blocker; ordinary Rope operation matrix over both root variants; concurrency-safe normalization; no unacceptable non-cursor regression |
-| C1 | Public XML/API and current-state document set; `List<T>` gap command model; boundary/overflow/representation-appropriate identity/sharing/concurrency tests; `RopeCursorBenchmarks` clearing the locked materiality gate in a predeclared named workload/cadence |
-| C2 | Noncommutative measure model; exact measure-seek identity/miss/boundary tests; existing measured-search XML/precondition correction; delegate/struct-predicate parity; callback ceilings and failed/racing snapshot tests; existing `NewlineMeasure` text-helper compatibility; UTF-16 line O(1)/column O(log n) examples; measured-text edit/seek/line-column benchmark gate at the sample cadence |
+| C1 | Public XML/API and current-state document set including the C0-proven branch-complexity scope; `List<T>` gap command model; boundary/overflow/representation-appropriate identity/sharing/concurrency tests; `RopeCursorBenchmarks` clearing the locked materiality gate in a predeclared named workload/cadence |
+| C2 | Noncommutative measure model; exact measure-seek identity/miss/boundary and true-at-empty parity tests; delegate/struct-predicate parity; per-fragment measure-cache ceilings and failed/racing snapshot tests; existing `NewlineMeasure` text-helper compatibility; UTF-16 line O(1)/column O(log n) examples; measured-text edit/seek/line-column benchmark gate at the sample cadence |
 | C3 | Editor/Tour smoke tests and transcripts; undo/branch histories distinguish edit cursor from history position; snapshot cadence in samples matches a measured workload |
 | T0 | Baseline edit-locality/publication matrix and counter report naming a credible win regime or recording deferral |
 | T1 | Production-representative ownership layout; ordinary-map size regression; strong-exception failpoints; base isolation; recursive count/canonicality validation; O(1) adopt/seal counters; net benchmark result |
