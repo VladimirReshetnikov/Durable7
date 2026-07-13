@@ -124,12 +124,13 @@ therefore selects only `PersistentHistory`. It completed all 456 combinations. I
 was reduced to the 456 versioned counter rows after collection; the exported timing reports remain
 alongside that sanitized CSV.
 
-The exact deciding filters, locked before any T1 timing, are:
+The deciding parameter tuples were locked before any T1 timing. The final evidence uses these
+corrected exact-name filters:
 
 ```powershell
-$persistentEndFilter = '*TransientLifecycleBenchmarks.PersistentHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512*'
-$builderFilter = '*TransientLifecycleBenchmarks.BulkBuilderHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512*'
-$directEndFilter = '*TransientLifecycleBenchmarks.SeparateNodeKernelHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512*'
+$persistentEndFilter = '*TransientLifecycleBenchmarks.PersistentHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512)'
+$builderFilter = '*TransientLifecycleBenchmarks.BulkBuilderHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512)'
+$directEndFilter = '*TransientLifecycleBenchmarks.SeparateNodeKernelHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512)'
 
 dotnet $driver --filter $persistentEndFilter --job short `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t0\candidate-persistent-short'
@@ -144,7 +145,24 @@ The surviving measurement branch is `codex/axis2-t1-direct-separate-gate`.
 branch or collision base. Ordinary `CollisionNode` and `BitmapIndexedNode` retain their b590 source
 and physical shape. A two-bit mask records data-array and child-array ownership independently, so
 wrapping one newly copied array does not falsely claim or eagerly copy the other shared array. Its
-versioned counter row remains `layout=separate-nodes` for artifact compatibility.
+versioned counter row remains `layout=separate-nodes` for artifact compatibility. Counter V2 names
+node/array allocation and copy fields `editable_*`: they cover the separate-node engine, while
+`deferred_persistent_mutations` and `deferred_persistent_wrapper_allocations` expose the ordinary
+first-edit stage. The paired T0 structural row contextualizes aggregate ordinary path-copy costs;
+it does not isolate the deferred edit. MemoryDiagnoser remains the authority for total timed
+allocation.
+
+The production-mode kernel does not pay editable-node machinery until reuse exists. Its first
+successful mutation delegates once to the ordinary persistent operation and retains that exact
+wrapper for O(1) publication. A second successful mutation promotes any reusable branch or
+collision path into the separate-node hierarchy; leaf-only histories may remain ordinary, while
+later same-session branch/collision mutations can reuse owned nodes and arrays. The
+edit token and bounded commit plan are allocated lazily, while failure injection and structural
+counters live in an optional diagnostic state that is enabled for setup evidence and tests but
+excluded from timed production lanes. A one-edit session therefore publishes an ordinary graph
+with no owner token or separate-node retained metadata. Failed promotion discards a token or commit
+plan created by that attempt, and diagnostic mode is fixed at adoption so production mode can never
+silently begin reporting partial counters.
 
 The owner-field evidence is historical and belongs to
 `codex/axis2-t1-owner-fields-gate`; it is not a second method on this branch. Likewise, the earlier
@@ -161,10 +179,10 @@ lookup/update controls guard the unchanged persistent surface. Preserve every fi
 curated record.
 
 ```powershell
-$persistentEvery64Filter = '*TransientLifecycleBenchmarks.PersistentHistory*History: ClusteredPrefix*PublicationCadence: Every64*Workload: N100000_E512*'
-$directEvery64Filter = '*TransientLifecycleBenchmarks.SeparateNodeKernelHistory*History: ClusteredPrefix*PublicationCadence: Every64*Workload: N100000_E512*'
-$ordinaryUpdateFilter = '*TransientLifecycleBenchmarks.PersistentHistory*History: ClusteredPrefix*PublicationCadence: EveryEdit*Workload: N100000_E1*'
-$directSparseFilter = '*TransientLifecycleBenchmarks.SeparateNodeKernelHistory*History: ClusteredPrefix*PublicationCadence: EveryEdit*Workload: N100000_E1*'
+$persistentEvery64Filter = '*TransientLifecycleBenchmarks.PersistentHistory*History: ClusteredPrefix*PublicationCadence: Every64*Workload: N100000_E512)'
+$directEvery64Filter = '*TransientLifecycleBenchmarks.SeparateNodeKernelHistory*History: ClusteredPrefix*PublicationCadence: Every64*Workload: N100000_E512)'
+$ordinaryUpdateFilter = '*TransientLifecycleBenchmarks.PersistentHistory*History: ClusteredPrefix*PublicationCadence: EveryEdit*Workload: N100000_E1)'
+$directSparseFilter = '*TransientLifecycleBenchmarks.SeparateNodeKernelHistory*History: ClusteredPrefix*PublicationCadence: EveryEdit*Workload: N100000_E1)'
 $ordinaryLookupFilter = '*ChampBenchmarks.ChampLookup*'
 
 1..5 | ForEach-Object {
@@ -188,6 +206,11 @@ dotnet $driver --filter $directSparseFilter `
 dotnet $driver --filter $ordinaryLookupFilter `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t1\ordinary-lookup-full'
 ```
+
+The literal closing parenthesis binds the exact BenchmarkDotNet parameterized name. During kernel
+tuning, a trailing wildcard after `N100000_E1` also selected `N100000_E100000`; that extra row is
+non-deciding and is not part of the final gate. The required E1 result itself remained valid, and
+all final evidence uses the exact filter above.
 
 ## Artifact contract
 

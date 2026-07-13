@@ -20,9 +20,11 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
   ownership, retained-size, lookup-visit, canonical bulk-builder diagnostic seam, exact ordinary
   field layout, and b590 source fingerprints for the ordinary nodes and monomorphic lookup loop.
 - `PersistentHashMapSeparateNodeKernelTests.cs` validates the private Axis 2 T1 owner-free gate
-  build: O(1) adoption/sealing, copy-on-first-write ownership in separate transient-editable
-  branch/collision classes, base and published-version isolation, recursive CHAMP canonicality/counts,
-  representatives/collisions, consumed sessions, callback/allocation/publication failure atomicity,
+  build: O(1) adoption/sealing, first-edit ordinary deferral, reusable-path promotion on a later edit,
+  copy-on-first-write ownership in separate transient-editable branch/collision classes, lazy token
+  and commit-plan allocation, production/diagnostic mode parity, base and published-version isolation,
+  recursive CHAMP canonicality/counts, representatives/collisions, consumed sessions,
+  callback/allocation/publication failure atomicity including deferred promotion rollback,
   and mixed published hierarchies through alternating exact-type lookup, enumeration, persistent
   update/remove, semantic equality, bidirectional structural diff, and all four map-algebra paths.
 - `PersistentHashMapEnumeratorTests.cs` covers allocation-free struct enumerators, copied enumerator independence,

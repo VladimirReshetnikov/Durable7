@@ -131,7 +131,7 @@ public class TransientLifecycleBenchmarks
         for (var start = 0; start < _edits.Length; start += batchSize)
         {
             var end = Math.Min(start + batchSize, _edits.Length);
-            var kernel = map.CreateSeparateNodeTransientKernel();
+            var kernel = map.CreateSeparateNodeTransientKernel(enableDiagnostics: false);
             for (var index = start; index < end; index++)
                 Apply(kernel, _edits[index]);
             map = kernel.Persist();
@@ -274,6 +274,8 @@ public class TransientLifecycleBenchmarks
             throw new InvalidOperationException("The T1 kernel replay diverged from the persistent T0 lane.");
         }
 
+        ValidateProductionKernelReplay(oracle, map);
+
         var canonicality = map.ValidateCanonicalityForDiagnostics();
         var baseStructure = _base.GetStructureDiagnostics();
         var resultStructure = map.GetStructureDiagnostics();
@@ -307,6 +309,41 @@ public class TransientLifecycleBenchmarks
                 ? checked(resultStructure.EstimatedRetainedBytes - resultStructure.EstimatedOwnerMetadataBytes)
                 : resultStructure.EstimatedRetainedBytes,
             canonicality.RecursiveEntryCount);
+    }
+
+    private void ValidateProductionKernelReplay(
+        Axis2HistoryResult oracle,
+        PersistentHashMap<Axis2HashKey, int> diagnosticMap)
+    {
+        var map = _base;
+        var checksum = (long)Axis2BenchmarkPolicy.Seed;
+        var batchSize = Axis2BenchmarkPolicy.GetPublicationBatchSize(PublicationCadence, _edits.Length);
+        for (var start = 0; start < _edits.Length; start += batchSize)
+        {
+            var end = Math.Min(start + batchSize, _edits.Length);
+            var kernel = map.CreateSeparateNodeTransientKernel(enableDiagnostics: false);
+            for (var index = start; index < end; index++)
+                Apply(kernel, _edits[index]);
+            map = kernel.Persist();
+            checksum = Axis2BenchmarkPolicy.AddPublicationChecksum(checksum, map.Count, end);
+        }
+
+        if (oracle.PublicationChecksum != checksum
+            || oracle.Map.Count != map.Count
+            || ComputeSemanticChecksum(oracle.Map) != ComputeSemanticChecksum(map))
+        {
+            throw new InvalidOperationException(
+                "The diagnostics-disabled T1 replay diverged from the persistent T0 lane.");
+        }
+
+        map.ValidateCanonicalityForDiagnostics();
+        var diagnosticStructure = diagnosticMap.GetStructureDiagnostics();
+        var productionStructure = map.GetStructureDiagnostics();
+        if (diagnosticStructure != productionStructure)
+        {
+            throw new InvalidOperationException(
+                "The diagnostics-disabled T1 replay diverged from the diagnostic retained layout.");
+        }
     }
 
     private static PersistentHashMap<Axis2HashKey, int> RebuildWithBulkBuilder(
@@ -436,7 +473,7 @@ internal readonly record struct Axis2OwnerTokenKernelEvidence(
 {
     internal string ToCsv() => string.Join(
         ',',
-        "AXIS2_T1_COUNTER_V1",
+        "AXIS2_T1_COUNTER_V2",
         $"layout={Layout}",
         $"base_count={BaseCount.ToString(CultureInfo.InvariantCulture)}",
         $"edits={EditCount.ToString(CultureInfo.InvariantCulture)}",
@@ -447,14 +484,18 @@ internal readonly record struct Axis2OwnerTokenKernelEvidence(
         $"adoption_node_visits={Counters.AdoptionNodeVisits.ToString(CultureInfo.InvariantCulture)}",
         $"publications={Counters.PublicationCount.ToString(CultureInfo.InvariantCulture)}",
         $"publication_node_visits={Counters.PublicationNodeVisits.ToString(CultureInfo.InvariantCulture)}",
+        $"deferred_persistent_mutations={Counters.DeferredPersistentMutationCount.ToString(CultureInfo.InvariantCulture)}",
+        $"editable_promotions={Counters.EditablePromotionCount.ToString(CultureInfo.InvariantCulture)}",
+        $"commit_plan_allocations={Counters.CommitPlanAllocationCount.ToString(CultureInfo.InvariantCulture)}",
         $"prepared_mutations={Counters.PreparedMutationCount.ToString(CultureInfo.InvariantCulture)}",
-        $"copied_nodes={Counters.CopiedNodeCount.ToString(CultureInfo.InvariantCulture)}",
-        $"allocated_nodes={Counters.AllocatedNodeCount.ToString(CultureInfo.InvariantCulture)}",
-        $"copied_arrays={Counters.CopiedArrayCount.ToString(CultureInfo.InvariantCulture)}",
-        $"allocated_arrays={Counters.AllocatedArrayCount.ToString(CultureInfo.InvariantCulture)}",
-        $"inplace_node_mutations={Counters.InPlaceNodeMutationCount.ToString(CultureInfo.InvariantCulture)}",
-        $"inplace_array_writes={Counters.InPlaceArrayWriteCount.ToString(CultureInfo.InvariantCulture)}",
+        $"editable_copied_nodes={Counters.CopiedNodeCount.ToString(CultureInfo.InvariantCulture)}",
+        $"editable_allocated_nodes={Counters.AllocatedNodeCount.ToString(CultureInfo.InvariantCulture)}",
+        $"editable_copied_arrays={Counters.CopiedArrayCount.ToString(CultureInfo.InvariantCulture)}",
+        $"editable_allocated_arrays={Counters.AllocatedArrayCount.ToString(CultureInfo.InvariantCulture)}",
+        $"editable_inplace_node_mutations={Counters.InPlaceNodeMutationCount.ToString(CultureInfo.InvariantCulture)}",
+        $"editable_inplace_array_writes={Counters.InPlaceArrayWriteCount.ToString(CultureInfo.InvariantCulture)}",
         $"wrapper_allocations={Counters.PersistentWrapperAllocationCount.ToString(CultureInfo.InvariantCulture)}",
+        $"deferred_persistent_wrapper_allocations={Counters.DeferredPersistentWrapperAllocationCount.ToString(CultureInfo.InvariantCulture)}",
         $"ordinary_owner_metadata_bytes={OrdinaryOwnerMetadataBytes.ToString(CultureInfo.InvariantCulture)}",
         $"ordinary_retained_bytes={OrdinaryEstimatedRetainedBytes.ToString(CultureInfo.InvariantCulture)}",
         $"ordinary_layout_adjusted_retained_bytes={OrdinaryLayoutAdjustedRetainedBytes.ToString(CultureInfo.InvariantCulture)}",

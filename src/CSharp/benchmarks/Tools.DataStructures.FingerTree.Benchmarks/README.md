@@ -53,7 +53,7 @@ Results are written under `BenchmarkDotNet.Artifacts/` (git-ignored); curated ta
 | `RopeBuilderBenchmarks` | append-only rope builder construction and snapshot constants | `Create`, `AddLast` loop, text `StringBuilder` materialization, `ImmutableList<T>.Builder` |
 | `ChampBenchmarks` | CHAMP lookup, payload-dense iteration, shared-single-change diff, and independent-history equality/diff | `Dictionary` and `ImmutableDictionary` |
 | `CtrieBenchmarks` | lock-free lookup and O(1) immutable snapshot publication | `ConcurrentDictionary` lookup and O(n) immutable copy |
-| `TransientLifecycleBenchmarks` | Axis 2 edit-locality/publication matrix, structural path-copy counters, and the direct-separate T1 gate build for exact-type transient-editable branch/collision nodes, with O(1) adoption/seal and actual ownership/copy/retained-size evidence | direct persistent edits and canonical `BulkBuilder` construction |
+| `TransientLifecycleBenchmarks` | Axis 2 edit-locality/publication matrix, structural path-copy counters, and the direct-separate T1 gate build: first-edit ordinary deferral, later reusable-path promotion, exact-type transient-editable branch/collision nodes, O(1) adoption/seal, and actual ownership/copy/retained-size evidence | direct persistent edits and canonical `BulkBuilder` construction |
 | `FrozenLookupBenchmarks`, `FrozenClusteredLookupBenchmarks`, `FrozenCollisionLookupBenchmarks`, `FrozenNullLookupBenchmarks` | Axis 2 F1 fixed-layout bake-off across lookup mixes, enumeration, construction, retained arrays, null/stored representatives, collision shapes, and break-even | persistent CHAMP, linear/Robin-Hood/quadratic repository prototypes, `Dictionary`, `ImmutableDictionary`, and BCL `FrozenDictionary` where semantically representable |
 | `PatriciaMapBenchmarks` | integer-key lookup and prefix-aware structural union | CHAMP and `ImmutableDictionary` lookup |
 | `RrbVectorBenchmarks` | uniform middle indexing and boundary-spine concatenation | `Rope<T>` indexing/concat and `ImmutableList<T>` indexing/concat |
@@ -133,11 +133,16 @@ filterable T1 measurement lane. Ordinary collision and bitmap nodes retain the b
 readonly source shape and physically contain no owner token or ownership flags. Direct
 `SeparateTransientCollisionNode : HashNode` and `SeparateTransientBranchNode : Node` types carry
 the token; a two-bit mask gives data and child arrays independent write ownership without a shared
-abstract node-property hierarchy. `AXIS2_T1_COUNTER_V1`
-therefore reports `ordinary_owner_metadata_bytes=0`, and both retained-byte fields estimate the
-actual reachable layout. The `*_layout_adjusted_retained_bytes` names remain as CSV-compatibility
-aliases and equal their corresponding actual retained-byte fields; no subtraction or modeled
-adjustment occurs. Adoption and publication node-visit counters must remain zero.
+abstract node-property hierarchy. The first changed edit stays ordinary, with reusable branch or
+collision paths promoted only by a later changed edit; tokens, commit plans, and diagnostics are
+lazy or optional. `AXIS2_T1_COUNTER_V2` therefore reports
+`ordinary_owner_metadata_bytes=0`, explicit deferred-persistent and editable-promotion counts, and
+`editable_*` node/array counters that do not mislabel the ordinary first-edit path. The paired T0
+row contextualizes ordinary persistent path-copy costs, while MemoryDiagnoser charges the complete
+timed history. Both retained-byte fields estimate the actual reachable layout. The
+`*_layout_adjusted_retained_bytes` names remain as CSV-compatibility aliases and equal
+their corresponding actual retained-byte fields; no subtraction or modeled adjustment occurs.
+Adoption and publication node-visit counters must remain zero.
 The owner-field lane and evidence recorded in the T0 decision document are historical and run on
 `codex/axis2-t1-owner-fields-gate`; the earlier abstract-base separate formulation runs on
 `codex/axis2-t1-separate-gate`. This branch intentionally exposes only the direct-separate lane,

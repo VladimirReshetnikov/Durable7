@@ -35,6 +35,200 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         Assert.Throws<ObjectDisposedException>(() => kernel.Persist());
     }
 
+    /// <summary>Verifies one changed edit stays on the ordinary path and needs only its map wrapper.</summary>
+    [Fact]
+    public void OneChangedEdit_DefersOwnershipAndPublishesTheOrdinaryResultDirectly()
+    {
+        var source = PersistentHashMap<int, int>.CreateRange(
+            Enumerable.Range(0, 1_024).Select(index => KeyValuePair.Create(index, index)));
+        var expected = source.SetItem(513, -513);
+        var kernel = source.CreateSeparateNodeTransientKernel();
+
+        kernel.SetItem(513, -513);
+
+        Assert.IsType<PersistentHashMap<int, int>.BitmapIndexedNode>(
+            kernel.RootIdentityForDiagnostics);
+        var deferred = Assert.IsType<PersistentHashMap<int, int>>(
+            kernel.DeferredPersistentIdentityForDiagnostics);
+        var result = kernel.Persist();
+        var counters = kernel.GetCountersForDiagnostics();
+        var structure = result.GetStructureDiagnostics();
+
+        Assert.True(result.MapEquals(expected));
+        Assert.Same(deferred, result);
+        Assert.Equal(1, counters.DeferredPersistentMutationCount);
+        Assert.Equal(0, counters.EditablePromotionCount);
+        Assert.Equal(0, counters.CommitPlanAllocationCount);
+        Assert.Equal(1, counters.PreparedMutationCount);
+        Assert.Equal(0, counters.AllocatedNodeCount);
+        Assert.Equal(0, counters.AllocatedArrayCount);
+        Assert.Equal(1, counters.PersistentWrapperAllocationCount);
+        Assert.Equal(1, counters.DeferredPersistentWrapperAllocationCount);
+        Assert.Equal(1, counters.PublicationCount);
+        Assert.False(kernel.TokenIsAllocatedForDiagnostics);
+        Assert.False(kernel.CommitPlanIsAllocatedForDiagnostics);
+        Assert.Equal(0, structure.SeparateBranchNodeCount);
+        Assert.Equal(0, structure.SeparateCollisionNodeCount);
+        Assert.Equal(0, structure.OwnerTokenCount);
+        result.ValidateCanonicalityForDiagnostics();
+    }
+
+    /// <summary>Verifies repeated edits to a leaf stay ordinary and do not report a promotion.</summary>
+    [Fact]
+    public void LeafOnlyReuse_RemainsOrdinaryAndDoesNotReportEditablePromotion()
+    {
+        var source = PersistentHashMap<int, int>.Empty.SetItem(1, 10);
+        var kernel = source.CreateSeparateNodeTransientKernel();
+
+        kernel.SetItem(1, 20);
+        kernel.SetItem(1, 30);
+        var result = kernel.Persist();
+        var counters = kernel.GetCountersForDiagnostics();
+        var structure = result.GetStructureDiagnostics();
+
+        Assert.Equal(30, result[1]);
+        Assert.Equal(10, source[1]);
+        Assert.Equal(1, counters.DeferredPersistentMutationCount);
+        Assert.Equal(0, counters.EditablePromotionCount);
+        Assert.False(kernel.TokenIsAllocatedForDiagnostics);
+        Assert.Equal(0, structure.SeparateBranchNodeCount);
+        Assert.Equal(0, structure.SeparateCollisionNodeCount);
+        Assert.Equal(0, structure.OwnerTokenCount);
+        result.ValidateCanonicalityForDiagnostics();
+    }
+
+    /// <summary>Verifies production mode and counter-enabled mode execute identical lifecycle semantics.</summary>
+    [Fact]
+    public void DiagnosticsDisabledHistory_MatchesCounterEnabledHistory()
+    {
+        var source = PersistentHashMap<int, int>.CreateRange(
+            Enumerable.Range(0, 256).Select(index => KeyValuePair.Create(index, index)));
+        var diagnostic = source.CreateSeparateNodeTransientKernel();
+        var production = source.CreateSeparateNodeTransientKernel(enableDiagnostics: false);
+
+        ApplyHistory(diagnostic);
+        ApplyHistory(production);
+
+        var diagnosticResult = diagnostic.Persist();
+        var productionResult = production.Persist();
+        Assert.True(diagnosticResult.MapEquals(productionResult));
+        Assert.Equal(diagnosticResult.ToArray(), productionResult.ToArray());
+        Assert.Equal(
+            diagnosticResult.GetStructureDiagnostics(),
+            productionResult.GetStructureDiagnostics());
+        Assert.True(diagnostic.GetCountersForDiagnostics().PreparedMutationCount >= 4);
+        diagnosticResult.ValidateCanonicalityForDiagnostics();
+        productionResult.ValidateCanonicalityForDiagnostics();
+
+        static void ApplyHistory(PersistentHashMap<int, int>.OwnerTokenTransientKernel kernel)
+        {
+            kernel.SetItem(17, -17);
+            Assert.True(kernel.TryAdd(1_024, 1_024));
+            Assert.True(kernel.Remove(3));
+            kernel.SetItem(17, -18);
+            Assert.False(kernel.TryAdd(17, 0));
+            Assert.False(kernel.Remove(-1));
+        }
+    }
+
+    /// <summary>Pins every first-operation fast path and no-op under both diagnostic modes.</summary>
+    [Fact]
+    public void FirstOperationMatrix_DefersChangedEditsAndKeepsNoOpsPristine()
+    {
+        var comparer = new ConstantHashIntComparer();
+        var source = PersistentHashMap<int, int>.Create(comparer)
+            .SetItem(1, 10)
+            .SetItem(2, 20)
+            .SetItem(3, 30);
+        var empty = PersistentHashMap<int, int>.Create(comparer);
+
+        foreach (var diagnosticsEnabled in new[] { false, true })
+        {
+            AssertChanged(
+                source,
+                diagnosticsEnabled,
+                kernel => kernel.SetItem(2, -20),
+                map => map.SetItem(2, -20));
+            AssertChanged(
+                source,
+                diagnosticsEnabled,
+                kernel => Assert.True(kernel.TryAdd(4, 40)),
+                map => map.SetItem(4, 40));
+            AssertChanged(
+                source,
+                diagnosticsEnabled,
+                kernel => Assert.True(kernel.Remove(2)),
+                map => map.Remove(2));
+            AssertChanged(
+                source,
+                diagnosticsEnabled,
+                kernel => kernel.Clear(),
+                map => map.Clear());
+
+            AssertNoOp(source, diagnosticsEnabled, kernel => kernel.SetItem(2, 20));
+            AssertNoOp(source, diagnosticsEnabled, kernel => Assert.False(kernel.TryAdd(2, -1)));
+            AssertNoOp(source, diagnosticsEnabled, kernel => Assert.False(kernel.Remove(99)));
+            AssertNoOp(empty, diagnosticsEnabled, kernel => kernel.Clear());
+        }
+
+        static void AssertChanged(
+            PersistentHashMap<int, int> source,
+            bool diagnosticsEnabled,
+            Action<PersistentHashMap<int, int>.OwnerTokenTransientKernel> mutation,
+            Func<PersistentHashMap<int, int>, PersistentHashMap<int, int>> persistentMutation)
+        {
+            var expected = persistentMutation(source);
+            var kernel = source.CreateSeparateNodeTransientKernel(
+                enableDiagnostics: diagnosticsEnabled);
+            mutation(kernel);
+
+            Assert.Equal(1, kernel.VersionForDiagnostics);
+            Assert.False(kernel.TokenIsAllocatedForDiagnostics);
+            Assert.False(kernel.CommitPlanIsAllocatedForDiagnostics);
+            var deferred = Assert.IsType<PersistentHashMap<int, int>>(
+                kernel.DeferredPersistentIdentityForDiagnostics);
+            var result = kernel.Persist();
+
+            Assert.Same(deferred, result);
+            Assert.True(result.MapEquals(expected));
+            Assert.Same(source.Comparer, result.Comparer);
+            var structure = result.GetStructureDiagnostics();
+            Assert.Equal(0, structure.SeparateBranchNodeCount);
+            Assert.Equal(0, structure.SeparateCollisionNodeCount);
+            Assert.Equal(0, structure.OwnerTokenCount);
+            if (diagnosticsEnabled)
+            {
+                var counters = kernel.GetCountersForDiagnostics();
+                Assert.Equal(1, counters.DeferredPersistentMutationCount);
+                Assert.Equal(1, counters.PreparedMutationCount);
+                Assert.Equal(0, counters.EditablePromotionCount);
+            }
+            else
+            {
+                Assert.Throws<InvalidOperationException>(
+                    () => _ = kernel.GetCountersForDiagnostics());
+            }
+        }
+
+        static void AssertNoOp(
+            PersistentHashMap<int, int> source,
+            bool diagnosticsEnabled,
+            Action<PersistentHashMap<int, int>.OwnerTokenTransientKernel> mutation)
+        {
+            var kernel = source.CreateSeparateNodeTransientKernel(
+                enableDiagnostics: diagnosticsEnabled);
+            var root = kernel.RootIdentityForDiagnostics;
+            mutation(kernel);
+
+            Assert.Equal(0, kernel.VersionForDiagnostics);
+            Assert.Null(kernel.DeferredPersistentIdentityForDiagnostics);
+            Assert.Same(root, kernel.RootIdentityForDiagnostics);
+            Assert.False(kernel.TokenIsAllocatedForDiagnostics);
+            Assert.False(kernel.CommitPlanIsAllocatedForDiagnostics);
+            Assert.Same(source, kernel.Persist());
+        }
+    }
+
     /// <summary>Verifies dirty empty publication preserves canonical/default and custom policies.</summary>
     [Fact]
     public void DirtyEmptyPublication_CanonicalizesDefaultAndPreservesCustomComparer()
@@ -123,13 +317,19 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         Assert.Same(sourceRoot, source.RootForTesting);
         Assert.True(counters.CopiedNodeCount > 0);
         Assert.True(counters.CopiedArrayCount > 0);
-        Assert.True(counters.InPlaceNodeMutationCount >= 127);
-        Assert.True(counters.InPlaceArrayWriteCount >= 127);
+        Assert.Equal(1, counters.DeferredPersistentMutationCount);
+        Assert.Equal(1, counters.EditablePromotionCount);
+        Assert.Equal(1, counters.CommitPlanAllocationCount);
+        Assert.True(counters.InPlaceNodeMutationCount >= 126);
+        Assert.True(counters.InPlaceArrayWriteCount >= 126);
         Assert.Equal(1, counters.AdoptionCount);
         Assert.Equal(0, counters.AdoptionNodeVisits);
         Assert.Equal(1, counters.PublicationCount);
         Assert.Equal(0, counters.PublicationNodeVisits);
-        Assert.Equal(1, counters.PersistentWrapperAllocationCount);
+        Assert.Equal(2, counters.PersistentWrapperAllocationCount);
+        Assert.Equal(1, counters.DeferredPersistentWrapperAllocationCount);
+        Assert.True(kernel.TokenIsAllocatedForDiagnostics);
+        Assert.True(kernel.CommitPlanIsAllocatedForDiagnostics);
         Assert.Equal(0, sourceStructure.SeparateBranchNodeCount);
         Assert.Equal(0, sourceStructure.SeparateCollisionNodeCount);
         Assert.Equal(0, sourceStructure.EstimatedOwnerMetadataBytes);
@@ -153,6 +353,79 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         second.ValidateCanonicalityForDiagnostics();
     }
 
+    /// <summary>Pins deferred promotion, lazy resources, rollback, and later owned-path reuse.</summary>
+    [Fact]
+    public void DeferredPromotion_AllocatesResourcesLazilyAndRollsThemBackOnFailure()
+    {
+        var source = PersistentHashMap<int, int>.CreateRange(
+            Enumerable.Range(0, 1_024).Select(index => KeyValuePair.Create(index, index)));
+        var kernel = source.CreateSeparateNodeTransientKernel();
+
+        kernel.SetItem(513, -1);
+        var deferred = Assert.IsType<PersistentHashMap<int, int>>(
+            kernel.DeferredPersistentIdentityForDiagnostics);
+        Assert.IsType<PersistentHashMap<int, int>.BitmapIndexedNode>(
+            kernel.RootIdentityForDiagnostics);
+        Assert.False(kernel.TokenIsAllocatedForDiagnostics);
+        Assert.False(kernel.CommitPlanIsAllocatedForDiagnostics);
+
+        var deferredRoot = kernel.RootIdentityForDiagnostics;
+        var deferredVersion = kernel.VersionForDiagnostics;
+        var deferredCounters = kernel.GetCountersForDiagnostics();
+        kernel.FailureInjector = point =>
+        {
+            if (point == PersistentHashMap<int, int>.OwnerTokenKernelFailurePoint.BeforeTokenAllocation)
+                throw new TestFailureException();
+        };
+
+        Assert.Throws<TestFailureException>(() => kernel.SetItem(513, -2));
+        Assert.Same(deferred, kernel.DeferredPersistentIdentityForDiagnostics);
+        Assert.Same(deferredRoot, kernel.RootIdentityForDiagnostics);
+        Assert.Equal(deferredVersion, kernel.VersionForDiagnostics);
+        Assert.Equal(deferredCounters, kernel.GetCountersForDiagnostics());
+        Assert.False(kernel.TokenIsAllocatedForDiagnostics);
+        Assert.False(kernel.CommitPlanIsAllocatedForDiagnostics);
+        Assert.Equal(-1, kernel.TryGetValue(513, out var afterTokenFailure) ? afterTokenFailure : 0);
+
+        kernel.FailureInjector = null;
+        kernel.SetItem(513, -2);
+        Assert.Null(kernel.DeferredPersistentIdentityForDiagnostics);
+        Assert.IsType<PersistentHashMap<int, int>.SeparateTransientBranchNode>(
+            kernel.RootIdentityForDiagnostics);
+        Assert.True(kernel.TokenIsAllocatedForDiagnostics);
+        Assert.False(kernel.CommitPlanIsAllocatedForDiagnostics);
+        Assert.Equal(1, kernel.GetCountersForDiagnostics().EditablePromotionCount);
+
+        var editableRoot = kernel.RootIdentityForDiagnostics;
+        var editableVersion = kernel.VersionForDiagnostics;
+        var editableCounters = kernel.GetCountersForDiagnostics();
+        kernel.FailureInjector = point =>
+        {
+            if (point == PersistentHashMap<int, int>.OwnerTokenKernelFailurePoint.BeforeCommitPlanAllocation)
+                throw new TestFailureException();
+        };
+
+        Assert.Throws<TestFailureException>(() => kernel.SetItem(513, -3));
+        Assert.Same(editableRoot, kernel.RootIdentityForDiagnostics);
+        Assert.Equal(editableVersion, kernel.VersionForDiagnostics);
+        Assert.Equal(editableCounters, kernel.GetCountersForDiagnostics());
+        Assert.True(kernel.TokenIsAllocatedForDiagnostics);
+        Assert.False(kernel.CommitPlanIsAllocatedForDiagnostics);
+        Assert.Equal(-2, kernel.TryGetValue(513, out var afterPlanFailure) ? afterPlanFailure : 0);
+
+        kernel.FailureInjector = null;
+        kernel.SetItem(513, -3);
+        Assert.True(kernel.CommitPlanIsAllocatedForDiagnostics);
+        var counters = kernel.GetCountersForDiagnostics();
+        Assert.Equal(1, counters.CommitPlanAllocationCount);
+        Assert.True(counters.InPlaceNodeMutationCount > 0);
+
+        var result = kernel.Persist();
+        Assert.Equal(-3, result[513]);
+        Assert.Equal(513, source[513]);
+        result.ValidateCanonicalityForDiagnostics();
+    }
+
     /// <summary>Verifies a data edit owns only data while retaining an independently shared child array.</summary>
     [Fact]
     public void DataEdit_OwnsDataButRetainsSharedChildren()
@@ -167,7 +440,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
             .SetItem(direct, 30);
         var ordinaryRoot = Assert.IsType<PersistentHashMap<ExplicitHashKey, int>.BitmapIndexedNode>(
             source.RootForTesting);
-        var kernel = source.CreateSeparateNodeTransientKernel();
+        var kernel = source.CreateSeparateNodeTransientKernel(deferOwnershipUntilReuse: false);
 
         kernel.SetItem(direct, -30);
         var result = kernel.Persist();
@@ -195,7 +468,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
             .SetItem(storedKey, NewString("one"))
             .SetItem("Beta", "two")
             .SetItem("Gamma", "three");
-        var kernel = source.CreateSeparateNodeTransientKernel();
+        var kernel = source.CreateSeparateNodeTransientKernel(deferOwnershipUntilReuse: false);
 
         var version = kernel.VersionForDiagnostics;
         kernel.SetItem(equivalentKey, NewString("one"));
@@ -406,7 +679,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
     {
         var source = PersistentHashMap<int, int>.CreateRange(
             Enumerable.Range(0, 1_024).Select(index => KeyValuePair.Create(index, index)));
-        var kernel = source.CreateSeparateNodeTransientKernel();
+        var kernel = source.CreateSeparateNodeTransientKernel(deferOwnershipUntilReuse: false);
         kernel.SetItem(513, -513);
         var separateRootMap = kernel.Persist();
         var separateRoot = Assert.IsType<PersistentHashMap<int, int>.SeparateTransientBranchNode>(
@@ -494,7 +767,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
 
         for (var failAt = 0; failAt < 64; failAt++)
         {
-            var kernel = source.CreateSeparateNodeTransientKernel();
+            var kernel = source.CreateSeparateNodeTransientKernel(deferOwnershipUntilReuse: false);
             var root = kernel.RootIdentityForDiagnostics;
             var expected = kernel.ToArrayForDiagnostics();
             var before = kernel.GetCountersForDiagnostics();
@@ -530,6 +803,47 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         Assert.True(observedFailures >= 4);
     }
 
+    /// <summary>Verifies the deferred first-edit commit boundary is failure-atomic for every verb.</summary>
+    [Fact]
+    public void DeferredFirstMutationPreparedFailure_LeavesTheSessionPristine()
+    {
+        var comparer = new ConstantHashIntComparer();
+        var source = PersistentHashMap<int, int>.Create(comparer)
+            .SetItem(1, 10)
+            .SetItem(2, 20)
+            .SetItem(3, 30);
+
+        AssertAtomic(kernel => kernel.SetItem(2, -20));
+        AssertAtomic(kernel => Assert.True(kernel.TryAdd(4, 40)));
+        AssertAtomic(kernel => Assert.True(kernel.Remove(2)));
+        AssertAtomic(kernel => kernel.Clear());
+
+        void AssertAtomic(Action<PersistentHashMap<int, int>.OwnerTokenTransientKernel> mutation)
+        {
+            var kernel = source.CreateSeparateNodeTransientKernel();
+            var root = kernel.RootIdentityForDiagnostics;
+            var entries = kernel.ToArrayForDiagnostics();
+            var counters = kernel.GetCountersForDiagnostics();
+            kernel.FailureInjector = point =>
+            {
+                if (point == PersistentHashMap<int, int>.OwnerTokenKernelFailurePoint.MutationPrepared)
+                    throw new TestFailureException();
+            };
+
+            Assert.Throws<TestFailureException>(() => mutation(kernel));
+            kernel.FailureInjector = null;
+
+            Assert.Same(root, kernel.RootIdentityForDiagnostics);
+            Assert.Equal(0, kernel.VersionForDiagnostics);
+            Assert.Null(kernel.DeferredPersistentIdentityForDiagnostics);
+            Assert.False(kernel.TokenIsAllocatedForDiagnostics);
+            Assert.False(kernel.CommitPlanIsAllocatedForDiagnostics);
+            Assert.Equal(counters, kernel.GetCountersForDiagnostics());
+            Assert.Equal(entries, kernel.ToArrayForDiagnostics());
+            Assert.Same(source, kernel.Persist());
+        }
+    }
+
     /// <summary>Verifies every mutation failpoint is reached by a representative owner-free shape.</summary>
     [Fact]
     public void MutationFailpoints_AreIndividuallyFailureAtomicAcrossNodeShapes()
@@ -549,6 +863,10 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
             .SetItem(collidingSecond, 1)
             .SetItem(split, 2);
 
+        AssertMutationFailpointAtomic(
+            branched,
+            kernel => kernel.SetItem(129, -1),
+            PersistentHashMap<int, int>.OwnerTokenKernelFailurePoint.BeforeTokenAllocation);
         AssertMutationFailpointAtomic(
             PersistentHashMap<int, int>.Empty,
             kernel => kernel.SetItem(0, 1),
@@ -597,7 +915,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
     {
         var source = PersistentHashMap<int, int>.CreateRange(
             Enumerable.Range(0, 512).Select(index => KeyValuePair.Create(index, index)));
-        var kernel = source.CreateSeparateNodeTransientKernel();
+        var kernel = source.CreateSeparateNodeTransientKernel(deferOwnershipUntilReuse: false);
         kernel.SetItem(257, -1);
         var root = kernel.RootIdentityForDiagnostics;
         var expected = kernel.ToArrayForDiagnostics();
@@ -628,7 +946,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
             .SetItem(0, 0)
             .SetItem(1, 1)
             .SetItem(2, 2);
-        var kernel = source.CreateSeparateNodeTransientKernel();
+        var kernel = source.CreateSeparateNodeTransientKernel(deferOwnershipUntilReuse: false);
         kernel.SetItem(1, -1);
         Assert.IsType<PersistentHashMap<int, int>.SeparateTransientCollisionNode>(
             kernel.RootIdentityForDiagnostics);
@@ -662,7 +980,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         var source = PersistentHashMap<string, ThrowingValue>.Create(comparer)
             .SetItem("alpha", new ThrowingValue("one"))
             .SetItem("beta", new ThrowingValue("two"));
-        var kernel = source.CreateSeparateNodeTransientKernel();
+        var kernel = source.CreateSeparateNodeTransientKernel(deferOwnershipUntilReuse: false);
         kernel.SetItem("alpha", new ThrowingValue("changed"));
         var root = kernel.RootIdentityForDiagnostics;
         var expected = kernel.ToArrayForDiagnostics();
@@ -691,12 +1009,82 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         Assert.Equal("one", source["alpha"].Text);
     }
 
+    /// <summary>Verifies production fast-path callbacks fail before any deferred state is installed.</summary>
+    [Fact]
+    public void DiagnosticsDisabledFirstEditFailures_LeaveTheSessionPristine()
+    {
+        var comparer = new SwitchableThrowingComparer();
+        var source = PersistentHashMap<string, int>.Create(comparer)
+            .SetItem("alpha", 1)
+            .SetItem("beta", 2);
+        var kernel = source.CreateSeparateNodeTransientKernel(enableDiagnostics: false);
+        var root = kernel.RootIdentityForDiagnostics;
+
+        comparer.ThrowHash = true;
+        Assert.Throws<TestFailureException>(() => kernel.SetItem("alpha", -1));
+        comparer.ThrowHash = false;
+        comparer.ThrowEquals = true;
+        Assert.Throws<TestFailureException>(() => kernel.SetItem("alpha", -1));
+        comparer.ThrowEquals = false;
+
+        Assert.Same(root, kernel.RootIdentityForDiagnostics);
+        Assert.Equal(0, kernel.VersionForDiagnostics);
+        Assert.Null(kernel.DeferredPersistentIdentityForDiagnostics);
+        Assert.False(kernel.TokenIsAllocatedForDiagnostics);
+        Assert.False(kernel.CommitPlanIsAllocatedForDiagnostics);
+        Assert.Throws<InvalidOperationException>(
+            () => _ = kernel.GetCountersForDiagnostics());
+        Assert.Throws<InvalidOperationException>(() => kernel.FailureInjector = _ => { });
+
+        kernel.SetItem("alpha", -1);
+        var result = kernel.Persist();
+        Assert.Equal(-1, result["alpha"]);
+        Assert.Equal(1, source["alpha"]);
+        result.ValidateCanonicalityForDiagnostics();
+    }
+
+    /// <summary>Verifies deferred publication retries the exact cached ordinary wrapper.</summary>
+    [Fact]
+    public void DeferredPublicationFailure_RetainsExactWrapperAndSkipsAllocationBoundary()
+    {
+        var source = PersistentHashMap<int, int>.CreateRange(
+            Enumerable.Range(0, 128).Select(index => KeyValuePair.Create(index, index)));
+        var kernel = source.CreateSeparateNodeTransientKernel();
+        kernel.SetItem(17, -17);
+        var deferred = Assert.IsType<PersistentHashMap<int, int>>(
+            kernel.DeferredPersistentIdentityForDiagnostics);
+        var root = kernel.RootIdentityForDiagnostics;
+        var version = kernel.VersionForDiagnostics;
+        var counters = kernel.GetCountersForDiagnostics();
+        var sawAllocationBoundary = false;
+        kernel.FailureInjector = point =>
+        {
+            if (point == PersistentHashMap<int, int>.OwnerTokenKernelFailurePoint.BeforePublicationAllocation)
+                sawAllocationBoundary = true;
+            if (point == PersistentHashMap<int, int>.OwnerTokenKernelFailurePoint.PublicationPrepared)
+                throw new TestFailureException();
+        };
+
+        Assert.Throws<TestFailureException>(kernel.Persist);
+        Assert.False(sawAllocationBoundary);
+        Assert.True(kernel.IsActiveForDiagnostics);
+        Assert.Same(deferred, kernel.DeferredPersistentIdentityForDiagnostics);
+        Assert.Same(root, kernel.RootIdentityForDiagnostics);
+        Assert.Equal(version, kernel.VersionForDiagnostics);
+        Assert.Equal(counters, kernel.GetCountersForDiagnostics());
+        Assert.False(kernel.TokenIsAllocatedForDiagnostics);
+        Assert.False(kernel.CommitPlanIsAllocatedForDiagnostics);
+
+        kernel.FailureInjector = null;
+        Assert.Same(deferred, kernel.Persist());
+    }
+
     /// <summary>Verifies failed publication leaves a dirty separate-node session active.</summary>
     [Fact]
     public void PublicationFailures_LeavePreparedSessionActiveAndUnpublished()
     {
         var source = PersistentHashMap<int, int>.Empty.SetItem(1, 1);
-        var kernel = source.CreateSeparateNodeTransientKernel();
+        var kernel = source.CreateSeparateNodeTransientKernel(deferOwnershipUntilReuse: false);
         kernel.SetItem(1, 2);
         var root = kernel.RootIdentityForDiagnostics;
         var version = kernel.VersionForDiagnostics;
@@ -740,7 +1128,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         where TKey : notnull
     {
         var expectedSource = source.ToArray();
-        var kernel = source.CreateSeparateNodeTransientKernel();
+        var kernel = source.CreateSeparateNodeTransientKernel(deferOwnershipUntilReuse: false);
         var root = kernel.RootIdentityForDiagnostics;
         var expectedKernel = kernel.ToArrayForDiagnostics();
         var version = kernel.VersionForDiagnostics;

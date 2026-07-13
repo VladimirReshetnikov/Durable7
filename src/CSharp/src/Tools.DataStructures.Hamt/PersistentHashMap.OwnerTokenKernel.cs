@@ -21,6 +21,8 @@ public sealed partial class PersistentHashMap<TKey, TValue>
 
     internal enum OwnerTokenKernelFailurePoint
     {
+        BeforeTokenAllocation,
+        BeforeCommitPlanAllocation,
         BeforeNodeAllocation,
         BeforeDataArrayAllocation,
         BeforeChildArrayAllocation,
@@ -35,6 +37,9 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         long AdoptionNodeVisits,
         long PublicationCount,
         long PublicationNodeVisits,
+        long DeferredPersistentMutationCount,
+        long EditablePromotionCount,
+        long CommitPlanAllocationCount,
         long PreparedMutationCount,
         long CopiedNodeCount,
         long AllocatedNodeCount,
@@ -42,7 +47,8 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         long AllocatedArrayCount,
         long InPlaceNodeMutationCount,
         long InPlaceArrayWriteCount,
-        long PersistentWrapperAllocationCount)
+        long PersistentWrapperAllocationCount,
+        long DeferredPersistentWrapperAllocationCount)
     {
         public static OwnerTokenKernelCounters operator +(
             OwnerTokenKernelCounters left,
@@ -52,6 +58,9 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 left.AdoptionNodeVisits + right.AdoptionNodeVisits,
                 left.PublicationCount + right.PublicationCount,
                 left.PublicationNodeVisits + right.PublicationNodeVisits,
+                left.DeferredPersistentMutationCount + right.DeferredPersistentMutationCount,
+                left.EditablePromotionCount + right.EditablePromotionCount,
+                left.CommitPlanAllocationCount + right.CommitPlanAllocationCount,
                 left.PreparedMutationCount + right.PreparedMutationCount,
                 left.CopiedNodeCount + right.CopiedNodeCount,
                 left.AllocatedNodeCount + right.AllocatedNodeCount,
@@ -59,7 +68,8 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 left.AllocatedArrayCount + right.AllocatedArrayCount,
                 left.InPlaceNodeMutationCount + right.InPlaceNodeMutationCount,
                 left.InPlaceArrayWriteCount + right.InPlaceArrayWriteCount,
-                left.PersistentWrapperAllocationCount + right.PersistentWrapperAllocationCount);
+                left.PersistentWrapperAllocationCount + right.PersistentWrapperAllocationCount,
+                left.DeferredPersistentWrapperAllocationCount + right.DeferredPersistentWrapperAllocationCount);
     }
 
     /// <summary>
@@ -67,8 +77,10 @@ public sealed partial class PersistentHashMap<TKey, TValue>
     /// the owner-free ordinary persistent-node classes. This is an evidence seam, not the proposed
     /// public transient API.
     /// </summary>
-    internal OwnerTokenTransientKernel CreateSeparateNodeTransientKernel() =>
-        new(this);
+    internal OwnerTokenTransientKernel CreateSeparateNodeTransientKernel(
+        bool enableDiagnostics = true,
+        bool deferOwnershipUntilReuse = true) =>
+        new(this, enableDiagnostics, deferOwnershipUntilReuse);
 
     /// <summary>
     /// Private production-layout experiment for one-way CHAMP mutation. The session is deliberately
@@ -83,30 +95,61 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         private PersistentHashMap<TKey, TValue>? _source;
         private Node? _root;
         private readonly IEqualityComparer<TKey> _comparer;
-        private readonly TransientOwnershipLayout _layout;
-        private readonly EditToken _token = new();
-        private CommitBuffer _commits;
-        private MutableCounters _counters;
+        private readonly bool _deferOwnershipUntilReuse;
+        private readonly bool _diagnosticsEnabled;
+        private EditToken? _token;
+        private CommitStep[]? _commits;
+        private KernelDiagnostics? _diagnostics;
         private int _commitCount;
         private int _count;
         private int _version;
         private int _state = ActiveState;
+        private bool _hasPersistentMutation;
         private bool _dirty;
 
         internal OwnerTokenTransientKernel(
             PersistentHashMap<TKey, TValue> source,
-            TransientOwnershipLayout layout)
+            bool enableDiagnostics,
+            bool deferOwnershipUntilReuse)
         {
             _source = source;
             _root = source._root;
             _count = source._count;
             _comparer = source._comparer;
-            _layout = layout;
-            _counters.AdoptionCount = 1;
-            _counters.AdoptionNodeVisits = 0;
+            _deferOwnershipUntilReuse = deferOwnershipUntilReuse;
+            _diagnosticsEnabled = enableDiagnostics;
+            if (enableDiagnostics)
+            {
+                _diagnostics = new KernelDiagnostics();
+                _diagnostics.Counters.AdoptionCount = 1;
+                _diagnostics.Counters.AdoptionNodeVisits = 0;
+            }
         }
 
-        internal Action<OwnerTokenKernelFailurePoint>? FailureInjector { get; set; }
+        internal Action<OwnerTokenKernelFailurePoint>? FailureInjector
+        {
+            get => _diagnostics?.FailureInjector;
+            set
+            {
+                if (!_diagnosticsEnabled)
+                {
+                    if (value is not null)
+                    {
+                        throw new InvalidOperationException(
+                            "Failure injection is unavailable when kernel diagnostics are disabled.");
+                    }
+                    return;
+                }
+
+                if (value is null)
+                {
+                    _diagnostics!.FailureInjector = null;
+                    return;
+                }
+
+                _diagnostics!.FailureInjector = value;
+            }
+        }
 
         internal int Count
         {
@@ -128,7 +171,12 @@ public sealed partial class PersistentHashMap<TKey, TValue>
 
         internal bool IsActiveForDiagnostics => Volatile.Read(ref _state) == ActiveState;
 
-        internal bool TokenIsActiveForDiagnostics => _token.IsActive;
+        internal bool TokenIsActiveForDiagnostics =>
+            IsActiveForDiagnostics && (_token?.IsActive ?? true);
+
+        internal bool TokenIsAllocatedForDiagnostics => _token is not null;
+
+        internal bool CommitPlanIsAllocatedForDiagnostics => _commits is not null;
 
         internal TransientOwnershipLayout LayoutForDiagnostics => _layout;
 
@@ -136,7 +184,19 @@ public sealed partial class PersistentHashMap<TKey, TValue>
 
         internal object? RootIdentityForDiagnostics => _root;
 
-        internal OwnerTokenKernelCounters GetCountersForDiagnostics() => _counters.Snapshot();
+        internal PersistentHashMap<TKey, TValue>? DeferredPersistentIdentityForDiagnostics =>
+            _hasPersistentMutation && !_dirty ? _source : null;
+
+        internal OwnerTokenKernelCounters GetCountersForDiagnostics()
+        {
+            if (!_diagnosticsEnabled)
+            {
+                throw new InvalidOperationException(
+                    "Counters are unavailable because kernel diagnostics were disabled at adoption.");
+            }
+
+            return _diagnostics!.Counters.Snapshot();
+        }
 
         internal bool ContainsKey(TKey key) => TryGetValue(key, out _);
 
@@ -167,9 +227,34 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             return entries;
         }
 
-        internal void SetItem(TKey key, TValue value) => SetCore(key, value, overwrite: true);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void SetItem(TKey key, TValue value)
+        {
+            if (_diagnostics is null
+                && _deferOwnershipUntilReuse
+                && !_hasPersistentMutation
+                && !_dirty)
+            {
+                SetFirstPersistentFast(key, value);
+                return;
+            }
 
-        internal bool TryAdd(TKey key, TValue value) => SetCore(key, value, overwrite: false).Added;
+            SetCore(key, value, overwrite: true);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal bool TryAdd(TKey key, TValue value)
+        {
+            if (_diagnostics is null
+                && _deferOwnershipUntilReuse
+                && !_hasPersistentMutation
+                && !_dirty)
+            {
+                return TryAddFirstPersistentFast(key, value);
+            }
+
+            return SetCore(key, value, overwrite: false).Added;
+        }
 
         internal void Add(TKey key, TValue value)
         {
@@ -183,7 +268,17 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             if (_root is null)
                 return false;
 
-            var countersBefore = _counters;
+            if (_deferOwnershipUntilReuse && !_hasPersistentMutation && !_dirty)
+            {
+                if (_diagnostics is null)
+                    return RemoveFirstPersistentFast(key);
+                return RemoveFirstPersistent(key);
+            }
+
+            var countersBefore = CaptureCounters();
+            var tokenBefore = _token;
+            var commitPlanBefore = _commits;
+            var promotesEditablePath = _hasPersistentMutation && !_dirty;
             var newVersion = checked(_version + 1);
             _commitCount = 0;
             try
@@ -199,12 +294,19 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 _count = newCount;
                 _version = newVersion;
                 _dirty = true;
-                _counters.PreparedMutationCount++;
+                _source = null;
+                if (_diagnostics is { } diagnostics)
+                {
+                    diagnostics.Counters.PreparedMutationCount++;
+                    if (promotesEditablePath && tokenBefore is null && _token is not null)
+                        diagnostics.Counters.EditablePromotionCount++;
+                }
                 return true;
             }
             catch
             {
-                _counters = countersBefore;
+                RestoreCounters(countersBefore);
+                RestoreTransientResources(tokenBefore, commitPlanBefore);
                 throw;
             }
             finally
@@ -219,17 +321,45 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             if (_root is null)
                 return;
 
+            if (_deferOwnershipUntilReuse && !_hasPersistentMutation && !_dirty)
+            {
+                var newVersion = checked(_version + 1);
+                var result = _source!.Clear();
+                Hit(OwnerTokenKernelFailurePoint.MutationPrepared);
+                _source = result;
+                _root = result._root;
+                _count = result._count;
+                _hasPersistentMutation = true;
+                _version = newVersion;
+                if (_diagnostics is { } firstDiagnostics)
+                {
+                    firstDiagnostics.Counters.DeferredPersistentMutationCount++;
+                    firstDiagnostics.Counters.PreparedMutationCount++;
+                    if (!ReferenceEquals(result, Empty))
+                    {
+                        firstDiagnostics.Counters.PersistentWrapperAllocationCount++;
+                        firstDiagnostics.Counters.DeferredPersistentWrapperAllocationCount++;
+                    }
+                }
+                return;
+            }
+
             _version = checked(_version + 1);
             _root = null;
             _count = 0;
             _dirty = true;
-            _counters.PreparedMutationCount++;
+            _source = null;
+            if (_diagnostics is { } diagnostics)
+                diagnostics.Counters.PreparedMutationCount++;
         }
 
         internal PersistentHashMap<TKey, TValue> Persist()
         {
             EnsureActive();
-            var countersBefore = _counters;
+            if (_diagnostics is null && !_dirty)
+                return PersistOrdinaryFast();
+
+            var countersBefore = CaptureCounters();
             var newVersion = checked(_version + 1);
             try
             {
@@ -251,24 +381,28 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                     result = _count == 0
                         ? EmptyFor(_comparer)
                         : new PersistentHashMap<TKey, TValue>(_root, _count, _comparer);
-                    _counters.PersistentWrapperAllocationCount++;
+                    if (_diagnostics is { } allocationDiagnostics)
+                        allocationDiagnostics.Counters.PersistentWrapperAllocationCount++;
                 }
 
                 Hit(OwnerTokenKernelFailurePoint.PublicationPrepared);
 
                 // From this point onward publication consists only of non-throwing state changes.
-                _token.Seal();
+                _token?.Seal();
                 _version = newVersion;
                 Volatile.Write(ref _state, InactiveState);
                 _root = null;
                 _source = null;
-                _counters.PublicationCount++;
-                _counters.PublicationNodeVisits = 0;
+                if (_diagnostics is { } diagnostics)
+                {
+                    diagnostics.Counters.PublicationCount++;
+                    diagnostics.Counters.PublicationNodeVisits = 0;
+                }
                 return result;
             }
             catch
             {
-                _counters = countersBefore;
+                RestoreCounters(countersBefore);
                 throw;
             }
         }
@@ -276,7 +410,13 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         private SetPreparation SetCore(TKey key, TValue value, bool overwrite)
         {
             EnsureActive();
-            var countersBefore = _counters;
+            if (_deferOwnershipUntilReuse && !_hasPersistentMutation && !_dirty)
+                return SetFirstPersistent(key, value, overwrite);
+
+            var countersBefore = CaptureCounters();
+            var tokenBefore = _token;
+            var commitPlanBefore = _commits;
+            var promotesEditablePath = _hasPersistentMutation && !_dirty;
             var newVersion = checked(_version + 1);
             _commitCount = 0;
             try
@@ -295,17 +435,165 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 _count = newCount;
                 _version = newVersion;
                 _dirty = true;
-                _counters.PreparedMutationCount++;
+                _source = null;
+                if (_diagnostics is { } diagnostics)
+                {
+                    diagnostics.Counters.PreparedMutationCount++;
+                    if (promotesEditablePath && tokenBefore is null && _token is not null)
+                        diagnostics.Counters.EditablePromotionCount++;
+                }
                 return prepared;
             }
             catch
             {
-                _counters = countersBefore;
+                RestoreCounters(countersBefore);
+                RestoreTransientResources(tokenBefore, commitPlanBefore);
                 throw;
             }
             finally
             {
                 ClearCommitPlan();
+            }
+        }
+
+        private bool RemoveFirstPersistent(TKey key)
+        {
+            var countersBefore = CaptureCounters();
+            var newVersion = checked(_version + 1);
+            try
+            {
+                var result = _source!.Remove(key);
+                if (ReferenceEquals(result, _source))
+                    return false;
+
+                Hit(OwnerTokenKernelFailurePoint.MutationPrepared);
+                _source = result;
+                _root = result._root;
+                _count = result._count;
+                _hasPersistentMutation = true;
+                _version = newVersion;
+                if (_diagnostics is { } diagnostics)
+                {
+                    diagnostics.Counters.DeferredPersistentMutationCount++;
+                    diagnostics.Counters.PreparedMutationCount++;
+                    if (!ReferenceEquals(result, Empty))
+                    {
+                        diagnostics.Counters.PersistentWrapperAllocationCount++;
+                        diagnostics.Counters.DeferredPersistentWrapperAllocationCount++;
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                RestoreCounters(countersBefore);
+                throw;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void SetFirstPersistentFast(TKey key, TValue value)
+        {
+            EnsureActive();
+            var newVersion = checked(_version + 1);
+            var result = _source!.SetItem(key, value);
+            if (ReferenceEquals(result, _source))
+                return;
+
+            _source = result;
+            _root = result._root;
+            _count = result._count;
+            _hasPersistentMutation = true;
+            _version = newVersion;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool TryAddFirstPersistentFast(TKey key, TValue value)
+        {
+            EnsureActive();
+            var newVersion = checked(_version + 1);
+            if (!_source!.TryAdd(key, value, out var result))
+                return false;
+
+            _source = result;
+            _root = result._root;
+            _count = result._count;
+            _hasPersistentMutation = true;
+            _version = newVersion;
+            return true;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool RemoveFirstPersistentFast(TKey key)
+        {
+            var newVersion = checked(_version + 1);
+            var result = _source!.Remove(key);
+            if (ReferenceEquals(result, _source))
+                return false;
+
+            _source = result;
+            _root = result._root;
+            _count = result._count;
+            _hasPersistentMutation = true;
+            _version = newVersion;
+            return true;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private PersistentHashMap<TKey, TValue> PersistOrdinaryFast()
+        {
+            var result = _source!;
+            var newVersion = checked(_version + 1);
+            _token?.Seal();
+            _version = newVersion;
+            Volatile.Write(ref _state, InactiveState);
+            _root = null;
+            _source = null;
+            return result;
+        }
+
+        private SetPreparation SetFirstPersistent(TKey key, TValue value, bool overwrite)
+        {
+            var countersBefore = CaptureCounters();
+            var newVersion = checked(_version + 1);
+            try
+            {
+                PersistentHashMap<TKey, TValue> result;
+                bool added;
+                if (overwrite)
+                {
+                    result = _source!.SetItem(key, value);
+                    if (ReferenceEquals(result, _source))
+                        return new SetPreparation(_root!, Changed: false, Added: false, CountDelta: 0);
+                    added = result._count != _count;
+                }
+                else
+                {
+                    added = _source!.TryAdd(key, value, out result);
+                    if (!added)
+                        return new SetPreparation(_root!, Changed: false, Added: false, CountDelta: 0);
+                }
+
+                var countDelta = added ? 1 : 0;
+                Hit(OwnerTokenKernelFailurePoint.MutationPrepared);
+                _source = result;
+                _root = result._root;
+                _count = result._count;
+                _hasPersistentMutation = true;
+                _version = newVersion;
+                if (_diagnostics is { } diagnostics)
+                {
+                    diagnostics.Counters.DeferredPersistentMutationCount++;
+                    diagnostics.Counters.PreparedMutationCount++;
+                    diagnostics.Counters.PersistentWrapperAllocationCount++;
+                    diagnostics.Counters.DeferredPersistentWrapperAllocationCount++;
+                }
+                return new SetPreparation(result._root!, Changed: true, added, countDelta);
+            }
+            catch
+            {
+                RestoreCounters(countersBefore);
+                throw;
             }
         }
 
@@ -861,7 +1149,8 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         {
             Hit(OwnerTokenKernelFailurePoint.BeforeNodeAllocation);
             var result = new LeafNode(hash, key, value);
-            _counters.AllocatedNodeCount++;
+            if (_diagnostics is { } diagnostics)
+                diagnostics.Counters.AllocatedNodeCount++;
             return result;
         }
 
@@ -874,11 +1163,14 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             HashNode result = new SeparateTransientCollisionNode(
                 hash,
                 entries,
-                _token,
+                GetOrCreateToken(),
                 entriesOwned: true);
-            _counters.AllocatedNodeCount++;
-            if (copiedNode)
-                _counters.CopiedNodeCount++;
+            if (_diagnostics is { } diagnostics)
+            {
+                diagnostics.Counters.AllocatedNodeCount++;
+                if (copiedNode)
+                    diagnostics.Counters.CopiedNodeCount++;
+            }
             return result;
         }
 
@@ -911,10 +1203,13 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 state.Children,
                 state.ChildrenOwned,
                 state.Count,
-                _token);
-            _counters.AllocatedNodeCount++;
-            if (copiedNode)
-                _counters.CopiedNodeCount++;
+                GetOrCreateToken());
+            if (_diagnostics is { } diagnostics)
+            {
+                diagnostics.Counters.AllocatedNodeCount++;
+                if (copiedNode)
+                    diagnostics.Counters.CopiedNodeCount++;
+            }
             return result;
         }
 
@@ -924,9 +1219,12 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 return [];
             Hit(OwnerTokenKernelFailurePoint.BeforeDataArrayAllocation);
             var result = new Entry[length];
-            _counters.AllocatedArrayCount++;
-            if (copiesExisting)
-                _counters.CopiedArrayCount++;
+            if (_diagnostics is { } diagnostics)
+            {
+                diagnostics.Counters.AllocatedArrayCount++;
+                if (copiesExisting)
+                    diagnostics.Counters.CopiedArrayCount++;
+            }
             return result;
         }
 
@@ -934,9 +1232,12 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         {
             Hit(OwnerTokenKernelFailurePoint.BeforeCollisionArrayAllocation);
             var result = new Entry[length];
-            _counters.AllocatedArrayCount++;
-            if (copiesExisting)
-                _counters.CopiedArrayCount++;
+            if (_diagnostics is { } diagnostics)
+            {
+                diagnostics.Counters.AllocatedArrayCount++;
+                if (copiesExisting)
+                    diagnostics.Counters.CopiedArrayCount++;
+            }
             return result;
         }
 
@@ -946,9 +1247,12 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 return [];
             Hit(OwnerTokenKernelFailurePoint.BeforeChildArrayAllocation);
             var result = new Node[length];
-            _counters.AllocatedArrayCount++;
-            if (copiesExisting)
-                _counters.CopiedArrayCount++;
+            if (_diagnostics is { } diagnostics)
+            {
+                diagnostics.Counters.AllocatedArrayCount++;
+                if (copiesExisting)
+                    diagnostics.Counters.CopiedArrayCount++;
+            }
             return result;
         }
 
@@ -1122,35 +1426,42 @@ public sealed partial class PersistentHashMap<TKey, TValue>
 
         private bool IsOwned(HashNode collision) =>
             collision is SeparateTransientCollisionNode separate
-            && ReferenceEquals(separate.Owner, _token);
+            && _token is { } token
+            && ReferenceEquals(separate.Owner, token);
 
         private bool CanWriteEntries(HashNode collision) =>
             collision is SeparateTransientCollisionNode separate
-            && separate.CanWriteEntries(_token);
+            && _token is { } token
+            && separate.CanWriteEntries(token);
 
         private bool IsOwned(BranchView branch) =>
             branch.Source is SeparateTransientBranchNode separate
-            && ReferenceEquals(separate.Owner, _token);
+            && _token is { } token
+            && ReferenceEquals(separate.Owner, token);
 
         private bool CanWriteData(BranchView branch) =>
             branch.Source is SeparateTransientBranchNode separate
-            && separate.CanWriteData(_token);
+            && _token is { } token
+            && separate.CanWriteData(token);
 
         private bool CanWriteChildren(BranchView branch) =>
             branch.Source is SeparateTransientBranchNode separate
-            && separate.CanWriteChildren(_token);
+            && _token is { } token
+            && separate.CanWriteChildren(token);
 
         private BranchState StateOf(BranchView source, int count) =>
             new(
                 source.DataMap,
                 source.Data,
                 source.Source is SeparateTransientBranchNode separateData
-                    && ReferenceEquals(separateData.Owner, _token)
+                    && _token is { } dataToken
+                    && ReferenceEquals(separateData.Owner, dataToken)
                     && separateData.DataOwned,
                 source.NodeMap,
                 source.Children,
                 source.Source is SeparateTransientBranchNode separateChildren
-                    && ReferenceEquals(separateChildren.Owner, _token)
+                    && _token is { } childToken
+                    && ReferenceEquals(separateChildren.Owner, childToken)
                     && separateChildren.ChildrenOwned,
                 count);
 
@@ -1158,22 +1469,33 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         {
             if (_commitCount == MaximumCommitSteps)
                 throw new InvalidOperationException("A CHAMP edit exceeded the bounded commit-plan depth.");
+            if (_commits is null)
+            {
+                Hit(OwnerTokenKernelFailurePoint.BeforeCommitPlanAllocation);
+                _commits = new CommitStep[MaximumCommitSteps];
+                if (_diagnostics is { } allocationDiagnostics)
+                    allocationDiagnostics.Counters.CommitPlanAllocationCount++;
+            }
+
             _commits[_commitCount++] = step;
-            _counters.InPlaceNodeMutationCount++;
-            if (step.WritesArray)
-                _counters.InPlaceArrayWriteCount++;
+            if (_diagnostics is { } diagnostics)
+            {
+                diagnostics.Counters.InPlaceNodeMutationCount++;
+                if (step.WritesArray)
+                    diagnostics.Counters.InPlaceArrayWriteCount++;
+            }
         }
 
         private void ApplyCommits()
         {
             for (var index = 0; index < _commitCount; index++)
-                _commits[index].Apply();
+                _commits![index].Apply();
         }
 
         private void ClearCommitPlan()
         {
             for (var index = 0; index < _commitCount; index++)
-                _commits[index] = default;
+                _commits![index] = default;
             _commitCount = 0;
         }
 
@@ -1183,7 +1505,39 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 throw new ObjectDisposedException(nameof(OwnerTokenTransientKernel));
         }
 
-        private void Hit(OwnerTokenKernelFailurePoint point) => FailureInjector?.Invoke(point);
+        private EditToken GetOrCreateToken()
+        {
+            if (_token is not null)
+                return _token;
+
+            Hit(OwnerTokenKernelFailurePoint.BeforeTokenAllocation);
+            _token = new EditToken();
+            return _token;
+        }
+
+        private MutableCounters CaptureCounters() => _diagnostics?.Counters ?? default;
+
+        private void RestoreCounters(MutableCounters counters)
+        {
+            if (_diagnostics is not null)
+                _diagnostics.Counters = counters;
+        }
+
+        private void RestoreTransientResources(EditToken? token, CommitStep[]? commitPlan)
+        {
+            if (_commits is not null)
+            {
+                for (var index = 0; index < _commitCount; index++)
+                    _commits[index] = default;
+            }
+
+            _commitCount = 0;
+            _token = token;
+            _commits = commitPlan;
+        }
+
+        private void Hit(OwnerTokenKernelFailurePoint point) =>
+            _diagnostics?.FailureInjector?.Invoke(point);
 
         private readonly record struct SetPreparation(Node Node, bool Changed, bool Added, int CountDelta);
 
@@ -1336,10 +1690,10 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             }
         }
 
-        [InlineArray(MaximumCommitSteps)]
-        private struct CommitBuffer
+        private sealed class KernelDiagnostics
         {
-            private CommitStep _element0;
+            internal Action<OwnerTokenKernelFailurePoint>? FailureInjector;
+            internal MutableCounters Counters;
         }
 
         private struct MutableCounters
@@ -1348,6 +1702,9 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             internal long AdoptionNodeVisits;
             internal long PublicationCount;
             internal long PublicationNodeVisits;
+            internal long DeferredPersistentMutationCount;
+            internal long EditablePromotionCount;
+            internal long CommitPlanAllocationCount;
             internal long PreparedMutationCount;
             internal long CopiedNodeCount;
             internal long AllocatedNodeCount;
@@ -1356,6 +1713,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             internal long InPlaceNodeMutationCount;
             internal long InPlaceArrayWriteCount;
             internal long PersistentWrapperAllocationCount;
+            internal long DeferredPersistentWrapperAllocationCount;
 
             internal readonly OwnerTokenKernelCounters Snapshot() =>
                 new(
@@ -1363,6 +1721,9 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                     AdoptionNodeVisits,
                     PublicationCount,
                     PublicationNodeVisits,
+                    DeferredPersistentMutationCount,
+                    EditablePromotionCount,
+                    CommitPlanAllocationCount,
                     PreparedMutationCount,
                     CopiedNodeCount,
                     AllocatedNodeCount,
@@ -1370,7 +1731,8 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                     AllocatedArrayCount,
                     InPlaceNodeMutationCount,
                     InPlaceArrayWriteCount,
-                    PersistentWrapperAllocationCount);
+                    PersistentWrapperAllocationCount,
+                    DeferredPersistentWrapperAllocationCount);
         }
     }
 
