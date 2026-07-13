@@ -77,6 +77,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
     /// the owner-free ordinary persistent-node classes. This is an evidence seam, not the proposed
     /// public transient API.
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal OwnerTokenTransientKernel CreateSeparateNodeTransientKernel(
         bool enableDiagnostics = true,
         bool deferOwnershipUntilReuse = true) =>
@@ -107,6 +108,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         private bool _hasPersistentMutation;
         private bool _dirty;
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal OwnerTokenTransientKernel(
             PersistentHashMap<TKey, TValue> source,
             bool enableDiagnostics,
@@ -353,12 +355,19 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 diagnostics.Counters.PreparedMutationCount++;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal PersistentHashMap<TKey, TValue> Persist()
         {
             EnsureActive();
             if (_diagnostics is null && !_dirty)
                 return PersistOrdinaryFast();
 
+            return PersistPrepared();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private PersistentHashMap<TKey, TValue> PersistPrepared()
+        {
             var countersBefore = CaptureCounters();
             var newVersion = checked(_version + 1);
             try
