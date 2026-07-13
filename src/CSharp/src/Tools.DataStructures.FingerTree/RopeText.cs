@@ -139,6 +139,24 @@ public static class RopeText
         return (line, offset - rope.LineStartOffset(line));
     }
 
+    /// <summary>
+    /// Returns the zero-based (line, UTF-16 column) position of a measured text cursor's gap. The line is the
+    /// cursor's cached newline prefix and is therefore O(1); locating that line's start for the column is O(log n).
+    /// </summary>
+    /// <param name="cursor">A cursor over a newline-measured character rope.</param>
+    /// <returns>The line and UTF-16-code-unit column of <paramref name="cursor"/>'s gap.</returns>
+    /// <exception cref="InvalidOperationException"><paramref name="cursor"/> is the default, uninitialized value.</exception>
+    /// <remarks>
+    /// A dirty cursor may first normalize its canonical snapshot. Grapheme navigation remains a separate text
+    /// helper concern; the column reported here counts UTF-16 code units, exactly like the rope offset API.
+    /// </remarks>
+    public static (int Line, int Column) LineColumnOf(
+        this MeasuredRopeCursor<char, int, NewlineMeasure> cursor)
+    {
+        var line = cursor.MeasureBefore;
+        return (line, cursor.Position - cursor.Snapshot().LineStartOffset(line));
+    }
+
     /// <summary>Returns the character offset of the given zero-based (line, column) position. O(log n).</summary>
     /// <param name="rope">The text rope.</param>
     /// <param name="line">Zero-based line index.</param>
