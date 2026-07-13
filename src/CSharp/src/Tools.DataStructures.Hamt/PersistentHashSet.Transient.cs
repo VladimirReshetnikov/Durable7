@@ -53,6 +53,11 @@ public sealed partial class PersistentHashSet<T>
     /// first stored item representative.
     /// </para>
     /// <para>
+    /// Point mutations provide the strong exception guarantee: if hashing, equality, allocation, or
+    /// an internal preparation step throws, the session remains active with unchanged contents,
+    /// version, source identity, and existing enumerators.
+    /// </para>
+    /// <para>
     /// The session is unsynchronized and has one logical owner. Sequential transfer between threads
     /// requires caller-provided synchronization; concurrent access is unsupported. Adoption and
     /// publication are O(1) and do not walk the trie.
@@ -60,7 +65,7 @@ public sealed partial class PersistentHashSet<T>
     /// </remarks>
     public sealed class Transient : IReadOnlySet<T>
     {
-        private readonly PersistentHashSet<T> _source;
+        private PersistentHashSet<T>? _source;
         private readonly PersistentHashMap<T, Unit>.Transient _map;
 
         internal Transient(
@@ -74,6 +79,8 @@ public sealed partial class PersistentHashSet<T>
         internal Action<TransientFailurePoint>? FailureInjector { get; set; }
 
         internal PersistentHashMap<T, Unit>.Transient MapForDiagnostics => _map;
+
+        internal PersistentHashSet<T>? SourceForDiagnostics => _source;
 
         /// <summary>Gets the number of items in the active session.</summary>
         /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
@@ -103,26 +110,59 @@ public sealed partial class PersistentHashSet<T>
         /// <param name="item">The item to add.</param>
         /// <returns><see langword="true"/> when the item was added; otherwise, <see langword="false"/>.</returns>
         /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
-        /// <remarks>A duplicate is a logical no-op and retains the first stored item object.</remarks>
-        public bool Add(T item) => _map.TryAdd(item, default);
+        /// <remarks>
+        /// Expected O(1). A duplicate is a logical no-op and retains the first stored item object.
+        /// If the operation throws, the session is unchanged and remains active.
+        /// </remarks>
+        public bool Add(T item)
+        {
+            if (!_map.TryAdd(item, default))
+                return false;
+
+            _source = null;
+            return true;
+        }
 
         /// <summary>Removes an equivalent item when present.</summary>
         /// <param name="item">The item to remove.</param>
         /// <returns><see langword="true"/> when an item was removed; otherwise, <see langword="false"/>.</returns>
         /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
-        /// <remarks>An absent item is a logical no-op.</remarks>
-        public bool Remove(T item) => _map.Remove(item);
+        /// <remarks>
+        /// Expected O(1). An absent item is a logical no-op. If the operation throws, the session is
+        /// unchanged and remains active.
+        /// </remarks>
+        public bool Remove(T item)
+        {
+            if (!_map.Remove(item))
+                return false;
+
+            _source = null;
+            return true;
+        }
 
         /// <summary>Removes every item from the active session.</summary>
         /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
-        /// <remarks>Clearing an already empty session is a logical no-op.</remarks>
-        public void Clear() => _map.Clear();
+        /// <remarks>
+        /// O(1). Clearing an already empty session is a logical no-op. The operation allocates no
+        /// collection proportional to the current item count.
+        /// </remarks>
+        public void Clear()
+        {
+            var changed = _map.Count != 0;
+            _map.Clear();
+            if (changed)
+                _source = null;
+        }
 
         /// <summary>Determines whether this active session is a subset of the supplied items.</summary>
         /// <param name="other">The items to compare against.</param>
         /// <returns><see langword="true"/> when every session item is present in <paramref name="other"/>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="other"/> is <see langword="null"/>.</exception>
         /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
+        /// <remarks>
+        /// Expected O(n + m), where n is this count and m is the supplied item count. The operation
+        /// materializes the distinct supplied items in a comparer-preserving <see cref="HashSet{T}"/>.
+        /// </remarks>
         public bool IsSubsetOf(IEnumerable<T> other)
         {
             _map.EnsureActiveForFacade();
@@ -141,6 +181,10 @@ public sealed partial class PersistentHashSet<T>
         /// <returns><see langword="true"/> when the session is a strict subset.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="other"/> is <see langword="null"/>.</exception>
         /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
+        /// <remarks>
+        /// Expected O(n + m), where n is this count and m is the supplied item count. The operation
+        /// materializes the distinct supplied items in a comparer-preserving <see cref="HashSet{T}"/>.
+        /// </remarks>
         public bool IsProperSubsetOf(IEnumerable<T> other)
         {
             _map.EnsureActiveForFacade();
@@ -161,6 +205,10 @@ public sealed partial class PersistentHashSet<T>
         /// <returns><see langword="true"/> when every supplied item is present.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="other"/> is <see langword="null"/>.</exception>
         /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
+        /// <remarks>
+        /// Expected O(m), where m is the number of supplied items inspected. The operation streams
+        /// <paramref name="other"/> and creates no collection proportional to its length.
+        /// </remarks>
         public bool IsSupersetOf(IEnumerable<T> other)
         {
             _map.EnsureActiveForFacade();
@@ -178,6 +226,10 @@ public sealed partial class PersistentHashSet<T>
         /// <returns><see langword="true"/> when the session is a strict superset.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="other"/> is <see langword="null"/>.</exception>
         /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
+        /// <remarks>
+        /// Expected O(m), where m is the supplied item count. The operation materializes the distinct
+        /// supplied items in a comparer-preserving <see cref="HashSet{T}"/>.
+        /// </remarks>
         public bool IsProperSupersetOf(IEnumerable<T> other)
         {
             _map.EnsureActiveForFacade();
@@ -198,6 +250,10 @@ public sealed partial class PersistentHashSet<T>
         /// <returns><see langword="true"/> when at least one supplied item is present.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="other"/> is <see langword="null"/>.</exception>
         /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
+        /// <remarks>
+        /// Expected O(m), where m is the number of supplied items inspected. The operation streams
+        /// <paramref name="other"/> and creates no collection proportional to its length.
+        /// </remarks>
         public bool Overlaps(IEnumerable<T> other)
         {
             _map.EnsureActiveForFacade();
@@ -215,6 +271,10 @@ public sealed partial class PersistentHashSet<T>
         /// <returns><see langword="true"/> when both sides contain the same distinct items.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="other"/> is <see langword="null"/>.</exception>
         /// <exception cref="ObjectDisposedException">The session has already been published.</exception>
+        /// <remarks>
+        /// Expected O(n + m), where n is this count and m is the supplied item count. The operation
+        /// materializes the distinct supplied items in a comparer-preserving <see cref="HashSet{T}"/>.
+        /// </remarks>
         public bool SetEquals(IEnumerable<T> other)
         {
             _map.EnsureActiveForFacade();
@@ -243,11 +303,12 @@ public sealed partial class PersistentHashSet<T>
         /// </remarks>
         public PersistentHashSet<T> Persist()
         {
+            var source = _source;
             var preparedMap = _map.PreparePublication();
             PersistentHashSet<T> result;
-            if (ReferenceEquals(preparedMap.Result, _source._map))
+            if (source is not null && ReferenceEquals(preparedMap.Result, source._map))
             {
-                result = _source;
+                result = source;
             }
             else if (ReferenceEquals(preparedMap.Result, PersistentHashMap<T, Unit>.Empty))
             {
@@ -261,6 +322,7 @@ public sealed partial class PersistentHashSet<T>
 
             FailureInjector?.Invoke(TransientFailurePoint.SetPublicationPrepared);
             _map.CommitPublication(preparedMap);
+            _source = null;
             return result;
         }
 

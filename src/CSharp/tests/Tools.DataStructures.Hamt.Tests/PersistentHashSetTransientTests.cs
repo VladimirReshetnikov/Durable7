@@ -25,6 +25,45 @@ public sealed class PersistentHashSetTransientTests
         Assert.NotSame(PersistentHashSet<string>.Empty, customEmpty);
     }
 
+    /// <summary>Verifies every specified logical no-op preserves exact source publication identity.</summary>
+    [Fact]
+    public void LogicalNoOps_PreserveExactAdoptedAndFactorySourceIdentity()
+    {
+        var source = PersistentHashSet<int>.CreateRange(new[] { 1, 2, 3 });
+        var adopted = source.ToTransient();
+        Assert.False(adopted.Add(2));
+        Assert.False(adopted.Remove(99));
+        Assert.Same(source, adopted.Persist());
+
+        var factory = PersistentHashSet<int>.CreateTransient();
+        var factorySource = factory.SourceForDiagnostics;
+        Assert.NotNull(factorySource);
+        factory.Clear();
+        Assert.Same(factorySource, factory.Persist());
+    }
+
+    /// <summary>Verifies only a clean active session retains its source wrapper for identity.</summary>
+    [Fact]
+    public void SourceRetention_EndsOnFirstChangeOrSuccessfulPublication()
+    {
+        var source = PersistentHashSet<int>.CreateRange(new[] { 1, 2, 3 });
+        var changed = source.CreateTransientForDiagnostics();
+        Assert.Same(source, changed.SourceForDiagnostics);
+        Assert.False(changed.Add(1));
+        Assert.False(changed.Remove(99));
+        Assert.Same(source, changed.SourceForDiagnostics);
+
+        Assert.True(changed.Remove(1));
+        Assert.Null(changed.SourceForDiagnostics);
+        changed.Persist();
+        Assert.Null(changed.SourceForDiagnostics);
+
+        var clean = source.CreateTransientForDiagnostics();
+        Assert.Same(source, clean.SourceForDiagnostics);
+        Assert.Same(source, clean.Persist());
+        Assert.Null(clean.SourceForDiagnostics);
+    }
+
     /// <summary>Verifies mutable-set verbs and first representative retention.</summary>
     [Fact]
     public void MutableVerbs_RetainFirstRepresentativeAndReportChanges()
@@ -72,6 +111,23 @@ public sealed class PersistentHashSetTransientTests
         Assert.True(published.Contains(null));
         var diagnostics = published.ValidateCanonicalityForDiagnostics();
         Assert.Equal(published.Count, diagnostics.RecursiveEntryCount);
+    }
+
+    /// <summary>Verifies transient enumeration exactly follows persistent trie and collision order.</summary>
+    [Fact]
+    public void EnumerationOrder_MatchesPersistentOracleWithFullHashCollisions()
+    {
+        var comparer = new NullableCollisionComparer();
+        var source = PersistentHashSet<string?>.CreateRange(
+            new string?[] { null, "alpha", "beta", "gamma", "delta" },
+            comparer);
+        var transient = source.ToTransient();
+        Assert.True(transient.Remove("beta"));
+        Assert.True(transient.Add("epsilon"));
+
+        var oracle = source.Remove("beta").Add("epsilon");
+        Assert.Equal(oracle.ToArray(), transient.ToArray());
+        Assert.Equal(oracle.ToArray(), transient.Persist().ToArray());
     }
 
     /// <summary>Verifies the active facade preserves the full read-only set relation contract.</summary>
@@ -221,6 +277,7 @@ public sealed class PersistentHashSetTransientTests
         var root = map.RootIdentityForDiagnostics;
         var counters = map.GetCountersForDiagnostics();
         var enumerator = transient.GetEnumerator();
+        var source = transient.SourceForDiagnostics;
         map.FailureInjector = point =>
         {
             if (point == PersistentHashMap<int, PersistentHashSet<int>.Unit>
@@ -234,6 +291,7 @@ public sealed class PersistentHashSetTransientTests
         Assert.Equal(version, map.VersionForDiagnostics);
         Assert.Same(root, map.RootIdentityForDiagnostics);
         Assert.Equal(counters, map.GetCountersForDiagnostics());
+        Assert.Same(source, transient.SourceForDiagnostics);
         Assert.True(enumerator.MoveNext());
         Assert.False(transient.Contains(2));
 
