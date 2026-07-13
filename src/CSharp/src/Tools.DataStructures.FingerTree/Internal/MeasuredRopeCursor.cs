@@ -44,16 +44,6 @@ internal sealed class MeasuredCursorBuffer<T, TMeasure, TMeasureOps>
     internal static MeasuredCursorBuffer<T, TMeasure, TMeasureOps> Empty(TMeasure empty) =>
         new(ReadOnlyMemory<T>.Empty, [], [empty], [empty]);
 
-    internal static MeasuredCursorBuffer<T, TMeasure, TMeasureOps> MeasureChunk(
-        MeasuredChunk<T, TMeasure, TMeasureOps> chunk)
-    {
-        var measures = new TMeasure[chunk.Length];
-        var span = chunk.Chunk.Data.Span;
-        for (var i = 0; i < span.Length; i++)
-            measures[i] = InvokeMeasure(span[i]);
-        return FromPrepared(chunk.Chunk.Data, measures);
-    }
-
     internal static MeasuredCursorBuffer<T, TMeasure, TMeasureOps> MeasureSpan(ReadOnlySpan<T> values)
     {
         if (values.IsEmpty)
@@ -86,6 +76,11 @@ internal sealed class MeasuredCursorBuffer<T, TMeasure, TMeasureOps>
         return new MeasuredCursorBuffer<T, TMeasure, TMeasureOps>(values, elementMeasures, prefix, suffix);
     }
 
+    internal static MeasuredCursorBuffer<T, TMeasure, TMeasureOps> FromPrepared(
+        ReadOnlyMemory<T> values,
+        ReadOnlyMemory<TMeasure> elementMeasures) =>
+        FromPrepared(values, elementMeasures.ToArray());
+
     internal MeasuredCursorBuffer<T, TMeasure, TMeasureOps> CopySlice(int start, int length)
     {
         if (length == 0)
@@ -109,6 +104,24 @@ internal sealed class MeasuredCursorBuffer<T, TMeasure, TMeasureOps>
                 : AggregateRange(start, length);
         return new MeasuredChunk<T, TMeasure, TMeasureOps>(
             new Chunk<T>(_values.Slice(start, length)),
+            aggregate);
+    }
+
+    internal MeasuredCursorPreparedFragment<T, TMeasure, TMeasureOps> PrepareFragment(
+        int start,
+        int length)
+    {
+        if (length <= 0)
+            throw new ArgumentOutOfRangeException(nameof(length));
+
+        var aggregate = start == 0
+            ? PrefixMeasure(length)
+            : start + length == Length
+                ? SuffixMeasure(start)
+                : AggregateRange(start, length);
+        return new MeasuredCursorPreparedFragment<T, TMeasure, TMeasureOps>(
+            _values.Slice(start, length),
+            _elementMeasures.AsMemory(start, length),
             aggregate);
     }
 
@@ -238,31 +251,173 @@ internal sealed class MeasuredCursorBuffer<T, TMeasure, TMeasureOps>
 }
 
 /// <summary>
+/// A prepared ordinary-chunk fragment. Element measures are retained once; directional prefix and
+/// suffix tables are published lazily only when navigation consumes that side of the fragment.
+/// This keeps cursor creation proportional to one element-measure array while preserving O(1)
+/// aggregate updates after the first boundary pull.
+/// </summary>
+internal sealed class MeasuredCursorPreparedFragment<T, TMeasure, TMeasureOps>
+    where TMeasureOps : IMeasure<T, TMeasure>
+{
+    private readonly ReadOnlyMemory<T> _values;
+    private readonly ReadOnlyMemory<TMeasure> _elementMeasures;
+    private TMeasure[]? _prefixMeasures;
+    private readonly int _prefixOffset;
+    private TMeasure[]? _suffixMeasures;
+    private readonly int _suffixOffset;
+
+    internal MeasuredCursorPreparedFragment(
+        ReadOnlyMemory<T> values,
+        ReadOnlyMemory<TMeasure> elementMeasures,
+        TMeasure measure,
+        TMeasure[]? prefixMeasures = null,
+        int prefixOffset = 0,
+        TMeasure[]? suffixMeasures = null,
+        int suffixOffset = 0)
+    {
+        if (values.Length != elementMeasures.Length)
+            throw new ArgumentException("The value and element-measure fragments must have the same length.");
+        _values = values;
+        _elementMeasures = elementMeasures;
+        _prefixMeasures = prefixMeasures;
+        _prefixOffset = prefixOffset;
+        _suffixMeasures = suffixMeasures;
+        _suffixOffset = suffixOffset;
+        Measure = measure;
+    }
+
+    internal int Length => _values.Length;
+
+    internal TMeasure Measure { get; }
+
+    internal TMeasure ElementMeasure(int index) => _elementMeasures.Span[index];
+
+    internal static MeasuredCursorPreparedFragment<T, TMeasure, TMeasureOps> MeasureChunk(
+        MeasuredChunk<T, TMeasure, TMeasureOps> chunk)
+    {
+        var measures = new TMeasure[chunk.Length];
+        var span = chunk.Chunk.Data.Span;
+        for (var index = 0; index < span.Length; index++)
+            measures[index] = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.InvokeMeasure(span[index]);
+        return new MeasuredCursorPreparedFragment<T, TMeasure, TMeasureOps>(
+            chunk.Chunk.Data,
+            measures,
+            chunk.Measure);
+    }
+
+    internal TMeasure AggregateRange(int start, int length)
+    {
+        if (length == 0)
+            return MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.InvokeEmpty();
+        if (start == 0 && length == Length)
+            return Measure;
+
+        var aggregate = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.InvokeEmpty();
+        var end = checked(start + length);
+        for (var index = start; index < end; index++)
+        {
+            aggregate = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.InvokeCombine(
+                aggregate,
+                _elementMeasures.Span[index]);
+        }
+        return aggregate;
+    }
+
+    internal TMeasure PrefixMeasure(int count)
+    {
+        if (count == Length)
+            return Measure;
+        var prefix = Volatile.Read(ref _prefixMeasures);
+        if (prefix is null)
+        {
+            var candidate = new TMeasure[Length + 1];
+            candidate[0] = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.InvokeEmpty();
+            for (var index = 0; index < Length; index++)
+            {
+                candidate[index + 1] = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.InvokeCombine(
+                    candidate[index],
+                    _elementMeasures.Span[index]);
+            }
+            prefix = Interlocked.CompareExchange(ref _prefixMeasures, candidate, null) ?? candidate;
+        }
+        return prefix[_prefixOffset + count];
+    }
+
+    internal TMeasure SuffixMeasure(int start)
+    {
+        if (start == 0)
+            return Measure;
+        var suffix = Volatile.Read(ref _suffixMeasures);
+        if (suffix is null)
+        {
+            var candidate = new TMeasure[Length + 1];
+            candidate[^1] = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.InvokeEmpty();
+            for (var index = Length - 1; index >= 0; index--)
+            {
+                candidate[index] = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.InvokeCombine(
+                    _elementMeasures.Span[index],
+                    candidate[index + 1]);
+            }
+            suffix = Interlocked.CompareExchange(ref _suffixMeasures, candidate, null) ?? candidate;
+        }
+        return suffix[_suffixOffset + start];
+    }
+
+    internal MeasuredCursorBuffer<T, TMeasure, TMeasureOps> ToBuffer(int start, int length) =>
+        length == 0
+            ? MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.Empty(
+                MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.InvokeEmpty())
+            : MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.FromPrepared(
+                _values.Slice(start, length),
+                _elementMeasures.Slice(start, length));
+
+    internal MeasuredCursorPreparedFragment<T, TMeasure, TMeasureOps> Slice(
+        int start,
+        int length,
+        TMeasure measure)
+    {
+        var prefix = start == 0 ? Volatile.Read(ref _prefixMeasures) : null;
+        var suffix = start + length == Length ? Volatile.Read(ref _suffixMeasures) : null;
+        return new MeasuredCursorPreparedFragment<T, TMeasure, TMeasureOps>(
+            _values.Slice(start, length),
+            _elementMeasures.Slice(start, length),
+            measure,
+            prefix,
+            prefix is null ? 0 : _prefixOffset,
+            suffix,
+            suffix is null ? 0 : _suffixOffset + start);
+    }
+
+    internal MeasuredChunk<T, TMeasure, TMeasureOps> ToMeasuredChunk() =>
+        new(new Chunk<T>(_values), Measure);
+}
+
+/// <summary>
 /// A version-lineage cache for ordinary chunks that have already paid the element-measure scan.
 /// Entries are keyed by immutable backing-memory slices, so pulling, spilling, and later crossing
-/// the same seam can reuse the complete ordered prefix/suffix buffer. Failed preparation is never
+/// the same seam can reuse retained element measures and lazily published directional aggregates. Failed preparation is never
 /// installed, and racing preparation may duplicate work but can only publish a successful buffer.
 /// </summary>
 internal sealed class MeasuredCursorFragmentCache<T, TMeasure, TMeasureOps>
     where TMeasureOps : IMeasure<T, TMeasure>
 {
-    private readonly ConcurrentDictionary<ReadOnlyMemory<T>, MeasuredCursorBuffer<T, TMeasure, TMeasureOps>> _buffers = [];
+    private readonly ConcurrentDictionary<ReadOnlyMemory<T>, MeasuredCursorPreparedFragment<T, TMeasure, TMeasureOps>> _fragments = [];
 
-    internal MeasuredCursorBuffer<T, TMeasure, TMeasureOps> GetOrMeasure(
+    internal MeasuredCursorPreparedFragment<T, TMeasure, TMeasureOps> GetOrMeasure(
         MeasuredChunk<T, TMeasure, TMeasureOps> chunk)
     {
         var key = chunk.Chunk.Data;
-        if (_buffers.TryGetValue(key, out var cached))
+        if (_fragments.TryGetValue(key, out var cached))
             return cached;
 
-        var candidate = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.MeasureChunk(chunk);
-        return _buffers.GetOrAdd(key, candidate);
+        var candidate = MeasuredCursorPreparedFragment<T, TMeasure, TMeasureOps>.MeasureChunk(chunk);
+        return _fragments.GetOrAdd(key, candidate);
     }
 
     internal void Register(
         MeasuredChunk<T, TMeasure, TMeasureOps> chunk,
-        MeasuredCursorBuffer<T, TMeasure, TMeasureOps> prepared) =>
-        _buffers.TryAdd(chunk.Chunk.Data, prepared);
+        MeasuredCursorPreparedFragment<T, TMeasure, TMeasureOps> prepared) =>
+        _fragments.TryAdd(chunk.Chunk.Data, prepared);
 }
 
 internal readonly record struct MeasuredRopeZipperContext<T, TMeasure, TMeasureOps>(
@@ -274,9 +429,13 @@ internal readonly record struct MeasuredRopeZipperContext<T, TMeasure, TMeasureO
     FingerTree<MeasuredChunk<T, TMeasure, TMeasureOps>, MeasurePair<int, TMeasure>, MeasuredChunkMeasure<T, TMeasure, TMeasureOps>> RightTree,
     int Position,
     RopeCursorPrototypeConfiguration Configuration,
-    MeasuredCursorFragmentCache<T, TMeasure, TMeasureOps> FragmentCache,
+    MeasuredCursorFragmentCache<T, TMeasure, TMeasureOps>? FragmentCache,
     TMeasure MeasureBefore,
-    TMeasure MeasureAfter)
+    TMeasure MeasureAfter,
+    MeasuredRope<T, TMeasure, TMeasureOps>? DeferredSource,
+    MeasuredChunk<T, TMeasure, TMeasureOps>? DeferredChunk,
+    int DeferredChunkStart,
+    int DeferredGap)
     where TMeasureOps : IMeasure<T, TMeasure>;
 
 internal sealed class MeasuredCursorVersionState<T, TMeasure, TMeasureOps>
@@ -425,7 +584,11 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
                 configuration,
                 emptyFragmentCache,
                 emptyMeasure,
-                emptyMeasure);
+                emptyMeasure,
+                DeferredSource: null,
+                DeferredChunk: null,
+                DeferredChunkStart: 0,
+                DeferredGap: 0);
         }
 
         FingerTree<
@@ -460,6 +623,16 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
 
         var fragmentCache = new MeasuredCursorFragmentCache<T, TMeasure, TMeasureOps>();
         var prepared = fragmentCache.GetOrMeasure(hit);
+        var activeLength = Math.Min(configuration.FocusCapacity, prepared.Length);
+        var activeStart = Math.Clamp(
+            gapInChunk - (activeLength / 2),
+            0,
+            prepared.Length - activeLength);
+        var leftFragmentMeasure = prepared.AggregateRange(0, activeStart);
+        var suffixStart = activeStart + activeLength;
+        var rightFragmentMeasure = prepared.AggregateRange(
+            suffixStart,
+            prepared.Length - suffixStart);
         return CreateContextFromLocatedChunk(
             left,
             prepared,
@@ -467,7 +640,9 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
             chunkStart,
             gapInChunk,
             configuration,
-            fragmentCache);
+            fragmentCache,
+            leftFragmentMeasure,
+            rightFragmentMeasure);
     }
 
     internal static (bool Found, MeasuredRopeZipperContext<T, TMeasure, TMeasureOps> Context)
@@ -477,41 +652,133 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
             RopeCursorPrototypeConfiguration configuration)
         where TPredicate : struct, IMeasurePredicate<TMeasure>
     {
-        if (!source.TreeForMeasuredCursor.TrySplitFind(
+        if (!source.TreeForMeasuredCursor.TryLocateWithSuffix(
                 new SecondComponentPredicate<TPredicate, int, TMeasure>(predicate),
-                out var left,
+                out var before,
                 out var hit,
-                out var right))
+                out var after))
         {
-            return (false, CreateContext(source, source.Count, configuration));
+            return (false, CreateDeferredEndContext(source, configuration));
         }
 
-        var fragmentCache = new MeasuredCursorFragmentCache<T, TMeasure, TMeasureOps>();
-        var prepared = fragmentCache.GetOrMeasure(hit);
-        var accumulated = left.Measure.Second;
-        var offset = 0;
-        for (; offset < prepared.Length; offset++)
-        {
-            accumulated = Combine(accumulated, prepared.ElementMeasure(offset));
-            if (predicate.Invoke(accumulated))
-                break;
-        }
+        var located = RopeCursorDiagnostics.IsSessionActive
+            ? LocateInChunkWithDiagnostics(hit, before.Second, after.Second, predicate)
+            : LocateInChunk(hit, before.Second, after.Second, predicate);
 
         // A lawful monotone predicate that selected this chunk must flip within it. Treat a stateful or otherwise
         // inconsistent predicate as a miss instead of manufacturing a boundary from the final element.
-        if (offset == prepared.Length)
-            return (false, CreateContext(source, source.Count, configuration));
+        if (!located.Found)
+            return (false, CreateDeferredEndContext(source, configuration));
 
+        // The scan deliberately continues after the boundary. For an arbitrary, non-invertible and
+        // noncommutative monoid this is the only way to cache the exact suffix without either a second
+        // element-measure pass or cursor-local arrays. The selected ordinary chunk is retained as an
+        // immutable deferred focus and is prepared only if navigation or editing actually needs it.
         return (
             true,
-            CreateContextFromLocatedChunk(
-                left,
-                prepared,
-                right,
-                left.Measure.First,
-                offset,
+            CreateDeferredContext(
+                source,
+                hit,
+                before.First,
+                located.Gap,
                 configuration,
-                fragmentCache));
+                located.MeasureBefore,
+                located.MeasureAfter));
+    }
+
+    private static (bool Found, int Gap, TMeasure MeasureBefore, TMeasure MeasureAfter)
+        LocateInChunk<TPredicate>(
+            MeasuredChunk<T, TMeasure, TMeasureOps> hit,
+            TMeasure measureBeforeChunk,
+            TMeasure measureAfterChunk,
+            TPredicate predicate)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>
+    {
+        var accumulated = measureBeforeChunk;
+        var measureAfter = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.InvokeEmpty();
+        var gap = -1;
+        var measureBefore = default(TMeasure)!;
+        for (var offset = 0; offset < hit.Length; offset++)
+        {
+            var elementMeasure = TMeasureOps.Measure(hit[offset]);
+            if (gap < 0)
+            {
+                var inclusive = TMeasureOps.Combine(accumulated, elementMeasure);
+                if (predicate.Invoke(inclusive))
+                {
+                    gap = offset;
+                    measureBefore = accumulated;
+                    measureAfter = elementMeasure;
+                }
+                else
+                {
+                    accumulated = inclusive;
+                }
+            }
+            else
+            {
+                measureAfter = TMeasureOps.Combine(measureAfter, elementMeasure);
+            }
+        }
+
+        return gap < 0
+            ? (false, 0, default!, default!)
+            : (true, gap, measureBefore, TMeasureOps.Combine(measureAfter, measureAfterChunk));
+    }
+
+    private static (bool Found, int Gap, TMeasure MeasureBefore, TMeasure MeasureAfter)
+        LocateInChunkWithDiagnostics<TPredicate>(
+            MeasuredChunk<T, TMeasure, TMeasureOps> hit,
+            TMeasure measureBeforeChunk,
+            TMeasure measureAfterChunk,
+            TPredicate predicate)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>
+    {
+        var measureCallbackCount = 0;
+        var combineCallbackCount = 0;
+        try
+        {
+            var accumulated = measureBeforeChunk;
+            var measureAfter = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.InvokeEmpty();
+            var gap = -1;
+            var measureBefore = default(TMeasure)!;
+            for (var offset = 0; offset < hit.Length; offset++)
+            {
+                measureCallbackCount++;
+                var elementMeasure = TMeasureOps.Measure(hit[offset]);
+                if (gap < 0)
+                {
+                    combineCallbackCount++;
+                    var inclusive = TMeasureOps.Combine(accumulated, elementMeasure);
+                    if (predicate.Invoke(inclusive))
+                    {
+                        gap = offset;
+                        measureBefore = accumulated;
+                        measureAfter = elementMeasure;
+                    }
+                    else
+                    {
+                        accumulated = inclusive;
+                    }
+                }
+                else
+                {
+                    combineCallbackCount++;
+                    measureAfter = TMeasureOps.Combine(measureAfter, elementMeasure);
+                }
+            }
+
+            if (gap < 0)
+                return (false, 0, default!, default!);
+
+            combineCallbackCount++;
+            return (true, gap, measureBefore, TMeasureOps.Combine(measureAfter, measureAfterChunk));
+        }
+        finally
+        {
+            RopeCursorDiagnostics.RecordElementMeasureCallback(measureCallbackCount);
+            RopeCursorDiagnostics.RecordMeasureCombineCallback(combineCallbackCount);
+        }
     }
 
     internal static bool TryPeekPrevious(
@@ -522,6 +789,19 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
         {
             value = default!;
             return false;
+        }
+
+        if (context.DeferredSource is { } deferredSource)
+        {
+            if (context.DeferredChunk is { } deferred && context.DeferredGap > 0)
+            {
+                value = deferred[context.DeferredGap - 1];
+                return true;
+            }
+
+            RopeCursorDiagnostics.RecordNodeVisits();
+            value = deferredSource[context.Position - 1];
+            return true;
         }
 
         if (context.Gap > 0)
@@ -553,6 +833,19 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
             return false;
         }
 
+        if (context.DeferredSource is { } deferredSource)
+        {
+            if (context.DeferredChunk is { } deferred && context.DeferredGap < deferred.Length)
+            {
+                value = deferred[context.DeferredGap];
+                return true;
+            }
+
+            RopeCursorDiagnostics.RecordNodeVisits();
+            value = deferredSource[context.Position];
+            return true;
+        }
+
         if (context.Gap < context.Active.Length)
         {
             value = context.Active[context.Gap];
@@ -578,7 +871,7 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
         if (source.Position == 0)
             throw new InvalidOperationException("The cursor is already at the start of the rope.");
 
-        var context = source;
+        var context = Materialize(source);
         if (context.Gap == 0)
         {
             context = PullFromLeft(context, Math.Max(1, context.Configuration.FocusCapacity / 2));
@@ -598,7 +891,7 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
         if (source.Position == count)
             throw new InvalidOperationException("The cursor is already at the end of the rope.");
 
-        var context = source;
+        var context = Materialize(source);
         if (context.Gap == context.Active.Length)
         {
             context = PullFromRight(context, Math.Max(1, context.Configuration.FocusCapacity / 2));
@@ -644,13 +937,14 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
             throw new OverflowException("The operation would create a rope with more than Int32.MaxValue elements.");
 
         var valueMeasure = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.InvokeMeasure(value);
-        var active = source.Active.Insert(source.Gap, value, valueMeasure);
+        var context = Materialize(source);
+        var active = context.Active.Insert(context.Gap, value, valueMeasure);
         RopeCursorDiagnostics.RecordFocusCopy(active.Length);
-        var context = source with
+        context = context with
         {
             Active = active,
-            Gap = source.Gap + 1,
-            Position = source.Position + 1,
+            Gap = context.Gap + 1,
+            Position = context.Position + 1,
         };
         context = Balance(context, preferLeft: true);
         context = WithMeasures(context);
@@ -668,13 +962,14 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
             throw new OverflowException("The operation would create a rope with more than Int32.MaxValue elements.");
 
         var inserted = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.MeasureSpan(values);
-        var active = source.Active.InsertRange(source.Gap, inserted);
+        var context = Materialize(source);
+        var active = context.Active.InsertRange(context.Gap, inserted);
         RopeCursorDiagnostics.RecordFocusCopy(active.Length);
-        var context = source with
+        context = context with
         {
             Active = active,
-            Gap = source.Gap + values.Length,
-            Position = source.Position + values.Length,
+            Gap = context.Gap + values.Length,
+            Position = context.Position + values.Length,
         };
         context = Balance(context, preferLeft: true);
         context = WithMeasures(context);
@@ -688,7 +983,7 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
         if (source.Position == 0)
             throw new InvalidOperationException("The cursor has no previous element to delete.");
 
-        var context = source;
+        var context = Materialize(source);
         if (context.Gap == 0)
             context = PullFromLeft(context, Math.Max(1, context.Configuration.FocusCapacity / 2));
 
@@ -713,7 +1008,7 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
         if (source.Position == version.Count)
             throw new InvalidOperationException("The cursor has no next element to delete.");
 
-        var context = source;
+        var context = Materialize(source);
         if (context.Gap == context.Active.Length)
             context = PullFromRight(context, Math.Max(1, context.Configuration.FocusCapacity / 2));
 
@@ -735,7 +1030,7 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
             throw new InvalidOperationException("The cursor has no next element to replace.");
 
         var valueMeasure = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.InvokeMeasure(value);
-        var context = source;
+        var context = Materialize(source);
         if (context.Gap == context.Active.Length)
         {
             context = PullFromRight(context, Math.Max(1, context.Configuration.FocusCapacity / 2));
@@ -753,10 +1048,11 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
         in MeasuredRopeZipperContext<T, TMeasure, TMeasureOps> context,
         int count)
     {
+        var materialized = Materialize(context);
         var middle = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.Concat(
-            context.LeftCarry,
-            context.Active,
-            context.RightCarry);
+            materialized.LeftCarry,
+            materialized.Active,
+            materialized.RightCarry);
         var chunks = new List<MeasuredChunk<T, TMeasure, TMeasureOps>>(
             (middle.Length + RopeChunking.MaxChunkSize - 1) / RopeChunking.MaxChunkSize);
         for (var offset = 0; offset < middle.Length; offset += RopeChunking.MaxChunkSize)
@@ -767,16 +1063,16 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
 
         RopeCursorDiagnostics.RecordSnapshotNormalization();
         RopeCursorDiagnostics.RecordSpineAllocation(2);
-        if (context.LeftCarry.Length > 0)
-            RopeCursorDiagnostics.RecordCarryCopy(context.LeftCarry.Length);
-        if (context.RightCarry.Length > 0)
-            RopeCursorDiagnostics.RecordCarryCopy(context.RightCarry.Length);
-        RopeCursorDiagnostics.RecordFocusCopy(context.Active.Length);
+        if (materialized.LeftCarry.Length > 0)
+            RopeCursorDiagnostics.RecordCarryCopy(materialized.LeftCarry.Length);
+        if (materialized.RightCarry.Length > 0)
+            RopeCursorDiagnostics.RecordCarryCopy(materialized.RightCarry.Length);
+        RopeCursorDiagnostics.RecordFocusCopy(materialized.Active.Length);
 
         var snapshot = MeasuredRope<T, TMeasure, TMeasureOps>.FromMeasuredCursorParts(
-            context.LeftTree,
+            materialized.LeftTree,
             [.. chunks],
-            context.RightTree);
+            materialized.RightTree);
         if (snapshot.Count != count)
             throw new InvalidOperationException("The measured cursor snapshot does not match its logical version count.");
         return snapshot;
@@ -784,13 +1080,15 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
 
     internal static MeasuredRopeCursorStateDiagnostics<TMeasure> GetDiagnostics(
         MeasuredCursorVersionState<T, TMeasure, TMeasureOps> version,
-        in MeasuredRopeZipperContext<T, TMeasure, TMeasureOps> context) =>
-        new(
+        in MeasuredRopeZipperContext<T, TMeasure, TMeasureOps> context)
+    {
+        var deferred = context.DeferredSource is not null;
+        return new(
             Count: version.Count,
             Position: context.Position,
-            ActiveLength: context.Active.Length,
-            LeftCarryLength: context.LeftCarry.Length,
-            RightCarryLength: context.RightCarry.Length,
+            ActiveLength: deferred ? 0 : context.Active.Length,
+            LeftCarryLength: deferred ? 0 : context.LeftCarry.Length,
+            RightCarryLength: deferred ? 0 : context.RightCarry.Length,
             LeftOrdinaryChunkCount: context.LeftTree.Count(),
             RightOrdinaryChunkCount: context.RightTree.Count(),
             HasCachedSnapshot: version.HasCachedSnapshot,
@@ -801,11 +1099,43 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
                 context),
             MeasureBefore: context.MeasureBefore,
             MeasureAfter: context.MeasureAfter);
+    }
 
     internal static void Validate(
         in MeasuredRopeZipperContext<T, TMeasure, TMeasureOps> context,
         int count)
     {
+        if (context.DeferredSource is { } deferredSource)
+        {
+            if (context.FragmentCache is not null || context.LeftCarry is not null ||
+                context.Active is not null || context.Gap != 0 || context.RightCarry is not null ||
+                !context.LeftTree.IsEmpty || !context.RightTree.IsEmpty)
+            {
+                throw new InvalidOperationException("A deferred measured cursor contains materialized focus state.");
+            }
+            if (deferredSource.Count != count || (uint)context.Position > (uint)count)
+            {
+                throw new InvalidOperationException(
+                    "The deferred measured cursor decomposition does not match its logical position or count.");
+            }
+            if (context.DeferredChunk is { } deferred)
+            {
+                if ((uint)context.DeferredGap > (uint)deferred.Length ||
+                    checked(context.DeferredChunkStart + context.DeferredGap) != context.Position)
+                {
+                    throw new InvalidOperationException(
+                        "The deferred measured cursor gap lies outside its located ordinary chunk.");
+                }
+            }
+            else if (context.Position != count || context.DeferredChunkStart != count || context.DeferredGap != 0)
+            {
+                throw new InvalidOperationException("A deferred miss is not the logical end cursor.");
+            }
+            return;
+        }
+
+        if (context.FragmentCache is null)
+            throw new InvalidOperationException("A materialized measured cursor has no fragment cache.");
         if ((uint)context.Gap > (uint)context.Active.Length)
             throw new InvalidOperationException("The measured cursor gap lies outside its active window.");
         if (context.Active.Length > context.Configuration.FocusCapacity)
@@ -827,14 +1157,70 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
             throw new InvalidOperationException("The measured cursor decomposition does not match its logical position or count.");
     }
 
+    private static MeasuredRopeZipperContext<T, TMeasure, TMeasureOps> CreateDeferredEndContext(
+        MeasuredRope<T, TMeasure, TMeasureOps> source,
+        RopeCursorPrototypeConfiguration configuration)
+    {
+        if (source.IsEmpty)
+            return CreateContext(source, 0, configuration);
+
+        return CreateDeferredContext(
+            source,
+            chunk: null,
+            source.Count,
+            gapInChunk: 0,
+            configuration,
+            source.Measure,
+            MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.InvokeEmpty());
+    }
+
+    private static MeasuredRopeZipperContext<T, TMeasure, TMeasureOps> CreateDeferredContext(
+        MeasuredRope<T, TMeasure, TMeasureOps> source,
+        MeasuredChunk<T, TMeasure, TMeasureOps>? chunk,
+        int chunkStart,
+        int gapInChunk,
+        RopeCursorPrototypeConfiguration configuration,
+        TMeasure measureBefore,
+        TMeasure measureAfter)
+    {
+        var context = new MeasuredRopeZipperContext<T, TMeasure, TMeasureOps>(
+            EmptyTree,
+            LeftCarry: null!,
+            Active: null!,
+            Gap: 0,
+            RightCarry: null!,
+            EmptyTree,
+            checked(chunkStart + gapInChunk),
+            configuration,
+            FragmentCache: null,
+            measureBefore,
+            measureAfter,
+            source,
+            chunk,
+            chunkStart,
+            gapInChunk);
+        Validate(context, source.Count);
+        return context;
+    }
+
+    private static MeasuredRopeZipperContext<T, TMeasure, TMeasureOps> Materialize(
+        in MeasuredRopeZipperContext<T, TMeasure, TMeasureOps> source)
+    {
+        if (source.DeferredSource is not { } deferredSource)
+            return source;
+        return CreateContext(deferredSource, source.Position, source.Configuration);
+    }
+
     private static MeasuredRopeZipperContext<T, TMeasure, TMeasureOps> CreateContextFromLocatedChunk(
         FingerTree<MeasuredChunk<T, TMeasure, TMeasureOps>, MeasurePair<int, TMeasure>, MeasuredChunkMeasure<T, TMeasure, TMeasureOps>> left,
-        MeasuredCursorBuffer<T, TMeasure, TMeasureOps> chunk,
+        MeasuredCursorPreparedFragment<T, TMeasure, TMeasureOps> chunk,
         FingerTree<MeasuredChunk<T, TMeasure, TMeasureOps>, MeasurePair<int, TMeasure>, MeasuredChunkMeasure<T, TMeasure, TMeasureOps>> right,
         int chunkStart,
         int gapInChunk,
         RopeCursorPrototypeConfiguration configuration,
-        MeasuredCursorFragmentCache<T, TMeasure, TMeasureOps> fragmentCache)
+        MeasuredCursorFragmentCache<T, TMeasure, TMeasureOps> fragmentCache,
+        TMeasure leftFragmentMeasure,
+        TMeasure rightFragmentMeasure)
     {
         var activeLength = Math.Min(configuration.FocusCapacity, chunk.Length);
         var activeStart = Math.Clamp(
@@ -844,21 +1230,24 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
 
         if (activeStart > 0)
         {
-            var preparedPrefix = chunk.CopySlice(0, activeStart);
-            var prefix = preparedPrefix.ToMeasuredChunk(0, preparedPrefix.Length);
+            var preparedPrefix = chunk.Slice(0, activeStart, leftFragmentMeasure);
+            var prefix = preparedPrefix.ToMeasuredChunk();
             fragmentCache.Register(prefix, preparedPrefix);
             left = left.Append(prefix);
         }
         var suffixStart = activeStart + activeLength;
         if (suffixStart < chunk.Length)
         {
-            var preparedSuffix = chunk.CopySlice(suffixStart, chunk.Length - suffixStart);
-            var suffix = preparedSuffix.ToMeasuredChunk(0, preparedSuffix.Length);
+            var preparedSuffix = chunk.Slice(
+                suffixStart,
+                chunk.Length - suffixStart,
+                rightFragmentMeasure);
+            var suffix = preparedSuffix.ToMeasuredChunk();
             fragmentCache.Register(suffix, preparedSuffix);
             right = right.Prepend(suffix);
         }
 
-        var active = chunk.CopySlice(activeStart, activeLength);
+        var active = chunk.ToBuffer(activeStart, activeLength);
         var empty = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.Empty(
             MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.InvokeEmpty());
         var context = new MeasuredRopeZipperContext<T, TMeasure, TMeasureOps>(
@@ -872,7 +1261,11 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
             configuration,
             fragmentCache,
             default!,
-            default!);
+            default!,
+            DeferredSource: null,
+            DeferredChunk: null,
+            DeferredChunkStart: 0,
+            DeferredGap: 0);
         context = WithMeasures(context);
         Validate(context, checked(left.Measure.First + active.Length + right.Measure.First));
         return context;
@@ -954,9 +1347,9 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
         var flushLength = combined.Length - (combined.Length % flushSize);
         for (var offset = 0; offset < flushLength; offset += flushSize)
         {
-            var prepared = combined.CopySlice(offset, flushSize);
-            var chunk = prepared.ToMeasuredChunk(0, prepared.Length);
-            context.FragmentCache.Register(chunk, prepared);
+            var prepared = combined.PrepareFragment(offset, flushSize);
+            var chunk = prepared.ToMeasuredChunk();
+            context.FragmentCache!.Register(chunk, prepared);
             leftTree = leftTree.Append(chunk);
             RopeCursorDiagnostics.RecordSpineAllocation();
         }
@@ -988,9 +1381,9 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
         var flushed = EmptyTree;
         for (var offset = carryLength; offset < combined.Length; offset += flushSize)
         {
-            var prepared = combined.CopySlice(offset, flushSize);
-            var chunk = prepared.ToMeasuredChunk(0, prepared.Length);
-            context.FragmentCache.Register(chunk, prepared);
+            var prepared = combined.PrepareFragment(offset, flushSize);
+            var chunk = prepared.ToMeasuredChunk();
+            context.FragmentCache!.Register(chunk, prepared);
             flushed = flushed.Append(chunk);
             RopeCursorDiagnostics.RecordSpineAllocation();
         }
@@ -1027,9 +1420,9 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
 
             RopeCursorDiagnostics.RecordNodeVisits();
             tree.TryViewRight(out var chunk, out var rest);
-            var prepared = context.FragmentCache.GetOrMeasure(chunk);
+            var prepared = context.FragmentCache!.GetOrMeasure(chunk);
             var chunkTake = Math.Min(maximum - pulled.Length, prepared.Length);
-            var treeFragment = prepared.CopySlice(prepared.Length - chunkTake, chunkTake);
+            var treeFragment = prepared.ToBuffer(prepared.Length - chunkTake, chunkTake);
             pulled = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.Concat(treeFragment, pulled);
             if (chunkTake == prepared.Length)
             {
@@ -1037,9 +1430,13 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
             }
             else
             {
-                var preparedRemainder = prepared.CopySlice(0, prepared.Length - chunkTake);
-                var remainder = preparedRemainder.ToMeasuredChunk(0, preparedRemainder.Length);
-                context.FragmentCache.Register(remainder, preparedRemainder);
+                var remainderLength = prepared.Length - chunkTake;
+                var preparedRemainder = prepared.Slice(
+                    0,
+                    remainderLength,
+                    prepared.PrefixMeasure(remainderLength));
+                var remainder = preparedRemainder.ToMeasuredChunk();
+                context.FragmentCache!.Register(remainder, preparedRemainder);
                 tree = rest.Append(remainder);
             }
             RopeCursorDiagnostics.RecordSpineAllocation();
@@ -1081,9 +1478,9 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
 
             RopeCursorDiagnostics.RecordNodeVisits();
             tree.TryViewLeft(out var chunk, out var rest);
-            var prepared = context.FragmentCache.GetOrMeasure(chunk);
+            var prepared = context.FragmentCache!.GetOrMeasure(chunk);
             var chunkTake = Math.Min(maximum - pulled.Length, prepared.Length);
-            var treeFragment = prepared.CopySlice(0, chunkTake);
+            var treeFragment = prepared.ToBuffer(0, chunkTake);
             pulled = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.Concat(pulled, treeFragment);
             if (chunkTake == prepared.Length)
             {
@@ -1091,9 +1488,13 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
             }
             else
             {
-                var preparedRemainder = prepared.CopySlice(chunkTake, prepared.Length - chunkTake);
-                var remainder = preparedRemainder.ToMeasuredChunk(0, preparedRemainder.Length);
-                context.FragmentCache.Register(remainder, preparedRemainder);
+                var remainderLength = prepared.Length - chunkTake;
+                var preparedRemainder = prepared.Slice(
+                    chunkTake,
+                    remainderLength,
+                    prepared.SuffixMeasure(chunkTake));
+                var remainder = preparedRemainder.ToMeasuredChunk();
+                context.FragmentCache!.Register(remainder, preparedRemainder);
                 tree = rest.Prepend(remainder);
             }
             RopeCursorDiagnostics.RecordSpineAllocation();
@@ -1127,9 +1528,9 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
         Add(current.RightCarry);
         return bytes;
 
-        void Add(MeasuredCursorBuffer<T, TMeasure, TMeasureOps> buffer)
+        void Add(MeasuredCursorBuffer<T, TMeasure, TMeasureOps>? buffer)
         {
-            if (buffer.Length > 0 && buffers.Add(buffer))
+            if (buffer is not null && buffer.Length > 0 && buffers.Add(buffer))
                 bytes = checked(bytes + buffer.EstimateRetainedBytes());
         }
     }

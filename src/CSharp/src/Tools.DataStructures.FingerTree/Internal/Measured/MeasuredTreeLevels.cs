@@ -75,6 +75,13 @@ internal sealed class EmptyMeasuredTree<TElement, TChild, TMeasure, TMonoid>
     public override (TMeasure MeasureBefore, TChild Hit) LocateTree<TPredicate>(TPredicate predicate, TMeasure accumulator) =>
         throw EmptyAccess();
 
+    /// <inheritdoc/>
+    public override (TMeasure MeasureBefore, TChild Hit, TMeasure MeasureAfter) LocateTreeWithSuffix<TPredicate>(
+        TPredicate predicate,
+        TMeasure accumulator,
+        TMeasure suffixAccumulator) =>
+        throw EmptyAccess();
+
     private static InvalidOperationException EmptyAccess() =>
         new("Internal invariant violation: element access on an empty measured finger-tree level.");
 }
@@ -160,6 +167,13 @@ internal sealed class SingleMeasuredTree<TElement, TChild, TMeasure, TMonoid>(TC
     /// <inheritdoc/>
     public override (TMeasure MeasureBefore, TChild Hit) LocateTree<TPredicate>(TPredicate predicate, TMeasure accumulator) =>
         (accumulator, Element);
+
+    /// <inheritdoc/>
+    public override (TMeasure MeasureBefore, TChild Hit, TMeasure MeasureAfter) LocateTreeWithSuffix<TPredicate>(
+        TPredicate predicate,
+        TMeasure accumulator,
+        TMeasure suffixAccumulator) =>
+        (accumulator, Element, suffixAccumulator);
 }
 
 /// <summary>
@@ -420,5 +434,33 @@ internal sealed class DeepMeasuredTree<TElement, TChild, TMeasure, TMonoid>
         }
 
         return LocateBuffer(predicate, afterMiddle, Suffix);
+    }
+
+    /// <inheritdoc/>
+    public override (TMeasure MeasureBefore, TChild Hit, TMeasure MeasureAfter) LocateTreeWithSuffix<TPredicate>(
+        TPredicate predicate,
+        TMeasure accumulator,
+        TMeasure suffixAccumulator)
+    {
+        var suffixAfterMiddle = TMonoid.Combine(CombineAll(Suffix), suffixAccumulator);
+        var middle = ForceMiddle();
+        var beforeMiddle = TMonoid.Combine(accumulator, CombineAll(Prefix));
+        if (predicate.Invoke(beforeMiddle))
+        {
+            var afterPrefix = TMonoid.Combine(middle.Measure, suffixAfterMiddle);
+            return LocateBufferWithSuffix(predicate, accumulator, Prefix, afterPrefix);
+        }
+
+        var afterMiddle = TMonoid.Combine(beforeMiddle, middle.Measure);
+        if (predicate.Invoke(afterMiddle))
+        {
+            var (nodeBefore, node, nodeAfter) = middle.LocateTreeWithSuffix(
+                predicate,
+                beforeMiddle,
+                suffixAfterMiddle);
+            return LocateBufferWithSuffix(predicate, nodeBefore, node.Children, nodeAfter);
+        }
+
+        return LocateBufferWithSuffix(predicate, afterMiddle, Suffix, suffixAccumulator);
     }
 }

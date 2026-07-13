@@ -346,6 +346,32 @@ public sealed class FingerTree<TElement, TMeasure, TMeasureOps>
         return true;
     }
 
+    /// <summary>
+    /// Internal two-sided locate used by measured cursors: returns the ordered measures strictly before and
+    /// after the hit without reconstructing either result tree.
+    /// </summary>
+    internal bool TryLocateWithSuffix<TPredicate>(
+        TPredicate predicate,
+        out TMeasure measureBefore,
+        [MaybeNullWhen(false)] out TElement found,
+        out TMeasure measureAfter)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>
+    {
+        if (_root.IsEmpty || !predicate.Invoke(_root.Measure))
+        {
+            measureBefore = _root.Measure;
+            found = default;
+            measureAfter = TMeasureOps.Empty;
+            return false;
+        }
+
+        var located = _root.LocateTreeWithSuffix(predicate, TMeasureOps.Empty, TMeasureOps.Empty);
+        measureBefore = located.MeasureBefore;
+        found = located.Hit.Value;
+        measureAfter = located.MeasureAfter;
+        return true;
+    }
+
     /// <summary>Copies the elements to a new array in order. O(n).</summary>
     /// <returns>A new array of the elements in order.</returns>
     public TElement[] ToArray()

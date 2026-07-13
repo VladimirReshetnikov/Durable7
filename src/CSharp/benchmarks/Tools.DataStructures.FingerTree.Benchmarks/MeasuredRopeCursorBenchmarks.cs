@@ -190,8 +190,16 @@ public class MeasuredRopeCursorQueryBenchmarks
     private MeasureAtLeastPredicate _structPredicate;
     private int _position;
 
+    /// <summary>Gets the document-size matrix, or only the locked gate size when explicitly requested.</summary>
+    public IEnumerable<int> DocumentSizes => string.Equals(
+            Environment.GetEnvironmentVariable("TDS_AXIS2_C2_GATE_ONLY"),
+            "1",
+            StringComparison.Ordinal)
+        ? [Axis2BenchmarkPolicy.MeasuredCursorGateDocumentSize]
+        : [1_024, 65_536, 1_048_576];
+
     /// <summary>Gets or sets the number of UTF-16 elements in the source document.</summary>
-    [Params(1_024, 65_536, 1_048_576)]
+    [ParamsSource(nameof(DocumentSizes))]
     public int DocumentSize { get; set; }
 
     /// <summary>Gets or sets the deterministic newline distribution.</summary>

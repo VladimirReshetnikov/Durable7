@@ -234,6 +234,44 @@ public sealed class MeasuredRopeCursorMeasureSeekTests
         Assert.Same(source, seek.Snapshot());
     }
 
+    /// <summary>A located chunk remains exact before and after its first navigation/edit preparation.</summary>
+    [Fact]
+    public void LocatedChunk_NoncommutativeMeasuresSurviveDeferredNavigationAndEditing()
+    {
+        var source = MeasuredRope<char, string, ConcatenatingMeasure>.Create("abcdef".ToCharArray());
+
+        Assert.True(source.TryGetCursorByMeasure(new LengthAtLeast(4), out var located));
+
+        Assert.Equal(3, located.Position);
+        Assert.Equal("abc", located.MeasureBefore);
+        Assert.Equal("def", located.MeasureAfter);
+        Assert.Equal(0, located.GetDiagnostics().ActiveLength);
+        Assert.True(located.TryPeekPrevious(out var previous));
+        Assert.Equal('c', previous);
+        Assert.True(located.TryPeekNext(out var next));
+        Assert.Equal('d', next);
+        located.Validate();
+
+        var moved = located.MoveNext();
+        Assert.Equal(4, moved.Position);
+        Assert.Equal("abcd", moved.MeasureBefore);
+        Assert.Equal("ef", moved.MeasureAfter);
+        Assert.Same(source, moved.Snapshot());
+        moved.Validate();
+
+        var edited = located.Insert('X');
+        Assert.Equal(4, edited.Position);
+        Assert.Equal("abcX", edited.MeasureBefore);
+        Assert.Equal("def", edited.MeasureAfter);
+        Assert.Equal("abcXdef", new string(edited.Snapshot().ToArray()));
+        edited.Validate();
+
+        Assert.Equal(3, located.Position);
+        Assert.Equal("abc", located.MeasureBefore);
+        Assert.Equal("def", located.MeasureAfter);
+        Assert.Same(source, located.Snapshot());
+    }
+
     /// <summary>Null delegate overloads reject null before navigating or changing cursor state.</summary>
     [Fact]
     public void NullDelegate_IsRejectedWithoutChangingState()
@@ -310,6 +348,15 @@ public sealed class MeasuredRopeCursorMeasureSeekTests
         public static int Combine(int left, int right) => left + right;
     }
 
+    private readonly struct ConcatenatingMeasure : IMeasure<char, string>
+    {
+        public static string Empty => string.Empty;
+
+        public static string Measure(char element) => element.ToString();
+
+        public static string Combine(string left, string right) => left + right;
+    }
+
     private readonly struct AtLeast(int threshold) : IMeasurePredicate<int>
     {
         public bool Invoke(int measure) => measure >= threshold;
@@ -318,6 +365,11 @@ public sealed class MeasuredRopeCursorMeasureSeekTests
     private readonly struct CountAbove(int count) : IMeasurePredicate<int>
     {
         public bool Invoke(int measure) => measure > count;
+    }
+
+    private readonly struct LengthAtLeast(int length) : IMeasurePredicate<string>
+    {
+        public bool Invoke(string measure) => measure.Length >= length;
     }
 
     private readonly struct AlwaysTrue : IMeasurePredicate<int>

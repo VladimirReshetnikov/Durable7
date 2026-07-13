@@ -403,7 +403,11 @@ public readonly struct MeasuredRopeCursor<T, TMeasure, TMeasureOps>
             ReferenceEquals(_context.RightCarry, other._context.RightCarry) &&
             ReferenceEquals(_context.RightTree, other._context.RightTree) &&
             _context.Position == other._context.Position &&
-            _context.Configuration == other._context.Configuration;
+            _context.Configuration == other._context.Configuration &&
+            ReferenceEquals(_context.DeferredSource, other._context.DeferredSource) &&
+            Nullable.Equals(_context.DeferredChunk, other._context.DeferredChunk) &&
+            _context.DeferredChunkStart == other._context.DeferredChunkStart &&
+            _context.DeferredGap == other._context.DeferredGap;
     }
 
     internal void Validate() =>

@@ -60,6 +60,17 @@ the owning workspace's decision or benchmark document, including
 [CHAMP T1](../../docs/Hamt/transient-t1-decision.md) and
 [T2](../../docs/Hamt/transient-t2-decision.md) decisions.
 
+On a memory-constrained machine already hosting unrelated .NET work, set
+`TDS_BENCHMARK_IN_PROCESS=1` to select BenchmarkDotNet's no-emit in-process toolchain. This mode
+creates no generated MSBuild project or benchmark child process and is appropriate for paired
+guardrail ratios after the benchmark executable itself has been built in Release with one MSBuild
+node. Do not combine its absolute timings with normal out-of-process evidence; record the mode in
+the decision artifact.
+
+For `MeasuredRopeCursorQueryBenchmarks`, set `TDS_AXIS2_C2_GATE_ONLY=1` to restrict the document-size
+parameter to the predeclared 65,536-element C2 gate while retaining both sparse and dense newline
+distributions. The default remains the complete 1,024 / 65,536 / 1,048,576 matrix.
+
 ## Benchmark classes
 
 | Class | Validates | Baseline |

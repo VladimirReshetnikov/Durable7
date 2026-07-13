@@ -7,6 +7,12 @@ internal static class RopeCursorDiagnostics
     [ThreadStatic]
     private static RopeCursorDiagnosticSession? s_current;
 
+    internal static bool IsSessionActive
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => s_current is not null;
+    }
+
     internal static RopeCursorDiagnosticSession BeginSession()
     {
         var session = new RopeCursorDiagnosticSession(s_current);

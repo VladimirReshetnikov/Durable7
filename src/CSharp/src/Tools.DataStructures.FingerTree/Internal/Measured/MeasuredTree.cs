@@ -116,6 +116,17 @@ internal abstract class MeasuredTree<TElement, TChild, TMeasure, TMonoid> : IEnu
     public abstract (TMeasure MeasureBefore, TChild Hit) LocateTree<TPredicate>(TPredicate predicate, TMeasure accumulator)
         where TPredicate : struct, IMeasurePredicate<TMeasure>;
 
+    /// <summary>
+    /// Locates the boundary element without reconstructing subtrees and additionally returns the ordered
+    /// measure strictly after it, including <paramref name="suffixAccumulator"/>. This is the two-sided
+    /// read-only counterpart to <see cref="SplitTree"/> for callers that need both cached sides but not trees.
+    /// </summary>
+    public abstract (TMeasure MeasureBefore, TChild Hit, TMeasure MeasureAfter) LocateTreeWithSuffix<TPredicate>(
+        TPredicate predicate,
+        TMeasure accumulator,
+        TMeasure suffixAccumulator)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>;
+
     /// <summary>Concatenates this tree with <paramref name="right"/>. O(log min) amortized.</summary>
     /// <param name="right">Tree whose elements follow this tree's elements.</param>
     public MeasuredTree<TElement, TChild, TMeasure, TMonoid> Concat(MeasuredTree<TElement, TChild, TMeasure, TMonoid> right) =>
@@ -222,6 +233,36 @@ internal abstract class MeasuredTree<TElement, TChild, TMeasure, TMonoid> : IEnu
         }
 
         return (accumulator, values[^1]);
+    }
+
+    /// <summary>Two-sided allocation-free locate within a one-through-four element buffer.</summary>
+    private protected static (TMeasure MeasureBefore, TChild Hit, TMeasure MeasureAfter)
+        LocateBufferWithSuffix<TPredicate>(
+            TPredicate predicate,
+            TMeasure accumulator,
+            TChild[] values,
+            TMeasure suffixAccumulator)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>
+    {
+        for (var i = 0; i < values.Length - 1; i++)
+        {
+            var next = TMonoid.Combine(accumulator, values[i].Measure);
+            if (predicate.Invoke(next))
+                return (accumulator, values[i], CombineSuffix(values, i + 1, suffixAccumulator));
+            accumulator = next;
+        }
+
+        return (accumulator, values[^1], suffixAccumulator);
+    }
+
+    private protected static TMeasure CombineSuffix(
+        TChild[] values,
+        int start,
+        TMeasure suffixAccumulator)
+    {
+        for (var i = values.Length - 1; i >= start; i--)
+            suffixAccumulator = TMonoid.Combine(values[i].Measure, suffixAccumulator);
+        return suffixAccumulator;
     }
 
     /// <summary>Groups a buffer of two or more elements into two-or-three-child nodes.</summary>

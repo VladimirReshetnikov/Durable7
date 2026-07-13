@@ -45,6 +45,40 @@ public sealed class MeasuredRopeCursorMeasureCacheTests
         Assert.Same(source, cursorStruct.Snapshot());
     }
 
+    /// <summary>Measure seek scans one ordinary chunk once and defers focus preparation until it is needed.</summary>
+    [Fact]
+    public void MeasureSeek_UsesOneChunkScanAndPreparesOnlyOnFirstNavigation()
+    {
+        var source = CreateSource(4098);
+
+        InstrumentedCountMeasure.Reset();
+        Assert.True(source.TryGetCursorByMeasure(new CountAbove(2040), out var located));
+        Assert.Equal(2048, InstrumentedCountMeasure.MeasureCalls);
+        Assert.Equal(0, located.GetDiagnostics().ActiveLength);
+        Assert.Equal(2040, located.Position);
+        Assert.Equal(2040, located.MeasureBefore);
+        Assert.Equal(source.Count - 2040, located.MeasureAfter);
+
+        InstrumentedCountMeasure.Reset();
+        var moved = located.MoveNext();
+        Assert.Equal(2048, InstrumentedCountMeasure.MeasureCalls);
+        Assert.Equal(2041, moved.Position);
+        Assert.Equal(2041, moved.MeasureBefore);
+
+        InstrumentedCountMeasure.Reset();
+        moved = moved.MoveNext();
+        Assert.Equal(0, InstrumentedCountMeasure.MeasureCalls);
+        Assert.Equal(2042, moved.Position);
+
+        InstrumentedCountMeasure.Reset();
+        var edited = located.Insert(-1);
+        Assert.Equal(2049, InstrumentedCountMeasure.MeasureCalls);
+        Assert.Equal(source.Count + 1, edited.Count);
+        Assert.Equal(2041, edited.Position);
+        Assert.Same(source, located.Snapshot());
+        Assert.NotSame(source, edited.Snapshot());
+    }
+
     /// <summary>Focus-local edits measure only bounded new content, while a pull never exceeds chunk plus focus.</summary>
     [Fact]
     public void LocalEditsAndBoundaryMovement_RespectMeasureCallbackCeilings()
