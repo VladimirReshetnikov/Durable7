@@ -42,9 +42,11 @@ included are:
 - `ft_rope`, a generic persistent chunked positional sequence backed by measured chunk leaves, plus
   `ft_rope_cursor`, an explicit-lifetime root-sharing gap cursor with persistent edits and retained branches;
 - `ft_measured_rope`, a generic persistent chunked sequence with cached user measures and cumulative-measure
-  navigation;
+  navigation, plus `ft_measured_rope_cursor`, an explicit-lifetime gap cursor with ordered before/after measures
+  and absolute monotone-prefix search;
 - `ft_text_rope`, a character-rope facade backed by `ft_measured_rope` with a cached newline measure, insertion,
-  removal, indexing, O(1) line count, O(log n) line navigation, and validated line/column-to-offset conversion.
+  removal, indexing, O(1) line count, O(log n) line navigation, validated line/column-to-offset conversion, and
+  a nominal `ft_text_rope_cursor` facade.
 
 The central C++ lazy-middle publication machinery is now present in the C core: endpoint overflow and boundary
 pop repairs share memoized middle cells across persistent versions, and independently held immutable handles may

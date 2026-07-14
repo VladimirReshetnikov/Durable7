@@ -72,9 +72,10 @@ Implemented in this checkpoint:
   plus an explicit-lifetime snapshot-plus-gap cursor with retained branching, copied peeks, positional navigation,
   single/range insertion, deletion, unconditional replacement, and snapshot publication;
 - generic measured rope with cached per-chunk user measures, whole/prefix measure reads, cumulative-measure locate
-  and split, split, concat, insertion, removal, and traversal;
+  and split, split, concat, insertion, removal, and traversal, plus an explicit-lifetime cursor with ordered
+  measure partitions, absolute monotone-prefix search, persistent edits, and snapshots;
 - character text rope facade, backed by the newline-measured rope, with insertion/removal/indexing and
-  logarithmic line/offset navigation plus column-validated offset lookup;
+  logarithmic line/offset navigation plus column-validated offset lookup and a nominal text cursor facade;
 - type-erased `ft_rrb_vector` with 32-element leaves, radix-indexed regular branches without size
   tables, relaxed branches with cumulative `size_t` prefixes, atomic node references, persistent
   endpoint/concat/split/range edits, ordered visitation, structural diagnostics, and an append-only
@@ -390,6 +391,20 @@ array insertion is O(m + log n) plus boundary normalization. The cursor is not t
 no snapshot memo, callback/allocation ceiling, or O(1)-amortized local editing. Use `ft_rope_cursor_try_size`
 when allocation failure must remain distinguishable from zero; the convenience size form follows `ft_rope_size`.
 
+`ft_measured_rope_cursor` applies the same explicit ownership, aliasing, failure-publication, copied-peek, and gap
+rules to one exact `ft_measured_rope` version. `measure_before` aggregates `[0, position)` and `measure_after`
+aggregates `[position, size)` in left-to-right monoid order; no inverse, commutativity, or element equality is
+assumed. Absolute measure search returns the gap before the first element whose inclusive prefix satisfies the
+caller predicate. A miss, including an empty rope, returns `found == false` with a usable end cursor. Known-count
+concat and insertion reject `size_t` overflow before publishing a result.
+
+Cursor copy, movement, positional seek, and snapshot perform O(1) structural work plus allocation of a self-owned
+policy context. Ordered partitions, peeks, point edits, and measure search are O(log n) plus bounded chunk work;
+range insertion is O(m + log n). `ft_text_rope_cursor` is a nominal wrapper over the newline-measured cursor: it
+preserves byte/`char` positions, LF-only zero-based line/column helpers, and `ft_text_rope` snapshots. Neither
+cursor claims the C# focused zipper, snapshot memo, callback/allocation ceiling, amortized locality, or benchmark
+evidence.
+
 `ft_text_rope` is based on `ft_measured_rope<char>` with a newline-count measure. Line count is O(1), while
 `line_of_offset`, `line_start_offset`, `line_column_of`, and the column-validated `offset_of` use measured
 descent plus at most one bounded chunk scan.
@@ -404,3 +419,5 @@ descent plus at most one bounded chunk scan.
   operands, not just structural compatibility.
 - `ft_rope_cursor` is an explicit owned C handle rather than a C++ value type. Its peeks copy values instead of
   returning borrowed pointers, and navigation can fail while allocating the cursor's self-owned policy context.
+- Measured search reports hit/miss through `bool* found` and always publishes a usable cursor on successful search;
+  C++ and several managed ports instead return a separate search-result value.

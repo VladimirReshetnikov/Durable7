@@ -48,12 +48,18 @@ line information, and exits non-zero if any test increments the failure count. A
   re-coalescing, and exact-boundary concat for both positional and measured ropes.
 - `measured rope` covers cached and prefix measures, cumulative-measure locate/split, chunk-local editing,
   coalescing, bounded chunk counts, append, and persistence.
+- `measured rope cursor`, `measured rope cursor ordered measure`, `measured rope cursor model`, and
+  `measured rope cursor concurrent readers` cover explicit handle ownership, chunk seams, ordered partitions,
+  absolute search hits/misses/empty ropes, retained branches, failure-output preservation, a noncommutative
+  measure, a deterministic 750-command model, and racing distinct-handle reads/branches.
 - `priority queue` covers minimum-first drain order and FIFO stability through a 128-element equal-priority run.
 - `interval tree` covers the signed 64-bit closed-interval facade.
 - `generic interval tree` covers caller-supplied endpoint policies, invalid interval rejection, max-high descent,
   shared-annotation lifetime, and comparison-count complexity ceilings.
 - `text rope` covers measured construction/editing, indexing, line count, both directions of line/column navigation,
   invalid-column rejection, bounded chunk counts, and traversal.
+- `text rope cursor` covers the nominal text facade, newline partitions/search, line/column interoperation,
+  C-string edits, retained snapshots, miss-to-end behavior, and persistence.
 - `text rope long edit script` covers retained snapshots and repeated edits across a multi-line document, comparing
   indexing, traversal, line counts, and line/column navigation against a plain C string model.
 

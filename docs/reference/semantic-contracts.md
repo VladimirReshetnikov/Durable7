@@ -269,8 +269,7 @@ Shared obligations:
 - Builders must document mutation, snapshot publication, and whether later builder changes can affect
   previously produced immutable ropes.
 
-C#, C, C++, Haskell, Kotlin, and Rust ship positional cursors; C#, C++, Haskell, Kotlin, and Rust
-also ship measured/text cursors. No deque, RRB,
+C#, C, C++, Haskell, Kotlin, and Rust ship positional and measured/text cursors. No deque, RRB,
 raw-finger-tree, reversible-deque, or Tungsten cursor is implied by those surfaces. Every shipped
 cursor shares these observable obligations:
 
@@ -320,16 +319,16 @@ output unchanged. Peeks copy through the rope's value policy rather than returni
 point edits are O(log n) plus bounded chunk work, while array insertion adds O(m) capture work. It makes no
 zipper, memo-cell, allocation-ceiling, or O(1)-amortized locality claim.
 
-The C#, C++, Haskell, Kotlin, and Rust measured cursors additionally share these result semantics:
+The C#, C, C++, Haskell, Kotlin, and Rust measured cursors additionally share these result semantics:
 
 - `MeasureBefore` aggregates `[0, Position)` and `MeasureAfter` aggregates `[Position, Count)`;
   combining them in that order yields the whole version's measure without assuming an inverse,
   commutativity, element equality, or a default-value identity.
 - Absolute measure seek selects the gap before the first element whose inclusive prefix satisfies a
-  lawful monotone predicate. True-at-empty selects zero for a nonempty rope; misses and empty ropes
+  lawful monotone predicate. A predicate already true at the identity selects zero for a nonempty rope; misses and empty ropes
   return `false` with an end cursor whose before measure is the whole measure.
 - The newline specialization uses the language's existing zero-based line/column rules. C# and
-  Kotlin positions are UTF-16 code units; C++ positions are `std::string` bytes; Haskell positions
+  Kotlin positions are UTF-16 code units; C and C++ positions are `char`/`std::string` bytes; Haskell positions
   are `Char` elements; Rust positions are Unicode scalar values. None denotes a grapheme-cluster index.
   Navigation and edits preserve access to the existing text helpers.
 
@@ -354,6 +353,16 @@ lvalue-only, and move operations copy the shared root so the source remains vali
 `text_rope_cursor` alias preserves the existing byte-oriented text facade. Known-count growth uses
 checked `size_t` preflights before new element-measure callbacks. It claims no focused zipper,
 snapshot memo, allocation ceiling, callback-count ceiling, or amortized locality.
+
+C `ft_measured_rope_cursor` extends the explicit owned-handle checkpoint with ordered before/after partitions,
+absolute monotone-prefix search, and a usable end cursor on a miss. Copy, movement, positional seek, and snapshot
+perform O(1) structural work plus a self-owned policy-context allocation; partitions, copied peeks, point edits,
+and search are O(log n) plus bounded chunk work, and range insertion is O(m + log n). The nominal
+`ft_text_rope_cursor` preserves `ft_text_rope` snapshots and its byte-oriented LF-only line/column helpers.
+Known-count measured concat/insertion and derived text line count reject `size_t` overflow before publication.
+Callbacks are infallible under the existing C boundary, so no callback-retry guarantee is claimed. Neither C
+cursor claims a focused zipper, snapshot memo, callback/allocation ceiling, amortized locality, or benchmark
+evidence.
 
 Haskell's opaque `MeasuredRopeCursor v a` is the analogous snapshot-plus-gap checkpoint over the
 existing chunked measured finger tree. `measureBefore`/`measureAfter` preserve noncommutative order,

@@ -811,6 +811,36 @@ replacement, and snapshot operations leave the source reusable on failure. Disti
 uninitialized or disposed; exact source/result aliasing is supported. The checkpoint retains the canonical rope
 root plus its gap and makes no focused-zipper or amortized-locality claim.
 
+Use `ft_measured_rope_get_cursor` for the same retained gap semantics over a custom measured rope.
+`ft_measured_rope_cursor_measure_before` and `measure_after` preserve left-to-right monoid order. Absolute search
+uses the existing cumulative predicate contract and returns a usable end cursor when `found` is false:
+
+```c
+ft_measured_rope_cursor cursor;
+bool found = false;
+int threshold = 100;
+ft_status status = ft_measured_rope_get_cursor_by_measure(
+    &measured,
+    sum_reaches, /* caller predicate over the cumulative measure */
+    &threshold,
+    &found,
+    &cursor);
+
+if (status == FT_STATUS_OK) {
+    /* A hit selects the first satisfying element gap; a miss leaves cursor at measured.size. */
+    int prefix;
+    status = ft_measured_rope_cursor_measure_before(&cursor, &prefix);
+}
+
+ft_measured_rope_cursor_dispose(&cursor);
+```
+
+`ft_text_rope_get_cursor` and `ft_text_rope_get_cursor_by_measure` wrap that cursor nominally. Text cursor
+snapshots remain `ft_text_rope` values, `line_column` observes the cursor gap, and positions retain the facade's
+byte-sized C `char` and LF-only zero-based line/column semantics. Cursor edits include character, C-string, and
+text-rope insertion. The measured and text cursor handles follow the same copy/move/dispose, exact-alias, and
+success-only publication rules as `ft_rope_cursor`.
+
 `ft_text_rope_line_count` follows the current text-rope facade semantics tested by the C workspace:
 an empty trailing line after a final newline is counted. `ft_text_rope_line_of_offset` and
 `ft_text_rope_line_start_offset` expose the two component navigations directly. `ft_text_rope_offset_of`
@@ -851,8 +881,8 @@ including from a destroy callback during disposal, is unsupported.
 | Closed intervals over `int64_t` endpoints | `ft_interval_tree_i64` |
 | Closed intervals over custom endpoint types | `ft_interval_tree` |
 | Chunked positional sequence and version-bound gap editing | `ft_rope`, `ft_rope_cursor` |
-| Chunked sequence with custom cumulative measure | `ft_measured_rope` |
-| Newline-aware character content | `ft_text_rope` |
+| Chunked sequence with custom cumulative measure and gap editing | `ft_measured_rope`, `ft_measured_rope_cursor` |
+| Newline-aware character content and gap editing | `ft_text_rope`, `ft_text_rope_cursor` |
 
 For coverage details, see [validation.md](validation.md). For cross-language contract alignment, see
 the repository [porting and semantic parity guide](../../../../docs/guides/porting-and-semantic-parity.md).

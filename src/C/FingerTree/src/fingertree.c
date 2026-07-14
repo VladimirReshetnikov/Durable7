@@ -8598,12 +8598,27 @@ ft_status ft_measured_rope_concat(
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
+    size_t left_size = 0;
+    size_t right_size = 0;
+    size_t combined_size = 0;
+    ft_status status = ft_measured_rope_try_size(left, &left_size);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    status = ft_measured_rope_try_size(right, &right_size);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    if (ft_add_overflows(left_size, right_size, &combined_size)) {
+        return FT_STATUS_OVERFLOW;
+    }
+
     if (ft_measured_rope_empty(left) || ft_measured_rope_empty(right)) {
         return ft_measured_rope_concat_raw(left, right, result);
     }
 
     ft_measured_rope_chunk left_chunk;
-    ft_status status = ft_tree_back(&left->tree, &left_chunk);
+    status = ft_tree_back(&left->tree, &left_chunk);
     if (status != FT_STATUS_OK) {
         return status;
     }
@@ -8850,9 +8865,16 @@ ft_status ft_measured_rope_insert_at(
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
-    const size_t size = ft_measured_rope_size(rope);
+    size_t size = 0;
+    ft_status status = ft_measured_rope_try_size(rope, &size);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
     if (index > size) {
         return FT_STATUS_OUT_OF_RANGE;
+    }
+    if (size == SIZE_MAX) {
+        return FT_STATUS_OVERFLOW;
     }
 
     if (size == 0) {
@@ -8869,7 +8891,7 @@ ft_status ft_measured_rope_insert_at(
     ft_tree left_tree;
     ft_tree right_tree;
     ft_measured_rope_chunk hit;
-    ft_status status = ft_tree_split(
+    status = ft_tree_split(
         &rope->tree,
         ft_measured_rope_count_reaches,
         (void*)&threshold,
@@ -9095,8 +9117,9 @@ ft_status ft_measured_rope_locate_by_measure(
     }
 
     if (!tree_found) {
+        const size_t rope_size = *ft_measured_rope_pair_length_const(pair_before);
         *found = false;
-        *index = ft_measured_rope_size(rope);
+        *index = rope_size;
         if (measure_before != NULL) {
             (void)memcpy(
                 measure_before,
@@ -9151,8 +9174,19 @@ ft_status ft_measured_rope_locate_by_measure(
         (void)memcpy(accumulator, combined, rope->user_measure.size);
     }
 
+    size_t rope_size = 0;
+    status = ft_measured_rope_try_size(rope, &rope_size);
+    if (status != FT_STATUS_OK) {
+        free(accumulator);
+        free(element_measure);
+        free(combined);
+        ft_measured_rope_chunk_destroy_value(rope->chunk_context, &chunk);
+        free(pair_before);
+        return status;
+    }
+
     *found = false;
-    *index = ft_measured_rope_size(rope);
+    *index = rope_size;
     if (measure_before != NULL) {
         (void)memcpy(measure_before, accumulator, rope->user_measure.size);
     }
@@ -9234,6 +9268,537 @@ ft_status ft_measured_rope_visit(const ft_measured_rope* rope, ft_visit_fn visit
     visit_context.visitor = visitor;
     visit_context.context = context;
     return ft_tree_visit(&rope->tree, ft_measured_rope_visit_chunk, &visit_context);
+}
+
+static bool ft_measured_rope_cursor_is_valid(const ft_measured_rope_cursor* cursor)
+{
+    return cursor != NULL && cursor->rope.chunk_context != NULL &&
+        cursor->rope.tree.policy != NULL && cursor->rope.tree.rep != NULL;
+}
+
+static ft_status ft_measured_rope_cursor_stage(
+    const ft_measured_rope* rope,
+    size_t position,
+    ft_measured_rope_cursor* cursor)
+{
+    (void)memset(cursor, 0, sizeof(*cursor));
+    ft_status status = ft_measured_rope_copy(rope, &cursor->rope);
+    if (status == FT_STATUS_OK) {
+        cursor->position = position;
+    }
+    return status;
+}
+
+static void ft_measured_rope_cursor_publish(
+    const ft_measured_rope_cursor* source,
+    ft_measured_rope_cursor* staged,
+    ft_measured_rope_cursor* result)
+{
+    if (result == source) {
+        ft_measured_rope_cursor_dispose(result);
+    }
+    ft_measured_rope_cursor_move(result, staged);
+}
+
+ft_status ft_measured_rope_get_cursor(
+    const ft_measured_rope* rope,
+    size_t position,
+    ft_measured_rope_cursor* result)
+{
+    if (rope == NULL || result == NULL || rope->chunk_context == NULL ||
+        rope->tree.policy == NULL || rope->tree.rep == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    size_t size = 0;
+    ft_status status = ft_measured_rope_try_size(rope, &size);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    if (position > size) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    ft_measured_rope_cursor staged;
+    status = ft_measured_rope_cursor_stage(rope, position, &staged);
+    if (status == FT_STATUS_OK) {
+        ft_measured_rope_cursor_move(result, &staged);
+    }
+    return status;
+}
+
+ft_status ft_measured_rope_get_cursor_by_measure(
+    const ft_measured_rope* rope,
+    ft_measure_predicate_fn predicate,
+    void* predicate_context,
+    bool* found,
+    ft_measured_rope_cursor* result)
+{
+    if (rope == NULL || predicate == NULL || found == NULL || result == NULL ||
+        rope->chunk_context == NULL || rope->tree.policy == NULL || rope->tree.rep == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    bool staged_found = false;
+    size_t position = 0;
+    ft_status status = ft_measured_rope_locate_by_measure(
+        rope, predicate, predicate_context, &staged_found, &position, NULL, NULL);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    ft_measured_rope_cursor staged;
+    status = ft_measured_rope_cursor_stage(rope, position, &staged);
+    if (status == FT_STATUS_OK) {
+        ft_measured_rope_cursor_move(result, &staged);
+        *found = staged_found;
+    }
+    return status;
+}
+
+ft_status ft_measured_rope_cursor_copy(
+    const ft_measured_rope_cursor* source,
+    ft_measured_rope_cursor* destination)
+{
+    if (!ft_measured_rope_cursor_is_valid(source) || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (source == destination) {
+        return FT_STATUS_OK;
+    }
+
+    ft_measured_rope_cursor staged;
+    ft_status status = ft_measured_rope_cursor_stage(&source->rope, source->position, &staged);
+    if (status == FT_STATUS_OK) {
+        ft_measured_rope_cursor_move(destination, &staged);
+    }
+    return status;
+}
+
+void ft_measured_rope_cursor_move(
+    ft_measured_rope_cursor* destination,
+    ft_measured_rope_cursor* source)
+{
+    if (destination == NULL || source == NULL || destination == source) {
+        return;
+    }
+    (void)memset(destination, 0, sizeof(*destination));
+    ft_measured_rope_move(&destination->rope, &source->rope);
+    destination->position = source->position;
+    source->position = 0;
+}
+
+void ft_measured_rope_cursor_dispose(ft_measured_rope_cursor* cursor)
+{
+    if (cursor != NULL) {
+        ft_measured_rope_dispose(&cursor->rope);
+        cursor->position = 0;
+    }
+}
+
+bool ft_measured_rope_cursor_valid(const ft_measured_rope_cursor* cursor)
+{
+    return ft_measured_rope_cursor_is_valid(cursor);
+}
+
+bool ft_measured_rope_cursor_empty(const ft_measured_rope_cursor* cursor)
+{
+    return !ft_measured_rope_cursor_is_valid(cursor) || ft_measured_rope_empty(&cursor->rope);
+}
+
+size_t ft_measured_rope_cursor_size(const ft_measured_rope_cursor* cursor)
+{
+    return ft_measured_rope_cursor_is_valid(cursor) ? ft_measured_rope_size(&cursor->rope) : 0;
+}
+
+ft_status ft_measured_rope_cursor_try_size(const ft_measured_rope_cursor* cursor, size_t* size)
+{
+    if (!ft_measured_rope_cursor_is_valid(cursor) || size == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_try_size(&cursor->rope, size);
+}
+
+size_t ft_measured_rope_cursor_position(const ft_measured_rope_cursor* cursor)
+{
+    return ft_measured_rope_cursor_is_valid(cursor) ? cursor->position : 0;
+}
+
+ft_status ft_measured_rope_cursor_is_at_start(const ft_measured_rope_cursor* cursor, bool* result)
+{
+    if (!ft_measured_rope_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    *result = cursor->position == 0;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_measured_rope_cursor_is_at_end(const ft_measured_rope_cursor* cursor, bool* result)
+{
+    if (!ft_measured_rope_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    size_t size = 0;
+    ft_status status = ft_measured_rope_try_size(&cursor->rope, &size);
+    if (status == FT_STATUS_OK) {
+        *result = cursor->position == size;
+    }
+    return status;
+}
+
+ft_status ft_measured_rope_cursor_measure_before(
+    const ft_measured_rope_cursor* cursor,
+    void* destination)
+{
+    if (!ft_measured_rope_cursor_is_valid(cursor) || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_prefix_measure(&cursor->rope, cursor->position, destination);
+}
+
+ft_status ft_measured_rope_cursor_measure_after(
+    const ft_measured_rope_cursor* cursor,
+    void* destination)
+{
+    if (!ft_measured_rope_cursor_is_valid(cursor) || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_measured_rope_split_result split;
+    ft_status status = ft_measured_rope_split_at(&cursor->rope, cursor->position, &split);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    status = ft_measured_rope_measure(&split.right, destination);
+    ft_measured_rope_dispose(&split.left);
+    ft_measured_rope_dispose(&split.right);
+    return status;
+}
+
+ft_status ft_measured_rope_cursor_try_peek_previous(
+    const ft_measured_rope_cursor* cursor,
+    bool* found,
+    void* value)
+{
+    if (!ft_measured_rope_cursor_is_valid(cursor) || found == NULL || value == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        *found = false;
+        return FT_STATUS_OK;
+    }
+    ft_status status = ft_measured_rope_at(&cursor->rope, cursor->position - 1u, value);
+    if (status == FT_STATUS_OK) {
+        *found = true;
+    }
+    return status;
+}
+
+ft_status ft_measured_rope_cursor_try_peek_next(
+    const ft_measured_rope_cursor* cursor,
+    bool* found,
+    void* value)
+{
+    if (!ft_measured_rope_cursor_is_valid(cursor) || found == NULL || value == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    size_t size = 0;
+    ft_status status = ft_measured_rope_try_size(&cursor->rope, &size);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    if (cursor->position == size) {
+        *found = false;
+        return FT_STATUS_OK;
+    }
+    status = ft_measured_rope_at(&cursor->rope, cursor->position, value);
+    if (status == FT_STATUS_OK) {
+        *found = true;
+    }
+    return status;
+}
+
+ft_status ft_measured_rope_cursor_seek(
+    const ft_measured_rope_cursor* cursor,
+    size_t position,
+    ft_measured_rope_cursor* result)
+{
+    if (!ft_measured_rope_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    size_t size = 0;
+    ft_status status = ft_measured_rope_try_size(&cursor->rope, &size);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    if (position > size) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    if (result == cursor && position == cursor->position) {
+        return FT_STATUS_OK;
+    }
+    ft_measured_rope_cursor staged;
+    status = ft_measured_rope_cursor_stage(&cursor->rope, position, &staged);
+    if (status == FT_STATUS_OK) {
+        ft_measured_rope_cursor_publish(cursor, &staged, result);
+    }
+    return status;
+}
+
+ft_status ft_measured_rope_cursor_move_previous(
+    const ft_measured_rope_cursor* cursor,
+    ft_measured_rope_cursor* result)
+{
+    if (!ft_measured_rope_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        return ft_measured_rope_empty(&cursor->rope) ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_measured_rope_cursor_seek(cursor, cursor->position - 1u, result);
+}
+
+ft_status ft_measured_rope_cursor_move_next(
+    const ft_measured_rope_cursor* cursor,
+    ft_measured_rope_cursor* result)
+{
+    if (!ft_measured_rope_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    size_t size = 0;
+    ft_status status = ft_measured_rope_try_size(&cursor->rope, &size);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_measured_rope_cursor_seek(cursor, cursor->position + 1u, result);
+}
+
+ft_status ft_measured_rope_cursor_seek_by_measure(
+    const ft_measured_rope_cursor* cursor,
+    ft_measure_predicate_fn predicate,
+    void* predicate_context,
+    bool* found,
+    ft_measured_rope_cursor* result)
+{
+    if (!ft_measured_rope_cursor_is_valid(cursor) || predicate == NULL ||
+        found == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    bool staged_found = false;
+    size_t position = 0;
+    ft_status status = ft_measured_rope_locate_by_measure(
+        &cursor->rope, predicate, predicate_context, &staged_found, &position, NULL, NULL);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_measured_rope_cursor staged;
+    status = ft_measured_rope_cursor_stage(&cursor->rope, position, &staged);
+    if (status == FT_STATUS_OK) {
+        ft_measured_rope_cursor_publish(cursor, &staged, result);
+        *found = staged_found;
+    }
+    return status;
+}
+
+ft_status ft_measured_rope_cursor_insert(
+    const ft_measured_rope_cursor* cursor,
+    const void* value,
+    ft_measured_rope_cursor* result)
+{
+    if (!ft_measured_rope_cursor_is_valid(cursor) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == SIZE_MAX) {
+        return FT_STATUS_OVERFLOW;
+    }
+    ft_measured_rope edited;
+    ft_status status = ft_measured_rope_insert_at(&cursor->rope, cursor->position, value, &edited);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_measured_rope_cursor staged = {0};
+    ft_measured_rope_move(&staged.rope, &edited);
+    staged.position = cursor->position + 1u;
+    ft_measured_rope_cursor_publish(cursor, &staged, result);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_measured_rope_cursor_insert_rope(
+    const ft_measured_rope_cursor* cursor,
+    const ft_measured_rope* values,
+    ft_measured_rope_cursor* result)
+{
+    if (!ft_measured_rope_cursor_is_valid(cursor) || values == NULL || result == NULL ||
+        values->chunk_context == NULL || values->tree.policy == NULL || values->tree.rep == NULL ||
+        !ft_measured_rope_compatible(&cursor->rope, values)) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    size_t value_count = 0;
+    ft_status status = ft_measured_rope_try_size(values, &value_count);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    if (value_count == 0) {
+        return ft_measured_rope_cursor_copy(cursor, result);
+    }
+    size_t next_position = 0;
+    if (ft_add_overflows(cursor->position, value_count, &next_position)) {
+        return FT_STATUS_OVERFLOW;
+    }
+
+    ft_measured_rope_split_result split;
+    status = ft_measured_rope_split_at(&cursor->rope, cursor->position, &split);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_measured_rope prefix;
+    status = ft_measured_rope_concat(&split.left, values, &prefix);
+    if (status != FT_STATUS_OK) {
+        ft_measured_rope_dispose(&split.left);
+        ft_measured_rope_dispose(&split.right);
+        return status;
+    }
+    ft_measured_rope edited;
+    status = ft_measured_rope_concat(&prefix, &split.right, &edited);
+    ft_measured_rope_dispose(&prefix);
+    ft_measured_rope_dispose(&split.left);
+    ft_measured_rope_dispose(&split.right);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_measured_rope_cursor staged = {0};
+    ft_measured_rope_move(&staged.rope, &edited);
+    staged.position = next_position;
+    ft_measured_rope_cursor_publish(cursor, &staged, result);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_measured_rope_cursor_insert_array(
+    const ft_measured_rope_cursor* cursor,
+    const void* values,
+    size_t count,
+    ft_measured_rope_cursor* result)
+{
+    if (!ft_measured_rope_cursor_is_valid(cursor) || result == NULL ||
+        (values == NULL && count != 0)) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (count == 0) {
+        return ft_measured_rope_cursor_copy(cursor, result);
+    }
+    ft_measured_rope range;
+    ft_status status = ft_measured_rope_from_array(
+        &range, &cursor->rope.value_type, &cursor->rope.user_measure, values, count);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    status = ft_measured_rope_cursor_insert_rope(cursor, &range, result);
+    ft_measured_rope_dispose(&range);
+    return status;
+}
+
+ft_status ft_measured_rope_cursor_delete_previous(
+    const ft_measured_rope_cursor* cursor,
+    ft_measured_rope_cursor* result)
+{
+    if (!ft_measured_rope_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        return ft_measured_rope_empty(&cursor->rope) ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_measured_rope edited;
+    ft_status status = ft_measured_rope_remove_at(&cursor->rope, cursor->position - 1u, &edited);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_measured_rope_cursor staged = {0};
+    ft_measured_rope_move(&staged.rope, &edited);
+    staged.position = cursor->position - 1u;
+    ft_measured_rope_cursor_publish(cursor, &staged, result);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_measured_rope_cursor_delete_next(
+    const ft_measured_rope_cursor* cursor,
+    ft_measured_rope_cursor* result)
+{
+    if (!ft_measured_rope_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    size_t size = 0;
+    ft_status status = ft_measured_rope_try_size(&cursor->rope, &size);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_measured_rope edited;
+    status = ft_measured_rope_remove_at(&cursor->rope, cursor->position, &edited);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_measured_rope_cursor staged = {0};
+    ft_measured_rope_move(&staged.rope, &edited);
+    staged.position = cursor->position;
+    ft_measured_rope_cursor_publish(cursor, &staged, result);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_measured_rope_cursor_replace_next(
+    const ft_measured_rope_cursor* cursor,
+    const void* value,
+    ft_measured_rope_cursor* result)
+{
+    if (!ft_measured_rope_cursor_is_valid(cursor) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    size_t size = 0;
+    ft_status status = ft_measured_rope_try_size(&cursor->rope, &size);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_measured_rope removed;
+    status = ft_measured_rope_remove_at(&cursor->rope, cursor->position, &removed);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_measured_rope edited;
+    status = ft_measured_rope_insert_at(&removed, cursor->position, value, &edited);
+    ft_measured_rope_dispose(&removed);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_measured_rope_cursor staged = {0};
+    ft_measured_rope_move(&staged.rope, &edited);
+    staged.position = cursor->position;
+    ft_measured_rope_cursor_publish(cursor, &staged, result);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_measured_rope_cursor_snapshot(
+    const ft_measured_rope_cursor* cursor,
+    ft_measured_rope* result)
+{
+    if (!ft_measured_rope_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (result == &cursor->rope) {
+        return FT_STATUS_OK;
+    }
+    ft_measured_rope staged;
+    ft_status status = ft_measured_rope_copy(&cursor->rope, &staged);
+    if (status == FT_STATUS_OK) {
+        ft_measured_rope_move(result, &staged);
+    }
+    return status;
 }
 
 typedef struct ft_priority_entry {
@@ -10693,6 +11258,9 @@ ft_status ft_text_rope_try_line_count(const ft_text_rope* rope, size_t* count)
     size_t newlines = 0;
     const ft_status status = ft_measured_rope_measure(&rope->rope, &newlines);
     if (status == FT_STATUS_OK) {
+        if (newlines == SIZE_MAX) {
+            return FT_STATUS_OVERFLOW;
+        }
         *count = newlines + 1u;
     }
 
@@ -10842,4 +11410,272 @@ ft_status ft_text_rope_visit(const ft_text_rope* rope, ft_visit_fn visitor, void
     }
 
     return ft_measured_rope_visit(&rope->rope, visitor, context);
+}
+
+ft_status ft_text_rope_get_cursor(
+    const ft_text_rope* rope,
+    size_t position,
+    ft_text_rope_cursor* result)
+{
+    if (rope == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_get_cursor(&rope->rope, position, &result->cursor);
+}
+
+ft_status ft_text_rope_get_cursor_by_measure(
+    const ft_text_rope* rope,
+    ft_measure_predicate_fn predicate,
+    void* predicate_context,
+    bool* found,
+    ft_text_rope_cursor* result)
+{
+    if (rope == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_get_cursor_by_measure(
+        &rope->rope, predicate, predicate_context, found, &result->cursor);
+}
+
+ft_status ft_text_rope_cursor_copy(
+    const ft_text_rope_cursor* source,
+    ft_text_rope_cursor* destination)
+{
+    if (source == NULL || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_copy(&source->cursor, &destination->cursor);
+}
+
+void ft_text_rope_cursor_move(ft_text_rope_cursor* destination, ft_text_rope_cursor* source)
+{
+    if (destination != NULL && source != NULL) {
+        ft_measured_rope_cursor_move(&destination->cursor, &source->cursor);
+    }
+}
+
+void ft_text_rope_cursor_dispose(ft_text_rope_cursor* cursor)
+{
+    if (cursor != NULL) {
+        ft_measured_rope_cursor_dispose(&cursor->cursor);
+    }
+}
+
+bool ft_text_rope_cursor_valid(const ft_text_rope_cursor* cursor)
+{
+    return cursor != NULL && ft_measured_rope_cursor_valid(&cursor->cursor);
+}
+
+bool ft_text_rope_cursor_empty(const ft_text_rope_cursor* cursor)
+{
+    return cursor == NULL || ft_measured_rope_cursor_empty(&cursor->cursor);
+}
+
+size_t ft_text_rope_cursor_size(const ft_text_rope_cursor* cursor)
+{
+    return cursor == NULL ? 0 : ft_measured_rope_cursor_size(&cursor->cursor);
+}
+
+ft_status ft_text_rope_cursor_try_size(const ft_text_rope_cursor* cursor, size_t* size)
+{
+    if (cursor == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_try_size(&cursor->cursor, size);
+}
+
+size_t ft_text_rope_cursor_position(const ft_text_rope_cursor* cursor)
+{
+    return cursor == NULL ? 0 : ft_measured_rope_cursor_position(&cursor->cursor);
+}
+
+ft_status ft_text_rope_cursor_is_at_start(const ft_text_rope_cursor* cursor, bool* result)
+{
+    if (cursor == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_is_at_start(&cursor->cursor, result);
+}
+
+ft_status ft_text_rope_cursor_is_at_end(const ft_text_rope_cursor* cursor, bool* result)
+{
+    if (cursor == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_is_at_end(&cursor->cursor, result);
+}
+
+ft_status ft_text_rope_cursor_line_column(
+    const ft_text_rope_cursor* cursor,
+    ft_line_column* result)
+{
+    if (!ft_text_rope_cursor_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    ft_text_rope borrowed;
+    borrowed.rope = cursor->cursor.rope;
+    return ft_text_rope_line_column_of(&borrowed, cursor->cursor.position, result);
+}
+
+ft_status ft_text_rope_cursor_measure_before(
+    const ft_text_rope_cursor* cursor,
+    size_t* newlines)
+{
+    if (cursor == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_measure_before(&cursor->cursor, newlines);
+}
+
+ft_status ft_text_rope_cursor_measure_after(
+    const ft_text_rope_cursor* cursor,
+    size_t* newlines)
+{
+    if (cursor == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_measure_after(&cursor->cursor, newlines);
+}
+
+ft_status ft_text_rope_cursor_try_peek_previous(
+    const ft_text_rope_cursor* cursor,
+    bool* found,
+    char* value)
+{
+    if (cursor == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_try_peek_previous(&cursor->cursor, found, value);
+}
+
+ft_status ft_text_rope_cursor_try_peek_next(
+    const ft_text_rope_cursor* cursor,
+    bool* found,
+    char* value)
+{
+    if (cursor == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_try_peek_next(&cursor->cursor, found, value);
+}
+
+ft_status ft_text_rope_cursor_move_previous(
+    const ft_text_rope_cursor* cursor,
+    ft_text_rope_cursor* result)
+{
+    if (cursor == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_move_previous(&cursor->cursor, &result->cursor);
+}
+
+ft_status ft_text_rope_cursor_move_next(
+    const ft_text_rope_cursor* cursor,
+    ft_text_rope_cursor* result)
+{
+    if (cursor == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_move_next(&cursor->cursor, &result->cursor);
+}
+
+ft_status ft_text_rope_cursor_seek(
+    const ft_text_rope_cursor* cursor,
+    size_t position,
+    ft_text_rope_cursor* result)
+{
+    if (cursor == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_seek(&cursor->cursor, position, &result->cursor);
+}
+
+ft_status ft_text_rope_cursor_seek_by_measure(
+    const ft_text_rope_cursor* cursor,
+    ft_measure_predicate_fn predicate,
+    void* predicate_context,
+    bool* found,
+    ft_text_rope_cursor* result)
+{
+    if (cursor == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_seek_by_measure(
+        &cursor->cursor, predicate, predicate_context, found, &result->cursor);
+}
+
+ft_status ft_text_rope_cursor_insert_char(
+    const ft_text_rope_cursor* cursor,
+    char value,
+    ft_text_rope_cursor* result)
+{
+    if (cursor == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_insert(&cursor->cursor, &value, &result->cursor);
+}
+
+ft_status ft_text_rope_cursor_insert_cstr(
+    const ft_text_rope_cursor* cursor,
+    const char* text,
+    ft_text_rope_cursor* result)
+{
+    if (cursor == NULL || text == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_insert_array(
+        &cursor->cursor, text, strlen(text), &result->cursor);
+}
+
+ft_status ft_text_rope_cursor_insert_rope(
+    const ft_text_rope_cursor* cursor,
+    const ft_text_rope* values,
+    ft_text_rope_cursor* result)
+{
+    if (cursor == NULL || values == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_insert_rope(
+        &cursor->cursor, &values->rope, &result->cursor);
+}
+
+ft_status ft_text_rope_cursor_delete_previous(
+    const ft_text_rope_cursor* cursor,
+    ft_text_rope_cursor* result)
+{
+    if (cursor == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_delete_previous(&cursor->cursor, &result->cursor);
+}
+
+ft_status ft_text_rope_cursor_delete_next(
+    const ft_text_rope_cursor* cursor,
+    ft_text_rope_cursor* result)
+{
+    if (cursor == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_delete_next(&cursor->cursor, &result->cursor);
+}
+
+ft_status ft_text_rope_cursor_replace_next(
+    const ft_text_rope_cursor* cursor,
+    char value,
+    ft_text_rope_cursor* result)
+{
+    if (cursor == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_replace_next(&cursor->cursor, &value, &result->cursor);
+}
+
+ft_status ft_text_rope_cursor_snapshot(
+    const ft_text_rope_cursor* cursor,
+    ft_text_rope* result)
+{
+    if (cursor == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_measured_rope_cursor_snapshot(&cursor->cursor, &result->rope);
 }

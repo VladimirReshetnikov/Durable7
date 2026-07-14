@@ -428,6 +428,92 @@ ft_status ft_measured_rope_concat(
     ft_measured_rope* result);
 ft_status ft_measured_rope_visit(const ft_measured_rope* rope, ft_visit_fn visitor, void* context);
 
+typedef struct ft_measured_rope_cursor {
+    ft_measured_rope rope;
+    size_t position;
+} ft_measured_rope_cursor;
+
+ft_status ft_measured_rope_get_cursor(
+    const ft_measured_rope* rope,
+    size_t position,
+    ft_measured_rope_cursor* result);
+ft_status ft_measured_rope_get_cursor_by_measure(
+    const ft_measured_rope* rope,
+    ft_measure_predicate_fn predicate,
+    void* predicate_context,
+    bool* found,
+    ft_measured_rope_cursor* result);
+ft_status ft_measured_rope_cursor_copy(
+    const ft_measured_rope_cursor* source,
+    ft_measured_rope_cursor* destination);
+void ft_measured_rope_cursor_move(
+    ft_measured_rope_cursor* destination,
+    ft_measured_rope_cursor* source);
+void ft_measured_rope_cursor_dispose(ft_measured_rope_cursor* cursor);
+bool ft_measured_rope_cursor_valid(const ft_measured_rope_cursor* cursor);
+bool ft_measured_rope_cursor_empty(const ft_measured_rope_cursor* cursor);
+size_t ft_measured_rope_cursor_size(const ft_measured_rope_cursor* cursor);
+ft_status ft_measured_rope_cursor_try_size(const ft_measured_rope_cursor* cursor, size_t* size);
+size_t ft_measured_rope_cursor_position(const ft_measured_rope_cursor* cursor);
+ft_status ft_measured_rope_cursor_is_at_start(const ft_measured_rope_cursor* cursor, bool* result);
+ft_status ft_measured_rope_cursor_is_at_end(const ft_measured_rope_cursor* cursor, bool* result);
+ft_status ft_measured_rope_cursor_measure_before(
+    const ft_measured_rope_cursor* cursor,
+    void* destination);
+ft_status ft_measured_rope_cursor_measure_after(
+    const ft_measured_rope_cursor* cursor,
+    void* destination);
+ft_status ft_measured_rope_cursor_try_peek_previous(
+    const ft_measured_rope_cursor* cursor,
+    bool* found,
+    void* value);
+ft_status ft_measured_rope_cursor_try_peek_next(
+    const ft_measured_rope_cursor* cursor,
+    bool* found,
+    void* value);
+ft_status ft_measured_rope_cursor_move_previous(
+    const ft_measured_rope_cursor* cursor,
+    ft_measured_rope_cursor* result);
+ft_status ft_measured_rope_cursor_move_next(
+    const ft_measured_rope_cursor* cursor,
+    ft_measured_rope_cursor* result);
+ft_status ft_measured_rope_cursor_seek(
+    const ft_measured_rope_cursor* cursor,
+    size_t position,
+    ft_measured_rope_cursor* result);
+ft_status ft_measured_rope_cursor_seek_by_measure(
+    const ft_measured_rope_cursor* cursor,
+    ft_measure_predicate_fn predicate,
+    void* predicate_context,
+    bool* found,
+    ft_measured_rope_cursor* result);
+ft_status ft_measured_rope_cursor_insert(
+    const ft_measured_rope_cursor* cursor,
+    const void* value,
+    ft_measured_rope_cursor* result);
+ft_status ft_measured_rope_cursor_insert_array(
+    const ft_measured_rope_cursor* cursor,
+    const void* values,
+    size_t count,
+    ft_measured_rope_cursor* result);
+ft_status ft_measured_rope_cursor_insert_rope(
+    const ft_measured_rope_cursor* cursor,
+    const ft_measured_rope* values,
+    ft_measured_rope_cursor* result);
+ft_status ft_measured_rope_cursor_delete_previous(
+    const ft_measured_rope_cursor* cursor,
+    ft_measured_rope_cursor* result);
+ft_status ft_measured_rope_cursor_delete_next(
+    const ft_measured_rope_cursor* cursor,
+    ft_measured_rope_cursor* result);
+ft_status ft_measured_rope_cursor_replace_next(
+    const ft_measured_rope_cursor* cursor,
+    const void* value,
+    ft_measured_rope_cursor* result);
+ft_status ft_measured_rope_cursor_snapshot(
+    const ft_measured_rope_cursor* cursor,
+    ft_measured_rope* result);
+
 typedef struct ft_priority_queue_entry_context ft_priority_queue_entry_context;
 
 typedef struct ft_priority_queue {
@@ -555,6 +641,10 @@ typedef struct ft_text_rope {
     ft_measured_rope rope;
 } ft_text_rope;
 
+typedef struct ft_text_rope_cursor {
+    ft_measured_rope_cursor cursor;
+} ft_text_rope_cursor;
+
 typedef struct ft_line_column {
     size_t line;
     size_t column;
@@ -577,6 +667,86 @@ ft_status ft_text_rope_line_start_offset(const ft_text_rope* rope, size_t line, 
 ft_status ft_text_rope_line_column_of(const ft_text_rope* rope, size_t offset, ft_line_column* result);
 ft_status ft_text_rope_offset_of(const ft_text_rope* rope, size_t line, size_t column, size_t* offset);
 ft_status ft_text_rope_visit(const ft_text_rope* rope, ft_visit_fn visitor, void* context);
+ft_status ft_text_rope_get_cursor(
+    const ft_text_rope* rope,
+    size_t position,
+    ft_text_rope_cursor* result);
+ft_status ft_text_rope_get_cursor_by_measure(
+    const ft_text_rope* rope,
+    ft_measure_predicate_fn predicate,
+    void* predicate_context,
+    bool* found,
+    ft_text_rope_cursor* result);
+ft_status ft_text_rope_cursor_copy(
+    const ft_text_rope_cursor* source,
+    ft_text_rope_cursor* destination);
+void ft_text_rope_cursor_move(ft_text_rope_cursor* destination, ft_text_rope_cursor* source);
+void ft_text_rope_cursor_dispose(ft_text_rope_cursor* cursor);
+bool ft_text_rope_cursor_valid(const ft_text_rope_cursor* cursor);
+bool ft_text_rope_cursor_empty(const ft_text_rope_cursor* cursor);
+size_t ft_text_rope_cursor_size(const ft_text_rope_cursor* cursor);
+ft_status ft_text_rope_cursor_try_size(const ft_text_rope_cursor* cursor, size_t* size);
+size_t ft_text_rope_cursor_position(const ft_text_rope_cursor* cursor);
+ft_status ft_text_rope_cursor_is_at_start(const ft_text_rope_cursor* cursor, bool* result);
+ft_status ft_text_rope_cursor_is_at_end(const ft_text_rope_cursor* cursor, bool* result);
+ft_status ft_text_rope_cursor_line_column(
+    const ft_text_rope_cursor* cursor,
+    ft_line_column* result);
+ft_status ft_text_rope_cursor_measure_before(
+    const ft_text_rope_cursor* cursor,
+    size_t* newlines);
+ft_status ft_text_rope_cursor_measure_after(
+    const ft_text_rope_cursor* cursor,
+    size_t* newlines);
+ft_status ft_text_rope_cursor_try_peek_previous(
+    const ft_text_rope_cursor* cursor,
+    bool* found,
+    char* value);
+ft_status ft_text_rope_cursor_try_peek_next(
+    const ft_text_rope_cursor* cursor,
+    bool* found,
+    char* value);
+ft_status ft_text_rope_cursor_move_previous(
+    const ft_text_rope_cursor* cursor,
+    ft_text_rope_cursor* result);
+ft_status ft_text_rope_cursor_move_next(
+    const ft_text_rope_cursor* cursor,
+    ft_text_rope_cursor* result);
+ft_status ft_text_rope_cursor_seek(
+    const ft_text_rope_cursor* cursor,
+    size_t position,
+    ft_text_rope_cursor* result);
+ft_status ft_text_rope_cursor_seek_by_measure(
+    const ft_text_rope_cursor* cursor,
+    ft_measure_predicate_fn predicate,
+    void* predicate_context,
+    bool* found,
+    ft_text_rope_cursor* result);
+ft_status ft_text_rope_cursor_insert_char(
+    const ft_text_rope_cursor* cursor,
+    char value,
+    ft_text_rope_cursor* result);
+ft_status ft_text_rope_cursor_insert_cstr(
+    const ft_text_rope_cursor* cursor,
+    const char* text,
+    ft_text_rope_cursor* result);
+ft_status ft_text_rope_cursor_insert_rope(
+    const ft_text_rope_cursor* cursor,
+    const ft_text_rope* values,
+    ft_text_rope_cursor* result);
+ft_status ft_text_rope_cursor_delete_previous(
+    const ft_text_rope_cursor* cursor,
+    ft_text_rope_cursor* result);
+ft_status ft_text_rope_cursor_delete_next(
+    const ft_text_rope_cursor* cursor,
+    ft_text_rope_cursor* result);
+ft_status ft_text_rope_cursor_replace_next(
+    const ft_text_rope_cursor* cursor,
+    char value,
+    ft_text_rope_cursor* result);
+ft_status ft_text_rope_cursor_snapshot(
+    const ft_text_rope_cursor* cursor,
+    ft_text_rope* result);
 
 #ifdef __cplusplus
 }

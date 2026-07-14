@@ -123,12 +123,17 @@ The executable covers:
   positional and measured ropes;
 - measured rope construction across chunk boundaries, cached whole/prefix measure reads, one-descent prefix
   measurement, cumulative-measure locate and split, chunk-local editing/coalescing, append, and persistence;
+- explicit-lifetime measured cursors across chunk seams, ordered noncommutative before/after measures, absolute
+  search hit/miss/empty behavior, retained edits and snapshots, incompatibility/failure-output preservation, a
+  deterministic 750-command model, and concurrent distinct-handle readers;
 - priority queue minimum-first drain order and FIFO stability for equal priorities, including a 128-element tie run;
 - signed 64-bit interval insertion, ordering, containment, removal, first-overlap, and overlap counting;
 - generic endpoint interval insertion, ordering, containment, removal, invalid interval rejection, max-high-guided
   first-overlap and overlap counting, shared-annotation lifetime, comparison-count ceilings, and persistence;
 - text rope construction, measured editing, indexing, O(1) line count, bidirectional offset/line-column navigation,
   invalid-column rejection, bounded chunk counts, and traversal.
+- nominal text cursor ownership, newline partitions and absolute search, line/column interoperation, text edits,
+  retained snapshots, miss-to-end behavior, and source persistence;
 - long text-rope edit scripts over retained snapshots, with model checks for indexing, traversal, line counts, and
   line/column navigation.
 

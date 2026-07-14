@@ -207,6 +207,67 @@ static void init_int_sum_measure(ft_measure_policy* policy)
     policy->context = NULL;
 }
 
+typedef struct ordered_measure {
+    uint64_t hash;
+    size_t count;
+} ordered_measure;
+
+static uint64_t ordered_measure_power(size_t exponent)
+{
+    uint64_t result = 1;
+    for (size_t index = 0; index != exponent; ++index) {
+        result *= UINT64_C(1099511628211);
+    }
+    return result;
+}
+
+static void ordered_measure_identity(void* destination, void* context)
+{
+    (void)context;
+    ordered_measure* result = (ordered_measure*)destination;
+    result->hash = 0;
+    result->count = 0;
+}
+
+static void ordered_measure_value(void* destination, const void* value, void* context)
+{
+    (void)context;
+    ordered_measure* result = (ordered_measure*)destination;
+    result->hash = (uint64_t)(uint32_t)*(const int*)value + 1u;
+    result->count = 1;
+}
+
+static void ordered_measure_combine(void* destination, const void* left, const void* right, void* context)
+{
+    (void)context;
+    const ordered_measure* left_measure = (const ordered_measure*)left;
+    const ordered_measure* right_measure = (const ordered_measure*)right;
+    ordered_measure* result = (ordered_measure*)destination;
+    result->hash = left_measure->hash * ordered_measure_power(right_measure->count) + right_measure->hash;
+    result->count = left_measure->count + right_measure->count;
+}
+
+static void init_ordered_measure(ft_measure_policy* policy)
+{
+    policy->size = sizeof(ordered_measure);
+    policy->identity = ordered_measure_identity;
+    policy->measure = ordered_measure_value;
+    policy->combine = ordered_measure_combine;
+    policy->context = NULL;
+}
+
+static ordered_measure ordered_measure_for_values(const int* values, size_t count)
+{
+    ordered_measure result = {0, 0};
+    for (size_t index = 0; index != count; ++index) {
+        const ordered_measure next = {(uint64_t)(uint32_t)values[index] + 1u, 1};
+        ordered_measure combined;
+        ordered_measure_combine(&combined, &result, &next, NULL);
+        result = combined;
+    }
+    return result;
+}
+
 static void collect_int(const void* value, void* context)
 {
     int_buffer* buffer = (int_buffer*)context;
@@ -287,6 +348,26 @@ static bool rope_matches(const ft_rope* rope, const int* expected, size_t count)
     }
 
     return true;
+}
+
+static bool measured_rope_matches(const ft_measured_rope* rope, const int* expected, size_t count)
+{
+    size_t actual_count = 0;
+    if (ft_measured_rope_try_size(rope, &actual_count) != FT_STATUS_OK || actual_count != count) {
+        return false;
+    }
+
+    int expected_sum = 0;
+    for (size_t index = 0; index != count; ++index) {
+        int actual = 0;
+        if (ft_measured_rope_at(rope, index, &actual) != FT_STATUS_OK || actual != expected[index]) {
+            return false;
+        }
+        expected_sum += expected[index];
+    }
+
+    int actual_sum = 0;
+    return ft_measured_rope_measure(rope, &actual_sum) == FT_STATUS_OK && actual_sum == expected_sum;
 }
 
 static void collect_char(const void* value, void* context)
@@ -2011,6 +2092,450 @@ static void test_measured_rope(void)
     ft_measured_rope_dispose(&rope);
 }
 
+static void test_measured_rope_cursor(void)
+{
+    ft_value_type int_type;
+    ft_value_type_init(&int_type, sizeof(int));
+    ft_measure_policy sum_measure;
+    init_int_sum_measure(&sum_measure);
+
+    int values[3000];
+    for (size_t index = 0; index != 3000; ++index) {
+        values[index] = 1;
+    }
+    values[2048] = 10;
+
+    ft_measured_rope rope;
+    REQUIRE_STATUS(
+        ft_measured_rope_from_array(&rope, &int_type, &sum_measure, values, 3000),
+        FT_STATUS_OK);
+
+    ft_measured_rope_cursor cursor;
+    REQUIRE_STATUS(ft_measured_rope_get_cursor(&rope, 2048, &cursor), FT_STATUS_OK);
+    REQUIRE(ft_measured_rope_cursor_valid(&cursor));
+    REQUIRE(ft_measured_rope_cursor_size(&cursor) == 3000);
+    REQUIRE(ft_measured_rope_cursor_position(&cursor) == 2048);
+
+    int before = -1;
+    int after = -1;
+    REQUIRE_STATUS(ft_measured_rope_cursor_measure_before(&cursor, &before), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_measured_rope_cursor_measure_after(&cursor, &after), FT_STATUS_OK);
+    REQUIRE(before == 2048);
+    REQUIRE(after == 961);
+
+    bool found = false;
+    int value = 0;
+    REQUIRE_STATUS(ft_measured_rope_cursor_try_peek_previous(&cursor, &found, &value), FT_STATUS_OK);
+    REQUIRE(found && value == 1);
+    REQUIRE_STATUS(ft_measured_rope_cursor_try_peek_next(&cursor, &found, &value), FT_STATUS_OK);
+    REQUIRE(found && value == 10);
+
+    int threshold = 2054;
+    ft_measured_rope_cursor located;
+    REQUIRE_STATUS(
+        ft_measured_rope_get_cursor_by_measure(&rope, int_sum_reaches, &threshold, &found, &located),
+        FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(ft_measured_rope_cursor_position(&located) == 2048);
+
+    threshold = 10000;
+    REQUIRE_STATUS(
+        ft_measured_rope_cursor_seek_by_measure(&located, int_sum_reaches, &threshold, &found, &located),
+        FT_STATUS_OK);
+    REQUIRE(!found);
+    REQUIRE(ft_measured_rope_cursor_position(&located) == 3000);
+
+    threshold = 0;
+    REQUIRE_STATUS(
+        ft_measured_rope_cursor_seek_by_measure(&located, int_sum_reaches, &threshold, &found, &located),
+        FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(ft_measured_rope_cursor_position(&located) == 0);
+
+    const int base_values[] = {1, 2, 3, 4};
+    ft_measured_rope base_rope;
+    REQUIRE_STATUS(
+        ft_measured_rope_from_array(&base_rope, &int_type, &sum_measure, base_values, 4),
+        FT_STATUS_OK);
+    ft_measured_rope_cursor base;
+    REQUIRE_STATUS(ft_measured_rope_get_cursor(&base_rope, 2, &base), FT_STATUS_OK);
+
+    const int range_values[] = {7, 8};
+    ft_measured_rope_cursor edited;
+    REQUIRE_STATUS(
+        ft_measured_rope_cursor_insert_array(&base, range_values, 2, &edited),
+        FT_STATUS_OK);
+    REQUIRE(ft_measured_rope_cursor_position(&edited) == 4);
+    const int inserted_expected[] = {1, 2, 7, 8, 3, 4};
+    ft_measured_rope snapshot;
+    REQUIRE_STATUS(ft_measured_rope_cursor_snapshot(&edited, &snapshot), FT_STATUS_OK);
+    REQUIRE(measured_rope_matches(&snapshot, inserted_expected, 6));
+
+    REQUIRE_STATUS(ft_measured_rope_cursor_delete_previous(&edited, &edited), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_measured_rope_cursor_delete_next(&edited, &edited), FT_STATUS_OK);
+    value = 9;
+    REQUIRE_STATUS(ft_measured_rope_cursor_replace_next(&edited, &value, &edited), FT_STATUS_OK);
+    const int edited_expected[] = {1, 2, 7, 9};
+    ft_measured_rope edited_snapshot;
+    REQUIRE_STATUS(ft_measured_rope_cursor_snapshot(&edited, &edited_snapshot), FT_STATUS_OK);
+    REQUIRE(measured_rope_matches(&edited_snapshot, edited_expected, 4));
+    REQUIRE(measured_rope_matches(&base_rope, base_values, 4));
+
+    ft_measured_rope_cursor sentinel;
+    REQUIRE_STATUS(ft_measured_rope_get_cursor(&base_rope, 1, &sentinel), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_measured_rope_cursor_seek(&sentinel, 5, &sentinel), FT_STATUS_OUT_OF_RANGE);
+    REQUIRE(ft_measured_rope_cursor_position(&sentinel) == 1);
+
+    ft_measure_policy incompatible_measure = sum_measure;
+    incompatible_measure.context = &sentinel;
+    ft_measured_rope incompatible;
+    REQUIRE_STATUS(
+        ft_measured_rope_from_array(&incompatible, &int_type, &incompatible_measure, base_values, 4),
+        FT_STATUS_OK);
+    REQUIRE_STATUS(
+        ft_measured_rope_cursor_insert_rope(&base, &incompatible, &sentinel),
+        FT_STATUS_INVALID_ARGUMENT);
+    REQUIRE(ft_measured_rope_cursor_position(&sentinel) == 1);
+
+    ft_measured_rope empty_rope;
+    REQUIRE_STATUS(ft_measured_rope_init(&empty_rope, &int_type, &sum_measure), FT_STATUS_OK);
+    ft_measured_rope_cursor empty_cursor;
+    REQUIRE_STATUS(
+        ft_measured_rope_get_cursor_by_measure(
+            &empty_rope, int_sum_reaches, &threshold, &found, &empty_cursor),
+        FT_STATUS_OK);
+    REQUIRE(!found);
+    REQUIRE(ft_measured_rope_cursor_empty(&empty_cursor));
+    REQUIRE(ft_measured_rope_cursor_position(&empty_cursor) == 0);
+
+    ft_measured_rope_cursor moved = {0};
+    ft_measured_rope_cursor_move(&moved, &sentinel);
+    REQUIRE(!ft_measured_rope_cursor_valid(&sentinel));
+    REQUIRE(ft_measured_rope_cursor_valid(&moved));
+
+    ft_measured_rope_cursor_dispose(&moved);
+    ft_measured_rope_cursor_dispose(&sentinel);
+    ft_measured_rope_cursor_dispose(&empty_cursor);
+    ft_measured_rope_dispose(&empty_rope);
+    ft_measured_rope_dispose(&incompatible);
+    ft_measured_rope_dispose(&edited_snapshot);
+    ft_measured_rope_dispose(&snapshot);
+    ft_measured_rope_cursor_dispose(&edited);
+    ft_measured_rope_cursor_dispose(&base);
+    ft_measured_rope_dispose(&base_rope);
+    ft_measured_rope_cursor_dispose(&located);
+    ft_measured_rope_cursor_dispose(&cursor);
+    ft_measured_rope_dispose(&rope);
+}
+
+static void test_measured_rope_cursor_ordered_measure(void)
+{
+    ft_value_type int_type;
+    ft_value_type_init(&int_type, sizeof(int));
+    ft_measure_policy measure_policy;
+    init_ordered_measure(&measure_policy);
+    const int values[] = {3, 1, 4, 1, 5, 9, 2};
+
+    ft_measured_rope rope;
+    REQUIRE_STATUS(
+        ft_measured_rope_from_array(&rope, &int_type, &measure_policy, values, 7),
+        FT_STATUS_OK);
+    ft_measured_rope_cursor cursor;
+    REQUIRE_STATUS(ft_measured_rope_get_cursor(&rope, 3, &cursor), FT_STATUS_OK);
+
+    ordered_measure before;
+    ordered_measure after;
+    REQUIRE_STATUS(ft_measured_rope_cursor_measure_before(&cursor, &before), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_measured_rope_cursor_measure_after(&cursor, &after), FT_STATUS_OK);
+    const ordered_measure expected_before = ordered_measure_for_values(values, 3);
+    const ordered_measure expected_after = ordered_measure_for_values(values + 3, 4);
+    REQUIRE(before.hash == expected_before.hash && before.count == expected_before.count);
+    REQUIRE(after.hash == expected_after.hash && after.count == expected_after.count);
+
+    ordered_measure combined;
+    ordered_measure_combine(&combined, &before, &after, NULL);
+    const ordered_measure expected_whole = ordered_measure_for_values(values, 7);
+    REQUIRE(combined.hash == expected_whole.hash && combined.count == expected_whole.count);
+
+    ft_measured_rope_cursor_dispose(&cursor);
+    ft_measured_rope_dispose(&rope);
+}
+
+static void test_measured_rope_cursor_model(void)
+{
+    ft_value_type int_type;
+    ft_value_type_init(&int_type, sizeof(int));
+    ft_measure_policy sum_measure;
+    init_int_sum_measure(&sum_measure);
+    int model[128] = {1, 2, 3};
+    size_t count = 3;
+    size_t position = 1;
+    uint32_t random = UINT32_C(0x5a17c9e3);
+
+    ft_measured_rope rope;
+    REQUIRE_STATUS(ft_measured_rope_from_array(&rope, &int_type, &sum_measure, model, count), FT_STATUS_OK);
+    ft_measured_rope_cursor cursor;
+    REQUIRE_STATUS(ft_measured_rope_get_cursor(&rope, position, &cursor), FT_STATUS_OK);
+    ft_measured_rope_dispose(&rope);
+
+    for (size_t step = 0; step != 750; ++step) {
+        const uint32_t bits = rope_cursor_next_random(&random);
+        const unsigned operation = bits % 8u;
+        if (operation == 0 && count < 96) {
+            const int value = (int)((bits >> 8) % 9u) + 1;
+            memmove(model + position + 1, model + position, (count - position) * sizeof(int));
+            model[position] = value;
+            ++position;
+            ++count;
+            REQUIRE_STATUS(ft_measured_rope_cursor_insert(&cursor, &value, &cursor), FT_STATUS_OK);
+        } else if (operation == 1 && position != 0) {
+            memmove(model + position - 1, model + position, (count - position) * sizeof(int));
+            --position;
+            --count;
+            REQUIRE_STATUS(ft_measured_rope_cursor_delete_previous(&cursor, &cursor), FT_STATUS_OK);
+        } else if (operation == 2 && position != count) {
+            memmove(model + position, model + position + 1, (count - position - 1) * sizeof(int));
+            --count;
+            REQUIRE_STATUS(ft_measured_rope_cursor_delete_next(&cursor, &cursor), FT_STATUS_OK);
+        } else if (operation == 3 && position != 0) {
+            --position;
+            REQUIRE_STATUS(ft_measured_rope_cursor_move_previous(&cursor, &cursor), FT_STATUS_OK);
+        } else if (operation == 4 && position != count) {
+            ++position;
+            REQUIRE_STATUS(ft_measured_rope_cursor_move_next(&cursor, &cursor), FT_STATUS_OK);
+        } else if (operation == 5 && position != count) {
+            const int value = (int)((bits >> 12) % 9u) + 1;
+            model[position] = value;
+            REQUIRE_STATUS(ft_measured_rope_cursor_replace_next(&cursor, &value, &cursor), FT_STATUS_OK);
+        } else if (operation == 6) {
+            position = count == 0 ? 0 : (bits >> 16) % (count + 1u);
+            REQUIRE_STATUS(ft_measured_rope_cursor_seek(&cursor, position, &cursor), FT_STATUS_OK);
+        } else {
+            int total = 0;
+            for (size_t index = 0; index != count; ++index) {
+                total += model[index];
+            }
+            int threshold = total == 0 ? 1 : (int)((bits >> 16) % (unsigned)(total + 2)) + 1;
+            bool found = false;
+            REQUIRE_STATUS(
+                ft_measured_rope_cursor_seek_by_measure(
+                    &cursor, int_sum_reaches, &threshold, &found, &cursor),
+                FT_STATUS_OK);
+            int prefix = 0;
+            position = 0;
+            while (position != count && prefix + model[position] < threshold) {
+                prefix += model[position];
+                ++position;
+            }
+            const bool expected_found = position != count;
+            REQUIRE(found == expected_found);
+            if (!expected_found) {
+                position = count;
+            }
+        }
+
+        REQUIRE(ft_measured_rope_cursor_position(&cursor) == position);
+        REQUIRE(ft_measured_rope_cursor_size(&cursor) == count);
+        int expected_before = 0;
+        int expected_after = 0;
+        for (size_t index = 0; index != position; ++index) {
+            expected_before += model[index];
+        }
+        for (size_t index = position; index != count; ++index) {
+            expected_after += model[index];
+        }
+        int actual_before = -1;
+        int actual_after = -1;
+        REQUIRE_STATUS(ft_measured_rope_cursor_measure_before(&cursor, &actual_before), FT_STATUS_OK);
+        REQUIRE_STATUS(ft_measured_rope_cursor_measure_after(&cursor, &actual_after), FT_STATUS_OK);
+        REQUIRE(actual_before == expected_before && actual_after == expected_after);
+
+        if (step % 47u == 0) {
+            ft_measured_rope snapshot;
+            REQUIRE_STATUS(ft_measured_rope_cursor_snapshot(&cursor, &snapshot), FT_STATUS_OK);
+            REQUIRE(measured_rope_matches(&snapshot, model, count));
+            ft_measured_rope_dispose(&snapshot);
+        }
+    }
+
+    ft_measured_rope_cursor_dispose(&cursor);
+}
+
+static void test_text_rope_cursor(void)
+{
+    const char* initial = "alpha\nbeta\n";
+    ft_text_rope rope;
+    REQUIRE_STATUS(ft_text_rope_from_cstr(initial, &rope), FT_STATUS_OK);
+    ft_text_rope_cursor cursor;
+    REQUIRE_STATUS(ft_text_rope_get_cursor(&rope, 6, &cursor), FT_STATUS_OK);
+    REQUIRE(ft_text_rope_cursor_valid(&cursor));
+    REQUIRE(ft_text_rope_cursor_position(&cursor) == 6);
+
+    ft_line_column line_column;
+    REQUIRE_STATUS(ft_text_rope_cursor_line_column(&cursor, &line_column), FT_STATUS_OK);
+    REQUIRE(line_column.line == 1 && line_column.column == 0);
+    size_t before = SIZE_MAX;
+    size_t after = SIZE_MAX;
+    REQUIRE_STATUS(ft_text_rope_cursor_measure_before(&cursor, &before), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_text_rope_cursor_measure_after(&cursor, &after), FT_STATUS_OK);
+    REQUIRE(before == 1 && after == 1);
+
+    size_t threshold = 1;
+    bool found = false;
+    ft_text_rope_cursor newline;
+    REQUIRE_STATUS(
+        ft_text_rope_get_cursor_by_measure(&rope, size_reaches, &threshold, &found, &newline),
+        FT_STATUS_OK);
+    REQUIRE(found && ft_text_rope_cursor_position(&newline) == 5);
+
+    ft_text_rope_cursor edited;
+    REQUIRE_STATUS(ft_text_rope_cursor_insert_cstr(&newline, "X\n", &edited), FT_STATUS_OK);
+    REQUIRE(ft_text_rope_cursor_position(&edited) == 7);
+    ft_text_rope snapshot;
+    REQUIRE_STATUS(ft_text_rope_cursor_snapshot(&edited, &snapshot), FT_STATUS_OK);
+    REQUIRE(text_rope_matches_model(&snapshot, "alphaX\n\nbeta\n", 13));
+
+    REQUIRE_STATUS(ft_text_rope_cursor_delete_previous(&edited, &edited), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_text_rope_cursor_replace_next(&edited, '!', &edited), FT_STATUS_OK);
+    ft_text_rope edited_snapshot;
+    REQUIRE_STATUS(ft_text_rope_cursor_snapshot(&edited, &edited_snapshot), FT_STATUS_OK);
+    REQUIRE(text_rope_matches_model(&edited_snapshot, "alphaX!beta\n", 12));
+    REQUIRE(text_rope_matches_model(&rope, initial, strlen(initial)));
+
+    threshold = 99;
+    REQUIRE_STATUS(
+        ft_text_rope_cursor_seek_by_measure(&edited, size_reaches, &threshold, &found, &edited),
+        FT_STATUS_OK);
+    REQUIRE(!found && ft_text_rope_cursor_position(&edited) == 12);
+
+    ft_text_rope_cursor sentinel;
+    REQUIRE_STATUS(ft_text_rope_get_cursor(&rope, 2, &sentinel), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_text_rope_cursor_seek(&sentinel, 99, &sentinel), FT_STATUS_OUT_OF_RANGE);
+    REQUIRE(ft_text_rope_cursor_position(&sentinel) == 2);
+
+    ft_text_rope empty;
+    REQUIRE_STATUS(ft_text_rope_init(&empty), FT_STATUS_OK);
+    ft_text_rope_cursor empty_cursor;
+    threshold = 0;
+    REQUIRE_STATUS(
+        ft_text_rope_get_cursor_by_measure(&empty, size_reaches, &threshold, &found, &empty_cursor),
+        FT_STATUS_OK);
+    REQUIRE(!found && ft_text_rope_cursor_empty(&empty_cursor));
+
+    ft_text_rope_cursor_dispose(&empty_cursor);
+    ft_text_rope_dispose(&empty);
+    ft_text_rope_cursor_dispose(&sentinel);
+    ft_text_rope_dispose(&edited_snapshot);
+    ft_text_rope_dispose(&snapshot);
+    ft_text_rope_cursor_dispose(&edited);
+    ft_text_rope_cursor_dispose(&newline);
+    ft_text_rope_cursor_dispose(&cursor);
+    ft_text_rope_dispose(&rope);
+}
+
+typedef struct concurrent_measured_cursor_context {
+    const ft_measured_rope_cursor* cursor;
+    int iterations;
+    test_atomic_long failures;
+} concurrent_measured_cursor_context;
+
+static void concurrent_measured_cursor_worker(concurrent_measured_cursor_context* context)
+{
+    for (int iteration = 0; iteration != context->iterations; ++iteration) {
+        ft_measured_rope_cursor cursor = {0};
+        int before = 0;
+        int after = 0;
+        if (ft_measured_rope_cursor_copy(context->cursor, &cursor) != FT_STATUS_OK ||
+            ft_measured_rope_cursor_measure_before(&cursor, &before) != FT_STATUS_OK ||
+            ft_measured_rope_cursor_measure_after(&cursor, &after) != FT_STATUS_OK ||
+            before != 2048 || after != 961) {
+            test_atomic_long_increment(&context->failures);
+            ft_measured_rope_cursor_dispose(&cursor);
+            return;
+        }
+        const int inserted = 7;
+        ft_measured_rope_cursor branch = {0};
+        if (ft_measured_rope_cursor_insert(&cursor, &inserted, &branch) != FT_STATUS_OK ||
+            ft_measured_rope_cursor_size(&branch) != 3001 ||
+            ft_measured_rope_cursor_size(&cursor) != 3000) {
+            test_atomic_long_increment(&context->failures);
+            ft_measured_rope_cursor_dispose(&branch);
+            ft_measured_rope_cursor_dispose(&cursor);
+            return;
+        }
+        ft_measured_rope_cursor_dispose(&branch);
+        ft_measured_rope_cursor_dispose(&cursor);
+    }
+}
+
+#ifdef _WIN32
+static DWORD WINAPI concurrent_measured_cursor_thread_proc(void* parameter)
+{
+    concurrent_measured_cursor_worker((concurrent_measured_cursor_context*)parameter);
+    return 0;
+}
+#elif defined(TEST_HAS_C11_THREADS)
+static int concurrent_measured_cursor_thread_main(void* parameter)
+{
+    concurrent_measured_cursor_worker((concurrent_measured_cursor_context*)parameter);
+    return 0;
+}
+#endif
+
+static void test_measured_rope_cursor_concurrent_readers(void)
+{
+    ft_value_type int_type;
+    ft_value_type_init(&int_type, sizeof(int));
+    ft_measure_policy sum_measure;
+    init_int_sum_measure(&sum_measure);
+    int values[3000];
+    for (size_t index = 0; index != 3000; ++index) {
+        values[index] = 1;
+    }
+    values[2048] = 10;
+    ft_measured_rope rope;
+    REQUIRE_STATUS(
+        ft_measured_rope_from_array(&rope, &int_type, &sum_measure, values, 3000),
+        FT_STATUS_OK);
+    ft_measured_rope_cursor cursor;
+    REQUIRE_STATUS(ft_measured_rope_get_cursor(&rope, 2048, &cursor), FT_STATUS_OK);
+    ft_measured_rope_dispose(&rope);
+
+    concurrent_measured_cursor_context context;
+    context.cursor = &cursor;
+    context.iterations = 32;
+    test_atomic_long_init(&context.failures, 0);
+
+#ifdef _WIN32
+    HANDLE threads[4];
+    for (size_t index = 0; index != 4; ++index) {
+        threads[index] = CreateThread(NULL, 0, concurrent_measured_cursor_thread_proc, &context, 0, NULL);
+        REQUIRE(threads[index] != NULL);
+    }
+    REQUIRE(WaitForMultipleObjects(4, threads, TRUE, INFINITE) == WAIT_OBJECT_0);
+    for (size_t index = 0; index != 4; ++index) {
+        REQUIRE(CloseHandle(threads[index]) != 0);
+    }
+#elif defined(TEST_HAS_C11_THREADS)
+    thrd_t threads[4];
+    for (size_t index = 0; index != 4; ++index) {
+        REQUIRE(thrd_create(&threads[index], concurrent_measured_cursor_thread_main, &context) == thrd_success);
+    }
+    for (size_t index = 0; index != 4; ++index) {
+        int result = 0;
+        REQUIRE(thrd_join(threads[index], &result) == thrd_success && result == 0);
+    }
+#else
+    for (size_t index = 0; index != 4; ++index) {
+        concurrent_measured_cursor_worker(&context);
+    }
+#endif
+
+    REQUIRE(test_atomic_long_read(&context.failures) == 0);
+    REQUIRE(ft_measured_rope_cursor_position(&cursor) == 2048);
+    ft_measured_rope_cursor_dispose(&cursor);
+}
+
 static void test_interval_tree(void)
 {
     ft_interval_tree_i64 tree;
@@ -2392,12 +2917,17 @@ int main(void)
     run_test("rope cursor concurrent readers", test_rope_cursor_concurrent_readers);
     run_test("rope chunk boundaries", test_rope_chunk_boundaries);
     run_test("measured rope", test_measured_rope);
+    run_test("measured rope cursor", test_measured_rope_cursor);
+    run_test("measured rope cursor ordered measure", test_measured_rope_cursor_ordered_measure);
+    run_test("measured rope cursor model", test_measured_rope_cursor_model);
+    run_test("measured rope cursor concurrent readers", test_measured_rope_cursor_concurrent_readers);
     run_test("priority queue", test_priority_queue);
     run_test("interval tree", test_interval_tree);
     run_test("interval tree equal-low tie order", test_interval_tree_equal_low_tie_order);
     run_test("generic interval tree", test_generic_interval_tree);
     run_test("interval tree max-high descent", test_interval_tree_max_high_descent);
     run_test("text rope", test_text_rope);
+    run_test("text rope cursor", test_text_rope_cursor);
     run_test("text rope long edit script", test_text_rope_long_edit_script);
 
     if (g_failures != 0) {
