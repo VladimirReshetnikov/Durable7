@@ -13,6 +13,10 @@
 assembly. Automatic choice by count, key type, comparer type, hit ratio, or observed hash shape is
 deliberately absent: the F2 gate must select one fixed general layout or defer the track.
 
+The independent [F0 packed-index signal gate](frozen-f0-signal-decision.md) is also unclosed. Its
+linear-only evidence must first record an explicit advance before any F1 result is interpreted.
+Building the shared multi-layout harness did not waive that prerequisite.
+
 The 2026-07-13/14 interactive session attempted exploratory runs while other agents and workloads
 were contending for CPU, memory, and I/O on the same laptop. Those timings are explicitly
 inadmissible: they are not curated below, do not establish a noise floor, select no layout, and
@@ -117,6 +121,10 @@ dotnet build DataStructures.sln -c Release --no-restore --disable-build-servers 
 
 Set-Location benchmarks\Tools.DataStructures.FingerTree.Benchmarks
 $benchmarkDll = '.\bin\Release\net10.0\Tools.DataStructures.FingerTree.Benchmarks.dll'
+dotnet $benchmarkDll --verify-axis2-frozen-layouts
+
+# Continue only after the standalone correctness verifier passes and F0 has an evidence-backed
+# advance record. The commands below are F1 measurements, not F0 evidence collection.
 dotnet $benchmarkDll --buildTimeout 600 `
     --filter '*FrozenLookupBenchmarks*' --job short `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-f1\short-uniform'

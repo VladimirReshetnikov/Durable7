@@ -263,7 +263,12 @@ internal sealed class FrozenF0AxisFixture
 {
     private const int ProbeCount = 1_024;
 
-    internal FrozenF0AxisFixture(int count, int hitPercentage, Axis2HashShape shape, string lane)
+    internal FrozenF0AxisFixture(
+        int count,
+        int hitPercentage,
+        Axis2HashShape shape,
+        string lane,
+        bool emitRetainedDiagnostics = true)
     {
         var comparer = Axis2HashKeyComparer.Instance;
         Entries = Axis2BenchmarkPolicy.CreateHashEntries(count, shape);
@@ -291,13 +296,16 @@ internal sealed class FrozenF0AxisFixture
         ValidatePackedEnumeration(Persistent, Packed);
         ValidateRobinHoodEnumeration(Persistent, RobinHood);
         ValidateQuadraticEnumeration(Persistent, Quadratic);
-        ReportRetainedArrays(
-            lane,
-            Persistent.GetStructureDiagnostics().EstimatedRetainedBytes,
-            Packed.Diagnostics,
-            RobinHood.Diagnostics,
-            Quadratic.Diagnostics,
-            FrozenLayoutMemory.EstimateBclFrozenArrayBytes(BclFrozen));
+        if (emitRetainedDiagnostics)
+        {
+            ReportRetainedArrays(
+                lane,
+                Persistent.GetStructureDiagnostics().EstimatedRetainedBytes,
+                Packed.Diagnostics,
+                RobinHood.Diagnostics,
+                Quadratic.Diagnostics,
+                FrozenLayoutMemory.EstimateBclFrozenArrayBytes(BclFrozen));
+        }
     }
 
     internal KeyValuePair<Axis2HashKey, int>[] Entries { get; }
@@ -584,7 +592,10 @@ internal sealed class FrozenF0NullCollisionFixture
     private const int ProbeCount = 1_024;
     private readonly NullCollisionComparer _comparer = new();
 
-    internal FrozenF0NullCollisionFixture(int count, int hitPercentage)
+    internal FrozenF0NullCollisionFixture(
+        int count,
+        int hitPercentage,
+        bool emitRetainedDiagnostics = true)
     {
         if (count < 2)
             throw new ArgumentOutOfRangeException(nameof(count));
@@ -622,13 +633,16 @@ internal sealed class FrozenF0NullCollisionFixture
         ValidateSemanticParity(originalRepresentatives);
         ValidateRepositoryEnumeration();
 
-        FrozenF0AxisFixture.ReportRetainedArrays(
-            "null-full-collision",
-            Persistent.GetStructureDiagnostics().EstimatedRetainedBytes,
-            Packed.Diagnostics,
-            RobinHood.Diagnostics,
-            Quadratic.Diagnostics,
-            bclFrozenEstimatedArrayBytes: null);
+        if (emitRetainedDiagnostics)
+        {
+            FrozenF0AxisFixture.ReportRetainedArrays(
+                "null-full-collision",
+                Persistent.GetStructureDiagnostics().EstimatedRetainedBytes,
+                Packed.Diagnostics,
+                RobinHood.Diagnostics,
+                Quadratic.Diagnostics,
+                bclFrozenEstimatedArrayBytes: null);
+        }
     }
 
     internal string?[] Probes { get; }

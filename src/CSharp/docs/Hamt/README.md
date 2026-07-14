@@ -30,9 +30,12 @@
   lifecycle, records its exact API and one-way consumption contract, carries forward the pinned T1
   evidence, records the full public-path confirmation, and distinguishes the earlier Dry-job smoke
   from performance evidence.
+- [Frozen hash F0 packed-index signal decision](frozen-f0-signal-decision.md) records the faithful
+  linear prototype, standalone semantic verifier, locked isolated evidence commands, and the
+  postponed advance/defer gate that must close before F1 can be interpreted.
 - [Frozen hash F1 fixed-layout decision](frozen-f1-layout-decision.md) locks the benchmark-local
   linear, Robin-Hood, and quadratic packed-index candidates, semantic setup oracle, retained-array
-  diagnostics, single-worker evidence commands, and the still-pending select/defer gate.
+  diagnostics, single-worker evidence commands, and the postponed select/defer gate.
 - [Implementation Review 2026-07-02](hamt-implementation-review-2026-07-02__afa84237ef48.md)
   records the adversarially-verified multi-agent review of the initial implementation, the
   improvements applied in response (annotations, `IReadOnlySet<T>`, single-pass adds,

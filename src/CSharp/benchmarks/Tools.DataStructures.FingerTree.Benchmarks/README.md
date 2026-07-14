@@ -38,6 +38,9 @@ Get-ChildItem Env: | Where-Object {
 cd .\benchmarks\Tools.DataStructures.FingerTree.Benchmarks
 $driver = '.\bin\Release\net10.0\Tools.DataStructures.FingerTree.Benchmarks.dll'
 
+# Correctness-only frozen-layout matrix. This does not invoke BenchmarkDotNet or collect timings.
+dotnet $driver --verify-axis2-frozen-layouts
+
 # Everything, full (default) job — the trustworthy but slow run.
 dotnet $driver --filter '*'
 
@@ -251,4 +254,8 @@ prototype enumeration order, stored representatives, nulls, and equal-full-hash 
 timed method can run. Setup also emits `AXIS2_F1_RETAINED_V1` rows for each prototype and for arrays
 reachable through the current runtime's BCL Frozen implementation. These are retained-array
 estimates, not construction allocation. The exact single-worker evidence protocol and pending gate
-are recorded in the [F1 decision document](../../docs/Hamt/frozen-f1-layout-decision.md).
+are recorded in the [F1 decision document](../../docs/Hamt/frozen-f1-layout-decision.md). The
+standalone `--verify-axis2-frozen-layouts` path runs the complete 39-case semantic matrix plus
+break-even and throwing-comparer checks without BenchmarkDotNet or retained-size output. It is a
+correctness prerequisite only. The [F0 decision](../../docs/Hamt/frozen-f0-signal-decision.md) must
+record an isolated linear-layout advance before F1 results may be interpreted.

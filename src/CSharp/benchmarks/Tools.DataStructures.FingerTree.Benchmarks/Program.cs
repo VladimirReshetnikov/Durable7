@@ -5,6 +5,9 @@ using BenchmarkDotNet.Running;
 using BenchmarkDotNet.Toolchains.InProcess.NoEmit;
 using Tools.DataStructures.FingerTree.Benchmarks;
 
+if (Axis2FrozenCorrectnessVerifier.TryRun(args))
+    return;
+
 if (Axis2C0EvidenceCollector.TryRun(args))
     return;
 
