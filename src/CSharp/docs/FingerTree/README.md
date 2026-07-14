@@ -20,8 +20,11 @@ project.
   source files, sample-smoke hooks, model/property suites, and stress controls.
 - [Rope cursor C0 decision](rope-cursor-c0-decision.md) records the readonly-struct zipper selected for
   the shipped C# positional `RopeCursor<T>`, its 16/256 focus/carry tuning, benchmark gate, and the
-  linear-lineage versus O(b log n) branch proof boundary. The current usage, API, and validation
-  documents describe C1; measured/text cursors and sample migration remain later Axis 2 phases.
+  linear-lineage versus O(b log n) branch proof boundary.
+- [Measured rope cursor C2 decision](measured-rope-cursor-c2-decision.md) records the shipped
+  `MeasuredRopeCursor<T, TMeasure, TMeasureOps>`, its ordered before/after measures, absolute
+  measure seek and lineage-shared fragment cache, plus the locked local-edit and query gates.
+  The current usage, API, and validation documents describe both C1 and C2; sample migration is C3.
 - [Proposal: Mutable Builders For FingerTree Collections](mutable-builder-proposal.md) evaluates `System.Collections.Immutable`-style builders for the repository's data structures and recommends a two-part plan: unconditional internal machinery (a measured-core validation hook, trust-sorted construction entries, chunk staging with a text-builder reroute) plus a benchmark-gated bottom-up packer prototype, then benchmark-gated public builders in strict order — sorted set/dictionary first, append-only frozen-prefix rope builders second, everything else deferred with recorded reasons. It states plainly which BCL builder benefits are *not* delivered (O(1) `ToBuilder` outside ropes; the edit–snapshot loop) and resolves the API contracts (nested builders, void/bool verbs, MUST-caching with fail-fast enumeration, read-only interfaces with `SetItem`). Revised 2026-07-01 after two adversarial review rounds.
 - The former complexity-guarantee and interval-tree wording defect reports have been incorporated into the
   amended API specification and XML documentation; the stale report files were removed after adjudication.

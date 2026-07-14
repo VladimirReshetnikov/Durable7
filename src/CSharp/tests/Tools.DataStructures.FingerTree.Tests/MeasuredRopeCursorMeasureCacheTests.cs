@@ -45,14 +45,15 @@ public sealed class MeasuredRopeCursorMeasureCacheTests
         Assert.Same(source, cursorStruct.Snapshot());
     }
 
-    /// <summary>Measure seek scans one ordinary chunk once and defers focus preparation until it is needed.</summary>
+    /// <summary>Measure seek scans one ordinary chunk once and reuses that preparation for later seeks and focus materialization.</summary>
     [Fact]
     public void MeasureSeek_UsesOneChunkScanAndPreparesOnlyOnFirstNavigation()
     {
         var source = CreateSource(4098);
+        var receiver = source.GetCursor(source.Count);
 
         InstrumentedCountMeasure.Reset();
-        Assert.True(source.TryGetCursorByMeasure(new CountAbove(2040), out var located));
+        Assert.True(receiver.TrySeekByMeasure(new CountAbove(2040), out var located));
         Assert.Equal(2048, InstrumentedCountMeasure.MeasureCalls);
         Assert.Equal(0, located.GetDiagnostics().ActiveLength);
         Assert.Equal(2040, located.Position);
@@ -60,8 +61,13 @@ public sealed class MeasuredRopeCursorMeasureCacheTests
         Assert.Equal(source.Count - 2040, located.MeasureAfter);
 
         InstrumentedCountMeasure.Reset();
+        Assert.True(located.TrySeekByMeasure(new CountAbove(2041), out var soughtAgain));
+        Assert.Equal(0, InstrumentedCountMeasure.MeasureCalls);
+        Assert.Equal(2041, soughtAgain.Position);
+
+        InstrumentedCountMeasure.Reset();
         var moved = located.MoveNext();
-        Assert.Equal(2048, InstrumentedCountMeasure.MeasureCalls);
+        Assert.Equal(0, InstrumentedCountMeasure.MeasureCalls);
         Assert.Equal(2041, moved.Position);
         Assert.Equal(2041, moved.MeasureBefore);
 
@@ -72,7 +78,7 @@ public sealed class MeasuredRopeCursorMeasureCacheTests
 
         InstrumentedCountMeasure.Reset();
         var edited = located.Insert(-1);
-        Assert.Equal(2049, InstrumentedCountMeasure.MeasureCalls);
+        Assert.Equal(1, InstrumentedCountMeasure.MeasureCalls);
         Assert.Equal(source.Count + 1, edited.Count);
         Assert.Equal(2041, edited.Position);
         Assert.Same(source, located.Snapshot());
@@ -261,11 +267,19 @@ public sealed class MeasuredRopeCursorMeasureCacheTests
 
         InstrumentedCountMeasure.Reset(throwOnCombine: 1);
         InstrumentedCountMeasure.BlockCombine(1);
-        var failedCandidate = Task.Run(() => Record.Exception(() => edited.Snapshot()));
+        var failedCandidate = Task.Factory.StartNew(
+            () => Record.Exception(() => edited.Snapshot()),
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
         try
         {
             InstrumentedCountMeasure.WaitForBlockedCombine();
-            var successfulCandidate = Task.Run(() => edited.Snapshot());
+            var successfulCandidate = Task.Factory.StartNew(
+                () => edited.Snapshot(),
+                CancellationToken.None,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
             Assert.Same(
                 successfulCandidate,
                 await Task.WhenAny(successfulCandidate, Task.Delay(TimeSpan.FromSeconds(10))));

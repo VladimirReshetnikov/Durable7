@@ -555,8 +555,8 @@ The implementation should keep XML documentation aligned with this file. XML sum
 
 The [C0 decision record](rope-cursor-c0-decision.md) owns the representation selection, measured gate,
 and proof boundary; the [validation guide](validation.md#test-coverage) maps the public command model,
-identity/sharing, boundary, failure, and concurrency evidence. This section describes only the shipped
-positional cursor: measured/text cursors and sample adoption remain later Axis 2 phases.
+identity/sharing, boundary, failure, and concurrency evidence. This section describes the positional
+cursor; the measured extension is specified below.
 
 ## The Measured Rope
 
@@ -568,6 +568,42 @@ positional cursor: measured/text cursors and sample adoption remain later Axis 2
 - **Builder.** `MeasuredRope<T, TMeasure, TMeasureOps>.Builder` is the measured analogue of `Rope<T>.Builder`: append-only, frozen-prefix based, and clean-freeze cached. It additionally exposes a live O(1) `Measure` property seeded from `TMeasureOps.Empty` and updated as elements are appended.
 - **Choice.** Use `Rope<T>` when no secondary measure is needed; `MeasuredRope<T, TMeasure, TMeasureOps>` when measure-based navigation is required.
 - **Text conveniences.** `RopeText` is a companion extension layer (so the rope cores stay element-agnostic) over `Rope<char>` and the line-aware `MeasuredRope<char, int, NewlineMeasure>`: the ready-made `NewlineMeasure`, string interop (`ToCharRope`/`ToTextRope`/`AsString`), zero-based O(log n) line/column navigation (`LineCount`, `LineOfOffset`, `LineStartOffset`, `LineColumnOf`, `OffsetOf`, `GetLine`, `Lines`), and a forward-only `TextReader` adapter (`AsTextReader`). Line numbering follows the editor convention that line count is newline count plus one (an empty buffer is one empty line; a trailing newline yields a trailing empty line).
+
+### Measured Edit Cursor
+
+`MeasuredRope<T, TMeasure, TMeasureOps>.GetCursor(position)` creates a public readonly
+`MeasuredRopeCursor<T, TMeasure, TMeasureOps>`. It has the positional cursor's gap, movement, edit,
+branching, identity, failure, snapshot, and linear-lineage complexity contracts, specialized to a
+measured rope.
+
+- **Ordered gap measures.** `MeasureBefore` is the aggregate of `[0, Position)` and `MeasureAfter`
+  is the aggregate of `[Position, Count)`. `Combine(MeasureBefore, MeasureAfter)` therefore equals
+  the version's total measure in source order. The contract assumes associativity only: it requires
+  no inverse, commutativity, default identity value, or element equality.
+- **Absolute measure seek.** `TrySeekByMeasure` searches the current logical version, and
+  `MeasuredRope.TryGetCursorByMeasure` combines creation with that search. Delegate and constrained
+  `IMeasurePredicate<TMeasure>` overloads select the gap immediately before the first element whose
+  inclusive prefix makes a lawful monotone predicate true. A predicate true for the empty measure
+  selects zero on a nonempty rope. A miss returns `false` and an end cursor whose `MeasureBefore` is
+  the whole measure. Empty ropes also miss. Arbitrary positional `Seek` remains available.
+- **Prepared fragments.** A measure seek on an existing lineage prepares at most the selected
+  ordinary chunk and shares its element measures with descendant edit versions. Prefix and suffix
+  tables are installed lazily and failure-atomically; later seeks through that fragment do no
+  element remeasurement. A one-shot source factory deliberately does not retain a full
+  element-measure array and defers zipper materialization until movement or editing requires it.
+- **Snapshot and callbacks.** Clean snapshots return the exact source reference. Dirty first
+  snapshots publish one winner-returning canonical measured rope and do not re-invoke the element
+  `Measure` callback for already prepared buffers. A callback exception publishes neither partial
+  fragment preparation nor a snapshot; racing preparation may duplicate bounded work but cannot
+  expose partial arrays.
+- **Text specialization.** With `MeasuredRope<char, int, NewlineMeasure>`, the cursor works directly
+  with the existing UTF-16 text helpers. `RopeText.LineColumnOf(cursor)` obtains zero-based line and
+  column coordinates without first materializing a snapshot.
+
+The [C2 shipment decision](measured-rope-cursor-c2-decision.md) owns the exact 16/256 representation,
+callback ceilings, source-versus-prepared split policy, benchmark thresholds, and validation
+evidence. No deque, RRB, reversible-deque, raw-finger-tree, Tungsten, bookmark, or rebase cursor is
+implied by this surface.
 
 ## Relaxed Radix-Balanced Vector
 

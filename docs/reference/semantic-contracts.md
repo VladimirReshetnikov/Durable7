@@ -252,8 +252,9 @@ Shared obligations:
 - Builders must document mutation, snapshot publication, and whether later builder changes can affect
   previously produced immutable ropes.
 
-C# additionally ships the positional `RopeCursor<T>`; no measured-rope, text, deque, RRB, raw-
-finger-tree, or Tungsten cursor is implied by that surface. Its current obligations are:
+C# additionally ships the positional `RopeCursor<T>` and measured
+`MeasuredRopeCursor<T, TMeasure, TMeasureOps>`; no deque, RRB, raw-finger-tree, reversible-deque,
+or Tungsten cursor is implied by those surfaces. Their shared obligations are:
 
 - A cursor position is a gap in `0 .. Count`: previous operations address `p - 1`, next operations
   address `p`, insertion returns the gap after the inserted values, backspace moves the gap left,
@@ -277,11 +278,26 @@ finger-tree, or Tungsten cursor is implied by that surface. Its current obligati
   at a boundary has the conservative O(b log n) aggregate bound; there is no unqualified
   arbitrary-version-DAG O(1)-amortized claim.
 
+The measured cursor additionally requires:
+
+- `MeasureBefore` aggregates `[0, Position)` and `MeasureAfter` aggregates `[Position, Count)`;
+  combining them in that order yields the whole version's measure without assuming an inverse,
+  commutativity, element equality, or a default-value identity.
+- Absolute measure seek selects the gap before the first element whose inclusive prefix satisfies a
+  lawful monotone predicate. True-at-empty selects zero for a nonempty rope; misses and empty ropes
+  return `false` with an end cursor whose before measure is the whole measure.
+- Prepared element measures belong to the immutable cursor lineage, may be shared by descendants,
+  and must be published failure-atomically. Failed or racing callbacks cannot expose partially
+  initialized prefix/suffix state. A dirty snapshot must not remeasure already prepared elements.
+- The newline specialization uses UTF-16 element offsets and the existing zero-based line/column
+  rules; it does not create a separate text-rope representation.
+
 The normative C# details and evidence are in the
 [FingerTree API specification](../../src/CSharp/docs/FingerTree/api-specification.md),
 [usage guide](../../src/CSharp/docs/FingerTree/usage.md),
 [validation guide](../../src/CSharp/docs/FingerTree/validation.md), and
-[C0 decision record](../../src/CSharp/docs/FingerTree/rope-cursor-c0-decision.md).
+[C0 positional decision](../../src/CSharp/docs/FingerTree/rope-cursor-c0-decision.md), and
+[C2 measured decision](../../src/CSharp/docs/FingerTree/measured-rope-cursor-c2-decision.md).
 
 ## Tungsten Collections
 

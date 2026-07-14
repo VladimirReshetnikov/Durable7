@@ -91,6 +91,16 @@ The suite covers:
   and exercises long typing, carry flush, seam oscillation, and full backspace histories;
 - the [C0 decision record](rope-cursor-c0-decision.md) connects those C1 tests to the selected 16/256
   representation, named benchmark gate, and published linear-lineage/O(b log n) complexity scope;
+- `MeasuredRopeCursorApiShapeTests.cs`, `MeasuredRopeCursorTests.cs`, and
+  `MeasuredRopeCursorModelTests.cs` lock the public C2 surface, default/boundary behavior, ordered
+  before/after measures, edit vocabulary, retained branches, snapshot identity, and deterministic
+  gap-model histories;
+- `MeasuredRopeCursorMeasureSeekTests.cs` and `MeasuredRopeCursorMeasureCacheTests.cs` cover
+  delegate and closure-free absolute measure seek, hit/miss/chunk-boundary behavior,
+  noncommutative ordering, source/prepared/dirty parity, fragment reuse, callback ceilings,
+  failure atomicity, and racing cache publication;
+- the [C2 decision record](measured-rope-cursor-c2-decision.md) connects that coverage to the
+  locked local-edit, positional/measure-seek, line/column, callback, allocation, and dirty-query gates;
 - `RrbVector<T>` radix boundaries, regular-versus-relaxed representation invariants, exact-boundary
   leaf reuse, unequal-height and adversarial-fragment concatenation, density/height ceilings,
   builder snapshot isolation, retained snapshots, and randomized mixed-edit histories;

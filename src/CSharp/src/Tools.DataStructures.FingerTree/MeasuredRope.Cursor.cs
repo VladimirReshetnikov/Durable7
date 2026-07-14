@@ -47,7 +47,9 @@ public sealed partial class MeasuredRope<T, TMeasure, TMeasureOps>
     /// <remarks>
     /// A predicate already true for the empty measure selects position zero when the rope is nonempty. On a miss,
     /// including an empty rope, <paramref name="cursor"/> has <c>Position == Count</c> and its
-    /// <c>MeasureBefore</c> is the whole-rope measure.
+    /// <c>MeasureBefore</c> is the whole-rope measure. This one-shot source factory defers focus preparation and
+    /// does not retain a full element-measure array for the located ordinary chunk; movement or editing prepares
+    /// that bounded chunk only if it is subsequently needed.
     /// </remarks>
     public bool TryGetCursorByMeasure(
         Func<TMeasure, bool> predicate,
@@ -102,8 +104,10 @@ public sealed partial class MeasuredRope<T, TMeasure, TMeasureOps>
 /// </para>
 /// <para>
 /// The cursor is a readonly value over immutable version and zipper state. A 16-element active window, a partial
-/// carry smaller than 256 elements on either side, and per-element prefix/suffix measure caches keep local copying
-/// and measure work bounded. On a linear editing lineage, local movement and single-element edits are O(1)
+/// carry smaller than 256 elements on either side, and lineage-shared per-element prefix/suffix measure caches keep
+/// local copying and measure work bounded. Absolute measure seeks on an existing lineage prepare a selected
+/// ordinary fragment once; later seeks and focus materialization reuse its element measures, and directional
+/// aggregate tables are published lazily. On a linear editing lineage, local movement and single-element edits are O(1)
 /// amortized and O(log n) worst-case. Arbitrary fan-out retains the conservative O(b log n) aggregate bound for
 /// <c>b</c> branches at a deferred boundary.
 /// </para>
@@ -313,6 +317,12 @@ public readonly struct MeasuredRopeCursor<T, TMeasure, TMeasureOps>
     /// <param name="cursor">The boundary cursor, or the end cursor on failure.</param>
     /// <returns><see langword="true"/> when a boundary element exists; otherwise <see langword="false"/>.</returns>
     /// <exception cref="InvalidOperationException">This is the default, uninitialized cursor.</exception>
+    /// <remarks>
+    /// A cache miss measures at most one ordinary chunk and installs that successful preparation in the immutable
+    /// version lineage. Repeated seeks that select the same fragment reuse its element measures; the ordered suffix
+    /// table is built and published only when needed. Failed preparation is never installed, and racing preparation
+    /// may duplicate bounded work but cannot publish partial state.
+    /// </remarks>
     public bool TrySeekByMeasure<TPredicate>(
         TPredicate predicate,
         out MeasuredRopeCursor<T, TMeasure, TMeasureOps> cursor)

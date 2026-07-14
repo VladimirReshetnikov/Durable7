@@ -421,8 +421,35 @@ their workload model.
 
 The [API specification](api-specification.md#positional-edit-cursor) is normative for the shipped
 surface; the [C0 decision](rope-cursor-c0-decision.md) records the benchmark selection and the exact
-linear-lineage/branched-history proof boundary. `MeasuredRope` and text cursors are not part of this C1
-surface.
+linear-lineage/branched-history proof boundary.
+
+The measured sibling preserves the same gap and edit vocabulary while carrying the aggregate on
+both sides of the gap. Absolute measure seek accepts either a delegate or a closure-free struct
+predicate and returns the gap immediately before the first element whose inclusive prefix makes the
+predicate true:
+
+```csharp
+var text = "alpha\nbeta\ngamma".ToTextRope();
+var cursor = text.GetCursor(6);               // immediately before 'b'
+var edited = cursor.InsertRange("new ");       // alpha\nnew |beta\ngamma
+
+Console.WriteLine(edited.MeasureBefore);      // one newline before the gap
+Console.WriteLine(edited.MeasureAfter);       // two newlines at/after the gap
+
+if (edited.TrySeekByMeasure(newlines => newlines >= 2, out var beforeSecondNewline))
+    Console.WriteLine(beforeSecondNewline.Position);
+
+var checkpoint = edited.Snapshot();
+```
+
+`MeasureBefore` and `MeasureAfter` compose in source order to the whole-version measure; no inverse
+or commutativity is required. A measure seek from an existing cursor lineage prepares the selected
+bounded fragment once and shares its element measures with descendant versions. A one-shot
+`MeasuredRope.TryGetCursorByMeasure` defers focus construction without retaining a full
+element-measure array. Failed callbacks publish no partial cache or snapshot. See the
+[measured cursor API](api-specification.md#measured-edit-cursor) and
+[C2 decision](measured-rope-cursor-c2-decision.md) for the exact semantics, complexity scope, and
+locked benchmark evidence.
 
 Use `MeasuredRope<T, TMeasure, TMeasureOps>` when the sequence also needs cumulative-measure
 navigation:

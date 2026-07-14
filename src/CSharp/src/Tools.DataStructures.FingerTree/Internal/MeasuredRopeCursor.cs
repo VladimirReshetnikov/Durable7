@@ -414,6 +414,11 @@ internal sealed class MeasuredCursorFragmentCache<T, TMeasure, TMeasureOps>
         return _fragments.GetOrAdd(key, candidate);
     }
 
+    internal bool TryGet(
+        MeasuredChunk<T, TMeasure, TMeasureOps> chunk,
+        out MeasuredCursorPreparedFragment<T, TMeasure, TMeasureOps> prepared) =>
+        _fragments.TryGetValue(chunk.Chunk.Data, out prepared!);
+
     internal void Register(
         MeasuredChunk<T, TMeasure, TMeasureOps> chunk,
         MeasuredCursorPreparedFragment<T, TMeasure, TMeasureOps> prepared) =>
@@ -548,7 +553,13 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
         where TPredicate : struct, IMeasurePredicate<TMeasure>
     {
         ArgumentNullException.ThrowIfNull(source);
-        var (found, context) = TryLocateContext(source, predicate, configuration);
+        var fragmentCache = new MeasuredCursorFragmentCache<T, TMeasure, TMeasureOps>();
+        var (found, context) = TryLocateContext(
+            source,
+            predicate,
+            configuration,
+            fragmentCache,
+            cacheMisses: false);
         return (
             found,
             new MeasuredRopeCursorEdit<T, TMeasure, TMeasureOps>(
@@ -563,7 +574,8 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
     internal static MeasuredRopeZipperContext<T, TMeasure, TMeasureOps> CreateContext(
         MeasuredRope<T, TMeasure, TMeasureOps> source,
         int position,
-        RopeCursorPrototypeConfiguration configuration)
+        RopeCursorPrototypeConfiguration configuration,
+        MeasuredCursorFragmentCache<T, TMeasure, TMeasureOps>? fragmentCache = null)
     {
         if ((uint)position > (uint)source.Count)
             throw new ArgumentOutOfRangeException(nameof(position));
@@ -572,7 +584,7 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
         {
             var emptyMeasure = source.Measure;
             var empty = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.Empty(emptyMeasure);
-            var emptyFragmentCache = new MeasuredCursorFragmentCache<T, TMeasure, TMeasureOps>();
+            fragmentCache ??= new MeasuredCursorFragmentCache<T, TMeasure, TMeasureOps>();
             return new MeasuredRopeZipperContext<T, TMeasure, TMeasureOps>(
                 EmptyTree,
                 empty,
@@ -582,7 +594,7 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
                 EmptyTree,
                 0,
                 configuration,
-                emptyFragmentCache,
+                fragmentCache,
                 emptyMeasure,
                 emptyMeasure,
                 DeferredSource: null,
@@ -621,7 +633,7 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
             gapInChunk = position - chunkStart;
         }
 
-        var fragmentCache = new MeasuredCursorFragmentCache<T, TMeasure, TMeasureOps>();
+        fragmentCache ??= new MeasuredCursorFragmentCache<T, TMeasure, TMeasureOps>();
         var prepared = fragmentCache.GetOrMeasure(hit);
         var activeLength = Math.Min(configuration.FocusCapacity, prepared.Length);
         var activeStart = Math.Clamp(
@@ -649,7 +661,9 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
         TryLocateContext<TPredicate>(
             MeasuredRope<T, TMeasure, TMeasureOps> source,
             TPredicate predicate,
-            RopeCursorPrototypeConfiguration configuration)
+            RopeCursorPrototypeConfiguration configuration,
+            MeasuredCursorFragmentCache<T, TMeasure, TMeasureOps> fragmentCache,
+            bool cacheMisses)
         where TPredicate : struct, IMeasurePredicate<TMeasure>
     {
         if (!source.TreeForMeasuredCursor.TryLocateWithSuffix(
@@ -658,17 +672,40 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
                 out var hit,
                 out var after))
         {
-            return (false, CreateDeferredEndContext(source, configuration));
+            return (false, CreateDeferredEndContext(source, configuration, fragmentCache));
         }
 
-        var located = RopeCursorDiagnostics.IsSessionActive
-            ? LocateInChunkWithDiagnostics(hit, before.Second, after.Second, predicate)
-            : LocateInChunk(hit, before.Second, after.Second, predicate);
+        (bool Found, int Gap, TMeasure MeasureBefore, TMeasure MeasureAfter) located;
+        if (fragmentCache.TryGet(hit, out var prepared))
+        {
+            located = RopeCursorDiagnostics.IsSessionActive
+                ? LocateInPreparedChunkWithDiagnostics(prepared, before.Second, after.Second, predicate)
+                : LocateInPreparedChunk(prepared, before.Second, after.Second, predicate);
+        }
+        else if (cacheMisses)
+        {
+            var measured = RopeCursorDiagnostics.IsSessionActive
+                ? LocateAndPrepareChunkWithDiagnostics(hit, before.Second, after.Second, predicate)
+                : LocateAndPrepareChunk(hit, before.Second, after.Second, predicate);
+            fragmentCache.Register(
+                hit,
+                new MeasuredCursorPreparedFragment<T, TMeasure, TMeasureOps>(
+                    hit.Chunk.Data,
+                    measured.ElementMeasures,
+                    hit.Measure));
+            located = (measured.Found, measured.Gap, measured.MeasureBefore, measured.MeasureAfter);
+        }
+        else
+        {
+            located = RopeCursorDiagnostics.IsSessionActive
+                ? LocateInUncachedChunkWithDiagnostics(hit, before.Second, after.Second, predicate)
+                : LocateInUncachedChunk(hit, before.Second, after.Second, predicate);
+        }
 
         // A lawful monotone predicate that selected this chunk must flip within it. Treat a stateful or otherwise
         // inconsistent predicate as a miss instead of manufacturing a boundary from the final element.
         if (!located.Found)
-            return (false, CreateDeferredEndContext(source, configuration));
+            return (false, CreateDeferredEndContext(source, configuration, fragmentCache));
 
         // The scan deliberately continues after the boundary. For an arbitrary, non-invertible and
         // noncommutative monoid this is the only way to cache the exact suffix without either a second
@@ -682,12 +719,13 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
                 before.First,
                 located.Gap,
                 configuration,
+                fragmentCache,
                 located.MeasureBefore,
                 located.MeasureAfter));
     }
 
     private static (bool Found, int Gap, TMeasure MeasureBefore, TMeasure MeasureAfter)
-        LocateInChunk<TPredicate>(
+        LocateInUncachedChunk<TPredicate>(
             MeasuredChunk<T, TMeasure, TMeasureOps> hit,
             TMeasure measureBeforeChunk,
             TMeasure measureAfterChunk,
@@ -727,7 +765,7 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
     }
 
     private static (bool Found, int Gap, TMeasure MeasureBefore, TMeasure MeasureAfter)
-        LocateInChunkWithDiagnostics<TPredicate>(
+        LocateInUncachedChunkWithDiagnostics<TPredicate>(
             MeasuredChunk<T, TMeasure, TMeasureOps> hit,
             TMeasure measureBeforeChunk,
             TMeasure measureAfterChunk,
@@ -777,6 +815,174 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
         finally
         {
             RopeCursorDiagnostics.RecordElementMeasureCallback(measureCallbackCount);
+            RopeCursorDiagnostics.RecordMeasureCombineCallback(combineCallbackCount);
+        }
+    }
+
+    private static (bool Found, int Gap, TMeasure MeasureBefore, TMeasure MeasureAfter, TMeasure[] ElementMeasures)
+        LocateAndPrepareChunk<TPredicate>(
+            MeasuredChunk<T, TMeasure, TMeasureOps> hit,
+            TMeasure measureBeforeChunk,
+            TMeasure measureAfterChunk,
+            TPredicate predicate)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>
+    {
+        var elementMeasures = new TMeasure[hit.Length];
+        var accumulated = measureBeforeChunk;
+        var measureAfter = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.InvokeEmpty();
+        var gap = -1;
+        var measureBefore = default(TMeasure)!;
+        for (var offset = 0; offset < hit.Length; offset++)
+        {
+            var elementMeasure = TMeasureOps.Measure(hit[offset]);
+            elementMeasures[offset] = elementMeasure;
+            if (gap < 0)
+            {
+                var inclusive = TMeasureOps.Combine(accumulated, elementMeasure);
+                if (predicate.Invoke(inclusive))
+                {
+                    gap = offset;
+                    measureBefore = accumulated;
+                    measureAfter = elementMeasure;
+                }
+                else
+                {
+                    accumulated = inclusive;
+                }
+            }
+            else
+            {
+                measureAfter = TMeasureOps.Combine(measureAfter, elementMeasure);
+            }
+        }
+
+        return gap < 0
+            ? (false, 0, default!, default!, elementMeasures)
+            : (true, gap, measureBefore, TMeasureOps.Combine(measureAfter, measureAfterChunk), elementMeasures);
+    }
+
+    private static (bool Found, int Gap, TMeasure MeasureBefore, TMeasure MeasureAfter, TMeasure[] ElementMeasures)
+        LocateAndPrepareChunkWithDiagnostics<TPredicate>(
+            MeasuredChunk<T, TMeasure, TMeasureOps> hit,
+            TMeasure measureBeforeChunk,
+            TMeasure measureAfterChunk,
+            TPredicate predicate)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>
+    {
+        var measureCallbackCount = 0;
+        var combineCallbackCount = 0;
+        try
+        {
+            var elementMeasures = new TMeasure[hit.Length];
+            var accumulated = measureBeforeChunk;
+            var measureAfter = MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.InvokeEmpty();
+            var gap = -1;
+            var measureBefore = default(TMeasure)!;
+            for (var offset = 0; offset < hit.Length; offset++)
+            {
+                measureCallbackCount++;
+                var elementMeasure = TMeasureOps.Measure(hit[offset]);
+                elementMeasures[offset] = elementMeasure;
+                if (gap < 0)
+                {
+                    combineCallbackCount++;
+                    var inclusive = TMeasureOps.Combine(accumulated, elementMeasure);
+                    if (predicate.Invoke(inclusive))
+                    {
+                        gap = offset;
+                        measureBefore = accumulated;
+                        measureAfter = elementMeasure;
+                    }
+                    else
+                    {
+                        accumulated = inclusive;
+                    }
+                }
+                else
+                {
+                    combineCallbackCount++;
+                    measureAfter = TMeasureOps.Combine(measureAfter, elementMeasure);
+                }
+            }
+
+            if (gap < 0)
+                return (false, 0, default!, default!, elementMeasures);
+
+            combineCallbackCount++;
+            return (
+                true,
+                gap,
+                measureBefore,
+                TMeasureOps.Combine(measureAfter, measureAfterChunk),
+                elementMeasures);
+        }
+        finally
+        {
+            RopeCursorDiagnostics.RecordElementMeasureCallback(measureCallbackCount);
+            RopeCursorDiagnostics.RecordMeasureCombineCallback(combineCallbackCount);
+        }
+    }
+
+    private static (bool Found, int Gap, TMeasure MeasureBefore, TMeasure MeasureAfter)
+        LocateInPreparedChunk<TPredicate>(
+            MeasuredCursorPreparedFragment<T, TMeasure, TMeasureOps> prepared,
+            TMeasure measureBeforeChunk,
+            TMeasure measureAfterChunk,
+            TPredicate predicate)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>
+    {
+        var accumulated = measureBeforeChunk;
+        for (var offset = 0; offset < prepared.Length; offset++)
+        {
+            var elementMeasure = prepared.ElementMeasure(offset);
+            var inclusive = TMeasureOps.Combine(accumulated, elementMeasure);
+            if (predicate.Invoke(inclusive))
+            {
+                return (
+                    true,
+                    offset,
+                    accumulated,
+                    TMeasureOps.Combine(prepared.SuffixMeasure(offset), measureAfterChunk));
+            }
+            accumulated = inclusive;
+        }
+
+        return (false, 0, default!, default!);
+    }
+
+    private static (bool Found, int Gap, TMeasure MeasureBefore, TMeasure MeasureAfter)
+        LocateInPreparedChunkWithDiagnostics<TPredicate>(
+            MeasuredCursorPreparedFragment<T, TMeasure, TMeasureOps> prepared,
+            TMeasure measureBeforeChunk,
+            TMeasure measureAfterChunk,
+            TPredicate predicate)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>
+    {
+        var combineCallbackCount = 0;
+        try
+        {
+            var accumulated = measureBeforeChunk;
+            for (var offset = 0; offset < prepared.Length; offset++)
+            {
+                var elementMeasure = prepared.ElementMeasure(offset);
+                combineCallbackCount++;
+                var inclusive = TMeasureOps.Combine(accumulated, elementMeasure);
+                if (predicate.Invoke(inclusive))
+                {
+                    combineCallbackCount++;
+                    return (
+                        true,
+                        offset,
+                        accumulated,
+                        TMeasureOps.Combine(prepared.SuffixMeasure(offset), measureAfterChunk));
+                }
+                accumulated = inclusive;
+            }
+
+            return (false, 0, default!, default!);
+        }
+        finally
+        {
             RopeCursorDiagnostics.RecordMeasureCombineCallback(combineCallbackCount);
         }
     }
@@ -925,7 +1131,12 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
             TPredicate predicate)
         where TPredicate : struct, IMeasurePredicate<TMeasure> =>
         PreserveSamePosition(
-            TryLocateContext(version.Snapshot(), predicate, source.Configuration),
+            TryLocateContext(
+                version.Snapshot(),
+                predicate,
+                source.Configuration,
+                source.FragmentCache!,
+                cacheMisses: true),
             source);
 
     internal static MeasuredRopeCursorEdit<T, TMeasure, TMeasureOps> Insert(
@@ -1107,7 +1318,7 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
     {
         if (context.DeferredSource is { } deferredSource)
         {
-            if (context.FragmentCache is not null || context.LeftCarry is not null ||
+            if (context.FragmentCache is null || context.LeftCarry is not null ||
                 context.Active is not null || context.Gap != 0 || context.RightCarry is not null ||
                 !context.LeftTree.IsEmpty || !context.RightTree.IsEmpty)
             {
@@ -1159,10 +1370,11 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
 
     private static MeasuredRopeZipperContext<T, TMeasure, TMeasureOps> CreateDeferredEndContext(
         MeasuredRope<T, TMeasure, TMeasureOps> source,
-        RopeCursorPrototypeConfiguration configuration)
+        RopeCursorPrototypeConfiguration configuration,
+        MeasuredCursorFragmentCache<T, TMeasure, TMeasureOps> fragmentCache)
     {
         if (source.IsEmpty)
-            return CreateContext(source, 0, configuration);
+            return CreateContext(source, 0, configuration, fragmentCache);
 
         return CreateDeferredContext(
             source,
@@ -1170,6 +1382,7 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
             source.Count,
             gapInChunk: 0,
             configuration,
+            fragmentCache,
             source.Measure,
             MeasuredCursorBuffer<T, TMeasure, TMeasureOps>.InvokeEmpty());
     }
@@ -1180,6 +1393,7 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
         int chunkStart,
         int gapInChunk,
         RopeCursorPrototypeConfiguration configuration,
+        MeasuredCursorFragmentCache<T, TMeasure, TMeasureOps> fragmentCache,
         TMeasure measureBefore,
         TMeasure measureAfter)
     {
@@ -1192,7 +1406,7 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
             EmptyTree,
             checked(chunkStart + gapInChunk),
             configuration,
-            FragmentCache: null,
+            fragmentCache,
             measureBefore,
             measureAfter,
             source,
@@ -1208,7 +1422,7 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
     {
         if (source.DeferredSource is not { } deferredSource)
             return source;
-        return CreateContext(deferredSource, source.Position, source.Configuration);
+        return CreateContext(deferredSource, source.Position, source.Configuration, source.FragmentCache);
     }
 
     private static MeasuredRopeZipperContext<T, TMeasure, TMeasureOps> CreateContextFromLocatedChunk(

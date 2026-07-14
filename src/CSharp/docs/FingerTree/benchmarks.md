@@ -213,6 +213,29 @@ worst-case aggregate work for `b` siblings—not unqualified amortized O(1) over
 DAG. The full protocol, environment, counter tables, and exact commands are in the
 [C0 decision](rope-cursor-c0-decision.md).
 
+### Axis 2 C2 measured rope cursor
+
+C2 repeated the 65,536-character, 256-replacement, locality-eight, snapshot-every-sixteen gate for
+newline-measured text. Against the fastest completed indexed-control repeat, the measured cursor
+reduced sparse editing from 1.084 ms to 275.7 us and dense editing from 1.139 ms to 265.9 us;
+allocation fell from 1.56 MB to 287.24 KB in both densities. These are 74.6%/76.7% latency and
+82.0% allocation improvements, clearing the predeclared practical threshold.
+
+The separately locked query lanes prevent that edit win from hiding regressions:
+
+| Query lane | Sparse candidate/baseline | Dense candidate/baseline | Candidate allocation |
+| --- | ---: | ---: | ---: |
+| Source struct measure seek | 1.80x | 1.64x | 664 B |
+| Prepared struct measure seek | 1.41x | 1.05x | 0 B |
+| Prepared positional seek | 1.02x | 1.21x | 0.99x baseline |
+| Cursor line/column | 0.91x | 0.81x | 0 B |
+| Freshly dirty struct measure seek | 1.14x | 1.09x | 1.00x baseline |
+
+The first selected 2,048-element fragment performs exactly 2,048 element `Measure` callbacks;
+later prepared seeks reuse those measures, and snapshot publication performs none. The full policy,
+delegate lanes, freshly dirty lanes, artifacts, and representation rationale are in the
+[C2 decision](measured-rope-cursor-c2-decision.md).
+
 ### Line navigation (measured rope)
 
 `MeasuredRope<char, int, NewlineMeasure>` navigates by line in O(log n) by descending its cached newline measure,

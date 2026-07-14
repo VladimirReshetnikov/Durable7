@@ -1,6 +1,6 @@
 # Frontier Structure Catalog
 
-- Status: Current-state catalog - shipped Axis 1 cores, shipped C# Axis 2 C1/T2, and remaining frontier candidates
+- Status: Current-state catalog - shipped Axis 1 cores, shipped C# Axis 2 C1/C2/T2, and remaining frontier candidates
 - Created (UTC): 2026-07-11T03:31:23Z
 - Repository HEAD: f40e301e8faf26d748f33d8546d7d9216657301e
 - Audience: Maintainers and AI agents planning new repository-owned cores, representation tiers, and specialized sibling collections
@@ -10,8 +10,9 @@ This document began as a catalog of candidate work that the
 [derived structure catalog](derived-structure-catalog.md) deliberately does not cover. That catalog
 records what can be built *by composing* the shipped HAMT and FingerTree families; this one records
 three complementary axes. Axis 1 now includes both implemented reference cores and unimplemented
-candidates. Axis 2 now includes the shipped C# positional rope cursor and one-way CHAMP transients;
-the measured/text cursor, frozen-hash, and later phases remain planning material, as does Axis 3:
+candidates. Axis 2 now includes the shipped C# positional and measured rope cursors and one-way
+CHAMP transients; frozen-hash, sample integration, and later phases remain planning material, as
+does Axis 3:
 
 1. **New cores** - structures that need their own node layer, including several invented or refined
    in the last decade.
@@ -38,9 +39,9 @@ committed, prioritized slate from the derived catalog plus review-observed gaps;
 the *frontier* candidate space beyond it. Three items originally overlapped: the Patricia trie
 family (proposal Tier C1), the cursor/zipper (proposal A3), and the RRB vector (then deferred on
 benchmark-first grounds). Patricia and RRB have since shipped across the language workspaces, and
-the positional cursor and CHAMP owner-token transients have shipped as C# Axis 2 C1 and T2;
-measured/text cursors, the frozen tier, and later cursor families remain planned. The cursor and the
-temporal-lifecycle work have a dedicated
+the positional cursor, measured/text cursor, and CHAMP owner-token transients have shipped as C#
+Axis 2 C1, C2, and T2; sample integration, the frozen tier, and later cursor families remain
+planned. The cursor and the temporal-lifecycle work have a dedicated
 [Axis 2 final plan](../proposals/axis2-lifecycle-and-sequence-cursors.md), which is authoritative where
 its API, complexity, or sequencing detail differs from the older proposal. The entries below are
 the current-state record, while the 2026-07-09 proposal remains useful historical scheduling
@@ -74,7 +75,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
 | Size-tiered small representations | 2 | Strong, explicitly postponed | Re-entry benchmark after the Axis 2 fixed-layout evidence decision | Internal tier per selected facade + representation-forcing tests |
 | Transient -> persistent -> frozen lifecycle | 2 | C# CHAMP T2 owner-token transient implemented; frozen map/set tier remains planned and evidence-gated | T0/T1/T2 complete for the transient; F1 evidence collection must precede F2 | Shipped C# map/set transients + planned frozen map/set types |
-| Version-bound cursor / zipper | 2, 3 | C1 positional `RopeCursor<T>` implemented in C#; C2/C3 planned; C4 consumer-gated | C0 selected the readonly-struct zipper-as-version; measured/text work has its own gate | Shipped positional cursor; measured/text cursor and sample integration remain |
+| Version-bound cursor / zipper | 2, 3 | C1 positional and C2 measured/text cursors implemented in C#; C3 planned; C4 consumer-gated | C0 selected the readonly-struct zipper-as-version; C2 cleared its measured/text gate | Shipped positional and measured cursors; sample integration remains |
 | Key-type-specialized map factories | 2 | Plausible, explicitly postponed | Named consumer after explicit Patricia consideration | Factory layer; ART only if independently justified |
 | Self-adjusting (splay-style) structures | 2 | Reject | - | Reads allocate under path copying; cursors + freeze substitute |
 | Range-update sequence (lazy propagation) | 3 | Strong | Measure action interface | 1 sibling core + tag algebra + property tests |
@@ -791,7 +792,8 @@ required concurrency-validation tier; the native reclamation exception remains e
 ### Size-tiered small representations
 
 **Status: Explicitly postponed; the current persistent facades do not switch to flat small-size
-tiers. Axis 2 has independently shipped the C1 positional cursor and T2 C# CHAMP transient, while
+tiers. Axis 2 has independently shipped the C1 positional cursor, C2 measured/text cursor, and T2
+C# CHAMP transient, while
 the fixed-layout evidence gate still precedes any size-tier re-entry.**
 
 **The pattern.** Below a threshold, represent the collection as a flat array; promote to the tree
@@ -898,10 +900,12 @@ language transient work.
 
 ### Cursor / zipper over the sequence family
 
-**Status (2026-07-13): C# C1 is shipped.** `Rope<T>.GetCursor(position)` and the public readonly
-`RopeCursor<T>` implement the positional version-bound gap cursor. C2 measured/text cursors and C3
-Editor/Tour integration remain planned behind their own evidence gates; C4 cursor adapters remain
-consumer-gated. No sibling-language cursor parity is committed. The
+**Status (2026-07-13): C# C1 and C2 are shipped.** `Rope<T>.GetCursor(position)` and the public
+readonly `RopeCursor<T>` implement the positional version-bound gap cursor.
+`MeasuredRope<T, TMeasure, TMeasureOps>.GetCursor(position)` and
+`TryGetCursorByMeasure` add the measured/text specialization through the public readonly
+`MeasuredRopeCursor<T, TMeasure, TMeasureOps>`. C3 Editor/Tour integration remains planned; C4
+cursor adapters remain consumer-gated. No sibling-language cursor parity is committed. The
 [Axis 2 final cursor plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) remains normative for
 the unshipped phases, while the [C0 decision record](../../src/CSharp/docs/FingerTree/rope-cursor-c0-decision.md)
 records the selected representation and proof boundary for C1.
@@ -915,6 +919,17 @@ the logical sequence version and snapshot memo; an edit creates a new version st
 [usage guide](../../src/CSharp/docs/FingerTree/usage.md), and
 [API specification](../../src/CSharp/docs/FingerTree/api-specification.md) describe that current
 surface.
+
+**Measured extension.** C2 preserves the same gap and version model while exposing exact ordered
+`MeasureBefore` and `MeasureAfter`. Absolute measure seek selects the gap before the first element
+whose inclusive prefix satisfies a delegate or closure-free struct predicate. Existing cursor
+lineages prepare at most the selected ordinary fragment and share its element measures with
+descendants; one-shot source seeks retain no full element-measure array. Lazy prefix/suffix tables,
+fragment preparation, and measured snapshot publication are failure-atomic and safe under racing
+readers. With `NewlineMeasure`, the cursor uses the existing UTF-16 text representation and
+line/column helpers rather than introducing a second text core. The
+[C2 decision record](../../src/CSharp/docs/FingerTree/measured-rope-cursor-c2-decision.md) owns the
+locked local-edit/query gates and callback ceilings.
 
 **Gap and version semantics.** A cursor denotes a boundary `0 .. Count`, not an element. Previous
 peek/movement/backspace address `p - 1`; next peek/movement/delete/replace address `p`. Insertion
@@ -945,18 +960,16 @@ cursors at a carry/chunk or lazy-spine boundary has the conservative O(b log n) 
 plus bounded focus/carry copying per branch. Potential consumed by one child cannot pay for a
 sibling.
 
-**Remaining phases.** C2 would add a measured cursor over
-`MeasuredRope<T, TMeasure, TMeasureOps>` and the newline-measured text specialization; neither type
-nor its measure-before/after, measure-seek, line, or column cursor API is shipped. C3 would then
-integrate that measured cursor into the existing Editor and Tour samples; the samples have not been
-migrated by C1. C4 separately evaluates `FingerTreeDeque<T>` and leaves editable RRB,
+**Remaining phases.** C3 integrates the shipped measured cursor into the existing Editor and Tour
+samples with smoke-locked histories and an explicit snapshot cadence; those samples have not yet
+been migrated. C4 separately evaluates `FingerTreeDeque<T>` and leaves editable RRB,
 `ReversibleDeque`, raw `FingerTree`, Tungsten, bookmark/rebase, and range-update cursors deferred
 until a consumer and benchmark justify them.
 
-**Verdict: C1 implemented; C2 and C3 remain evidence-gated, and C4 remains consumer-gated.** The
-shipped positional cursor cleared its named local-edit benchmark and validation gate. That result
-does not pre-approve measured/text state, sample integration, later sequence adapters, or a broader
-branched-history complexity claim.
+**Verdict: C1 and C2 implemented; C3 remains integration work, and C4 remains consumer-gated.** The
+positional and measured cursors separately cleared their named local-edit, query, allocation,
+callback, and validation gates. Those results do not pre-approve sample behavior, later sequence
+adapters, or a broader branched-history complexity claim.
 
 ### Key-type-specialized map construction
 
@@ -1135,7 +1148,8 @@ The implementation wave described by this catalog has already landed these C# re
 - `BrodalOkasakiHeap<T>` and `PrioritySearchQueue<TKey, TPriority, TValue>`;
 - `DabaLite<T, TMonoid>`;
 - the managed Ctrie with O(1) immutable snapshots; and
-- the Axis 2 C1 positional `RopeCursor<T>`.
+- the Axis 2 C1 positional `RopeCursor<T>` and C2 measured/text
+  `MeasuredRopeCursor<T, TMeasure, TMeasureOps>`.
 
 CHAMP, Patricia, and RRB have also advanced through the sibling-language work recorded in their
 entries; the canonical zip-zip set, Brodal-Okasaki heap, and priority-search queue are implemented
@@ -1145,7 +1159,7 @@ Kotlin/JVM. The Merkle search tree's full trust-boundary tier is complete across
 The owner-token transient lifecycle is C#-only; no sibling transient parity is implied. These are
 current-state implementation records, not candidates awaiting a consumer.
 Future work on the Axis 1 cores is ordinary hardening, measurement, and demand-driven porting. The
-cursor's C2/C3/C4 extensions retain the separate status recorded in its entry above.
+cursor's C3/C4 extensions retain the separate status recorded in its entry above.
 
 ### Remaining candidate sequencing
 
@@ -1154,7 +1168,7 @@ a C# reference first, and promote it only with proven value. Items shared with t
 [2026-07-09 proposal](../proposals/new-data-structures-2026-07-09.md) keep that proposal's scheduling
 slot unless a later dedicated plan says otherwise. The
 [Axis 2 final plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) now owns lifecycle/cursor detail.
-The positional cursor's P0/C0/C1 tranche and the transient's P0/T0/T1/T2 tranche are complete;
+The cursor's P0/C0/C1/C2 tranche and the transient's P0/T0/T1/T2 tranche are complete;
 remaining work is sequenced as follows:
 
 1. **C1 is shipped:** C0 selected the readonly-struct zipper-as-version with focus 16 and flush 256,
@@ -1162,10 +1176,10 @@ remaining work is sequenced as follows:
 2. **T2 is shipped in C# only:** T0 qualified the clustered many-edit regime, T1 selected the direct
    separate-node owner-token kernel, and T2 published the one-way CHAMP map/set transient after
    lifecycle, failure, retained-memory, and API-shape gates.
-3. Advance **C2 measured/text cursor** only through its measure-law, failure/race, text-helper, and
-   measured-workload gate. C1 alone does not make this surface current.
-4. Advance **C3 Editor/Tour integration** only after C2, with smoke-locked histories and a measured
-   snapshot cadence. Neither sample currently demonstrates the positional cursor as a substitute.
+3. **C2 is shipped:** the measured/text cursor cleared its measure-law, failure/race, text-helper,
+   callback, allocation, dirty-query, and measured-workload gates.
+4. Advance **C3 Editor/Tour integration** with smoke-locked histories and an explicit measured
+   snapshot cadence. Neither sample currently demonstrates the measured cursor as its retained state.
 5. Evaluate **C4 later sequence cursors** separately and only for a named consumer; do not infer a
    deque, RRB, reversible-deque, raw-FingerTree, or Tungsten cursor from C1.
 6. Complete the pending **F1 fixed-layout evidence collection** before any F2 public implementation.
@@ -1178,8 +1192,8 @@ remaining work is sequenced as follows:
    served by existing composition.
 9. **Styled-text rope sample**, after measured cursor and range-update foundations settle.
 
-This numbering expresses dependencies and gates, not a ceremonial landing order: the independent C1
-and T2 shipments do not clear C2/C3/C4 or the still-unshipped F2 tier.
+This numbering expresses dependencies and gates, not a ceremonial landing order: the independent C2
+and T2 shipments do not clear C3/C4 or the still-unshipped F2 tier.
 
 Automatic size tiers, count/key-specific frozen strategies, key-type-specialized factories, and
 unrequested sequence cursor families are postponed rather than placed in this active sequence.

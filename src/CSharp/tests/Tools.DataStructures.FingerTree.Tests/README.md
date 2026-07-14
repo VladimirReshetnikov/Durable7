@@ -44,6 +44,14 @@ reasonable oracle.
   `List<T>` gap-model parity, the selected 16/256 focus/carry bounds, exact named boundaries, all operations,
   retained branches, version/context/snapshot identity, overflow and failure atomicity, cache races, structural
   sharing, and adversarial fan-out under the published conservative branch bound.
+- `MeasuredRopeCursorApiShapeTests.cs`, `MeasuredRopeCursorTests.cs`, and
+  `MeasuredRopeCursorModelTests.cs` validate the public Axis 2 C2 readonly-struct cursor: API shape,
+  ordered before/after measures, positional movement and edits, retained branches, snapshot identity,
+  callback failures, and deterministic gap-model histories.
+- `MeasuredRopeCursorMeasureSeekTests.cs` and `MeasuredRopeCursorMeasureCacheTests.cs` cover absolute
+  measure seek through delegate and closure-free predicates, lawful noncommutative measures, source and
+  prepared paths, dirty versions, exact bounded callback counts, same-fragment lineage reuse,
+  failure-atomic preparation, and concurrent winner-returning publication.
 - `RopeBoundaryCoverageTests.cs` covers legal sub-minimum split chunks, concatenation seam re-coalescing, and
   mixed `TextReader` peek/single/buffered reads across chunk boundaries.
 - `RrbVectorTests.cs` covers branch-factor boundaries, unequal-height boundary-spine concatenation,
