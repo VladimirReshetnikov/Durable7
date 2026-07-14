@@ -148,7 +148,24 @@ function Invoke-KotlinWorkspaceTests {
     $jar = Join-Path $outDir "$($Name.ToLowerInvariant())-tests.jar"
 
     Write-Host "Compiling $Name Kotlin tests"
-    & $Kotlinc @sources "-jvm-target" "21" "-include-runtime" "-d" $jar
+    $previousKotlinOptions = $env:KOTLIN_OPTS
+    $backendArguments = @()
+    if ($IsWindowsHost) {
+        # kotlinc.bat preserves '=' in inherited KOTLIN_OPTS but its argument loop rewrites this
+        # advanced option into the deprecated two-token form.
+        $env:KOTLIN_OPTS = "$previousKotlinOptions -Xbackend-threads=1".Trim()
+    } else {
+        $backendArguments = @("-Xbackend-threads=1")
+    }
+    try {
+        & $Kotlinc @sources @backendArguments "-jvm-target" "21" "-include-runtime" "-d" $jar
+    } finally {
+        if ($null -eq $previousKotlinOptions) {
+            Remove-Item Env:KOTLIN_OPTS -ErrorAction SilentlyContinue
+        } else {
+            $env:KOTLIN_OPTS = $previousKotlinOptions
+        }
+    }
     if ($LASTEXITCODE -ne 0) {
         throw "$Name Kotlin compilation failed"
     }

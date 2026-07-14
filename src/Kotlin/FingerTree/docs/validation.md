@@ -16,6 +16,9 @@ runs the test executable. If no Java 21+ runtime is available on `PATH` on Windo
 Temurin JDK 21 under `src/Kotlin/build/tools`; on non-Windows hosts, provide Java 21+ through `PATH` or
 `JAVA_HOME`. It also downloads and verifies the Kotlin 2.4.0 compiler archive before compilation. All generated
 files stay under the ignored `build` directory.
+The build wrapper launches one compiler process and then one test JVM, pins the Kotlin backend to one
+thread with `-Xbackend-threads=1`, and uses no Gradle daemon or worker pool. Concurrent-reader cases
+create their bounded threads inside that single test JVM.
 On Windows the script enables inherited non-interactive OS error handling before tool startup, and it launches
 the test JVM in AWT headless mode so failures stay on the console and return a nonzero exit.
 
@@ -23,11 +26,17 @@ The test executable covers persistent deque snapshots, reversible orientation, m
 splits/locates, sorted bag/set/map ordering and ranges, stable cached-priority dequeue, max-high closed
 interval queries and coalescing, complete positional/range editing surfaces for positional and measured ropes,
 comparator-aware sorted-map bulk construction, measured text line navigation, and rope builder conveniences.
+Positional cursor coverage locks empty/start/end gaps, nullable-safe peeks, exact clean snapshots,
+identity-preserving seek and empty insertion, one-shot range capture, unconditional representative
+replacement, retained branches, concurrent readers, and a 750-command gap/list model.
 Counting-comparator guards over 65,536-element sorted collections prove that bag counting bounds, set
 rank/neighbor navigation, and keyed map lookup finish within one logarithmic descent.
 Representation coverage validates AVL balance and identity sharing across
 every facade, a 5,000-command sequence model, 100,000-element construction, policy compatibility,
 overflow and comparison regressions, and concurrent readers over retained snapshots.
+The rope overflow regression constructs a logarithmic shared DAG through self-concatenation, reaches
+the maximum representable `Int` size without materialization, and verifies every positional growth
+path and both cursor overflow paths fail before publication while all retained inputs remain usable.
 
 RRB validation covers every 32-way boundary through 100,000 elements, unequal-height and uneven
 fragment concatenation, exact-boundary leaf identity, regular-versus-relaxed size-table invariants,

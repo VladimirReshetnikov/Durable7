@@ -12,7 +12,7 @@ where the language surfaces line up.
 | Workspace | Role | Primary entry points | Validation |
 | --- | --- | --- | --- |
 | [Hamt](Hamt/README.md) | Persistent HAMT map/set port with 32-way bitmap-indexed trie nodes and immutable collision buckets | `tools.datastructures.hamt.PersistentHashMap`, `PersistentHashSet` | `.\build.ps1 -Workspace Hamt` |
-| [FingerTree](FingerTree/README.md) | Persistent measured-tree port of the FingerTree family, RRB vectors, the policy-canonical zip-zip sorted set, Brodal-Okasaki and priority-search-queue cores, and the mutable DABA Lite FIFO aggregator | `tools.datastructures.fingertree.*` | `.\build.ps1 -Workspace FingerTree` |
+| [FingerTree](FingerTree/README.md) | Persistent measured-tree port of the FingerTree family, positional rope cursor, RRB vectors, the policy-canonical zip-zip sorted set, Brodal-Okasaki and priority-search-queue cores, and the mutable DABA Lite FIFO aggregator | `tools.datastructures.fingertree.*` | `.\build.ps1 -Workspace FingerTree` |
 | [Tungsten](Tungsten/README.md) | Tungsten `List` and `Association` collection port over Kotlin persistent substrates | `tools.datastructures.tungsten.PersistentList`, `PersistentAssociation` | `.\build.ps1 -Workspace Tungsten` |
 
 Run the full Kotlin validation from this directory:
@@ -25,6 +25,8 @@ The build script bootstraps a local Windows JDK 21 when a suitable Java 21+ runt
 On non-Windows hosts, put Java 21+ on `PATH` or set `JAVA_HOME` before running the script. The verified Kotlin
 2.4.0 command-line compiler is bootstrapped into `src/Kotlin/build/tools` on every host, then the script compiles
 each workspace and runs its dependency-free executable tests. The `build` directory is ignored by the repository.
+Workspaces run sequentially, and each compiler invocation pins the Kotlin backend to one thread; there is no
+Gradle daemon or worker pool.
 On Windows, the script enables inherited non-interactive OS error handling before launching build tools or tests,
 and starts every test JVM with `-Djava.awt.headless=true`. Assertion, exception, loader, and crash failures therefore
 remain console diagnostics with nonzero exits instead of opening modal UI.
@@ -32,7 +34,9 @@ remain console diagnostics with nonzero exits instead of opening modal UI.
 The FingerTree workspace uses immutable measured AVL sequence nodes throughout the public family.
 Cached size and monoidal measures drive logarithmic indexed edits, splits, prefix location, priority,
 interval, rope, and text operations; path copying retains unchanged JVM subtrees. The local API notes
-spell out the few engine-level differences from the C# lazy digit spine. Its separate `DabaLite<T>`
+spell out the few engine-level differences from the C# lazy digit spine. Its positional
+`RopeCursor<T>` preserves immutable gap/edit/branch semantics through an exact retained rope snapshot
+without claiming the C# zipper representation or its focus-local complexity. Its separate `DabaLite<T>`
 member is deliberately mutable: a six-cursor, chunk-backed schedule maintains a FIFO monoid aggregate
 with bounded callback counts and requires external serialization.
 

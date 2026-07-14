@@ -269,9 +269,9 @@ Shared obligations:
 - Builders must document mutation, snapshot publication, and whether later builder changes can affect
   previously produced immutable ropes.
 
-C# ships positional and measured cursors; C++ `rope_cursor<T>` and Rust `RopeCursor<T>` also ship
-positional semantic checkpoints. No deque, RRB, raw-finger-tree, reversible-deque, or Tungsten cursor
-is implied by those surfaces. Every shipped cursor shares these observable obligations:
+C# ships positional and measured cursors; C++ `rope_cursor<T>` plus Kotlin and Rust `RopeCursor<T>`
+also ship positional semantic checkpoints. No deque, RRB, raw-finger-tree, reversible-deque, or
+Tungsten cursor is implied by those surfaces. Every shipped cursor shares these observable obligations:
 
 - A cursor position is a gap in `0 .. Count`: previous operations address `p - 1`, next operations
   address `p`, insertion returns the gap after the inserted values, backspace moves the gap left,
@@ -299,11 +299,12 @@ retained cursors
   at a boundary has the conservative O(b log n) aggregate bound; there is no unqualified
   arbitrary-version-DAG O(1)-amortized claim.
 
-The C++ and Rust positional checkpoints store an already-canonical retained rope plus its gap.
-Construction, navigation, and snapshot are O(1); peeks and point edits are O(log n) plus bounded
-chunk work. Neither has a default-constructed cursor or makes a zipper, memo-cell, or
-O(1)-amortized local-edit claim. Rust edits retain the substrate's `T: Clone` bound; read-only cursor
-operations do not.
+The C++, Kotlin, and Rust positional checkpoints store an already-canonical retained rope plus its
+gap. Construction, navigation, and snapshot are O(1). C++ and Rust peeks and point edits are O(log n)
+plus bounded chunk work; Kotlin peeks and point edits are O(log n) over its measured AVL substrate.
+None has a default-constructed cursor or makes a zipper, memo-cell, or O(1)-amortized local-edit
+claim. Kotlin uses a non-null peek wrapper to distinguish a stored null from a missing neighbor.
+Rust edits retain the substrate's `T: Clone` bound; read-only cursor operations do not.
 
 The C# measured cursor additionally requires:
 

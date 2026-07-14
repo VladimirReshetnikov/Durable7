@@ -19,7 +19,8 @@ names for the public families:
 - `RrbVector<T>` and its append-only `RrbVector.Builder<T>`;
 - `ZipTreeRankPolicy<T>`, `CanonicalSortedSet<T>`, and `CanonicalSortedSetStatistics`;
 - `Monoid<T>`, `DabaLite<T>`, and `DabaLiteStatistics` for mutable FIFO window aggregation;
-- `Rope<T>`, `MeasuredRope<T, M>`, `TextRope`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
+- `Rope<T>`, its immutable positional `RopeCursor<T>` and nullable-safe `RopeCursorPeek<T>`,
+  `MeasuredRope<T, M>`, `TextRope`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
 
 The family is backed by a shared immutable measured AVL sequence. Every node caches subtree size,
 height, and the active monoidal measure; joins, splits, indexed edits, and concatenation copy only
@@ -27,6 +28,14 @@ the affected paths and retain untouched JVM nodes. The same substrate drives `Pe
 general `FingerTree`, sorted facades, stable priority selection, max-high interval pruning,
 positional/measured ropes, and newline-measured text. `ReversibleDeque` keeps its specialized
 orientation-aware balanced tree so whole-value reversal remains O(1).
+
+`RopeCursor<T>` is the positional semantic checkpoint: an ordinary immutable class retaining the
+exact source `Rope<T>` plus a validated gap in `0..size`. Creation, movement, seek, and snapshot are
+O(1); nullable-safe wrapped peeks and point edits are O(log n), and inserting `m` elements is
+O(m + log n). Retained cursors branch independently, same-position seek and empty insertion preserve
+identity, and replacement stores the supplied representative without equality. Positional-rope
+growth uses checked `Int` arithmetic and fails before publication. This is not the C# focused zipper
+and makes no amortized-locality claim; measured and text cursor surfaces remain unported.
 
 `RrbVector<T>` is the family's random-access-optimized sequence. It stores up to 32 elements per
 leaf and uses 32-way branches: packed branches navigate by five-bit radix arithmetic without size

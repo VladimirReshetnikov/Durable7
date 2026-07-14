@@ -1,5 +1,11 @@
 package tools.datastructures.fingertree
 
+/**
+ * A persistent positional sequence backed by the shared immutable measured AVL tree.
+ *
+ * Every growth operation uses checked [Int] arithmetic. If a result would exceed [Int.MAX_VALUE],
+ * the operation throws [ArithmeticException] before publication and every input rope remains valid.
+ */
 public class Rope<T> private constructor(
     private val items: PersistentDeque<T>,
 ) : Iterable<T> {
@@ -19,6 +25,13 @@ public class Rope<T> private constructor(
 
     public val isEmpty: Boolean
         get() = items.isEmpty
+
+    /** Returns an immutable positional cursor at the gap before the first element. */
+    public fun cursor(): RopeCursor<T> = RopeCursor.create(this, 0)
+
+    /** Returns a cursor at [position], or `null` when the position is outside `0..size`. */
+    public fun cursorAt(position: Int): RopeCursor<T>? =
+        if (position < 0 || position > size) null else RopeCursor.create(this, position)
 
     public fun front(): T? = items.front()
 
@@ -41,9 +54,25 @@ public class Rope<T> private constructor(
         return true
     }
 
-    public fun pushFront(value: T): Rope<T> = Rope(items.prepend(value))
+    /**
+     * Returns a rope with [value] prepended.
+     *
+     * @throws ArithmeticException if the resulting size cannot be represented by [Int].
+     */
+    public fun pushFront(value: T): Rope<T> {
+        Math.addExact(size, 1)
+        return Rope(items.prepend(value))
+    }
 
-    public fun pushBack(value: T): Rope<T> = Rope(items.append(value))
+    /**
+     * Returns a rope with [value] appended.
+     *
+     * @throws ArithmeticException if the resulting size cannot be represented by [Int].
+     */
+    public fun pushBack(value: T): Rope<T> {
+        Math.addExact(size, 1)
+        return Rope(items.append(value))
+    }
 
     public fun setItem(index: Int, value: T): Rope<T>? {
         if (index < 0 || index >= size) {
@@ -55,21 +84,39 @@ public class Rope<T> private constructor(
         return Rope(items.setItem(index, value)!!)
     }
 
+    /**
+     * Returns a rope with [value] inserted at [index], or `null` when [index] is not a valid gap.
+     *
+     * @throws ArithmeticException if the resulting size cannot be represented by [Int].
+     */
     public fun insertAt(index: Int, value: T): Rope<T>? {
         if (index < 0 || index > size) {
             return null
         }
 
+        Math.addExact(size, 1)
         return Rope(items.insertAt(index, value)!!)
     }
 
+    /**
+     * Returns a rope with [values] inserted at [index], or `null` when [index] is not a valid gap.
+     * The iterable is consumed exactly once. An empty input returns this rope by identity.
+     *
+     * @throws ArithmeticException if the resulting size cannot be represented by [Int].
+     */
     public fun insertRange(index: Int, values: Iterable<T>): Rope<T>? {
         if (index < 0 || index > size) {
             return null
         }
 
+        val owned = values.toList()
+        if (owned.isEmpty()) {
+            return this
+        }
+
+        Math.addExact(size, owned.size)
         val split = items.splitAt(index)!!
-        val middle = PersistentDeque.from(values)
+        val middle = PersistentDeque.from(owned)
         return Rope(split.left.concat(middle).concat(split.right))
     }
 
@@ -109,11 +156,19 @@ public class Rope<T> private constructor(
         return Rope(split.left) to Rope(split.right)
     }
 
+    /**
+     * Concatenates this rope with [other]. Empty operands preserve the existing rope by identity.
+     *
+     * @throws ArithmeticException if the resulting size cannot be represented by [Int].
+     */
     public fun concat(other: Rope<T>): Rope<T> =
         when {
             isEmpty -> other
             other.isEmpty -> this
-            else -> Rope(items.concat(other.items))
+            else -> {
+                Math.addExact(size, other.size)
+                Rope(items.concat(other.items))
+            }
         }
 
     public fun compact(): Rope<T> = this
@@ -122,9 +177,157 @@ public class Rope<T> private constructor(
 
     public fun sharesStorageWith(other: Rope<T>): Boolean = items.sharesStorageWith(other.items)
 
+    internal fun itemAt(index: Int): T = items.itemAt(index)
+
     internal fun debugIsBalanced(): Boolean = items.debugIsBalanced()
 
     override fun iterator(): Iterator<T> = items.iterator()
+}
+
+/**
+ * A nullable-safe result from [RopeCursor.peekPrevious] or [RopeCursor.peekNext].
+ *
+ * A non-null wrapper reports that a neighbor exists even when [value] itself is `null`.
+ */
+public data class RopeCursorPeek<T>(public val value: T)
+
+/**
+ * An immutable positional editing cursor over one retained [Rope] snapshot.
+ *
+ * [position] denotes a gap in `0..size`: the previous element is at `position - 1` and the next
+ * element is at `position`. Every movement or edit returns another immutable cursor, so retained
+ * cursors branch independently. This semantic checkpoint stores a rope snapshot plus its gap; it
+ * does not implement the C# focused zipper and makes no amortized-locality claim.
+ *
+ * Creation, movement, seek, and [snapshot] are O(1). Peeks and point edits are O(log n), and
+ * inserting `m` values is O(m + log n). Failed edits leave the receiver reusable. Like [Rope],
+ * cursors are structurally safe for concurrent readers; callers remain responsible for any mutable
+ * state reachable through stored elements. The type has no public constructor or default instance.
+ */
+public class RopeCursor<T> private constructor(
+    private val rope: Rope<T>,
+    public val position: Int,
+) {
+    internal companion object {
+        internal fun <T> create(rope: Rope<T>, position: Int): RopeCursor<T> = RopeCursor(rope, position)
+    }
+
+    init {
+        require(position >= 0 && position <= rope.size) { "Cursor position must be in 0..rope.size." }
+    }
+
+    /** The number of elements in this cursor's retained snapshot. */
+    public val size: Int
+        get() = rope.size
+
+    /** Whether this cursor's retained snapshot is empty. */
+    public val isEmpty: Boolean
+        get() = rope.isEmpty
+
+    /** Whether the gap precedes the first element. */
+    public val isAtStart: Boolean
+        get() = position == 0
+
+    /** Whether the gap follows the last element. */
+    public val isAtEnd: Boolean
+        get() = position == size
+
+    /** Returns the element immediately before the gap, or `null` at the start. */
+    public fun peekPrevious(): RopeCursorPeek<T>? =
+        if (isAtStart) null else RopeCursorPeek(rope.itemAt(position - 1))
+
+    /** Returns the element immediately after the gap, or `null` at the end. */
+    public fun peekNext(): RopeCursorPeek<T>? =
+        if (isAtEnd) null else RopeCursorPeek(rope.itemAt(position))
+
+    /** Moves the gap toward the start, or returns `null` when already at the start. */
+    public fun movePrevious(): RopeCursor<T>? =
+        if (isAtStart) null else create(rope, position - 1)
+
+    /** Moves the gap toward the end, or returns `null` when already at the end. */
+    public fun moveNext(): RopeCursor<T>? =
+        if (isAtEnd) null else create(rope, position + 1)
+
+    /**
+     * Moves the gap to [position], or returns `null` when it is outside `0..size`.
+     * Seeking to the current position returns this cursor by identity.
+     */
+    public fun seek(position: Int): RopeCursor<T>? =
+        when {
+            position < 0 || position > size -> null
+            position == this.position -> this
+            else -> create(rope, position)
+        }
+
+    /** Returns the exact immutable rope snapshot retained by this cursor. */
+    public fun snapshot(): Rope<T> = rope
+
+    /**
+     * Inserts [value] at the gap and returns a cursor immediately after it.
+     *
+     * @throws ArithmeticException if the resulting size cannot be represented by [Int].
+     */
+    public fun insert(value: T): RopeCursor<T> {
+        val nextPosition = Math.addExact(position, 1)
+        val edited = rope.insertAt(position, value)
+            ?: error("A validated cursor gap must be a valid insertion position.")
+        return create(edited, nextPosition)
+    }
+
+    /**
+     * Inserts [values] at the gap in iteration order and returns a cursor after the range.
+     * The iterable is consumed exactly once. An empty input returns this cursor by identity.
+     *
+     * @throws ArithmeticException if the resulting size cannot be represented by [Int].
+     */
+    public fun insertRange(values: Iterable<T>): RopeCursor<T> {
+        val owned = values.toList()
+        if (owned.isEmpty()) {
+            return this
+        }
+
+        val nextPosition = Math.addExact(position, owned.size)
+        val edited = rope.insertRange(position, owned)
+            ?: error("A validated cursor gap must be a valid range insertion position.")
+        return create(edited, nextPosition)
+    }
+
+    /** Deletes the element before the gap and moves left, or returns `null` at the start. */
+    public fun deletePrevious(): RopeCursor<T>? {
+        if (isAtStart) {
+            return null
+        }
+
+        val nextPosition = position - 1
+        val edited = rope.removeAt(nextPosition)
+            ?: error("A non-start cursor must have a previous element.")
+        return create(edited, nextPosition)
+    }
+
+    /** Deletes the element after the gap without moving, or returns `null` at the end. */
+    public fun deleteNext(): RopeCursor<T>? {
+        if (isAtEnd) {
+            return null
+        }
+
+        val edited = rope.removeAt(position)
+            ?: error("A non-end cursor must have a next element.")
+        return create(edited, position)
+    }
+
+    /**
+     * Unconditionally replaces the element after the gap, or returns `null` at the end.
+     * Equality is not consulted, the supplied representative is stored, and the gap does not move.
+     */
+    public fun replaceNext(value: T): RopeCursor<T>? {
+        if (isAtEnd) {
+            return null
+        }
+
+        val edited = rope.setItem(position, value)
+            ?: error("A non-end cursor must have a next element.")
+        return create(edited, position)
+    }
 }
 
 public data class MeasuredRopeSplit<T, M>(

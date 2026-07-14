@@ -22,7 +22,8 @@ Current public families:
 - `ZipTreeRankPolicy<T>`, `CanonicalSortedSet<T>`, `CanonicalSetLookup<T>`, and
   `CanonicalSortedSetStatistics`;
 - `Monoid<T>`, `DabaLite<T>`, and `DabaLiteStatistics`;
-- `Rope<T>`, `MeasuredRope<T, M>`, `TextRope`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
+- `Rope<T>`, positional `RopeCursor<T>`, nullable-safe `RopeCursorPeek<T>`, `MeasuredRope<T, M>`,
+  `TextRope`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
 
 The Kotlin surface follows Kotlin/JVM conventions:
 
@@ -41,6 +42,32 @@ The Kotlin surface follows Kotlin/JVM conventions:
 matching the rest of this workspace. `RrbPop<T>` keeps successful removal distinct from failure even
 when a vector stores nullable elements. Equal-value replacement, empty insertion/removal, boundary
 splits, and concatenation with empty preserve the receiver or existing root where applicable.
+
+## Positional rope cursor
+
+`Rope.cursor()` creates an immutable cursor at gap zero; `cursorAt(position)` accepts every gap in
+`0..size` and returns `null` outside that range. `RopeCursor<T>` is an ordinary non-data class with no
+public constructor or default instance, so callers cannot forge a gap through generated `copy`.
+It retains the exact source `Rope<T>` reference and its validated gap. `size`, `isEmpty`, `position`,
+`isAtStart`, `isAtEnd`, `movePrevious`,
+`moveNext`, `seek`, and `snapshot` expose navigation without copying elements. Boundary movement and
+invalid seek return `null`; same-position seek returns the same cursor by identity.
+
+`peekPrevious` and `peekNext` return `RopeCursorPeek<T>?`. A null result means that no neighbor exists,
+while a non-null wrapper may contain a stored null value, so nullable element types remain
+unambiguous. Edits return new cursors and never mutate the receiver. `insert` and `insertRange` leave
+the new gap after the inserted values; `deletePrevious` implements backspace and moves left;
+`deleteNext` and `replaceNext` keep the gap fixed. Replacement is unconditional, performs no equality
+call, and stores the supplied representative. A range source is captured exactly once, and an empty
+range returns the same cursor and rope by identity.
+
+Positional `Rope` growth uses checked `Int` arithmetic for prepend, append, point/range insertion, and
+concatenation. An unrepresentable result throws `ArithmeticException` before publication; all source
+ropes and cursors remain reusable. Cursor creation, movement, seek, and snapshot are O(1). Peeks and
+point edits are O(log n) over the measured AVL substrate, and inserting `m` values is O(m + log n).
+Immutable cursors are safe for structurally concurrent reads subject to the same caller-owned element
+mutability caveat as ropes. This is a semantic checkpoint, not the C# focused zipper, and it makes no
+O(1)-amortized local-edit claim. `MeasuredRope` and `TextRope` cursors remain unported.
 
 ## Representation and complexity
 

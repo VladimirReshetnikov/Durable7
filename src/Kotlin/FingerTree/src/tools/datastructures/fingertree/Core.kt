@@ -227,7 +227,7 @@ public class PersistentDeque<T> private constructor(
     internal fun prefixLength(isInPrefix: (T) -> Boolean): Int = items.prefixLength(isInPrefix)
 
     @Suppress("UNCHECKED_CAST")
-    private fun itemAt(index: Int): T = items[index] as T
+    internal fun itemAt(index: Int): T = items[index] as T
 }
 
 private const val ReversibleDequeLeafCapacity = 32

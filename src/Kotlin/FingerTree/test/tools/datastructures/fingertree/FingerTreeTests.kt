@@ -432,6 +432,277 @@ private fun ropesEditAndNavigateText() {
     checkEquals("xy\nz", builder.toTextRope().asString(), "builder")
 }
 
+private class CursorRepresentative(
+    val key: Int,
+    val label: String,
+) {
+    companion object {
+        var equalityCalls: Int = 0
+    }
+
+    override fun equals(other: Any?): Boolean {
+        equalityCalls++
+        return other is CursorRepresentative && key == other.key
+    }
+
+    override fun hashCode(): Int = key
+}
+
+private fun ropeCursorHandlesBoundariesNullsAndPersistentEdits() {
+    val emptyRope = Rope.empty<Int>()
+    val empty = emptyRope.cursor()
+    checkEquals(0, empty.position, "empty cursor position")
+    checkEquals(0, empty.size, "empty cursor size")
+    check(empty.isEmpty, "empty cursor snapshot")
+    check(empty.isAtStart && empty.isAtEnd, "empty cursor is both boundaries")
+    checkEquals(null, empty.peekPrevious(), "empty cursor previous")
+    checkEquals(null, empty.peekNext(), "empty cursor next")
+    checkEquals(null, empty.movePrevious(), "empty cursor move previous")
+    checkEquals(null, empty.moveNext(), "empty cursor move next")
+    check(empty.snapshot() === emptyRope, "empty cursor retains exact source rope")
+
+    val rope = Rope.from(0 until 130)
+    val start = rope.cursor()
+    checkEquals(0, start.position, "cursor start position")
+    checkEquals(rope.size, start.size, "cursor start size")
+    check(!start.isEmpty, "nonempty cursor snapshot")
+    check(start.isAtStart, "cursor starts at first gap")
+    check(!start.isAtEnd, "nonempty start is not end")
+    checkEquals(null, start.peekPrevious(), "start has no previous value")
+    checkEquals(0, start.peekNext()?.value, "start next value")
+    checkEquals(null, start.movePrevious(), "cannot move before start")
+    check(start.snapshot() === rope, "cursor retains exact source rope")
+    checkEquals(null, rope.cursorAt(-1), "negative cursor gap rejected")
+    checkEquals(null, rope.cursorAt(rope.size + 1), "past-end cursor gap rejected")
+
+    val middle = rope.cursorAt(64) ?: throw AssertionError("middle cursor")
+    checkEquals(63, middle.peekPrevious()?.value, "middle previous value")
+    checkEquals(64, middle.peekNext()?.value, "middle next value")
+    check(middle.seek(64) === middle, "same-position seek preserves cursor identity")
+    check(middle.moveNext()?.snapshot() === rope, "navigation retains exact source rope")
+    checkEquals(null, middle.seek(-1), "negative seek rejected")
+    checkEquals(null, middle.seek(rope.size + 1), "past-end seek rejected")
+    check(middle.insertRange(emptyList()) === middle, "empty range insertion preserves cursor identity")
+
+    val oneShot = object : Iterable<Int> {
+        var iteratorCalls: Int = 0
+
+        override fun iterator(): Iterator<Int> {
+            if (iteratorCalls++ != 0) {
+                throw AssertionError("cursor range source was enumerated more than once")
+            }
+            return listOf(-2, -3).iterator()
+        }
+    }
+    val ranged = middle.insertRange(oneShot)
+    checkEquals(1, oneShot.iteratorCalls, "cursor range source enumeration count")
+    checkEquals(66, ranged.position, "range insertion advances gap")
+    checkEquals(-3, ranged.peekPrevious()?.value, "range insertion previous value")
+    checkEquals(64, ranged.peekNext()?.value, "range insertion next value")
+
+    val inserted = ranged.insert(-1)
+    checkEquals(67, inserted.position, "single insertion advances gap")
+    checkEquals(-1, inserted.peekPrevious()?.value, "single insertion previous value")
+    val restored = inserted.deletePrevious() ?: throw AssertionError("delete previous")
+    checkEquals(ranged.snapshot().toList(), restored.snapshot().toList(), "backspace restores ranged contents")
+
+    val replaced = restored.replaceNext(99_999) ?: throw AssertionError("replace next")
+    checkEquals(restored.position, replaced.position, "replacement keeps gap")
+    checkEquals(99_999, replaced.peekNext()?.value, "replacement stores supplied value")
+    val deleted = replaced.deleteNext() ?: throw AssertionError("delete next")
+    checkEquals(replaced.position, deleted.position, "delete next keeps gap")
+    checkEquals(65, deleted.peekNext()?.value, "delete next exposes successor")
+
+    val end = rope.cursorAt(rope.size) ?: throw AssertionError("end cursor")
+    check(end.isAtEnd, "end cursor reports end")
+    checkEquals(129, end.peekPrevious()?.value, "end previous value")
+    checkEquals(null, end.peekNext(), "end has no next value")
+    checkEquals(null, end.moveNext(), "cannot move beyond end")
+    checkEquals(null, start.deletePrevious(), "cannot backspace at start")
+    checkEquals(null, end.deleteNext(), "cannot delete next at end")
+    checkEquals(null, end.replaceNext(0), "cannot replace next at end")
+
+    val nullable = Rope.from(listOf<Int?>(null, 1)).cursorAt(1) ?: throw AssertionError("nullable cursor")
+    val storedNull = nullable.peekPrevious() ?: throw AssertionError("stored null has a peek wrapper")
+    checkEquals(null, storedNull.value, "peek wrapper retains stored null")
+    checkEquals(1, nullable.peekNext()?.value, "nullable cursor next value")
+
+    val originalRepresentative = CursorRepresentative(7, "original")
+    val replacementRepresentative = CursorRepresentative(7, "replacement")
+    check(originalRepresentative == replacementRepresentative, "representatives are value-equal")
+    val representativeRope = Rope.from(
+        listOf(CursorRepresentative(6, "left"), originalRepresentative, CursorRepresentative(8, "right")),
+    )
+    val representativeSource = representativeRope.cursorAt(1) ?: throw AssertionError("representative cursor")
+    CursorRepresentative.equalityCalls = 0
+    val representativeEdit = representativeSource.replaceNext(replacementRepresentative)
+        ?: throw AssertionError("representative replacement")
+    checkEquals(0, CursorRepresentative.equalityCalls, "replacement performs no equality calls")
+    check(
+        representativeEdit.peekNext()?.value === replacementRepresentative,
+        "equal replacement stores the supplied representative",
+    )
+    check(
+        representativeSource.peekNext()?.value === originalRepresentative,
+        "equal replacement preserves the source representative",
+    )
+    check(representativeEdit.snapshot() !== representativeSource.snapshot(), "replacement publishes a new rope")
+    check(
+        representativeEdit.snapshot().sharesStorageWith(representativeSource.snapshot()),
+        "replacement retains untouched rope nodes",
+    )
+
+    val retained = Rope.from(0 until 256).cursorAt(128) ?: throw AssertionError("retained cursor")
+    val leftBranch = retained.insert(-10)
+    val rightBranch = retained.insert(-20)
+    checkEquals(128, retained.peekNext()?.value, "retained source remains unchanged")
+    checkEquals(-10, leftBranch.snapshot()[128], "left branch value")
+    checkEquals(-20, rightBranch.snapshot()[128], "right branch value")
+    check(retained.snapshot().sharesStorageWith(leftBranch.snapshot()), "left branch shares source storage")
+    check(retained.snapshot().sharesStorageWith(rightBranch.snapshot()), "right branch shares source storage")
+    check(ranged.snapshot().debugIsBalanced(), "ranged cursor snapshot remains balanced")
+    check(deleted.snapshot().debugIsBalanced(), "deleted cursor snapshot remains balanced")
+}
+
+private fun ropeCursorHistoryMatchesGapListModel() {
+    var cursor = Rope.empty<Int>().cursor()
+    val model = mutableListOf<Int>()
+    var position = 0
+    var state = 0x9e37_79b9L
+
+    for (step in 0 until 750) {
+        state = (state * 1_664_525L + 1_013_904_223L) and 0xffff_ffffL
+        when ((state % 7L).toInt()) {
+            0 -> {
+                cursor = cursor.insert(step)
+                model.add(position, step)
+                position++
+            }
+            1 -> {
+                val values = listOf(step, -step)
+                cursor = cursor.insertRange(values)
+                model.addAll(position, values)
+                position += values.size
+            }
+            2 -> {
+                val edited = cursor.deletePrevious()
+                if (position == 0) {
+                    checkEquals(null, edited, "model backspace at start")
+                } else {
+                    position--
+                    model.removeAt(position)
+                    cursor = edited ?: throw AssertionError("model backspace")
+                }
+            }
+            3 -> {
+                val edited = cursor.deleteNext()
+                if (position == model.size) {
+                    checkEquals(null, edited, "model delete at end")
+                } else {
+                    model.removeAt(position)
+                    cursor = edited ?: throw AssertionError("model delete next")
+                }
+            }
+            4 -> {
+                val edited = cursor.replaceNext(step)
+                if (position == model.size) {
+                    checkEquals(null, edited, "model replacement at end")
+                } else {
+                    model[position] = step
+                    cursor = edited ?: throw AssertionError("model replace next")
+                }
+            }
+            5 -> {
+                if ((state and 0x1000L) == 0L) {
+                    val moved = cursor.movePrevious()
+                    if (position == 0) {
+                        checkEquals(null, moved, "model move before start")
+                    } else {
+                        position--
+                        cursor = moved ?: throw AssertionError("model move previous")
+                    }
+                } else {
+                    val moved = cursor.moveNext()
+                    if (position == model.size) {
+                        checkEquals(null, moved, "model move beyond end")
+                    } else {
+                        position++
+                        cursor = moved ?: throw AssertionError("model move next")
+                    }
+                }
+            }
+            else -> {
+                val target = ((state ushr 8) % (model.size + 2).toLong()).toInt()
+                val sought = cursor.seek(target)
+                if (target > model.size) {
+                    checkEquals(null, sought, "model invalid seek")
+                } else {
+                    position = target
+                    cursor = sought ?: throw AssertionError("model seek")
+                }
+            }
+        }
+
+        checkEquals(position, cursor.position, "model cursor position at step $step")
+        checkEquals(model.size, cursor.size, "model cursor size at step $step")
+        checkEquals(position == 0, cursor.isAtStart, "model cursor start at step $step")
+        checkEquals(position == model.size, cursor.isAtEnd, "model cursor end at step $step")
+        checkEquals(
+            if (position == 0) null else model[position - 1],
+            cursor.peekPrevious()?.value,
+            "model previous value at step $step",
+        )
+        checkEquals(
+            if (position == model.size) null else model[position],
+            cursor.peekNext()?.value,
+            "model next value at step $step",
+        )
+        checkEquals(model, cursor.snapshot().toList(), "model snapshot at step $step")
+        check(cursor.snapshot().debugIsBalanced(), "model snapshot balance at step $step")
+    }
+}
+
+private fun ropeGrowthOverflowIsCheckedAndAtomic() {
+    val seed = Rope.from(listOf(7))
+    var power = seed
+    while (power.size <= Int.MAX_VALUE / 2) {
+        power = power.concat(power)
+    }
+
+    val powerSize = power.size
+    checkEquals(1 shl 30, powerSize, "shared power rope size")
+    checkEquals(7, power.front(), "shared power rope front")
+    checkEquals(7, power.back(), "shared power rope back")
+    checkThrows<ArithmeticException>("overflowing rope concat") { power.concat(power) }
+    checkEquals(powerSize, power.size, "overflowing concat preserves source size")
+
+    val almostPower = power.removeAt(0) ?: throw AssertionError("remove from shared power rope")
+    val maximum = power.concat(almostPower)
+    checkEquals(Int.MAX_VALUE, maximum.size, "maximum representable rope size")
+    checkThrows<ArithmeticException>("overflowing rope prepend") { maximum.pushFront(8) }
+    checkThrows<ArithmeticException>("overflowing rope append") { maximum.pushBack(8) }
+    checkThrows<ArithmeticException>("overflowing rope point insertion") { maximum.insertAt(0, 8) }
+    checkThrows<ArithmeticException>("overflowing rope range insertion") {
+        maximum.insertRange(0, listOf(8))
+    }
+    checkThrows<ArithmeticException>("overflowing maximum rope concat") { maximum.concat(seed) }
+    checkThrows<ArithmeticException>("overflowing maximum rope prefix concat") { seed.concat(maximum) }
+    checkThrows<ArithmeticException>("overflowing cursor point insertion at start") {
+        maximum.cursor().insert(8)
+    }
+    checkThrows<ArithmeticException>("overflowing cursor insertion at start") {
+        maximum.cursor().insertRange(listOf(8))
+    }
+    val maximumEnd = maximum.cursorAt(maximum.size) ?: throw AssertionError("maximum end cursor")
+    checkThrows<ArithmeticException>("overflowing cursor position") { maximumEnd.insert(8) }
+
+    checkEquals(Int.MAX_VALUE, maximum.size, "failed growth preserves maximum rope")
+    checkEquals(7, maximum.front(), "failed growth preserves maximum front")
+    checkEquals(7, maximum.back(), "failed growth preserves maximum back")
+    checkEquals(1, seed.size, "failed growth preserves seed size")
+    checkEquals(7, seed.front(), "failed growth preserves seed value")
+}
+
 private fun ropeCopyToStreamsAcrossChunkBoundaries() {
     val expected = (0 until 200).toList()
     val rope = Rope.fromChunks(expected.chunked(7))
@@ -618,6 +889,7 @@ private fun concurrentReadersObserveConsistentSnapshots() {
     val deque = PersistentDeque.from(expected)
     val reversible = ReversibleDeque.from(expected).reverse()
     val rope = Rope.from(expected)
+    val cursor = rope.cursorAt(128) ?: throw AssertionError("concurrent cursor")
     val measuredValues = (1..128).toList()
     val measured = MeasuredRope.from(measuredValues, IntSumMeasure)
 
@@ -630,6 +902,9 @@ private fun concurrentReadersObserveConsistentSnapshots() {
             checkEquals(256, rope.size, "concurrent rope size")
             checkEquals(128, rope[128], "concurrent rope index")
             checkEquals(expected, rope.toList(), "concurrent rope contents")
+            checkEquals(127, cursor.peekPrevious()?.value, "concurrent cursor previous")
+            checkEquals(128, cursor.peekNext()?.value, "concurrent cursor next")
+            check(cursor.snapshot() === rope, "concurrent cursor snapshot identity")
             checkEquals(128, measured.size, "concurrent measured size")
             checkEquals(measuredValues.sum(), measured.measure(), "concurrent measured total")
             checkEquals(64, measured[63], "concurrent measured index")
@@ -655,6 +930,9 @@ public fun main() {
         "intervalTreeInsertsNewEqualLowIntervalsFirst" to ::intervalTreeInsertsNewEqualLowIntervalsFirst,
         "recurringPortingRegressionsStayLocked" to ::recurringPortingRegressionsStayLocked,
         "ropesEditAndNavigateText" to ::ropesEditAndNavigateText,
+        "ropeCursorHandlesBoundariesNullsAndPersistentEdits" to ::ropeCursorHandlesBoundariesNullsAndPersistentEdits,
+        "ropeCursorHistoryMatchesGapListModel" to ::ropeCursorHistoryMatchesGapListModel,
+        "ropeGrowthOverflowIsCheckedAndAtomic" to ::ropeGrowthOverflowIsCheckedAndAtomic,
         "ropeCopyToStreamsAcrossChunkBoundaries" to ::ropeCopyToStreamsAcrossChunkBoundaries,
         "locateReportsFoundForStoredNulls" to ::locateReportsFoundForStoredNulls,
         "measuredRopeSupportsThePositionalEditingSurface" to ::measuredRopeSupportsThePositionalEditingSurface,
