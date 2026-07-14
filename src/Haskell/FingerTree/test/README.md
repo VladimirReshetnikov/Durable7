@@ -41,11 +41,17 @@ density ceilings.
 
 Positional-cursor coverage locks empty/start/end gap behavior, nested-`Maybe` peeks, invalid seek
 and edit results, exact snapshot/no-op identity under optimized GHC, chunk-boundary edits,
-equality-free representative replacement, retained branches, and far-chunk sharing. A deterministic
-750-command list/gap model covers movement, seek, insertion, deletion, replacement, and snapshots;
-concurrent readers exercise one retained cursor. A shared-DAG construction reaches the exact
-`Int` maximum without materializing its logical elements, then checks every rope and cursor growth
-path for pre-publication overflow, exception atomicity, and continued usability of all sources.
+equality-free representative replacement, retained branches, and far-chunk sharing. Measured-cursor
+coverage adds ordered noncommutative before/after partitions, absolute monotone-prefix search over
+clean and edited versions, callback failure/retry, exact measured snapshots, and text-cursor helper
+parity at every `Char` gap across supplementary-plane, combining-mark, CRLF, and LF content. Separate
+deterministic 750-command positional and measured list/gap models cover movement, seek, insertion,
+deletion, replacement, measures, and snapshots; concurrent readers exercise retained positional,
+measured, and text cursors. Shared-DAG constructions reach the exact `Int` maximum without
+materializing their logical elements, then check every positional/measured rope and cursor growth
+path for length overflow before new element/monoid callbacks, exception atomicity, lazy range-spine
+short-circuiting, and continued usability of all sources. An all-newline maximum DAG also locks
+checked line-count derivation.
 
 Canonical zip-zip-set coverage pins caller-keyed and `ZZT2` public-seed HMAC rank vectors, unsigned
 secondary-word priority, hidden random-key separation, construction-order-independent bulk and

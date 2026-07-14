@@ -9,7 +9,7 @@ This package ports the repository finger-tree family to Haskell. It includes a g
 finger tree, a size-and-rightmost-leaf-measured deque, a reversible deque, sorted bag/set/map
 facades, a stable meldable priority queue, a worst-case-optimal Brodal-Okasaki heap, a keyed
 priority-search queue, interval tree helpers, positional ropes, measured ropes, text-rope navigation
-helpers, an immutable positional rope cursor, a persistent RRB vector, and a policy-canonical
+helpers, immutable positional/measured/text rope cursors, a persistent RRB vector, and a policy-canonical
 zip-zip-tree sorted set.
 
 [`CanonicalSortedSet`](docs/canonical-sorted-set.md) derives exact HMAC-SHA-256 ranks from a caller's
@@ -81,11 +81,35 @@ Construction, movement, and snapshot are O(1); peeks and point edits are O(log n
 64-element chunk work, and inserting `m` values is O(m + log n). This is deliberately a persistent
 path-copy checkpoint, not the C# zipper, so it makes no focus-local or benchmark-parity claim.
 
-Positional-rope growth checks the cached `Int` count before publication. `append`, endpoint and
-positional insertion, range insertion, and their cursor forms raise the pure
-`Data.Structures.FingerTree.Rope: length overflow` exception if the result would exceed `maxBound`;
-the receiver and every retained source remain reusable. Range insertion constructs its middle rope
-once. Measured-rope and text cursor surfaces remain unported in Haskell.
+`MeasuredRopeCursor v a` applies the same opaque immutable gap model to the exact retained
+`MeasuredRope`. It adds ordered `measureBefore` and `measureAfter` partitions plus absolute
+measure-guided factory and seek operations. `MeasuredRopeCursorSearch` always carries a usable
+cursor: a lawful monotone-prefix hit selects the gap before the first satisfying element, while an
+empty rope or miss returns the end gap with `searchFound == False`. Measure partitions preserve
+left-to-right monoid order without assuming an inverse, commutativity, or element equality. Peeks
+retain Haskell's nested-`Maybe` distinction, replacement has no `Eq` constraint, same-gap seek and
+empty insertion preserve the exact source, and edits branch through the existing measured rope.
+Creation, movement, positional seek, and snapshot are O(1); peeks, ordered measure reads, point
+edits, and absolute measure search are O(log n) plus one bounded 64-element chunk scan, and range
+insertion is O(m + log n). Element-measure and monoid work may occur during measure reads and edits.
+
+`TextRopeCursor` and `TextRopeCursorSearch` are zero-wrapper type aliases over that measured cursor,
+with the full gap/edit/search surface and `lineColumnOfCursor` re-exported by the text module. A
+snapshot is therefore immediately usable by every existing text helper. Positions and columns count
+Haskell `Char` elements, not UTF-16 code units or grapheme clusters: a supplementary-plane character
+normally occupies one `Char`, a combining mark occupies another, and a surrogate-valued `Char` also
+occupies one. Because `TextRope` itself is a type alias, callers can construct
+one through the generic measured API with a non-newline measure; the text cursor and helper contract
+requires values created by `fromString`/`fromText` or an extensionally identical newline measure.
+
+Positional- and measured-rope growth checks the cached `Int` count before constructing a result.
+`append`, point/range insertion, and their cursor forms raise the family-specific pure length-
+overflow exception if the result would exceed `maxBound`; the receiver and every retained source
+remain reusable. Measured range insertion validates the gap, consumes only enough list spine to
+prove the count fits, then constructs its measured middle once, so overflow wins before the new
+elements or their measure/monoid callbacks are forced. As usual for pure Haskell, forcing an
+unevaluated operand or input spine is outside that callback-order guarantee. The text facade also
+checks the derived `newlineCount + 1` line count instead of wrapping at `maxBound`.
 
 The text helpers use the measured rope's cached newline counts for offset/line navigation rather
 than rescanning the entire text. The interval tree is a low-sorted finger tree annotated with both

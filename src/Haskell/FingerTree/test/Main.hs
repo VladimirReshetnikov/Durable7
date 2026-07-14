@@ -53,6 +53,7 @@ main = do
   testRrbVector
   testRopes
   testRopeCursor
+  testMeasuredRopeCursor
   testTextRope
   testConcurrentReads
   putStrLn "tools-data-structures-fingertree tests passed"
@@ -931,6 +932,415 @@ testRopeGrowthOverflow = do
   assertEqual "failed growth preserves almost-power" (powerCount - 1) (Rope.count almostPower)
   assertEqual "failed growth preserves seed" [7] (Rope.toList seed)
 
+testMeasuredRopeCursor :: IO ()
+testMeasuredRopeCursor = do
+  let emptyRope :: MeasuredRope.MeasuredRope (Sum Int) Int
+      emptyRope = MeasuredRope.emptyWith (const (Sum 1))
+      emptyCursor = MeasuredRope.cursor emptyRope
+  assertEqual "empty measured cursor position" 0 (MeasuredRope.cursorPosition emptyCursor)
+  assertEqual "empty measured cursor count" 0 (MeasuredRope.cursorCount emptyCursor)
+  assertBool "empty measured cursor reports null" (MeasuredRope.cursorNull emptyCursor)
+  assertBool "empty measured cursor is at start" (MeasuredRope.isAtStart emptyCursor)
+  assertBool "empty measured cursor is at end" (MeasuredRope.isAtEnd emptyCursor)
+  assertEqual "empty measured cursor before" (Sum 0) (MeasuredRope.measureBefore emptyCursor)
+  assertEqual "empty measured cursor after" (Sum 0) (MeasuredRope.measureAfter emptyCursor)
+  assertNothing "empty measured cursor has no previous" (MeasuredRope.peekPrevious emptyCursor)
+  assertNothing "empty measured cursor has no next" (MeasuredRope.peekNext emptyCursor)
+  assertNothing "empty measured cursor cannot move previous" (MeasuredRope.movePrevious emptyCursor)
+  assertNothing "empty measured cursor cannot move next" (MeasuredRope.moveNext emptyCursor)
+  assertSameStableName
+    "empty measured cursor retains exact source"
+    emptyRope
+    (MeasuredRope.snapshot emptyCursor)
+
+  let source :: MeasuredRope.MeasuredRope (Sum Int) Int
+      source = MeasuredRope.fromListWith (const (Sum 1)) [0 :: Int .. 129]
+      start = MeasuredRope.cursor source
+  assertEqual "measured cursor start position" 0 (MeasuredRope.cursorPosition start)
+  assertEqual "measured cursor start count" 130 (MeasuredRope.cursorCount start)
+  assertEqual "measured cursor start before" (Sum 0) (MeasuredRope.measureBefore start)
+  assertEqual "measured cursor start after" (Sum 130) (MeasuredRope.measureAfter start)
+  assertNothing "negative measured cursor gap rejected" (MeasuredRope.cursorAt (-1) source)
+  assertNothing "past-end measured cursor gap rejected" (MeasuredRope.cursorAt 131 source)
+  assertNothing
+    "invalid measured range gap does not force values"
+    (MeasuredRope.insertRangeAt (-1) (error "invalid measured range source was forced") source)
+  assertEqual
+    "direct measured range insertion preserves order"
+    (Just ([60, 61, 62, 63, -2, -3, 64, 65, 66, 67] :: [Int]))
+    (take 10 . drop 60 . MeasuredRope.toList <$> MeasuredRope.insertRangeAt 64 [-2, -3] source)
+  unchanged <- expectJust "empty measured direct range insertion" (MeasuredRope.insertRangeAt 64 [] source)
+  assertSameStableName "empty measured direct range retains source" source unchanged
+
+  middle <- expectJust "middle measured cursor" (MeasuredRope.cursorAt 64 source)
+  assertEqual "middle measured previous" (Just 63) (MeasuredRope.peekPrevious middle)
+  assertEqual "middle measured next" (Just 64) (MeasuredRope.peekNext middle)
+  assertEqual "middle measured before" (Sum 64) (MeasuredRope.measureBefore middle)
+  assertEqual "middle measured after" (Sum 66) (MeasuredRope.measureAfter middle)
+  same <- expectJust "same measured cursor seek" (MeasuredRope.seek 64 middle)
+  assertSameStableName "same measured seek retains source" source (MeasuredRope.snapshot same)
+  moved <- expectJust "measured cursor move next" (MeasuredRope.moveNext middle)
+  assertSameStableName "measured navigation retains source" source (MeasuredRope.snapshot moved)
+  assertNothing "negative measured cursor seek rejected" (MeasuredRope.seek (-1) middle)
+  assertNothing "past-end measured cursor seek rejected" (MeasuredRope.seek 131 middle)
+  let unchangedCursor = MeasuredRope.insertRange [] middle
+  assertEqual "empty measured range preserves gap" 64 (MeasuredRope.cursorPosition unchangedCursor)
+  assertSameStableName
+    "empty measured range preserves source"
+    source
+    (MeasuredRope.snapshot unchangedCursor)
+
+  let ranged = MeasuredRope.insertRange [-2, -3] middle
+  assertEqual "measured range advances gap" 66 (MeasuredRope.cursorPosition ranged)
+  assertEqual "measured range previous" (Just (-3)) (MeasuredRope.peekPrevious ranged)
+  assertEqual "measured range next" (Just 64) (MeasuredRope.peekNext ranged)
+  assertEqual "measured range before" (Sum 66) (MeasuredRope.measureBefore ranged)
+  assertEqual "measured range after" (Sum 66) (MeasuredRope.measureAfter ranged)
+  let inserted = MeasuredRope.insert (-1) ranged
+  restored <- expectJust "measured delete previous" (MeasuredRope.deletePrevious inserted)
+  assertEqual
+    "measured backspace restores range"
+    (MeasuredRope.toList (MeasuredRope.snapshot ranged))
+    (MeasuredRope.toList (MeasuredRope.snapshot restored))
+  replaced <- expectJust "measured replace next" (MeasuredRope.replaceNext 99_999 restored)
+  assertEqual "measured replacement keeps gap" 66 (MeasuredRope.cursorPosition replaced)
+  assertEqual "measured replacement stores value" (Just 99_999) (MeasuredRope.peekNext replaced)
+  deleted <- expectJust "measured delete next" (MeasuredRope.deleteNext replaced)
+  assertEqual "measured delete next keeps gap" 66 (MeasuredRope.cursorPosition deleted)
+  assertEqual "measured delete next exposes successor" (Just 65) (MeasuredRope.peekNext deleted)
+
+  end <- expectJust "measured end cursor" (MeasuredRope.cursorAt 130 source)
+  assertBool "measured end reports end" (MeasuredRope.isAtEnd end)
+  assertEqual "measured end before" (Sum 130) (MeasuredRope.measureBefore end)
+  assertEqual "measured end after" (Sum 0) (MeasuredRope.measureAfter end)
+  assertNothing "measured cursor cannot move beyond end" (MeasuredRope.moveNext end)
+  assertNothing "measured cannot backspace at start" (MeasuredRope.deletePrevious start)
+  assertNothing "measured cannot delete at end" (MeasuredRope.deleteNext end)
+  assertNothing "measured cannot replace at end" (MeasuredRope.replaceNext 0 end)
+
+  let nullableRope :: MeasuredRope.MeasuredRope (Sum Int) (Maybe Int)
+      nullableRope = MeasuredRope.fromListWith (const (Sum 1)) [Nothing, Just 1]
+  nullable <- expectJust
+    "nullable measured cursor"
+    (MeasuredRope.cursorAt 1 nullableRope)
+  assertEqual
+    "measured peek distinguishes stored Nothing"
+    (Just Nothing)
+    (MeasuredRope.peekPrevious nullable)
+  assertEqual "nullable measured next" (Just (Just 1)) (MeasuredRope.peekNext nullable)
+
+  let originalRepresentative = CursorRepresentative 7 "original"
+      replacementRepresentative = CursorRepresentative 7 "replacement"
+      representativeRope :: MeasuredRope.MeasuredRope (Sum Int) CursorRepresentative
+      representativeRope = MeasuredRope.fromListWith (const (Sum 1))
+        [ CursorRepresentative 6 "left"
+        , originalRepresentative
+        , CursorRepresentative 8 "right"
+        ]
+  representativeSource <- expectJust
+    "measured representative cursor"
+    (MeasuredRope.cursorAt 1 representativeRope)
+  representativeEdit <- expectJust
+    "measured representative replacement"
+    (MeasuredRope.replaceNext replacementRepresentative representativeSource)
+  assertEqual
+    "measured replacement stores supplied representative without Eq"
+    (Just "replacement")
+    (cursorRepresentativeLabel <$> MeasuredRope.peekNext representativeEdit)
+  assertEqual
+    "measured replacement retains source representative"
+    (Just "original")
+    (cursorRepresentativeLabel <$> MeasuredRope.peekNext representativeSource)
+
+  retained <- expectJust "retained measured cursor" (MeasuredRope.cursorAt 64 source)
+  let leftBranch = MeasuredRope.insert (-10) retained
+      rightBranch = MeasuredRope.insert (-20) retained
+  assertEqual "retained measured source remains unchanged" (Just 64) (MeasuredRope.peekNext retained)
+  assertEqual "left measured branch value" (Just (-10)) (MeasuredRope.index 64 (MeasuredRope.snapshot leftBranch))
+  assertEqual "right measured branch value" (Just (-20)) (MeasuredRope.index 64 (MeasuredRope.snapshot rightBranch))
+  assertSameStableName "retained measured cursor keeps exact source" source (MeasuredRope.snapshot retained)
+
+  testMeasuredCursorOrderedMeasures
+  testMeasuredCursorSearch
+  runMeasuredCursorModel 0 0x6d2b_79f5 (MeasuredRope.cursor (MeasuredRope.emptyWith (const (Sum 1)))) [] 0
+  testMeasuredCursorCallbackFailures
+  testMeasuredRopeGrowthOverflow
+
+testMeasuredCursorOrderedMeasures :: IO ()
+testMeasuredCursorOrderedMeasures = do
+  let model = [0 :: Int .. 299]
+      source = MeasuredRope.fromListWith (\value -> Trace [value]) model
+  forM_ [0, 1, 15, 16, 17, 63, 64, 65, 127, 128, 255, 256, 299, 300] $ \position -> do
+    cursorValue <- expectJust "ordered measured cursor" (MeasuredRope.cursorAt position source)
+    assertEqual ("ordered measured prefix at " ++ show position) (Trace (take position model)) (MeasuredRope.measureBefore cursorValue)
+    assertEqual ("ordered measured suffix at " ++ show position) (Trace (drop position model)) (MeasuredRope.measureAfter cursorValue)
+    assertEqual
+      ("ordered measured partition at " ++ show position)
+      (MeasuredRope.measure source)
+      (MeasuredRope.measureBefore cursorValue <> MeasuredRope.measureAfter cursorValue)
+
+  sourceCursor <- expectJust "ordered measured edit cursor" (MeasuredRope.cursorAt 128 source)
+  replaced <- expectJust
+    "ordered measured edit replacement"
+    (MeasuredRope.replaceNext (-3) =<< MeasuredRope.deletePrevious (MeasuredRope.insert (-2) (MeasuredRope.insert (-1) sourceCursor)))
+  let expected = take 128 model ++ [-1, -3] ++ drop 129 model
+  assertEqual "ordered measured edited position" 129 (MeasuredRope.cursorPosition replaced)
+  assertEqual "ordered measured edited prefix" (Trace (take 129 expected)) (MeasuredRope.measureBefore replaced)
+  assertEqual "ordered measured edited suffix" (Trace (drop 129 expected)) (MeasuredRope.measureAfter replaced)
+  assertEqual "ordered measured edited snapshot" expected (MeasuredRope.toList (MeasuredRope.snapshot replaced))
+  assertEqual "ordered measured source retained" model (MeasuredRope.toList source)
+
+  let orderedSearch = MeasuredRope.cursorByMeasure (\(Trace values) -> length values >= 129) source
+      orderedSearchCursor = MeasuredRope.searchCursor orderedSearch
+  assertBool "ordered noncommutative measured search found" (MeasuredRope.searchFound orderedSearch)
+  assertEqual "ordered noncommutative measured search position" 128 (MeasuredRope.cursorPosition orderedSearchCursor)
+  assertEqual "ordered noncommutative measured search prefix" (Trace (take 128 model)) (MeasuredRope.measureBefore orderedSearchCursor)
+  assertEqual "ordered noncommutative measured search suffix" (Trace (drop 128 model)) (MeasuredRope.measureAfter orderedSearchCursor)
+
+testMeasuredCursorSearch :: IO ()
+testMeasuredCursorSearch = do
+  let source = MeasuredRope.fromListWith Sum [2 :: Int, 3, 5, 7]
+      cases =
+        [ (0, True, 0, 0)
+        , (1, True, 0, 0)
+        , (2, True, 0, 0)
+        , (3, True, 1, 2)
+        , (5, True, 1, 2)
+        , (6, True, 2, 5)
+        , (10, True, 2, 5)
+        , (11, True, 3, 10)
+        , (17, True, 3, 10)
+        , (18, False, 4, 17)
+        ]
+  receiver <- expectJust "measured search receiver" (MeasuredRope.cursorAt 3 source)
+  forM_ cases $ \(threshold, expectedFound, expectedPosition, expectedBefore) -> do
+    let results =
+          [ ("factory", MeasuredRope.cursorByMeasure (\(Sum value) -> value >= threshold) source)
+          , ("seek", MeasuredRope.seekByMeasure (\(Sum value) -> value >= threshold) receiver)
+          ]
+    forM_ results $ \(label, result) -> do
+      let cursorValue = MeasuredRope.searchCursor result
+      assertEqual (label ++ " measured search found at " ++ show threshold) expectedFound (MeasuredRope.searchFound result)
+      assertEqual (label ++ " measured search position at " ++ show threshold) expectedPosition (MeasuredRope.cursorPosition cursorValue)
+      assertEqual (label ++ " measured search before at " ++ show threshold) (Sum expectedBefore) (MeasuredRope.measureBefore cursorValue)
+      assertEqual (label ++ " measured search after at " ++ show threshold) (Sum (17 - expectedBefore)) (MeasuredRope.measureAfter cursorValue)
+      assertSameStableName (label ++ " measured search retains source") source (MeasuredRope.snapshot cursorValue)
+
+  let same = MeasuredRope.seekByMeasure (\(Sum value) -> value >= 11) receiver
+  assertBool "same-gap measured search found" (MeasuredRope.searchFound same)
+  assertEqual "same-gap measured search position" 3 (MeasuredRope.cursorPosition (MeasuredRope.searchCursor same))
+  assertSameStableName "same-gap measured search retains source" source (MeasuredRope.snapshot (MeasuredRope.searchCursor same))
+
+  let dirty = MeasuredRope.insert 11 receiver
+      dirtyHit = MeasuredRope.seekByMeasure (\(Sum value) -> value >= 11) dirty
+      dirtyMiss = MeasuredRope.seekByMeasure (\(Sum value) -> value >= 29) dirty
+  assertBool "dirty measured search found" (MeasuredRope.searchFound dirtyHit)
+  assertEqual "dirty measured search is absolute" 3 (MeasuredRope.cursorPosition (MeasuredRope.searchCursor dirtyHit))
+  assertEqual "dirty measured search snapshot" [2, 3, 5, 11, 7] (MeasuredRope.toList (MeasuredRope.snapshot (MeasuredRope.searchCursor dirtyHit)))
+  assertBool "dirty measured search miss" (not (MeasuredRope.searchFound dirtyMiss))
+  assertEqual "dirty measured miss returns end" 5 (MeasuredRope.cursorPosition (MeasuredRope.searchCursor dirtyMiss))
+
+  let emptySearch = MeasuredRope.cursorByMeasure (const True) (MeasuredRope.emptyWith Sum :: MeasuredRope.MeasuredRope (Sum Int) Int)
+  assertBool "empty measured search misses" (not (MeasuredRope.searchFound emptySearch))
+  assertBool "empty measured search returns empty end" (MeasuredRope.isAtEnd (MeasuredRope.searchCursor emptySearch))
+
+  predicateFailure <- try
+    (evaluate (MeasuredRope.searchFound (MeasuredRope.seekByMeasure (\_ -> error "measured predicate callback") receiver)))
+  assertErrorCallPrefix "measured predicate failure propagates" "measured predicate callback" predicateFailure
+  assertSameStableName "predicate failure retains measured source" source (MeasuredRope.snapshot receiver)
+  assertEqual
+    "predicate failure measured retry succeeds"
+    1
+    (MeasuredRope.cursorPosition (MeasuredRope.searchCursor (MeasuredRope.seekByMeasure (\(Sum value) -> value >= 3) receiver)))
+
+runMeasuredCursorModel :: Int -> Word32 -> MeasuredRope.MeasuredRopeCursor (Sum Int) Int -> [Int] -> Int -> IO ()
+runMeasuredCursorModel !step !randomState cursorValue model position
+  | step == 750 = assertMeasuredCursorModel step cursorValue model position
+  | otherwise = do
+      let next = nextRrbRandom randomState
+          operation = fromIntegral (next `mod` 7) :: Int
+      (edited, expected, nextPosition) <-
+        case operation of
+          0 -> pure
+            ( MeasuredRope.insert step cursorValue
+            , take position model ++ [step] ++ drop position model
+            , position + 1
+            )
+          1 ->
+            let values = [step, negate step]
+             in pure
+                  ( MeasuredRope.insertRange values cursorValue
+                  , take position model ++ values ++ drop position model
+                  , position + length values
+                  )
+          2 ->
+            case MeasuredRope.deletePrevious cursorValue of
+              Nothing -> do
+                assertEqual (measuredModelLabel "backspace boundary" step) 0 position
+                pure (cursorValue, model, position)
+              Just result ->
+                let previous = position - 1
+                 in pure (result, take previous model ++ drop position model, previous)
+          3 ->
+            case MeasuredRope.deleteNext cursorValue of
+              Nothing -> do
+                assertEqual (measuredModelLabel "delete boundary" step) (length model) position
+                pure (cursorValue, model, position)
+              Just result -> pure (result, take position model ++ drop (position + 1) model, position)
+          4 ->
+            case MeasuredRope.replaceNext step cursorValue of
+              Nothing -> do
+                assertEqual (measuredModelLabel "replace boundary" step) (length model) position
+                pure (cursorValue, model, position)
+              Just result -> pure (result, take position model ++ [step] ++ drop (position + 1) model, position)
+          5
+            | (next `div` 4096) `mod` 2 == 0 ->
+                case MeasuredRope.movePrevious cursorValue of
+                  Nothing -> do
+                    assertEqual (measuredModelLabel "move previous boundary" step) 0 position
+                    pure (cursorValue, model, position)
+                  Just result -> pure (result, model, position - 1)
+            | otherwise ->
+                case MeasuredRope.moveNext cursorValue of
+                  Nothing -> do
+                    assertEqual (measuredModelLabel "move next boundary" step) (length model) position
+                    pure (cursorValue, model, position)
+                  Just result -> pure (result, model, position + 1)
+          _ -> do
+            let target = fromIntegral ((next `div` 256) `mod` fromIntegral (length model + 2))
+            case MeasuredRope.seek target cursorValue of
+              Nothing -> do
+                assertBool (measuredModelLabel "invalid seek" step) (target > length model)
+                pure (cursorValue, model, position)
+              Just result -> pure (result, model, target)
+      assertMeasuredCursorModel step edited expected nextPosition
+      runMeasuredCursorModel (step + 1) next edited expected nextPosition
+
+assertMeasuredCursorModel :: Int -> MeasuredRope.MeasuredRopeCursor (Sum Int) Int -> [Int] -> Int -> IO ()
+assertMeasuredCursorModel step cursorValue model position = do
+  assertEqual (measuredModelLabel "position" step) position (MeasuredRope.cursorPosition cursorValue)
+  assertEqual (measuredModelLabel "count" step) (length model) (MeasuredRope.cursorCount cursorValue)
+  assertEqual (measuredModelLabel "before" step) (Sum position) (MeasuredRope.measureBefore cursorValue)
+  assertEqual (measuredModelLabel "after" step) (Sum (length model - position)) (MeasuredRope.measureAfter cursorValue)
+  assertEqual
+    (measuredModelLabel "previous" step)
+    (if position == 0 then Nothing else Just (model !! (position - 1)))
+    (MeasuredRope.peekPrevious cursorValue)
+  assertEqual
+    (measuredModelLabel "next" step)
+    (if position == length model then Nothing else Just (model !! position))
+    (MeasuredRope.peekNext cursorValue)
+  assertEqual (measuredModelLabel "snapshot" step) model (MeasuredRope.toList (MeasuredRope.snapshot cursorValue))
+
+measuredModelLabel :: String -> Int -> String
+measuredModelLabel label step = "measured rope cursor model " ++ label ++ " at step " ++ show step
+
+testMeasuredCursorCallbackFailures :: IO ()
+testMeasuredCursorCallbackFailures = do
+  state <- newMeasureProbeState
+  let source = MeasuredRope.fromListWith (probeElementMeasure state) [0 :: Int .. 128]
+  _ <- evaluate (probeMeasureTotal (MeasuredRope.measure source))
+  cursorValue <- expectJust "probe measured cursor" (MeasuredRope.cursorAt 64 source)
+  resetMeasureProbe state
+
+  setMeasureProbeArming state True False
+  elementFailure <- try
+    (evaluate (probeMeasureTotal (MeasuredRope.measure (MeasuredRope.snapshot (MeasuredRope.insert (-1) cursorValue)))))
+  setMeasureProbeArming state False False
+  assertErrorCallPrefix "measured element callback failure" "measured element callback" elementFailure
+  assertSameStableName "element failure retains measured source" source (MeasuredRope.snapshot cursorValue)
+  resetMeasureProbe state
+  assertEqual
+    "element callback failure retry succeeds"
+    130
+    (MeasuredRope.cursorCount (MeasuredRope.insert (-1) cursorValue))
+
+  resetMeasureProbe state
+  setMeasureProbeArming state False True
+  combineFailure <- try
+    (evaluate (case MeasuredRope.replaceNext (-1) cursorValue of
+      Just edited -> probeMeasureTotal (MeasuredRope.measure (MeasuredRope.snapshot edited))
+      Nothing -> error "probe replacement unexpectedly missed"))
+  setMeasureProbeArming state False False
+  assertErrorCallPrefix "measured combine callback failure" "measured combine callback" combineFailure
+  assertSameStableName "combine failure retains measured source" source (MeasuredRope.snapshot cursorValue)
+  resetMeasureProbe state
+  retried <- expectJust "combine callback retry" (MeasuredRope.replaceNext (-1) cursorValue)
+  assertEqual "combine callback retry stores value" (Just (-1)) (MeasuredRope.peekNext retried)
+
+  resetMeasureProbe state
+  setMeasureProbeArming state True True
+  assertEqual "measured snapshot count is callback-free" 129 (MeasuredRope.count (MeasuredRope.snapshot cursorValue))
+  assertSameStableName "measured snapshot itself is callback-free" source (MeasuredRope.snapshot cursorValue)
+  elementCalls <- readIORef (probeElementCalls state)
+  combineCalls <- readIORef (probeCombineCalls state)
+  setMeasureProbeArming state False False
+  assertEqual "snapshot element callback count" 0 elementCalls
+  assertEqual "snapshot combine callback count" 0 combineCalls
+
+testMeasuredRopeGrowthOverflow :: IO ()
+testMeasuredRopeGrowthOverflow = do
+  state <- newMeasureProbeState
+  let seed = MeasuredRope.singletonWith (probeElementMeasure state) (7 :: Int)
+      grow current
+        | MeasuredRope.count current > maxBound `div` 2 = current
+        | otherwise = grow (MeasuredRope.append current current)
+      power = grow seed
+      powerCount = MeasuredRope.count power
+  _ <- evaluate (probeMeasureTotal (MeasuredRope.measure power))
+  assertEqual "measured shared power count" (maxBound `div` 2 + 1) powerCount
+  almostPower <- expectJust "remove from measured shared power" (MeasuredRope.deleteAt 0 power)
+  let maximumRope = MeasuredRope.append power almostPower
+      maximumCursor = MeasuredRope.cursor maximumRope
+  maximumEnd <- expectJust "maximum measured end cursor" (MeasuredRope.cursorAt maxBound maximumRope)
+  _ <- evaluate (probeMeasureTotal (MeasuredRope.measure maximumRope))
+  assertEqual "maximum measured rope count" maxBound (MeasuredRope.count maximumRope)
+
+  assertMeasuredLengthOverflowNoCallbacks state
+    "overflowing measured self-append"
+    (evaluate (MeasuredRope.count (MeasuredRope.append power power)))
+  assertMeasuredLengthOverflowNoCallbacks state
+    "overflowing measured point insertion"
+    (evaluate (maybe (-1) MeasuredRope.count (MeasuredRope.insertAt 0 8 maximumRope)))
+  assertMeasuredLengthOverflowNoCallbacks state
+    "overflowing measured end insertion"
+    (evaluate (maybe (-1) MeasuredRope.count (MeasuredRope.insertAt maxBound 8 maximumRope)))
+  assertMeasuredLengthOverflowNoCallbacks state
+    "overflowing measured range insertion"
+    (evaluate (maybe (-1) MeasuredRope.count (MeasuredRope.insertRangeAt 0 [8] maximumRope)))
+  assertMeasuredLengthOverflowNoCallbacks state
+    "overflowing measured range preflight does not force values or tail"
+    (evaluate (maybe (-1) MeasuredRope.count
+      (MeasuredRope.insertRangeAt 0 (error "measured range head forced" : error "measured range tail forced") maximumRope)))
+  assertMeasuredLengthOverflowNoCallbacks state
+    "overflowing measured maximum append"
+    (evaluate (MeasuredRope.count (MeasuredRope.append maximumRope seed)))
+  assertMeasuredLengthOverflowNoCallbacks state
+    "overflowing measured maximum prefix append"
+    (evaluate (MeasuredRope.count (MeasuredRope.append seed maximumRope)))
+  assertMeasuredLengthOverflowNoCallbacks state
+    "overflowing measured cursor insertion"
+    (evaluate (MeasuredRope.cursorCount (MeasuredRope.insert 8 maximumCursor)))
+  assertMeasuredLengthOverflowNoCallbacks state
+    "overflowing measured cursor range"
+    (evaluate (MeasuredRope.cursorCount (MeasuredRope.insertRange [8] maximumCursor)))
+  assertMeasuredLengthOverflowNoCallbacks state
+    "overflowing measured cursor range does not force values or tail"
+    (evaluate (MeasuredRope.cursorCount
+      (MeasuredRope.insertRange (error "measured cursor range head forced" : error "measured cursor range tail forced") maximumCursor)))
+  assertMeasuredLengthOverflowNoCallbacks state
+    "overflowing measured end cursor insertion"
+    (evaluate (MeasuredRope.cursorCount (MeasuredRope.insert 8 maximumEnd)))
+  assertMeasuredLengthOverflowNoCallbacks state
+    "overflowing measured end cursor range"
+    (evaluate (MeasuredRope.cursorCount (MeasuredRope.insertRange [8] maximumEnd)))
+
+  assertEqual "measured overflow preserves maximum" maxBound (MeasuredRope.count maximumRope)
+  assertEqual "measured overflow preserves front" (Just 7) (MeasuredRope.index 0 maximumRope)
+  assertEqual "measured overflow preserves back" (Just 7) (MeasuredRope.index (maxBound - 1) maximumRope)
+  assertEqual "measured overflow preserves power" powerCount (MeasuredRope.count power)
+  assertEqual "measured overflow preserves seed" [7] (MeasuredRope.toList seed)
+
 testTextRope :: IO ()
 testTextRope = do
   let text = RopeText.fromString "a\nbc\n"
@@ -948,6 +1358,130 @@ testTextRope = do
   assertEqual "text measured offset across chunks" (Just 171) (RopeText.offsetOf 1 90 longText)
   assertEqual "text measured line extraction across chunks" (Just (replicate 90 'b')) (RopeText.getLine 1 longText)
 
+  let cursorContent = '\x1F603' : 'e' : '\x0301' : '\r' : '\n' : "alpha\n\x03B2"
+      cursorText = RopeText.fromString cursorContent
+      firstNewlineOffset =
+        case List.elemIndex '\n' cursorContent of
+          Just value -> value
+          Nothing -> error "text cursor fixture has no newline"
+  forM_ [0 .. length cursorContent] $ \position -> do
+    cursorValue <- expectJust "text cursor at valid gap" (RopeText.cursorAt position cursorText)
+    assertEqual
+      ("text cursor line-column at " ++ show position)
+      (textLineColumnModel position cursorContent)
+      (RopeText.lineColumnOfCursor cursorValue)
+    assertEqual
+      ("text cursor helper parity at " ++ show position)
+      (Just (RopeText.lineColumnOfCursor cursorValue))
+      (RopeText.lineColumnOf position cursorText)
+    assertSameStableName
+      ("text cursor retains exact source at " ++ show position)
+      cursorText
+      (RopeText.snapshot cursorValue)
+
+  let textStart = RopeText.cursor cursorText
+      unchangedTextCursor = RopeText.insertRange [] textStart
+  assertSameStableName "empty text cursor insertion retains facade" cursorText (RopeText.snapshot unchangedTextCursor)
+  assertEqual "Haskell text cursor counts Char elements" (0, 1) (RopeText.lineColumnOfCursor (expectTextCursor 1 cursorText))
+  assertEqual
+    "text cursor CR remains in the preceding column"
+    (0, firstNewlineOffset)
+    (RopeText.lineColumnOfCursor (expectTextCursor firstNewlineOffset cursorText))
+  assertEqual
+    "text cursor moves to column zero after LF"
+    (1, 0)
+    (RopeText.lineColumnOfCursor (expectTextCursor (firstNewlineOffset + 1) cursorText))
+
+  let firstNewline = RopeText.cursorByMeasure (\(RopeText.NewlineMeasure seen) -> seen >= 1) cursorText
+  assertBool "text cursor first newline search found" (RopeText.searchFound firstNewline)
+  assertEqual
+    "text cursor first newline search position"
+    firstNewlineOffset
+    (RopeText.cursorPosition (RopeText.searchCursor firstNewline))
+  assertSameStableName
+    "text cursor search retains exact facade"
+    cursorText
+    (RopeText.snapshot (RopeText.searchCursor firstNewline))
+  let secondNewline = RopeText.seekByMeasure
+        (\(RopeText.NewlineMeasure seen) -> seen >= 2)
+        (RopeText.searchCursor firstNewline)
+  assertBool "text cursor second newline search found" (RopeText.searchFound secondNewline)
+  assertEqual
+    "text cursor second newline search position"
+    (maybe (-1) id (List.elemIndex '\n' (drop (firstNewlineOffset + 1) cursorContent)) + firstNewlineOffset + 1)
+    (RopeText.cursorPosition (RopeText.searchCursor secondNewline))
+
+  let insertionPoint = expectTextCursor firstNewlineOffset cursorText
+      inserted = RopeText.insert '\n' insertionPoint
+      editedText = RopeText.snapshot inserted
+      expectedText = take firstNewlineOffset cursorContent ++ "\n" ++ drop firstNewlineOffset cursorContent
+  assertEqual "text cursor edited snapshot" expectedText (RopeText.toString editedText)
+  assertEqual "text cursor edited lines" (splitTextLines expectedText) (RopeText.lines editedText)
+  assertEqual "text cursor edited line count" (length (splitTextLines expectedText)) (RopeText.lineCount editedText)
+  assertEqual
+    "text cursor edited coordinates"
+    (maybe (error "edited text coordinate") id (RopeText.lineColumnOf (RopeText.cursorPosition inserted) editedText))
+    (RopeText.lineColumnOfCursor inserted)
+  restored <- expectJust "text cursor delete previous" (RopeText.deletePrevious inserted)
+  assertEqual "text cursor delete restores source content" cursorContent (RopeText.toString (RopeText.snapshot restored))
+  replaced <- expectJust "text cursor replacement" (RopeText.replaceNext 'x' insertionPoint)
+  assertEqual
+    "text cursor replacement snapshot"
+    (take firstNewlineOffset cursorContent ++ "x" ++ drop (firstNewlineOffset + 1) cursorContent)
+    (RopeText.toString (RopeText.snapshot replaced))
+  assertEqual
+    "text cursor replacement updates newline measure"
+    (RopeText.lineCount cursorText - 1)
+    (RopeText.lineCount (RopeText.snapshot replaced))
+  testTextLineCountOverflow
+
+expectTextCursor :: Int -> RopeText.TextRope -> RopeText.TextRopeCursor
+expectTextCursor position text =
+  case RopeText.cursorAt position text of
+    Just value -> value
+    Nothing -> error "expected a valid text cursor gap"
+
+textLineColumnModel :: Int -> String -> (Int, Int)
+textLineColumnModel position content =
+  let before = take position content
+      line = length (filter (== '\n') before)
+      lineStart =
+        case List.elemIndices '\n' before of
+          [] -> 0
+          offsets -> last offsets + 1
+   in (line, position - lineStart)
+
+splitTextLines :: String -> [String]
+splitTextLines values =
+  case break (== '\n') values of
+    (line, []) -> [line]
+    (line, _ : rest) -> line : splitTextLines rest
+
+testTextLineCountOverflow :: IO ()
+testTextLineCountOverflow = do
+  let seed = RopeText.fromString "\n"
+      grow current
+        | MeasuredRope.count current > maxBound `div` 2 = current
+        | otherwise = grow (MeasuredRope.append current current)
+      power = grow seed
+  almostPower <- expectJust "remove from newline shared power" (MeasuredRope.deleteAt 0 power)
+  let maximumText = MeasuredRope.append power almostPower
+  assertEqual "maximum newline text count" maxBound (MeasuredRope.count maximumText)
+  let startCursor = RopeText.cursor maximumText
+      endCursor = expectTextCursor maxBound maximumText
+  assertEqual "maximum newline text start coordinate" (0, 0) (RopeText.lineColumnOfCursor startCursor)
+  assertEqual "maximum newline text end coordinate" (maxBound, 0) (RopeText.lineColumnOfCursor endCursor)
+  assertEqual "maximum newline text first line start" (Just 0) (RopeText.lineStartOffset 0 maximumText)
+  assertEqual "maximum newline text final line start" (Just maxBound) (RopeText.lineStartOffset maxBound maximumText)
+  assertEqual "maximum newline text first line" (Just "") (RopeText.getLine 0 maximumText)
+  assertEqual "maximum newline text final line" (Just "") (RopeText.getLine maxBound maximumText)
+  assertEqual "maximum newline text end offset" (Just maxBound) (RopeText.offsetOf maxBound 0 maximumText)
+  result <- try (evaluate (RopeText.lineCount maximumText))
+  assertErrorCallPrefix
+    "maximum newline text line count is checked"
+    "Data.Structures.FingerTree.Rope.Text: line count overflow"
+    result
+
 testConcurrentReads :: IO ()
 testConcurrentReads = do
   let expectedDeque = [0 :: Int .. 511]
@@ -959,6 +1493,9 @@ testConcurrentReads = do
       rrb = RrbVector.fromList expectedDeque
       measuredValues = [1 :: Int .. 128]
       measured = MeasuredRope.fromListWith Sum measuredValues
+      measuredCursor = maybe (error "concurrent measured cursor") id (MeasuredRope.cursorAt 64 measured)
+      text = RopeText.fromString "a\nbc"
+      textCursor = expectTextCursor 3 text
   runConcurrent "fingertree concurrent reads" 8 $ do
     forM_ [1 :: Int .. 128] $ \_ -> do
       assertEqual "concurrent deque count" 512 (Deque.count deque)
@@ -978,6 +1515,15 @@ testConcurrentReads = do
       assertEqual "concurrent measured count" 128 (MeasuredRope.count measured)
       assertEqual "concurrent measured total" (Sum (sum measuredValues)) (MeasuredRope.measure measured)
       assertEqual "concurrent measured index" (Just 64) (MeasuredRope.index 63 measured)
+      assertEqual "concurrent measured cursor position" 64 (MeasuredRope.cursorPosition measuredCursor)
+      assertEqual "concurrent measured cursor previous" (Just 64) (MeasuredRope.peekPrevious measuredCursor)
+      assertEqual "concurrent measured cursor next" (Just 65) (MeasuredRope.peekNext measuredCursor)
+      assertEqual "concurrent measured cursor before" (Sum (sum [1 :: Int .. 64])) (MeasuredRope.measureBefore measuredCursor)
+      assertEqual "concurrent measured cursor after" (Sum (sum [65 :: Int .. 128])) (MeasuredRope.measureAfter measuredCursor)
+      assertEqual "concurrent measured cursor snapshot" measuredValues (MeasuredRope.toList (MeasuredRope.snapshot measuredCursor))
+      assertEqual "concurrent text cursor position" 3 (RopeText.cursorPosition textCursor)
+      assertEqual "concurrent text cursor coordinate" (1, 1) (RopeText.lineColumnOfCursor textCursor)
+      assertEqual "concurrent text cursor snapshot" "a\nbc" (RopeText.toString (RopeText.snapshot textCursor))
 
 runConcurrent :: String -> Int -> IO () -> IO ()
 runConcurrent label workerCount action = do
@@ -1032,6 +1578,74 @@ data CursorRepresentative = CursorRepresentative Int String
 cursorRepresentativeLabel :: CursorRepresentative -> String
 cursorRepresentativeLabel (CursorRepresentative _ label) = label
 
+data MeasureProbeState = MeasureProbeState
+  { probeElementArmed :: !(IORef Bool)
+  , probeCombineArmed :: !(IORef Bool)
+  , probeElementCalls :: !(IORef Int)
+  , probeCombineCalls :: !(IORef Int)
+  }
+
+data ProbeMeasure
+  = ProbeIdentity
+  | ProbeValue !MeasureProbeState !Int !Int
+
+instance Semigroup ProbeMeasure where
+  (<>) = combineProbeMeasure
+
+instance Monoid ProbeMeasure where
+  mempty = ProbeIdentity
+
+{-# NOINLINE combineProbeMeasure #-}
+combineProbeMeasure :: ProbeMeasure -> ProbeMeasure -> ProbeMeasure
+combineProbeMeasure ProbeIdentity right = right
+combineProbeMeasure left ProbeIdentity = left
+combineProbeMeasure (ProbeValue state left leftTag) (ProbeValue _ right rightTag) = unsafePerformIO $ do
+  modifyIORef' (probeCombineCalls state) (+ 1)
+  armed <- readIORef (probeCombineArmed state)
+  if armed
+    then error "measured combine callback"
+    else pure (ProbeValue state (left + right) (leftTag + rightTag))
+
+{-# NOINLINE probeElementMeasure #-}
+probeElementMeasure :: MeasureProbeState -> Int -> ProbeMeasure
+probeElementMeasure state value = unsafePerformIO $ do
+  modifyIORef' (probeElementCalls state) (+ 1)
+  armed <- readIORef (probeElementArmed state)
+  if armed
+    then error "measured element callback"
+    else pure (ProbeValue state 1 value)
+
+probeMeasureTotal :: ProbeMeasure -> Int
+probeMeasureTotal ProbeIdentity = 0
+probeMeasureTotal (ProbeValue _ total _) = total
+
+newMeasureProbeState :: IO MeasureProbeState
+newMeasureProbeState =
+  MeasureProbeState <$> newIORef False <*> newIORef False <*> newIORef 0 <*> newIORef 0
+
+setMeasureProbeArming :: MeasureProbeState -> Bool -> Bool -> IO ()
+setMeasureProbeArming state elementArmed combineArmed = do
+  writeIORef (probeElementArmed state) elementArmed
+  writeIORef (probeCombineArmed state) combineArmed
+
+resetMeasureProbe :: MeasureProbeState -> IO ()
+resetMeasureProbe state = do
+  setMeasureProbeArming state False False
+  writeIORef (probeElementCalls state) 0
+  writeIORef (probeCombineCalls state) 0
+
+assertMeasuredLengthOverflowNoCallbacks :: MeasureProbeState -> String -> IO a -> IO ()
+assertMeasuredLengthOverflowNoCallbacks state label action = do
+  resetMeasureProbe state
+  setMeasureProbeArming state True True
+  result <- try (action >> pure ())
+  setMeasureProbeArming state False False
+  elementCalls <- readIORef (probeElementCalls state)
+  combineCalls <- readIORef (probeCombineCalls state)
+  assertErrorCallPrefix label "Data.Structures.FingerTree.MeasuredRope: length overflow" result
+  assertEqual (label ++ " element callback count") 0 elementCalls
+  assertEqual (label ++ " combine callback count") 0 combineCalls
+
 {-# NOINLINE countingCompare #-}
 countingCompare :: Ord a => IORef Int -> a -> a -> Ordering
 countingCompare calls left right = unsafePerformIO $ do
@@ -1063,6 +1677,15 @@ assertSameStableName label left right = do
   leftName <- makeStableName leftValue
   rightName <- makeStableName rightValue
   assertBool label (leftName `eqStableName` rightName)
+
+assertErrorCallPrefix :: String -> String -> Either ErrorCall a -> IO ()
+assertErrorCallPrefix label expected result =
+  case result of
+    Left exception ->
+      assertBool
+        (label ++ ": expected error prefix " ++ show expected)
+        (expected `List.isPrefixOf` displayException exception)
+    Right _ -> fail (label ++ ": expected an exception")
 
 assertLengthOverflow :: String -> IO a -> IO ()
 assertLengthOverflow label action = do

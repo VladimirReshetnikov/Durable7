@@ -153,7 +153,9 @@ FingerTree lineage:
 4. [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) ports the family to Haskell
    with a general measured tree, size-measured deque, reversible deque, derived collections, the
    explicitly identified policy-canonical zip-zip set, priority queues, intervals, ropes, and text
-   helpers, including the positional snapshot-plus-gap rope cursor checkpoint.
+   helpers, including positional, measured, and `Char`-element text snapshot-plus-gap cursor
+   checkpoints. These preserve ordered measures and pure failure semantics without importing the C#
+   zipper, cache, allocation, or amortized-locality claims.
 5. [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) ports the family to Kotlin/JVM over
    structurally shared measured AVL sequences with cached monoidal summaries and runtime
    measure/comparator policies, plus the policy-canonical zip-zip sorted set. Its positional,
