@@ -29,6 +29,10 @@ Dependency direction is therefore one-way:
 - Kernel-driven Tungsten changes flow only through the sibling Tungsten ports. They do not
   automatically flow into an independent general-purpose fork.
 
+The detailed normative policy, including allowed references, fork requirements, extraction rules,
+and a worked ordered-set example, is the
+[Tungsten application-leaf dependency boundary](docs/reference/tungsten-application-leaf-boundary.md).
+
 ## Where to start
 
 | Goal | Start with | Then open |

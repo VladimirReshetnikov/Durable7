@@ -14,7 +14,7 @@ tables ports must reproduce.
 This specification is authoritative only for the application-specific Tungsten family. No general
 collection may depend on this project or inherit this contract as its baseline. Reusable mechanics
 must be forked into an independently owned implementation whose API and guarantees are specified
-without reference to Tungsten.
+without treating Tungsten as semantic authority; non-normative provenance citations are allowed.
 
 Complexity notation: `n` is the collection size; `w ≤ 7` is the HAMT trie depth and `c` the
 equal-hash collision-bucket scan; finger-tree bounds are the substrate's documented amortized

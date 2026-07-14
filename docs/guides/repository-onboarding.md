@@ -43,7 +43,9 @@ repository or change with new Wolfram-kernel evidence. It may depend on general 
 families. No general or non-Tungsten workspace may depend on Tungsten code, types, internals, or
 semantics. When reusing an attractive mechanism, create an independently owned implementation and
 state its own contract, tests, dependency direction, and deliberately retained or relaxed
-guarantees. Do not use Tungsten as a wrapper substrate or live test oracle.
+guarantees. Do not use Tungsten as a wrapper substrate or live test oracle. Consult the normative
+[application-leaf boundary](../reference/tungsten-application-leaf-boundary.md) before generalizing
+or relocating Tungsten work.
 
 ## Task Classification
 

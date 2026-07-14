@@ -13,7 +13,7 @@ contracts of the C# baseline where the current implementation exposes equivalent
 | --- | --- | --- | --- |
 | [Hamt](Hamt/README.md) | Persistent HAMT map/set port with 32-way bitmap-indexed trie nodes and `Arc` structural sharing | `tools_data_structures_hamt::{PersistentHashMap, PersistentHashSet}` | `.\test.ps1 -Workspace Hamt` |
 | [FingerTree](FingerTree/README.md) | Rust checkpoint for the FingerTree family, positional/measured/text rope cursors, and mutable DABA Lite FIFO-window aggregator | `tools_data_structures_fingertree::*` | `.\test.ps1 -Workspace FingerTree` |
-| [Tungsten](Tungsten/README.md) | Tungsten `List` and `Association` collection port over Rust persistent substrates | `tools_data_structures_tungsten::{PersistentList, PersistentAssociation}` | `.\test.ps1 -Workspace Tungsten` |
+| [Tungsten](Tungsten/README.md) | Application-specific leaf port of Tungsten `List` and `Association` over Rust persistent substrates | `tools_data_structures_tungsten::{PersistentList, PersistentAssociation}` | `.\test.ps1 -Workspace Tungsten` |
 
 Run the full Rust validation from this directory:
 

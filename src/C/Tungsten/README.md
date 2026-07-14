@@ -12,7 +12,8 @@ type-erased, explicit-lifetime APIs through
 This is an application-specific leaf port. It may consume the C HAMT and FingerTree libraries, but
 no general C library may depend on Tungsten or treat its kernel-derived behavior as a baseline.
 Fork reusable mechanics into an independently owned implementation; C# is authoritative only for
-the sibling Tungsten ports.
+the sibling Tungsten ports. See the normative
+[application-leaf boundary](../../../docs/reference/tungsten-application-leaf-boundary.md).
 
 - `tds_tungsten_list` is a value-type facade over the C FingerTree persistent deque.
 - `tds_tungsten_association` composes the C HAMT with an internal ref-counted AVL sequence ordered by

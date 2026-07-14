@@ -83,6 +83,9 @@ A generally useful Tungsten mechanism must be forked into a separately owned wor
 independent API, contract, test suite, and evolution policy. The fork may deliberately relax
 Tungsten-specific fidelity or complexity guarantees. Provenance and translated tests are welcome;
 a project reference, wrapper, shared implementation owner, or Tungsten semantic baseline is not.
+See the detailed
+[Tungsten application-leaf dependency boundary](tungsten-application-leaf-boundary.md) for the
+normative code, test, documentation, porting, and extraction rules.
 
 ## Workspace Roles
 

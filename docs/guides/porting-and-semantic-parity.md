@@ -27,6 +27,9 @@ non-Tungsten workspace may depend on a Tungsten package/type or use its contract
 generally useful mechanism must be forked into an independently owned implementation with its own
 API, contracts, tests, and parity decision. Kernel-driven changes then flow across Tungsten ports
 only; neither the fork nor any general family inherits them automatically.
+See the detailed
+[Tungsten application-leaf dependency boundary](../reference/tungsten-application-leaf-boundary.md)
+before extracting or generalizing a Tungsten mechanism.
 
 ## Authoritative Inputs
 

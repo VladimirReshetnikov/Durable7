@@ -11,7 +11,8 @@ The public headers live under [`include/tools/data_structures/tungsten`](include
 This is an application-specific leaf port. It may consume the C++ HAMT and FingerTree libraries,
 but no general C++ library may depend on Tungsten or treat its kernel-derived behavior as a
 baseline. Fork reusable mechanics into an independently owned implementation; C# is authoritative
-only for the sibling Tungsten ports.
+only for the sibling Tungsten ports. See the normative
+[application-leaf boundary](../../../docs/reference/tungsten-application-leaf-boundary.md).
 
 - `persistent_list<T>` wraps the C++ FingerTree persistent deque and exposes the Tungsten `List`
   operation vocabulary.

@@ -1,8 +1,9 @@
 # Benchmark-Independent Next Data Structures: Detailed C# Implementation Proposal
 
-- Status: Proposed execution sequence — benchmark-independent work only
+- Status: Revised proposed execution sequence — benchmark-independent work only
 - Created (UTC): 2026-07-14T19:23:49Z
 - Repository HEAD: ab9a73c6ae20a3b0ee0627bfe810117450e20c3e
+- Revised (UTC): 2026-07-14T21:14:47Z at faf53286375109fc598e40d5e6da7d1bff7e7415
 - Audience: Maintainers selecting the next C# persistent-collection work after Axis 1 and the shipped Axis 2 tranches
 - Scope: Repository-wide plan/proposal audit, candidate disposition, and detailed contracts and validation gates for the next C# data structures that do not depend on postponed benchmark evidence
 
@@ -10,24 +11,33 @@
 
 Proceed in this order:
 
-1. Implement `PersistentOrderedSet<T>` as a thin facade over the shipped Tungsten association
-   substrate.
-2. Add persistent-HAMT single-pass `GetOrAdd`/`AddOrUpdate` operations, then implement
-   `PersistentHashBag<T>` over `PersistentHashMap<T, int>`.
-3. Implement `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` as the next genuinely new
+1. Add persistent-HAMT single-pass `GetOrAdd`/`AddOrUpdate` operations.
+2. Implement `PersistentHashBag<T>` over `PersistentHashMap<T, int>`.
+3. Implement `PersistentOrderedSet<T>` as an independently owned composite in a new general
+   `Tools.DataStructures.Ordered` project. Fork the useful dual-index and sparse-label mechanics;
+   do not reference, wrap, or inherit semantics from Tungsten `PersistentAssociation`.
+4. Implement `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` as the next genuinely new
    structure core, after locking its tag-action algebra and executable laws. Prefer a separate
    path-copied implicit AVL core over adding lazy tags to the existing measured finger-tree engine.
-4. Keep `PersistentBiMap<TKey, TValue>` and a value-carrying interval map as reserve candidates.
+5. Keep `PersistentBiMap<TKey, TValue>` and a value-carrying interval map as reserve candidates.
    Give either a dedicated contract pass before promoting it into the active sequence.
 
 This order deliberately distinguishes two notions of “next”:
 
-- **Lowest implementation risk:** `PersistentOrderedSet<T>` and `PersistentHashBag<T>` reuse
-  shipped, heavily tested cores and can be validated entirely through semantic models and
-  deterministic structural guards.
+- **Lowest implementation risk:** the persistent HAMT point kernel and `PersistentHashBag<T>` stay
+  inside one shipped family and can be validated entirely through semantic models, callback counts,
+  and deterministic structural guards.
+- **Lowest-risk independent composite:** `PersistentOrderedSet<T>` still reuses public HAMT and
+  FingerTree foundations, but it now owns a new assembly, dual-index invariant, sparse labels,
+  contract, tests, and evolution policy. That makes it larger than a thin facade and correctly
+  places it after the HAMT/bag tranche.
 - **Next new core in the current frontier roadmap:** `RangeUpdateSequence` is the only unshipped
   candidate that the current frontier catalog calls Strong and actively sequences without a
   benchmark pre-gate.
+
+The detailed sections discuss the Ordered design before Steps 1 and 2 because correcting its
+ownership boundary is the central revision to this document. The numbered execution steps above,
+the section labels, and the implementation tranches remain the authoritative landing order.
 
 No benchmark is required to begin or ship these three structures. This proposal does not authorize
 performance comparisons against BCL collections or claims that one representation beats another.
@@ -47,7 +57,13 @@ This proposal follows the repository documents in this authority order:
    frozen-hash and later-cursor phases.
 4. The [2026-07-09 next-structures proposal](new-data-structures-2026-07-09.md) and
    [derived-structure catalog](../reference/derived-structure-catalog.md) retain historical
-   candidate rationale, but their implementation-status language is not authoritative.
+   candidate rationale, but their implementation-status language is not authoritative. Their
+   Tungsten consumer case study is design provenance only, never semantic or dependency authority
+   for a general collection.
+5. The normative
+   [Tungsten application-leaf dependency boundary](../reference/tungsten-application-leaf-boundary.md)
+   controls ownership, dependency direction, independent-fork requirements, test-oracle isolation,
+   and future extraction.
 
 The audit covered:
 
@@ -101,48 +117,97 @@ A candidate enters this proposal only when all of the following are true:
 5. A C# reference implementation can land without committing sibling-language parity prematurely.
 6. Its value is a capability or meaningful collection vocabulary, not merely a speculative
    constant-factor optimization.
+7. It can live in a repository-general owner whose production code, tests, examples, benchmarks,
+   and contract do not depend on an application-specific Tungsten artifact or live behavioral
+   oracle. Tungsten-derived mechanics require an independent fork.
 
 “Low risk” means more than a small file count. It means that the representation invariant, policy
 source, representative rules, order, failure atomicity, no-op identity, and model oracle can all be
 stated before implementation.
 
-## Candidate 1: `PersistentOrderedSet<T>`
+## Independent Composite Candidate (Execution Step 3): `PersistentOrderedSet<T>`
 
-### Why It Leads
+### Why It Remains Selected
 
-The historical next-structures proposal identifies an insertion-ordered set as the cheapest new
-family because the association already supplies the complete dual-index substrate. That assessment
-still holds. The shipped `PersistentAssociation<TKey, TValue>` provides:
+The historical next-structures proposal correctly noticed that a hashed membership index plus a
+persistent ordered sequence can support a valuable insertion-ordered set. It incorrectly concluded
+that the general type should be a thin wrapper around Tungsten `PersistentAssociation`. Tungsten is
+an application-specific leaf whose behavior can change with new kernel evidence or move to another
+repository. It cannot be a general collection's assembly, representation, contract, or test oracle.
+
+The corrected candidate remains benchmark-independent because the repository already ships the two
+general foundations it needs:
 
 - comparer-preserving hashed lookup;
-- one persistent sequence entry per key;
-- stable order-maintenance stamps;
-- positional lookup and index lookup;
-- append, prepend, arbitrary insert, removal, slicing, reverse, and stable sorting; and
-- stored-key representative rules inherited from CHAMP.
+- stored-representative recovery from the HAMT;
+- a persistent deque with positional access, split/concat, stable enumeration, and sorted lower
+  bounds over private stamp entries; and
+- canonical public bulk construction on both sides.
 
-An ordered set erases the association’s value dimension. It does not need a new node type, a new
-balancing algorithm, a new ownership model, or a new amortization argument.
+The set does not need a new balancing algorithm, but it does need an independently owned composite:
+a new assembly, a set-specific dual-index invariant, private sparse-label/relabel code, an explicit
+general contract, an independent model suite, and its own evolution policy. That bounded work is why
+it remains selected but moves behind the HAMT point-update kernel and hash bag.
 
 ### Placement And Representation
 
-Place the type in `Tools.DataStructures.Tungsten`, the existing project that composes HAMT and
-FingerTree storage. Do not add a dependency from the HAMT project to FingerTree or from FingerTree to
-HAMT merely to host the facade.
+Create a neutral general-purpose project and corresponding tests/docs:
+
+- `src/CSharp/src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj`;
+- namespace `Tools.DataStructures.Ordered`;
+- `src/CSharp/tests/Tools.DataStructures.Ordered.Tests`; and
+- `src/CSharp/docs/Ordered`.
+
+The project references public HAMT and FingerTree projects. Neither foundation references Ordered,
+and Ordered does not reference Tungsten:
+
+```text
+Tools.DataStructures.Ordered
+├── Tools.DataStructures.Hamt
+└── Tools.DataStructures.FingerTree
+
+Tools.DataStructures.Tungsten
+├── Tools.DataStructures.Hamt
+└── Tools.DataStructures.FingerTree
+```
+
+Do not initially refactor Tungsten to consume Ordered. Similar mechanics do not imply shared
+semantic ownership, and keeping the two consumers independent preserves the extraction boundary.
 
 Recommended representation:
 
 ```csharp
 public sealed class PersistentOrderedSet<T> : IReadOnlySet<T>
-    where T : notnull
 {
-    private readonly PersistentAssociation<T, Unit> _items;
+    private readonly FingerTreeDeque<Entry> _order;
+    private readonly PersistentHashMap<T, long> _stamps;
+
+    private readonly record struct Entry(long Stamp, T Item);
 }
 ```
 
-`Unit` is an internal zero-state value whose equality is unconditional. Using the association as the
-single source of truth avoids duplicating its stamp/relabel code. The extra zero-sized logical value
-does not alter the collection semantics.
+The general set follows the HAMT set family's comparer-defined null semantics rather than importing
+Association's `where TKey : notnull` annotation. `PersistentHashMap<T, long>` stores only membership
+and stamp; the sequence owns ordered representatives. Do not add a unit-valued Association, duplicate
+the item in a map slot, share a Tungsten source file, or request a Tungsten-related friend grant.
+
+### Independently Owned Invariants
+
+The Ordered project owns and test-checks all of these invariants:
+
+1. `_order.Count == _stamps.Count`.
+2. `_order` contains exactly one representative of every comparer equivalence class.
+3. entry stamps strictly ascend in `_order`.
+4. every ordered entry has one index entry carrying the same stamp.
+5. every index entry has exactly one ordered entry.
+6. the HAMT's stored representative and the ordered entry are the same logical representative.
+7. every derived version retains the receiver's equality comparer.
+8. retained earlier versions remain immutable and safe for concurrent reads.
+
+Private Ordered helpers own stamp comparison, label selection, lower-bound location, relabeling,
+stable rebuild, and any slice reconciliation. The implementation may copy the idea of gapped labels
+and midpoint insertion with provenance, but it must not expose Association's exact `2^20` gap or its
+“20 same-point inserts” threshold as a public promise.
 
 ### Proposed Public Surface
 
@@ -151,16 +216,21 @@ does not alter the collection semantics.
 | Construction | `Empty`, `Create(comparer)`, `CreateRange(items, comparer)` |
 | State | `Count`, `IsEmpty`, `Comparer`, `First`, `Last` |
 | Lookup | `Contains`, `TryGetValue`, `GetAt`, indexer by position, `IndexOf` |
-| Stable-position update | `Add` |
-| Explicit repositioning | `Append`, `Prepend`, `Insert` |
+| Addition without implicit movement | `Add`, `AddFirst`, `Insert` |
+| Explicit movement | `MoveToFirst`, `MoveToLast`, `MoveTo` |
 | Removal | `Remove`, `TryRemove`, `RemoveAt`, `RemoveFirst`, `RemoveLast`, `Clear` |
 | Range/order | `GetRange`, `Take`, `Drop`, `Reverse`, stable one-shot `Sort` |
-| Set algebra | `Union`, `Intersect`, `Except`, `SymmetricExcept` |
+| Set algebra | Same-type and `IEnumerable<T>` overloads of `Union`, `Intersect`, `Except`, `SymmetricExcept` |
 | Relations | `IsSubsetOf`, `IsProperSubsetOf`, `IsSupersetOf`, `IsProperSupersetOf`, `Overlaps`, `SetEquals` |
 | Enumeration | struct `Enumerator`, `ToArray` |
 
 Avoid sorted-set vocabulary such as `Min`, `Max`, lower-bound, or range-by-value. “Ordered” here means
 insertion/explicit-position order, never comparison order.
+
+`GetAt(index)` and the positional indexer return the same stored representative and accept exactly
+`0 <= index < Count`. `IndexOf(equalValue)` returns that representative's position or `-1` when the
+equivalence class is absent. `Contains` and `TryGetValue` are comparer-defined membership probes;
+`TryGetValue` returns the stored representative rather than the lookup argument.
 
 ### Construction And Representative Contract
 
@@ -172,26 +242,65 @@ insertion/explicit-position order, never comparison order.
   reference-default comparer.
 - `TryGetValue(equalValue, out actualValue)` returns the stored representative.
 
-These rules match `PersistentAssociation.CreateRange` with unit values and the HAMT’s first-key
-representative contract.
+These are Ordered-owned set rules. The HAMT's public stored-key contract supports them, but
+Association construction is neither their definition nor their oracle.
 
-### Update And Repositioning Contract
+### Addition And Movement Contract
 
-Three verbs must remain distinct:
+Addition never hides movement or representative replacement:
 
 - `Add(item)` appends an absent item. If an equivalent item already exists, it returns the current
   set instance and retains both position and representative.
-- `Append(item)` places the supplied representative at the end. If an equivalent item exists at
-  another position, it is removed and the supplied representative is re-added at the end. If its
-  equivalence class is already last, the operation is an identity-preserving no-op and retains the
-  stored representative, even when the supplied object is distinct.
-- `Prepend(item)` is symmetric at the front.
-- `Insert(index, item)` interprets the index against the pre-removal sequence, matching Association.
-  If an equivalent item exists, that occurrence is removed and the supplied representative occupies
-  the requested logical position.
+- `AddFirst(item)` prepends only an absent item. An equivalent existing item is an
+  identity-preserving no-op regardless of its position.
+- `Insert(index, item)` accepts `0 <= index <= Count`, validates `index` eagerly, and inserts only
+  when the equivalence class is absent. An existing item remains at its current position with its
+  stored representative.
+- `MoveToFirst(equalValue)` and `MoveToLast(equalValue)` move an existing equivalence class while
+  retaining its stored representative. An absent class throws `KeyNotFoundException`.
+- `MoveTo(index, equalValue)` accepts `0 <= index < Count`, validates `index` eagerly, and interprets
+  it as the item's final index in the result. It retains the stored representative and throws
+  `KeyNotFoundException` when absent.
+- Moving an item already at its requested destination returns the current instance.
+- The first version exposes no API that implicitly replaces an existing stored representative.
 
-This distinction gives callers both ordinary persistent-set behavior and explicit order-editing
-behavior without hidden movement on `Add`.
+These names deliberately avoid Association's `Append`/`Prepend` move-and-replace behavior and its
+pre-removal interpretation of positional insertion.
+
+### Removal, Range, And Reorder Contract
+
+Fix the result shapes and boundary behavior before implementation:
+
+```csharp
+public PersistentOrderedSet<T> Remove(T equalValue);
+public bool TryRemove(T equalValue, out PersistentOrderedSet<T> result);
+public PersistentOrderedSet<T> RemoveAt(int index);
+public PersistentOrderedSet<T> RemoveFirst();
+public PersistentOrderedSet<T> RemoveLast();
+
+public PersistentOrderedSet<T> GetRange(int index, int count);
+public PersistentOrderedSet<T> Take(int count);
+public PersistentOrderedSet<T> Drop(int count);
+public PersistentOrderedSet<T> Reverse();
+public PersistentOrderedSet<T> Sort(IComparer<T>? comparer = null);
+```
+
+- `Remove` returns the receiver when the equivalence class is absent.
+- `TryRemove` returns `false` and the receiver through `result` when absent; on success it returns
+  `true` and the successor. Stored-representative recovery remains available separately through
+  `TryGetValue`; `TryRemove` has no second item `out` parameter.
+- `RemoveAt` accepts `0 <= index < Count`. `RemoveFirst` and `RemoveLast` throw
+  `InvalidOperationException` on empty input.
+- `GetRange` requires `0 <= index <= Count`, `0 <= count`, and `index + count <= Count`, using
+  overflow-safe validation. The full range returns the receiver; an empty range returns an empty set
+  retaining the receiver's comparer.
+- `Take` and `Drop` require `0 <= count <= Count`. `Take(Count)` and `Drop(0)` return the receiver;
+  `Take(0)` and `Drop(Count)` return a comparer-preserving empty set.
+- `Clear` returns the receiver when already empty and otherwise a comparer-preserving empty set.
+- `Reverse` returns the receiver for counts zero and one.
+- `Sort` is stable. It returns the receiver for counts zero and one and whenever stable sorting leaves
+  the representative sequence unchanged; otherwise it rebuilds both indexes. Comparer failure never
+  publishes a partial result.
 
 ### Set-Algebra Ordering
 
@@ -205,9 +314,9 @@ Same-type algebra uses the receiver’s comparer and the following deterministic
   elements in argument order after collapsing them under the receiver comparer.
 
 Receiver representatives win wherever a receiver element remains. Argument representatives are
-installed only for new argument-only classes. Arbitrary-`IEnumerable<T>` overloads, if included,
-must use the same receiver-policy rules rather than delegating equality to a temporary default
-`HashSet<T>`.
+installed only for new argument-only classes. Both same-type and arbitrary-`IEnumerable<T>`
+set-producing overloads ship and use the same receiver-policy rules rather than delegating equality
+to a temporary default `HashSet<T>`.
 
 Normalize every argument-side sequence under the receiver's comparer in its enumeration order.
 If elements distinct under the argument's own policy collapse into one receiver equivalence class,
@@ -226,44 +335,72 @@ subsequent additions append and do not maintain sorted order.
 - Logical no-ops return the same set instance.
 - Any comparer exception occurs before a new facade is published; the input remains unchanged.
 - Invalid positional arguments throw `ArgumentOutOfRangeException` before any result is published.
-- Empty first/last and removal operations follow the nearest Association/List precedent and must be
-  documented consistently.
+- Empty `First`, `Last`, `RemoveFirst`, and `RemoveLast` throw `InvalidOperationException` under this
+  type's own contract.
+- Failed movement of an absent equivalence class throws `KeyNotFoundException` without publishing a
+  partial successor.
 
-### Complexity
+### Independent Complexity Contract
 
-Publish only complexity inherited from `PersistentAssociation`:
+Publish bounds owned by Ordered and derived from its representation plus public HAMT/FingerTree
+contracts. Here `n` is the receiver or distinct result size as applicable, and `m` is the number of
+enumerated construction inputs or argument elements:
 
 | Operation | Bound |
 | --- | --- |
+| `CreateRange` | O(m (w + c) + n) with one ordered/index rebuild; duplicate inputs still count in m |
 | Hashed membership / stored representative | O(w + c) |
 | Positional lookup | O(log min(index + 1, n - index)) worst case |
-| `Add` of an absent item | O(w + c) amortized on a linear history; O(w + c + log n) worst case |
-| Explicit append/prepend | O(w + c + log n) |
-| Positional insert/remove | O(w + c + log n), plus the documented O(n (w + c)) relabel path for insertion |
-| Reverse/slice | Exact Association bounds, including index reconciliation for slices |
+| `IndexOf` | O(w + c + log n) |
+| Ordinary end insertion | O(w + c) amortized on a linear history; O(w + c + log n) ordinary worst case |
+| Positional insertion or movement while a label gap exists | O(w + c + log n) |
+| Any insertion requiring relabel | O(n (w + c)) |
+| `Remove` / successful `TryRemove` | O(w + c + log n); absent removal O(w + c) |
+| `RemoveAt` | O(w + c + log min(index + 1, n - index)) amortized; O(w + c + log n) worst case |
+| `Clear` | O(1) |
+| Reverse | O(n (w + c)) rebuild |
+| `GetRange` / `Take` / `Drop` | O(log n) sequence work plus O(min(kept, removed) (w + c)) index reconciliation |
 | Stable one-shot sort | O(n log n) ordering-comparer calls plus O(n (w + c)) rebuild |
-| Enumeration | O(n) |
+| Set algebra producing a set | O((n + m) (w + c + log(n + m + 1))) conservative worst case, including receiver-policy normalization and ordered reconstruction |
+| Set relations | O((n + m) (w + c)) after receiver-policy normalization; no structural same-policy fast path promised initially |
+| Enumeration / `ToArray` | O(n) |
 
-Order-maintenance relabeling retains the Association’s honest per-produced-version worst case; do not
-silently advertise a branching-persistence amortization that the substrate does not provide.
+Ordered must derive and test these bounds independently. Its private relabel design retains the
+honest per-produced-version worst case: no amortization claim spans siblings branched before a
+relabel. No claim about beating another ordered-set representation is made without isolated
+benchmark evidence.
 
 ### Validation Plan
 
 Use a comparer-aware model containing an ordered `List<T>` plus explicit equivalence-class lookup.
+Among repository collection projects, the Ordered test project references only Ordered and its
+general dependencies; ordinary test infrastructure remains allowed. It must not call
+`PersistentAssociation`, reference Tungsten tests, or generate expected values from Tungsten.
+
+Applicable adversarial scenarios may be adapted once from `PersistentAssociationTests.cs`,
+`PersistentAssociationPropertyTests.cs`, and `PersistentAssociationDerivedPropertyTests.cs`, with
+provenance recorded at commit `e199f6a6a2071e6d5f13b734dc426bd21a7741e8`. The independent Ordered
+contract decides every expected result. Do not copy assertions for last-value construction,
+`Join`, implicit append/prepend movement, supplied-representative replacement, or pre-removal insert
+indexing.
+
 The test matrix must cover:
 
 - example tests for every member;
 - generated command histories including retained branches;
 - constant-hash comparers and collision-heavy equivalence classes;
 - comparison-equivalent but object-distinct representatives;
-- add-versus-reposition distinctions;
+- add-versus-explicit-movement distinctions;
 - every same-type and enumerable algebra operation under differing comparer instances;
 - no-op reference identity;
 - relabel-boundary histories;
+- direct invariant checks across both indexes;
 - enumerator order and concurrent read-only enumeration; and
 - eager argument validation.
 
-No benchmark is an exit criterion.
+A dependency audit must reject an Ordered-to-Tungsten project/test reference, source import, `using`,
+linked file, compiled Tungsten symbol use, or live test oracle. Non-normative provenance comments are
+allowed. No benchmark is an exit criterion.
 
 ### Exit Criteria
 
@@ -272,10 +409,13 @@ The type ships when:
 - the public contract above is reflected in XML documentation;
 - the command model, representative matrix, algebra matrix, retained-version tests, and no-op identity
   tests pass;
+- invariant diagnostics and the Ordered/Tungsten dependency audit pass;
+- the new project, test project, solution entries, overview, usage guide, API specification, and
+  validation guide all identify Ordered—not Tungsten—as the owner;
 - workspace overview/usage/API/validation docs and repository catalogs are updated; and
 - the complete C# suite passes with one build/test worker.
 
-## Enabling API: Persistent HAMT Single-Pass Updates
+## Execution Step 1: Persistent HAMT Single-Pass Updates
 
 ### Why This Is Separate From Builders And Transients
 
@@ -364,7 +504,7 @@ semantics but fail the enabling API’s single-descent purpose.
 
 These are operation-count and correctness gates, not wall-clock gates.
 
-## Candidate 2: `PersistentHashBag<T>`
+## Execution Step 2: `PersistentHashBag<T>`
 
 ### Representation
 
@@ -487,7 +627,7 @@ Cover:
 
 No benchmark is an exit criterion.
 
-## Candidate 3: `RangeUpdateSequence`
+## Execution Step 4: `RangeUpdateSequence`
 
 ### Why It Is The Next Core
 
@@ -846,9 +986,9 @@ and inheriting undocumented duplicate behavior.
 | RRB transient or persistent tail | Current vector ships; remaining adoption/performance questions are measurement-driven. |
 | C4 deque/RRB/reversible/raw-FingerTree/Tungsten cursors | Explicitly consumer- and benchmark-gated. |
 | ART and automatic key-type dispatch | Requires a real byte-prefix/range consumer after explicit Patricia consideration. |
-| Order-maintenance list | Requires a second consumer or an observed Association relabel bottleneck. |
+| Order-maintenance list | The independent ordered-set fork may keep simple labels private. A public precedes-query core still needs a general consumer or evidence that independently owned private labeling is inadequate; Tungsten is provenance, not its foundation. |
 | Native Ctrie ports | Require an independent safe-reclamation architecture, not ordinary porting. |
-| Generic ordered map | `PersistentAssociation` already proves the composition; a second public map needs a general consumer and a values-in-HAMT versus values-in-both decision. |
+| Generic ordered map | `PersistentAssociation` is implementation evidence only. A general map needs a named consumer plus an independent project, contract, representation choice, values-in-HAMT versus values-in-both decision, model, and tests. |
 | Three-way HAMT merge | Needs a consumer-defined conflict matrix. |
 | `PersistentHashMultimap` | Straightforward after `AddOrUpdate`, but consumer-gated by parity economics. |
 | Addressable priority queue | The shipped priority-search queue covers most keyed-priority needs; the remaining handle/timer niche needs a named caller. |
@@ -896,6 +1036,12 @@ Update these records in or before the first implementation tranche:
    its unshipped phases where the frontier catalog points to it.
 7. The GUID study understates the work required to feed a raw 128-bit key into the current 32-bit
    CHAMP path. That option requires a widened path/hash representation and is not a thin facade.
+8. The derived/frontier catalogs sometimes describe Tungsten shipment as though it completed or
+   supplied a general ordered-map substrate. They must distinguish application evidence from a
+   reusable general family.
+9. The original ordered-set recommendation violated the Tungsten application-leaf boundary. This
+   revision replaces the wrapper with an independently owned general composite and records which
+   Tungsten-specific guarantees it deliberately drops.
 
 Preserve historical conclusions while adding explicit current-state notes rather than silently
 rewriting proposal-time reasoning.
@@ -904,13 +1050,18 @@ rewriting proposal-time reasoning.
 
 If this proposal is accepted, use these self-contained tranches:
 
-1. **Ordered-set contract and implementation**
-   - source, model tests, docs, catalogs, semantic contracts;
-   - no benchmark changes.
-2. **Persistent HAMT single-pass update kernel**
+1. **Persistent HAMT single-pass update kernel**
    - node operation, public API, exhaustive transition/callback tests, docs.
-3. **Hash-bag facade**
+2. **Hash-bag facade**
    - source, count/algebra/representative model tests, docs and catalogs.
+3. **Complete independent ordered set**
+   - new Ordered source/test projects and solution entries;
+   - independent API, invariants, representative/movement/algebra decisions, complexity contract;
+   - forked private sparse-label mechanics, comparer-aware model, invariant and dependency guards;
+   - Ordered overview/usage/API/validation docs and repository catalogs;
+   - no Tungsten reference, friend grant, linked source, or live test oracle;
+   - land no public stub or throwing placeholder: source, tests, and docs pass together;
+   - no benchmark changes or claims.
 4. **Range-update algebra and private core**
    - law harness, node/tag invariants, split/join, deterministic counters.
 5. **Range-update public facade**
@@ -944,18 +1095,20 @@ For documentation-only tranches, run the repository stale-path scan, Markdown li
 
 ## Final Recommendation
 
-The best immediate implementation is `PersistentOrderedSet<T>`. It has a complete substrate, a
-small and explicit semantic delta, a strong model oracle, and no representation experiment hidden
-inside it.
+The best immediate implementation is the persistent HAMT's single-pass point-update kernel,
+followed by `PersistentHashBag<T>`. This closes the highest-leverage remaining API gap inside one
+shipped family and produces a Strong facade with explicit multiplicity semantics.
 
-The second implementation should be the persistent HAMT’s single-pass update operation followed by
-`PersistentHashBag<T>`. This closes the highest-leverage remaining API gap and produces another
-Strong facade with explicit multiplicity semantics.
+`PersistentOrderedSet<T>` follows as the lowest-risk independent composite. It reuses public general
+foundations but is not a thin facade: the new Ordered project must own its dual-index invariant,
+sparse-label/relabel implementation, movement and representative contract, independent model, and
+evolution. Tungsten `PersistentAssociation` is useful provenance and a source of adversarial cases,
+never a dependency or semantic oracle.
 
-`RangeUpdateSequence` should then become the next new core. It is not as low-risk as the two facades,
-but it is specification-driven rather than benchmark-driven. A separate persistent implicit AVL
-keeps that risk local, provides deterministic worst-case bounds, and leaves the shipped measured
-finger tree untouched.
+`RangeUpdateSequence` should then become the next new core. It is not as low-risk as the HAMT facade
+or Ordered composite, but it is specification-driven rather than benchmark-driven. A separate
+persistent implicit AVL keeps that risk local, provides deterministic worst-case bounds, and leaves
+the shipped measured finger tree untouched.
 
 Everything dependent on frozen-layout evidence, representation thresholds, a missing consumer, or a
 new reclamation architecture remains parked.
@@ -969,6 +1122,7 @@ new reclamation architecture remains parked.
 - [Axis 2 final plan](axis2-lifecycle-and-sequence-cursors.md)
 - [Persistent GUID-set design study](persistent-guid-set-design-study-2026-07-12.md)
 - [Semantic contracts](../reference/semantic-contracts.md)
+- [Tungsten application-leaf dependency boundary](../reference/tungsten-application-leaf-boundary.md)
 - [Porting and semantic parity](../guides/porting-and-semantic-parity.md)
 - Brent Yorgey, [*You Could Have Invented Fenwick Trees*](https://www.cambridge.org/core/journals/journal-of-functional-programming/article/you-could-have-invented-fenwick-trees/B4628279D4E54229CED97249E96F721D), Journal of Functional Programming, 2025
 - Taiki Kaneda, Hiroki Arimura, and Shunsuke Inenaga,
@@ -981,7 +1135,11 @@ new reclamation architecture remains parked.
 - The frontier catalog remains authoritative for current implementation status. This proposal
   selects and refines benchmark-independent work; it does not replace the catalog.
 - The derived catalog remains the broad composition survey. This proposal selects a small subset and
-  resolves additional API and ordering details.
+  resolves additional API and ordering details. Its Tungsten case study is historical design evidence,
+  not authority to depend on an application workspace.
+- The [Tungsten application-leaf dependency boundary](../reference/tungsten-application-leaf-boundary.md)
+  is normative for ownership and dependency direction. This proposal's independent Ordered design
+  is subordinate to that policy.
 - The Axis 2 final plan remains authoritative for frozen F0–F3 and C4 gating. None of those phases is
   advanced here.
 - Workspace API, usage, and validation documents become authoritative only when each proposed public

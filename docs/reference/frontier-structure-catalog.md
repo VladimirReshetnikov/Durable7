@@ -34,6 +34,12 @@ primary-source checks performed while they were built. Unimplemented candidates 
 received that treatment: before implementing one, re-read the cited paper and verify its actual
 claims and bounds. The [references](#references) section lists what to pull.
 
+Tungsten material in this catalog is consumer evidence and historical provenance only. Under the
+normative [application-leaf boundary](tungsten-application-leaf-boundary.md), no general candidate
+may depend on Tungsten code, types, internals, tests, or semantics. Reusable mechanics require an
+independently owned implementation and contract; C# Tungsten remains authoritative only for sibling
+Tungsten ports.
+
 **Division of labor with the
 [2026-07-09 proposal](../proposals/new-data-structures-2026-07-09.md).** That proposal selects a
 committed, prioritized slate from the derived catalog plus review-observed gaps; this catalog maps
@@ -82,7 +88,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | Key-type-specialized map factories | 2 | Plausible, explicitly postponed | Named consumer after explicit Patricia consideration | Factory layer; ART only if independently justified |
 | Self-adjusting (splay-style) structures | 2 | Reject | - | Reads allocate under path copying; cursors + freeze substitute |
 | Range-update sequence (lazy propagation) | 3 | Strong | Measure action interface | 1 sibling core + tag algebra + property tests |
-| Order-maintenance list | 3 | Plausible | - | 1 public type; Tungsten stamps could layer on it |
+| Order-maintenance list | 3 | Plausible | Named general precedes-query consumer | 1 independently owned public type; Tungsten stamps are provenance only |
 | Persistent chunked bitset | 3 | Plausible | - (tree-only form per derived catalog follow-up) | 1 facade over measured tree |
 | Styled-text rope | 3 | Sample, not family | Range-update sequence (or interval runs) | Composition sample + docs |
 | Kaplan-Tarjan real-time deque | 3 | Reject | - | Document the memoized deque's spike profile instead |
@@ -1179,19 +1185,22 @@ Fenwick-style structures with range updates *and* range queries.
 **What it is.** The Dietz-Sleator / Bender et al. structure answering "does A precede B?" in O(1)
 with O(1) amortized insertion, via two-level integer labels with local relabeling.
 
-**Why here.** The Tungsten association already embeds a special case: gapped stamps with gap 2^20,
-midpoint insertion, and O(n (w + c)) wholesale relabel. Extracting a public
-`OrderMaintenanceList` would (a) serve any consumer needing order queries over a mutating sequence
-(dependency graphs, document anchors, CRDT position identifiers), and (b) let the association's
-stamp discipline sit on a structure with a stronger amortized bound than wholesale relabel.
+**Why here.** Tungsten Association provides historical evidence that sparse labels and midpoint
+insertion are useful, but its exact gap and wholesale-relabel contract are application-owned. A
+public `OrderMaintenanceList` would need an independent implementation and API serving general
+consumers that actually ask “does A precede B?” (dependency graphs, document anchors, CRDT position
+identifiers). Do not extract or wrap Tungsten code, and do not refactor Tungsten to consume the new
+core automatically.
 
 **Honest caveat.** Relabeling amortization is a linear-history argument; under branching
-persistence a version branched before a relabel can re-pay it - the same honest contract the
-association already documents (derived catalog rule 2 / Tungsten "honest amortization" rule).
-State the worst case per produced version.
+persistence a version branched before a relabel can re-pay it. State the general type's worst case
+per produced version from its own algorithm and tests; Tungsten's existing caveat is provenance,
+not the new type's complexity authority.
 
-**Verdict: Plausible.** Build it when a second consumer beyond Tungsten stamps appears, or when
-association relabel cost shows up in a real profile.
+**Verdict: Plausible.** Build it when a named general consumer needs public order queries, or when
+an independently owned general composite demonstrates that its private labeling is inadequate.
+A Tungsten-only relabel profile may justify Tungsten-local work but does not by itself establish a
+repository-general foundation.
 
 ### Persistent chunked bitset
 
@@ -1332,8 +1341,9 @@ remaining work is sequenced as follows:
    after that C# frozen contract ships.
 7. **Range-update sequence**, independently reviewing and law-testing the measure-action interface.
    It is not a cursor prerequisite; the later styled-text sample depends on both tracks.
-8. **Order-maintenance list** and **persistent chunked bitset**, each only for a concrete client not
-   served by existing composition.
+8. **Order-maintenance list** and **persistent chunked bitset**, each only for a concrete general
+   client not served by existing composition; Tungsten remains evidence rather than a substrate or
+   semantic baseline.
 9. **Styled-text rope sample**, after measured cursor and range-update foundations settle.
 
 This numbering expresses dependencies and gates, not a ceremonial landing order: the independent C3
@@ -1387,9 +1397,9 @@ catalog's summary alone.
 ## Relationship To Other Documents
 
 - [Benchmark-independent next data structures (2026-07-14)](../proposals/benchmark-independent-next-structures-2026-07-14.md) -
-  the detailed C# execution proposal that sequences the low-risk ordered-set and hash-bag facades,
-  fixes the persistent-HAMT single-pass update contract, and refines this catalog's range-update
-  candidate into an algebra-law-gated implicit-AVL design without advancing postponed benchmarks.
+  the detailed C# execution proposal that sequences the persistent-HAMT single-pass update,
+  hash-bag facade, independently owned ordered-set composite, and this catalog's algebra-law-gated
+  implicit-AVL range-update design without advancing postponed benchmarks.
 - [Derived structure catalog](derived-structure-catalog.md) - compositions of the shipped
   families, the shared enabling API gaps, and the composition design rules this document extends.
   CHAMP's equality/diff entry here is the core-level realization of that catalog's top-ranked gap.

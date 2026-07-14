@@ -11,7 +11,8 @@ Rust:
 This is an application-specific leaf port. It may consume the Rust HAMT and FingerTree crates, but
 no general Rust crate may depend on Tungsten or treat its kernel-derived behavior as a baseline.
 Fork reusable mechanics into an independently owned implementation; C# is authoritative only for
-the sibling Tungsten ports.
+the sibling Tungsten ports. See the normative
+[application-leaf boundary](../../../docs/reference/tungsten-application-leaf-boundary.md).
 
 - `PersistentList<T>` wraps the Rust FingerTree deque facade.
 - `PersistentAssociation<K, V, S>` composes the Rust HAMT with a stamp-ordered persistent deque and

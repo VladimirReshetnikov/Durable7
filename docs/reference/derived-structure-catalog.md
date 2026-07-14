@@ -1,6 +1,6 @@
 # Derived Structure Catalog
 
-- Status: Candidate catalog - nothing in this document is shipped surface
+- Status: Historical composition survey with current disposition notes; consult the data-structure catalog for shipped surface
 - Created (UTC): 2026-07-03T17:01:58Z
 - Repository HEAD: ef450fdd2651ca7d1862ad8eda2f2a9ae7eda722
 - Audience: Maintainers and AI agents planning new repository-owned structures or API extensions
@@ -11,6 +11,13 @@ This document records what can usefully be built *on top of* the repository's tw
 which repository API additions those candidates keep asking for, and the composition rules that
 survived adversarial review. It complements the
 [data-structure catalog](data-structure-catalog.md), which describes shipped surface only.
+
+Some survey items have since shipped, as called out locally. Tungsten `PersistentAssociation` is an
+application-specific realization of one composition idea, not shipment of a general
+`PersistentOrderedMap` and not a permitted substrate or semantic baseline for general collections.
+The normative
+[Tungsten application-leaf dependency boundary](tungsten-application-leaf-boundary.md) requires an
+independently owned fork for any general reuse.
 
 ## Provenance And Method
 
@@ -43,11 +50,11 @@ These gaps recurred across independent candidates and across the external consum
 the highest-leverage repository work because each unblocks several candidates at once. Every gap is
 portable to the C model (callback + context pointer) unless noted.
 
-| Gap | Surface | What it unblocks |
+| Surveyed gap / current disposition | Surface | What it unblocks |
 | --- | --- | --- |
 | `Update(key, func)` / `GetOrAdd` | HAMT map and set | Halves every read-modify-write (currently `TryGetValue` + `SetItem` = two trie walks). Consumers: bag increments, multimap inner updates, graph edge ops, union-find compression, interning, `Counts`/`Merge`-style aggregation. |
-| Builder / transient bulk construction | HAMT map and set | Bulk construction is `O(n * update)` with per-insert path allocation today. Consumers: every facade's `CreateRange`, table batch writes, association construction (the largest constant-factor loss vs the Tungsten kernel in the case study). |
-| Structural diff / equality / 3-way merge / set-vs-set algebra | HAMT node layer (not composable from outside) | The single highest-leverage addition found. Reference-equality-pruned lockstep traversal gives `O(divergence)` comparison of versions sharing ancestry. Unblocks: MVCC change events, delta-CRDT extraction, graph/table/workspace diffing, overlay flattening, Merkle sync, and fixes set algebra's `O(m)` probe-set materialization. |
+| Bulk construction — **shipped**; public editing sessions are a separate lifecycle | HAMT map and set | Canonical `CreateRange` now stages through an internal mutable builder and freezes once. C# also ships an owner-token `Transient`; sibling ports preserve the edit-then-publish semantics without sharing its performance claim. This historical row no longer blocks facade construction. |
+| Structural diff / equality / set-vs-set algebra — **shipped**; 3-way merge remains consumer-gated | HAMT node layer (not composable from outside) | Reference-equality-pruned lockstep traversal and same-type structural algebra now ship across all six languages. A general 3-way merge still needs a conflict matrix. |
 | Value-comparer parameter for no-op identity | HAMT factories | `SetItem`'s equal-value no-op check hardcodes `EqualityComparer<TValue>.Default`; a factory-supplied value comparer would let structural value equality trigger the identity short-circuit. |
 | Reverse support | `Rope<T>` and `FingerTreeDeque<T>` | A reversal bit or reverse enumerator. `ReversibleDeque` exists but lacks the sorted adapter and range operations, materializes an `O(n)` array per enumeration, and its amortized bounds are documented for single-threaded linear use only - facades keep rejecting it. |
 | Struct enumerator for `Rope<T>` / `MeasuredRope` | Rope family | Both use compiler-generated yield iterators; `FingerTreeDeque` already has a public struct enumerator, and the general measured tree gained one on 2026-07-01. Iteration-hot consumers (evaluators) notice the difference. |
@@ -70,19 +77,20 @@ API additions plus samples than as families.
 
 | Candidate | Composition | Key caveat |
 | --- | --- | --- |
-| `PersistentOrderedMap<TKey, TValue>` | HAMT `key -> (stamp, value)` + finger tree of `(stamp, key)` with a stamp projection of `OrderStatisticMeasure` | Commit to the values-in-HAMT variant (lookup `O(w + c)` allocation-free; `SetItem` on an existing key leaves the tree untouched). Rank access (`GetAt`/`IndexOfKey`) comes free from the count component. |
+| `PersistentOrderedMap<TKey, TValue>` | Independently owned HAMT `key -> (stamp, value)` + persistent stamp-ordered sequence | Still unshipped as a general family. It needs a named consumer, neutral project, independently selected values-in-HAMT versus values-in-both representation, contract, model, and tests; Tungsten is provenance only. |
 | HAMT structural diff / merge / set algebra | Feature inside the Hamt family node layer, phased: (1) `MapEquals` + `Diff` enumerator, (2) structural set-vs-set ops, (3) 3-way `Merge` with a specified conflict matrix | Bound is `O(divergent region)` and history-dependent, not content-diff-dependent; collision buckets are insertion-ordered so equal buckets need key-matched (unordered) comparison; comparer mismatch must be gated by reference equality on the comparer. |
 | `PersistentHashBag<T>` | Facade over HAMT `T -> int` + cached `long` total count | Same facade shape as the shipped `PersistentHashSet` (precedent). Specify `int` count overflow policy; expose `long TotalCount` (expanded count can exceed `int.MaxValue`). |
 | `PersistentBiMap<TKey, TValue>` | Forward `K -> V` + inverse `V -> K` HAMTs behind a bijection-enforcing facade | No-op identity must be pre-checked via `inverse.TryGetKey` (the map's internal check hardcodes the default value comparer). Honest 2x memory: every pair stored in both tries. |
 
-`PersistentOrderedMap` fixes the HAMT's biggest documented ergonomic limitation (unspecified
-enumeration order) and is what the Tungsten case study's `Association` design specializes.
-*Shipped 2026-07-07*: the Tungsten-collections workspaces instantiate this pattern's
-values-in-both variant as `PersistentAssociation` (plus the `PersistentList` sequence facade), with
-the C# workspace ([`Tools.DataStructures.Tungsten`](../../src/CSharp/docs/Tungsten/overview.md)) as
-the semantic reference and C, C++, Haskell, Kotlin, and Rust ports linked from the
-[data-structure catalog](data-structure-catalog.md#tungsten-collections). The generic
-values-in-HAMT-only variant and the other candidates below remain unshipped. The
+`PersistentOrderedMap` would address the HAMT's unspecified enumeration order, and the Tungsten
+case study independently specialized the broad composition idea for `Association`.
+*Application-specific shipment 2026-07-07*: the Tungsten workspaces own a values-in-both
+`PersistentAssociation` (plus the `PersistentList` sequence facade), with the C# workspace
+([`Tools.DataStructures.Tungsten`](../../src/CSharp/docs/Tungsten/overview.md)) as the semantic
+reference only for C, C++, Haskell, Kotlin, and Rust Tungsten ports linked from the
+[data-structure catalog](data-structure-catalog.md#tungsten-application-collections). This did not
+ship the generic ordered-map candidate. The generic values-in-HAMT-only variant and the other
+candidates below remain unshipped. The
 structural diff feature is the one candidate that cannot be built by composition - the node layer
 is internal - and the one that upgrades the most other candidates from "store versions" to "reason
 about versions".
@@ -152,6 +160,11 @@ Cross-cutting findings that adversarial review kept re-deriving:
    over a new four-language family.
 
 ## Consumer Case Study: Tungsten
+
+This section records application requirements and algorithmic provenance. It does not define a
+general collection contract. Tungsten may consume general structures, but a general structure must
+not depend on Tungsten code or behavior; fork any reusable mechanism independently under the
+[application-leaf boundary](tungsten-application-leaf-boundary.md).
 
 The Tungsten engine (`C:\Smithereens\src\Tungsten`, a kernel-free Tungsten Language engine)
 provided an external requirements source: replacement designs for `List` (the argument sequence of

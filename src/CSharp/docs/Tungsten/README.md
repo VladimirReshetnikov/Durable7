@@ -21,6 +21,9 @@ is useful outside the Tungsten project, copy the design into an independently ow
 with its own API, invariants, tests, documentation, and evolution policy. A general implementation
 must not wrap or delegate to Tungsten, and later kernel-driven changes do not automatically flow
 into the fork.
+The repository's detailed
+[Tungsten application-leaf dependency boundary](../../../../docs/reference/tungsten-application-leaf-boundary.md)
+is normative for code, tests, documentation, porting, and future workspace extraction.
 
 ## Documents
 

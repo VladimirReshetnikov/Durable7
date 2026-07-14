@@ -69,7 +69,9 @@ Write docs as contracts and maps, not as narration of what a command happens to 
   documents and should not be mistaken for shipped behavior.
 - Describe Tungsten as an application-specific leaf. Never present a Tungsten package, type,
   implementation, or behavioral contract as a general collection's dependency or baseline; an
-  independent fork must document its own owner, contracts, tests, and any relaxed guarantees.
+  independent fork must document its own owner, contracts, tests, and any relaxed guarantees. The
+  detailed [application-leaf boundary](../reference/tungsten-application-leaf-boundary.md) is the
+  normative documentation checklist.
 - Keep external study material clearly segregated. Repository-owned docs may summarize it, but should
   not imply that external material is covered by this repository's MIT-0 license.
 - Do not include secrets, access tokens, machine-local credentials, or transient absolute paths except

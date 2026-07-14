@@ -22,7 +22,8 @@ under `benchmarks/`, and family-specific documentation under `docs/<Family>/`.
 Tungsten may depend on the general managed libraries, but dependency direction is never reversed.
 No general C# collection may reference the Tungsten project, namespace, types, internals, or behavioral
 contract. Reusable mechanics must be forked into an independently owned project with its own API,
-tests, documentation, and evolution policy.
+tests, documentation, and evolution policy; see the normative
+[application-leaf boundary](../../docs/reference/tungsten-application-leaf-boundary.md).
 
 ## Non-Interactive Test Runs
 

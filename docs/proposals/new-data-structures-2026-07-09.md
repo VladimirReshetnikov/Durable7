@@ -11,18 +11,24 @@
 > **Current disposition:** A2's structural equality/diff work and C1's Patricia family have shipped.
 > The [Axis 2 final plan](axis2-lifecycle-and-sequence-cursors.md) supersedes A3's cursor sequencing
 > and sample integration. Consult the current derived/frontier catalogs before reactivating any
-> remaining item; the body below preserves proposal-time rationale and order.
+> remaining item; the body below preserves proposal-time rationale and order. B2's proposed
+> Tungsten-backed ordered set is specifically superseded by the
+> [revised benchmark-independent proposal](benchmark-independent-next-structures-2026-07-14.md) and
+> the normative [Tungsten application-leaf boundary](../reference/tungsten-application-leaf-boundary.md):
+> a general ordered set must be an independent project, implementation, contract, and test suite.
 
 ## Framing
 
 The repository ships four families (fixed-width/sparse numerics, HAMT map/set, the FingerTree
 family, Tungsten list/association) across up to six languages. The
 [derived-structure catalog](../reference/derived-structure-catalog.md) already establishes which
-compositions are sound and which enabling API gaps recur; one of its "Strong" candidates
-(`PersistentOrderedMap`, as `PersistentAssociation`) has since shipped, validating the pipeline.
-This proposal selects a concrete next slate, ordered by leverage per unit of parity cost, and adds
-candidates from the 2026-07-09 discussion that the catalog does not yet record. Effort estimates
-use velocity-independent units: new public API members, workspaces touched, and test surface.
+compositions are sound and which enabling API gaps recur. This proposal originally treated the
+application-specific `PersistentAssociation` shipment as shipment of the catalog's general
+`PersistentOrderedMap` candidate. Current policy corrects that classification: Association is a
+Tungsten-owned realization and design case study; the general ordered-map candidate remains
+unshipped and requires an independent owner and contract. The proposal-time slate below remains
+ordered by leverage per unit of parity cost. Effort estimates use velocity-independent units: new
+public API members, workspaces touched, and test surface.
 
 The catalog's own economics rule applies throughout: a thin facade is cheaper to ship as an API
 addition plus a sample than as a six-language family. The slate below is therefore split into
@@ -114,6 +120,12 @@ efficient increments (otherwise every `Add` is two walks).
   `RemoveCopies`, `TotalCount`, distinct-vs-expanded enumeration).
 
 ### B2. Insertion-ordered persistent set (`PersistentOrderedSet<T>` / Tungsten set)
+
+> **Superseded ownership and design (2026-07-14):** the proposal-time text below is retained as
+> history, but its “same machinery” and Association-ordering recommendation must not be implemented
+> as a Tungsten wrapper or semantic dependency. The current design forks useful sparse-label and
+> dual-index mechanics into `Tools.DataStructures.Ordered`, selects set behavior independently, and
+> uses an independent model rather than Association as a live oracle.
 
 New since the catalog. The insertion-ordered *map* shipped as `PersistentAssociation`; the set
 counterpart is the same stamp-sequence + HAMT machinery with the value side erased — exactly the

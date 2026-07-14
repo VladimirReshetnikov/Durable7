@@ -19,6 +19,10 @@ projects grouped by role under `src/CSharp/src`, `tests`, `samples`, and `benchm
 | [Kotlin](Kotlin/README.md) | Kotlin/JVM command-line compiler with dependency-free executable tests bootstrapped by `build.ps1` | [Hamt](Kotlin/Hamt/README.md), [FingerTree](Kotlin/FingerTree/README.md), [Tungsten](Kotlin/Tungsten/README.md) |
 | [Rust](Rust/README.md) | Cargo workspace with safe Rust crates and inline unit tests | [Hamt](Rust/Hamt/README.md), [FingerTree](Rust/FingerTree/README.md), [Tungsten](Rust/Tungsten/README.md) |
 
+Across every language root, Tungsten is an application-specific leaf consumer. It may depend on
+general libraries; no general workspace may depend on it. See the normative
+[application-leaf boundary](../docs/reference/tungsten-application-leaf-boundary.md).
+
 Use the repository [onboarding guide](../docs/guides/repository-onboarding.md) when starting work in an
 unfamiliar area, the [workspace map](../docs/reference/workspace-map.md) for layout rules and port lineage,
 the [data-structure catalog](../docs/reference/data-structure-catalog.md) for cross-language public surfaces,

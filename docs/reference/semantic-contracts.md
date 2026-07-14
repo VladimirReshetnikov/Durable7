@@ -430,6 +430,8 @@ reinterpreted, and may move out of this repository. They are leaf consumers: gen
 must not reference their packages/types, use their implementation, or inherit their semantics.
 If a mechanism deserves general use, fork it under a separate owner with independent contracts and
 tests; do not make the fork track later Tungsten changes automatically.
+The detailed [application-leaf boundary](tungsten-application-leaf-boundary.md) controls what counts
+as a dependency, an independent fork, harmless provenance, and sufficient validation.
 
 Tungsten collections compose HAMT keyed lookup with persistent ordered storage into a sequence facade
 (`PersistentList`) and an insertion-ordered map (`PersistentAssociation`) whose ordering behavior

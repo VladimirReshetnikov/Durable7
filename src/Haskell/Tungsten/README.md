@@ -11,7 +11,8 @@ dependency-light Haskell modules:
 This is an application-specific leaf port. It may consume the Haskell HAMT and FingerTree packages,
 but no general Haskell package may depend on Tungsten or treat its kernel-derived behavior as a
 baseline. Fork reusable mechanics into an independently owned implementation; C# is authoritative
-only for the sibling Tungsten ports.
+only for the sibling Tungsten ports. See the normative
+[application-leaf boundary](../../../docs/reference/tungsten-application-leaf-boundary.md).
 
 - `Data.Structures.Tungsten.List` wraps the Haskell FingerTree deque for persistent list operations.
 - `Data.Structures.Tungsten.Association` composes the Haskell HAMT with an internal balanced

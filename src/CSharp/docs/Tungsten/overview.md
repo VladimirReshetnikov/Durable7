@@ -45,6 +45,10 @@ eventually move to the Tungsten repository. Dependency direction is consequently
 - C# is the semantic reference only for the sibling Tungsten ports. Kernel-driven changes propagate
   within that family and nowhere else automatically.
 
+The detailed
+[Tungsten application-leaf dependency boundary](../../../../docs/reference/tungsten-application-leaf-boundary.md)
+defines the normative fork, test-oracle, validation, and extraction rules.
+
 ## Design Provenance
 
 The design instantiates the adversarially verified composition recorded in the repository's
