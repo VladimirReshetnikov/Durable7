@@ -892,6 +892,9 @@ private fun concurrentReadersObserveConsistentSnapshots() {
     val cursor = rope.cursorAt(128) ?: throw AssertionError("concurrent cursor")
     val measuredValues = (1..128).toList()
     val measured = MeasuredRope.from(measuredValues, IntSumMeasure)
+    val measuredCursor = measured.cursorAt(64) ?: throw AssertionError("concurrent measured cursor")
+    val text = TextRope.fromText("alpha\nbeta\ngamma")
+    val textCursor = text.cursorAt(8) ?: throw AssertionError("concurrent text cursor")
 
     runConcurrent("fingertree-readers") {
         repeat(128) {
@@ -908,6 +911,13 @@ private fun concurrentReadersObserveConsistentSnapshots() {
             checkEquals(128, measured.size, "concurrent measured size")
             checkEquals(measuredValues.sum(), measured.measure(), "concurrent measured total")
             checkEquals(64, measured[63], "concurrent measured index")
+            checkEquals(measuredValues.take(64).sum(), measuredCursor.measureBefore, "concurrent measured cursor prefix")
+            checkEquals(measuredValues.drop(64).sum(), measuredCursor.measureAfter, "concurrent measured cursor suffix")
+            checkEquals(64, measuredCursor.peekPrevious()?.value, "concurrent measured cursor previous")
+            checkEquals(65, measuredCursor.peekNext()?.value, "concurrent measured cursor next")
+            check(measuredCursor.snapshot() === measured, "concurrent measured cursor snapshot identity")
+            checkEquals(LineColumn(1, 2), textCursor.lineColumn(), "concurrent text cursor coordinates")
+            check(textCursor.snapshot() === text, "concurrent text cursor snapshot identity")
         }
     }
 }
@@ -940,7 +950,8 @@ public fun main() {
         "sortedBoundsDescendOnceOnLargeCollections" to ::sortedBoundsDescendOnceOnLargeCollections,
         "overflowingRangesAreRejected" to ::overflowingRangesAreRejected,
         "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,
-    ) + rrbVectorTestCases() + dabaLiteTestCases() + canonicalSortedSetTestCases() + priorityCoreTestCases()
+    ) + measuredRopeCursorTestCases() + rrbVectorTestCases() + dabaLiteTestCases() +
+        canonicalSortedSetTestCases() + priorityCoreTestCases()
 
     for ((name, test) in tests) {
         test()

@@ -349,6 +349,12 @@ public data class MeasuredRopeLocate<T, M>(
     public val found: Boolean,
 )
 
+/**
+ * A persistent measured sequence backed by the shared immutable measured AVL tree.
+ *
+ * Every growth operation uses checked [Int] arithmetic. If a result would exceed [Int.MAX_VALUE],
+ * the operation throws [ArithmeticException] before invoking the measure policy or publishing a result.
+ */
 public class MeasuredRope<T, M> private constructor(
     private val items: PersistentMeasuredTree<T, M>,
     public val policy: MeasurePolicy<T, M>,
@@ -371,6 +377,26 @@ public class MeasuredRope<T, M> private constructor(
 
     public val isEmpty: Boolean
         get() = items.isEmpty
+
+    /** Returns an immutable measured cursor at the gap before the first element. */
+    public fun cursor(): MeasuredRopeCursor<T, M> = MeasuredRopeCursor.create(this, 0)
+
+    /** Returns a measured cursor at [position], or `null` when it is outside `0..size`. */
+    public fun cursorAt(position: Int): MeasuredRopeCursor<T, M>? =
+        if (position < 0 || position > size) null else MeasuredRopeCursor.create(this, position)
+
+    /**
+     * Locates the gap immediately before the first element whose inclusive absolute prefix satisfies
+     * [predicate]. A miss, including an empty rope, returns the end cursor with [MeasuredRopeCursorSearch.found]
+     * set to `false`.
+     */
+    public fun cursorByMeasure(predicate: (M) -> Boolean): MeasuredRopeCursorSearch<T, M> {
+        val located = locateByMeasure(predicate)
+        return MeasuredRopeCursorSearch(
+            MeasuredRopeCursor.create(this, located.index),
+            located.found,
+        )
+    }
 
     public fun measure(): M = items.measure()
 
@@ -403,9 +429,25 @@ public class MeasuredRope<T, M> private constructor(
         return true
     }
 
-    public fun pushFront(value: T): MeasuredRope<T, M> = MeasuredRope(items.prepend(value), policy)
+    /**
+     * Returns a rope with [value] prepended.
+     *
+     * @throws ArithmeticException if the resulting size cannot be represented by [Int].
+     */
+    public fun pushFront(value: T): MeasuredRope<T, M> {
+        Math.addExact(size, 1)
+        return MeasuredRope(items.prepend(value), policy)
+    }
 
-    public fun pushBack(value: T): MeasuredRope<T, M> = MeasuredRope(items.append(value), policy)
+    /**
+     * Returns a rope with [value] appended.
+     *
+     * @throws ArithmeticException if the resulting size cannot be represented by [Int].
+     */
+    public fun pushBack(value: T): MeasuredRope<T, M> {
+        Math.addExact(size, 1)
+        return MeasuredRope(items.append(value), policy)
+    }
 
     public fun setItem(index: Int, value: T): MeasuredRope<T, M>? {
         if (index < 0 || index >= size) {
@@ -422,6 +464,7 @@ public class MeasuredRope<T, M> private constructor(
             return null
         }
 
+        Math.addExact(size, 1)
         return MeasuredRope(items.insertAt(index, value)!!, policy)
     }
 
@@ -430,8 +473,14 @@ public class MeasuredRope<T, M> private constructor(
             return null
         }
 
+        val owned = values.toList()
+        if (owned.isEmpty()) {
+            return this
+        }
+
+        Math.addExact(size, owned.size)
         val split = items.splitAt(index)!!
-        val middle = PersistentMeasuredTree.from(values, policy)
+        val middle = PersistentMeasuredTree.from(owned, policy)
         return MeasuredRope(split.first.concat(middle).concat(split.second), policy)
     }
 
@@ -482,6 +531,7 @@ public class MeasuredRope<T, M> private constructor(
     }
 
     public fun concat(other: MeasuredRope<T, M>): MeasuredRope<T, M> {
+        Math.addExact(size, other.size)
         require(policy === other.policy || policy == other.policy) { "Cannot concatenate ropes with different measure policies." }
         return when {
             isEmpty -> other
@@ -495,6 +545,13 @@ public class MeasuredRope<T, M> private constructor(
     public fun toList(): List<T> = items.toList()
 
     public fun sharesStorageWith(other: MeasuredRope<T, M>): Boolean = items.sharesStructureWith(other.items)
+
+    @Suppress("UNCHECKED_CAST")
+    internal fun itemAt(index: Int): T = items[index] as T
+
+    internal fun measurePrefix(count: Int): M = items.measurePrefix(count)
+
+    internal fun measureSuffix(startIndex: Int): M = items.measureSuffix(startIndex)
 
     internal fun debugIsBalanced(): Boolean = items.isBalanced()
 
@@ -515,6 +572,11 @@ public class TextRope private constructor(
     public companion object {
         public fun empty(): TextRope = TextRope(MeasuredRope.empty(NewlineMeasure))
         public fun fromText(text: String): TextRope = TextRope(MeasuredRope.from(text.asIterable(), NewlineMeasure))
+
+        internal fun fromMeasured(characters: MeasuredRope<Char, Int>): TextRope {
+            require(characters.policy === NewlineMeasure) { "Text ropes require NewlineMeasure." }
+            return TextRope(characters)
+        }
     }
 
     public val size: Int
@@ -522,6 +584,19 @@ public class TextRope private constructor(
 
     public val isEmpty: Boolean
         get() = characters.isEmpty
+
+    /** Returns a newline-measured cursor at the gap before the first UTF-16 code unit. */
+    public fun cursor(): TextRopeCursor = TextRopeCursor.create(this, characters.cursor())
+
+    /** Returns a newline-measured cursor at [position], or `null` outside `0..size`. */
+    public fun cursorAt(position: Int): TextRopeCursor? =
+        characters.cursorAt(position)?.let { TextRopeCursor.create(this, it) }
+
+    /** Locates a newline-measured cursor by an absolute prefix predicate. */
+    public fun cursorByMeasure(predicate: (Int) -> Boolean): TextRopeCursorSearch {
+        val located = characters.cursorByMeasure(predicate)
+        return TextRopeCursorSearch(TextRopeCursor.create(this, located.cursor), located.found)
+    }
 
     public fun asString(): String = characters.toList().joinToString("")
 

@@ -59,7 +59,7 @@ internal class PersistentMeasuredTree<T, M> private constructor(
     val isEmpty: Boolean
         get() = root == null
 
-    fun measure(): M = root?.measure ?: policy.empty
+    fun measure(): M = if (root == null) policy.empty else root.measure
 
     operator fun get(index: Int): T? {
         if (index < 0 || index >= size) {
@@ -133,7 +133,19 @@ internal class PersistentMeasuredTree<T, M> private constructor(
             return null
         }
 
+        return measurePrefix(count)
+    }
+
+    /** Returns the ordered measure of the first [count] elements for a validated boundary. */
+    fun measurePrefix(count: Int): M {
+        require(count >= 0 && count <= size) { "Prefix boundary must be in 0..size." }
         return prefixMeasureNode(root, count, policy)
+    }
+
+    /** Returns the ordered measure of the elements at and after [startIndex] for a validated boundary. */
+    fun measureSuffix(startIndex: Int): M {
+        require(startIndex >= 0 && startIndex <= size) { "Suffix boundary must be in 0..size." }
+        return suffixMeasureNode(root, startIndex, policy)
     }
 
     fun locate(predicate: (M) -> Boolean): Locate<T, M> =
@@ -204,7 +216,7 @@ private fun <T, M> nodeSize(node: PersistentMeasuredTree.Node<T, M>?): Int = nod
 private fun <T, M> nodeHeight(node: PersistentMeasuredTree.Node<T, M>?): Int = node?.height ?: 0
 
 private fun <T, M> nodeMeasure(node: PersistentMeasuredTree.Node<T, M>?, policy: MeasurePolicy<T, M>): M =
-    node?.measure ?: policy.empty
+    if (node == null) policy.empty else node.measure
 
 private fun <T, M> makeNode(
     left: PersistentMeasuredTree.Node<T, M>?,
@@ -369,6 +381,29 @@ private fun <T, M> prefixMeasureNode(
             policy.combine(nodeMeasure(node.left, policy), policy.measure(node.value)),
             prefixMeasureNode(node.right, count - leftSize - 1, policy),
         )
+    }
+}
+
+private fun <T, M> suffixMeasureNode(
+    node: PersistentMeasuredTree.Node<T, M>?,
+    startIndex: Int,
+    policy: MeasurePolicy<T, M>,
+): M {
+    if (node == null || startIndex == node.size) {
+        return policy.empty
+    }
+    if (startIndex == 0) {
+        return node.measure
+    }
+
+    val leftSize = nodeSize(node.left)
+    return when {
+        startIndex <= leftSize -> policy.combine(
+            suffixMeasureNode(node.left, startIndex, policy),
+            policy.combine(policy.measure(node.value), nodeMeasure(node.right, policy)),
+        )
+        startIndex == leftSize + 1 -> nodeMeasure(node.right, policy)
+        else -> suffixMeasureNode(node.right, startIndex - leftSize - 1, policy)
     }
 }
 

@@ -23,7 +23,8 @@ Current public families:
   `CanonicalSortedSetStatistics`;
 - `Monoid<T>`, `DabaLite<T>`, and `DabaLiteStatistics`;
 - `Rope<T>`, positional `RopeCursor<T>`, nullable-safe `RopeCursorPeek<T>`, `MeasuredRope<T, M>`,
-  `TextRope`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
+  `MeasuredRopeCursor<T, M>`, `MeasuredRopeCursorSearch<T, M>`, `TextRope`, `TextRopeCursor`,
+  `TextRopeCursorSearch`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
 
 The Kotlin surface follows Kotlin/JVM conventions:
 
@@ -67,7 +68,49 @@ ropes and cursors remain reusable. Cursor creation, movement, seek, and snapshot
 point edits are O(log n) over the measured AVL substrate, and inserting `m` values is O(m + log n).
 Immutable cursors are safe for structurally concurrent reads subject to the same caller-owned element
 mutability caveat as ropes. This is a semantic checkpoint, not the C# focused zipper, and it makes no
-O(1)-amortized local-edit claim. `MeasuredRope` and `TextRope` cursors remain unported.
+O(1)-amortized local-edit claim.
+
+## Measured and text rope cursors
+
+`MeasuredRope.cursor()` and `cursorAt(position)` create an opaque `MeasuredRopeCursor<T, M>` over the
+exact source rope. The cursor mirrors the positional gap/edit surface and adds `measureBefore` for
+`[0, position)` plus `measureAfter` for `[position, size)`. Those measures are combined in logical
+left-to-right order; the contract assumes neither an inverse nor commutativity. A nullable `M` is
+supported: a cached null aggregate is a value and is never substituted with `policy.empty`. The same
+nullable-safe `RopeCursorPeek<T>` distinguishes a stored null from a missing neighbor. Navigation
+retains the exact rope; edits path-copy an independent measured rope; same-position seek and empty
+range insertion return the same cursor object.
+
+`cursorByMeasure(predicate)` and `seekByMeasure(predicate)` evaluate a lawful monotone predicate over
+absolute prefixes of the whole retained version. `MeasuredRopeCursorSearch<T, M>` always contains a
+cursor plus `found`: a hit is the gap immediately before the first element whose inclusive prefix
+satisfies the predicate; a miss, including an empty rope, is the end cursor with the whole measure
+before it and the identity after it. A predicate already true at the identity therefore selects gap
+zero only when an element exists. Cursor search is absolute rather than relative to the receiver's
+current gap, and a hit at the current gap preserves cursor identity.
+
+Measured rope prepend, append, point/range insertion, concatenation, and all cursor growth paths use
+checked `Int` arithmetic. After an iterable has necessarily been captured once, overflow is rejected
+before any measure-policy callback (including compatibility equality) or tree publication. Policy
+exceptions during measure reads, searches, or edits propagate while every immutable input remains
+exact and retryable. Cursor creation, movement, positional seek, and `snapshot` are O(1). Peeks,
+ordered measure reads, point edits, and
+absolute measure search are O(log n); insertion of `m` elements is O(m + log n). Unlike C#, Kotlin
+does not prepare element-fragment tables: `measureBefore` and `measureAfter` may invoke O(log n)
+policy operations on each read. Callers sharing cursors across threads must therefore make reachable
+elements, measure values, and policy callbacks safe for those concurrent reads.
+
+`TextRope.cursor()`, `cursorAt`, and `cursorByMeasure` return an opaque `TextRopeCursor` specialized by
+`NewlineMeasure`. It delegates the measured cursor but retains the exact `TextRope` facade; navigation
+keeps the original facade, and each edit wraps its new measured snapshot in O(1), so `asString`, line
+enumeration, and other text helpers remain available without materialization. `lineColumn()` reports
+the zero-based line and UTF-16 `Char` column at the gap. The generic
+`MeasuredRopeCursor<Char, Int>.lineColumn()` form checks `NewlineMeasure` identity at runtime because
+Kotlin's measure-policy type is not part of the cursor's static type.
+
+Both cursor types are snapshot-plus-gap semantic ports. They deliberately do not port C#'s 16/256
+focus/carry zipper, 2,048-element fragment cache, winner-returning snapshot memo, allocation ceilings,
+callback-count gates, or linear-lineage O(1)-amortized local-edit claim.
 
 ## Representation and complexity
 

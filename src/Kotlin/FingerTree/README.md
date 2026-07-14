@@ -20,7 +20,8 @@ names for the public families:
 - `ZipTreeRankPolicy<T>`, `CanonicalSortedSet<T>`, and `CanonicalSortedSetStatistics`;
 - `Monoid<T>`, `DabaLite<T>`, and `DabaLiteStatistics` for mutable FIFO window aggregation;
 - `Rope<T>`, its immutable positional `RopeCursor<T>` and nullable-safe `RopeCursorPeek<T>`,
-  `MeasuredRope<T, M>`, `TextRope`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
+  `MeasuredRope<T, M>`, `MeasuredRopeCursor<T, M>`, `MeasuredRopeCursorSearch<T, M>`, `TextRope`,
+  `TextRopeCursor`, `TextRopeCursorSearch`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
 
 The family is backed by a shared immutable measured AVL sequence. Every node caches subtree size,
 height, and the active monoidal measure; joins, splits, indexed edits, and concatenation copy only
@@ -29,13 +30,17 @@ general `FingerTree`, sorted facades, stable priority selection, max-high interv
 positional/measured ropes, and newline-measured text. `ReversibleDeque` keeps its specialized
 orientation-aware balanced tree so whole-value reversal remains O(1).
 
-`RopeCursor<T>` is the positional semantic checkpoint: an ordinary immutable class retaining the
-exact source `Rope<T>` plus a validated gap in `0..size`. Creation, movement, seek, and snapshot are
-O(1); nullable-safe wrapped peeks and point edits are O(log n), and inserting `m` elements is
-O(m + log n). Retained cursors branch independently, same-position seek and empty insertion preserve
-identity, and replacement stores the supplied representative without equality. Positional-rope
-growth uses checked `Int` arithmetic and fails before publication. This is not the C# focused zipper
-and makes no amortized-locality claim; measured and text cursor surfaces remain unported.
+`RopeCursor<T>` and `MeasuredRopeCursor<T, M>` are immutable semantic checkpoints retaining an exact
+rope snapshot plus a validated gap in `0..size`. Both preserve branchable edits, nullable-safe wrapped
+peeks, identity-preserving same-position seek and empty insertion, and equality-free replacement. The
+measured cursor additionally exposes ordered `measureBefore`/`measureAfter` partitions and absolute
+prefix search with an end cursor on a miss. `TextRopeCursor` keeps the exact text facade around the
+newline-measured cursor and wraps edited measured snapshots in O(1), retaining access to string,
+line, and UTF-16 column helpers without materialization.
+Creation, movement, seek, and snapshot are O(1); peeks, measured reads, measure search, and point edits
+are O(log n), while inserting `m` elements is O(m + log n). Rope growth uses checked `Int` arithmetic
+and fails before measure-policy callbacks or publication. These are not the C# focused zipper and make
+no memo-cell, allocation, or amortized-locality claim.
 
 `RrbVector<T>` is the family's random-access-optimized sequence. It stores up to 32 elements per
 leaf and uses 32-way branches: packed branches navigate by five-bit radix arithmetic without size

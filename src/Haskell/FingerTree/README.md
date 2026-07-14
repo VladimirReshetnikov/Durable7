@@ -85,7 +85,7 @@ Positional-rope growth checks the cached `Int` count before publication. `append
 positional insertion, range insertion, and their cursor forms raise the pure
 `Data.Structures.FingerTree.Rope: length overflow` exception if the result would exceed `maxBound`;
 the receiver and every retained source remain reusable. Range insertion constructs its middle rope
-once. Measured-rope and text cursor surfaces remain C#-only.
+once. Measured-rope and text cursor surfaces remain unported in Haskell.
 
 The text helpers use the measured rope's cached newline counts for offset/line navigation rather
 than rescanning the entire text. The interval tree is a low-sorted finger tree annotated with both

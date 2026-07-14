@@ -47,11 +47,15 @@ Coverage groups:
   asymmetry plus every set relation. Canonical algebra, no-op identity, quantified add/remove
   off-path sharing, fully colliding 4,096-node stack safety, digest inequality short-circuit,
   concurrent digest publication, and injected-metadata validator rejection have dedicated checks;
-- `Rope`, its positional `RopeCursor`, `MeasuredRope`, `TextRope`, and `RopeBuilder`: complete
-  positional/range edits, cursor empty/start/end and nullable-peek behavior, identity no-ops,
-  one-shot range capture, equality-free replacement, retained branches, a 750-command gap model,
-  checked shared-DAG growth overflow, copies, measure-guided navigation, compaction, snapshot
-  retention, line/column mapping, and string conversion;
+- `Rope`, positional `RopeCursor`, `MeasuredRope`, `MeasuredRopeCursor`, `TextRope`,
+  `TextRopeCursor`, and `RopeBuilder`: complete positional/range edits, cursor empty/start/end and
+  nullable-peek behavior, identity no-ops, one-shot range capture, equality-free replacement,
+  retained branches, positional and measured 750-command gap models, ordered noncommutative
+  before/after measures, nullable aggregate retention, absolute prefix-search hit/miss/empty behavior,
+  callback-failure retry,
+  positional and measured exact-`Int.MAX_VALUE` shared-DAG overflow, copies, compaction, exact text-
+  facade snapshots, UTF-16 line/column mapping across surrogate/combining/CRLF content, and string
+  conversion;
 - shared measured-AVL invariants and identity sharing across deque, measured tree, sorted, priority,
   interval, rope, measured-rope, and text facades;
 - a 5,000-command edit/split model and 100,000-element construction stress for the real-tree
@@ -59,5 +63,5 @@ Coverage groups:
 - the cross-language recurring-defect checklist: value-equal policy concatenation, stable priority
   comparator guards, comparison-based interval membership, equal-low insertion order, supplied-key
   sorted-map replacement, text-column overflow, and range-overflow rejection;
-- JVM concurrent readers over shared immutable deque, reversible deque, rope, positional cursor, and
-  measured-rope snapshots.
+- JVM concurrent readers over shared immutable deque, reversible deque, rope, positional/measured/text
+  cursors, and measured-rope snapshots.

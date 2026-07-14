@@ -269,9 +269,10 @@ Shared obligations:
 - Builders must document mutation, snapshot publication, and whether later builder changes can affect
   previously produced immutable ropes.
 
-C# ships positional and measured cursors; C++ `rope_cursor<T>`, Haskell `RopeCursor a`, plus Kotlin
-and Rust `RopeCursor<T>` also ship positional semantic checkpoints. No deque, RRB, raw-finger-tree, reversible-deque, or
-Tungsten cursor is implied by those surfaces. Every shipped cursor shares these observable obligations:
+C# and Kotlin ship positional and measured/text cursors; C++ `rope_cursor<T>`, Haskell
+`RopeCursor a`, and Rust `RopeCursor<T>` ship positional semantic checkpoints. No deque, RRB,
+raw-finger-tree, reversible-deque, or Tungsten cursor is implied by those surfaces. Every shipped
+cursor shares these observable obligations:
 
 - A cursor position is a gap in `0 .. Count`: previous operations address `p - 1`, next operations
   address `p`, insertion returns the gap after the inserted values, backspace moves the gap left,
@@ -310,7 +311,7 @@ retained values reusable. Kotlin uses a non-null peek wrapper to distinguish a s
 missing neighbor. Rust edits retain the substrate's `T: Clone` bound; read-only cursor operations do
 not.
 
-The C# measured cursor additionally requires:
+The C# and Kotlin measured cursors additionally share these result semantics:
 
 - `MeasureBefore` aggregates `[0, Position)` and `MeasureAfter` aggregates `[Position, Count)`;
   combining them in that order yields the whole version's measure without assuming an inverse,
@@ -318,18 +319,32 @@ The C# measured cursor additionally requires:
 - Absolute measure seek selects the gap before the first element whose inclusive prefix satisfies a
   lawful monotone predicate. True-at-empty selects zero for a nonempty rope; misses and empty ropes
   return `false` with an end cursor whose before measure is the whole measure.
-- Prepared element measures belong to the immutable cursor lineage, may be shared by descendants,
-  and must be published failure-atomically. Failed or racing callbacks cannot expose partially
-  initialized prefix/suffix state. A dirty snapshot must not remeasure already prepared elements.
 - The newline specialization uses UTF-16 element offsets and the existing zero-based line/column
-  rules; it does not create a separate text-rope representation.
+  rules. Navigation and edits must preserve access to the language's existing text helpers.
+
+The C# measured zipper additionally prepares element measures in the immutable cursor lineage,
+shares them with descendants, and publishes prefix/suffix tables failure-atomically. Failed or racing
+callbacks cannot expose partially initialized state, and a dirty snapshot does not remeasure already
+prepared elements. Its measure properties are O(1) cached reads and its newline specialization adds
+no second text representation.
+
+Kotlin's `MeasuredRopeCursor<T, M>` remains a snapshot-plus-gap checkpoint over the measured AVL
+substrate. Nullable aggregate values remain distinct from the empty aggregate. Creation, movement,
+positional seek, and snapshot are O(1); measure reads, peeks, point
+edits, and absolute measure search are O(log n), and measure reads may invoke the runtime policy.
+`TextRopeCursor` is a thin newline-policy facade that retains the exact `TextRope` on navigation and
+wraps edited measured snapshots in O(1). Kotlin checked growth rejects `Int` overflow before policy
+callbacks or publication after one-shot range capture. It claims no C# fragment cache, snapshot memo,
+allocation ceiling, or O(1)-amortized local editing.
 
 The normative C# details and evidence are in the
 [FingerTree API specification](../../src/CSharp/docs/FingerTree/api-specification.md),
 [usage guide](../../src/CSharp/docs/FingerTree/usage.md),
 [validation guide](../../src/CSharp/docs/FingerTree/validation.md), and
 [C0 positional decision](../../src/CSharp/docs/FingerTree/rope-cursor-c0-decision.md), and
-[C2 measured decision](../../src/CSharp/docs/FingerTree/measured-rope-cursor-c2-decision.md).
+[C2 measured decision](../../src/CSharp/docs/FingerTree/measured-rope-cursor-c2-decision.md). The
+Kotlin checkpoint is specified in its [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md) and
+[validation guide](../../src/Kotlin/FingerTree/docs/validation.md).
 
 ## Tungsten Collections
 

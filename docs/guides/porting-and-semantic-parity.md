@@ -156,8 +156,10 @@ FingerTree lineage:
    helpers, including the positional snapshot-plus-gap rope cursor checkpoint.
 5. [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) ports the family to Kotlin/JVM over
    structurally shared measured AVL sequences with cached monoidal summaries and runtime
-   measure/comparator policies, plus the policy-canonical zip-zip sorted set; its API notes state
-   the strict-AVL versus lazy-digit-spine costs and segregate the mutable managed DABA Lite member.
+   measure/comparator policies, plus the policy-canonical zip-zip sorted set. Its positional,
+   measured, and UTF-16 text cursors are snapshot-plus-gap semantic checkpoints with no C# zipper or
+   amortized-locality claim; its API notes state the strict-AVL versus lazy-digit-spine costs and
+   segregate the mutable managed DABA Lite member.
 6. [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) is the Rust semantic checkpoint for
    the same family names. It preserves immutable snapshot behavior now; the public facades use
    structurally shared Rust tree storage and include the policy-canonical zip-zip sorted set, while

@@ -12,7 +12,7 @@ where the language surfaces line up.
 | Workspace | Role | Primary entry points | Validation |
 | --- | --- | --- | --- |
 | [Hamt](Hamt/README.md) | Persistent HAMT map/set port with 32-way bitmap-indexed trie nodes and immutable collision buckets | `tools.datastructures.hamt.PersistentHashMap`, `PersistentHashSet` | `.\build.ps1 -Workspace Hamt` |
-| [FingerTree](FingerTree/README.md) | Persistent measured-tree port of the FingerTree family, positional rope cursor, RRB vectors, the policy-canonical zip-zip sorted set, Brodal-Okasaki and priority-search-queue cores, and the mutable DABA Lite FIFO aggregator | `tools.datastructures.fingertree.*` | `.\build.ps1 -Workspace FingerTree` |
+| [FingerTree](FingerTree/README.md) | Persistent measured-tree port of the FingerTree family, positional/measured/text rope cursors, RRB vectors, the policy-canonical zip-zip sorted set, Brodal-Okasaki and priority-search-queue cores, and the mutable DABA Lite FIFO aggregator | `tools.datastructures.fingertree.*` | `.\build.ps1 -Workspace FingerTree` |
 | [Tungsten](Tungsten/README.md) | Tungsten `List` and `Association` collection port over Kotlin persistent substrates | `tools.datastructures.tungsten.PersistentList`, `PersistentAssociation` | `.\build.ps1 -Workspace Tungsten` |
 
 Run the full Kotlin validation from this directory:
@@ -36,8 +36,9 @@ The FingerTree workspace uses immutable measured AVL sequence nodes throughout t
 Cached size and monoidal measures drive logarithmic indexed edits, splits, prefix location, priority,
 interval, rope, and text operations; path copying retains unchanged JVM subtrees. The local API notes
 spell out the few engine-level differences from the C# lazy digit spine. Its positional
-`RopeCursor<T>` preserves immutable gap/edit/branch semantics through an exact retained rope snapshot
-without claiming the C# zipper representation or its focus-local complexity. Its separate `DabaLite<T>`
+`RopeCursor<T>`, generic `MeasuredRopeCursor<T, M>`, and newline-specialized `TextRopeCursor` preserve
+immutable gap/edit/branch and absolute measure-search semantics through exact retained snapshots
+without claiming the C# zipper representation, caches, or focus-local complexity. Its separate `DabaLite<T>`
 member is deliberately mutable: a six-cursor, chunk-backed schedule maintains a FIFO monoid aggregate
 with bounded callback counts and requires external serialization.
 

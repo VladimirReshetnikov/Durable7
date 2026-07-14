@@ -29,14 +29,23 @@ comparator-aware sorted-map bulk construction, measured text line navigation, an
 Positional cursor coverage locks empty/start/end gaps, nullable-safe peeks, exact clean snapshots,
 identity-preserving seek and empty insertion, one-shot range capture, unconditional representative
 replacement, retained branches, concurrent readers, and a 750-command gap/list model.
+Measured cursor coverage adds ordered noncommutative before/after partitions, nullable aggregate
+retention, absolute prefix search
+for true-at-empty/hit/miss/empty cases, predicate and measure-policy failure retry, exact snapshot and
+no-op identity, retained sharing, and a second 750-command gap/measure model. Text cursor cases check
+every UTF-16 gap across surrogate pairs, combining marks, CRLF/LF content, newline edits, exact text-
+facade identity, and continued access to all line/string helpers. Concurrent readers exercise both
+measured and text cursors inside the single test JVM.
 Counting-comparator guards over 65,536-element sorted collections prove that bag counting bounds, set
 rank/neighbor navigation, and keyed map lookup finish within one logarithmic descent.
 Representation coverage validates AVL balance and identity sharing across
 every facade, a 5,000-command sequence model, 100,000-element construction, policy compatibility,
 overflow and comparison regressions, and concurrent readers over retained snapshots.
-The rope overflow regression constructs a logarithmic shared DAG through self-concatenation, reaches
-the maximum representable `Int` size without materialization, and verifies every positional growth
-path and both cursor overflow paths fail before publication while all retained inputs remain usable.
+The rope overflow regressions construct logarithmic positional and measured shared DAGs through self-
+concatenation, reach the maximum representable `Int` size without materialization, and verify every
+growth path and cursor overflow path fails before publication while all retained inputs remain usable.
+The measured case arms measure, combine, and distinct-policy equality to throw and proves count
+overflow wins before any is invoked.
 
 RRB validation covers every 32-way boundary through 100,000 elements, unequal-height and uneven
 fragment concatenation, exact-boundary leaf identity, regular-versus-relaxed size-table invariants,
@@ -101,3 +110,5 @@ JMH setup rather than embedding stopwatch assertions in correctness tests.
 Likewise, the JVM Brodal audit does not copy C# allocated-byte ceilings: HotSpot object layout,
 escape analysis, tiered compilation, and collector choice make them non-portable. Exact comparison
 counts and identity-sharing bounds are the deterministic JVM substitutes.
+The measured/text cursor checkpoint likewise claims only the documented snapshot-plus-gap costs;
+none of its correctness tests is presented as C# zipper, allocation, or amortized-locality evidence.
