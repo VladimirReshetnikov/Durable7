@@ -65,9 +65,9 @@ no edit-throughput or allocation-win claim. Keep each language's lifecycle shape
 
 - C clone handles alias one ref-counted session state, share consumption, and surface consumed or
   modified-iterator conditions through status codes.
-- C++ sessions are move-only and rvalue-published. Nothrow policy moves give non-throwing
-  publication; a throwing custom policy move has the documented no-retry/content-preservation
-  caveat.
+- C++ sessions are move-only and rvalue-published. A throwing custom policy move terminally
+  invalidates a moved source and, for assignment, its destination; publication has the documented
+  no-retry/content-preservation caveat. Nothrow policy moves avoid both exceptional boundaries.
 - Haskell sessions live in `IO` and use candidate-before-masked-commit publication into their
   `IORef` state.
 - Kotlin rejects post-publication access dynamically and binds acquired views to the session version.

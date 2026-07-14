@@ -213,6 +213,10 @@ session, throws `std::logic_error`. A consumed or moved-from variable may still 
 session through move assignment. Iterators are bound to the session generation: content changes
 invalidate them, logical no-ops do not, and publication invalidates all of them. Moving a session
 transfers still-valid iterators to the destination's logical session.
+If a custom policy throws during a session move, the source is terminally invalidated; a throwing
+move assignment terminally invalidates both source and destination, including both iterator
+lineages. This preserves deterministic basic exception safety without claiming rollback of
+partially moved policy state. Nothrow-movable policies avoid that boundary.
 
 Sets expose the same lifecycle with reporting membership edits:
 

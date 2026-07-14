@@ -31,7 +31,9 @@ sessions publish the original shared root; real point edits deliberately call th
 path-copy operations, so this lifecycle surface makes no owner-token mutation or throughput claim.
 Generation-bound iterators fail after a content change, and every later collection observation,
 mutation, iteration request, or publication attempt fails deterministically after publication or
-on a moved-from session. Maps also expose `map_equals` and owned typed
+on a moved-from session. A throwing custom policy move terminally invalidates the affected source
+and destination sessions and their iterator lineages before partially moved maps can be observed.
+Maps also expose `map_equals` and owned typed
 added/removed/changed diff. Those two operations have a caller precondition that stateful `Hash`
 and `KeyEqual` objects define compatible semantics; arbitrary C++ policy objects expose no general
 identity/equality operation, so the library cannot enforce the C# reference's comparer-identity

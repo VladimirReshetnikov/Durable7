@@ -5,6 +5,7 @@
 #include <bit>
 #include <cassert>
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <initializer_list>
 #include <iterator>
@@ -1993,6 +1994,7 @@ private:
         active,
         consumed,
         moved_from,
+        move_failed,
         destroyed,
     };
 
@@ -2013,18 +2015,30 @@ public:
     transient(const transient&) = delete;
     transient& operator=(const transient&) = delete;
 
-    transient(transient&& other) noexcept(std::is_nothrow_move_constructible_v<map_type>)
+    transient(transient&& other) noexcept(std::is_nothrow_move_constructible_v<map_type>) try
         : map_(std::move(other.map_)),
           control_(std::move(other.control_)),
           state_(other.state_) {
         other.state_ = lifecycle_state::moved_from;
+    } catch (...) {
+        other.mark_move_failed();
+        rethrow_move_failure<std::is_nothrow_move_constructible_v<map_type>>();
     }
 
     transient& operator=(transient&& other) noexcept(
         std::is_nothrow_move_assignable_v<map_type>) {
         if (this != &other) {
-            map_ = std::move(other.map_);
-            mark_destroyed();
+            // Invalidate the overwritten session before a potentially throwing
+            // policy move can partially replace its persistent map. If the map
+            // assignment throws, neither partially moved session remains
+            // observable and every iterator fails deterministically.
+            mark_move_failed();
+            try {
+                map_ = std::move(other.map_);
+            } catch (...) {
+                other.mark_move_failed();
+                rethrow_move_failure<std::is_nothrow_move_assignable_v<map_type>>();
+            }
             control_ = std::move(other.control_);
             state_ = other.state_;
             other.state_ = lifecycle_state::moved_from;
@@ -2182,6 +2196,10 @@ public:
                 throw std::logic_error(
                     "The persistent_hash_map transient that created this iterator no longer exists.");
             }
+            if (control_->state == lifecycle_state::move_failed) {
+                throw std::logic_error(
+                    "The persistent_hash_map transient was invalidated by a failed move.");
+            }
             if (control_->version != version_) {
                 throw std::logic_error(
                     "The persistent_hash_map transient was changed after this iterator was created.");
@@ -2277,6 +2295,10 @@ private:
             throw std::logic_error(
                 "The persistent_hash_map transient has been moved from.");
         }
+        if (state_ == lifecycle_state::move_failed) {
+            throw std::logic_error(
+                "The persistent_hash_map transient was invalidated by a failed move.");
+        }
         if (!control_ || control_->state != lifecycle_state::active) {
             throw std::logic_error(
                 "The persistent_hash_map transient is not active.");
@@ -2317,6 +2339,25 @@ private:
     void mark_destroyed() noexcept {
         if (state_ == lifecycle_state::active && control_) {
             control_->state = lifecycle_state::destroyed;
+        }
+    }
+
+    void mark_move_failed() noexcept {
+        state_ = lifecycle_state::move_failed;
+        if (control_) {
+            control_->state = lifecycle_state::move_failed;
+        }
+    }
+
+    template <bool IsNothrow>
+    [[noreturn]] static void rethrow_move_failure() noexcept(IsNothrow) {
+        if constexpr (IsNothrow) {
+            // The catch is unreachable when the map move is correctly marked
+            // noexcept. Keep that instantiation free of an explicit rethrow so
+            // strict MSVC builds do not diagnose a throwing noexcept function.
+            std::terminate();
+        } else {
+            throw;
         }
     }
 

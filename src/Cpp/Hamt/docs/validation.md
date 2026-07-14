@@ -128,7 +128,8 @@ The suite covers:
   lookup and materialization, and rvalue-only one-way publication;
 - session lifecycle and iteration: copied generation-bound iterators, real-edit invalidation,
   no-op stability, transfer across move construction, overwritten-destination invalidation on move
-  assignment, deterministic consumed/moved-from failures, and set-facade delegation;
+  assignment, deterministic consumed/moved-from failures, terminal invalidation after throwing
+  policy move construction/assignment, and set-facade delegation;
 - active set-session relations through receiver-policy initializer-list, persistent-set, and range
   overloads, including equivalent duplicates, iterator stability, and empty-probe consumed checks;
 - edit-session failure/model coverage: injected hash failure without state or iterator change and a

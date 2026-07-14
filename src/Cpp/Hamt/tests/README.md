@@ -75,8 +75,9 @@ exact deep-bridge collapse case, and all four reachable terminal fragments. Vali
 hash-prefix routing; topology comparison matches collision keys through `KeyEqual` without depending
 on collision insertion order. The transient groups separately lock the move-only one-way lifecycle,
 clean/no-op identity, path-copy source isolation, generation-bound iteration, moved/consumed
-behavior, policy and representative retention, injected hash failure, set delegation, and a
-collision-heavy 5,000-operation model. They deliberately do not assert an edit-performance gain:
+behavior, deterministic map/set invalidation after throwing policy moves, policy and representative
+retention, injected hash failure, set delegation, and a collision-heavy 5,000-operation model. They
+deliberately do not assert an edit-performance gain:
 the first native session uses the persistent update kernel. Candidate failures occur before the
 non-throwing root/count commit, so the injected failure also checks generation/iterator stability.
 Set relations cover receiver-policy case folding, duplicate range members, persistent-set and range

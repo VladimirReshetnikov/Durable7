@@ -885,7 +885,8 @@ receiver-policy set relations, and failure-atomic edits, but every changed point
 ordinary persistent path-copy successor before replacing the current session value. Consequently
 they make no transient-throughput or allocation-win claim. C explicit clones alias one ref-counted
 consumed state and expose lifecycle/iterator failures through status codes; C++ sessions are
-move-only and document the publication caveat for throwing custom policy moves; Haskell sessions
+move-only, terminally invalidate affected sessions after a throwing policy move, and document the
+separate publication caveat; Haskell sessions
 live in `IO`; Kotlin checks consumption dynamically and binds views to session versions; Rust uses
 consuming ownership for publication.
 

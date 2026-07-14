@@ -233,6 +233,44 @@ struct controlled_throw_hash {
     }
 };
 
+struct throwing_move_policy_control {
+    bool throw_on_move_construction = false;
+    bool throw_on_move_assignment = false;
+};
+
+struct throwing_move_hash {
+    std::shared_ptr<throwing_move_policy_control> control =
+        std::make_shared<throwing_move_policy_control>();
+
+    throwing_move_hash() = default;
+
+    explicit throwing_move_hash(std::shared_ptr<throwing_move_policy_control> move_control)
+        : control(std::move(move_control)) {
+    }
+
+    throwing_move_hash(const throwing_move_hash&) = default;
+    throwing_move_hash& operator=(const throwing_move_hash&) = default;
+
+    throwing_move_hash(throwing_move_hash&& other)
+        : control(other.control) {
+        if (control && control->throw_on_move_construction) {
+            throw std::runtime_error("injected policy move-construction failure");
+        }
+    }
+
+    throwing_move_hash& operator=(throwing_move_hash&& other) {
+        control = other.control;
+        if (control && control->throw_on_move_assignment) {
+            throw std::runtime_error("injected policy move-assignment failure");
+        }
+        return *this;
+    }
+
+    std::size_t operator()(int value) const noexcept {
+        return std::hash<int>{}(value);
+    }
+};
+
 // Distinguishes stored-value retention from replacement: values equal mod 10
 // compare equal under the policy while staying observably different.
 struct mod_ten_equal {
@@ -1620,6 +1658,65 @@ TEST(TransientMap_MoveTransferAndOverwriteHaveDeterministicLifecycles) {
         destroyed_iterator = doomed.begin();
     }
     CHECK_THROWS_AS(*destroyed_iterator, std::logic_error);
+}
+
+TEST(TransientMoveFailuresInvalidateBothSessionsAndTheirIterators) {
+    using map_type = persistent_hash_map<int, int, throwing_move_hash>;
+
+    const auto construction_control = std::make_shared<throwing_move_policy_control>();
+    const auto construction_source_map =
+        map_type::create(throwing_move_hash{construction_control}).set_item(1, 10);
+    auto construction_source = construction_source_map.to_transient();
+    auto construction_iterator = construction_source.begin();
+
+    construction_control->throw_on_move_construction = true;
+    bool construction_threw = false;
+    try {
+        auto destination = std::move(construction_source);
+        (void)destination;
+    } catch (const std::runtime_error&) {
+        construction_threw = true;
+    }
+    construction_control->throw_on_move_construction = false;
+
+    CHECK(construction_threw);
+    CHECK_THROWS_AS(construction_source.count(), std::logic_error);
+    CHECK_THROWS_AS(*construction_iterator, std::logic_error);
+
+    const auto assignment_control = std::make_shared<throwing_move_policy_control>();
+    const auto assignment_source_map =
+        map_type::create(throwing_move_hash{assignment_control}).set_item(2, 20);
+    const auto assignment_target_map =
+        map_type::create(throwing_move_hash{assignment_control}).set_item(3, 30);
+    auto assignment_source = assignment_source_map.to_transient();
+    auto assignment_target = assignment_target_map.to_transient();
+    auto assignment_source_iterator = assignment_source.begin();
+    auto assignment_target_iterator = assignment_target.begin();
+
+    assignment_control->throw_on_move_assignment = true;
+    CHECK_THROWS_AS(assignment_target = std::move(assignment_source), std::runtime_error);
+    assignment_control->throw_on_move_assignment = false;
+
+    CHECK_THROWS_AS(assignment_source.count(), std::logic_error);
+    CHECK_THROWS_AS(assignment_target.count(), std::logic_error);
+    CHECK_THROWS_AS(*assignment_source_iterator, std::logic_error);
+    CHECK_THROWS_AS(*assignment_target_iterator, std::logic_error);
+
+    using set_type = persistent_hash_set<int, throwing_move_hash>;
+    const auto set_control = std::make_shared<throwing_move_policy_control>();
+    auto set_source = set_type::create(throwing_move_hash{set_control}).add(4).to_transient();
+    auto set_target = set_type::create(throwing_move_hash{set_control}).add(5).to_transient();
+    auto set_source_iterator = set_source.begin();
+    auto set_target_iterator = set_target.begin();
+
+    set_control->throw_on_move_assignment = true;
+    CHECK_THROWS_AS(set_target = std::move(set_source), std::runtime_error);
+    set_control->throw_on_move_assignment = false;
+
+    CHECK_THROWS_AS(set_source.count(), std::logic_error);
+    CHECK_THROWS_AS(set_target.count(), std::logic_error);
+    CHECK_THROWS_AS(*set_source_iterator, std::logic_error);
+    CHECK_THROWS_AS(*set_target_iterator, std::logic_error);
 }
 
 TEST(TransientMap_HashFailureLeavesContentsAndIteratorsUnchanged) {

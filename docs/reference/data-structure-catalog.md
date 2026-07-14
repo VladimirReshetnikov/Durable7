@@ -47,7 +47,8 @@ Ctrie; and all six languages own complete wire-compatible policy-bound Merkle se
 
 The lifecycle shape is idiomatic rather than textually identical. C explicit clones alias one
 ref-counted session and observe shared consumed/modified status; C++ sessions are move-only and
-publish through an rvalue, with the documented retry caveat for throwing custom policy moves;
+publish through an rvalue, with deterministic terminal invalidation during a throwing session move
+and the documented no-retry caveat during throwing publication;
 Haskell sessions live in `IO`; Kotlin checks consumption at runtime and binds views to a session
 version; Rust consumes the session in the type system when publishing. These differences preserve
 the common one-way lifecycle without pretending that the sibling facades implement C#'s owner-token

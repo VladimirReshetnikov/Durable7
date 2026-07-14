@@ -217,6 +217,13 @@ publication attempt throws `std::logic_error`; operations on a moved-from sessio
 Destroying an active session also makes an iterator's next observation fail deterministically.
 A consumed or moved-from variable remains a valid target for move assignment from a fresh session.
 
+If a custom policy throws during session move construction, the source session and its iterators
+become terminally invalid. If a custom policy throws during session move assignment, both the source
+and overwritten destination sessions, plus both iterator lineages, become terminally invalid. The
+partially moved policy/map subobjects remain destructible but cannot be observed through collection
+operations. Successful moves retain the ordinary control-transfer behavior above; nothrow-movable
+policies avoid this exceptional boundary entirely. The set facade inherits the same rule.
+
 `persist() &&` constructs its result by moving the current map and its policy objects, then marks
 the session consumed. With nothrow-movable policies this is a non-throwing publication step. If a
 custom policy move constructor throws, the exception propagates before the consume flag is set, but
