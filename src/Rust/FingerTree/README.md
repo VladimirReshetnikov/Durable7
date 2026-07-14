@@ -22,9 +22,9 @@ family. It exposes Rust-native names for the same public families:
 - `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>`;
 - `PriorityQueue<T, P>`;
 - `Interval<T>` and `IntervalTree<T>`;
-- `Rope<T>` and its immutable positional `RopeCursor<T>`, `MeasuredRope<T, P>`,
-  `MeasuredRopeBuilder<T, P>`, `TextRope`, and `RopeBuilder`, including Unicode text extras and
-  newline-style classification.
+- `Rope<T>` and its immutable positional `RopeCursor<T>`, `MeasuredRope<T, P>` and
+  `MeasuredRopeCursor<T, P>`, `MeasuredRopeBuilder<T, P>`, `TextRope` and `TextRopeCursor`, and
+  `RopeBuilder`, including Unicode text extras and newline-style classification.
 
 This checkpoint preserves immutable snapshot semantics and the observable behavior covered by the
 crate tests for its persistent families. `DabaLite<T, M>` is the deliberate mutable exception: it
@@ -77,9 +77,15 @@ Movement, seek, and snapshot are O(1) and require no element cloning; peeks and 
 the rope substrate's O(log n) plus bounded-chunk work, and range insertion is O(m + log n). Retained
 cursors branch independently. Cached rope lengths use checked `usize` addition: a result that cannot
 fit panics before publication while every input snapshot remains valid. This is deliberately not the
-C# focused zipper and carries no amortized-locality claim; measured/text cursor surfaces remain
-unported. `TextRope` stores the same
-character content in a newline-measured rope for cached line navigation. `FingerTree<T, P>` now
+C# focused zipper and carries no amortized-locality claim. `MeasuredRopeCursor<T, P>` applies the
+same immutable snapshot-plus-gap model to the exact measured version, adds ordered prefix/suffix
+measures and absolute monotone prefix search, and returns a usable end cursor on a search miss.
+`TextRopeCursor` is the nominal newline-specialized facade: it retains `TextRope`, reports scalar-
+offset line/column positions, and preserves existing LF-measure semantics. Measured/text navigation
+does not require `T: Clone`; edits inherit the measured rope's bounded-chunk clone requirement.
+Checked count preflights make unrepresentable measured growth fail before element-measure callbacks.
+`TextRope` stores the same character content in a newline-measured rope for cached line navigation.
+`FingerTree<T, P>` now
 uses structurally shared measured tree storage with cached monoid measures. The measured core now includes
 `ProductMeasure<T, PFirst, PSecond>`, `MeasurePair<TFirst, TSecond>`, `KeyMeasure<T>`, and
 size+sum / size+min / size+max aliases with component-projected splits, bound splits,

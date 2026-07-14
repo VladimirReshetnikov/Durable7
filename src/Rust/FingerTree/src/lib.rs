@@ -45,8 +45,9 @@ pub use priority_search_queue::{
     PrioritySearchRangeError, PrioritySearchRangeIter, PrioritySearchRemoveResult,
 };
 pub use rope::{
-    LineColumn, MeasuredRope, MeasuredRopeBuilder, MeasuredRopeLocate, MeasuredRopeSplit,
-    NewlineMeasure, Rope, RopeBuilder, RopeCursor, TextRope,
+    LineColumn, MeasuredRope, MeasuredRopeBuilder, MeasuredRopeCursor, MeasuredRopeCursorSearch,
+    MeasuredRopeLocate, MeasuredRopeSplit, NewlineMeasure, Rope, RopeBuilder, RopeCursor, TextRope,
+    TextRopeCursor, TextRopeCursorSearch,
 };
 pub use rrb_vector::{
     RrbVector, RrbVectorBuilder, RrbVectorIntoIter, RrbVectorInvariantError, RrbVectorIter,
@@ -70,6 +71,8 @@ mod concurrency_tests {
         assert_send_sync::<Rope<i32>>();
         assert_send_sync::<RopeCursor<i32>>();
         assert_send_sync::<MeasuredRope<i32, SumMeasure<i32>>>();
+        assert_send_sync::<MeasuredRopeCursor<i32, SumMeasure<i32>>>();
+        assert_send_sync::<TextRopeCursor>();
     }
 
     #[test]
@@ -86,6 +89,8 @@ mod concurrency_tests {
         let measured_values = (1..=128).collect::<Vec<_>>();
         let measured: MeasuredRope<_, SumMeasure<i32>> = measured_values.iter().copied().collect();
         let measured_total = measured_values.iter().sum::<i32>();
+        let measured_cursor = measured.cursor_at(63).unwrap();
+        let text_cursor = TextRope::from("alpha\nbeta").cursor_at(6).unwrap();
 
         let mut handles = Vec::new();
         for _ in 0..8 {
@@ -96,6 +101,8 @@ mod concurrency_tests {
             let reversible = reversible.clone();
             let rope = rope.clone();
             let measured = measured.clone();
+            let measured_cursor = measured_cursor.clone();
+            let text_cursor = text_cursor.clone();
             handles.push(thread::spawn(move || {
                 for _ in 0..128 {
                     assert_eq!(deque.len(), 256);
@@ -114,6 +121,21 @@ mod concurrency_tests {
                     assert_eq!(measured.measure(), &measured_total);
                     assert_eq!(measured.get(63), Some(&64));
                     assert_eq!(measured.to_vec(), measured_values);
+
+                    assert_eq!(measured_cursor.position(), 63);
+                    assert_eq!(measured_cursor.measure_before(), (1..=63).sum::<i32>());
+                    assert_eq!(measured_cursor.peek_next(), Some(&64));
+                    assert_eq!(
+                        measured_cursor
+                            .seek_by_measure(|sum| *sum >= 2_080)
+                            .cursor
+                            .position(),
+                        63
+                    );
+
+                    assert_eq!(text_cursor.position(), 6);
+                    assert_eq!(text_cursor.line_column(), LineColumn { line: 1, column: 0 });
+                    assert_eq!(text_cursor.snapshot().as_string(), "alpha\nbeta");
                 }
             }));
         }

@@ -1,6 +1,6 @@
 # Frontier Structure Catalog
 
-- Status: Current-state catalog - shipped Axis 1 cores, shipped C# Axis 2 C1/C2/C3/T2, Haskell/Kotlin measured/text plus C++/Haskell/Kotlin/Rust positional cursor checkpoints, cross-language semantic CHAMP sessions, and remaining frontier candidates
+- Status: Current-state catalog - shipped Axis 1 cores, shipped C# Axis 2 C1/C2/C3/T2, Haskell/Kotlin/Rust measured/text plus C++/Haskell/Kotlin/Rust positional cursor checkpoints, cross-language semantic CHAMP sessions, and remaining frontier candidates
 - Created (UTC): 2026-07-11T03:31:23Z
 - Repository HEAD: f40e301e8faf26d748f33d8546d7d9216657301e
 - Audience: Maintainers and AI agents planning new repository-owned cores, representation tiers, and specialized sibling collections
@@ -11,7 +11,7 @@ This document began as a catalog of candidate work that the
 records what can be built *by composing* the shipped HAMT and FingerTree families; this one records
 three complementary axes. Axis 1 now includes both implemented reference cores and unimplemented
 candidates. Axis 2 now includes the shipped C# positional and measured rope cursors, their Tour and
-Editor integration, Haskell's and Kotlin's measured/text semantic cursor checkpoints, the C++, Haskell, Kotlin, and
+Editor integration, Haskell's, Kotlin's, and Rust's measured/text semantic cursor checkpoints, the C++, Haskell, Kotlin, and
 Rust positional semantic cursor checkpoints, the optimized C#
 one-way CHAMP transient, and semantic path-copying CHAMP editing sessions in every sibling language;
 frozen-hash and later phases remain planning material, as does Axis 3:
@@ -44,7 +44,7 @@ benchmark-first grounds). Patricia and RRB have since shipped across the languag
 the positional cursor, measured/text cursor, sample integration, and CHAMP owner-token transients
 have shipped as C# Axis 2 C1, C2, C3, and T2. The one-way lifecycle has since gained semantic
 path-copying ports in C, C++, Haskell, Kotlin, and Rust, and C++, Haskell, Kotlin, and Rust now have positional
-snapshot-plus-gap cursor checkpoints without zipper or performance parity. Haskell and Kotlin additionally have
+snapshot-plus-gap cursor checkpoints without zipper or performance parity. Haskell, Kotlin, and Rust additionally have
 measured and text cursor facades over the same checkpoint model; the frozen tier and
 later cursor families remain planned. The cursor and the temporal-lifecycle work have a dedicated
 [Axis 2 final plan](../proposals/axis2-lifecycle-and-sequence-cursors.md), which is authoritative where
@@ -80,7 +80,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
 | Size-tiered small representations | 2 | Strong, explicitly postponed | Re-entry benchmark after the Axis 2 fixed-layout evidence decision | Internal tier per selected facade + representation-forcing tests |
 | Transient -> persistent -> frozen lifecycle | 2 | C# CHAMP T2 owner-token transient and semantic path-copying sibling sessions implemented; frozen map/set tier remains unshipped and evidence-gated | T0/T1/T2 complete for the optimized transient; sibling lifecycle ports complete; postponed F0 then F1 evidence must precede F2 | Shipped map/set sessions across six languages + planned frozen map/set types |
-| Version-bound cursor / zipper | 2, 3 | C1 positional cursor, C2 measured/text cursor, and C3 samples implemented in C#; Haskell/Kotlin measured/text and C++/Haskell/Kotlin/Rust positional semantic checkpoints shipped; C4 consumer-gated | C0 selected the C# readonly-struct zipper-as-version; sibling checkpoints reuse persistent rope path copying without its complexity claim | C# positional/measured cursors and Tour/Editor integration, Haskell/Kotlin measured/text facades, and C++/Haskell/Kotlin/Rust positional facades |
+| Version-bound cursor / zipper | 2, 3 | C1 positional cursor, C2 measured/text cursor, and C3 samples implemented in C#; Haskell/Kotlin/Rust measured/text and C++/Haskell/Kotlin/Rust positional semantic checkpoints shipped; C4 consumer-gated | C0 selected the C# readonly-struct zipper-as-version; sibling checkpoints reuse persistent rope path copying without its complexity claim | C# positional/measured cursors and Tour/Editor integration, Haskell/Kotlin/Rust measured/text facades, and C++/Haskell/Kotlin/Rust positional facades |
 | Key-type-specialized map factories | 2 | Plausible, explicitly postponed | Named consumer after explicit Patricia consideration | Factory layer; ART only if independently justified |
 | Self-adjusting (splay-style) structures | 2 | Reject | - | Reads allocate under path copying; cursors + freeze substitute |
 | Range-update sequence (lazy propagation) | 3 | Strong | Measure action interface | 1 sibling core + tag algebra + property tests |
@@ -931,8 +931,8 @@ not authorize sibling frozen types or a claim of owner-token edit performance.
 
 ### Cursor / zipper over the sequence family
 
-**Status (2026-07-14): C# C1, C2, and C3 are shipped; Haskell and Kotlin have measured/text and
-positional semantic checkpoints; C++ and Rust have positional checkpoints.**
+**Status (2026-07-14): C# C1, C2, and C3 are shipped; Haskell, Kotlin, and Rust have measured/text
+and positional semantic checkpoints; C++ has a positional checkpoint.**
 `Rope<T>.GetCursor(position)` and the public
 readonly `RopeCursor<T>` implement the positional version-bound gap cursor.
 `MeasuredRope<T, TMeasure, TMeasureOps>.GetCursor(position)` and
@@ -941,12 +941,13 @@ readonly `RopeCursor<T>` implement the positional version-bound gap cursor.
 undo/redo, and the Editor demonstrates a sixteen-edit local Unicode/line/branch history. C4 cursor
 adapters remain consumer-gated. C++ `rope_cursor<T>`, Haskell `RopeCursor a`, plus Kotlin and Rust `RopeCursor<T>` preserve
 the positional gap, immutable branching, unconditional replacement, and retained-snapshot semantics
-through root-sharing snapshot-plus-position facades. Haskell's `MeasuredRopeCursor v a` and Kotlin's
-`MeasuredRopeCursor<T, M>` add ordered before/after measures and absolute prefix search over their
-existing measured checkpoint cores. Their `TextRopeCursor` surfaces retain the existing text helpers
-with `Char`-element Haskell and UTF-16 Kotlin positions. They deliberately do not claim the C# zipper
-representation or its focus-local complexity; measured/text cursors remain unported in C, C++, and
-Rust, and the C positional cursor remains unported. The
+through root-sharing snapshot-plus-position facades. Haskell's `MeasuredRopeCursor v a`, Kotlin's
+`MeasuredRopeCursor<T, M>`, and Rust's `MeasuredRopeCursor<T, P>` add ordered before/after measures
+and absolute prefix search over their existing measured checkpoint cores. Their `TextRopeCursor`
+surfaces retain the existing text helpers with `Char`-element Haskell, UTF-16 Kotlin, and Unicode-
+scalar Rust positions. They deliberately do not claim the C# zipper representation or its focus-
+local complexity; measured/text cursors remain unported in C and C++, and the C positional cursor
+remains unported. The
 [Axis 2 final cursor plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) remains normative for
 the unshipped phases, while the [C0 decision record](../../src/CSharp/docs/FingerTree/rope-cursor-c0-decision.md)
 records the selected representation and proof boundary for C1.
@@ -999,6 +1000,21 @@ concurrent readers are correctness gates. They provide no zipper, memo, allocati
 locality, or benchmark evidence. The [Haskell workspace README](../../src/Haskell/FingerTree/README.md)
 owns this checkpoint's pure-evaluation and complexity boundary.
 
+**Rust measured/text checkpoint.** Rust retains `MeasuredRope<T, P>` plus a private validated gap in
+the opaque `MeasuredRopeCursor<T, P>`. Ordered `measure_before`/`measure_after` do not assume a
+commutative or invertible measure. Absolute monotone search returns
+`MeasuredRopeCursorSearch<T, P>` with either the first satisfying element gap or a usable end cursor
+on a miss. Creation, movement, positional seek, and snapshot are O(1); measures, peeks, point edits,
+and search are O(log n) plus bounded chunk work, and range insertion is O(m + log n). Navigation
+and search accept non-`Clone` elements; edits inherit the chunk substrate's `T: Clone` bound. The
+nominal `TextRopeCursor` preserves the exact text facade and reports line/column positions in Unicode
+scalar values under the existing LF-only newline measure. Noncommutative partitions, predicate-
+panic retry, retained branches, nullable and non-`Clone` values, a 750-command gap model, cross-
+chunk search, Unicode/CRLF text behavior, `Send + Sync`, and exact-`usize::MAX` shared-DAG overflow
+before element-measure callbacks are correctness gates. They provide no focused-zipper, allocation,
+locality, or benchmark evidence. The [Rust API notes](../../src/Rust/FingerTree/docs/api-notes.md)
+own this checkpoint's contract and complexity boundary.
+
 **Gap and version semantics.** A cursor denotes a boundary `0 .. Count`, not an element. Previous
 peek/movement/backspace address `p - 1`; next peek/movement/delete/replace address `p`. Insertion
 returns the gap after the inserted values, backspace returns `p - 1`, and forward deletion or
@@ -1036,7 +1052,7 @@ until a consumer and benchmark justify them.
 positional and measured cursors separately cleared their named local-edit, query, allocation,
 callback, and validation gates; the samples lock retained-history, branch, coordinate, and
 cadence-sixteen transcripts. The C++, Haskell, Kotlin, and Rust positional checkpoints plus the
-Haskell/Kotlin measured/text checkpoints add semantic behavior parity without asserting zipper or
+Haskell/Kotlin/Rust measured/text checkpoints add semantic behavior parity without asserting zipper or
 benchmark parity. Those results do not
 pre-approve later sequence adapters or a broader branched-history complexity claim.
 
@@ -1222,8 +1238,9 @@ The implementation wave described by this catalog has already landed these refer
 - the Axis 2 C1 positional `RopeCursor<T>` and C2 measured/text
   `MeasuredRopeCursor<T, TMeasure, TMeasureOps>` in C#, plus C++ `rope_cursor<T>`, Haskell
   `RopeCursor a`, and Kotlin/Rust `RopeCursor<T>` snapshot-plus-gap positional semantic checkpoints,
-  with Haskell `MeasuredRopeCursor v a`/`TextRopeCursor` and Kotlin
-  `MeasuredRopeCursor<T, M>`/`TextRopeCursor` measured/text checkpoints.
+  with Haskell `MeasuredRopeCursor v a`/`TextRopeCursor`, Kotlin
+  `MeasuredRopeCursor<T, M>`/`TextRopeCursor`, and Rust
+  `MeasuredRopeCursor<T, P>`/`TextRopeCursor` measured/text checkpoints.
 
 CHAMP, Patricia, and RRB have also advanced through the sibling-language work recorded in their
 entries; the canonical zip-zip set, Brodal-Okasaki heap, and priority-search queue are implemented
@@ -1235,7 +1252,7 @@ optimization and its performance evidence remain C#-only. These are current-stat
 records, not candidates awaiting a consumer.
 Future work on the Axis 1 cores is ordinary hardening, measurement, and demand-driven porting. The
 C++/Haskell/Kotlin/Rust checkpoints make no zipper or focus-local complexity claim; measured/text
-cursor parity now spans C#, Haskell, and Kotlin but remains absent in C, C++, and Rust. The cursor's C4
+cursor parity now spans C#, Haskell, Kotlin, and Rust but remains absent in C and C++. The cursor's C4
 extensions retain the separate status recorded in its entry above.
 
 ### Remaining candidate sequencing

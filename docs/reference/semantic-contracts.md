@@ -269,8 +269,8 @@ Shared obligations:
 - Builders must document mutation, snapshot publication, and whether later builder changes can affect
   previously produced immutable ropes.
 
-C#, Haskell, and Kotlin ship positional and measured/text cursors; C++ `rope_cursor<T>` and Rust
-`RopeCursor<T>` ship positional semantic checkpoints. No deque, RRB,
+C#, Haskell, Kotlin, and Rust ship positional and measured/text cursors; C++ `rope_cursor<T>` ships
+a positional semantic checkpoint. No deque, RRB,
 raw-finger-tree, reversible-deque, or Tungsten cursor is implied by those surfaces. Every shipped
 cursor shares these observable obligations:
 
@@ -311,7 +311,7 @@ retained values reusable. Kotlin uses a non-null peek wrapper to distinguish a s
 missing neighbor. Rust edits retain the substrate's `T: Clone` bound; read-only cursor operations do
 not.
 
-The C#, Haskell, and Kotlin measured cursors additionally share these result semantics:
+The C#, Haskell, Kotlin, and Rust measured cursors additionally share these result semantics:
 
 - `MeasureBefore` aggregates `[0, Position)` and `MeasureAfter` aggregates `[Position, Count)`;
   combining them in that order yields the whole version's measure without assuming an inverse,
@@ -320,8 +320,8 @@ The C#, Haskell, and Kotlin measured cursors additionally share these result sem
   lawful monotone predicate. True-at-empty selects zero for a nonempty rope; misses and empty ropes
   return `false` with an end cursor whose before measure is the whole measure.
 - The newline specialization uses the language's existing zero-based line/column rules. C# and
-  Kotlin positions are UTF-16 code units; Haskell positions are `Char` elements, not grapheme
-  clusters and not necessarily Unicode scalar values.
+  Kotlin positions are UTF-16 code units; Haskell positions are `Char` elements; Rust positions are
+  Unicode scalar values. None of those positions denotes a grapheme-cluster index.
   Navigation and edits preserve access to the existing text helpers.
 
 The C# measured zipper additionally prepares element measures in the immutable cursor lineage,
@@ -353,6 +353,17 @@ range spine are available. Pure evaluation may still force an unevaluated operan
 first. The derived text line count is separately checked. No zipper, memo, allocation ceiling,
 callback-count ceiling, or amortized-locality claim is made.
 
+Rust's opaque `MeasuredRopeCursor<T, P>` retains the exact chunked measured-rope root plus a
+validated `usize` gap. Ordered measures and absolute monotone search require no `T: Clone`; edits
+retain the affected-chunk clone bound. Creation, movement, positional seek, and snapshot are O(1),
+while measures, peeks, point edits, and search are O(log n) plus bounded chunk work and range
+insertion is O(m + log n). `MeasuredRopeCursorSearch<T, P>` carries a usable end cursor on a miss.
+The nominal `TextRopeCursor` wraps the newline policy without losing the `TextRope` facade and
+reports line/column positions in Unicode scalar values under the existing LF-only measure. Checked
+count preflights reject unrepresentable `usize` growth before attempted element-measure callbacks.
+No focused zipper, snapshot memo, allocation ceiling, callback-count ceiling, or amortized-locality
+claim is made.
+
 The normative C# details and evidence are in the
 [FingerTree API specification](../../src/CSharp/docs/FingerTree/api-specification.md),
 [usage guide](../../src/CSharp/docs/FingerTree/usage.md),
@@ -362,7 +373,9 @@ The normative C# details and evidence are in the
 Kotlin checkpoint is specified in its [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md) and
 [validation guide](../../src/Kotlin/FingerTree/docs/validation.md). The Haskell checkpoint is
 specified by its [workspace README](../../src/Haskell/FingerTree/README.md) and executable
-[test map](../../src/Haskell/FingerTree/test/README.md).
+[test map](../../src/Haskell/FingerTree/test/README.md). The Rust checkpoint is specified by its
+[API notes](../../src/Rust/FingerTree/docs/api-notes.md) and
+[validation guide](../../src/Rust/FingerTree/docs/validation.md).
 
 ## Tungsten Collections
 

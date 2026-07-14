@@ -56,9 +56,12 @@ Coverage groups:
   construction, caller-supplied copy targets, positional cursor boundaries/non-`Clone` navigation/chunk-edge
   edits/no-op seeks and inserts/retained branches/root-sharing snapshots/gap-vector model replay,
   checked-length shared-DAG overflow atomicity, structurally shared measured-rope point/range edits and
-  slices, deterministic vector-model replay, append-builder measure tracking, and immutable snapshot isolation;
+  slices, deterministic vector-model replay, append-builder measure tracking and snapshot isolation,
+  measured-cursor non-`Clone` navigation, ordered measures, absolute hit/miss search, retained edit branches,
+  callback retry, a 750-command gap model, exact-maximum count overflow before policy callbacks, and
+  text-cursor Unicode/LF line semantics with exact text-facade snapshots;
 - `text_extras.rs`: Unicode-scalar addressing, UAX #29 extended grapheme segmentation and offset conversion,
   LF/CRLF/CR/mixed newline detection, and CRLF-aware line text over both character and text ropes.
-- `lib.rs`: public `Send`/`Sync` assertions, including the positional rope cursor, and spawned-thread
+- `lib.rs`: public `Send`/`Sync` assertions, including positional, measured, and text rope cursors, and spawned-thread
   readers over the canonical set and shared immutable deque, reversible deque, rope, and
   measured-rope snapshots.

@@ -26,8 +26,9 @@ Current public families:
 - `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>`;
 - `PriorityQueue<T, P>` and `PriorityEntry<T, P>`;
 - `Interval<T>` and `IntervalTree<T>`;
-- `Rope<T>`, positional `RopeCursor<T>`, `MeasuredRope<T, P>`, `MeasuredRopeBuilder<T, P>`,
-  `TextRope`, `RopeBuilder`, `NewlineMeasure`, `NewlineStyle`, and `LineColumn`.
+- `Rope<T>`, positional `RopeCursor<T>`, `MeasuredRope<T, P>`, `MeasuredRopeCursor<T, P>`,
+  `MeasuredRopeCursorSearch<T, P>`, `MeasuredRopeBuilder<T, P>`, `TextRope`, `TextRopeCursor`,
+  `TextRopeCursorSearch`, `RopeBuilder`, `NewlineMeasure`, `NewlineStyle`, and `LineColumn`.
 
 The Rust surface follows Rust conventions:
 
@@ -76,8 +77,34 @@ cursor insertion, panics before returning; all input ropes and cursors remain va
 
 This is a semantic positional checkpoint, not a port of the C# focused zipper. Cursor creation,
 cloning, movement, seek, and snapshot are O(1). Peeks and point edits are O(log n) plus bounded chunk
-work; inserting `m` values is O(m + log n). No O(1)-amortized local-edit claim is made. There is no
-`MeasuredRope` or `TextRope` cursor in this checkpoint.
+work; inserting `m` values is O(m + log n). No O(1)-amortized local-edit claim is made.
+
+## Measured and text rope cursors
+
+`MeasuredRope::cursor`, `cursor_at`, and `cursor_by_measure` create an opaque
+`MeasuredRopeCursor<T, P>` over the exact retained measured-rope root. It has the positional
+cursor's gap, boundary, borrowed peek, movement, seek, edit, branching, and snapshot semantics.
+`measure_before` and `measure_after` preserve monoid order; they do not assume commutativity or an
+inverse. Construction, movement, positional seek, and snapshot are O(1). Prefix/suffix measures,
+peeks, and absolute measure search are O(log n) plus bounded chunk work; edits retain the measured
+rope's O(log n) plus bounded chunk copy, and inserting `m` elements is O(m + log n). Navigation,
+measurement, search, and snapshotting do not require `T: Clone`; edits do.
+
+`cursor_by_measure` and `MeasuredRopeCursor::seek_by_measure` apply a caller-supplied lawful
+monotone predicate to absolute prefixes of the complete retained version, independent of the
+receiver's current gap. `MeasuredRopeCursorSearch<T, P>` contains the first matching element's gap
+and `found == true`; a miss contains `found == false` and a usable end cursor. A predicate panic
+publishes no state, so the source and receiver remain reusable. Count growth uses checked `usize`
+preflights before element-measure callbacks; concatenation, builder append, ordinary insertion, and
+cursor insertion panic without publishing when the resulting count is unrepresentable.
+
+`TextRope::cursor`, `cursor_at`, and `cursor_by_measure` return the nominal `TextRopeCursor` facade
+over `MeasuredRopeCursor<char, NewlineMeasure>`. It preserves the exact `TextRope` facade on
+snapshot, exposes the full measured cursor vocabulary, and adds `line_column` at the gap. Offsets
+and columns count Unicode scalar values. The measure counts only `\n`, exactly like `TextRope`;
+CRLF recognition and grapheme segmentation remain explicit text-extra operations rather than
+cursor addressing rules. This sibling checkpoint makes no C# focused-zipper, allocation, or
+amortized-locality claim.
 
 ## Brodal-Okasaki heap
 
@@ -270,7 +297,9 @@ sorted bounds therefore descend once in O(log n) node visits, and the sorted spl
 operations reuse those bounds while preserving shared subtrees. `Rope<T>` now uses chunked length-measured
 storage over the shared measured tree, so chunk construction, `copy_to`, positional edits, slices, splits, and
 concatenations share unchanged chunks and measured subtrees; `MeasuredRope<T, P>` now provides the same
-positional insert/remove/range/slice vocabulary while preserving cached user measures. Its mutable append builder
+positional insert/remove/range/slice vocabulary while preserving cached user measures. Its immutable
+measured cursor adds ordered prefix/suffix measures and absolute prefix search; the text-specialized cursor
+retains the nominal text facade and its scalar-offset line semantics. Its mutable append builder
 keeps an immutable measured-rope prefix plus one staged chunk: freezing publishes that chunk, and later appends
 share rather than mutate earlier snapshots. `TextRope` stores characters in
 `MeasuredRope<char, NewlineMeasure>` so line counts, line starts, and line/column navigation use cached newline

@@ -977,7 +977,12 @@ where
     }
 
     fn combine(left: &Self::Measure, right: &Self::Measure) -> Self::Measure {
-        (left.0 + right.0, P::combine(&left.1, &right.1))
+        (
+            left.0
+                .checked_add(right.0)
+                .expect("measured rope length overflow"),
+            P::combine(&left.1, &right.1),
+        )
     }
 }
 
@@ -988,6 +993,31 @@ where
     P: MeasurePolicy<T>,
 {
     tree: MeasuredRopeTree<T, P>,
+}
+
+/// An immutable positional editing cursor over one [`MeasuredRope`] snapshot.
+///
+/// The cursor retains the exact measured rope version and a gap in `0..=len`. Operations return
+/// new values, so retained cursors branch independently. This Rust port deliberately uses the
+/// same root-sharing snapshot-plus-gap representation as [`RopeCursor`]; it does not claim the
+/// focused zipper or amortized local-edit bounds of the C# implementation.
+pub struct MeasuredRopeCursor<T, P>
+where
+    P: MeasurePolicy<T>,
+{
+    rope: MeasuredRope<T, P>,
+    position: usize,
+}
+
+/// The result of an absolute prefix-measure cursor search.
+///
+/// A miss carries a usable cursor at the end of the retained snapshot.
+pub struct MeasuredRopeCursorSearch<T, P>
+where
+    P: MeasurePolicy<T>,
+{
+    pub cursor: MeasuredRopeCursor<T, P>,
+    pub found: bool,
 }
 
 pub struct MeasuredRopeIter<'a, T, P>
@@ -1039,6 +1069,30 @@ where
     }
 }
 
+impl<T, P> Clone for MeasuredRopeCursor<T, P>
+where
+    P: MeasurePolicy<T>,
+{
+    fn clone(&self) -> Self {
+        Self {
+            rope: self.rope.clone(),
+            position: self.position,
+        }
+    }
+}
+
+impl<T, P> Clone for MeasuredRopeCursorSearch<T, P>
+where
+    P: MeasurePolicy<T>,
+{
+    fn clone(&self) -> Self {
+        Self {
+            cursor: self.cursor.clone(),
+            found: self.found,
+        }
+    }
+}
+
 impl<T, P> MeasuredRope<T, P>
 where
     P: MeasurePolicy<T>,
@@ -1067,6 +1121,36 @@ where
 
     fn from_tree(tree: MeasuredRopeTree<T, P>) -> Self {
         Self { tree }
+    }
+
+    /// Creates a cursor at the gap before the first element. O(1).
+    #[must_use]
+    pub fn cursor(&self) -> MeasuredRopeCursor<T, P> {
+        MeasuredRopeCursor {
+            rope: self.clone(),
+            position: 0,
+        }
+    }
+
+    /// Creates a cursor at `position`, returning `None` outside `0..=len`. O(1).
+    #[must_use]
+    pub fn cursor_at(&self, position: usize) -> Option<MeasuredRopeCursor<T, P>> {
+        (position <= self.len()).then(|| MeasuredRopeCursor {
+            rope: self.clone(),
+            position,
+        })
+    }
+
+    /// Searches absolute prefixes and returns a cursor at the first matching element.
+    ///
+    /// The predicate must be monotone over successive prefixes. A miss returns `found == false`
+    /// and an end cursor. Predicate failure cannot mutate the source rope.
+    #[must_use]
+    pub fn cursor_by_measure<F>(&self, predicate: F) -> MeasuredRopeCursorSearch<T, P>
+    where
+        F: FnMut(&P::Measure) -> bool,
+    {
+        self.cursor().seek_by_measure(predicate)
     }
 
     #[must_use]
@@ -1168,7 +1252,32 @@ where
 
     #[must_use]
     pub fn concat(&self, other: &Self) -> Self {
+        self.len()
+            .checked_add(other.len())
+            .expect("measured rope length overflow");
         Self::from_tree(self.tree.concat(&other.tree))
+    }
+
+    fn locate_cursor_by_measure<F>(&self, mut predicate: F) -> (usize, bool)
+    where
+        F: FnMut(&P::Measure) -> bool,
+    {
+        let located = self.tree.try_locate(|measure| predicate(&measure.1));
+        let Some(chunk) = self.tree.get(located.index) else {
+            return (self.len(), false);
+        };
+
+        let mut measure_before = located.measure_before.1;
+        for (index, item) in (located.measure_before.0..).zip(chunk.as_slice()) {
+            let next = P::combine(&measure_before, &P::measure(item));
+            if predicate(&next) {
+                return (index, true);
+            }
+
+            measure_before = next;
+        }
+
+        (self.len(), false)
     }
 
     fn split_at_count(&self, index: usize) -> Option<MeasuredRopeSplit<T, P>> {
@@ -1223,6 +1332,210 @@ where
         assert_eq!(total_len, self.len());
         assert_eq!(&total_measure, self.measure());
         self.tree.validate_invariants();
+    }
+}
+
+impl<T, P> MeasuredRopeCursor<T, P>
+where
+    P: MeasurePolicy<T>,
+{
+    /// Returns the number of elements in the retained snapshot. O(1).
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.rope.len()
+    }
+
+    /// Returns whether the retained snapshot is empty. O(1).
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.rope.is_empty()
+    }
+
+    /// Returns the gap position in `0..=len`. O(1).
+    #[must_use]
+    pub fn position(&self) -> usize {
+        self.position
+    }
+
+    #[must_use]
+    pub fn is_at_start(&self) -> bool {
+        self.position == 0
+    }
+
+    #[must_use]
+    pub fn is_at_end(&self) -> bool {
+        self.position == self.len()
+    }
+
+    /// Returns the ordered measure of the prefix before the gap. O(log n).
+    #[must_use]
+    pub fn measure_before(&self) -> P::Measure {
+        self.rope
+            .prefix_measure(self.position)
+            .expect("a cursor gap is always a valid measured-rope position")
+    }
+
+    /// Returns the ordered measure of the suffix after the gap. O(log n).
+    #[must_use]
+    pub fn measure_after(&self) -> P::Measure {
+        self.rope
+            .split_at_count(self.position)
+            .expect("a cursor gap is always a valid measured-rope position")
+            .right
+            .measure()
+            .clone()
+    }
+
+    #[must_use]
+    pub fn peek_previous(&self) -> Option<&T> {
+        self.position
+            .checked_sub(1)
+            .and_then(|index| self.rope.get(index))
+    }
+
+    #[must_use]
+    pub fn peek_next(&self) -> Option<&T> {
+        self.rope.get(self.position)
+    }
+
+    #[must_use]
+    pub fn move_previous(&self) -> Option<Self> {
+        Some(Self {
+            rope: self.rope.clone(),
+            position: self.position.checked_sub(1)?,
+        })
+    }
+
+    #[must_use]
+    pub fn move_next(&self) -> Option<Self> {
+        if self.is_at_end() {
+            return None;
+        }
+
+        Some(Self {
+            rope: self.rope.clone(),
+            position: self.position + 1,
+        })
+    }
+
+    #[must_use]
+    pub fn seek(&self, position: usize) -> Option<Self> {
+        if position > self.len() {
+            return None;
+        }
+
+        Some(Self {
+            rope: self.rope.clone(),
+            position,
+        })
+    }
+
+    /// Searches absolute prefixes of the retained snapshot, independent of the current gap.
+    ///
+    /// The predicate must be monotone over successive prefixes. A miss returns a usable end
+    /// cursor. The receiver remains valid if the predicate panics.
+    #[must_use]
+    pub fn seek_by_measure<F>(&self, predicate: F) -> MeasuredRopeCursorSearch<T, P>
+    where
+        F: FnMut(&P::Measure) -> bool,
+    {
+        let (position, found) = self.rope.locate_cursor_by_measure(predicate);
+        MeasuredRopeCursorSearch {
+            cursor: Self {
+                rope: self.rope.clone(),
+                position,
+            },
+            found,
+        }
+    }
+
+    /// Returns the exact retained measured-rope snapshot by root sharing. O(1).
+    #[must_use]
+    pub fn snapshot(&self) -> MeasuredRope<T, P> {
+        self.rope.clone()
+    }
+}
+
+impl<T, P> MeasuredRopeCursor<T, P>
+where
+    T: Clone,
+    P: MeasurePolicy<T>,
+{
+    #[must_use]
+    pub fn insert(&self, item: T) -> Self {
+        let position = self
+            .position
+            .checked_add(1)
+            .expect("measured rope cursor position overflow");
+        let rope = self
+            .rope
+            .insert_at(self.position, item)
+            .expect("a cursor gap is always a valid insertion position");
+        Self { rope, position }
+    }
+
+    #[must_use]
+    pub fn insert_range<I>(&self, items: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let items: Vec<T> = items.into_iter().collect();
+        if items.is_empty() {
+            return self.clone();
+        }
+
+        let position = self
+            .position
+            .checked_add(items.len())
+            .expect("measured rope cursor position overflow");
+        let rope = self
+            .rope
+            .insert_range(self.position, items)
+            .expect("a cursor gap is always a valid range insertion position");
+        Self { rope, position }
+    }
+
+    #[must_use]
+    pub fn delete_previous(&self) -> Option<Self> {
+        let position = self.position.checked_sub(1)?;
+        let rope = self
+            .rope
+            .remove_at(position)
+            .expect("a non-start cursor always has a previous element");
+        Some(Self { rope, position })
+    }
+
+    #[must_use]
+    pub fn delete_next(&self) -> Option<Self> {
+        if self.is_at_end() {
+            return None;
+        }
+
+        let rope = self
+            .rope
+            .remove_at(self.position)
+            .expect("a non-end cursor always has a next element");
+        Some(Self {
+            rope,
+            position: self.position,
+        })
+    }
+
+    /// Unconditionally replaces the element after the gap without invoking equality.
+    #[must_use]
+    pub fn replace_next(&self, item: T) -> Option<Self> {
+        if self.is_at_end() {
+            return None;
+        }
+
+        let rope = self
+            .rope
+            .set_item(self.position, item)
+            .expect("a non-end cursor always has a next element");
+        Some(Self {
+            rope,
+            position: self.position,
+        })
     }
 }
 
@@ -1281,7 +1594,10 @@ where
 
     #[must_use]
     pub fn len(&self) -> usize {
-        self.prefix.len() + self.tail.len()
+        self.prefix
+            .len()
+            .checked_add(self.tail.len())
+            .expect("measured rope length overflow")
     }
 
     #[must_use]
@@ -1297,9 +1613,13 @@ where
 
     /// Appends one element, amortized O(1) between persistent-tree publications.
     pub fn push(&mut self, item: T) -> &mut Self {
+        self.len()
+            .checked_add(1)
+            .expect("measured rope length overflow");
         let item_measure = P::measure(&item);
+        let next_measure = P::combine(&self.tail_measure, &item_measure);
         self.tail.push(item);
-        self.tail_measure = P::combine(&self.tail_measure, &item_measure);
+        self.tail_measure = next_measure;
         if self.tail.len() == MAX_CHUNK_SIZE {
             self.flush_tail();
         }
@@ -1420,6 +1740,9 @@ where
 
     #[must_use]
     pub fn push_back(&self, item: T) -> Self {
+        self.len()
+            .checked_add(1)
+            .expect("measured rope length overflow");
         if self.is_empty() {
             return Self::from_tree(
                 MeasuredRopeTree::new().append(MeasuredRopeChunk::new(vec![item])),
@@ -1446,6 +1769,10 @@ where
         if index > self.len() {
             return None;
         }
+
+        self.len()
+            .checked_add(1)
+            .expect("measured rope length overflow");
 
         if self.is_empty() {
             return Some(Self::from_tree(
@@ -1479,7 +1806,11 @@ where
             return None;
         }
 
-        let middle = Self::from_vec(items.into_iter().collect());
+        let items: Vec<T> = items.into_iter().collect();
+        self.len()
+            .checked_add(items.len())
+            .expect("measured rope length overflow");
+        let middle = Self::from_vec(items);
         if middle.is_empty() {
             return Some(self.clone());
         }
@@ -1752,12 +2083,29 @@ impl MeasurePolicy<char> for NewlineMeasure {
     }
 
     fn combine(left: &Self::Measure, right: &Self::Measure) -> Self::Measure {
-        left + right
+        left.checked_add(*right).expect("newline measure overflow")
     }
 }
 
 pub struct TextRope {
     chars: MeasuredRope<char, NewlineMeasure>,
+}
+
+/// An immutable character-gap cursor retaining one exact [`TextRope`] snapshot.
+///
+/// Offsets and columns count Unicode scalar values, matching [`TextRope`]. Newline measures count
+/// `\n`; CRLF handling remains an opt-in text-extras concern. This is a thin nominal facade over
+/// [`MeasuredRopeCursor`] and inherits its snapshot-plus-gap complexity contracts.
+pub struct TextRopeCursor {
+    measured: MeasuredRopeCursor<char, NewlineMeasure>,
+}
+
+/// The result of an absolute newline-prefix cursor search.
+///
+/// A miss carries a usable cursor at the end of the retained text snapshot.
+pub struct TextRopeCursorSearch {
+    pub cursor: TextRopeCursor,
+    pub found: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1778,6 +2126,41 @@ impl TextRope {
     pub fn from_text(text: &str) -> Self {
         Self {
             chars: text.chars().collect(),
+        }
+    }
+
+    fn from_measured_rope(chars: MeasuredRope<char, NewlineMeasure>) -> Self {
+        Self { chars }
+    }
+
+    /// Creates a cursor before the first character. O(1).
+    #[must_use]
+    pub fn cursor(&self) -> TextRopeCursor {
+        TextRopeCursor {
+            measured: self.chars.cursor(),
+        }
+    }
+
+    /// Creates a cursor at a character offset, returning `None` outside `0..=len`. O(1).
+    #[must_use]
+    pub fn cursor_at(&self, position: usize) -> Option<TextRopeCursor> {
+        Some(TextRopeCursor {
+            measured: self.chars.cursor_at(position)?,
+        })
+    }
+
+    /// Searches absolute newline-count prefixes and returns the first matching character gap.
+    #[must_use]
+    pub fn cursor_by_measure<F>(&self, predicate: F) -> TextRopeCursorSearch
+    where
+        F: FnMut(&usize) -> bool,
+    {
+        let result = self.chars.cursor_by_measure(predicate);
+        TextRopeCursorSearch {
+            cursor: TextRopeCursor {
+                measured: result.cursor,
+            },
+            found: result.found,
         }
     }
 
@@ -1803,7 +2186,10 @@ impl TextRope {
 
     #[must_use]
     pub fn line_count(&self) -> usize {
-        *self.chars.measure() + 1
+        self.chars
+            .measure()
+            .checked_add(1)
+            .expect("text rope line count overflow")
     }
 
     #[must_use]
@@ -1893,6 +2279,163 @@ impl TextRope {
         }
 
         Some(self.len())
+    }
+}
+
+impl Clone for TextRopeCursor {
+    fn clone(&self) -> Self {
+        Self {
+            measured: self.measured.clone(),
+        }
+    }
+}
+
+impl Clone for TextRopeCursorSearch {
+    fn clone(&self) -> Self {
+        Self {
+            cursor: self.cursor.clone(),
+            found: self.found,
+        }
+    }
+}
+
+impl TextRopeCursor {
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.measured.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.measured.is_empty()
+    }
+
+    #[must_use]
+    pub fn position(&self) -> usize {
+        self.measured.position()
+    }
+
+    #[must_use]
+    pub fn is_at_start(&self) -> bool {
+        self.measured.is_at_start()
+    }
+
+    #[must_use]
+    pub fn is_at_end(&self) -> bool {
+        self.measured.is_at_end()
+    }
+
+    #[must_use]
+    pub fn measure_before(&self) -> usize {
+        self.measured.measure_before()
+    }
+
+    #[must_use]
+    pub fn measure_after(&self) -> usize {
+        self.measured.measure_after()
+    }
+
+    #[must_use]
+    pub fn peek_previous(&self) -> Option<&char> {
+        self.measured.peek_previous()
+    }
+
+    #[must_use]
+    pub fn peek_next(&self) -> Option<&char> {
+        self.measured.peek_next()
+    }
+
+    #[must_use]
+    pub fn move_previous(&self) -> Option<Self> {
+        Some(Self {
+            measured: self.measured.move_previous()?,
+        })
+    }
+
+    #[must_use]
+    pub fn move_next(&self) -> Option<Self> {
+        Some(Self {
+            measured: self.measured.move_next()?,
+        })
+    }
+
+    #[must_use]
+    pub fn seek(&self, position: usize) -> Option<Self> {
+        Some(Self {
+            measured: self.measured.seek(position)?,
+        })
+    }
+
+    /// Searches absolute newline-count prefixes of this cursor's retained version.
+    #[must_use]
+    pub fn seek_by_measure<F>(&self, predicate: F) -> TextRopeCursorSearch
+    where
+        F: FnMut(&usize) -> bool,
+    {
+        let result = self.measured.seek_by_measure(predicate);
+        TextRopeCursorSearch {
+            cursor: Self {
+                measured: result.cursor,
+            },
+            found: result.found,
+        }
+    }
+
+    /// Returns the zero-based line and Unicode-scalar column at the gap.
+    #[must_use]
+    pub fn line_column(&self) -> LineColumn {
+        let line = self.measure_before();
+        let start = TextRope::from_measured_rope(self.measured.rope.clone())
+            .line_start_offset(line)
+            .expect("a cursor gap always has a valid line start");
+        LineColumn {
+            line,
+            column: self.position() - start,
+        }
+    }
+
+    #[must_use]
+    pub fn insert(&self, value: char) -> Self {
+        Self {
+            measured: self.measured.insert(value),
+        }
+    }
+
+    #[must_use]
+    pub fn insert_range<I>(&self, values: I) -> Self
+    where
+        I: IntoIterator<Item = char>,
+    {
+        Self {
+            measured: self.measured.insert_range(values),
+        }
+    }
+
+    #[must_use]
+    pub fn delete_previous(&self) -> Option<Self> {
+        Some(Self {
+            measured: self.measured.delete_previous()?,
+        })
+    }
+
+    #[must_use]
+    pub fn delete_next(&self) -> Option<Self> {
+        Some(Self {
+            measured: self.measured.delete_next()?,
+        })
+    }
+
+    #[must_use]
+    pub fn replace_next(&self, value: char) -> Option<Self> {
+        Some(Self {
+            measured: self.measured.replace_next(value)?,
+        })
+    }
+
+    /// Returns the exact retained text facade by root sharing. O(1).
+    #[must_use]
+    pub fn snapshot(&self) -> TextRope {
+        TextRope::from_measured_rope(self.measured.snapshot())
     }
 }
 
@@ -2030,7 +2573,52 @@ impl fmt::Display for RopeBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::measured::SumMeasure;
+    use crate::measured::{SizeMeasure, SumMeasure};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct TraceMeasure;
+
+    impl MeasurePolicy<i32> for TraceMeasure {
+        type Measure = Vec<i32>;
+
+        fn empty() -> Self::Measure {
+            Vec::new()
+        }
+
+        fn measure(element: &i32) -> Self::Measure {
+            vec![*element]
+        }
+
+        fn combine(left: &Self::Measure, right: &Self::Measure) -> Self::Measure {
+            let mut combined = Vec::with_capacity(left.len() + right.len());
+            combined.extend_from_slice(left);
+            combined.extend_from_slice(right);
+            combined
+        }
+    }
+
+    static COUNTING_MEASURE_CALLS: AtomicUsize = AtomicUsize::new(0);
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct CountingSizeMeasure;
+
+    impl MeasurePolicy<i32> for CountingSizeMeasure {
+        type Measure = usize;
+
+        fn empty() -> Self::Measure {
+            0
+        }
+
+        fn measure(_element: &i32) -> Self::Measure {
+            COUNTING_MEASURE_CALLS.fetch_add(1, Ordering::Relaxed);
+            1
+        }
+
+        fn combine(left: &Self::Measure, right: &Self::Measure) -> Self::Measure {
+            left.checked_add(*right).expect("counting measure overflow")
+        }
+    }
 
     #[test]
     fn rope_edits_preserve_snapshots() {
@@ -2558,6 +3146,258 @@ mod tests {
                 split.right.validate_chunk_invariants();
             }
         }
+    }
+
+    #[test]
+    fn measured_rope_cursor_navigation_search_and_snapshot_need_no_clone_bound() {
+        #[derive(Debug, PartialEq, Eq)]
+        struct NonClone(i32);
+
+        let empty = MeasuredRope::<NonClone, SizeMeasure>::new().cursor();
+        assert!(empty.is_empty());
+        assert!(empty.is_at_start());
+        assert!(empty.is_at_end());
+        assert_eq!(empty.measure_before(), 0);
+        assert_eq!(empty.measure_after(), 0);
+        assert!(empty.move_previous().is_none());
+        assert!(empty.move_next().is_none());
+
+        let empty_search = empty.seek_by_measure(|_| true);
+        assert!(!empty_search.found);
+        assert_eq!(empty_search.cursor.position(), 0);
+
+        let rope: MeasuredRope<_, SizeMeasure> = [NonClone(10), NonClone(20), NonClone(30)]
+            .into_iter()
+            .collect();
+        let cursor = rope.cursor_at(1).unwrap();
+        assert_eq!(cursor.peek_previous(), Some(&NonClone(10)));
+        assert_eq!(cursor.peek_next(), Some(&NonClone(20)));
+        assert_eq!(cursor.measure_before(), 1);
+        assert_eq!(cursor.measure_after(), 2);
+        assert_eq!(cursor.move_next().unwrap().position(), 2);
+        assert_eq!(cursor.move_previous().unwrap().position(), 0);
+        assert!(cursor.seek(4).is_none());
+        assert!(rope.shares_storage_with(&cursor.snapshot()));
+
+        let found = cursor.seek_by_measure(|count| *count >= 2);
+        assert!(found.found);
+        assert_eq!(found.cursor.position(), 1);
+        assert_eq!(found.cursor.peek_next(), Some(&NonClone(20)));
+
+        let miss = cursor.seek_by_measure(|count| *count > 3);
+        assert!(!miss.found);
+        assert_eq!(miss.cursor.position(), 3);
+        assert!(miss.cursor.is_at_end());
+    }
+
+    #[test]
+    fn measured_rope_cursor_preserves_ordered_measures_and_retained_branches() {
+        let source: MeasuredRope<i32, TraceMeasure> = (0..4096).collect();
+        let cursor = source.cursor_at(2048).unwrap();
+
+        assert_eq!(cursor.measure_before(), (0..2048).collect::<Vec<_>>());
+        assert_eq!(cursor.measure_after(), (2048..4096).collect::<Vec<_>>());
+
+        let inserted = cursor.insert(-1).insert_range([-2, -3]);
+        let replaced = inserted.replace_next(99_999).unwrap();
+        let previous_deleted = replaced.delete_previous().unwrap();
+        let next_deleted = previous_deleted.delete_next().unwrap();
+
+        let mut expected = (0..4096).collect::<Vec<_>>();
+        expected.splice(2048..2048, [-1, -2, -3]);
+        expected[2051] = 99_999;
+        expected.remove(2050);
+        expected.remove(2050);
+
+        assert_eq!(next_deleted.snapshot().to_vec(), expected);
+        assert_eq!(next_deleted.position(), 2050);
+        assert_eq!(source.to_vec(), (0..4096).collect::<Vec<_>>());
+        assert!(source.shares_storage_with(&cursor.snapshot()));
+        assert!(
+            source
+                .tree
+                .shared_node_count_with(&next_deleted.snapshot().tree)
+                > 0
+        );
+
+        let nullable: MeasuredRope<Option<i32>, SizeMeasure> =
+            [Some(1), None, Some(3)].into_iter().collect();
+        let nullable_cursor = nullable.cursor_at(1).unwrap().replace_next(None).unwrap();
+        assert_eq!(
+            nullable_cursor.snapshot().to_vec(),
+            vec![Some(1), None, Some(3)]
+        );
+    }
+
+    #[test]
+    fn measured_rope_cursor_measure_search_is_absolute_ordered_and_retryable() {
+        let source: MeasuredRope<i32, SumMeasure<i32>> = [2, 4, 8].into_iter().collect();
+        let receiver = source.cursor_at(2).unwrap();
+
+        let found = source.cursor_by_measure(|sum| *sum > 5);
+        assert!(found.found);
+        assert_eq!(found.cursor.position(), 1);
+        assert_eq!(found.cursor.measure_before(), 2);
+        assert_eq!(found.cursor.peek_next(), Some(&4));
+
+        let same_absolute_result = receiver.seek_by_measure(|sum| *sum > 5);
+        assert!(same_absolute_result.found);
+        assert_eq!(same_absolute_result.cursor.position(), 1);
+
+        let first = receiver.seek_by_measure(|_| true);
+        assert!(first.found);
+        assert_eq!(first.cursor.position(), 0);
+
+        let miss = receiver.seek_by_measure(|sum| *sum > 14);
+        assert!(!miss.found);
+        assert_eq!(miss.cursor.position(), source.len());
+
+        let edited = receiver.insert(16);
+        let edited_hit = edited.seek_by_measure(|sum| *sum >= 18);
+        assert!(edited_hit.found);
+        assert_eq!(edited_hit.cursor.position(), 2);
+        assert_eq!(edited_hit.cursor.peek_next(), Some(&16));
+
+        let failure = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            receiver.seek_by_measure(|_| panic!("cursor predicate failure"))
+        }));
+        assert!(failure.is_err());
+        assert_eq!(receiver.position(), 2);
+        assert_eq!(receiver.snapshot().to_vec(), vec![2, 4, 8]);
+        assert_eq!(
+            receiver.seek_by_measure(|sum| *sum >= 6).cursor.position(),
+            1
+        );
+
+        let across_chunks: MeasuredRope<i32, SizeMeasure> = (0..4097).collect();
+        let boundary = across_chunks.cursor_by_measure(|count| *count >= 2049);
+        assert!(boundary.found);
+        assert_eq!(boundary.cursor.position(), 2048);
+        assert_eq!(boundary.cursor.peek_next(), Some(&2048));
+    }
+
+    #[test]
+    fn measured_rope_cursor_edits_match_a_gap_vector_model() {
+        let mut cursor = MeasuredRope::<i32, SumMeasure<i32>>::new().cursor();
+        let mut model = Vec::new();
+        let mut position = 0_usize;
+        let mut state = 0xa341_316c_u32;
+
+        for step in 0..750_i32 {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            match state % 7 {
+                0 | 1 => {
+                    cursor = cursor.insert(step);
+                    model.insert(position, step);
+                    position += 1;
+                }
+                2 => {
+                    let values = [step, -step];
+                    cursor = cursor.insert_range(values);
+                    model.splice(position..position, values);
+                    position += values.len();
+                }
+                3 if position > 0 => {
+                    cursor = cursor.delete_previous().unwrap();
+                    position -= 1;
+                    model.remove(position);
+                }
+                4 if position < model.len() => {
+                    cursor = cursor.delete_next().unwrap();
+                    model.remove(position);
+                }
+                5 if position < model.len() => {
+                    cursor = cursor.replace_next(-step).unwrap();
+                    model[position] = -step;
+                }
+                _ => {
+                    position = (state as usize >> 8) % (model.len() + 1);
+                    cursor = cursor.seek(position).unwrap();
+                }
+            }
+
+            assert_eq!(cursor.position(), position);
+            assert_eq!(cursor.snapshot().to_vec(), model);
+            assert_eq!(
+                cursor.peek_previous(),
+                position.checked_sub(1).and_then(|i| model.get(i))
+            );
+            assert_eq!(cursor.peek_next(), model.get(position));
+            assert_eq!(
+                cursor.measure_before(),
+                model[..position].iter().sum::<i32>()
+            );
+            assert_eq!(
+                cursor.measure_after(),
+                model[position..].iter().sum::<i32>()
+            );
+            cursor.snapshot().validate_chunk_invariants();
+        }
+    }
+
+    #[test]
+    fn measured_rope_length_overflow_precedes_cursor_measure_callbacks() {
+        let seed: MeasuredRope<_, CountingSizeMeasure> = [0].into_iter().collect();
+        let mut power = seed.clone();
+        let mut expanded = MeasuredRope::new();
+        for bit in 0..usize::BITS {
+            expanded = expanded.concat(&power);
+            if bit + 1 < usize::BITS {
+                power = power.concat(&power);
+            }
+        }
+
+        let expanded_len = expanded.len();
+        assert_eq!(expanded_len, usize::MAX);
+        COUNTING_MEASURE_CALLS.store(0, Ordering::Relaxed);
+        let failure = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            expanded.cursor().insert(-1)
+        }));
+
+        assert!(failure.is_err());
+        assert_eq!(COUNTING_MEASURE_CALLS.load(Ordering::Relaxed), 0);
+        assert_eq!(expanded.len(), expanded_len);
+        assert_eq!(expanded.get(0), Some(&0));
+        assert_eq!(seed.len(), 1);
+    }
+
+    #[test]
+    fn text_rope_cursor_retains_text_semantics_and_exact_facade() {
+        let text = TextRope::from("a🙂\r\nβ");
+        let start = text.cursor();
+        assert_eq!(start.len(), 5);
+        assert_eq!(start.line_column(), LineColumn { line: 0, column: 0 });
+
+        let newline = text.cursor_by_measure(|count| *count >= 1);
+        assert!(newline.found);
+        assert_eq!(newline.cursor.position(), 3);
+        assert_eq!(newline.cursor.peek_next(), Some(&'\n'));
+        assert_eq!(newline.cursor.measure_before(), 0);
+        assert_eq!(newline.cursor.measure_after(), 1);
+        assert_eq!(
+            newline.cursor.move_next().unwrap().line_column(),
+            LineColumn { line: 1, column: 0 }
+        );
+
+        let edited = text
+            .cursor_at(1)
+            .unwrap()
+            .insert_range("x\n".chars())
+            .replace_next('Ω')
+            .unwrap();
+        assert_eq!(edited.position(), 3);
+        assert_eq!(edited.snapshot().as_string(), "ax\nΩ\r\nβ");
+        assert_eq!(edited.line_column(), LineColumn { line: 1, column: 0 });
+        assert_eq!(text.as_string(), "a🙂\r\nβ");
+        assert!(
+            text.to_measured_rope()
+                .shares_storage_with(&start.snapshot().to_measured_rope())
+        );
+
+        let miss = edited.seek_by_measure(|count| *count > 2);
+        assert!(!miss.found);
+        assert!(miss.cursor.is_at_end());
+        assert_eq!(miss.cursor.snapshot().as_string(), "ax\nΩ\r\nβ");
     }
 
     #[test]

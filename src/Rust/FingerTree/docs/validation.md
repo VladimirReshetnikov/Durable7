@@ -65,9 +65,13 @@ they cover:
   chunk-edge edits, exact seek/empty-insert no-ops, retained branch isolation, root-sharing snapshots,
   deterministic gap-vector model replay, and logarithmic shared-DAG length-overflow panic atomicity;
 - measured-rope cached count-plus-user measures, measure navigation, persistent point/range insertion and removal,
-  slicing, deterministic vector-model replay, subtree sharing, and append-builder snapshot isolation;
+  slicing, deterministic vector-model replay, subtree sharing, and append-builder snapshot isolation; immutable
+  measured cursor empty/boundary and non-`Clone` navigation, ordered noncommutative before/after measures,
+  absolute hit/miss/chunk-boundary measure search, callback-panic retry, retained edit branches, nullable values,
+  a 750-command gap-vector model, and exact-`usize::MAX` shared-DAG overflow before measure callbacks;
 - cached-newline text line helpers, Rust string/display conversions, Unicode scalar and UAX #29 extended-grapheme
-  addressing, LF/CRLF/CR/mixed detection, CRLF-aware line text, and builder output.
+  addressing, LF/CRLF/CR/mixed detection, CRLF-aware line text, builder output, and the nominal text cursor's
+  exact-facade snapshots, newline-prefix search, scalar line/column positions, and Unicode edits.
 
 The current validation proves structurally shared Rust storage across the public FingerTree-family facades and the
 observable semantic checkpoint behavior, not final C#/C++ lazy-spine asymptotic parity for the whole crate.
