@@ -29,11 +29,13 @@
   "buildPresets": [
     {
       "name": "msvc-debug",
-      "configurePreset": "msvc-debug"
+      "configurePreset": "msvc-debug",
+      "jobs": 1
     },
     {
       "name": "msvc-release",
-      "configurePreset": "msvc-release"
+      "configurePreset": "msvc-release",
+      "jobs": 1
     }
   ],
   "testPresets": [
@@ -42,6 +44,9 @@
       "configurePreset": "msvc-debug",
       "output": {
         "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 1
       }
     },
     {
@@ -49,6 +54,9 @@
       "configurePreset": "msvc-release",
       "output": {
         "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 1
       }
     }
   ]

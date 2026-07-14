@@ -55,7 +55,7 @@ binaries as evidence for GCC or Clang.
 $vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
 $cmakeDir = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
 
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-debug && ""$cmakeDir\cmake.exe"" --build --preset msvc-debug && ""$cmakeDir\ctest.exe"" --preset msvc-debug --output-on-failure"
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-debug && ""$cmakeDir\cmake.exe"" --build --preset msvc-debug --parallel 1 && ""$cmakeDir\ctest.exe"" --preset msvc-debug --parallel 1 --output-on-failure"
 ```
 
 ## Release Build And Tests
@@ -64,7 +64,7 @@ cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.
 $vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
 $cmakeDir = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
 
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-release && ""$cmakeDir\cmake.exe"" --build --preset msvc-release && ""$cmakeDir\ctest.exe"" --preset msvc-release --output-on-failure"
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-release && ""$cmakeDir\cmake.exe"" --build --preset msvc-release --parallel 1 && ""$cmakeDir\ctest.exe"" --preset msvc-release --parallel 1 --output-on-failure"
 ```
 
 A plain PowerShell invocation of `VsDevCmd.bat` does not persist its environment changes in the current
@@ -78,8 +78,8 @@ Use the WinLibs compiler, CMake, Ninja, and CTest directly when they are not on 
 $mingw = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin"
 
 & "$mingw\cmake.exe" -S . -B out\build\gcc-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER="$mingw\gcc.exe" -DCMAKE_MAKE_PROGRAM="$mingw\ninja.exe"
-& "$mingw\cmake.exe" --build out\build\gcc-debug
-& "$mingw\ctest.exe" --test-dir out\build\gcc-debug --output-on-failure
+& "$mingw\cmake.exe" --build out\build\gcc-debug --parallel 1
+& "$mingw\ctest.exe" --test-dir out\build\gcc-debug --parallel 1 --output-on-failure
 ```
 
 ## Clang Build And Tests
@@ -93,7 +93,7 @@ $ctest = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\Commo
 $ninja = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
 $clang = "C:\Program Files\LLVM\bin\clang.exe"
 
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmake"" -S . -B out\build\clang-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=""$clang"" -DCMAKE_MAKE_PROGRAM=""$ninja"" && ""$cmake"" --build out\build\clang-debug && ""$ctest"" --test-dir out\build\clang-debug --output-on-failure"
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmake"" -S . -B out\build\clang-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=""$clang"" -DCMAKE_MAKE_PROGRAM=""$ninja"" && ""$cmake"" --build out\build\clang-debug --parallel 1 && ""$ctest"" --test-dir out\build\clang-debug --parallel 1 --output-on-failure"
 ```
 
 ## Current Coverage
@@ -224,12 +224,12 @@ GCC or Clang available through CMake, the portable presets are also available:
 
 ```powershell
 cmake --preset ninja-debug
-cmake --build --preset ninja-debug
-ctest --preset ninja-debug --output-on-failure
+cmake --build --preset ninja-debug --parallel 1
+ctest --preset ninja-debug --parallel 1 --output-on-failure
 
 cmake --preset ninja-asan
-cmake --build --preset ninja-asan
-ctest --preset ninja-asan --output-on-failure
+cmake --build --preset ninja-asan --parallel 1
+ctest --preset ninja-asan --parallel 1 --output-on-failure
 ```
 
 `ninja-asan` enables AddressSanitizer and UndefinedBehaviorSanitizer flags for compilers that support the GCC-style
@@ -243,7 +243,7 @@ supported options only:
 ```powershell
 $env:ASAN_OPTIONS = "detect_leaks=0:halt_on_error=1:strict_string_checks=1"
 $env:UBSAN_OPTIONS = "halt_on_error=1:print_stacktrace=1"
-& "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe" --test-dir out\build\clang-asan --output-on-failure
+& "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe" --test-dir out\build\clang-asan --parallel 1 --output-on-failure
 ```
 
 Using `detect_leaks=1` on this platform terminates each executable before `main` with an unsupported-option
@@ -256,7 +256,7 @@ outstanding-allocation/copy-destroy accounting.
 When reporting validation, include the workspace and exact command, for example:
 
 ```text
-src/C/FingerTree> cmd.exe /d /c "call ""C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"" -arch=x64 -host_arch=x64 && ""C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"" --preset msvc-debug && ""C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"" --build --preset msvc-debug && ""C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe"" --preset msvc-debug --output-on-failure"
+src/C/FingerTree> cmd.exe /d /c "call ""C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"" -arch=x64 -host_arch=x64 && ""C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"" --preset msvc-debug && ""C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"" --build --preset msvc-debug --parallel 1 && ""C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe"" --preset msvc-debug --parallel 1 --output-on-failure"
 ```
 
 If a docs-only change only updates links or wording and does not alter commands, C API claims, samples, or

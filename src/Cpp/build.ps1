@@ -41,11 +41,11 @@ function Invoke-FingerTreeBuild {
     $steps = @(
         "call `"$VisualStudioDevCmd`" -arch=x64 -host_arch=x64",
         "`"$CMake`" --preset $preset",
-        "`"$CMake`" --build --preset $preset"
+        "`"$CMake`" --build --preset $preset --parallel 1"
     )
 
     if ($RunTests) {
-        $steps += "`"$CTest`" --preset $preset --output-on-failure"
+        $steps += "`"$CTest`" --preset $preset --parallel 1 --output-on-failure"
     }
 
     Push-Location -LiteralPath (Join-Path $PSScriptRoot 'FingerTree')
@@ -65,11 +65,11 @@ function Invoke-TungstenBuild {
     $steps = @(
         "call `"$VisualStudioDevCmd`" -arch=x64 -host_arch=x64",
         "`"$CMake`" --preset $preset",
-        "`"$CMake`" --build --preset $preset"
+        "`"$CMake`" --build --preset $preset --parallel 1"
     )
 
     if ($RunTests) {
-        $steps += "`"$CTest`" --preset $preset --output-on-failure"
+        $steps += "`"$CTest`" --preset $preset --parallel 1 --output-on-failure"
     }
 
     Push-Location -LiteralPath (Join-Path $PSScriptRoot 'Tungsten')

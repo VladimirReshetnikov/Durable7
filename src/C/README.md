@@ -9,6 +9,9 @@ The C root contains type-erased, explicit-lifetime ports of repository-owned per
 The root `build.ps1` delegates to the family-local build systems: the HAMT C17 script and the FingerTree
 and Tungsten CMake/CTest presets.
 
+The root wrapper runs selected workspaces sequentially. Every CMake build preset, CTest preset, and
+wrapper invocation fixes its job count at one; the direct HAMT compiler/test steps are already serial.
+
 | Workspace | Role | Primary entry points | Validation |
 | --- | --- | --- | --- |
 | [Hamt](Hamt/README.md) | C17 persistent HAMT map/set port | [public header](Hamt/include/Tools/DataStructures/Hamt/hamt.h), [usage](Hamt/docs/usage.md), [API spec](Hamt/docs/api-specification.md) | `.\build.ps1 -Workspace Hamt -RunTests`; see [validation](Hamt/docs/validation.md) and [tests](Hamt/tests/README.md) |

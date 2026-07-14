@@ -10,7 +10,8 @@
 From `src/CSharp`:
 
 ```powershell
-dotnet build .\DataStructures.sln     # includes the XML-documentation warnings-as-errors gate
+dotnet build .\DataStructures.sln --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false # XML-documentation warnings-as-errors gate
 .\test.ps1                            # full workspace gate
 .\test.ps1 -Project .\tests\Tools.DataStructures.Tungsten.Tests\Tools.DataStructures.Tungsten.Tests.csproj
 ```
@@ -18,6 +19,8 @@ dotnet build .\DataStructures.sln     # includes the XML-documentation warnings-
 The test launcher establishes the inherited Windows headless error mode before starting `dotnet`; the shared
 test-assembly initializer repeats the setting and disables WER UI for direct runner and Test Explorer execution.
 Failures remain visible in console output and the process exit code.
+The shared properties and launcher keep restore/build/test execution to one worker and one test host;
+run these commands sequentially.
 
 The library builds under the workspace `Directory.Build.props` policy: .NET 10, preview language,
 nullable enabled, `GenerateDocumentationFile` with `CS1591`/`CS1573` as errors. A change that

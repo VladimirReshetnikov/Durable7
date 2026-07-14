@@ -91,15 +91,15 @@ From `src/Cpp/FingerTree`, build and run the Debug CTest target:
 $vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
 $cmakeDir = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
 
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-debug && ""$cmakeDir\cmake.exe"" --build --preset msvc-debug && ""$cmakeDir\ctest.exe"" --preset msvc-debug --output-on-failure -L fingertree"
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-debug && ""$cmakeDir\cmake.exe"" --build --preset msvc-debug --parallel 1 && ""$cmakeDir\ctest.exe"" --preset msvc-debug --parallel 1 --output-on-failure -L fingertree"
 ```
 
 Run one subsystem through the same headless CTest launcher:
 
 ```powershell
-& "$cmakeDir\ctest.exe" --test-dir out\build\msvc-debug --output-on-failure -R '^fingertree\.command-model$'
-& "$cmakeDir\ctest.exe" --test-dir out\build\msvc-debug --output-on-failure -R '^fingertree\.canonical-sorted-set$'
-& "$cmakeDir\ctest.exe" --test-dir out\build\msvc-debug --output-on-failure -R '^fingertree\.daba-lite$'
+& "$cmakeDir\ctest.exe" --test-dir out\build\msvc-debug --parallel 1 --output-on-failure -R '^fingertree\.command-model$'
+& "$cmakeDir\ctest.exe" --test-dir out\build\msvc-debug --parallel 1 --output-on-failure -R '^fingertree\.canonical-sorted-set$'
+& "$cmakeDir\ctest.exe" --test-dir out\build\msvc-debug --parallel 1 --output-on-failure -R '^fingertree\.daba-lite$'
 ```
 
 Run the built executable directly when changing runner output, failure diagnostics, or tests that need local
@@ -127,7 +127,7 @@ runner repeats the seed in its failure diagnostic together with the two supporte
 
 $env:FINGERTREE_REPLAY_SEED = '0x123456789abcdef'
 try {
-    & "$cmakeDir\ctest.exe" --test-dir out\build\msvc-debug --output-on-failure -R '^fingertree\.command-model$'
+    & "$cmakeDir\ctest.exe" --test-dir out\build\msvc-debug --parallel 1 --output-on-failure -R '^fingertree\.command-model$'
 }
 finally {
     Remove-Item Env:\FINGERTREE_REPLAY_SEED -ErrorAction SilentlyContinue
@@ -146,7 +146,7 @@ short default suitable for ordinary Debug validation. Raise the value for local 
 
 ```powershell
 $env:FINGERTREE_STRESS_SECONDS = '30'
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\ctest.exe"" --preset msvc-debug --output-on-failure -R ""^fingertree\.concurrency$"""
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\ctest.exe"" --preset msvc-debug --parallel 1 --output-on-failure -R ""^fingertree\.concurrency$"""
 Remove-Item Env:\FINGERTREE_STRESS_SECONDS
 ```
 

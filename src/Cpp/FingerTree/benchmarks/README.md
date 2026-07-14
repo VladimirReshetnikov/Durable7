@@ -37,7 +37,7 @@ operations as interchangeable. DABA Lite and its `std::deque` baseline are the e
 mutable streaming windows, and the paired operations evict, insert, and then query the same fixed-size window.
 
 ```powershell
-cmake --build --preset msvc-release --target fingertree_benchmarks
+cmake --build --preset msvc-release --parallel 1 --target fingertree_benchmarks
 .\out\build\msvc-release\benchmarks\fingertree_benchmarks.exe --short
 .\out\build\msvc-release\benchmarks\fingertree_benchmarks.exe --filter=persistence_branching
 .\out\build\msvc-release\benchmarks\fingertree_benchmarks.exe --filter=daba

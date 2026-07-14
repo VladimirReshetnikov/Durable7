@@ -36,11 +36,90 @@ $selection = switch ($Workspace) {
     'Tungsten' { @('-p', 'tools-data-structures-tungsten') }
 }
 
+$separatorIndex = [Array]::IndexOf([string[]] $CargoArguments, '--')
+if ($separatorIndex -ge 0) {
+    $cargoOptions = if ($separatorIndex -gt 0) {
+        @($CargoArguments[0..($separatorIndex - 1)])
+    }
+    else {
+        @()
+    }
+    $testOptions = if ($separatorIndex + 1 -lt $CargoArguments.Count) {
+        @($CargoArguments[($separatorIndex + 1)..($CargoArguments.Count - 1)])
+    }
+    else {
+        @()
+    }
+}
+else {
+    $cargoOptions = @($CargoArguments)
+    $testOptions = @()
+}
+$cargoOptions = @($cargoOptions)
+$testOptions = @($testOptions)
+
+$normalizedCargoOptions = [System.Collections.Generic.List[string]]::new()
+for ($index = 0; $index -lt $cargoOptions.Count; $index++) {
+    $argument = $cargoOptions[$index]
+    if ($argument -eq '--jobs' -or $argument -eq '-j') {
+        if ($index + 1 -ge $cargoOptions.Count -or
+            $cargoOptions[$index + 1] -notmatch '^(default|[+-]?\d+)$') {
+            throw "$argument requires a job count or 'default'."
+        }
+        $index++
+        continue
+    }
+    if ($argument -match '^--jobs=(?<Jobs>.*)$') {
+        if ($Matches.Jobs -notmatch '^(default|[+-]?\d+)$') {
+            throw "Invalid Cargo job option: $argument"
+        }
+        continue
+    }
+    if ($argument -match '^-j=?(?<Jobs>.+)$') {
+        if ($Matches.Jobs -notmatch '^(default|[+-]?\d+)$') {
+            throw "Invalid Cargo job option: $argument"
+        }
+        continue
+    }
+    $normalizedCargoOptions.Add($argument)
+}
+$cargoOptions = @($normalizedCargoOptions)
+
+$normalizedTestOptions = [System.Collections.Generic.List[string]]::new()
+for ($index = 0; $index -lt $testOptions.Count; $index++) {
+    $argument = $testOptions[$index]
+    if ($argument -eq '--test-threads') {
+        if ($index + 1 -ge $testOptions.Count -or
+            $testOptions[$index + 1] -notmatch '^\d+$') {
+            throw "$argument requires a non-negative integer."
+        }
+        $index++
+        continue
+    }
+    if ($argument -match '^--test-threads=(?<Threads>.*)$') {
+        if ($Matches.Threads -notmatch '^\d+$') {
+            throw "Invalid rusttest thread option: $argument"
+        }
+        continue
+    }
+    $normalizedTestOptions.Add($argument)
+}
+$testOptions = @($normalizedTestOptions)
+
 $arguments = @('test') + $selection
 if ($Release) {
     $arguments += '--release'
 }
-$arguments += $CargoArguments
+$arguments += $cargoOptions
+# Append the enforced values after caller options so a profile or forwarded flag cannot fan out.
+$arguments += @('--jobs', '1', '--')
+$arguments += $testOptions
+$arguments += '--test-threads=1'
+
+$previousCargoBuildJobs = $env:CARGO_BUILD_JOBS
+$previousRustTestThreads = $env:RUST_TEST_THREADS
+$env:CARGO_BUILD_JOBS = '1'
+$env:RUST_TEST_THREADS = '1'
 
 Push-Location -LiteralPath $PSScriptRoot
 try {
@@ -51,4 +130,16 @@ try {
 }
 finally {
     Pop-Location
+    if ($null -eq $previousCargoBuildJobs) {
+        Remove-Item Env:CARGO_BUILD_JOBS -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:CARGO_BUILD_JOBS = $previousCargoBuildJobs
+    }
+    if ($null -eq $previousRustTestThreads) {
+        Remove-Item Env:RUST_TEST_THREADS -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:RUST_TEST_THREADS = $previousRustTestThreads
+    }
 }

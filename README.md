@@ -243,8 +243,10 @@ Use [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) a
 
 ```powershell
 cd C:\DataStructures\src\CSharp
-dotnet restore
-dotnet build
+dotnet restore --disable-parallel --disable-build-servers -m:1 -nr:false `
+    -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
+dotnet build --no-restore --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false
 .\test.ps1
 
 cd C:\DataStructures\src\C
@@ -273,6 +275,12 @@ cd C:\DataStructures\src\Haskell
 cd C:\DataStructures\src\Kotlin
 .\build.ps1
 ```
+
+The checked-in launchers and native presets force one build worker/job; test runners are likewise
+restricted to one test host/thread where their toolchain supports it. Run language workspaces
+sequentially rather than overlapping restore, build, or test processes. Local benchmarks are a
+separate, explicit activity and are not part of routine validation. The C++ GitHub workflow's short
+harness probes are isolated compile/runtime smoke checks, not performance evidence.
 
 Run benchmarks from the benchmark project:
 

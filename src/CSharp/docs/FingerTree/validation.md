@@ -39,8 +39,10 @@ test gate; see [benchmarks.md](benchmarks.md) and the benchmark project
 From `src/CSharp`:
 
 ```powershell
-dotnet restore
-dotnet build .\DataStructures.sln
+dotnet restore .\DataStructures.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
+    -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
+dotnet build .\DataStructures.sln --no-restore --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false
 .\test.ps1
 ```
 
@@ -48,6 +50,7 @@ For ordinary behavior changes, `.\test.ps1` is the main gate because it restores
 the test projects while suppressing modal Windows failure UI throughout the child-process tree. Use the explicit
 restore/build steps when validating toolchain, solution membership, XML documentation, sample build, or
 benchmark-project build changes.
+All three phases are serialized; do not overlap them with another workspace build, test, or benchmark run.
 
 Run individual sample tours when changing sample text or manual-demo behavior:
 

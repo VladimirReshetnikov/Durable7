@@ -45,7 +45,7 @@ for MSVC, GCC/MinGW, and Clang. Each lane must run CTest against the binaries fr
 $vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
 $cmakeDir = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
 
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-debug && ""$cmakeDir\cmake.exe"" --build --preset msvc-debug && ""$cmakeDir\ctest.exe"" --preset msvc-debug --output-on-failure"
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-debug && ""$cmakeDir\cmake.exe"" --build --preset msvc-debug --parallel 1 && ""$cmakeDir\ctest.exe"" --preset msvc-debug --parallel 1 --output-on-failure"
 ```
 
 The C++ targets require the active MSVC latest language mode. CMake records that as `CXX_STANDARD 23` plus an
@@ -60,7 +60,7 @@ an uninitialized shell.
 $vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
 $cmakeDir = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
 
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-release && ""$cmakeDir\cmake.exe"" --build --preset msvc-release && ""$cmakeDir\ctest.exe"" --preset msvc-release --output-on-failure"
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-release && ""$cmakeDir\cmake.exe"" --build --preset msvc-release --parallel 1 && ""$cmakeDir\ctest.exe"" --preset msvc-release --parallel 1 --output-on-failure"
 ```
 
 ## GCC Build And Tests
@@ -72,12 +72,12 @@ $mingw = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSI
 $env:PATH = "$mingw;$env:PATH" # Required at test time for the WinLibs runtime DLLs.
 
 & "$mingw\cmake.exe" -S . -B out\build\gcc-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER="$mingw\g++.exe" -DCMAKE_MAKE_PROGRAM="$mingw\ninja.exe"
-& "$mingw\cmake.exe" --build out\build\gcc-debug
-& "$mingw\ctest.exe" --test-dir out\build\gcc-debug --output-on-failure
+& "$mingw\cmake.exe" --build out\build\gcc-debug --parallel 1
+& "$mingw\ctest.exe" --test-dir out\build\gcc-debug --parallel 1 --output-on-failure
 
 & "$mingw\cmake.exe" -S . -B out\build\gcc-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER="$mingw\g++.exe" -DCMAKE_MAKE_PROGRAM="$mingw\ninja.exe"
-& "$mingw\cmake.exe" --build out\build\gcc-release
-& "$mingw\ctest.exe" --test-dir out\build\gcc-release --output-on-failure
+& "$mingw\cmake.exe" --build out\build\gcc-release --parallel 1
+& "$mingw\ctest.exe" --test-dir out\build\gcc-release --parallel 1 --output-on-failure
 ```
 
 ## Clang Build And Tests
@@ -92,8 +92,8 @@ $ctest = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\Commo
 $ninja = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
 $clang = "C:\Program Files\LLVM\bin\clang++.exe"
 
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmake"" -S . -B out\build\clang-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=""$clang"" -DCMAKE_MAKE_PROGRAM=""$ninja"" && ""$cmake"" --build out\build\clang-debug && ""$ctest"" --test-dir out\build\clang-debug --output-on-failure"
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmake"" -S . -B out\build\clang-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=""$clang"" -DCMAKE_MAKE_PROGRAM=""$ninja"" && ""$cmake"" --build out\build\clang-release && ""$ctest"" --test-dir out\build\clang-release --output-on-failure"
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmake"" -S . -B out\build\clang-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=""$clang"" -DCMAKE_MAKE_PROGRAM=""$ninja"" && ""$cmake"" --build out\build\clang-debug --parallel 1 && ""$ctest"" --test-dir out\build\clang-debug --parallel 1 --output-on-failure"
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmake"" -S . -B out\build\clang-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=""$clang"" -DCMAKE_MAKE_PROGRAM=""$ninja"" && ""$cmake"" --build out\build\clang-release --parallel 1 && ""$ctest"" --test-dir out\build\clang-release --parallel 1 --output-on-failure"
 ```
 
 ## Test Policy
@@ -120,16 +120,16 @@ Use the portable Ninja presets on hosts with a suitable C++23 compiler and `ninj
 
 ```powershell
 cmake --preset ninja-debug
-cmake --build --preset ninja-debug
-ctest --preset ninja-debug --output-on-failure
+cmake --build --preset ninja-debug --parallel 1
+ctest --preset ninja-debug --parallel 1 --output-on-failure
 
 cmake --preset ninja-asan
-cmake --build --preset ninja-asan
-ctest --preset ninja-asan --output-on-failure
+cmake --build --preset ninja-asan --parallel 1
+ctest --preset ninja-asan --parallel 1 --output-on-failure
 
 cmake --preset ninja-tsan
-cmake --build --preset ninja-tsan
-ctest --preset ninja-tsan --output-on-failure
+cmake --build --preset ninja-tsan --parallel 1
+ctest --preset ninja-tsan --parallel 1 --output-on-failure
 ```
 
 `ninja-asan` enables AddressSanitizer and UndefinedBehaviorSanitizer flags for compilers that support the GCC-style
@@ -149,7 +149,7 @@ headless launcher, so a subsystem failure is isolated without introducing Catch2
 execution. `fingertree.samples` checks two deterministic transcripts, and `fingertree.installed-consumer` performs
 the staged package integration test. All 23 carry the `fingertree` label and all Windows invocations—including the
 nested install/configure/build/test command—inherit the no-dialog error mode. Use
-`ctest --test-dir out/build/msvc-debug -N -L fingertree` to list the cases, or `-R` with one exact case name for a
+`ctest --test-dir out/build/msvc-debug --parallel 1 -N -L fingertree` to list the cases, or `-R` with one exact case name for a
 focused run. See the [tests README](../tests/README.md) for the complete group list, direct runner options,
 replay-seed controls, shrinking contract, and stress notes.
 
@@ -204,7 +204,7 @@ The suite covers:
 Build and run the dependency-free harness in Release configuration:
 
 ```powershell
-cmake --build --preset msvc-release --target fingertree_benchmarks
+cmake --build --preset msvc-release --parallel 1 --target fingertree_benchmarks
 .\out\build\msvc-release\benchmarks\fingertree_benchmarks.exe --short
 .\out\build\msvc-release\benchmarks\fingertree_benchmarks.exe --filter=persistence_branching
 ```
@@ -224,7 +224,7 @@ The ordinary build compiles `fingertree_showcase` and `fingertree_persistent_sna
 `run(std::ostream&)` seams are captured by the sample test:
 
 ```powershell
-ctest --preset msvc-debug -R '^fingertree\.samples$' --output-on-failure
+ctest --preset msvc-debug --parallel 1 -R '^fingertree\.samples$' --output-on-failure
 ```
 
 The packaging test performs a real installation to a configuration-specific private prefix, then configures a
@@ -236,7 +236,7 @@ the canonical rank policy (thereby proving the transitive crypto link), Brodal-O
 priority-search queue, DABA Lite, and persistent collections:
 
 ```powershell
-ctest --preset msvc-debug -R '^fingertree\.installed-consumer$' --output-on-failure
+ctest --preset msvc-debug --parallel 1 -R '^fingertree\.installed-consumer$' --output-on-failure
 ```
 
 ## Continuous Integration
@@ -255,7 +255,7 @@ compiling against the source-tree include directory.
 When reporting validation, include the workspace and exact command, for example:
 
 ```text
-src/Cpp/FingerTree> cmd.exe /d /c "call ""C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"" -arch=x64 -host_arch=x64 && ""C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"" --preset msvc-debug && ""C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"" --build --preset msvc-debug && ""C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe"" --preset msvc-debug --output-on-failure"
+src/Cpp/FingerTree> cmd.exe /d /c "call ""C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"" -arch=x64 -host_arch=x64 && ""C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"" --preset msvc-debug && ""C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"" --build --preset msvc-debug --parallel 1 && ""C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe"" --preset msvc-debug --parallel 1 --output-on-failure"
 ```
 
 If a docs-only change only updates links or wording and does not alter commands, C++ API claims, stress behavior,

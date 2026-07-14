@@ -25,7 +25,9 @@ The wrapper finds Cargo on `PATH` or under the default rustup profile. On Window
 non-interactive OS error handling before Cargo starts a test binary, so assertion, panic, loader, and crash
 failures remain console diagnostics with nonzero exits instead of opening modal UI. Use `-Workspace Hamt`,
 `-Workspace FingerTree`, or `-Workspace Tungsten` for focused runs; `-Release` selects the release profile,
-and `-CargoArguments` forwards additional Cargo or test-harness options.
+and `-CargoArguments` forwards additional Cargo or test-harness options. The wrapper appends
+`--jobs 1` before the harness boundary and `--test-threads=1` after it, and also scopes
+`CARGO_BUILD_JOBS=1` / `RUST_TEST_THREADS=1` to the invocation, so caller options cannot fan out.
 
 The FingerTree crate intentionally starts as a semantic checkpoint rather than a final asymptotic
 parity port. Its public families now use structurally shared Rust tree storage, while some

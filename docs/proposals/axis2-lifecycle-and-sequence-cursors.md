@@ -929,7 +929,8 @@ not follow-up documentation debt.
 Every implementation tranche runs the C# build and unattended suite from `src/CSharp`:
 
 ```powershell
-dotnet build
+dotnet build --disable-build-servers -m:1 -nr:false `
+    -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
 .\test.ps1
 ```
 

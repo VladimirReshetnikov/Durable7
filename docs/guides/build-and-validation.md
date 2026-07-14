@@ -72,6 +72,10 @@ Workspace-local validation guides define which of those lanes are mandatory toda
 When a compiler is installed but a workspace guide marks that lane as provisional or blocked, record the attempted
 command and failure mode instead of silently omitting it.
 
+All repository launchers run selected workspaces sequentially and force one build worker/job. MSBuild/NuGet,
+CMake/Ninja/CTest, Cargo/rusttest, Cabal, and the Kotlin compiler/JVM have checked-in one-worker controls; do not
+overlap language-root validation commands. This is a resource-safety policy, not performance evidence.
+
 ## C# Workspace
 
 ```powershell
@@ -81,8 +85,9 @@ cd C:\DataStructures\src\CSharp
 
 The C# solution targets `net10.0` and uses C# preview features. Treat public XML documentation warnings
 as build-relevant: `CS1591` and `CS1573` are intentionally escalated in the C# workspace. The local
-test launcher suppresses modal Windows failure UI before the SDK and test host start; direct
-`dotnet test` still receives the repository runsettings and per-test-assembly initializer. The local
+test launcher suppresses modal Windows failure UI before the SDK and test host start, disables build servers,
+and forces one MSBuild node. Direct `dotnet test` still receives shared properties that disable parallel restore,
+project builds, and compiler sharing plus runsettings that limit vstest/xUnit to one host/thread. The local
 validation guides define family-specific coverage and optional stress/benchmark boundaries:
 
 - [C# Numerics validation](../../src/CSharp/docs/Numerics/validation.md)
@@ -103,7 +108,8 @@ cd C:\DataStructures\src\Rust
 
 The Rust crates are safe Rust only (`#![forbid(unsafe_code)]`) and are validated through Cargo unit tests.
 The wrapper finds Cargo on `PATH` or under the default rustup profile, applies non-interactive Windows error
-handling before Cargo starts any test binary, and preserves Cargo's failure exit.
+handling before Cargo starts any test binary, and preserves Cargo's failure exit. It enforces one Cargo build job
+and one rusttest thread after caller arguments, with scoped environment-variable backstops.
 
 Local guides:
 
@@ -151,7 +157,7 @@ cd C:\DataStructures\src\Cpp
 .\build.ps1 -Workspace Tungsten -RunTests
 ```
 
-The Tungsten native workspaces use CMake presets and CTest. The C port links the existing C HAMT and
+The Tungsten native workspaces use one-job CMake build and CTest presets. The C port links the existing C HAMT and
 C FingerTree implementations and validates both Debug and Release MSVC lanes for parity-sensitive changes.
 The C++ port is header-first and shares the C++ HAMT/FingerTree substrates.
 
@@ -179,16 +185,16 @@ $cmake = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\Commo
 $ctest = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe"
 
 cd C:\DataStructures\src\C\FingerTree
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmake"" --preset msvc-debug && ""$cmake"" --build --preset msvc-debug && ""$ctest"" --preset msvc-debug --output-on-failure"
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmake"" --preset msvc-debug && ""$cmake"" --build --preset msvc-debug --parallel 1 && ""$ctest"" --preset msvc-debug --parallel 1 --output-on-failure"
 
 cd C:\DataStructures\src\Cpp\FingerTree
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmake"" --preset msvc-debug && ""$cmake"" --build --preset msvc-debug && ""$ctest"" --preset msvc-debug --output-on-failure"
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmake"" --preset msvc-debug && ""$cmake"" --build --preset msvc-debug --parallel 1 && ""$ctest"" --preset msvc-debug --parallel 1 --output-on-failure"
 ```
 
 Use `msvc-release` for optimized validation:
 
 ```powershell
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmake"" --preset msvc-release && ""$cmake"" --build --preset msvc-release && ""$ctest"" --preset msvc-release --output-on-failure"
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmake"" --preset msvc-release && ""$cmake"" --build --preset msvc-release --parallel 1 && ""$ctest"" --preset msvc-release --parallel 1 --output-on-failure"
 ```
 
 If a workspace was moved after CMake had already configured it, remove only the stale generated preset
@@ -222,13 +228,13 @@ presets. On hosts with `cmake`, `ninja`, and a GCC/Clang-style sanitizer-capable
 ```powershell
 cd C:\DataStructures\src\C\FingerTree
 cmake --preset ninja-asan
-cmake --build --preset ninja-asan
-ctest --preset ninja-asan --output-on-failure
+cmake --build --preset ninja-asan --parallel 1
+ctest --preset ninja-asan --parallel 1 --output-on-failure
 
 cd C:\DataStructures\src\Cpp\FingerTree
 cmake --preset ninja-asan
-cmake --build --preset ninja-asan
-ctest --preset ninja-asan --output-on-failure
+cmake --build --preset ninja-asan --parallel 1
+ctest --preset ninja-asan --parallel 1 --output-on-failure
 ```
 
 For C++ FingerTree, the workspace validation guide owns the exact MSVC, GCC, and Clang commands. On Windows, run
@@ -266,7 +272,9 @@ The Kotlin build script compiles each workspace with the Kotlin command-line com
 dependency-free executable tests. If no Java 21+ runtime is on `PATH` on Windows, it bootstraps a local Temurin
 JDK 21 under `src/Kotlin/build/tools`; on non-Windows hosts, provide Java 21+ through `PATH` or `JAVA_HOME`.
 It also downloads and verifies the Kotlin compiler archive. On Windows the script enables inherited
-non-interactive OS error handling before tool bootstrap, and every test JVM runs in AWT headless mode.
+non-interactive OS error handling before tool bootstrap. Compiler backends are pinned to one thread; compiler
+and test JVMs see one active processor and use the serial collector unless a caller already selected another
+collector. Every test JVM also runs in AWT headless mode.
 Local guides:
 
 - [Kotlin HAMT validation](../../src/Kotlin/Hamt/docs/validation.md)
@@ -285,7 +293,7 @@ cd C:\DataStructures\src\CSharp\benchmarks\Tools.DataStructures.FingerTree.Bench
 dotnet run -c Release -- --filter * --job short
 
 cd C:\DataStructures\src\Cpp\FingerTree
-cmake --build --preset msvc-release --target fingertree_benchmarks
+cmake --build --preset msvc-release --parallel 1 --target fingertree_benchmarks
 .\out\build\msvc-release\benchmarks\fingertree_benchmarks.exe --short
 ```
 

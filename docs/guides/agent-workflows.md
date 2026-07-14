@@ -22,14 +22,18 @@ Use the real .NET SDK in the local Windows environment:
 
 ```powershell
 cd C:\DataStructures\src\CSharp
-dotnet restore
-dotnet build
+dotnet restore --disable-parallel --disable-build-servers -m:1 -nr:false `
+    -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
+dotnet build --no-restore --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false
 .\test.ps1
 ```
 
 The test launcher establishes inherited non-interactive Windows failure handling before the .NET
 toolchain starts. Direct `dotnet test` remains available for diagnosis and automatically picks up
-the repository runsettings and test-assembly initializer.
+the repository runsettings and test-assembly initializer. The shared properties, launcher, and
+runsettings keep restore/build/test execution to one worker, one compiler process, and one test host.
+Do not overlap language-workspace validation commands on memory-constrained machines.
 
 Prefer deterministic tests for data-structure complexity claims. Do not replace operation-count or allocation guards with timing thresholds unless the task is explicitly benchmark-oriented.
 

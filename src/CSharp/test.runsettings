@@ -3,5 +3,12 @@
   <RunConfiguration>
     <!-- A discovery/configuration failure must not look like a successful empty test run. -->
     <TreatNoTestsAsError>true</TreatNoTestsAsError>
+    <!-- Keep vstest to one testhost at a time on memory-constrained developer machines. -->
+    <MaxCpuCount>1</MaxCpuCount>
   </RunConfiguration>
+  <xUnit>
+    <ParallelizeAssembly>false</ParallelizeAssembly>
+    <ParallelizeTestCollections>false</ParallelizeTestCollections>
+    <MaxParallelThreads>1</MaxParallelThreads>
+  </xUnit>
 </RunSettings>

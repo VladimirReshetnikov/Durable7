@@ -174,7 +174,7 @@ From `src/Haskell`:
 
 ```powershell
 .\test.ps1 -Workspace Hamt
-cabal test hamt-test --test-show-details=direct --ghc-options=-Werror
+cabal test hamt-test --jobs=1 --test-show-details=direct --ghc-options=-Werror
 ```
 
 The focused coverage is summarized in [`../test/README.md`](../test/README.md).

@@ -59,23 +59,28 @@
   "buildPresets": [
     {
       "name": "msvc-debug",
-      "configurePreset": "msvc-debug"
+      "configurePreset": "msvc-debug",
+      "jobs": 1
     },
     {
       "name": "msvc-release",
-      "configurePreset": "msvc-release"
+      "configurePreset": "msvc-release",
+      "jobs": 1
     },
     {
       "name": "ninja-debug",
-      "configurePreset": "ninja-debug"
+      "configurePreset": "ninja-debug",
+      "jobs": 1
     },
     {
       "name": "ninja-release",
-      "configurePreset": "ninja-release"
+      "configurePreset": "ninja-release",
+      "jobs": 1
     },
     {
       "name": "ninja-asan",
-      "configurePreset": "ninja-asan"
+      "configurePreset": "ninja-asan",
+      "jobs": 1
     }
   ],
   "testPresets": [
@@ -84,6 +89,9 @@
       "configurePreset": "msvc-debug",
       "output": {
         "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 1
       }
     },
     {
@@ -91,6 +99,9 @@
       "configurePreset": "msvc-release",
       "output": {
         "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 1
       }
     },
     {
@@ -98,6 +109,9 @@
       "configurePreset": "ninja-debug",
       "output": {
         "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 1
       }
     },
     {
@@ -105,6 +119,9 @@
       "configurePreset": "ninja-release",
       "output": {
         "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 1
       }
     },
     {
@@ -112,6 +129,9 @@
       "configurePreset": "ninja-asan",
       "output": {
         "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 1
       }
     }
   ]

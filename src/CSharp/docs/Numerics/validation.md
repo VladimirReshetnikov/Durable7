@@ -34,14 +34,17 @@ The test project references the library project and uses `xunit`, `xunit.runner.
 From `src/CSharp`:
 
 ```powershell
-dotnet restore
-dotnet build .\DataStructures.sln
+dotnet restore .\DataStructures.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
+    -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
+dotnet build .\DataStructures.sln --no-restore --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false
 .\test.ps1
 ```
 
 For ordinary behavior changes, `.\test.ps1` is the main gate because it restores and builds as needed before running
 the test projects while suppressing modal Windows failure UI throughout the child-process tree. Use the explicit
 restore/build steps when validating toolchain or warning-policy changes, or when you want a clearer failure boundary.
+All three phases are serialized; do not overlap them with another workspace build or test run.
 
 ## Test Coverage
 

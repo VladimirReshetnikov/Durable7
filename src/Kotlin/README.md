@@ -26,7 +26,8 @@ On non-Windows hosts, put Java 21+ on `PATH` or set `JAVA_HOME` before running t
 2.4.0 command-line compiler is bootstrapped into `src/Kotlin/build/tools` on every host, then the script compiles
 each workspace and runs its dependency-free executable tests. The `build` directory is ignored by the repository.
 Workspaces run sequentially, and each compiler invocation pins the Kotlin backend to one thread; there is no
-Gradle daemon or worker pool.
+Gradle daemon or worker pool. Compiler and test JVMs also see one active processor and use the serial collector
+unless a caller already selected another collector.
 On Windows, the script enables inherited non-interactive OS error handling before launching build tools or tests,
 and starts every test JVM with `-Djava.awt.headless=true`. Assertion, exception, loader, and crash failures therefore
 remain console diagnostics with nonzero exits instead of opening modal UI.

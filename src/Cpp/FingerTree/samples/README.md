@@ -27,8 +27,8 @@ reported to the terminal instead of modal dialogs.
 Build and run from the workspace root after configuring a preset:
 
 ```powershell
-cmake --build --preset msvc-release --target fingertree_showcase fingertree_persistent_snapshots
+cmake --build --preset msvc-release --parallel 1 --target fingertree_showcase fingertree_persistent_snapshots
 .\out\build\msvc-release\samples\fingertree_showcase.exe
 .\out\build\msvc-release\samples\fingertree_persistent_snapshots.exe
-ctest --preset msvc-release -R '^fingertree\.samples$' --output-on-failure
+ctest --preset msvc-release --parallel 1 -R '^fingertree\.samples$' --output-on-failure
 ```

@@ -59,7 +59,7 @@ cd src\Cpp\FingerTree   # repository-relative; the C# workspace builds from C:\D
 $vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
 $cmakeDir = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
 
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-debug && ""$cmakeDir\cmake.exe"" --build --preset msvc-debug && ""$cmakeDir\ctest.exe"" --preset msvc-debug --output-on-failure"
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$cmakeDir\cmake.exe"" --preset msvc-debug && ""$cmakeDir\cmake.exe"" --build --preset msvc-debug --parallel 1 && ""$cmakeDir\ctest.exe"" --preset msvc-debug --parallel 1 --output-on-failure"
 ```
 
 A direct PowerShell invocation of `VsDevCmd.bat` does not persist its environment changes in the current
@@ -955,8 +955,8 @@ baselines.
 Every milestone should include:
 
 - `cmake --preset msvc-debug`
-- `cmake --build --preset msvc-debug`
-- `ctest --preset msvc-debug`
+- `cmake --build --preset msvc-debug --parallel 1`
+- `ctest --preset msvc-debug --parallel 1`
 - a replay seed in any randomized failure output
 - a quick documentation/link check for files touched in the milestone
 

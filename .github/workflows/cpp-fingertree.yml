@@ -48,9 +48,9 @@ jobs:
           cmake -S src/Cpp/FingerTree -B $build -G Ninja `
             -DCMAKE_BUILD_TYPE=${{ matrix.configuration }}
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cmake --build $build
+          cmake --build $build --parallel 1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ctest --test-dir $build --output-on-failure
+          ctest --test-dir $build --parallel 1 --output-on-failure
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run benchmark sanity probe
@@ -82,8 +82,8 @@ jobs:
           cmake -S src/Cpp/FingerTree -B "$build" -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ matrix.configuration }} \
             -DCMAKE_CXX_COMPILER=g++
-          cmake --build "$build"
-          ctest --test-dir "$build" --output-on-failure
+          cmake --build "$build" --parallel 1
+          ctest --test-dir "$build" --parallel 1 --output-on-failure
 
       - name: Run benchmark sanity probe
         if: matrix.configuration == 'Release'
@@ -112,8 +112,8 @@ jobs:
           cmake -S src/Cpp/FingerTree -B "$build" -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ matrix.configuration }} \
             -DCMAKE_CXX_COMPILER=/usr/bin/clang++
-          cmake --build "$build"
-          ctest --test-dir "$build" --output-on-failure
+          cmake --build "$build" --parallel 1
+          ctest --test-dir "$build" --parallel 1 --output-on-failure
 
       - name: Run Clang static analyzer on the aggregate public-header surface
         if: matrix.configuration == 'Debug'
@@ -158,11 +158,11 @@ jobs:
             -DFINGERTREE_BUILD_BENCHMARKS=OFF \
             "-DCMAKE_CXX_FLAGS=${{ matrix.compile_flags }}" \
             "-DCMAKE_EXE_LINKER_FLAGS=${{ matrix.link_flags }}"
-          cmake --build "$build"
+          cmake --build "$build" --parallel 1
 
       - name: Run sanitizer tests
         shell: bash
         run: |
           set -euo pipefail
           env ${{ matrix.runtime_environment }} \
-            ctest --test-dir "src/Cpp/FingerTree/out/build/ci-${{ matrix.slug }}" --output-on-failure
+            ctest --test-dir "src/Cpp/FingerTree/out/build/ci-${{ matrix.slug }}" --parallel 1 --output-on-failure

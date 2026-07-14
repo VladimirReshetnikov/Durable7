@@ -7,7 +7,7 @@
 
 The C# root is a single .NET 10 workspace. `DataStructures.sln` contains all managed libraries, tests,
 FingerTree samples, and the FingerTree benchmark harness; `Directory.Build.props` applies the shared
-preview-language, nullable, documentation, warning, and test-runsettings policy to the tree.
+preview-language, nullable, documentation, warning, serialized-build, and test-runsettings policy to the tree.
 
 Source projects live under `src/`, tests under `tests/`, runnable samples under `samples/`, benchmarks
 under `benchmarks/`, and family-specific documentation under `docs/<Family>/`.
@@ -37,9 +37,15 @@ reasserts the process error mode and disables Windows Error Reporting UI; this c
 `dotnet test` execution after the CLR has loaded the test assembly. The launcher remains the canonical unattended
 entry point because only its inherited process setting can cover failures before managed startup.
 
-`test.runsettings` is applied automatically through `Directory.Build.props` and treats a run that discovers no
-tests as an error. `-NoRestore`, `-NoBuild`, and `-Blame` map to their `dotnet test` counterparts; unrecognized
-trailing arguments are forwarded to `dotnet test`.
+`test.runsettings` is applied automatically through `Directory.Build.props`, treats a run that discovers no
+tests as an error, and limits vstest/xUnit to one host/thread. The launcher disables build servers and forces one
+MSBuild node while the shared properties disable parallel restore/project builds and compiler sharing.
+`-NoRestore`, `-NoBuild`, and `-Blame` map to their `dotnet test` counterparts; `-AdditionalArguments` forwards
+explicit dotnet arguments. Custom settings switches/properties and opaque response files are rejected so they
+cannot replace the single-worker policy. To forward test-host RunSettings arguments from PowerShell, pass the
+separator literally, for example
+`-AdditionalArguments @('--', 'RunConfiguration.TestSessionTimeout=60000')`; a bare `--` is consumed by
+PowerShell. Run restore, build, and test sequentially.
 
 Use the parent [source index](../README.md) for the full language list, the repository
 [workspace map](../../docs/reference/workspace-map.md) for port lineage, and the

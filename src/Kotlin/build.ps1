@@ -121,6 +121,22 @@ function Get-KotlinCompiler {
     return $compilerPath
 }
 
+function Remove-ActiveProcessorCountOption([AllowNull()][string]$Options) {
+    if ($null -eq $Options) {
+        return $null
+    }
+
+    return ($Options -replace '(?i)(?<!\S)(?:-J)?-XX:ActiveProcessorCount=[^\s]+(?=\s|$)', '').Trim()
+}
+
+function Set-EnvironmentOption([string]$Name, [AllowNull()][string]$Value) {
+    if ($null -eq $Value) {
+        Remove-Item "Env:$Name" -ErrorAction SilentlyContinue
+    } else {
+        Set-Item "Env:$Name" $Value
+    }
+}
+
 function Invoke-KotlinWorkspaceTests {
     param(
         [string]$Name,
@@ -149,30 +165,77 @@ function Invoke-KotlinWorkspaceTests {
 
     Write-Host "Compiling $Name Kotlin tests"
     $previousKotlinOptions = $env:KOTLIN_OPTS
+    $previousJavaOptions = $env:JAVA_OPTS
+    $previousJavaToolOptions = $env:JAVA_TOOL_OPTIONS
+    $previousJdkJavaOptions = $env:JDK_JAVA_OPTIONS
+    $previousUnderscoreJavaOptions = $env:_JAVA_OPTIONS
+    $inheritedJvmOptions = @(
+        $previousJavaToolOptions
+        $previousJdkJavaOptions
+        $previousUnderscoreJavaOptions
+    ) -join ' '
+    $compilerJvmOptions = @(
+        $inheritedJvmOptions
+        $previousJavaOptions
+    ) -join ' '
+    $compilerGcSelected = $compilerJvmOptions -match '-XX:[+-]Use[^ ]*GC' -or
+        $previousKotlinOptions -match '(?i)(?<!\S)-J-XX:[+-]Use[^\s]*GC'
+    $testGcSelected = $inheritedJvmOptions -match '-XX:[+-]Use[^ ]*GC'
+
+    $serializedKotlinOptions = Remove-ActiveProcessorCountOption $previousKotlinOptions
+    $serializedJavaOptions = Remove-ActiveProcessorCountOption $previousJavaOptions
+    $serializedJavaToolOptions = Remove-ActiveProcessorCountOption $previousJavaToolOptions
+    $serializedJdkJavaOptions = Remove-ActiveProcessorCountOption $previousJdkJavaOptions
+    $serializedUnderscoreJavaOptions = Remove-ActiveProcessorCountOption $previousUnderscoreJavaOptions
+    $compilerJavaToolOptions = $serializedJavaToolOptions
+    if (-not $compilerGcSelected) {
+        $compilerJavaToolOptions = "$compilerJavaToolOptions -XX:+UseSerialGC".Trim()
+    }
+    Set-EnvironmentOption JAVA_TOOL_OPTIONS $compilerJavaToolOptions
+    Set-EnvironmentOption JDK_JAVA_OPTIONS $serializedJdkJavaOptions
+    Set-EnvironmentOption _JAVA_OPTIONS "$serializedUnderscoreJavaOptions -XX:ActiveProcessorCount=1".Trim()
+    Set-EnvironmentOption JAVA_OPTS $serializedJavaOptions
     $backendArguments = @()
     if ($IsWindowsHost) {
         # kotlinc.bat preserves '=' in inherited KOTLIN_OPTS but its argument loop rewrites this
         # advanced option into the deprecated two-token form.
-        $env:KOTLIN_OPTS = "$previousKotlinOptions -Xbackend-threads=1".Trim()
+        Set-EnvironmentOption KOTLIN_OPTS "$serializedKotlinOptions -Xbackend-threads=1".Trim()
     } else {
+        Set-EnvironmentOption KOTLIN_OPTS $serializedKotlinOptions
         $backendArguments = @("-Xbackend-threads=1")
     }
     try {
         & $Kotlinc @sources @backendArguments "-jvm-target" "21" "-include-runtime" "-d" $jar
+        $compileExitCode = $LASTEXITCODE
     } finally {
-        if ($null -eq $previousKotlinOptions) {
-            Remove-Item Env:KOTLIN_OPTS -ErrorAction SilentlyContinue
-        } else {
-            $env:KOTLIN_OPTS = $previousKotlinOptions
-        }
+        Set-EnvironmentOption KOTLIN_OPTS $previousKotlinOptions
+        Set-EnvironmentOption JAVA_OPTS $previousJavaOptions
+        Set-EnvironmentOption JAVA_TOOL_OPTIONS $previousJavaToolOptions
+        Set-EnvironmentOption JDK_JAVA_OPTIONS $previousJdkJavaOptions
+        Set-EnvironmentOption _JAVA_OPTIONS $previousUnderscoreJavaOptions
     }
-    if ($LASTEXITCODE -ne 0) {
+    if ($compileExitCode -ne 0) {
         throw "$Name Kotlin compilation failed"
     }
 
     Write-Host "Running $Name Kotlin tests"
-    & $Java "-Djava.awt.headless=true" "-jar" $jar
-    if ($LASTEXITCODE -ne 0) {
+    $testJavaToolOptions = $serializedJavaToolOptions
+    if (-not $testGcSelected) {
+        $testJavaToolOptions = "$testJavaToolOptions -XX:+UseSerialGC".Trim()
+    }
+    Set-EnvironmentOption JAVA_TOOL_OPTIONS $testJavaToolOptions
+    Set-EnvironmentOption JDK_JAVA_OPTIONS $serializedJdkJavaOptions
+    Set-EnvironmentOption _JAVA_OPTIONS "$serializedUnderscoreJavaOptions -XX:ActiveProcessorCount=1".Trim()
+    try {
+        & $Java "-Djava.awt.headless=true" "-jar" $jar
+        $testExitCode = $LASTEXITCODE
+    }
+    finally {
+        Set-EnvironmentOption JAVA_TOOL_OPTIONS $previousJavaToolOptions
+        Set-EnvironmentOption JDK_JAVA_OPTIONS $previousJdkJavaOptions
+        Set-EnvironmentOption _JAVA_OPTIONS $previousUnderscoreJavaOptions
+    }
+    if ($testExitCode -ne 0) {
         throw "$Name Kotlin tests failed"
     }
 }
