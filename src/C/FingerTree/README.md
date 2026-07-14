@@ -39,7 +39,8 @@ included are:
   sharing, checked prefix sizes, persistent range edits, and an append-only builder;
 - `ft_daba_lite`, a mutable six-cursor FIFO monoid aggregator with 64-slot blocks, worst-case
   3/2/1 combine ceilings for insert/evict/query, injected allocation, and deterministic reclamation;
-- `ft_rope`, a generic persistent chunked positional sequence backed by measured chunk leaves;
+- `ft_rope`, a generic persistent chunked positional sequence backed by measured chunk leaves, plus
+  `ft_rope_cursor`, an explicit-lifetime root-sharing gap cursor with persistent edits and retained branches;
 - `ft_measured_rope`, a generic persistent chunked sequence with cached user measures and cumulative-measure
   navigation;
 - `ft_text_rope`, a character-rope facade backed by `ft_measured_rope` with a cached newline measure, insertion,

@@ -40,6 +40,10 @@ line information, and exits non-zero if any test increments the failure count. A
 - `sorted map` covers insert, set, duplicate rejection, lookup, rank access, traversal, and persistence.
 - `rope` covers chunked positional construction, indexing, traversal, split/reconcat, chunk-local editing,
   boundary coalescing, bounded chunk counts, append, and persistence.
+- `rope cursor`, `rope cursor model`, and `rope cursor concurrent readers` cover explicit handle ownership,
+  empty/start/end and chunk-seam gaps, copied peeks, navigation, exact-alias persistent edits, retained branches,
+  unconditional replacement, array/rope insertion, failure-output preservation, a deterministic 750-command
+  model, and concurrent copies/reads/branches over one retained cursor.
 - `rope chunk boundaries` covers empty/singleton transitions, exact-maximum chunks, overflow splitting, removal
   re-coalescing, and exact-boundary concat for both positional and measured ropes.
 - `measured rope` covers cached and prefix measures, cumulative-measure locate/split, chunk-local editing,

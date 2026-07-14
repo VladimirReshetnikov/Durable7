@@ -292,6 +292,11 @@ typedef struct ft_rope_split_result {
     ft_rope right;
 } ft_rope_split_result;
 
+typedef struct ft_rope_cursor {
+    ft_rope rope;
+    size_t position;
+} ft_rope_cursor;
+
 ft_status ft_rope_init(ft_rope* rope, const ft_value_type* value_type);
 ft_status ft_rope_from_array(
     ft_rope* rope,
@@ -311,6 +316,52 @@ ft_status ft_rope_remove_at(const ft_rope* rope, size_t index, ft_rope* result);
 ft_status ft_rope_split_at(const ft_rope* rope, size_t index, ft_rope_split_result* result);
 ft_status ft_rope_concat(const ft_rope* left, const ft_rope* right, ft_rope* result);
 ft_status ft_rope_visit(const ft_rope* rope, ft_visit_fn visitor, void* context);
+
+ft_status ft_rope_get_cursor(const ft_rope* rope, size_t position, ft_rope_cursor* result);
+ft_status ft_rope_cursor_copy(const ft_rope_cursor* source, ft_rope_cursor* destination);
+void ft_rope_cursor_move(ft_rope_cursor* destination, ft_rope_cursor* source);
+void ft_rope_cursor_dispose(ft_rope_cursor* cursor);
+bool ft_rope_cursor_valid(const ft_rope_cursor* cursor);
+bool ft_rope_cursor_empty(const ft_rope_cursor* cursor);
+size_t ft_rope_cursor_size(const ft_rope_cursor* cursor);
+ft_status ft_rope_cursor_try_size(const ft_rope_cursor* cursor, size_t* size);
+size_t ft_rope_cursor_position(const ft_rope_cursor* cursor);
+ft_status ft_rope_cursor_is_at_start(const ft_rope_cursor* cursor, bool* result);
+ft_status ft_rope_cursor_is_at_end(const ft_rope_cursor* cursor, bool* result);
+ft_status ft_rope_cursor_try_peek_previous(
+    const ft_rope_cursor* cursor,
+    bool* found,
+    void* value);
+ft_status ft_rope_cursor_try_peek_next(
+    const ft_rope_cursor* cursor,
+    bool* found,
+    void* value);
+ft_status ft_rope_cursor_move_previous(const ft_rope_cursor* cursor, ft_rope_cursor* result);
+ft_status ft_rope_cursor_move_next(const ft_rope_cursor* cursor, ft_rope_cursor* result);
+ft_status ft_rope_cursor_seek(
+    const ft_rope_cursor* cursor,
+    size_t position,
+    ft_rope_cursor* result);
+ft_status ft_rope_cursor_insert(
+    const ft_rope_cursor* cursor,
+    const void* value,
+    ft_rope_cursor* result);
+ft_status ft_rope_cursor_insert_array(
+    const ft_rope_cursor* cursor,
+    const void* values,
+    size_t count,
+    ft_rope_cursor* result);
+ft_status ft_rope_cursor_insert_rope(
+    const ft_rope_cursor* cursor,
+    const ft_rope* values,
+    ft_rope_cursor* result);
+ft_status ft_rope_cursor_delete_previous(const ft_rope_cursor* cursor, ft_rope_cursor* result);
+ft_status ft_rope_cursor_delete_next(const ft_rope_cursor* cursor, ft_rope_cursor* result);
+ft_status ft_rope_cursor_replace_next(
+    const ft_rope_cursor* cursor,
+    const void* value,
+    ft_rope_cursor* result);
+ft_status ft_rope_cursor_snapshot(const ft_rope_cursor* cursor, ft_rope* result);
 
 typedef struct ft_measured_rope_chunk_context ft_measured_rope_chunk_context;
 

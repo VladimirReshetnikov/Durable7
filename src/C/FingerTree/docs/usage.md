@@ -57,7 +57,7 @@ ft_tree_dispose(&tree);
 tree = next;
 ```
 
-Self-owned facade structs such as `ft_sorted_map`, `ft_rope`, `ft_measured_rope`,
+Self-owned facade structs such as `ft_sorted_map`, `ft_rope`, `ft_rope_cursor`, `ft_measured_rope`,
 `ft_priority_queue`, `ft_interval_tree_i64`, `ft_interval_tree`, and `ft_text_rope`
 embed callback policy state that the nested tree points at. When replacing one of those facade
 variables with a successful update result, dispose the old value and use the matching `ft_*_move`
@@ -764,6 +764,53 @@ ft_text_rope_dispose(&rope);
 return status;
 ```
 
+Use `ft_rope_get_cursor` for an explicit-lifetime positional gap cursor. Cursor-producing operations accept the
+same cursor as source and result, making a checked in-place handle replacement convenient while retained copies
+continue to represent independent versions:
+
+```c
+ft_value_type int_type;
+ft_value_type_init(&int_type, sizeof(int));
+const int initial[] = {10, 20, 30, 40};
+ft_rope values;
+ft_status status = ft_rope_from_array(&values, &int_type, initial, 4);
+
+ft_rope_cursor cursor;
+if (status == FT_STATUS_OK) {
+    status = ft_rope_get_cursor(&values, 2, &cursor); /* gap between 20 and 30 */
+}
+
+ft_rope_cursor retained;
+if (status == FT_STATUS_OK) {
+    status = ft_rope_cursor_copy(&cursor, &retained);
+}
+
+const int inserted = 99;
+if (status == FT_STATUS_OK) {
+    status = ft_rope_cursor_insert(&cursor, &inserted, &cursor);
+}
+
+ft_rope edited;
+if (status == FT_STATUS_OK) {
+    status = ft_rope_cursor_snapshot(&cursor, &edited);
+}
+
+if (status == FT_STATUS_OK) {
+    ft_rope_dispose(&edited);
+}
+ft_rope_cursor_dispose(&retained);
+ft_rope_cursor_dispose(&cursor);
+ft_rope_dispose(&values);
+return status;
+```
+
+The cursor owns its embedded rope and requires `ft_rope_cursor_copy`, `ft_rope_cursor_move`, and
+`ft_rope_cursor_dispose`; a zeroed or moved-from cursor is invalid. `try_peek_previous` and `try_peek_next` copy
+into caller-provided value storage and use `found` to report a boundary. Movement, seek, insertion, deletion,
+replacement, and snapshot operations leave the source reusable on failure. Distinct successful outputs must be
+uninitialized or disposed; exact source/result aliasing is supported. The checkpoint retains the canonical rope
+root plus its gap and makes no focused-zipper or amortized-locality claim.
+
 `ft_text_rope_line_count` follows the current text-rope facade semantics tested by the C workspace:
 an empty trailing line after a final newline is counted. `ft_text_rope_line_of_offset` and
 `ft_text_rope_line_start_offset` expose the two component navigations directly. `ft_text_rope_offset_of`
@@ -803,7 +850,7 @@ including from a destroy callback during disposal, is unsupported.
 | Minimum-priority draining with stable equal priorities | `ft_priority_queue` |
 | Closed intervals over `int64_t` endpoints | `ft_interval_tree_i64` |
 | Closed intervals over custom endpoint types | `ft_interval_tree` |
-| Chunked positional sequence | `ft_rope` |
+| Chunked positional sequence and version-bound gap editing | `ft_rope`, `ft_rope_cursor` |
 | Chunked sequence with custom cumulative measure | `ft_measured_rope` |
 | Newline-aware character content | `ft_text_rope` |
 

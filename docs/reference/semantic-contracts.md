@@ -269,7 +269,8 @@ Shared obligations:
 - Builders must document mutation, snapshot publication, and whether later builder changes can affect
   previously produced immutable ropes.
 
-C#, C++, Haskell, Kotlin, and Rust ship positional and measured/text cursors. No deque, RRB,
+C#, C, C++, Haskell, Kotlin, and Rust ship positional cursors; C#, C++, Haskell, Kotlin, and Rust
+also ship measured/text cursors. No deque, RRB,
 raw-finger-tree, reversible-deque, or Tungsten cursor is implied by those surfaces. Every shipped
 cursor shares these observable obligations:
 
@@ -299,7 +300,7 @@ retained cursors
   at a boundary has the conservative O(b log n) aggregate bound; there is no unqualified
   arbitrary-version-DAG O(1)-amortized claim.
 
-The C++, Haskell, Kotlin, and Rust positional checkpoints store an already-canonical retained rope
+The C, C++, Haskell, Kotlin, and Rust positional checkpoints store an already-canonical retained rope
 plus its gap. Construction, navigation, and snapshot are O(1). C++, Haskell, and Rust peeks and
 point edits are O(log n) plus bounded chunk work; Kotlin peeks and point edits are O(log n) over its
 measured AVL substrate. None has a default-constructed cursor or makes a zipper, memo-cell, or
@@ -309,6 +310,15 @@ Its pure growth failures raise a length-overflow exception before publishing a r
 retained values reusable. Kotlin uses a non-null peek wrapper to distinguish a stored null from a
 missing neighbor. Rust edits retain the substrate's `T: Clone` bound; read-only cursor operations do
 not.
+
+C `ft_rope_cursor` expresses the same retained-root checkpoint as an explicit owned handle. The zeroed,
+moved-from, or disposed value is invalid; initialized cursors require `copy`, consuming `move`, and `dispose`.
+Cursor-producing operations support exact source/result aliasing and otherwise publish a distinct uninitialized
+destination only on success. Copy, movement, seek, and snapshot perform O(1) structural work plus allocation of
+one self-owned policy context and therefore return `ft_status`; failure leaves retained inputs and an existing
+output unchanged. Peeks copy through the rope's value policy rather than returning borrowed storage. Peeks and
+point edits are O(log n) plus bounded chunk work, while array insertion adds O(m) capture work. It makes no
+zipper, memo-cell, allocation-ceiling, or O(1)-amortized locality claim.
 
 The C#, C++, Haskell, Kotlin, and Rust measured cursors additionally share these result semantics:
 
@@ -383,7 +393,9 @@ specified by its [workspace README](../../src/Haskell/FingerTree/README.md) and 
 [API notes](../../src/Rust/FingerTree/docs/api-notes.md) and
 [validation guide](../../src/Rust/FingerTree/docs/validation.md). The C++ checkpoint is specified by
 its [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) and
-[validation guide](../../src/Cpp/FingerTree/docs/validation.md).
+[validation guide](../../src/Cpp/FingerTree/docs/validation.md). The C positional checkpoint is
+specified by its [API notes](../../src/C/FingerTree/docs/api-notes.md) and
+[validation guide](../../src/C/FingerTree/docs/validation.md).
 
 ## Tungsten Collections
 

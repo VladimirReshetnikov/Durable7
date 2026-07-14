@@ -272,6 +272,23 @@ static bool int_buffer_matches(const int_buffer* buffer, const int* expected, si
     return true;
 }
 
+static bool rope_matches(const ft_rope* rope, const int* expected, size_t count)
+{
+    size_t actual_count = 0;
+    if (ft_rope_try_size(rope, &actual_count) != FT_STATUS_OK || actual_count != count) {
+        return false;
+    }
+
+    for (size_t index = 0; index != count; ++index) {
+        int actual = 0;
+        if (ft_rope_at(rope, index, &actual) != FT_STATUS_OK || actual != expected[index]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 static void collect_char(const void* value, void* context)
 {
     char_buffer* buffer = (char_buffer*)context;
@@ -1392,6 +1409,428 @@ static void test_rope(void)
     ft_rope_dispose(&rope);
 }
 
+static void test_rope_cursor(void)
+{
+    ft_value_type int_type;
+    ft_value_type_init(&int_type, sizeof(int));
+
+    int values[3000];
+    for (int index = 0; index != 3000; ++index) {
+        values[index] = index;
+    }
+
+    ft_rope rope;
+    REQUIRE_STATUS(ft_rope_from_array(&rope, &int_type, values, 3000), FT_STATUS_OK);
+
+    ft_rope_cursor start;
+    REQUIRE_STATUS(ft_rope_get_cursor(&rope, 0, &start), FT_STATUS_OK);
+    REQUIRE(ft_rope_cursor_valid(&start));
+    REQUIRE(!ft_rope_cursor_empty(&start));
+    REQUIRE(ft_rope_cursor_size(&start) == 3000);
+    REQUIRE(ft_rope_cursor_position(&start) == 0);
+
+    size_t reported_size = 0;
+    REQUIRE_STATUS(ft_rope_cursor_try_size(&start, &reported_size), FT_STATUS_OK);
+    REQUIRE(reported_size == 3000);
+    bool boundary = false;
+    REQUIRE_STATUS(ft_rope_cursor_is_at_start(&start, &boundary), FT_STATUS_OK);
+    REQUIRE(boundary);
+    REQUIRE_STATUS(ft_rope_cursor_is_at_end(&start, &boundary), FT_STATUS_OK);
+    REQUIRE(!boundary);
+
+    bool found = true;
+    int peek = -1;
+    REQUIRE_STATUS(ft_rope_cursor_try_peek_previous(&start, &found, &peek), FT_STATUS_OK);
+    REQUIRE(!found);
+    REQUIRE(peek == -1);
+    REQUIRE_STATUS(ft_rope_cursor_try_peek_next(&start, &found, &peek), FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(peek == 0);
+
+    ft_rope_cursor seam;
+    REQUIRE_STATUS(ft_rope_cursor_seek(&start, 2048, &seam), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_rope_cursor_try_peek_previous(&seam, &found, &peek), FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(peek == 2047);
+    REQUIRE_STATUS(ft_rope_cursor_try_peek_next(&seam, &found, &peek), FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(peek == 2048);
+
+    ft_rope_cursor end;
+    REQUIRE_STATUS(ft_rope_get_cursor(&rope, 3000, &end), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_rope_cursor_is_at_end(&end, &boundary), FT_STATUS_OK);
+    REQUIRE(boundary);
+    peek = -1;
+    REQUIRE_STATUS(ft_rope_cursor_try_peek_next(&end, &found, &peek), FT_STATUS_OK);
+    REQUIRE(!found);
+    REQUIRE(peek == -1);
+    REQUIRE_STATUS(ft_rope_cursor_try_peek_previous(&end, &found, &peek), FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(peek == 2999);
+
+    ft_rope_cursor moved;
+    REQUIRE_STATUS(ft_rope_cursor_copy(&seam, &moved), FT_STATUS_OK);
+    ft_rope_cursor moved_again = {0};
+    ft_rope_cursor_move(&moved_again, &moved);
+    REQUIRE(!ft_rope_cursor_valid(&moved));
+    REQUIRE(ft_rope_cursor_valid(&moved_again));
+    REQUIRE(ft_rope_cursor_position(&moved_again) == 2048);
+    REQUIRE_STATUS(ft_rope_cursor_move_previous(&moved_again, &moved_again), FT_STATUS_OK);
+    REQUIRE(ft_rope_cursor_position(&moved_again) == 2047);
+    REQUIRE_STATUS(ft_rope_cursor_move_next(&moved_again, &moved_again), FT_STATUS_OK);
+    REQUIRE(ft_rope_cursor_position(&moved_again) == 2048);
+
+    ft_rope_cursor sentinel;
+    REQUIRE_STATUS(ft_rope_get_cursor(&rope, 17, &sentinel), FT_STATUS_OK);
+    ft_tree_rep* const sentinel_rep = sentinel.rope.tree.rep;
+    REQUIRE_STATUS(ft_rope_cursor_seek(&sentinel, 3001, &sentinel), FT_STATUS_OUT_OF_RANGE);
+    REQUIRE(sentinel.rope.tree.rep == sentinel_rep);
+    REQUIRE(ft_rope_cursor_position(&sentinel) == 17);
+    REQUIRE_STATUS(ft_rope_cursor_move_previous(&start, &sentinel), FT_STATUS_OUT_OF_RANGE);
+    REQUIRE(sentinel.rope.tree.rep == sentinel_rep);
+    REQUIRE(ft_rope_cursor_position(&sentinel) == 17);
+    REQUIRE_STATUS(ft_rope_get_cursor(&rope, 3001, &sentinel), FT_STATUS_OUT_OF_RANGE);
+    REQUIRE(sentinel.rope.tree.rep == sentinel_rep);
+    REQUIRE(ft_rope_cursor_position(&sentinel) == 17);
+
+    ft_rope empty_rope;
+    REQUIRE_STATUS(ft_rope_init(&empty_rope, &int_type), FT_STATUS_OK);
+    ft_rope_cursor empty_cursor;
+    REQUIRE_STATUS(ft_rope_get_cursor(&empty_rope, 0, &empty_cursor), FT_STATUS_OK);
+    REQUIRE(ft_rope_cursor_empty(&empty_cursor));
+    REQUIRE_STATUS(ft_rope_cursor_is_at_start(&empty_cursor, &boundary), FT_STATUS_OK);
+    REQUIRE(boundary);
+    REQUIRE_STATUS(ft_rope_cursor_is_at_end(&empty_cursor, &boundary), FT_STATUS_OK);
+    REQUIRE(boundary);
+    peek = -1;
+    REQUIRE_STATUS(ft_rope_cursor_try_peek_previous(&empty_cursor, &found, &peek), FT_STATUS_OK);
+    REQUIRE(!found);
+    REQUIRE_STATUS(ft_rope_cursor_try_peek_next(&empty_cursor, &found, &peek), FT_STATUS_OK);
+    REQUIRE(!found);
+    REQUIRE_STATUS(ft_rope_cursor_move_previous(&empty_cursor, &sentinel), FT_STATUS_EMPTY);
+    REQUIRE_STATUS(ft_rope_cursor_move_next(&empty_cursor, &sentinel), FT_STATUS_EMPTY);
+    REQUIRE_STATUS(ft_rope_cursor_delete_previous(&empty_cursor, &sentinel), FT_STATUS_EMPTY);
+    REQUIRE_STATUS(ft_rope_cursor_delete_next(&empty_cursor, &sentinel), FT_STATUS_EMPTY);
+    REQUIRE_STATUS(ft_rope_cursor_replace_next(&empty_cursor, &peek, &sentinel), FT_STATUS_EMPTY);
+    REQUIRE(sentinel.rope.tree.rep == sentinel_rep);
+    REQUIRE(ft_rope_cursor_position(&sentinel) == 17);
+
+    const int small_values[] = {10, 20, 30, 40};
+    ft_rope small;
+    REQUIRE_STATUS(ft_rope_from_array(&small, &int_type, small_values, 4), FT_STATUS_OK);
+    ft_rope_cursor base;
+    REQUIRE_STATUS(ft_rope_get_cursor(&small, 2, &base), FT_STATUS_OK);
+
+    const int inserted_value = 99;
+    ft_rope_cursor inserted;
+    REQUIRE_STATUS(ft_rope_cursor_insert(&base, &inserted_value, &inserted), FT_STATUS_OK);
+    REQUIRE(ft_rope_cursor_position(&inserted) == 3);
+    const int inserted_expected[] = {10, 20, 99, 30, 40};
+    ft_rope inserted_snapshot;
+    REQUIRE_STATUS(ft_rope_cursor_snapshot(&inserted, &inserted_snapshot), FT_STATUS_OK);
+    REQUIRE(rope_matches(&inserted_snapshot, inserted_expected, 5));
+    REQUIRE(rope_matches(&small, small_values, 4));
+
+    ft_rope_cursor restored;
+    REQUIRE_STATUS(ft_rope_cursor_delete_previous(&inserted, &restored), FT_STATUS_OK);
+    ft_rope restored_snapshot;
+    REQUIRE_STATUS(ft_rope_cursor_snapshot(&restored, &restored_snapshot), FT_STATUS_OK);
+    REQUIRE(rope_matches(&restored_snapshot, small_values, 4));
+    REQUIRE(ft_rope_cursor_position(&restored) == 2);
+
+    const int range_values[] = {7, 8, 9};
+    ft_rope_cursor with_range;
+    REQUIRE_STATUS(
+        ft_rope_cursor_insert_array(&base, range_values, 3, &with_range),
+        FT_STATUS_OK);
+    const int range_expected[] = {10, 20, 7, 8, 9, 30, 40};
+    ft_rope range_snapshot;
+    REQUIRE_STATUS(ft_rope_cursor_snapshot(&with_range, &range_snapshot), FT_STATUS_OK);
+    REQUIRE(rope_matches(&range_snapshot, range_expected, 7));
+    REQUIRE(ft_rope_cursor_position(&with_range) == 5);
+
+    ft_rope range_rope;
+    REQUIRE_STATUS(ft_rope_from_array(&range_rope, &int_type, range_values, 3), FT_STATUS_OK);
+    ft_rope_cursor with_rope;
+    REQUIRE_STATUS(ft_rope_cursor_insert_rope(&base, &range_rope, &with_rope), FT_STATUS_OK);
+    ft_rope range_rope_snapshot;
+    REQUIRE_STATUS(ft_rope_cursor_snapshot(&with_rope, &range_rope_snapshot), FT_STATUS_OK);
+    REQUIRE(rope_matches(&range_rope_snapshot, range_expected, 7));
+
+    ft_rope_cursor deleted_next;
+    REQUIRE_STATUS(ft_rope_cursor_delete_next(&base, &deleted_next), FT_STATUS_OK);
+    const int deleted_next_expected[] = {10, 20, 40};
+    ft_rope deleted_next_snapshot;
+    REQUIRE_STATUS(ft_rope_cursor_snapshot(&deleted_next, &deleted_next_snapshot), FT_STATUS_OK);
+    REQUIRE(rope_matches(&deleted_next_snapshot, deleted_next_expected, 3));
+    REQUIRE(ft_rope_cursor_position(&deleted_next) == 2);
+
+    const int equal_replacement = 30;
+    ft_rope_cursor replaced;
+    REQUIRE_STATUS(ft_rope_cursor_replace_next(&base, &equal_replacement, &replaced), FT_STATUS_OK);
+    ft_rope replaced_snapshot;
+    REQUIRE_STATUS(ft_rope_cursor_snapshot(&replaced, &replaced_snapshot), FT_STATUS_OK);
+    REQUIRE(rope_matches(&replaced_snapshot, small_values, 4));
+    REQUIRE(replaced_snapshot.tree.rep != small.tree.rep);
+    REQUIRE(ft_rope_cursor_position(&replaced) == 2);
+
+    ft_rope_cursor no_op;
+    REQUIRE_STATUS(ft_rope_cursor_insert_array(&base, NULL, 0, &no_op), FT_STATUS_OK);
+    REQUIRE(no_op.rope.tree.rep == base.rope.tree.rep);
+    REQUIRE(ft_rope_cursor_position(&no_op) == 2);
+
+    ft_value_type short_type;
+    ft_value_type_init(&short_type, sizeof(short));
+    const short short_value = 1;
+    ft_rope incompatible;
+    REQUIRE_STATUS(ft_rope_from_array(&incompatible, &short_type, &short_value, 1), FT_STATUS_OK);
+    REQUIRE_STATUS(
+        ft_rope_cursor_insert_rope(&base, &incompatible, &sentinel),
+        FT_STATUS_INVALID_ARGUMENT);
+    REQUIRE(sentinel.rope.tree.rep == sentinel_rep);
+    REQUIRE(ft_rope_cursor_position(&sentinel) == 17);
+
+    ft_rope_cursor_dispose(&no_op);
+    ft_rope_dispose(&incompatible);
+    ft_rope_dispose(&replaced_snapshot);
+    ft_rope_cursor_dispose(&replaced);
+    ft_rope_dispose(&deleted_next_snapshot);
+    ft_rope_cursor_dispose(&deleted_next);
+    ft_rope_dispose(&range_rope_snapshot);
+    ft_rope_cursor_dispose(&with_rope);
+    ft_rope_dispose(&range_rope);
+    ft_rope_dispose(&range_snapshot);
+    ft_rope_cursor_dispose(&with_range);
+    ft_rope_dispose(&restored_snapshot);
+    ft_rope_cursor_dispose(&restored);
+    ft_rope_dispose(&inserted_snapshot);
+    ft_rope_cursor_dispose(&inserted);
+    ft_rope_cursor_dispose(&base);
+    ft_rope_dispose(&small);
+    ft_rope_cursor_dispose(&empty_cursor);
+    ft_rope_dispose(&empty_rope);
+    ft_rope_cursor_dispose(&sentinel);
+    ft_rope_cursor_dispose(&moved_again);
+    ft_rope_cursor_dispose(&moved);
+    ft_rope_cursor_dispose(&end);
+    ft_rope_cursor_dispose(&seam);
+    ft_rope_cursor_dispose(&start);
+    ft_rope_dispose(&rope);
+}
+
+static uint32_t rope_cursor_next_random(uint32_t* state)
+{
+    *state = *state * UINT32_C(1664525) + UINT32_C(1013904223);
+    return *state;
+}
+
+static void test_rope_cursor_model(void)
+{
+    ft_value_type int_type;
+    ft_value_type_init(&int_type, sizeof(int));
+
+    ft_rope rope;
+    REQUIRE_STATUS(ft_rope_init(&rope, &int_type), FT_STATUS_OK);
+    ft_rope_cursor cursor;
+    REQUIRE_STATUS(ft_rope_get_cursor(&rope, 0, &cursor), FT_STATUS_OK);
+    ft_rope_dispose(&rope);
+
+    int model[96] = {0};
+    size_t count = 0;
+    size_t position = 0;
+    size_t reported_size = 0;
+    uint32_t random = UINT32_C(0x6d2b79f5);
+
+    for (int step = 0; step != 750; ++step) {
+        const uint32_t bits = rope_cursor_next_random(&random);
+        unsigned operation = bits % 7u;
+        if (count == 96 && operation == 0) {
+            operation = position == 0 ? 2u : 1u;
+        }
+
+        if (operation == 0 || (count == 0 && operation != 6)) {
+            const int value = step * 17 + (int)(bits >> 24);
+            REQUIRE_STATUS(ft_rope_cursor_insert(&cursor, &value, &cursor), FT_STATUS_OK);
+            (void)memmove(
+                model + position + 1u,
+                model + position,
+                (count - position) * sizeof(model[0]));
+            model[position] = value;
+            ++position;
+            ++count;
+        } else if (operation == 1 && position != 0) {
+            REQUIRE_STATUS(ft_rope_cursor_delete_previous(&cursor, &cursor), FT_STATUS_OK);
+            (void)memmove(
+                model + position - 1u,
+                model + position,
+                (count - position) * sizeof(model[0]));
+            --position;
+            --count;
+        } else if (operation == 2 && position != count) {
+            REQUIRE_STATUS(ft_rope_cursor_delete_next(&cursor, &cursor), FT_STATUS_OK);
+            (void)memmove(
+                model + position,
+                model + position + 1u,
+                (count - position - 1u) * sizeof(model[0]));
+            --count;
+        } else if (operation == 3 && position != 0) {
+            REQUIRE_STATUS(ft_rope_cursor_move_previous(&cursor, &cursor), FT_STATUS_OK);
+            --position;
+        } else if (operation == 4 && position != count) {
+            REQUIRE_STATUS(ft_rope_cursor_move_next(&cursor, &cursor), FT_STATUS_OK);
+            ++position;
+        } else if (operation == 5 && position != count) {
+            const int value = -step - 1;
+            REQUIRE_STATUS(ft_rope_cursor_replace_next(&cursor, &value, &cursor), FT_STATUS_OK);
+            model[position] = value;
+        } else {
+            const size_t next_position = count == 0 ? 0 : (size_t)(bits >> 8) % (count + 1u);
+            REQUIRE_STATUS(ft_rope_cursor_seek(&cursor, next_position, &cursor), FT_STATUS_OK);
+            position = next_position;
+        }
+
+        REQUIRE(ft_rope_cursor_position(&cursor) == position);
+        REQUIRE_STATUS(ft_rope_cursor_try_size(&cursor, &reported_size), FT_STATUS_OK);
+        REQUIRE(reported_size == count);
+
+        bool found = false;
+        int value = 0;
+        REQUIRE_STATUS(ft_rope_cursor_try_peek_previous(&cursor, &found, &value), FT_STATUS_OK);
+        REQUIRE(found == (position != 0));
+        if (found) {
+            REQUIRE(value == model[position - 1u]);
+        }
+
+        REQUIRE_STATUS(ft_rope_cursor_try_peek_next(&cursor, &found, &value), FT_STATUS_OK);
+        REQUIRE(found == (position != count));
+        if (found) {
+            REQUIRE(value == model[position]);
+        }
+
+        if (step % 25 == 0 || step == 749) {
+            ft_rope snapshot;
+            REQUIRE_STATUS(ft_rope_cursor_snapshot(&cursor, &snapshot), FT_STATUS_OK);
+            REQUIRE(rope_matches(&snapshot, model, count));
+            ft_rope_dispose(&snapshot);
+        }
+    }
+
+    ft_rope_cursor_dispose(&cursor);
+}
+
+typedef struct concurrent_rope_cursor_context {
+    const ft_rope_cursor* cursor;
+    int iterations;
+    test_atomic_long failures;
+} concurrent_rope_cursor_context;
+
+static void concurrent_rope_cursor_worker(concurrent_rope_cursor_context* context)
+{
+    for (int iteration = 0; iteration != context->iterations; ++iteration) {
+        ft_rope_cursor cursor;
+        if (ft_rope_cursor_copy(context->cursor, &cursor) != FT_STATUS_OK) {
+            test_atomic_long_increment(&context->failures);
+            return;
+        }
+
+        bool found = false;
+        int previous = -1;
+        int next = -1;
+        if (ft_rope_cursor_try_peek_previous(&cursor, &found, &previous) != FT_STATUS_OK ||
+            !found || previous != 2047 ||
+            ft_rope_cursor_try_peek_next(&cursor, &found, &next) != FT_STATUS_OK ||
+            !found || next != 2048) {
+            test_atomic_long_increment(&context->failures);
+            ft_rope_cursor_dispose(&cursor);
+            return;
+        }
+
+        const int inserted = -iteration - 1;
+        ft_rope_cursor branch = {0};
+        if (ft_rope_cursor_insert(&cursor, &inserted, &branch) != FT_STATUS_OK ||
+            ft_rope_cursor_position(&branch) != 2049 ||
+            ft_rope_cursor_size(&branch) != 3001 ||
+            ft_rope_cursor_position(&cursor) != 2048 ||
+            ft_rope_cursor_size(&cursor) != 3000) {
+            test_atomic_long_increment(&context->failures);
+            ft_rope_cursor_dispose(&branch);
+            ft_rope_cursor_dispose(&cursor);
+            return;
+        }
+
+        ft_rope_cursor_dispose(&branch);
+        ft_rope_cursor_dispose(&cursor);
+    }
+}
+
+#ifdef _WIN32
+static DWORD WINAPI concurrent_rope_cursor_thread_proc(void* parameter)
+{
+    concurrent_rope_cursor_worker((concurrent_rope_cursor_context*)parameter);
+    return 0;
+}
+#elif defined(TEST_HAS_C11_THREADS)
+static int concurrent_rope_cursor_thread_main(void* parameter)
+{
+    concurrent_rope_cursor_worker((concurrent_rope_cursor_context*)parameter);
+    return 0;
+}
+#endif
+
+static void test_rope_cursor_concurrent_readers(void)
+{
+    ft_value_type int_type;
+    ft_value_type_init(&int_type, sizeof(int));
+    int values[3000];
+    for (int index = 0; index != 3000; ++index) {
+        values[index] = index;
+    }
+
+    ft_rope rope;
+    REQUIRE_STATUS(ft_rope_from_array(&rope, &int_type, values, 3000), FT_STATUS_OK);
+    ft_rope_cursor cursor;
+    REQUIRE_STATUS(ft_rope_get_cursor(&rope, 2048, &cursor), FT_STATUS_OK);
+
+    concurrent_rope_cursor_context context;
+    context.cursor = &cursor;
+    context.iterations = 48;
+    test_atomic_long_init(&context.failures, 0);
+
+#ifdef _WIN32
+    enum { thread_count = 4 };
+    HANDLE threads[thread_count];
+    for (DWORD index = 0; index != thread_count; ++index) {
+        threads[index] = CreateThread(NULL, 0, concurrent_rope_cursor_thread_proc, &context, 0, NULL);
+        REQUIRE(threads[index] != NULL);
+    }
+
+    REQUIRE(WaitForMultipleObjects(thread_count, threads, TRUE, INFINITE) == WAIT_OBJECT_0);
+    for (DWORD index = 0; index != thread_count; ++index) {
+        CloseHandle(threads[index]);
+    }
+#elif defined(TEST_HAS_C11_THREADS)
+    enum { thread_count = 4 };
+    thrd_t threads[thread_count];
+    for (int index = 0; index != thread_count; ++index) {
+        REQUIRE(thrd_create(&threads[index], concurrent_rope_cursor_thread_main, &context) == thrd_success);
+    }
+
+    for (int index = 0; index != thread_count; ++index) {
+        REQUIRE(thrd_join(threads[index], NULL) == thrd_success);
+    }
+#else
+    for (int index = 0; index != 4; ++index) {
+        concurrent_rope_cursor_worker(&context);
+    }
+#endif
+
+    REQUIRE(test_atomic_long_read(&context.failures) == 0);
+    REQUIRE(ft_rope_cursor_position(&cursor) == 2048);
+    REQUIRE(ft_rope_cursor_size(&cursor) == 3000);
+    ft_rope_cursor_dispose(&cursor);
+    ft_rope_dispose(&rope);
+}
+
 static void test_rope_chunk_boundaries(void)
 {
     ft_value_type int_type;
@@ -1948,6 +2387,9 @@ int main(void)
     run_test("sorted facade structural bounds", test_sorted_facade_structural_bounds);
     run_test("sorted map", test_sorted_map);
     run_test("rope", test_rope);
+    run_test("rope cursor", test_rope_cursor);
+    run_test("rope cursor model", test_rope_cursor_model);
+    run_test("rope cursor concurrent readers", test_rope_cursor_concurrent_readers);
     run_test("rope chunk boundaries", test_rope_chunk_boundaries);
     run_test("measured rope", test_measured_rope);
     run_test("priority queue", test_priority_queue);

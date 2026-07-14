@@ -116,6 +116,9 @@ The executable covers:
 - sorted map insert/set/remove, duplicate rejection, lookup, rank access, traversal, and persistence;
 - chunked rope construction across chunk boundaries, cumulative indexing, traversal, split/reconcat, chunk-local
   insertion/removal, boundary coalescing, bounded chunk counts, append, and persistence;
+- explicit-lifetime positional rope cursors across empty/start/end and chunk-seam gaps, copied peeks,
+  copy/move/dispose ownership, exact-alias edits, retained branches, unconditional replacement, range insertion,
+  failure-output preservation, a deterministic 750-command gap model, and concurrent distinct-handle readers;
 - empty/singleton and exact-maximum chunk boundaries, including split-on-insert and merge-on-remove/concat for
   positional and measured ropes;
 - measured rope construction across chunk boundaries, cached whole/prefix measure reads, one-descent prefix

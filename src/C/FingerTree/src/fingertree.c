@@ -6705,12 +6705,31 @@ ft_status ft_rope_concat(const ft_rope* left, const ft_rope* right, ft_rope* res
         return FT_STATUS_INVALID_ARGUMENT;
     }
 
+    size_t left_size = 0;
+    size_t right_size = 0;
+    size_t combined_size = 0;
+    ft_status status = ft_rope_try_size(left, &left_size);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_rope_try_size(right, &right_size);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (ft_add_overflows(left_size, right_size, &combined_size)) {
+        return FT_STATUS_OVERFLOW;
+    }
+
+    (void)combined_size;
+
     if (ft_rope_empty(left) || ft_rope_empty(right)) {
         return ft_rope_concat_raw(left, right, result);
     }
 
     ft_rope_chunk left_chunk;
-    ft_status status = ft_tree_back(&left->tree, &left_chunk);
+    status = ft_tree_back(&left->tree, &left_chunk);
     if (status != FT_STATUS_OK) {
         return status;
     }
@@ -6955,6 +6974,10 @@ ft_status ft_rope_insert_at(const ft_rope* rope, size_t index, const void* value
         return FT_STATUS_OUT_OF_RANGE;
     }
 
+    if (size == SIZE_MAX) {
+        return FT_STATUS_OVERFLOW;
+    }
+
     if (size == 0) {
         return ft_rope_from_array(result, &rope->value_type, value, 1);
     }
@@ -7160,6 +7183,491 @@ ft_status ft_rope_visit(const ft_rope* rope, ft_visit_fn visitor, void* context)
     visit_context.visitor = visitor;
     visit_context.context = context;
     return ft_tree_visit(&rope->tree, ft_rope_visit_chunk, &visit_context);
+}
+
+static bool ft_rope_cursor_is_valid(const ft_rope_cursor* cursor)
+{
+    return cursor != NULL && cursor->rope.chunk_context != NULL &&
+        cursor->rope.tree.policy != NULL && cursor->rope.tree.rep != NULL;
+}
+
+static ft_status ft_rope_cursor_stage(
+    const ft_rope* rope,
+    size_t position,
+    ft_rope_cursor* cursor)
+{
+    (void)memset(cursor, 0, sizeof(*cursor));
+    ft_status status = ft_rope_copy(rope, &cursor->rope);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    cursor->position = position;
+    return FT_STATUS_OK;
+}
+
+static void ft_rope_cursor_publish(
+    const ft_rope_cursor* source,
+    ft_rope_cursor* staged,
+    ft_rope_cursor* result)
+{
+    if (result == source) {
+        ft_rope_cursor_dispose(result);
+    }
+
+    ft_rope_cursor_move(result, staged);
+}
+
+ft_status ft_rope_get_cursor(const ft_rope* rope, size_t position, ft_rope_cursor* result)
+{
+    if (rope == NULL || result == NULL || rope->chunk_context == NULL ||
+        rope->tree.policy == NULL || rope->tree.rep == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    size_t size = 0;
+    ft_status status = ft_rope_try_size(rope, &size);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (position > size) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    ft_rope_cursor staged;
+    status = ft_rope_cursor_stage(rope, position, &staged);
+    if (status == FT_STATUS_OK) {
+        ft_rope_cursor_move(result, &staged);
+    }
+
+    return status;
+}
+
+ft_status ft_rope_cursor_copy(const ft_rope_cursor* source, ft_rope_cursor* destination)
+{
+    if (!ft_rope_cursor_is_valid(source) || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (source == destination) {
+        return FT_STATUS_OK;
+    }
+
+    ft_rope_cursor staged;
+    ft_status status = ft_rope_cursor_stage(&source->rope, source->position, &staged);
+    if (status == FT_STATUS_OK) {
+        ft_rope_cursor_move(destination, &staged);
+    }
+
+    return status;
+}
+
+void ft_rope_cursor_move(ft_rope_cursor* destination, ft_rope_cursor* source)
+{
+    if (destination == NULL || source == NULL || destination == source) {
+        return;
+    }
+
+    (void)memset(destination, 0, sizeof(*destination));
+    ft_rope_move(&destination->rope, &source->rope);
+    destination->position = source->position;
+    source->position = 0;
+}
+
+void ft_rope_cursor_dispose(ft_rope_cursor* cursor)
+{
+    if (cursor == NULL) {
+        return;
+    }
+
+    ft_rope_dispose(&cursor->rope);
+    cursor->position = 0;
+}
+
+bool ft_rope_cursor_valid(const ft_rope_cursor* cursor)
+{
+    return ft_rope_cursor_is_valid(cursor);
+}
+
+bool ft_rope_cursor_empty(const ft_rope_cursor* cursor)
+{
+    return !ft_rope_cursor_is_valid(cursor) || ft_rope_empty(&cursor->rope);
+}
+
+size_t ft_rope_cursor_size(const ft_rope_cursor* cursor)
+{
+    return ft_rope_cursor_is_valid(cursor) ? ft_rope_size(&cursor->rope) : 0;
+}
+
+ft_status ft_rope_cursor_try_size(const ft_rope_cursor* cursor, size_t* size)
+{
+    if (!ft_rope_cursor_is_valid(cursor) || size == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    return ft_rope_try_size(&cursor->rope, size);
+}
+
+size_t ft_rope_cursor_position(const ft_rope_cursor* cursor)
+{
+    return ft_rope_cursor_is_valid(cursor) ? cursor->position : 0;
+}
+
+ft_status ft_rope_cursor_is_at_start(const ft_rope_cursor* cursor, bool* result)
+{
+    if (!ft_rope_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    *result = cursor->position == 0;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_rope_cursor_is_at_end(const ft_rope_cursor* cursor, bool* result)
+{
+    if (!ft_rope_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    size_t size = 0;
+    ft_status status = ft_rope_try_size(&cursor->rope, &size);
+    if (status == FT_STATUS_OK) {
+        *result = cursor->position == size;
+    }
+
+    return status;
+}
+
+ft_status ft_rope_cursor_try_peek_previous(
+    const ft_rope_cursor* cursor,
+    bool* found,
+    void* value)
+{
+    if (!ft_rope_cursor_is_valid(cursor) || found == NULL || value == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (cursor->position == 0) {
+        *found = false;
+        return FT_STATUS_OK;
+    }
+
+    ft_status status = ft_rope_at(&cursor->rope, cursor->position - 1u, value);
+    if (status == FT_STATUS_OK) {
+        *found = true;
+    }
+
+    return status;
+}
+
+ft_status ft_rope_cursor_try_peek_next(
+    const ft_rope_cursor* cursor,
+    bool* found,
+    void* value)
+{
+    if (!ft_rope_cursor_is_valid(cursor) || found == NULL || value == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    size_t size = 0;
+    ft_status status = ft_rope_try_size(&cursor->rope, &size);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (cursor->position == size) {
+        *found = false;
+        return FT_STATUS_OK;
+    }
+
+    status = ft_rope_at(&cursor->rope, cursor->position, value);
+    if (status == FT_STATUS_OK) {
+        *found = true;
+    }
+
+    return status;
+}
+
+ft_status ft_rope_cursor_seek(
+    const ft_rope_cursor* cursor,
+    size_t position,
+    ft_rope_cursor* result)
+{
+    if (!ft_rope_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    size_t size = 0;
+    ft_status status = ft_rope_try_size(&cursor->rope, &size);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (position > size) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+
+    if (result == cursor && position == cursor->position) {
+        return FT_STATUS_OK;
+    }
+
+    ft_rope_cursor staged;
+    status = ft_rope_cursor_stage(&cursor->rope, position, &staged);
+    if (status == FT_STATUS_OK) {
+        ft_rope_cursor_publish(cursor, &staged, result);
+    }
+
+    return status;
+}
+
+ft_status ft_rope_cursor_move_previous(const ft_rope_cursor* cursor, ft_rope_cursor* result)
+{
+    if (!ft_rope_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (cursor->position == 0) {
+        return ft_rope_empty(&cursor->rope) ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+
+    return ft_rope_cursor_seek(cursor, cursor->position - 1u, result);
+}
+
+ft_status ft_rope_cursor_move_next(const ft_rope_cursor* cursor, ft_rope_cursor* result)
+{
+    if (!ft_rope_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    size_t size = 0;
+    ft_status status = ft_rope_try_size(&cursor->rope, &size);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+
+    return ft_rope_cursor_seek(cursor, cursor->position + 1u, result);
+}
+
+ft_status ft_rope_cursor_insert(
+    const ft_rope_cursor* cursor,
+    const void* value,
+    ft_rope_cursor* result)
+{
+    if (!ft_rope_cursor_is_valid(cursor) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (cursor->position == SIZE_MAX) {
+        return FT_STATUS_OVERFLOW;
+    }
+
+    ft_rope edited;
+    ft_status status = ft_rope_insert_at(&cursor->rope, cursor->position, value, &edited);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    ft_rope_cursor staged = {0};
+    ft_rope_move(&staged.rope, &edited);
+    staged.position = cursor->position + 1u;
+    ft_rope_cursor_publish(cursor, &staged, result);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_rope_cursor_insert_rope(
+    const ft_rope_cursor* cursor,
+    const ft_rope* values,
+    ft_rope_cursor* result)
+{
+    if (!ft_rope_cursor_is_valid(cursor) || values == NULL || result == NULL ||
+        values->chunk_context == NULL || values->tree.policy == NULL || values->tree.rep == NULL ||
+        !ft_rope_compatible(&cursor->rope, values)) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    size_t value_count = 0;
+    ft_status status = ft_rope_try_size(values, &value_count);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (value_count == 0) {
+        return ft_rope_cursor_copy(cursor, result);
+    }
+
+    size_t next_position = 0;
+    if (ft_add_overflows(cursor->position, value_count, &next_position)) {
+        return FT_STATUS_OVERFLOW;
+    }
+
+    ft_rope_split_result split;
+    status = ft_rope_split_at(&cursor->rope, cursor->position, &split);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    ft_rope prefix;
+    status = ft_rope_concat(&split.left, values, &prefix);
+    if (status != FT_STATUS_OK) {
+        ft_rope_dispose(&split.left);
+        ft_rope_dispose(&split.right);
+        return status;
+    }
+
+    ft_rope edited;
+    status = ft_rope_concat(&prefix, &split.right, &edited);
+    ft_rope_dispose(&prefix);
+    ft_rope_dispose(&split.left);
+    ft_rope_dispose(&split.right);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    ft_rope_cursor staged = {0};
+    ft_rope_move(&staged.rope, &edited);
+    staged.position = next_position;
+    ft_rope_cursor_publish(cursor, &staged, result);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_rope_cursor_insert_array(
+    const ft_rope_cursor* cursor,
+    const void* values,
+    size_t count,
+    ft_rope_cursor* result)
+{
+    if (!ft_rope_cursor_is_valid(cursor) || result == NULL || (values == NULL && count != 0)) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (count == 0) {
+        return ft_rope_cursor_copy(cursor, result);
+    }
+
+    ft_rope range;
+    ft_status status = ft_rope_from_array(&range, &cursor->rope.value_type, values, count);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    status = ft_rope_cursor_insert_rope(cursor, &range, result);
+    ft_rope_dispose(&range);
+    return status;
+}
+
+ft_status ft_rope_cursor_delete_previous(const ft_rope_cursor* cursor, ft_rope_cursor* result)
+{
+    if (!ft_rope_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (cursor->position == 0) {
+        return ft_rope_empty(&cursor->rope) ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+
+    ft_rope edited;
+    ft_status status = ft_rope_remove_at(&cursor->rope, cursor->position - 1u, &edited);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    ft_rope_cursor staged = {0};
+    ft_rope_move(&staged.rope, &edited);
+    staged.position = cursor->position - 1u;
+    ft_rope_cursor_publish(cursor, &staged, result);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_rope_cursor_delete_next(const ft_rope_cursor* cursor, ft_rope_cursor* result)
+{
+    if (!ft_rope_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    size_t size = 0;
+    ft_status status = ft_rope_try_size(&cursor->rope, &size);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+
+    ft_rope edited;
+    status = ft_rope_remove_at(&cursor->rope, cursor->position, &edited);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    ft_rope_cursor staged = {0};
+    ft_rope_move(&staged.rope, &edited);
+    staged.position = cursor->position;
+    ft_rope_cursor_publish(cursor, &staged, result);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_rope_cursor_replace_next(
+    const ft_rope_cursor* cursor,
+    const void* value,
+    ft_rope_cursor* result)
+{
+    if (!ft_rope_cursor_is_valid(cursor) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    size_t size = 0;
+    ft_status status = ft_rope_try_size(&cursor->rope, &size);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+
+    ft_rope removed;
+    status = ft_rope_remove_at(&cursor->rope, cursor->position, &removed);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    ft_rope edited;
+    status = ft_rope_insert_at(&removed, cursor->position, value, &edited);
+    ft_rope_dispose(&removed);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    ft_rope_cursor staged = {0};
+    ft_rope_move(&staged.rope, &edited);
+    staged.position = cursor->position;
+    ft_rope_cursor_publish(cursor, &staged, result);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_rope_cursor_snapshot(const ft_rope_cursor* cursor, ft_rope* result)
+{
+    if (!ft_rope_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (result == &cursor->rope) {
+        return FT_STATUS_OK;
+    }
+
+    ft_rope staged;
+    ft_status status = ft_rope_copy(&cursor->rope, &staged);
+    if (status == FT_STATUS_OK) {
+        ft_rope_move(result, &staged);
+    }
+
+    return status;
 }
 
 typedef struct ft_measured_rope_chunk {

@@ -149,7 +149,8 @@ FingerTree lineage:
 3. [`src/C/FingerTree`](../../src/C/FingerTree/README.md) follows the native design in C form with
    explicit handles, callback policies, and facade types, including the erased-type-safe canonical
    zip-zip set and a separately owned mutable DABA Lite handle with allocator-failure status
-   semantics.
+   semantics. Its `ft_rope_cursor` is an explicit-lifetime positional snapshot-plus-gap checkpoint;
+   measured/text cursor specialization remains a separate later port.
 4. [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) ports the family to Haskell
    with a general measured tree, size-measured deque, reversible deque, derived collections, the
    explicitly identified policy-canonical zip-zip set, priority queues, intervals, ropes, and text

@@ -29,7 +29,7 @@ The public C API lives in `tools/data_structures/finger_tree/fingertree.h` and t
 `ft_tree_insert_at`, and `ft_tree_remove_at` return new handles and leave their inputs valid. Handles must be
 released with `ft_tree_dispose`. Wrappers that reference caller-owned policies (`ft_sorted_set` and
 `ft_sorted_multiset`) follow the same value-handle convention as long as the external policy outlives all handles.
-Self-owned facades (`ft_sorted_map`, `ft_rope`, `ft_measured_rope`, `ft_priority_queue`,
+Self-owned facades (`ft_sorted_map`, `ft_rope`, `ft_rope_cursor`, `ft_measured_rope`, `ft_priority_queue`,
 `ft_interval_tree_i64`, `ft_interval_tree`, and `ft_text_rope`) embed policy state referenced by their nested
 tree handles; use their `ft_*_move` helpers when relocating an initialized value into another variable.
 The independent `ft_canonical_policy` is instead an identity-bearing reference-counted handle retained by every
@@ -68,7 +68,9 @@ Implemented in this checkpoint:
 - generic persistent minimum-priority queue with caller-supplied value and priority copy policies;
 - generic closed-interval tree facade, plus a signed 64-bit convenience facade, with insertion, removal,
   containment, first-overlap, and overlap count;
-- generic chunked positional rope with cumulative-length indexing, split, concat, insertion, removal, and traversal;
+- generic chunked positional rope with cumulative-length indexing, split, concat, insertion, removal, and traversal,
+  plus an explicit-lifetime snapshot-plus-gap cursor with retained branching, copied peeks, positional navigation,
+  single/range insertion, deletion, unconditional replacement, and snapshot publication;
 - generic measured rope with cached per-chunk user measures, whole/prefix measure reads, cumulative-measure locate
   and split, split, concat, insertion, removal, and traversal;
 - character text rope facade, backed by the newline-measured rope, with insertion/removal/indexing and
@@ -374,6 +376,20 @@ configured maximum, and merge adjacent boundary chunks on split, concat, and rem
 Edit-heavy workloads consequently remain chunked instead of degenerating toward one leaf per element.
 `ft_measured_rope_prefix_measure` descends once and scans at most one bounded chunk: O(log n + chunk-size).
 
+`ft_rope_cursor` is an initialized owned handle containing one exact `ft_rope` version and a gap in
+`0 .. size`. It has explicit `copy`, consuming `move`, and `dispose` operations; the zeroed or disposed value is
+invalid. Navigation retains the shared root, edits publish independent rope versions, and exact source/result
+aliasing is supported by cursor-producing operations. A same-position seek and empty insertion preserve the
+exact root; `replace_next` always creates a successor without consulting element equality. Distinct successful
+result destinations must be uninitialized or disposed, while a failed operation leaves both the source and the
+result untouched. Peeks copy into caller storage, so the existing `ft_copy_fn` abort-on-failure boundary applies.
+
+Cursor copy, movement, seek, and snapshot perform O(1) structural work but allocate one small self-owned policy
+context and can return `FT_STATUS_NO_MEMORY`. Peeks and point edits are O(log n) plus bounded chunk copying;
+array insertion is O(m + log n) plus boundary normalization. The cursor is not the C# focused zipper and claims
+no snapshot memo, callback/allocation ceiling, or O(1)-amortized local editing. Use `ft_rope_cursor_try_size`
+when allocation failure must remain distinguishable from zero; the convenience size form follows `ft_rope_size`.
+
 `ft_text_rope` is based on `ft_measured_rope<char>` with a newline-count measure. Line count is O(1), while
 `line_of_offset`, `line_start_offset`, `line_column_of`, and the column-validated `offset_of` use measured
 descent plus at most one bounded chunk scan.
@@ -386,3 +402,5 @@ descent plus at most one bounded chunk scan.
   produced.
 - `ft_tree_concat` (and the reversible deque's concat) require policy *pointer* identity between
   operands, not just structural compatibility.
+- `ft_rope_cursor` is an explicit owned C handle rather than a C++ value type. Its peeks copy values instead of
+  returning borrowed pointers, and navigation can fail while allocating the cursor's self-owned policy context.
