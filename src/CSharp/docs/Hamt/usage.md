@@ -372,6 +372,12 @@ Console.WriteLine(published["REQUESTS"]);
 PersistentHashMap<string, int> champ = published.ToPersistentHashMap();
 ```
 
+The conversion enumerates that captured generation once. The resulting CHAMP map keeps the exact
+comparer object, snapshot enumeration sequence, and stored key/value representatives, including
+null and equal-full-hash collision entries when the comparer supports them. Writes before, during,
+or after conversion can advance the live Ctrie but cannot alter the captured generation or the
+resulting persistent map.
+
 Factories passed to `GetOrAdd` and `AddOrUpdate` may be invoked more than once under contention;
 keep them repeatable and free of non-repeatable side effects.
 

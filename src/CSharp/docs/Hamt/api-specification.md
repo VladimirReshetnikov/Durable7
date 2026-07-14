@@ -261,7 +261,10 @@ mutable, thread-safe update surface:
 - `Clear` atomically publishes an empty root.
 - `Snapshot` and `GetEnumerator` capture one immutable generation. Later writes cannot change their
   contents, and snapshots retain the trie's comparer.
-- `SnapshotView.ToPersistentHashMap` copies a captured generation into canonical CHAMP form in O(n).
+- `SnapshotView.ToPersistentHashMap` enumerates the captured generation once and copies it into
+  canonical CHAMP form in O(n). The result retains the exact comparer object, enumeration sequence,
+  and stored key/value representatives; later live-trie writes affect neither the conversion nor
+  its result.
 
 The managed implementation installs GCAS descriptors on the indirection node owning a change, and
 readers help complete encountered descriptors. `Snapshot` uses a specialized root/main RDCSS

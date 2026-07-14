@@ -97,7 +97,7 @@ distributions. The default remains the complete 1,024 / 65,536 / 1,048,576 matri
 | `ChampBenchmarks` | CHAMP lookup, payload-dense iteration, shared-single-change diff, and independent-history equality/diff | `Dictionary` and `ImmutableDictionary` |
 | `CtrieBenchmarks` | lock-free lookup and O(1) immutable snapshot publication | `ConcurrentDictionary` lookup and O(n) immutable copy |
 | `TransientLifecycleBenchmarks` | Axis 2 edit-locality/publication matrix and the shipped public C# transient path: O(1) `ToTransient`/`Persist`, first-edit ordinary deferral, later reusable-path promotion, exact-type transient-editable branch/collision nodes, plus untimed structural copy/ownership/retained-size diagnostics | direct persistent edits and canonical `BulkBuilder` construction |
-| `FrozenLookupBenchmarks`, `FrozenClusteredLookupBenchmarks`, `FrozenCollisionLookupBenchmarks`, `FrozenNullLookupBenchmarks` | Axis 2 F1 fixed-layout bake-off across lookup mixes, enumeration, construction, retained arrays, null/stored representatives, collision shapes, and break-even | persistent CHAMP, linear/Robin-Hood/quadratic repository prototypes, `Dictionary`, `ImmutableDictionary`, and BCL `FrozenDictionary` where semantically representable |
+| `FrozenLookupBenchmarks`, `FrozenClusteredLookupBenchmarks`, `FrozenCollisionLookupBenchmarks`, `FrozenNullLookupBenchmarks` | Axis 2 F1 fixed-layout bake-off across lookup mixes, enumeration, construction, conversion back to canonical CHAMP, retained arrays, null/stored representatives, collision shapes, and break-even | persistent CHAMP, linear/Robin-Hood/quadratic repository prototypes, `Dictionary`, `ImmutableDictionary`, and BCL `FrozenDictionary` where semantically representable |
 | `PatriciaMapBenchmarks` | integer-key lookup and prefix-aware structural union | CHAMP and `ImmutableDictionary` lookup |
 | `RrbVectorBenchmarks` | uniform middle indexing and boundary-spine concatenation | `Rope<T>` indexing/concat and `ImmutableList<T>` indexing/concat |
 | `DabaLiteBenchmarks` | worst-case O(1) FIFO slide-and-query aggregation, callback-free structure validation, and 63/64/65 chunk-boundary behavior | `Queue<T>` plus O(n) reaggregation |
@@ -253,9 +253,14 @@ quadratic probing. Global setup validates comparer identity, lookup/content pari
 prototype enumeration order, stored representatives, nulls, and equal-full-hash buckets before a
 timed method can run. Setup also emits `AXIS2_F1_RETAINED_V1` rows for each prototype and for arrays
 reachable through the current runtime's BCL Frozen implementation. These are retained-array
-estimates, not construction allocation. The exact single-worker evidence protocol and pending gate
-are recorded in the [F1 decision document](../../docs/Hamt/frozen-f1-layout-decision.md). The
-standalone `--verify-axis2-frozen-layouts` path runs the complete 39-case semantic matrix plus
-break-even and throwing-comparer checks without BenchmarkDotNet or retained-size output. It is a
-correctness prerequisite only. The [F0 decision](../../docs/Hamt/frozen-f0-signal-decision.md) must
-record an isolated linear-layout advance before F1 results may be interpreted.
+estimates, not construction allocation. Separate `ToPersistent` groups rebuild canonical CHAMP
+from each candidate's packed source-order entries, including the null lane. The exact single-worker
+evidence protocol and pending gate are recorded in the
+[F1 decision document](../../docs/Hamt/frozen-f1-layout-decision.md). The standalone
+`--verify-axis2-frozen-layouts` path emits `AXIS2_FROZEN_VERIFY_V2` after the complete 39-case
+matrix plus a reference-representative case, exact candidate -> persistent -> candidate round trips,
+layout diagnostics, exact comparer callback counts, invariant retained-record formatting,
+break-even arithmetic, and throwing-comparer checks pass. It invokes neither BenchmarkDotNet nor
+retained-size output and is a correctness prerequisite only. The
+[F0 decision](../../docs/Hamt/frozen-f0-signal-decision.md) must record an isolated linear-layout
+advance before F1 results may be interpreted.

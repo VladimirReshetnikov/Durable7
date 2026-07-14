@@ -1,6 +1,8 @@
 using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Text;
 using Tools.DataStructures.Hamt;
 
 namespace Tools.DataStructures.FingerTree.Benchmarks;
@@ -89,6 +91,18 @@ internal sealed class PackedFrozenMapPrototype<TKey, TValue>
 
         actualKey = equalKey;
         return false;
+    }
+
+    /// <summary>
+    /// Rebuilds canonical CHAMP topology from packed source-order entries. This benchmark-local
+    /// conversion models the layout-independent F2 contract without exposing a public frozen type.
+    /// </summary>
+    internal PersistentHashMap<TKey, TValue> ToPersistent()
+    {
+        var builder = PersistentHashMap<TKey, TValue>.CreateBulkBuilder(_comparer);
+        foreach (ref readonly var entry in _entries.AsSpan())
+            builder.SetItem(entry.Key, entry.Value);
+        return builder.ToImmutable();
     }
 
     public Enumerator GetEnumerator() => new(_entries);
@@ -338,6 +352,15 @@ internal sealed class FrozenF0AxisFixture
     internal QuadraticFrozenMapPrototype<Axis2HashKey, int> ConstructQuadratic() =>
         QuadraticFrozenMapPrototype<Axis2HashKey, int>.Create(Persistent);
 
+    internal PersistentHashMap<Axis2HashKey, int> ConvertPackedToPersistent() =>
+        Packed.ToPersistent();
+
+    internal PersistentHashMap<Axis2HashKey, int> ConvertRobinHoodToPersistent() =>
+        RobinHood.ToPersistent();
+
+    internal PersistentHashMap<Axis2HashKey, int> ConvertQuadraticToPersistent() =>
+        Quadratic.ToPersistent();
+
     internal Dictionary<Axis2HashKey, int> ConstructDictionary() =>
         CreateDictionary(Persistent, Axis2HashKeyComparer.Instance);
 
@@ -561,24 +584,60 @@ internal sealed class FrozenF0AxisFixture
         PackedFrozenMapPrototypeDiagnostics quadratic,
         long? bclFrozenEstimatedArrayBytes)
     {
-        Console.WriteLine(
-            $"AXIS2_F1_RETAINED_V1,lane={lane},entries={linear.EntryCount}," +
-            $"persistent-estimated-graph={persistentEstimatedRetainedBytes}," +
-            $"linear-slots={linear.SlotCount},linear-load={linear.LoadFactor:F4}," +
-            $"linear-entry-array={linear.EstimatedEntryArrayBytes}," +
-            $"linear-slot-array={linear.EstimatedSlotArrayBytes}," +
-            $"linear-retained-arrays={linear.EstimatedRetainedArrayBytes}," +
-            $"robin-hood-slots={robinHood.SlotCount},robin-hood-load={robinHood.LoadFactor:F4}," +
-            $"robin-hood-entry-array={robinHood.EstimatedEntryArrayBytes}," +
-            $"robin-hood-slot-array={robinHood.EstimatedSlotArrayBytes}," +
-            $"robin-hood-retained-arrays={robinHood.EstimatedRetainedArrayBytes}," +
-            $"quadratic-slots={quadratic.SlotCount},quadratic-load={quadratic.LoadFactor:F4}," +
-            $"quadratic-entry-array={quadratic.EstimatedEntryArrayBytes}," +
-            $"quadratic-slot-array={quadratic.EstimatedSlotArrayBytes}," +
-            $"quadratic-retained-arrays={quadratic.EstimatedRetainedArrayBytes}," +
-            $"bcl-frozen-retained-arrays={bclFrozenEstimatedArrayBytes?.ToString() ?? "omitted-null-semantics"}. " +
-            "Array estimates exclude wrappers, comparers, and key/value payload object graphs; " +
-            "the BCL value reflects arrays reachable through this runtime's Frozen implementation objects.");
+        Console.WriteLine(FormatRetainedArrays(
+            lane,
+            persistentEstimatedRetainedBytes,
+            linear,
+            robinHood,
+            quadratic,
+            bclFrozenEstimatedArrayBytes));
+    }
+
+    internal static string FormatRetainedArrays(
+        string lane,
+        long persistentEstimatedRetainedBytes,
+        PackedFrozenMapPrototypeDiagnostics linear,
+        PackedFrozenMapPrototypeDiagnostics robinHood,
+        PackedFrozenMapPrototypeDiagnostics quadratic,
+        long? bclFrozenEstimatedArrayBytes)
+    {
+        var bclFrozenBytes = bclFrozenEstimatedArrayBytes?.ToString(CultureInfo.InvariantCulture)
+            ?? "omitted-null-semantics";
+        return new StringBuilder(512)
+            .Append("AXIS2_F1_RETAINED_V1,lane=").Append(lane)
+            .Append(",entries=").Append(linear.EntryCount.ToString(CultureInfo.InvariantCulture))
+            .Append(",persistent-estimated-graph=")
+            .Append(persistentEstimatedRetainedBytes.ToString(CultureInfo.InvariantCulture))
+            .Append(",linear-slots=").Append(linear.SlotCount.ToString(CultureInfo.InvariantCulture))
+            .Append(",linear-load=").Append(linear.LoadFactor.ToString("F4", CultureInfo.InvariantCulture))
+            .Append(",linear-entry-array=")
+            .Append(linear.EstimatedEntryArrayBytes.ToString(CultureInfo.InvariantCulture))
+            .Append(",linear-slot-array=")
+            .Append(linear.EstimatedSlotArrayBytes.ToString(CultureInfo.InvariantCulture))
+            .Append(",linear-retained-arrays=")
+            .Append(linear.EstimatedRetainedArrayBytes.ToString(CultureInfo.InvariantCulture))
+            .Append(",robin-hood-slots=")
+            .Append(robinHood.SlotCount.ToString(CultureInfo.InvariantCulture))
+            .Append(",robin-hood-load=")
+            .Append(robinHood.LoadFactor.ToString("F4", CultureInfo.InvariantCulture))
+            .Append(",robin-hood-entry-array=")
+            .Append(robinHood.EstimatedEntryArrayBytes.ToString(CultureInfo.InvariantCulture))
+            .Append(",robin-hood-slot-array=")
+            .Append(robinHood.EstimatedSlotArrayBytes.ToString(CultureInfo.InvariantCulture))
+            .Append(",robin-hood-retained-arrays=")
+            .Append(robinHood.EstimatedRetainedArrayBytes.ToString(CultureInfo.InvariantCulture))
+            .Append(",quadratic-slots=")
+            .Append(quadratic.SlotCount.ToString(CultureInfo.InvariantCulture))
+            .Append(",quadratic-load=")
+            .Append(quadratic.LoadFactor.ToString("F4", CultureInfo.InvariantCulture))
+            .Append(",quadratic-entry-array=")
+            .Append(quadratic.EstimatedEntryArrayBytes.ToString(CultureInfo.InvariantCulture))
+            .Append(",quadratic-slot-array=")
+            .Append(quadratic.EstimatedSlotArrayBytes.ToString(CultureInfo.InvariantCulture))
+            .Append(",quadratic-retained-arrays=")
+            .Append(quadratic.EstimatedRetainedArrayBytes.ToString(CultureInfo.InvariantCulture))
+            .Append(",bcl-frozen-retained-arrays=").Append(bclFrozenBytes)
+            .ToString();
     }
 }
 
@@ -666,6 +725,15 @@ internal sealed class FrozenF0NullCollisionFixture
 
     internal QuadraticFrozenMapPrototype<string?, int> ConstructQuadratic() =>
         QuadraticFrozenMapPrototype<string?, int>.Create(Persistent);
+
+    internal PersistentHashMap<string?, int> ConvertPackedToPersistent() =>
+        Packed.ToPersistent();
+
+    internal PersistentHashMap<string?, int> ConvertRobinHoodToPersistent() =>
+        RobinHood.ToPersistent();
+
+    internal PersistentHashMap<string?, int> ConvertQuadraticToPersistent() =>
+        Quadratic.ToPersistent();
 
     private void ValidateSemanticParity(string?[] originalRepresentatives)
     {

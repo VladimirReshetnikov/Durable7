@@ -80,6 +80,60 @@ public sealed class ConcurrentHashTrieTests
         Assert.Equal("later", trie[1000]);
     }
 
+    /// <summary>
+    /// Locks the existing snapshot-to-CHAMP boundary that a future frozen conversion must match.
+    /// </summary>
+    [Fact]
+    public void SnapshotToPersistent_PreservesPolicyRepresentativesOrderAndGeneration()
+    {
+        var comparer = new NullableCollisionComparer();
+        var firstKey = new string("Alpha".ToCharArray());
+        var equivalentKey = new string("ALPHA".ToCharArray());
+        var finalEquivalentKey = new string("alpha".ToCharArray());
+        var initialValue = new RepresentativeValue("initial");
+        var winningValue = new RepresentativeValue("winning");
+        var equalWinningValue = new RepresentativeValue("winning");
+        var nullValue = new RepresentativeValue("null");
+        var laterValue = new RepresentativeValue("later");
+        var trie = new ConcurrentHashTrie<string?, RepresentativeValue?>(comparer);
+        trie.SetItem(firstKey, initialValue);
+        trie.SetItem(equivalentKey, winningValue);
+        trie.SetItem(finalEquivalentKey, equalWinningValue);
+        trie.SetItem(null, nullValue);
+        var snapshot = trie.Snapshot();
+        var snapshotEntries = snapshot.ToArray();
+
+        trie.SetItem("ALPHA", laterValue);
+        Assert.True(trie.TryRemove(null, out _));
+        trie.SetItem("post-snapshot", new RepresentativeValue("new"));
+
+        var persistent = snapshot.ToPersistentHashMap();
+
+        Assert.Same(comparer, persistent.Comparer);
+        Assert.Equal(snapshotEntries.Length, persistent.Count);
+        Assert.True(persistent.TryGetKey("aLpHa", out var actualKey));
+        Assert.Same(firstKey, actualKey);
+        Assert.True(persistent.TryGetValue("aLpHa", out var actualValue));
+        Assert.Same(winningValue, actualValue);
+        Assert.True(persistent.TryGetKey(null, out var actualNullKey));
+        Assert.Null(actualNullKey);
+        Assert.True(persistent.TryGetValue(null, out var actualNullValue));
+        Assert.Same(nullValue, actualNullValue);
+
+        var persistentEntries = persistent.ToArray();
+        for (var index = 0; index < snapshotEntries.Length; index++)
+        {
+            Assert.Same(snapshotEntries[index].Key, persistentEntries[index].Key);
+            Assert.Same(snapshotEntries[index].Value, persistentEntries[index].Value);
+        }
+
+        trie.Clear();
+        Assert.Same(winningValue, snapshot["alpha"]);
+        Assert.Same(nullValue, snapshot[null]);
+        Assert.Same(winningValue, persistent["alpha"]);
+        Assert.Same(nullValue, persistent[null]);
+    }
+
     /// <summary>Verifies unique-key publishers do not lose successful updates under contention.</summary>
     [Fact]
     public void ParallelUniqueAdds_PublishEveryEntry()
@@ -332,6 +386,16 @@ public sealed class ConcurrentHashTrieTests
         public bool Equals(int x, int y) => x == y;
         public int GetHashCode(int obj) => 0;
     }
+
+    private sealed class NullableCollisionComparer : IEqualityComparer<string?>
+    {
+        public bool Equals(string? left, string? right) =>
+            StringComparer.OrdinalIgnoreCase.Equals(left, right);
+
+        public int GetHashCode(string? value) => 0;
+    }
+
+    private sealed record RepresentativeValue(string Text);
 
     private sealed class CollisionThenSplitComparer : IEqualityComparer<int>
     {

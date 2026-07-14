@@ -111,6 +111,26 @@ public abstract class FrozenF0AxisBenchmarksBase
     [BenchmarkCategory("Construction")]
     public FrozenDictionary<Axis2HashKey, int> BclFrozenConstructionFromSourceMap() =>
         _fixture.ConstructBclFrozen();
+
+    [Benchmark(Baseline = true)]
+    [BenchmarkCategory("ToPersistent")]
+    public PersistentHashMap<Axis2HashKey, int> PersistentRebuildForConversion() =>
+        _fixture.ConstructPersistent();
+
+    [Benchmark]
+    [BenchmarkCategory("ToPersistent")]
+    public PersistentHashMap<Axis2HashKey, int> PackedPrototypeToPersistent() =>
+        _fixture.ConvertPackedToPersistent();
+
+    [Benchmark]
+    [BenchmarkCategory("ToPersistent")]
+    public PersistentHashMap<Axis2HashKey, int> RobinHoodPrototypeToPersistent() =>
+        _fixture.ConvertRobinHoodToPersistent();
+
+    [Benchmark]
+    [BenchmarkCategory("ToPersistent")]
+    public PersistentHashMap<Axis2HashKey, int> QuadraticPrototypeToPersistent() =>
+        _fixture.ConvertQuadraticToPersistent();
 }
 
 /// <summary>
@@ -231,6 +251,26 @@ public class FrozenNullLookupBenchmarks
     [Benchmark]
     [BenchmarkCategory("NullConstruction")]
     public object QuadraticPrototypeNullConstructionFromSourceMap() => _fixture.ConstructQuadratic();
+
+    [Benchmark(Baseline = true)]
+    [BenchmarkCategory("NullToPersistent")]
+    public PersistentHashMap<string?, int> PersistentNullRebuildForConversion() =>
+        _fixture.ConstructPersistent();
+
+    [Benchmark]
+    [BenchmarkCategory("NullToPersistent")]
+    public PersistentHashMap<string?, int> PackedPrototypeNullToPersistent() =>
+        _fixture.ConvertPackedToPersistent();
+
+    [Benchmark]
+    [BenchmarkCategory("NullToPersistent")]
+    public PersistentHashMap<string?, int> RobinHoodPrototypeNullToPersistent() =>
+        _fixture.ConvertRobinHoodToPersistent();
+
+    [Benchmark]
+    [BenchmarkCategory("NullToPersistent")]
+    public PersistentHashMap<string?, int> QuadraticPrototypeNullToPersistent() =>
+        _fixture.ConvertQuadraticToPersistent();
 }
 
 /// <summary>

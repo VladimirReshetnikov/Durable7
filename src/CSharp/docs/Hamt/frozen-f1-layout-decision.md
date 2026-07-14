@@ -17,6 +17,14 @@ The independent [F0 packed-index signal gate](frozen-f0-signal-decision.md) is a
 linear-only evidence must first record an explicit advance before any F1 result is interpreted.
 Building the shared multi-layout harness did not waive that prerequisite.
 
+Low-risk pre-measurement work is complete for the layout-independent reverse conversion. Each
+benchmark-local candidate rebuilds canonical CHAMP through the existing bulk builder, and the
+benchmark matrix has separate `ToPersistent` groups including the null/collision lane. The untimed
+verifier proves exact comparer, source-order, first-key, and last-distinct-value representative
+preservation across candidate -> persistent -> same-candidate reconstruction, including throwing
+callback, exact callback-count, retained-record-format, failed-`TryGetKey`, and empty-map behavior.
+This does not select a layout or expose any F2 API.
+
 The 2026-07-13/14 interactive session attempted exploratory runs while other agents and workloads
 were contending for CPU, memory, and I/O on the same laptop. Those timings are explicitly
 inadmissible: they are not curated below, do not establish a noise floor, select no layout, and
@@ -59,7 +67,8 @@ All comparable methods use the same source CHAMP map, entry sequence, comparer o
 - one equal-full-hash run at counts 8, 32, and 1,024;
 - 0%, 50%, and 100% lookup hits in every non-null class;
 - null plus case-insensitive stored representatives in equal-full-hash buckets of 8 and 32 entries;
-- lookup, full enumeration, and construction from the same retained source map; and
+- lookup, full enumeration, and construction from the same retained source map;
+- conversion from each repository candidate back to canonical persistent CHAMP; and
 - the three repository candidates, BCL `FrozenDictionary`, shipped persistent CHAMP, mutable
   `Dictionary`, and `ImmutableDictionary` wherever those controls can represent the lane.
 
@@ -92,6 +101,10 @@ metric. Break-even reads are calculated independently for each candidate from it
 mean and its per-read saving relative to the already-existing persistent map; a non-faster lookup
 has infinite lookup break-even and may still be considered only if a different named read regime
 materially wins.
+
+The retained row is a pure comma-delimited invariant-culture record with no appended prose; its
+schema formatter is covered by the untimed verifier. Exclusion and runtime-interpretation notes
+remain in this document rather than contaminating the machine record.
 
 ## Exact single-worker commands
 

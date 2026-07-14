@@ -774,6 +774,14 @@ public sealed class ConcurrentHashTrie<TKey, TValue> : IReadOnlyDictionary<TKey,
             _owner.TryGetValue(_root, key, out value);
 
         /// <summary>Copies this generation into the canonical persistent CHAMP representation.</summary>
+        /// <returns>
+        /// A persistent map retaining the exact comparer object, stored key and value representatives,
+        /// and enumeration sequence captured by this snapshot.
+        /// </returns>
+        /// <remarks>
+        /// Enumerates this captured generation exactly once and runs in O(n). Later writes to the live
+        /// Ctrie cannot affect either the conversion or its result.
+        /// </remarks>
         public PersistentHashMap<TKey, TValue> ToPersistentHashMap() =>
             PersistentHashMap<TKey, TValue>.CreateRange(this, _owner._comparer);
 

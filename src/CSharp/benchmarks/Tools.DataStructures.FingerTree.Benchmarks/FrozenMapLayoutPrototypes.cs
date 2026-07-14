@@ -87,6 +87,15 @@ internal sealed class RobinHoodFrozenMapPrototype<TKey, TValue>
         return false;
     }
 
+    /// <summary>Rebuilds canonical CHAMP topology from the packed source-order entries.</summary>
+    internal PersistentHashMap<TKey, TValue> ToPersistent()
+    {
+        var builder = PersistentHashMap<TKey, TValue>.CreateBulkBuilder(_comparer);
+        foreach (ref readonly var entry in _entries.AsSpan())
+            builder.SetItem(entry.Key, entry.Value);
+        return builder.ToImmutable();
+    }
+
     public FrozenLayoutEnumerator<TKey, TValue> GetEnumerator() => new(_entries);
 
     private bool TryGetEntry(
@@ -268,6 +277,15 @@ internal sealed class QuadraticFrozenMapPrototype<TKey, TValue>
 
         actualKey = equalKey;
         return false;
+    }
+
+    /// <summary>Rebuilds canonical CHAMP topology from the packed source-order entries.</summary>
+    internal PersistentHashMap<TKey, TValue> ToPersistent()
+    {
+        var builder = PersistentHashMap<TKey, TValue>.CreateBulkBuilder(_comparer);
+        foreach (ref readonly var entry in _entries.AsSpan())
+            builder.SetItem(entry.Key, entry.Value);
+        return builder.ToImmutable();
     }
 
     public FrozenLayoutEnumerator<TKey, TValue> GetEnumerator() => new(_entries);

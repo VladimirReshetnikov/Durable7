@@ -889,6 +889,13 @@ isolated machine run, but the [F0 signal record](../../src/CSharp/docs/Hamt/froz
 must first advance the track; no
 F2 public type or API is authorized.
 
+The benchmark-local candidates already cover the low-risk layout-independent reverse conversion:
+each packed source-order entry sequence rebuilds canonical CHAMP through the existing bulk builder.
+An untimed verifier locks comparer identity, exact traversal sequence, first key and last distinct
+value representatives, null/collision behavior, empty maps, throwing callbacks, fixed slot/load
+diagnostics, and candidate -> persistent -> same-candidate reconstruction. These artifacts prepare
+the F1/F2 semantic boundary without selecting a probe layout or publishing a frozen type.
+
 **Deliberate non-adaptivity in v1.** Tiny flat layouts, string prefix/length dispatch, integer-key
 routing, binary-fuse/ribbon filters, Eytzinger/PGM sorted layouts, and count-derived selectors are
 all postponed. Benchmarks may contain tiny and string datasets, but those are workloads, not

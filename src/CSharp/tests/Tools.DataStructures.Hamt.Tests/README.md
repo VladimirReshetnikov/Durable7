@@ -63,7 +63,8 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
   snapshots/enumerators, deterministic root-RDCSS and GCAS-helping schedules, tomb contraction,
   collision-node re-splitting, stored-key retention, contended updates, concurrent snapshot
   consistency, lazy generation renewal, same-reference value no-ops without equality callbacks,
-  and explicit snapshot-to-CHAMP conversion.
+  and snapshot-to-CHAMP comparer/order/key-and-value-representative/null/collision/generation
+  preservation.
 - `ConcurrentHashTrieLinearizabilityTests.cs` records invocation/response intervals for 400 mixed
   five-operation histories and exhaustively checks all real-time-compatible serializations against a
   dictionary model under ordinary, shared-prefix, and all-equal-hash policies.

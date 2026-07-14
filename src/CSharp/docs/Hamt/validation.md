@@ -110,9 +110,10 @@ The suite covers:
 - generated set behavior checked against model set semantics.
 - concurrent hash-trie root/main RDCSS and node GCAS helping, deterministic snapshot/write race
   schedules, tomb contraction, collision re-splitting, stored-key retention, stable snapshots,
-  same-reference value no-ops without equality callbacks, contended publication/accumulation, and
-  400 exhaustively serialized short-history linearizability checks across ordinary, shared-prefix,
-  and equal-hash policies.
+  same-reference value no-ops without equality callbacks, snapshot-to-CHAMP comparer/order/key-and-
+  value-representative/null/collision/generation preservation, contended publication/accumulation,
+  and 400 exhaustively serialized short-history linearizability checks across ordinary,
+  shared-prefix, and equal-hash policies.
 - 32/64-bit Patricia signed-boundary ordering, 35,000 randomized model operations with retained
   snapshots, combining overloads, set relations, and randomized prefix-aware structural algebra.
 - Merkle `mst-sha256-b16-v2` codec, digest, empty-manifest, and complete block golden vectors;

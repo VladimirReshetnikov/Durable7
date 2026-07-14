@@ -46,11 +46,17 @@ dotnet $driver --verify-axis2-frozen-layouts
 ```
 
 This command does not invoke BenchmarkDotNet, start generated builds, measure elapsed time, or emit
-retained-size evidence. It validates all 39 locked uniform, clustered-prefix, equal-full-hash, and
-null/case-insensitive cases across 0%, 50%, and 100% hits. Fixture construction checks content,
-exact enumeration, comparer identity, and stored representatives for the linear, Robin-Hood, and
-quadratic repository prototypes. The verifier separately checks break-even arithmetic, empty-map
-callback avoidance, and construction/lookup propagation of throwing hash and equality callbacks.
+retained-size evidence. `AXIS2_FROZEN_VERIFY_V2` validates all 39 locked uniform,
+clustered-prefix, equal-full-hash, and null/case-insensitive cases across 0%, 50%, and 100% hits,
+plus one reference-key/reference-value representative case. Fixture construction checks content,
+exact enumeration, comparer identity, fixed load/slot diagnostics, and stored representatives for
+the linear, Robin-Hood, and quadratic repository prototypes. Every candidate is also converted to
+canonical CHAMP and recreated from that result, proving exact order, comparer, key representative,
+and value representative preservation across the planned freeze -> persistent -> freeze sequence.
+The verifier separately checks exact construction/hit/miss/conversion comparer callback counts,
+failed-`TryGetKey` representative behavior, the invariant machine-readable retained-layout row,
+break-even arithmetic, empty-map callback avoidance, and construction/lookup/conversion propagation
+of throwing hash and equality callbacks.
 
 Passing this command is correctness evidence only. It cannot close F0 or F1.
 
@@ -125,6 +131,11 @@ for F0, curate only the persistent and linear fields. Raw artifact directories r
 Record the executed commit, SDK/runtime, CPU and affinity, GC mode, exact commands, confidence
 intervals, five-process noise calculation, linear bytes per entry, construction means, and
 per-regime break-even reads here.
+
+The benchmark classes also contain `ToPersistent` groups for all three candidates and the null
+lane. Those layout-independent methods implement the broader Axis 2 conversion matrix, but they do
+not contribute to the narrower F0 advance/defer tuple unless the deciding regime explicitly charges
+conversion back to an editable persistent value.
 
 ## Curated evidence
 
