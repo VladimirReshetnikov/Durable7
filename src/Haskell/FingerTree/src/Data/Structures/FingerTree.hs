@@ -31,6 +31,7 @@ module Data.Structures.FingerTree
   , IntervalTree.Interval(..)
   , IntervalTree.IntervalTree
   , Rope.Rope
+  , Rope.RopeCursor
   , Rope.Chunk(..)
   , MeasuredRope.MeasuredRope
   , RopeText.NewlineMeasure(..)

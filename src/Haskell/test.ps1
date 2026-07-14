@@ -24,7 +24,8 @@ $target = switch ($Workspace) {
 $cabal = Get-Command cabal -ErrorAction Stop
 Push-Location -LiteralPath $PSScriptRoot
 try {
-    & $cabal.Source test $target @CabalArguments
+    # Force a single Cabal build job even when a caller profile or argument requests more.
+    & $cabal.Source test $target @CabalArguments '--jobs=1'
     if ($LASTEXITCODE -ne 0) {
         throw "Haskell $Workspace tests failed with exit code $LASTEXITCODE."
     }

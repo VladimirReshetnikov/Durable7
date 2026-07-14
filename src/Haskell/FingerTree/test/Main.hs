@@ -7,7 +7,7 @@ module Main (main) where
 import Prelude hiding (lines, null, reverse, splitAt)
 
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
-import Control.Exception (SomeException, evaluate, try)
+import Control.Exception (ErrorCall, SomeException, displayException, evaluate, try)
 import Control.Monad (forM_, replicateM, when)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import qualified Data.List as List
@@ -52,6 +52,7 @@ main = do
   testIntervalTree
   testRrbVector
   testRopes
+  testRopeCursor
   testTextRope
   testConcurrentReads
   putStrLn "tools-data-structures-fingertree tests passed"
@@ -682,6 +683,254 @@ testRopes = do
   where
     pairToLists (left, right) = (Rope.toList left, Rope.toList right)
 
+testRopeCursor :: IO ()
+testRopeCursor = do
+  let emptyRope = Rope.empty :: Rope.Rope Int
+      emptyCursor = Rope.cursor emptyRope
+  assertEqual "empty cursor position" 0 (Rope.cursorPosition emptyCursor)
+  assertEqual "empty cursor count" 0 (Rope.cursorCount emptyCursor)
+  assertBool "empty cursor reports null" (Rope.cursorNull emptyCursor)
+  assertBool "empty cursor is at start" (Rope.isAtStart emptyCursor)
+  assertBool "empty cursor is at end" (Rope.isAtEnd emptyCursor)
+  assertNothing "empty cursor has no previous value" (Rope.peekPrevious emptyCursor)
+  assertNothing "empty cursor has no next value" (Rope.peekNext emptyCursor)
+  assertNothing "empty cursor cannot move previous" (Rope.movePrevious emptyCursor)
+  assertNothing "empty cursor cannot move next" (Rope.moveNext emptyCursor)
+  assertSameStableName "empty cursor retains exact source rope" emptyRope (Rope.snapshot emptyCursor)
+
+  let source = Rope.fromList [0 :: Int .. 129]
+      start = Rope.cursor source
+  assertEqual "cursor start position" 0 (Rope.cursorPosition start)
+  assertEqual "cursor start count" 130 (Rope.cursorCount start)
+  assertBool "nonempty cursor does not report null" (not (Rope.cursorNull start))
+  assertBool "cursor starts at first gap" (Rope.isAtStart start)
+  assertBool "nonempty start is not end" (not (Rope.isAtEnd start))
+  assertNothing "start has no previous value" (Rope.peekPrevious start)
+  assertEqual "start next value" (Just 0) (Rope.peekNext start)
+  assertNothing "cursor cannot move before start" (Rope.movePrevious start)
+  assertSameStableName "cursor retains exact source rope" source (Rope.snapshot start)
+  assertNothing "negative cursor gap rejected" (Rope.cursorAt (-1) source)
+  assertNothing "past-end cursor gap rejected" (Rope.cursorAt 131 source)
+  assertEqual
+    "direct range insertion preserves order across a chunk boundary"
+    (Just ([60, 61, 62, 63, -2, -3, 64, 65, 66, 67] :: [Int]))
+    (take 10 . drop 60 . Rope.toList <$> Rope.insertRangeAt 64 [-2, -3] source)
+  assertNothing
+    "invalid direct range gap does not force its source"
+    (Rope.insertRangeAt (-1) (error "invalid range source was forced") source)
+  assertNothing "past-end direct range gap rejected" (Rope.insertRangeAt 131 [1] source)
+  unchangedRope <- expectJust "empty rope range insertion" (Rope.insertRangeAt 64 [] source)
+  assertSameStableName "empty rope range insertion preserves source identity" source unchangedRope
+
+  middle <- expectJust "middle cursor" (Rope.cursorAt 64 source)
+  assertEqual "middle previous value" (Just 63) (Rope.peekPrevious middle)
+  assertEqual "middle next value" (Just 64) (Rope.peekNext middle)
+  same <- expectJust "same-position cursor seek" (Rope.seek 64 middle)
+  assertEqual "same-position seek preserves gap" 64 (Rope.cursorPosition same)
+  assertSameStableName "same-position seek preserves source identity" source (Rope.snapshot same)
+  moved <- expectJust "cursor move next" (Rope.moveNext middle)
+  assertSameStableName "cursor navigation retains exact source rope" source (Rope.snapshot moved)
+  assertNothing "negative cursor seek rejected" (Rope.seek (-1) middle)
+  assertNothing "past-end cursor seek rejected" (Rope.seek 131 middle)
+  let emptyInsertion = Rope.insertRange [] middle
+  assertEqual "empty range insertion preserves gap" 64 (Rope.cursorPosition emptyInsertion)
+  assertSameStableName "empty range insertion preserves source identity" source (Rope.snapshot emptyInsertion)
+
+  let ranged = Rope.insertRange [-2, -3] middle
+  assertEqual "range insertion advances gap" 66 (Rope.cursorPosition ranged)
+  assertEqual "range insertion previous value" (Just (-3)) (Rope.peekPrevious ranged)
+  assertEqual "range insertion next value" (Just 64) (Rope.peekNext ranged)
+  let inserted = Rope.insert (-1) ranged
+  assertEqual "single insertion advances gap" 67 (Rope.cursorPosition inserted)
+  assertEqual "single insertion previous value" (Just (-1)) (Rope.peekPrevious inserted)
+  restored <- expectJust "delete previous" (Rope.deletePrevious inserted)
+  assertEqual "backspace restores ranged contents" (Rope.toList (Rope.snapshot ranged)) (Rope.toList (Rope.snapshot restored))
+  replaced <- expectJust "replace next" (Rope.replaceNext 99_999 restored)
+  assertEqual "replacement keeps gap" (Rope.cursorPosition restored) (Rope.cursorPosition replaced)
+  assertEqual "replacement stores supplied value" (Just 99_999) (Rope.peekNext replaced)
+  deleted <- expectJust "delete next" (Rope.deleteNext replaced)
+  assertEqual "delete next keeps gap" (Rope.cursorPosition replaced) (Rope.cursorPosition deleted)
+  assertEqual "delete next exposes successor" (Just 65) (Rope.peekNext deleted)
+
+  end <- expectJust "end cursor" (Rope.cursorAt (Rope.count source) source)
+  assertBool "end cursor reports end" (Rope.isAtEnd end)
+  assertEqual "end previous value" (Just 129) (Rope.peekPrevious end)
+  assertNothing "end has no next value" (Rope.peekNext end)
+  assertNothing "cursor cannot move beyond end" (Rope.moveNext end)
+  assertNothing "cannot backspace at start" (Rope.deletePrevious start)
+  assertNothing "cannot delete next at end" (Rope.deleteNext end)
+  assertNothing "cannot replace next at end" (Rope.replaceNext 0 end)
+
+  nullable <- expectJust "nullable cursor" (Rope.cursorAt 1 (Rope.fromList [Nothing, Just (1 :: Int)]))
+  assertEqual "peek distinguishes stored Nothing from a boundary" (Just Nothing) (Rope.peekPrevious nullable)
+  assertEqual "nullable cursor next value" (Just (Just 1)) (Rope.peekNext nullable)
+
+  let originalRepresentative = CursorRepresentative 7 "original"
+      replacementRepresentative = CursorRepresentative 7 "replacement"
+      representativeRope = Rope.fromList
+        [ CursorRepresentative 6 "left"
+        , originalRepresentative
+        , CursorRepresentative 8 "right"
+        ]
+  representativeSource <- expectJust "representative cursor" (Rope.cursorAt 1 representativeRope)
+  representativeEdit <- expectJust "representative replacement" (Rope.replaceNext replacementRepresentative representativeSource)
+  assertEqual
+    "replacement stores supplied representative without an Eq constraint"
+    (Just "replacement")
+    (cursorRepresentativeLabel <$> Rope.peekNext representativeEdit)
+  assertEqual
+    "replacement preserves source representative"
+    (Just "original")
+    (cursorRepresentativeLabel <$> Rope.peekNext representativeSource)
+
+  let retainedRope = Rope.fromList [0 :: Int .. 255]
+  retained <- expectJust "retained cursor" (Rope.cursorAt 128 retainedRope)
+  let leftBranch = Rope.insert (-10) retained
+      rightBranch = Rope.insert (-20) retained
+  assertEqual "retained source remains unchanged" (Just 128) (Rope.peekNext retained)
+  assertEqual "left branch value" (Just (-10)) (Rope.index 128 (Rope.snapshot leftBranch))
+  assertEqual "right branch value" (Just (-20)) (Rope.index 128 (Rope.snapshot rightBranch))
+  assertEqual "left branch keeps source contents" [0 :: Int .. 255] (Rope.toList retainedRope)
+  assertEqual "right branch keeps source contents" [0 :: Int .. 255] (Rope.toList retainedRope)
+  assertSameStableName
+    "left cursor branch retains an untouched far chunk"
+    (Rope.chunks retainedRope !! 3)
+    (Rope.chunks (Rope.snapshot leftBranch) !! 4)
+  assertSameStableName
+    "right cursor branch retains an untouched far chunk"
+    (Rope.chunks retainedRope !! 3)
+    (Rope.chunks (Rope.snapshot rightBranch) !! 4)
+
+  runRopeCursorModel 0 0x9e37_79b9 (Rope.cursor (Rope.empty :: Rope.Rope Int)) [] 0
+  testRopeGrowthOverflow
+
+runRopeCursorModel :: Int -> Word32 -> Rope.RopeCursor Int -> [Int] -> Int -> IO ()
+runRopeCursorModel !step !randomState cursorValue model position
+  | step == 750 = assertRopeCursorModel step cursorValue model position
+  | otherwise = do
+      let next = nextRrbRandom randomState
+          operation = fromIntegral (next `mod` 7) :: Int
+      (edited, expected, nextPosition) <-
+        case operation of
+          0 ->
+            pure
+              ( Rope.insert step cursorValue
+              , take position model ++ [step] ++ drop position model
+              , position + 1
+              )
+          1 ->
+            let values = [step, negate step]
+             in pure
+                  ( Rope.insertRange values cursorValue
+                  , take position model ++ values ++ drop position model
+                  , position + length values
+                  )
+          2 ->
+            case Rope.deletePrevious cursorValue of
+              Nothing -> do
+                assertEqual (modelLabel "backspace boundary" step) 0 position
+                pure (cursorValue, model, position)
+              Just result ->
+                let previous = position - 1
+                 in pure (result, take previous model ++ drop position model, previous)
+          3 ->
+            case Rope.deleteNext cursorValue of
+              Nothing -> do
+                assertEqual (modelLabel "delete boundary" step) (length model) position
+                pure (cursorValue, model, position)
+              Just result -> pure (result, take position model ++ drop (position + 1) model, position)
+          4 ->
+            case Rope.replaceNext step cursorValue of
+              Nothing -> do
+                assertEqual (modelLabel "replace boundary" step) (length model) position
+                pure (cursorValue, model, position)
+              Just result -> pure (result, take position model ++ [step] ++ drop (position + 1) model, position)
+          5
+            | (next `div` 4096) `mod` 2 == 0 ->
+                case Rope.movePrevious cursorValue of
+                  Nothing -> do
+                    assertEqual (modelLabel "move previous boundary" step) 0 position
+                    pure (cursorValue, model, position)
+                  Just result -> pure (result, model, position - 1)
+            | otherwise ->
+                case Rope.moveNext cursorValue of
+                  Nothing -> do
+                    assertEqual (modelLabel "move next boundary" step) (length model) position
+                    pure (cursorValue, model, position)
+                  Just result -> pure (result, model, position + 1)
+          _ -> do
+            let target = fromIntegral ((next `div` 256) `mod` fromIntegral (length model + 2))
+            case Rope.seek target cursorValue of
+              Nothing -> do
+                assertBool (modelLabel "invalid seek" step) (target > length model)
+                pure (cursorValue, model, position)
+              Just result -> pure (result, model, target)
+      assertRopeCursorModel step edited expected nextPosition
+      runRopeCursorModel (step + 1) next edited expected nextPosition
+
+assertRopeCursorModel :: Int -> Rope.RopeCursor Int -> [Int] -> Int -> IO ()
+assertRopeCursorModel step cursorValue model position = do
+  assertEqual (modelLabel "position" step) position (Rope.cursorPosition cursorValue)
+  assertEqual (modelLabel "count" step) (length model) (Rope.cursorCount cursorValue)
+  assertEqual (modelLabel "start" step) (position == 0) (Rope.isAtStart cursorValue)
+  assertEqual (modelLabel "end" step) (position == length model) (Rope.isAtEnd cursorValue)
+  assertEqual
+    (modelLabel "previous" step)
+    (if position == 0 then Nothing else Just (model !! (position - 1)))
+    (Rope.peekPrevious cursorValue)
+  assertEqual
+    (modelLabel "next" step)
+    (if position == length model then Nothing else Just (model !! position))
+    (Rope.peekNext cursorValue)
+  assertEqual (modelLabel "snapshot" step) model (Rope.toList (Rope.snapshot cursorValue))
+
+modelLabel :: String -> Int -> String
+modelLabel label step = "rope cursor model " ++ label ++ " at step " ++ show step
+
+testRopeGrowthOverflow :: IO ()
+testRopeGrowthOverflow = do
+  let seed = Rope.singleton (7 :: Int)
+      grow current
+        | Rope.count current > maxBound `div` 2 = current
+        | otherwise = grow (Rope.append current current)
+      power = grow seed
+      powerCount = Rope.count power
+  assertEqual "shared power rope count" (maxBound `div` 2 + 1) powerCount
+  assertEqual "shared power rope first value" (Just 7) (Rope.index 0 power)
+  assertEqual "shared power rope last value" (Just 7) (Rope.index (powerCount - 1) power)
+  assertLengthOverflow "overflowing rope self-append" (evaluate (Rope.count (Rope.append power power)))
+
+  almostPower <- expectJust "remove from shared power rope" (Rope.deleteAt 0 power)
+  let maximumRope = Rope.append power almostPower
+      maximumCursor = Rope.cursor maximumRope
+  maximumEnd <- expectJust "maximum end cursor" (Rope.cursorAt maxBound maximumRope)
+  assertEqual "maximum representable rope count" maxBound (Rope.count maximumRope)
+  assertLengthOverflow "overflowing rope cons" (evaluate (Rope.count (Rope.cons 8 maximumRope)))
+  assertLengthOverflow "overflowing rope snoc" (evaluate (Rope.count (Rope.snoc maximumRope 8)))
+  assertLengthOverflow
+    "overflowing rope point insertion"
+    (evaluate (maybe (-1) Rope.count (Rope.insertAt 0 8 maximumRope)))
+  assertLengthOverflow
+    "overflowing rope range insertion"
+    (evaluate (maybe (-1) Rope.count (Rope.insertRangeAt 0 [8] maximumRope)))
+  assertLengthOverflow "overflowing maximum rope append" (evaluate (Rope.count (Rope.append maximumRope seed)))
+  assertLengthOverflow "overflowing maximum rope prefix append" (evaluate (Rope.count (Rope.append seed maximumRope)))
+  assertLengthOverflow "overflowing cursor insertion at start" (evaluate (Rope.cursorCount (Rope.insert 8 maximumCursor)))
+  assertLengthOverflow
+    "overflowing cursor range insertion at start"
+    (evaluate (Rope.cursorCount (Rope.insertRange [8] maximumCursor)))
+  assertLengthOverflow "overflowing cursor position at end" (evaluate (Rope.cursorCount (Rope.insert 8 maximumEnd)))
+  assertLengthOverflow
+    "overflowing cursor range position at end"
+    (evaluate (Rope.cursorCount (Rope.insertRange [8] maximumEnd)))
+
+  assertEqual "failed growth preserves maximum rope" maxBound (Rope.count maximumRope)
+  assertEqual "failed growth preserves maximum front" (Just 7) (Rope.index 0 maximumRope)
+  assertEqual "failed growth preserves maximum back" (Just 7) (Rope.index (maxBound - 1) maximumRope)
+  assertEqual "failed growth preserves shared power" powerCount (Rope.count power)
+  assertEqual "failed growth preserves almost-power" (powerCount - 1) (Rope.count almostPower)
+  assertEqual "failed growth preserves seed" [7] (Rope.toList seed)
+
 testTextRope :: IO ()
 testTextRope = do
   let text = RopeText.fromString "a\nbc\n"
@@ -706,6 +955,7 @@ testConcurrentReads = do
       reversible = ReversibleDeque.reverse (ReversibleDeque.fromList expectedDeque)
       expectedReverse = List.reverse expectedDeque
       rope = Rope.fromList expectedDeque
+      ropeCursor = maybe (error "concurrent rope cursor") id (Rope.cursorAt 255 rope)
       rrb = RrbVector.fromList expectedDeque
       measuredValues = [1 :: Int .. 128]
       measured = MeasuredRope.fromListWith Sum measuredValues
@@ -718,6 +968,10 @@ testConcurrentReads = do
       assertEqual "concurrent rope count" 512 (Rope.count rope)
       assertEqual "concurrent rope index" (Just 255) (Rope.index 255 rope)
       assertEqual "concurrent rope contents" expectedDeque (Rope.toList rope)
+      assertEqual "concurrent rope cursor position" 255 (Rope.cursorPosition ropeCursor)
+      assertEqual "concurrent rope cursor previous" (Just 254) (Rope.peekPrevious ropeCursor)
+      assertEqual "concurrent rope cursor next" (Just 255) (Rope.peekNext ropeCursor)
+      assertEqual "concurrent rope cursor snapshot" expectedDeque (Rope.toList (Rope.snapshot ropeCursor))
       assertEqual "concurrent rrb count" 512 (RrbVector.count rrb)
       assertEqual "concurrent rrb index" (Just 255) (RrbVector.index 255 rrb)
       assertEqual "concurrent rrb contents" expectedDeque (RrbVector.toList rrb)
@@ -770,6 +1024,14 @@ instance Ord Keyed where
 keyedLabel :: Keyed -> String
 keyedLabel (Keyed _ label) = label
 
+-- Deliberately has no Eq instance: cursor replacement must neither require
+-- nor consult element equality, and must retain the supplied representative.
+data CursorRepresentative = CursorRepresentative Int String
+  deriving (Show)
+
+cursorRepresentativeLabel :: CursorRepresentative -> String
+cursorRepresentativeLabel (CursorRepresentative _ label) = label
+
 {-# NOINLINE countingCompare #-}
 countingCompare :: Ord a => IORef Int -> a -> a -> Ordering
 countingCompare calls left right = unsafePerformIO $ do
@@ -785,3 +1047,29 @@ assertBool :: String -> Bool -> IO ()
 assertBool label condition
   | condition = pure ()
   | otherwise = fail (label ++ ": expected true")
+
+assertNothing :: String -> Maybe a -> IO ()
+assertNothing _ Nothing = pure ()
+assertNothing label (Just _) = fail (label ++ ": expected Nothing")
+
+expectJust :: String -> Maybe a -> IO a
+expectJust _ (Just value) = pure value
+expectJust label Nothing = fail (label ++ ": expected Just")
+
+assertSameStableName :: String -> a -> a -> IO ()
+assertSameStableName label left right = do
+  leftValue <- evaluate left
+  rightValue <- evaluate right
+  leftName <- makeStableName leftValue
+  rightName <- makeStableName rightValue
+  assertBool label (leftName `eqStableName` rightName)
+
+assertLengthOverflow :: String -> IO a -> IO ()
+assertLengthOverflow label action = do
+  result <- try (action >> pure ())
+  case (result :: Either ErrorCall ()) of
+    Left exception ->
+      assertBool
+        (label ++ ": expected the rope length-overflow exception")
+        ("Data.Structures.FingerTree.Rope: length overflow" `List.isPrefixOf` displayException exception)
+    Right () -> fail (label ++ ": expected an exception")

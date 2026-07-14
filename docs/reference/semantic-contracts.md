@@ -269,8 +269,8 @@ Shared obligations:
 - Builders must document mutation, snapshot publication, and whether later builder changes can affect
   previously produced immutable ropes.
 
-C# ships positional and measured cursors; C++ `rope_cursor<T>` plus Kotlin and Rust `RopeCursor<T>`
-also ship positional semantic checkpoints. No deque, RRB, raw-finger-tree, reversible-deque, or
+C# ships positional and measured cursors; C++ `rope_cursor<T>`, Haskell `RopeCursor a`, plus Kotlin
+and Rust `RopeCursor<T>` also ship positional semantic checkpoints. No deque, RRB, raw-finger-tree, reversible-deque, or
 Tungsten cursor is implied by those surfaces. Every shipped cursor shares these observable obligations:
 
 - A cursor position is a gap in `0 .. Count`: previous operations address `p - 1`, next operations
@@ -299,12 +299,16 @@ retained cursors
   at a boundary has the conservative O(b log n) aggregate bound; there is no unqualified
   arbitrary-version-DAG O(1)-amortized claim.
 
-The C++, Kotlin, and Rust positional checkpoints store an already-canonical retained rope plus its
-gap. Construction, navigation, and snapshot are O(1). C++ and Rust peeks and point edits are O(log n)
-plus bounded chunk work; Kotlin peeks and point edits are O(log n) over its measured AVL substrate.
-None has a default-constructed cursor or makes a zipper, memo-cell, or O(1)-amortized local-edit
-claim. Kotlin uses a non-null peek wrapper to distinguish a stored null from a missing neighbor.
-Rust edits retain the substrate's `T: Clone` bound; read-only cursor operations do not.
+The C++, Haskell, Kotlin, and Rust positional checkpoints store an already-canonical retained rope
+plus its gap. Construction, navigation, and snapshot are O(1). C++, Haskell, and Rust peeks and
+point edits are O(log n) plus bounded chunk work; Kotlin peeks and point edits are O(log n) over its
+measured AVL substrate. None has a default-constructed cursor or makes a zipper, memo-cell, or
+O(1)-amortized local-edit claim. Haskell uses outer `Maybe` for the boundary, so a stored `Nothing`
+at element type `Maybe a` is `Just Nothing`; invalid movement/edit operations also return `Nothing`.
+Its pure growth failures raise a length-overflow exception before publishing a result, leaving all
+retained values reusable. Kotlin uses a non-null peek wrapper to distinguish a stored null from a
+missing neighbor. Rust edits retain the substrate's `T: Clone` bound; read-only cursor operations do
+not.
 
 The C# measured cursor additionally requires:
 

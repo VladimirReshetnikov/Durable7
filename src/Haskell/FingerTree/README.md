@@ -9,7 +9,8 @@ This package ports the repository finger-tree family to Haskell. It includes a g
 finger tree, a size-and-rightmost-leaf-measured deque, a reversible deque, sorted bag/set/map
 facades, a stable meldable priority queue, a worst-case-optimal Brodal-Okasaki heap, a keyed
 priority-search queue, interval tree helpers, positional ropes, measured ropes, text-rope navigation
-helpers, a persistent RRB vector, and a policy-canonical zip-zip-tree sorted set.
+helpers, an immutable positional rope cursor, a persistent RRB vector, and a policy-canonical
+zip-zip-tree sorted set.
 
 [`CanonicalSortedSet`](docs/canonical-sorted-set.md) derives exact HMAC-SHA-256 ranks from a caller's
 equivalence-class hash and a retained seeded, keyed, or fresh-random policy. Policy creation is an
@@ -69,6 +70,23 @@ spines without flattening. Because Haskell functions do not have decidable equal
 `MeasuredRope` operands passed to `append` must have extensionally identical element-measure
 functions.
 
+`RopeCursor a` is an opaque immutable snapshot-plus-gap cursor over `Rope a`. `cursor` and
+`cursorAt` create gaps in `0 .. count`; the query, peek, movement, seek, insertion, deletion,
+replacement, and `snapshot` functions preserve retained ancestors and let edits branch freely.
+`Maybe` represents an absent neighbor or invalid operation in the usual Haskell way: when the
+element type is itself `Maybe a`, `Just Nothing` is a stored `Nothing` and outer `Nothing` is a
+boundary. Same-position seek and empty range insertion preserve the exact retained version state,
+and unconditional replacement has no `Eq` constraint and stores the supplied representative.
+Construction, movement, and snapshot are O(1); peeks and point edits are O(log n) plus bounded
+64-element chunk work, and inserting `m` values is O(m + log n). This is deliberately a persistent
+path-copy checkpoint, not the C# zipper, so it makes no focus-local or benchmark-parity claim.
+
+Positional-rope growth checks the cached `Int` count before publication. `append`, endpoint and
+positional insertion, range insertion, and their cursor forms raise the pure
+`Data.Structures.FingerTree.Rope: length overflow` exception if the result would exceed `maxBound`;
+the receiver and every retained source remain reusable. Range insertion constructs its middle rope
+once. Measured-rope and text cursor surfaces remain C#-only.
+
 The text helpers use the measured rope's cached newline counts for offset/line navigation rather
 than rescanning the entire text. The interval tree is a low-sorted finger tree annotated with both
 maximum-high and last-low values: lower-bound insertion and the first overlap query are O(log n),
@@ -81,4 +99,5 @@ cd src\Haskell
 .\test.ps1 -Workspace FingerTree
 ```
 
-The local [test README](test/README.md) lists the deterministic coverage areas.
+The wrapper forces one Cabal build job. The local [test README](test/README.md) lists the
+deterministic coverage areas.

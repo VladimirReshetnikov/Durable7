@@ -11,6 +11,9 @@ Run from `src/Haskell`:
 .\test.ps1 -Workspace FingerTree
 ```
 
+The wrapper appends `--jobs=1`, so Cabal compiles and links with one build job even when a caller
+configuration requests parallel workers.
+
 The dependency-free executable covers measured-tree split/view semantics, deque indexing and sorted
 search, reversible deque orientation plus all mixed-orientation append combinations, sorted
 bag/set/map facades, stable priority dequeue, interval queries and coalescing, positional ropes,
@@ -35,6 +38,14 @@ append, regular-versus-relaxed metadata, split round-trips, optimized root reuse
 list model with retained snapshots, 2,000 adversarial split/rejoin operations, uneven fragments,
 and concurrent pure readers. Every history checks cached count/height/size-table invariants and
 density ceilings.
+
+Positional-cursor coverage locks empty/start/end gap behavior, nested-`Maybe` peeks, invalid seek
+and edit results, exact snapshot/no-op identity under optimized GHC, chunk-boundary edits,
+equality-free representative replacement, retained branches, and far-chunk sharing. A deterministic
+750-command list/gap model covers movement, seek, insertion, deletion, replacement, and snapshots;
+concurrent readers exercise one retained cursor. A shared-DAG construction reaches the exact
+`Int` maximum without materializing its logical elements, then checks every rope and cursor growth
+path for pre-publication overflow, exception atomicity, and continued usability of all sources.
 
 Canonical zip-zip-set coverage pins caller-keyed and `ZZT2` public-seed HMAC rank vectors, unsigned
 secondary-word priority, hidden random-key separation, construction-order-independent bulk and
