@@ -21,6 +21,10 @@ fragments and compare collision key sets independently of insertion order under 
 The CHAMP algebra tier additionally checks right-valued map union with left key representatives,
 all four structural map/set operations, cached-cardinality validity, zero-rehash shared ancestry,
 receiver-policy normalization, and collision-heavy deterministic histories.
+The transient tier covers clean-source root identity after duplicate/equal/missing no-ops,
+case-insensitive stored-key and stored-item representatives, edited snapshot isolation, duplicate
+errors, consumed map/set sessions, a 192-key deterministic model history, canonical publication,
+and a throwing hash callback that leaves the session active and the source root unchanged.
 The Patricia tier covers explicit 32/64-bit signed extrema, ascending enumeration, a 10,000-step
 map history, right-biased map algebra, left/right/key-aware combining algebra, cached-subtree
 cardinality validation, and set union/intersection/difference.

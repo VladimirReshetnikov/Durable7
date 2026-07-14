@@ -14,6 +14,7 @@ module Data.Structures.Hamt.HashMap
   , size
   , validStructure
   , sameTopology
+  , sharesRootWith
   , null
   , clear
   , policy
@@ -117,6 +118,12 @@ validStructure (HashMap _ expectedCount root) = nodeCountIfValid 0 0 0 root == J
 sameTopology :: HashMap k v -> HashMap k v' -> Bool
 sameTopology (HashMap leftPolicy _ left) (HashMap _ _ right) =
   sameNodeTopology leftPolicy left right
+
+-- | Reports whether two maps retain the exact same immutable root node.
+-- This is stronger than 'sameTopology' and is useful when validating no-op
+-- updates and clean transient publication.
+sharesRootWith :: HashMap k v -> HashMap k v -> Bool
+sharesRootWith (HashMap _ _ left) (HashMap _ _ right) = ptrEq left right
 
 sameNodeTopology :: HashPolicy k -> Node k v -> Node k v' -> Bool
 sameNodeTopology _ EmptyNode EmptyNode = True

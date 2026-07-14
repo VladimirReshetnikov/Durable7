@@ -18,6 +18,7 @@ library
     Data.Structures.Hamt.MerklePersistence
     Data.Structures.Hamt.MerkleSearchTree
     Data.Structures.Hamt.Patricia
+    Data.Structures.Hamt.Transient
   hs-source-dirs: src
   build-depends:
     array >=0.5 && <0.6,

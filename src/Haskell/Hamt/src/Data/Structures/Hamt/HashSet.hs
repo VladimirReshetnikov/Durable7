@@ -7,6 +7,8 @@ module Data.Structures.Hamt.HashSet
   , fromList
   , fromListWith
   , size
+  , policy
+  , sharesRootWith
   , null
   , clear
   , member
@@ -57,6 +59,13 @@ fromListWith hashPolicy = List.foldl' (flip insert) (emptyWith hashPolicy)
 
 size :: HashSet a -> Int
 size (HashSet values) = HashMap.size values
+
+policy :: HashSet a -> HashPolicy a
+policy (HashSet values) = HashMap.policy values
+
+-- | Reports whether two sets retain the exact same immutable map root.
+sharesRootWith :: HashSet a -> HashSet a -> Bool
+sharesRootWith (HashSet left) (HashSet right) = HashMap.sharesRootWith left right
 
 null :: HashSet a -> Bool
 null setValue = size setValue == 0

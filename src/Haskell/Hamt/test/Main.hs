@@ -19,6 +19,7 @@ import Data.Structures.Hamt.Hashable (hash)
 import Data.Structures.Hamt.HashMap (HashPolicy(..))
 import qualified Data.Structures.Hamt.HashMap as HashMap
 import qualified Data.Structures.Hamt.HashSet as HashSet
+import qualified Data.Structures.Hamt.Transient as Transient
 import Data.Structures.Hamt.MerkleEncoding
   ( MerkleCodec(..)
   , digestHex
@@ -50,6 +51,7 @@ main = do
   testAdjustAndStrictMapping
   testSetAlgebra
   testCrossPolicySetRelations
+  testTransientSessions
   testLargeFromList
   testMerkleEncodingAndCore
   runPersistenceTests
@@ -473,6 +475,92 @@ testConcurrentReads = do
       assertEqual "concurrent set size" 256 (HashSet.size setValues)
       assertBool "concurrent set membership" (HashSet.member 200 setValues)
       assertEqual "concurrent set contents" expectedSet (sort (HashSet.toList setValues))
+
+testTransientSessions :: IO ()
+testTransientSessions = do
+  let casePolicy = HashPolicy length (\left right -> map toLower left == map toLower right)
+      source = HashMap.fromListWith casePolicy [("Alpha", 1 :: Int), ("Beta", 2)]
+
+  clean <- Transient.mapToTransient source
+  assertEqual "transient map initial size" 2 =<< Transient.mapTransientSize clean
+  assertEqual "transient map lookup" (Just 1) =<< Transient.mapTransientLookup "ALPHA" clean
+  assertEqual "transient map keeps representative" (Just "Alpha") =<<
+    Transient.mapTransientActualKey "ALPHA" clean
+  assertBool "transient duplicate is a no-op" . not =<<
+    Transient.mapTransientTryAdd "ALPHA" 99 clean
+  assertBool "transient equal put is a no-op" . not =<<
+    Transient.mapTransientPut "alpha" 1 clean
+  assertBool "transient missing delete is a no-op" . not =<<
+    Transient.mapTransientDelete "missing" clean
+  cleanPublished <- Transient.persistMap clean
+  assertBool "clean transient publication retains source root"
+    (HashMap.sharesRootWith source cleanPublished)
+  cleanConsumed <- try (Transient.mapTransientSize clean) :: IO (Either Transient.TransientException Int)
+  assertEqual "map transient is consumed" (Left Transient.TransientConsumed) cleanConsumed
+
+  edited <- Transient.mapToTransient source
+  assertBool "transient put changes value" =<< Transient.mapTransientPut "ALPHA" 3 edited
+  assertEqual "put retains first key representative" (Just "Alpha") =<<
+    Transient.mapTransientActualKey "alpha" edited
+  assertBool "transient try-add inserts" =<< Transient.mapTransientTryAdd "Gamma" 4 edited
+  duplicate <- try (Transient.mapTransientAdd "GAMMA" 5 edited) ::
+    IO (Either Transient.TransientException ())
+  assertEqual "transient add rejects duplicate" (Left Transient.TransientDuplicateKey) duplicate
+  assertBool "transient delete removes" =<< Transient.mapTransientDelete "beta" edited
+  editedPublished <- Transient.persistMap edited
+  assertEqual "transient map edited contents"
+    [("Alpha", 3), ("Gamma", 4)]
+    (sort (HashMap.toList editedPublished))
+  assertEqual "persistent source remains isolated"
+    [("Alpha", 1), ("Beta", 2)]
+    (sort (HashMap.toList source))
+
+  model <- Transient.newMapTransient
+  forM_ [0 :: Int .. 127] $ \key -> do
+    _ <- Transient.mapTransientPut key (key * 7) model
+    pure ()
+  forM_ [0, 3 .. 126] $ \key -> do
+    _ <- Transient.mapTransientDelete key model
+    pure ()
+  forM_ [64 :: Int .. 191] $ \key -> do
+    _ <- Transient.mapTransientPut key (negate key) model
+    pure ()
+  modeled <- Transient.persistMap model
+  let reference0 = HashMap.fromList [(key, key * 7) | key <- [0 :: Int .. 127]]
+      reference1 = foldr HashMap.delete reference0 [0, 3 .. 126]
+      reference2 = foldr (\key -> HashMap.insert key (negate key)) reference1 [64 :: Int .. 191]
+  assertEqual "transient deterministic history matches persistent model"
+    (sort (HashMap.toList reference2))
+    (sort (HashMap.toList modeled))
+  assertBool "transient history remains canonical" (HashMap.validStructure modeled)
+
+  let failingPolicy = HashPolicy
+        (\key -> if key == (99 :: Int) then error "injected hash failure" else key)
+        (==)
+      failureSource = HashMap.fromListWith failingPolicy [(1 :: Int, "one")]
+  failing <- Transient.mapToTransient failureSource
+  failedEdit <- try (Transient.mapTransientTryAdd 99 "bad" failing) :: IO (Either SomeException Bool)
+  assertBool "transient callback failure propagates" (isLeft failedEdit)
+  assertEqual "failed transient edit leaves session active" (Just "one") =<<
+    Transient.mapTransientLookup 1 failing
+  failurePublished <- Transient.persistMap failing
+  assertBool "failed transient edit retains source root"
+    (HashMap.sharesRootWith failureSource failurePublished)
+
+  let setSource = HashSet.fromListWith casePolicy ["Alpha", "Beta"]
+  setSession <- Transient.setToTransient setSource
+  assertBool "transient set duplicate is a no-op" . not =<<
+    Transient.setTransientAdd "ALPHA" setSession
+  assertEqual "transient set keeps representative" (Just "Alpha") =<<
+    Transient.setTransientActualValue "alpha" setSession
+  assertBool "transient set inserts" =<< Transient.setTransientAdd "Gamma" setSession
+  assertBool "transient set removes" =<< Transient.setTransientDelete "beta" setSession
+  setPublished <- Transient.persistSet setSession
+  assertEqual "transient set edited contents" ["Alpha", "Gamma"] (sort (HashSet.toList setPublished))
+  assertEqual "persistent set source remains isolated" ["Alpha", "Beta"] (sort (HashSet.toList setSource))
+  setConsumed <- try (Transient.setTransientMember "Alpha" setSession) ::
+    IO (Either Transient.TransientException Bool)
+  assertEqual "set transient is consumed" (Left Transient.TransientConsumed) setConsumed
 
 runConcurrent :: String -> Int -> IO () -> IO ()
 runConcurrent label workerCount action = do

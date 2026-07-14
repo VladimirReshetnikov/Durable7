@@ -12,6 +12,20 @@ and optional runtime `HashPolicy` values for custom hash/equality behavior. Maps
 `mapEquals`, typed `MapDifference` classification, and right-valued union, left-valued
 intersection, difference, and symmetric difference implemented by direct CHAMP-slot combination.
 
+`Data.Structures.Hamt.Transient` adds one-way `MapTransient` and `SetTransient` editing sessions in
+`IO`. Creating a session adopts an immutable source by reference, and `persistMap` / `persistSet`
+publish the current value by reference and consume the session. Clean and logical-no-op sessions
+retain the exact source root; successful edits preserve the hash policy, first equivalent key/item
+representative, old snapshots, and canonical trie shape. Callback and path construction finish
+before a masked `IORef` commit, so synchronous or asynchronous failure cannot partially publish an
+edit. Sessions are deliberately unsynchronized and support one logical owner.
+
+This first Haskell port is a semantic lifecycle checkpoint, not an owner-token optimization. Point
+edits call the existing persistent path-copying operations and retain their complexity and
+allocation behavior; only adoption, clear, and terminal publication are O(1). No benchmark or
+speedup claim is attached to the API. A future internal mutable-node engine may optimize the same
+surface after separately reviewed evidence without changing its observable contract.
+
 `Data.Structures.Hamt.MerkleEncoding`, `Data.Structures.Hamt.MerkleSearchTree`, and
 `Data.Structures.Hamt.MerklePersistence` provide the policy-bound canonical Merkle search tree.
 The pure SHA-256 implementation, strict versioned codecs, domain/key framing, empty digest,

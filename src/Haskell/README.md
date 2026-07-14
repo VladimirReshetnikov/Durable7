@@ -11,7 +11,7 @@ managed C# projects where the language surfaces line up.
 
 | Workspace | Package | Public modules |
 | --- | --- | --- |
-| [Hamt](Hamt/README.md) | `tools-data-structures-hamt` | `Data.Structures.Hamt`, `Data.Structures.Hamt.HashMap`, `Data.Structures.Hamt.HashSet` |
+| [Hamt](Hamt/README.md) | `tools-data-structures-hamt` | `Data.Structures.Hamt`, `Data.Structures.Hamt.HashMap`, `Data.Structures.Hamt.HashSet`, `Data.Structures.Hamt.Transient` |
 | [FingerTree](FingerTree/README.md) | `tools-data-structures-fingertree` | `Data.Structures.FingerTree`, genuine measured-tree deque/core, count-measured structurally shared ropes, newline-measured text helpers, max-high interval tree, sorted collections, and priority queue |
 | [Tungsten](Tungsten/README.md) | `tools-data-structures-tungsten` | `Data.Structures.Tungsten`, `Data.Structures.Tungsten.List`, `Data.Structures.Tungsten.Association` |
 
