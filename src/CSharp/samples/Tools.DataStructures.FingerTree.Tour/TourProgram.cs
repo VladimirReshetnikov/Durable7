@@ -1,13 +1,15 @@
 using Tools.DataStructures.FingerTree;
+using TextCursor = Tools.DataStructures.FingerTree.MeasuredRopeCursor<char, int, Tools.DataStructures.FingerTree.NewlineMeasure>;
 using TextRope = Tools.DataStructures.FingerTree.MeasuredRope<char, int, Tools.DataStructures.FingerTree.NewlineMeasure>;
 
 namespace Tools.DataStructures.FingerTree.Tour;
 
 /// <summary>
 /// A short end-to-end tour of the persistent finger-tree library built around a text buffer, in three acts:
-/// undo/redo over O(1) snapshots, O(log n) line/column navigation, and a background reader snapshotting a
-/// growing buffer lock-free while a writer publishes versions. Exposed as <see cref="Run"/> so it can be driven
-/// from a test with a captured writer; it runs a bounded, deterministic scenario and returns.
+/// undo/redo over retained measured cursor versions with explicit snapshot boundaries, O(log n) line/column
+/// navigation, and a background reader observing a growing buffer lock-free while a writer publishes versions.
+/// Exposed as <see cref="Run"/> so it can be driven from a test with a captured writer; it runs a bounded,
+/// deterministic scenario and returns.
 /// </summary>
 public static class TourProgram
 {
@@ -27,31 +29,44 @@ public static class TourProgram
 
     private static void UndoRedoAct(TextWriter output)
     {
-        output.WriteLine("Act 1 - Undo/redo as a cursor over retained snapshots");
+        output.WriteLine("Act 1 - Undo/redo with retained measured cursors");
 
-        var history = new List<TextRope> { "".ToTextRope() };
-        var cursor = 0;
+        const int snapshotCadence = 16;
+        var history = new List<TextCursor> { "".ToTextRope().GetCursor() };
+        var historyPosition = 0;
+        var cursorEditCount = 0;
 
-        void Apply(Func<TextRope, TextRope> edit)
+        void Apply(int operationCount, Func<TextCursor, TextCursor> edit)
         {
-            var next = edit(history[cursor]);
-            history.RemoveRange(cursor + 1, history.Count - cursor - 1);   // a new edit drops the redo branch
+            var next = edit(history[historyPosition]);
+            history.RemoveRange(
+                historyPosition + 1,
+                history.Count - historyPosition - 1);   // a new edit drops the redo branch
             history.Add(next);
-            cursor++;
+            historyPosition++;
+            cursorEditCount += operationCount;
         }
 
-        string Current() => history[cursor].AsString();
-        string Undo() => history[cursor = Math.Max(0, cursor - 1)].AsString();
-        string Redo() => history[cursor = Math.Min(history.Count - 1, cursor + 1)].AsString();
+        string DisplayCurrent() => history[historyPosition].Snapshot().AsString();
+        string Undo() => history[historyPosition = Math.Max(0, historyPosition - 1)].Snapshot().AsString();
+        string Redo() => history[historyPosition = Math.Min(history.Count - 1, historyPosition + 1)].Snapshot().AsString();
 
-        Apply(buffer => buffer.InsertRange(buffer.Count, "hello".AsSpan()));
-        Apply(buffer => buffer.InsertRange(buffer.Count, " world".AsSpan()));
-        Apply(buffer => buffer.InsertRange(5, ",\nbrave".AsSpan()));
-        output.WriteLine($"  after 3 edits    : {Quote(Current())}");
+        Apply(3, cursor => cursor.InsertRange("he").InsertRange("ll").Insert('o'));
+        Apply(6, cursor => " world".Aggregate(cursor, static (current, character) => current.Insert(character)));
+        Apply(7, cursor =>
+        {
+            for (var i = 0; i < 6; i++)
+                cursor = cursor.MovePrevious();
+            return ",\nbrave".Aggregate(cursor, static (current, character) => current.Insert(character));
+        });
+
+        output.WriteLine($"  after 3 edits    : {Quote(DisplayCurrent())}");
         output.WriteLine($"  undo             : {Quote(Undo())}");
         output.WriteLine($"  undo             : {Quote(Undo())}");
         output.WriteLine($"  redo             : {Quote(Redo())}");
-        output.WriteLine($"  retained versions: {history.Count} (each snapshot is an O(1) reference, not a copy)\n");
+        output.WriteLine($"  history position : {historyPosition} of {history.Count - 1}");
+        output.WriteLine($"  snapshot cadence : {snapshotCadence} cursor edits ({cursorEditCount} before the first display)");
+        output.WriteLine($"  retained versions: {history.Count} immutable cursor versions; snapshots occur only for display/commit\n");
     }
 
     private static void LineNavigationAct(TextWriter output)

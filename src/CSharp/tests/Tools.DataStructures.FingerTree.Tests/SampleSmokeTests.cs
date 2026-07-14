@@ -25,6 +25,8 @@ public sealed class SampleSmokeTests
         Assert.Contains("Act 1 - Undo/redo", transcript);
         Assert.Contains("hello,\\nbrave world", transcript);          // after the three edits
         Assert.Contains("redo             : \"hello world\"", transcript);
+        Assert.Contains("history position : 2 of 3", transcript);
+        Assert.Contains("snapshot cadence : 16 cursor edits (16 before the first display)", transcript);
         Assert.Contains("offset 14        : line 1, column 3", transcript);
         Assert.Contains("GetLine(1)       : \"second line\"", transcript);
         Assert.Contains("OffsetOf(2, 0)   : 23", transcript);
@@ -74,6 +76,10 @@ public sealed class SampleSmokeTests
         Assert.Contains("newline style    : CrLf", transcript);
         Assert.Contains("char offset 3    : code point #3, grapheme #3", transcript);
         Assert.Contains("grapheme #8 at     : char offset 9", transcript);
+        Assert.Contains("main after 16 edits: \"alpha\\nlocal beta 🙂 edited!\\n✓\\ngamma\"", transcript);
+        Assert.Contains("cursor gap         : line 2, column 1", transcript);
+        Assert.Contains("alternate branch   : \"alpha\\nalternate beta\\ngamma\"", transcript);
+        Assert.Contains("retained original  : \"alpha\\nbeta\\ngamma\"", transcript);
         Assert.Contains("Done.", transcript);
     }
 }

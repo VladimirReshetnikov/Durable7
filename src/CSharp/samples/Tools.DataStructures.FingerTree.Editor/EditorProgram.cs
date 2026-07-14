@@ -6,12 +6,13 @@ namespace Tools.DataStructures.FingerTree.Editor;
 /// <summary>
 /// A runnable tour of the editor-grade text extras: build a document with <see cref="RopeBuilder"/>, then show how
 /// UTF-16 characters, Unicode code points, and grapheme clusters differ, detect the newline style, read
-/// carriage-return-stripped lines, and convert between character offsets and code-point / grapheme indices.
+/// carriage-return-stripped lines, convert between character offsets and code-point / grapheme indices, and
+/// perform a sixteen-edit local measured-cursor burst with movement, deletion, coordinates, and branching.
 /// Exposed as <see cref="Run"/> so a test can drive it with a captured writer.
 /// </summary>
 public static class EditorProgram
 {
-    /// <summary>Runs the four-act tour, writing a narrated transcript to <paramref name="output"/>.</summary>
+    /// <summary>Runs the five-act tour, writing a narrated transcript to <paramref name="output"/>.</summary>
     /// <param name="output">Destination for the transcript.</param>
     public static void Run(TextWriter output)
     {
@@ -53,6 +54,28 @@ public static class EditorProgram
         output.WriteLine(
             $"  grapheme #{accentGrapheme} at     : char offset {document.GraphemeIndexToCharOffset(accentGrapheme)} (the accented e)\n");
 
+        output.WriteLine("Act 5 - Local measured-cursor editing and branching");
+        var original = "alpha\nbeta\ngamma".ToTextRope();
+        var branchPoint = original.GetCursor(original.OffsetOf(1, 0));
+        var cursor = branchPoint.InsertRange("local ");                        // edit 1: localized insertion
+        cursor = cursor.MoveNext().MoveNext().MoveNext().MoveNext();           // movement across "beta"
+        cursor = cursor.DeletePrevious().Insert('a');                          // edits 2-3: delete and restore
+
+        foreach (var character in " 🙂 edited!\n✓")
+            cursor = cursor.Insert(character);                                // edits 4-16, including Unicode
+
+        var (cursorLine, cursorColumn) = cursor.LineColumnOf();
+        var main = cursor.Snapshot();                                          // measured cadence: one snapshot after 16 edits
+        var alternate = branchPoint.InsertRange("alternate ").Snapshot();      // explicit branch-display boundary
+
+        output.WriteLine($"  main after 16 edits: {Quote(main.AsString())}");
+        output.WriteLine($"  cursor gap         : line {cursorLine}, column {cursorColumn}");
+        output.WriteLine($"  alternate branch   : {Quote(alternate.AsString())}");
+        output.WriteLine($"  retained original  : {Quote(original.AsString())}");
+        output.WriteLine("  snapshot cadence   : 16 local edits; branch snapshot only at its display boundary\n");
+
         output.WriteLine("Done. Character, code-point, and grapheme addressing all agree on boundaries.");
     }
+
+    private static string Quote(string text) => "\"" + text.Replace("\n", "\\n") + "\"";
 }

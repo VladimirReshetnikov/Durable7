@@ -24,7 +24,9 @@ From the workspace root `src/CSharp`, prefix the project paths with `samples\`.
 
 A short, narrated end-to-end tour built around a persistent text buffer, in three acts:
 
-- **Undo/redo** as a cursor over O(1) snapshots — each retained version is a reference, not a copy (structural sharing).
+- **Undo/redo** over retained measured cursor versions — three logical commands perform sixteen
+  local cursor edits before the first display snapshot; the history index is explicitly a
+  `historyPosition`, not a second cursor concept.
 - **O(log n) line and column navigation** via the newline measure (`LineColumnOf`, `GetLine`, `OffsetOf`).
 - **Lock-free concurrent reading** — a background thread snapshots a growing buffer while a writer publishes successive versions through a single volatile reference; it takes millions of consistent, never-torn snapshots with no locks held.
 
@@ -51,13 +53,17 @@ dotnet run --project .\Tools.DataStructures.FingerTree.Showcase -c Release
 
 ## `Tools.DataStructures.FingerTree.Editor`
 
-The editor-grade text extras, in four acts over a document built with `RopeBuilder`:
+The editor-grade text extras, in five acts over measured text:
 
 - **Three different lengths** — a document mixing an emoji (a surrogate pair) and a decomposed accented letter has 29 UTF-16 chars, 28 code points, and 25 grapheme clusters.
 - **Newline style detection** (`CrLf`) and carriage-return-stripped lines.
 - **Offset addressing** — converting between character offsets and code-point / grapheme indices.
+- **Localized cursor editing** — a sixteen-edit insertion/deletion/movement burst containing Unicode,
+  line/column reporting at the gap, and an alternate branch from a retained old cursor.
 
-Deterministic, exposed as `EditorProgram.Run(TextWriter)` and smoke-tested.
+Both main edit bursts use the measured C2 benchmark cadence of sixteen and snapshot only at explicit
+display/commit boundaries. The scenarios are deterministic, exposed through `Run(TextWriter)`, and
+smoke-tested. See the [C3 integration record](../docs/FingerTree/cursor-c3-sample-integration.md).
 
 ```powershell
 dotnet run --project .\Tools.DataStructures.FingerTree.Editor -c Release

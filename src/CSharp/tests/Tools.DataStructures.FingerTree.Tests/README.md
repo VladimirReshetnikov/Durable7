@@ -81,7 +81,9 @@ reasonable oracle.
   `PrioritySearchQueueAdversarialTests.cs` covers comparer-versus-default equality during replacement,
   public invariant statistics, every AVL rotation and deletion rebalance, a 20,000-operation retained
   history, exact path sharing, tie order, and comparison-count evidence for query pruning.
-- `SampleSmokeTests.cs` captures the Tour, Showcase, and Editor sample output contracts.
+- `SampleSmokeTests.cs` captures the Tour, Showcase, and Editor sample output contracts, including
+  the Axis 2 C3 retained measured-cursor history, cadence-sixteen snapshot policy, localized Unicode
+  editing, line/column result, and alternate branch transcript.
 - `PersistenceConcurrencyExamplesTests.cs` and `TearableConcurrencyStressTests.cs` cover structural-sharing
   examples, atomic publication, concurrent reads, and tearable-value stress.
 - `RopePropertyTests.cs`, `SortedCollectionPropertyTests.cs`, and `ModelBasedCommandTests.cs` hold the CsCheck

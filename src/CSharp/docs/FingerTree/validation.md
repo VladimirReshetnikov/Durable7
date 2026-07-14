@@ -134,7 +134,9 @@ The suite covers:
   `ValidateStructure` statistics, a 20,000-operation branching retained history, exact no-op/path
   sharing, priority-tie order, and comparison-count evidence for whole-tree, exact-key, and mixed
   range/threshold pruning;
-- runnable sample smoke tests for Tour, Showcase, and Editor;
+- runnable sample smoke tests for Tour, Showcase, and Editor, including C3 retained measured-cursor
+  undo/redo history, cadence-sixteen edit bursts, cursor line/column output, Unicode edits, and
+  branching from an old cursor;
 - persistence/concurrency examples and tearable-struct stress tests;
 - CsCheck property tests and model-based command-sequence tests that shrink operation histories rather than only
   data inputs.

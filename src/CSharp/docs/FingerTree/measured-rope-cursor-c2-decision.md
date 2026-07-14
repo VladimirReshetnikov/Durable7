@@ -134,8 +134,10 @@ C2-specific coverage includes:
 The snapshot-race test uses dedicated long-running tasks so its deliberately blocked callback still
 overlaps the winning candidate when the serial full-suite host has a saturated worker pool.
 
-## Follow-on
+## C3 follow-on status
 
-C3 may update the Editor and Tour to retain measured cursor versions and materialize snapshots only
-at explicit display/commit boundaries. The benchmark cadence remains sixteen; sample integration
-must not silently redefine snapshot-every-edit as the target workload.
+C3 subsequently updated the Editor and Tour to retain measured cursor versions and materialize
+snapshots only at explicit display/commit boundaries. The samples use the benchmark cadence of
+sixteen local edits and do not redefine snapshot-every-edit as the target workload. The
+[C3 integration record](cursor-c3-sample-integration.md) owns the sample histories and transcript
+evidence.
