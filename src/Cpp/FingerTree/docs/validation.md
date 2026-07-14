@@ -187,12 +187,13 @@ The suite covers:
 - sorted bag/set/map ranking, navigation, range, custom order, set algebra, and randomized model checks;
 - priority queue ordering, stability, and command-model behavior;
 - interval tree insertion, overlap, containment, coalescing, removal, and model comparisons;
-- `rope<T>`, its positional snapshot-plus-gap cursor, measured rope, text rope, line navigation, chunked
-  mutations, retained cursor branches, copy-on-move source validity, lvalue-only borrowed peeks, text snapshots,
-  boundary/chunk-seam cursor edits, long edit scripts,
-  and randomized vector-gap and sequence-model histories;
+- `rope<T>`, measured rope, text rope, and their positional/measured/text snapshot-plus-gap cursors; ordered
+  noncommutative measures; absolute hit/miss/chunk-boundary search; callback retry; retained cursor branches;
+  copy-on-move source validity; lvalue-only borrowed peeks; byte-oriented text line positions and exact snapshots;
+  boundary/chunk-seam edits; a 750-command measured gap model; exact-maximum shared-DAG overflow before new
+  element-measure callbacks; long edit scripts; and randomized vector-gap and sequence-model histories;
 - atomic-box/lazy-publication helpers, allocation counters, operation counters, and command-model support;
-- tearable-struct concurrency stress tests for measured trees, measured ropes, atomic data-race-safe rope
+- tearable-struct concurrency stress tests for measured trees, measured ropes and measured cursors, atomic data-race-safe rope
   publication, and branching histories over retained shared bases. These tests make no lock-free progress claim;
   `atomic<shared_ptr>` may serialize internally;
 - stateful command programs over the measured tree, tuned deque, reversible deque, positional/measured ropes, and

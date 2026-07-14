@@ -36,6 +36,8 @@ struct newline_measure final {
 };
 
 using text_rope = measured_rope<char, newline_measure>;
+using text_rope_cursor = measured_rope_cursor<char, newline_measure>;
+using text_rope_cursor_search_result = measured_rope_cursor_search_result<char, newline_measure>;
 
 struct line_column final {
     std::size_t line = 0;
@@ -109,6 +111,11 @@ struct line_column final {
 {
     const auto line = line_of_offset(rope, offset);
     return line_column{line, offset - line_start_offset(rope, line)};
+}
+
+[[nodiscard]] inline line_column line_column_of(const text_rope_cursor& cursor)
+{
+    return line_column_of(cursor.snapshot(), cursor.position());
 }
 
 [[nodiscard]] inline std::size_t offset_of(

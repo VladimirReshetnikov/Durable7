@@ -187,6 +187,9 @@ void add_tearable_concurrency_tests_impl(suite& tests)
         const auto values = tearable_range(item_count);
         const auto expected_sum = static_cast<long long>(item_count) * (item_count - 1) / 2;
         const auto rope = ft::measured_rope<tearable, tearable_sum_measure>::from_range(values);
+        const auto cursor = rope.get_cursor(2048);
+        const auto expected_before = 2048LL * 2047 / 2;
+        const auto expected_through_next = 2048LL * 2049 / 2;
 
         run_racing_workers(worker_count, [&](const int, std::atomic<int>& failures) {
             const auto measure = rope.measure();
@@ -205,6 +208,25 @@ void add_tearable_concurrency_tests_impl(suite& tests)
                     failures.fetch_add(1);
                     return;
                 }
+            }
+
+            const auto before = cursor.measure_before();
+            const auto after = cursor.measure_after();
+            const auto* next = cursor.try_peek_next();
+            if (!before.is_intact() || before.value() != expected_before
+                || !after.is_intact() || after.value() != expected_sum - expected_before
+                || next == nullptr || !next->is_intact() || next->value() != 2048) {
+                failures.fetch_add(1);
+                return;
+            }
+
+            const auto located = cursor.seek_by_measure([expected_through_next](const tearable& sum) {
+                return sum.value() >= expected_through_next;
+            });
+            if (!located.found || located.cursor.position() != 2048
+                || located.cursor.try_peek_next() == nullptr
+                || !located.cursor.try_peek_next()->is_intact()) {
+                failures.fetch_add(1);
             }
         });
     });

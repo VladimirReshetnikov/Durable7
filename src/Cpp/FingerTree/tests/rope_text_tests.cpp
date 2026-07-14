@@ -3,6 +3,7 @@
 #include "test_support/test_runner.hpp"
 
 #include <algorithm>
+#include <concepts>
 #include <cstddef>
 #include <sstream>
 #include <string>
@@ -13,6 +14,11 @@ namespace ft = tools::data_structures::finger_tree;
 using namespace tools::data_structures::finger_tree::tests;
 
 namespace {
+
+static_assert(std::same_as<ft::text_rope_cursor, ft::measured_rope_cursor<char, ft::newline_measure>>);
+static_assert(std::same_as<
+    ft::text_rope_cursor_search_result,
+    ft::measured_rope_cursor_search_result<char, ft::newline_measure>>);
 
 [[nodiscard]] std::vector<std::string> split_lines(const std::string_view text)
 {
@@ -197,6 +203,51 @@ void add_rope_text_tests_impl(suite& tests)
         require_text_model(text);
         FT_REQUIRE(ft::as_string(snapshot) == snapshot_text);
         require_text_model(snapshot_text);
+    });
+
+    tests.add("rope text cursor preserves byte offsets line measures and exact text snapshots", [] {
+        const auto text = ft::to_text_rope("a\r\nb");
+        const auto start = text.get_cursor();
+        FT_REQUIRE_EQUAL(start.size(), static_cast<std::size_t>(4));
+        FT_REQUIRE((ft::line_column_of(start) == ft::line_column{0, 0}));
+        FT_REQUIRE(start.snapshot().begin() == text.begin());
+
+        const auto newline = text.get_cursor_by_measure([](const std::size_t count) {
+            return count >= 1;
+        });
+        FT_REQUIRE(newline.found);
+        FT_REQUIRE_EQUAL(newline.cursor.position(), static_cast<std::size_t>(2));
+        FT_REQUIRE_EQUAL(*newline.cursor.try_peek_next(), '\n');
+        FT_REQUIRE_EQUAL(newline.cursor.measure_before(), static_cast<std::size_t>(0));
+        FT_REQUIRE_EQUAL(newline.cursor.measure_after(), static_cast<std::size_t>(1));
+        FT_REQUIRE((ft::line_column_of(newline.cursor.move_next()) == ft::line_column{1, 0}));
+
+        const auto edited = text.get_cursor(1)
+            .insert_range(std::string{"x\n"})
+            .replace_next('Z');
+        FT_REQUIRE_EQUAL(edited.position(), static_cast<std::size_t>(3));
+        FT_REQUIRE(ft::as_string(edited.snapshot()) == "ax\nZ\nb");
+        FT_REQUIRE((ft::line_column_of(edited) == ft::line_column{1, 0}));
+        FT_REQUIRE(ft::as_string(text) == "a\r\nb");
+
+        const auto second_newline = edited.seek_by_measure([](const std::size_t count) {
+            return count >= 2;
+        });
+        FT_REQUIRE(second_newline.found);
+        FT_REQUIRE_EQUAL(second_newline.cursor.position(), static_cast<std::size_t>(4));
+
+        const auto miss = edited.seek_by_measure([](const std::size_t count) {
+            return count > 2;
+        });
+        FT_REQUIRE(!miss.found);
+        FT_REQUIRE(miss.cursor.is_at_end());
+        FT_REQUIRE(ft::as_string(miss.cursor.snapshot()) == "ax\nZ\nb");
+
+        FT_REQUIRE_THROWS(std::runtime_error, edited.seek_by_measure([](const std::size_t) -> bool {
+            throw std::runtime_error("text cursor predicate failure");
+        }));
+        FT_REQUIRE_EQUAL(edited.position(), static_cast<std::size_t>(3));
+        FT_REQUIRE(ft::as_string(edited.snapshot()) == "ax\nZ\nb");
     });
 
     tests.add("rope text argument validation", [] {

@@ -72,9 +72,10 @@ listing, and replay-seed selection.
   removal, and sweep-model checks.
 - `rope_tests.cpp`, `measured_rope_tests.cpp`, and `rope_text_tests.cpp` cover chunked sequence editing, retained
   chunk-aware forward traversal, bounded nonmaterializing copy, same-type insertion regression guards, positional
-  cursor endpoints, chunk seams, no-ops, copy-on-move validity, lvalue-only borrowed peeks, retained branches,
-  deterministic vector-gap histories, measured
-  searches, text interop, line navigation, retained text snapshots, long edit scripts, and randomized
+  and measured cursor endpoints, chunk seams, no-ops, copy-on-move validity, lvalue-only borrowed peeks, retained
+  branches, ordered measures, absolute hit/miss search and callback retry, deterministic 500/750-command gap
+  histories, exact-maximum overflow before policy callbacks, measured searches, text cursor byte/LF semantics,
+  text interop, line navigation, retained text snapshots, long edit scripts, and randomized
   vector/string-model histories.
 - `atomic_box_tests.cpp` and `tearable_concurrency_tests.cpp` cover atomic, data-race-safe publication helpers and
   structure-level tearable-value stress tests. `atomic<shared_ptr>` may serialize internally and is not promised

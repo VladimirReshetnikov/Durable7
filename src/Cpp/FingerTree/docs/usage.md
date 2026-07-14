@@ -370,6 +370,9 @@ auto cursor_snapshot = branch.snapshot();     // cheap persistent rope copy
 
 auto measured = ft::measured_rope<int, ft::sum_measure<int>>::from_range(std::vector{5, 1, 4});
 auto located = measured.try_locate_by_measure(ft::sum_above_predicate<int>{5});
+auto measured_cursor = measured.get_cursor(1);
+auto measure_before = measured_cursor.measure_before();
+auto measure_hit = measured_cursor.seek_by_measure(ft::sum_above_predicate<int>{5});
 ```
 
 `rope<T>::from_chunks` accepts immutable shared vector storage when retaining chunk backing storage
@@ -385,6 +388,13 @@ element with an equal value still creates a distinct persistent version at the s
 snapshot-plus-position facade, not the C# zipper, and does not promise O(1)-amortized local edits. A borrowed peek
 pointer must not outlive every cursor or snapshot copy that retains the pointed-to storage.
 
+`measured_rope_cursor<T, MeasurePolicy>` retains the exact measured root and gap. It adds ordered
+`measure_before`/`measure_after` queries and absolute `seek_by_measure`; a miss returns `found == false` with a
+usable end cursor. Measures, peeks, point edits, and search are O(log n) plus bounded chunk work. The
+`text_rope_cursor` alias applies the same contract to byte-indexed `std::string` text and preserves the existing
+line/column helpers. These are root-plus-gap semantic checkpoints and make no C# zipper, memoization, allocation,
+or amortized-locality claim.
+
 For text:
 
 ```cpp
@@ -396,6 +406,8 @@ std::string second = ft::get_line(text, 1);
 
 auto inserted = text.insert_range(5, std::string{",\nthere"});
 std::string materialized = ft::as_string(inserted);
+auto text_cursor = text.get_cursor(6);
+auto cursor_line_column = ft::line_column_of(text_cursor);
 ```
 
 For incremental construction:

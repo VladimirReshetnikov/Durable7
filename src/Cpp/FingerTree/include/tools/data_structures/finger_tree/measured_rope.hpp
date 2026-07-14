@@ -26,6 +26,14 @@ class measured_rope;
 
 template <class T, class MeasurePolicy>
     requires measure_policy<MeasurePolicy, T>
+class measured_rope_cursor;
+
+template <class T, class MeasurePolicy>
+    requires measure_policy<MeasurePolicy, T>
+struct measured_rope_cursor_search_result;
+
+template <class T, class MeasurePolicy>
+    requires measure_policy<MeasurePolicy, T>
 struct measured_rope_split final {
     measured_rope<T, MeasurePolicy> left;
     measured_rope<T, MeasurePolicy> right;
@@ -96,6 +104,13 @@ public:
     {
         return measured_rope{std::ranges::begin(values), std::ranges::end(values)};
     }
+
+    [[nodiscard]] measured_rope_cursor<value_type, measure_policy> get_cursor(size_type position = 0) const;
+
+    template <class Predicate>
+    [[nodiscard]] auto get_cursor_by_measure(Predicate predicate) const
+        -> measured_rope_cursor_search_result<value_type, measure_policy>
+        requires measure_predicate<Predicate, user_measure_type>;
 
     [[nodiscard]] bool empty() const noexcept
     {
@@ -214,6 +229,7 @@ public:
     [[nodiscard]] measured_rope insert_at(size_type index, value_type value) const
     {
         throw_if_insert_index_out_of_range(index, size());
+        (void)checked_add(size(), size_type{1});
 
         if (empty()) {
             return wrap(tree_.append(single_chunk(std::move(value))));
@@ -246,6 +262,7 @@ public:
     [[nodiscard]] measured_rope insert_range(const size_type index, const measured_rope& values) const
     {
         throw_if_insert_index_out_of_range(index, size());
+        (void)checked_add(size(), values.size());
         if (values.empty()) {
             return *this;
         }
@@ -322,6 +339,7 @@ public:
 
     [[nodiscard]] measured_rope concat(const measured_rope& other) const
     {
+        (void)checked_add(size(), other.size());
         if (other.empty()) {
             return *this;
         }
@@ -572,6 +590,8 @@ public:
     }
 
 private:
+    friend class measured_rope_cursor<T, MeasurePolicy>;
+
     using chunk_type = detail::measured_rope_chunk<value_type, measure_policy>;
     using tree_measure_type = measure_pair<size_type, user_measure_type>;
     using tree_type = finger_tree<chunk_type, detail::measured_rope_chunk_measure<value_type, measure_policy>>;
@@ -641,6 +661,23 @@ private:
         throw std::logic_error("measured_rope predicate did not flip inside the located chunk");
     }
 
+    template <class Predicate>
+        requires measure_predicate<Predicate, user_measure_type>
+    [[nodiscard]] std::pair<size_type, bool> cursor_position_by_measure(Predicate predicate) const
+    {
+        auto located = tree_.try_locate(
+            second_component_predicate<Predicate, size_type, user_measure_type>{predicate});
+        if (!located.item.has_value()) {
+            return {size(), false};
+        }
+
+        const auto offset = chunk_split_offset(
+            located.item.value(),
+            located.measure_before.second,
+            predicate);
+        return {checked_add(located.measure_before.first, offset), true};
+    }
+
     [[nodiscard]] static tree_type join_grown(tree_type left, chunk_type grown, tree_type right)
     {
         if (grown.length() <= max_chunk_size) {
@@ -688,6 +725,240 @@ private:
 
     tree_type tree_;
 };
+
+/// An immutable gap cursor over one exact measured-rope snapshot.
+///
+/// This semantic checkpoint retains the persistent root plus a position. It deliberately does not
+/// claim the focused zipper or amortized local-edit bounds of the C# implementation.
+template <class T, class MeasurePolicy>
+    requires measure_policy<MeasurePolicy, T>
+class measured_rope_cursor final {
+public:
+    using value_type = T;
+    using measure_policy = MeasurePolicy;
+    using user_measure_type = typename measure_policy::measure_type;
+    using size_type = std::size_t;
+
+    measured_rope_cursor() = delete;
+    measured_rope_cursor(const measured_rope_cursor&) = default;
+    measured_rope_cursor& operator=(const measured_rope_cursor&) = default;
+
+    // Cursor values are immutable version handles. A move copies the shared root so the source
+    // remains a valid cursor, matching rope_cursor's version-handle convention.
+    measured_rope_cursor(measured_rope_cursor&& other) noexcept(
+        std::is_nothrow_copy_constructible_v<measured_rope<value_type, measure_policy>>)
+        : snapshot_(other.snapshot_)
+        , position_(other.position_)
+    {
+    }
+
+    measured_rope_cursor& operator=(measured_rope_cursor&& other) noexcept(
+        std::is_nothrow_copy_assignable_v<measured_rope<value_type, measure_policy>>)
+    {
+        if (this != &other) {
+            snapshot_ = other.snapshot_;
+            position_ = other.position_;
+        }
+
+        return *this;
+    }
+
+    [[nodiscard]] size_type size() const
+    {
+        return snapshot_.size();
+    }
+
+    [[nodiscard]] bool empty() const
+    {
+        return snapshot_.empty();
+    }
+
+    [[nodiscard]] size_type position() const noexcept
+    {
+        return position_;
+    }
+
+    [[nodiscard]] bool is_at_start() const noexcept
+    {
+        return position_ == 0;
+    }
+
+    [[nodiscard]] bool is_at_end() const
+    {
+        return position_ == snapshot_.size();
+    }
+
+    [[nodiscard]] user_measure_type measure_before() const
+    {
+        return snapshot_.prefix_measure(position_);
+    }
+
+    [[nodiscard]] user_measure_type measure_after() const
+    {
+        return snapshot_.split_at(position_).right.measure();
+    }
+
+    [[nodiscard]] const value_type* try_peek_previous() const &
+    {
+        return position_ == 0 ? nullptr : snapshot_.try_get(position_ - 1);
+    }
+
+    const value_type* try_peek_previous() const && = delete;
+
+    [[nodiscard]] const value_type* try_peek_next() const &
+    {
+        return snapshot_.try_get(position_);
+    }
+
+    const value_type* try_peek_next() const && = delete;
+
+    [[nodiscard]] measured_rope_cursor move_previous() const
+    {
+        if (is_at_start()) {
+            throw std::logic_error("measured rope cursor is already at the start");
+        }
+
+        return measured_rope_cursor{snapshot_, position_ - 1};
+    }
+
+    [[nodiscard]] measured_rope_cursor move_next() const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("measured rope cursor is already at the end");
+        }
+
+        return measured_rope_cursor{snapshot_, position_ + 1};
+    }
+
+    [[nodiscard]] measured_rope_cursor seek(const size_type position) const
+    {
+        if (position > snapshot_.size()) {
+            throw std::out_of_range("cursor position is outside the measured rope bounds");
+        }
+
+        return position == position_ ? *this : measured_rope_cursor{snapshot_, position};
+    }
+
+    template <class Predicate>
+    [[nodiscard]] auto seek_by_measure(Predicate predicate) const
+        -> measured_rope_cursor_search_result<value_type, measure_policy>
+        requires measure_predicate<Predicate, user_measure_type>;
+
+    [[nodiscard]] measured_rope_cursor insert(value_type value) const
+    {
+        const auto next_position = checked_add(position_, size_type{1});
+        return measured_rope_cursor{snapshot_.insert_at(position_, std::move(value)), next_position};
+    }
+
+    template <std::ranges::input_range Range>
+        requires(!std::same_as<std::remove_cvref_t<Range>, measured_rope<value_type, measure_policy>>)
+            && std::convertible_to<std::ranges::range_reference_t<Range>, value_type>
+    [[nodiscard]] measured_rope_cursor insert_range(Range&& values) const
+    {
+        auto middle = measured_rope<value_type, measure_policy>::from_range(std::forward<Range>(values));
+        return middle.empty() ? *this : insert_range(middle);
+    }
+
+    [[nodiscard]] measured_rope_cursor insert_range(
+        const measured_rope<value_type, measure_policy>& values) const
+    {
+        if (values.empty()) {
+            return *this;
+        }
+
+        const auto next_position = checked_add(position_, values.size());
+        return measured_rope_cursor{snapshot_.insert_range(position_, values), next_position};
+    }
+
+    [[nodiscard]] measured_rope_cursor delete_previous() const
+    {
+        if (is_at_start()) {
+            throw std::logic_error("measured rope cursor has no previous element");
+        }
+
+        return measured_rope_cursor{snapshot_.remove_at(position_ - 1), position_ - 1};
+    }
+
+    [[nodiscard]] measured_rope_cursor delete_next() const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("measured rope cursor has no next element");
+        }
+
+        return measured_rope_cursor{snapshot_.remove_at(position_), position_};
+    }
+
+    [[nodiscard]] measured_rope_cursor replace_next(value_type value) const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("measured rope cursor has no next element");
+        }
+
+        return measured_rope_cursor{snapshot_.set_item(position_, std::move(value)), position_};
+    }
+
+    [[nodiscard]] measured_rope<value_type, measure_policy> snapshot() const
+    {
+        return snapshot_;
+    }
+
+private:
+    friend class measured_rope<T, MeasurePolicy>;
+
+    measured_rope_cursor(
+        measured_rope<value_type, measure_policy> snapshot,
+        const size_type position)
+        : snapshot_(std::move(snapshot))
+        , position_(position)
+    {
+    }
+
+    measured_rope<value_type, measure_policy> snapshot_;
+    size_type position_;
+};
+
+/// Result of absolute prefix-measure cursor search. A miss retains a usable end cursor.
+template <class T, class MeasurePolicy>
+    requires measure_policy<MeasurePolicy, T>
+struct measured_rope_cursor_search_result final {
+    measured_rope_cursor<T, MeasurePolicy> cursor;
+    bool found = false;
+};
+
+template <class T, class MeasurePolicy>
+    requires measure_policy<MeasurePolicy, T>
+template <class Predicate>
+[[nodiscard]] auto measured_rope_cursor<T, MeasurePolicy>::seek_by_measure(Predicate predicate) const
+    -> measured_rope_cursor_search_result<value_type, measure_policy>
+    requires measure_predicate<Predicate, user_measure_type>
+{
+    const auto [position, found] = snapshot_.cursor_position_by_measure(predicate);
+    return measured_rope_cursor_search_result<value_type, measure_policy>{
+        measured_rope_cursor{snapshot_, position},
+        found};
+}
+
+template <class T, class MeasurePolicy>
+    requires measure_policy<MeasurePolicy, T>
+[[nodiscard]] measured_rope_cursor<T, MeasurePolicy>
+measured_rope<T, MeasurePolicy>::get_cursor(const size_type position) const
+{
+    if (position > size()) {
+        throw std::out_of_range("cursor position is outside the measured rope bounds");
+    }
+
+    return measured_rope_cursor<value_type, measure_policy>{*this, position};
+}
+
+template <class T, class MeasurePolicy>
+    requires measure_policy<MeasurePolicy, T>
+template <class Predicate>
+[[nodiscard]] auto measured_rope<T, MeasurePolicy>::get_cursor_by_measure(Predicate predicate) const
+    -> measured_rope_cursor_search_result<value_type, measure_policy>
+    requires measure_predicate<Predicate, user_measure_type>
+{
+    return get_cursor().seek_by_measure(std::move(predicate));
+}
 
 template <class T, class MeasurePolicy>
     requires measure_policy<MeasurePolicy, T> && equality_comparable_value<T>

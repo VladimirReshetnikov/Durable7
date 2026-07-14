@@ -269,8 +269,7 @@ Shared obligations:
 - Builders must document mutation, snapshot publication, and whether later builder changes can affect
   previously produced immutable ropes.
 
-C#, Haskell, Kotlin, and Rust ship positional and measured/text cursors; C++ `rope_cursor<T>` ships
-a positional semantic checkpoint. No deque, RRB,
+C#, C++, Haskell, Kotlin, and Rust ship positional and measured/text cursors. No deque, RRB,
 raw-finger-tree, reversible-deque, or Tungsten cursor is implied by those surfaces. Every shipped
 cursor shares these observable obligations:
 
@@ -311,7 +310,7 @@ retained values reusable. Kotlin uses a non-null peek wrapper to distinguish a s
 missing neighbor. Rust edits retain the substrate's `T: Clone` bound; read-only cursor operations do
 not.
 
-The C#, Haskell, Kotlin, and Rust measured cursors additionally share these result semantics:
+The C#, C++, Haskell, Kotlin, and Rust measured cursors additionally share these result semantics:
 
 - `MeasureBefore` aggregates `[0, Position)` and `MeasureAfter` aggregates `[Position, Count)`;
   combining them in that order yields the whole version's measure without assuming an inverse,
@@ -320,8 +319,8 @@ The C#, Haskell, Kotlin, and Rust measured cursors additionally share these resu
   lawful monotone predicate. True-at-empty selects zero for a nonempty rope; misses and empty ropes
   return `false` with an end cursor whose before measure is the whole measure.
 - The newline specialization uses the language's existing zero-based line/column rules. C# and
-  Kotlin positions are UTF-16 code units; Haskell positions are `Char` elements; Rust positions are
-  Unicode scalar values. None of those positions denotes a grapheme-cluster index.
+  Kotlin positions are UTF-16 code units; C++ positions are `std::string` bytes; Haskell positions
+  are `Char` elements; Rust positions are Unicode scalar values. None denotes a grapheme-cluster index.
   Navigation and edits preserve access to the existing text helpers.
 
 The C# measured zipper additionally prepares element measures in the immutable cursor lineage,
@@ -338,6 +337,13 @@ edits, and absolute measure search are O(log n), and measure reads may invoke th
 wraps edited measured snapshots in O(1). Kotlin checked growth rejects `Int` overflow before policy
 callbacks or publication after one-shot range capture. It claims no C# fragment cache, snapshot memo,
 allocation ceiling, or O(1)-amortized local editing.
+
+C++ `measured_rope_cursor<T, MeasurePolicy>` is the analogous root-plus-gap checkpoint over the
+chunked measured rope. Its search result carries a usable end cursor on a miss; borrowed peeks are
+lvalue-only, and move operations copy the shared root so the source remains valid. The
+`text_rope_cursor` alias preserves the existing byte-oriented text facade. Known-count growth uses
+checked `size_t` preflights before new element-measure callbacks. It claims no focused zipper,
+snapshot memo, allocation ceiling, callback-count ceiling, or amortized locality.
 
 Haskell's opaque `MeasuredRopeCursor v a` is the analogous snapshot-plus-gap checkpoint over the
 existing chunked measured finger tree. `measureBefore`/`measureAfter` preserve noncommutative order,
@@ -375,7 +381,9 @@ Kotlin checkpoint is specified in its [API notes](../../src/Kotlin/FingerTree/do
 specified by its [workspace README](../../src/Haskell/FingerTree/README.md) and executable
 [test map](../../src/Haskell/FingerTree/test/README.md). The Rust checkpoint is specified by its
 [API notes](../../src/Rust/FingerTree/docs/api-notes.md) and
-[validation guide](../../src/Rust/FingerTree/docs/validation.md).
+[validation guide](../../src/Rust/FingerTree/docs/validation.md). The C++ checkpoint is specified by
+its [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) and
+[validation guide](../../src/Cpp/FingerTree/docs/validation.md).
 
 ## Tungsten Collections
 

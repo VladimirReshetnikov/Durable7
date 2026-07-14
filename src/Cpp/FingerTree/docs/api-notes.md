@@ -324,7 +324,6 @@ a temporary cursor that was its last backing-storage owner.
 Cursor construction, movement, seeking, and `snapshot()` are O(1) root-sharing operations. A peek or point edit
 is O(log n) plus bounded chunk work, and inserting m range elements is O(m + log n) amortized. This positional
 checkpoint does not port the C# zipper: it does not claim O(1)-amortized local navigation or point editing.
-Measured-rope and text-rope cursors are not part of this checkpoint.
 
 ## `measured_rope<T, MeasurePolicy>`
 
@@ -337,6 +336,8 @@ Primary operations:
 - positional observers and edits: the same `empty`, `size`, `front`, `back`, `at`, `try_get`, endpoint, indexed,
   range, split, slice, concat, copy, materialization, and `compact` operations as `rope<T>`;
 - measure observers/navigation: `measure`, `prefix_measure`, `split_by_measure`, and `try_locate_by_measure`;
+- persistent gap editing: `get_cursor` and `get_cursor_by_measure`, returning
+  `measured_rope_cursor<T, MeasurePolicy>` and `measured_rope_cursor_search_result<T, MeasurePolicy>`;
 - test/diagnostic support: `validate_invariants` and `chunk_count`.
 
 Notable C++ differences from C#:
@@ -353,20 +354,34 @@ Notable C++ differences from C#:
 - traversal uses the same retained, chunk-aware forward-iterator contract as `rope<T>`; `to_vector` remains the
   explicit owning materialization operation.
 
+The measured cursor is non-default-constructible and retains one exact measured-rope root plus a validated gap.
+It adds ordered `measure_before`/`measure_after` and absolute `seek_by_measure` to the positional cursor's
+navigation, lvalue-only borrowed peeks, persistent edits, copy-on-move validity, and snapshot surface. Search
+selects the gap before the first element whose inclusive prefix satisfies a lawful monotone predicate; a miss
+returns `found == false` with a usable end cursor. Predicate exceptions publish nothing. Creation, movement,
+positional seek, and snapshot are O(1); measures, peeks, point edits, and search are O(log n) plus bounded chunk
+work, and range insertion is O(m + log n). Known-count concat and insertion overflow is rejected before new
+element-measure callbacks. This is a semantic root-plus-gap checkpoint, not the C# focused zipper or its
+allocation/locality evidence.
+
 ## Text Rope Helpers
 
 The in-scope text layer mirrors the non-editor C# `RopeText` and `RopeBuilder` surface:
 
 - `newline_measure`, a `char -> std::size_t` measure that counts `'\n'`;
 - `text_rope`, an alias for `measured_rope<char, newline_measure>`;
+- `text_rope_cursor` and `text_rope_cursor_search_result`, exact aliases for the corresponding newline-measured
+  cursor types;
 - string interop: `to_char_rope`, `to_text_rope`, and `as_string`;
 - line helpers: `line_count`, `line_of_offset`, `line_start_offset`, `line_column_of`, `offset_of`, `get_line`,
-  and `lines`;
+  and `lines`, with `line_column_of(text_rope_cursor)` reporting the cursor gap;
 - `rope_builder`, a fluent append-only character builder with `append`, `append_line`, `clear`, `to_rope`, and
   `to_text_rope`.
 
 Out of scope for the first C++ port are the editor-grade extensions from C# `RopeTextExtras`: Unicode scalar and
 grapheme indexing, newline-style detection, CR-stripping line helpers, and `TextReader` adapters.
+Text-rope cursor positions and columns therefore remain `std::string` byte offsets; only `'\n'` contributes to
+the cached newline measure.
 
 ## `sorted_bag<T, Less>`, `sorted_set<T, Less>`, And `sorted_map<Key, T, Less>`
 

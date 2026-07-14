@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
+#include <limits>
 #include <numeric>
 #include <ranges>
 #include <source_location>
@@ -24,9 +25,25 @@ using namespace tools::data_structures::finger_tree::tests;
 namespace {
 
 using sum_rope = ft::measured_rope<int, ft::sum_measure<int>>;
+using sum_cursor = ft::measured_rope_cursor<int, ft::sum_measure<int>>;
+
+template <class T>
+concept has_rvalue_measured_peek_previous = requires(const T&& cursor) {
+    std::move(cursor).try_peek_previous();
+};
+
+template <class T>
+concept has_rvalue_measured_peek_next = requires(const T&& cursor) {
+    std::move(cursor).try_peek_next();
+};
 
 static_assert(std::forward_iterator<sum_rope::const_iterator>);
 static_assert(std::ranges::forward_range<const sum_rope>);
+static_assert(!std::default_initializable<sum_cursor>);
+static_assert(std::copy_constructible<sum_cursor>);
+static_assert(std::same_as<decltype(std::declval<const sum_cursor&>().try_peek_next()), const int*>);
+static_assert(!has_rvalue_measured_peek_previous<sum_cursor>);
+static_assert(!has_rvalue_measured_peek_next<sum_cursor>);
 
 struct non_equality_value final {
     int value;
@@ -41,6 +58,53 @@ using non_equality_rope = ft::measured_rope<non_equality_value, ft::size_measure
 static_assert(std::ranges::forward_range<const non_equality_rope>);
 static_assert(!has_equality<
     ft::measured_rope_split<non_equality_value, ft::size_measure<non_equality_value>>>);
+static_assert(!has_equality<
+    ft::measured_rope_cursor<non_equality_value, ft::size_measure<non_equality_value>>>);
+
+struct trace_measure final {
+    using element_type = int;
+    using measure_type = std::vector<int>;
+
+    [[nodiscard]] static measure_type empty()
+    {
+        return {};
+    }
+
+    [[nodiscard]] static measure_type measure(const int value)
+    {
+        return {value};
+    }
+
+    [[nodiscard]] static measure_type combine(const measure_type& left, const measure_type& right)
+    {
+        auto result = left;
+        result.insert(result.end(), right.begin(), right.end());
+        return result;
+    }
+};
+
+struct counting_size_measure final {
+    using element_type = int;
+    using measure_type = std::size_t;
+
+    inline static std::size_t measure_calls = 0;
+
+    [[nodiscard]] static constexpr measure_type empty() noexcept
+    {
+        return 0;
+    }
+
+    [[nodiscard]] static measure_type measure(const int) noexcept
+    {
+        ++measure_calls;
+        return 1;
+    }
+
+    [[nodiscard]] static measure_type combine(const measure_type left, const measure_type right)
+    {
+        return ft::checked_add(left, right);
+    }
+};
 
 struct newline_measure final {
     using element_type = char;
@@ -114,6 +178,47 @@ void require_sequence_equal(
         FT_REQUIRE_EQUAL(actual.front(), expected.front());
         FT_REQUIRE_EQUAL(actual.back(), expected.back());
     }
+}
+
+void require_cursor_equal(
+    const sum_cursor& actual,
+    const std::vector<int>& expected,
+    const std::size_t expected_position,
+    const std::source_location location = std::source_location::current())
+{
+    if (actual.size() != expected.size()
+        || actual.position() != expected_position
+        || actual.is_at_start() != (expected_position == 0)
+        || actual.is_at_end() != (expected_position == expected.size())) {
+        std::ostringstream message;
+        message << location.file_name() << ':' << location.line()
+                << ": measured rope cursor state mismatch";
+        throw test_failure(message.str());
+    }
+
+    const auto* previous = actual.try_peek_previous();
+    if (expected_position == 0) {
+        FT_REQUIRE(previous == nullptr);
+    } else {
+        FT_REQUIRE(previous != nullptr);
+        FT_REQUIRE_EQUAL(*previous, expected[expected_position - 1]);
+    }
+
+    const auto* next = actual.try_peek_next();
+    if (expected_position == expected.size()) {
+        FT_REQUIRE(next == nullptr);
+    } else {
+        FT_REQUIRE(next != nullptr);
+        FT_REQUIRE_EQUAL(*next, expected[expected_position]);
+    }
+
+    require_sequence_equal(actual.snapshot(), expected, location);
+    FT_REQUIRE_EQUAL(
+        actual.measure_before(),
+        std::accumulate(expected.begin(), expected.begin() + static_cast<std::ptrdiff_t>(expected_position), 0));
+    FT_REQUIRE_EQUAL(
+        actual.measure_after(),
+        std::accumulate(expected.begin() + static_cast<std::ptrdiff_t>(expected_position), expected.end(), 0));
 }
 
 void add_measured_rope_tests_impl(suite& tests)
@@ -370,6 +475,215 @@ void add_measured_rope_tests_impl(suite& tests)
                 }
             }
         }
+    });
+
+    tests.add("measured rope cursor boundaries measures edits and retained versions", [] {
+        const auto values = iota_vector(4'098);
+        const auto source = sum_rope::from_range(values);
+        const auto boundaries = std::vector<std::size_t>{
+            0, 1, 15, 16, 255, 256, 257, 2'047, 2'048, 2'049, values.size()};
+
+        for (const auto position : boundaries) {
+            const auto cursor = source.get_cursor(position);
+            require_cursor_equal(cursor, values, position);
+            FT_REQUIRE(cursor.snapshot().begin() == source.begin());
+
+            auto inserted_values = values;
+            inserted_values.insert(
+                inserted_values.begin() + static_cast<std::ptrdiff_t>(position),
+                -1);
+            const auto inserted = cursor.insert(-1);
+            require_cursor_equal(inserted, inserted_values, position + 1);
+            require_cursor_equal(inserted.delete_previous(), values, position);
+
+            auto range_values = values;
+            range_values.insert(
+                range_values.begin() + static_cast<std::ptrdiff_t>(position),
+                {-3, -2, -1});
+            const auto ranged = cursor.insert_range(std::vector<int>{-3, -2, -1});
+            require_cursor_equal(ranged, range_values, position + 3);
+
+            if (position == 0) {
+                FT_REQUIRE_THROWS(std::logic_error, cursor.move_previous());
+                FT_REQUIRE_THROWS(std::logic_error, cursor.delete_previous());
+            } else {
+                auto removed = values;
+                removed.erase(removed.begin() + static_cast<std::ptrdiff_t>(position - 1));
+                require_cursor_equal(cursor.move_previous(), values, position - 1);
+                require_cursor_equal(cursor.delete_previous(), removed, position - 1);
+            }
+
+            if (position == values.size()) {
+                FT_REQUIRE_THROWS(std::logic_error, cursor.move_next());
+                FT_REQUIRE_THROWS(std::logic_error, cursor.delete_next());
+                FT_REQUIRE_THROWS(std::logic_error, cursor.replace_next(-4));
+            } else {
+                auto removed = values;
+                removed.erase(removed.begin() + static_cast<std::ptrdiff_t>(position));
+                require_cursor_equal(cursor.move_next(), values, position + 1);
+                require_cursor_equal(cursor.delete_next(), removed, position);
+
+                auto replaced = values;
+                replaced[position] = -4;
+                require_cursor_equal(cursor.replace_next(-4), replaced, position);
+            }
+        }
+
+        const auto no_equality_source = non_equality_rope::from_range(
+            std::vector<non_equality_value>{{1}});
+        const auto no_equality_replaced = no_equality_source.get_cursor().replace_next(
+            non_equality_value{2});
+        FT_REQUIRE_EQUAL(no_equality_replaced.snapshot()[0].value, 2);
+        FT_REQUIRE_EQUAL(no_equality_source[0].value, 1);
+
+        const auto same = source.get_cursor(10).seek(10);
+        const auto empty_insert = source.get_cursor(10).insert_range(std::vector<int>{});
+        FT_REQUIRE(same.snapshot().begin() == source.begin());
+        FT_REQUIRE(empty_insert.snapshot().begin() == source.begin());
+        FT_REQUIRE_THROWS(std::out_of_range, source.get_cursor(source.size() + 1));
+    });
+
+    tests.add("measured rope cursor preserves noncommutative partitions", [] {
+        const auto source = ft::measured_rope<int, trace_measure>{1, 2, 3, 4, 5};
+        const auto cursor = source.get_cursor(2);
+
+        FT_REQUIRE(cursor.measure_before() == std::vector<int>({1, 2}));
+        FT_REQUIRE(cursor.measure_after() == std::vector<int>({3, 4, 5}));
+
+        const auto edited = cursor.insert(9).insert_range(std::vector<int>{8, 7});
+        FT_REQUIRE(edited.measure_before() == std::vector<int>({1, 2, 9, 8, 7}));
+        FT_REQUIRE(edited.measure_after() == std::vector<int>({3, 4, 5}));
+        FT_REQUIRE(source.to_vector() == std::vector<int>({1, 2, 3, 4, 5}));
+    });
+
+    tests.add("measured rope cursor absolute search returns first gap miss end and retries", [] {
+        const auto source = sum_rope{2, 4, 8};
+        const auto receiver = source.get_cursor(2);
+
+        const auto found = source.get_cursor_by_measure([](const int sum) {
+            return sum > 5;
+        });
+        FT_REQUIRE(found.found);
+        FT_REQUIRE_EQUAL(found.cursor.position(), static_cast<std::size_t>(1));
+        FT_REQUIRE_EQUAL(found.cursor.measure_before(), 2);
+        FT_REQUIRE_EQUAL(*found.cursor.try_peek_next(), 4);
+
+        const auto absolute = receiver.seek_by_measure([](const int sum) {
+            return sum > 5;
+        });
+        FT_REQUIRE(absolute.found);
+        FT_REQUIRE_EQUAL(absolute.cursor.position(), static_cast<std::size_t>(1));
+
+        const auto first = receiver.seek_by_measure([](const int) {
+            return true;
+        });
+        FT_REQUIRE(first.found);
+        FT_REQUIRE_EQUAL(first.cursor.position(), static_cast<std::size_t>(0));
+
+        const auto miss = receiver.seek_by_measure([](const int sum) {
+            return sum > 14;
+        });
+        FT_REQUIRE(!miss.found);
+        FT_REQUIRE(miss.cursor.is_at_end());
+        FT_REQUIRE_EQUAL(miss.cursor.measure_before(), 14);
+
+        const auto empty = sum_rope{}.get_cursor_by_measure([](const int) {
+            return true;
+        });
+        FT_REQUIRE(!empty.found);
+        FT_REQUIRE(empty.cursor.is_at_end());
+
+        FT_REQUIRE_THROWS(std::runtime_error, receiver.seek_by_measure([](const int) -> bool {
+            throw std::runtime_error("cursor predicate failure");
+        }));
+        require_cursor_equal(receiver, {2, 4, 8}, 2);
+        FT_REQUIRE_EQUAL(
+            receiver.seek_by_measure([](const int sum) { return sum >= 6; }).cursor.position(),
+            static_cast<std::size_t>(1));
+
+        const auto across_chunks = ft::measured_rope<int, ft::size_measure<int>>::from_range(
+            iota_vector(4'097));
+        const auto boundary = across_chunks.get_cursor_by_measure([](const std::size_t count) {
+            return count >= 2'049;
+        });
+        FT_REQUIRE(boundary.found);
+        FT_REQUIRE_EQUAL(boundary.cursor.position(), static_cast<std::size_t>(2'048));
+        FT_REQUIRE_EQUAL(*boundary.cursor.try_peek_next(), 2'049);
+    });
+
+    tests.add("measured rope cursor deterministic history matches vector gap model", [] {
+        auto rng = deterministic_rng{0xc25e};
+        auto model = std::vector<int>{};
+        auto position = std::size_t{0};
+        auto cursor = sum_rope{}.get_cursor();
+
+        for (auto step = 1; step <= 750; ++step) {
+            switch (rng.next_index(7)) {
+            case 0:
+            case 1:
+                cursor = cursor.insert(step);
+                model.insert(model.begin() + static_cast<std::ptrdiff_t>(position), step);
+                ++position;
+                break;
+            case 2: {
+                const auto inserted = std::vector<int>{step, -step};
+                cursor = cursor.insert_range(inserted);
+                model.insert(
+                    model.begin() + static_cast<std::ptrdiff_t>(position),
+                    inserted.begin(),
+                    inserted.end());
+                position += inserted.size();
+                break;
+            }
+            case 3:
+                if (position != 0) {
+                    cursor = cursor.delete_previous();
+                    --position;
+                    model.erase(model.begin() + static_cast<std::ptrdiff_t>(position));
+                }
+                break;
+            case 4:
+                if (position != model.size()) {
+                    cursor = cursor.delete_next();
+                    model.erase(model.begin() + static_cast<std::ptrdiff_t>(position));
+                }
+                break;
+            case 5:
+                if (position != model.size()) {
+                    cursor = cursor.replace_next(-step);
+                    model[position] = -step;
+                }
+                break;
+            default:
+                position = rng.next_index(model.size() + 1);
+                cursor = cursor.seek(position);
+                break;
+            }
+
+            require_cursor_equal(cursor, model, position);
+        }
+    });
+
+    tests.add("measured rope cursor overflow precedes new element measure callbacks", [] {
+        using counted_rope = ft::measured_rope<int, counting_size_measure>;
+
+        const auto seed = counted_rope{0};
+        auto power = seed;
+        auto expanded = counted_rope{};
+        for (auto bit = 0; bit != std::numeric_limits<std::size_t>::digits; ++bit) {
+            expanded = expanded.concat(power);
+            if (bit + 1 != std::numeric_limits<std::size_t>::digits) {
+                power = power.concat(power);
+            }
+        }
+
+        FT_REQUIRE_EQUAL(expanded.size(), (std::numeric_limits<std::size_t>::max)());
+        counting_size_measure::measure_calls = 0;
+        FT_REQUIRE_THROWS(std::overflow_error, expanded.get_cursor().insert(-1));
+        FT_REQUIRE_EQUAL(counting_size_measure::measure_calls, static_cast<std::size_t>(0));
+        FT_REQUIRE_EQUAL(expanded.size(), (std::numeric_limits<std::size_t>::max)());
+        FT_REQUIRE_EQUAL(*expanded.try_get(0), 0);
+        FT_REQUIRE_EQUAL(seed.size(), static_cast<std::size_t>(1));
     });
 
     tests.add("measured rope empty and argument validation behavior", [] {
