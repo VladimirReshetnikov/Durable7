@@ -18,6 +18,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -218,6 +219,17 @@ struct counting_string_equal {
 struct few_buckets_hash {
     std::size_t operator()(int value) const noexcept {
         return static_cast<std::uint32_t>(value) & 3u;
+    }
+};
+
+struct controlled_throw_hash {
+    std::shared_ptr<bool> should_throw;
+
+    std::size_t operator()(int value) const {
+        if (*should_throw) {
+            throw std::runtime_error("injected transient hash failure");
+        }
+        return std::hash<int>{}(value);
     }
 };
 
@@ -1448,6 +1460,351 @@ TEST(BulkBuilder_CreateRangeAndIntersectionUseBuilderSemantics) {
     CHECK_EQ(std::string("Alpha"), *intersected);
     CHECK(intersection.contains("gamma"));
     CHECK(!intersection.contains("beta"));
+}
+
+TEST(TransientMap_CleanAndLogicalNoOpPublicationRetainSourceIdentity) {
+    using map_type = persistent_hash_map<
+        std::string,
+        int,
+        case_insensitive_hash,
+        case_insensitive_equal,
+        mod_ten_equal>;
+
+    static_assert(std::is_move_constructible_v<map_type::transient>);
+    static_assert(std::is_move_assignable_v<map_type::transient>);
+    static_assert(!std::is_default_constructible_v<map_type::transient>);
+    static_assert(!std::is_copy_constructible_v<map_type::transient>);
+    static_assert(!std::is_copy_assignable_v<map_type::transient>);
+
+    const auto source = map_type::create(
+        case_insensitive_hash{}, case_insensitive_equal{}, mod_ten_equal{})
+        .set_item("Alpha", 12);
+    auto session = source.to_transient();
+    auto iterator = session.begin();
+
+    CHECK_EQ(std::size_t{1}, session.count());
+    CHECK(!session.is_empty());
+    CHECK(session.contains_key("ALPHA"));
+    CHECK_EQ(12, session.at("alpha"));
+    CHECK_EQ(std::string("Alpha"), *session.try_get_key("ALPHA"));
+    CHECK_EQ(source.hash_function()("Alpha"), session.hash_function()("Alpha"));
+    CHECK(session.key_eq()("Alpha", "ALPHA"));
+    CHECK(session.value_eq()(12, 22));
+
+    session.set_item("ALPHA", 22);
+    CHECK(!session.try_add("alpha", 99));
+    CHECK(!session.remove("missing"));
+    CHECK(iterator != session.end());
+    CHECK_EQ(std::string("Alpha"), iterator->first);
+    CHECK_EQ(12, iterator->second);
+    CHECK_EQ(12, session.at("alpha"));
+    CHECK_EQ(std::size_t{1}, session.to_vector().size());
+    CHECK_EQ(std::vector<std::string>{"Alpha"}, session.keys());
+    CHECK_EQ(std::vector<int>{12}, session.values());
+    CHECK(session.debug_validate_canonical());
+
+    const auto published = std::move(session).persist();
+    CHECK(published.shares_root_with(source));
+    CHECK(published.shares_policy_with(source));
+    CHECK_EQ(std::string("Alpha"), *published.try_get_key("alpha"));
+    CHECK_EQ(12, published.at("ALPHA"));
+
+    CHECK_THROWS_AS(session.count(), std::logic_error);
+    CHECK_THROWS_AS(session.contains_key("alpha"), std::logic_error);
+    CHECK_THROWS_AS(session.begin(), std::logic_error);
+    CHECK_THROWS_AS(std::move(session).persist(), std::logic_error);
+    CHECK_THROWS_AS(*iterator, std::logic_error);
+}
+
+TEST(TransientMap_PointEditsPreserveRepresentativesAndVersionBoundIteration) {
+    using map_type = persistent_hash_map<
+        std::string,
+        int,
+        case_insensitive_hash,
+        case_insensitive_equal,
+        mod_ten_equal>;
+
+    const auto source = map_type::create(
+        case_insensitive_hash{}, case_insensitive_equal{}, mod_ten_equal{})
+        .set_item("Alpha", 1);
+    auto session = source.to_transient();
+    auto stale = session.begin();
+
+    session.set_item("BETA", 3);
+    CHECK_THROWS_AS(*stale, std::logic_error);
+    CHECK_EQ(std::size_t{2}, session.count());
+    CHECK_EQ(std::string("BETA"), *session.try_get_key("beta"));
+
+    auto copied_iterator = session.begin();
+    auto copied_peer = copied_iterator;
+    const auto copied_key = copied_iterator->first;
+    const auto copied_value = copied_iterator->second;
+    ++copied_iterator;
+    CHECK_EQ(copied_key, copied_peer->first);
+    CHECK_EQ(copied_value, copied_peer->second);
+
+    auto duplicate_guard = session.begin();
+    CHECK_THROWS_AS(session.add("beta", 99), std::invalid_argument);
+    CHECK(duplicate_guard != session.end());
+
+    auto equal_replacement_guard = session.begin();
+    session.set_item("beta", 13);
+    CHECK(equal_replacement_guard != session.end());
+    CHECK_EQ(3, session.at("BETA"));
+
+    session.set_item("beta", 4);
+    CHECK_THROWS_AS(*equal_replacement_guard, std::logic_error);
+    CHECK_EQ(4, session.at("beta"));
+
+    auto absent_remove_guard = session.begin();
+    CHECK(!session.remove("missing"));
+    CHECK(absent_remove_guard != session.end());
+    CHECK(session.remove("ALPHA"));
+    CHECK_THROWS_AS(*absent_remove_guard, std::logic_error);
+    CHECK(!session.contains_key("alpha"));
+    CHECK(source.contains_key("alpha"));
+    CHECK(!source.contains_key("beta"));
+
+    auto before_clear = session.begin();
+    session.clear();
+    CHECK(session.is_empty());
+    CHECK_THROWS_AS(before_clear == session.end(), std::logic_error);
+
+    auto empty_guard = session.begin();
+    CHECK(empty_guard == session.end());
+    session.clear();
+    CHECK(empty_guard == session.end());
+
+    const auto published = std::move(session).persist();
+    CHECK(published.is_empty());
+    CHECK(published.shares_policy_with(source));
+    CHECK_EQ(std::size_t{1}, source.count());
+}
+
+TEST(TransientMap_MoveTransferAndOverwriteHaveDeterministicLifecycles) {
+    using map_type = persistent_hash_map<int, std::string>;
+
+    auto rvalue_source = map_type::empty().set_item(7, "seven");
+    auto rvalue_session = std::move(rvalue_source).to_transient();
+    CHECK(rvalue_source.is_empty());
+    const auto rvalue_publication = std::move(rvalue_session).persist();
+    CHECK_EQ(std::string("seven"), rvalue_publication.at(7));
+
+    auto original = map_type::empty().set_item(1, "one").to_transient();
+    auto transferred_iterator = original.begin();
+    auto transferred = std::move(original);
+
+    CHECK_THROWS_AS(original.count(), std::logic_error);
+    CHECK_THROWS_AS(original.begin(), std::logic_error);
+    CHECK_EQ(1, transferred_iterator->first);
+    CHECK_EQ(std::string("one"), transferred_iterator->second);
+
+    auto target = map_type::create_transient();
+    auto overwritten_iterator = target.begin();
+    target = std::move(transferred);
+
+    CHECK_THROWS_AS(transferred.count(), std::logic_error);
+    CHECK_THROWS_AS(overwritten_iterator == target.end(), std::logic_error);
+    CHECK_EQ(std::size_t{1}, target.count());
+    CHECK_EQ(std::string("one"), target.at(1));
+    CHECK_EQ(1, transferred_iterator->first);
+
+    const auto published = std::move(target).persist();
+    CHECK_EQ(std::string("one"), published.at(1));
+    CHECK_THROWS_AS(target.count(), std::logic_error);
+    CHECK_THROWS_AS(*transferred_iterator, std::logic_error);
+
+    auto destroyed_iterator = map_type::transient::const_iterator{};
+    {
+        auto doomed = map_type::empty().set_item(9, "nine").to_transient();
+        destroyed_iterator = doomed.begin();
+    }
+    CHECK_THROWS_AS(*destroyed_iterator, std::logic_error);
+}
+
+TEST(TransientMap_HashFailureLeavesContentsAndIteratorsUnchanged) {
+    using map_type = persistent_hash_map<int, int, controlled_throw_hash>;
+
+    const auto should_throw = std::make_shared<bool>(false);
+    const auto source = map_type::create(controlled_throw_hash{should_throw}).set_item(1, 10);
+    auto session = source.to_transient();
+    auto iterator = session.begin();
+
+    *should_throw = true;
+    CHECK_THROWS_AS(session.set_item(2, 20), std::runtime_error);
+    *should_throw = false;
+
+    CHECK_EQ(std::size_t{1}, session.count());
+    CHECK_EQ(10, session.at(1));
+    CHECK(!session.contains_key(2));
+    CHECK(iterator != session.end());
+    CHECK_EQ(1, iterator->first);
+    CHECK(session.debug_validate_canonical());
+
+    const auto published = std::move(session).persist();
+    CHECK(published.shares_root_with(source));
+    CHECK_EQ(std::size_t{1}, published.count());
+}
+
+TEST(TransientMap_RandomizedPathCopySessionMatchesModelAndIsolatesSource) {
+    using map_type = persistent_hash_map<int, int, few_buckets_hash>;
+    using model_type = std::unordered_map<int, int, few_buckets_hash>;
+
+    auto source = map_type::create(few_buckets_hash{});
+    auto initial_model = model_type{};
+    for (int key = 0; key != 32; ++key) {
+        source = source.set_item(key, key * 10);
+        initial_model.emplace(key, key * 10);
+    }
+
+    auto model = initial_model;
+    auto session = source.to_transient();
+    auto random = std::mt19937{20260713u};
+    for (int step = 0; step != 5000; ++step) {
+        const auto key = static_cast<int>(random() % 257u);
+        const auto value = static_cast<int>(random() % 100000u);
+        switch (random() % 4u) {
+        case 0:
+            session.set_item(key, value);
+            model[key] = value;
+            break;
+        case 1: {
+            const auto expected = model.emplace(key, value).second;
+            CHECK_EQ(expected, session.try_add(key, value));
+            break;
+        }
+        case 2: {
+            const auto expected = model.erase(key) != 0;
+            CHECK_EQ(expected, session.remove(key));
+            break;
+        }
+        default:
+            if (step % 997 == 0) {
+                session.clear();
+                model.clear();
+            } else {
+                session.set_item(key, value);
+                model[key] = value;
+            }
+            break;
+        }
+
+        if (step % 73 == 0) {
+            assert_matches(model, session);
+            CHECK(session.debug_validate_canonical());
+        }
+    }
+
+    assert_matches(initial_model, source);
+    const auto published = std::move(session).persist();
+    assert_matches(model, published);
+    CHECK(published.debug_validate_canonical());
+}
+
+TEST(TransientSet_DelegatesLifecycleRepresentativesNoOpsAndIteration) {
+    using set_type = persistent_hash_set<
+        std::string,
+        case_insensitive_hash,
+        case_insensitive_equal>;
+
+    static_assert(std::is_move_constructible_v<set_type::transient>);
+    static_assert(std::is_move_assignable_v<set_type::transient>);
+    static_assert(!std::is_default_constructible_v<set_type::transient>);
+    static_assert(!std::is_copy_constructible_v<set_type::transient>);
+    static_assert(!std::is_copy_assignable_v<set_type::transient>);
+
+    const auto source = set_type::create_range(
+        std::vector<std::string>{"Alpha", "Beta"},
+        case_insensitive_hash{},
+        case_insensitive_equal{});
+
+    auto clean = source.to_transient();
+    const auto clean_publication = std::move(clean).persist();
+    CHECK(clean_publication.shares_root_with(source));
+
+    auto session = source.to_transient();
+    auto no_op_guard = session.begin();
+    CHECK(!session.add("ALPHA"));
+    CHECK(!session.remove("missing"));
+    CHECK(no_op_guard != session.end());
+    CHECK_EQ(std::string("Alpha"), *session.try_get_value("alpha"));
+    CHECK_EQ(source.hash_function()("Alpha"), session.hash_function()("Alpha"));
+    CHECK(session.key_eq()("Alpha", "ALPHA"));
+
+    CHECK(session.add("gamma"));
+    CHECK_THROWS_AS(*no_op_guard, std::logic_error);
+    CHECK(session.contains("GAMMA"));
+    CHECK(session.remove("BETA"));
+    CHECK(!session.remove("beta"));
+    CHECK_EQ(std::size_t{2}, session.count());
+    CHECK_EQ(std::size_t{2}, session.to_vector().size());
+    CHECK(session.debug_validate_canonical());
+
+    auto before_clear = session.begin();
+    session.clear();
+    CHECK(session.is_empty());
+    CHECK_THROWS_AS(*before_clear, std::logic_error);
+    auto empty_guard = session.begin();
+    session.clear();
+    CHECK(empty_guard == session.end());
+
+    const auto published = std::move(session).persist();
+    CHECK(published.is_empty());
+    CHECK_EQ(std::size_t{2}, source.count());
+    CHECK(source.contains("alpha"));
+    CHECK(source.contains("beta"));
+    CHECK_THROWS_AS(session.count(), std::logic_error);
+    CHECK_THROWS_AS(std::move(session).persist(), std::logic_error);
+
+    auto fresh = set_type::create_transient(
+        case_insensitive_hash{}, case_insensitive_equal{});
+    CHECK(fresh.add("Delta"));
+    const auto fresh_publication = std::move(fresh).persist();
+    CHECK_EQ(std::string("Delta"), *fresh_publication.try_get_value("delta"));
+}
+
+TEST(TransientSet_RelationsUseReceiverPolicyAndRequireActiveSession) {
+    using set_type = persistent_hash_set<
+        std::string,
+        case_insensitive_hash,
+        case_insensitive_equal>;
+
+    const auto source = set_type::create_range(
+        std::vector<std::string>{"Alpha", "Beta"},
+        case_insensitive_hash{},
+        case_insensitive_equal{});
+    const auto equal_set = set_type::create_range(
+        std::vector<std::string>{"alpha", "BETA"},
+        case_insensitive_hash{},
+        case_insensitive_equal{});
+    const auto proper_super = std::vector<std::string>{"ALPHA", "beta", "Gamma", "gamma"};
+    const auto proper_sub = std::vector<std::string>{"ALPHA", "alpha"};
+    const auto disjoint = std::vector<std::string>{"gamma", "DELTA"};
+    const auto empty = std::vector<std::string>{};
+
+    auto session = source.to_transient();
+    auto iterator = session.begin();
+    CHECK(session.is_subset_of(proper_super));
+    CHECK(session.is_proper_subset_of(proper_super));
+    CHECK(session.is_superset_of(proper_sub));
+    CHECK(session.is_proper_superset_of(proper_sub));
+    CHECK(session.overlaps(proper_super));
+    CHECK(!session.overlaps(disjoint));
+    CHECK(session.set_equals(equal_set));
+    CHECK(session.set_equals(std::vector<std::string>{"ALPHA", "beta", "alpha"}));
+    CHECK(!session.is_subset_of(proper_sub));
+    CHECK(!session.set_equals(proper_super));
+    CHECK_EQ(std::string("Alpha"), *session.try_get_value("ALPHA"));
+    CHECK(iterator != session.end());
+
+    const auto published = std::move(session).persist();
+    CHECK(published.set_equals(source));
+    CHECK_THROWS_AS(session.is_subset_of(empty), std::logic_error);
+    CHECK_THROWS_AS(session.is_proper_subset_of(empty), std::logic_error);
+    CHECK_THROWS_AS(session.is_superset_of(empty), std::logic_error);
+    CHECK_THROWS_AS(session.is_proper_superset_of(empty), std::logic_error);
+    CHECK_THROWS_AS(session.overlaps(empty), std::logic_error);
+    CHECK_THROWS_AS(session.set_equals(empty), std::logic_error);
 }
 
 TEST(PatriciaMap_CachedCountsAndNoOpAlgebraPreserveRoots) {

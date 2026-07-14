@@ -8,6 +8,7 @@
 #include <functional>
 #include <initializer_list>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -97,6 +98,8 @@ public:
     using hasher = Hash;
     using key_equal = KeyEqual;
     using value_equal = ValueEqual;
+
+    class transient;
 
 private:
     struct payload {
@@ -217,6 +220,15 @@ public:
         ValueEqual values_equal = {}) {
         return bulk_builder(std::move(hash), std::move(equal), std::move(values_equal));
     }
+
+    [[nodiscard]] static transient create_transient(
+        Hash hash = {},
+        KeyEqual equal = {},
+        ValueEqual values_equal = {});
+
+    [[nodiscard]] transient to_transient() const &;
+
+    [[nodiscard]] transient to_transient() &&;
 
     static persistent_hash_map create_range(
         std::initializer_list<value_type> items,
@@ -1965,6 +1977,373 @@ private:
     std::shared_ptr<const policy_identity> policy_identity_ =
         std::make_shared<const policy_identity>();
 };
+
+// A deliberately thin, one-way editing session over a persistent map value.
+// Point edits call the ordinary persistent operations and therefore path-copy
+// changed trie regions; this type does not expose or claim an owner-token
+// mutable-node fast path. Adoption and publication move/copy only the map's
+// root, count, policy objects, and policy-identity token and never walk the
+// trie. Policy-object copy/move costs remain caller-defined.
+template <class Key, class T, class Hash, class KeyEqual, class ValueEqual>
+class persistent_hash_map<Key, T, Hash, KeyEqual, ValueEqual>::transient final {
+private:
+    using map_type = persistent_hash_map<Key, T, Hash, KeyEqual, ValueEqual>;
+
+    enum class lifecycle_state {
+        active,
+        consumed,
+        moved_from,
+        destroyed,
+    };
+
+    struct iterator_control final {
+        lifecycle_state state = lifecycle_state::active;
+        typename map_type::size_type version = 0;
+    };
+
+public:
+    using key_type = Key;
+    using mapped_type = T;
+    using value_type = typename map_type::value_type;
+    using size_type = typename map_type::size_type;
+    using hasher = Hash;
+    using key_equal = KeyEqual;
+    using value_equal = ValueEqual;
+
+    transient(const transient&) = delete;
+    transient& operator=(const transient&) = delete;
+
+    transient(transient&& other) noexcept(std::is_nothrow_move_constructible_v<map_type>)
+        : map_(std::move(other.map_)),
+          control_(std::move(other.control_)),
+          state_(other.state_) {
+        other.state_ = lifecycle_state::moved_from;
+    }
+
+    transient& operator=(transient&& other) noexcept(
+        std::is_nothrow_move_assignable_v<map_type>) {
+        if (this != &other) {
+            map_ = std::move(other.map_);
+            mark_destroyed();
+            control_ = std::move(other.control_);
+            state_ = other.state_;
+            other.state_ = lifecycle_state::moved_from;
+        }
+
+        return *this;
+    }
+
+    ~transient() {
+        mark_destroyed();
+    }
+
+    [[nodiscard]] size_type count() const {
+        return active_map().count();
+    }
+
+    [[nodiscard]] bool is_empty() const {
+        return active_map().is_empty();
+    }
+
+    [[nodiscard]] const Hash& hash_function() const {
+        return active_map().hash_function();
+    }
+
+    [[nodiscard]] const KeyEqual& key_eq() const {
+        return active_map().key_eq();
+    }
+
+    [[nodiscard]] const ValueEqual& value_eq() const {
+        return active_map().value_eq();
+    }
+
+    [[nodiscard]] bool contains_key(const Key& key) const {
+        return active_map().contains_key(key);
+    }
+
+    // The returned pointers remain valid only until the session is changed,
+    // consumed, moved, or destroyed, unless another retained map/iterator
+    // independently keeps the containing immutable node alive.
+    [[nodiscard]] const T* try_get(const Key& key) const {
+        return active_map().try_get(key);
+    }
+
+    [[nodiscard]] const Key* try_get_key(const Key& equal_key) const {
+        return active_map().try_get_key(equal_key);
+    }
+
+    [[nodiscard]] const T& at(const Key& key) const {
+        return active_map().at(key);
+    }
+
+    void set_item(const Key& key, const T& value) {
+        commit(active_map().set_item(key, value));
+    }
+
+    void add(const Key& key, const T& value) {
+        commit(active_map().add(key, value));
+    }
+
+    [[nodiscard]] bool try_add(const Key& key, const T& value) {
+        auto [candidate, added] = active_map().try_add(key, value);
+        if (added) {
+            commit(std::move(candidate));
+        }
+        return added;
+    }
+
+    [[nodiscard]] bool remove(const Key& key) {
+        auto& current = active_map();
+        auto candidate = current.remove(key);
+        if (candidate.shares_root_with(current)) {
+            return false;
+        }
+
+        commit(std::move(candidate));
+        return true;
+    }
+
+    void clear() {
+        commit(active_map().clear());
+    }
+
+    class const_iterator {
+    public:
+        using iterator_concept = std::input_iterator_tag;
+        using iterator_category = std::input_iterator_tag;
+        using value_type = typename map_type::value_type;
+        using difference_type = std::ptrdiff_t;
+        using reference = const value_type&;
+        using pointer = const value_type*;
+
+        const_iterator() = default;
+
+        reference operator*() const {
+            validate();
+            return *inner_;
+        }
+
+        pointer operator->() const {
+            validate();
+            return inner_.operator->();
+        }
+
+        const_iterator& operator++() {
+            validate();
+            ++inner_;
+            return *this;
+        }
+
+        const_iterator operator++(int) {
+            auto copy = *this;
+            ++(*this);
+            return copy;
+        }
+
+        friend bool operator==(const const_iterator& iterator, std::default_sentinel_t sentinel) {
+            iterator.validate();
+            return iterator.inner_ == sentinel;
+        }
+
+        friend bool operator==(std::default_sentinel_t sentinel, const const_iterator& iterator) {
+            return iterator == sentinel;
+        }
+
+        friend bool operator!=(const const_iterator& iterator, std::default_sentinel_t sentinel) {
+            return !(iterator == sentinel);
+        }
+
+        friend bool operator!=(std::default_sentinel_t sentinel, const const_iterator& iterator) {
+            return !(iterator == sentinel);
+        }
+
+    private:
+        friend class transient;
+
+        const_iterator(
+            std::shared_ptr<const iterator_control> control,
+            size_type version,
+            typename map_type::const_iterator inner)
+            : control_(std::move(control)),
+              version_(version),
+              inner_(std::move(inner)) {
+        }
+
+        void validate() const {
+            if (!control_) {
+                return;
+            }
+
+            if (control_->state == lifecycle_state::consumed) {
+                throw std::logic_error(
+                    "The persistent_hash_map transient has already been consumed by persist().");
+            }
+            if (control_->state == lifecycle_state::destroyed) {
+                throw std::logic_error(
+                    "The persistent_hash_map transient that created this iterator no longer exists.");
+            }
+            if (control_->version != version_) {
+                throw std::logic_error(
+                    "The persistent_hash_map transient was changed after this iterator was created.");
+            }
+        }
+
+        std::shared_ptr<const iterator_control> control_;
+        size_type version_ = 0;
+        typename map_type::const_iterator inner_;
+    };
+
+    [[nodiscard]] const_iterator begin() const {
+        const auto& map = active_map();
+        return const_iterator(control_, control_->version, map.begin());
+    }
+
+    [[nodiscard]] std::default_sentinel_t end() const {
+        ensure_active();
+        return {};
+    }
+
+    [[nodiscard]] const_iterator cbegin() const {
+        return begin();
+    }
+
+    [[nodiscard]] std::default_sentinel_t cend() const {
+        return end();
+    }
+
+    [[nodiscard]] std::vector<value_type> to_vector() const {
+        ensure_active();
+        std::vector<value_type> items;
+        items.reserve(map_.count());
+        for (const auto& item : *this) {
+            items.push_back(item);
+        }
+        return items;
+    }
+
+    [[nodiscard]] std::vector<Key> keys() const {
+        ensure_active();
+        std::vector<Key> result;
+        result.reserve(map_.count());
+        for (const auto& [key, value] : *this) {
+            (void)value;
+            result.push_back(key);
+        }
+        return result;
+    }
+
+    [[nodiscard]] std::vector<T> values() const {
+        ensure_active();
+        std::vector<T> result;
+        result.reserve(map_.count());
+        for (const auto& [key, value] : *this) {
+            (void)key;
+            result.push_back(value);
+        }
+        return result;
+    }
+
+    [[nodiscard]] bool debug_validate_canonical() const {
+        return active_map().debug_validate_canonical();
+    }
+
+    // Publication is deliberately rvalue-only. A successful call moves the
+    // current persistent value out in constant trie work and consumes this
+    // session; every later observation throws std::logic_error.
+    [[nodiscard]] map_type persist() && {
+        ensure_active();
+        auto result = std::move(map_);
+        state_ = lifecycle_state::consumed;
+        control_->state = lifecycle_state::consumed;
+        return result;
+    }
+
+    map_type persist() & = delete;
+
+private:
+    friend map_type;
+
+    explicit transient(map_type map)
+        : map_(std::move(map)),
+          control_(std::make_shared<iterator_control>()) {
+    }
+
+    void ensure_active() const {
+        if (state_ == lifecycle_state::consumed) {
+            throw std::logic_error(
+                "The persistent_hash_map transient has already been consumed by persist().");
+        }
+        if (state_ == lifecycle_state::moved_from) {
+            throw std::logic_error(
+                "The persistent_hash_map transient has been moved from.");
+        }
+        if (!control_ || control_->state != lifecycle_state::active) {
+            throw std::logic_error(
+                "The persistent_hash_map transient is not active.");
+        }
+    }
+
+    [[nodiscard]] map_type& active_map() {
+        ensure_active();
+        return map_;
+    }
+
+    [[nodiscard]] const map_type& active_map() const {
+        ensure_active();
+        return map_;
+    }
+
+    void commit(map_type candidate) {
+        ensure_active();
+        if (candidate.shares_root_with(map_)) {
+            return;
+        }
+        if (control_->version == (std::numeric_limits<size_type>::max)()) {
+            throw std::overflow_error(
+                "The persistent_hash_map transient version counter overflowed.");
+        }
+
+        // Candidate construction performs every potentially throwing hash,
+        // equality, allocation, and policy-copy operation. The candidate was
+        // derived exclusively from map_, so its policies and identity are the
+        // same; commit only the immutable root/count pair and keep the exact
+        // policy objects already owned by the session. Both assignments are
+        // non-throwing, as is the generation increment checked above.
+        map_.root_ = std::move(candidate.root_);
+        map_.count_ = candidate.count_;
+        ++control_->version;
+    }
+
+    void mark_destroyed() noexcept {
+        if (state_ == lifecycle_state::active && control_) {
+            control_->state = lifecycle_state::destroyed;
+        }
+    }
+
+    map_type map_;
+    std::shared_ptr<iterator_control> control_;
+    lifecycle_state state_ = lifecycle_state::active;
+};
+
+template <class Key, class T, class Hash, class KeyEqual, class ValueEqual>
+[[nodiscard]] auto persistent_hash_map<Key, T, Hash, KeyEqual, ValueEqual>::create_transient(
+    Hash hash,
+    KeyEqual equal,
+    ValueEqual values_equal) -> transient {
+    return transient(create(std::move(hash), std::move(equal), std::move(values_equal)));
+}
+
+template <class Key, class T, class Hash, class KeyEqual, class ValueEqual>
+[[nodiscard]] auto persistent_hash_map<Key, T, Hash, KeyEqual, ValueEqual>::to_transient() const &
+    -> transient {
+    return transient(*this);
+}
+
+template <class Key, class T, class Hash, class KeyEqual, class ValueEqual>
+[[nodiscard]] auto persistent_hash_map<Key, T, Hash, KeyEqual, ValueEqual>::to_transient() &&
+    -> transient {
+    return transient(std::move(*this));
+}
 
 } // namespace tools::data_structures::hamt
 

@@ -25,6 +25,11 @@ The port intentionally follows C++ value semantics rather than C# reference iden
 return a value that shares the same root node as the source; `shares_root_with` and the debug root
 inspection helpers expose that property for tests.
 
+The CHAMP map and set also expose nested move-only `transient` types for an explicit edit-then-
+publish lifecycle. These sessions port the C# lifecycle and representative contracts, not its
+owner-token mutation kernel: each successful content-changing edit invokes the ordinary immutable
+operation and path-copies the affected trie region.
+
 `merkle_search_tree<K, V>` is a third, independent immutable map core. It orders keys through an
 explicit policy, derives canonical geometric levels from policy-bound SHA-256 key hashes, and emits
 exact `MST2` content-addressed blocks. `merkle_persistence.hpp` and `merkle_proofs.hpp` add bounded
@@ -170,6 +175,60 @@ heap storage while traversing; copied iterators advance independently. Pointers 
 `try_get`/`try_get_key` do not retain the trie: they stay valid only while some map value holding
 the containing version is alive.
 
+## CHAMP Edit Sessions
+
+`persistent_hash_map::create_transient(...)` starts an empty active map session with explicit
+policy objects. `map.to_transient()` adopts an lvalue by sharing its immutable root, while
+`std::move(map).to_transient()` transfers the map value. The set exposes the same factories. The
+session types are movable but not copyable, have no public default constructor, and publish only
+through the rvalue-qualified `std::move(session).persist()` operation.
+
+An active map session exposes `count`, `is_empty`, policy access, lookup, `set_item`, duplicate-
+rejecting `add`, reporting `try_add`, reporting `remove`, `clear`, iteration, materialization, and
+canonical-structure diagnostics. The set session is a thin map-backed facade with lookup,
+stored-representative recovery, reporting `add`/`remove`, `clear`, iteration, materialization, and
+diagnostics. It also mirrors the persistent set's subset, proper-subset, superset, proper-superset,
+overlap, and set-equality queries for initializer lists, persistent sets, and ranges. Relation
+arguments are interpreted through the active session's retained hash/equality policy. The first
+equivalent key/item representative and the map's `ValueEqual` no-op rule are exactly those of the
+persistent receiver.
+
+Adoption does not walk the trie. A clean session, including one that sees only duplicate adds,
+absent removals, equal-value replacement, or empty clear, publishes a map/set sharing the source
+root and policy identity. A real edit creates the same path-copied immutable successor that the
+persistent operation would create and replaces only the session's current value. Consequently,
+retained source maps/sets remain isolated and readable throughout editing. This first C++ session
+does **not** mutate CHAMP nodes in place and makes no edit-throughput or allocation improvement
+claim over persistent updates. It is separate from `bulk_builder`, whose unpublished mutable nodes
+serve repeated construction and whose `to_immutable()` snapshots do not consume the builder.
+
+Point-edit candidate construction completes all hashing, equality callbacks, policy copying, and
+allocation before commit. Commit changes only the immutable root/count pair and generation through
+non-throwing assignments. A candidate-construction failure therefore leaves session contents,
+policy objects, generation, and captured-iterator validity unchanged.
+
+Each iterator captures the session generation and retains the immutable root it traverses. A
+successful content change invalidates it with `std::logic_error`; a logical no-op does not. Copied
+iterators advance independently. Moving a session transfers its iterator control, so pre-move
+iterators continue to describe the logical session now owned by the destination. Move assignment
+invalidates iterators previously obtained from the overwritten destination. Publication invalidates
+all session iterators and consumes the session. Every later read, edit, iteration request, or
+publication attempt throws `std::logic_error`; operations on a moved-from session do likewise.
+Destroying an active session also makes an iterator's next observation fail deterministically.
+A consumed or moved-from variable remains a valid target for move assignment from a fresh session.
+
+`persist() &&` constructs its result by moving the current map and its policy objects, then marks
+the session consumed. With nothrow-movable policies this is a non-throwing publication step. If a
+custom policy move constructor throws, the exception propagates before the consume flag is set, but
+already-moved map or policy subobjects are not rolled back; the session has no retry/content
+preservation guarantee in that exceptional case. Set publication may already have consumed its map
+session before a later throwing move into the set wrapper. Callers requiring retryable publication
+should provide nothrow-movable policy objects.
+
+The session is unsynchronized and has one logical owner. A caller may move it between threads under
+external synchronization, but must not overlap reads or edits on one session. Immutable source and
+published values keep the ordinary concurrent-read contract.
+
 ## Map Contract
 
 - `empty()` returns an empty default-policy map.
@@ -184,6 +243,9 @@ the containing version is alive.
   `to_immutable()` freezes the current contents into a detached persistent map by copying every
   reachable node; the builder never shares mutable storage with frozen maps and stays usable for
   further `set_item`/`to_immutable` rounds afterwards.
+- `create_transient(hash, equal, values_equal)` creates an empty move-only edit session;
+  `to_transient()` adopts an existing value, and rvalue-only `persist()` publishes and consumes the
+  session. Session point edits use the persistent path-copy kernel rather than the bulk builder.
 - `set_item(key, value)` adds or replaces a key.
 - `set_items(items)` adds or replaces entries in enumeration order.
 - `add(key, value)` adds a key and throws `std::invalid_argument` when an equivalent key already
@@ -215,6 +277,9 @@ policy objects have no generally available equality operation.
 ## Set Contract
 
 - `empty()`, `create`, and `create_range` mirror the map factories.
+- `create_transient`, `to_transient`, and the nested move-only session mirror the map lifecycle;
+  set `add` and `remove` report whether membership changed, and its six relation families mirror
+  the persistent set's initializer-list, same-set, and range overloads.
 - `add`, `try_add`, `remove`, `try_remove`, `contains`, `try_get_value`, and `clear` mirror map
   behavior.
 - `union_with`, `intersect_with`, `except_with`, and `symmetric_except_with` return new persistent
@@ -243,6 +308,12 @@ length of an equal-hash collision bucket.
   persistent path copies between successive input entries.
 - Bulk builder `set_item`: O(w / log2(b) + c) with in-place mutation of unpublished nodes;
   `to_immutable`: O(n) node copies producing a detached persistent trie.
+- Edit-session adoption/publication: O(1) trie work and no trie traversal; copying or moving custom
+  policy objects has the cost defined by those objects. Session lookup and point edits have the
+  same bounds and allocation behavior as the corresponding persistent operations because they use
+  the same path-copy kernel.
+- Edit-session enumeration: O(n), with the persistent iterator's seven inline traversal frames plus
+  one O(1) generation check per iterator operation.
 - Set algebra implemented from public operations: O((n + m) * update-cost) unless the operation
   only probes membership.
 

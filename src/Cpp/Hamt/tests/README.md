@@ -62,11 +62,25 @@ The executable registers these cases:
 - `BulkBuilder_DeepPrefixKeysBranchAtFinalHashLevel`
 - `BulkBuilder_RandomizedBuildMatchesPersistentUpdates`
 - `BulkBuilder_CreateRangeAndIntersectionUseBuilderSemantics`
+- `TransientMap_CleanAndLogicalNoOpPublicationRetainSourceIdentity`
+- `TransientMap_PointEditsPreserveRepresentativesAndVersionBoundIteration`
+- `TransientMap_MoveTransferAndOverwriteHaveDeterministicLifecycles`
+- `TransientMap_HashFailureLeavesContentsAndIteratorsUnchanged`
+- `TransientMap_RandomizedPathCopySessionMatchesModelAndIsolatesSource`
+- `TransientSet_DelegatesLifecycleRepresentativesNoOpsAndIteration`
+- `TransientSet_RelationsUseReceiverPolicyAndRequireActiveSession`
 
 The CHAMP canonicalization fixture uses explicit spreading hashes on every standard library, an
 exact deep-bridge collapse case, and all four reachable terminal fragments. Validation checks full
 hash-prefix routing; topology comparison matches collision keys through `KeyEqual` without depending
-on collision insertion order.
+on collision insertion order. The transient groups separately lock the move-only one-way lifecycle,
+clean/no-op identity, path-copy source isolation, generation-bound iteration, moved/consumed
+behavior, policy and representative retention, injected hash failure, set delegation, and a
+collision-heavy 5,000-operation model. They deliberately do not assert an edit-performance gain:
+the first native session uses the persistent update kernel. Candidate failures occur before the
+non-throwing root/count commit, so the injected failure also checks generation/iterator stability.
+Set relations cover receiver-policy case folding, duplicate range members, persistent-set and range
+overloads, iterator stability, and consumed-session failures including empty probes.
 
 ## Merkle Core, Wire, And Persistence Coverage
 
@@ -118,10 +132,10 @@ preflight, missing/tampered/noncanonical inputs, all seven limits and proof-pref
 proof expansion/tampering, iterative sync, present-null/no-partial merge, move-only values, and
 concurrent store/load/proof/sync.
 
-`merkle_header_consumer.cpp` includes the aggregate header from the copied package tree, creates and
-validates the one-entry golden tree, then instantiates export/save/load, proof verification, and
-merge. It is an independent public-header closure and crypto-link gate, not a replacement for the
-model suite.
+`merkle_header_consumer.cpp` includes the aggregate header from the copied package tree, instantiates
+map/set edit sessions through one-way publication, creates and validates the one-entry golden tree,
+then instantiates export/save/load, proof verification, and merge. It is an independent
+public-header closure and crypto-link gate, not a replacement for the model suite.
 
 ## Build And Run
 

@@ -182,6 +182,64 @@ auto [without_one, was_removed] = with_two.try_remove(1);
 Use `try_get_value` to recover the originally stored equivalent value when custom equality is in
 play.
 
+## One-Way Edit Sessions
+
+Use the nested move-only `transient` when an operation naturally has an edit phase followed by one
+publication point:
+
+```cpp
+auto source = map_type::empty().set_item(1, "one");
+auto edit = source.to_transient();
+
+edit.set_item(2, "two");
+edit.set_item(1, "uno");
+bool inserted = edit.try_add(3, "three");
+bool removed = edit.remove(2);
+
+auto published = std::move(edit).persist();
+```
+
+`source` remains immutable and isolated. A clean session—or one subjected only to equal-value
+replacement, duplicate `try_add`, absent removal, or empty clear—publishes a value sharing the
+source root. A real edit uses the same persistent CHAMP path-copy operation as calling `set_item`,
+`add`, `remove`, or `clear` on a map value; this session is a lifecycle convenience, not an in-place
+mutation optimization. It is distinct from the reusable construction-only `bulk_builder`.
+If hashing, equality, policy copying, or allocation fails while preparing a point edit, the active
+session and its existing iterators remain unchanged.
+
+Publication is deliberately rvalue-only and consumes the session. Every later collection read,
+edit, iteration request, or publication attempt on `edit`, and every such operation on a moved-from
+session, throws `std::logic_error`. A consumed or moved-from variable may still receive a fresh
+session through move assignment. Iterators are bound to the session generation: content changes
+invalidate them, logical no-ops do not, and publication invalidates all of them. Moving a session
+transfers still-valid iterators to the destination's logical session.
+
+Sets expose the same lifecycle with reporting membership edits:
+
+```cpp
+auto edit_set = set_type::create_transient();
+bool added_one = edit_set.add(1);
+bool duplicate = edit_set.add(1); // false
+bool removed_one = edit_set.remove(1);
+bool contains_all = edit_set.is_superset_of(std::vector<int>{1, 2});
+bool same_members = edit_set.set_equals(std::vector<int>{2, 3});
+auto published_set = std::move(edit_set).persist();
+```
+
+The set session also mirrors `is_subset_of`, `is_proper_subset_of`, `is_superset_of`,
+`is_proper_superset_of`, `overlaps`, and `set_equals` for initializer lists, persistent sets, and
+ranges. As on the persistent facade, the receiver's retained hash/equality policy interprets the
+argument and collapses equivalent duplicates where cardinality matters.
+
+Publication moves the current map and policy objects before it marks the session consumed. Standard
+nothrow-movable policies make that boundary straightforward. A throwing custom policy move can
+leave an unconsumed map session with already-moved subobjects, or consume the inner map before set-
+wrapper construction fails; there is no retry/content-preservation guarantee for that exceptional
+publication path. Use nothrow-movable policies when publication must be retry-independent.
+
+Sessions are unsynchronized single-owner values. Move them between threads only with external
+synchronization; continue to share immutable source or published values for concurrent reads.
+
 ## Set Algebra
 
 Set algebra methods accept initializer lists or ranges:
@@ -406,9 +464,10 @@ if (result.success()) {
 Map and set values are immutable after construction. Independent snapshots can be read concurrently,
 and update-shaped operations create new values without mutating retained snapshots. Ordinary C++
 object lifetime rules still apply: do not race on the same local variable while another thread
-reassigns it. Merkle policies additionally call their shared comparator and codecs during reads,
-updates, equality, diff, and validation; custom implementations must support the concurrency the
-caller permits.
+reassigns it. CHAMP edit sessions are unsynchronized and support one logical owner; do not overlap
+session operations, and use caller synchronization for sequential transfer between threads. Merkle
+policies additionally call their shared comparator and codecs during reads, updates, equality,
+diff, and validation; custom implementations must support the concurrency the caller permits.
 
 ## Choosing A Surface
 
@@ -419,6 +478,7 @@ caller permits.
 | Stored equivalent key recovery | `try_get_key` |
 | Immutable unordered value set | `persistent_hash_set<T>` |
 | Stored equivalent item recovery | `try_get_value` |
+| One-way map/set edit phase | `to_transient()` / `create_transient()`, then `std::move(session).persist()` |
 | Union/intersection/difference | `union_with`, `intersect_with`, `except_with`, `symmetric_except_with` |
 | Custom value semantics | Template hash/equality policy objects plus `create(...)` or `create_range(...)` |
 | Canonical ordered map with a SHA-256 root | `merkle_search_tree<K,V>` |

@@ -22,9 +22,10 @@ public `include/Tools` subtree into `build/<Configuration>/package/include`, and
 - `tests/merkle_header_consumer.cpp` against only the copied package include root into
   `merkle_header_consumer.exe`.
 
-The third program is an installed-header closure gate: it prevents the aggregate/public Merkle
-surface from accidentally depending on source-tree-relative files or undeclared transitive
-includes. All three programs link Windows CNG through `bcrypt.lib` because the public SHA-256
+The third program is an installed-header closure gate: it prevents the aggregate/public CHAMP and
+Merkle surfaces from accidentally depending on source-tree-relative files or undeclared transitive
+includes. It instantiates map/set transients through publication as well as the Merkle persistence
+surface. All three programs link Windows CNG through `bcrypt.lib` because the public SHA-256
 implementation selects CNG on Windows. Non-Windows consumers link OpenSSL Crypto.
 
 The script uses these project-level compiler gates:
@@ -122,6 +123,17 @@ The suite covers:
   equal-value retention for duplicates, final-hash-level branching, a collision-heavy randomized
   build checked against persistent updates, and builder-backed `create_range`/`intersect_with`
   semantics.
+- move-only CHAMP map/set edit sessions: empty and retained-value adoption, clean/no-op root and
+  policy preservation, stored representatives, point edits and clear, source isolation, active
+  lookup and materialization, and rvalue-only one-way publication;
+- session lifecycle and iteration: copied generation-bound iterators, real-edit invalidation,
+  no-op stability, transfer across move construction, overwritten-destination invalidation on move
+  assignment, deterministic consumed/moved-from failures, and set-facade delegation;
+- active set-session relations through receiver-policy initializer-list, persistent-set, and range
+  overloads, including equivalent duplicates, iterator stability, and empty-probe consumed checks;
+- edit-session failure/model coverage: injected hash failure without state or iterator change and a
+  5,000-operation collision-heavy map session checked against `std::unordered_map` while retaining
+  the original source snapshot;
 - 32-/64-bit Patricia signed ordering, 10,000 deterministic updates against `std::map`, retained
   no-op roots, cached subtree counts, fixed-bias and resolver-combining map algebra, and integer-set
   union/intersection/difference.
@@ -157,9 +169,9 @@ The Merkle suite covers:
 - concurrent store publication, load, proof verification, and sync reads.
 
 The copied-header consumer includes the installed aggregate header without source-tree include
-paths, pins the one-entry golden root, and instantiates export/save/load, proof verification, and
-merge. This verifies public include closure and the required crypto link independently from the
-full native suite.
+paths, instantiates map/set edit sessions and publication, pins the one-entry golden root, and
+instantiates export/save/load, proof verification, and merge. This verifies public include closure
+and the required crypto link independently from the full native suite.
 
 For new behavior, prefer adding deterministic model checks here before relying on example-only coverage.
 

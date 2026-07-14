@@ -23,14 +23,20 @@ per trie level, canonical CHAMP branches with separate data/node maps, compact i
 child-only vectors, immutable equal-hash collision buckets, custom
 hash/equality policy objects, structural sharing across versions, first equivalent key/item
 retention, no-op root reuse, cached subtree cardinalities, and slot-aligned structural map/set
-algebra that prunes pointer-identical subtries. A transient `bulk_builder` (mirroring the C# reference's bulk
-construction) mutates unpublished nodes in place and freezes them into detached persistent maps;
-`create_range` and set intersection build through it. Maps also expose `map_equals` and owned typed
-added/removed/changed diff. Those two operations have a caller precondition that stateful `Hash` and
-`KeyEqual` objects define compatible semantics; arbitrary C++ policy objects expose no general
+algebra that prunes pointer-identical subtries. A construction-only `bulk_builder` mutates
+unpublished nodes in place and freezes them into detached persistent maps; `create_range` and set
+intersection build through it. Separately, both CHAMP facades expose move-only, one-way
+`transient` editing sessions through `create_transient` and `to_transient`. Clean and logical-no-op
+sessions publish the original shared root; real point edits deliberately call the immutable
+path-copy operations, so this lifecycle surface makes no owner-token mutation or throughput claim.
+Generation-bound iterators fail after a content change, and every later collection observation,
+mutation, iteration request, or publication attempt fails deterministically after publication or
+on a moved-from session. Maps also expose `map_equals` and owned typed
+added/removed/changed diff. Those two operations have a caller precondition that stateful `Hash`
+and `KeyEqual` objects define compatible semantics; arbitrary C++ policy objects expose no general
 identity/equality operation, so the library cannot enforce the C# reference's comparer-identity
-check. Because C++ collections use value semantics,
-identity guarantees are expressed as shared root identity rather than object reference identity.
+check. Because C++ collections use value semantics, identity guarantees are expressed as shared
+root identity rather than object reference identity.
 
 The integer family is a separate big-endian Patricia core. It sign-flips keys for ascending signed
 iteration, compresses unary prefixes, caches subtree cardinality, and aligns prefixes for structural
@@ -52,9 +58,9 @@ three-way merge extend that core without weakening move-only key/value support.
 - `include/Tools/DataStructures/Hamt/hamt.hpp` is the aggregate public include for all C++ HAMT,
   Patricia, and Merkle surfaces.
 - `include/Tools/DataStructures/Hamt/persistent_hash_map.hpp` contains the template map
-  implementation.
+  implementation, construction builder, and move-only edit session.
 - `include/Tools/DataStructures/Hamt/persistent_hash_set.hpp` contains the set wrapper and set
-  algebra.
+  algebra plus its map-backed edit session.
 - `include/Tools/DataStructures/Hamt/persistent_int_map.hpp` contains both widths of Patricia maps
   and sets.
 - `include/Tools/DataStructures/Hamt/merkle_encoding.hpp` contains SHA-256 digests, strict canonical
