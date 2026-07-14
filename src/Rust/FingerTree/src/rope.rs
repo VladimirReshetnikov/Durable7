@@ -129,20 +129,60 @@ impl<T> MeasurePolicy<RopeChunk<T>> for ChunkLengthMeasure<T> {
     }
 
     fn combine(left: &Self::Measure, right: &Self::Measure) -> Self::Measure {
-        left + right
+        left.checked_add(*right).expect("rope length overflow")
     }
 }
 
 type RopeTree<T> = FingerTree<RopeChunk<T>, ChunkLengthMeasure<T>>;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// A persistent chunked sequence with cached length measures.
+///
+/// Cached lengths use `usize`. Construction or growth that would make the total length
+/// unrepresentable panics before publishing a result; every input rope remains valid and reusable.
+#[derive(Debug, PartialEq, Eq)]
 pub struct Rope<T> {
     chunks: RopeTree<T>,
+}
+
+/// An immutable positional editing cursor over one [`Rope`] snapshot.
+///
+/// A cursor denotes a gap in `0..=len`: elements before `position` precede the gap and elements at
+/// or after it follow the gap. Movement and edits return new cursor values, so retained cursors can
+/// branch independently. This Rust checkpoint stores a cheap root-sharing rope value plus the gap;
+/// it is not the focused zipper used by the C# implementation and makes no amortized-locality claim.
+///
+/// Creating, cloning, moving, seeking, and taking a snapshot are O(1). Peeks and point edits are
+/// O(log n) plus bounded chunk work. Inserting `m` elements is O(m + log n). Navigation, peeking,
+/// seeking, and snapshotting do not require `T: Clone`; edits carry that bound because the current
+/// rope substrate copies the affected chunk. An edit whose resulting length cannot fit in `usize`
+/// panics before returning and leaves the receiver reusable. The cursor intentionally has no
+/// `Default`; it is `Send + Sync` whenever `T` is `Send + Sync`.
+#[derive(Debug, PartialEq, Eq)]
+pub struct RopeCursor<T> {
+    rope: Rope<T>,
+    position: usize,
 }
 
 pub struct RopeIter<'a, T> {
     chunks: crate::measured::Iter<'a, RopeChunk<T>, usize>,
     current: Option<std::slice::Iter<'a, T>>,
+}
+
+impl<T> Clone for Rope<T> {
+    fn clone(&self) -> Self {
+        Self {
+            chunks: self.chunks.clone(),
+        }
+    }
+}
+
+impl<T> Clone for RopeCursor<T> {
+    fn clone(&self) -> Self {
+        Self {
+            rope: self.rope.clone(),
+            position: self.position,
+        }
+    }
 }
 
 impl<T> Rope<T> {
@@ -158,6 +198,24 @@ impl<T> Rope<T> {
 
     fn from_tree(chunks: RopeTree<T>) -> Self {
         Self { chunks }
+    }
+
+    /// Creates a cursor at the gap before the first element. O(1).
+    #[must_use]
+    pub fn cursor(&self) -> RopeCursor<T> {
+        RopeCursor {
+            rope: self.clone(),
+            position: 0,
+        }
+    }
+
+    /// Creates a cursor at `position`, returning `None` when it is outside `0..=len`. O(1).
+    #[must_use]
+    pub fn cursor_at(&self, position: usize) -> Option<RopeCursor<T>> {
+        (position <= self.len()).then(|| RopeCursor {
+            rope: self.clone(),
+            position,
+        })
     }
 
     #[must_use]
@@ -219,6 +277,206 @@ impl<T> Rope<T> {
 
         assert_eq!(total, self.len());
         self.chunks.validate_invariants();
+    }
+}
+
+impl<T> RopeCursor<T> {
+    /// Returns the number of elements in this cursor's immutable rope snapshot. O(1).
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.rope.len()
+    }
+
+    /// Returns whether this cursor's immutable rope snapshot is empty. O(1).
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.rope.is_empty()
+    }
+
+    /// Returns the gap position in `0..=len`. O(1).
+    #[must_use]
+    pub fn position(&self) -> usize {
+        self.position
+    }
+
+    /// Returns whether the gap is before the first element. O(1).
+    #[must_use]
+    pub fn is_at_start(&self) -> bool {
+        self.position == 0
+    }
+
+    /// Returns whether the gap is after the last element. O(1).
+    #[must_use]
+    pub fn is_at_end(&self) -> bool {
+        self.position == self.len()
+    }
+
+    /// Borrows the element immediately before the gap, if one exists. O(log n).
+    #[must_use]
+    pub fn peek_previous(&self) -> Option<&T> {
+        self.position
+            .checked_sub(1)
+            .and_then(|index| self.rope.get(index))
+    }
+
+    /// Borrows the element immediately after the gap, if one exists. O(log n).
+    #[must_use]
+    pub fn peek_next(&self) -> Option<&T> {
+        self.rope.get(self.position)
+    }
+
+    /// Moves the gap one element toward the start, or returns `None` at the start. O(1).
+    #[must_use]
+    pub fn move_previous(&self) -> Option<Self> {
+        Some(Self {
+            rope: self.rope.clone(),
+            position: self.position.checked_sub(1)?,
+        })
+    }
+
+    /// Moves the gap one element toward the end, or returns `None` at the end. O(1).
+    #[must_use]
+    pub fn move_next(&self) -> Option<Self> {
+        if self.is_at_end() {
+            return None;
+        }
+
+        Some(Self {
+            rope: self.rope.clone(),
+            position: self.position + 1,
+        })
+    }
+
+    /// Moves the gap to `position`, returning `None` outside `0..=len`. O(1).
+    ///
+    /// Seeking to the current position returns an unchanged root-sharing cursor value.
+    #[must_use]
+    pub fn seek(&self, position: usize) -> Option<Self> {
+        if position > self.len() {
+            return None;
+        }
+
+        if position == self.position {
+            return Some(self.clone());
+        }
+
+        Some(Self {
+            rope: self.rope.clone(),
+            position,
+        })
+    }
+
+    /// Returns this cursor's immutable rope snapshot by O(1) root sharing.
+    #[must_use]
+    pub fn snapshot(&self) -> Rope<T> {
+        self.rope.clone()
+    }
+}
+
+impl<T> RopeCursor<T>
+where
+    T: Clone,
+{
+    /// Inserts `item` at the gap and returns a cursor immediately after it.
+    ///
+    /// The edit is O(log n) plus bounded chunk copying. The receiver remains valid.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the resulting rope length cannot be represented by `usize`.
+    #[must_use]
+    pub fn insert(&self, item: T) -> Self {
+        let position = self
+            .position
+            .checked_add(1)
+            .expect("rope cursor position overflow");
+        let rope = self
+            .rope
+            .insert_at(self.position, item)
+            .expect("a cursor gap is always a valid insertion position");
+        Self { rope, position }
+    }
+
+    /// Inserts `items` at the gap in iteration order and returns a cursor after the range.
+    ///
+    /// Inserting `m` elements is O(m + log n). An empty input returns an unchanged root-sharing
+    /// cursor value.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the resulting rope length cannot be represented by `usize`.
+    #[must_use]
+    pub fn insert_range<I>(&self, items: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let items: Vec<T> = items.into_iter().collect();
+        if items.is_empty() {
+            return self.clone();
+        }
+
+        let position = self
+            .position
+            .checked_add(items.len())
+            .expect("rope cursor position overflow");
+        let rope = self
+            .rope
+            .insert_range(self.position, items)
+            .expect("a cursor gap is always a valid range insertion position");
+        Self { rope, position }
+    }
+
+    /// Deletes the element before the gap and moves the gap left, or returns `None` at the start.
+    ///
+    /// The edit is O(log n) plus bounded chunk copying. The receiver remains valid.
+    #[must_use]
+    pub fn delete_previous(&self) -> Option<Self> {
+        let position = self.position.checked_sub(1)?;
+        let rope = self
+            .rope
+            .remove_at(position)
+            .expect("a non-start cursor always has a previous element");
+        Some(Self { rope, position })
+    }
+
+    /// Deletes the element after the gap without moving it, or returns `None` at the end.
+    ///
+    /// The edit is O(log n) plus bounded chunk copying. The receiver remains valid.
+    #[must_use]
+    pub fn delete_next(&self) -> Option<Self> {
+        if self.is_at_end() {
+            return None;
+        }
+
+        let rope = self
+            .rope
+            .remove_at(self.position)
+            .expect("a non-end cursor always has a next element");
+        Some(Self {
+            rope,
+            position: self.position,
+        })
+    }
+
+    /// Unconditionally replaces the element after the gap, or returns `None` at the end.
+    ///
+    /// Replacement invokes no equality comparison and creates an edited snapshot even when the
+    /// supplied value compares equal to the stored value. The gap does not move. The edit is
+    /// O(log n) plus bounded chunk copying.
+    #[must_use]
+    pub fn replace_next(&self, item: T) -> Option<Self> {
+        if self.is_at_end() {
+            return None;
+        }
+
+        let rope = self
+            .rope
+            .set_item(self.position, item)
+            .expect("a non-end cursor always has a next element");
+        Some(Self {
+            rope,
+            position: self.position,
+        })
     }
 }
 
@@ -303,12 +561,22 @@ where
         Some(())
     }
 
+    /// Returns a rope with `item` prepended.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the resulting rope length cannot be represented by `usize`.
     #[must_use]
     pub fn push_front(&self, item: T) -> Self {
         self.insert_at(0, item)
             .expect("front insertion index is always valid")
     }
 
+    /// Returns a rope with `item` appended.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the resulting rope length cannot be represented by `usize`.
     #[must_use]
     pub fn push_back(&self, item: T) -> Self {
         self.insert_at(self.len(), item)
@@ -331,6 +599,11 @@ where
         ))
     }
 
+    /// Returns a rope with `item` inserted at `index`, or `None` when `index > len()`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the resulting rope length cannot be represented by `usize`.
     #[must_use]
     pub fn insert_at(&self, index: usize, item: T) -> Option<Self> {
         if index > self.len() {
@@ -372,6 +645,11 @@ where
         )))
     }
 
+    /// Returns a rope with `items` inserted at `index`, or `None` when `index > len()`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the resulting rope length cannot be represented by `usize`.
     #[must_use]
     pub fn insert_range<I>(&self, index: usize, items: I) -> Option<Self>
     where
@@ -478,6 +756,12 @@ where
         Some((Self::from_tree(left_tree), Self::from_tree(right_tree)))
     }
 
+    /// Concatenates two persistent ropes.
+    ///
+    /// # Panics
+    ///
+    /// Panics before returning if the combined length cannot fit in `usize`. Both inputs remain
+    /// valid because concatenation does not mutate them.
     #[must_use]
     pub fn concat(&self, other: &Self) -> Self {
         if self.is_empty() {
@@ -1758,6 +2042,260 @@ mod tests {
         assert_eq!(rope.slice(1, 2).unwrap().to_vec(), vec![2, 3]);
         assert!(rope.slice(1, usize::MAX).is_none());
         assert!(rope.remove_range(1, usize::MAX).is_none());
+    }
+
+    #[test]
+    fn rope_cursor_navigation_and_snapshot_need_no_clone_bound() {
+        #[derive(Debug, PartialEq, Eq)]
+        struct NonClone(i32);
+
+        let empty = Rope::<NonClone>::new().cursor();
+        assert!(empty.is_empty());
+        assert!(empty.is_at_start());
+        assert!(empty.is_at_end());
+        assert_eq!(empty.peek_previous(), None);
+        assert_eq!(empty.peek_next(), None);
+        assert!(empty.move_previous().is_none());
+        assert!(empty.move_next().is_none());
+        assert!(
+            empty
+                .seek(0)
+                .unwrap()
+                .snapshot()
+                .shares_storage_with(&empty.snapshot())
+        );
+
+        let rope: Rope<_> = [NonClone(10), NonClone(20), NonClone(30)]
+            .into_iter()
+            .collect();
+        let start = rope.cursor();
+
+        assert_eq!(start.len(), 3);
+        assert!(!start.is_empty());
+        assert_eq!(start.position(), 0);
+        assert!(start.is_at_start());
+        assert!(!start.is_at_end());
+        assert_eq!(start.peek_previous(), None);
+        assert_eq!(start.peek_next().map(|value| value.0), Some(10));
+        assert!(start.move_previous().is_none());
+        assert!(rope.cursor_at(4).is_none());
+
+        let middle = start.move_next().unwrap().move_next().unwrap();
+        assert_eq!(middle.position(), 2);
+        assert_eq!(middle.peek_previous().map(|value| value.0), Some(20));
+        assert_eq!(middle.peek_next().map(|value| value.0), Some(30));
+
+        let same = middle.seek(2).unwrap();
+        assert_eq!(same.position(), middle.position());
+        assert!(same.snapshot().shares_storage_with(&middle.snapshot()));
+        assert!(middle.seek(4).is_none());
+
+        let end = rope.cursor_at(rope.len()).unwrap();
+        assert!(end.is_at_end());
+        assert!(!end.is_at_start());
+        assert_eq!(end.peek_previous().map(|value| value.0), Some(30));
+        assert_eq!(end.peek_next(), None);
+        assert!(end.move_next().is_none());
+        assert!(end.snapshot().shares_storage_with(&rope));
+    }
+
+    #[test]
+    fn rope_cursor_edits_cross_chunk_boundaries_and_preserve_no_ops() {
+        let rope: Rope<_> = (0..(MAX_CHUNK_SIZE as i32 * 2 + 3)).collect();
+        let edge = rope.cursor_at(MAX_CHUNK_SIZE).unwrap();
+
+        assert_eq!(edge.peek_previous(), Some(&(MAX_CHUNK_SIZE as i32 - 1)));
+        assert_eq!(edge.peek_next(), Some(&(MAX_CHUNK_SIZE as i32)));
+        assert!(rope.cursor().delete_previous().is_none());
+        assert!(rope.cursor_at(rope.len()).unwrap().delete_next().is_none());
+        assert!(
+            rope.cursor_at(rope.len())
+                .unwrap()
+                .replace_next(-1)
+                .is_none()
+        );
+
+        let empty = edge.insert_range(std::iter::empty::<i32>());
+        assert_eq!(empty.position(), edge.position());
+        assert!(empty.snapshot().shares_storage_with(&rope));
+
+        let equal_replacement = edge.replace_next(MAX_CHUNK_SIZE as i32).unwrap();
+        assert_eq!(equal_replacement.position(), edge.position());
+        assert_eq!(equal_replacement.peek_next(), edge.peek_next());
+        assert!(!equal_replacement.snapshot().shares_storage_with(&rope));
+
+        let ranged = edge.insert_range([-2, -3]);
+        assert_eq!(ranged.position(), MAX_CHUNK_SIZE + 2);
+        assert_eq!(ranged.peek_previous(), Some(&-3));
+        assert_eq!(ranged.peek_next(), Some(&(MAX_CHUNK_SIZE as i32)));
+
+        let inserted = ranged.insert(-1);
+        assert_eq!(inserted.position(), MAX_CHUNK_SIZE + 3);
+        assert_eq!(inserted.peek_previous(), Some(&-1));
+        let restored = inserted.delete_previous().unwrap();
+        assert_eq!(restored.snapshot().to_vec(), ranged.snapshot().to_vec());
+
+        let replaced = restored.replace_next(99_999).unwrap();
+        assert_eq!(replaced.position(), restored.position());
+        assert_eq!(replaced.peek_next(), Some(&99_999));
+        let deleted = replaced.delete_next().unwrap();
+        assert_eq!(deleted.position(), replaced.position());
+        assert_eq!(deleted.peek_previous(), Some(&-3));
+        assert_eq!(deleted.peek_next(), Some(&(MAX_CHUNK_SIZE as i32 + 1)));
+
+        ranged.snapshot().validate_chunk_invariants();
+        inserted.snapshot().validate_chunk_invariants();
+        replaced.snapshot().validate_chunk_invariants();
+        deleted.snapshot().validate_chunk_invariants();
+    }
+
+    #[test]
+    fn rope_cursor_retained_versions_branch_and_snapshot_by_root_sharing() {
+        let rope: Rope<_> = (0..(MAX_CHUNK_SIZE as i32 * 4)).collect();
+        let retained = rope.cursor_at(MAX_CHUNK_SIZE * 2).unwrap();
+        let left = retained.insert(-10);
+        let right = retained.insert(-20);
+
+        let source_snapshot = retained.snapshot();
+        let source_again = retained.snapshot();
+        let left_snapshot = left.snapshot();
+        let left_again = left.snapshot();
+        let right_snapshot = right.snapshot();
+
+        assert!(source_snapshot.shares_storage_with(&source_again));
+        assert!(left_snapshot.shares_storage_with(&left_again));
+        assert_eq!(
+            source_snapshot.get(MAX_CHUNK_SIZE * 2),
+            Some(&(MAX_CHUNK_SIZE as i32 * 2))
+        );
+        assert_eq!(left_snapshot.get(MAX_CHUNK_SIZE * 2), Some(&-10));
+        assert_eq!(right_snapshot.get(MAX_CHUNK_SIZE * 2), Some(&-20));
+        assert_eq!(retained.position(), MAX_CHUNK_SIZE * 2);
+        assert_eq!(left.position(), MAX_CHUNK_SIZE * 2 + 1);
+        assert_eq!(right.position(), MAX_CHUNK_SIZE * 2 + 1);
+        assert!(rope.chunks.shared_node_count_with(&left_snapshot.chunks) > 0);
+        assert!(rope.chunks.shared_node_count_with(&right_snapshot.chunks) > 0);
+        assert_ne!(left_snapshot.to_vec(), right_snapshot.to_vec());
+        source_snapshot.validate_chunk_invariants();
+        left_snapshot.validate_chunk_invariants();
+        right_snapshot.validate_chunk_invariants();
+    }
+
+    #[test]
+    fn rope_cursor_deterministic_history_matches_gap_vector_model() {
+        let mut cursor = Rope::<i32>::new().cursor();
+        let mut model = Vec::new();
+        let mut position = 0_usize;
+        let mut state = 0x9e37_79b9_u32;
+
+        for step in 0..750_i32 {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            match state % 7 {
+                0 => {
+                    cursor = cursor.insert(step);
+                    model.insert(position, step);
+                    position += 1;
+                }
+                1 => {
+                    let values = [step, -step];
+                    cursor = cursor.insert_range(values);
+                    model.splice(position..position, values);
+                    position += values.len();
+                }
+                2 => {
+                    let edited = cursor.delete_previous();
+                    if position == 0 {
+                        assert!(edited.is_none());
+                    } else {
+                        position -= 1;
+                        model.remove(position);
+                        cursor = edited.unwrap();
+                    }
+                }
+                3 => {
+                    let edited = cursor.delete_next();
+                    if position == model.len() {
+                        assert!(edited.is_none());
+                    } else {
+                        model.remove(position);
+                        cursor = edited.unwrap();
+                    }
+                }
+                4 => {
+                    let edited = cursor.replace_next(step);
+                    if position == model.len() {
+                        assert!(edited.is_none());
+                    } else {
+                        model[position] = step;
+                        cursor = edited.unwrap();
+                    }
+                }
+                5 if (state & 0x1000) == 0 => {
+                    let moved = cursor.move_previous();
+                    if position == 0 {
+                        assert!(moved.is_none());
+                    } else {
+                        position -= 1;
+                        cursor = moved.unwrap();
+                    }
+                }
+                5 => {
+                    let moved = cursor.move_next();
+                    if position == model.len() {
+                        assert!(moved.is_none());
+                    } else {
+                        position += 1;
+                        cursor = moved.unwrap();
+                    }
+                }
+                _ => {
+                    let target = ((state >> 8) as usize) % (model.len() + 2);
+                    let sought = cursor.seek(target);
+                    if target > model.len() {
+                        assert!(sought.is_none());
+                    } else {
+                        position = target;
+                        cursor = sought.unwrap();
+                    }
+                }
+            }
+
+            assert_eq!(cursor.position(), position);
+            assert_eq!(cursor.len(), model.len());
+            assert_eq!(
+                cursor.peek_previous(),
+                position.checked_sub(1).and_then(|i| model.get(i))
+            );
+            assert_eq!(cursor.peek_next(), model.get(position));
+            let snapshot = cursor.snapshot();
+            assert_eq!(snapshot.to_vec(), model);
+            snapshot.validate_chunk_invariants();
+        }
+    }
+
+    #[test]
+    fn rope_length_overflow_panics_without_mutating_shared_sources() {
+        let seed: Rope<_> = (0..MAX_CHUNK_SIZE).collect();
+        let mut expanded = seed.clone();
+        while expanded.len() <= usize::MAX / 2 {
+            expanded = expanded.concat(&expanded);
+        }
+
+        let expanded_len = expanded.len();
+        assert!(expanded_len > usize::MAX / 2);
+        assert_eq!(expanded.front(), Some(&0));
+        assert_eq!(expanded.back(), Some(&(MAX_CHUNK_SIZE - 1)));
+
+        let failure =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| expanded.concat(&expanded)));
+        assert!(failure.is_err());
+
+        assert_eq!(expanded.len(), expanded_len);
+        assert_eq!(expanded.front(), Some(&0));
+        assert_eq!(expanded.back(), Some(&(MAX_CHUNK_SIZE - 1)));
+        assert_eq!(seed.len(), MAX_CHUNK_SIZE);
+        assert_eq!(seed.front(), Some(&0));
+        assert_eq!(seed.back(), Some(&(MAX_CHUNK_SIZE - 1)));
     }
 
     #[test]

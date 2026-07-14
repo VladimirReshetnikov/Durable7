@@ -228,7 +228,8 @@ language-first layout.
   family and newer sequence/streaming cores. Its persistent deque, measured sequence, RRB vector,
   policy-canonical zip-zip sorted set, non-`Clone` bootstrapped skew-binomial heap, winner-cached
   priority-search queue, reversible deque, sorted bag/set/map, priority queue, interval tree, and
-  rope/text facades use structurally shared Rust storage. The separate mutable
+  rope/text facades use structurally shared Rust storage; `RopeCursor<T>` adds a positional
+  snapshot-plus-gap editing checkpoint. The separate mutable
   `DabaLite<T, M>` preserves bounded FIFO aggregation callbacks and prompt deterministic
   reclamation; it is `!Send`/`!Sync`, and `clear` is explicitly O(n + c) because owned values must
   be dropped.

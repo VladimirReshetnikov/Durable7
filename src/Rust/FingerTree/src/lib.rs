@@ -46,7 +46,7 @@ pub use priority_search_queue::{
 };
 pub use rope::{
     LineColumn, MeasuredRope, MeasuredRopeBuilder, MeasuredRopeLocate, MeasuredRopeSplit,
-    NewlineMeasure, Rope, RopeBuilder, TextRope,
+    NewlineMeasure, Rope, RopeBuilder, RopeCursor, TextRope,
 };
 pub use rrb_vector::{
     RrbVector, RrbVectorBuilder, RrbVectorIntoIter, RrbVectorInvariantError, RrbVectorIter,
@@ -68,6 +68,7 @@ mod concurrency_tests {
         assert_send_sync::<CanonicalSortedSet<i32>>();
         assert_send_sync::<ReversibleDeque<i32>>();
         assert_send_sync::<Rope<i32>>();
+        assert_send_sync::<RopeCursor<i32>>();
         assert_send_sync::<MeasuredRope<i32, SumMeasure<i32>>>();
     }
 

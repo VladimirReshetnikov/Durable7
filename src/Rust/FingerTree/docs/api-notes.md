@@ -26,8 +26,8 @@ Current public families:
 - `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>`;
 - `PriorityQueue<T, P>` and `PriorityEntry<T, P>`;
 - `Interval<T>` and `IntervalTree<T>`;
-- `Rope<T>`, `MeasuredRope<T, P>`, `MeasuredRopeBuilder<T, P>`, `TextRope`, `RopeBuilder`,
-  `NewlineMeasure`, `NewlineStyle`, and `LineColumn`.
+- `Rope<T>`, positional `RopeCursor<T>`, `MeasuredRope<T, P>`, `MeasuredRopeBuilder<T, P>`,
+  `TextRope`, `RopeBuilder`, `NewlineMeasure`, `NewlineStyle`, and `LineColumn`.
 
 The Rust surface follows Rust conventions:
 
@@ -52,6 +52,32 @@ The Rust surface follows Rust conventions:
 - out-of-range positional rope edits and text offset conversions return `None`.
 - out-of-range RRB indexing, splitting, and range edits return `None`; indexing through `Index`
   retains Rust's ordinary panic-on-invalid-index convention.
+
+## Positional rope cursor
+
+`Rope::cursor()` creates an immutable cursor at gap zero; `cursor_at(position)` accepts every gap in
+`0..=len` and returns `None` outside that range. `RopeCursor<T>` owns a cheap root-sharing `Rope<T>`
+snapshot and a gap position. It intentionally has no `Default` and is `Send + Sync` whenever `T`
+is `Send + Sync`. `len`, `is_empty`, `position`, `is_at_start`, `is_at_end`, borrowed
+`peek_previous`/`peek_next`, `move_previous`/`move_next`, `seek`, and `snapshot` expose navigation
+without requiring `T: Clone`. Boundary movement and invalid seek return `None`. Seeking to the
+current position and inserting an empty range return unchanged root-sharing cursor values.
+
+Edits return new cursors and never mutate the receiver, so any retained cursor can form an
+independent branch. `insert` and `insert_range` leave the new gap after the inserted values;
+`delete_previous` implements backspace and moves the gap left; `delete_next` and `replace_next`
+keep the gap fixed. `replace_next` is unconditional: it invokes no equality comparison and creates
+an edited snapshot even for an equal replacement. Missing previous/next elements return `None`.
+These edit methods require `T: Clone` because the current chunked rope substrate clones the affected
+chunk; the bound is not imposed on construction, navigation, peeking, seeking, or snapshotting.
+Cached positional-rope lengths use checked `usize` addition. Any construction or growth operation
+whose resulting length is unrepresentable, including concatenation, ordinary rope insertion, and
+cursor insertion, panics before returning; all input ropes and cursors remain valid.
+
+This is a semantic positional checkpoint, not a port of the C# focused zipper. Cursor creation,
+cloning, movement, seek, and snapshot are O(1). Peeks and point edits are O(log n) plus bounded chunk
+work; inserting `m` values is O(m + log n). No O(1)-amortized local-edit claim is made. There is no
+`MeasuredRope` or `TextRope` cursor in this checkpoint.
 
 ## Brodal-Okasaki heap
 

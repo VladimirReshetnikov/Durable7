@@ -61,7 +61,9 @@ they cover:
 - closed interval overlap, containment, coalescing, last-low/maximum-high measured descent (including a
   100,000-interval sparse-hit case), and shared-storage insert/remove paths;
 - chunked positional rope construction from chunks, caller-supplied copy targets, edits, cached length measures,
-  and chunk/subtree sharing;
+  and chunk/subtree sharing; positional cursor gap boundaries and non-`Clone` navigation/snapshot,
+  chunk-edge edits, exact seek/empty-insert no-ops, retained branch isolation, root-sharing snapshots,
+  deterministic gap-vector model replay, and logarithmic shared-DAG length-overflow panic atomicity;
 - measured-rope cached count-plus-user measures, measure navigation, persistent point/range insertion and removal,
   slicing, deterministic vector-model replay, subtree sharing, and append-builder snapshot isolation;
 - cached-newline text line helpers, Rust string/display conversions, Unicode scalar and UAX #29 extended-grapheme

@@ -53,9 +53,12 @@ Coverage groups:
 - `interval_tree.rs`: closed intervals, last-low/maximum-high measured overlap descent, a 100,000-interval
   sparse-hit regression, coalescing, and shared-storage updates;
 - `rope.rs`: chunked positional and measured rope storage over cached count/user-measure summaries, chunk-copy
-  construction, caller-supplied copy targets, structurally shared measured-rope point/range edits and slices,
-  deterministic vector-model replay, append-builder measure tracking, and immutable snapshot isolation;
+  construction, caller-supplied copy targets, positional cursor boundaries/non-`Clone` navigation/chunk-edge
+  edits/no-op seeks and inserts/retained branches/root-sharing snapshots/gap-vector model replay,
+  checked-length shared-DAG overflow atomicity, structurally shared measured-rope point/range edits and
+  slices, deterministic vector-model replay, append-builder measure tracking, and immutable snapshot isolation;
 - `text_extras.rs`: Unicode-scalar addressing, UAX #29 extended grapheme segmentation and offset conversion,
   LF/CRLF/CR/mixed newline detection, and CRLF-aware line text over both character and text ropes.
-- `lib.rs`: public `Send`/`Sync` assertions and spawned-thread readers over the canonical set and
-  shared immutable deque, reversible deque, rope, and measured-rope snapshots.
+- `lib.rs`: public `Send`/`Sync` assertions, including the positional rope cursor, and spawned-thread
+  readers over the canonical set and shared immutable deque, reversible deque, rope, and
+  measured-rope snapshots.

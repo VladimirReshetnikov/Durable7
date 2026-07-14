@@ -138,11 +138,12 @@ text ropes specialize the same machinery for newline-aware text navigation. C# a
 version-bound positional and measured cursors: immutable gap cursors for local movement and edits,
 retained branches, and cached canonical snapshots. `MeasuredRopeCursor<T, TMeasure, TMeasureOps>`
 adds ordered before/after measures and absolute measure seek; with `NewlineMeasure` it is the text
-cursor. C++ also ships a positional `rope_cursor<T>` semantic checkpoint as a retained rope snapshot
-plus a validated gap; it preserves branching and edit behavior but does not port the C# zipper or its
-focus-local complexity. Measured and text cursor surfaces remain C#-only. The Rust checkpoint uses
-chunked measured storage for both positional `Rope<T>` and custom-measured `MeasuredRope<T, P>` and stores `TextRope`
-content in a newline-measured rope while its API notes track the remaining lazy-spine parity boundary.
+cursor. C++ `rope_cursor<T>` and Rust `RopeCursor<T>` also ship positional semantic checkpoints as
+retained rope snapshots plus validated gaps; they preserve branching and edit behavior but do not
+port the C# zipper or its focus-local complexity. Measured and text cursor surfaces remain C#-only.
+The Rust checkpoint uses chunked measured storage for both positional `Rope<T>` and custom-measured
+`MeasuredRope<T, P>` and stores `TextRope` content in a newline-measured rope while its API notes track
+the remaining lazy-spine parity boundary.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
@@ -151,7 +152,7 @@ content in a newline-measured rope while its API notes track the remaining lazy-
 | C++ | `rope<T>`, `rope_cursor<T>`, `measured_rope<T, MeasurePolicy>`, `text_rope`, `rope_builder`, `newline_measure`, `line_column` | [usage guide](../../src/Cpp/FingerTree/docs/usage.md), [rope header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/rope.hpp), [measured rope header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/measured_rope.hpp), [text header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/rope_text.hpp), [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) |
 | Haskell | `Rope a`, `MeasuredRope v a`, `TextRope`, `NewlineMeasure` | [rope source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Rope.hs), [measured rope source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/MeasuredRope.hs), [text source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Rope/Text.hs), [tests](../../src/Haskell/FingerTree/test/README.md) |
 | Kotlin | `Rope<T>`, `MeasuredRope<T, M>`, `TextRope`, `RopeBuilder`, `NewlineMeasure`, `LineColumn` | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [source](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Rope.kt) |
-| Rust | `Rope<T>`, `MeasuredRope<T, P>`, `TextRope`, `RopeBuilder`, `NewlineMeasure`, `LineColumn` | [API notes](../../src/Rust/FingerTree/docs/api-notes.md), [source](../../src/Rust/FingerTree/src/rope.rs) |
+| Rust | `Rope<T>`, `RopeCursor<T>`, `MeasuredRope<T, P>`, `TextRope`, `RopeBuilder`, `NewlineMeasure`, `LineColumn` | [API notes](../../src/Rust/FingerTree/docs/api-notes.md), [source](../../src/Rust/FingerTree/src/rope.rs) |
 
 ## Measures, Comparisons, And Predicates
 
