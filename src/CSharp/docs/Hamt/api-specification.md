@@ -46,6 +46,12 @@ original.
 - `Create(comparer)` returns an empty map using a supplied comparer.
 - `CreateRange(items, comparer)` adds entries in enumeration order with last-wins semantics.
 - `SetItem(key, value)` adds or replaces a key.
+- `GetOrAdd(key, addFactory, out value)` returns the current map and stored value on a hit. On a
+  miss, it invokes `addFactory` exactly once with the caller's key and returns the successor map and
+  selected value.
+- `AddOrUpdate(key, addFactory, updateFactory, out value)` invokes exactly one selected factory
+  exactly once. The update factory receives the caller's lookup key and stored value while the map
+  retains the originally stored key representative.
 - `SetItems(items)` adds or replaces entries in enumeration order with last-wins semantics and
   throws `ArgumentNullException` for a null sequence.
 - `Add(key, value)` adds a key and throws `ArgumentException` when the key already exists. This is
@@ -76,16 +82,22 @@ reported output). Independently built equal maps still require O(n) comparison b
 topology does not make separately allocated nodes reference-equal. Equal-hash collision runs are
 matched without regard to order and can require O(c²) key comparisons for a bucket of size c.
 
-`Add` and `TryAdd` hash the key once and walk the trie once; a rejected duplicate allocates nothing.
+`Add`, `TryAdd`, `GetOrAdd`, and `AddOrUpdate` hash the key once and walk the trie once. Persistent
+factory updates have no retry loop. `GetOrAdd` invokes no factory on a hit; `AddOrUpdate` invokes
+exactly one of its two factories. All factory arguments are validated before hashing, even when the
+selected branch would not use one of them. A rejected duplicate, `GetOrAdd` hit, or equal-value
+`AddOrUpdate` no-op allocates nothing.
 The try-pattern `out` values (`TryGetValue`, `TryRemove`) carry `[MaybeNullWhen(false)]`, matching
 the `IReadOnlyDictionary<TKey, TValue>` annotation.
 
-No-op updates preserve instance identity throughout: replacing a value that compares equal under
-`EqualityComparer<TValue>.Default`, removing an absent key, and clearing an empty map all return the
-current instance. Consequently, "last-wins" value semantics hold up to default value equality: when
-an incoming value compares equal to the stored value, the stored value object is retained. When a
-present key is replaced or re-set, the originally stored key object is likewise retained; use
-`TryGetKey` to observe it.
+No-op updates preserve instance identity throughout: a `GetOrAdd` hit, an `AddOrUpdate` replacement
+that compares equal under `EqualityComparer<TValue>.Default`, replacing an equal value through
+`SetItem`, removing an absent key, and clearing an empty map all return the current instance. An
+equal factory result retains and reports the stored value object. When a present key is replaced or
+re-set, the originally stored key object is likewise retained; use `TryGetKey` to observe it.
+
+Factory, key-comparer, or value-equality failure publishes no successor and leaves the source map
+unchanged. A present null value selects the hit/update branch and is never conflated with absence.
 
 The configured comparer defines hash and equality semantics, including any behavior for null keys.
 The comparer must honor the usual hash contract: equivalent keys must produce equal hash codes.
@@ -214,8 +226,9 @@ copies before writing those paths.
 Let `w` be the hash width (32 bits), `b` be the branch factor (32), and `c` be the length of an
 equal-hash collision bucket.
 
-- Lookup, insert, replace, and remove: O(w / log2(b) + c), effectively bounded by seven trie levels
-  plus collision-bucket scan for 32-bit hashes. Lookups allocate nothing.
+- Lookup, insert, replace, remove, `GetOrAdd`, and `AddOrUpdate`: O(w / log2(b) + c), effectively
+  bounded by seven trie levels plus collision-bucket scan for 32-bit hashes. Lookups and unchanged
+  single-pass factory updates allocate nothing.
 - Enumeration: O(n) time. The enumerator holds at most seven inline frames (one per trie level) and
   performs no heap allocation.
 - Map `CreateRange` / set `CreateRange`: O(n (w + c)) through hash-bucket staging followed by one

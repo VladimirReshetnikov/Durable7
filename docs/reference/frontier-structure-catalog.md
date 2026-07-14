@@ -1276,6 +1276,8 @@ New rules this survey adds to the derived catalog's seven:
 The implementation wave described by this catalog has already landed these reference and port surfaces:
 
 - CHAMP canonical nodes plus structural equality/diff;
+- C# persistent CHAMP `GetOrAdd`/`AddOrUpdate` with one hash, one descent, deterministic factory
+  selection, representative retention, and callback-failure atomicity;
 - the C# `PersistentHashMap<TKey, TValue>.Transient` and `PersistentHashSet<T>.Transient` one-way
   owner-token editing sessions;
 - semantic one-way CHAMP map/set editing sessions in C, C++, Haskell, Kotlin, and Rust, retaining

@@ -95,6 +95,29 @@ if (unique.TryAdd(2, "two", out var withTwo))
 }
 ```
 
+Use persistent `GetOrAdd` and `AddOrUpdate` when selecting a value depends on membership and the
+successor map is still immutable. Both hash once and descend once; unlike the mutable Ctrie, their
+factories never retry:
+
+```csharp
+var withThree = withTwo.GetOrAdd(
+    3,
+    key => $"value-{key}",
+    out string threeValue);
+
+var incremented = PersistentHashMap<string, int>.Empty.AddOrUpdate(
+    "requests",
+    _ => 1,
+    (_, current) => checked(current + 1),
+    out int requestCount);
+```
+
+`GetOrAdd` invokes no factory on a hit. `AddOrUpdate` invokes exactly one selected factory once. An
+update factory receives the caller's lookup key and stored value, while the map retains the original
+equivalent key object. If the selected update value compares equal under the default value comparer,
+the source map and stored value object are retained. Null delegates fail before hashing, and any
+factory or comparer exception leaves the source unchanged.
+
 `TryRemove` reports whether the key existed and returns the removed value:
 
 ```csharp

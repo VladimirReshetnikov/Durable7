@@ -11,7 +11,7 @@
 
 Proceed in this order:
 
-1. Add persistent-HAMT single-pass `GetOrAdd`/`AddOrUpdate` operations.
+1. Add persistent-HAMT single-pass `GetOrAdd`/`AddOrUpdate` operations — **shipped in C#**.
 2. Implement `PersistentHashBag<T>` over `PersistentHashMap<T, int>`.
 3. Implement `PersistentOrderedSet<T>` as an independently owned composite in a new general
    `Tools.DataStructures.Ordered` project. Fork the useful dual-index and sparse-label mechanics;
@@ -76,9 +76,11 @@ The audit covered:
 - Numerics future-width and code-generation plans, which were classified as outside this
   data-structure proposal.
 
-Candidate status was then checked against the C# source and test trees. Exact-name searches confirm
-that `PersistentOrderedSet`, `PersistentHashBag`, `RangeUpdateSequence`, `PersistentBiMap`, and a
-value-carrying interval-map facade are not currently shipped C# types.
+At proposal-audit time, exact-name searches confirmed that `PersistentOrderedSet`,
+`PersistentHashBag`, `RangeUpdateSequence`, `PersistentBiMap`, and a value-carrying interval-map
+facade were not shipped C# types. Execution Step 1 has since shipped the persistent-HAMT
+`GetOrAdd`/`AddOrUpdate` kernel; the named structure candidates remain unshipped until their own
+complete source/test/documentation tranches land.
 
 ## Current Baseline
 
@@ -350,7 +352,7 @@ enumerated construction inputs or argument elements:
 | --- | --- |
 | `CreateRange` | O(m (w + c) + n) with one ordered/index rebuild; duplicate inputs still count in m |
 | Hashed membership / stored representative | O(w + c) |
-| Positional lookup | O(log min(index + 1, n - index)) worst case |
+| Positional lookup | O(log n) worst case; O(1 + log min(index + 1, n - index)) amortized; endpoints O(1) worst case |
 | `IndexOf` | O(w + c + log n) |
 | Ordinary end insertion | O(w + c) amortized on a linear history; O(w + c + log n) ordinary worst case |
 | Positional insertion or movement while a label gap exists | O(w + c + log n) |
@@ -415,7 +417,7 @@ The type ships when:
 - workspace overview/usage/API/validation docs and repository catalogs are updated; and
 - the complete C# suite passes with one build/test worker.
 
-## Execution Step 1: Persistent HAMT Single-Pass Updates
+## Execution Step 1: Persistent HAMT Single-Pass Updates — Shipped In C#
 
 ### Why This Is Separate From Builders And Transients
 
@@ -426,8 +428,9 @@ current repository vocabulary makes that grouping obsolete:
 - `Transient` is the public one-way owner-token editing session.
 - `GetOrAdd`/`AddOrUpdate` are ordinary persistent point operations returning immutable versions.
 
-Canonical bulk construction and C# transients already ship. Only the single-pass persistent point
-operation remains an enabling API gap.
+Canonical bulk construction and C# transients already shipped before this proposal. Step 1 now
+closes the remaining C# single-pass persistent point-operation gap; this section records its shipped
+contract and validation boundary for later ports.
 
 ### Recommended Surface
 
@@ -780,9 +783,11 @@ Push is immutable. It never mutates nodes reachable from an older version.
 
 1. eagerly validates the range;
 2. returns the source for an empty range or identity tag;
-3. splits before `index` and after `count`;
-4. applies the tag once to the isolated middle root; and
-5. rejoins the three pieces.
+3. applies the tag directly to the root when the validated range is the whole sequence, preserving
+   the O(1) whole-sequence bound;
+4. otherwise splits before `index` and after `count`;
+5. applies the tag once to the isolated middle root; and
+6. rejoins the three pieces.
 
 The two boundary spines are copied; the range interior and all outside subtrees remain shared.
 
@@ -867,7 +872,8 @@ array-backed segment tree, or any external library.
 - A throwing measure/tag policy leaves every input version unchanged.
 - Empty-range and `IsIdentity`-recognized updates return the source instance. The generic type has
   no element-equality policy, so `SetItem` does not promise an equal-value identity shortcut.
-- Measuring an empty range returns `TOps.Empty` without invoking element or tag policy code.
+- Measuring an empty range returns the cached empty measure without invoking element-measure or tag
+  callbacks after generic initialization.
 - The type is immutable and safe for concurrent reads.
 - No mutable cache is required for tag propagation.
 - User policies are expected to be deterministic and side-effect-free; concurrent invocation is a
@@ -1050,7 +1056,7 @@ rewriting proposal-time reasoning.
 
 If this proposal is accepted, use these self-contained tranches:
 
-1. **Persistent HAMT single-pass update kernel**
+1. **Persistent HAMT single-pass update kernel — shipped in C#**
    - node operation, public API, exhaustive transition/callback tests, docs.
 2. **Hash-bag facade**
    - source, count/algebra/representative model tests, docs and catalogs.
@@ -1095,9 +1101,9 @@ For documentation-only tranches, run the repository stale-path scan, Markdown li
 
 ## Final Recommendation
 
-The best immediate implementation is the persistent HAMT's single-pass point-update kernel,
-followed by `PersistentHashBag<T>`. This closes the highest-leverage remaining API gap inside one
-shipped family and produces a Strong facade with explicit multiplicity semantics.
+The persistent HAMT's single-pass point-update kernel is complete in C#. The best immediate next
+implementation is `PersistentHashBag<T>`, which consumes that enabling API inside the shipped HAMT
+family and adds a Strong facade with explicit multiplicity semantics.
 
 `PersistentOrderedSet<T>` follows as the lowest-risk independent composite. It reuses public general
 foundations but is not a thin facade: the new Ordered project must own its dual-index invariant,

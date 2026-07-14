@@ -6,10 +6,24 @@
 - Repository HEAD (final synthesis): 6dbe754bd6166462beae226621511ddbcb24aaad
 - Final review closure (UTC): 2026-07-13T05:03:55Z
 - Repository HEAD (final review closure): 387e24c9ce07631a6fa331693e34bc25afb459be
-- Status: Final authoritative Axis 2 plan
+- Status: Historical final Axis 2 plan — authoritative only for the unshipped phases identified below
 - Audience: Maintainers designing the next C# persistent-collection wave
 - Scope: Detailed C#-first plan for owner-token transients, persistent collections,
   read-optimized frozen collections, and version-bound rope cursors
+
+## Current Disposition (2026-07-14)
+
+This plan records the decisions that led to the current workspaces, but the
+[frontier structure catalog](../reference/frontier-structure-catalog.md) is authoritative for
+shipment status:
+
+- cursor phases C1, C2, and C3 and the owner-token transient phase T2 have shipped;
+- F0 and F1 retain only their isolated-evidence definitions, and their measurements remain
+  intentionally postponed;
+- F2/F3 and later cursor phase C4 remain unshipped and gated exactly where the frontier catalog
+  points back to this plan; and
+- shipped workspace API/usage/validation documents, rather than this pre-shipment plan, define the
+  current public contracts.
 
 ## Decision
 
@@ -40,8 +54,9 @@ This document refines the survey-level entries in the
 complexity sketch in item A3 of the
 [2026-07-09 proposal](new-data-structures-2026-07-09.md). It incorporates the conclusions of the
 [2026-07-13 review](../reviews/axis2-lifecycle-and-cursors-review-2026-07-13.md) and the useful parts
-of its [cursor-first alternative](axis2-cursor-first-alternative-2026-07-13.md). It does not
-describe shipped APIs.
+of its [cursor-first alternative](axis2-cursor-first-alternative-2026-07-13.md). At publication it
+did not describe shipped APIs; the disposition above now separates its remaining normative gates
+from phases whose current contracts live in workspace documentation.
 
 ## Disposition Of The Review And Alternative
 

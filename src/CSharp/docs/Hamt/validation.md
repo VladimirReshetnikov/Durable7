@@ -76,6 +76,9 @@ dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Te
 The suite covers:
 
 - map construction, lookup, replacement, removal, no-op behavior, and enumeration;
+- persistent single-pass `GetOrAdd`/`AddOrUpdate` factory selection, exact hash/equality callback
+  counts, leaf/collision/bitmap and published-transient node paths, representative/null behavior,
+  allocation-free no-ops, failure atomicity, and generated-history canonicality;
 - set construction, membership, add/remove, set algebra, and `IReadOnlySet<T>` behavior;
 - Axis 2 map/set contract oracles for comparer identity, stored representatives, nullable keys/items,
   collisions, stable enumeration, no-op identity, retained versions, and callback-exception atomicity;
@@ -139,6 +142,11 @@ The T2 shipment checkpoint is **223 passed, 0 failed** for the complete C# HAMT 
 single-worker command above. The final focused public transient/API filter passed 33 tests, and the
 existing selected-kernel suite remained 26 tests. Treat these as a named checkpoint rather than a
 permanent expected-count assertion; new tests should increase the total.
+
+The persistent single-pass update tranche advances the current complete-project checkpoint to
+**244 passed, 0 failed**, including 19 focused `PersistentHashMapSinglePassUpdateTests`. The full
+C# workspace gate also passed 319 Numerics, 630 FingerTree, and 52 Tungsten tests under the same
+single-worker policy.
 
 ## Public Transient Benchmark Validation
 

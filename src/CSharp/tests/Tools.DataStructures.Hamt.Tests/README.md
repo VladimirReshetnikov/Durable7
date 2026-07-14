@@ -13,6 +13,10 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
 
 - `PersistentHashMapTests.cs` covers construction, lookup, insertion, replacement, removal, no-op behavior,
   comparer preservation, value materialization, concurrent snapshot readers, and immutable-version publication.
+- `PersistentHashMapSinglePassUpdateTests.cs` covers persistent `GetOrAdd`/`AddOrUpdate`: eager
+  delegate validation, exact factory/hash/equality counts, leaf/collision/bitmap and published
+  separate-node paths, stored representatives, present nulls, allocation-free no-ops, callback
+  failure atomicity, retained roots, and generated-history canonicality.
 - `PersistentHashMapContractOracleTests.cs` and `PersistentHashSetContractOracleTests.cs` are the Axis 2
   executable semantic baseline for comparer identity, stored representatives, collisions, nullable keys/items,
   stable enumeration, no-op identity, retained versions, and callback-exception atomicity.
@@ -127,6 +131,9 @@ Test Explorer execution is non-interactive after the assembly loads as well.
 The T2 shipment checkpoint is **223 passed, 0 failed** for this complete project. The final focused
 public transient/API filter passed 33 tests, and the selected T1 kernel suite remained 26 tests.
 These counts record the shipment evidence and are not a ceiling for later test growth.
+
+The persistent single-pass update tranche raises the current complete-project checkpoint to
+**244 passed, 0 failed**, including 19 focused factory-update tests.
 
 Use the workspace [validation guide](../../docs/Hamt/validation.md) for restore/build split commands, warning policy,
 and evidence expectations.

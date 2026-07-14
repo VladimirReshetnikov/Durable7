@@ -52,7 +52,7 @@ portable to the C model (callback + context pointer) unless noted.
 
 | Surveyed gap / current disposition | Surface | What it unblocks |
 | --- | --- | --- |
-| `Update(key, func)` / `GetOrAdd` | HAMT map and set | Halves every read-modify-write (currently `TryGetValue` + `SetItem` = two trie walks). Consumers: bag increments, multimap inner updates, graph edge ops, union-find compression, interning, `Counts`/`Merge`-style aggregation. |
+| Persistent `GetOrAdd` / `AddOrUpdate` — **shipped in C#** | HAMT map | One hash, one trie descent, and exactly one selected factory invocation now support bag increments, multimap inner updates, graph edge operations, interning, and aggregation without a probe followed by `SetItem`. Sibling-language parity follows after the complete C# proposal stabilizes. |
 | Bulk construction — **shipped**; public editing sessions are a separate lifecycle | HAMT map and set | Canonical `CreateRange` now stages through an internal mutable builder and freezes once. C# also ships an owner-token `Transient`; sibling ports preserve the edit-then-publish semantics without sharing its performance claim. This historical row no longer blocks facade construction. |
 | Structural diff / equality / set-vs-set algebra — **shipped**; 3-way merge remains consumer-gated | HAMT node layer (not composable from outside) | Reference-equality-pruned lockstep traversal and same-type structural algebra now ship across all six languages. A general 3-way merge still needs a conflict matrix. |
 | Value-comparer parameter for no-op identity | HAMT factories | `SetItem`'s equal-value no-op check hardcodes `EqualityComparer<TValue>.Default`; a factory-supplied value comparer would let structural value equality trigger the identity short-circuit. |

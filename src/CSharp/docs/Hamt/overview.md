@@ -10,8 +10,10 @@
 `Tools.DataStructures.Hamt`, a persistent and concurrent trie/search-tree library led by canonical
 CHAMP. `PersistentHashMap<TKey, TValue>` is an immutable unordered dictionary with structural
 sharing across versions. `PersistentHashSet<T>` is built on the same core and implements
-`IReadOnlySet<T>`. Both expose the optimized C# one-way `Transient` editing session for many edits
-per publication. `CreateTransient` starts empty and `ToTransient` adopts a persistent value in O(1);
+`IReadOnlySet<T>`. The map also exposes single-pass persistent `GetOrAdd` and `AddOrUpdate`
+operations that select a value through exactly one factory invocation and one trie descent. Both
+collections expose the optimized C# one-way `Transient` editing session for many edits per
+publication. `CreateTransient` starts empty and `ToTransient` adopts a persistent value in O(1);
 `Persist` publishes in O(1), consumes the session, and returns the exact source object when the
 session remained logically clean. The map surface is the selected direct separate-node engine
 itself, not an additional public facade allocation; the set surface is a thin `IReadOnlySet<T>`
@@ -54,13 +56,14 @@ Canonical deletion promotes singleton child payloads back into their parent; equ
 collisions remain immutable collision buckets. Insert,
 replace, lookup, and removal run in O(hash-width / 5) expected time plus collision-bucket length for
 adversarial equal hashes; operations clone only the search path and reuse every untouched subtree.
-Lookups allocate nothing, single-pass `Add`/`TryAdd` hash and walk once, and both collections expose
+Lookups allocate nothing. `Add`/`TryAdd`, `GetOrAdd`, and `AddOrUpdate` hash and walk once;
+`GetOrAdd` hits and equal-value `AddOrUpdate` no-ops allocate nothing. Both collections expose
 allocation-free copy-safe struct enumerators.
 
 From-scratch map/set factories use an internal bulk builder. It stages entries by full hash and
 freezes them directly into canonical CHAMP topology, avoiding a persistent path copy for every item.
-The same internal facility is available to the sibling Tungsten assembly
-for association relabel/sort/reverse rebuilds; no mutable storage is ever shared with a published map.
+The facility is an implementation detail of the general HAMT family; downstream consumers use the
+public `CreateRange` contract. No mutable staging storage is ever shared with a published map.
 
 Transient sessions preserve the persistent CHAMP comparer, stored-representative, collision,
 enumeration, and no-op rules. They are unsynchronized and have one logical owner; sequential transfer
@@ -88,6 +91,8 @@ and canonical topology alone does not confer reference identity.
 - `DataStructures.sln` is the solution entry point.
 - `src/Tools.DataStructures.Hamt/` contains the public library.
   - `PersistentHashMap.cs` is the bitmap-indexed HAMT map implementation.
+  - `PersistentHashMap.SinglePassUpdates.cs` implements persistent `GetOrAdd`/`AddOrUpdate` through
+    one hash computation, one trie descent, and one selected factory invocation.
   - `PersistentHashMap.Transient.cs` and `PersistentHashMap.OwnerTokenKernel.cs` expose and implement
     the public one-way map transient.
   - `MapDifference.cs` defines the added/removed/changed result vocabulary used by structural diff.
@@ -135,4 +140,4 @@ dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Te
 ```
 
 See [`docs/validation.md`](validation.md) for the restore/build/test split, XML documentation
-warning gate, complete single-node commands, and the 223-test C# HAMT checkpoint.
+warning gate, complete single-node commands, and the current 244-test C# HAMT checkpoint.

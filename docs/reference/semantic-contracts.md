@@ -118,7 +118,7 @@ Language-specific obligations:
 
 | Language | Additional contract |
 | --- | --- |
-| C# | Public XML docs must state comparer preservation, exception behavior, no-op identity where promised, and IReadOnly collection semantics. |
+| C# | Public XML docs must state comparer preservation, exception behavior, no-op identity where promised, and IReadOnly collection semantics. Persistent `GetOrAdd`/`AddOrUpdate` validate delegates before hashing, hash and descend once, invoke only the selected factory once, retain stored key/value representatives on equal updates, and publish nothing on callback failure. |
 | C | Every function must define ownership of input keys/values, retained outputs, status codes, and cleanup on partial failure. Callback contexts must outlive collections that use them. |
 | C++ | Value objects should remain cheap to copy through shared immutable nodes; template policies must stay part of the value's semantic identity. |
 | Haskell | `HashPolicy` and package-local `Hashable` shape are part of the port, avoiding third-party dependencies while preserving persistent HAMT behavior. |
