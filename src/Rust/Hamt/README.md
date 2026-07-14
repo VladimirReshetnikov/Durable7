@@ -7,10 +7,11 @@
 
 `tools-data-structures-hamt` ports the repository HAMT, integer Patricia, and canonical Merkle
 search-tree families to safe Rust. It exposes `PersistentHashMap<K, V, S = RandomState>`,
-`PersistentHashSet<T, S = RandomState>`, and `BulkBuilder<K, V, S = RandomState>`, the transient
-one-pass bulk constructor mirroring the C# reference (mutable unpublished nodes frozen into
-detached persistent nodes; used by `FromIterator`, set intersection, the set-relation probes, and
-the Tungsten association's index rebuilds).
+`PersistentHashSet<T, S = RandomState>`, their one-way `TransientHashMap` / `TransientHashSet`
+editing sessions, and `BulkBuilder<K, V, S = RandomState>`, the independent one-pass scratch
+constructor (mutable unpublished nodes frozen into detached persistent nodes; used by
+`FromIterator`, set intersection, the set-relation probes, and the Tungsten association's index
+rebuilds).
 
 The trie follows the existing ports:
 
@@ -58,6 +59,10 @@ Rust-specific shape:
 
 - key equality is Rust's `Eq`; hash policy is supplied through `BuildHasher`;
 - updates return new values, while `shares_root_with` exposes structural sharing for validation;
+- `into_transient` moves a map/set into a one-way edit session, `to_transient` shares its root, and
+  `into_persistent` consumes the session. Active sessions support reads, iteration, point edits,
+  removal, and clear. This first semantic port intentionally delegates changed edits to ordinary
+  persistent path copying; it makes no in-place-edit or performance claim;
 - duplicate inserts return `DuplicateKey` instead of throwing;
 - iteration is stable for an unchanged map but remains trie-order, not insertion or sorted order.
 

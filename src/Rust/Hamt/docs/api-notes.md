@@ -12,6 +12,8 @@ Primary entry points:
 
 - `PersistentHashMap<K, V, S = RandomState>`;
 - `PersistentHashSet<T, S = RandomState>`;
+- `TransientHashMap<K, V, S = RandomState>`;
+- `TransientHashSet<T, S = RandomState>`;
 - `BulkBuilder<K, V, S = RandomState>`;
 - `DuplicateKey`;
 - `MapDifference<K, V>`;
@@ -43,7 +45,37 @@ difference toggles the distinct probe elements on the receiver. The `*_set` same
 structural CHAMP algebra when policies are compatible. Both surfaces preserve untouched subtries
 and the receiver root for applicable no-op cases.
 
-`BulkBuilder` mirrors the C# reference's transient bulk builder (commit `c092016`): unpublished
+## One-way edit sessions
+
+`PersistentHashMap::into_transient` and `PersistentHashSet::into_transient` move a persistent value
+into a single-owner session. Their `to_transient` counterparts clone only the value wrapper and
+share the exact current root and internal hash-policy identity. `TransientHashMap::new` /
+`with_hasher` and the corresponding set factories create empty sessions directly.
+
+The active map session exposes length, hash-policy access, lookup, stored-key recovery, key/value/
+entry iteration, replacement-style `insert`, duplicate-rejecting `try_add` / `add`, `remove` /
+`remove_entry`, and `clear`. The set session is a thin facade with length, policy access, membership,
+stored-representative recovery, iteration, `insert`, `remove`, and `clear`. The borrow checker keeps
+an active iterator from overlapping a mutation.
+
+Publication is deliberately one-way and ownership-native: `into_persistent(self)` consumes the
+session. There is no reusable snapshot method, no session `Clone`, and no runtime inactive state.
+Consequently a read, edit, iterator request, or second publication after successful publication is
+a compile-time ownership error rather than the runtime disposed-state check required by C# aliases.
+
+Moving adoption through `into_transient` and consuming publication are O(1). Borrowing adoption
+through `to_transient` performs O(1) trie work plus the cost of `S::clone`. This first Rust port is a
+semantic and lifecycle surface, not an owner-token performance kernel: each logically changed point
+edit calls the ordinary persistent CHAMP operation, path-copies O(w + c) nodes/entries along the
+affected route, and installs the fully constructed successor only after that operation returns. A
+panic in hashing, equality, value equality, cloning, or allocation therefore cannot publish a
+partial session state. Duplicate adds, absent removals, equal-value replacements, and clearing an
+empty session do not replace the current root. A session containing only such no-ops publishes the
+exact adopted root and policy identity. Existing source values and all published results remain
+immutable and isolated.
+
+`BulkBuilder` is a separate scratch-construction mechanism. It mirrors the C# reference's internal
+bulk builder (commit `c092016`): unpublished
 leaf, collision, and split-map CHAMP branch nodes are mutated in place and frozen into detached persistent nodes, so
 one-pass construction costs O(n (w + c)) node mutations — bounded trie depth plus the applicable
 equal-hash collision scan — with no persistent path copies between successive entries. `set_item`
@@ -62,6 +94,8 @@ Rust-specific differences:
   implements `Display` and `std::error::Error`;
 - lookups return references, and removal returns owned cloned values; `try_remove_entry` also
   surfaces the stored key;
+- transient edit sessions follow the same bound split: active reads require the ordinary lookup
+  bounds; changed point edits require the persistent update `Clone` / `PartialEq` bounds;
 - `shares_root_with` exposes root sharing for tests and diagnostics;
 - iteration streams trie order through an explicit traversal stack rather than materializing all
   entries up front; map iteration yields `Iter` and set iteration yields `SetIter`, both `Clone` +

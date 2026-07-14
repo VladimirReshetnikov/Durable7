@@ -6,14 +6,16 @@
 - Scope: Documentation index for the Rust HAMT workspace
 
 The Rust HAMT crate ports the repository persistent HAMT map/set contract to safe Rust values backed by
-`Arc`-shared immutable nodes. Start here when reviewing Rust naming, `BuildHasher` policy behavior,
-borrowed lookup results, cloned removal results, or Cargo validation.
+`Arc`-shared immutable nodes, including ownership-native one-way edit sessions. Start here when
+reviewing Rust naming, `BuildHasher` policy behavior, borrowed lookup results, cloned removal
+results, transient publication, or Cargo validation.
 
 ## Current Documents
 
 - [API notes](api-notes.md) describe `PersistentHashMap<K, V, S>`, `PersistentHashSet<T, S>`,
-  `DuplicateKey`, `BuildHasher` policy preservation, collision buckets, root-sharing diagnostics,
-  iteration order, and Rust-specific result shapes.
+  `TransientHashMap<K, V, S>`, `TransientHashSet<T, S>`, `DuplicateKey`, `BuildHasher` policy
+  preservation, collision buckets, root-sharing diagnostics, iteration order, and Rust-specific
+  result shapes.
 - [Merkle search tree](merkle-search-tree.md) specifies the Rust B=16 wide-tree API, policy domain,
   built-in strict codecs, `MST2` block framing, canonical shape, block-store persistence, bounded
   verification, `MSP2` proofs, synchronization, and typed three-way merge.

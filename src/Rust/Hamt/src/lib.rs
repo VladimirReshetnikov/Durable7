@@ -199,6 +199,16 @@ impl<K, V, S> PersistentHashMap<K, V, S> {
     pub fn values(&self) -> impl Iterator<Item = &V> {
         self.iter().map(|(_, value)| value)
     }
+
+    /// Moves this map into a single-owner editing session in O(1).
+    ///
+    /// The session uses the persistent CHAMP update kernel: point edits path-copy the affected
+    /// trie path and then replace the session's current root. Publishing consumes the session and
+    /// moves that current persistent value back out in O(1).
+    #[must_use]
+    pub fn into_transient(self) -> TransientHashMap<K, V, S> {
+        TransientHashMap { map: self }
+    }
 }
 
 impl<K, V, S: Clone> PersistentHashMap<K, V, S> {
@@ -214,6 +224,17 @@ impl<K, V, S: Clone> PersistentHashMap<K, V, S> {
             hasher: self.hasher.clone(),
             policy_identity: Arc::clone(&self.policy_identity),
         }
+    }
+
+    /// Creates a single-owner editing session over this map with O(1) trie work.
+    ///
+    /// The session shares this map's root and hash-policy identity until its first logical change.
+    /// A session subjected only to logical no-ops publishes a map that still shares this exact
+    /// root. Prefer [`PersistentHashMap::into_transient`] when the source value is no longer needed;
+    /// that form moves the wrapper and avoids the otherwise additional cost of `S::clone`.
+    #[must_use]
+    pub fn to_transient(&self) -> TransientHashMap<K, V, S> {
+        self.clone().into_transient()
     }
 }
 
@@ -536,6 +557,180 @@ where
     }
 }
 
+/// A single-owner, one-way editing session for [`PersistentHashMap`].
+///
+/// Unlike [`BulkBuilder`], this type can adopt an existing persistent map and supports lookup,
+/// removal, and clear as well as insertion. Unlike the C# owner-token kernel, this first Rust
+/// implementation deliberately does not mutate adopted nodes in place: every changed point edit
+/// delegates to the persistent CHAMP path-copy operation. This keeps retained snapshots isolated
+/// and preserves the crate's safe-`Arc` representation without adding locks or unsafe code.
+///
+/// Publication is expressed by ownership. [`TransientHashMap::into_persistent`] consumes the
+/// session, so Rust statically prevents reads, edits, iteration, or a second publication through
+/// the same value afterward. An iterator borrows the session and therefore also statically blocks
+/// mutation for its lifetime.
+#[must_use = "a transient session has no effect unless it is published with into_persistent"]
+pub struct TransientHashMap<K, V, S = RandomState> {
+    map: PersistentHashMap<K, V, S>,
+}
+
+impl<K, V> TransientHashMap<K, V, RandomState> {
+    /// Creates an empty session with a fresh default hash builder.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::with_hasher(RandomState::new())
+    }
+}
+
+impl<K, V, S: Default> Default for TransientHashMap<K, V, S> {
+    fn default() -> Self {
+        Self::with_hasher(S::default())
+    }
+}
+
+impl<K, V, S> TransientHashMap<K, V, S> {
+    /// Creates an empty session that retains `hasher` as its hash policy.
+    #[must_use]
+    pub fn with_hasher(hasher: S) -> Self {
+        PersistentHashMap::with_hasher(hasher).into_transient()
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
+    #[must_use]
+    pub fn hasher(&self) -> &S {
+        self.map.hasher()
+    }
+
+    /// Iterates the session's current trie order.
+    pub fn iter(&self) -> Iter<'_, K, V> {
+        self.map.iter()
+    }
+
+    pub fn keys(&self) -> impl Iterator<Item = &K> {
+        self.map.keys()
+    }
+
+    pub fn values(&self) -> impl Iterator<Item = &V> {
+        self.map.values()
+    }
+
+    /// Consumes this session and publishes its current persistent value in O(1).
+    #[must_use]
+    pub fn into_persistent(self) -> PersistentHashMap<K, V, S> {
+        self.map
+    }
+}
+
+impl<K, V, S> TransientHashMap<K, V, S>
+where
+    K: Eq + Hash,
+    S: BuildHasher,
+{
+    #[must_use]
+    pub fn contains_key(&self, key: &K) -> bool {
+        self.map.contains_key(key)
+    }
+
+    #[must_use]
+    pub fn get(&self, key: &K) -> Option<&V> {
+        self.map.get(key)
+    }
+
+    /// Returns the retained concrete key representative and its value.
+    #[must_use]
+    pub fn get_key_value(&self, key: &K) -> Option<(&K, &V)> {
+        self.map.get_key_value(key)
+    }
+}
+
+impl<K, V, S> TransientHashMap<K, V, S>
+where
+    K: Eq + Hash + Clone,
+    V: Clone + PartialEq,
+    S: BuildHasher + Clone,
+{
+    /// Adds or replaces one entry, returning whether the logical map changed.
+    ///
+    /// An equivalent key retains the first concrete key representative. An equal replacement
+    /// value is a logical no-op and retains both the current root and stored value instance.
+    pub fn insert(&mut self, key: K, value: V) -> bool {
+        let next = self.map.insert(key, value);
+        if self.map.shares_root_with(&next) {
+            return false;
+        }
+
+        self.map = next;
+        true
+    }
+
+    /// Adds one entry unless an equivalent key is already present.
+    pub fn try_add(&mut self, key: K, value: V) -> bool {
+        let (next, added) = self.map.try_add(key, value);
+        if added {
+            self.map = next;
+        }
+        added
+    }
+
+    /// Adds one entry or returns [`DuplicateKey`] without changing the session.
+    pub fn add(&mut self, key: K, value: V) -> Result<(), DuplicateKey> {
+        if self.try_add(key, value) {
+            Ok(())
+        } else {
+            Err(DuplicateKey)
+        }
+    }
+}
+
+impl<K, V, S> TransientHashMap<K, V, S>
+where
+    K: Eq + Hash + Clone,
+    V: Clone,
+    S: BuildHasher + Clone,
+{
+    /// Removes one entry and returns its value, if present.
+    pub fn remove(&mut self, key: &K) -> Option<V> {
+        self.remove_entry(key).map(|(_, value)| value)
+    }
+
+    /// Removes one entry and returns its retained concrete key and value representatives.
+    pub fn remove_entry(&mut self, key: &K) -> Option<(K, V)> {
+        let (next, actual_key, value) = self.map.try_remove_entry(key)?;
+        self.map = next;
+        Some((actual_key, value))
+    }
+}
+
+impl<K, V, S: Clone> TransientHashMap<K, V, S> {
+    /// Clears the session, returning whether it was nonempty.
+    pub fn clear(&mut self) -> bool {
+        if self.map.is_empty() {
+            return false;
+        }
+
+        self.map = self.map.clear();
+        true
+    }
+}
+
+impl<'a, K, V, S> IntoIterator for &'a TransientHashMap<K, V, S> {
+    type Item = (&'a K, &'a V);
+    type IntoIter = Iter<'a, K, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 /// Builds an independent map in one pass by mutating unpublished nodes in
 /// place, then freezes them into persistent nodes.
 ///
@@ -817,6 +1012,14 @@ impl<T, S> PersistentHashSet<T, S> {
             inner: self.map.iter(),
         }
     }
+
+    /// Moves this set into a single-owner editing session in O(1).
+    #[must_use]
+    pub fn into_transient(self) -> TransientHashSet<T, S> {
+        TransientHashSet {
+            map: self.map.into_transient(),
+        }
+    }
 }
 
 impl<T, S: Clone> PersistentHashSet<T, S> {
@@ -825,6 +1028,14 @@ impl<T, S: Clone> PersistentHashSet<T, S> {
         Self {
             map: self.map.clear(),
         }
+    }
+
+    /// Creates a single-owner editing session sharing this set's current CHAMP root.
+    ///
+    /// The trie work is O(1); the operation additionally has the cost of `S::clone`.
+    #[must_use]
+    pub fn to_transient(&self) -> TransientHashSet<T, S> {
+        self.clone().into_transient()
     }
 }
 
@@ -849,7 +1060,7 @@ where
     T: Eq + Hash,
     S: BuildHasher,
 {
-    /// Bulk-constructs a set from scratch through the map's transient builder,
+    /// Bulk-constructs a set from scratch through the map's scratch builder,
     /// preserving the map's duplicate rule (first stored instance wins).
     fn bulk_from_items<I>(hasher: S, items: I) -> Self
     where
@@ -1084,6 +1295,118 @@ where
     {
         let other_set = self.probe_from(other);
         self.len() == other_set.len() && self.iter().all(|value| other_set.contains(value))
+    }
+}
+
+/// A single-owner, one-way editing session for [`PersistentHashSet`].
+///
+/// This is a thin set facade over [`TransientHashMap`]. Changed point edits use persistent CHAMP
+/// path copying; publication consumes the session and moves the current set out in O(1).
+#[must_use = "a transient session has no effect unless it is published with into_persistent"]
+pub struct TransientHashSet<T, S = RandomState> {
+    map: TransientHashMap<T, (), S>,
+}
+
+impl<T> TransientHashSet<T, RandomState> {
+    /// Creates an empty session with a fresh default hash builder.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::with_hasher(RandomState::new())
+    }
+}
+
+impl<T, S: Default> Default for TransientHashSet<T, S> {
+    fn default() -> Self {
+        Self::with_hasher(S::default())
+    }
+}
+
+impl<T, S> TransientHashSet<T, S> {
+    /// Creates an empty session that retains `hasher` as its hash policy.
+    #[must_use]
+    pub fn with_hasher(hasher: S) -> Self {
+        Self {
+            map: TransientHashMap::with_hasher(hasher),
+        }
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
+    #[must_use]
+    pub fn hasher(&self) -> &S {
+        self.map.hasher()
+    }
+
+    /// Iterates the session's current trie order.
+    pub fn iter(&self) -> SetIter<'_, T> {
+        SetIter {
+            inner: self.map.iter(),
+        }
+    }
+
+    /// Consumes this session and publishes its current persistent value in O(1).
+    #[must_use]
+    pub fn into_persistent(self) -> PersistentHashSet<T, S> {
+        PersistentHashSet {
+            map: self.map.into_persistent(),
+        }
+    }
+}
+
+impl<T, S> TransientHashSet<T, S>
+where
+    T: Eq + Hash,
+    S: BuildHasher,
+{
+    #[must_use]
+    pub fn contains(&self, value: &T) -> bool {
+        self.map.contains_key(value)
+    }
+
+    /// Returns the retained concrete representative equivalent to `value`.
+    #[must_use]
+    pub fn get(&self, value: &T) -> Option<&T> {
+        self.map.get_key_value(value).map(|(key, _)| key)
+    }
+}
+
+impl<T, S> TransientHashSet<T, S>
+where
+    T: Eq + Hash + Clone,
+    S: BuildHasher + Clone,
+{
+    /// Inserts `value`, returning whether the logical set changed.
+    pub fn insert(&mut self, value: T) -> bool {
+        self.map.try_add(value, ())
+    }
+
+    /// Removes and returns the retained representative equivalent to `value`.
+    pub fn remove(&mut self, value: &T) -> Option<T> {
+        self.map.remove_entry(value).map(|(actual, ())| actual)
+    }
+}
+
+impl<T, S: Clone> TransientHashSet<T, S> {
+    /// Clears the session, returning whether it was nonempty.
+    pub fn clear(&mut self) -> bool {
+        self.map.clear()
+    }
+}
+
+impl<'a, T, S> IntoIterator for &'a TransientHashSet<T, S> {
+    type Item = &'a T;
+    type IntoIter = SetIter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 
@@ -2341,6 +2664,7 @@ fn sparse_index(bitmap: u32, bit: u32) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{BuildHasherDefault, Hasher};
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -2632,6 +2956,237 @@ mod tests {
         // from_iter routes through the builder and must agree as well.
         let collected: PersistentHashMap<u32, u32> = pairs.iter().copied().collect();
         assert_eq!(collected, incremental_spread);
+    }
+
+    #[test]
+    fn transient_map_clean_and_no_op_publication_preserve_exact_shared_state() {
+        let state = CountingState::default();
+        let retained_value = Arc::new(10);
+        let source = PersistentHashMap::with_hasher(state.clone())
+            .insert("a", Arc::clone(&retained_value))
+            .insert("b", Arc::new(20));
+
+        let mut transient = source.to_transient();
+        assert_eq!(transient.len(), 2);
+        assert_eq!(transient.get(&"a").map(|value| value.as_ref()), Some(&10));
+        assert_eq!(transient.iter().len(), 2);
+        assert_eq!(transient.keys().count(), 2);
+        assert_eq!(transient.values().count(), 2);
+
+        assert!(!transient.insert("a", Arc::new(10)));
+        assert!(!transient.try_add("a", Arc::new(99)));
+        assert_eq!(transient.remove(&"missing"), None);
+        assert!(Arc::ptr_eq(
+            transient.get(&"a").expect("retained entry"),
+            &retained_value
+        ));
+
+        let published = transient.into_persistent();
+        assert!(source.shares_root_with(&published));
+        assert!(Arc::ptr_eq(
+            &source.policy_identity,
+            &published.policy_identity
+        ));
+        assert!(Arc::ptr_eq(
+            &source.hasher().builds,
+            &published.hasher().builds
+        ));
+
+        let mut empty: TransientHashMap<i32, i32, ConstantState> =
+            TransientHashMap::with_hasher(ConstantState::default());
+        assert!(!empty.clear());
+        assert!(empty.into_persistent().is_empty());
+    }
+
+    #[test]
+    fn transient_map_preserves_representatives_collisions_and_source_snapshot() {
+        #[derive(Clone, Debug)]
+        struct Key(&'static str, usize);
+
+        impl Hash for Key {
+            fn hash<H: Hasher>(&self, state: &mut H) {
+                self.0.hash(state);
+            }
+        }
+
+        impl PartialEq for Key {
+            fn eq(&self, other: &Self) -> bool {
+                self.0 == other.0
+            }
+        }
+
+        impl Eq for Key {}
+
+        let original_value = Arc::new(10);
+        let source: PersistentHashMap<Key, Arc<i32>, ConstantState> =
+            PersistentHashMap::with_hasher(ConstantState::default())
+                .insert(Key("x", 1), Arc::clone(&original_value))
+                .insert(Key("z", 9), Arc::new(90));
+        let retained_source = source.clone();
+        let mut transient = source.to_transient();
+
+        assert!(!transient.insert(Key("x", 2), Arc::new(10)));
+        let (stored_key, stored_value) = transient
+            .get_key_value(&Key("x", 99))
+            .expect("equivalent key");
+        assert_eq!(stored_key.1, 1);
+        assert!(Arc::ptr_eq(stored_value, &original_value));
+
+        assert!(transient.insert(Key("x", 3), Arc::new(20)));
+        assert!(transient.try_add(Key("y", 4), Arc::new(40)));
+        assert!(matches!(
+            transient.add(Key("y", 5), Arc::new(50)),
+            Err(DuplicateKey)
+        ));
+        let (removed_key, removed_value) = transient
+            .remove_entry(&Key("x", 100))
+            .expect("retained representative is returned");
+        assert_eq!(removed_key.1, 1);
+        assert_eq!(*removed_value, 20);
+
+        let published = transient.into_persistent();
+        assert_eq!(published.len(), 2);
+        assert!(Arc::ptr_eq(
+            &source.policy_identity,
+            &published.policy_identity
+        ));
+        assert!(published.get(&Key("x", 0)).is_none());
+        assert_eq!(**published.get(&Key("y", 0)).expect("new entry"), 40);
+        assert_eq!(**published.get(&Key("z", 0)).expect("retained entry"), 90);
+
+        assert!(retained_source.shares_root_with(&source));
+        let (source_key, source_value) = source
+            .get_key_value(&Key("x", 0))
+            .expect("source remains unchanged");
+        assert_eq!(source_key.1, 1);
+        assert!(Arc::ptr_eq(source_value, &original_value));
+        assert!(source.get(&Key("y", 0)).is_none());
+    }
+
+    #[test]
+    fn transient_map_deterministic_collision_model_matches_btree_map() {
+        let source: PersistentHashMap<i32, i32, ConstantState> =
+            PersistentHashMap::with_hasher(ConstantState::default()).set_items([
+                (-31, 1),
+                (0, 2),
+                (31, 3),
+            ]);
+        let retained_source = source.clone();
+        let mut transient = source.to_transient();
+        let mut model = BTreeMap::from([(-31, 1), (0, 2), (31, 3)]);
+        let mut random = 0x9e37_79b9_7f4a_7c15_u64;
+
+        for step in 0..4_096_u64 {
+            random ^= random << 7;
+            random ^= random >> 9;
+            random ^= random << 8;
+            let key = ((random >> 17) % 97) as i32 - 48;
+            let value = ((random >> 33) % 2_003) as i32 - 1_001;
+
+            match (random ^ step) % 7 {
+                0 | 1 | 2 => {
+                    let expected_changed = model.get(&key) != Some(&value);
+                    model.insert(key, value);
+                    assert_eq!(transient.insert(key, value), expected_changed);
+                }
+                3 => {
+                    let expected_added = !model.contains_key(&key);
+                    if expected_added {
+                        model.insert(key, value);
+                    }
+                    assert_eq!(transient.try_add(key, value), expected_added);
+                }
+                4 => {
+                    let expected = model.remove(&key);
+                    assert_eq!(transient.remove(&key), expected);
+                }
+                5 if step % 257 == 0 => {
+                    let expected_changed = !model.is_empty();
+                    model.clear();
+                    assert_eq!(transient.clear(), expected_changed);
+                }
+                _ => {
+                    assert_eq!(transient.get(&key), model.get(&key));
+                    assert_eq!(transient.contains_key(&key), model.contains_key(&key));
+                }
+            }
+
+            assert_eq!(transient.len(), model.len());
+            let actual = transient
+                .iter()
+                .map(|(key, value)| (*key, *value))
+                .collect::<BTreeMap<_, _>>();
+            assert_eq!(actual, model);
+        }
+
+        let published = transient.into_persistent();
+        assert_eq!(
+            published
+                .iter()
+                .map(|(key, value)| (*key, *value))
+                .collect::<BTreeMap<_, _>>(),
+            model
+        );
+        assert_eq!(retained_source.len(), 3);
+        assert_eq!(retained_source.get(&-31), Some(&1));
+        assert_eq!(retained_source.get(&0), Some(&2));
+        assert_eq!(retained_source.get(&31), Some(&3));
+    }
+
+    #[test]
+    fn transient_set_is_a_one_way_representative_preserving_facade() {
+        #[derive(Clone, Debug)]
+        struct Item(&'static str, usize);
+
+        impl Hash for Item {
+            fn hash<H: Hasher>(&self, state: &mut H) {
+                self.0.hash(state);
+            }
+        }
+
+        impl PartialEq for Item {
+            fn eq(&self, other: &Self) -> bool {
+                self.0 == other.0
+            }
+        }
+
+        impl Eq for Item {}
+
+        let source: PersistentHashSet<Item, ConstantState> =
+            PersistentHashSet::with_hasher(ConstantState::default())
+                .insert(Item("x", 1))
+                .insert(Item("z", 9));
+        let mut transient = source.to_transient();
+
+        assert!(!transient.insert(Item("x", 2)));
+        assert_eq!(transient.get(&Item("x", 0)).expect("stored item").1, 1);
+        assert!(transient.insert(Item("y", 3)));
+        assert!(transient.contains(&Item("y", 0)));
+        assert_eq!(transient.iter().count(), 3);
+        assert_eq!(transient.remove(&Item("x", 100)).expect("removed").1, 1);
+
+        let published = transient.into_persistent();
+        assert!(Arc::ptr_eq(
+            &source.map.policy_identity,
+            &published.map.policy_identity
+        ));
+        assert!(published.contains(&Item("y", 0)));
+        assert!(!published.contains(&Item("x", 0)));
+        assert!(source.contains(&Item("x", 0)));
+        assert!(!source.contains(&Item("y", 0)));
+
+        let clean = source.to_transient().into_persistent();
+        assert!(source.shares_root_with(&clean));
+        assert!(Arc::ptr_eq(
+            &source.map.policy_identity,
+            &clean.map.policy_identity
+        ));
+
+        let mut clearing = published.into_transient();
+        assert!(clearing.clear());
+        assert!(!clearing.clear());
+        assert!(clearing.into_persistent().is_empty());
+        assert_eq!(source.len(), 2);
     }
 
     #[test]

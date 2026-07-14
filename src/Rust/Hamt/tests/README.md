@@ -24,8 +24,12 @@ Coverage groups:
   over-depth, and compact-run fixtures proving the diagnostics reject invalid shapes;
 - streaming trie-order iteration and exact-size accounting;
 - last-wins replacement and original-key retention;
+- one-way `TransientHashMap` / `TransientHashSet` sessions, including clean/no-op root and policy
+  identity, consuming publication, active reads and iteration, stored representatives, source
+  snapshot isolation, collision-heavy point edits, clear, and a deterministic 4,096-command map
+  model;
 - set algebra, equality, and proper subset/superset relations;
-- transient bulk-builder snapshot detachment, duplicate-identity rules, final-hash-level splits,
+- scratch bulk-builder snapshot detachment, duplicate-identity rules, final-hash-level splits,
   and differential agreement with incremental construction;
 - 32/64-bit Patricia ordering and randomized histories, structural algebra, key/left/right map
   combiners, cached branch cardinalities, and receiver-root no-op identity;
