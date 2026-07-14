@@ -40,6 +40,7 @@ behavior change through sibling workspaces.
 | Version-bound cursor | An immutable working value that owns one persistent sequence version and a position within it; navigation and editing never redirect it to a different version implicitly. |
 | Checkpoint port | A port that preserves observable API semantics and tests while documenting a remaining representation or asymptotic parity boundary. |
 | Facade | A public collection built on a shared core engine, such as sorted sets on measured trees or text ropes on measured ropes. |
+| Application-specific leaf | A workspace that may consume general libraries but cannot be a dependency or semantic baseline for general-purpose structures. Reusable mechanisms leave it only through an independently owned fork. Tungsten is the repository's current example. |
 
 ## Fixed-Width Integer Numerics
 
@@ -423,6 +424,13 @@ specified by its [API notes](../../src/C/FingerTree/docs/api-notes.md) and
 
 ## Tungsten Collections
 
+This section is a contract only among the application-specific Tungsten ports. Tungsten collections
+serve the Tungsten project, may change as Wolfram-kernel behavior is newly discovered or
+reinterpreted, and may move out of this repository. They are leaf consumers: general collections
+must not reference their packages/types, use their implementation, or inherit their semantics.
+If a mechanism deserves general use, fork it under a separate owner with independent contracts and
+tests; do not make the fork track later Tungsten changes automatically.
+
 Tungsten collections compose HAMT keyed lookup with persistent ordered storage into a sequence facade
 (`PersistentList`) and an insertion-ordered map (`PersistentAssociation`) whose ordering behavior
 matches the kernel-verified Tungsten Language rules.
@@ -466,6 +474,10 @@ Shared obligations:
 When adding a new collection, numeric type, helper, builder, or facade, add docs that answer:
 
 - What is the public entry point and which namespace, module, header, package, or crate exports it?
+- Which workspace owns it, and does every dependency point toward a repository-general substrate?
+- If the design was inspired by Tungsten, where is the independently owned fork and what
+  Tungsten-specific guarantees were retained or deliberately dropped? A new general surface may
+  not use Tungsten as its implementation or semantic baseline.
 - Which existing family is the semantic baseline?
 - Which operations preserve persistence and structural sharing?
 - Which policies are stored, inherited, or supplied per operation?

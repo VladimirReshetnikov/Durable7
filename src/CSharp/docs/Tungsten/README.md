@@ -8,9 +8,19 @@
 `Tools.DataStructures.Tungsten` provides persistent collections shaped for representing Tungsten
 Language `List` and `Association` expressions: `PersistentList<T>` and
 `PersistentAssociation<TKey, TValue>`. The primary external client is the Tungsten engine
-(`C:\Smithereens\src\Tungsten`, a kernel-free Tungsten Language automation workspace); the library
-itself is client-agnostic and generic. This C# implementation is the reference for ports to the
-repository's other language workspaces.
+(`C:\Smithereens\src\Tungsten`, a kernel-free Tungsten Language automation workspace). This is an
+application-specific leaf library even though its types are generic. Its behavior may change with
+new Wolfram-kernel evidence, and the workspace may eventually move out of this repository. This C#
+implementation is the reference only for sibling Tungsten ports.
+
+## Dependency Boundary
+
+Tungsten consumes the public HAMT and FingerTree libraries. No general-purpose library may depend
+on this project, its namespace or types, its internals, or its behavioral contract. If a mechanism
+is useful outside the Tungsten project, copy the design into an independently owned implementation
+with its own API, invariants, tests, documentation, and evolution policy. A general implementation
+must not wrap or delegate to Tungsten, and later kernel-driven changes do not automatically flow
+into the fork.
 
 ## Documents
 
@@ -25,8 +35,9 @@ repository's other language workspaces.
 ## Related Material
 
 - [Tests README](../../tests/Tools.DataStructures.Tungsten.Tests/README.md)
-- [Derived structure catalog](../../../../docs/reference/derived-structure-catalog.md) - the
-  verified composition rules (`PersistentOrderedMap` pattern) this library instantiates.
+- [Derived structure catalog](../../../../docs/reference/derived-structure-catalog.md) - historical
+  composition evidence behind this application-specific implementation, not a dependency recipe
+  for general collections.
 - [Data structure catalog](../../../../docs/reference/data-structure-catalog.md) - shipped
   cross-language surface.
 - Tungsten design study (external, in the Smithereens repository):

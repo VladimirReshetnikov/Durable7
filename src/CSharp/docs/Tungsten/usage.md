@@ -5,6 +5,10 @@
 - Audience: Consumers of `Tools.DataStructures.Tungsten`
 - Scope: Task-oriented examples for `PersistentList<T>` and `PersistentAssociation<TKey, TValue>`
 
+This guide is for the Tungsten application's leaf collection family. General-purpose libraries
+must not take a dependency on these types or use their behavior as a baseline; fork any reusable
+mechanism into an independently owned implementation instead.
+
 Add a project reference to
 [`Tools.DataStructures.Tungsten.csproj`](../../src/Tools.DataStructures.Tungsten/Tools.DataStructures.Tungsten.csproj)
 and import the namespace:
@@ -148,8 +152,8 @@ var v3 = v1.Append("a", 9);                 // branch from v1
 
 ## Choosing Between This Library And The Substrates
 
-Use `PersistentHashMap` directly when you need a keyed map and do not care about enumeration
-order. Use `FingerTreeDeque`/`Rope` directly when you need a sequence and not the Tungsten
-operation vocabulary. Reach for this library when insertion order is part of the contract
-(association) or when you want the Tungsten operation surface and its ordering rules test-locked
-for you (list and association).
+Use `PersistentHashMap` directly when you need a general keyed map and do not care about
+enumeration order. Use `FingerTreeDeque`/`Rope` directly when you need a general sequence. Reach for
+this library only inside the Tungsten application family when you need its operation surface and
+kernel-derived ordering rules. A general insertion-ordered collection belongs in an independent
+project with an independently chosen contract.

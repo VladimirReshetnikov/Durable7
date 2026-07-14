@@ -176,17 +176,23 @@ surfaces require them); the C workspace exposes equivalent policy callbacks and 
 | Kotlin | `Monoid<T>`, `MeasurePolicy<T, M>`, `DabaLite<T>`, `DabaLiteStatistics`, `SizeMeasure<T>`, `IntSumMeasure`, `MaxMeasure<T>`, `MinMeasure<T>`, `ProductMeasure<T, A, B>`, `MeasurePair<A, B>`, `NewlineMeasure` | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [monoids and measures](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Core.kt), [DABA Lite](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/DabaLite.kt), [newline measure](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Rope.kt) |
 | Rust | `DabaMonoid<T>`, `DabaLite<T, M>`, `DabaLiteStatistics`, `MeasurePolicy<T>`, `SizeMeasure`, `SumMeasure<T>`, `MaxMeasure`, `MinMeasure`, `KeyMeasure<T>`, `ProductMeasure<T, PFirst, PSecond>`, `MeasurePair<TFirst, TSecond>`, `SizeAndSumMeasure<T>`, `SizeAndMaxMeasure<T>`, `SizeAndMinMeasure<T>`, `OrderStatisticMeasure<T>`, `RankedKey<T>`, `NewlineMeasure` | [API notes](../../src/Rust/FingerTree/docs/api-notes.md), [DABA Lite](../../src/Rust/FingerTree/src/daba_lite.rs), [measures](../../src/Rust/FingerTree/src/measured.rs), [newline measure](../../src/Rust/FingerTree/src/rope.rs) |
 
-## Tungsten Collections
+## Tungsten Application Collections
 
-The Tungsten-collections workspace composes the HAMT and FingerTree families into persistent
+The Tungsten-collections workspaces are application-specific leaf consumers for the Tungsten
+project. They may change with newly discovered or reinterpreted Wolfram-kernel behavior and may
+move out of this repository. No general collection may depend on these packages/types or use them
+as a semantic baseline. A generally useful mechanism must be forked into an independently owned
+implementation with its own API, contracts, tests, and evolution policy.
+
+Within that application boundary, the workspaces compose the HAMT and FingerTree families into persistent
 collections shaped for Tungsten Language `List` and `Association` semantics: an ordered-sequence
 facade with the Tungsten `List` operation vocabulary, and an insertion-ordered map with keyed and
 positional access following the kernel-verified `Association` ordering rules (in-place update,
 move-on-`Append`/`Prepend`, first-position/last-value construction, positional slicing, stable
 sorts). The primary external client is the Tungsten engine in the Smithereens repository; the C#
-implementation is the semantic reference for sibling language ports (see the
-[derived structure catalog](derived-structure-catalog.md) for the verified composition it
-instantiates).
+implementation is the semantic reference only for sibling Tungsten ports. The
+[derived structure catalog](derived-structure-catalog.md) records useful historical composition
+evidence, not permission to make a general structure depend on Tungsten.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |

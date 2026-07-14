@@ -5,6 +5,10 @@
 - Audience: Maintainers validating changes to `Tools.DataStructures.Tungsten`
 - Scope: Build and test commands, coverage map, and validation expectations
 
+This validation guide governs the application-specific Tungsten family only. General collections
+must not reference these tests as a live oracle; translated cases require an independently stated
+contract and independent expected model.
+
 ## Commands
 
 From `src/CSharp`:
@@ -42,9 +46,9 @@ map. The important gates:
   lookups, positional reads, and retained snapshots (branching persistence) after every step.
 - **Order-maintenance stress.** Repeated same-point inserts force stamp-gap exhaustion and full
   relabels; order, keyed lookups, and positions must survive.
-- **Fused stamp edits.** Generated set/append/prepend/insert/remove histories exercise the
-  one-descent sorted update/removal path while retained snapshots verify reconstruction remains
-  persistent.
+- **Public-substrate stamp edits.** Generated set/append/prepend/insert/remove histories exercise
+  public sorted-search and positional-edit composition while retained snapshots verify
+  reconstruction remains persistent.
 - **No-op identity.** Reference-equality checks for observably unchanged writes on both types.
 - **Policy preservation.** Custom key comparers govern equality, survive every derivation
   (slices, sorts, reversal, removal), and stored-key retention matches the HAMT contract.
@@ -59,4 +63,5 @@ map. The important gates:
 - Complexity or allocation claims follow the repository documentation standard: state them in
   the XML remarks and keep the specification tables in sync.
 - Ports must transcribe the example tests as their fidelity spec per the
-  [porting guide](../../../../docs/guides/porting-and-semantic-parity.md).
+  [porting guide](../../../../docs/guides/porting-and-semantic-parity.md). This obligation applies
+  only to sibling Tungsten ports, never to an independent general-purpose fork.

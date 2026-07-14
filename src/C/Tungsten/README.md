@@ -9,6 +9,11 @@ This workspace is the C17 port of the Tungsten `List` and `Association` collecti
 type-erased, explicit-lifetime APIs through
 [`tungsten.h`](include/tools/data_structures/tungsten/tungsten.h).
 
+This is an application-specific leaf port. It may consume the C HAMT and FingerTree libraries, but
+no general C library may depend on Tungsten or treat its kernel-derived behavior as a baseline.
+Fork reusable mechanics into an independently owned implementation; C# is authoritative only for
+the sibling Tungsten ports.
+
 - `tds_tungsten_list` is a value-type facade over the C FingerTree persistent deque.
 - `tds_tungsten_association` composes the C HAMT with an internal ref-counted AVL sequence ordered by
   sparse stamps. The HAMT gives keyed lookup and stored-key recovery; the stamp sequence gives ordered

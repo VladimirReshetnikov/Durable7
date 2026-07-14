@@ -369,9 +369,8 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
         if (ValuesEqual(slot.Value, value))
             return this;
 
-        // UpdateAt fuses the fetch and the replacement into one tree walk, and the hash map
-        // retains its originally stored key instance on SetItem by contract, so neither side
-        // needs a separate stored-key fetch.
+        // The public deque operations locate the stable stamp and replace that position. The hash
+        // map retains its originally stored key instance on SetItem by contract.
         return new(
             UpdateAtStamp(slot.Stamp, stored => new Entry(stored.Stamp, stored.Key, value)),
             _index.SetItem(key, new Slot(slot.Stamp, value)));
@@ -582,10 +581,12 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
         var result = Create(Comparer);
         foreach (var key in keys)
         {
-            if (_index.TryGetEntry(key, out var storedKey, out var slot) && !result.ContainsKey(key))
-            {
-                result = result.AppendNew(storedKey, slot.Value);
-            }
+            if (!_index.TryGetValue(key, out var slot) ||
+                !_index.TryGetKey(key, out var storedKey) ||
+                result.ContainsKey(key))
+                continue;
+
+            result = result.AppendNew(storedKey, slot.Value);
         }
         return result;
     }
@@ -812,43 +813,25 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int IndexOfStamp(long stamp)
     {
-        // The keyed index is the source of the stamp, so lower-bound must land on that unique
-        // entry. Avoid SortedBinarySearch's second element-read descent used to classify misses.
+        // The keyed index is the source of the stamp, so lower-bound must land on that unique entry.
         var position = _entries.SortedLowerBound(new Entry(stamp, default!, default!), StampOrder.Instance);
-        Debug.Assert(position < Count, "a stamp recorded in the keyed index must exist in the entry sequence");
+        if ((uint)position >= (uint)Count || _entries[position].Stamp != stamp)
+            throw new InvalidOperationException("A stamp recorded in the keyed index is absent from the entry sequence.");
         return position;
     }
 
-    /// <summary>Removes the uniquely stamped entry by fusing sorted location and reconstruction.</summary>
+    /// <summary>Locates and removes the uniquely stamped entry through public deque operations.</summary>
     private FingerTreeDeque<Entry> RemoveAtStamp(long stamp, out int position)
     {
-        if (_entries.TryRemoveSortedItem(
-                new Entry(stamp, default!, default!),
-                StampOrder.Instance,
-                out position,
-                out _,
-                out var result))
-        {
-            return result;
-        }
-
-        throw new InvalidOperationException("A stamp recorded in the keyed index is absent from the entry sequence.");
+        position = IndexOfStamp(stamp);
+        return _entries.RemoveAt(position);
     }
 
-    /// <summary>Updates the uniquely stamped entry by fusing sorted location and path rebuilding.</summary>
+    /// <summary>Locates and updates the uniquely stamped entry through public deque operations.</summary>
     private FingerTreeDeque<Entry> UpdateAtStamp(long stamp, Func<Entry, Entry> updater)
     {
-        if (_entries.TryUpdateSortedItem(
-                new Entry(stamp, default!, default!),
-                StampOrder.Instance,
-                updater,
-                out _,
-                out var result))
-        {
-            return result;
-        }
-
-        throw new InvalidOperationException("A stamp recorded in the keyed index is absent from the entry sequence.");
+        var position = IndexOfStamp(stamp);
+        return _entries.SetItem(position, updater(_entries[position]));
     }
 
     /// <summary>Appends a key known to be absent from the keyed index.</summary>
@@ -937,14 +920,16 @@ public sealed class PersistentAssociation<TKey, TValue> : IReadOnlyDictionary<TK
     /// <summary>Rebuilds both structures from entries in the given order, assigning fresh gapped labels.</summary>
     private PersistentAssociation<TKey, TValue> Rebuilt(Entry[] ordered)
     {
-        var indexBuilder = PersistentHashMap<TKey, Slot>.CreateBulkBuilder(Comparer);
+        var indexItems = new KeyValuePair<TKey, Slot>[ordered.Length];
         for (var i = 0; i < ordered.Length; i++)
         {
             var stamp = (long)i * StampGap;
             ordered[i] = new Entry(stamp, ordered[i].Key, ordered[i].Value);
-            indexBuilder.SetItem(ordered[i].Key, new Slot(stamp, ordered[i].Value));
+            indexItems[i] = KeyValuePair.Create(ordered[i].Key, new Slot(stamp, ordered[i].Value));
         }
-        return new(FingerTreeDeque<Entry>.Create(ordered), indexBuilder.ToImmutable());
+        return new(
+            FingerTreeDeque<Entry>.Create(ordered),
+            PersistentHashMap<TKey, Slot>.CreateRange(indexItems, Comparer));
     }
 
     private PersistentAssociation<TKey, TValue> SortedBy<TOrder>(Func<Entry, TOrder> selector, IComparer<TOrder> comparer)

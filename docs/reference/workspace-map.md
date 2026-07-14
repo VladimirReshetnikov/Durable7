@@ -71,6 +71,19 @@ For the cross-language list of public library surfaces, see the
 ordering, and documentation obligations that should remain recognizable across language ports, see the
 [semantic contracts reference](semantic-contracts.md).
 
+## Dependency Direction
+
+Tungsten is an application-specific leaf family for the Tungsten project, not a repository-general
+foundation. It may consume HAMT, FingerTree, and other general libraries; dependency arrows must
+never point from a general or non-Tungsten workspace to a Tungsten package, type, or implementation.
+This boundary keeps the general families independent if kernel discoveries change Tungsten behavior
+or the Tungsten workspaces move out of this repository.
+
+A generally useful Tungsten mechanism must be forked into a separately owned workspace with an
+independent API, contract, test suite, and evolution policy. The fork may deliberately relax
+Tungsten-specific fidelity or complexity guarantees. Provenance and translated tests are welcome;
+a project reference, wrapper, shared implementation owner, or Tungsten semantic baseline is not.
+
 ## Workspace Roles
 
 | Workspace | Role | Main entry points | Local docs |
@@ -88,7 +101,7 @@ ordering, and documentation obligations that should remain recognizable across l
 | [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) | Haskell FingerTree/RRB/canonical-set family port with positional/measured/text rope cursors | `tools-data-structures-fingertree.cabal`, `src/Data/Structures/FingerTree/` | [`README`](../../src/Haskell/FingerTree/README.md) |
 | [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | Kotlin/JVM persistent measured-tree/RRB/canonical-set/optimal-priority family plus managed DABA Lite | `src/tools/datastructures/fingertree/`, `test/tools/datastructures/fingertree/` | [`docs`](../../src/Kotlin/FingerTree/docs/README.md) |
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | Rust FingerTree/RRB/canonical-set checkpoint with non-`Clone` Brodal/PSQ cores plus single-threaded DABA Lite | `Cargo.toml`, `src/` | [`docs`](../../src/Rust/FingerTree/docs/README.md) |
-| [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) | Canonical managed Tungsten-semantics collections (list facade and insertion-ordered association) composed from the HAMT and FingerTree families | `DataStructures.sln`, `src/Tools.DataStructures.Tungsten/`, `tests/Tools.DataStructures.Tungsten.Tests/` | [`docs`](../../src/CSharp/docs/Tungsten/README.md) |
+| [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) | Application-specific leaf collections for the Tungsten project; canonical only within the sibling Tungsten port family and not a general collection foundation | `DataStructures.sln`, `src/Tools.DataStructures.Tungsten/`, `tests/Tools.DataStructures.Tungsten.Tests/` | [`docs`](../../src/CSharp/docs/Tungsten/README.md) |
 | [`src/C/Tungsten`](../../src/C/Tungsten/README.md) | C17 Tungsten `List` and `Association` port | `include/tools/data_structures/tungsten/tungsten.h`, `CMakePresets.json` | [`README`](../../src/C/Tungsten/README.md) |
 | [`src/Cpp/Tungsten`](../../src/Cpp/Tungsten/README.md) | C++23 Tungsten `List` and `Association` port | `include/tools/data_structures/tungsten/`, `CMakePresets.json` | [`README`](../../src/Cpp/Tungsten/README.md) |
 | [`src/Haskell/Tungsten`](../../src/Haskell/Tungsten/README.md) | Haskell Tungsten `List` and `Association` port | `tools-data-structures-tungsten.cabal`, `src/Data/Structures/Tungsten/` | [`README`](../../src/Haskell/Tungsten/README.md) |
@@ -144,11 +157,16 @@ FingerTree lineage:
 
 Tungsten collections lineage:
 
-1. C# Tungsten collections (`src/CSharp/src/Tools.DataStructures.Tungsten`) define the managed public
-   contract: `PersistentList<T>` over the FingerTree deque and `PersistentAssociation<TKey, TValue>`
-   composed per the [derived structure catalog](derived-structure-catalog.md)'s
-   `PersistentOrderedMap` pattern, with the kernel-verified Tungsten ordering rules as the fidelity
-   spec.
+This lineage is application-local. It establishes parity only among the Tungsten ports; it creates
+no dependency or semantic obligation for a general collection. New kernel evidence may revise the
+whole lineage, and any generally useful mechanism must move by an independently owned fork rather
+than by making another family depend on Tungsten.
+
+1. C# Tungsten collections (`src/CSharp/src/Tools.DataStructures.Tungsten`) define the managed
+   Tungsten-port contract: `PersistentList<T>` over the FingerTree deque and
+   `PersistentAssociation<TKey, TValue>` composed per the historical
+   [derived structure catalog](derived-structure-catalog.md) case study, with the kernel-verified
+   Tungsten ordering rules as the family-local fidelity spec.
 2. `src/Cpp/Tungsten`, `src/C/Tungsten`, `src/Haskell/Tungsten`, `src/Kotlin/Tungsten`, and
    `src/Rust/Tungsten` port the same public family to their language-local ownership and policy
    models while preserving the substrate composition, sparse-stamp relabel behavior, and

@@ -10,6 +10,25 @@ This repository contains Vladimir Reshetnikov's standalone data-structure and nu
 
 This document is the canonical repository guidance for Vladimir and the AI coding agents that help him. `AGENTS.md` and `CLAUDE.md` point here, so keep shared project and agent instructions in this file.
 
+## Tungsten Dependency Boundary
+
+Tungsten collections are application-specific leaf consumers for the Tungsten project, an
+alternative interpreter for Wolfram Language. Their behavior may change as Wolfram-kernel behavior
+is newly discovered, reinterpreted, or changed, and the Tungsten workspaces may move out of this
+repository.
+
+Dependency direction is therefore one-way:
+
+- Tungsten may consume repository-general HAMT, FingerTree, and other data-structure libraries.
+- No general-purpose collection, new data structure, or non-Tungsten project may reference a
+  Tungsten package or type, use Tungsten as its implementation substrate, or adopt Tungsten behavior
+  as its semantic baseline.
+- If a Tungsten mechanism is attractive generally, fork it into an independently owned
+  implementation with its own API, contracts, tests, and evolution policy. General code must not
+  wrap, delegate to, subclass, or remain constrained by the Tungsten implementation.
+- Kernel-driven Tungsten changes flow only through the sibling Tungsten ports. They do not
+  automatically flow into an independent general-purpose fork.
+
 ## Where to start
 
 | Goal | Start with | Then open |
@@ -192,7 +211,7 @@ language-first layout.
 - [C# Numerics](src/CSharp/docs/Numerics/overview.md) is a .NET 10 fixed-width and sparse integer numerics library under [src/CSharp/src/Tools.Numerics](src/CSharp/src/Tools.Numerics/Tools.Numerics.csproj). It provides `UInt256`/`Int256`, `UInt512`/`Int512`, `UInt1024`/`Int1024`, `SparseInteger`, deterministic two's-complement and binary conversion semantics, declaration-parity guardrails, and xUnit tests.
 - [C# HAMT](src/CSharp/docs/Hamt/overview.md) is a .NET 10 hash-trie library under [src/CSharp/src/Tools.DataStructures.Hamt](src/CSharp/src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj). Its canonical CHAMP `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` preserve comparers, stored representatives, and structural sharing, and expose optimized single-owner `Transient` sessions with owner-token in-place edits, O(1) adoption, and one-way O(1) publication. C, C++, Haskell, Kotlin, and Rust expose the same semantic edit-then-publish lifecycle through language-local sessions whose changed point edits remain persistent path copies and carry no performance claim. The workspace also owns the lock-free snapshotting Ctrie, 32/64-bit Patricia maps and sets, and the policy-bound Merkle search tree; xUnit/CsCheck suites cover persistent, transient, and concurrent behavior.
 - [C# FingerTree](src/CSharp/docs/FingerTree/overview.md) is a .NET 10 persistent finger-tree library under [src/CSharp/src/Tools.DataStructures.FingerTree](src/CSharp/src/Tools.DataStructures.FingerTree/Tools.DataStructures.FingerTree.csproj): two engine cores (a tuned catenable deque and a general monoid-measured tree), a full collection family (sorted bag/set/dictionary, priority queue, interval tree, reversible deque), product/sum/built-in measures with a closure-free predicate API, and a rope family (positional, measured, and text) with version-bound positional and measured edit cursors. It ships a navigable design-notes document ([FingerTree-Design-Notes.pdf](src/CSharp/docs/FingerTree/FingerTree-Design-Notes.pdf), with `.tex` source and a rebuild script alongside), a BenchmarkDotNet harness, three runnable samples, and a three-tier (example + property + model-based command) test suite plus tearable-struct concurrency stress tests.
-- [C# Tungsten collections](src/CSharp/docs/Tungsten/overview.md) is a .NET 10 library under [src/CSharp/src/Tools.DataStructures.Tungsten](src/CSharp/src/Tools.DataStructures.Tungsten/Tools.DataStructures.Tungsten.csproj) composing the HAMT and FingerTree families into persistent collections with Tungsten Language semantics: `PersistentList<T>` (the `List` operation vocabulary over the catenable deque) and `PersistentAssociation<TKey, TValue>` (an insertion-ordered map with keyed and positional access following the kernel-verified `Association` ordering rules). The primary external client is the Tungsten engine in the Smithereens repository; the C# implementation is the semantic reference for sibling language ports.
+- [C# Tungsten collections](src/CSharp/docs/Tungsten/overview.md) is a .NET 10 application-specific leaf library under [src/CSharp/src/Tools.DataStructures.Tungsten](src/CSharp/src/Tools.DataStructures.Tungsten/Tools.DataStructures.Tungsten.csproj) composing the HAMT and FingerTree families into persistent collections for the Tungsten project: `PersistentList<T>` (the `List` operation vocabulary over the catenable deque) and `PersistentAssociation<TKey, TValue>` (an insertion-ordered map with keyed and positional access following the kernel-verified `Association` ordering rules). The primary external client is the Tungsten engine in the Smithereens repository; the C# implementation is the semantic reference only for sibling Tungsten ports and is never a foundation for general collections.
 - [src/C/Hamt](src/C/Hamt/README.md) is a C17 port of the persistent HAMT library. It provides type-erased
   `tds_hamt_map` and `tds_hamt_set` value structs with callback-driven hash/equality/ownership
   policy, explicit ref-counted one-way edit-session handles whose aliases share lifecycle status,

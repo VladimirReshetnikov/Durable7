@@ -24,10 +24,26 @@ substrates' no-op identity contract.
 
 The primary external client is the Tungsten engine (`C:\Smithereens\src\Tungsten`), a kernel-free
 Tungsten Language automation workspace currently written in Python; the design imagines its
-expression layer as a typed host application. The library itself is client-agnostic: nothing in
-the API depends on Tungsten or Tungsten types, and `TValue` can carry engine-specific payloads
-(for example a `delayed` flag distinguishing `->` from `:>` entries, which is deliberately an
-engine concern rather than a library field).
+expression layer as a typed host application. The public types are generic implementation tools,
+but the library is not client-agnostic: its operation vocabulary, ordering rules, and change policy
+belong to that application. `TValue` can carry engine-specific payloads (for example a `delayed`
+flag distinguishing `->` from `:>` entries, which is deliberately an engine concern rather than a
+library field).
+
+## Application-Specific Leaf Boundary
+
+Tungsten collections are leaf consumers of repository-general libraries. They may change when
+Wolfram-kernel behavior is newly discovered, reinterpreted, or changed, and these workspaces may
+eventually move to the Tungsten repository. Dependency direction is consequently strict:
+
+- Tungsten may reference the public HAMT, FingerTree, and other general data-structure APIs.
+- No general collection or non-Tungsten project may reference a Tungsten assembly, namespace, type,
+  internal API, or behavioral contract.
+- A generally useful mechanism observed here must be forked into an independently named and owned
+  implementation with its own API, invariants, tests, documentation, and evolution policy. It may
+  preserve, alter, or relax Tungsten guarantees; it must not wrap, delegate to, or track Tungsten.
+- C# is the semantic reference only for the sibling Tungsten ports. Kernel-driven changes propagate
+  within that family and nowhere else automatically.
 
 ## Design Provenance
 
@@ -69,13 +85,15 @@ is stamp-sorted, any key's position is recovered from its stamp by the deque's s
 signposts in `O(log n)` - this is how keyed removal, in-place update, and `IndexOfKey` avoid
 linear scans.
 
-Stamp-keyed updates and removals fuse signpost-guided location with persistent path reconstruction
-in one deque descent. `KeyTake` likewise obtains the canonical stored key and slot from one HAMT
-probe rather than looking them up independently.
+Stamp-keyed updates and removals compose the public deque's signpost-guided lower bound with its
+public positional edit operations. `KeyTake` composes the public HAMT stored-key and value probes.
+These paths preserve the documented asymptotic bounds without granting this consumer access to
+either foundation's internals; no one-descent or one-probe constant-factor guarantee is made.
 
-Relabel, reverse, and sort rebuild their keyed side through the HAMT's internal mutable bulk
-builder. The builder freezes once after all fresh stamps are assigned, so these O(n (w + c))
-operations do not also allocate an immutable search path for each entry.
+Relabel, reverse, and sort rebuild their keyed side through the public HAMT `CreateRange` API. Its
+unpublished builder freezes once after all fresh stamps are assigned, so these O(n (w + c))
+operations do not also allocate an immutable search path for each entry while Tungsten remains
+isolated from the builder implementation.
 
 ## Tungsten Semantics Guaranteed
 
@@ -118,8 +136,9 @@ Mapping absence to an engine's missing value is the client's job.
 
 ## Porting Notes
 
-This C# implementation is the reference for ports to the repository's other language workspaces
-(C, C++, Haskell, Kotlin, Rust), which all already ship the two substrate families. A port needs:
+This C# implementation is the reference only for Tungsten ports to the repository's other language
+workspaces (C, C++, Haskell, Kotlin, Rust), which all already ship the two substrate families. It is
+not a semantic reference for a general ordered map or set. A Tungsten port needs:
 the substrate deque with sorted-search on a stamp comparer, the substrate hash map with
 tuple-like slot values, the gapped-label algorithm (`TryPickStamp`/relabel), and the ordering
 rules table above as its fidelity spec. The C# test suite's example tests encode the

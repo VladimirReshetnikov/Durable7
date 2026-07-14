@@ -8,6 +8,11 @@
 This workspace ports the Tungsten `List` and `Association` collection family to Kotlin/JVM. Public
 types live in `tools.datastructures.tungsten`:
 
+This is an application-specific leaf port. It may consume the Kotlin HAMT and FingerTree packages,
+but no general Kotlin/JVM library may depend on Tungsten or treat its kernel-derived behavior as a
+baseline. Fork reusable mechanics into an independently owned implementation; C# is authoritative
+only for the sibling Tungsten ports.
+
 - `PersistentList<T>` provides Tungsten-style persistent list operations.
 - `PersistentAssociation<K, V>` combines the Kotlin HAMT with a persistent balanced positional
   sequence and sparse stamps for Tungsten Association ordering, keyed lookup, positional access,

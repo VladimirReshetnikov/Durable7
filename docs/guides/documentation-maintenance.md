@@ -55,6 +55,7 @@ Use this checklist when changing repository behavior:
 | Benchmark result or benchmark harness change | Workspace benchmark README, benchmark notes, [`test-suite-map.md`](../reference/test-suite-map.md), root benchmark summary if claims changed |
 | External reference addition | External index, license/provenance note, root external-material policy if the shape changes |
 | New long-lived report | Correct `docs/` bucket or workspace `docs/`, provenance metadata, collision-safe filename if needed |
+| Tungsten-inspired general structure | Root dependency boundary, owning general workspace docs, independent API/semantic/validation docs, catalogs; use Tungsten only as provenance |
 
 ## Writing Standards
 
@@ -66,6 +67,9 @@ Write docs as contracts and maps, not as narration of what a command happens to 
 - Name validation evidence precisely: the command, workspace, test suite, and what it proves.
 - Keep speculative plans separate from current-state docs. Plans belong in explicit `*-plan.md`
   documents and should not be mistaken for shipped behavior.
+- Describe Tungsten as an application-specific leaf. Never present a Tungsten package, type,
+  implementation, or behavioral contract as a general collection's dependency or baseline; an
+  independent fork must document its own owner, contracts, tests, and any relaxed guarantees.
 - Keep external study material clearly segregated. Repository-owned docs may summarize it, but should
   not imply that external material is covered by this repository's MIT-0 license.
 - Do not include secrets, access tokens, machine-local credentials, or transient absolute paths except

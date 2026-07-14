@@ -15,11 +15,24 @@ Semantic parity does not mean identical names or identical type-system shapes. I
 observable contracts are preserved where the languages expose equivalent capabilities, and that
 intentional differences are explicit in the local API notes.
 
+## Tungsten Is An Application-Specific Leaf
+
+Tungsten collections are governed by the Tungsten project and observed Wolfram-kernel behavior.
+They may change when that behavior is newly discovered or reinterpreted, and the workspaces may
+eventually move out of this repository. C# Tungsten documentation is authoritative only for sibling
+Tungsten ports.
+
+Tungsten may portably consume general HAMT/FingerTree families, but no general-purpose collection or
+non-Tungsten workspace may depend on a Tungsten package/type or use its contract as a baseline. A
+generally useful mechanism must be forked into an independently owned implementation with its own
+API, contracts, tests, and parity decision. Kernel-driven changes then flow across Tungsten ports
+only; neither the fork nor any general family inherits them automatically.
+
 ## Authoritative Inputs
 
 | Input | Use it for |
 | --- | --- |
-| Managed API specs under `src/CSharp/*/docs` | Primary semantic contract for repository-owned collection behavior. |
+| Managed API specs under `src/CSharp/*/docs` | Primary semantic contract for the owning general collection family. Tungsten specs are authoritative only inside the sibling Tungsten port lineage. |
 | Native API specs and public headers under `src/C/*` and `src/Cpp/*` | Idiomatic C and C++ surface shape, ownership model, and local divergences. |
 | Kotlin API notes under `src/Kotlin/*/docs` | Kotlin/JVM value semantics, null/result shapes, tool bootstrap, persistent representation, complexity, and intentional engine differences. |
 | Rust API notes under `src/Rust/*/docs` | Rust value semantics, `Result`/`Option` shape, Cargo validation, and checkpoint divergences. |
@@ -172,9 +185,14 @@ FingerTree lineage:
 
 Tungsten collections lineage:
 
-1. [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) are the semantic baseline
-   for the `PersistentList<T>` facade and kernel-verified `PersistentAssociation<TKey, TValue>`
-   ordering rules.
+This is a family-local application lineage, not a general collection lineage. Its behavior may
+change with new kernel evidence. Port changes within it across sibling Tungsten workspaces; fork any
+generally useful mechanism into a separately owned family instead of importing, wrapping, or
+refactoring Tungsten into a dependency.
+
+1. [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) are the baseline only for
+   sibling Tungsten ports of the `PersistentList<T>` facade and kernel-verified
+   `PersistentAssociation<TKey, TValue>` ordering rules.
 2. [`src/Cpp/Tungsten`](../../src/Cpp/Tungsten/README.md) ports the family to C++23 value types over
    the C++ HAMT and FingerTree substrates.
 3. [`src/C/Tungsten`](../../src/C/Tungsten/README.md) ports the family to type-erased C value structs
