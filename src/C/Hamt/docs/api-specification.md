@@ -4,7 +4,7 @@
 - Created (UTC): 2026-07-02T18:18:57Z
 - Repository HEAD: 3444f5ee27357d86c43db484993f8f12dfd4887c
 - Audience: Maintainers and reviewers of the pure C `tds_hamt` API
-- Scope: Public C API, ownership semantics, persistence behavior, and complexity guarantees
+- Scope: Public C API, ownership semantics, persistent and one-way edit-session behavior, and complexity guarantees
 
 For practical policy setup and lifetime examples, start with the [usage guide](usage.md).
 The ordered content-addressed family has its own exact
@@ -20,6 +20,12 @@ collision bucket.
 
 `tds_hamt_set` is a value-set wrapper over the same map core. It stores set items as map keys and
 uses a unit value.
+
+`tds_hamt_map_transient` and `tds_hamt_set_transient` are one-way, single-owner edit-session
+surfaces over those persistent values. They preserve the C# transient's lifecycle and collection
+semantics in C ownership terms, but intentionally delegate changed point edits to the established
+persistent path-copy operations. They are not an owner-token in-place engine and carry no edit-
+throughput claim.
 
 `tds_int_map` / `tds_long_map` and their set wrappers are a separate explicit-width family backed
 by one big-endian Patricia engine. They use integer keys directly rather than hashing and compress
@@ -115,6 +121,48 @@ in-place updates are safe (the previous version is no longer reachable afterward
 duplicate, `tds_hamt_map_add` leaves an aliased `result` holding the unchanged source version,
 while a distinct `result` is left destroyed (empty, not a live handle).
 
+## One-Way CHAMP Edit Sessions
+
+`tds_hamt_map_transient_create` / `tds_hamt_set_transient_create` start empty sessions under the
+normalized supplied policy. `tds_hamt_map_to_transient` / `tds_hamt_set_to_transient` allocate one
+small opaque session state and retain the source root without walking or copying the trie. The
+source remains an independent immutable snapshot. `*_transient_persist` transfers the session's
+own retained persistent handle to the caller, marks the state consumed, and does not walk the trie.
+The output passed to a create/adopt/persist operation must not already own a live value.
+
+Transient handles follow the same explicit C ownership discipline as persistent handles. Do not
+copy a live transient by assignment. `*_transient_clone` creates another owning handle for the same
+logical session without copying collection content; call `*_transient_destroy` for every initialized
+handle. A successful publication through any clone consumes the shared session. Every subsequent
+read, edit, iterator creation, clone, or publication through any alias returns
+`TDS_HAMT_TRANSIENT_CONSUMED`. Destroy remains valid and idempotent for zero/destroyed handles.
+
+Map sessions expose policy, count, contains, stored-key lookup, value lookup, `set`, duplicate-
+rejecting `add`, `try_add`, `remove`, `try_remove`, `clear`, iteration, and terminal `persist`. Set
+sessions expose the corresponding item policy, count, contains, stored-representative lookup,
+idempotent `add`, `try_add`, `remove`, `try_remove`, `clear`, all six set relations over both
+`*_many` inputs and persistent-set operands, iteration, and `persist`. Relation operations use the
+active transient as receiver, and therefore preserve its hash/equality policy and duplicate-
+collapsing semantics. Their boolean output is published only on `TDS_HAMT_OK`; allocation failure
+or a consumed session leaves it untouched. Policies and their context pointer are preserved exactly.
+Map replacement and set insertion retain the first equivalent stored key/item; equal-value
+replacement, duplicate try-add, absent removal, and clearing an empty session preserve root identity.
+
+Changed point edits call the ordinary persistent operation into a temporary map and commit that
+complete result only after every allocation and retaining callback succeeds. Consequently an
+`OUT_OF_MEMORY` result leaves session content, root identity, version, policy, output flags, and
+captured iterator validity unchanged. Publication has no allocation step: an invalid output pointer
+returns `TDS_HAMT_INVALID_ARGUMENT` and leaves the session active for retry. Hash/equality callbacks
+retain their existing infallible C callback shape; retain callbacks report allocation failure by
+returning `NULL` for a non-`NULL` input.
+
+Transient iterators borrow the opaque session state and do not retain it. Keep at least one owning
+session handle alive until iteration ends. A changed edit increments the session version, and an
+older iterator then returns `TDS_HAMT_TRANSIENT_MODIFIED` without touching its output parameters.
+Logical no-ops and failed edits do not invalidate it. Publication makes an iterator return
+`TDS_HAMT_TRANSIENT_CONSUMED`. As with persistent iterators, a copied iterator advances
+independently while the session remains active and at the captured version.
+
 ## Hash Trie Shape
 
 The trie uses 32-way logical branching and consumes five hash bits per level. CHAMP branch nodes
@@ -192,6 +240,10 @@ equal-hash collision bucket.
 
 - Lookup, insert, replace, and remove: O(w / log2(b) + c), effectively bounded by seven trie levels
   plus collision-bucket scan for 32-bit hashes.
+- Transient create/adoption: O(1) in trie size, with one opaque-state allocation and one root retain.
+- Transient publication: O(1) in trie size, transferring the already-retained persistent handle.
+- Transient lookup and point edits: the same bounds and allocation behavior as the corresponding
+  persistent operations. Changed edits path-copy; no in-place-edit or amortized speedup is promised.
 - Enumeration: O(n) time with at most seven inline branch frames.
 - Map `create_range` / set `create_range`: O(n * update-cost), with structural sharing during the
   build.
@@ -217,3 +269,9 @@ nodes shared with sibling snapshots. Serialize those operations across every str
 derive versions single-threaded (or under one external lock), publish already-retained snapshots to readers,
 then join/quiesce those readers before releasing their handles. Independent collections proven not to share
 nodes may be updated concurrently.
+
+Transient sessions are unsynchronized and have one logical owner. Explicitly cloned transient
+handles are aliases for lifecycle transfer, not permission for concurrent access. Serialize every
+read, edit, clone, publication, and destroy involving one shared session state, and apply the same
+lineage rule to its retained source/published roots. Already-retained persistent snapshots remain
+eligible for the read-only publication pattern above.

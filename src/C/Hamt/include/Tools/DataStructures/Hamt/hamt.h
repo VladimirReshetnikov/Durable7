@@ -13,7 +13,9 @@ typedef enum tds_hamt_status {
     TDS_HAMT_OK = 0,
     TDS_HAMT_OUT_OF_MEMORY = 1,
     TDS_HAMT_DUPLICATE_KEY = 2,
-    TDS_HAMT_INVALID_ARGUMENT = 3
+    TDS_HAMT_INVALID_ARGUMENT = 3,
+    TDS_HAMT_TRANSIENT_CONSUMED = 4,
+    TDS_HAMT_TRANSIENT_MODIFIED = 5
 } tds_hamt_status;
 
 typedef enum tds_hamt_node_kind {
@@ -102,6 +104,34 @@ typedef struct tds_hamt_map_iterator {
 typedef struct tds_hamt_set_iterator {
     tds_hamt_map_iterator inner;
 } tds_hamt_set_iterator;
+
+struct tds_hamt_map_transient_state;
+
+/* A one-way edit-session handle. The state is opaque and reference-counted;
+ * use tds_hamt_map_transient_clone rather than copying a live handle by
+ * assignment, and destroy every initialized handle. Cloned handles alias one
+ * logical session, so publishing through one consumes all of them. */
+typedef struct tds_hamt_map_transient {
+    struct tds_hamt_map_transient_state *state;
+} tds_hamt_map_transient;
+
+typedef struct tds_hamt_set_transient {
+    tds_hamt_map_transient inner;
+} tds_hamt_set_transient;
+
+/* Transient iterators borrow their session state. Keep at least one owning
+ * session handle alive until iteration ends. A changed edit invalidates an
+ * iterator with TDS_HAMT_TRANSIENT_MODIFIED; publication invalidates it with
+ * TDS_HAMT_TRANSIENT_CONSUMED. */
+typedef struct tds_hamt_map_transient_iterator {
+    const struct tds_hamt_map_transient_state *state;
+    size_t version;
+    tds_hamt_map_iterator inner;
+} tds_hamt_map_transient_iterator;
+
+typedef struct tds_hamt_set_transient_iterator {
+    tds_hamt_map_transient_iterator inner;
+} tds_hamt_set_transient_iterator;
 
 tds_hamt_policy tds_hamt_policy_default(void);
 tds_hamt_set_policy tds_hamt_set_policy_default(void);
@@ -196,6 +226,77 @@ bool tds_hamt_map_debug_validate_canonical(const tds_hamt_map *map);
 bool tds_hamt_map_debug_topology_equal(
     const tds_hamt_map *left,
     const tds_hamt_map *right);
+
+/* One-way map edit sessions. Creation/adoption and publication are O(1) in
+ * trie size. Point edits currently use the persistent path-copy operations;
+ * this surface makes no in-place-edit or throughput claim. Output handles
+ * must not already own a live value. On failure, outputs and session state
+ * are unchanged. */
+tds_hamt_status tds_hamt_map_transient_create(
+    const tds_hamt_policy *policy,
+    tds_hamt_map_transient *result);
+tds_hamt_status tds_hamt_map_to_transient(
+    const tds_hamt_map *map,
+    tds_hamt_map_transient *result);
+tds_hamt_status tds_hamt_map_transient_clone(
+    const tds_hamt_map_transient *transient,
+    tds_hamt_map_transient *result);
+void tds_hamt_map_transient_destroy(tds_hamt_map_transient *transient);
+bool tds_hamt_map_transient_is_active(const tds_hamt_map_transient *transient);
+tds_hamt_status tds_hamt_map_transient_get_policy(
+    const tds_hamt_map_transient *transient,
+    tds_hamt_policy *policy);
+tds_hamt_status tds_hamt_map_transient_count(
+    const tds_hamt_map_transient *transient,
+    size_t *count);
+tds_hamt_status tds_hamt_map_transient_contains_key(
+    const tds_hamt_map_transient *transient,
+    const void *key,
+    bool *contains);
+tds_hamt_status tds_hamt_map_transient_try_get(
+    const tds_hamt_map_transient *transient,
+    const void *key,
+    bool *found,
+    const void **value);
+tds_hamt_status tds_hamt_map_transient_try_get_key(
+    const tds_hamt_map_transient *transient,
+    const void *equal_key,
+    bool *found,
+    const void **actual_key);
+tds_hamt_status tds_hamt_map_transient_set(
+    tds_hamt_map_transient *transient,
+    const void *key,
+    const void *value);
+tds_hamt_status tds_hamt_map_transient_add(
+    tds_hamt_map_transient *transient,
+    const void *key,
+    const void *value);
+tds_hamt_status tds_hamt_map_transient_try_add(
+    tds_hamt_map_transient *transient,
+    const void *key,
+    const void *value,
+    bool *added);
+tds_hamt_status tds_hamt_map_transient_remove(
+    tds_hamt_map_transient *transient,
+    const void *key);
+tds_hamt_status tds_hamt_map_transient_try_remove(
+    tds_hamt_map_transient *transient,
+    const void *key,
+    bool *removed);
+tds_hamt_status tds_hamt_map_transient_clear(tds_hamt_map_transient *transient);
+tds_hamt_status tds_hamt_map_transient_iterator_init(
+    const tds_hamt_map_transient *transient,
+    tds_hamt_map_transient_iterator *iterator);
+tds_hamt_status tds_hamt_map_transient_iterator_next(
+    tds_hamt_map_transient_iterator *iterator,
+    bool *has_value,
+    const void **key,
+    const void **value);
+tds_hamt_status tds_hamt_map_transient_persist(
+    tds_hamt_map_transient *transient,
+    tds_hamt_map *result);
+const void *tds_hamt_map_transient_debug_root_identity(
+    const tds_hamt_map_transient *transient);
 
 tds_hamt_set tds_hamt_set_create(const tds_hamt_set_policy *policy);
 tds_hamt_status tds_hamt_set_create_range(
@@ -333,6 +434,118 @@ bool tds_hamt_set_iterator_next(tds_hamt_set_iterator *iterator, const void **it
 bool tds_hamt_set_shares_root(const tds_hamt_set *left, const tds_hamt_set *right);
 const void *tds_hamt_set_debug_root_identity(const tds_hamt_set *set);
 tds_hamt_node_kind tds_hamt_set_debug_root_kind(const tds_hamt_set *set);
+
+/* Set edit sessions share the map session lifecycle and failure contract.
+ * They preserve the set hash/equality/ownership policy and first stored item
+ * representative, while changed edits use persistent path copying. Relation
+ * APIs use receiver-policy semantics and write their boolean only on success. */
+tds_hamt_status tds_hamt_set_transient_create(
+    const tds_hamt_set_policy *policy,
+    tds_hamt_set_transient *result);
+tds_hamt_status tds_hamt_set_to_transient(
+    const tds_hamt_set *set,
+    tds_hamt_set_transient *result);
+tds_hamt_status tds_hamt_set_transient_clone(
+    const tds_hamt_set_transient *transient,
+    tds_hamt_set_transient *result);
+void tds_hamt_set_transient_destroy(tds_hamt_set_transient *transient);
+bool tds_hamt_set_transient_is_active(const tds_hamt_set_transient *transient);
+tds_hamt_status tds_hamt_set_transient_get_policy(
+    const tds_hamt_set_transient *transient,
+    tds_hamt_set_policy *policy);
+tds_hamt_status tds_hamt_set_transient_count(
+    const tds_hamt_set_transient *transient,
+    size_t *count);
+tds_hamt_status tds_hamt_set_transient_contains(
+    const tds_hamt_set_transient *transient,
+    const void *item,
+    bool *contains);
+tds_hamt_status tds_hamt_set_transient_try_get_value(
+    const tds_hamt_set_transient *transient,
+    const void *equal_value,
+    bool *found,
+    const void **actual_value);
+tds_hamt_status tds_hamt_set_transient_add(
+    tds_hamt_set_transient *transient,
+    const void *item);
+tds_hamt_status tds_hamt_set_transient_try_add(
+    tds_hamt_set_transient *transient,
+    const void *item,
+    bool *added);
+tds_hamt_status tds_hamt_set_transient_remove(
+    tds_hamt_set_transient *transient,
+    const void *item);
+tds_hamt_status tds_hamt_set_transient_try_remove(
+    tds_hamt_set_transient *transient,
+    const void *item,
+    bool *removed);
+tds_hamt_status tds_hamt_set_transient_clear(tds_hamt_set_transient *transient);
+tds_hamt_status tds_hamt_set_transient_is_subset_of_many(
+    const tds_hamt_set_transient *transient,
+    const void *const *items,
+    size_t item_count,
+    bool *result);
+tds_hamt_status tds_hamt_set_transient_is_proper_subset_of_many(
+    const tds_hamt_set_transient *transient,
+    const void *const *items,
+    size_t item_count,
+    bool *result);
+tds_hamt_status tds_hamt_set_transient_is_superset_of_many(
+    const tds_hamt_set_transient *transient,
+    const void *const *items,
+    size_t item_count,
+    bool *result);
+tds_hamt_status tds_hamt_set_transient_is_proper_superset_of_many(
+    const tds_hamt_set_transient *transient,
+    const void *const *items,
+    size_t item_count,
+    bool *result);
+tds_hamt_status tds_hamt_set_transient_overlaps_many(
+    const tds_hamt_set_transient *transient,
+    const void *const *items,
+    size_t item_count,
+    bool *result);
+tds_hamt_status tds_hamt_set_transient_equals_many(
+    const tds_hamt_set_transient *transient,
+    const void *const *items,
+    size_t item_count,
+    bool *result);
+tds_hamt_status tds_hamt_set_transient_is_subset_of(
+    const tds_hamt_set_transient *transient,
+    const tds_hamt_set *other,
+    bool *result);
+tds_hamt_status tds_hamt_set_transient_is_proper_subset_of(
+    const tds_hamt_set_transient *transient,
+    const tds_hamt_set *other,
+    bool *result);
+tds_hamt_status tds_hamt_set_transient_is_superset_of(
+    const tds_hamt_set_transient *transient,
+    const tds_hamt_set *other,
+    bool *result);
+tds_hamt_status tds_hamt_set_transient_is_proper_superset_of(
+    const tds_hamt_set_transient *transient,
+    const tds_hamt_set *other,
+    bool *result);
+tds_hamt_status tds_hamt_set_transient_overlaps(
+    const tds_hamt_set_transient *transient,
+    const tds_hamt_set *other,
+    bool *result);
+tds_hamt_status tds_hamt_set_transient_equals(
+    const tds_hamt_set_transient *transient,
+    const tds_hamt_set *other,
+    bool *result);
+tds_hamt_status tds_hamt_set_transient_iterator_init(
+    const tds_hamt_set_transient *transient,
+    tds_hamt_set_transient_iterator *iterator);
+tds_hamt_status tds_hamt_set_transient_iterator_next(
+    tds_hamt_set_transient_iterator *iterator,
+    bool *has_value,
+    const void **item);
+tds_hamt_status tds_hamt_set_transient_persist(
+    tds_hamt_set_transient *transient,
+    tds_hamt_set *result);
+const void *tds_hamt_set_transient_debug_root_identity(
+    const tds_hamt_set_transient *transient);
 
 #ifdef __cplusplus
 }

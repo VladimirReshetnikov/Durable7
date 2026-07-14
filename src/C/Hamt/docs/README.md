@@ -10,9 +10,9 @@
 
 - [API Specification](api-specification.md) defines the C public API shape, semantic adaptation from
   the C# and C++ workspaces, persistence behavior, ownership rules, and complexity targets for
-  `tds_hamt_map` and `tds_hamt_set`.
+  `tds_hamt_map` and `tds_hamt_set`, including their one-way transient edit-session handles.
 - [Usage guide](usage.md) shows policy setup, borrowed/owned lifetime rules, persistent update
-  patterns, iteration, and set algebra for `tds_hamt_map` and `tds_hamt_set`.
+  patterns, one-way edit sessions, iteration, and set algebra for `tds_hamt_map` and `tds_hamt_set`.
 - [Validation](validation.md) records the local MSVC build script, Debug/Release commands, warning
   policy, generated outputs, and native model-test coverage.
 - [Merkle search tree](merkle-search-tree.md) specifies the type-erased persistent ordered map,

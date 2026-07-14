@@ -11,6 +11,10 @@ for immutable unordered collections backed by a hash-array mapped trie:
 
 - `tds_hamt_map`, a persistent map from `void *` keys to `void *` values.
 - `tds_hamt_set`, a persistent set wrapper over the map core.
+- `tds_hamt_map_transient` / `tds_hamt_set_transient`, explicit one-way edit-session handles over
+  the persistent CHAMP values. Adoption and terminal publication are O(1) handle operations; point
+  edits deliberately reuse the persistent path-copy engine rather than claiming owner-token
+  in-place-update performance.
 - `tds_int_map` / `tds_long_map`, explicit-width persistent maps backed by a big-endian Patricia
   trie, plus `tds_int_set` / `tds_long_set` wrappers.
 - `tds_merkle_search_tree`, a persistent ordered content-addressed map implementing the exact
@@ -25,7 +29,9 @@ buckets, custom hash/equality policy callbacks, first equivalent key/item retent
 reuse, cached subtree cardinalities, and slot-aligned structural map/set algebra that prunes
 pointer-identical subtries. Because this is C, ownership is explicit: maps and
 sets are value structs whose roots are reference-counted, and callers use `clone`/`destroy` to manage
-version lifetimes.
+version lifetimes. Transient session states are also reference-counted: explicit transient clones
+alias one active session, terminal publication consumes every alias, and each initialized handle is
+destroyed independently.
 
 The Patricia family sign-flips signed keys before branching, so visitor traversal is ascending
 signed order for both 32- and 64-bit keys. Compressed prefixes support subtree-aware union,
@@ -48,6 +54,9 @@ The HAMT and Patricia intrusive node reference counts are deliberately non-atomi
 concurrent read-only access, but copying, updating, clearing, or destroying versions that share a lineage must
 be serialized; those operations retain or release shared nodes. Fully independent maps/sets with no shared
 nodes may be updated on separate threads, subject to the thread-safety of their policy callbacks.
+Transient session state and its alias count are likewise non-atomic and single-owner. Serialize all
+operations across transient clones, and do not concurrently read a source/published snapshot while
+an edit on a structurally shared transient lineage may retain or release its nodes.
 The Merkle search tree instead uses atomic policy/object/byte/entry/node reference counts; its caller
 callbacks and callback-owned contexts remain responsible for their own synchronization.
 

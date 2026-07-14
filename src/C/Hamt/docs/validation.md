@@ -144,6 +144,15 @@ The suite covers:
 - randomized map histories checked against an in-memory model, including retained snapshots;
 - a long scripted collision and deep-prefix scenario with retained snapshots and no-op root reuse checks;
 - randomized histories with deliberately colliding hashes;
+- one-way map/set transient creation, O(1)-shape root adoption, policy/context and first-
+  representative preservation, clean root identity, changed snapshot isolation, active reads,
+  version-bound iteration, clear, terminal publication, and shared-alias consumption;
+- a 4,096-step deterministic transient map history checked against the persistent array model;
+- transient fail-at-every-allocation sweeps for wrapper adoption, collision-heavy add/replace/remove,
+  and the set façade, plus retain-callback failure sweeps that prove unchanged root/content/version,
+  untouched output flags, iterator validity, retryability, and balanced unwind;
+- transient set relations over duplicate-heavy arrays and cross-policy persistent sets, including
+  consumed lifecycle and allocation-failure sweeps with atomic boolean outputs;
 - set add/remove/contains persistence;
 - set algebra against model sets, including structural two-set overloads, zero-rehash shared-node
   pruning, cached-cardinality validation, and duplicate treatment for symmetric difference.

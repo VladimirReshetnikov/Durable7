@@ -3,7 +3,7 @@
 - Created (UTC): 2026-07-02T20:07:09Z
 - Repository HEAD: c58fc1159beb94e985ca66861bdc2ed3767eb2da
 - Audience: C consumers and maintainers using the HAMT, Patricia, and Merkle families
-- Scope: Includes, policies, ownership, updates, persistence, iteration, and set algebra
+- Scope: Includes, policies, ownership, persistent updates, one-way edit sessions, iteration, and set algebra
 
 This guide is the practical companion to the [C API specification](api-specification.md). The public
 declarations live in [`hamt.h`](../include/Tools/DataStructures/Hamt/hamt.h).
@@ -123,6 +123,83 @@ tds_hamt_map_destroy(&map);
 Do not copy a live map or set with plain assignment unless you are moving ownership from one local
 variable to another and will destroy it only once.
 
+## One-Way Edit Sessions
+
+Use a transient when one logical owner wants a sequence of point edits followed by exactly one
+publication. In this C checkpoint, adoption and publication are O(1) handle operations, while each
+changed edit still uses the persistent path-copy implementation. The surface provides lifecycle and
+semantic parity; it does not claim that an edit sequence is faster than direct persistent updates.
+
+```c
+tds_hamt_map_transient edit;
+tds_hamt_status status = tds_hamt_map_to_transient(&map, &edit);
+if (status != TDS_HAMT_OK) {
+    tds_hamt_map_destroy(&map);
+    return status;
+}
+
+status = tds_hamt_map_transient_set(&edit, key1, value1);
+if (status == TDS_HAMT_OK) {
+    bool added = false;
+    status = tds_hamt_map_transient_try_add(&edit, key2, value2, &added);
+}
+
+tds_hamt_map published;
+if (status == TDS_HAMT_OK) {
+    status = tds_hamt_map_transient_persist(&edit, &published);
+}
+
+/* Destroy the session handle even after publication. */
+tds_hamt_map_transient_destroy(&edit);
+if (status != TDS_HAMT_OK) {
+    tds_hamt_map_destroy(&map);
+    return status;
+}
+
+/* map is the unchanged source snapshot; published owns the edited version. */
+tds_hamt_map_destroy(&published);
+tds_hamt_map_destroy(&map);
+```
+
+`tds_hamt_map_transient_create` and `tds_hamt_set_transient_create` provide empty-session factories.
+The set surface uses the analogous `tds_hamt_set_transient_*` functions. Policies and callback
+contexts survive create/adopt/edit/persist unchanged, and equivalent updates keep the first stored
+key/item representative. Its subset, proper-subset, superset, proper-superset, overlap, and equality
+relations accept either `*_many` item arrays or a persistent `tds_hamt_set`; both forms interpret
+the right operand under the active session's receiver policy and collapse duplicate input items.
+
+Do not copy a transient handle with assignment. Use `*_transient_clone` when ownership of one
+logical session must be represented by multiple explicit handles, then destroy each handle. A
+successful `persist` through any clone consumes the state shared by all clones. Later operations
+return `TDS_HAMT_TRANSIENT_CONSUMED`; publication cannot be repeated.
+
+Transient iterators are borrowed and version-bound:
+
+```c
+tds_hamt_map_transient_iterator iterator;
+status = tds_hamt_map_transient_iterator_init(&edit, &iterator);
+while (status == TDS_HAMT_OK) {
+    bool has_value = false;
+    const void *key = NULL;
+    const void *value = NULL;
+    status = tds_hamt_map_transient_iterator_next(
+        &iterator, &has_value, &key, &value);
+    if (status != TDS_HAMT_OK || !has_value) {
+        break;
+    }
+    /* Inspect key/value while the session remains alive and unmodified. */
+}
+```
+
+A changed edit makes older iterators return `TDS_HAMT_TRANSIENT_MODIFIED`. Logical no-ops and failed
+edits leave them valid. Publication makes them return `TDS_HAMT_TRANSIENT_CONSUMED`. Keep at least
+one owning session handle alive while using an iterator.
+
+All edit outputs and the session itself are failure-atomic. An allocation or retaining-callback
+failure leaves content and output flags unchanged, so callers may retry. Passing a null publication
+output returns `TDS_HAMT_INVALID_ARGUMENT` without consuming the session. Creation, adoption, and
+publication outputs must not already own a live handle.
+
 ## Policies
 
 The default map and set policies hash and compare pointer identity and store borrowed pointers. For
@@ -154,9 +231,9 @@ policy.value_equal = int_equal;
 Use retain/release callbacks when keys, values, or set items need owned lifetime management. With
 null retain/release callbacks, the collection stores the pointer values it is given and does not free
 or copy pointed-to data. Any callback context pointer must remain valid for every map or set version
-created with that policy. Retain callbacks cannot report allocation failure through
-`TDS_HAMT_OUT_OF_MEMORY`; if they allocate, they must either succeed or use a caller-defined fatal or
-non-local error policy. Returning `NULL` stores `NULL` as the retained payload.
+created with that policy. An allocating retain callback reports failure by returning `NULL` for a
+non-`NULL` input; the operation returns `TDS_HAMT_OUT_OF_MEMORY` and unwinds every completed retain.
+Retaining a `NULL` input may return `NULL` successfully.
 
 Hash/equality callbacks must obey the normal hash-table contract: equivalent keys or items must
 produce equal 32-bit hash values.
@@ -362,8 +439,10 @@ the same reader-safety contract.
 | Value-semantic map over `void*` payloads | `tds_hamt_map` with custom policy callbacks |
 | Duplicate-rejecting insert | `tds_hamt_map_add` or `tds_hamt_map_try_add` |
 | Stored equivalent key recovery | `tds_hamt_map_try_get_key` |
+| One-way map edit session | `tds_hamt_map_to_transient` / `tds_hamt_map_transient_persist` |
 | Borrowed-pointer identity set | `tds_hamt_set_create(NULL)` |
 | Value-semantic set over `void*` payloads | `tds_hamt_set` with custom policy callbacks |
+| One-way set edit session | `tds_hamt_set_to_transient` / `tds_hamt_set_transient_persist` |
 | Set union/intersection/difference | `tds_hamt_set_*_many` APIs |
 
 For cross-language contract alignment, see the repository

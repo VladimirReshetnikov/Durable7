@@ -172,6 +172,62 @@ static void assert_int_model_matches(
     CHECK(enumerated == expected_count);
 }
 
+static void assert_int_transient_model_matches(
+    const bool present[81],
+    const int values[81],
+    const tds_hamt_map_transient *transient) {
+    size_t expected_count = 0;
+    for (int key = -40; key <= 40; ++key) {
+        bool found = false;
+        const void *actual = NULL;
+        CHECK_STATUS(tds_hamt_map_transient_try_get(
+            transient,
+            int_key(key),
+            &found,
+            &actual));
+        if (present[key + 40]) {
+            ++expected_count;
+            CHECK(found);
+            CHECK(actual != NULL);
+            CHECK(*(const int *)actual == values[key + 40]);
+        } else {
+            CHECK(!found);
+            CHECK(actual == NULL);
+        }
+    }
+
+    size_t actual_count = SIZE_MAX;
+    CHECK_STATUS(tds_hamt_map_transient_count(transient, &actual_count));
+    CHECK(actual_count == expected_count);
+
+    bool seen[81] = { false };
+    size_t enumerated = 0;
+    tds_hamt_map_transient_iterator iterator;
+    CHECK_STATUS(tds_hamt_map_transient_iterator_init(transient, &iterator));
+    for (;;) {
+        bool has_value = false;
+        const void *key_ptr = NULL;
+        const void *value_ptr = NULL;
+        CHECK_STATUS(tds_hamt_map_transient_iterator_next(
+            &iterator,
+            &has_value,
+            &key_ptr,
+            &value_ptr));
+        if (!has_value) {
+            break;
+        }
+
+        const int key = *(const int *)key_ptr;
+        CHECK(key >= -40 && key <= 40);
+        CHECK(present[key + 40]);
+        CHECK(!seen[key + 40]);
+        CHECK(*(const int *)value_ptr == values[key + 40]);
+        seen[key + 40] = true;
+        ++enumerated;
+    }
+    CHECK(enumerated == expected_count);
+}
+
 static void assert_set_model_matches(const bool present[61], const tds_hamt_set *set) {
     size_t expected_count = 0;
     for (int value = -30; value <= 30; ++value) {
@@ -1928,6 +1984,928 @@ static void test_aliased_try_remove_reports_null_removed_value(void) {
     CHECK(state.value_retains == state.value_releases);
 }
 
+static void test_map_transient_lifecycle_reads_and_snapshot_isolation(void) {
+    int policy_context = 17;
+    int stored_key = 5;
+    int equivalent_key = 5;
+    int stored_value = 50;
+    int equal_value = 50;
+    tds_hamt_policy policy = int_map_policy(few_buckets_int_hash);
+    policy.context = &policy_context;
+
+    tds_hamt_map source = tds_hamt_map_create(&policy);
+    CHECK_STATUS(tds_hamt_map_set(&source, &stored_key, &stored_value, &source));
+    const void *source_root = tds_hamt_map_debug_root_identity(&source);
+
+    tds_hamt_map_transient clean;
+    CHECK_STATUS(tds_hamt_map_to_transient(&source, &clean));
+    CHECK(tds_hamt_map_transient_is_active(&clean));
+    CHECK(tds_hamt_map_transient_debug_root_identity(&clean) == source_root);
+
+    tds_hamt_policy actual_policy;
+    CHECK_STATUS(tds_hamt_map_transient_get_policy(&clean, &actual_policy));
+    CHECK(actual_policy.hash == policy.hash);
+    CHECK(actual_policy.key_equal == policy.key_equal);
+    CHECK(actual_policy.value_equal == policy.value_equal);
+    CHECK(actual_policy.context == &policy_context);
+
+    tds_hamt_map_transient alias;
+    CHECK_STATUS(tds_hamt_map_transient_clone(&clean, &alias));
+    tds_hamt_map_transient_iterator clean_iterator;
+    CHECK_STATUS(tds_hamt_map_transient_iterator_init(&clean, &clean_iterator));
+
+    CHECK_STATUS(tds_hamt_map_transient_set(
+        &clean,
+        &equivalent_key,
+        &equal_value));
+    CHECK(tds_hamt_map_transient_debug_root_identity(&clean) == source_root);
+
+    bool added = true;
+    CHECK_STATUS(tds_hamt_map_transient_try_add(
+        &clean,
+        &equivalent_key,
+        int_value(999),
+        &added));
+    CHECK(!added);
+    CHECK(tds_hamt_map_transient_add(
+        &clean,
+        &equivalent_key,
+        int_value(999)) == TDS_HAMT_DUPLICATE_KEY);
+    CHECK_STATUS(tds_hamt_map_transient_remove(&clean, int_key(99)));
+    CHECK(tds_hamt_map_transient_debug_root_identity(&clean) == source_root);
+
+    bool found = false;
+    const void *actual_key = NULL;
+    const void *actual_value = NULL;
+    CHECK_STATUS(tds_hamt_map_transient_try_get_key(
+        &clean,
+        &equivalent_key,
+        &found,
+        &actual_key));
+    CHECK(found);
+    CHECK(actual_key == &stored_key);
+    CHECK_STATUS(tds_hamt_map_transient_try_get(
+        &clean,
+        &equivalent_key,
+        &found,
+        &actual_value));
+    CHECK(found);
+    CHECK(actual_value == &stored_value);
+
+    bool has_value = false;
+    const void *iterator_key = NULL;
+    const void *iterator_value = NULL;
+    CHECK_STATUS(tds_hamt_map_transient_iterator_next(
+        &clean_iterator,
+        &has_value,
+        &iterator_key,
+        &iterator_value));
+    CHECK(has_value);
+    CHECK(iterator_key == &stored_key);
+    CHECK(iterator_value == &stored_value);
+
+    tds_hamt_map clean_published;
+    CHECK_STATUS(tds_hamt_map_transient_persist(&alias, &clean_published));
+    CHECK(tds_hamt_map_shares_root(&source, &clean_published));
+    CHECK(!tds_hamt_map_transient_is_active(&clean));
+    CHECK(!tds_hamt_map_transient_is_active(&alias));
+
+    size_t consumed_count = 12345;
+    CHECK(tds_hamt_map_transient_count(&clean, &consumed_count) ==
+        TDS_HAMT_TRANSIENT_CONSUMED);
+    CHECK(consumed_count == 12345);
+    has_value = true;
+    iterator_key = int_key(1);
+    iterator_value = int_value(1);
+    CHECK(tds_hamt_map_transient_iterator_next(
+        &clean_iterator,
+        &has_value,
+        &iterator_key,
+        &iterator_value) == TDS_HAMT_TRANSIENT_CONSUMED);
+    CHECK(has_value);
+    CHECK(iterator_key == int_key(1));
+    CHECK(iterator_value == int_value(1));
+
+    tds_hamt_map untouched = tds_hamt_map_create(&policy);
+    CHECK_STATUS(tds_hamt_map_set(&untouched, int_key(42), int_value(420), &untouched));
+    const void *untouched_root = tds_hamt_map_debug_root_identity(&untouched);
+    CHECK(tds_hamt_map_transient_persist(&clean, &untouched) ==
+        TDS_HAMT_TRANSIENT_CONSUMED);
+    CHECK(tds_hamt_map_debug_root_identity(&untouched) == untouched_root);
+
+    tds_hamt_map_transient_destroy(&alias);
+    tds_hamt_map_transient_destroy(&clean);
+
+    tds_hamt_map_transient edited;
+    CHECK_STATUS(tds_hamt_map_to_transient(&source, &edited));
+    tds_hamt_map_transient_iterator invalidated;
+    CHECK_STATUS(tds_hamt_map_transient_iterator_init(&edited, &invalidated));
+    CHECK_STATUS(tds_hamt_map_transient_set(&edited, int_key(8), int_value(80)));
+    CHECK(!tds_hamt_map_contains_key(&source, int_key(8)));
+    bool contains = false;
+    CHECK_STATUS(tds_hamt_map_transient_contains_key(&edited, int_key(8), &contains));
+    CHECK(contains);
+
+    has_value = false;
+    iterator_key = NULL;
+    iterator_value = NULL;
+    CHECK(tds_hamt_map_transient_iterator_next(
+        &invalidated,
+        &has_value,
+        &iterator_key,
+        &iterator_value) == TDS_HAMT_TRANSIENT_MODIFIED);
+    CHECK(!has_value);
+    CHECK(iterator_key == NULL);
+    CHECK(iterator_value == NULL);
+
+    CHECK(tds_hamt_map_transient_persist(&edited, NULL) == TDS_HAMT_INVALID_ARGUMENT);
+    CHECK(tds_hamt_map_transient_is_active(&edited));
+    tds_hamt_map changed_published;
+    CHECK_STATUS(tds_hamt_map_transient_persist(&edited, &changed_published));
+    CHECK(tds_hamt_map_count(&source) == 1);
+    CHECK(tds_hamt_map_count(&changed_published) == 2);
+    assert_int_value(&changed_published, 8, 80);
+    tds_hamt_map_transient_destroy(&edited);
+
+    tds_hamt_map_transient cleared;
+    CHECK_STATUS(tds_hamt_map_to_transient(&changed_published, &cleared));
+    CHECK_STATUS(tds_hamt_map_transient_clear(&cleared));
+    size_t count = SIZE_MAX;
+    CHECK_STATUS(tds_hamt_map_transient_count(&cleared, &count));
+    CHECK(count == 0);
+    tds_hamt_map_transient_iterator empty_iterator;
+    CHECK_STATUS(tds_hamt_map_transient_iterator_init(&cleared, &empty_iterator));
+    CHECK_STATUS(tds_hamt_map_transient_clear(&cleared));
+    has_value = true;
+    CHECK_STATUS(tds_hamt_map_transient_iterator_next(
+        &empty_iterator,
+        &has_value,
+        NULL,
+        NULL));
+    CHECK(!has_value);
+    tds_hamt_map empty_published;
+    CHECK_STATUS(tds_hamt_map_transient_persist(&cleared, &empty_published));
+    CHECK(tds_hamt_map_count(&empty_published) == 0);
+    CHECK(empty_published.policy.context == &policy_context);
+    tds_hamt_map_transient_destroy(&cleared);
+
+    tds_hamt_map_destroy(&empty_published);
+    tds_hamt_map_destroy(&changed_published);
+    tds_hamt_map_destroy(&untouched);
+    tds_hamt_map_destroy(&clean_published);
+    tds_hamt_map_destroy(&source);
+}
+
+static void test_set_transient_lifecycle_representatives_and_clear(void) {
+    int policy_context = 23;
+    int stored_item = 7;
+    int equivalent_item = 7;
+    tds_hamt_set_policy policy = int_set_policy(few_buckets_int_hash);
+    policy.context = &policy_context;
+
+    tds_hamt_set source = tds_hamt_set_create(&policy);
+    CHECK_STATUS(tds_hamt_set_add(&source, &stored_item, &source));
+    const void *source_root = tds_hamt_set_debug_root_identity(&source);
+
+    tds_hamt_set_transient transient;
+    CHECK_STATUS(tds_hamt_set_to_transient(&source, &transient));
+    CHECK(tds_hamt_set_transient_debug_root_identity(&transient) == source_root);
+    tds_hamt_set_transient alias;
+    CHECK_STATUS(tds_hamt_set_transient_clone(&transient, &alias));
+
+    tds_hamt_set_policy actual_policy;
+    CHECK_STATUS(tds_hamt_set_transient_get_policy(&transient, &actual_policy));
+    CHECK(actual_policy.hash == policy.hash);
+    CHECK(actual_policy.equal == policy.equal);
+    CHECK(actual_policy.context == &policy_context);
+
+    tds_hamt_set_transient_iterator stable_iterator;
+    CHECK_STATUS(tds_hamt_set_transient_iterator_init(&transient, &stable_iterator));
+    CHECK_STATUS(tds_hamt_set_transient_add(&transient, &equivalent_item));
+    bool added = true;
+    CHECK_STATUS(tds_hamt_set_transient_try_add(
+        &transient,
+        &equivalent_item,
+        &added));
+    CHECK(!added);
+    bool removed = true;
+    CHECK_STATUS(tds_hamt_set_transient_try_remove(
+        &transient,
+        int_key(99),
+        &removed));
+    CHECK(!removed);
+    CHECK(tds_hamt_set_transient_debug_root_identity(&transient) == source_root);
+
+    bool found = false;
+    const void *actual_item = NULL;
+    CHECK_STATUS(tds_hamt_set_transient_try_get_value(
+        &transient,
+        &equivalent_item,
+        &found,
+        &actual_item));
+    CHECK(found);
+    CHECK(actual_item == &stored_item);
+
+    bool has_value = false;
+    const void *item = NULL;
+    CHECK_STATUS(tds_hamt_set_transient_iterator_next(
+        &stable_iterator,
+        &has_value,
+        &item));
+    CHECK(has_value);
+    CHECK(item == &stored_item);
+
+    tds_hamt_set_transient_iterator invalidated;
+    CHECK_STATUS(tds_hamt_set_transient_iterator_init(&transient, &invalidated));
+    CHECK_STATUS(tds_hamt_set_transient_add(&transient, int_key(8)));
+    CHECK(!tds_hamt_set_contains(&source, int_key(8)));
+    has_value = true;
+    item = int_key(1);
+    CHECK(tds_hamt_set_transient_iterator_next(
+        &invalidated,
+        &has_value,
+        &item) == TDS_HAMT_TRANSIENT_MODIFIED);
+    CHECK(has_value);
+    CHECK(item == int_key(1));
+
+    CHECK_STATUS(tds_hamt_set_transient_clear(&transient));
+    size_t count = SIZE_MAX;
+    CHECK_STATUS(tds_hamt_set_transient_count(&transient, &count));
+    CHECK(count == 0);
+    tds_hamt_set_transient_iterator empty_iterator;
+    CHECK_STATUS(tds_hamt_set_transient_iterator_init(&transient, &empty_iterator));
+    CHECK_STATUS(tds_hamt_set_transient_clear(&transient));
+    has_value = true;
+    CHECK_STATUS(tds_hamt_set_transient_iterator_next(
+        &empty_iterator,
+        &has_value,
+        NULL));
+    CHECK(!has_value);
+    CHECK_STATUS(tds_hamt_set_transient_add(&transient, int_key(9)));
+
+    tds_hamt_set published;
+    CHECK_STATUS(tds_hamt_set_transient_persist(&alias, &published));
+    CHECK(tds_hamt_set_contains(&published, int_key(9)));
+    CHECK(tds_hamt_set_count(&published) == 1);
+    CHECK(!tds_hamt_set_transient_is_active(&transient));
+    CHECK(!tds_hamt_set_transient_is_active(&alias));
+    bool contains = true;
+    CHECK(tds_hamt_set_transient_contains(&transient, int_key(9), &contains) ==
+        TDS_HAMT_TRANSIENT_CONSUMED);
+    CHECK(contains);
+
+    tds_hamt_set_transient_destroy(&alias);
+    tds_hamt_set_transient_destroy(&transient);
+    tds_hamt_set_destroy(&published);
+    tds_hamt_set_destroy(&source);
+
+    tds_hamt_set_transient empty;
+    CHECK_STATUS(tds_hamt_set_transient_create(&policy, &empty));
+    tds_hamt_set empty_published;
+    CHECK_STATUS(tds_hamt_set_transient_persist(&empty, &empty_published));
+    CHECK(tds_hamt_set_count(&empty_published) == 0);
+    CHECK(empty_published.map.policy.context == &policy_context);
+    tds_hamt_set_transient_destroy(&empty);
+    tds_hamt_set_destroy(&empty_published);
+}
+
+static void test_map_transient_deterministic_model_history(void) {
+    tds_hamt_policy policy = int_map_policy(few_buckets_int_hash);
+    tds_hamt_map_transient transient;
+    CHECK_STATUS(tds_hamt_map_transient_create(&policy, &transient));
+
+    bool present[81] = { false };
+    int values[81] = { 0 };
+    uint32_t random = 0xa511e9b3u;
+    for (int step = 0; step < 4096; ++step) {
+        random = random * 1664525u + 1013904223u;
+        const int key = (int)(random % 81u) - 40;
+        random = random * 1664525u + 1013904223u;
+        const int value = (int)(random % 2001u) - 1000;
+        const unsigned operation = (random >> 27) % 7u;
+        const size_t index = (size_t)(key + 40);
+
+        if (operation == 0) {
+            CHECK_STATUS(tds_hamt_map_transient_set(
+                &transient,
+                int_key(key),
+                int_value(value)));
+            present[index] = true;
+            values[index] = value;
+        } else if (operation == 1) {
+            bool added = false;
+            CHECK_STATUS(tds_hamt_map_transient_try_add(
+                &transient,
+                int_key(key),
+                int_value(value),
+                &added));
+            CHECK(added == !present[index]);
+            if (added) {
+                present[index] = true;
+                values[index] = value;
+            }
+        } else if (operation == 2) {
+            const tds_hamt_status status = tds_hamt_map_transient_add(
+                &transient,
+                int_key(key),
+                int_value(value));
+            if (present[index]) {
+                CHECK(status == TDS_HAMT_DUPLICATE_KEY);
+            } else {
+                CHECK(status == TDS_HAMT_OK);
+                present[index] = true;
+                values[index] = value;
+            }
+        } else if (operation == 3) {
+            bool removed = false;
+            CHECK_STATUS(tds_hamt_map_transient_try_remove(
+                &transient,
+                int_key(key),
+                &removed));
+            CHECK(removed == present[index]);
+            present[index] = false;
+        } else if (operation == 4) {
+            CHECK_STATUS(tds_hamt_map_transient_remove(&transient, int_key(key)));
+            present[index] = false;
+        } else if (operation == 5 && (random & 31u) == 0) {
+            CHECK_STATUS(tds_hamt_map_transient_clear(&transient));
+            memset(present, 0, sizeof(present));
+        } else {
+            bool contains = false;
+            CHECK_STATUS(tds_hamt_map_transient_contains_key(
+                &transient,
+                int_key(key),
+                &contains));
+            CHECK(contains == present[index]);
+        }
+
+        if ((step & 127) == 0) {
+            assert_int_transient_model_matches(present, values, &transient);
+        }
+    }
+
+    assert_int_transient_model_matches(present, values, &transient);
+    tds_hamt_map published;
+    CHECK_STATUS(tds_hamt_map_transient_persist(&transient, &published));
+    assert_int_model_matches(present, values, &published);
+    tds_hamt_map_transient_destroy(&transient);
+    tds_hamt_map_destroy(&published);
+}
+
+static void test_transient_allocation_failures_are_atomic(void) {
+    tds_hamt_policy policy = int_map_policy(few_buckets_int_hash);
+    tds_hamt_map source = tds_hamt_map_create(&policy);
+    for (int index = 0; index < 24; ++index) {
+        CHECK_STATUS(tds_hamt_map_set(
+            &source,
+            int_key(index),
+            int_value(index * 3),
+            &source));
+    }
+
+    tds_hamt_map_transient failed_adoption;
+    failed_adoption.state = (struct tds_hamt_map_transient_state *)(void *)&source;
+    tds_hamt_test_fail_allocations_after(0);
+    CHECK(tds_hamt_map_to_transient(&source, &failed_adoption) ==
+        TDS_HAMT_OUT_OF_MEMORY);
+    tds_hamt_test_reset_allocator();
+    CHECK(failed_adoption.state ==
+        (struct tds_hamt_map_transient_state *)(void *)&source);
+
+    bool completed = false;
+    bool saw_failure = false;
+    for (size_t fail_after = 0; fail_after < 512 && !completed; ++fail_after) {
+        tds_hamt_map_transient transient;
+        CHECK_STATUS(tds_hamt_map_to_transient(&source, &transient));
+        const void *root = tds_hamt_map_transient_debug_root_identity(&transient);
+        tds_hamt_map_transient_iterator iterator;
+        CHECK_STATUS(tds_hamt_map_transient_iterator_init(&transient, &iterator));
+        bool added = true;
+
+        tds_hamt_test_fail_allocations_after(fail_after);
+        const tds_hamt_status status = tds_hamt_map_transient_try_add(
+            &transient,
+            int_key(24),
+            int_value(72),
+            &added);
+        tds_hamt_test_reset_allocator();
+
+        if (status == TDS_HAMT_OUT_OF_MEMORY) {
+            saw_failure = true;
+            CHECK(added);
+            CHECK(tds_hamt_map_transient_debug_root_identity(&transient) == root);
+            size_t count = SIZE_MAX;
+            CHECK_STATUS(tds_hamt_map_transient_count(&transient, &count));
+            CHECK(count == 24);
+            bool contains = true;
+            CHECK_STATUS(tds_hamt_map_transient_contains_key(
+                &transient,
+                int_key(24),
+                &contains));
+            CHECK(!contains);
+            bool has_value = false;
+            CHECK_STATUS(tds_hamt_map_transient_iterator_next(
+                &iterator,
+                &has_value,
+                NULL,
+                NULL));
+            CHECK(has_value);
+        } else {
+            CHECK(status == TDS_HAMT_OK);
+            CHECK(added);
+            size_t count = 0;
+            CHECK_STATUS(tds_hamt_map_transient_count(&transient, &count));
+            CHECK(count == 25);
+            bool has_value = false;
+            CHECK(tds_hamt_map_transient_iterator_next(
+                &iterator,
+                &has_value,
+                NULL,
+                NULL) == TDS_HAMT_TRANSIENT_MODIFIED);
+            completed = true;
+        }
+        tds_hamt_map_transient_destroy(&transient);
+    }
+    CHECK(saw_failure);
+    CHECK(completed);
+
+    completed = false;
+    saw_failure = false;
+    for (size_t fail_after = 0; fail_after < 512 && !completed; ++fail_after) {
+        tds_hamt_map_transient transient;
+        CHECK_STATUS(tds_hamt_map_to_transient(&source, &transient));
+        const void *root = tds_hamt_map_transient_debug_root_identity(&transient);
+        tds_hamt_map_transient_iterator iterator;
+        CHECK_STATUS(tds_hamt_map_transient_iterator_init(&transient, &iterator));
+
+        tds_hamt_test_fail_allocations_after(fail_after);
+        const tds_hamt_status status = tds_hamt_map_transient_set(
+            &transient,
+            int_key(5),
+            int_value(777));
+        tds_hamt_test_reset_allocator();
+
+        if (status == TDS_HAMT_OUT_OF_MEMORY) {
+            saw_failure = true;
+            CHECK(tds_hamt_map_transient_debug_root_identity(&transient) == root);
+            bool found = false;
+            const void *value = NULL;
+            CHECK_STATUS(tds_hamt_map_transient_try_get(
+                &transient,
+                int_key(5),
+                &found,
+                &value));
+            CHECK(found);
+            CHECK(*(const int *)value == 15);
+            bool has_value = false;
+            CHECK_STATUS(tds_hamt_map_transient_iterator_next(
+                &iterator,
+                &has_value,
+                NULL,
+                NULL));
+            CHECK(has_value);
+        } else {
+            CHECK(status == TDS_HAMT_OK);
+            bool found = false;
+            const void *value = NULL;
+            CHECK_STATUS(tds_hamt_map_transient_try_get(
+                &transient,
+                int_key(5),
+                &found,
+                &value));
+            CHECK(found);
+            CHECK(*(const int *)value == 777);
+            bool has_value = false;
+            CHECK(tds_hamt_map_transient_iterator_next(
+                &iterator,
+                &has_value,
+                NULL,
+                NULL) == TDS_HAMT_TRANSIENT_MODIFIED);
+            completed = true;
+        }
+        tds_hamt_map_transient_destroy(&transient);
+    }
+    CHECK(saw_failure);
+    CHECK(completed);
+
+    completed = false;
+    saw_failure = false;
+    for (size_t fail_after = 0; fail_after < 512 && !completed; ++fail_after) {
+        tds_hamt_map_transient transient;
+        CHECK_STATUS(tds_hamt_map_to_transient(&source, &transient));
+        const void *root = tds_hamt_map_transient_debug_root_identity(&transient);
+        tds_hamt_map_transient_iterator iterator;
+        CHECK_STATUS(tds_hamt_map_transient_iterator_init(&transient, &iterator));
+        bool removed = true;
+
+        tds_hamt_test_fail_allocations_after(fail_after);
+        const tds_hamt_status status = tds_hamt_map_transient_try_remove(
+            &transient,
+            int_key(7),
+            &removed);
+        tds_hamt_test_reset_allocator();
+
+        if (status == TDS_HAMT_OUT_OF_MEMORY) {
+            saw_failure = true;
+            CHECK(removed);
+            CHECK(tds_hamt_map_transient_debug_root_identity(&transient) == root);
+            bool contains = false;
+            CHECK_STATUS(tds_hamt_map_transient_contains_key(
+                &transient,
+                int_key(7),
+                &contains));
+            CHECK(contains);
+            bool has_value = false;
+            CHECK_STATUS(tds_hamt_map_transient_iterator_next(
+                &iterator,
+                &has_value,
+                NULL,
+                NULL));
+            CHECK(has_value);
+        } else {
+            CHECK(status == TDS_HAMT_OK);
+            CHECK(removed);
+            bool contains = true;
+            CHECK_STATUS(tds_hamt_map_transient_contains_key(
+                &transient,
+                int_key(7),
+                &contains));
+            CHECK(!contains);
+            bool has_value = false;
+            CHECK(tds_hamt_map_transient_iterator_next(
+                &iterator,
+                &has_value,
+                NULL,
+                NULL) == TDS_HAMT_TRANSIENT_MODIFIED);
+            completed = true;
+        }
+        tds_hamt_map_transient_destroy(&transient);
+    }
+    CHECK(saw_failure);
+    CHECK(completed);
+
+    tds_hamt_set_policy set_policy = int_set_policy(few_buckets_int_hash);
+    tds_hamt_set set_source = tds_hamt_set_create(&set_policy);
+    for (int index = 0; index < 24; ++index) {
+        CHECK_STATUS(tds_hamt_set_add(&set_source, int_key(index), &set_source));
+    }
+
+    tds_hamt_set_transient failed_set_adoption;
+    failed_set_adoption.inner.state =
+        (struct tds_hamt_map_transient_state *)(void *)&set_source;
+    tds_hamt_test_fail_allocations_after(0);
+    CHECK(tds_hamt_set_to_transient(&set_source, &failed_set_adoption) ==
+        TDS_HAMT_OUT_OF_MEMORY);
+    tds_hamt_test_reset_allocator();
+    CHECK(failed_set_adoption.inner.state ==
+        (struct tds_hamt_map_transient_state *)(void *)&set_source);
+
+    completed = false;
+    saw_failure = false;
+    for (size_t fail_after = 0; fail_after < 512 && !completed; ++fail_after) {
+        tds_hamt_set_transient transient;
+        CHECK_STATUS(tds_hamt_set_to_transient(&set_source, &transient));
+        const void *root = tds_hamt_set_transient_debug_root_identity(&transient);
+        tds_hamt_set_transient_iterator iterator;
+        CHECK_STATUS(tds_hamt_set_transient_iterator_init(&transient, &iterator));
+        bool added = true;
+
+        tds_hamt_test_fail_allocations_after(fail_after);
+        const tds_hamt_status status = tds_hamt_set_transient_try_add(
+            &transient,
+            int_key(24),
+            &added);
+        tds_hamt_test_reset_allocator();
+
+        if (status == TDS_HAMT_OUT_OF_MEMORY) {
+            saw_failure = true;
+            CHECK(added);
+            CHECK(tds_hamt_set_transient_debug_root_identity(&transient) == root);
+            bool contains = true;
+            CHECK_STATUS(tds_hamt_set_transient_contains(
+                &transient,
+                int_key(24),
+                &contains));
+            CHECK(!contains);
+            bool has_value = false;
+            CHECK_STATUS(tds_hamt_set_transient_iterator_next(
+                &iterator,
+                &has_value,
+                NULL));
+            CHECK(has_value);
+        } else {
+            CHECK(status == TDS_HAMT_OK);
+            CHECK(added);
+            bool contains = false;
+            CHECK_STATUS(tds_hamt_set_transient_contains(
+                &transient,
+                int_key(24),
+                &contains));
+            CHECK(contains);
+            bool has_value = false;
+            CHECK(tds_hamt_set_transient_iterator_next(
+                &iterator,
+                &has_value,
+                NULL) == TDS_HAMT_TRANSIENT_MODIFIED);
+            completed = true;
+        }
+        tds_hamt_set_transient_destroy(&transient);
+    }
+    CHECK(saw_failure);
+    CHECK(completed);
+
+    tds_hamt_set_destroy(&set_source);
+    tds_hamt_map_destroy(&source);
+}
+
+typedef struct failing_transient_retain_state {
+    size_t call_count;
+    size_t fail_after;
+    bool failure_enabled;
+    long key_retains;
+    long key_releases;
+    long value_retains;
+    long value_releases;
+} failing_transient_retain_state;
+
+static void *failing_transient_retain_key(const void *key, void *context) {
+    failing_transient_retain_state *state =
+        (failing_transient_retain_state *)context;
+    if (key == NULL) {
+        return NULL;
+    }
+    if (state->failure_enabled && state->call_count++ == state->fail_after) {
+        return NULL;
+    }
+    ++state->key_retains;
+    return (void *)key;
+}
+
+static void failing_transient_release_key(void *key, void *context) {
+    failing_transient_retain_state *state =
+        (failing_transient_retain_state *)context;
+    if (key != NULL) {
+        ++state->key_releases;
+    }
+}
+
+static void *failing_transient_retain_value(const void *value, void *context) {
+    failing_transient_retain_state *state =
+        (failing_transient_retain_state *)context;
+    if (value == NULL) {
+        return NULL;
+    }
+    if (state->failure_enabled && state->call_count++ == state->fail_after) {
+        return NULL;
+    }
+    ++state->value_retains;
+    return (void *)value;
+}
+
+static void failing_transient_release_value(void *value, void *context) {
+    failing_transient_retain_state *state =
+        (failing_transient_retain_state *)context;
+    if (value != NULL) {
+        ++state->value_releases;
+    }
+}
+
+static void test_transient_retain_failures_are_atomic_and_retryable(void) {
+    failing_transient_retain_state state = {
+        0, 0, false, 0, 0, 0, 0
+    };
+    tds_hamt_policy policy = int_map_policy(few_buckets_int_hash);
+    policy.retain_key = failing_transient_retain_key;
+    policy.release_key = failing_transient_release_key;
+    policy.retain_value = failing_transient_retain_value;
+    policy.release_value = failing_transient_release_value;
+    policy.context = &state;
+
+    tds_hamt_map source = tds_hamt_map_create(&policy);
+    for (int index = 0; index < 12; ++index) {
+        CHECK_STATUS(tds_hamt_map_set(
+            &source,
+            int_key(index),
+            int_value(index * 5),
+            &source));
+    }
+
+    bool completed = false;
+    bool saw_failure = false;
+    for (size_t fail_after = 0; fail_after < 256 && !completed; ++fail_after) {
+        tds_hamt_map_transient transient;
+        CHECK_STATUS(tds_hamt_map_to_transient(&source, &transient));
+        const void *root = tds_hamt_map_transient_debug_root_identity(&transient);
+        tds_hamt_map_transient_iterator iterator;
+        CHECK_STATUS(tds_hamt_map_transient_iterator_init(&transient, &iterator));
+        bool added = true;
+
+        state.call_count = 0;
+        state.fail_after = fail_after;
+        state.failure_enabled = true;
+        const tds_hamt_status status = tds_hamt_map_transient_try_add(
+            &transient,
+            int_key(12),
+            int_value(60),
+            &added);
+        state.failure_enabled = false;
+
+        if (status == TDS_HAMT_OUT_OF_MEMORY) {
+            saw_failure = true;
+            CHECK(added);
+            CHECK(tds_hamt_map_transient_debug_root_identity(&transient) == root);
+            size_t count = SIZE_MAX;
+            CHECK_STATUS(tds_hamt_map_transient_count(&transient, &count));
+            CHECK(count == 12);
+            bool contains = true;
+            CHECK_STATUS(tds_hamt_map_transient_contains_key(
+                &transient,
+                int_key(12),
+                &contains));
+            CHECK(!contains);
+            bool has_value = false;
+            CHECK_STATUS(tds_hamt_map_transient_iterator_next(
+                &iterator,
+                &has_value,
+                NULL,
+                NULL));
+            CHECK(has_value);
+        } else {
+            CHECK(status == TDS_HAMT_OK);
+            CHECK(added);
+            bool contains = false;
+            CHECK_STATUS(tds_hamt_map_transient_contains_key(
+                &transient,
+                int_key(12),
+                &contains));
+            CHECK(contains);
+            bool has_value = false;
+            CHECK(tds_hamt_map_transient_iterator_next(
+                &iterator,
+                &has_value,
+                NULL,
+                NULL) == TDS_HAMT_TRANSIENT_MODIFIED);
+            completed = true;
+        }
+        tds_hamt_map_transient_destroy(&transient);
+    }
+    CHECK(saw_failure);
+    CHECK(completed);
+
+    tds_hamt_map_destroy(&source);
+    CHECK(state.key_retains == state.key_releases);
+    CHECK(state.value_retains == state.value_releases);
+    CHECK(state.key_retains > 0);
+    CHECK(state.value_retains > 0);
+}
+
+static void test_set_transient_relations_preserve_policy_and_lifecycle(void) {
+    tds_hamt_set_policy policy = int_set_policy(few_buckets_int_hash);
+    const void *source_items[] = { int_key(1), int_key(2), int_key(3) };
+    tds_hamt_set source;
+    CHECK_STATUS(tds_hamt_set_create_range(&policy, source_items, 3, &source));
+    tds_hamt_set_transient transient;
+    CHECK_STATUS(tds_hamt_set_to_transient(&source, &transient));
+    const void *root = tds_hamt_set_transient_debug_root_identity(&transient);
+    tds_hamt_set_transient_iterator iterator;
+    CHECK_STATUS(tds_hamt_set_transient_iterator_init(&transient, &iterator));
+
+    const void *equal_with_duplicates[] = {
+        int_key(3), int_key(2), int_key(1), int_key(1)
+    };
+    bool relation = false;
+    CHECK_STATUS(tds_hamt_set_transient_is_subset_of_many(
+        &transient, equal_with_duplicates, 4, &relation));
+    CHECK(relation);
+    CHECK_STATUS(tds_hamt_set_transient_is_proper_subset_of_many(
+        &transient, equal_with_duplicates, 4, &relation));
+    CHECK(!relation);
+    CHECK_STATUS(tds_hamt_set_transient_is_superset_of_many(
+        &transient, equal_with_duplicates, 4, &relation));
+    CHECK(relation);
+    CHECK_STATUS(tds_hamt_set_transient_is_proper_superset_of_many(
+        &transient, equal_with_duplicates, 4, &relation));
+    CHECK(!relation);
+    CHECK_STATUS(tds_hamt_set_transient_overlaps_many(
+        &transient, equal_with_duplicates, 4, &relation));
+    CHECK(relation);
+    CHECK_STATUS(tds_hamt_set_transient_equals_many(
+        &transient, equal_with_duplicates, 4, &relation));
+    CHECK(relation);
+
+    tds_hamt_set_policy other_policy = int_set_policy(int_hash);
+    const void *larger_items[] = {
+        int_key(4), int_key(3), int_key(2), int_key(1)
+    };
+    tds_hamt_set larger;
+    CHECK_STATUS(tds_hamt_set_create_range(
+        &other_policy, larger_items, 4, &larger));
+    CHECK_STATUS(tds_hamt_set_transient_is_subset_of(
+        &transient, &larger, &relation));
+    CHECK(relation);
+    CHECK_STATUS(tds_hamt_set_transient_is_proper_subset_of(
+        &transient, &larger, &relation));
+    CHECK(relation);
+    CHECK_STATUS(tds_hamt_set_transient_is_superset_of(
+        &transient, &larger, &relation));
+    CHECK(!relation);
+    CHECK_STATUS(tds_hamt_set_transient_is_proper_superset_of(
+        &transient, &larger, &relation));
+    CHECK(!relation);
+    CHECK_STATUS(tds_hamt_set_transient_overlaps(
+        &transient, &larger, &relation));
+    CHECK(relation);
+    CHECK_STATUS(tds_hamt_set_transient_equals(
+        &transient, &larger, &relation));
+    CHECK(!relation);
+    CHECK(tds_hamt_set_transient_debug_root_identity(&transient) == root);
+
+    bool has_value = false;
+    CHECK_STATUS(tds_hamt_set_transient_iterator_next(
+        &iterator, &has_value, NULL));
+    CHECK(has_value);
+
+    tds_hamt_set published;
+    CHECK_STATUS(tds_hamt_set_transient_persist(&transient, &published));
+    relation = true;
+    CHECK(tds_hamt_set_transient_equals_many(
+        &transient, equal_with_duplicates, 4, &relation) ==
+        TDS_HAMT_TRANSIENT_CONSUMED);
+    CHECK(relation);
+
+    tds_hamt_set_transient_destroy(&transient);
+    tds_hamt_set_destroy(&published);
+    tds_hamt_set_destroy(&larger);
+    tds_hamt_set_destroy(&source);
+}
+
+static void test_set_transient_relation_failures_preserve_output(void) {
+    tds_hamt_set_policy policy = int_set_policy(few_buckets_int_hash);
+    const void *source_items[16];
+    const void *larger_items[17];
+    for (int index = 0; index < 16; ++index) {
+        source_items[index] = int_key(index);
+        larger_items[index] = int_key(index);
+    }
+    larger_items[16] = int_key(16);
+
+    tds_hamt_set source;
+    CHECK_STATUS(tds_hamt_set_create_range(&policy, source_items, 16, &source));
+    tds_hamt_set_transient transient;
+    CHECK_STATUS(tds_hamt_set_to_transient(&source, &transient));
+    const void *root = tds_hamt_set_transient_debug_root_identity(&transient);
+
+    bool completed = false;
+    bool saw_failure = false;
+    for (size_t fail_after = 0; fail_after < 512 && !completed; ++fail_after) {
+        bool relation = true;
+        tds_hamt_test_fail_allocations_after(fail_after);
+        const tds_hamt_status status = tds_hamt_set_transient_equals_many(
+            &transient, larger_items, 17, &relation);
+        tds_hamt_test_reset_allocator();
+        if (status == TDS_HAMT_OUT_OF_MEMORY) {
+            saw_failure = true;
+            CHECK(relation);
+            CHECK(tds_hamt_set_transient_debug_root_identity(&transient) == root);
+        } else {
+            CHECK(status == TDS_HAMT_OK);
+            CHECK(!relation);
+            completed = true;
+        }
+    }
+    CHECK(saw_failure);
+    CHECK(completed);
+
+    tds_hamt_set_policy other_policy = int_set_policy(int_hash);
+    tds_hamt_set larger;
+    CHECK_STATUS(tds_hamt_set_create_range(
+        &other_policy, larger_items, 17, &larger));
+    completed = false;
+    saw_failure = false;
+    for (size_t fail_after = 0; fail_after < 512 && !completed; ++fail_after) {
+        bool relation = true;
+        tds_hamt_test_fail_allocations_after(fail_after);
+        const tds_hamt_status status = tds_hamt_set_transient_equals(
+            &transient, &larger, &relation);
+        tds_hamt_test_reset_allocator();
+        if (status == TDS_HAMT_OUT_OF_MEMORY) {
+            saw_failure = true;
+            CHECK(relation);
+            CHECK(tds_hamt_set_transient_debug_root_identity(&transient) == root);
+        } else {
+            CHECK(status == TDS_HAMT_OK);
+            CHECK(!relation);
+            completed = true;
+        }
+    }
+    CHECK(saw_failure);
+    CHECK(completed);
+
+    tds_hamt_set_destroy(&larger);
+    tds_hamt_set_transient_destroy(&transient);
+    tds_hamt_set_destroy(&source);
+}
+
 static const test_case tests[] = {
     { "empty map has no entries", test_empty_map_has_no_entries },
     { "set item adds replaces and preserves old versions", test_set_adds_replaces_and_preserves_old_versions },
@@ -1967,7 +2945,21 @@ static const test_case tests[] = {
     { "aliased map_add duplicate preserves source",
       test_aliased_map_add_duplicate_preserves_source },
     { "aliased try_remove reports null removed value",
-      test_aliased_try_remove_reports_null_removed_value }
+      test_aliased_try_remove_reports_null_removed_value },
+    { "map transient lifecycle reads and snapshot isolation",
+      test_map_transient_lifecycle_reads_and_snapshot_isolation },
+    { "set transient lifecycle representatives and clear",
+      test_set_transient_lifecycle_representatives_and_clear },
+    { "map transient deterministic model history",
+      test_map_transient_deterministic_model_history },
+    { "transient allocation failures are atomic",
+      test_transient_allocation_failures_are_atomic },
+    { "transient retain failures are atomic and retryable",
+      test_transient_retain_failures_are_atomic_and_retryable },
+    { "set transient relations preserve policy and lifecycle",
+      test_set_transient_relations_preserve_policy_and_lifecycle },
+    { "set transient relation failures preserve output",
+      test_set_transient_relation_failures_preserve_output }
 };
 
 int main(void) {

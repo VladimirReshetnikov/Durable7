@@ -37,6 +37,13 @@ enum {
 
 typedef struct tds_hamt_node tds_hamt_node;
 
+struct tds_hamt_map_transient_state {
+    size_t ref_count;
+    size_t version;
+    bool active;
+    tds_hamt_map map;
+};
+
 struct tds_hamt_node {
     tds_hamt_node_kind kind;
     size_t ref_count;
@@ -1660,6 +1667,833 @@ const void *tds_hamt_set_debug_root_identity(const tds_hamt_set *set) {
 
 tds_hamt_node_kind tds_hamt_set_debug_root_kind(const tds_hamt_set *set) {
     return set == NULL ? TDS_HAMT_NODE_EMPTY : tds_hamt_map_debug_root_kind(&set->map);
+}
+
+static tds_hamt_status tds_hamt_map_transient_active_state(
+    const tds_hamt_map_transient *transient,
+    struct tds_hamt_map_transient_state **state) {
+    if (transient == NULL || transient->state == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+    if (!transient->state->active) {
+        return TDS_HAMT_TRANSIENT_CONSUMED;
+    }
+
+    if (state != NULL) {
+        *state = transient->state;
+    }
+    return TDS_HAMT_OK;
+}
+
+static void tds_hamt_map_transient_commit(
+    struct tds_hamt_map_transient_state *state,
+    tds_hamt_map *next) {
+    const bool changed = state->map.root != next->root;
+    tds_hamt_map_destroy(&state->map);
+    state->map = *next;
+    if (changed) {
+        ++state->version;
+    }
+}
+
+tds_hamt_status tds_hamt_map_transient_create(
+    const tds_hamt_policy *policy,
+    tds_hamt_map_transient *result) {
+    if (result == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    const tds_hamt_map empty = tds_hamt_map_create(policy);
+    return tds_hamt_map_to_transient(&empty, result);
+}
+
+tds_hamt_status tds_hamt_map_to_transient(
+    const tds_hamt_map *map,
+    tds_hamt_map_transient *result) {
+    if (map == NULL || result == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    struct tds_hamt_map_transient_state *state =
+        (struct tds_hamt_map_transient_state *)tds_hamt_allocate(sizeof(*state));
+    if (state == NULL) {
+        return TDS_HAMT_OUT_OF_MEMORY;
+    }
+
+    state->ref_count = 1;
+    state->version = 0;
+    state->active = true;
+    state->map = tds_hamt_map_clone(map);
+
+    tds_hamt_map_transient transient;
+    transient.state = state;
+    *result = transient;
+    return TDS_HAMT_OK;
+}
+
+tds_hamt_status tds_hamt_map_transient_clone(
+    const tds_hamt_map_transient *transient,
+    tds_hamt_map_transient *result) {
+    struct tds_hamt_map_transient_state *state = NULL;
+    const tds_hamt_status status = tds_hamt_map_transient_active_state(transient, &state);
+    if (status != TDS_HAMT_OK || result == NULL || result == transient) {
+        return status == TDS_HAMT_OK ? TDS_HAMT_INVALID_ARGUMENT : status;
+    }
+    if (state->ref_count == SIZE_MAX) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    ++state->ref_count;
+    tds_hamt_map_transient clone;
+    clone.state = state;
+    *result = clone;
+    return TDS_HAMT_OK;
+}
+
+void tds_hamt_map_transient_destroy(tds_hamt_map_transient *transient) {
+    if (transient == NULL || transient->state == NULL) {
+        return;
+    }
+
+    struct tds_hamt_map_transient_state *state = transient->state;
+    transient->state = NULL;
+    assert(state->ref_count > 0);
+    --state->ref_count;
+    if (state->ref_count == 0) {
+        tds_hamt_map_destroy(&state->map);
+        free(state);
+    }
+}
+
+bool tds_hamt_map_transient_is_active(const tds_hamt_map_transient *transient) {
+    return transient != NULL && transient->state != NULL && transient->state->active;
+}
+
+tds_hamt_status tds_hamt_map_transient_get_policy(
+    const tds_hamt_map_transient *transient,
+    tds_hamt_policy *policy) {
+    struct tds_hamt_map_transient_state *state = NULL;
+    const tds_hamt_status status = tds_hamt_map_transient_active_state(transient, &state);
+    if (status != TDS_HAMT_OK || policy == NULL) {
+        return status == TDS_HAMT_OK ? TDS_HAMT_INVALID_ARGUMENT : status;
+    }
+
+    *policy = state->map.policy;
+    return TDS_HAMT_OK;
+}
+
+tds_hamt_status tds_hamt_map_transient_count(
+    const tds_hamt_map_transient *transient,
+    size_t *count) {
+    struct tds_hamt_map_transient_state *state = NULL;
+    const tds_hamt_status status = tds_hamt_map_transient_active_state(transient, &state);
+    if (status != TDS_HAMT_OK || count == NULL) {
+        return status == TDS_HAMT_OK ? TDS_HAMT_INVALID_ARGUMENT : status;
+    }
+
+    *count = state->map.count;
+    return TDS_HAMT_OK;
+}
+
+tds_hamt_status tds_hamt_map_transient_contains_key(
+    const tds_hamt_map_transient *transient,
+    const void *key,
+    bool *contains) {
+    struct tds_hamt_map_transient_state *state = NULL;
+    const tds_hamt_status status = tds_hamt_map_transient_active_state(transient, &state);
+    if (status != TDS_HAMT_OK || contains == NULL) {
+        return status == TDS_HAMT_OK ? TDS_HAMT_INVALID_ARGUMENT : status;
+    }
+
+    *contains = tds_hamt_map_contains_key(&state->map, key);
+    return TDS_HAMT_OK;
+}
+
+tds_hamt_status tds_hamt_map_transient_try_get(
+    const tds_hamt_map_transient *transient,
+    const void *key,
+    bool *found,
+    const void **value) {
+    struct tds_hamt_map_transient_state *state = NULL;
+    const tds_hamt_status status = tds_hamt_map_transient_active_state(transient, &state);
+    if (status != TDS_HAMT_OK || found == NULL) {
+        return status == TDS_HAMT_OK ? TDS_HAMT_INVALID_ARGUMENT : status;
+    }
+
+    const void *local_value = NULL;
+    const bool local_found = tds_hamt_map_try_get(&state->map, key, &local_value);
+    *found = local_found;
+    if (value != NULL) {
+        *value = local_value;
+    }
+    return TDS_HAMT_OK;
+}
+
+tds_hamt_status tds_hamt_map_transient_try_get_key(
+    const tds_hamt_map_transient *transient,
+    const void *equal_key,
+    bool *found,
+    const void **actual_key) {
+    struct tds_hamt_map_transient_state *state = NULL;
+    const tds_hamt_status status = tds_hamt_map_transient_active_state(transient, &state);
+    if (status != TDS_HAMT_OK || found == NULL) {
+        return status == TDS_HAMT_OK ? TDS_HAMT_INVALID_ARGUMENT : status;
+    }
+
+    const void *local_key = NULL;
+    const bool local_found = tds_hamt_map_try_get_key(&state->map, equal_key, &local_key);
+    *found = local_found;
+    if (actual_key != NULL) {
+        *actual_key = local_key;
+    }
+    return TDS_HAMT_OK;
+}
+
+tds_hamt_status tds_hamt_map_transient_set(
+    tds_hamt_map_transient *transient,
+    const void *key,
+    const void *value) {
+    struct tds_hamt_map_transient_state *state = NULL;
+    tds_hamt_status status = tds_hamt_map_transient_active_state(transient, &state);
+    if (status != TDS_HAMT_OK) {
+        return status;
+    }
+
+    tds_hamt_map next;
+    status = tds_hamt_map_set(&state->map, key, value, &next);
+    if (status == TDS_HAMT_OK) {
+        tds_hamt_map_transient_commit(state, &next);
+    }
+    return status;
+}
+
+tds_hamt_status tds_hamt_map_transient_add(
+    tds_hamt_map_transient *transient,
+    const void *key,
+    const void *value) {
+    struct tds_hamt_map_transient_state *state = NULL;
+    tds_hamt_status status = tds_hamt_map_transient_active_state(transient, &state);
+    if (status != TDS_HAMT_OK) {
+        return status;
+    }
+
+    tds_hamt_map next;
+    status = tds_hamt_map_add(&state->map, key, value, &next);
+    if (status == TDS_HAMT_OK) {
+        tds_hamt_map_transient_commit(state, &next);
+    }
+    return status;
+}
+
+tds_hamt_status tds_hamt_map_transient_try_add(
+    tds_hamt_map_transient *transient,
+    const void *key,
+    const void *value,
+    bool *added) {
+    struct tds_hamt_map_transient_state *state = NULL;
+    tds_hamt_status status = tds_hamt_map_transient_active_state(transient, &state);
+    if (status != TDS_HAMT_OK) {
+        return status;
+    }
+
+    bool local_added = false;
+    tds_hamt_map next;
+    status = tds_hamt_map_try_add(&state->map, key, value, &next, &local_added);
+    if (status != TDS_HAMT_OK) {
+        return status;
+    }
+
+    tds_hamt_map_transient_commit(state, &next);
+    if (added != NULL) {
+        *added = local_added;
+    }
+    return TDS_HAMT_OK;
+}
+
+tds_hamt_status tds_hamt_map_transient_remove(
+    tds_hamt_map_transient *transient,
+    const void *key) {
+    struct tds_hamt_map_transient_state *state = NULL;
+    tds_hamt_status status = tds_hamt_map_transient_active_state(transient, &state);
+    if (status != TDS_HAMT_OK) {
+        return status;
+    }
+
+    tds_hamt_map next;
+    status = tds_hamt_map_remove(&state->map, key, &next);
+    if (status == TDS_HAMT_OK) {
+        tds_hamt_map_transient_commit(state, &next);
+    }
+    return status;
+}
+
+tds_hamt_status tds_hamt_map_transient_try_remove(
+    tds_hamt_map_transient *transient,
+    const void *key,
+    bool *removed) {
+    struct tds_hamt_map_transient_state *state = NULL;
+    tds_hamt_status status = tds_hamt_map_transient_active_state(transient, &state);
+    if (status != TDS_HAMT_OK) {
+        return status;
+    }
+
+    bool local_removed = false;
+    const void *removed_value = NULL;
+    tds_hamt_map next;
+    status = tds_hamt_map_try_remove(
+        &state->map,
+        key,
+        &next,
+        &local_removed,
+        &removed_value);
+    if (status != TDS_HAMT_OK) {
+        return status;
+    }
+
+    tds_hamt_map_transient_commit(state, &next);
+    if (removed != NULL) {
+        *removed = local_removed;
+    }
+    return TDS_HAMT_OK;
+}
+
+tds_hamt_status tds_hamt_map_transient_clear(tds_hamt_map_transient *transient) {
+    struct tds_hamt_map_transient_state *state = NULL;
+    tds_hamt_status status = tds_hamt_map_transient_active_state(transient, &state);
+    if (status != TDS_HAMT_OK) {
+        return status;
+    }
+
+    tds_hamt_map next;
+    status = tds_hamt_map_clear(&state->map, &next);
+    if (status == TDS_HAMT_OK) {
+        tds_hamt_map_transient_commit(state, &next);
+    }
+    return status;
+}
+
+tds_hamt_status tds_hamt_map_transient_iterator_init(
+    const tds_hamt_map_transient *transient,
+    tds_hamt_map_transient_iterator *iterator) {
+    struct tds_hamt_map_transient_state *state = NULL;
+    const tds_hamt_status status = tds_hamt_map_transient_active_state(transient, &state);
+    if (status != TDS_HAMT_OK || iterator == NULL) {
+        return status == TDS_HAMT_OK ? TDS_HAMT_INVALID_ARGUMENT : status;
+    }
+
+    tds_hamt_map_transient_iterator local;
+    local.state = state;
+    local.version = state->version;
+    tds_hamt_map_iterator_init(&state->map, &local.inner);
+    *iterator = local;
+    return TDS_HAMT_OK;
+}
+
+tds_hamt_status tds_hamt_map_transient_iterator_next(
+    tds_hamt_map_transient_iterator *iterator,
+    bool *has_value,
+    const void **key,
+    const void **value) {
+    if (iterator == NULL || iterator->state == NULL || has_value == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+    if (!iterator->state->active) {
+        return TDS_HAMT_TRANSIENT_CONSUMED;
+    }
+    if (iterator->version != iterator->state->version) {
+        return TDS_HAMT_TRANSIENT_MODIFIED;
+    }
+
+    const void *local_key = NULL;
+    const void *local_value = NULL;
+    const bool local_has_value =
+        tds_hamt_map_iterator_next(&iterator->inner, &local_key, &local_value);
+    *has_value = local_has_value;
+    if (key != NULL) {
+        *key = local_key;
+    }
+    if (value != NULL) {
+        *value = local_value;
+    }
+    return TDS_HAMT_OK;
+}
+
+tds_hamt_status tds_hamt_map_transient_persist(
+    tds_hamt_map_transient *transient,
+    tds_hamt_map *result) {
+    struct tds_hamt_map_transient_state *state = NULL;
+    const tds_hamt_status status = tds_hamt_map_transient_active_state(transient, &state);
+    if (status != TDS_HAMT_OK || result == NULL) {
+        return status == TDS_HAMT_OK ? TDS_HAMT_INVALID_ARGUMENT : status;
+    }
+
+    const tds_hamt_map published = state->map;
+    state->map.root = NULL;
+    state->map.count = 0;
+    state->active = false;
+    ++state->version;
+    *result = published;
+    return TDS_HAMT_OK;
+}
+
+const void *tds_hamt_map_transient_debug_root_identity(
+    const tds_hamt_map_transient *transient) {
+    return tds_hamt_map_transient_is_active(transient)
+        ? transient->state->map.root
+        : NULL;
+}
+
+tds_hamt_status tds_hamt_set_transient_create(
+    const tds_hamt_set_policy *policy,
+    tds_hamt_set_transient *result) {
+    if (result == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    const tds_hamt_set empty = tds_hamt_set_create(policy);
+    tds_hamt_set_transient transient;
+    const tds_hamt_status status = tds_hamt_map_to_transient(&empty.map, &transient.inner);
+    if (status == TDS_HAMT_OK) {
+        *result = transient;
+    }
+    return status;
+}
+
+tds_hamt_status tds_hamt_set_to_transient(
+    const tds_hamt_set *set,
+    tds_hamt_set_transient *result) {
+    if (set == NULL || result == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    tds_hamt_set_transient transient;
+    const tds_hamt_status status = tds_hamt_map_to_transient(&set->map, &transient.inner);
+    if (status == TDS_HAMT_OK) {
+        *result = transient;
+    }
+    return status;
+}
+
+tds_hamt_status tds_hamt_set_transient_clone(
+    const tds_hamt_set_transient *transient,
+    tds_hamt_set_transient *result) {
+    if (transient == NULL || result == NULL || transient == result) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    tds_hamt_set_transient clone;
+    const tds_hamt_status status =
+        tds_hamt_map_transient_clone(&transient->inner, &clone.inner);
+    if (status == TDS_HAMT_OK) {
+        *result = clone;
+    }
+    return status;
+}
+
+void tds_hamt_set_transient_destroy(tds_hamt_set_transient *transient) {
+    if (transient != NULL) {
+        tds_hamt_map_transient_destroy(&transient->inner);
+    }
+}
+
+bool tds_hamt_set_transient_is_active(const tds_hamt_set_transient *transient) {
+    return transient != NULL && tds_hamt_map_transient_is_active(&transient->inner);
+}
+
+tds_hamt_status tds_hamt_set_transient_get_policy(
+    const tds_hamt_set_transient *transient,
+    tds_hamt_set_policy *policy) {
+    if (transient == NULL || policy == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    tds_hamt_policy map_policy;
+    const tds_hamt_status status =
+        tds_hamt_map_transient_get_policy(&transient->inner, &map_policy);
+    if (status != TDS_HAMT_OK) {
+        return status;
+    }
+
+    tds_hamt_set_policy set_policy;
+    set_policy.hash = map_policy.hash;
+    set_policy.equal = map_policy.key_equal;
+    set_policy.retain_item = map_policy.retain_key;
+    set_policy.release_item = map_policy.release_key;
+    set_policy.context = map_policy.context;
+    *policy = set_policy;
+    return TDS_HAMT_OK;
+}
+
+tds_hamt_status tds_hamt_set_transient_count(
+    const tds_hamt_set_transient *transient,
+    size_t *count) {
+    return transient == NULL
+        ? TDS_HAMT_INVALID_ARGUMENT
+        : tds_hamt_map_transient_count(&transient->inner, count);
+}
+
+tds_hamt_status tds_hamt_set_transient_contains(
+    const tds_hamt_set_transient *transient,
+    const void *item,
+    bool *contains) {
+    return transient == NULL
+        ? TDS_HAMT_INVALID_ARGUMENT
+        : tds_hamt_map_transient_contains_key(&transient->inner, item, contains);
+}
+
+tds_hamt_status tds_hamt_set_transient_try_get_value(
+    const tds_hamt_set_transient *transient,
+    const void *equal_value,
+    bool *found,
+    const void **actual_value) {
+    return transient == NULL
+        ? TDS_HAMT_INVALID_ARGUMENT
+        : tds_hamt_map_transient_try_get_key(
+            &transient->inner,
+            equal_value,
+            found,
+            actual_value);
+}
+
+tds_hamt_status tds_hamt_set_transient_add(
+    tds_hamt_set_transient *transient,
+    const void *item) {
+    return transient == NULL
+        ? TDS_HAMT_INVALID_ARGUMENT
+        : tds_hamt_map_transient_set(&transient->inner, item, NULL);
+}
+
+tds_hamt_status tds_hamt_set_transient_try_add(
+    tds_hamt_set_transient *transient,
+    const void *item,
+    bool *added) {
+    return transient == NULL
+        ? TDS_HAMT_INVALID_ARGUMENT
+        : tds_hamt_map_transient_try_add(&transient->inner, item, NULL, added);
+}
+
+tds_hamt_status tds_hamt_set_transient_remove(
+    tds_hamt_set_transient *transient,
+    const void *item) {
+    return transient == NULL
+        ? TDS_HAMT_INVALID_ARGUMENT
+        : tds_hamt_map_transient_remove(&transient->inner, item);
+}
+
+tds_hamt_status tds_hamt_set_transient_try_remove(
+    tds_hamt_set_transient *transient,
+    const void *item,
+    bool *removed) {
+    return transient == NULL
+        ? TDS_HAMT_INVALID_ARGUMENT
+        : tds_hamt_map_transient_try_remove(&transient->inner, item, removed);
+}
+
+tds_hamt_status tds_hamt_set_transient_clear(tds_hamt_set_transient *transient) {
+    return transient == NULL
+        ? TDS_HAMT_INVALID_ARGUMENT
+        : tds_hamt_map_transient_clear(&transient->inner);
+}
+
+typedef enum tds_hamt_set_transient_relation {
+    TDS_HAMT_SET_TRANSIENT_SUBSET,
+    TDS_HAMT_SET_TRANSIENT_PROPER_SUBSET,
+    TDS_HAMT_SET_TRANSIENT_SUPERSET,
+    TDS_HAMT_SET_TRANSIENT_PROPER_SUPERSET,
+    TDS_HAMT_SET_TRANSIENT_OVERLAPS,
+    TDS_HAMT_SET_TRANSIENT_EQUALS
+} tds_hamt_set_transient_relation;
+
+static tds_hamt_status tds_hamt_set_transient_relation_many(
+    const tds_hamt_set_transient *transient,
+    const void *const *items,
+    size_t item_count,
+    bool *result,
+    tds_hamt_set_transient_relation relation) {
+    if (transient == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    struct tds_hamt_map_transient_state *state = NULL;
+    const tds_hamt_status active_status =
+        tds_hamt_map_transient_active_state(&transient->inner, &state);
+    if (active_status != TDS_HAMT_OK) {
+        return active_status;
+    }
+    if (result == NULL || (item_count != 0 && items == NULL)) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    tds_hamt_set borrowed;
+    borrowed.map = state->map;
+    bool local_result = false;
+    tds_hamt_status status;
+    switch (relation) {
+    case TDS_HAMT_SET_TRANSIENT_SUBSET:
+        status = tds_hamt_set_is_subset_of_many(
+            &borrowed, items, item_count, &local_result);
+        break;
+    case TDS_HAMT_SET_TRANSIENT_PROPER_SUBSET:
+        status = tds_hamt_set_is_proper_subset_of_many(
+            &borrowed, items, item_count, &local_result);
+        break;
+    case TDS_HAMT_SET_TRANSIENT_SUPERSET:
+        status = tds_hamt_set_is_superset_of_many(
+            &borrowed, items, item_count, &local_result);
+        break;
+    case TDS_HAMT_SET_TRANSIENT_PROPER_SUPERSET:
+        status = tds_hamt_set_is_proper_superset_of_many(
+            &borrowed, items, item_count, &local_result);
+        break;
+    case TDS_HAMT_SET_TRANSIENT_OVERLAPS:
+        status = tds_hamt_set_overlaps_many(
+            &borrowed, items, item_count, &local_result);
+        break;
+    case TDS_HAMT_SET_TRANSIENT_EQUALS:
+        status = tds_hamt_set_equals_many(
+            &borrowed, items, item_count, &local_result);
+        break;
+    default:
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    if (status == TDS_HAMT_OK) {
+        *result = local_result;
+    }
+    return status;
+}
+
+static tds_hamt_status tds_hamt_set_transient_relation_set(
+    const tds_hamt_set_transient *transient,
+    const tds_hamt_set *other,
+    bool *result,
+    tds_hamt_set_transient_relation relation) {
+    if (transient == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    struct tds_hamt_map_transient_state *state = NULL;
+    const tds_hamt_status active_status =
+        tds_hamt_map_transient_active_state(&transient->inner, &state);
+    if (active_status != TDS_HAMT_OK) {
+        return active_status;
+    }
+    if (other == NULL || result == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    tds_hamt_set borrowed;
+    borrowed.map = state->map;
+    bool local_result = false;
+    tds_hamt_status status;
+    switch (relation) {
+    case TDS_HAMT_SET_TRANSIENT_SUBSET:
+        status = tds_hamt_set_is_subset_of(&borrowed, other, &local_result);
+        break;
+    case TDS_HAMT_SET_TRANSIENT_PROPER_SUBSET:
+        status = tds_hamt_set_is_proper_subset_of(&borrowed, other, &local_result);
+        break;
+    case TDS_HAMT_SET_TRANSIENT_SUPERSET:
+        status = tds_hamt_set_is_superset_of(&borrowed, other, &local_result);
+        break;
+    case TDS_HAMT_SET_TRANSIENT_PROPER_SUPERSET:
+        status = tds_hamt_set_is_proper_superset_of(&borrowed, other, &local_result);
+        break;
+    case TDS_HAMT_SET_TRANSIENT_OVERLAPS:
+        status = tds_hamt_set_overlaps(&borrowed, other, &local_result);
+        break;
+    case TDS_HAMT_SET_TRANSIENT_EQUALS:
+        status = tds_hamt_set_equals(&borrowed, other, &local_result);
+        break;
+    default:
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    if (status == TDS_HAMT_OK) {
+        *result = local_result;
+    }
+    return status;
+}
+
+tds_hamt_status tds_hamt_set_transient_is_subset_of_many(
+    const tds_hamt_set_transient *transient,
+    const void *const *items,
+    size_t item_count,
+    bool *result) {
+    return tds_hamt_set_transient_relation_many(
+        transient,
+        items,
+        item_count,
+        result,
+        TDS_HAMT_SET_TRANSIENT_SUBSET);
+}
+
+tds_hamt_status tds_hamt_set_transient_is_proper_subset_of_many(
+    const tds_hamt_set_transient *transient,
+    const void *const *items,
+    size_t item_count,
+    bool *result) {
+    return tds_hamt_set_transient_relation_many(
+        transient,
+        items,
+        item_count,
+        result,
+        TDS_HAMT_SET_TRANSIENT_PROPER_SUBSET);
+}
+
+tds_hamt_status tds_hamt_set_transient_is_superset_of_many(
+    const tds_hamt_set_transient *transient,
+    const void *const *items,
+    size_t item_count,
+    bool *result) {
+    return tds_hamt_set_transient_relation_many(
+        transient,
+        items,
+        item_count,
+        result,
+        TDS_HAMT_SET_TRANSIENT_SUPERSET);
+}
+
+tds_hamt_status tds_hamt_set_transient_is_proper_superset_of_many(
+    const tds_hamt_set_transient *transient,
+    const void *const *items,
+    size_t item_count,
+    bool *result) {
+    return tds_hamt_set_transient_relation_many(
+        transient,
+        items,
+        item_count,
+        result,
+        TDS_HAMT_SET_TRANSIENT_PROPER_SUPERSET);
+}
+
+tds_hamt_status tds_hamt_set_transient_overlaps_many(
+    const tds_hamt_set_transient *transient,
+    const void *const *items,
+    size_t item_count,
+    bool *result) {
+    return tds_hamt_set_transient_relation_many(
+        transient,
+        items,
+        item_count,
+        result,
+        TDS_HAMT_SET_TRANSIENT_OVERLAPS);
+}
+
+tds_hamt_status tds_hamt_set_transient_equals_many(
+    const tds_hamt_set_transient *transient,
+    const void *const *items,
+    size_t item_count,
+    bool *result) {
+    return tds_hamt_set_transient_relation_many(
+        transient,
+        items,
+        item_count,
+        result,
+        TDS_HAMT_SET_TRANSIENT_EQUALS);
+}
+
+tds_hamt_status tds_hamt_set_transient_is_subset_of(
+    const tds_hamt_set_transient *transient,
+    const tds_hamt_set *other,
+    bool *result) {
+    return tds_hamt_set_transient_relation_set(
+        transient, other, result, TDS_HAMT_SET_TRANSIENT_SUBSET);
+}
+
+tds_hamt_status tds_hamt_set_transient_is_proper_subset_of(
+    const tds_hamt_set_transient *transient,
+    const tds_hamt_set *other,
+    bool *result) {
+    return tds_hamt_set_transient_relation_set(
+        transient, other, result, TDS_HAMT_SET_TRANSIENT_PROPER_SUBSET);
+}
+
+tds_hamt_status tds_hamt_set_transient_is_superset_of(
+    const tds_hamt_set_transient *transient,
+    const tds_hamt_set *other,
+    bool *result) {
+    return tds_hamt_set_transient_relation_set(
+        transient, other, result, TDS_HAMT_SET_TRANSIENT_SUPERSET);
+}
+
+tds_hamt_status tds_hamt_set_transient_is_proper_superset_of(
+    const tds_hamt_set_transient *transient,
+    const tds_hamt_set *other,
+    bool *result) {
+    return tds_hamt_set_transient_relation_set(
+        transient, other, result, TDS_HAMT_SET_TRANSIENT_PROPER_SUPERSET);
+}
+
+tds_hamt_status tds_hamt_set_transient_overlaps(
+    const tds_hamt_set_transient *transient,
+    const tds_hamt_set *other,
+    bool *result) {
+    return tds_hamt_set_transient_relation_set(
+        transient, other, result, TDS_HAMT_SET_TRANSIENT_OVERLAPS);
+}
+
+tds_hamt_status tds_hamt_set_transient_equals(
+    const tds_hamt_set_transient *transient,
+    const tds_hamt_set *other,
+    bool *result) {
+    return tds_hamt_set_transient_relation_set(
+        transient, other, result, TDS_HAMT_SET_TRANSIENT_EQUALS);
+}
+
+tds_hamt_status tds_hamt_set_transient_iterator_init(
+    const tds_hamt_set_transient *transient,
+    tds_hamt_set_transient_iterator *iterator) {
+    if (transient == NULL || iterator == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    tds_hamt_set_transient_iterator local;
+    const tds_hamt_status status =
+        tds_hamt_map_transient_iterator_init(&transient->inner, &local.inner);
+    if (status == TDS_HAMT_OK) {
+        *iterator = local;
+    }
+    return status;
+}
+
+tds_hamt_status tds_hamt_set_transient_iterator_next(
+    tds_hamt_set_transient_iterator *iterator,
+    bool *has_value,
+    const void **item) {
+    if (iterator == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    const void *value = NULL;
+    return tds_hamt_map_transient_iterator_next(
+        &iterator->inner,
+        has_value,
+        item,
+        &value);
+}
+
+tds_hamt_status tds_hamt_set_transient_persist(
+    tds_hamt_set_transient *transient,
+    tds_hamt_set *result) {
+    if (transient == NULL || result == NULL) {
+        return TDS_HAMT_INVALID_ARGUMENT;
+    }
+
+    tds_hamt_map map;
+    const tds_hamt_status status =
+        tds_hamt_map_transient_persist(&transient->inner, &map);
+    if (status == TDS_HAMT_OK) {
+        result->map = map;
+    }
+    return status;
+}
+
+const void *tds_hamt_set_transient_debug_root_identity(
+    const tds_hamt_set_transient *transient) {
+    return transient == NULL
+        ? NULL
+        : tds_hamt_map_transient_debug_root_identity(&transient->inner);
 }
 
 static uint32_t tds_hamt_pointer_hash(const void *item, void *context) {

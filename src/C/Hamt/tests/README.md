@@ -3,7 +3,7 @@
 - Created (UTC): 2026-07-02T21:13:37Z
 - Repository HEAD: 30159246f73321480596ee7d9971a951f939280d
 - Audience: Maintainers validating the C HAMT port
-- Scope: Native test executable and source organization under `src/C/Hamt/tests`
+- Scope: Native persistent/transient test executables and source organization under `src/C/Hamt/tests`
 
 `hamt_tests.c` is the dependency-free native test executable for the C HAMT port. The workspace
 [`build.ps1`](../build.ps1) script compiles it together with `src/hamt.c` into
@@ -50,10 +50,25 @@ The executable registers these cases:
 - `set algebra matches model`
 - `set symmetric_except treats duplicates as one item`
 - `concurrent retained snapshot reads`
+- `map transient lifecycle reads and snapshot isolation`
+- `set transient lifecycle representatives and clear`
+- `map transient deterministic model history`
+- `transient allocation failures are atomic`
+- `transient retain failures are atomic and retryable`
+- `set transient relations preserve policy and lifecycle`
+- `set transient relation failures preserve output`
 
 The CHAMP structure cases validate every stored hash prefix against its bitmap slot, including all
 four reachable fragments at shift 30, and compare equal-hash collision key sets independently of
 insertion order.
+
+The transient cases treat the C API as an explicit one-way edit-session lifecycle rather than an
+in-place-performance claim. They cover policy and stored-representative preservation, clean root
+identity, source isolation, active reads and iteration, changed/no-op iterator epochs, explicit
+clone alias consumption, clear, publication retry, a deterministic model history, and allocation /
+retaining-callback failure atomicity across map and set operations. Set-relation coverage exercises
+all six predicates over duplicate-heavy arrays and cross-policy persistent-set operands, then sweeps
+both allocation-bearing paths to prove boolean-output atomicity.
 
 The Merkle executable registers:
 
