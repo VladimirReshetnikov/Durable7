@@ -29,8 +29,8 @@ live in `Hamt/tests/merkle_core_wire.rs` and `Hamt/tests/merkle_persistence.rs`.
 - streaming iterator exact-size accounting over collision buckets;
 - last-wins bulk map construction while retaining the original stored key;
 - one-way map/set edit sessions: clean/no-op root and policy identity, consuming publication,
-  active lookup and iteration, stored representatives, collision-heavy point edits, clear,
-  retained-source isolation, and a deterministic 4,096-command `BTreeMap` model;
+  active lookup and iteration, stored representatives, receiver-policy relations, collision-heavy
+  point edits, clear, retained-source isolation, and a deterministic 4,096-command `BTreeMap` model;
 - persistent set algebra and proper subset/superset relations, including zero-rehash shared-policy
   operations, semantic fallback across independent policies, and collision-heavy model histories;
 - scratch bulk-builder snapshot detachment, first-key/last-value duplicate identity,

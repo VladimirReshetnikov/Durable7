@@ -61,8 +61,9 @@ Rust-specific shape:
 - updates return new values, while `shares_root_with` exposes structural sharing for validation;
 - `into_transient` moves a map/set into a one-way edit session, `to_transient` shares its root, and
   `into_persistent` consumes the session. Active sessions support reads, iteration, point edits,
-  removal, and clear. This first semantic port intentionally delegates changed edits to ordinary
-  persistent path copying; it makes no in-place-edit or performance claim;
+  removal, clear, and receiver-policy set relations. This first semantic port intentionally
+  delegates changed edits to ordinary persistent path copying; it makes no in-place-edit or
+  performance claim;
 - duplicate inserts return `DuplicateKey` instead of throwing;
 - iteration is stable for an unchanged map but remains trie-order, not insertion or sorted order.
 

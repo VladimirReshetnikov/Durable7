@@ -25,9 +25,9 @@ Coverage groups:
 - streaming trie-order iteration and exact-size accounting;
 - last-wins replacement and original-key retention;
 - one-way `TransientHashMap` / `TransientHashSet` sessions, including clean/no-op root and policy
-  identity, consuming publication, active reads and iteration, stored representatives, source
-  snapshot isolation, collision-heavy point edits, clear, and a deterministic 4,096-command map
-  model;
+  identity, consuming publication, active reads and iteration, stored representatives, receiver-
+  policy relations, source snapshot isolation, collision-heavy point edits, clear, and a
+  deterministic 4,096-command map model;
 - set algebra, equality, and proper subset/superset relations;
 - scratch bulk-builder snapshot detachment, duplicate-identity rules, final-hash-level splits,
   and differential agreement with incremental construction;

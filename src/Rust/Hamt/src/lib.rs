@@ -1376,6 +1376,77 @@ where
     pub fn get(&self, value: &T) -> Option<&T> {
         self.map.get_key_value(value).map(|(key, _)| key)
     }
+
+    /// Tests whether every supplied value occurs in the active session.
+    #[must_use]
+    pub fn is_superset_of<I>(&self, other: I) -> bool
+    where
+        I: IntoIterator<Item = T>,
+    {
+        other.into_iter().all(|value| self.contains(&value))
+    }
+
+    /// Tests whether at least one supplied value occurs in the active session.
+    #[must_use]
+    pub fn overlaps<I>(&self, other: I) -> bool
+    where
+        I: IntoIterator<Item = T>,
+    {
+        other.into_iter().any(|value| self.contains(&value))
+    }
+}
+
+impl<T, S> TransientHashSet<T, S>
+where
+    T: Eq + Hash,
+    S: BuildHasher + Clone,
+{
+    fn relation_probe<I>(&self, other: I) -> PersistentHashSet<T, S>
+    where
+        I: IntoIterator<Item = T>,
+    {
+        PersistentHashSet::bulk_from_items(self.hasher().clone(), other)
+    }
+
+    /// Tests subset membership after deduplicating the argument with this session's hash policy.
+    #[must_use]
+    pub fn is_subset_of<I>(&self, other: I) -> bool
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let probe = self.relation_probe(other);
+        self.iter().all(|value| probe.contains(value))
+    }
+
+    /// Tests strict subset membership under this session's hash policy.
+    #[must_use]
+    pub fn is_proper_subset_of<I>(&self, other: I) -> bool
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let probe = self.relation_probe(other);
+        self.len() < probe.len() && self.iter().all(|value| probe.contains(value))
+    }
+
+    /// Tests strict superset membership after deduplicating the argument with this policy.
+    #[must_use]
+    pub fn is_proper_superset_of<I>(&self, other: I) -> bool
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let probe = self.relation_probe(other);
+        self.len() > probe.len() && probe.iter().all(|value| self.contains(value))
+    }
+
+    /// Tests set equality after deduplicating the argument with this session's hash policy.
+    #[must_use]
+    pub fn set_equals<I>(&self, other: I) -> bool
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let probe = self.relation_probe(other);
+        self.len() == probe.len() && self.iter().all(|value| probe.contains(value))
+    }
 }
 
 impl<T, S> TransientHashSet<T, S>
@@ -3160,6 +3231,16 @@ mod tests {
 
         assert!(!transient.insert(Item("x", 2)));
         assert_eq!(transient.get(&Item("x", 0)).expect("stored item").1, 1);
+        assert!(transient.is_subset_of([Item("x", 100), Item("z", 101), Item("extra", 102),]));
+        assert!(transient.is_proper_subset_of([
+            Item("x", 100),
+            Item("z", 101),
+            Item("extra", 102),
+        ]));
+        assert!(transient.is_superset_of([Item("x", 200)]));
+        assert!(transient.is_proper_superset_of([Item("x", 200)]));
+        assert!(transient.overlaps([Item("missing", 0), Item("z", 200)]));
+        assert!(transient.set_equals([Item("z", 300), Item("x", 301), Item("x", 302),]));
         assert!(transient.insert(Item("y", 3)));
         assert!(transient.contains(&Item("y", 0)));
         assert_eq!(transient.iter().count(), 3);

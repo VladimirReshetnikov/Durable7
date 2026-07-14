@@ -55,8 +55,9 @@ share the exact current root and internal hash-policy identity. `TransientHashMa
 The active map session exposes length, hash-policy access, lookup, stored-key recovery, key/value/
 entry iteration, replacement-style `insert`, duplicate-rejecting `try_add` / `add`, `remove` /
 `remove_entry`, and `clear`. The set session is a thin facade with length, policy access, membership,
-stored-representative recovery, iteration, `insert`, `remove`, and `clear`. The borrow checker keeps
-an active iterator from overlapping a mutation.
+stored-representative recovery, iteration, `insert`, `remove`, `clear`, and all six set relations.
+Relation arguments are deduplicated with the session's retained hasher/equality policy whenever
+cardinality matters. The borrow checker keeps an active iterator from overlapping a mutation.
 
 Publication is deliberately one-way and ownership-native: `into_persistent(self)` consumes the
 session. There is no reusable snapshot method, no session `Clone`, and no runtime inactive state.
