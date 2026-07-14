@@ -839,7 +839,8 @@ independently demonstrated by the Axis 2 fixed-layout tier, if that tier ships.
 ### The transient -> persistent -> frozen lifecycle
 
 **Status (2026-07-13): T2 owner-token transients are shipped for the C# CHAMP map and set. The
-repository-owned frozen collection tier is not shipped: F1 evidence collection remains pending and
+repository-owned frozen collection tier is not shipped: F1 evidence collection is postponed until
+an isolated benchmark run, and
 F2 is not authorized. No sibling-language transient or frozen parity is committed. The
 [T2 shipment decision](../../src/CSharp/docs/Hamt/transient-t2-decision.md) records the public
 boundary; the [Axis 2 final plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) remains
@@ -882,7 +883,8 @@ but otherwise unspecified—never insertion, sorted, canonical, or serialization
 persistent conversion is visibly O(n); `Freeze()` on an already-frozen value is identity. Track F
 starts with one faithful packed-index signal (F0), then compares fixed layouts only after a credible
 read-heavy regime appears (F1); F2 ships only behind lookup/enumeration/memory and realistic
-construction break-even evidence. F1's fixed-layout evidence collection is still pending, so no
+construction break-even evidence. F1's fixed-layout evidence collection is postponed for an
+isolated machine run, so no
 F2 public type or API is authorized.
 
 **Deliberate non-adaptivity in v1.** Tiny flat layouts, string prefix/length dispatch, integer-key
@@ -1182,7 +1184,7 @@ remaining work is sequenced as follows:
    and smoke-lock their undo, branch, Unicode, and line/column transcripts.
 5. Evaluate **C4 later sequence cursors** separately and only for a named consumer; do not infer a
    deque, RRB, reversible-deque, raw-FingerTree, or Tungsten cursor from C1.
-6. Complete the pending **F1 fixed-layout evidence collection** before any F2 public implementation.
+6. Complete the postponed **F1 fixed-layout evidence collection** in isolation before any F2 public implementation.
    Advance F2 only if one general C# frozen hash layout clears the named lookup, enumeration,
    retained-memory, construction, and break-even gates; evaluate F3 Ctrie snapshot conversion only
    after that C# frozen contract ships.

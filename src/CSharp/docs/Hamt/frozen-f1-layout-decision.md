@@ -1,6 +1,6 @@
 # Frozen hash F1 fixed-layout decision
 
-- Status: Evidence collection pending
+- Status: Evidence collection postponed until an isolated machine run
 - Created (UTC): 2026-07-13T07:18:58Z
 - Repository HEAD: db05d492d2027afc44f551f886d5f91b3d42959e
 - Audience: Maintainers deciding whether the Axis 2 frozen hash tier can advance to F2
@@ -8,10 +8,15 @@
 
 ## Decision status
 
-**Evidence collection pending.** F1 has not selected a layout and does not authorize a public
+**Evidence collection postponed.** F1 has not selected a layout and does not authorize a public
 `FrozenHashMap` or `FrozenHashSet`. The three repository candidates live only in the benchmark
 assembly. Automatic choice by count, key type, comparer type, hit ratio, or observed hash shape is
 deliberately absent: the F2 gate must select one fixed general layout or defer the track.
+
+The 2026-07-13/14 interactive session attempted exploratory runs while other agents and workloads
+were contending for CPU, memory, and I/O on the same laptop. Those timings are explicitly
+inadmissible: they are not curated below, do not establish a noise floor, select no layout, and
+cannot authorize F2. Rerun the locked matrix later on an otherwise isolated machine.
 
 Selection requires one candidate to clear the predeclared materiality rule in a named read-heavy
 regime after lookup, enumeration, construction, retained arrays, and calculated break-even reads
@@ -98,22 +103,30 @@ $env:MSBUILDDISABLENODEREUSE = '1'
 $env:BuildInParallel = 'false'
 $env:UseSharedCompilation = 'false'
 $env:RestoreDisableParallel = 'true'
+$env:DOTNET_TieredCompilation = '0'
+$env:COMPlus_TieredCompilation = '0'
+$env:DOTNET_ReadyToRun = '0'
+$env:OPENAI_API_KEY = $null
+$env:GITHUB_TOKEN = $null
+$env:GH_TOKEN = $null
+[System.Diagnostics.Process]::GetCurrentProcess().ProcessorAffinity = [IntPtr]1
 
 dotnet restore DataStructures.sln --disable-parallel
 dotnet build DataStructures.sln -c Release --no-restore --disable-build-servers -m:1 -nr:false `
-    -p:BuildInParallel=false -p:UseSharedCompilation=false
+    -p:BuildInParallel=false -p:UseSharedCompilation=false -p:RestoreDisableParallel=true
 
 Set-Location benchmarks\Tools.DataStructures.FingerTree.Benchmarks
-dotnet run -c Release --no-build -- `
+$benchmarkDll = '.\bin\Release\net10.0\Tools.DataStructures.FingerTree.Benchmarks.dll'
+dotnet $benchmarkDll --buildTimeout 600 `
     --filter '*FrozenLookupBenchmarks*' --job short `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-f1\short-uniform'
-dotnet run -c Release --no-build -- `
+dotnet $benchmarkDll --buildTimeout 600 `
     --filter '*FrozenClusteredLookupBenchmarks*' --job short `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-f1\short-clustered'
-dotnet run -c Release --no-build -- `
+dotnet $benchmarkDll --buildTimeout 600 `
     --filter '*FrozenCollisionLookupBenchmarks*' --job short `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-f1\short-collision'
-dotnet run -c Release --no-build -- `
+dotnet $benchmarkDll --buildTimeout 600 `
     --filter '*FrozenNullLookupBenchmarks*' --job short `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-f1\short-null'
 ```
@@ -121,16 +134,16 @@ dotnet run -c Release --no-build -- `
 Collect decision evidence with the default full job in four sequential processes:
 
 ```powershell
-dotnet run -c Release --no-build -- `
+dotnet $benchmarkDll --buildTimeout 600 `
     --filter '*FrozenLookupBenchmarks*' `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-f1\full-uniform'
-dotnet run -c Release --no-build -- `
+dotnet $benchmarkDll --buildTimeout 600 `
     --filter '*FrozenClusteredLookupBenchmarks*' `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-f1\full-clustered'
-dotnet run -c Release --no-build -- `
+dotnet $benchmarkDll --buildTimeout 600 `
     --filter '*FrozenCollisionLookupBenchmarks*' `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-f1\full-collision'
-dotnet run -c Release --no-build -- `
+dotnet $benchmarkDll --buildTimeout 600 `
     --filter '*FrozenNullLookupBenchmarks*' `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-f1\full-null'
 ```
@@ -140,7 +153,7 @@ candidate/control difference:
 
 ```powershell
 1..5 | ForEach-Object {
-    dotnet run -c Release --no-build -- `
+    dotnet $benchmarkDll --buildTimeout 600 `
         --filter '*FrozenLookupBenchmarks.BclFrozenLookupMix*' `
         --artifacts ".\BenchmarkDotNet.Artifacts\axis2-f1\noise-bcl-frozen-$($_)"
 }
@@ -150,12 +163,12 @@ candidate/control difference:
 
 | Evidence | Required location | Current state |
 | --- | --- | --- |
-| Short semantic/timing smoke matrix | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-f1/short-*` | Pending |
-| Full uniform/clustered/collision/null comparisons | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-f1/full-*` | Pending |
-| Five independent BCL control runs | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-f1/noise-bcl-frozen-*` | Pending |
-| Retained-array `AXIS2_F1_RETAINED_V1` rows | Raw logs from the matching short/full directories | Pending |
-| Curated tables, break-even calculations, environment, and threshold calculation | This document, section `Curated evidence` | Pending |
-| F1 select/defer result | This document, replacing the pending status without rewriting provenance | Pending |
+| Short semantic/timing smoke matrix | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-f1/short-*` | Pending isolated run |
+| Full uniform/clustered/collision/null comparisons | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-f1/full-*` | Pending isolated run |
+| Five independent BCL control runs | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-f1/noise-bcl-frozen-*` | Pending isolated run |
+| Retained-array `AXIS2_F1_RETAINED_V1` rows | Raw logs from the matching short/full directories | Pending isolated run |
+| Curated tables, break-even calculations, environment, and threshold calculation | This document, section `Curated evidence` | Pending isolated run |
+| F1 select/defer result | This document, replacing the postponed status without rewriting provenance | Pending isolated run |
 
 Raw BenchmarkDotNet directories are git-ignored. Curated evidence must retain the executed commit,
 runtime/SDK, CPU, GC mode, exact filters and parameters, confidence intervals, five-process noise
@@ -163,8 +176,8 @@ calculation, retained-array rows, and per-candidate break-even reads.
 
 ## Curated evidence
 
-Pending. No F1 timing, allocation, retained-array, noise-floor, or break-even result has been
-collected for this record.
+Postponed. No admissible F1 timing, allocation, retained-array, noise-floor, or break-even result
+has been collected for this record. Results from the contended interactive session are discarded.
 
 ## Exit outcomes
 
