@@ -9,6 +9,8 @@ Primary entry points:
 
 - `PersistentHashMap<K, V>`;
 - `PersistentHashSet<T>`;
+- `PersistentHashMap.Transient<K, V>` and `PersistentHashSet.Transient<T>` one-way editing
+  sessions;
 - `HashPolicy<K>` for runtime hash/equality policy injection;
 - `DuplicateKeyException`, `AddResult<T>`, and removal result records.
 - `ConcurrentHashTrie<K,V>` and its immutable `Snapshot<K,V>`.
@@ -55,6 +57,39 @@ Kotlin-specific differences:
 
 The hash contract is the standard hash-map contract: keys considered equivalent by the active
 `HashPolicy` must produce the same hash through that policy.
+
+## One-Way CHAMP Editing Sessions
+
+`PersistentHashMap.toTransient()` and `PersistentHashSet.toTransient()` adopt an existing value by
+reference in O(1). The companion `createTransient(...)` factories begin from an empty persistent
+value under the supplied policy. A session retains that exact `HashPolicy` object and exposes active
+size, emptiness, lookup, stored-representative recovery, and iteration. Map point verbs are `put`,
+indexed assignment (`session[key] = value`), `add`, `tryAdd`, `remove`, `tryRemove`, and `clear`; set
+sessions expose `add`, `remove`, and `clear`, plus `isSubsetOf`, `isProperSubsetOf`, `isSupersetOf`,
+`isProperSupersetOf`, `overlaps`, and `setEquals` over `Iterable<T>`. Relation arguments are
+interpreted with the active session's retained policy and do not replace stored representatives.
+Map `put` and both set point verbs report whether the logical collection changed. Map `tryRemove`
+returns an `HamtEntry` object, keeping a stored nullable key or value distinguishable from a miss.
+
+`persist()` returns the session's current persistent object by reference in O(1) and then consumes
+the session. If no successful logical change occurred—including equal-value replacement, duplicate
+`tryAdd`, absent removal, or clearing an already-empty collection—the result is the exact adopted
+map or set object. Every later read, edit, iteration request, or publication attempt throws
+`IllegalStateException`. Map `entries()`, `keys()`, and `values()` and set `asSequence()` capture the
+immutable snapshot and session version when the view is acquired. Logical no-ops leave acquired
+views valid; a successful edit makes them throw `ConcurrentModificationException` even if their
+iterator is created only afterward. Publication makes existing and new session-backed iteration
+throw `IllegalStateException`.
+
+This is not the C# owner-token kernel. A Kotlin session stores one reference to the current
+`PersistentHashMap` or `PersistentHashSet`; each edit first computes the ordinary immutable
+successor, path-copying the affected CHAMP route, and only then replaces that reference. Adoption
+and publication are O(1), but edit time and allocation are exactly those of the corresponding
+persistent operation. No performance advantage is claimed. If hashing, equivalence, or value
+equality throws, no successor reference is installed and the active session remains unchanged and
+retryable. Sessions are single-owner and unsynchronized. Reentrant mutation/publication from a
+policy callback is rejected with `IllegalStateException`; externally serialize all access to one
+session.
 
 ## Concurrent Ctrie
 

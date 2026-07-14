@@ -15,6 +15,16 @@ difference. CHAMP nodes cache subtree cardinality, align logical bitmap slots wi
 and prune JVM-reference-identical roots and descendants; same-policy set relations use the same
 structural path while cross-policy relations retain receiver-policy semantics.
 
+The CHAMP map and set also expose one-way `Transient` editing sessions through `toTransient()` and
+`createTransient(...)`. Adoption and `persist()` are O(1) reference transfers, clean or logically
+unchanged sessions publish the exact adopted persistent object, and successful publication consumes
+the session. This Kotlin tier is intentionally a lifecycle facade over the existing immutable
+implementation: every point edit still path-copies an ordinary persistent CHAMP successor. It makes
+no transient throughput or allocation-win claim. Policy identity, stored representatives, active
+reads and receiver-policy set relations, callback-failure atomicity, and retained-source isolation
+are preserved. Enumeration views capture the active snapshot and session version when acquired:
+logical no-ops preserve them, while successful edits invalidate them even before iteration begins.
+
 `ConcurrentHashTrie<K,V>` is the deliberately mutable JVM member. It uses generation-stamped
 indirection nodes, helping node-local GCAS, and a root/main RDCSS transition for lock-free updates
 and linearizable O(1) immutable snapshots. Empty/singleton tombs contract deletion paths instead of

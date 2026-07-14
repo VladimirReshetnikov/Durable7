@@ -32,6 +32,45 @@ private class CountingIntPolicy : HashPolicy<Int> {
     fun reset() { hashCalls = 0; equalityCalls = 0 }
 }
 
+private class InjectedPolicyFailure : RuntimeException()
+
+private class ThrowingIntPolicy : HashPolicy<Int> {
+    var throwOnHash: Boolean = false
+    var throwOnEquivalent: Boolean = false
+
+    override fun hash(key: Int): Int {
+        if (throwOnHash) throw InjectedPolicyFailure()
+        return 0
+    }
+
+    override fun equivalent(left: Int, right: Int): Boolean {
+        if (throwOnEquivalent) throw InjectedPolicyFailure()
+        return left == right
+    }
+}
+
+private class ThrowingValue(val number: Int) {
+    var throwOnEquals: Boolean = false
+
+    override fun equals(other: Any?): Boolean {
+        if (throwOnEquals) throw InjectedPolicyFailure()
+        return other is ThrowingValue && number == other.number
+    }
+
+    override fun hashCode(): Int = number
+}
+
+private class ReentrantIntPolicy : HashPolicy<Int> {
+    var callback: (() -> Unit)? = null
+
+    override fun hash(key: Int): Int {
+        callback?.invoke()
+        return key
+    }
+
+    override fun equivalent(left: Int, right: Int): Boolean = left == right
+}
+
 /**
  * Spreads Int keys across the trie's 5-bit levels so the canonicalization test builds a genuinely
  * sparse trie with unary prefix bridges and single-entry-collapsible branches. Identity hashing on
@@ -61,6 +100,16 @@ private fun <T> checkEquals(expected: T, actual: T, message: String) {
     if (expected != actual) {
         throw AssertionError("$message Expected <$expected>, actual <$actual>.")
     }
+}
+
+private inline fun <reified T : Throwable> checkThrows(message: String, action: () -> Unit): T {
+    try {
+        action()
+    } catch (error: Throwable) {
+        if (error is T) return error
+        throw AssertionError("$message Expected ${T::class.java.simpleName}, got ${error::class.java.simpleName}.", error)
+    }
+    throw AssertionError("$message Expected ${T::class.java.simpleName}.")
 }
 
 private fun runConcurrent(name: String, workerCount: Int = 8, action: (Int) -> Unit) {
@@ -324,6 +373,373 @@ private fun concurrentReadersObserveConsistentSnapshots() {
             check(set.setEquals(0 until 256), "concurrent set equality")
         }
     }
+}
+
+private fun transientMapLifecyclePreservesIdentityAndRepresentatives() {
+    val policy = EquivalentKeyPolicy()
+    val stored = EquivalentKey("alpha", 1)
+    val equivalent = EquivalentKey("alpha", 2)
+    val source = PersistentHashMap.from(listOf(stored to 10, EquivalentKey("beta", 3) to 20), policy)
+    val transient = source.toTransient()
+    val iterator = transient.iterator()
+
+    check(transient.policy === policy, "map transient must retain the exact policy object")
+    checkEquals(2, transient.size, "map transient exposes active size")
+    check(transient.containsKey(equivalent), "map transient uses the retained policy")
+    check(transient.getEntry(equivalent)?.key === stored, "map transient returns the first stored key representative")
+    check(!transient.put(equivalent, 10), "equal replacement is a logical no-op")
+    check(!transient.tryAdd(equivalent, 99), "tryAdd reports an equivalent key")
+    checkThrows<DuplicateKeyException>("duplicate add remains atomic") { transient.add(equivalent, 99) }
+    check(!transient.remove(EquivalentKey("missing", 4)), "absent removal is a logical no-op")
+    check(iterator.hasNext(), "logical no-ops do not invalidate an active iterator")
+
+    val published = transient.persist()
+    check(published === source, "clean map publication must return the exact adopted map")
+    checkThrows<IllegalStateException>("consumed map size") { transient.size }
+    checkThrows<IllegalStateException>("consumed map emptiness") { transient.isEmpty }
+    checkThrows<IllegalStateException>("consumed map policy") { transient.policy }
+    checkThrows<IllegalStateException>("consumed map lookup") { transient[stored] }
+    checkThrows<IllegalStateException>("consumed map contains") { transient.containsKey(stored) }
+    checkThrows<IllegalStateException>("consumed map entry lookup") { transient.getEntry(stored) }
+    checkThrows<IllegalStateException>("consumed map mutation") { transient.put(stored, 11) }
+    checkThrows<IllegalStateException>("consumed map indexed assignment") { transient[stored] = 11 }
+    checkThrows<IllegalStateException>("consumed map add") { transient.add(EquivalentKey("new", 5), 50) }
+    checkThrows<IllegalStateException>("consumed map tryAdd") { transient.tryAdd(EquivalentKey("new", 5), 50) }
+    checkThrows<IllegalStateException>("consumed map remove") { transient.remove(stored) }
+    checkThrows<IllegalStateException>("consumed map tryRemove") { transient.tryRemove(stored) }
+    checkThrows<IllegalStateException>("consumed map clear") { transient.clear() }
+    checkThrows<IllegalStateException>("consumed map enumeration") { transient.entries().toList() }
+    checkThrows<IllegalStateException>("consumed map key enumeration") { transient.keys().toList() }
+    checkThrows<IllegalStateException>("consumed map value enumeration") { transient.values().toList() }
+    checkThrows<IllegalStateException>("consumed map iterator creation") { transient.iterator() }
+    checkThrows<IllegalStateException>("consumed map publication") { transient.persist() }
+    checkThrows<IllegalStateException>("consumed map iterator alias") { iterator.hasNext() }
+
+    val empty = PersistentHashMap.empty<EquivalentKey, Int>(policy)
+    val emptyTransient = empty.toTransient()
+    emptyTransient.clear()
+    check(emptyTransient.persist() === empty, "clearing an empty adopted map preserves exact identity")
+
+    val factory = PersistentHashMap.createTransient<EquivalentKey, Int>(policy)
+    check(factory.policy === policy, "map transient factory retains the policy object")
+    val factoryResult = factory.persist()
+    check(factoryResult.isEmpty, "map transient factory publishes an empty map")
+    check(factoryResult.policy === policy, "factory publication retains policy identity")
+}
+
+private fun transientMapPointEditsEnumerationAndFailureAtomicity() {
+    val collisionPolicy = ConstantPolicy<String?>()
+    val source = PersistentHashMap.empty<String?, String?>(collisionPolicy)
+        .put(null, null)
+        .put("alpha", "one")
+        .put("beta", "two")
+    val transient = source.toTransient()
+
+    check(transient.put("alpha", "ONE"), "map transient replacement reports a change")
+    check(transient.tryAdd("gamma", null), "map transient tryAdd reports a new key")
+    check(!transient.tryAdd("gamma", "duplicate"), "map transient tryAdd rejects a duplicate")
+    transient.add("epsilon", "five")
+    checkEquals("five", transient["epsilon"], "map transient add publishes into the active session")
+    val removedNull = transient.tryRemove(null) ?: throw AssertionError("map transient must remove a stored null key")
+    checkEquals(null, removedNull.key, "map transient removal returns the stored null key")
+    checkEquals(null, removedNull.value, "map transient removal returns the stored null value")
+    check(transient.remove("beta"), "map transient remove reports a stored key")
+    check(!transient.remove("missing"), "map transient remove reports a miss")
+
+    val oracle = source.put("alpha", "ONE").put("gamma", null).add("epsilon", "five").remove(null).remove("beta")
+    checkEquals(oracle.entries().toList(), transient.entries().toList(), "active enumeration follows persistent CHAMP order")
+    checkEquals(oracle.keys().toList(), transient.keys().toList(), "active key enumeration follows persistent CHAMP order")
+    checkEquals(oracle.values().toList(), transient.values().toList(), "active value enumeration follows persistent CHAMP order")
+
+    val stale = transient.iterator()
+    check(!transient.put("alpha", "ONE"), "equal map replacement remains a no-op")
+    check(stale.hasNext(), "a no-op does not invalidate the map iterator")
+    check(transient.put("delta", "four"), "new map key changes the session")
+    checkThrows<ConcurrentModificationException>("changed map invalidates an iterator") { stale.hasNext() }
+
+    val published = transient.persist()
+    checkEquals("one", source["alpha"], "map transient edits do not mutate the adopted source")
+    checkEquals("ONE", published["alpha"], "map transient publishes replacement")
+    checkEquals("four", published["delta"], "map transient publishes insertion")
+    checkEquals("five", published["epsilon"], "map transient publishes add")
+    check(!published.containsKey(null), "map transient publishes null-key removal")
+    check(!published.containsKey("beta"), "map transient publishes boolean removal")
+    check(published.policy === collisionPolicy, "changed map publication retains policy identity")
+
+    val clearTransient = published.toTransient()
+    clearTransient.clear()
+    clearTransient.clear()
+    val cleared = clearTransient.persist()
+    check(cleared.isEmpty, "map transient clear publishes an empty map")
+    check(cleared.policy === collisionPolicy, "map transient clear retains policy identity")
+
+    val throwingPolicy = ThrowingIntPolicy()
+    val failureSource = PersistentHashMap.from(listOf(1 to 10, 2 to 20), throwingPolicy)
+    val failureTransient = failureSource.toTransient()
+    val expected = failureTransient.entries().toList()
+    val failureIterator = failureTransient.iterator()
+
+    throwingPolicy.throwOnHash = true
+    checkThrows<InjectedPolicyFailure>("hash failure leaves map transient active") { failureTransient.put(3, 30) }
+    throwingPolicy.throwOnHash = false
+    checkEquals(expected, failureTransient.entries().toList(), "hash failure leaves map contents unchanged")
+    check(failureIterator.hasNext(), "hash failure does not invalidate an iterator")
+
+    throwingPolicy.throwOnEquivalent = true
+    checkThrows<InjectedPolicyFailure>("equality failure leaves map transient active") { failureTransient.remove(1) }
+    throwingPolicy.throwOnEquivalent = false
+    checkEquals(expected, failureTransient.entries().toList(), "equality failure leaves map contents unchanged")
+    check(failureTransient.put(3, 30), "map transient remains usable after callback failures")
+    checkEquals(3, failureTransient.persist().size, "retry after map callback failure publishes normally")
+
+    val storedValue = ThrowingValue(1)
+    val valueTransient = PersistentHashMap.empty<Int, ThrowingValue>().put(1, storedValue).toTransient()
+    storedValue.throwOnEquals = true
+    checkThrows<InjectedPolicyFailure>("value equality failure leaves map transient active") {
+        valueTransient.put(1, ThrowingValue(2))
+    }
+    storedValue.throwOnEquals = false
+    check(valueTransient.getEntry(1)?.value === storedValue, "value equality failure retains the stored value")
+    valueTransient[1] = ThrowingValue(2)
+    checkEquals(2, valueTransient.persist().getEntry(1)?.value?.number,
+        "indexed assignment remains usable after value equality failure")
+
+    val reentrantPolicy = ReentrantIntPolicy()
+    val reentrant = PersistentHashMap.empty<Int, Int>(reentrantPolicy).put(1, 10).toTransient()
+    reentrantPolicy.callback = { reentrant.put(3, 30) }
+    checkThrows<IllegalStateException>("reentrant map mutation is rejected atomically") { reentrant.put(2, 20) }
+    reentrantPolicy.callback = null
+    checkEquals(listOf(1 to 10), reentrant.entries().map { it.key to it.value }.toList(),
+        "reentrant map mutation leaves the session unchanged")
+    check(reentrant.put(2, 20), "map session remains usable after rejected reentrancy")
+    checkEquals(2, reentrant.persist().size, "reentrant-map retry publishes normally")
+}
+
+private fun transientMapDeterministicModelAcrossPublications() {
+    val random = Random(0x54524E4D)
+    val model = mutableMapOf<Int, Int>()
+    var persistent = PersistentHashMap.empty<Int, Int>()
+
+    repeat(16) { epoch ->
+        val retained = persistent
+        val retainedModel = retained.entries().map { it.key to it.value }.toList().sortedBy { it.first }
+        val transient = persistent.toTransient()
+
+        repeat(256) { operation ->
+            val key = random.nextInt(96)
+            val value = random.nextInt(33) - 16
+            when (random.nextInt(6)) {
+                0, 1, 2 -> {
+                    val changed = !model.containsKey(key) || model[key] != value
+                    checkEquals(changed, transient.put(key, value), "map model put result at $epoch/$operation")
+                    model[key] = value
+                }
+                3 -> {
+                    val added = !model.containsKey(key)
+                    checkEquals(added, transient.tryAdd(key, value), "map model tryAdd result at $epoch/$operation")
+                    if (added) model[key] = value
+                }
+                4 -> {
+                    val removed = model.remove(key) != null
+                    checkEquals(removed, transient.remove(key), "map model remove result at $epoch/$operation")
+                }
+                else -> {
+                    checkEquals(model[key], transient[key], "map model lookup at $epoch/$operation")
+                    if (operation % 127 == 0) {
+                        transient.clear()
+                        model.clear()
+                    }
+                }
+            }
+        }
+
+        checkEquals(retainedModel, retained.entries().map { it.key to it.value }.toList().sortedBy { it.first },
+            "map transient preserves retained source at epoch $epoch")
+        val expected = model.toList().sortedBy { it.first }
+        checkEquals(expected, transient.entries().map { it.key to it.value }.toList().sortedBy { it.first },
+            "active map transient matches model at epoch $epoch")
+        persistent = transient.persist()
+        checkEquals(expected, persistent.entries().map { it.key to it.value }.toList().sortedBy { it.first },
+            "published map matches model at epoch $epoch")
+    }
+}
+
+private fun transientViewsCaptureSnapshotAndVersionAtAcquisition() {
+    val mapSource = PersistentHashMap.from(listOf(1 to "one", 2 to "two"))
+    val map = mapSource.toTransient()
+    val noOpEntries = map.entries()
+    val noOpKeys = map.keys()
+    val noOpValues = map.values()
+    check(!map.put(1, "one"), "map view fixture performs a logical no-op")
+    checkEquals(mapSource.entries().toList(), noOpEntries.toList(), "map entries view survives a no-op")
+    checkEquals(mapSource.keys().toList(), noOpKeys.toList(), "map keys view survives a no-op")
+    checkEquals(mapSource.values().toList(), noOpValues.toList(), "map values view survives a no-op")
+
+    val staleEntries = map.entries()
+    val staleKeys = map.keys()
+    val staleValues = map.values()
+    check(map.put(3, "three"), "map view fixture performs a successful edit")
+    checkThrows<ConcurrentModificationException>("pre-edit entries view is version-bound") { staleEntries.toList() }
+    checkThrows<ConcurrentModificationException>("pre-edit keys view is version-bound") { staleKeys.toList() }
+    checkThrows<ConcurrentModificationException>("pre-edit values view is version-bound") { staleValues.toList() }
+
+    val consumedEntries = map.entries()
+    val consumedKeys = map.keys()
+    val consumedValues = map.values()
+    val mapPublished = map.persist()
+    checkEquals("three", mapPublished[3], "map view fixture publishes the successful edit")
+    checkThrows<IllegalStateException>("publication consumes an acquired entries view") { consumedEntries.toList() }
+    checkThrows<IllegalStateException>("publication consumes an acquired keys view") { consumedKeys.toList() }
+    checkThrows<IllegalStateException>("publication consumes an acquired values view") { consumedValues.toList() }
+
+    val setSource = PersistentHashSet.from(listOf(1, 2))
+    val set = setSource.toTransient()
+    val noOpSetView = set.asSequence()
+    check(!set.add(2), "set view fixture performs a logical no-op")
+    checkEquals(setSource.toList(), noOpSetView.toList(), "set sequence view survives a no-op")
+
+    val staleSetView = set.asSequence()
+    check(set.add(3), "set view fixture performs a successful edit")
+    checkThrows<ConcurrentModificationException>("pre-edit set sequence is version-bound") { staleSetView.toList() }
+
+    val consumedSetView = set.asSequence()
+    val setPublished = set.persist()
+    check(setPublished.contains(3), "set view fixture publishes the successful edit")
+    checkThrows<IllegalStateException>("publication consumes an acquired set sequence") { consumedSetView.toList() }
+}
+
+private fun transientSetRelationsUseReceiverPolicyAndActiveValues() {
+    val moduloPolicy = ModuloTenPolicy()
+    val source = PersistentHashSet.from(listOf(1, 2), moduloPolicy)
+    val transient = source.toTransient()
+    check(transient.add(3), "set relation fixture adds an active-session value")
+
+    check(transient.isSubsetOf(listOf(11, 12, 13, 99)), "transient subset uses receiver policy")
+    check(transient.isProperSubsetOf(listOf(11, 12, 13, 99)), "transient proper subset uses receiver policy")
+    check(transient.isSupersetOf(listOf(11, 12)), "transient superset uses receiver policy")
+    check(transient.isProperSupersetOf(listOf(11, 12)), "transient proper superset uses receiver policy")
+    check(transient.overlaps(listOf(42, 99)), "transient overlap uses receiver policy")
+    check(transient.setEquals(listOf(11, 12, 13, 23)),
+        "transient equality deduplicates argument representatives under receiver policy")
+    check(!transient.setEquals(listOf(11, 12)), "transient equality observes active-session additions")
+    check(!source.contains(3), "transient relation reads do not mutate the retained source")
+
+    val storedAlpha = EquivalentKey("alpha", 1)
+    val storedBeta = EquivalentKey("beta", 2)
+    val representativePolicy = EquivalentKeyPolicy()
+    val representatives = PersistentHashSet.from(listOf(storedAlpha, storedBeta), representativePolicy).toTransient()
+    val alphaProbe = EquivalentKey("alpha", 99)
+    val betaProbe = EquivalentKey("beta", 100)
+    check(representatives.setEquals(listOf(betaProbe, alphaProbe, EquivalentKey("alpha", 101))),
+        "set relation equality uses policy equivalence rather than concrete representative equality")
+    check(representatives.isSubsetOf(listOf(alphaProbe, betaProbe)),
+        "set relation subset accepts foreign equivalent representatives")
+    check(representatives.isSupersetOf(listOf(alphaProbe)),
+        "set relation superset accepts a foreign equivalent representative")
+    check(representatives.get(alphaProbe) === storedAlpha,
+        "set relation queries retain the first concrete representative")
+    val representativeResult = representatives.persist()
+    check(representativeResult.get(alphaProbe) === storedAlpha,
+        "set relation queries publish the same concrete representative")
+}
+
+private fun transientSetLifecycleFailureAndDeterministicModel() {
+    val representativePolicy = EquivalentKeyPolicy()
+    val stored = EquivalentKey("stored", 1)
+    val equivalent = EquivalentKey("stored", 2)
+    val source = PersistentHashSet.from(listOf(stored, EquivalentKey("other", 3)), representativePolicy)
+    val clean = source.toTransient()
+    val cleanIterator = clean.iterator()
+
+    check(clean.policy === representativePolicy, "set transient retains policy identity")
+    check(clean.get(equivalent) === stored, "set transient returns the first stored representative")
+    check(!clean.add(equivalent), "set transient duplicate add is a logical no-op")
+    check(!clean.remove(EquivalentKey("missing", 4)), "set transient absent removal is a logical no-op")
+    check(cleanIterator.hasNext(), "set logical no-ops preserve active iterators")
+    check(clean.persist() === source, "clean set publication returns the exact adopted set")
+    checkThrows<IllegalStateException>("consumed set size") { clean.size }
+    checkThrows<IllegalStateException>("consumed set emptiness") { clean.isEmpty }
+    checkThrows<IllegalStateException>("consumed set policy") { clean.policy }
+    checkThrows<IllegalStateException>("consumed set read") { clean.contains(stored) }
+    checkThrows<IllegalStateException>("consumed set representative lookup") { clean.get(stored) }
+    checkThrows<IllegalStateException>("consumed set mutation") { clean.add(EquivalentKey("new", 5)) }
+    checkThrows<IllegalStateException>("consumed set remove") { clean.remove(stored) }
+    checkThrows<IllegalStateException>("consumed set clear") { clean.clear() }
+    checkThrows<IllegalStateException>("consumed set subset") { clean.isSubsetOf(listOf(stored)) }
+    checkThrows<IllegalStateException>("consumed set proper subset") { clean.isProperSubsetOf(listOf(stored)) }
+    checkThrows<IllegalStateException>("consumed set superset") { clean.isSupersetOf(listOf(stored)) }
+    checkThrows<IllegalStateException>("consumed set proper superset") { clean.isProperSupersetOf(listOf(stored)) }
+    checkThrows<IllegalStateException>("consumed set overlap") { clean.overlaps(listOf(stored)) }
+    checkThrows<IllegalStateException>("consumed set equality") { clean.setEquals(listOf(stored)) }
+    checkThrows<IllegalStateException>("consumed set sequence") { clean.asSequence().toList() }
+    checkThrows<IllegalStateException>("consumed set iterator creation") { clean.iterator() }
+    checkThrows<IllegalStateException>("consumed set publication") { clean.persist() }
+    checkThrows<IllegalStateException>("consumed set iterator alias") { cleanIterator.hasNext() }
+
+    val collisionPolicy = ConstantPolicy<String?>()
+    val collision = PersistentHashSet.createTransient<String?>(collisionPolicy)
+    check(collision.add(null), "set transient adds null")
+    check(collision.add("alpha"), "set transient adds colliding value")
+    check(!collision.add("alpha"), "set transient rejects colliding duplicate")
+    check(collision.contains(null), "set transient reads stored null")
+    val staleCollisionIterator = collision.iterator()
+    check(collision.add("beta"), "set transient adds a second colliding value")
+    checkThrows<ConcurrentModificationException>("changed set invalidates an iterator") {
+        staleCollisionIterator.hasNext()
+    }
+    check(collision.remove(null), "set transient removes stored null")
+    val collisionPublished = collision.persist()
+    checkEquals(listOf("alpha", "beta"), collisionPublished.toList(), "set transient publishes collision edits")
+    check(collisionPublished.policy === collisionPolicy, "set transient publication retains collision policy")
+
+    val throwingPolicy = ThrowingIntPolicy()
+    val failureSource = PersistentHashSet.from(listOf(1, 2), throwingPolicy)
+    val failureTransient = failureSource.toTransient()
+    val expectedFailureState = failureTransient.toList()
+    throwingPolicy.throwOnHash = true
+    checkThrows<InjectedPolicyFailure>("set hash failure is atomic") { failureTransient.add(3) }
+    throwingPolicy.throwOnHash = false
+    checkEquals(expectedFailureState, failureTransient.toList(), "set hash failure leaves contents unchanged")
+    throwingPolicy.throwOnEquivalent = true
+    checkThrows<InjectedPolicyFailure>("set equality failure is atomic") { failureTransient.remove(1) }
+    throwingPolicy.throwOnEquivalent = false
+    checkEquals(expectedFailureState, failureTransient.toList(), "set equality failure leaves contents unchanged")
+    check(failureTransient.add(3), "set transient remains usable after callback failures")
+    checkEquals(3, failureTransient.persist().size, "set retry publishes after callback failure")
+
+    val random = Random(0x54524E53)
+    val model = mutableSetOf<Int>()
+    var persistent = PersistentHashSet.empty<Int>()
+    repeat(16) { epoch ->
+        val retained = persistent
+        val retainedModel = retained.toList().sorted()
+        val transient = persistent.toTransient()
+        repeat(256) { operation ->
+            val value = random.nextInt(96)
+            if (random.nextBoolean()) {
+                checkEquals(model.add(value), transient.add(value), "set model add result at $epoch/$operation")
+            } else {
+                checkEquals(model.remove(value), transient.remove(value), "set model remove result at $epoch/$operation")
+            }
+            if (operation % 61 == 0) {
+                checkEquals(value in model, transient.contains(value), "set model lookup at $epoch/$operation")
+            }
+        }
+        checkEquals(retainedModel, retained.toList().sorted(), "set transient preserves retained source at epoch $epoch")
+        checkEquals(model.sorted(), transient.toList().sorted(), "active set transient matches model at epoch $epoch")
+        persistent = transient.persist()
+        checkEquals(model.sorted(), persistent.toList().sorted(), "published set matches model at epoch $epoch")
+    }
+
+    val clearSource = persistent
+    val clearSourceContents = clearSource.toList().sorted()
+    val clear = clearSource.toTransient()
+    clear.clear()
+    val stale = clear.iterator()
+    clear.clear()
+    check(!stale.hasNext(), "clearing an already empty set is an iterator-preserving no-op")
+    check(clear.persist().isEmpty, "set transient clear publishes an empty set")
+    checkEquals(clearSourceContents, clearSource.toList().sorted(), "set transient clear preserves the retained source")
 }
 
 private fun ctrieSnapshotsAndAtomicUpdates() {
@@ -886,6 +1302,12 @@ public fun main() {
         "structuralSetAlgebraPrunesSharedNodesAndMatchesModels" to ::structuralSetAlgebraPrunesSharedNodesAndMatchesModels,
         "crossPolicyRelationsUseReceiverPolicy" to ::crossPolicyRelationsUseReceiverPolicy,
         "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,
+        "transientMapLifecyclePreservesIdentityAndRepresentatives" to ::transientMapLifecyclePreservesIdentityAndRepresentatives,
+        "transientMapPointEditsEnumerationAndFailureAtomicity" to ::transientMapPointEditsEnumerationAndFailureAtomicity,
+        "transientMapDeterministicModelAcrossPublications" to ::transientMapDeterministicModelAcrossPublications,
+        "transientViewsCaptureSnapshotAndVersionAtAcquisition" to ::transientViewsCaptureSnapshotAndVersionAtAcquisition,
+        "transientSetRelationsUseReceiverPolicyAndActiveValues" to ::transientSetRelationsUseReceiverPolicyAndActiveValues,
+        "transientSetLifecycleFailureAndDeterministicModel" to ::transientSetLifecycleFailureAndDeterministicModel,
         "ctrieSnapshotsAndAtomicUpdates" to ::ctrieSnapshotsAndAtomicUpdates,
         "ctrieSameReferenceUpdatesBypassValueEquality" to ::ctrieSameReferenceUpdatesBypassValueEquality,
         "ctrieContentionAndGenerationRenewal" to ::ctrieContentionAndGenerationRenewal,

@@ -25,6 +25,16 @@ algebra, including relations between sets built with different policies where th
 is authoritative. Same-policy tests additionally pin self-operation instance identity, zero
 rehashing, reference-pruned shared ancestry, all four structural algebra truth tables, and randomized
 set models.
+The one-way CHAMP-session tier checks O(1)-shape adoption/publication through exact object identity,
+policy identity, first stored representatives, null and collision entries, all point verbs, clear,
+active reads and receiver-policy set relations, exact trie-order enumeration, acquisition-time view
+capture, no-op preservation, successful-edit invalidation, retained source isolation, and
+`IllegalStateException` across every consumed access category. Injected hash
+and equivalence failures prove that the session remains unchanged, active, and retryable. Separate
+deterministic map and set histories cross sixteen publication boundaries while comparing every
+active and published version with mutable JVM models and rechecking every retained persistent
+source. These are semantic tests only: the Kotlin session deliberately path-copies persistent
+successors and has no benchmark or performance-win gate.
 It also covers the mutable Ctrie's node-local GCAS and root/main RDCSS helping, deterministic
 snapshot-versus-writer schedules in both linearization directions, deep and equal-hash tomb contraction, lazy renewal after
 snapshot, same-reference no-op updates without equality callbacks, contended same-key updates,

@@ -78,6 +78,26 @@ private data class RemoveResult<K, V>(
     val changed: Boolean,
 )
 
+private const val ConsumedTransientMessage: String =
+    "This transient editing session has already been persisted."
+private const val ReentrantTransientMutationMessage: String =
+    "Transient editing sessions do not allow reentrant mutation or publication."
+
+private class VersionBoundIterator<T>(
+    private val source: Iterator<T>,
+    private val validate: () -> Unit,
+) : Iterator<T> {
+    override fun hasNext(): Boolean {
+        validate()
+        return source.hasNext()
+    }
+
+    override fun next(): T {
+        validate()
+        return source.next()
+    }
+}
+
 public class PersistentHashMap<K, V> private constructor(
     private val root: Node<K, V>?,
     public val size: Int,
@@ -87,6 +107,11 @@ public class PersistentHashMap<K, V> private constructor(
         public fun <K, V> empty(policy: HashPolicy<K> = defaultHashPolicy()): PersistentHashMap<K, V> =
             PersistentHashMap(null, 0, policy)
 
+        /** Creates an active one-way editing session over an empty map. */
+        public fun <K, V> createTransient(
+            policy: HashPolicy<K> = defaultHashPolicy(),
+        ): Transient<K, V> = Transient(empty(policy))
+
         public fun <K, V> from(
             items: Iterable<Pair<K, V>>,
             policy: HashPolicy<K> = defaultHashPolicy(),
@@ -94,6 +119,15 @@ public class PersistentHashMap<K, V> private constructor(
     }
 
     public val isEmpty: Boolean get() = size == 0
+
+    /**
+     * Adopts this map into a one-way editing session in O(1) time.
+     *
+     * The Kotlin session is a lifecycle facade over persistent path-copying operations. It does not
+     * mutate CHAMP nodes in place and makes no allocation or throughput improvement claim.
+     */
+    public fun toTransient(): Transient<K, V> = Transient(this)
+
     public fun sharesRootWith(other: PersistentHashMap<K, V>): Boolean = root === other.root
     public fun containsKey(key: K): Boolean = getEntry(key) != null
     public operator fun get(key: K): V? = getEntry(key)?.value
@@ -204,12 +238,137 @@ public class PersistentHashMap<K, V> private constructor(
     public fun keys(): Sequence<K> = entries().map { it.key }
     public fun values(): Sequence<V> = entries().map { it.value }
     override fun iterator(): Iterator<HamtEntry<K, V>> = entries().iterator()
+
+    /**
+     * A mutable-looking, single-owner editing session with one-way O(1) publication.
+     *
+     * Each successful edit still invokes the ordinary persistent map operation and therefore
+     * path-copies the affected CHAMP path. A callback failure occurs before the session reference is
+     * replaced, leaving the active session unchanged. The session is unsynchronized; callers must
+     * externally serialize access and policy callbacks must not reenter mutation or publication.
+     */
+    public class Transient<K, V> internal constructor(source: PersistentHashMap<K, V>) :
+        Iterable<HamtEntry<K, V>> {
+        private var current: PersistentHashMap<K, V>? = source
+        private var version: Int = 0
+        private var mutationInProgress: Boolean = false
+
+        public val size: Int get() = active().size
+        public val isEmpty: Boolean get() = active().isEmpty
+        public val policy: HashPolicy<K> get() = active().policy
+
+        public fun containsKey(key: K): Boolean = active().containsKey(key)
+        public operator fun get(key: K): V? = active()[key]
+        public fun getEntry(key: K): HamtEntry<K, V>? = active().getEntry(key)
+
+        /** Sets a key/value pair and reports whether the logical map changed. */
+        public fun put(key: K, value: V): Boolean = mutate { before ->
+            publish(before, before.put(key, value))
+        }
+
+        /** Kotlin indexed-assignment spelling for [put]; the change result is intentionally discarded. */
+        public operator fun set(key: K, value: V): Unit {
+            put(key, value)
+        }
+
+        /** Adds a key/value pair or throws [DuplicateKeyException] for an equivalent key. */
+        public fun add(key: K, value: V): Unit = mutate { before ->
+            publish(before, before.add(key, value))
+        }
+
+        /** Adds a key/value pair if absent and reports whether it was added. */
+        public fun tryAdd(key: K, value: V): Boolean = mutate { before ->
+            val result = before.tryAdd(key, value)
+            publish(before, result.value)
+            result.added
+        }
+
+        /** Removes an equivalent key and reports whether an entry was removed. */
+        public fun remove(key: K): Boolean = tryRemove(key) != null
+
+        /** Removes and returns the stored key/value representatives, or `null` on a miss. */
+        public fun tryRemove(key: K): HamtEntry<K, V>? = mutate { before ->
+            val result = before.tryRemoveEntry(key) ?: return@mutate null
+            publish(before, result.map)
+            result.entry
+        }
+
+        /** Clears the active map. Clearing an empty map is an exact logical no-op. */
+        public fun clear(): Unit = mutate { before ->
+            publish(before, before.clear())
+        }
+
+        public fun entries(): Sequence<HamtEntry<K, V>> {
+            val snapshot = active()
+            val expectedVersion = version
+            return Sequence {
+                VersionBoundIterator(snapshot.iterator()) { validateIterator(expectedVersion) }
+            }
+        }
+        public fun keys(): Sequence<K> = entries().map { it.key }
+        public fun values(): Sequence<V> = entries().map { it.value }
+
+        override fun iterator(): Iterator<HamtEntry<K, V>> {
+            val snapshot = active()
+            val expectedVersion = version
+            return VersionBoundIterator(snapshot.iterator()) { validateIterator(expectedVersion) }
+        }
+
+        /**
+         * Publishes the current persistent map by reference in O(1) time and consumes this session.
+         * A session containing only logical no-ops returns the exact adopted map object.
+         */
+        public fun persist(): PersistentHashMap<K, V> {
+            val result = active()
+            if (mutationInProgress) throw IllegalStateException(ReentrantTransientMutationMessage)
+            current = null
+            version++
+            return result
+        }
+
+        private fun active(): PersistentHashMap<K, V> =
+            current ?: throw IllegalStateException(ConsumedTransientMessage)
+
+        private inline fun <R> mutate(operation: (PersistentHashMap<K, V>) -> R): R {
+            val before = active()
+            if (mutationInProgress) throw IllegalStateException(ReentrantTransientMutationMessage)
+            mutationInProgress = true
+            return try {
+                operation(before)
+            } finally {
+                mutationInProgress = false
+            }
+        }
+
+        private fun publish(
+            before: PersistentHashMap<K, V>,
+            candidate: PersistentHashMap<K, V>,
+        ): Boolean {
+            if (candidate === before) return false
+            current = candidate
+            version++
+            return true
+        }
+
+        private fun validateIterator(expectedVersion: Int) {
+            active()
+            if (version != expectedVersion) {
+                throw ConcurrentModificationException("The transient map changed during iteration.")
+            }
+        }
+    }
 }
 
 public class PersistentHashSet<T> private constructor(private val map: PersistentHashMap<T, Unit>) : Iterable<T> {
     public companion object {
         public fun <T> empty(policy: HashPolicy<T> = defaultHashPolicy()): PersistentHashSet<T> =
             PersistentHashSet(PersistentHashMap.empty(policy))
+
+        /** Creates an active one-way editing session over an empty set. */
+        public fun <T> createTransient(
+            policy: HashPolicy<T> = defaultHashPolicy(),
+        ): Transient<T> = Transient(empty(policy))
+
         public fun <T> from(values: Iterable<T>, policy: HashPolicy<T> = defaultHashPolicy()): PersistentHashSet<T> =
             empty<T>(policy).union(values)
     }
@@ -217,6 +376,13 @@ public class PersistentHashSet<T> private constructor(private val map: Persisten
     public val size: Int get() = map.size
     public val isEmpty: Boolean get() = map.isEmpty
     public val policy: HashPolicy<T> get() = map.policy
+
+    /**
+     * Adopts this set into a one-way editing session in O(1) time.
+     * Point edits retain the persistent set's path-copying implementation.
+     */
+    public fun toTransient(): Transient<T> = Transient(this)
+
     public fun sharesRootWith(other: PersistentHashSet<T>): Boolean = map.sharesRootWith(other.map)
     public fun contains(value: T): Boolean = map.containsKey(value)
     public fun get(value: T): T? = map.getEntry(value)?.key
@@ -296,6 +462,120 @@ public class PersistentHashSet<T> private constructor(private val map: Persisten
     }
     public fun asSequence(): Sequence<T> = map.keys()
     override fun iterator(): Iterator<T> = asSequence().iterator()
+
+    /** Mutable-set facade over persistent CHAMP successors with one-way O(1) publication. */
+    public class Transient<T> internal constructor(source: PersistentHashSet<T>) : Iterable<T> {
+        private var current: PersistentHashSet<T>? = source
+        private var version: Int = 0
+        private var mutationInProgress: Boolean = false
+
+        public val size: Int get() = active().size
+        public val isEmpty: Boolean get() = active().isEmpty
+        public val policy: HashPolicy<T> get() = active().policy
+
+        public fun contains(value: T): Boolean = active().contains(value)
+
+        /**
+         * Returns the first stored representative equivalent to [value], or `null` on a miss.
+         * For nullable element types, use [contains] to distinguish a stored `null` from a miss.
+         */
+        public fun get(value: T): T? = active().get(value)
+
+        /** Adds [value] if absent and reports whether the set changed. */
+        public fun add(value: T): Boolean = mutate { before ->
+            val result = before.tryAdd(value)
+            publish(before, result.value)
+            result.added
+        }
+
+        /** Removes an equivalent value and reports whether the set changed. */
+        public fun remove(value: T): Boolean = mutate { before ->
+            val result = before.tryRemove(value) ?: return@mutate false
+            publish(before, result.set)
+            true
+        }
+
+        /** Clears the active set. Clearing an empty set is an exact logical no-op. */
+        public fun clear(): Unit = mutate { before ->
+            publish(before, before.clear())
+        }
+
+        /** Uses this session's retained policy to test whether all active values occur in [values]. */
+        public fun isSubsetOf(values: Iterable<T>): Boolean = active().isSubsetOf(values)
+
+        /** Uses this session's retained policy to test strict subset membership. */
+        public fun isProperSubsetOf(values: Iterable<T>): Boolean = active().isProperSubsetOf(values)
+
+        /** Uses this session's retained policy to test whether it contains every value in [values]. */
+        public fun isSupersetOf(values: Iterable<T>): Boolean = active().isSupersetOf(values)
+
+        /** Uses this session's retained policy to test strict superset membership. */
+        public fun isProperSupersetOf(values: Iterable<T>): Boolean = active().isProperSupersetOf(values)
+
+        /** Uses this session's retained policy to test whether any equivalent value overlaps. */
+        public fun overlaps(values: Iterable<T>): Boolean = active().overlaps(values)
+
+        /** Uses this session's retained policy to compare distinct equivalence classes. */
+        public fun setEquals(values: Iterable<T>): Boolean = active().setEquals(values)
+
+        public fun asSequence(): Sequence<T> {
+            val snapshot = active()
+            val expectedVersion = version
+            return Sequence {
+                VersionBoundIterator(snapshot.iterator()) { validateIterator(expectedVersion) }
+            }
+        }
+
+        override fun iterator(): Iterator<T> {
+            val snapshot = active()
+            val expectedVersion = version
+            return VersionBoundIterator(snapshot.iterator()) { validateIterator(expectedVersion) }
+        }
+
+        /**
+         * Publishes the current persistent set by reference in O(1) time and consumes this session.
+         * A session containing only logical no-ops returns the exact adopted set object.
+         */
+        public fun persist(): PersistentHashSet<T> {
+            val result = active()
+            if (mutationInProgress) throw IllegalStateException(ReentrantTransientMutationMessage)
+            current = null
+            version++
+            return result
+        }
+
+        private fun active(): PersistentHashSet<T> =
+            current ?: throw IllegalStateException(ConsumedTransientMessage)
+
+        private inline fun <R> mutate(operation: (PersistentHashSet<T>) -> R): R {
+            val before = active()
+            if (mutationInProgress) throw IllegalStateException(ReentrantTransientMutationMessage)
+            mutationInProgress = true
+            return try {
+                operation(before)
+            } finally {
+                mutationInProgress = false
+            }
+        }
+
+        private fun publish(
+            before: PersistentHashSet<T>,
+            candidate: PersistentHashSet<T>,
+        ): Boolean {
+            if (candidate === before) return false
+            current = candidate
+            version++
+            return true
+        }
+
+        private fun validateIterator(expectedVersion: Int) {
+            active()
+            if (version != expectedVersion) {
+                throw ConcurrentModificationException("The transient set changed during iteration.")
+            }
+        }
+    }
+
     private fun withMap(value: PersistentHashMap<T, Unit>): PersistentHashSet<T> =
         if (value === map) this else PersistentHashSet(value)
 }

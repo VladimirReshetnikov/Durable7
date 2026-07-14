@@ -26,6 +26,12 @@ Coverage groups:
 - set algebra, equality, and proper subset/superset relations;
 - cross-policy subset/superset/equality/overlap relations under the receiver's `HashPolicy`;
 - JVM concurrent readers over shared immutable map/set snapshots;
+- one-way CHAMP map/set editing sessions: exact clean-source and policy identity, stored
+  representatives, null/collision point edits, clear, active trie-order enumeration, version-bound
+  views captured at acquisition, receiver-policy set relations, consumed-session failures,
+  retained-source isolation, injected callback-failure atomicity/retry, and deterministic map/set
+  models across sixteen publication epochs; the tests
+  make no edit-performance claim because Kotlin sessions retain persistent path copying;
 - Ctrie node-local GCAS and root/main RDCSS helping, deterministic snapshot/write races in both
   linearization directions, O(1)
   retained generations, lazy renewal, deep/equal-hash tomb contraction, contended same-key updates,
