@@ -3,8 +3,8 @@
 - Status: Active C++ workspace
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-12T05:22:05Z
-- Updated against repository HEAD: 2b2f91177a7c90ddfc4769d86f0a928fdede6f03
+- Updated (UTC): 2026-07-14T04:50:00Z
+- Updated against repository HEAD: f814076ceba253306517114ff94d30f952af92e6
 - Audience: Maintainers implementing and reviewing the C++ port
 - Scope: Build entry points, layout, and validation for `src/Cpp/FingerTree`
 
@@ -47,6 +47,11 @@ the first concrete key representative while replacing priority and payload; exac
 ordinary priority and payload equality. Shared component handles support move-only keys, priorities, and payloads,
 and the inclusive range/priority query prunes whole subtrees from cached winners while returning key-ordered entry
 handles.
+
+The positional `rope<T>` exposes a persistent `rope_cursor<T>` checkpoint for gap-based editing. The C++ cursor
+is deliberately a cheap root-sharing rope snapshot plus a position: construction, movement, seek, and snapshot
+are O(1), while peeks and point edits retain the rope's O(log n) descent plus bounded chunk work. This is not the
+C# zipper implementation and makes no O(1)-amortized local-edit claim.
 
 The native runner and benchmark harness remain repository-owned, so configuring a preset does not implicitly run
 a package manager. The canonical rank policy uses the operating-system CNG provider (`bcrypt`) on Windows and the

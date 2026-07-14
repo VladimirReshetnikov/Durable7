@@ -15,6 +15,7 @@
 #include <span>
 #include <sstream>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace ft = tools::data_structures::finger_tree;
@@ -22,8 +23,25 @@ using namespace tools::data_structures::finger_tree::tests;
 
 namespace {
 
+template <class T>
+concept has_rvalue_peek_previous = requires(const T&& cursor) {
+    std::move(cursor).try_peek_previous();
+};
+
+template <class T>
+concept has_rvalue_peek_next = requires(const T&& cursor) {
+    std::move(cursor).try_peek_next();
+};
+
 static_assert(std::forward_iterator<ft::rope<int>::const_iterator>);
 static_assert(std::ranges::forward_range<const ft::rope<int>>);
+static_assert(!std::default_initializable<ft::rope_cursor<int>>);
+static_assert(std::copy_constructible<ft::rope_cursor<int>>);
+static_assert(std::same_as<decltype(std::declval<const ft::rope_cursor<int>&>().try_peek_next()), const int*>);
+static_assert(requires(const ft::rope_cursor<int>& cursor) { cursor.try_peek_previous(); });
+static_assert(!has_rvalue_peek_previous<ft::rope_cursor<int>>);
+static_assert(requires(const ft::rope_cursor<int>& cursor) { cursor.try_peek_next(); });
+static_assert(!has_rvalue_peek_next<ft::rope_cursor<int>>);
 
 struct non_equality_value final {
     int value;
@@ -36,6 +54,7 @@ concept has_equality = requires(const T& left, const T& right) {
 
 static_assert(std::ranges::forward_range<const ft::rope<non_equality_value>>);
 static_assert(!has_equality<ft::rope_split<non_equality_value>>);
+static_assert(!has_equality<ft::rope_cursor<non_equality_value>>);
 
 template <class T>
 void require_sequence_equal(
@@ -89,6 +108,70 @@ void require_sequence_equal(
 [[nodiscard]] std::shared_ptr<const std::vector<int>> shared_block(std::vector<int> values)
 {
     return std::make_shared<const std::vector<int>>(std::move(values));
+}
+
+void require_cursor_equal(
+    const ft::rope_cursor<int>& actual,
+    const std::vector<int>& expected,
+    const std::size_t expected_position,
+    const std::source_location location = std::source_location::current())
+{
+    if (actual.size() != expected.size()
+        || actual.position() != expected_position
+        || actual.is_at_start() != (expected_position == 0)
+        || actual.is_at_end() != (expected_position == expected.size())) {
+        std::ostringstream message;
+        message << location.file_name() << ':' << location.line() << ": rope cursor state mismatch";
+        throw test_failure(message.str());
+    }
+
+    const auto* previous = actual.try_peek_previous();
+    if (expected_position == 0) {
+        FT_REQUIRE(previous == nullptr);
+    } else {
+        FT_REQUIRE(previous != nullptr);
+        FT_REQUIRE_EQUAL(*previous, expected[expected_position - 1]);
+    }
+
+    const auto* next = actual.try_peek_next();
+    if (expected_position == expected.size()) {
+        FT_REQUIRE(next == nullptr);
+    } else {
+        FT_REQUIRE(next != nullptr);
+        FT_REQUIRE_EQUAL(*next, expected[expected_position]);
+    }
+
+    require_sequence_equal(actual.snapshot(), expected, location);
+}
+
+void move_assign_cursor(
+    ft::rope_cursor<int>& destination,
+    ft::rope_cursor<int>& source)
+{
+    destination = std::move(source);
+}
+
+std::vector<int> insert_model_values(
+    const std::vector<int>& source,
+    const std::size_t position,
+    const std::initializer_list<int> inserted)
+{
+    if (position > source.size()) {
+        throw test_failure("model insertion position is out of range");
+    }
+
+    auto result = std::vector<int>{};
+    result.reserve(source.size() + inserted.size());
+    for (auto index = std::size_t{0}; index != position; ++index) {
+        result.push_back(source[index]);
+    }
+    for (const auto value : inserted) {
+        result.push_back(value);
+    }
+    for (auto index = position; index != source.size(); ++index) {
+        result.push_back(source[index]);
+    }
+    return result;
 }
 
 void add_rope_tests_impl(suite& tests)
@@ -275,6 +358,268 @@ void add_rope_tests_impl(suite& tests)
 
         FT_REQUIRE_EQUAL(backing.use_count(), 1L);
         require_sequence_equal(compacted, expected);
+    });
+
+    tests.add("rope cursor gap navigation and endpoint failures are exact", [] {
+        const auto values = std::vector<int>{10, 20, 30, 40, 50};
+        const auto source = ft::rope<int>::from_range(values);
+        const auto cursor = source.get_cursor(2);
+
+        require_cursor_equal(cursor, values, 2);
+        require_cursor_equal(cursor.move_previous(), values, 1);
+        require_cursor_equal(cursor.move_next(), values, 3);
+
+        const auto start = cursor.seek(0);
+        require_cursor_equal(start, values, 0);
+        FT_REQUIRE_THROWS(std::logic_error, start.move_previous());
+        FT_REQUIRE_THROWS(std::logic_error, start.delete_previous());
+
+        const auto end = cursor.seek(values.size());
+        require_cursor_equal(end, values, values.size());
+        FT_REQUIRE_THROWS(std::logic_error, end.move_next());
+        FT_REQUIRE_THROWS(std::logic_error, end.delete_next());
+        FT_REQUIRE_THROWS(std::logic_error, end.replace_next(0));
+
+        FT_REQUIRE_THROWS(std::out_of_range, source.get_cursor(values.size() + 1));
+        FT_REQUIRE_THROWS(std::out_of_range, cursor.seek(values.size() + 1));
+
+        const auto empty = ft::rope<int>{}.get_cursor();
+        require_cursor_equal(empty, {}, 0);
+        FT_REQUIRE_THROWS(std::logic_error, empty.move_previous());
+        FT_REQUIRE_THROWS(std::logic_error, empty.move_next());
+        FT_REQUIRE_THROWS(std::logic_error, empty.delete_previous());
+        FT_REQUIRE_THROWS(std::logic_error, empty.delete_next());
+        FT_REQUIRE_THROWS(std::logic_error, empty.replace_next(0));
+    });
+
+    tests.add("rope cursor moves preserve both immutable values", [] {
+        const auto values = iota_vector(32);
+        const auto source = ft::rope<int>::from_range(values);
+
+        auto move_source = source.get_cursor(11);
+        const auto move_destination = std::move(move_source);
+        require_cursor_equal(move_source, values, 11);
+        require_cursor_equal(move_destination, values, 11);
+
+        auto assignment_source = source.get_cursor(23);
+        auto assignment_destination = source.get_cursor(3);
+        assignment_destination = std::move(assignment_source);
+        require_cursor_equal(assignment_source, values, 23);
+        require_cursor_equal(assignment_destination, values, 23);
+
+        move_assign_cursor(assignment_destination, assignment_destination);
+        require_cursor_equal(assignment_destination, values, 23);
+    });
+
+    tests.add("rope cursor edits branch retained snapshots and preserve no-ops", [] {
+        const auto original_values = iota_vector(20);
+        const auto source = ft::rope<int>::from_range(original_values);
+        const auto ancestor = source.get_cursor(10);
+
+        auto inserted_values = original_values;
+        inserted_values.insert(inserted_values.begin() + 10, -1);
+        require_cursor_equal(ancestor.insert(-1), inserted_values, 11);
+
+        auto range_values = original_values;
+        range_values.insert(range_values.begin() + 10, {-3, -2, -1});
+        const auto caller_owned = std::vector<int>{-3, -2, -1};
+        require_cursor_equal(ancestor.insert_range(caller_owned), range_values, 13);
+        require_cursor_equal(
+            ancestor.insert_range(ft::rope<int>::from_range(caller_owned)),
+            range_values,
+            13);
+
+        auto without_previous = original_values;
+        without_previous.erase(without_previous.begin() + 9);
+        require_cursor_equal(ancestor.delete_previous(), without_previous, 9);
+
+        auto without_next = original_values;
+        without_next.erase(without_next.begin() + 10);
+        require_cursor_equal(ancestor.delete_next(), without_next, 10);
+
+        auto replaced_values = original_values;
+        replaced_values[10] = -2;
+        require_cursor_equal(ancestor.replace_next(-2), replaced_values, 10);
+        require_cursor_equal(ancestor, original_values, 10);
+
+        const auto equal_replacement = ancestor.replace_next(original_values[10]);
+        require_cursor_equal(equal_replacement, original_values, 10);
+        FT_REQUIRE(ancestor.snapshot().begin() != equal_replacement.snapshot().begin());
+
+        const auto same_position = ancestor.seek(ancestor.position());
+        const auto empty_insert = ancestor.insert_range(std::vector<int>{});
+        require_cursor_equal(same_position, original_values, 10);
+        require_cursor_equal(empty_insert, original_values, 10);
+        FT_REQUIRE(ancestor.snapshot().begin() == same_position.snapshot().begin());
+        FT_REQUIRE(ancestor.snapshot().begin() == empty_insert.snapshot().begin());
+
+        const auto no_equality_source = ft::rope<non_equality_value>::from_range(
+            std::vector<non_equality_value>{{1}});
+        const auto no_equality_replaced = no_equality_source.get_cursor().replace_next(non_equality_value{2});
+        FT_REQUIRE_EQUAL(no_equality_replaced.snapshot()[0].value, 2);
+        FT_REQUIRE_EQUAL(no_equality_source[0].value, 1);
+    });
+
+    tests.add("rope cursor operations are exact across chunk boundaries", [] {
+        const auto values = iota_vector(4'098);
+        const auto source = ft::rope<int>::from_range(values);
+        const auto boundaries = std::vector<std::size_t>{
+            0, 1, 15, 16, 255, 256, 257, 2'047, 2'048, 2'049, values.size()};
+
+        for (const auto position : boundaries) {
+            const auto cursor = source.get_cursor(position);
+            require_cursor_equal(cursor, values, position);
+
+            const auto with_insert = insert_model_values(values, position, {-1});
+            const auto inserted = cursor.insert(-1);
+            require_cursor_equal(inserted, with_insert, position + 1);
+            require_cursor_equal(inserted.delete_previous(), values, position);
+
+            const auto with_range = insert_model_values(values, position, {-3, -2, -1});
+            const auto ranged = cursor.insert_range(std::vector<int>{-3, -2, -1});
+            require_cursor_equal(ranged, with_range, position + 3);
+            require_cursor_equal(
+                ranged.delete_previous().delete_previous().delete_previous(),
+                values,
+                position);
+
+            if (position != 0) {
+                auto removed = values;
+                removed.erase(removed.begin() + static_cast<std::ptrdiff_t>(position - 1));
+                require_cursor_equal(cursor.delete_previous(), removed, position - 1);
+            }
+
+            if (position != values.size()) {
+                auto removed = values;
+                removed.erase(removed.begin() + static_cast<std::ptrdiff_t>(position));
+                require_cursor_equal(cursor.delete_next(), removed, position);
+
+                auto replaced = values;
+                replaced[position] = -4;
+                require_cursor_equal(cursor.replace_next(-4), replaced, position);
+            }
+        }
+    });
+
+    tests.add("rope cursor deterministic command history matches vector gap model", [] {
+        auto rng = deterministic_rng{0x51c0};
+        auto model = iota_vector(513);
+        auto position = std::size_t{256};
+        auto cursor = ft::rope<int>::from_range(model).get_cursor(position);
+        auto retained = std::vector<ft::rope_cursor<int>>{};
+        auto retained_models = std::vector<std::vector<int>>{};
+        auto retained_positions = std::vector<std::size_t>{};
+        auto next_value = -1;
+
+        for (auto step = 0; step != 500; ++step) {
+            switch (rng.next_index(12)) {
+            case 0:
+                if (position == 0) {
+                    FT_REQUIRE_THROWS(std::logic_error, cursor.move_previous());
+                } else {
+                    cursor = cursor.move_previous();
+                    --position;
+                }
+                break;
+            case 1:
+                if (position == model.size()) {
+                    FT_REQUIRE_THROWS(std::logic_error, cursor.move_next());
+                } else {
+                    cursor = cursor.move_next();
+                    ++position;
+                }
+                break;
+            case 2:
+                position = rng.next_index(model.size() + 1);
+                cursor = cursor.seek(position);
+                break;
+            case 3:
+                cursor = cursor.insert(next_value);
+                model.insert(model.begin() + static_cast<std::ptrdiff_t>(position), next_value--);
+                ++position;
+                break;
+            case 4: {
+                const auto length = rng.next_index(9);
+                auto values = std::vector<int>{};
+                values.reserve(length);
+                for (auto index = std::size_t{0}; index != length; ++index) {
+                    values.push_back(next_value--);
+                }
+
+                cursor = cursor.insert_range(values);
+                model.insert(
+                    model.begin() + static_cast<std::ptrdiff_t>(position),
+                    values.begin(),
+                    values.end());
+                position += length;
+                break;
+            }
+            case 5:
+                if (position == 0) {
+                    FT_REQUIRE_THROWS(std::logic_error, cursor.delete_previous());
+                } else {
+                    cursor = cursor.delete_previous();
+                    model.erase(model.begin() + static_cast<std::ptrdiff_t>(position - 1));
+                    --position;
+                }
+                break;
+            case 6:
+                if (position == model.size()) {
+                    FT_REQUIRE_THROWS(std::logic_error, cursor.delete_next());
+                } else {
+                    cursor = cursor.delete_next();
+                    model.erase(model.begin() + static_cast<std::ptrdiff_t>(position));
+                }
+                break;
+            case 7:
+                if (position == model.size()) {
+                    FT_REQUIRE_THROWS(std::logic_error, cursor.replace_next(next_value));
+                } else {
+                    cursor = cursor.replace_next(next_value);
+                    model[position] = next_value--;
+                }
+                break;
+            case 8:
+                retained.push_back(cursor);
+                retained_models.push_back(model);
+                retained_positions.push_back(position);
+                break;
+            case 9: {
+                const auto boundaries = std::vector<std::size_t>{0, 1, 15, 16, 255, 256, 257, 2'047, 2'048, 2'049};
+                position = (std::min)(boundaries[rng.next_index(boundaries.size())], model.size());
+                cursor = cursor.seek(position);
+                break;
+            }
+            case 10:
+                cursor = cursor.seek(position);
+                break;
+            default:
+                if (!retained.empty()) {
+                    const auto retained_index = rng.next_index(retained.size());
+                    auto branch_model = retained_models[retained_index];
+                    const auto branch_position = retained_positions[retained_index];
+                    const auto branch_value = next_value--;
+                    branch_model.insert(
+                        branch_model.begin() + static_cast<std::ptrdiff_t>(branch_position),
+                        branch_value);
+                    require_cursor_equal(
+                        retained[retained_index].insert(branch_value),
+                        branch_model,
+                        branch_position + 1);
+                    require_cursor_equal(
+                        retained[retained_index],
+                        retained_models[retained_index],
+                        branch_position);
+                }
+                break;
+            }
+
+            require_cursor_equal(cursor, model, position);
+        }
+
+        for (auto index = std::size_t{0}; index != retained.size(); ++index) {
+            require_cursor_equal(retained[index], retained_models[index], retained_positions[index]);
+        }
     });
 
     tests.add("rope randomized history matches vector model", [] {

@@ -23,6 +23,9 @@ template <class T>
 class rope;
 
 template <class T>
+class rope_cursor;
+
+template <class T>
 struct rope_split final {
     rope<T> left;
     rope<T> right;
@@ -98,6 +101,8 @@ public:
     {
         return tree_.measure();
     }
+
+    [[nodiscard]] rope_cursor<value_type> get_cursor(size_type position = 0) const;
 
     [[nodiscard]] const_reference front() const
     {
@@ -616,6 +621,180 @@ private:
 
     tree_type tree_;
 };
+
+/// An immutable edit cursor whose position denotes a gap in a persistent rope snapshot.
+template <class T>
+class rope_cursor final {
+public:
+    using value_type = T;
+    using size_type = std::size_t;
+
+    rope_cursor() = delete;
+    rope_cursor(const rope_cursor&) = default;
+    rope_cursor& operator=(const rope_cursor&) = default;
+
+    // Cursor values are immutable version handles. Moving therefore copies the
+    // shared rope root instead of transferring it, keeping the source cursor's
+    // gap invariant and full API valid after the move.
+    rope_cursor(rope_cursor&& other) noexcept(std::is_nothrow_copy_constructible_v<rope<value_type>>)
+        : snapshot_(other.snapshot_),
+          position_(other.position_)
+    {
+    }
+
+    rope_cursor& operator=(rope_cursor&& other) noexcept(
+        std::is_nothrow_copy_assignable_v<rope<value_type>>)
+    {
+        if (this != &other) {
+            snapshot_ = other.snapshot_;
+            position_ = other.position_;
+        }
+
+        return *this;
+    }
+
+    [[nodiscard]] size_type size() const
+    {
+        return snapshot_.size();
+    }
+
+    [[nodiscard]] size_type position() const noexcept
+    {
+        return position_;
+    }
+
+    [[nodiscard]] bool is_at_start() const noexcept
+    {
+        return position_ == 0;
+    }
+
+    [[nodiscard]] bool is_at_end() const
+    {
+        return position_ == snapshot_.size();
+    }
+
+    /// Returns a pointer borrowed from this cursor's retained snapshot, or nullptr at the start.
+    [[nodiscard]] const value_type* try_peek_previous() const &
+    {
+        return position_ == 0 ? nullptr : snapshot_.try_get(position_ - 1);
+    }
+
+    const value_type* try_peek_previous() const && = delete;
+
+    /// Returns a pointer borrowed from this cursor's retained snapshot, or nullptr at the end.
+    [[nodiscard]] const value_type* try_peek_next() const &
+    {
+        return snapshot_.try_get(position_);
+    }
+
+    const value_type* try_peek_next() const && = delete;
+
+    [[nodiscard]] rope_cursor move_previous() const
+    {
+        if (is_at_start()) {
+            throw std::logic_error("rope cursor is already at the start");
+        }
+
+        return rope_cursor{snapshot_, position_ - 1};
+    }
+
+    [[nodiscard]] rope_cursor move_next() const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("rope cursor is already at the end");
+        }
+
+        return rope_cursor{snapshot_, position_ + 1};
+    }
+
+    [[nodiscard]] rope_cursor seek(const size_type position) const
+    {
+        if (position > snapshot_.size()) {
+            throw std::out_of_range("cursor position is outside the rope bounds");
+        }
+
+        return position == position_ ? *this : rope_cursor{snapshot_, position};
+    }
+
+    [[nodiscard]] rope_cursor insert(value_type value) const
+    {
+        const auto next_position = checked_add(position_, size_type{1});
+        return rope_cursor{snapshot_.insert_at(position_, std::move(value)), next_position};
+    }
+
+    template <std::ranges::input_range Range>
+        requires(!std::same_as<std::remove_cvref_t<Range>, rope<value_type>>)
+            && std::convertible_to<std::ranges::range_reference_t<Range>, value_type>
+    [[nodiscard]] rope_cursor insert_range(Range&& values) const
+    {
+        auto middle = rope<value_type>::from_range(std::forward<Range>(values));
+        return middle.empty() ? *this : insert_range(middle);
+    }
+
+    [[nodiscard]] rope_cursor insert_range(const rope<value_type>& values) const
+    {
+        if (values.empty()) {
+            return *this;
+        }
+
+        const auto next_position = checked_add(position_, values.size());
+        return rope_cursor{snapshot_.insert_range(position_, values), next_position};
+    }
+
+    [[nodiscard]] rope_cursor delete_previous() const
+    {
+        if (is_at_start()) {
+            throw std::logic_error("rope cursor has no previous element");
+        }
+
+        return rope_cursor{snapshot_.remove_at(position_ - 1), position_ - 1};
+    }
+
+    [[nodiscard]] rope_cursor delete_next() const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("rope cursor has no next element");
+        }
+
+        return rope_cursor{snapshot_.remove_at(position_), position_};
+    }
+
+    [[nodiscard]] rope_cursor replace_next(value_type value) const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("rope cursor has no next element");
+        }
+
+        return rope_cursor{snapshot_.set_item(position_, std::move(value)), position_};
+    }
+
+    [[nodiscard]] rope<value_type> snapshot() const
+    {
+        return snapshot_;
+    }
+
+private:
+    friend class rope<T>;
+
+    rope_cursor(rope<value_type> snapshot, const size_type position)
+        : snapshot_(std::move(snapshot)),
+          position_(position)
+    {
+    }
+
+    rope<value_type> snapshot_;
+    size_type position_;
+};
+
+template <class T>
+[[nodiscard]] rope_cursor<T> rope<T>::get_cursor(const size_type position) const
+{
+    if (position > size()) {
+        throw std::out_of_range("cursor position is outside the rope bounds");
+    }
+
+    return rope_cursor<value_type>{*this, position};
+}
 
 template <class T>
     requires equality_comparable_value<T>

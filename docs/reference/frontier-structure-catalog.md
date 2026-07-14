@@ -1,6 +1,6 @@
 # Frontier Structure Catalog
 
-- Status: Current-state catalog - shipped Axis 1 cores, shipped C# Axis 2 C1/C2/C3/T2, cross-language semantic CHAMP sessions, and remaining frontier candidates
+- Status: Current-state catalog - shipped Axis 1 cores, shipped C# Axis 2 C1/C2/C3/T2, the C++ positional cursor checkpoint, cross-language semantic CHAMP sessions, and remaining frontier candidates
 - Created (UTC): 2026-07-11T03:31:23Z
 - Repository HEAD: f40e301e8faf26d748f33d8546d7d9216657301e
 - Audience: Maintainers and AI agents planning new repository-owned cores, representation tiers, and specialized sibling collections
@@ -11,9 +11,9 @@ This document began as a catalog of candidate work that the
 records what can be built *by composing* the shipped HAMT and FingerTree families; this one records
 three complementary axes. Axis 1 now includes both implemented reference cores and unimplemented
 candidates. Axis 2 now includes the shipped C# positional and measured rope cursors, their Tour and
-Editor integration, the optimized C# one-way CHAMP transient, and semantic path-copying CHAMP
-editing sessions in every sibling language; frozen-hash and later phases remain planning material,
-as does Axis 3:
+Editor integration, the C++ positional semantic cursor checkpoint, the optimized C# one-way CHAMP
+transient, and semantic path-copying CHAMP editing sessions in every sibling language; frozen-hash
+and later phases remain planning material, as does Axis 3:
 
 1. **New cores** - structures that need their own node layer, including several invented or refined
    in the last decade.
@@ -42,8 +42,9 @@ family (proposal Tier C1), the cursor/zipper (proposal A3), and the RRB vector (
 benchmark-first grounds). Patricia and RRB have since shipped across the language workspaces, and
 the positional cursor, measured/text cursor, sample integration, and CHAMP owner-token transients
 have shipped as C# Axis 2 C1, C2, C3, and T2. The one-way lifecycle has since gained semantic
-path-copying ports in C, C++, Haskell, Kotlin, and Rust; the frozen tier and later cursor families
-remain planned. The cursor and the temporal-lifecycle work have a dedicated
+path-copying ports in C, C++, Haskell, Kotlin, and Rust, and C++ now has a positional
+snapshot-plus-gap cursor checkpoint without zipper or performance parity; the frozen tier and later
+cursor families remain planned. The cursor and the temporal-lifecycle work have a dedicated
 [Axis 2 final plan](../proposals/axis2-lifecycle-and-sequence-cursors.md), which is authoritative where
 its API, complexity, or sequencing detail differs from the older proposal. The entries below are
 the current-state record, while the 2026-07-09 proposal remains useful historical scheduling
@@ -77,7 +78,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
 | Size-tiered small representations | 2 | Strong, explicitly postponed | Re-entry benchmark after the Axis 2 fixed-layout evidence decision | Internal tier per selected facade + representation-forcing tests |
 | Transient -> persistent -> frozen lifecycle | 2 | C# CHAMP T2 owner-token transient and semantic path-copying sibling sessions implemented; frozen map/set tier remains unshipped and evidence-gated | T0/T1/T2 complete for the optimized transient; sibling lifecycle ports complete; postponed F0 then F1 evidence must precede F2 | Shipped map/set sessions across six languages + planned frozen map/set types |
-| Version-bound cursor / zipper | 2, 3 | C1 positional cursor, C2 measured/text cursor, and C3 samples implemented in C#; C4 consumer-gated | C0 selected the readonly-struct zipper-as-version; C2 cleared its measured/text gate | Shipped positional and measured cursors plus Tour/Editor integration |
+| Version-bound cursor / zipper | 2, 3 | C1 positional cursor, C2 measured/text cursor, and C3 samples implemented in C#; C++ positional semantic checkpoint shipped; C4 consumer-gated | C0 selected the C# readonly-struct zipper-as-version; C++ reuses persistent rope path copying without its complexity claim | C# positional/measured cursors and Tour/Editor integration plus the C++ positional facade |
 | Key-type-specialized map factories | 2 | Plausible, explicitly postponed | Named consumer after explicit Patricia consideration | Factory layer; ART only if independently justified |
 | Self-adjusting (splay-style) structures | 2 | Reject | - | Reads allocate under path copying; cursors + freeze substitute |
 | Range-update sequence (lazy propagation) | 3 | Strong | Measure action interface | 1 sibling core + tag algebra + property tests |
@@ -928,13 +929,17 @@ not authorize sibling frozen types or a claim of owner-token edit performance.
 
 ### Cursor / zipper over the sequence family
 
-**Status (2026-07-13): C# C1, C2, and C3 are shipped.** `Rope<T>.GetCursor(position)` and the public
+**Status (2026-07-13): C# C1, C2, and C3 are shipped; C++ has a positional semantic checkpoint.**
+`Rope<T>.GetCursor(position)` and the public
 readonly `RopeCursor<T>` implement the positional version-bound gap cursor.
 `MeasuredRope<T, TMeasure, TMeasureOps>.GetCursor(position)` and
 `TryGetCursorByMeasure` add the measured/text specialization through the public readonly
 `MeasuredRopeCursor<T, TMeasure, TMeasureOps>`. The Tour retains measured cursor versions for
 undo/redo, and the Editor demonstrates a sixteen-edit local Unicode/line/branch history. C4 cursor
-adapters remain consumer-gated. No sibling-language cursor parity is committed. The
+adapters remain consumer-gated. C++ `rope_cursor<T>` preserves the positional gap, immutable branching,
+unconditional replacement, and retained-snapshot semantics through a root-sharing snapshot-plus-position
+facade. It deliberately does not claim the C# zipper representation or its focus-local complexity;
+measured/text cursors and the other sibling languages remain unported. The
 [Axis 2 final cursor plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) remains normative for
 the unshipped phases, while the [C0 decision record](../../src/CSharp/docs/FingerTree/rope-cursor-c0-decision.md)
 records the selected representation and proof boundary for C1.
@@ -996,8 +1001,9 @@ until a consumer and benchmark justify them.
 **Verdict: C1, C2, and C3 implemented; C4 remains consumer-gated.** The
 positional and measured cursors separately cleared their named local-edit, query, allocation,
 callback, and validation gates; the samples lock retained-history, branch, coordinate, and
-cadence-sixteen transcripts. Those results do not pre-approve later sequence adapters or a broader
-branched-history complexity claim.
+cadence-sixteen transcripts. The C++ positional semantic checkpoint adds API/behavior parity without
+asserting zipper or benchmark parity. Those results do not pre-approve later sequence adapters or a
+broader branched-history complexity claim.
 
 ### Key-type-specialized map construction
 
@@ -1179,7 +1185,8 @@ The implementation wave described by this catalog has already landed these refer
 - `DabaLite<T, TMonoid>`;
 - the managed Ctrie with O(1) immutable snapshots; and
 - the Axis 2 C1 positional `RopeCursor<T>` and C2 measured/text
-  `MeasuredRopeCursor<T, TMeasure, TMeasureOps>`.
+  `MeasuredRopeCursor<T, TMeasure, TMeasureOps>` in C#, plus the C++ positional
+  `rope_cursor<T>` snapshot-plus-gap semantic checkpoint.
 
 CHAMP, Patricia, and RRB have also advanced through the sibling-language work recorded in their
 entries; the canonical zip-zip set, Brodal-Okasaki heap, and priority-search queue are implemented
@@ -1190,7 +1197,8 @@ The one-way CHAMP editing lifecycle now spans all six languages; the owner-token
 optimization and its performance evidence remain C#-only. These are current-state implementation
 records, not candidates awaiting a consumer.
 Future work on the Axis 1 cores is ordinary hardening, measurement, and demand-driven porting. The
-cursor's C4 extensions retain the separate status recorded in its entry above.
+C++ checkpoint makes no zipper or focus-local complexity claim; measured/text cursor parity remains
+C#-only. The cursor's C4 extensions retain the separate status recorded in its entry above.
 
 ### Remaining candidate sequencing
 

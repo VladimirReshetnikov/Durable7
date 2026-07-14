@@ -269,33 +269,41 @@ Shared obligations:
 - Builders must document mutation, snapshot publication, and whether later builder changes can affect
   previously produced immutable ropes.
 
-C# additionally ships the positional `RopeCursor<T>` and measured
-`MeasuredRopeCursor<T, TMeasure, TMeasureOps>`; no deque, RRB, raw-finger-tree, reversible-deque,
-or Tungsten cursor is implied by those surfaces. Their shared obligations are:
+C# ships positional and measured cursors; C++ also ships a positional `rope_cursor<T>` semantic
+checkpoint. No deque, RRB, raw-finger-tree, reversible-deque, or Tungsten cursor is implied by those
+surfaces. Every shipped cursor shares these observable obligations:
 
 - A cursor position is a gap in `0 .. Count`: previous operations address `p - 1`, next operations
   address `p`, insertion returns the gap after the inserted values, backspace moves the gap left,
   and forward deletion or replacement keeps it fixed. Empty, start, and end gaps are valid states.
-- The initialized cursor is an immutable value over one logical version and navigation context.
-  Navigation retains the version and its snapshot cache; every edit creates an independent version.
+- The initialized cursor is an immutable value over one logical version and a validated gap.
+  Navigation retains the version; every edit creates an independent version.
   Retained cursors and snapshots stay valid, and editing any retained cursor creates a branch without
   changing its ancestor or siblings.
-- `Seek(Position)` and an empty `InsertRange` preserve the exact shared version and context state.
+- A same-position seek and an empty range insertion preserve the exact stored version state.
   `ReplaceNext` always creates a new logical version and does not consult element equality.
-- A cursor created from a rope has that source object as its clean snapshot. A dirty first
-  `Snapshot()` publishes one canonical rope through a thread-safe winner-returning memo cell;
-  repeated clean snapshots from any navigation context over the version are O(1) and return the same
-  rope reference. A failed construction publishes nothing and leaves the version reusable.
-- Initialized cursor values are safe for concurrent reads, including racing first snapshots. The
-  default `RopeCursor<T>` value is deliberately invalid; the initialized empty state comes from
-  `Rope<T>.Empty.GetCursor()`.
-- The proven complexity scope is linear-lineage only: local movement and single-element edits are
-  O(1) amortized along one lineage and O(log n) worst-case, while dirty snapshot materialization is
-  bounded focus/carry packing plus an O(log n) tree join. Editing `b` independently retained cursors
+- A cursor created from a rope retains that source version as its clean snapshot. Snapshot creation
+  must not mutate an ancestor or sibling version, and a failed edit must leave the receiver reusable.
+- Initialized cursor values do not mutate shared persistent storage during reads. Each language must
+  document its default-construction, invalid-operation, borrowed-value, and thread-safety conventions.
+
+The C# positional zipper additionally requires a shared navigation context and snapshot cache. A
+dirty first `Snapshot()` publishes one canonical rope through a thread-safe winner-returning memo
+cell; repeated clean snapshots from any navigation context over the version are O(1) and return the
+same rope reference. Failed construction publishes nothing, initialized cursors support racing first
+snapshots, the default `RopeCursor<T>` is invalid, and the initialized empty state comes from
+`Rope<T>.Empty.GetCursor()`. Its proven complexity scope is linear-lineage only: local movement and
+single-element edits are O(1) amortized along one lineage and O(log n) worst-case, while dirty snapshot
+materialization is bounded focus/carry packing plus an O(log n) tree join. Editing `b` independently
+retained cursors
   at a boundary has the conservative O(b log n) aggregate bound; there is no unqualified
   arbitrary-version-DAG O(1)-amortized claim.
 
-The measured cursor additionally requires:
+The C++ positional checkpoint stores an already-canonical retained rope plus its gap. Construction,
+navigation, and snapshot are O(1); peeks and point edits are O(log n) plus bounded chunk work. It is
+non-default-constructible and makes no zipper, memo-cell, or O(1)-amortized local-edit claim.
+
+The C# measured cursor additionally requires:
 
 - `MeasureBefore` aggregates `[0, Position)` and `MeasureAfter` aggregates `[Position, Count)`;
   combining them in that order yields the whole version's measure without assuming an inverse,

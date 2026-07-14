@@ -2,8 +2,8 @@
 
 - Created (UTC): 2026-07-02T21:06:57Z
 - Repository HEAD: 399710816b9007dde1374aef2043f118beddc225
-- Updated (UTC): 2026-07-12T05:22:05Z
-- Updated Repository HEAD: 2b2f91177a7c90ddfc4769d86f0a928fdede6f03
+- Updated (UTC): 2026-07-14T04:50:00Z
+- Updated Repository HEAD: f814076ceba253306517114ff94d30f952af92e6
 - Audience: Maintainers validating the C++ FingerTree port
 - Scope: Native test executable, source grouping, and stress controls under `src/Cpp/FingerTree/tests`
 
@@ -71,7 +71,9 @@ listing, and replay-seed selection.
 - `interval_tree_tests.cpp` covers insertion, forward traversal/copy, overlap, containment, streaming coalescing,
   removal, and sweep-model checks.
 - `rope_tests.cpp`, `measured_rope_tests.cpp`, and `rope_text_tests.cpp` cover chunked sequence editing, retained
-  chunk-aware forward traversal, bounded nonmaterializing copy, same-type insertion regression guards, measured
+  chunk-aware forward traversal, bounded nonmaterializing copy, same-type insertion regression guards, positional
+  cursor endpoints, chunk seams, no-ops, copy-on-move validity, lvalue-only borrowed peeks, retained branches,
+  deterministic vector-gap histories, measured
   searches, text interop, line navigation, retained text snapshots, long edit scripts, and randomized
   vector/string-model histories.
 - `atomic_box_tests.cpp` and `tearable_concurrency_tests.cpp` cover atomic, data-race-safe publication helpers and

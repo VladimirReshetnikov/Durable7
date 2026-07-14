@@ -3,8 +3,8 @@
 - Status: Current validation guide
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-12T05:22:05Z
-- Updated Repository HEAD: 2b2f91177a7c90ddfc4769d86f0a928fdede6f03
+- Updated (UTC): 2026-07-14T04:50:00Z
+- Updated Repository HEAD: f814076ceba253306517114ff94d30f952af92e6
 - Audience: Maintainers validating the C++ port
 - Scope: Local/CI build, test, stress, sample, packaging, sanitizer, and benchmark guidance
 
@@ -187,8 +187,10 @@ The suite covers:
 - sorted bag/set/map ranking, navigation, range, custom order, set algebra, and randomized model checks;
 - priority queue ordering, stability, and command-model behavior;
 - interval tree insertion, overlap, containment, coalescing, removal, and model comparisons;
-- `rope<T>`, measured rope, text rope, line navigation, chunked mutations, retained text snapshots, long edit
-  scripts, and randomized vector-model histories;
+- `rope<T>`, its positional snapshot-plus-gap cursor, measured rope, text rope, line navigation, chunked
+  mutations, retained cursor branches, copy-on-move source validity, lvalue-only borrowed peeks, text snapshots,
+  boundary/chunk-seam cursor edits, long edit scripts,
+  and randomized vector-gap and sequence-model histories;
 - atomic-box/lazy-publication helpers, allocation counters, operation counters, and command-model support;
 - tearable-struct concurrency stress tests for measured trees, measured ropes, atomic data-race-safe rope
   publication, and branching histories over retained shared bases. These tests make no lock-free progress claim;

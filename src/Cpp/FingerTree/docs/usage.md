@@ -2,8 +2,8 @@
 
 - Created (UTC): 2026-07-02T20:03:36Z
 - Repository HEAD: 17d505f18e9e0a5748058701d408ed6642dcba29
-- Updated (UTC): 2026-07-12T05:22:05Z
-- Updated against repository HEAD: 2b2f91177a7c90ddfc4769d86f0a928fdede6f03
+- Updated (UTC): 2026-07-14T04:50:00Z
+- Updated against repository HEAD: f814076ceba253306517114ff94d30f952af92e6
 - Audience: C++ consumers and maintainers using the public FingerTree headers
 - Scope: Public include path, value semantics, canonical ranking, priority cores, and facade quick starts
 
@@ -363,12 +363,27 @@ auto rope = ft::rope<int>::from_range(std::vector{1, 2, 3, 4});
 auto edited = rope.insert_at(2, 99).remove_at(0);
 auto slice = edited.slice(1, 2);
 
+auto cursor = rope.get_cursor(2);             // gap between 2 and 3
+auto branch = cursor.insert(99).move_previous();
+const int* next = branch.try_peek_next();      // borrowed from branch's retained snapshot
+auto cursor_snapshot = branch.snapshot();     // cheap persistent rope copy
+
 auto measured = ft::measured_rope<int, ft::sum_measure<int>>::from_range(std::vector{5, 1, 4});
 auto located = measured.try_locate_by_measure(ft::sum_above_predicate<int>{5});
 ```
 
 `rope<T>::from_chunks` accepts immutable shared vector storage when retaining chunk backing storage
 is intentional. `compact()` rebuilds fresh chunks to release oversized retained backing storage.
+
+`rope_cursor<T>` denotes a gap from zero through the snapshot size. It has no valid default state: obtain one
+with `get_cursor`. Cursor values are immutable, so retaining a cursor retains its version and edits can branch.
+Moving a cursor copies its shared root and leaves both source and destination valid. Borrowed peeks are available
+only on lvalue cursors, preventing a pointer from escaping a temporary cursor that owns the last snapshot copy.
+Construction, movement, seek, and snapshot are O(1); peeks and point edits are O(log n) plus bounded chunk work,
+and range insertion is O(m + log n) amortized. `replace_next` never invokes element equality, so replacing an
+element with an equal value still creates a distinct persistent version at the same gap. The cursor is a
+snapshot-plus-position facade, not the C# zipper, and does not promise O(1)-amortized local edits. A borrowed peek
+pointer must not outlive every cursor or snapshot copy that retains the pointed-to storage.
 
 For text:
 

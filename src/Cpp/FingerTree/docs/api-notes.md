@@ -3,8 +3,8 @@
 - Status: Current API notes
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-12T05:22:05Z
-- Updated against repository HEAD: 2b2f91177a7c90ddfc4769d86f0a928fdede6f03
+- Updated (UTC): 2026-07-14T04:50:00Z
+- Updated against repository HEAD: f814076ceba253306517114ff94d30f952af92e6
 - Audience: Maintainers implementing and reviewing public C++ APIs
 - Scope: C++ naming, contracts, and intentional differences from the C# workspace
 
@@ -290,6 +290,7 @@ Primary operations:
 - observers: `empty`, `size`, `front`, `back`, `at`, `operator[]`, and `try_get`;
 - endpoint updates: `push_front`, `push_back`, `add_first`, `add_last`, `remove_first`, and `remove_last`;
 - indexed and range updates: `set_item`, `set_at`, `insert_at`, `insert_range`, `remove_at`, and `remove_range`;
+- persistent gap editing: `get_cursor`, returning `rope_cursor<T>`;
 - slicing and catenation: `slice`, `split_at`, and `concat`;
 - streaming traversal/copy: `begin`, `end`, `cbegin`, `cend`, and indexed-span `copy_to`;
 - explicit materialization: `to_vector`, `get_range`, and `compact`;
@@ -307,6 +308,23 @@ Notable C++ differences from C#:
   backing vectors, and `compact()` rebuilds fresh chunks to release oversized retained backing storage;
 - `const_iterator` is a multipass, chunk-aware forward iterator. Its underlying measured-tree cursor retains the
   chunk tree and backing storage, so references survive destruction of the facade that produced the iterator.
+
+`rope_cursor<T>` is a non-default-constructible immutable value containing a retained rope snapshot and a gap in
+`0 .. size()`. It exposes `size`, `position`, `is_at_start`, `is_at_end`, borrowed-pointer `try_peek_previous` and
+`try_peek_next`, `move_previous`, `move_next`, `seek`, `insert`, both range and rope `insert_range` overloads,
+`delete_previous`, `delete_next`, `replace_next`, and `snapshot`. A same-position seek and empty range insertion
+return the receiver unchanged. Previously retained cursors and snapshots remain valid and can independently fork
+new edits. Factory/seek positions outside the gap range throw `std::out_of_range`; impossible endpoint movement,
+deletion, and replacement throw `std::logic_error`. `replace_next` deliberately performs no equality comparison:
+even an equal replacement creates a distinct persistent version while preserving the gap.
+Move construction and assignment copy the shared root rather than emptying the source, so both cursor values
+remain valid. Borrowed peeks are lvalue-only; the rvalue overloads are deleted to prevent a pointer from outliving
+a temporary cursor that was its last backing-storage owner.
+
+Cursor construction, movement, seeking, and `snapshot()` are O(1) root-sharing operations. A peek or point edit
+is O(log n) plus bounded chunk work, and inserting m range elements is O(m + log n) amortized. This positional
+checkpoint does not port the C# zipper: it does not claim O(1)-amortized local navigation or point editing.
+Measured-rope and text-rope cursors are not part of this checkpoint.
 
 ## `measured_rope<T, MeasurePolicy>`
 
