@@ -402,7 +402,7 @@ specified by its [workspace README](../../src/Haskell/FingerTree/README.md) and 
 [API notes](../../src/Rust/FingerTree/docs/api-notes.md) and
 [validation guide](../../src/Rust/FingerTree/docs/validation.md). The C++ checkpoint is specified by
 its [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) and
-[validation guide](../../src/Cpp/FingerTree/docs/validation.md). The C positional checkpoint is
+[validation guide](../../src/Cpp/FingerTree/docs/validation.md). The C cursor checkpoints are
 specified by its [API notes](../../src/C/FingerTree/docs/api-notes.md) and
 [validation guide](../../src/C/FingerTree/docs/validation.md).
 

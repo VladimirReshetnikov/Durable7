@@ -84,7 +84,7 @@ ordering, and documentation obligations that should remain recognizable across l
 | [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | Rust HAMT/Patricia port and wire-compatible Merkle search tree | `Cargo.toml`, `src/lib.rs`, `src/merkle_search_tree.rs` | [`docs`](../../src/Rust/Hamt/docs/README.md) |
 | [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | Canonical managed FingerTree library | `DataStructures.sln`, `src/Tools.DataStructures.FingerTree/`, `tests/Tools.DataStructures.FingerTree.Tests/`, `samples/`, `benchmarks/` | [`docs`](../../src/CSharp/docs/FingerTree/README.md) |
 | [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | C++23 FingerTree/RRB/canonical-set family with Brodal/PSQ cores, positional/measured/text rope cursors, and native DABA Lite | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/Cpp/FingerTree/docs/README.md) |
-| [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | C11 FingerTree/RRB/canonical-set family with a positional rope cursor, type-erased Brodal/PSQ cores, and DABA Lite | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/C/FingerTree/docs/README.md) |
+| [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | C11 FingerTree/RRB/canonical-set family with positional/measured/text rope cursors, type-erased Brodal/PSQ cores, and DABA Lite | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/C/FingerTree/docs/README.md) |
 | [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) | Haskell FingerTree/RRB/canonical-set family port with positional/measured/text rope cursors | `tools-data-structures-fingertree.cabal`, `src/Data/Structures/FingerTree/` | [`README`](../../src/Haskell/FingerTree/README.md) |
 | [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | Kotlin/JVM persistent measured-tree/RRB/canonical-set/optimal-priority family plus managed DABA Lite | `src/tools/datastructures/fingertree/`, `test/tools/datastructures/fingertree/` | [`docs`](../../src/Kotlin/FingerTree/docs/README.md) |
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | Rust FingerTree/RRB/canonical-set checkpoint with non-`Clone` Brodal/PSQ cores plus single-threaded DABA Lite | `Cargo.toml`, `src/` | [`docs`](../../src/Rust/FingerTree/docs/README.md) |
@@ -128,8 +128,8 @@ FingerTree lineage:
    CMake/CTest validation.
 3. `src/C/FingerTree` starts from the C++ port and exposes a C11 API with explicit handles,
    ownership, persistent facades, RRB vectors, an erased-type-safe policy-canonical zip-zip set, a
-   failure-atomic type-erased Brodal-Okasaki heap and winner-cached priority-search queue, an
-   explicit-lifetime root-sharing positional rope cursor, and mutable DABA Lite.
+   failure-atomic type-erased Brodal-Okasaki heap and winner-cached priority-search queue,
+   explicit-lifetime root-sharing positional/measured/text rope cursors, and mutable DABA Lite.
 4. `src/Haskell/FingerTree` ports the family to Haskell with a general measured tree,
    deque/reversible deque, derived collections, the explicitly identified policy-canonical zip-zip
    set, intervals, ropes, positional/measured/text snapshot-plus-gap cursors, and text helpers.

@@ -1084,8 +1084,8 @@ until a consumer and benchmark justify them.
 **Verdict: C1, C2, and C3 implemented; C4 remains consumer-gated.** The
 positional and measured cursors separately cleared their named local-edit, query, allocation,
 callback, and validation gates; the samples lock retained-history, branch, coordinate, and
-cadence-sixteen transcripts. The C positional checkpoint and the C++, Haskell, Kotlin, and Rust
-positional/measured/text checkpoints add semantic behavior parity without asserting zipper or
+cadence-sixteen transcripts. The C, C++, Haskell, Kotlin, and Rust positional/measured/text
+checkpoints add semantic behavior parity without asserting zipper or
 benchmark parity. Those results do not
 pre-approve later sequence adapters or a broader branched-history complexity claim.
 
