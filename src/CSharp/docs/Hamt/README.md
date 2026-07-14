@@ -26,10 +26,11 @@
 - [CHAMP transient T1 decision](transient-t1-decision.md) selects the direct separate-node kernel,
   records the affinity-pinned material-win and sparse guard, closes the retained-layout and
   failure/canonicality evidence, and authorizes T2 public-API implementation without shipping it.
-- [CHAMP transient T2 decision](transient-t2-decision.md) ships the C#-only public map/set transient
-  lifecycle, records its exact API and one-way consumption contract, carries forward the pinned T1
-  evidence, records the full public-path confirmation, and distinguishes the earlier Dry-job smoke
-  from performance evidence.
+- [CHAMP transient T2 decision](transient-t2-decision.md) records the original C#-only shipment of
+  the optimized owner-token map/set lifecycle, its exact API and one-way consumption contract, the
+  pinned T1 evidence, the full public-path confirmation, and the distinction between the earlier
+  Dry-job smoke and performance evidence. Sibling workspaces now expose semantic path-copying
+  sessions without inheriting that performance claim.
 - [Frozen hash F0 packed-index signal decision](frozen-f0-signal-decision.md) records the faithful
   linear prototype, standalone semantic verifier, locked isolated evidence commands, and the
   postponed advance/defer gate that must close before F1 can be interpreted.

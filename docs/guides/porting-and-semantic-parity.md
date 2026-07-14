@@ -51,6 +51,29 @@ HAMT lineage:
    `BuildHasher` hash policies, `Eq` key equality, `Arc` structural sharing, and `Result`/`Option`
    result shapes.
 
+The one-way CHAMP map/set editing lifecycle now exists in all six workspaces. Preserve these shared
+semantics when changing it: O(1)-in-trie adoption and terminal publication, one logical owner,
+one-way consumption, exact policy and stored-representative preservation, retained-source
+isolation, unchanged-root identity after logical no-ops, receiver-policy set relations, and
+failure-atomic point edits.
+
+Do not mechanically copy the C# representation claim into a sibling port. C# alone currently has
+the optimized owner-token kernel: it mutates token-owned nodes and path-copies shared/sealed nodes.
+C, C++, Haskell, Kotlin, and Rust expose semantic lifecycle facades whose changed point edits invoke
+the persistent path-copying kernel; their adoption/publication are O(1) in trie size, but they make
+no edit-throughput or allocation-win claim. Keep each language's lifecycle shape explicit:
+
+- C clone handles alias one ref-counted session state, share consumption, and surface consumed or
+  modified-iterator conditions through status codes.
+- C++ sessions are move-only and rvalue-published. Nothrow policy moves give non-throwing
+  publication; a throwing custom policy move has the documented no-retry/content-preservation
+  caveat.
+- Haskell sessions live in `IO` and use candidate-before-masked-commit publication into their
+  `IORef` state.
+- Kotlin rejects post-publication access dynamically and binds acquired views to the session version.
+- Rust consumes the session through `into_persistent(self)`, expressing use-after-publication
+  prevention in ownership rather than a runtime consumed state.
+
 The policy-bound Merkle search tree is complete across all six languages. Every port pins the
 SHA-256 domain, key framing, empty digest, canonical `MST2` block bytes, seven verification budgets,
 `MSP2` point/range proofs, closure-pruned synchronization, and no-partial-result three-way merge.
@@ -229,6 +252,10 @@ For map/set changes, verify these contracts across C#, C++, C, Haskell, Kotlin, 
 - Set algebra comparer/policy behavior and any temporary materialization costs.
 - Stable-but-unspecified enumeration order for unchanged versions.
 - Structural sharing and no-op root/instance behavior expressed in each language's ownership model.
+- For one-way editing sessions, adoption/publication without a trie walk, single-owner consumption,
+  active-read and version-bound-iteration behavior, exact clean/no-op identity, retained-source
+  isolation, policy/representative preservation, receiver-policy set relations, and failure-atomic
+  edits. Require separate evidence before claiming owner-token in-place edits or a performance win.
 - For Merkle ports, byte-identical policy domains, `MST2` blocks, and `MSP2` queries; finite resource
   budgets enforced before untrusted allocation or decoding; complete closure validation; atomic
   publication; and merge semantics that distinguish deletion from a present nullable value.

@@ -1,6 +1,6 @@
 # Frontier Structure Catalog
 
-- Status: Current-state catalog - shipped Axis 1 cores, shipped C# Axis 2 C1/C2/C3/T2, and remaining frontier candidates
+- Status: Current-state catalog - shipped Axis 1 cores, shipped C# Axis 2 C1/C2/C3/T2, cross-language semantic CHAMP sessions, and remaining frontier candidates
 - Created (UTC): 2026-07-11T03:31:23Z
 - Repository HEAD: f40e301e8faf26d748f33d8546d7d9216657301e
 - Audience: Maintainers and AI agents planning new repository-owned cores, representation tiers, and specialized sibling collections
@@ -11,8 +11,9 @@ This document began as a catalog of candidate work that the
 records what can be built *by composing* the shipped HAMT and FingerTree families; this one records
 three complementary axes. Axis 1 now includes both implemented reference cores and unimplemented
 candidates. Axis 2 now includes the shipped C# positional and measured rope cursors, their Tour and
-Editor integration, and one-way CHAMP transients; frozen-hash and later phases remain planning material, as
-does Axis 3:
+Editor integration, the optimized C# one-way CHAMP transient, and semantic path-copying CHAMP
+editing sessions in every sibling language; frozen-hash and later phases remain planning material,
+as does Axis 3:
 
 1. **New cores** - structures that need their own node layer, including several invented or refined
    in the last decade.
@@ -40,8 +41,9 @@ the *frontier* candidate space beyond it. Three items originally overlapped: the
 family (proposal Tier C1), the cursor/zipper (proposal A3), and the RRB vector (then deferred on
 benchmark-first grounds). Patricia and RRB have since shipped across the language workspaces, and
 the positional cursor, measured/text cursor, sample integration, and CHAMP owner-token transients
-have shipped as C# Axis 2 C1, C2, C3, and T2; the frozen tier and later cursor families remain
-planned. The cursor and the temporal-lifecycle work have a dedicated
+have shipped as C# Axis 2 C1, C2, C3, and T2. The one-way lifecycle has since gained semantic
+path-copying ports in C, C++, Haskell, Kotlin, and Rust; the frozen tier and later cursor families
+remain planned. The cursor and the temporal-lifecycle work have a dedicated
 [Axis 2 final plan](../proposals/axis2-lifecycle-and-sequence-cursors.md), which is authoritative where
 its API, complexity, or sequencing detail differs from the older proposal. The entries below are
 the current-state record, while the 2026-07-09 proposal remains useful historical scheduling
@@ -74,7 +76,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | Ctrie (concurrent, O(1) snapshot) | 1 | Managed-only (C# + Kotlin/JVM implemented) | Tracing GC; native ports require reclamation design | 1 new core, concurrency test tier |
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
 | Size-tiered small representations | 2 | Strong, explicitly postponed | Re-entry benchmark after the Axis 2 fixed-layout evidence decision | Internal tier per selected facade + representation-forcing tests |
-| Transient -> persistent -> frozen lifecycle | 2 | C# CHAMP T2 owner-token transient implemented; frozen map/set tier remains planned and evidence-gated | T0/T1/T2 complete for the transient; postponed F0 then F1 evidence must precede F2 | Shipped C# map/set transients + planned frozen map/set types |
+| Transient -> persistent -> frozen lifecycle | 2 | C# CHAMP T2 owner-token transient and semantic path-copying sibling sessions implemented; frozen map/set tier remains unshipped and evidence-gated | T0/T1/T2 complete for the optimized transient; sibling lifecycle ports complete; postponed F0 then F1 evidence must precede F2 | Shipped map/set sessions across six languages + planned frozen map/set types |
 | Version-bound cursor / zipper | 2, 3 | C1 positional cursor, C2 measured/text cursor, and C3 samples implemented in C#; C4 consumer-gated | C0 selected the readonly-struct zipper-as-version; C2 cleared its measured/text gate | Shipped positional and measured cursors plus Tour/Editor integration |
 | Key-type-specialized map factories | 2 | Plausible, explicitly postponed | Named consumer after explicit Patricia consideration | Factory layer; ART only if independently justified |
 | Self-adjusting (splay-style) structures | 2 | Reject | - | Reads allocate under path copying; cursors + freeze substitute |
@@ -779,8 +781,8 @@ persistent snapshotting: `ConcurrentDictionary` performance with `PersistentHash
 **Why managed runtimes only.** In .NET and on the JVM the garbage collector solves the memory-reclamation problem that
 makes lock-free tries hard in native code; the C port would be an epoch/hazard-pointer project (the
 derived catalog's `Atom<T>` entry records the same conclusion for a far simpler cell). Parity
-economics therefore cap this at a C#-only (or C#+JVM) tier, which the porting guide would need to
-acknowledge explicitly.
+economics therefore cap this at the implemented C# + Kotlin/JVM managed tier, which the porting
+guide acknowledges explicitly.
 
 **Verdict: Implemented for the managed tier.** The use case is hot shared caches that periodically
 publish immutable snapshots into the persistent world. Deterministic descriptor interleavings,
@@ -792,9 +794,9 @@ required concurrency-validation tier; the native reclamation exception remains e
 ### Size-tiered small representations
 
 **Status: Explicitly postponed; the current persistent facades do not switch to flat small-size
-tiers. Axis 2 has independently shipped the C1 positional cursor, C2 measured/text cursor, and T2
-C# CHAMP transient, while
-the fixed-layout evidence gate still precedes any size-tier re-entry.**
+tiers. Axis 2 has independently shipped the C1 positional cursor, C2 measured/text cursor, the T2
+C# owner-token CHAMP transient, and semantic sibling-language editing sessions, while the
+fixed-layout evidence gate still precedes any size-tier re-entry.**
 
 **The pattern.** Below a threshold, represent the collection as a flat array; promote to the tree
 representation at the threshold; demote on shrink with hysteresis. Precedents: Clojure's
@@ -838,11 +840,11 @@ independently demonstrated by the Axis 2 fixed-layout tier, if that tier ships.
 
 ### The transient -> persistent -> frozen lifecycle
 
-**Status (2026-07-13): T2 owner-token transients are shipped for the C# CHAMP map and set. The
-repository-owned frozen collection tier is not shipped: the faithful F0 prototype exists, but its
-advance/defer evidence and the dependent F1 layout evidence are postponed until isolated benchmark
-runs, and
-F2 is not authorized. No sibling-language transient or frozen parity is committed. The
+**Status (2026-07-13): T2 owner-token transients are shipped for the C# CHAMP map and set, and C,
+C++, Haskell, Kotlin, and Rust now ship semantic one-way editing sessions over their persistent
+path-copying kernels. The repository-owned frozen collection tier is not shipped: the faithful F0
+prototype exists, but its advance/defer evidence and the dependent F1 layout evidence are postponed
+until isolated benchmark runs, and F2 is not authorized. No frozen parity is committed. The
 [T2 shipment decision](../../src/CSharp/docs/Hamt/transient-t2-decision.md) records the public
 boundary; the [Axis 2 final plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) remains
 normative for the unshipped frozen phases.**
@@ -850,18 +852,20 @@ normative for the unshipped frozen phases.**
 **The correction.** Existing HAMT bulk construction, sorted builders, and rope/RRB frozen-prefix
 builders are staging or pattern-specific builders, not transients in the persistent-collection
 sense. They do not adopt an arbitrary persistent root, mutate uniquely owned paths, and publish the
-same nodes in O(1). The Ctrie's generation snapshot is a third mechanism again. Axis 2 keeps five
-terms distinct: staging builder, owner-token transient, persistent version, Ctrie snapshot view,
-and read-optimized frozen collection.
+same nodes in O(1). The Ctrie's generation snapshot is a third mechanism again. The C# reference
+keeps five terms distinct: staging builder, owner-token transient, persistent version, Ctrie
+snapshot view, and read-optimized frozen collection. Sibling semantic editing sessions preserve the
+transient lifecycle contract but do not claim the owner-token representation.
 
 **First lifecycle.** C# CHAMP map/set is the reference family:
 
 ```text
-Persistent --O(1) ToTransient--> single-owner Transient --O(1) Persist--> Persistent  [shipped C# T2]
+Persistent --O(1) ToTransient--> single-owner Transient --O(1) Persist--> Persistent  [C# optimized T2]
+Persistent --O(1) adopt-------> single-owner session ---O(1) publish--> Persistent  [C/C++/Haskell/Kotlin/Rust; path-copy edits]
 Persistent --O(n) Freeze-------> fixed-layout Frozen --O(n) ToPersistent--> Persistent [planned]
 ```
 
-The shipped transient is one-way. `Persist()` consumes the session, seals any allocated edit token,
+The shipped C# transient is one-way. `Persist()` consumes the session, seals any allocated edit token,
 publishes without traversing the graph, and invalidates the mutable object and every previously
 obtained view or enumerator. Edits mutate only nodes and arrays proven owned by the active token and
 path-copy shared/sealed storage.
@@ -874,6 +878,16 @@ surface rather than a semantic change to the existing staging builders. See the
 [T0](../../src/CSharp/docs/Hamt/transient-t0-decision.md),
 [T1](../../src/CSharp/docs/Hamt/transient-t1-decision.md), and
 [T2](../../src/CSharp/docs/Hamt/transient-t2-decision.md) decisions for the successive boundaries.
+
+The sibling sessions port the observable one-way lifecycle, not the optimized kernel. They preserve
+policy identity, stored representatives, exact clean/no-op root identity, retained sources,
+receiver-policy set relations, and failure-atomic edits, but every changed point edit computes an
+ordinary persistent path-copy successor before replacing the current session value. Consequently
+they make no transient-throughput or allocation-win claim. C explicit clones alias one ref-counted
+consumed state and expose lifecycle/iterator failures through status codes; C++ sessions are
+move-only and document the publication caveat for throwing custom policy moves; Haskell sessions
+live in `IO`; Kotlin checks consumption dynamically and binds views to session versions; Rust uses
+consuming ownership for publication.
 
 The first frozen types are separate `FrozenHashMap<TKey, TValue>` and `FrozenHashSet<T>` types with
 no update-shaped API. They use one offline-built general hash layout for every count and key type,
@@ -902,12 +916,14 @@ all postponed. Benchmarks may contain tiny and string datasets, but those are wo
 permission to select a representation. This isolates the value of the temporal lifecycle before
 combining it with size or key specialization.
 
-**Verdict: C# CHAMP transient implemented; frozen tier remains a strong evidence-gated candidate.**
-The independent C1 cursor and T2 transient shipments do not clear Track F. Advance F only through
+**Verdict: CHAMP editing sessions are implemented across all six languages; only C# claims the
+owner-token optimization, and the frozen tier remains a strong evidence-gated candidate.** The
+independent C1 cursor, T2 transient, and sibling semantic-session shipments do not clear Track F.
+Advance F only through
 the final plan's semantic, failure-atomicity, retained-memory, lookup, enumeration, construction,
 and break-even gates. Evaluate RRB transients, Ctrie snapshot-to-frozen conversion, and other frozen
-families only after the corresponding C# reference contract settles; T2 itself commits no sibling-
-language transient work.
+families only after the corresponding C# reference contract settles. Sibling lifecycle parity does
+not authorize sibling frozen types or a claim of owner-token edit performance.
 
 ### Cursor / zipper over the sequence family
 
@@ -1144,13 +1160,15 @@ New rules this survey adds to the derived catalog's seven:
 
 ## Implementation Status And Remaining Sequencing
 
-### Shipped reference cores and C# Axis 2 surfaces
+### Shipped reference cores and Axis 2 surfaces
 
-The implementation wave described by this catalog has already landed these C# reference surfaces:
+The implementation wave described by this catalog has already landed these reference and port surfaces:
 
 - CHAMP canonical nodes plus structural equality/diff;
 - the C# `PersistentHashMap<TKey, TValue>.Transient` and `PersistentHashSet<T>.Transient` one-way
   owner-token editing sessions;
+- semantic one-way CHAMP map/set editing sessions in C, C++, Haskell, Kotlin, and Rust, retaining
+  persistent path-copy costs;
 - 32-bit and 64-bit Patricia maps and sets;
 - `RrbVector<T>`;
 - the Merkle search tree, including its deterministic wire, bounded verification, proofs, sync,
@@ -1167,8 +1185,9 @@ entries; the canonical zip-zip set, Brodal-Okasaki heap, and priority-search que
 across all six languages, and DABA Lite now exists in every applicable imperative
 language (C#, C, C++, Kotlin/JVM, and Rust). The Ctrie's deliberate parity boundary remains C# and
 Kotlin/JVM. The Merkle search tree's full trust-boundary tier is complete across all six languages.
-The owner-token transient lifecycle is C#-only; no sibling transient parity is implied. These are
-current-state implementation records, not candidates awaiting a consumer.
+The one-way CHAMP editing lifecycle now spans all six languages; the owner-token in-place-edit
+optimization and its performance evidence remain C#-only. These are current-state implementation
+records, not candidates awaiting a consumer.
 Future work on the Axis 1 cores is ordinary hardening, measurement, and demand-driven porting. The
 cursor's C4 extensions retain the separate status recorded in its entry above.
 
@@ -1184,9 +1203,11 @@ remaining work is sequenced as follows:
 
 1. **C1 is shipped:** C0 selected the readonly-struct zipper-as-version with focus 16 and flush 256,
    closed focused-root escalation, and published the linear-lineage/O(b log n) branch scope.
-2. **T2 is shipped in C# only:** T0 qualified the clustered many-edit regime, T1 selected the direct
-   separate-node owner-token kernel, and T2 published the one-way CHAMP map/set transient after
-   lifecycle, failure, retained-memory, and API-shape gates.
+2. **T2's optimized kernel is shipped in C#, and semantic sessions are shipped across the sibling
+   languages:** T0 qualified the clustered many-edit regime, T1 selected the direct separate-node
+   owner-token kernel, and T2 published the C# one-way CHAMP map/set transient after lifecycle,
+   failure, retained-memory, and API-shape gates. C, C++, Haskell, Kotlin, and Rust port the
+   lifecycle through persistent path copying without inheriting the performance claim.
 3. **C2 is shipped:** the measured/text cursor cleared its measure-law, failure/race, text-helper,
    callback, allocation, dirty-query, and measured-workload gates.
 4. **C3 is shipped:** Editor and Tour retain measured cursors, use the measured cadence of sixteen,

@@ -10,12 +10,14 @@
 `Tools.DataStructures.Hamt`, a persistent and concurrent trie/search-tree library led by canonical
 CHAMP. `PersistentHashMap<TKey, TValue>` is an immutable unordered dictionary with structural
 sharing across versions. `PersistentHashSet<T>` is built on the same core and implements
-`IReadOnlySet<T>`. Both expose a C#-only one-way `Transient` editing session for many edits per
-publication. `CreateTransient` starts empty and `ToTransient` adopts a persistent value in O(1);
+`IReadOnlySet<T>`. Both expose the optimized C# one-way `Transient` editing session for many edits
+per publication. `CreateTransient` starts empty and `ToTransient` adopts a persistent value in O(1);
 `Persist` publishes in O(1), consumes the session, and returns the exact source object when the
 session remained logically clean. The map surface is the selected direct separate-node engine
 itself, not an additional public facade allocation; the set surface is a thin `IReadOnlySet<T>`
-facade over that map engine.
+facade over that map engine. C, C++, Haskell, Kotlin, and Rust separately expose the same one-way
+lifecycle through semantic sessions whose changed edits remain persistent path-copy operations;
+they do not inherit this C# engine's owner-token performance claim.
 
 `ConcurrentHashTrie<TKey, TValue>` is the deliberately mutable member of the family. It applies
 GCAS descriptors to generation-stamped indirection nodes and a root/main RDCSS transition for
