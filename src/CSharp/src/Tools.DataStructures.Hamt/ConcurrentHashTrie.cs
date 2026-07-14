@@ -26,6 +26,7 @@ public sealed class ConcurrentHashTrie<TKey, TValue> : IReadOnlyDictionary<TKey,
 
     internal Action? SnapshotMainReadHookForTesting;
     internal Action? GcasInstalledHookForTesting;
+    internal Action? RemovalCommittedHookForTesting;
 
     /// <summary>Initializes an empty trie with the default key comparer.</summary>
     public ConcurrentHashTrie() : this(comparer: null) { }
@@ -252,7 +253,10 @@ public sealed class ConcurrentHashTrie<TKey, TValue> : IReadOnlyDictionary<TKey,
                         break;
                     Interlocked.Increment(ref _revision);
                     if (decision.Kind == DecisionKind.Remove)
+                    {
+                        Volatile.Read(ref RemovalCommittedHookForTesting)?.Invoke();
                         CleanTombs(hash);
+                    }
                     return new MutationResult(true, decision.ResultValue);
                 }
 
@@ -288,7 +292,10 @@ public sealed class ConcurrentHashTrie<TKey, TValue> : IReadOnlyDictionary<TKey,
                             break;
                         Interlocked.Increment(ref _revision);
                         if (decision.Kind == DecisionKind.Remove)
+                        {
+                            Volatile.Read(ref RemovalCommittedHookForTesting)?.Invoke();
                             CleanTombs(hash);
+                        }
                         return new MutationResult(true, decision.ResultValue);
                     }
 
@@ -583,14 +590,45 @@ public sealed class ConcurrentHashTrie<TKey, TValue> : IReadOnlyDictionary<TKey,
                 yield return KeyValuePair.Create(entry.Key, entry.Value);
             yield break;
         }
-        foreach (var branch in ((CNode)main).Branches)
+        var branches = ((CNode)main).Branches;
+        var summaries = new BranchSummary[branches.Length];
+        for (var index = 0; index < branches.Length; index++)
         {
-            if (branch is SNode singleton)
+            var summary = Classify(branches[index]);
+            summaries[index] = summary;
+            if (summary.Singleton is { } singleton)
                 yield return KeyValuePair.Create(singleton.Key, singleton.Value);
-            else
-                foreach (var entry in Enumerate((INode)branch))
+        }
+
+        for (var index = 0; index < branches.Length; index++)
+        {
+            if (summaries[index].HasMultipleEntries)
+                foreach (var entry in Enumerate((INode)branches[index]))
                     yield return entry;
         }
+    }
+
+    private BranchSummary Classify(Branch branch) =>
+        branch is SNode singleton
+            ? new BranchSummary(singleton, HasMultipleEntries: false)
+            : Classify(ReadMain((INode)branch));
+
+    private BranchSummary Classify(MainNode main)
+    {
+        if (main is TNode tomb)
+            return new BranchSummary(tomb.Entry, HasMultipleEntries: false);
+        if (main is LNode)
+            return new BranchSummary(Singleton: null, HasMultipleEntries: true);
+
+        SNode? singleton = null;
+        foreach (var branch in ((CNode)main).Branches)
+        {
+            var summary = Classify(branch);
+            if (summary.HasMultipleEntries || (summary.Singleton is not null && singleton is not null))
+                return new BranchSummary(Singleton: null, HasMultipleEntries: true);
+            singleton ??= summary.Singleton;
+        }
+        return new BranchSummary(singleton, HasMultipleEntries: false);
     }
 
     private static T[] ReplaceAt<T>(T[] source, int index, T value)
@@ -748,6 +786,11 @@ public sealed class ConcurrentHashTrie<TKey, TValue> : IReadOnlyDictionary<TKey,
     }
 
     /// <summary>An immutable O(1)-captured Ctrie generation.</summary>
+    /// <remarks>
+    /// Enumeration follows canonical CHAMP order: logical singleton payloads precede multi-entry
+    /// child nodes at every bitmap level. This includes singletons still hidden behind a frozen
+    /// deletion tomb; equal-hash collision entries retain their bucket order.
+    /// </remarks>
     public sealed class SnapshotView : IReadOnlyDictionary<TKey, TValue>
     {
         private readonly ConcurrentHashTrie<TKey, TValue> _owner;
@@ -797,6 +840,8 @@ public sealed class ConcurrentHashTrie<TKey, TValue> : IReadOnlyDictionary<TKey,
         int TombNodeCount,
         int EntryCount,
         int MaxDepth);
+
+    private readonly record struct BranchSummary(SNode? Singleton, bool HasMultipleEntries);
 
     internal sealed class Root(INode node, TrieGeneration generation)
     {

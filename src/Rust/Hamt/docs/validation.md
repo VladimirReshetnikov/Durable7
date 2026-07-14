@@ -22,7 +22,9 @@ live in `Hamt/tests/merkle_core_wire.rs` and `Hamt/tests/merkle_persistence.rs`.
 - no-op root sharing for equal-value replacement and absent removal;
 - duplicate rejection through `try_add` and `add`;
 - same-hash collision insertion, lookup, and removal;
-- CHAMP inline-payload/child-run invariants, independent insertion histories, and typed diff;
+- CHAMP inline-payload/child-run invariants, independent insertion histories, and typed diff,
+  including exact callback counters proving same-policy equality/diff rehash no keys and prune a
+  partially shared descendant subtree before value comparison;
 - 32/64-bit Patricia signed boundaries, randomized `BTreeMap` histories, structural map/set algebra,
   key/left/right map combiners, cached subtree-cardinality invariants, no-op root sharing, and direct
   union/intersection identity checks for a partially shared subtree;

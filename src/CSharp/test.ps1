@@ -41,8 +41,16 @@ if ($NoBuild) {
 if ($Blame) {
     $dotnetArguments += '--blame'
 }
-$forwardedArguments = if ($null -eq $AdditionalArguments) { @() } else { @($AdditionalArguments) }
-$separatorIndex = [Array]::IndexOf([string[]] $forwardedArguments, '--')
+[string[]]$forwardedArguments = @()
+if ($null -ne $AdditionalArguments) {
+    $forwardedArguments = @($AdditionalArguments)
+}
+$separatorIndex = if ($forwardedArguments.Length -eq 0) {
+    -1
+}
+else {
+    [Array]::IndexOf($forwardedArguments, '--')
+}
 if ($separatorIndex -ge 0) {
     $dotnetOptions = if ($separatorIndex -gt 0) {
         @($forwardedArguments[0..($separatorIndex - 1)])

@@ -91,38 +91,45 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 
 ### CHAMP canonicalization (upgrade to the shipped HAMT)
 
-**C# status (2026-07-12): Implemented.** The managed HAMT uses separate data/node bitmaps, inline
+**C# status (2026-07-14): Implemented.** The managed HAMT uses separate data/node bitmaps, inline
 payload runs, deletion-time leaf promotion, canonical one-freeze bulk construction, lockstep
 reference-pruned `MapEquals`, bitmap-aligned structural `Diff`, and same-type structural map/set
 algebra and relations. Its executable gate covers every
 leaf/collision/branch transition, eager argument validation, stored-key representatives, randomized
-node invariants, independent-history topology, reference-pruning bounds, and dedicated benchmarks.
+node invariants, independent-history topology, and reference-pruning bounds. Dedicated benchmark
+definitions remain available, but local measurement is deliberately postponed until the machine can
+run them without competing agent, CPU, memory, or I/O load.
 
-**Kotlin status (2026-07-12): Implemented.** The JVM port now has the same split bitmap/inline
-payload representation and canonical deletion promotion, plus policy-compatible `mapEquals` and
-typed `diff` and reference-pruned structural algebra. Its executable suite checks independent insertion histories, CHAMP node invariants,
-collisions, persistence, and concurrent readers.
+**Kotlin status (2026-07-14): Implemented.** The JVM port has the same split bitmap/inline payload
+representation and canonical deletion promotion. Exact-policy `mapEquals` and typed `diff` now
+traverse logical slots in lockstep, use stored hashes, and prune every reference-identical
+descendant. Its executable suite checks independent insertion histories, exact callback ceilings,
+CHAMP node invariants, collisions, persistence, and concurrent readers.
 
-**Rust status (2026-07-12): Implemented.** Both persistent path copying and `BulkBuilder` freezing
+**Rust status (2026-07-14): Implemented.** Both persistent path copying and `BulkBuilder` freezing
 now produce split data/node maps with inline payload runs and canonical deletion promotion. The safe
-`Arc` implementation adds owned typed diff, policy-identity-gated structural algebra, and
-representation-invariant coverage.
+`Arc` implementation adds policy-identity-gated lockstep equality, owned typed diff, structural
+algebra, and descendant-pruning callback gates. Independently created hasher-policy identities keep
+semantic lookup fallback behavior.
 
-**Haskell status (2026-07-12): Implemented.** `HashMap` now stores strict split data/node maps,
+**Haskell status (2026-07-14): Implemented.** `HashMap` stores strict split data/node maps,
 inline `(hash,key,value)` payload runs, child-only subtrie runs, and deletion promotion. Its
-dependency-free API adds `mapEquals`, typed `MapDifference` values, cached-cardinality structural
-algebra, and positive-only GHC pointer pruning, with `validStructure`
-checking the CHAMP invariants. Native-port status follows below.
+dependency-free API adds lockstep `mapEquals`, typed `MapDifference` values, cached-cardinality
+structural algebra, and indirection-aware positive-only GHC pointer pruning. Exact retained policy
+closures take the stored-hash path; independently supplied compatible policies retain semantic
+lookup fallback. `validStructure` checks the CHAMP invariants. Native-port status follows below.
 
-**C++ status (2026-07-12): Implemented.** The header-first C++20 map and its move-only bulk builder
+**C++ status (2026-07-14): Implemented.** The header-first C++20 map and its move-only bulk builder
 now use split maps, compact inline payload vectors, child-only shared subtries, and canonical removal
-promotion. `map_equals`, owned typed `map_difference`, cached counts, and policy-token-gated
-structural algebra round out the map surface.
+promotion. Same-policy-identity `map_equals`, owned typed `map_difference`, cached counts, and
+structural algebra align slots and prune shared descendants. Independently created stateful hash
+policies retain semantic lookup equality/diff, including different coherent hash states.
 
-**C status (2026-07-12): Implemented.** The C17 core stores split maps, inline type-erased payloads,
+**C status (2026-07-14): Implemented.** The C17 core stores split maps, inline type-erased payloads,
 and child-only flexible-array runs while preserving retain/release policy balance and allocation-
-failure rollback. Visitor-based typed diff avoids imposing an allocator on callers; two-set/map
-structural algebra is failure-atomic and reference-pruned. CHAMP is now
+failure rollback. Exact callback/context-compatible equality and visitor-based typed diff traverse
+stored hashes in lockstep and prune shared descendants; diff avoids imposing an allocator on
+callers. Two-set/map structural algebra is failure-atomic and reference-pruned. CHAMP is now
 implemented across all six repository languages.
 
 **What it is.** CHAMP (Compressed Hash-Array Mapped Prefix-tree; Steindorfer & Vinju, OOPSLA 2015)
@@ -750,7 +757,7 @@ first consumer outside the trees.
 
 ### Ctrie (concurrent hash trie with O(1) snapshots)
 
-**C# status (2026-07-11): Implemented with node GCAS, root/main RDCSS, and tomb cleanup.**
+**C# status (2026-07-14): Implemented with node GCAS, root/main RDCSS, and tomb cleanup.**
 `ConcurrentHashTrie<TKey, TValue>` provides lock-free mutable operations over bitmap C-nodes,
 singleton leaves, true equal-hash collision nodes, and empty/singleton tomb nodes. Readers help
 node-local GCAS; `Snapshot()` uses a GCAS-priority root/main RDCSS transition so a writer cannot be
@@ -758,15 +765,19 @@ lost between main observation and root publication. Later writers lazily renew o
 indirection nodes, while deletion promotes tombs through parents to prevent path-skeleton buildup.
 The gate includes deterministic descriptor schedules and an exhaustive serialization oracle for 400
 mixed short histories under ordinary, shared-prefix, and all-equal-hash policies. Immutable snapshot
-views convert explicitly to canonical `PersistentHashMap` form in O(n).
+views convert explicitly to canonical `PersistentHashMap` form in O(n). Snapshot enumeration now
+uses canonical CHAMP data-run-before-node-run order at every level, including frozen singleton
+tombs, so conversion preserves the exact captured entry sequence and representatives.
 
-**Kotlin/JVM status (2026-07-12): Implemented with node GCAS, root/main RDCSS, and tomb cleanup.**
+**Kotlin/JVM status (2026-07-14): Implemented with node GCAS, root/main RDCSS, and tomb cleanup.**
 `ConcurrentHashTrie<K,V>` mirrors the C# protocol with JVM atomics: bitmap C-nodes,
 singleton/collision/tomb nodes, helping node-local descriptors, linearizable O(1) generation
 snapshots, deletion-path contraction, and lazy child renewal. Its gate includes the deterministic
 committed-writer/snapshot schedule, deep and equal-hash contraction churn, contended same-key
 updates, a 250-round short-history serialization oracle under three hash policies, structural
-validation, retained generations, and explicit snapshot-to-CHAMP conversion.
+validation, retained generations, and explicit snapshot-to-CHAMP conversion. Its snapshot walker
+matches the same canonical data-run-before-node-run order, with mixed-branch and tomb-bearing
+fixtures proving exact conversion sequence.
 
 **Other-language status: Not applicable without a separate reclamation project.** C and C++ need
 epochs or hazard pointers before indirection-node CAS can reclaim safely. Rust's `Arc` ownership

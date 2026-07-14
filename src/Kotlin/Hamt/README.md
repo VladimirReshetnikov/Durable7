@@ -12,8 +12,9 @@ sharing between versions, and optional runtime `HashPolicy<K>` values for custom
 behavior. Maps expose policy-compatible semantic equality and typed added/removed/changed diff.
 Maps and sets also expose same-type structural union, intersection, difference, and symmetric
 difference. CHAMP nodes cache subtree cardinality, align logical bitmap slots without rehashing,
-and prune JVM-reference-identical roots and descendants; same-policy set relations use the same
-structural path while cross-policy relations retain receiver-policy semantics.
+and let map equality, typed diff, algebra, and same-policy set relations prune
+JVM-reference-identical roots and descendants; cross-policy relations retain receiver-policy
+semantics.
 
 The CHAMP map and set also expose one-way `Transient` editing sessions through `toTransient()` and
 `createTransient(...)`. Adoption and `persist()` are O(1) reference transfers, clean or logically

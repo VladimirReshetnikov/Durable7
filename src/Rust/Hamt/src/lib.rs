@@ -451,11 +451,19 @@ where
         }
     }
 
-    /// Reports semantic additions, removals, and replacements, with a shared-root fast path.
+    /// Reports semantic additions, removals, and replacements.
+    ///
+    /// Maps descending from one hash-policy identity are traversed in lockstep and prune every
+    /// `Arc`-identical descendant. Independently created policies retain the semantic fallback.
     #[must_use]
     pub fn diff(&self, other: &Self) -> Vec<MapDifference<K, V>> {
         if self.shares_root_with(other) {
             return Vec::new();
+        }
+        if Arc::ptr_eq(&self.policy_identity, &other.policy_identity) {
+            let mut result = Vec::new();
+            diff_champ_nodes(self.root.as_ref(), other.root.as_ref(), 0, &mut result);
+            return result;
         }
         let mut result = Vec::new();
         for (key, before) in self {
@@ -529,11 +537,17 @@ where
     S: BuildHasher,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.shares_root_with(other)
-            || self.len == other.len
-                && self
-                    .iter()
-                    .all(|(key, value)| other.get(key) == Some(value))
+        if self.shares_root_with(other) {
+            return true;
+        }
+        if self.len != other.len {
+            return false;
+        }
+        if Arc::ptr_eq(&self.policy_identity, &other.policy_identity) {
+            return champ_optional_nodes_equal(self.root.as_ref(), other.root.as_ref());
+        }
+        self.iter()
+            .all(|(key, value)| other.get(key) == Some(value))
     }
 }
 
@@ -1521,8 +1535,7 @@ where
     S: BuildHasher,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.shares_root_with(other)
-            || self.len() == other.len() && self.iter().all(|value| other.contains(value))
+        self.map == other.map
     }
 }
 
@@ -1577,6 +1590,520 @@ fn same_optional_root<K, V>(
         (None, None) => true,
         (Some(left), Some(right)) => Arc::ptr_eq(left, right),
         _ => false,
+    }
+}
+
+fn champ_optional_nodes_equal<K, V>(
+    left: Option<&Arc<Node<K, V>>>,
+    right: Option<&Arc<Node<K, V>>>,
+) -> bool
+where
+    K: Eq,
+    V: PartialEq,
+{
+    match (left, right) {
+        (None, None) => true,
+        (Some(left), Some(right)) => champ_nodes_equal(left, right),
+        _ => false,
+    }
+}
+
+fn champ_nodes_equal<K, V>(left: &Arc<Node<K, V>>, right: &Arc<Node<K, V>>) -> bool
+where
+    K: Eq,
+    V: PartialEq,
+{
+    if Arc::ptr_eq(left, right) {
+        return true;
+    }
+    match (left.as_ref(), right.as_ref()) {
+        (
+            Node::Leaf {
+                hash: left_hash,
+                key: left_key,
+                value: left_value,
+            },
+            Node::Leaf {
+                hash: right_hash,
+                key: right_key,
+                value: right_value,
+            },
+        ) => left_hash == right_hash && left_key == right_key && left_value == right_value,
+        (
+            Node::Collision {
+                hash: left_hash,
+                entries: left_entries,
+            },
+            Node::Collision {
+                hash: right_hash,
+                entries: right_entries,
+            },
+        ) => {
+            left_hash == right_hash
+                && left_entries.len() == right_entries.len()
+                && left_entries.iter().all(|(left_key, left_value)| {
+                    right_entries.iter().any(|(right_key, right_value)| {
+                        left_key == right_key && left_value == right_value
+                    })
+                })
+        }
+        (
+            Node::Branch {
+                data_map: left_data_map,
+                node_map: left_node_map,
+                data: left_data,
+                children: left_children,
+                ..
+            },
+            Node::Branch {
+                data_map: right_data_map,
+                node_map: right_node_map,
+                data: right_data,
+                children: right_children,
+                ..
+            },
+        ) => {
+            left_data_map == right_data_map
+                && left_node_map == right_node_map
+                && left_data.len() == right_data.len()
+                && left_data.iter().zip(right_data.iter()).all(
+                    |((left_hash, left_key, left_value), (right_hash, right_key, right_value))| {
+                        left_hash == right_hash
+                            && left_key == right_key
+                            && left_value == right_value
+                    },
+                )
+                && left_children.len() == right_children.len()
+                && left_children
+                    .iter()
+                    .zip(right_children.iter())
+                    .all(|(left_child, right_child)| champ_nodes_equal(left_child, right_child))
+        }
+        _ => false,
+    }
+}
+
+enum ChampSlotRef<'a, K, V> {
+    Data(u32, &'a K, &'a V),
+    Child(&'a Arc<Node<K, V>>),
+}
+
+fn champ_branch_slot<'a, K, V>(node: &'a Node<K, V>, index: u32) -> Option<ChampSlotRef<'a, K, V>> {
+    let Node::Branch {
+        data_map,
+        node_map,
+        data,
+        children,
+        ..
+    } = node
+    else {
+        return None;
+    };
+    let bit = bit_position(index);
+    if data_map & bit != 0 {
+        let (hash, key, value) = &data[sparse_index(*data_map, bit)];
+        Some(ChampSlotRef::Data(*hash, key, value))
+    } else if node_map & bit != 0 {
+        Some(ChampSlotRef::Child(&children[sparse_index(*node_map, bit)]))
+    } else {
+        None
+    }
+}
+
+fn append_champ_subtree<K, V>(node: &Node<K, V>, added: bool, result: &mut Vec<MapDifference<K, V>>)
+where
+    K: Clone,
+    V: Clone,
+{
+    match node {
+        Node::Leaf { key, value, .. } => {
+            if added {
+                result.push(MapDifference::Added {
+                    key: key.clone(),
+                    value: value.clone(),
+                });
+            } else {
+                result.push(MapDifference::Removed {
+                    key: key.clone(),
+                    value: value.clone(),
+                });
+            }
+        }
+        Node::Collision { entries, .. } => {
+            for (key, value) in entries.iter() {
+                if added {
+                    result.push(MapDifference::Added {
+                        key: key.clone(),
+                        value: value.clone(),
+                    });
+                } else {
+                    result.push(MapDifference::Removed {
+                        key: key.clone(),
+                        value: value.clone(),
+                    });
+                }
+            }
+        }
+        Node::Branch { data, children, .. } => {
+            for (_, key, value) in data.iter() {
+                if added {
+                    result.push(MapDifference::Added {
+                        key: key.clone(),
+                        value: value.clone(),
+                    });
+                } else {
+                    result.push(MapDifference::Removed {
+                        key: key.clone(),
+                        value: value.clone(),
+                    });
+                }
+            }
+            for child in children.iter() {
+                append_champ_subtree(child, added, result);
+            }
+        }
+    }
+}
+
+fn diff_champ_region_left<K, V>(
+    node: &Node<K, V>,
+    right: &Node<K, V>,
+    shift: u32,
+    result: &mut Vec<MapDifference<K, V>>,
+) where
+    K: Eq + Clone,
+    V: Clone + PartialEq,
+{
+    match node {
+        Node::Leaf { hash, key, value } => match get_in_node(right, *hash, key, shift) {
+            None => result.push(MapDifference::Removed {
+                key: key.clone(),
+                value: value.clone(),
+            }),
+            Some((_, after)) if after != value => result.push(MapDifference::Changed {
+                key: key.clone(),
+                before: value.clone(),
+                after: after.clone(),
+            }),
+            _ => {}
+        },
+        Node::Collision { hash, entries } => {
+            for (key, value) in entries.iter() {
+                match get_in_node(right, *hash, key, shift) {
+                    None => result.push(MapDifference::Removed {
+                        key: key.clone(),
+                        value: value.clone(),
+                    }),
+                    Some((_, after)) if after != value => result.push(MapDifference::Changed {
+                        key: key.clone(),
+                        before: value.clone(),
+                        after: after.clone(),
+                    }),
+                    _ => {}
+                }
+            }
+        }
+        Node::Branch { data, children, .. } => {
+            for (hash, key, value) in data.iter() {
+                match get_in_node(right, *hash, key, shift) {
+                    None => result.push(MapDifference::Removed {
+                        key: key.clone(),
+                        value: value.clone(),
+                    }),
+                    Some((_, after)) if after != value => result.push(MapDifference::Changed {
+                        key: key.clone(),
+                        before: value.clone(),
+                        after: after.clone(),
+                    }),
+                    _ => {}
+                }
+            }
+            for child in children.iter() {
+                diff_champ_region_left(child, right, shift, result);
+            }
+        }
+    }
+}
+
+fn append_champ_region_additions<K, V>(
+    node: &Node<K, V>,
+    left: &Node<K, V>,
+    shift: u32,
+    result: &mut Vec<MapDifference<K, V>>,
+) where
+    K: Eq + Clone,
+    V: Clone,
+{
+    match node {
+        Node::Leaf { hash, key, value } => {
+            if get_in_node(left, *hash, key, shift).is_none() {
+                result.push(MapDifference::Added {
+                    key: key.clone(),
+                    value: value.clone(),
+                });
+            }
+        }
+        Node::Collision { hash, entries } => {
+            for (key, value) in entries.iter() {
+                if get_in_node(left, *hash, key, shift).is_none() {
+                    result.push(MapDifference::Added {
+                        key: key.clone(),
+                        value: value.clone(),
+                    });
+                }
+            }
+        }
+        Node::Branch { data, children, .. } => {
+            for (hash, key, value) in data.iter() {
+                if get_in_node(left, *hash, key, shift).is_none() {
+                    result.push(MapDifference::Added {
+                        key: key.clone(),
+                        value: value.clone(),
+                    });
+                }
+            }
+            for child in children.iter() {
+                append_champ_region_additions(child, left, shift, result);
+            }
+        }
+    }
+}
+
+fn diff_champ_regions<K, V>(
+    left: &Arc<Node<K, V>>,
+    right: &Arc<Node<K, V>>,
+    shift: u32,
+    result: &mut Vec<MapDifference<K, V>>,
+) where
+    K: Eq + Clone,
+    V: Clone + PartialEq,
+{
+    diff_champ_region_left(left, right, shift, result);
+    append_champ_region_additions(right, left, shift, result);
+}
+
+fn append_champ_subtree_except_key<K, V>(
+    node: &Node<K, V>,
+    excluded: &K,
+    added: bool,
+    result: &mut Vec<MapDifference<K, V>>,
+) where
+    K: Eq + Clone,
+    V: Clone,
+{
+    match node {
+        Node::Leaf { key, value, .. } => {
+            if key != excluded {
+                if added {
+                    result.push(MapDifference::Added {
+                        key: key.clone(),
+                        value: value.clone(),
+                    });
+                } else {
+                    result.push(MapDifference::Removed {
+                        key: key.clone(),
+                        value: value.clone(),
+                    });
+                }
+            }
+        }
+        Node::Collision { entries, .. } => {
+            for (key, value) in entries.iter().filter(|(key, _)| key != excluded) {
+                if added {
+                    result.push(MapDifference::Added {
+                        key: key.clone(),
+                        value: value.clone(),
+                    });
+                } else {
+                    result.push(MapDifference::Removed {
+                        key: key.clone(),
+                        value: value.clone(),
+                    });
+                }
+            }
+        }
+        Node::Branch { data, children, .. } => {
+            for (_, key, value) in data.iter().filter(|(_, key, _)| key != excluded) {
+                if added {
+                    result.push(MapDifference::Added {
+                        key: key.clone(),
+                        value: value.clone(),
+                    });
+                } else {
+                    result.push(MapDifference::Removed {
+                        key: key.clone(),
+                        value: value.clone(),
+                    });
+                }
+            }
+            for child in children.iter() {
+                append_champ_subtree_except_key(child, excluded, added, result);
+            }
+        }
+    }
+}
+
+fn diff_champ_entry_and_node<K, V>(
+    hash: u32,
+    key: &K,
+    value: &V,
+    right: &Arc<Node<K, V>>,
+    shift: u32,
+    result: &mut Vec<MapDifference<K, V>>,
+) where
+    K: Eq + Clone,
+    V: Clone + PartialEq,
+{
+    match get_in_node(right, hash, key, shift) {
+        None => result.push(MapDifference::Removed {
+            key: key.clone(),
+            value: value.clone(),
+        }),
+        Some((_, after)) if after != value => result.push(MapDifference::Changed {
+            key: key.clone(),
+            before: value.clone(),
+            after: after.clone(),
+        }),
+        _ => {}
+    }
+    append_champ_subtree_except_key(right, key, true, result);
+}
+
+fn diff_champ_node_and_entry<K, V>(
+    left: &Arc<Node<K, V>>,
+    hash: u32,
+    key: &K,
+    value: &V,
+    shift: u32,
+    result: &mut Vec<MapDifference<K, V>>,
+) where
+    K: Eq + Clone,
+    V: Clone + PartialEq,
+{
+    append_champ_subtree_except_key(left, key, false, result);
+    match get_in_node(left, hash, key, shift) {
+        None => result.push(MapDifference::Added {
+            key: key.clone(),
+            value: value.clone(),
+        }),
+        Some((actual_key, before)) if before != value => result.push(MapDifference::Changed {
+            key: actual_key.clone(),
+            before: before.clone(),
+            after: value.clone(),
+        }),
+        _ => {}
+    }
+}
+
+fn diff_champ_nodes<K, V>(
+    left: Option<&Arc<Node<K, V>>>,
+    right: Option<&Arc<Node<K, V>>>,
+    shift: u32,
+    result: &mut Vec<MapDifference<K, V>>,
+) where
+    K: Eq + Clone,
+    V: Clone + PartialEq,
+{
+    match (left, right) {
+        (None, None) => return,
+        (Some(left), Some(right)) if Arc::ptr_eq(left, right) => return,
+        (None, Some(right)) => {
+            append_champ_subtree(right, true, result);
+            return;
+        }
+        (Some(left), None) => {
+            append_champ_subtree(left, false, result);
+            return;
+        }
+        _ => {}
+    }
+    let left = left.unwrap();
+    let right = right.unwrap();
+    if !matches!(left.as_ref(), Node::Branch { .. })
+        || !matches!(right.as_ref(), Node::Branch { .. })
+    {
+        diff_champ_regions(left, right, shift, result);
+        return;
+    }
+
+    for index in 0..BRANCH_FACTOR as u32 {
+        let left_slot = champ_branch_slot(left, index);
+        let right_slot = champ_branch_slot(right, index);
+        match (left_slot, right_slot) {
+            (None, None) => {}
+            (Some(ChampSlotRef::Data(_, key, value)), None) => {
+                result.push(MapDifference::Removed {
+                    key: key.clone(),
+                    value: value.clone(),
+                });
+            }
+            (None, Some(ChampSlotRef::Data(_, key, value))) => {
+                result.push(MapDifference::Added {
+                    key: key.clone(),
+                    value: value.clone(),
+                });
+            }
+            (Some(ChampSlotRef::Child(child)), None) => {
+                append_champ_subtree(child, false, result);
+            }
+            (None, Some(ChampSlotRef::Child(child))) => {
+                append_champ_subtree(child, true, result);
+            }
+            (
+                Some(ChampSlotRef::Data(_, left_key, left_value)),
+                Some(ChampSlotRef::Data(_, right_key, right_value)),
+            ) => {
+                if left_key == right_key {
+                    if left_value != right_value {
+                        result.push(MapDifference::Changed {
+                            key: left_key.clone(),
+                            before: left_value.clone(),
+                            after: right_value.clone(),
+                        });
+                    }
+                } else {
+                    result.push(MapDifference::Removed {
+                        key: left_key.clone(),
+                        value: left_value.clone(),
+                    });
+                    result.push(MapDifference::Added {
+                        key: right_key.clone(),
+                        value: right_value.clone(),
+                    });
+                }
+            }
+            (Some(ChampSlotRef::Child(left_child)), Some(ChampSlotRef::Child(right_child))) => {
+                diff_champ_nodes(
+                    Some(left_child),
+                    Some(right_child),
+                    shift + BITS_PER_LEVEL,
+                    result,
+                );
+            }
+            (
+                Some(ChampSlotRef::Data(hash, key, value)),
+                Some(ChampSlotRef::Child(right_child)),
+            ) => {
+                diff_champ_entry_and_node(
+                    hash,
+                    key,
+                    value,
+                    right_child,
+                    shift + BITS_PER_LEVEL,
+                    result,
+                );
+            }
+            (Some(ChampSlotRef::Child(left_child)), Some(ChampSlotRef::Data(hash, key, value))) => {
+                diff_champ_node_and_entry(
+                    left_child,
+                    hash,
+                    key,
+                    value,
+                    shift + BITS_PER_LEVEL,
+                    result,
+                );
+            }
+        }
     }
 }
 
@@ -2780,6 +3307,73 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Default)]
+    struct RoutedState {
+        builds: Arc<AtomicUsize>,
+    }
+
+    #[derive(Default)]
+    struct RoutedHasher(u32);
+
+    impl BuildHasher for RoutedState {
+        type Hasher = RoutedHasher;
+
+        fn build_hasher(&self) -> Self::Hasher {
+            self.builds.fetch_add(1, Ordering::Relaxed);
+            RoutedHasher::default()
+        }
+    }
+
+    impl Hasher for RoutedHasher {
+        fn finish(&self) -> u64 {
+            u64::from(self.0)
+        }
+
+        fn write(&mut self, bytes: &[u8]) {
+            let mut value = [0_u8; 4];
+            let count = bytes.len().min(value.len());
+            value[..count].copy_from_slice(&bytes[..count]);
+            self.0 = u32::from_le_bytes(value);
+        }
+
+        fn write_u32(&mut self, value: u32) {
+            self.0 = value;
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct RoutedKey {
+        identity: i32,
+        hash: u32,
+    }
+
+    impl Hash for RoutedKey {
+        fn hash<H: Hasher>(&self, state: &mut H) {
+            state.write_u32(self.hash);
+        }
+    }
+
+    impl PartialEq for RoutedKey {
+        fn eq(&self, other: &Self) -> bool {
+            self.identity == other.identity
+        }
+    }
+
+    impl Eq for RoutedKey {}
+
+    #[derive(Clone, Debug)]
+    struct RoutedValue {
+        value: i32,
+        comparisons: Arc<AtomicUsize>,
+    }
+
+    impl PartialEq for RoutedValue {
+        fn eq(&self, other: &Self) -> bool {
+            self.comparisons.fetch_add(1, Ordering::Relaxed);
+            self.value == other.value
+        }
+    }
+
     #[test]
     fn map_updates_preserve_old_versions() {
         let empty = PersistentHashMap::new();
@@ -3486,6 +4080,102 @@ mod tests {
             diff.iter()
                 .any(|item| matches!(item, MapDifference::Added { key: 1_000, .. }))
         );
+    }
+
+    #[test]
+    fn champ_equality_and_diff_prune_shared_descendants() {
+        let state = RoutedState::default();
+        let comparisons = Arc::new(AtomicUsize::new(0));
+        let value = |value| RoutedValue {
+            value,
+            comparisons: Arc::clone(&comparisons),
+        };
+        let base = PersistentHashMap::with_hasher(state.clone())
+            .insert(
+                RoutedKey {
+                    identity: 0,
+                    hash: 0,
+                },
+                value(0),
+            )
+            .insert(
+                RoutedKey {
+                    identity: 1,
+                    hash: 32,
+                },
+                value(1),
+            )
+            .insert(
+                RoutedKey {
+                    identity: 2,
+                    hash: 64,
+                },
+                value(2),
+            )
+            .insert(
+                RoutedKey {
+                    identity: 31,
+                    hash: 31,
+                },
+                value(31),
+            );
+        let changed = base.insert(
+            RoutedKey {
+                identity: 31,
+                hash: 31,
+            },
+            value(-31),
+        );
+        let restored = changed.insert(
+            RoutedKey {
+                identity: 31,
+                hash: 31,
+            },
+            value(31),
+        );
+
+        let shared_child = match (base.root.as_deref(), restored.root.as_deref()) {
+            (
+                Some(Node::Branch {
+                    node_map: left_map,
+                    children: left_children,
+                    ..
+                }),
+                Some(Node::Branch {
+                    node_map: right_map,
+                    children: right_children,
+                    ..
+                }),
+            ) => {
+                let bit = bit_position(0);
+                assert_ne!(left_map & bit, 0);
+                assert_ne!(right_map & bit, 0);
+                Arc::ptr_eq(
+                    &left_children[sparse_index(*left_map, bit)],
+                    &right_children[sparse_index(*right_map, bit)],
+                )
+            }
+            _ => false,
+        };
+        assert!(shared_child);
+
+        state.builds.store(0, Ordering::Relaxed);
+        comparisons.store(0, Ordering::Relaxed);
+        assert!(base == restored);
+        assert_eq!(state.builds.load(Ordering::Relaxed), 0);
+        assert_eq!(comparisons.load(Ordering::Relaxed), 1);
+
+        state.builds.store(0, Ordering::Relaxed);
+        comparisons.store(0, Ordering::Relaxed);
+        let differences = base.diff(&changed);
+        assert_eq!(differences.len(), 1);
+        assert!(matches!(
+            &differences[0],
+            MapDifference::Changed { key, before, after }
+                if key.identity == 31 && before.value == 31 && after.value == -31
+        ));
+        assert_eq!(state.builds.load(Ordering::Relaxed), 0);
+        assert_eq!(comparisons.load(Ordering::Relaxed), 1);
     }
 
     fn champ_statistics<K, V>(

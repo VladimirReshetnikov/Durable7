@@ -40,6 +40,8 @@ The executable registers these cases:
 - `Structure_RootShapeTracksContentsAndCollapse`
 - `Structure_UpdateSharesUntouchedSiblingSubtrees`
 - `Champ_IndependentHistoriesAndTypedDiff`
+- `Champ_IndependentPolicyHashStatesUseSemanticEqualityAndDiff`
+- `Champ_EqualityAndDiffPruneSharedDescendants`
 - `Champ_TopologyComparatorRejectsDifferentCollisionKeys`
 - `Patricia_SignedOrderingHistoriesAndStructuralAlgebra`
 - `PatriciaMap_CachedCountsAndNoOpAlgebraPreserveRoots`
@@ -73,8 +75,12 @@ The executable registers these cases:
 The CHAMP canonicalization fixture uses explicit spreading hashes on every standard library, an
 exact deep-bridge collapse case, and all four reachable terminal fragments. Validation checks full
 hash-prefix routing; topology comparison matches collision keys through `KeyEqual` without depending
-on collision insertion order. The transient groups separately lock the move-only one-way lifecycle,
-clean/no-op identity, path-copy source isolation, generation-bound iteration, moved/consumed
+on collision insertion order. The shared-descendant fixture restores one edited value through a
+distinct root retaining the same policy identity and uses hash/key/value callback counts to prove
+equality and diff align canonical slots without touching pointer-identical off-path subtries.
+Independent policy identities retain the semantic lookup path. The transient groups separately lock the
+move-only one-way lifecycle, clean/no-op identity, path-copy source isolation, generation-bound
+iteration, moved/consumed
 behavior, deterministic map/set invalidation after throwing policy moves, policy and representative
 retention, injected hash failure, set delegation, and a collision-heavy 5,000-operation model. They
 deliberately do not assert an edit-performance gain:

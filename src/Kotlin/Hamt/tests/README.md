@@ -20,7 +20,8 @@ Coverage groups:
 - equal-hash collision buckets through a constant `HashPolicy`;
 - CHAMP split-bitmap invariants, full hash-prefix routing through shift 30, malformed-depth and
   bitmap-cardinality rejection, policy-aware collision topology, canonical independent-history
-  equality, and typed map diff;
+  equality, and typed map diff, including exact callback counts proving reference-pruned partial
+  shared ancestry without rehashing;
 - streaming trie-order iteration;
 - last-wins replacement and original-key retention through an equivalence policy;
 - set algebra, equality, and proper subset/superset relations;
@@ -35,7 +36,10 @@ Coverage groups:
 - Ctrie node-local GCAS and root/main RDCSS helping, deterministic snapshot/write races in both
   linearization directions, O(1)
   retained generations, lazy renewal, deep/equal-hash tomb contraction, contended same-key updates,
-  250-round short-history linearizability, structural validation, and snapshot-to-CHAMP conversion.
+  equal-hash collision-node re-splitting for a later distinct full hash, 250-round short-history
+  linearizability, structural validation, and snapshot-to-CHAMP conversion preserving the exact
+  policy object, stored key/value representatives, null entries, canonical mixed singleton/child
+  and frozen-tomb enumeration order, collision order, and later-write isolation.
 - 32/64-bit big-endian Patricia boundary ordering, randomized histories, cached-cardinality
   structural map/set algebra, right-biased and combining map semantics, and receiver identity on
   semantic no-ops;

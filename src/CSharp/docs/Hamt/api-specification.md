@@ -260,7 +260,10 @@ mutable, thread-safe update surface:
   loses contention, matching the repeatability requirement of `ConcurrentDictionary` factories.
 - `Clear` atomically publishes an empty root.
 - `Snapshot` and `GetEnumerator` capture one immutable generation. Later writes cannot change their
-  contents, and snapshots retain the trie's comparer.
+  contents, and snapshots retain the trie's comparer. Snapshot enumeration matches canonical CHAMP
+  order: each bitmap level emits logical singleton payloads in bitmap order before recursively
+  emitting multi-entry child nodes. A frozen singleton tomb participates in the payload run at its
+  parent, while an equal-hash collision bucket retains its entry order.
 - `SnapshotView.ToPersistentHashMap` enumerates the captured generation once and copies it into
   canonical CHAMP form in O(n). The result retains the exact comparer object, enumeration sequence,
   and stored key/value representatives; later live-trie writes affect neither the conversion nor

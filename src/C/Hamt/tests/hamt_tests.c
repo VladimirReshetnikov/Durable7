@@ -960,6 +960,41 @@ static void count_difference(const tds_hamt_difference *difference, void *contex
     }
 }
 
+typedef struct captured_differences {
+    tds_hamt_difference items[8];
+    size_t count;
+} captured_differences;
+
+static void capture_difference(const tds_hamt_difference *difference, void *context) {
+    captured_differences *captured = (captured_differences *)context;
+    CHECK(captured->count < sizeof(captured->items) / sizeof(captured->items[0]));
+    captured->items[captured->count++] = *difference;
+}
+
+typedef struct champ_pruning_counts {
+    size_t hash_calls;
+    size_t key_equal_calls;
+    size_t value_equal_calls;
+} champ_pruning_counts;
+
+static uint32_t champ_pruning_hash(const void *item, void *context) {
+    champ_pruning_counts *counts = (champ_pruning_counts *)context;
+    ++counts->hash_calls;
+    return int_hash(item, NULL);
+}
+
+static bool champ_pruning_key_equal(const void *left, const void *right, void *context) {
+    champ_pruning_counts *counts = (champ_pruning_counts *)context;
+    ++counts->key_equal_calls;
+    return *(const int *)left == *(const int *)right;
+}
+
+static bool champ_pruning_value_equal(const void *left, const void *right, void *context) {
+    champ_pruning_counts *counts = (champ_pruning_counts *)context;
+    ++counts->value_equal_calls;
+    return *(const int *)left == *(const int *)right;
+}
+
 static void test_champ_independent_histories_and_typed_diff(void) {
     tds_hamt_policy policy = int_map_policy(int_hash);
     tds_hamt_map ascending = tds_hamt_map_create(&policy);
@@ -997,6 +1032,100 @@ static void test_champ_independent_histories_and_typed_diff(void) {
     tds_hamt_map_destroy(&changed);
     tds_hamt_map_destroy(&descending);
     tds_hamt_map_destroy(&ascending);
+}
+
+static void test_champ_collision_runs_compare_and_diff_semantically(void) {
+    tds_hamt_policy policy = int_map_policy(few_buckets_int_hash);
+    tds_hamt_map ascending = tds_hamt_map_create(&policy);
+    tds_hamt_map descending = tds_hamt_map_create(&policy);
+    for (int key = 0; key != 8; ++key) {
+        CHECK_STATUS(tds_hamt_map_set(&ascending, int_key(key), int_value(key * 10), &ascending));
+        CHECK_STATUS(tds_hamt_map_set(
+            &descending, int_key(7 - key), int_value((7 - key) * 10), &descending));
+    }
+    CHECK(tds_hamt_map_equals(&ascending, &descending));
+    diff_counts equal_counts = { 0 };
+    CHECK_STATUS(tds_hamt_map_diff(&ascending, &descending, count_difference, &equal_counts));
+    CHECK(equal_counts.added == 0 && equal_counts.removed == 0 && equal_counts.changed == 0);
+
+    tds_hamt_map changed = tds_hamt_map_clone(&descending);
+    CHECK_STATUS(tds_hamt_map_remove(&changed, int_key(1), &changed));
+    CHECK_STATUS(tds_hamt_map_set(&changed, int_key(2), int_value(-20), &changed));
+    CHECK_STATUS(tds_hamt_map_set(&changed, int_key(8), int_value(80), &changed));
+    captured_differences captured = { 0 };
+    CHECK_STATUS(tds_hamt_map_diff(&ascending, &changed, capture_difference, &captured));
+    CHECK(captured.count == 3);
+    bool saw_removed = false;
+    bool saw_changed = false;
+    bool saw_added = false;
+    for (size_t index = 0; index != captured.count; ++index) {
+        const tds_hamt_difference *item = &captured.items[index];
+        const int key = *(const int *)item->key;
+        saw_removed = saw_removed
+            || (item->kind == TDS_HAMT_DIFFERENCE_REMOVED && key == 1
+                && *(const int *)item->before == 10 && item->after == NULL);
+        saw_changed = saw_changed
+            || (item->kind == TDS_HAMT_DIFFERENCE_CHANGED && key == 2
+                && *(const int *)item->before == 20 && *(const int *)item->after == -20);
+        saw_added = saw_added
+            || (item->kind == TDS_HAMT_DIFFERENCE_ADDED && key == 8
+                && item->before == NULL && *(const int *)item->after == 80);
+    }
+    CHECK(saw_removed && saw_changed && saw_added);
+
+    tds_hamt_map_destroy(&changed);
+    tds_hamt_map_destroy(&descending);
+    tds_hamt_map_destroy(&ascending);
+}
+
+static void test_champ_equality_and_diff_prune_shared_descendants(void) {
+    champ_pruning_counts callback_counts = { 0 };
+    tds_hamt_policy policy = tds_hamt_policy_default();
+    policy.hash = champ_pruning_hash;
+    policy.key_equal = champ_pruning_key_equal;
+    policy.value_equal = champ_pruning_value_equal;
+    policy.context = &callback_counts;
+
+    int stored_values[100];
+    tds_hamt_map basis = tds_hamt_map_create(&policy);
+    for (int key = 0; key != 100; ++key) {
+        stored_values[key] = key;
+        CHECK_STATUS(tds_hamt_map_set(&basis, int_key(key), &stored_values[key], &basis));
+    }
+
+    int changed_value = -42;
+    int restored_value = 42;
+    tds_hamt_map changed;
+    tds_hamt_map restored;
+    CHECK_STATUS(tds_hamt_map_set(&basis, int_key(42), &changed_value, &changed));
+    CHECK_STATUS(tds_hamt_map_set(&changed, int_key(42), &restored_value, &restored));
+    CHECK(!tds_hamt_map_shares_root(&basis, &restored));
+
+    callback_counts = (champ_pruning_counts){ 0 };
+    CHECK(tds_hamt_map_equals(&basis, &restored));
+    CHECK(callback_counts.hash_calls == 0);
+    CHECK(callback_counts.key_equal_calls > 0 && callback_counts.key_equal_calls < 100);
+    CHECK(callback_counts.value_equal_calls == 1);
+
+    callback_counts = (champ_pruning_counts){ 0 };
+    diff_counts empty = { 0 };
+    CHECK_STATUS(tds_hamt_map_diff(&basis, &restored, count_difference, &empty));
+    CHECK(empty.added == 0 && empty.removed == 0 && empty.changed == 0);
+    CHECK(callback_counts.hash_calls == 0);
+    CHECK(callback_counts.key_equal_calls > 0 && callback_counts.key_equal_calls < 100);
+    CHECK(callback_counts.value_equal_calls == 1);
+
+    callback_counts = (champ_pruning_counts){ 0 };
+    diff_counts changed_counts = { 0 };
+    CHECK_STATUS(tds_hamt_map_diff(&basis, &changed, count_difference, &changed_counts));
+    CHECK(changed_counts.added == 0 && changed_counts.removed == 0 && changed_counts.changed == 1);
+    CHECK(callback_counts.hash_calls == 0);
+    CHECK(callback_counts.key_equal_calls > 0 && callback_counts.key_equal_calls < 100);
+    CHECK(callback_counts.value_equal_calls == 1);
+
+    tds_hamt_map_destroy(&restored);
+    tds_hamt_map_destroy(&changed);
+    tds_hamt_map_destroy(&basis);
 }
 
 static void test_iterator_copy_advances_independently(void) {
@@ -2923,6 +3052,10 @@ static const test_case tests[] = {
     { "collision bucket equal value keeps root and key object", test_collision_bucket_equal_value_keeps_root_and_key_object },
     { "structure root shape and sharing", test_structure_root_shape_and_sharing },
     { "CHAMP independent histories and typed diff", test_champ_independent_histories_and_typed_diff },
+    { "CHAMP collision runs compare and diff semantically",
+      test_champ_collision_runs_compare_and_diff_semantically },
+    { "CHAMP equality and diff prune shared descendants",
+      test_champ_equality_and_diff_prune_shared_descendants },
     { "iterator copy advances independently", test_iterator_copy_advances_independently },
     { "random history matches model and preserves snapshots", test_random_history_matches_model_and_preserves_snapshots },
     { "scripted collision snapshot story", test_scripted_collision_snapshot_story },

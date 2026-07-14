@@ -25,10 +25,12 @@ The trie follows the existing ports:
   slots directly, prune `Arc`-identical subtries, and cache subtree cardinalities; independently
   created hash-policy states retain the receiver-policy semantic fallback;
 - map bulk construction uses last-wins semantics.
-- map diff returns owned typed additions, removals, and changes, with a shared-root fast path.
-  Equality and diff are deliberately semantic across distinct `BuildHasher` states: Rust key
-  equivalence is always `Eq`, and each lookup hashes with the probed map's own builder. This differs
-  from C# comparer-object identity without weakening Rust's `Eq`/`Hash` contract.
+- map equality and diff traverse same-policy CHAMP nodes in lockstep, use stored hashes, and prune
+  every `Arc`-identical descendant before key or value comparison. Diff returns owned typed
+  additions, removals, and changes. Across distinct `BuildHasher` policy identities both operations
+  retain the semantic lookup fallback: Rust key equivalence is always `Eq`, and each fallback
+  lookup hashes with the probed map's own builder. This differs from C# comparer-object identity
+  without weakening Rust's `Eq`/`Hash` contract.
 
 The crate also exports `PersistentIntMap`/`PersistentIntSet` and
 `PersistentLongMap`/`PersistentLongSet`. Their big-endian Patricia core sign-flips keys for

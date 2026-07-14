@@ -24,7 +24,9 @@ collision buckets, trie-order iteration, last-wins replacement with original-key
 algebra, including relations between sets built with different policies where the receiver's policy
 is authoritative. Same-policy tests additionally pin self-operation instance identity, zero
 rehashing, reference-pruned shared ancestry, all four structural algebra truth tables, and randomized
-set models.
+set models. A focused partially shared CHAMP lineage proves that `mapEquals` and typed `diff` skip
+every reference-identical descendant, perform no rehashing, and invoke key-policy and value equality
+exactly once for the single changed leaf.
 The one-way CHAMP-session tier checks O(1)-shape adoption/publication through exact object identity,
 policy identity, first stored representatives, null and collision entries, all point verbs, clear,
 active reads and receiver-policy set relations, exact trie-order enumeration, acquisition-time view
@@ -38,8 +40,11 @@ successors and has no benchmark or performance-win gate.
 It also covers the mutable Ctrie's node-local GCAS and root/main RDCSS helping, deterministic
 snapshot-versus-writer schedules in both linearization directions, deep and equal-hash tomb contraction, lazy renewal after
 snapshot, same-reference no-op updates without equality callbacks, contended same-key updates,
-explicit conversion back to persistent CHAMP, and a 250-round short-history linearizability oracle
-under ordinary, shared-prefix, and all-equal-hash policies.
+equal-hash collision-node re-splitting when a later key has a distinct full hash, exact-policy and
+stored-representative preservation across snapshot-to-CHAMP conversion (including null keys,
+present-null values, mixed singleton/child canonical order, a frozen singleton tomb, collision
+order, and later-write isolation), and a 250-round short-history
+linearizability oracle under ordinary, shared-prefix, and all-equal-hash policies.
 
 Merkle search-tree coverage includes:
 

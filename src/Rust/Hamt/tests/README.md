@@ -22,6 +22,8 @@ Coverage groups:
 - equal-hash collision buckets and insertion-order-independent collision-key topology comparison;
 - CHAMP hash-prefix routing through the final two-bit level, with deliberately malformed routing,
   over-depth, and compact-run fixtures proving the diagnostics reject invalid shapes;
+- same-policy lockstep equality and typed diff, with exact hash/value callback counters proving
+  descendant-level `Arc` pruning on a partially shared trie;
 - streaming trie-order iteration and exact-size accounting;
 - last-wins replacement and original-key retention;
 - one-way `TransientHashMap` / `TransientHashSet` sessions, including clean/no-op root and policy

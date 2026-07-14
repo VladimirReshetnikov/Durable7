@@ -267,9 +267,14 @@ published values keep the ordinary concurrent-read contract.
 - `union_with`, `intersect_with`, `except_with`, and `symmetric_except_with` combine maps. Union is
   right-biased for unequal values while retaining the receiver's stored key representative;
   intersection retains receiver entries.
-- `map_equals(other)` performs content equality with a shared-root fast path.
-- `diff(other)` returns owned `map_difference<Key,T>` records classified as `added`, `removed`, or
-  `changed`, also returning immediately for a shared root.
+- `map_equals(other)` performs content equality by aligning canonical data/node bitmaps for maps
+  retaining one internal policy identity and pruning every pointer-identical descendant before
+  invoking key or value equality. Independently created identities retain semantic lookup
+  comparison, including compatible equality objects with different coherent hash states.
+- `diff(other)` uses the same-identity lockstep descendant pruning and returns owned
+  `map_difference<Key,T>` records classified as `added`, `removed`, or `changed`. That structural
+  path performs no key rehashing; equal-hash collision runs retain unordered key matching and its
+  quadratic bucket worst case. Independently created identities use the semantic lookup fallback.
 
 When replacing an existing key, the originally stored key object inside the trie is retained. When
 the existing value compares equal under `ValueEqual`, the root is reused and the stored value object
@@ -310,6 +315,12 @@ length of an equal-hash collision bucket.
 - Lookup, insert, replace, and remove: O(w / log2(b) + c), effectively bounded by seven trie levels
   plus collision-bucket scan for 32-bit hashes.
 - Enumeration: O(n) time with at most seven inline branch frames.
+- Same-identity map equality and diff: O(v + r + Σ cᵢ²), where `v` is the unmatched canonical trie
+  region visited after pointer-identical descendant pruning, `r` is the number of reported
+  differences, and each `cᵢ` is a visited equal-hash collision-run length. The quadratic terms come
+  from unordered pairwise key matching; the overall worst case is O((n + m)²). Independently
+  created policy identities use element-wise semantic lookups, each bounded by trie depth plus the
+  applicable collision scan, with the same quadratic all-collision worst case.
 - Map `create_range` / set `create_range` / set `intersect_with`: O(n * (w / log2(b) + c)) through
   the bulk builder. A mutable unpublished trie is updated in place and frozen once, avoiding
   persistent path copies between successive input entries.

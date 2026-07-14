@@ -39,6 +39,11 @@ The port follows the repository HAMT semantics:
   from one hash-policy identity use cached-cardinality CHAMP combination and prune `Arc`-identical
   subtries without rehashing. Independently created policy identities use the existing semantic
   receiver-policy path, even when their `BuildHasher` values happen to share a type.
+- map equality and typed diff likewise align the canonical logical CHAMP slots for one policy
+  identity, prune every `Arc`-identical descendant, and navigate only with stored hashes. Equality
+  is collision-order independent. Diff preserves receiver representatives for removals and changed
+  keys, and target representatives for additions and replacement values. Independently created
+  policy identities retain semantic lookup-based equality and diff.
 
 Iterable set difference removes each probe element from the receiver, and iterable symmetric
 difference toggles the distinct probe elements on the receiver. The `*_set` same-type variants use

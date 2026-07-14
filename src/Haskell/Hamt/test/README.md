@@ -15,16 +15,19 @@ The self-contained executable covers map last-wins construction, duplicate rejec
 collision buckets, custom hash/equality policy behavior, original-key recovery, set algebra, and
 `forkIO` concurrent readers over shared immutable snapshots. It also locks in collision-to-leaf
 canonicalization, receiver-policy set relations, one-pass adjustment behavior, strict value mapping,
-independent-history CHAMP equality, typed diff classification, and 100,000-entry bulk construction.
+independent-history CHAMP equality, typed diff classification, partially shared same-policy
+lockstep equality/diff callback ceilings, semantic fallback across compatible policies with
+different hash functions, and 100,000-entry bulk construction.
 The CHAMP diagnostics additionally validate full hash-prefix routing through terminal shift-30
 fragments and compare collision key sets independently of insertion order under the map's policy.
 The CHAMP algebra tier additionally checks right-valued map union with left key representatives,
 all four structural map/set operations, cached-cardinality validity, zero-rehash shared ancestry,
 receiver-policy normalization, and collision-heavy deterministic histories.
 The transient tier covers clean-source root identity after duplicate/equal/missing no-ops,
-case-insensitive stored-key and stored-item representatives, edited snapshot isolation, duplicate
-errors, consumed map/set sessions, a 192-key deterministic model history, canonical publication,
-and a throwing hash callback that leaves the session active and the source root unchanged.
+case-insensitive stored-key and stored-item representatives, edited snapshot isolation, direct map/set
+clear semantics, all six set relations under the receiver policy, duplicate errors, consumed map/set
+sessions, a 192-key deterministic model history, canonical publication, and a throwing hash callback
+that leaves the session active and the source root unchanged.
 The Patricia tier covers explicit 32/64-bit signed extrema, ascending enumeration, a 10,000-step
 map history, right-biased map algebra, left/right/key-aware combining algebra, cached-subtree
 cardinality validation, and set union/intersection/difference.

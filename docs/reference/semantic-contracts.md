@@ -103,6 +103,11 @@ Shared obligations:
 - Equality, diff, no-op replacement, and structural algebra should prune reference-identical
   roots/subtries/values before invoking semantic equality when the language can do so safely. This
   is an optimization only: policy-defined equality remains authoritative for non-identical values.
+- Lockstep equality/diff may interpret stored hashes structurally only when the implementation has
+  a positive witness that both maps retain one hash-policy identity (or the C equivalent of exact
+  callback/context compatibility). Independently created but semantically compatible policies must
+  retain lookup-based comparison when their coherent hash states can differ; APIs that require
+  exact policy identity may instead reject the operation explicitly.
 - Iteration order is trie order: stable for unchanged versions, not sorted, not insertion ordered, and
   not a serialization contract.
 - Diagnostic root-sharing APIs such as `shares_root_with` or debug root kind are test aids, not
@@ -118,6 +123,16 @@ Language-specific obligations:
 | Haskell | `HashPolicy` and package-local `Hashable` shape are part of the port, avoiding third-party dependencies while preserving persistent HAMT behavior. |
 | Kotlin | Miss paths and duplicate results should use idiomatic Kotlin null/result/exception shapes documented in API notes. |
 | Rust | Keys that compare equal under `Eq` must hash equally under the chosen `BuildHasher`; removal returns owned cloned values where exposed. |
+
+### Managed Ctrie snapshots
+
+The C# and Kotlin/JVM Ctries are the deliberate managed-only concurrent tier. `Snapshot` captures a
+generation in O(1); later writes lazily renew paths and cannot alter the captured view. Snapshot
+enumeration follows canonical CHAMP ordering: singleton/data entries precede multi-entry child/node
+runs at each bitmap level, frozen empty tombs are skipped, frozen singleton tombs are promoted
+logically into the data run, and equal-hash collision buckets retain their local order. Explicit
+snapshot-to-CHAMP conversion is O(n) and preserves that sequence, the exact policy object, stored
+key/value representatives, null/present-null semantics, and isolation from later live writes.
 
 ### One-way CHAMP editing lifecycle
 

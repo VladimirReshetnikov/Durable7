@@ -199,9 +199,13 @@ source map or set remains alive.
 - `tds_hamt_map_union`, `tds_hamt_map_intersect`, `tds_hamt_map_except`, and
   `tds_hamt_map_symmetric_except` combine two maps. Union retains receiver key representatives and
   uses right values for unequal overlaps; intersection retains receiver entries.
-- `tds_hamt_map_equals` compares contents when the callback/context policy identities match.
-- `tds_hamt_map_diff` calls a visitor with `ADDED`, `REMOVED`, and `CHANGED` records. It performs no
-  result allocation and returns `TDS_HAMT_INVALID_ARGUMENT` for incompatible policies.
+- `tds_hamt_map_equals` compares contents when the callback/context policy identities match. It
+  aligns canonical data/node bitmaps, returns immediately for every pointer-identical descendant,
+  and compares only inline payloads and collision runs in the remaining trie regions.
+- `tds_hamt_map_diff` performs the same lockstep descendant pruning and calls a visitor with
+  `ADDED`, `REMOVED`, and `CHANGED` records. It performs no result allocation or key rehashing and
+  returns `TDS_HAMT_INVALID_ARGUMENT` for incompatible policies. Equal-hash collision runs retain
+  unordered key matching and therefore have the existing quadratic bucket worst case.
 
 When replacing an existing key, the originally stored key is re-retained through the policy: with
 identity or reference-counting retain callbacks the stored key *pointer* is preserved (matching the
@@ -245,6 +249,10 @@ equal-hash collision bucket.
 - Transient lookup and point edits: the same bounds and allocation behavior as the corresponding
   persistent operations. Changed edits path-copy; no in-place-edit or amortized speedup is promised.
 - Enumeration: O(n) time with at most seven inline branch frames.
+- Map equality and diff: O(v + r + Σ cᵢ²), where `v` is the unmatched canonical trie region
+  visited after pointer-identical descendant pruning, `r` is the number of reported differences,
+  and each `cᵢ` is a visited equal-hash collision-run length. The quadratic terms come from
+  unordered pairwise key matching; the overall worst case is O((n + m)²).
 - Map `create_range` / set `create_range`: O(n * update-cost), with structural sharing during the
   build.
 - Set algebra implemented from public operations: O((n + m) * update-cost), except for streaming

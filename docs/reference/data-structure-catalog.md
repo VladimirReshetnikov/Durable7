@@ -32,9 +32,13 @@ versions, and comparer/hash-policy preservation. All six languages expose one-wa
 editing sessions with O(1)-in-trie adoption and publication. C# implements the optimized owner-token
 kernel, including in-place edits of token-owned nodes. C, C++, Haskell, Kotlin, and Rust preserve the
 same observable lifecycle through semantic facades whose changed point edits remain ordinary
-persistent path copies; those sibling sessions make no edit-performance claim. All six languages
+persistent path copies; those sibling sessions make no edit-performance claim. Same-policy CHAMP
+equality/diff now aligns canonical logical slots and prunes shared descendants in all six languages,
+with semantic fallback or explicit rejection where independently created hash policies cannot be
+proven identical. All six languages
 also expose explicit-width Patricia maps/sets; C# and Kotlin/JVM intentionally own the managed-only
-Ctrie; and all six languages own complete wire-compatible policy-bound Merkle search trees.
+Ctrie, whose snapshots enumerate in canonical CHAMP order for exact sequence-preserving conversion;
+and all six languages own complete wire-compatible policy-bound Merkle search trees.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |

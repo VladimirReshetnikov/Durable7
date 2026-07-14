@@ -140,6 +140,10 @@ The suite covers:
 - fail-after-N allocation injection across recursive hash-node merge and bitmap `node_set` insertion paths,
   verifying source persistence and complete unwind at every allocation boundary;
 - no-op root reuse and structural sharing shape checks;
+- canonical lockstep map equality/diff over independent histories, including reversed equal-hash
+  collision runs and typed added/removed/changed payloads, plus a retained-lineage fixture proving
+  that pointer-identical descendants are skipped without hashing and with localized key/value
+  equality callbacks;
 - independent iterator copies;
 - randomized map histories checked against an in-memory model, including retained snapshots;
 - a long scripted collision and deep-prefix scenario with retained snapshots and no-op root reuse checks;

@@ -20,6 +20,9 @@ public class ConcurrentHashTrie<K, V>(
     @Volatile
     internal var gcasInstalledHookForTesting: (() -> Unit)? = null
 
+    @Volatile
+    internal var removalCommittedHookForTesting: (() -> Unit)? = null
+
     init {
         val generation = Generation()
         root = AtomicReference<Any>(
@@ -177,7 +180,10 @@ public class ConcurrentHashTrie<K, V>(
                         }
                         if (!gcas(node, main, replacement, observed)) break
                         revision.incrementAndGet()
-                        if (decision.kind == DecisionKind.REMOVE) cleanTombs(hash)
+                        if (decision.kind == DecisionKind.REMOVE) {
+                            removalCommittedHookForTesting?.invoke()
+                            cleanTombs(hash)
+                        }
                         return MutationResult(true, decision.result)
                     }
                     is CNode -> {
@@ -205,7 +211,10 @@ public class ConcurrentHashTrie<K, V>(
                                     }
                                     if (!gcas(node, main, replacement, observed)) break
                                     revision.incrementAndGet()
-                                    if (decision.kind == DecisionKind.REMOVE) cleanTombs(hash)
+                                    if (decision.kind == DecisionKind.REMOVE) {
+                                        removalCommittedHookForTesting?.invoke()
+                                        cleanTombs(hash)
+                                    }
                                     return MutationResult(true, decision.result)
                                 }
                                 val decision = transform(false, null, null)
@@ -440,13 +449,45 @@ public class ConcurrentHashTrie<K, V>(
             when (val main = readMain(node)) {
                 is TNode -> if (main.entry != null) yield(HamtEntry(main.entry.key, main.entry.value))
                 is LNode -> for (entry in main.entries) yield(HamtEntry(entry.key, entry.value))
-                is CNode -> for (branch in main.branches) when (branch) {
-                    is SNode -> yield(HamtEntry(branch.key, branch.value))
-                    is INode -> walk(branch)
+                is CNode -> {
+                    val summaries = main.branches.map { branch -> classify(branch) }
+                    for (summary in summaries) {
+                        val singleton = summary.singleton
+                        if (singleton != null) yield(HamtEntry(singleton.key, singleton.value))
+                    }
+                    for (index in main.branches.indices) {
+                        if (summaries[index].hasMultipleEntries) {
+                            @Suppress("UNCHECKED_CAST")
+                            walk(main.branches[index] as INode<K, V>)
+                        }
+                    }
                 }
             }
         }
         walk(observed.node)
+    }
+
+    private fun classify(branch: Branch<K, V>): BranchSummary<K, V> = when (branch) {
+        is SNode -> BranchSummary(branch, hasMultipleEntries = false)
+        is INode -> classify(readMain(branch))
+    }
+
+    private fun classify(main: MainNode<K, V>): BranchSummary<K, V> {
+        return when (main) {
+            is TNode -> BranchSummary(main.entry, hasMultipleEntries = false)
+            is LNode -> BranchSummary(singleton = null, hasMultipleEntries = true)
+            is CNode -> {
+                var singleton: SNode<K, V>? = null
+                for (branch in main.branches) {
+                    val summary = classify(branch)
+                    if (summary.hasMultipleEntries || (summary.singleton != null && singleton != null)) {
+                        return BranchSummary(singleton = null, hasMultipleEntries = true)
+                    }
+                    if (singleton == null) singleton = summary.singleton
+                }
+                BranchSummary(singleton, hasMultipleEntries = false)
+            }
+        }
     }
 
     internal fun validateStructureForTesting(): CtrieStatistics {
@@ -543,6 +584,13 @@ public class ConcurrentHashTrie<K, V>(
         }
     }
 
+    /**
+     * An immutable O(1)-captured generation enumerated in canonical CHAMP order.
+     *
+     * Logical singleton payloads precede multi-entry child nodes at every bitmap level, including
+     * a singleton still hidden behind a frozen deletion tomb. Equal-hash collision entries retain
+     * their bucket order.
+     */
     public class Snapshot<K, V> internal constructor(
         private val owner: ConcurrentHashTrie<K, V>,
         private val root: Root<K, V>,
@@ -564,6 +612,10 @@ public class ConcurrentHashTrie<K, V>(
         val tombNodeCount: Int,
         val entryCount: Int,
         val maxDepth: Int,
+    )
+    private data class BranchSummary<K, V>(
+        val singleton: SNode<K, V>?,
+        val hasMultipleEntries: Boolean,
     )
     internal sealed interface Branch<K, V>
     internal sealed interface MainNode<K, V>

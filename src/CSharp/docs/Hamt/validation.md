@@ -111,7 +111,8 @@ The suite covers:
 - concurrent hash-trie root/main RDCSS and node GCAS helping, deterministic snapshot/write race
   schedules, tomb contraction, collision re-splitting, stored-key retention, stable snapshots,
   same-reference value no-ops without equality callbacks, snapshot-to-CHAMP comparer/order/key-and-
-  value-representative/null/collision/generation preservation, contended publication/accumulation,
+  value-representative/null/collision/generation preservation, mixed inline/child canonical order,
+  frozen singleton-tomb promotion during enumeration, contended publication/accumulation,
   and 400 exhaustively serialized short-history linearizability checks across ordinary,
   shared-prefix, and equal-hash policies.
 - 32/64-bit Patricia signed-boundary ordering, 35,000 randomized model operations with retained

@@ -37,8 +37,11 @@ The port follows the repository HAMT semantics:
 - bulk map construction is last-wins;
 - set algebra includes union, intersection, difference, symmetric difference, subset/superset,
   proper subset/superset, overlap, and equality checks.
-- `mapEquals` requires the same `HashPolicy` object and compares map contents; `diff` reports typed
-  added, removed, and changed entries and returns immediately for a shared root.
+- `mapEquals` requires the same `HashPolicy` object and compares canonical bitmap slots in lockstep;
+  `diff` reports typed added, removed, and changed entries in deterministic structural order.
+  Both use stored hashes without rehashing and return immediately at every reference-identical root,
+  descendant subtrie, or leaf. Equal-hash collision buckets remain insertion-order independent and
+  are matched through the retained key policy.
 
 Same-type map/set algebra requires the same `HashPolicy` object, aligns CHAMP bitmap slots, uses
 stored hashes, and returns immediately for reference-identical roots or subtrees. Nodes cache entry
@@ -101,7 +104,10 @@ Every root consumer helps pending descriptors through `readRoot()`. Empty and si
 are promoted through their parents after removal, preserving the invariant that the root is never a
 tomb and that live lookup depth does not grow with historical churn. Later writers copy
 old-generation child indirections only along paths they modify. `Snapshot.toPersistentHashMap()`
-performs the explicit O(n) conversion into canonical CHAMP form. `getOrPut` and `compute` callbacks
+performs the explicit O(n) conversion into canonical CHAMP form. Snapshot enumeration already uses
+that canonical order: at each bitmap level logical singleton payloads appear in bitmap order before
+multi-entry child nodes, frozen singleton tombs participate in the parent payload run, and
+equal-hash collision buckets retain their entry order. `getOrPut` and `compute` callbacks
 can run repeatedly after a lost GCAS and must therefore be repeatable. `set` and `compute` treat an
 identical value reference as an immediate no-op before invoking user equality. Progress is
 lock-free, not wait-free.

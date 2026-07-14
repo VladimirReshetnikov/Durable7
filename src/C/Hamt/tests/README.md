@@ -41,6 +41,8 @@ The executable registers these cases:
 - `collision bucket equal value keeps root and key object`
 - `structure root shape and sharing`
 - `CHAMP independent histories and typed diff`
+- `CHAMP collision runs compare and diff semantically`
+- `CHAMP equality and diff prune shared descendants`
 - `iterator copy advances independently`
 - `random history matches model and preserves snapshots`
 - `scripted collision snapshot story`
@@ -60,7 +62,9 @@ The executable registers these cases:
 
 The CHAMP structure cases validate every stored hash prefix against its bitmap slot, including all
 four reachable fragments at shift 30, and compare equal-hash collision key sets independently of
-insertion order.
+insertion order. The shared-descendant case restores one edited value through a distinct root, then
+uses hash and equality callback counts to prove map equality and diff align bitmap slots directly
+and prune pointer-identical off-path subtries.
 
 The transient cases treat the C API as an explicit one-way edit-session lifecycle rather than an
 in-place-performance claim. They cover policy and stored-representative preservation, clean root

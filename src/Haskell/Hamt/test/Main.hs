@@ -5,12 +5,12 @@ import Prelude hiding (lookup, null)
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (SomeException, evaluate, try)
 import Control.Monad (forM_, replicateM)
-import Data.Bits ((.&.), shiftL)
+import Data.Bits ((.&.), (.|.), shiftL)
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Char8 as ByteStringChar8
 import Data.Char (toLower)
 import Data.Int (Int32, Int64)
-import Data.IORef (atomicModifyIORef', newIORef, readIORef, writeIORef)
+import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef, writeIORef)
 import Data.List (sort)
 import Data.Word (Word8)
 import System.IO.Unsafe (unsafePerformIO)
@@ -37,12 +37,28 @@ import qualified Data.Structures.Hamt.MerkleSearchTree as Merkle
 import qualified Data.Structures.Hamt.Patricia as Patricia
 import PersistenceTests (runPersistenceTests)
 
+data CountedValue = CountedValue !(IORef Int) !Int !Int
+
+instance Eq CountedValue where
+  (==) = countedValuesEqual
+
+instance Show CountedValue where
+  show (CountedValue _ value _) = "CountedValue " ++ show value
+
+countedValuesEqual :: CountedValue -> CountedValue -> Bool
+countedValuesEqual (CountedValue calls left _) (CountedValue _ right _) = unsafePerformIO $ do
+  atomicModifyIORef' calls (\count -> (count + 1, ()))
+  pure (left == right)
+{-# NOINLINE countedValuesEqual #-}
+
 main :: IO ()
 main = do
   testMapBasics
   testCollisionPolicy
   testCollisionShrinkCanonicalization
   testChampCanonicalizationAndDiff
+  testChampEqualityAndDiffPruneSharedDescendants
+  testCrossHashPolicyMapComparison
   testChampTopologyRejectsDifferentCollisionKeys
   testChampTerminalHashFragments
   testChampStructuralAlgebra
@@ -110,6 +126,70 @@ testChampCanonicalizationAndDiff = do
   assertBool "typed diff change" (HashMap.EntryChanged 9 9 (-9) `elem` differences)
   assertBool "typed diff addition" (HashMap.EntryAdded 1000 1000 `elem` differences)
 
+testChampEqualityAndDiffPruneSharedDescendants :: IO ()
+testChampEqualityAndDiffPruneSharedDescendants = do
+  hashCalls <- newIORef (0 :: Int)
+  keyEqualityCalls <- newIORef (0 :: Int)
+  valueEqualityCalls <- newIORef (0 :: Int)
+  let branchingHash key = (key `div` 2) .|. ((key .&. 1) `shiftL` 5)
+      countedHash key = unsafePerformIO $ do
+        atomicModifyIORef' hashCalls (\count -> (count + 1, ()))
+        pure (branchingHash key)
+      countedKeyEquality left right = unsafePerformIO $ do
+        atomicModifyIORef' keyEqualityCalls (\count -> (count + 1, ()))
+        pure (left == right)
+      countedPolicy = HashPolicy countedHash countedKeyEquality
+      source = HashMap.fromListWith countedPolicy
+        [(key, CountedValue valueEqualityCalls key 0) | key <- [0 :: Int .. 63]]
+      equalEdit = HashMap.insert 0 (CountedValue valueEqualityCalls 0 1) source
+
+  _ <- evaluate (HashMap.size equalEdit)
+  writeIORef hashCalls 0
+  writeIORef keyEqualityCalls 0
+  writeIORef valueEqualityCalls 0
+  assertBool "lockstep map equality accepts a partially shared equal edit"
+    (HashMap.mapEquals source equalEdit)
+  equalityHashes <- readIORef hashCalls
+  equalityKeys <- readIORef keyEqualityCalls
+  equalityValues <- readIORef valueEqualityCalls
+  assertEqual "lockstep map equality never rehashes" 0 equalityHashes
+  assertEqual "lockstep map equality prunes 31 pointer-identical child nodes" 2 equalityKeys
+  assertEqual "lockstep map equality compares only the rebuilt value" 1 equalityValues
+
+  writeIORef hashCalls 0
+  writeIORef keyEqualityCalls 0
+  writeIORef valueEqualityCalls 0
+  assertEqual "lockstep diff accepts a partially shared equal edit" []
+    (HashMap.diff source equalEdit)
+  diffHashes <- readIORef hashCalls
+  diffKeys <- readIORef keyEqualityCalls
+  diffValues <- readIORef valueEqualityCalls
+  assertEqual "lockstep diff never rehashes" 0 diffHashes
+  assertEqual "lockstep diff prunes 31 pointer-identical child nodes" 4 diffKeys
+  assertEqual "lockstep diff compares only the rebuilt value" 1 diffValues
+
+testCrossHashPolicyMapComparison :: IO ()
+testCrossHashPolicyMapComparison = do
+  let leftPolicy = HashPolicy id (==)
+      rightPolicy = HashPolicy negate (==)
+      left = HashMap.fromListWith leftPolicy
+        [(1 :: Int, "one"), (2, "two"), (3, "three")]
+      equalRight = HashMap.fromListWith rightPolicy
+        [(3 :: Int, "three"), (2, "two"), (1, "one")]
+      changedRight = HashMap.fromListWith rightPolicy
+        [(1 :: Int, "one"), (2, "TWO"), (4, "four")]
+      differences = HashMap.diff left changedRight
+  assertBool "compatible policies with distinct hashes compare semantically"
+    (HashMap.mapEquals left equalRight)
+  assertEqual "compatible policies with distinct hashes have an empty semantic diff"
+    [] (HashMap.diff left equalRight)
+  assertBool "cross-hash-policy diff reports a removal"
+    (HashMap.EntryRemoved 3 "three" `elem` differences)
+  assertBool "cross-hash-policy diff reports a change"
+    (HashMap.EntryChanged 2 "two" "TWO" `elem` differences)
+  assertBool "cross-hash-policy diff reports an addition"
+    (HashMap.EntryAdded 4 "four" `elem` differences)
+
 testChampTopologyRejectsDifferentCollisionKeys :: IO ()
 testChampTopologyRejectsDifferentCollisionKeys = do
   let collisionPolicy = HashPolicy (const 7) (==)
@@ -118,6 +198,8 @@ testChampTopologyRejectsDifferentCollisionKeys = do
       different = HashMap.fromListWith collisionPolicy [(1 :: Int, "a"), (3, "c")]
   assertBool "collision topology ignores insertion order" (HashMap.sameTopology left sameReversed)
   assertBool "collision topology compares key contents" (not (HashMap.sameTopology left different))
+  assertBool "collision map equality ignores insertion order" (HashMap.mapEquals left sameReversed)
+  assertEqual "collision diff ignores insertion order" [] (HashMap.diff left sameReversed)
 
 testChampTerminalHashFragments :: IO ()
 testChampTerminalHashFragments = do
@@ -547,7 +629,59 @@ testTransientSessions = do
   assertBool "failed transient edit retains source root"
     (HashMap.sharesRootWith failureSource failurePublished)
 
+  clearedMap <- Transient.mapToTransient source
+  assertBool "transient map clear changes a nonempty session" =<<
+    Transient.mapTransientClear clearedMap
+  assertEqual "transient map clear empties the session" 0 =<<
+    Transient.mapTransientSize clearedMap
+  assertBool "transient map clear is a no-op when already empty" . not =<<
+    Transient.mapTransientClear clearedMap
+  assertBool "transient map clear preserves the session policy" =<<
+    Transient.mapTransientPut "DELTA" 5 clearedMap
+  assertEqual "transient map remains usable after clear" (Just 5) =<<
+    Transient.mapTransientLookup "delta" clearedMap
+  assertBool "transient map can be cleared again" =<<
+    Transient.mapTransientClear clearedMap
+  clearedMapPublished <- Transient.persistMap clearedMap
+  assertEqual "transient map publishes the cleared state" 0 (HashMap.size clearedMapPublished)
+  assertEqual "transient map clear leaves its source isolated" 2 (HashMap.size source)
+
   let setSource = HashSet.fromListWith casePolicy ["Alpha", "Beta"]
+      equivalentSet = HashSet.fromListWith casePolicy ["ALPHA", "beta"]
+      setSuperset = HashSet.fromListWith casePolicy ["alpha", "BETA", "Gamma"]
+      setSubset = HashSet.fromListWith casePolicy ["ALPHA"]
+      disjointSet = HashSet.fromListWith casePolicy ["missing"]
+  relationSession <- Transient.setToTransient setSource
+  assertBool "transient set equality uses the receiver policy" =<<
+    Transient.setTransientEquals relationSession equivalentSet
+  assertBool "transient set subset relation is direct" =<<
+    Transient.setTransientIsSubsetOf relationSession setSuperset
+  assertBool "transient set proper-subset relation is direct" =<<
+    Transient.setTransientIsProperSubsetOf relationSession setSuperset
+  assertBool "transient set superset relation is direct" =<<
+    Transient.setTransientIsSupersetOf relationSession setSubset
+  assertBool "transient set proper-superset relation is direct" =<<
+    Transient.setTransientIsProperSupersetOf relationSession setSubset
+  assertBool "transient set overlap relation finds an equivalent representative" =<<
+    Transient.setTransientOverlaps relationSession equivalentSet
+  assertBool "transient set overlap relation rejects a disjoint set" . not =<<
+    Transient.setTransientOverlaps relationSession disjointSet
+  assertBool "transient set clear changes a nonempty session" =<<
+    Transient.setTransientClear relationSession
+  assertEqual "transient set clear empties the session" 0 =<<
+    Transient.setTransientSize relationSession
+  assertBool "transient set clear is a no-op when already empty" . not =<<
+    Transient.setTransientClear relationSession
+  assertBool "transient set clear preserves the session policy" =<<
+    Transient.setTransientAdd "DELTA" relationSession
+  assertBool "transient set remains usable after clear" =<<
+    Transient.setTransientMember "delta" relationSession
+  assertBool "transient set can be cleared again" =<<
+    Transient.setTransientClear relationSession
+  clearedSetPublished <- Transient.persistSet relationSession
+  assertEqual "transient set publishes the cleared state" 0 (HashSet.size clearedSetPublished)
+  assertEqual "transient set clear leaves its source isolated" 2 (HashSet.size setSource)
+
   setSession <- Transient.setToTransient setSource
   assertBool "transient set duplicate is a no-op" . not =<<
     Transient.setTransientAdd "ALPHA" setSession

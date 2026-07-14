@@ -281,28 +281,158 @@ elems = fmap snd . toList
 foldrWithKey :: (k -> v -> b -> b) -> b -> HashMap k v -> b
 foldrWithKey folder seed (HashMap _ _ root) = foldrNode (\(k, v) acc -> folder k v acc) seed root
 
--- | Compares contents under the right map's key policy. Callers must ensure
--- independently supplied policies define compatible key equivalence; Haskell
--- functions have no decidable identity with which to enforce that precondition.
+-- | Compares contents under the right map's key policy. Maps retaining the
+-- same policy object compare canonical nodes in lockstep and prune
+-- pointer-identical descendants without key or value callbacks. Independently
+-- supplied policies retain semantic lookup comparison because compatible key
+-- equivalence functions may use different coherent hash functions.
 mapEquals :: Eq v => HashMap k v -> HashMap k v -> Bool
-mapEquals (HashMap _ leftSize leftRoot) (HashMap rightPolicy rightSize rightRoot) =
-  ptrEq leftRoot rightRoot ||
-    (leftSize == rightSize && all matches (nodeEntries leftRoot))
+mapEquals (HashMap leftPolicy leftSize leftRoot) right@(HashMap rightPolicy rightSize rightRoot)
+  | ptrEq leftRoot rightRoot = True
+  | leftSize /= rightSize = False
+  | policiesShareFunctions leftPolicy rightPolicy = nodesEqual rightPolicy 0 leftRoot rightRoot
+  | otherwise = all matches (nodeEntries leftRoot)
   where
-    right = HashMap rightPolicy rightSize rightRoot
     matches (key, value) = maybe False (valuesEqual value) (lookup key right)
 
--- | Reports changes between maps whose key policies are semantically compatible.
+-- | Reports semantic changes. Maps retaining the same policy object use a
+-- lockstep canonical-node traversal and prune pointer-identical descendants.
+-- Independently supplied policies retain the lookup fallback. The result keeps
+-- left removals/changes before right additions.
 diff :: Eq v => HashMap k v -> HashMap k v -> [MapDifference k v]
-diff (HashMap _ _ leftRoot) (HashMap _ _ rightRoot) | ptrEq leftRoot rightRoot = []
-diff left right = removedOrChanged ++ added
+diff left@(HashMap leftPolicy _ leftRoot) right@(HashMap rightPolicy _ rightRoot)
+  | ptrEq leftRoot rightRoot = []
+  | policiesShareFunctions leftPolicy rightPolicy = removedOrChanged ++ added
+  | otherwise = semanticRemovedOrChanged ++ semanticAdded
   where
-    removedOrChanged = concatMap classifyLeft (toList left)
+    (removedOrChanged, added) = diffNodes rightPolicy 0 leftRoot rightRoot
+    semanticRemovedOrChanged = concatMap classifyLeft (toList left)
     classifyLeft (key, before) = case lookup key right of
       Nothing -> [EntryRemoved key before]
       Just after | not (valuesEqual before after) -> [EntryChanged key before after]
       _ -> []
-    added = [EntryAdded key value | (key, value) <- toList right, not (member key left)]
+    semanticAdded =
+      [EntryAdded key value | (key, value) <- toList right, not (member key left)]
+
+-- Compare canonical nodes in lockstep. A positive pointer comparison is enough
+-- to prune an immutable descendant without invoking key or value equality; a
+-- negative result is never used as a semantic verdict.
+nodesEqual :: Eq v => HashPolicy k -> Int -> Node k v -> Node k v -> Bool
+nodesEqual _ _ left right | nodePtrEq left right = True
+nodesEqual _ _ left right | nodeCardinality left /= nodeCardinality right = False
+nodesEqual _ _ EmptyNode EmptyNode = True
+nodesEqual hashPolicy _ left right
+  | isHashNode left && isHashNode right =
+      hashNodeHash left == hashNodeHash right
+        && hashEntriesEqual hashPolicy (nodeEntries left) (nodeEntries right)
+nodesEqual hashPolicy shift left right
+  | shift < hashBits = all slotEqual (bitmapSlots occupied)
+  | otherwise = False
+  where
+    occupied = nodeOccupiedBitmap left shift .|. nodeOccupiedBitmap right shift
+    slotEqual slot =
+      nodesEqual
+        hashPolicy
+        (shift + bitsPerLevel)
+        (logicalSlot left slot shift)
+        (logicalSlot right slot shift)
+
+hashEntriesEqual :: Eq v => HashPolicy k -> [(k, v)] -> [(k, v)] -> Bool
+hashEntriesEqual hashPolicy leftEntries rightEntries =
+  length leftEntries == length rightEntries && all matches leftEntries
+  where
+    matches (leftKey, leftValue) = case findEquivalentEntry hashPolicy leftKey rightEntries of
+      Just (_, rightValue) -> valuesEqual leftValue rightValue
+      Nothing -> False
+
+-- Return left-side removals/changes separately from right-side additions so
+-- the public result retains its established left-traversal-then-right-traversal
+-- ordering even while the implementation walks paired logical slots.
+diffNodes
+  :: Eq v
+  => HashPolicy k
+  -> Int
+  -> Node k v
+  -> Node k v
+  -> ([MapDifference k v], [MapDifference k v])
+diffNodes _ _ left right | nodePtrEq left right = ([], [])
+diffNodes _ _ EmptyNode right =
+  ([], [EntryAdded key value | (key, value) <- nodeEntries right])
+diffNodes _ _ left EmptyNode =
+  ([EntryRemoved key value | (key, value) <- nodeEntries left], [])
+diffNodes hashPolicy _ left right
+  | isHashNode left && isHashNode right = diffHashNodes hashPolicy left right
+diffNodes hashPolicy shift left right
+  | shift < hashBits =
+      ( concatMap (fst . resultFor) (nodeTraversalSlots left shift)
+      , concatMap (snd . resultFor) (nodeTraversalSlots right shift)
+      )
+  | otherwise = diffHashEntries hashPolicy (nodeEntries left) (nodeEntries right)
+  where
+    occupied = nodeOccupiedBitmap left shift .|. nodeOccupiedBitmap right shift
+    slotResults =
+      [ ( slot
+        , diffNodes
+            hashPolicy
+            (shift + bitsPerLevel)
+            (logicalSlot left slot shift)
+            (logicalSlot right slot shift)
+        )
+      | slot <- bitmapSlots occupied
+      ]
+    resultFor slot = case List.find ((== slot) . fst) slotResults of
+      Just (_, result) -> result
+      Nothing -> error "occupied CHAMP slot has no paired diff result"
+
+diffHashNodes
+  :: Eq v
+  => HashPolicy k
+  -> Node k v
+  -> Node k v
+  -> ([MapDifference k v], [MapDifference k v])
+diffHashNodes hashPolicy left right
+  | hashNodeHash left == hashNodeHash right =
+      diffHashEntries hashPolicy (nodeEntries left) (nodeEntries right)
+  | otherwise =
+      ( [EntryRemoved key value | (key, value) <- nodeEntries left]
+      , [EntryAdded key value | (key, value) <- nodeEntries right]
+      )
+
+diffHashEntries
+  :: Eq v
+  => HashPolicy k
+  -> [(k, v)]
+  -> [(k, v)]
+  -> ([MapDifference k v], [MapDifference k v])
+diffHashEntries hashPolicy leftEntries rightEntries =
+  (concatMap classifyLeft leftEntries, concatMap classifyRight rightEntries)
+  where
+    classifyLeft (leftKey, leftValue) = case findEquivalentEntry hashPolicy leftKey rightEntries of
+      Nothing -> [EntryRemoved leftKey leftValue]
+      Just (_, rightValue)
+        | valuesEqual leftValue rightValue -> []
+        | otherwise -> [EntryChanged leftKey leftValue rightValue]
+    classifyRight (rightKey, rightValue) = case findEquivalentEntry hashPolicy rightKey leftEntries of
+      Nothing -> [EntryAdded rightKey rightValue]
+      Just _ -> []
+
+findEquivalentEntry :: HashPolicy k -> k -> [(k, v)] -> Maybe (k, v)
+findEquivalentEntry hashPolicy key = List.find (equalKeys hashPolicy key . fst)
+
+nodeOccupiedBitmap :: Node k v -> Int -> Word32
+nodeOccupiedBitmap EmptyNode _ = 0
+nodeOccupiedBitmap (Leaf hashValue _ _) shift = bitFor hashValue shift
+nodeOccupiedBitmap (Collision _ hashValue _) shift = bitFor hashValue shift
+nodeOccupiedBitmap (Branch _ dataMap nodeMap _ _) _ = dataMap .|. nodeMap
+
+-- Enumeration visits a branch's inline payload run before its child run. This
+-- slot order lets 'diffNodes' preserve that public traversal-derived ordering.
+nodeTraversalSlots :: Node k v -> Int -> [Int]
+nodeTraversalSlots EmptyNode _ = []
+nodeTraversalSlots (Leaf hashValue _ _) shift = [hashIndex hashValue shift]
+nodeTraversalSlots (Collision _ hashValue _) shift = [hashIndex hashValue shift]
+nodeTraversalSlots (Branch _ dataMap nodeMap _ _) _ =
+  bitmapSlots dataMap ++ bitmapSlots nodeMap
 
 data CombineOperation
   = CombineUnion
@@ -318,7 +448,8 @@ combineMaps operation (HashMap leftPolicy _ leftRoot) (HashMap rightPolicy _ rig
       CombineIntersection -> leftRoot
       CombineDifference -> EmptyNode
       CombineSymmetricDifference -> EmptyNode
-  | ptrEq leftPolicy rightPolicy = fromRoot (combineNodes leftPolicy operation 0 leftRoot rightRoot)
+  | policiesShareFunctions leftPolicy rightPolicy =
+      fromRoot (combineNodes leftPolicy operation 0 leftRoot rightRoot)
   | otherwise =
       let HashMap _ _ normalizedRight = fromListWith leftPolicy (nodeEntries rightRoot)
        in fromRoot (combineNodes leftPolicy operation 0 leftRoot normalizedRight)
@@ -326,7 +457,7 @@ combineMaps operation (HashMap leftPolicy _ leftRoot) (HashMap rightPolicy _ rig
     fromRoot root = HashMap leftPolicy (nodeCardinality root) root
 
 combineNodes :: Eq v => HashPolicy k -> CombineOperation -> Int -> Node k v -> Node k v -> Node k v
-combineNodes _ operation _ left right | ptrEq left right = case operation of
+combineNodes _ operation _ left right | nodePtrEq left right = case operation of
   CombineUnion -> left
   CombineIntersection -> left
   CombineDifference -> EmptyNode
@@ -453,7 +584,7 @@ logicalSlotsMatch hashPolicy shift original slots = and
   ]
   where
     nodesMatch expected actual
-      | ptrEq expected actual = True
+      | nodePtrEq expected actual = True
     nodesMatch (Leaf leftHash leftKey leftValue) (Leaf rightHash rightKey rightValue) =
       leftHash == rightHash && equalKeys hashPolicy leftKey rightKey && valuesEqual leftValue rightValue
     nodesMatch EmptyNode EmptyNode = True
@@ -481,6 +612,23 @@ hashIndex hashValue shift = fromIntegral ((hashValue `shiftR` shift) .&. 0x1f)
 ptrEq :: a -> a -> Bool
 ptrEq left right = isTrue# (reallyUnsafePtrEquality# left right)
 {-# INLINE ptrEq #-}
+
+-- Child lists are lazy, so force both internal nodes to constructor form before
+-- asking GHC for positive identity. This follows indirections introduced by
+-- evaluation while preserving the non-strict value shortcut in 'valuesEqual'.
+nodePtrEq :: Node k v -> Node k v -> Bool
+nodePtrEq left right = left `seq` right `seq` ptrEq left right
+{-# INLINE nodePtrEq #-}
+
+-- A shared record is sufficient but not required: strict projection can copy
+-- the record while retaining both exact function closures. Positive identity
+-- of both closures is a safe witness that stored hashes and key equivalence
+-- came from one policy implementation. A negative result is never semantic.
+policiesShareFunctions :: HashPolicy k -> HashPolicy k -> Bool
+policiesShareFunctions left right =
+  ptrEq left right
+    || (ptrEq (hashKey left) (hashKey right) && ptrEq (equalKeys left) (equalKeys right))
+{-# INLINE policiesShareFunctions #-}
 
 valuesEqual :: Eq a => a -> a -> Bool
 valuesEqual left right = ptrEq left right || left == right

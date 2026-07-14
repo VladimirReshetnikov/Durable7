@@ -111,6 +111,9 @@ The suite covers:
 - equal-hash collision buckets and deep shared-prefix shapes;
 - first equivalent key/item retention;
 - no-op root reuse and structural sharing shape checks;
+- canonical lockstep map equality/diff over independent histories retaining one policy identity,
+  plus a retained-lineage fixture proving zero hashing and localized key/value equality across
+  pointer-shared descendants, and semantic fallback across independent coherent hash states;
 - iteration and value materialization;
 - randomized map histories checked against `std::unordered_map`, including retained snapshots;
 - a long scripted collision and deep-prefix scenario with retained snapshots and no-op root reuse checks;

@@ -191,6 +191,14 @@ struct explicit_equal {
     }
 };
 
+struct salted_int_hash {
+    std::uint32_t salt;
+
+    std::size_t operator()(int value) const noexcept {
+        return static_cast<std::uint32_t>(std::hash<int>{}(value)) ^ salt;
+    }
+};
+
 explicit_hash_key spreading_champ_key(int id) noexcept {
     return explicit_hash_key{
         id,
@@ -204,6 +212,45 @@ struct counting_hash {
     std::size_t operator()(int value) const noexcept {
         calls->fetch_add(1, std::memory_order_relaxed);
         return std::hash<int>{}(value);
+    }
+};
+
+struct champ_pruning_counts {
+    std::atomic<std::size_t> hash_calls{0};
+    std::atomic<std::size_t> key_equal_calls{0};
+    std::atomic<std::size_t> value_equal_calls{0};
+
+    void reset() noexcept {
+        hash_calls.store(0, std::memory_order_relaxed);
+        key_equal_calls.store(0, std::memory_order_relaxed);
+        value_equal_calls.store(0, std::memory_order_relaxed);
+    }
+};
+
+struct champ_counting_hash {
+    std::shared_ptr<champ_pruning_counts> counts;
+
+    std::size_t operator()(explicit_hash_key key) const noexcept {
+        counts->hash_calls.fetch_add(1, std::memory_order_relaxed);
+        return key.hash;
+    }
+};
+
+struct champ_counting_key_equal {
+    std::shared_ptr<champ_pruning_counts> counts;
+
+    bool operator()(explicit_hash_key left, explicit_hash_key right) const noexcept {
+        counts->key_equal_calls.fetch_add(1, std::memory_order_relaxed);
+        return left.id == right.id;
+    }
+};
+
+struct champ_counting_value_equal {
+    std::shared_ptr<champ_pruning_counts> counts;
+
+    bool operator()(int left, int right) const noexcept {
+        counts->value_equal_calls.fetch_add(1, std::memory_order_relaxed);
+        return left == right;
     }
 };
 
@@ -629,8 +676,9 @@ TEST(Structure_UpdateSharesUntouchedSiblingSubtrees) {
 
 TEST(Champ_IndependentHistoriesAndTypedDiff) {
     using map_type = persistent_hash_map<explicit_hash_key, int, explicit_hash, explicit_equal>;
-    auto ascending = map_type::create(explicit_hash{}, explicit_equal{});
-    auto descending = map_type::create(explicit_hash{}, explicit_equal{});
+    const auto empty = map_type::create(explicit_hash{}, explicit_equal{});
+    auto ascending = empty;
+    auto descending = empty;
     for (int key = 0; key < 512; ++key) {
         ascending = ascending.set_item(spreading_champ_key(key), key);
         descending = descending.set_item(spreading_champ_key(511 - key), 511 - key);
@@ -683,6 +731,84 @@ TEST(Champ_IndependentHistoriesAndTypedDiff) {
     CHECK(deep.debug_validate_canonical());
     CHECK(collapsed.debug_validate_canonical());
     CHECK(collapsed.debug_topology_equal(direct));
+}
+
+TEST(Champ_IndependentPolicyHashStatesUseSemanticEqualityAndDiff) {
+    using map_type = persistent_hash_map<int, int, salted_int_hash>;
+    const auto left = map_type::create(salted_int_hash{0u})
+        .set_item(1, 10)
+        .set_item(2, 20)
+        .set_item(3, 30);
+    const auto equal_right = map_type::create(salted_int_hash{0x9e3779b9u})
+        .set_item(3, 30)
+        .set_item(2, 20)
+        .set_item(1, 10);
+
+    CHECK(!left.shares_policy_with(equal_right));
+    CHECK(left.map_equals(equal_right));
+    CHECK(left.diff(equal_right).empty());
+
+    const auto changed_right = equal_right.remove(3).set_item(2, -20).set_item(4, 40);
+    const auto differences = left.diff(changed_right);
+    CHECK_EQ(std::size_t{3}, differences.size());
+    CHECK(std::ranges::any_of(differences, [](const auto& item) {
+        return item.kind == map_difference_kind::removed && item.key == 3;
+    }));
+    CHECK(std::ranges::any_of(differences, [](const auto& item) {
+        return item.kind == map_difference_kind::changed && item.key == 2
+            && item.before == 20 && item.after == -20;
+    }));
+    CHECK(std::ranges::any_of(differences, [](const auto& item) {
+        return item.kind == map_difference_kind::added && item.key == 4;
+    }));
+}
+
+TEST(Champ_EqualityAndDiffPruneSharedDescendants) {
+    const auto callback_counts = std::make_shared<champ_pruning_counts>();
+    using map_type = persistent_hash_map<
+        explicit_hash_key,
+        int,
+        champ_counting_hash,
+        champ_counting_key_equal,
+        champ_counting_value_equal>;
+    auto basis = map_type::create(
+        champ_counting_hash{callback_counts},
+        champ_counting_key_equal{callback_counts},
+        champ_counting_value_equal{callback_counts});
+    for (int key = 0; key < 512; ++key) {
+        basis = basis.set_item(spreading_champ_key(key), key);
+    }
+
+    const auto changed = basis.set_item(spreading_champ_key(42), -42);
+    const auto restored = changed.set_item(spreading_champ_key(42), 42);
+    CHECK(!basis.shares_root_with(restored));
+
+    callback_counts->reset();
+    CHECK(basis.map_equals(restored));
+    CHECK_EQ(std::size_t{0}, callback_counts->hash_calls.load(std::memory_order_relaxed));
+    const auto equality_key_calls = callback_counts->key_equal_calls.load(std::memory_order_relaxed);
+    const auto equality_value_calls = callback_counts->value_equal_calls.load(std::memory_order_relaxed);
+    CHECK(equality_key_calls > 0 && equality_key_calls < basis.count());
+    CHECK(equality_value_calls > 0 && equality_value_calls < basis.count());
+
+    callback_counts->reset();
+    CHECK(basis.diff(restored).empty());
+    CHECK_EQ(std::size_t{0}, callback_counts->hash_calls.load(std::memory_order_relaxed));
+    const auto equal_diff_key_calls = callback_counts->key_equal_calls.load(std::memory_order_relaxed);
+    const auto equal_diff_value_calls = callback_counts->value_equal_calls.load(std::memory_order_relaxed);
+    CHECK(equal_diff_key_calls > 0 && equal_diff_key_calls < basis.count());
+    CHECK(equal_diff_value_calls > 0 && equal_diff_value_calls < basis.count());
+
+    callback_counts->reset();
+    const auto differences = basis.diff(changed);
+    CHECK_EQ(std::size_t{1}, differences.size());
+    CHECK_EQ(map_difference_kind::changed, differences[0].kind);
+    CHECK_EQ(42, differences[0].key.id);
+    CHECK_EQ(std::size_t{0}, callback_counts->hash_calls.load(std::memory_order_relaxed));
+    const auto changed_diff_key_calls = callback_counts->key_equal_calls.load(std::memory_order_relaxed);
+    const auto changed_diff_value_calls = callback_counts->value_equal_calls.load(std::memory_order_relaxed);
+    CHECK(changed_diff_key_calls > 0 && changed_diff_key_calls < basis.count());
+    CHECK(changed_diff_value_calls > 0 && changed_diff_value_calls < basis.count());
 }
 
 TEST(Champ_TopologyComparatorRejectsDifferentCollisionKeys) {

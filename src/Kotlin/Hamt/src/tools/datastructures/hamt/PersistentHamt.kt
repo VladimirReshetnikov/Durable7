@@ -208,27 +208,13 @@ public class PersistentHashMap<K, V> private constructor(
     public fun mapEquals(other: PersistentHashMap<K, V>): Boolean {
         require(policy === other.policy) { "Maps must retain the same hash policy object." }
         if (root === other.root) return true
-        return size == other.size && all { entry ->
-            other.getEntry(entry.key)?.let { hamtValuesEqual(it.value, entry.value) } == true
-        }
+        return size == other.size && champNodesEqual(root, other.root, policy)
     }
 
     /** Reports additions, removals, and value changes between two policy-compatible maps. */
     public fun diff(other: PersistentHashMap<K, V>): Sequence<MapDifference<K, V>> = sequence {
         require(policy === other.policy) { "Maps must retain the same hash policy object." }
-        if (root === other.root) return@sequence
-        for (entry in this@PersistentHashMap) {
-            val after = other.getEntry(entry.key)
-            if (after == null) yield(MapDifference(MapDifferenceKind.REMOVED, entry.key, entry.value, null))
-            else if (entry.value != after.value) {
-                yield(MapDifference(MapDifferenceKind.CHANGED, entry.key, entry.value, after.value))
-            }
-        }
-        for (entry in other) {
-            if (getEntry(entry.key) == null) {
-                yield(MapDifference(MapDifferenceKind.ADDED, entry.key, null, entry.value))
-            }
-        }
+        diffChampNodes(root, other.root, 0, policy)
     }
 
     public fun entries(): Sequence<HamtEntry<K, V>> = sequence {
@@ -767,6 +753,176 @@ private fun <K, V> collectLeaves(node: Node<K, V>): List<Leaf<K, V>> = when (nod
     is Leaf -> listOf(node)
     is Collision -> node.entries
     is BitmapNode -> node.data + node.nodes.flatMap(::collectLeaves)
+}
+
+/**
+ * Compares canonical CHAMP nodes in bitmap-slot lockstep.
+ *
+ * Reference-identical nodes and leaves are accepted before policy or value equality is invoked, so
+ * lineage-related maps pay comparison cost only on divergent paths. Collision entry order remains
+ * unobservable and is matched through the retained key policy.
+ */
+private fun <K, V> champNodesEqual(
+    left: Node<K, V>?,
+    right: Node<K, V>?,
+    policy: HashPolicy<K>,
+): Boolean {
+    if (left === right) return true
+    if (left == null || right == null) return false
+    return when {
+        left is Leaf && right is Leaf ->
+            left.hash == right.hash &&
+                policy.equivalent(left.key, right.key) &&
+                hamtValuesEqual(left.value, right.value)
+        left is Collision && right is Collision ->
+            left.hash == right.hash && collisionEntriesEqual(left.entries, right.entries, policy)
+        left is BitmapNode && right is BitmapNode ->
+            left.dataMap == right.dataMap &&
+                left.nodeMap == right.nodeMap &&
+                left.data.size == right.data.size &&
+                left.nodes.size == right.nodes.size &&
+                left.data.indices.all { index ->
+                    champNodesEqual(left.data[index], right.data[index], policy)
+                } &&
+                left.nodes.indices.all { index ->
+                    champNodesEqual(left.nodes[index], right.nodes[index], policy)
+                }
+        else -> false
+    }
+}
+
+private fun <K, V> collisionEntriesEqual(
+    left: List<Leaf<K, V>>,
+    right: List<Leaf<K, V>>,
+    policy: HashPolicy<K>,
+): Boolean {
+    if (left.size != right.size) return false
+    val matchedRight = BooleanArray(right.size)
+    for (leftEntry in left) {
+        val rightIndex = matchingLeafIndex(leftEntry, right, matchedRight, policy)
+        if (rightIndex < 0) return false
+        matchedRight[rightIndex] = true
+        val rightEntry = right[rightIndex]
+        if (leftEntry !== rightEntry && !hamtValuesEqual(leftEntry.value, rightEntry.value)) return false
+    }
+    return true
+}
+
+private fun <K, V> matchingLeafIndex(
+    entry: Leaf<K, V>,
+    candidates: List<Leaf<K, V>>,
+    matched: BooleanArray,
+    policy: HashPolicy<K>,
+): Int {
+    for (index in candidates.indices) {
+        if (!matched[index] && entry === candidates[index]) return index
+    }
+    for (index in candidates.indices) {
+        if (!matched[index] && policy.equivalent(entry.key, candidates[index].key)) return index
+    }
+    return -1
+}
+
+/** Traverses logical bitmap slots together and skips every reference-identical descendant. */
+private suspend fun <K, V> SequenceScope<MapDifference<K, V>>.diffChampNodes(
+    left: Node<K, V>?,
+    right: Node<K, V>?,
+    shift: Int,
+    policy: HashPolicy<K>,
+) {
+    if (left === right) return
+    if (left == null) {
+        appendSubtreeDifferences(checkNotNull(right), added = true)
+        return
+    }
+    if (right == null) {
+        appendSubtreeDifferences(left, added = false)
+        return
+    }
+
+    val leftIsHashNode = left is Leaf || left is Collision
+    val rightIsHashNode = right is Leaf || right is Collision
+    if (leftIsHashNode && rightIsHashNode) {
+        diffHashNodes(left, right, policy)
+        return
+    }
+
+    for (index in 0 until 32) {
+        diffChampNodes(
+            logicalSlot(left, index, shift),
+            logicalSlot(right, index, shift),
+            shift + BitsPerLevel,
+            policy,
+        )
+    }
+}
+
+private suspend fun <K, V> SequenceScope<MapDifference<K, V>>.diffHashNodes(
+    left: Node<K, V>,
+    right: Node<K, V>,
+    policy: HashPolicy<K>,
+) {
+    val leftEntries = entriesOf(left)
+    val rightEntries = entriesOf(right)
+    if (hashOf(left) != hashOf(right)) {
+        for (entry in leftEntries) appendLeafDifference(entry, added = false)
+        for (entry in rightEntries) appendLeafDifference(entry, added = true)
+        return
+    }
+
+    val matchedRight = BooleanArray(rightEntries.size)
+    for (leftEntry in leftEntries) {
+        val rightIndex = matchingLeafIndex(leftEntry, rightEntries, matchedRight, policy)
+        if (rightIndex < 0) {
+            appendLeafDifference(leftEntry, added = false)
+            continue
+        }
+        matchedRight[rightIndex] = true
+        val rightEntry = rightEntries[rightIndex]
+        if (leftEntry !== rightEntry && !hamtValuesEqual(leftEntry.value, rightEntry.value)) {
+            yield(MapDifference(
+                MapDifferenceKind.CHANGED,
+                leftEntry.key,
+                leftEntry.value,
+                rightEntry.value,
+            ))
+        }
+    }
+    for (rightIndex in rightEntries.indices) {
+        if (!matchedRight[rightIndex]) appendLeafDifference(rightEntries[rightIndex], added = true)
+    }
+}
+
+private suspend fun <K, V> SequenceScope<MapDifference<K, V>>.appendSubtreeDifferences(
+    node: Node<K, V>,
+    added: Boolean,
+) {
+    when (node) {
+        is Leaf -> appendLeafDifference(node, added)
+        is Collision -> for (entry in node.entries) appendLeafDifference(entry, added)
+        is BitmapNode -> {
+            for (index in 0 until 32) {
+                val bit = bitPosition(index)
+                when {
+                    node.dataMap and bit != 0 ->
+                        appendLeafDifference(node.data[sparseIndex(node.dataMap, bit)], added)
+                    node.nodeMap and bit != 0 ->
+                        appendSubtreeDifferences(node.nodes[sparseIndex(node.nodeMap, bit)], added)
+                }
+            }
+        }
+    }
+}
+
+private suspend fun <K, V> SequenceScope<MapDifference<K, V>>.appendLeafDifference(
+    entry: Leaf<K, V>,
+    added: Boolean,
+) {
+    yield(if (added) {
+        MapDifference(MapDifferenceKind.ADDED, entry.key, null, entry.value)
+    } else {
+        MapDifference(MapDifferenceKind.REMOVED, entry.key, entry.value, null)
+    })
 }
 
 private fun <K, V> champStatistics(

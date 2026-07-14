@@ -75,6 +75,8 @@ private:
     struct collision_node;
     struct bitmap_indexed_node;
     struct payload;
+    struct entry_run_view;
+    struct diff_operand;
     struct policy_identity final {};
 
     using node_ptr = std::shared_ptr<const node>;
@@ -636,13 +638,19 @@ public:
     }
 
     // Precondition: both maps' stateful Hash/KeyEqual objects define compatible key semantics.
-    // Policy objects use C++ value semantics and have no general identity/equality operation.
+    // Descendants sharing this map's internal policy identity use canonical bitmap alignment with
+    // no hashing and prune pointer-identical nodes before KeyEqual or ValueEqual. Independently
+    // created policy identities retain semantic lookup comparison because compatible equality
+    // objects may use different coherent hash states.
     [[nodiscard]] bool map_equals(const persistent_hash_map& other) const {
         if (root_.get() == other.root_.get()) {
             return true;
         }
         if (count_ != other.count_) {
             return false;
+        }
+        if (shares_policy_with(other)) {
+            return nodes_equal(root_.get(), other.root_.get(), key_equal_, value_equal_);
         }
         for (const auto& [key, value] : *this) {
             const auto* actual_key = static_cast<const Key*>(nullptr);
@@ -655,12 +663,23 @@ public:
         return true;
     }
 
-    // The same policy-compatibility precondition as map_equals applies.
+    // The same policy-compatibility precondition, structural fast path, and semantic fallback as
+    // map_equals apply.
     [[nodiscard]] std::vector<map_difference<Key, T>> diff(const persistent_hash_map& other) const {
         if (root_.get() == other.root_.get()) {
             return {};
         }
         std::vector<map_difference<Key, T>> result;
+        if (shares_policy_with(other)) {
+            diff_operands(
+                diff_operand{root_.get(), nullptr},
+                diff_operand{other.root_.get(), nullptr},
+                0,
+                key_equal_,
+                value_equal_,
+                result);
+            return result;
+        }
         for (const auto& [key, value] : *this) {
             const auto* actual_key = static_cast<const Key*>(nullptr);
             const auto* other_value = static_cast<const T*>(nullptr);
@@ -1579,6 +1598,294 @@ private:
         std::vector<node_ptr> children_;
         size_type count_;
     };
+
+    struct entry_run_view {
+        std::uint32_t hash;
+        const value_type* single;
+        const std::vector<value_type>* entries;
+
+        [[nodiscard]] size_type count() const noexcept {
+            return single != nullptr ? 1 : entries->size();
+        }
+
+        [[nodiscard]] const value_type& at(size_type index_value) const noexcept {
+            assert(index_value < count());
+            return single != nullptr ? *single : (*entries)[index_value];
+        }
+    };
+
+    struct diff_operand {
+        const node* node_value;
+        const payload* inline_entry;
+    };
+
+    static bool nodes_equal(
+        const node* left,
+        const node* right,
+        const KeyEqual& equal,
+        const ValueEqual& values_equal) {
+        if (left == right) {
+            return true;
+        }
+        if (left == nullptr || right == nullptr || left->kind() != right->kind()) {
+            return false;
+        }
+        if (left->kind() == persistent_hamt_node_kind::leaf) {
+            const auto* l = static_cast<const leaf_node*>(left);
+            const auto* r = static_cast<const leaf_node*>(right);
+            return l->hash_ == r->hash_
+                && std::invoke(equal, l->entry_.first, r->entry_.first)
+                && values_equal_by_policy(l->entry_.second, r->entry_.second, values_equal);
+        }
+        if (left->kind() == persistent_hamt_node_kind::collision) {
+            const auto* l = static_cast<const collision_node*>(left);
+            const auto* r = static_cast<const collision_node*>(right);
+            return l->hash_ == r->hash_
+                && l->entries_.size() == r->entries_.size()
+                && std::ranges::all_of(l->entries_, [&](const value_type& left_entry) {
+                    return std::ranges::any_of(r->entries_, [&](const value_type& right_entry) {
+                        return std::invoke(equal, left_entry.first, right_entry.first)
+                            && values_equal_by_policy(
+                                left_entry.second, right_entry.second, values_equal);
+                    });
+                });
+        }
+
+        const auto* l = static_cast<const bitmap_indexed_node*>(left);
+        const auto* r = static_cast<const bitmap_indexed_node*>(right);
+        if (l->data_map_ != r->data_map_
+            || l->node_map_ != r->node_map_
+            || l->data_.size() != r->data_.size()
+            || l->children_.size() != r->children_.size()) {
+            return false;
+        }
+        for (auto index_value = size_type{0}; index_value != l->data_.size(); ++index_value) {
+            const auto& left_entry = l->data_[index_value];
+            const auto& right_entry = r->data_[index_value];
+            if (left_entry.hash != right_entry.hash
+                || !std::invoke(equal, left_entry.entry.first, right_entry.entry.first)
+                || !values_equal_by_policy(
+                    left_entry.entry.second, right_entry.entry.second, values_equal)) {
+                return false;
+            }
+        }
+        for (auto index_value = size_type{0}; index_value != l->children_.size(); ++index_value) {
+            if (!nodes_equal(
+                    l->children_[index_value].get(),
+                    r->children_[index_value].get(),
+                    equal,
+                    values_equal)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static bool diff_operand_is_empty(diff_operand operand) noexcept {
+        return operand.node_value == nullptr && operand.inline_entry == nullptr;
+    }
+
+    static bool diff_operand_is_run(diff_operand operand) noexcept {
+        return operand.inline_entry != nullptr
+            || (operand.node_value != nullptr
+                && operand.node_value->kind() != persistent_hamt_node_kind::bitmap_indexed);
+    }
+
+    static entry_run_view entry_run_from_operand(diff_operand operand) noexcept {
+        if (operand.inline_entry != nullptr) {
+            return entry_run_view{
+                operand.inline_entry->hash,
+                std::addressof(operand.inline_entry->entry),
+                nullptr};
+        }
+        assert(operand.node_value != nullptr);
+        if (operand.node_value->kind() == persistent_hamt_node_kind::leaf) {
+            const auto* leaf = static_cast<const leaf_node*>(operand.node_value);
+            return entry_run_view{leaf->hash_, std::addressof(leaf->entry_), nullptr};
+        }
+        assert(operand.node_value->kind() == persistent_hamt_node_kind::collision);
+        const auto* collision = static_cast<const collision_node*>(operand.node_value);
+        return entry_run_view{collision->hash_, nullptr, std::addressof(collision->entries_)};
+    }
+
+    static diff_operand diff_operand_logical_slot(
+        diff_operand operand,
+        int slot_index,
+        int shift) noexcept {
+        if (diff_operand_is_empty(operand)) {
+            return operand;
+        }
+        if (diff_operand_is_run(operand)) {
+            assert(shift < 32);
+            return index(entry_run_from_operand(operand).hash, shift) == slot_index
+                ? operand
+                : diff_operand{nullptr, nullptr};
+        }
+
+        const auto* branch = static_cast<const bitmap_indexed_node*>(operand.node_value);
+        const auto selected_bit = bit(slot_index);
+        if ((branch->data_map_ & selected_bit) != 0) {
+            return diff_operand{
+                nullptr,
+                std::addressof(branch->data_[slot(branch->data_map_, selected_bit)])};
+        }
+        if ((branch->node_map_ & selected_bit) != 0) {
+            return diff_operand{
+                branch->children_[slot(branch->node_map_, selected_bit)].get(),
+                nullptr};
+        }
+        return diff_operand{nullptr, nullptr};
+    }
+
+    static void append_run_differences(
+        entry_run_view run,
+        bool added,
+        std::vector<map_difference<Key, T>>& result) {
+        for (auto index_value = size_type{0}; index_value != run.count(); ++index_value) {
+            const auto& entry = run.at(index_value);
+            result.push_back(added
+                ? map_difference<Key, T>{
+                    map_difference_kind::added, entry.first, std::nullopt, entry.second}
+                : map_difference<Key, T>{
+                    map_difference_kind::removed, entry.first, entry.second, std::nullopt});
+        }
+    }
+
+    static void append_diff_operand(
+        diff_operand operand,
+        bool added,
+        std::vector<map_difference<Key, T>>& result) {
+        if (diff_operand_is_empty(operand)) {
+            return;
+        }
+        if (diff_operand_is_run(operand)) {
+            append_run_differences(entry_run_from_operand(operand), added, result);
+            return;
+        }
+        const auto* branch = static_cast<const bitmap_indexed_node*>(operand.node_value);
+        for (auto slot_index = 0; slot_index <= branch_mask; ++slot_index) {
+            const auto selected_bit = bit(slot_index);
+            if ((branch->data_map_ & selected_bit) != 0) {
+                append_diff_operand(
+                    diff_operand{
+                        nullptr,
+                        std::addressof(branch->data_[slot(branch->data_map_, selected_bit)])},
+                    added,
+                    result);
+            } else if ((branch->node_map_ & selected_bit) != 0) {
+                append_diff_operand(
+                    diff_operand{
+                        branch->children_[slot(branch->node_map_, selected_bit)].get(),
+                        nullptr},
+                    added,
+                    result);
+            }
+        }
+    }
+
+    static size_type find_entry(
+        entry_run_view run,
+        const Key& key,
+        const KeyEqual& equal) {
+        for (auto index_value = size_type{0}; index_value != run.count(); ++index_value) {
+            if (std::invoke(equal, run.at(index_value).first, key)) {
+                return index_value;
+            }
+        }
+        return std::numeric_limits<size_type>::max();
+    }
+
+    static void diff_entry_runs(
+        entry_run_view left,
+        entry_run_view right,
+        const KeyEqual& equal,
+        const ValueEqual& values_equal,
+        std::vector<map_difference<Key, T>>& result) {
+        if (left.hash != right.hash) {
+            append_run_differences(left, false, result);
+            append_run_differences(right, true, result);
+            return;
+        }
+        for (auto left_index = size_type{0}; left_index != left.count(); ++left_index) {
+            const auto& before = left.at(left_index);
+            const auto right_index = find_entry(right, before.first, equal);
+            if (right_index == std::numeric_limits<size_type>::max()) {
+                result.push_back({
+                    map_difference_kind::removed,
+                    before.first,
+                    before.second,
+                    std::nullopt});
+                continue;
+            }
+            const auto& after = right.at(right_index);
+            if (!values_equal_by_policy(before.second, after.second, values_equal)) {
+                result.push_back({
+                    map_difference_kind::changed,
+                    before.first,
+                    before.second,
+                    after.second});
+            }
+        }
+        for (auto right_index = size_type{0}; right_index != right.count(); ++right_index) {
+            const auto& after = right.at(right_index);
+            if (find_entry(left, after.first, equal) == std::numeric_limits<size_type>::max()) {
+                result.push_back({
+                    map_difference_kind::added,
+                    after.first,
+                    std::nullopt,
+                    after.second});
+            }
+        }
+    }
+
+    static void diff_operands(
+        diff_operand left,
+        diff_operand right,
+        int shift,
+        const KeyEqual& equal,
+        const ValueEqual& values_equal,
+        std::vector<map_difference<Key, T>>& result) {
+        if (left.node_value != nullptr
+            && left.node_value == right.node_value
+            && left.inline_entry == nullptr
+            && right.inline_entry == nullptr) {
+            return;
+        }
+        if (left.inline_entry != nullptr
+            && left.inline_entry == right.inline_entry
+            && left.node_value == nullptr
+            && right.node_value == nullptr) {
+            return;
+        }
+        if (diff_operand_is_empty(left)) {
+            append_diff_operand(right, true, result);
+            return;
+        }
+        if (diff_operand_is_empty(right)) {
+            append_diff_operand(left, false, result);
+            return;
+        }
+        if (diff_operand_is_run(left) && diff_operand_is_run(right)) {
+            diff_entry_runs(
+                entry_run_from_operand(left),
+                entry_run_from_operand(right),
+                equal,
+                values_equal,
+                result);
+            return;
+        }
+
+        assert(shift < 32);
+        for (auto slot_index = 0; slot_index <= branch_mask; ++slot_index) {
+            diff_operands(
+                diff_operand_logical_slot(left, slot_index, shift),
+                diff_operand_logical_slot(right, slot_index, shift),
+                shift + bits_per_level,
+                equal,
+                values_equal,
+                result);
+        }
+    }
 
     static bool debug_hash_has_prefix(
         std::uint32_t hash, std::uint32_t prefix, std::uint32_t prefix_mask) noexcept {

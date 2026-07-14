@@ -90,6 +90,56 @@ private class TableHashPolicy(private val hashes: Map<Int, Int>) : HashPolicy<In
     override fun equivalent(left: Int, right: Int): Boolean = left == right
 }
 
+/** Forces equivalent and null keys through one collision bucket for Ctrie conversion coverage. */
+private class NullableEquivalentKeyPolicy : HashPolicy<EquivalentKey?> {
+    override fun hash(key: EquivalentKey?): Int = 0
+
+    override fun equivalent(left: EquivalentKey?, right: EquivalentKey?): Boolean =
+        left === right || (left != null && right != null && left.text.equals(right.text, ignoreCase = true))
+}
+
+/** Builds an equal-hash collision first, then introduces a hash that diverges at the second level. */
+private class CollisionThenSplitPolicy : HashPolicy<Int> {
+    override fun hash(key: Int): Int = if (key < 2) 0 else 32
+    override fun equivalent(left: Int, right: Int): Boolean = left == right
+}
+
+private data class CtrieRepresentativeValue(val text: String)
+
+private class CountingStructuralHashPolicy : HashPolicy<Int> {
+    var hashCalls: Int = 0
+    var equivalenceCalls: Int = 0
+
+    override fun hash(key: Int): Int {
+        hashCalls++
+        return key
+    }
+
+    override fun equivalent(left: Int, right: Int): Boolean {
+        equivalenceCalls++
+        return left == right
+    }
+
+    fun reset() {
+        hashCalls = 0
+        equivalenceCalls = 0
+    }
+}
+
+private class ValueEqualityCounter(var calls: Int = 0)
+
+private class CountedMapValue(
+    val number: Int,
+    private val equalityCounter: ValueEqualityCounter,
+) {
+    override fun equals(other: Any?): Boolean {
+        equalityCounter.calls++
+        return other is CountedMapValue && number == other.number
+    }
+
+    override fun hashCode(): Int = number
+}
+
 private fun check(value: Boolean, message: String) {
     if (!value) {
         throw AssertionError(message)
@@ -253,6 +303,43 @@ private fun champCanonicalizationAndDiff() {
     check(differences.any { it.kind == MapDifferenceKind.REMOVED && it.key == 7 }, "removed difference")
     check(differences.any { it.kind == MapDifferenceKind.CHANGED && it.key == 9 }, "changed difference")
     check(differences.any { it.kind == MapDifferenceKind.ADDED && it.key == 1_000 }, "added difference")
+}
+
+private fun champMapEqualsAndDiffPrunePartialSharedSubtrees() {
+    val policy = CountingStructuralHashPolicy()
+    val equalityCounter = ValueEqualityCounter()
+    val values = (0 until 128).map { key -> CountedMapValue(key, equalityCounter) }
+    var source = PersistentHashMap.empty<Int, CountedMapValue>(policy)
+    for (key in values.indices) source = source.put(key, values[key])
+    val changedValue = CountedMapValue(-127, equalityCounter)
+    val target = source.put(127, changedValue)
+    checkEquals(33, source.champStatistics().bitmapNodes,
+        "partial-sharing fixture has one root and thirty-two descendant bitmap subtries")
+    check(!source.sharesRootWith(target), "changed map must publish a new root")
+
+    policy.reset()
+    equalityCounter.calls = 0
+    check(!source.mapEquals(target), "one divergent value makes the maps unequal")
+    checkEquals(0, policy.hashCalls, "mapEquals traverses stored bitmap slots without rehashing")
+    checkEquals(1, policy.equivalenceCalls,
+        "mapEquals prunes every shared descendant before comparing the one changed key")
+    checkEquals(1, equalityCounter.calls,
+        "mapEquals invokes value equality only for the one changed leaf")
+
+    policy.reset()
+    equalityCounter.calls = 0
+    val differences = source.diff(target).toList()
+    checkEquals(1, differences.size, "partial-shared diff reports only the changed leaf")
+    val difference = differences.single()
+    checkEquals(MapDifferenceKind.CHANGED, difference.kind, "partial-shared diff kind")
+    checkEquals(127, difference.key, "partial-shared diff key")
+    check(difference.before === values[127], "diff retains the source value representative")
+    check(difference.after === changedValue, "diff retains the target value representative")
+    checkEquals(0, policy.hashCalls, "diff traverses stored bitmap slots without rehashing")
+    checkEquals(1, policy.equivalenceCalls,
+        "diff prunes every shared descendant before comparing the one changed key")
+    checkEquals(1, equalityCounter.calls,
+        "diff invokes value equality only for the one changed leaf")
 }
 
 private fun champTopologyComparatorRejectsDifferentCollisionKeys() {
@@ -757,6 +844,107 @@ private fun ctrieSnapshotsAndAtomicUpdates() {
     checkEquals(2, trie["alpha"], "live Ctrie advances")
 }
 
+private fun ctrieSnapshotConversionPreservesPolicyRepresentativesOrderAndIsolation() {
+    val policy = NullableEquivalentKeyPolicy()
+    val firstKey = EquivalentKey("Alpha", 1)
+    val equivalentKey = EquivalentKey("ALPHA", 2)
+    val finalEquivalentKey = EquivalentKey("alpha", 3)
+    val nullValueKey = EquivalentKey("stored-null", 4)
+    val initialValue = CtrieRepresentativeValue("initial")
+    val winningValue = CtrieRepresentativeValue("winning")
+    val equalWinningValue = CtrieRepresentativeValue("winning")
+    val nullKeyValue = CtrieRepresentativeValue("null-key")
+    val laterValue = CtrieRepresentativeValue("later")
+    val postSnapshotKey = EquivalentKey("post-snapshot", 6)
+    val trie = ConcurrentHashTrie<EquivalentKey?, CtrieRepresentativeValue?>(policy)
+
+    trie.set(firstKey, initialValue)
+    trie.set(equivalentKey, winningValue)
+    trie.set(finalEquivalentKey, equalWinningValue)
+    trie.set(null, nullKeyValue)
+    trie.set(nullValueKey, null)
+    val snapshot = trie.snapshot()
+    val snapshotEntries = snapshot.toList()
+
+    trie.set(EquivalentKey("aLpHa", 5), laterValue)
+    check(trie.remove(null)?.value === nullKeyValue, "live removal returns the stored null-key value")
+    trie.set(postSnapshotKey, CtrieRepresentativeValue("new"))
+    val generationBeforeConversion = trie.generation
+
+    val persistent = snapshot.toPersistentHashMap()
+
+    check(persistent.policy === policy, "snapshot conversion retains the exact hash-policy object")
+    checkEquals(snapshotEntries.size, persistent.size, "snapshot conversion retains every captured entry")
+    val equivalentEntry = persistent.getEntry(EquivalentKey("AlPhA", 7))
+        ?: throw AssertionError("snapshot conversion lost an equivalent key")
+    check(equivalentEntry.key === firstKey, "snapshot conversion retains the first stored key representative")
+    check(equivalentEntry.value === winningValue, "equal-value no-op retains the winning value representative")
+    val nullKeyEntry = persistent.getEntry(null)
+        ?: throw AssertionError("snapshot conversion lost the null key")
+    check(nullKeyEntry.key == null, "snapshot conversion retains the null key representative")
+    check(nullKeyEntry.value === nullKeyValue, "snapshot conversion retains the null-key value representative")
+    val nullValueEntry = persistent.getEntry(EquivalentKey("STORED-NULL", 8))
+        ?: throw AssertionError("snapshot conversion lost the present-null entry")
+    check(nullValueEntry.key === nullValueKey, "snapshot conversion retains the present-null key representative")
+    check(nullValueEntry.value == null, "snapshot conversion distinguishes a present null value from absence")
+
+    val persistentEntries = persistent.toList()
+    for (index in snapshotEntries.indices) {
+        check(snapshotEntries[index].key === persistentEntries[index].key,
+            "snapshot conversion preserves key sequence and identity at index $index")
+        check(snapshotEntries[index].value === persistentEntries[index].value,
+            "snapshot conversion preserves value sequence and identity at index $index")
+    }
+    checkEquals(generationBeforeConversion, trie.generation,
+        "converting a frozen generation does not publish a live Ctrie update")
+
+    trie.clear()
+    check(snapshot.getEntry(EquivalentKey("ALPHA", 9))?.value === winningValue,
+        "later live writes do not alter the captured generation")
+    check(snapshot.getEntry(null)?.value === nullKeyValue,
+        "later live removal does not alter the captured null-key entry")
+    check(snapshot.getEntry(nullValueKey) != null,
+        "the captured generation retains a present-null entry")
+    check(!snapshot.containsKey(postSnapshotKey),
+        "the captured generation excludes a later live insertion")
+    check(persistent.getEntry(EquivalentKey("alpha", 10))?.value === winningValue,
+        "later live writes do not alter the converted CHAMP")
+    check(persistent.getEntry(null)?.value === nullKeyValue,
+        "later live removal does not alter the converted null-key entry")
+    check(persistent.getEntry(nullValueKey) != null,
+        "the converted CHAMP retains a present-null entry")
+    check(!persistent.containsKey(postSnapshotKey),
+        "the converted CHAMP excludes a later live insertion")
+}
+
+private fun ctrieSnapshotEnumerationMatchesCanonicalChampAcrossMixedBranchesAndTombs() {
+    val trie = ConcurrentHashTrie<Int, String>()
+    trie.set(0, "zero")
+    trie.set(32, "thirty-two")
+    trie.set(1, "one")
+
+    val mixed = trie.snapshot()
+    checkEquals(listOf(1, 0, 32), mixed.map { it.key },
+        "Ctrie mixed topology emits the CHAMP data run before its child run")
+    checkEquals(listOf(1, 0, 32), mixed.toPersistentHashMap().map { it.key },
+        "mixed-topology snapshot conversion retains canonical CHAMP order")
+
+    var tombSnapshot: ConcurrentHashTrie.Snapshot<Int, String>? = null
+    trie.removalCommittedHookForTesting = { tombSnapshot = trie.snapshot() }
+    try {
+        checkEquals("thirty-two", trie.remove(32)?.value,
+            "removal returns the entry captured before tomb cleanup")
+    } finally {
+        trie.removalCommittedHookForTesting = null
+    }
+
+    val captured = checkNotNull(tombSnapshot)
+    checkEquals(listOf(0, 1), captured.map { it.key },
+        "a tomb-hidden singleton joins the parent CHAMP data run in bitmap order")
+    checkEquals(listOf(0, 1), captured.toPersistentHashMap().map { it.key },
+        "tomb-bearing snapshot conversion retains canonical CHAMP order")
+}
+
 private class EqualityCountingValue {
     var equalityCalls: Int = 0
 
@@ -817,6 +1005,25 @@ private fun ctrieCollisionNodesRemainStable() {
     checkEquals(1_600, snapshot.size, "collision snapshot size")
     checkEquals(1_200, trie.size, "collision live size")
     checkEquals(1_599, snapshot[1_599], "collision snapshot lookup")
+}
+
+private fun ctrieCollisionNodeSplitsForDifferentFullHash() {
+    val trie = ConcurrentHashTrie<Int, String>(CollisionThenSplitPolicy())
+    trie.set(0, "zero")
+    trie.set(1, "one")
+    val collision = trie.validateStructureForTesting()
+    checkEquals(2, collision.entryCount, "equal hashes create a two-entry collision node")
+    checkEquals(1, collision.collisionNodeCount, "equal hashes share one collision node")
+
+    trie.set(2, "two")
+
+    checkEquals("zero", trie[0], "collision re-split retains the first entry")
+    checkEquals("one", trie[1], "collision re-split retains the second entry")
+    checkEquals("two", trie[2], "collision re-split publishes the distinct-hash entry")
+    val split = trie.validateStructureForTesting()
+    checkEquals(3, split.entryCount, "collision re-split retains all entries")
+    checkEquals(1, split.collisionNodeCount, "collision re-split retains the equal-hash bucket")
+    checkEquals(0, split.tombNodeCount, "collision re-split introduces no tomb")
 }
 
 private fun ctrieSnapshotDoesNotLoseCommittedWriter() {
@@ -1294,6 +1501,7 @@ public fun main() {
         "addRejectsDuplicates" to ::addRejectsDuplicates,
         "collisionsAreStoredAndRemoved" to ::collisionsAreStoredAndRemoved,
         "champCanonicalizationAndDiff" to ::champCanonicalizationAndDiff,
+        "champMapEqualsAndDiffPrunePartialSharedSubtrees" to ::champMapEqualsAndDiffPrunePartialSharedSubtrees,
         "champTopologyComparatorRejectsDifferentCollisionKeys" to ::champTopologyComparatorRejectsDifferentCollisionKeys,
         "champValidatorRejectsMalformedDepthAndBitmapCardinality" to ::champValidatorRejectsMalformedDepthAndBitmapCardinality,
         "iterationStreamsTrieOrder" to ::iterationStreamsTrieOrder,
@@ -1309,9 +1517,14 @@ public fun main() {
         "transientSetRelationsUseReceiverPolicyAndActiveValues" to ::transientSetRelationsUseReceiverPolicyAndActiveValues,
         "transientSetLifecycleFailureAndDeterministicModel" to ::transientSetLifecycleFailureAndDeterministicModel,
         "ctrieSnapshotsAndAtomicUpdates" to ::ctrieSnapshotsAndAtomicUpdates,
+        "ctrieSnapshotConversionPreservesPolicyRepresentativesOrderAndIsolation" to
+            ::ctrieSnapshotConversionPreservesPolicyRepresentativesOrderAndIsolation,
+        "ctrieSnapshotEnumerationMatchesCanonicalChampAcrossMixedBranchesAndTombs" to
+            ::ctrieSnapshotEnumerationMatchesCanonicalChampAcrossMixedBranchesAndTombs,
         "ctrieSameReferenceUpdatesBypassValueEquality" to ::ctrieSameReferenceUpdatesBypassValueEquality,
         "ctrieContentionAndGenerationRenewal" to ::ctrieContentionAndGenerationRenewal,
         "ctrieCollisionNodesRemainStable" to ::ctrieCollisionNodesRemainStable,
+        "ctrieCollisionNodeSplitsForDifferentFullHash" to ::ctrieCollisionNodeSplitsForDifferentFullHash,
         "ctrieSnapshotDoesNotLoseCommittedWriter" to ::ctrieSnapshotDoesNotLoseCommittedWriter,
         "ctrieSnapshotExcludesWriterAfterRootAdvance" to ::ctrieSnapshotExcludesWriterAfterRootAdvance,
         "ctrieReaderHelpsInstalledGcas" to ::ctrieReaderHelpsInstalledGcas,

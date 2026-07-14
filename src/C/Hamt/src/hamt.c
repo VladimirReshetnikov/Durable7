@@ -78,6 +78,19 @@ typedef struct tds_hamt_bitmap_node {
     unsigned char storage[];
 } tds_hamt_bitmap_node;
 
+typedef struct tds_hamt_entry_run_view {
+    uint32_t hash;
+    size_t count;
+    const tds_hamt_entry *entries;
+    tds_hamt_entry single;
+    bool is_single;
+} tds_hamt_entry_run_view;
+
+typedef struct tds_hamt_diff_operand {
+    const tds_hamt_node *node;
+    const tds_hamt_inline_entry *inline_entry;
+} tds_hamt_diff_operand;
+
 typedef enum tds_hamt_combine_operation {
     TDS_HAMT_COMBINE_UNION,
     TDS_HAMT_COMBINE_INTERSECT,
@@ -749,6 +762,320 @@ static bool tds_hamt_policies_compatible(const tds_hamt_map *left, const tds_ham
         && left->policy.context == right->policy.context;
 }
 
+static bool tds_hamt_nodes_equal(
+    const tds_hamt_node *left,
+    const tds_hamt_node *right,
+    const tds_hamt_policy *policy) {
+    if (left == right) {
+        return true;
+    }
+    if (left == NULL || right == NULL || left->kind != right->kind) {
+        return false;
+    }
+    if (left->kind == TDS_HAMT_NODE_LEAF) {
+        const tds_hamt_leaf_node *l = (const tds_hamt_leaf_node *)left;
+        const tds_hamt_leaf_node *r = (const tds_hamt_leaf_node *)right;
+        return l->hash == r->hash
+            && tds_hamt_keys_equal(policy, l->key, r->key)
+            && tds_hamt_values_equal(policy, l->value, r->value);
+    }
+    if (left->kind == TDS_HAMT_NODE_COLLISION) {
+        const tds_hamt_collision_node *l = (const tds_hamt_collision_node *)left;
+        const tds_hamt_collision_node *r = (const tds_hamt_collision_node *)right;
+        if (l->hash != r->hash || l->count != r->count) {
+            return false;
+        }
+        for (size_t left_index = 0; left_index != l->count; ++left_index) {
+            bool found = false;
+            for (size_t right_index = 0; right_index != r->count; ++right_index) {
+                if (tds_hamt_keys_equal(
+                        policy,
+                        l->entries[left_index].key,
+                        r->entries[right_index].key)
+                    && tds_hamt_values_equal(
+                        policy,
+                        l->entries[left_index].value,
+                        r->entries[right_index].value)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    const tds_hamt_bitmap_node *l = (const tds_hamt_bitmap_node *)left;
+    const tds_hamt_bitmap_node *r = (const tds_hamt_bitmap_node *)right;
+    if (l->data_map != r->data_map || l->node_map != r->node_map
+        || l->data_count != r->data_count || l->node_count != r->node_count) {
+        return false;
+    }
+    const tds_hamt_inline_entry *left_data = tds_hamt_bitmap_data_const(l);
+    const tds_hamt_inline_entry *right_data = tds_hamt_bitmap_data_const(r);
+    for (size_t index = 0; index != l->data_count; ++index) {
+        if (left_data[index].hash != right_data[index].hash
+            || !tds_hamt_keys_equal(
+                policy, left_data[index].entry.key, right_data[index].entry.key)
+            || !tds_hamt_values_equal(
+                policy, left_data[index].entry.value, right_data[index].entry.value)) {
+            return false;
+        }
+    }
+    tds_hamt_node *const *left_children = tds_hamt_bitmap_children_const(l);
+    tds_hamt_node *const *right_children = tds_hamt_bitmap_children_const(r);
+    for (size_t index = 0; index != l->node_count; ++index) {
+        if (!tds_hamt_nodes_equal(left_children[index], right_children[index], policy)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool tds_hamt_diff_operand_is_empty(tds_hamt_diff_operand operand) {
+    return operand.node == NULL && operand.inline_entry == NULL;
+}
+
+static bool tds_hamt_diff_operand_is_run(tds_hamt_diff_operand operand) {
+    return operand.inline_entry != NULL
+        || (operand.node != NULL && operand.node->kind != TDS_HAMT_NODE_BITMAP_INDEXED);
+}
+
+static tds_hamt_entry_run_view tds_hamt_entry_run_from_operand(tds_hamt_diff_operand operand) {
+    tds_hamt_entry_run_view result = { 0 };
+    result.is_single = true;
+    result.count = 1;
+    if (operand.inline_entry != NULL) {
+        result.hash = operand.inline_entry->hash;
+        result.single = operand.inline_entry->entry;
+        return result;
+    }
+
+    assert(operand.node != NULL);
+    if (operand.node->kind == TDS_HAMT_NODE_LEAF) {
+        const tds_hamt_leaf_node *leaf = (const tds_hamt_leaf_node *)operand.node;
+        result.hash = leaf->hash;
+        result.single.key = leaf->key;
+        result.single.value = leaf->value;
+        return result;
+    }
+
+    assert(operand.node->kind == TDS_HAMT_NODE_COLLISION);
+    const tds_hamt_collision_node *collision = (const tds_hamt_collision_node *)operand.node;
+    result.hash = collision->hash;
+    result.count = collision->count;
+    result.entries = collision->entries;
+    result.is_single = false;
+    return result;
+}
+
+static const tds_hamt_entry *tds_hamt_entry_run_at(
+    const tds_hamt_entry_run_view *run,
+    size_t index) {
+    assert(index < run->count);
+    return run->is_single ? &run->single : &run->entries[index];
+}
+
+static tds_hamt_diff_operand tds_hamt_diff_operand_logical_slot(
+    tds_hamt_diff_operand operand,
+    int index,
+    int shift) {
+    if (tds_hamt_diff_operand_is_empty(operand)) {
+        return operand;
+    }
+    if (tds_hamt_diff_operand_is_run(operand)) {
+        assert(shift < 32);
+        const tds_hamt_entry_run_view run = tds_hamt_entry_run_from_operand(operand);
+        return tds_hamt_index(run.hash, shift) == index
+            ? operand
+            : (tds_hamt_diff_operand){ NULL, NULL };
+    }
+
+    assert(operand.node->kind == TDS_HAMT_NODE_BITMAP_INDEXED);
+    const tds_hamt_bitmap_node *branch = (const tds_hamt_bitmap_node *)operand.node;
+    const uint32_t selected_bit = tds_hamt_bit(index);
+    if ((branch->data_map & selected_bit) != 0) {
+        const tds_hamt_inline_entry *data = tds_hamt_bitmap_data_const(branch);
+        return (tds_hamt_diff_operand){
+            NULL,
+            &data[tds_hamt_slot(branch->data_map, selected_bit)] };
+    }
+    if ((branch->node_map & selected_bit) != 0) {
+        tds_hamt_node *const *children = tds_hamt_bitmap_children_const(branch);
+        return (tds_hamt_diff_operand){
+            children[tds_hamt_slot(branch->node_map, selected_bit)],
+            NULL };
+    }
+    return (tds_hamt_diff_operand){ NULL, NULL };
+}
+
+static void tds_hamt_emit_difference(
+    tds_hamt_difference_kind kind,
+    const void *key,
+    const void *before,
+    const void *after,
+    tds_hamt_difference_visitor visitor,
+    void *context) {
+    const tds_hamt_difference difference = { kind, key, before, after };
+    visitor(&difference, context);
+}
+
+static void tds_hamt_append_diff_operand(
+    tds_hamt_diff_operand operand,
+    bool added,
+    tds_hamt_difference_visitor visitor,
+    void *context) {
+    if (tds_hamt_diff_operand_is_empty(operand)) {
+        return;
+    }
+    if (tds_hamt_diff_operand_is_run(operand)) {
+        const tds_hamt_entry_run_view run = tds_hamt_entry_run_from_operand(operand);
+        for (size_t index = 0; index != run.count; ++index) {
+            const tds_hamt_entry *entry = tds_hamt_entry_run_at(&run, index);
+            tds_hamt_emit_difference(
+                added ? TDS_HAMT_DIFFERENCE_ADDED : TDS_HAMT_DIFFERENCE_REMOVED,
+                entry->key,
+                added ? NULL : entry->value,
+                added ? entry->value : NULL,
+                visitor,
+                context);
+        }
+        return;
+    }
+
+    for (int index = 0; index != TDS_HAMT_BRANCH_MASK + 1; ++index) {
+        tds_hamt_append_diff_operand(
+            tds_hamt_diff_operand_logical_slot(operand, index, 0),
+            added,
+            visitor,
+            context);
+    }
+}
+
+static size_t tds_hamt_entry_run_find(
+    const tds_hamt_entry_run_view *run,
+    const void *key,
+    const tds_hamt_policy *policy) {
+    for (size_t index = 0; index != run->count; ++index) {
+        if (tds_hamt_keys_equal(policy, tds_hamt_entry_run_at(run, index)->key, key)) {
+            return index;
+        }
+    }
+    return SIZE_MAX;
+}
+
+static void tds_hamt_diff_entry_runs(
+    const tds_hamt_entry_run_view *left,
+    const tds_hamt_entry_run_view *right,
+    const tds_hamt_policy *policy,
+    tds_hamt_difference_visitor visitor,
+    void *context) {
+    if (left->hash != right->hash) {
+        for (size_t index = 0; index != left->count; ++index) {
+            const tds_hamt_entry *entry = tds_hamt_entry_run_at(left, index);
+            tds_hamt_emit_difference(
+                TDS_HAMT_DIFFERENCE_REMOVED,
+                entry->key,
+                entry->value,
+                NULL,
+                visitor,
+                context);
+        }
+        for (size_t index = 0; index != right->count; ++index) {
+            const tds_hamt_entry *entry = tds_hamt_entry_run_at(right, index);
+            tds_hamt_emit_difference(
+                TDS_HAMT_DIFFERENCE_ADDED,
+                entry->key,
+                NULL,
+                entry->value,
+                visitor,
+                context);
+        }
+        return;
+    }
+
+    for (size_t left_index = 0; left_index != left->count; ++left_index) {
+        const tds_hamt_entry *before = tds_hamt_entry_run_at(left, left_index);
+        const size_t right_index = tds_hamt_entry_run_find(right, before->key, policy);
+        if (right_index == SIZE_MAX) {
+            tds_hamt_emit_difference(
+                TDS_HAMT_DIFFERENCE_REMOVED,
+                before->key,
+                before->value,
+                NULL,
+                visitor,
+                context);
+            continue;
+        }
+        const tds_hamt_entry *after = tds_hamt_entry_run_at(right, right_index);
+        if (!tds_hamt_values_equal(policy, before->value, after->value)) {
+            tds_hamt_emit_difference(
+                TDS_HAMT_DIFFERENCE_CHANGED,
+                before->key,
+                before->value,
+                after->value,
+                visitor,
+                context);
+        }
+    }
+    for (size_t right_index = 0; right_index != right->count; ++right_index) {
+        const tds_hamt_entry *after = tds_hamt_entry_run_at(right, right_index);
+        if (tds_hamt_entry_run_find(left, after->key, policy) == SIZE_MAX) {
+            tds_hamt_emit_difference(
+                TDS_HAMT_DIFFERENCE_ADDED,
+                after->key,
+                NULL,
+                after->value,
+                visitor,
+                context);
+        }
+    }
+}
+
+static void tds_hamt_diff_operands(
+    tds_hamt_diff_operand left,
+    tds_hamt_diff_operand right,
+    int shift,
+    const tds_hamt_policy *policy,
+    tds_hamt_difference_visitor visitor,
+    void *context) {
+    if (left.node != NULL && left.node == right.node
+        && left.inline_entry == NULL && right.inline_entry == NULL) {
+        return;
+    }
+    if (left.inline_entry != NULL && left.inline_entry == right.inline_entry
+        && left.node == NULL && right.node == NULL) {
+        return;
+    }
+    if (tds_hamt_diff_operand_is_empty(left)) {
+        tds_hamt_append_diff_operand(right, true, visitor, context);
+        return;
+    }
+    if (tds_hamt_diff_operand_is_empty(right)) {
+        tds_hamt_append_diff_operand(left, false, visitor, context);
+        return;
+    }
+    if (tds_hamt_diff_operand_is_run(left) && tds_hamt_diff_operand_is_run(right)) {
+        const tds_hamt_entry_run_view left_run = tds_hamt_entry_run_from_operand(left);
+        const tds_hamt_entry_run_view right_run = tds_hamt_entry_run_from_operand(right);
+        tds_hamt_diff_entry_runs(&left_run, &right_run, policy, visitor, context);
+        return;
+    }
+
+    assert(shift < 32);
+    for (int index = 0; index != TDS_HAMT_BRANCH_MASK + 1; ++index) {
+        tds_hamt_diff_operands(
+            tds_hamt_diff_operand_logical_slot(left, index, shift),
+            tds_hamt_diff_operand_logical_slot(right, index, shift),
+            shift + TDS_HAMT_BITS_PER_LEVEL,
+            policy,
+            visitor,
+            context);
+    }
+}
+
 bool tds_hamt_map_equals(const tds_hamt_map *left, const tds_hamt_map *right) {
     if (left == NULL || right == NULL || !tds_hamt_policies_compatible(left, right)) {
         return false;
@@ -759,18 +1086,7 @@ bool tds_hamt_map_equals(const tds_hamt_map *left, const tds_hamt_map *right) {
     if (left->count != right->count) {
         return false;
     }
-    tds_hamt_map_iterator iterator;
-    tds_hamt_map_iterator_init(left, &iterator);
-    const void *key = NULL;
-    const void *value = NULL;
-    while (tds_hamt_map_iterator_next(&iterator, &key, &value)) {
-        const void *other_value = NULL;
-        if (!tds_hamt_map_try_get(right, key, &other_value)
-            || !tds_hamt_values_equal(&left->policy, value, other_value)) {
-            return false;
-        }
-    }
-    return true;
+    return tds_hamt_nodes_equal(left->root, right->root, &left->policy);
 }
 
 tds_hamt_status tds_hamt_map_diff(
@@ -785,31 +1101,13 @@ tds_hamt_status tds_hamt_map_diff(
     if (left->root == right->root) {
         return TDS_HAMT_OK;
     }
-    tds_hamt_map_iterator iterator;
-    tds_hamt_map_iterator_init(left, &iterator);
-    const void *key = NULL;
-    const void *value = NULL;
-    while (tds_hamt_map_iterator_next(&iterator, &key, &value)) {
-        const void *after = NULL;
-        tds_hamt_difference difference;
-        if (!tds_hamt_map_try_get(right, key, &after)) {
-            difference = (tds_hamt_difference){
-                TDS_HAMT_DIFFERENCE_REMOVED, key, value, NULL };
-            visitor(&difference, context);
-        } else if (!tds_hamt_values_equal(&left->policy, value, after)) {
-            difference = (tds_hamt_difference){
-                TDS_HAMT_DIFFERENCE_CHANGED, key, value, after };
-            visitor(&difference, context);
-        }
-    }
-    tds_hamt_map_iterator_init(right, &iterator);
-    while (tds_hamt_map_iterator_next(&iterator, &key, &value)) {
-        if (!tds_hamt_map_contains_key(left, key)) {
-            const tds_hamt_difference difference = {
-                TDS_HAMT_DIFFERENCE_ADDED, key, NULL, value };
-            visitor(&difference, context);
-        }
-    }
+    tds_hamt_diff_operands(
+        (tds_hamt_diff_operand){ left->root, NULL },
+        (tds_hamt_diff_operand){ right->root, NULL },
+        0,
+        &left->policy,
+        visitor,
+        context);
     return TDS_HAMT_OK;
 }
 

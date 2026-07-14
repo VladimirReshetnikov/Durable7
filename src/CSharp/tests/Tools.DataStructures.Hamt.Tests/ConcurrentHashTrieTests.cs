@@ -134,6 +134,36 @@ public sealed class ConcurrentHashTrieTests
         Assert.Same(nullValue, persistent[null]);
     }
 
+    /// <summary>Verifies Ctrie snapshots expose the canonical CHAMP data-run-before-node-run order.</summary>
+    [Fact]
+    public void SnapshotEnumeration_MatchesCanonicalChampAcrossMixedBranchesAndTombs()
+    {
+        var trie = new ConcurrentHashTrie<int, string>();
+        trie.SetItem(0, "zero");
+        trie.SetItem(32, "thirty-two");
+        trie.SetItem(1, "one");
+
+        var mixed = trie.Snapshot();
+        Assert.Equal(new[] { 1, 0, 32 }, mixed.Select(entry => entry.Key));
+        Assert.Equal(new[] { 1, 0, 32 }, mixed.ToPersistentHashMap().Select(entry => entry.Key));
+
+        ConcurrentHashTrie<int, string>.SnapshotView? tombSnapshot = null;
+        trie.RemovalCommittedHookForTesting = () => tombSnapshot = trie.Snapshot();
+        try
+        {
+            Assert.True(trie.TryRemove(32, out var removed));
+            Assert.Equal("thirty-two", removed);
+        }
+        finally
+        {
+            trie.RemovalCommittedHookForTesting = null;
+        }
+
+        var captured = Assert.IsType<ConcurrentHashTrie<int, string>.SnapshotView>(tombSnapshot);
+        Assert.Equal(new[] { 0, 1 }, captured.Select(entry => entry.Key));
+        Assert.Equal(new[] { 0, 1 }, captured.ToPersistentHashMap().Select(entry => entry.Key));
+    }
+
     /// <summary>Verifies unique-key publishers do not lose successful updates under contention.</summary>
     [Fact]
     public void ParallelUniqueAdds_PublishEveryEntry()

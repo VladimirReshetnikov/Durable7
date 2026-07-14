@@ -8,9 +8,10 @@
 This package ports the repository's persistent map cores to Haskell. It provides persistent
 `HashMap` and `HashSet` values with a canonical 32-way CHAMP trie, strict split data/node maps,
 inline payload runs, immutable equal-hash collision buckets, structural sharing between versions,
-and optional runtime `HashPolicy` values for custom hash/equality behavior. Maps expose semantic
-`mapEquals`, typed `MapDifference` classification, and right-valued union, left-valued
-intersection, difference, and symmetric difference implemented by direct CHAMP-slot combination.
+and optional runtime `HashPolicy` values for custom hash/equality behavior. Same-policy maps expose
+lockstep node-based `mapEquals` and typed `MapDifference` classification; cross-policy maps retain
+semantic lookup comparison. Right-valued union, left-valued intersection, difference, and
+symmetric difference are implemented by direct CHAMP-slot combination.
 
 `Data.Structures.Hamt.Transient` adds one-way `MapTransient` and `SetTransient` editing sessions in
 `IO`. Creating a session adopts an immutable source by reference, and `persistMap` / `persistSet`
@@ -57,10 +58,14 @@ version, but neither insertion order nor sorted order (matching the C# reference
 contract). Structural algebra uses GHC's one-way pointer-identity primitive to prune identical
 immutable roots, subtries, and policy values without hashing. A negative pointer comparison never
 affects semantics: the right operand is normalized under the receiver policy before combination.
-`mapEquals` and `diff` require semantically compatible `HashPolicy` values and interpret
-left keys through the right map where applicable. This is a documented caller precondition because
-Haskell functions have no semantic equality operation for functions; pointer identity is used only
-as a safe positive optimization, not as a compatibility verdict.
+When both maps retain the exact same hash and equality function closures, `mapEquals` and `diff`
+traverse the two canonical node graphs in lockstep, pruning pointer-identical descendants before key
+or value equality callbacks and using stored hashes rather than rehashing keys. Independently
+supplied policies use the semantic lookup path, so compatible equality functions may retain
+distinct coherent hash functions. They must still define compatible key equivalence. This is a
+documented caller precondition because Haskell functions have no semantic equality operation for
+functions; pointer identity is used only as a safe positive optimization, not as a compatibility
+verdict.
 
 `Data.Structures.Hamt.Patricia` adds `IntMap32`/`IntSet32` and `IntMap64`/`IntSet64`. The shared
 strict big-endian Patricia core sign-flips keys for ascending signed traversal, compresses common
