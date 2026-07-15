@@ -1110,7 +1110,7 @@ These are deterministic AVL/path-copying bounds, not comparative performance cla
 [range-update sequence contract](range-update-sequence.md) gives the complete law table, affine
 assign/add example, implementation invariant, deterministic test matrix, and benchmark boundary.
 The C# reference is shipped. Focused Debug validation passes all 62 range-update tests, and the
-complete 692-test FingerTree project suite passes in Debug and Release. The full serialized C#
-solution builds with zero warnings or errors and passes 1,417/1,417 tests in both configurations:
-319 Numerics + 292 HAMT + 692 FingerTree + 62 Ordered + 52 Tungsten. No benchmark result is part of
-the shipment evidence.
+complete 692-test FingerTree project suite passes in Debug and Release. At the pre-bimap Range
+shipment checkpoint, the full serialized C# solution built with zero warnings or errors and passed
+1,417/1,417 tests in both configurations: 319 Numerics + 292 HAMT + 692 FingerTree + 62 Ordered + 52
+Tungsten. No benchmark result is part of the shipment evidence.

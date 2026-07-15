@@ -220,9 +220,10 @@ Range-update lineage:
 2. C, C++, Haskell, Kotlin, Rust, TypeScript, and Python now ship language-local ports preserving
    the algebra laws, logical cached-measure invariant, composition direction, persistence,
    validation, and failure semantics through their native policy and ownership idioms.
-3. Both full serialized C# Debug and Release solution builds complete with zero warnings and zero
-   errors, and both gates pass 1,417/1,417 tests. No benchmark was run; measurements remain
-   postponed for isolation.
+3. At the pre-bimap Range shipment checkpoint, both full serialized C# Debug and Release solution
+   builds completed with zero warnings and zero errors, and both gates passed 1,417/1,417 tests.
+   The later bimap shipment passes 16 focused C# tests and 308/308 HAMT tests in both
+   configurations. No benchmark was run; measurements remain postponed for isolation.
 
 For the surrounding benchmark-independent tranches, single-pass HAMT updates,
 `PersistentHashBag`, strict `PersistentBiMap`, and `PersistentOrderedSet` now ship across all eight

@@ -23,8 +23,10 @@ The later benchmark-independent implementation tranches now ship persistent one-
 updates, `PersistentHashBag`, strict `PersistentBiMap`, neutral `PersistentOrderedSet`, and the
 genuinely new non-composite `RangeUpdateSequence` core across all eight languages. C# owns the implicit-AVL reference, algebra
 contract, invariant suite, and public API; siblings preserve those semantics through language-local
-policies and ownership idioms. Both full serialized C# Debug and Release gates pass 1,417/1,417 tests after builds
-with zero warnings and zero errors. No benchmark was run; see the
+policies and ownership idioms. At the pre-bimap Range shipment checkpoint, both full serialized C#
+Debug and Release gates passed 1,417/1,417 tests after builds with zero warnings and zero errors.
+The later bimap shipment passes 16 focused C# tests and 308/308 HAMT tests in both configurations.
+No benchmark was run; see the
 [frontier catalog](frontier-structure-catalog.md#range-update-sequence-persistent-lazy-propagation)
 and the [four-surface cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md).
 The later [PersistentBiMap completion audit](../reviews/persistent-bimap-cross-language-completion-2026-07-15.md)

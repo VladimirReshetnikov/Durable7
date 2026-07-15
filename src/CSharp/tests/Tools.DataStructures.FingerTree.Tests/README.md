@@ -88,9 +88,9 @@ reasonable oracle.
   AVL/tag/cache invariants, deterministic height/node/allocation/callback ceilings, failpoint
   atomicity, concrete/interface and copied-enumerator behavior, and concurrent reads. The focused
   lane passes 62/62 tests; the complete project passes 692/692 in Debug and Release with zero build
-  warnings or errors. The full serialized C# solution builds with zero warnings or errors and
-  passes 1,417/1,417 tests in both configurations (319 Numerics + 292 HAMT + 692 FingerTree + 62
-  Ordered + 52 Tungsten), so the C# reference is shipped.
+  warnings or errors. At the pre-bimap Range shipment checkpoint, the full serialized C# solution
+  built with zero warnings or errors and passed 1,417/1,417 tests in both configurations (319
+  Numerics + 292 HAMT + 692 FingerTree + 62 Ordered + 52 Tungsten), so the C# reference is shipped.
   `RangeUpdateDiagnosticsAdapter.cs` exposes the
   internal deterministic counters to this test assembly without adding diagnostics to the public
   collection API.
@@ -130,8 +130,9 @@ The range-update integration lane uses the same serialized launcher:
 ```
 
 This focused Debug lane passes 62/62 tests. The complete project passes 692/692 tests in Debug and
-Release. The shipped C# reference is additionally covered by full serialized C# solution builds
-with zero warnings or errors and 1,417/1,417 passing tests in both configurations; see the
+Release. At the pre-bimap Range shipment checkpoint, the shipped C# reference was additionally
+covered by full serialized C# solution builds with zero warnings or errors and 1,417/1,417 passing
+tests in both configurations; see the
 [range-update sequence contract](../../docs/FingerTree/range-update-sequence.md) and validation guide.
 
 The launcher suppresses modal Windows loader/crash reporting for the complete `dotnet` child-process tree. The

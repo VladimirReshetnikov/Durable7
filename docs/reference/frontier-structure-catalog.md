@@ -1259,8 +1259,9 @@ The normative [Range contract](../../src/CSharp/docs/FingerTree/range-update-seq
 algebra, node invariant, operation semantics, complexity, and affine assignment/addition example.
 The [API specification](../../src/CSharp/docs/FingerTree/api-specification.md#range-update-sequence)
 and [validation gate](../../src/CSharp/docs/FingerTree/validation.md#range-update-sequence-integration-gate)
-own the exact surface and evidence. Both complete serialized C# Debug and Release solution builds
-finish with zero warnings and zero errors, and both test gates pass 1,417/1,417. Coverage includes
+own the exact surface and evidence. At the pre-bimap Range shipment checkpoint, both complete
+serialized C# Debug and Release solution builds finished with zero warnings and zero errors, and
+both test gates passed 1,417/1,417. Coverage includes
 62 focused Range tests, 692 complete FingerTree tests, algebra/model/invariant/operation-count gates,
 failpoints, retained branches, enumeration, and concurrency. No benchmark was run; measurements
 remain postponed until the machine can run them in isolation.

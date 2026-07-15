@@ -18,9 +18,10 @@ project.
   `Compose(newer, older)` direction, implicit-AVL lazy-tag invariant, exact public API, structural
   bounds, affine assign/add example, and deterministic validation boundary for
   `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>`. The C# reference is shipped: the focused
-  Debug lane passes 62/62 tests, the complete FingerTree project passes 692/692 tests in Debug and
-  Release, and the full serialized C# solution passes 1,417/1,417 tests with zero build warnings or
-  errors in both configurations. Benchmarks remain postponed until they can run in isolation.
+  Debug lane passes 62/62 tests and the complete FingerTree project passes 692/692 tests in Debug
+  and Release. At the pre-bimap Range shipment checkpoint, the full serialized C# solution passed
+  1,417/1,417 tests with zero build warnings or errors in both configurations. Benchmarks remain
+  postponed until they can run in isolation.
 - [Validation](validation.md) records the local .NET restore/build/test commands, XML-documentation gate,
   sample and benchmark validation boundaries, stress controls, and test-suite coverage.
 - [Tests README](../../tests/Tools.DataStructures.FingerTree.Tests/README.md) maps the xUnit/CsCheck test project,

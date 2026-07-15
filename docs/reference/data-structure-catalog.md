@@ -151,8 +151,9 @@ proper subrange updates and queries perform logarithmic boundary work.
 | TypeScript | `RangeUpdateAlgebra<T, M, Tag>`, `RangeUpdateSequence<T, M, Tag>` | [contract](../../src/TypeScript/docs/range-update-sequence.md), [source](../../src/TypeScript/src/finger-tree/range-update-sequence.ts), [tests](../../src/TypeScript/test/finger-tree/range-update-sequence.test.ts) |
 | Python | `RangeUpdateAlgebra`, `RangeUpdateSequence` | [contract](../../src/Python/docs/range-update-sequence.md), [source](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/range_update_sequence.py), [tests](../../src/Python/tests/finger_tree/test_range_update_sequence.py) |
 
-Both full serialized C# Debug and Release solution builds complete with zero warnings and zero
-errors, and both configurations pass 1,417/1,417 tests. No benchmark was run; measurement remains
+At the pre-bimap Range shipment checkpoint, both full serialized C# Debug and Release solution
+builds completed with zero warnings and zero errors, and both configurations passed 1,417/1,417
+tests. No benchmark was run; measurement remains
 postponed until an isolated session. The single-pass HAMT updates, hash bag, ordered set, and
 range-update sequence now ship across all eight languages; the detailed evidence is in the
 [cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md).
@@ -299,8 +300,8 @@ applying shortcuts, retaining receiver representatives and first normalized argu
 All eight ports ship. The C# focused single-worker Debug and Release lanes each pass 62 tests. At
 the historical pre-Range Ordered shipment checkpoint, the full
 serialized C# Release build had zero warnings and zero errors and the complete gate passed
-1,355/1,355 tests; current full-workspace evidence is the 1,417/1,417 Debug and Release Range gate
-recorded above. No benchmark was run for either shipment, and measurements remain postponed for an
+1,355/1,355 tests; the later pre-bimap full-workspace evidence is the 1,417/1,417 Debug and Release
+Range checkpoint recorded above. No benchmark was run for either shipment, and measurements remain postponed for an
 isolated session.
 
 ## Tungsten Application Collections

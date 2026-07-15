@@ -367,7 +367,7 @@ Integration must establish the contract with deterministic evidence:
 
 The serialized focused Debug lane passes 62/62 range-update tests. The complete FingerTree project
 passes 692/692 tests in Debug and Release, and both project builds report zero warnings and zero
-errors. The full serialized C# solution builds with zero warnings or errors and passes 1,417/1,417
-tests in both Debug and Release: 319 Numerics + 292 HAMT + 692 FingerTree + 62 Ordered + 52
-Tungsten. This records the C# reference as shipped. Benchmarks are not part of this contract gate
-and remain postponed until they can run in isolation.
+errors. At the pre-bimap Range shipment checkpoint, the full serialized C# solution built with zero
+warnings or errors and passed 1,417/1,417 tests in both Debug and Release: 319 Numerics + 292 HAMT +
+692 FingerTree + 62 Ordered + 52 Tungsten. This records the C# reference as shipped. Benchmarks are
+not part of this contract gate and remain postponed until they can run in isolation.

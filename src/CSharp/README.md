@@ -62,10 +62,12 @@ The focused serialized Ordered Debug and Release lanes each discover and pass 62
 build warnings. At its historical pre-Range shipment checkpoint, the complete serialized C# Release
 gate built with zero warnings or errors and passed all 1,355 tests.
 
-The shipped Range-update tranche adds 62 focused Range tests to a 692-test FingerTree project.
-Both current complete serialized C# Debug and Release solution builds finish with zero warnings and
-zero errors, and both full gates pass 1,417/1,417 tests (319 Numerics + 292 HAMT + 692 FingerTree +
-62 Ordered + 52 Tungsten). The Range gate covers algebra laws, implicit-AVL/tag/measure invariants,
+The shipped Range-update tranche adds 62 focused Range tests to a 692-test FingerTree project. At
+the pre-bimap Range shipment checkpoint, both complete serialized C# Debug and Release solution
+builds finished with zero warnings and zero errors, and both full gates passed 1,417/1,417 tests
+(319 Numerics + 292 HAMT + 692 FingerTree + 62 Ordered + 52 Tungsten). The later bimap shipment
+passes 16 focused tests and all 308 HAMT tests in both configurations. The Range gate covers algebra
+laws, implicit-AVL/tag/measure invariants,
 API and identity semantics, generated retained-branch models, deterministic operation ceilings,
 failure atomicity, enumerator behavior, and concurrent readers. No benchmark was run for shipment;
 all performance measurements remain postponed until they can run without competing agents or other

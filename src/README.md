@@ -25,11 +25,14 @@ and TypeScript package all families into one language-local distribution.
 The benchmark-independent rollout now ships one-descent persistent HAMT updates,
 `PersistentHashBag`, strict `PersistentBiMap`, neutral `PersistentOrderedSet`, and independently implemented implicit-AVL
 `RangeUpdateSequence` surfaces across all eight language roots. C# owns the law-gated reference
-`IRangeUpdateAlgebra`, while siblings express the same action through language-local policies. Both complete
-serialized C# Debug and Release solution builds finish with zero warnings and zero errors, and both
-test gates pass 1,417/1,417. No benchmark was run, and measurements remain postponed until an
-isolated session. The detailed [completion audit](../docs/reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md)
-indexes every source, test, dependency, and validation checkpoint.
+`IRangeUpdateAlgebra`, while siblings express the same action through language-local policies. At
+the pre-bimap Range shipment checkpoint, both complete serialized C# Debug and Release solution
+builds finished with zero warnings and zero errors and both test gates passed 1,417/1,417. The later
+bimap shipment passes 16 focused C# tests and all 308 HAMT tests in both configurations. No benchmark
+was run, and measurements remain postponed until an isolated session. The detailed
+[four-surface completion audit](../docs/reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md)
+and [bimap completion audit](../docs/reviews/persistent-bimap-cross-language-completion-2026-07-15.md)
+index every source, test, dependency, and validation checkpoint.
 
 Across every language root, Tungsten is an application-specific leaf consumer. It may depend on
 general libraries; no general workspace may depend on it. See the normative

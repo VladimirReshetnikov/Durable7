@@ -389,8 +389,9 @@ Public behavior must preserve these contracts:
 The exact API, affine assignment/addition example, invariants, and complexity live in the
 [Range contract](../../src/CSharp/docs/FingerTree/range-update-sequence.md); the executable gate is
 recorded in the [C# validation guide](../../src/CSharp/docs/FingerTree/validation.md#range-update-sequence-integration-gate).
-Both full serialized C# Debug and Release builds complete with zero warnings and zero errors, and
-both configurations pass 1,417/1,417 tests. Language-local Range ports, together with the same
+At the pre-bimap Range shipment checkpoint, both full serialized C# Debug and Release builds
+completed with zero warnings and zero errors, and both configurations passed 1,417/1,417 tests.
+Language-local Range ports, together with the same
 tranche's HAMT factories, hash bags, and neutral ordered sets, now ship in C, C++, Haskell, Kotlin,
 Rust, TypeScript, and Python. The
 [cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md)

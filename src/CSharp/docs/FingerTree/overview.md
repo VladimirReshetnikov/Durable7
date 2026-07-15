@@ -58,10 +58,10 @@ and measure queries in O(log n), and indexed edits, split, and concat in O(log n
 core rather than a lazy-tag modification of either finger-tree engine. The
 [range-update sequence contract](range-update-sequence.md) records the algebra laws,
 `Compose(newer, older)` order, representation invariant, exact API, and validation evidence. The C#
-reference is shipped: its focused Debug lane passes 62/62 tests, the complete FingerTree project
-passes 692/692 tests in Debug and Release, and the full serialized C# solution passes 1,417/1,417
-tests with zero build warnings or errors in both configurations. No benchmark result is part of
-that shipment evidence.
+reference is shipped: its focused Debug lane passes 62/62 tests and the complete FingerTree project
+passes 692/692 tests in Debug and Release. At the pre-bimap Range shipment checkpoint, the full
+serialized C# solution passed 1,417/1,417 tests with zero build warnings or errors in both
+configurations. No benchmark result is part of that shipment evidence.
 
 `FingerTreeDeque<T>` is the individually tuned sequence/deque (the analogue of Haskell's `Data.Sequence`, kept separate from the general core just as Haskell keeps it separate from `Data.FingerTree`): an immutable `IReadOnlyList<T>` with O(1) endpoint reads, O(log n) worst-case / O(1) amortized endpoint insertion and removal, concatenation logarithmic in the smaller operand (amortized), indexed access and splitting logarithmic in the distance from the nearer end (amortized), and comparer-based sorted search over rightmost-element signposts with a worst-case near-bound comparer-call count. The representation follows the simplified finger tree of Claessen's *Finger Trees Explained Anew, and Slightly Simplified* (digits of one through three elements, middle nodes of two or three children), with element height encoded through polymorphic recursion, leaf counts plus rightmost-leaf signposts cached per node, and the middle subtree of every deep node held behind a memoize-on-first-force suspension — the strict-language strategy from Hinze and Paterson's original paper that makes the amortized bounds hold under fully persistent (branching) version use. The normative API and complexity contract is [docs/api-specification.md](api-specification.md); its complexity columns were realigned with the source papers' amortized claims (worst-case O(log n), amortized sharp under branching persistence, O(1) worst-case endpoint reads) after the specification review.
 
@@ -116,8 +116,9 @@ that shipment evidence.
   contains the xUnit/CsCheck suite. Its local README maps the deque, measured-tree, derived-collection, rope,
   range-update sequence, sample-smoke, property, model-command, persistence, and
   tearable-concurrency stress test files. The range-update focused Debug lane passes 62/62 tests,
-  the complete FingerTree project passes 692/692 tests in Debug and Release, and the full serialized
-  C# solution passes 1,417/1,417 tests with zero build warnings or errors in both configurations.
+  and the complete FingerTree project passes 692/692 tests in Debug and Release. At the pre-bimap
+  Range shipment checkpoint, the full serialized C# solution passed 1,417/1,417 tests with zero
+  build warnings or errors in both configurations.
 - `benchmarks/Tools.DataStructures.FingerTree.Benchmarks/` is the shared BenchmarkDotNet harness for
   the C# persistent-collections workspace. Alongside the deque, ropes, measures, sorted collections,
   and measured priority queue, it now contains RRB-vector, DABA Lite, canonical zip-set,

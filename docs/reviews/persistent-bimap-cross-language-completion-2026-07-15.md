@@ -249,6 +249,29 @@ configured-policy replacement, inverse mutation/orientation, symmetric removal, 
 clear, a 2,000-operation collision-heavy model, canonical validation, and allocation-failure
 atomicity.
 
+## Final Integration Confirmation
+
+The final-tree audit at commit `9b5e9b31e11307dac8397856893910cbc2e29b7e` repeated one focused,
+serialized, benchmark-free lane for every language after all implementation and documentation
+commits were present:
+
+- C#: 16/16 focused Release bimap tests. The first no-restore attempt exposed a missing local NuGet
+  cache entry; a serialized, parallel-disabled restore repaired the environment, after which the
+  unchanged source passed.
+- TypeScript: 8/8 focused Vitest tests.
+- Python: 8/8 focused pytest tests with deterministic hashing.
+- C++: 67/67 Release HAMT/Patricia groups, including all six bimap groups.
+- Rust: 8/8 focused integration tests with one Cargo build job and one test thread.
+- Haskell: the complete HAMT executable under GHC 9.12.4 with one Cabal job.
+- Kotlin: all 69 registered HAMT groups with one compiler backend thread and one active processor.
+- C: the Release bimap executable.
+
+`origin/main` at `0e1cec5b6adfd40a7fe2bd7a1c9c96c653effee0` is an ancestor of the
+shipment branch; the requested merge is therefore already contained and `git merge origin/main`
+is a no-op. The final audit also confirms that the active documentation distinguishes the
+pre-bimap 1,417-test full-solution Range checkpoint from the later 16-test focused and 308-test
+complete C# HAMT bimap evidence.
+
 ## Benchmark Boundary
 
 No benchmark was run, interpreted, or used as evidence. This shipment claims the asymptotic bounds
