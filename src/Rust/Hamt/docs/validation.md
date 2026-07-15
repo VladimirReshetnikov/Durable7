@@ -14,13 +14,23 @@ Run from `src/Rust`:
 The wrapper locates Cargo on `PATH` or under the default rustup profile and applies inherited,
 non-interactive Windows error handling before Cargo starts the test executable.
 
-The crate uses `#![forbid(unsafe_code)]`. HAMT and Patricia unit tests are inline in
-`Hamt/src/lib.rs` and `Hamt/src/patricia.rs`; Merkle core/wire and persistence integration tests
-live in `Hamt/tests/merkle_core_wire.rs` and `Hamt/tests/merkle_persistence.rs`. Coverage includes:
+The crate uses `#![forbid(unsafe_code)]`. HAMT, hash-bag invariant, and Patricia unit tests are inline
+in `Hamt/src/lib.rs`, `Hamt/src/hash_bag.rs`, and `Hamt/src/patricia.rs`; one-descent map factories
+and the hash bag have focused integration suites in `Hamt/tests/map_factory_updates.rs` and
+`Hamt/tests/persistent_hash_bag.rs`; Merkle core/wire and persistence integration tests live in
+`Hamt/tests/merkle_core_wire.rs` and `Hamt/tests/merkle_persistence.rs`. Coverage includes:
 
 - persistent snapshot preservation;
 - no-op root sharing for equal-value replacement and absent removal;
 - duplicate rejection through `try_add` and `add`;
+- one-hash/one-descent `get_or_add` and `add_or_update`, exact selected-closure counts, caller-key
+  versus stored-key identity, stored/equal-`Arc` value retention, collision buckets, panic
+  atomicity, and a deterministic 4,096-command collision-heavy `BTreeMap` model;
+- hash-bag distinct/total/count queries; first-representative retention; expanded, distinct, and
+  entry iteration; zero-before-hash validation; checked multiplicity and wide `i64` totals;
+  saturated removal; max/min/saturated/checked receiver-policy algebra; eager mismatched-policy
+  normalization; representative precedence; failure atomicity; and a deterministic 4,096-command
+  collision-heavy multiset model;
 - same-hash collision insertion, lookup, and removal;
 - CHAMP inline-payload/child-run invariants, independent insertion histories, and typed diff,
   including exact callback counters proving same-policy equality/diff rehash no keys and prune a

@@ -5,9 +5,12 @@
 - Audience: Maintainers navigating Rust HAMT test coverage
 - Scope: Test location, command, and coverage map
 
-HAMT and Patricia tests live inline in [`../src/lib.rs`](../src/lib.rs) and
-[`../src/patricia.rs`](../src/patricia.rs). Merkle core/wire and persistence tests live in
-[`merkle_core_wire.rs`](merkle_core_wire.rs) and
+HAMT, hash-bag invariant, and Patricia tests live inline in [`../src/lib.rs`](../src/lib.rs),
+[`../src/hash_bag.rs`](../src/hash_bag.rs), and [`../src/patricia.rs`](../src/patricia.rs).
+One-descent map-factory tests live in
+[`map_factory_updates.rs`](map_factory_updates.rs), hash-bag tests live in
+[`persistent_hash_bag.rs`](persistent_hash_bag.rs), and Merkle core/wire and persistence tests live
+in [`merkle_core_wire.rs`](merkle_core_wire.rs) and
 [`merkle_persistence.rs`](merkle_persistence.rs). Run them from `src/Rust`:
 
 ```powershell
@@ -18,6 +21,11 @@ Coverage groups:
 
 - map persistence and version isolation;
 - root-sharing no-op behavior;
+- one-hash/one-descent map factories, exact closure selection, retained key and `Arc` value
+  representatives, collision paths, panic atomicity, and a deterministic collision-heavy model;
+- persistent hash-bag construction, checked counts, retained representatives, expanded/distinct/
+  entry iteration, saturated removal, receiver-policy algebra and eager normalization, algebra
+  failure atomicity, and a deterministic collision-heavy multiset model;
 - duplicate-key rejection;
 - equal-hash collision buckets and insertion-order-independent collision-key topology comparison;
 - CHAMP hash-prefix routing through the final two-bit level, with deliberately malformed routing,

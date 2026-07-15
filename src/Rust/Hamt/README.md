@@ -8,10 +8,12 @@
 `tools-data-structures-hamt` ports the repository HAMT, integer Patricia, and canonical Merkle
 search-tree families to safe Rust. It exposes `PersistentHashMap<K, V, S = RandomState>`,
 `PersistentHashSet<T, S = RandomState>`, their one-way `TransientHashMap` / `TransientHashSet`
-editing sessions, and `BulkBuilder<K, V, S = RandomState>`, the independent one-pass scratch
-constructor (mutable unpublished nodes frozen into detached persistent nodes; used by
-`FromIterator`, set intersection, the set-relation probes, and the Tungsten association's index
-rebuilds).
+editing sessions, `PersistentHashBag<T, S = RandomState>`, and
+`BulkBuilder<K, V, S = RandomState>`, the independent one-pass scratch constructor (mutable
+unpublished nodes frozen into detached persistent nodes; used by map/set `FromIterator`, set
+intersection, set-relation probes, and Tungsten association index rebuilds). The map additionally
+provides one-descent `get_or_add` / `add_or_update` factories; the bag is deliberately persistent
+only and exposes neither a transient nor a public builder.
 
 The trie follows the existing ports:
 
@@ -21,10 +23,18 @@ The trie follows the existing ports:
 - immutable same-hash collision buckets;
 - `Arc`-shared nodes across persistent versions;
 - no-op replacement and absent removal reuse the existing root;
+- `get_or_add` and `add_or_update` hash once, descend once, invoke exactly one selected closure,
+  retain stored key/value representatives on hits and equal-value updates, and return the actual
+  selected value beside the successor in `MapUpdateResult`;
 - same-policy map/set union, intersection, difference, and symmetric difference combine CHAMP
   slots directly, prune `Arc`-identical subtries, and cache subtree cardinalities; independently
   created hash-policy states retain the receiver-policy semantic fallback;
 - map bulk construction uses last-wins semantics.
+- `PersistentHashBag` stores positive `i32` multiplicities in the CHAMP map and caches the expanded
+  count as `i64`; updates are checked and failure-atomic, default iteration is expanded, and
+  distinct/entry iteration avoids expansion. Bag union/intersection/difference/sum use max/min/
+  saturated subtraction/checked addition after eagerly rebuilding an independently created
+  argument under the receiver's `BuildHasher` policy identity;
 - map equality and diff traverse same-policy CHAMP nodes in lockstep, use stored hashes, and prune
   every `Arc`-identical descendant before key or value comparison. Diff returns owned typed
   additions, removals, and changes. Across distinct `BuildHasher` policy identities both operations
@@ -67,6 +77,9 @@ Rust-specific shape:
   delegates changed edits to ordinary persistent path copying; it makes no in-place-edit or
   performance claim;
 - duplicate inserts return `DuplicateKey` instead of throwing;
+- checked bag operations return `HashBagError`; zero-copy updates return before hashing, algebra
+  preserves receiver representatives for shared classes, and argument representatives are adopted
+  only for classes absent from the receiver;
 - iteration is stable for an unchanged map but remains trie-order, not insertion or sorted order.
 
 See [API notes](docs/api-notes.md), [validation](docs/validation.md), and the

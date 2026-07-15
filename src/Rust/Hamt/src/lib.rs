@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-#![doc = "Persistent HAMT, Patricia, and canonical Merkle search-tree collections."]
+#![doc = "Persistent HAMT map/set/bag, Patricia, and canonical Merkle search-tree collections."]
 
 use std::collections::hash_map::RandomState;
 use std::fmt;
@@ -8,10 +8,12 @@ use std::iter::FusedIterator;
 use std::ops::Index;
 use std::sync::Arc;
 
+mod hash_bag;
 mod merkle_encoding;
 mod merkle_persistence;
 mod merkle_search_tree;
 mod patricia;
+pub use hash_bag::{BagIter, HashBagEntry, HashBagError, PersistentHashBag};
 pub use merkle_encoding::{
     Int32MerkleCodec, Int64MerkleCodec, MerkleCodec, MerkleCodecError, MerkleDigest,
     MerkleDigestParseError, MerkleDigestWriteError, MerkleKeyComparer, MerklePolicyError,
@@ -46,6 +48,44 @@ pub enum MapDifference<K, V> {
     Added { key: K, value: V },
     Removed { key: K, value: V },
     Changed { key: K, before: V, after: V },
+}
+
+/// Result of one persistent map factory update.
+///
+/// `map` is the immutable successor and `value` is the actual stored value selected by the
+/// operation. On a hit or an equal-value update, cloning an `Arc` value therefore preserves the
+/// exact stored allocation rather than returning an equal factory-produced replacement.
+#[must_use]
+pub struct MapUpdateResult<K, V, S = RandomState> {
+    pub map: PersistentHashMap<K, V, S>,
+    pub value: V,
+}
+
+impl<K, V: Clone, S: Clone> Clone for MapUpdateResult<K, V, S> {
+    fn clone(&self) -> Self {
+        Self {
+            map: self.map.clone(),
+            value: self.value.clone(),
+        }
+    }
+}
+
+impl<K: fmt::Debug, V: fmt::Debug, S> fmt::Debug for MapUpdateResult<K, V, S> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("MapUpdateResult")
+            .field("map", &self.map)
+            .field("value", &self.value)
+            .finish()
+    }
+}
+
+impl<K, V, S> MapUpdateResult<K, V, S> {
+    /// Splits the result into its successor map and selected value.
+    #[must_use]
+    pub fn into_parts(self) -> (PersistentHashMap<K, V, S>, V) {
+        (self.map, self.value)
+    }
 }
 
 impl fmt::Display for DuplicateKey {
@@ -131,6 +171,75 @@ struct InsertResult<K, V> {
     duplicate: bool,
 }
 
+struct FactoryUpdateNodeResult<K, V> {
+    node: Arc<Node<K, V>>,
+    value: V,
+    added: bool,
+    changed: bool,
+}
+
+enum PresentFactorySelection<V> {
+    Unchanged(V),
+    Changed(V),
+}
+
+trait FactorySelector<K, V> {
+    fn select_absent(&mut self, caller_key: &K) -> V;
+    fn select_present(&mut self, caller_key: &K, stored_value: &V) -> PresentFactorySelection<V>;
+}
+
+struct GetOrAddSelector<F> {
+    add_factory: Option<F>,
+}
+
+impl<K, V, F> FactorySelector<K, V> for GetOrAddSelector<F>
+where
+    V: Clone,
+    F: FnOnce(&K) -> V,
+{
+    fn select_absent(&mut self, caller_key: &K) -> V {
+        self.add_factory
+            .take()
+            .expect("the add factory is selected at most once")(caller_key)
+    }
+
+    fn select_present(&mut self, _caller_key: &K, stored_value: &V) -> PresentFactorySelection<V> {
+        PresentFactorySelection::Unchanged(stored_value.clone())
+    }
+}
+
+struct AddOrUpdateSelector<Add, Update> {
+    add_factory: Option<Add>,
+    update_factory: Option<Update>,
+}
+
+impl<K, V, Add, Update> FactorySelector<K, V> for AddOrUpdateSelector<Add, Update>
+where
+    V: Clone + PartialEq,
+    Add: FnOnce(&K) -> V,
+    Update: FnOnce(&K, &V) -> V,
+{
+    fn select_absent(&mut self, caller_key: &K) -> V {
+        self.add_factory
+            .take()
+            .expect("the add factory is selected at most once")(caller_key)
+    }
+
+    fn select_present(&mut self, caller_key: &K, stored_value: &V) -> PresentFactorySelection<V> {
+        let candidate = self
+            .update_factory
+            .take()
+            .expect("the update factory is selected at most once")(
+            caller_key, stored_value
+        );
+        if stored_value == &candidate {
+            PresentFactorySelection::Unchanged(stored_value.clone())
+        } else {
+            PresentFactorySelection::Changed(candidate)
+        }
+    }
+}
+
 struct RemoveResult<K, V> {
     node: Option<Arc<Node<K, V>>>,
     removed: Option<(K, V)>,
@@ -177,6 +286,10 @@ impl<K, V, S> PersistentHashMap<K, V, S> {
             (Some(left), Some(right)) => Arc::ptr_eq(left, right),
             _ => false,
         }
+    }
+
+    fn has_same_policy_identity(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.policy_identity, &other.policy_identity)
     }
 
     #[must_use]
@@ -272,6 +385,65 @@ where
     V: Clone,
     S: BuildHasher + Clone,
 {
+    /// Returns the value already stored for `key`, or persistently adds the value produced by
+    /// `add_factory` when the key is absent.
+    ///
+    /// The key is hashed once and the trie is descended once. `add_factory` is invoked exactly
+    /// once on a miss and is not invoked on a hit. A hit retains both stored representatives and
+    /// returns a map sharing this map's root.
+    #[must_use]
+    pub fn get_or_add<F>(&self, key: K, add_factory: F) -> MapUpdateResult<K, V, S>
+    where
+        F: FnOnce(&K) -> V,
+    {
+        self.apply_factory_update(
+            key,
+            GetOrAddSelector {
+                add_factory: Some(add_factory),
+            },
+        )
+    }
+
+    fn apply_factory_update<Selector>(
+        &self,
+        key: K,
+        mut selector: Selector,
+    ) -> MapUpdateResult<K, V, S>
+    where
+        Selector: FactorySelector<K, V>,
+    {
+        let hash = self.hash_key(&key);
+        let Some(root) = &self.root else {
+            let value = selector.select_absent(&key);
+            let result_value = value.clone();
+            return MapUpdateResult {
+                map: Self {
+                    root: Some(Arc::new(Node::Leaf { hash, key, value })),
+                    len: 1,
+                    hasher: self.hasher.clone(),
+                    policy_identity: Arc::clone(&self.policy_identity),
+                },
+                value: result_value,
+            };
+        };
+
+        let result = factory_update_node(root, hash, key, 0, &mut selector);
+        let map = if result.changed {
+            Self {
+                root: Some(result.node),
+                len: self.len + usize::from(result.added),
+                hasher: self.hasher.clone(),
+                policy_identity: Arc::clone(&self.policy_identity),
+            }
+        } else {
+            self.clone()
+        };
+        MapUpdateResult {
+            map,
+            value: result.value,
+        }
+    }
+
     #[must_use]
     pub fn remove(&self, key: &K) -> Self {
         self.try_remove(key)
@@ -314,6 +486,32 @@ where
     V: Clone + PartialEq,
     S: BuildHasher + Clone,
 {
+    /// Persistently adds or updates `key` with exactly one selected factory invocation.
+    ///
+    /// The key is hashed once and the trie is descended once. On a hit, `update_factory` receives
+    /// the caller's lookup-key representative and the stored value; `add_factory` is not invoked.
+    /// On a miss, only `add_factory` is invoked. An update equal to the stored value retains the
+    /// stored key and value representatives and returns a map sharing this map's root.
+    #[must_use]
+    pub fn add_or_update<Add, Update>(
+        &self,
+        key: K,
+        add_factory: Add,
+        update_factory: Update,
+    ) -> MapUpdateResult<K, V, S>
+    where
+        Add: FnOnce(&K) -> V,
+        Update: FnOnce(&K, &V) -> V,
+    {
+        self.apply_factory_update(
+            key,
+            AddOrUpdateSelector {
+                add_factory: Some(add_factory),
+                update_factory: Some(update_factory),
+            },
+        )
+    }
+
     #[must_use]
     pub fn insert(&self, key: K, value: V) -> Self {
         let hash = self.hash_key(&key);
@@ -2406,6 +2604,244 @@ where
                 );
             }
             None
+        }
+    }
+}
+
+fn factory_update_node<K, V, Selector>(
+    node: &Arc<Node<K, V>>,
+    hash: u32,
+    key: K,
+    shift: u32,
+    selector: &mut Selector,
+) -> FactoryUpdateNodeResult<K, V>
+where
+    K: Eq + Clone,
+    V: Clone,
+    Selector: FactorySelector<K, V>,
+{
+    match node.as_ref() {
+        Node::Leaf {
+            hash: leaf_hash,
+            key: leaf_key,
+            value: leaf_value,
+        } => {
+            if *leaf_hash == hash && leaf_key == &key {
+                return match selector.select_present(&key, leaf_value) {
+                    PresentFactorySelection::Unchanged(value) => FactoryUpdateNodeResult {
+                        node: Arc::clone(node),
+                        value,
+                        added: false,
+                        changed: false,
+                    },
+                    PresentFactorySelection::Changed(value) => {
+                        let result_value = value.clone();
+                        FactoryUpdateNodeResult {
+                            node: Arc::new(Node::Leaf {
+                                hash,
+                                key: leaf_key.clone(),
+                                value,
+                            }),
+                            value: result_value,
+                            added: false,
+                            changed: true,
+                        }
+                    }
+                };
+            }
+
+            let value = selector.select_absent(&key);
+            let result_value = value.clone();
+            let new_leaf = Arc::new(Node::Leaf { hash, key, value });
+            let next = if *leaf_hash == hash {
+                Arc::new(Node::Collision {
+                    hash,
+                    entries: Arc::from(vec![
+                        (leaf_key.clone(), leaf_value.clone()),
+                        leaf_entry(new_leaf),
+                    ]),
+                })
+            } else {
+                merge_two(Arc::clone(node), *leaf_hash, new_leaf, hash, shift)
+            };
+            FactoryUpdateNodeResult {
+                node: next,
+                value: result_value,
+                added: true,
+                changed: true,
+            }
+        }
+        Node::Collision {
+            hash: bucket_hash,
+            entries,
+        } => {
+            if *bucket_hash == hash {
+                if let Some(index) = entries.iter().position(|(entry_key, _)| entry_key == &key) {
+                    return match selector.select_present(&key, &entries[index].1) {
+                        PresentFactorySelection::Unchanged(value) => FactoryUpdateNodeResult {
+                            node: Arc::clone(node),
+                            value,
+                            added: false,
+                            changed: false,
+                        },
+                        PresentFactorySelection::Changed(value) => {
+                            let result_value = value.clone();
+                            let mut next = entries.to_vec();
+                            next[index] = (next[index].0.clone(), value);
+                            FactoryUpdateNodeResult {
+                                node: Arc::new(Node::Collision {
+                                    hash,
+                                    entries: Arc::from(next),
+                                }),
+                                value: result_value,
+                                added: false,
+                                changed: true,
+                            }
+                        }
+                    };
+                }
+
+                let value = selector.select_absent(&key);
+                let result_value = value.clone();
+                let mut next = entries.to_vec();
+                next.push((key, value));
+                return FactoryUpdateNodeResult {
+                    node: Arc::new(Node::Collision {
+                        hash,
+                        entries: Arc::from(next),
+                    }),
+                    value: result_value,
+                    added: true,
+                    changed: true,
+                };
+            }
+
+            let value = selector.select_absent(&key);
+            let result_value = value.clone();
+            let new_leaf = Arc::new(Node::Leaf { hash, key, value });
+            FactoryUpdateNodeResult {
+                node: merge_two(Arc::clone(node), *bucket_hash, new_leaf, hash, shift),
+                value: result_value,
+                added: true,
+                changed: true,
+            }
+        }
+        Node::Branch {
+            data_map,
+            node_map,
+            data,
+            children,
+            ..
+        } => {
+            let bit = bit_position(hash_fragment(hash, shift));
+            if data_map & bit != 0 {
+                let index = sparse_index(*data_map, bit);
+                let (leaf_hash, leaf_key, leaf_value) = &data[index];
+                if *leaf_hash == hash && leaf_key == &key {
+                    return match selector.select_present(&key, leaf_value) {
+                        PresentFactorySelection::Unchanged(value) => FactoryUpdateNodeResult {
+                            node: Arc::clone(node),
+                            value,
+                            added: false,
+                            changed: false,
+                        },
+                        PresentFactorySelection::Changed(value) => {
+                            let result_value = value.clone();
+                            let mut next_data = data.to_vec();
+                            next_data[index] = (hash, leaf_key.clone(), value);
+                            FactoryUpdateNodeResult {
+                                node: make_branch(
+                                    *data_map,
+                                    *node_map,
+                                    Arc::from(next_data),
+                                    Arc::clone(children),
+                                ),
+                                value: result_value,
+                                added: false,
+                                changed: true,
+                            }
+                        }
+                    };
+                }
+
+                let value = selector.select_absent(&key);
+                let result_value = value.clone();
+                let child = merge_two(
+                    Arc::new(Node::Leaf {
+                        hash: *leaf_hash,
+                        key: leaf_key.clone(),
+                        value: leaf_value.clone(),
+                    }),
+                    *leaf_hash,
+                    Arc::new(Node::Leaf { hash, key, value }),
+                    hash,
+                    shift + BITS_PER_LEVEL,
+                );
+                let mut next_data = data.to_vec();
+                next_data.remove(index);
+                let mut next_children = children.to_vec();
+                next_children.insert(sparse_index(*node_map, bit), child);
+                return FactoryUpdateNodeResult {
+                    node: make_branch(
+                        data_map & !bit,
+                        node_map | bit,
+                        Arc::from(next_data),
+                        Arc::from(next_children),
+                    ),
+                    value: result_value,
+                    added: true,
+                    changed: true,
+                };
+            }
+
+            if node_map & bit == 0 {
+                let value = selector.select_absent(&key);
+                let result_value = value.clone();
+                let mut next_data = data.to_vec();
+                next_data.insert(sparse_index(*data_map, bit), (hash, key, value));
+                return FactoryUpdateNodeResult {
+                    node: make_branch(
+                        data_map | bit,
+                        *node_map,
+                        Arc::from(next_data),
+                        Arc::clone(children),
+                    ),
+                    value: result_value,
+                    added: true,
+                    changed: true,
+                };
+            }
+
+            let index = sparse_index(*node_map, bit);
+            let child_result = factory_update_node(
+                &children[index],
+                hash,
+                key,
+                shift + BITS_PER_LEVEL,
+                selector,
+            );
+            if !child_result.changed {
+                return FactoryUpdateNodeResult {
+                    node: Arc::clone(node),
+                    value: child_result.value,
+                    added: false,
+                    changed: false,
+                };
+            }
+
+            let mut next_children = children.to_vec();
+            next_children[index] = child_result.node;
+            FactoryUpdateNodeResult {
+                node: make_branch(
+                    *data_map,
+                    *node_map,
+                    Arc::clone(data),
+                    Arc::from(next_children),
+                ),
+                value: child_result.value,
+                added: child_result.added,
+                changed: true,
+            }
         }
     }
 }

@@ -16,7 +16,9 @@ Primary entry points:
 - `TransientHashSet<T, S = RandomState>`;
 - `BulkBuilder<K, V, S = RandomState>`;
 - `DuplicateKey`;
+- `MapUpdateResult<K, V, S = RandomState>`;
 - `MapDifference<K, V>`;
+- `PersistentHashBag<T, S = RandomState>`, `HashBagEntry<T>`, `BagIter<T>`, and `HashBagError`;
 - `PersistentIntMap<V>` / `PersistentIntSet` and `PersistentLongMap<V>` / `PersistentLongSet`.
 - `MerkleSearchTree<K, V>`, `MerkleSearchTreePolicy<K, V>`, `MerkleEntry<K, V>`, and
   `MerkleMapDifference<K, V>`;
@@ -31,6 +33,7 @@ The port follows the repository HAMT semantics:
 - deletion promotes a singleton child payload back into its parent to restore canonical shape;
 - equal full-hash collisions are kept in immutable collision buckets;
 - no-op value replacement and absent removal preserve the existing root;
+- one-descent factory updates preserve the existing root on hits and equal-value updates;
 - duplicate `add`/`try_add` calls reject the key without changing the root;
 - replacing an existing key retains the originally stored key object;
 - bulk map construction is last-wins.
@@ -49,6 +52,79 @@ Iterable set difference removes each probe element from the receiver, and iterab
 difference toggles the distinct probe elements on the receiver. The `*_set` same-type variants use
 structural CHAMP algebra when policies are compatible. Both surfaces preserve untouched subtries
 and the receiver root for applicable no-op cases.
+
+## One-descent map factories
+
+`PersistentHashMap::get_or_add(key, add_factory)` and
+`PersistentHashMap::add_or_update(key, add_factory, update_factory)` return
+`MapUpdateResult { map, value }`; `into_parts` is the ownership-friendly destructuring helper. The
+result value is the value actually selected for storage, not merely an equal candidate. In
+particular, `Arc<V>` callers observe the exact stored allocation on a hit or equal-value update.
+
+Both methods compute the truncated hash exactly once and carry one selector down one CHAMP route,
+including inline payloads, child nodes, and same-hash collision buckets. `get_or_add` never calls
+its factory on a hit and calls it once on a miss. `add_or_update` calls only the add closure on a
+miss and only the update closure on a hit. The update closure receives `(&caller_key,
+&stored_value)`, so it can distinguish the lookup representative from the retained stored key.
+The first stored key always survives an update.
+
+An update candidate equal under `V: PartialEq` is discarded: the successor shares the receiver's
+root, the prior stored value remains authoritative, and `value` is a clone of that stored value.
+`get_or_add` therefore needs only `V: Clone`; `add_or_update` adds `V: PartialEq`. A changed
+factory-produced value becomes the stored representative and is cloned once for the result record;
+for shared handles such as `Arc<V>`, both positions retain the exact same allocation. Hashing,
+equality, either selected closure, comparison, or cloning may panic, but all work is over immutable
+source nodes and no partial successor is observable.
+
+## Persistent hash bag
+
+`PersistentHashBag<T, S>` is an immutable unordered multiset over
+`PersistentHashMap<T, i32, S>`. It retains the first representative of every `Eq` class, requires
+every stored multiplicity to be positive and no larger than `i32::MAX`, and caches an expanded
+`i64` `total_count` separately from the `usize` `distinct_count`. This separation permits totals
+larger than `i32::MAX` without widening every CHAMP payload.
+
+Construction and query surface:
+
+- `new` / `with_hasher` create empty bags, and `try_from_items` /
+  `try_from_items_with_hasher` aggregate occurrences in input order;
+- standard `FromIterator<T>` is also available and panics with a descriptive message if checked
+  bag aggregation overflows, while the `try_*` factories return `HashBagError`;
+- `contains`, `count_of`, `get` / `get_stored`, and `get_entry` expose membership, multiplicity, and
+  retained representatives;
+- `iter` and `IntoIterator for &PersistentHashBag` are expanded: each representative is repeated
+  contiguously by its count. `distinct_items` emits one representative per class and `entries`
+  emits `HashBagEntry<&T>` without expansion. All three follow stable-for-one-version, otherwise
+  unspecified CHAMP order;
+- `to_vec` checks conversion to `usize` and `Vec` capacity before cloning expanded items.
+
+`add` / `add_copies` return `Result`. Negative copy counts produce
+`HashBagError::NegativeCopies`; zero returns a root-sharing clone before hashing. Positive additions
+use the one-descent map factory, check both the per-class `i32` sum and cached `i64` total, and retain
+the existing representative. A multiplicity overflow deliberately selects an equal no-op map value
+internally and returns the error without publishing that local result. `remove` / `remove_copies`
+perform saturated subtraction, delete zero-count classes, and return before hashing for zero;
+`remove_all` obtains the removed multiplicity from the map removal result. `clear` preserves the
+receiver's `BuildHasher` policy identity.
+
+Bag algebra is receiver-policy algebra:
+
+- `union` takes the larger count for every class;
+- `intersect` takes the smaller count;
+- `except` performs saturated subtraction;
+- `sum` performs checked per-class and total addition.
+
+Before any empty/self shortcut, an argument from an independently created map policy identity is
+eagerly rebuilt under the receiver's retained hasher and policy identity. This ensures every later
+lookup uses receiver hashes and establishes deterministic representative precedence: a receiver
+representative wins for an overlapping class, while the normalized argument representative is
+adopted only for an absent class. Normalization and `sum` can return multiplicity or total overflow;
+all algebra is failure-atomic because only local persistent successors exist before `Ok` is
+returned. No structural-algebra or benchmark claim is made for the bag tranche.
+
+There is intentionally no `PersistentHashBag` transient, edit session, or public bulk builder.
+`BulkBuilder` remains the existing construction-only map facility; its public surface was not
+expanded for bag mutation.
 
 ## One-way edit sessions
 
@@ -110,8 +186,10 @@ Rust-specific differences:
   bounds; lookups require `K: Eq + Hash, S: BuildHasher`; removal additionally requires
   `K: Clone, V: Clone, S: Clone`; only the insert family requires `V: PartialEq` (for the
   no-op value check). The C# reference imposes no compile-time constraints, so relaxed bounds are
-  the closest Rust analogue;
-- both collections implement content-based `PartialEq`/`Eq` (the C# reference uses reference
+  the closest Rust analogue. Bag metadata and iteration likewise require no bounds, lookup requires
+  only `T: Eq + Hash, S: BuildHasher`, expanded materialization requires `T: Clone`, and persistent
+  edits/algebra add the cloning bounds needed for path copies and retained policies;
+- the map, set, and bag implement content-based `PartialEq`/`Eq` (the C# reference uses reference
   equality and makes no value-equality claim), `Debug`, and `Default` for any `S: Default`;
   `FromIterator` is available for any default-constructible hasher policy; the map implements
   `Index<&K>` which panics on a missing key.
