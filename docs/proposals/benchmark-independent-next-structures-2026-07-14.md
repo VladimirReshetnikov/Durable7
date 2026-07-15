@@ -1,6 +1,6 @@
 # Benchmark-Independent Next Data Structures: Detailed C# Implementation Proposal
 
-- Status: Revised proposed execution sequence — benchmark-independent work only
+- Status: Active execution sequence — C# Steps 1 and 2 shipped; benchmark-independent work only
 - Created (UTC): 2026-07-14T19:23:49Z
 - Repository HEAD: ab9a73c6ae20a3b0ee0627bfe810117450e20c3e
 - Revised (UTC): 2026-07-14T21:14:47Z at faf53286375109fc598e40d5e6da7d1bff7e7415
@@ -11,8 +11,8 @@
 
 Proceed in this order:
 
-1. Add persistent-HAMT single-pass `GetOrAdd`/`AddOrUpdate` operations.
-2. Implement `PersistentHashBag<T>` over `PersistentHashMap<T, int>`.
+1. Add persistent-HAMT single-pass `GetOrAdd`/`AddOrUpdate` operations — **shipped in C#**.
+2. Implement `PersistentHashBag<T>` over `PersistentHashMap<T, int>` — **shipped in C#**.
 3. Implement `PersistentOrderedSet<T>` as an independently owned composite in a new general
    `Tools.DataStructures.Ordered` project. Fork the useful dual-index and sparse-label mechanics;
    do not reference, wrap, or inherit semantics from Tungsten `PersistentAssociation`.
@@ -39,7 +39,7 @@ The detailed sections discuss the Ordered design before Steps 1 and 2 because co
 ownership boundary is the central revision to this document. The numbered execution steps above,
 the section labels, and the implementation tranches remain the authoritative landing order.
 
-No benchmark is required to begin or ship these three structures. This proposal does not authorize
+No benchmark is required to begin or ship these structures. This proposal does not authorize
 performance comparisons against BCL collections or claims that one representation beats another.
 It requires correctness, persistence, invariant, asymptotic-work, failure, and documentation
 evidence instead.
@@ -76,15 +76,20 @@ The audit covered:
 - Numerics future-width and code-generation plans, which were classified as outside this
   data-structure proposal.
 
-Candidate status was then checked against the C# source and test trees. Exact-name searches confirm
-that `PersistentOrderedSet`, `PersistentHashBag`, `RangeUpdateSequence`, `PersistentBiMap`, and a
-value-carrying interval-map facade are not currently shipped C# types.
+At proposal-audit time, exact-name searches confirmed that `PersistentOrderedSet`,
+`PersistentHashBag`, `RangeUpdateSequence`, `PersistentBiMap`, and a value-carrying interval-map
+facade were not shipped C# types. Execution Steps 1 and 2 have since shipped the persistent-HAMT
+`GetOrAdd`/`AddOrUpdate` kernel and `PersistentHashBag<T>` respectively. The remaining named
+structure candidates stay unshipped until their own complete source/test/documentation tranches
+land.
 
 ## Current Baseline
 
 The following work is complete and must not be mistaken for pending implementation:
 
 - CHAMP canonical nodes, structural equality/diff, and structural map/set algebra;
+- the C# `PersistentHashBag<T>` facade with explicit multiplicity, receiver-policy algebra, and
+  expanded/distinct enumeration contracts;
 - C# owner-token CHAMP transients and semantic one-way editing sessions in the sibling languages;
 - 32-bit and 64-bit Patricia maps and sets;
 - RRB vectors;
@@ -350,7 +355,7 @@ enumerated construction inputs or argument elements:
 | --- | --- |
 | `CreateRange` | O(m (w + c) + n) with one ordered/index rebuild; duplicate inputs still count in m |
 | Hashed membership / stored representative | O(w + c) |
-| Positional lookup | O(log min(index + 1, n - index)) worst case |
+| Positional lookup | O(log n) worst case; O(1 + log min(index + 1, n - index)) amortized; endpoints O(1) worst case |
 | `IndexOf` | O(w + c + log n) |
 | Ordinary end insertion | O(w + c) amortized on a linear history; O(w + c + log n) ordinary worst case |
 | Positional insertion or movement while a label gap exists | O(w + c + log n) |
@@ -415,7 +420,7 @@ The type ships when:
 - workspace overview/usage/API/validation docs and repository catalogs are updated; and
 - the complete C# suite passes with one build/test worker.
 
-## Execution Step 1: Persistent HAMT Single-Pass Updates
+## Execution Step 1: Persistent HAMT Single-Pass Updates — Shipped In C#
 
 ### Why This Is Separate From Builders And Transients
 
@@ -426,8 +431,9 @@ current repository vocabulary makes that grouping obsolete:
 - `Transient` is the public one-way owner-token editing session.
 - `GetOrAdd`/`AddOrUpdate` are ordinary persistent point operations returning immutable versions.
 
-Canonical bulk construction and C# transients already ship. Only the single-pass persistent point
-operation remains an enabling API gap.
+Canonical bulk construction and C# transients already shipped before this proposal. Step 1 now
+closes the remaining C# single-pass persistent point-operation gap; this section records its shipped
+contract and validation boundary for later ports.
 
 ### Recommended Surface
 
@@ -504,7 +510,7 @@ semantics but fail the enabling API’s single-descent purpose.
 
 These are operation-count and correctness gates, not wall-clock gates.
 
-## Execution Step 2: `PersistentHashBag<T>`
+## Execution Step 2: `PersistentHashBag<T>` — Shipped In C#
 
 ### Representation
 
@@ -524,8 +530,9 @@ The map contains one entry for each equivalence class. Its positive `int` value 
 
 `CreateRange` should aggregate through a small internal extension of the existing HAMT
 `BulkBuilder`, retaining the first equivalent key while incrementing a checked count, and freeze
-once into canonical CHAMP shape. This remains an internal staging path, not a second public builder
-or transient lifecycle.
+once into canonical CHAMP shape. The combiner receives both the stored value and incoming add value,
+so checked aggregation can use a capture-free static delegate. This remains an internal staging
+path, not a second public builder or transient lifecycle.
 
 ### Count And Enumeration Contract
 
@@ -543,14 +550,71 @@ enumeration or silently truncate `TotalCount`.
 
 ### Proposed Public Surface
 
-| Area | Members |
-| --- | --- |
-| Construction | `Empty`, `Create(comparer)`, `CreateRange(items, comparer)` |
-| State | `DistinctCount`, `TotalCount`, `IsEmpty`, `Comparer` |
-| Lookup | `Contains`, `CountOf`, `TryGetValue` for the stored representative |
-| Update | `Add`, `AddCopies`, `Remove`, `RemoveCopies`, `RemoveAll`, `Clear` |
-| Algebra | `Union`, `Intersect`, `Except`, `Sum` |
-| Enumeration | expanded enumerator, `DistinctItems`, `Entries`, `ToArray` with explicit overflow behavior |
+The C# reference surface is exact rather than illustrative:
+
+```csharp
+public sealed class PersistentHashBag<T> : IEnumerable<T>
+{
+    public static PersistentHashBag<T> Empty { get; }
+
+    public static PersistentHashBag<T> Create(
+        IEqualityComparer<T>? comparer = null);
+
+    public static PersistentHashBag<T> CreateRange(
+        IEnumerable<T> items,
+        IEqualityComparer<T>? comparer = null);
+
+    public int DistinctCount { get; }
+    public long TotalCount { get; }
+    public bool IsEmpty { get; }
+    public IEqualityComparer<T> Comparer { get; }
+
+    public bool Contains(T item);
+    public int CountOf(T item);
+    public bool TryGetValue(T equalValue, out T actualValue);
+
+    public PersistentHashBag<T> Add(T item);
+    public PersistentHashBag<T> AddCopies(T item, int count);
+    public PersistentHashBag<T> Remove(T item);
+    public PersistentHashBag<T> RemoveCopies(T item, int count);
+    public PersistentHashBag<T> RemoveAll(T item);
+    public PersistentHashBag<T> Clear();
+
+    public PersistentHashBag<T> Union(PersistentHashBag<T> other);
+    public PersistentHashBag<T> Intersect(PersistentHashBag<T> other);
+    public PersistentHashBag<T> Except(PersistentHashBag<T> other);
+    public PersistentHashBag<T> Sum(PersistentHashBag<T> other);
+
+    public IEnumerable<T> DistinctItems { get; }
+    public IEnumerable<KeyValuePair<T, int>> Entries { get; }
+
+    public T[] ToArray();
+    public Enumerator GetEnumerator();
+}
+```
+
+The type deliberately exposes neither `Count` nor `IReadOnlyCollection<T>`. It also has no
+enumerable algebra overload, public mutable builder or transient facade, or content-equality
+override. `Entries` uses the standard `KeyValuePair<T, int>` representation and follows the same
+distinct trie order as `DistinctItems`. Interface enumeration remains available through
+`IEnumerable<T>` and the non-generic `IEnumerable` base interface. `TryGetValue` returns the stored
+representative on a hit and assigns the lookup argument itself to `actualValue` on a miss, matching
+the persistent-set convention. Null items are accepted or rejected only through the selected
+comparer's behavior.
+
+The nested public `Enumerator` is a mutable struct that wraps the map's struct enumerator and keeps
+the current representative plus its unexpanded repetition count. Obtaining and draining it through
+the concrete surface allocates nothing; copying it creates an independently advancing value. Its
+`Current` is `default` before the first successful `MoveNext` and after exhaustion, `Dispose` is a
+no-op, and `IEnumerator.Reset` throws `NotSupportedException`. Enumeration through an interface may
+box the struct. `DistinctItems` is the map's key view and `Entries` is the map's pair view, so each
+view is version-bound and immutable. Each representative's expanded occurrences are contiguous;
+the relative order of first expanded occurrences, `DistinctItems`, and `Entries` is identical. The
+order is stable for an unchanged version but otherwise unspecified.
+
+The debugger proxy exposes a distinct-entry array, never expanded enumeration. Debugger inspection
+therefore remains bounded by `DistinctCount` even when one multiplicity or `TotalCount` is very
+large.
 
 ### Multiplicity And Overflow Rules
 
@@ -568,10 +632,33 @@ retained while later elements only increment its count. `Clear` and every result
 retain the receiver's comparer object; only the reference-default comparer uses the shared `Empty`
 instance.
 
+`Create()` and `Create(EqualityComparer<T>.Default)` return `Empty`; reference identity with that
+default comparer object, not semantic comparer equivalence, selects the singleton. Point additions
+retain an existing representative, while an absent class stores the caller's item.
+
 `TotalCount` cannot overflow for a valid bag: `DistinctCount <= int.MaxValue` and every
 multiplicity is at most `int.MaxValue`, so the maximum representable total is
 `(int.MaxValue * (long)int.MaxValue) < long.MaxValue`. Keep internal total arithmetic checked as a
 defensive invariant guard, but do not advertise an unreachable public total-overflow case.
+
+`AddCopies` and `RemoveCopies` validate a negative `count` before hashing or equality callbacks.
+They return the receiver for zero without hashing or invoking equality. Positive `AddCopies` uses
+the map's one-descent persistent `AddOrUpdate`; positive `RemoveCopies` may perform a lookup followed
+by one changed map update because the map combinator cannot delete an entry. This is two bounded
+searches but only one rebuilt path and retains the stated O(w + c) bound. `RemoveAll` uses the map's
+single-descent `TryRemove` and obtains the removed multiplicity from that operation.
+
+`ToArray` returns expanded enumeration in exactly the bag enumerator's order. Before allocating, it
+throws `OverflowException` when `TotalCount > Array.MaxLength`; checking only `int.MaxValue` is not
+sufficient because the CLR's maximum single-dimensional array length is lower. An empty bag returns
+an empty array. No partially populated array is observable if enumeration unexpectedly fails.
+
+`CreateRange` rejects a null source before enumeration. Its internal bulk combine validates its
+update delegate before hashing, hashes each source item once, scans one full-hash bucket, invokes the
+update delegate exactly once only for an equivalent stored key, retains the first key
+representative, retains an equal stored value representative, and leaves builder state unchanged if
+hashing, key equality, count increment, or value equality throws. Freezing owns all published arrays;
+later builder changes cannot mutate an earlier immutable snapshot.
 
 ### Algebra
 
@@ -593,6 +680,30 @@ representative encountered in the map's stable-but-unspecified enumeration order
 normalized class. This rule prevents algebra from silently using the argument's equality policy.
 It also means structural lockstep algebra is available only when the implementations explicitly
 prove policy compatibility; normalization otherwise takes element-wise distinct-entry work.
+Because map order is not semantic, two logically equal argument versions may select different
+representatives when their observed entry orders differ; only the rule relative to the particular
+argument version's observed order is guaranteed.
+
+This normalization is semantically eager: after null validation, a comparer-mismatched argument is
+fully normalized before operation-specific empty or identity short-cuts. Consequently, comparer,
+hash, equality, or checked-collapse failures during normalization remain observable even for an
+intersection with an empty receiver or another case whose mathematical answer could be known
+without examining the argument. Reference-identical comparer objects skip normalization because
+each input already has one entry per receiver equivalence class.
+
+All four operations are failure-atomic because they build only immutable intermediate versions.
+`Union` and `Sum` introduce the normalized argument representative only for a class absent from the
+receiver; every surviving receiver class keeps the receiver representative. `Intersect` and
+`Except` never introduce an argument representative. `Sum` checks every per-class addition before
+publishing that changed version. If the complete logical result equals the receiver, including its
+multiplicities and representatives, the exact receiver instance is returned. Every empty result
+retains the receiver comparer object and canonicalizes only when that object is
+`EqualityComparer<T>.Default` by reference.
+
+In particular, `Union(this)` and `Intersect(this)` return `this`, `Except(this)` returns the
+receiver-comparer empty bag, and `Sum(this)` actually doubles each multiplicity and can overflow.
+Logical equality for the no-op rule is receiver-policy class membership plus multiplicity; the
+argument's representative identities do not displace surviving receiver representatives.
 
 ### Complexity
 
@@ -602,11 +713,14 @@ prove policy compatibility; normalization otherwise takes element-wise distinct-
 | Point add/remove | O(w + c), one rebuilt search path when changed |
 | Expanded enumeration | O(`TotalCount`) |
 | Distinct/entry enumeration | O(`DistinctCount`) |
-| Same-type structural algebra | Inherit the CHAMP structural bound where implemented directly; otherwise document element-wise work honestly |
+| Same-comparer `Union` / `Sum` | O(argument `DistinctCount` (w + c)) element-wise work |
+| Same-comparer `Intersect` / `Except` | O(receiver `DistinctCount` (w + c)) element-wise work |
+| Mismatched-comparer algebra | O((receiver + argument `DistinctCount`) (w + c)) including normalization |
 
-Do not claim structural bag algebra merely because the underlying map has structural algebra. A
-combining multiplicity operation needs an explicit lockstep implementation before receiving that
-bound.
+The initial implementation is deliberately element-wise and preserves receiver sharing as each
+class is processed. Do not claim structural bag algebra merely because the underlying map has
+structural algebra. A combining multiplicity operation needs an explicit lockstep implementation
+before receiving that bound.
 
 ### Validation Plan
 
@@ -624,6 +738,12 @@ Cover:
 - no-op identity and retained versions;
 - comparer and input-enumerator exceptions; and
 - randomized command histories with invariant validation.
+
+Internal invariant diagnostics must first validate canonical CHAMP routing and ownership sealing,
+then verify that every stored multiplicity is positive and that their checked sum equals
+`TotalCount`. API-shape tests lock the absence of `Count` and `IReadOnlyCollection<T>`; enumerator
+tests lock default, before-first, active, copied, exhausted, interface, and reset behavior; debugger
+tests lock distinct rather than expanded projection.
 
 No benchmark is an exit criterion.
 
@@ -780,9 +900,11 @@ Push is immutable. It never mutates nodes reachable from an older version.
 
 1. eagerly validates the range;
 2. returns the source for an empty range or identity tag;
-3. splits before `index` and after `count`;
-4. applies the tag once to the isolated middle root; and
-5. rejoins the three pieces.
+3. applies the tag directly to the root when the validated range is the whole sequence, preserving
+   the O(1) whole-sequence bound;
+4. otherwise splits before `index` and after `count`;
+5. applies the tag once to the isolated middle root; and
+6. rejoins the three pieces.
 
 The two boundary spines are copied; the range interior and all outside subtrees remain shared.
 
@@ -867,7 +989,8 @@ array-backed segment tree, or any external library.
 - A throwing measure/tag policy leaves every input version unchanged.
 - Empty-range and `IsIdentity`-recognized updates return the source instance. The generic type has
   no element-equality policy, so `SetItem` does not promise an equal-value identity shortcut.
-- Measuring an empty range returns `TOps.Empty` without invoking element or tag policy code.
+- Measuring an empty range returns the cached empty measure without invoking element-measure or tag
+  callbacks after generic initialization.
 - The type is immutable and safe for concurrent reads.
 - No mutable cache is required for tag propagation.
 - User policies are expected to be deterministic and side-effect-free; concurrent invocation is a
@@ -1050,9 +1173,9 @@ rewriting proposal-time reasoning.
 
 If this proposal is accepted, use these self-contained tranches:
 
-1. **Persistent HAMT single-pass update kernel**
+1. **Persistent HAMT single-pass update kernel — shipped in C#**
    - node operation, public API, exhaustive transition/callback tests, docs.
-2. **Hash-bag facade**
+2. **Hash-bag facade — shipped in C#**
    - source, count/algebra/representative model tests, docs and catalogs.
 3. **Complete independent ordered set**
    - new Ordered source/test projects and solution entries;
@@ -1095,11 +1218,13 @@ For documentation-only tranches, run the repository stale-path scan, Markdown li
 
 ## Final Recommendation
 
-The best immediate implementation is the persistent HAMT's single-pass point-update kernel,
-followed by `PersistentHashBag<T>`. This closes the highest-leverage remaining API gap inside one
-shipped family and produces a Strong facade with explicit multiplicity semantics.
+The persistent HAMT's single-pass point-update kernel and `PersistentHashBag<T>` facade are complete
+in C#. The bag consumes that enabling API inside the shipped HAMT family and supplies explicit
+multiplicity, receiver-policy normalization, representative, overflow, identity, and expanded-
+enumeration semantics without depending on benchmark evidence.
 
-`PersistentOrderedSet<T>` follows as the lowest-risk independent composite. It reuses public general
+`PersistentOrderedSet<T>` is now the immediate next C# implementation and the lowest-risk independent
+composite. It reuses public general
 foundations but is not a thin facade: the new Ordered project must own its dual-index invariant,
 sparse-label/relabel implementation, movement and representative contract, independent model, and
 evolution. Tungsten `PersistentAssociation` is useful provenance and a source of adversarial cases,

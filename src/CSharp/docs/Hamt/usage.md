@@ -2,12 +2,12 @@
 
 - Created (UTC): 2026-07-02T20:12:28Z
 - Repository HEAD: f448af2c7626e4f3b06f74701c3f9f9383db7446
-- Audience: .NET consumers and maintainers using the C# HAMT, Ctrie, Patricia, and Merkle families
-- Scope: Construction, persistent and transient updates, comparer behavior, iteration, concurrency, and content-addressed workflows
+- Audience: .NET consumers and maintainers using the C# HAMT, hash-bag, Ctrie, Patricia, and Merkle families
+- Scope: Construction, persistent and transient updates, bag multiplicities and algebra, comparer behavior, iteration, concurrency, and content-addressed workflows
 
 This guide is the practical companion to the [C# API specification](api-specification.md). It shows
-the common usage patterns for the CHAMP, Ctrie, Patricia, and Merkle families; the API specification
-remains the normative contract for complexity, allocation behavior, and edge cases.
+the common usage patterns for the CHAMP map/set/bag, Ctrie, Patricia, and Merkle families; the API
+specification remains the normative contract for complexity, allocation behavior, and edge cases.
 
 ## Namespace And Build
 
@@ -42,8 +42,8 @@ The repository currently builds the library from source under
 
 ## Persistent Values
 
-Maps and sets are immutable persistent values. Update-shaped members return a new version and leave
-the source version usable:
+Maps, sets, and bags are immutable persistent values. Update-shaped members return a new version and
+leave the source version usable:
 
 ```csharp
 var empty = PersistentHashMap<int, string>.Empty;
@@ -94,6 +94,29 @@ if (unique.TryAdd(2, "two", out var withTwo))
     // withTwo has both keys; unique is unchanged.
 }
 ```
+
+Use persistent `GetOrAdd` and `AddOrUpdate` when selecting a value depends on membership and the
+successor map is still immutable. Both hash once and descend once; unlike the mutable Ctrie, their
+factories never retry:
+
+```csharp
+var withThree = withTwo.GetOrAdd(
+    3,
+    key => $"value-{key}",
+    out string threeValue);
+
+var incremented = PersistentHashMap<string, int>.Empty.AddOrUpdate(
+    "requests",
+    _ => 1,
+    (_, current) => checked(current + 1),
+    out int requestCount);
+```
+
+`GetOrAdd` invokes no factory on a hit. `AddOrUpdate` invokes exactly one selected factory once. An
+update factory receives the caller's lookup key and stored value, while the map retains the original
+equivalent key object. If the selected update value compares equal under the default value comparer,
+the source map and stored value object are retained. Null delegates fail before hashing, and any
+factory or comparer exception leaves the source unchanged.
 
 `TryRemove` reports whether the key existed and returns the removed value:
 
@@ -239,6 +262,123 @@ if (set.TryGetValue("ALPHA", out var actualValue))
     // actualValue is "Alpha".
 }
 ```
+
+## Persistent Hash Bag
+
+`PersistentHashBag<T>` is an immutable unordered multiset. One representative and one positive
+`int` multiplicity are stored for each comparer equivalence class. Use `DistinctCount` for the
+number of classes and `TotalCount` for the expanded number of occurrences:
+
+```csharp
+IEqualityComparer<string> comparer = StringComparer.OrdinalIgnoreCase;
+var bag = PersistentHashBag<string>.CreateRange(
+    new[] { "Alpha", "ALPHA", "beta" },
+    comparer);
+
+Debug.Assert(bag.DistinctCount == 2);
+Debug.Assert(bag.TotalCount == 3L);
+Debug.Assert(bag.CountOf("alpha") == 2);
+Debug.Assert(bag.Contains("BETA"));
+
+if (bag.TryGetValue("ALPHA", out var representative))
+{
+    // representative is the first input object, "Alpha".
+}
+```
+
+The type deliberately has no ambiguous `Count` property and does not implement
+`IReadOnlyCollection<T>`: an `int Count` could neither represent all valid `TotalCount` values nor
+agree safely with expanded enumeration. `Empty`, `Create()`, and
+`Create(EqualityComparer<T>.Default)` share the default-comparer empty object. An empty created with
+a custom comparer preserves that comparer object instead. Construction consumes occurrences in
+input order, retains the first equivalent item as the class representative, checks every
+multiplicity increment, and publishes one immutable CHAMP only after aggregation. The combining
+bulk path used for that aggregation is internal construction machinery, not a public builder.
+
+Use `Add`/`Remove` for one copy and `AddCopies`/`RemoveCopies` for a specified number. Removal
+saturates at zero; a class with no remaining copies is removed from the underlying map:
+
+```csharp
+var fiveAlphas = bag.AddCopies("alpha", 3);
+Debug.Assert(fiveAlphas.CountOf("ALPHA") == 5);
+
+var twoAlphas = fiveAlphas.RemoveCopies("ALPHA", 3);
+var noBetas = twoAlphas.RemoveAll("beta");
+
+// Existing classes retain their original representative in every successor.
+Debug.Assert(twoAlphas.TryGetValue("alpha", out var stillAlpha));
+Debug.Assert(stillAlpha == "Alpha");
+
+// Earlier versions are unchanged.
+Debug.Assert(bag.CountOf("alpha") == 2);
+```
+
+`AddCopies(item, 0)` and `RemoveCopies(item, 0)` return the receiver before hashing. Removing a
+missing class is also an identity-preserving no-op. Negative copy counts throw
+`ArgumentOutOfRangeException`. Addition throws `OverflowException` rather than allowing a class to
+exceed `int.MaxValue`, and callback or checked-arithmetic failures publish no successor. `Clear()`
+returns the receiver when already empty and otherwise returns an empty bag retaining the exact
+receiver comparer object. Null-item behavior is defined solely by that comparer.
+
+Default enumeration is expanded. Each stored representative appears once per occurrence, with all
+copies of one representative contiguous. `DistinctItems` and `Entries` instead enumerate one item
+or one `KeyValuePair<T, int>` per class:
+
+```csharp
+foreach (string occurrence in bag)
+{
+    // Visits three values: the two "Alpha" occurrences are contiguous.
+}
+
+foreach (var (item, multiplicity) in bag.Entries)
+{
+    Console.WriteLine($"{item}: {multiplicity}");
+}
+
+foreach (string item in bag.DistinctItems)
+{
+    // Visits "Alpha" and "beta" once each, in the same distinct order as Entries.
+}
+```
+
+The relative distinct order follows the CHAMP bitmap/collision shape: it is stable for an unchanged
+version but is neither insertion order nor sorted order. The concrete expanded enumerator is an
+allocation-free, copy-safe struct; interface enumeration may box it. Before its first successful
+`MoveNext` and after exhaustion, `Current` is `default`; `Dispose` does nothing and interface
+`Reset` throws `NotSupportedException`. `ToArray()` copies exactly this expanded order, but first
+throws `OverflowException` when `TotalCount` exceeds `Array.MaxLength`. Debugger inspection projects
+`Entries`, not expanded occurrences, so inspecting a very large multiplicity remains bounded by
+`DistinctCount`.
+
+Bag algebra accepts another `PersistentHashBag<T>` and uses conventional multiset counts:
+
+```csharp
+var left = PersistentHashBag<string>.CreateRange(
+    new[] { "a", "a", "b" }, comparer);
+var right = PersistentHashBag<string>.CreateRange(
+    new[] { "A", "B", "B", "c" }, comparer);
+
+var maximum = left.Union(right);       // a:2, b:2, c:1
+var minimum = left.Intersect(right);   // a:1, b:1
+var difference = left.Except(right);   // a:1
+var additive = left.Sum(right);        // a:3, b:3, c:1
+```
+
+`Union` takes the maximum count, `Intersect` the minimum, `Except` the saturated receiver-minus-
+argument count, and `Sum` checked addition. The receiver's comparer always defines equivalence.
+Surviving receiver classes retain receiver representatives; only classes absent from the receiver
+can introduce an argument representative. A logical no-op returns the receiver instance.
+`Union(bag)` and `Intersect(bag)` therefore return `bag`, `Except(bag)` returns a comparer-preserving
+empty, and `Sum(bag)` really doubles counts and may overflow.
+
+When comparer objects are not reference-identical, algebra first normalizes every distinct argument
+entry under the receiver comparer. Argument classes that collapse together contribute the checked
+sum of their counts; the first representative encountered in that argument version's stable trie
+order represents the normalized class. Normalization is eager after null validation, even when an
+empty operand would otherwise reveal the mathematical answer. Comparer, hash, equality, or checked-
+collapse failures therefore remain observable and leave both inputs unchanged. Use the same
+comparer object for both operands when their policies are intentionally identical and normalization
+is unnecessary.
 
 ## One-Way Transient Editing
 
@@ -603,7 +743,11 @@ unresolved, the result exposes every unresolved conflict and no partial tree.
 | Immutable unordered value set | `PersistentHashSet<T>` |
 | Many single-owner set edits per publication | `PersistentHashSet<T>.Transient` |
 | Stored equivalent item recovery | `TryGetValue` |
-| Union/intersection/difference | `Union`, `Intersect`, `Except`, `SymmetricExcept` |
+| Set union/intersection/difference | `Union`, `Intersect`, `Except`, `SymmetricExcept` |
+| Immutable unordered multiset with large expanded count | `PersistentHashBag<T>` |
+| Per-class and expanded bag counts | `CountOf`, `DistinctCount`, `TotalCount` |
+| Maximum/minimum/subtractive/additive bag algebra | `Union`, `Intersect`, `Except`, `Sum` |
+| Expanded bag materialization | `ToArray` (when `TotalCount <= Array.MaxLength`) |
 | Custom value semantics | `Create(comparer)` or `CreateRange(items, comparer)` |
 | Shared mutable map with O(1) immutable snapshots | `ConcurrentHashTrie<TKey, TValue>` |
 | Signed integer keys with ordered structural merge | `PersistentIntMap<TValue>` / `PersistentLongMap<TValue>` |

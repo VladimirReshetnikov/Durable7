@@ -62,7 +62,7 @@ For membership-dominated workloads on GUIDs, this is already adequate.
    an `Array.Copy`) on each insert ([`PersistentHashMap.cs:1419`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashMap.cs),
    `:1433`). For random GUIDs these buckets are birthday-bound and modest — see [the numbers](#the-numbers-that-matter)
    — but the 32-bit ceiling is intrinsic regardless of hash quality.
-2. **Set algebra is element-wise, not structural.** `Union`, `Intersect`, `Except`, and
+2. **Historical baseline: set algebra was element-wise, not structural.** `Union`, `Intersect`, `Except`, and
    `SymmetricExcept` all take `IEnumerable<T>` and operate element-by-element: `Union` folds
    `result.Add(item)`, `Except` folds `result.Remove(item)`, `Intersect` materializes a probe
    `HashSet<T>` and rebuilds ([`PersistentHashSet.cs:210`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashSet.cs)–`290`).
@@ -71,6 +71,11 @@ For membership-dominated workloads on GUIDs, this is already adequate.
    have reference-equality-pruned `MapEquals`/`Diff` ([`PersistentHashMap.cs:441`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashMap.cs)–`455`,
    `:573`), but that is a change-enumeration over aligned nodes, not an algebraic combine, and it is
    not surfaced on the set at all.
+
+   **Current-state correction (2026-07-14):** same-type structural CHAMP map/set algebra now ships
+   across all six language workspaces, with reference-equal subtree pruning and stored-hash reuse.
+   Arbitrary-`IEnumerable<T>` overloads remain element-wise. The historical limitation above no
+   longer distinguishes a full-key GUID collection from the current same-type hash-set surface.
 3. **Enumeration is bitmap order, not sorted.** There is no ordered iteration and no range or prefix
    query — the 32-bit hash destroys key locality.
 
@@ -150,6 +155,11 @@ fix (see below).
   give the hash set its own (unordered) structural set algebra, narrowing even this gap for
   order-agnostic workloads.
 
+  **Current-state correction (2026-07-14):** that frontier work has shipped. Both designs now prune
+  shared same-type subtrees; the full-key design's remaining differentiators are collision freedom,
+  key order, range/prefix operations, and its different depth/memory trade rather than structural
+  algebra alone.
+
 ### Where the custom collection loses
 
 For **trusted random GUIDs doing plain membership**, the elegant 1-bit variant is worse than the
@@ -169,9 +179,10 @@ baseline on every axis that matters:
 Restoring per-op parity requires the **5-bit variant** — which reintroduces exactly the bitmap +
 popcount + compaction machinery the "simple Patricia" pitch claims to avoid. At that point the honest
 description is not "a simple extension of the int/long core" but "CHAMP re-keyed on the full 128-bit
-GUID," and the cleanest realization is to **feed the raw 128-bit GUID into the existing shipped CHAMP
-as its own hash** — collision-free past 128 bits, reusing the already-ported six-language node layer —
-rather than building a bespoke wide-radix core from scratch.
+GUID." **Current-state correction (2026-07-14):** feeding that discriminator through the current
+CHAMP is not a thin facade or unchanged-node reuse. The shipped node entries, routing helpers, bitmap
+descent, collision representation, diagnostics, and every port carry a 32-bit hash/path contract; a
+full-key version must deliberately widen that representation and revalidate the node layer.
 
 ## The numbers that matter
 
@@ -288,9 +299,10 @@ The smallest changes that capture most of the value, in order of leverage:
 
 1. **If GUIDs are untrusted** — this is the one case that justifies building now, because it closes a
    real algorithmic-DoS exposure in the baseline rather than optimizing a micro-benchmark. The
-   smallest correct form is **CHAMP keyed on the full 128-bit GUID** (via `UInt128`), reusing the
-   existing six-language node layer, keeping HAMT-class depth and memory, and eliminating the
-   collision path.
+   smallest correct form is **CHAMP keyed on the full 128-bit GUID** (via `UInt128`), but it requires
+   a widened path/hash representation throughout each language's CHAMP node layer rather than a thin
+   facade over the shipped 32-bit implementation. It retains HAMT-class depth and memory goals while
+   eliminating the equal-full-hash collision path.
 2. **If ordered/range/structural-diff over GUIDs is the need** — generalize the existing Patricia
    core's path type **once** to `TPath : IBinaryInteger<TPath>` (making int, long, and 128-bit all
    instances of one core; behavior of the shipped int/long maps is unchanged) and add a thin `Guid`

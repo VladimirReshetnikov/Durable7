@@ -3,20 +3,23 @@
 - Status: Informational
 - Created (UTC): 2026-07-02T05:02:24Z
 - Repository HEAD: 3c639e02d05377685676923a13b30a3d22fd4994
-- Audience: Maintainers and implementers working on the C# CHAMP, Ctrie, Patricia, and Merkle families
+- Audience: Maintainers and implementers working on the C# CHAMP, hash-bag, Ctrie, Patricia, and Merkle families
 - Scope: Index of current specifications, usage, and validation for `src/CSharp/src/Tools.DataStructures.Hamt`
 
 ## Current Documents
 
 - [API Specification](api-specification.md) defines the public C# API shape, semantic contracts,
   persistence/concurrency behavior, complexity targets, canonical wire, verification boundary, and
-  merge contracts for the CHAMP map/set, Ctrie, integer Patricia, and Merkle search-tree surfaces.
-- [Usage guide](usage.md) shows persistent CHAMP updates and structural diff, comparer and stored-
-  representative behavior, one-way map/set transient edit sessions, set algebra, Ctrie snapshots,
-  Patricia structural algebra, and Merkle persistence, proofs, synchronization, and three-way merge.
+  merge contracts for the CHAMP map/set/bag, Ctrie, integer Patricia, and Merkle search-tree
+  surfaces. The bag section locks its separate distinct/expanded counts, checked multiplicities,
+  comparer normalization, representative precedence, enumeration, debugger, and no-op contracts.
+- [Usage guide](usage.md) shows persistent CHAMP updates and structural diff, hash-bag counting and
+  algebra, comparer and stored-representative behavior, one-way map/set transient edit sessions,
+  set algebra, Ctrie snapshots, Patricia structural algebra, and Merkle persistence, proofs,
+  synchronization, and three-way merge.
 - [Validation](validation.md) records the local .NET restore/build/test commands, workspace warning
-  policy, generated XML-documentation gate, and xUnit/CsCheck/model/stress coverage for all four
-  families.
+  policy, generated XML-documentation gate, and xUnit/CsCheck/model/stress coverage for the CHAMP
+  map/set/bag, Ctrie, Patricia, and Merkle families.
 - [Tests README](../../tests/Tools.DataStructures.Hamt.Tests/README.md) maps the xUnit/CsCheck test project,
   source files, filter commands, wire vectors, proof/persistence adversarial cases, concurrency
   histories, and model/property coverage.

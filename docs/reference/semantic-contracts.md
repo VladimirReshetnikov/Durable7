@@ -125,14 +125,33 @@ Language-specific obligations:
 
 | Language | Additional contract |
 | --- | --- |
-| C# | Public XML docs must state comparer preservation, exception behavior, no-op identity where promised, and IReadOnly collection semantics. |
+| C# | Public XML docs must state comparer preservation, exception behavior, no-op identity where promised, and IReadOnly collection semantics. Persistent `GetOrAdd`/`AddOrUpdate` validate delegates before hashing, hash and descend once, invoke only the selected factory once, retain stored key/value representatives on equal updates, and publish nothing on callback failure. |
 | C | Every function must define ownership of input keys/values, retained outputs, status codes, and cleanup on partial failure. Callback contexts must outlive collections that use them. |
 | C++ | Value objects should remain cheap to copy through shared immutable nodes; template policies must stay part of the value's semantic identity. |
 | Haskell | `HashPolicy` and package-local `Hashable` shape are part of the port, avoiding third-party dependencies while preserving persistent HAMT behavior. |
 | Kotlin | Miss paths and duplicate results should use idiomatic Kotlin null/result/exception shapes documented in API notes. |
 | Rust | Keys that compare equal under `Eq` must hash equally under the chosen `BuildHasher`; removal returns owned cloned values where exposed. |
-| TypeScript | Equality and hashing are explicit runtime policy, not JavaScript object identity by accident; session and iterator validity are checked dynamically. |
+| TypeScript | Runtime hash policies define equivalence and representative retention; transient sessions are isolate-local path-copying facades with no cross-worker progress or edit-performance claim. |
 | Python | Equality and hashing are explicit retained policy; mutable application objects require caller discipline, and changed or consumed sessions invalidate version-bound iterators dynamically. |
+
+### C# persistent hash bag
+
+`PersistentHashBag<T>` is the shipped C# unordered-multiset facade over
+`PersistentHashMap<T, int>`. It stores exactly one representative and one positive multiplicity per
+comparer equivalence class, exposes `DistinctCount : int` separately from expanded
+`TotalCount : long`, and deliberately does not implement `IReadOnlyCollection<T>` or expose an
+ambiguous `int Count`. Construction and point additions retain the first stored representative;
+expanded enumeration repeats each representative contiguously, while `DistinctItems` and `Entries`
+enumerate one class each in the same stable-for-one-version, otherwise unspecified HAMT order.
+
+Bag algebra uses maximum union, minimum intersection, saturated difference, and checked additive
+sum. The receiver comparer defines equivalence and receiver representatives win every surviving
+receiver class. A reference-different argument comparer is normalized eagerly under the receiver
+policy before any operation-specific shortcut; collapsed argument multiplicities are checked and
+use the first representative observed in that argument version's HAMT order. Zero-copy and logical
+no-op updates return the receiver, empty results preserve its comparer object, and `ToArray` rejects
+`TotalCount > Array.MaxLength` before allocation. The complete contract is in the
+[C# HAMT API specification](../../src/CSharp/docs/Hamt/api-specification.md).
 
 ### Concurrent snapshot facades
 
@@ -190,7 +209,7 @@ advantage is claimed:
 | Haskell | `MapTransient` / `SetTransient` live in `IO`; `persistMap` / `persistSet` consume the `IORef` state. Candidate construction precedes a masked commit, so synchronous or asynchronous failure cannot partially install an edit. |
 | Kotlin | Nested `Transient` sessions enforce consumption with `IllegalStateException`; acquired views capture the current persistent snapshot and session version, survive logical no-ops, and fail after content changes. Callback failure leaves the active session unchanged and retryable. |
 | Rust | `TransientHashMap` / `TransientHashSet` publish with consuming `into_persistent(self)`, so the type system prevents use-after-publication. `into_transient` moves a source while `to_transient` shares its root; both retain persistent path-copy edit costs. |
-| TypeScript | `TransientHashMap` / `TransientHashSet` enforce one-way publication and version-bound iteration dynamically; changed edits use persistent path copying and failed callbacks leave the active session retryable. |
+| TypeScript | `TransientHashMap` / `TransientHashSet` enforce one-way publication at runtime inside one JavaScript isolate. Changed edits replace the current persistent root through ordinary path copies; the facade makes no cross-worker progress or transient-performance claim. |
 | Python | `TransientHashMap` / `TransientHashSet` retain a persistent current value, consume on publication, and invalidate iterators after content changes or publication; changed edits remain persistent path copies rather than owner-token mutation. |
 
 The local authoritative references are the [C API specification](../../src/C/Hamt/docs/api-specification.md),

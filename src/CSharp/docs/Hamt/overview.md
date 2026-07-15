@@ -3,15 +3,20 @@
 - Status: Implemented workspace
 - Created (UTC): 2026-07-02T05:02:24Z
 - Repository HEAD: 3c639e02d05377685676923a13b30a3d22fd4994
-- Audience: Maintainers implementing and reviewing the CHAMP, Ctrie, Patricia, and Merkle families
+- Audience: Maintainers implementing and reviewing the CHAMP, hash-bag, Ctrie, Patricia, and Merkle families
 - Scope: Project layout and validation entry points for `src/CSharp/src/Tools.DataStructures.Hamt`
 
 `src/CSharp/src/Tools.DataStructures.Hamt` contains the .NET 10 C# preview workspace for
 `Tools.DataStructures.Hamt`, a persistent and concurrent trie/search-tree library led by canonical
 CHAMP. `PersistentHashMap<TKey, TValue>` is an immutable unordered dictionary with structural
 sharing across versions. `PersistentHashSet<T>` is built on the same core and implements
-`IReadOnlySet<T>`. Both expose the optimized C# one-way `Transient` editing session for many edits
-per publication. `CreateTransient` starts empty and `ToTransient` adopts a persistent value in O(1);
+`IReadOnlySet<T>`. `PersistentHashBag<T>` is the immutable unordered multiset facade: it stores one
+positive `int` multiplicity per comparer equivalence class, reports the number of classes through
+`DistinctCount`, and reports the expanded occurrence count through a `long TotalCount`. The map also
+exposes single-pass persistent `GetOrAdd` and `AddOrUpdate` operations that select a value through
+exactly one factory invocation and one trie descent. The map and set expose the optimized C# one-way
+`Transient` editing session for many edits per publication. `CreateTransient` starts empty and
+`ToTransient` adopts a persistent value in O(1);
 `Persist` publishes in O(1), consumes the session, and returns the exact source object when the
 session remained logically clean. The map surface is the selected direct separate-node engine
 itself, not an additional public facade allocation; the set surface is a thin `IReadOnlySet<T>`
@@ -54,13 +59,29 @@ Canonical deletion promotes singleton child payloads back into their parent; equ
 collisions remain immutable collision buckets. Insert,
 replace, lookup, and removal run in O(hash-width / 5) expected time plus collision-bucket length for
 adversarial equal hashes; operations clone only the search path and reuse every untouched subtree.
-Lookups allocate nothing, single-pass `Add`/`TryAdd` hash and walk once, and both collections expose
-allocation-free copy-safe struct enumerators.
+Lookups allocate nothing. `Add`/`TryAdd`, `GetOrAdd`, and `AddOrUpdate` hash and walk once;
+`GetOrAdd` hits and equal-value `AddOrUpdate` no-ops allocate nothing. The map, set, and bag expose
+allocation-free copy-safe concrete struct enumerators. Bag enumeration is expanded: occurrences of
+one representative are contiguous and repeated according to its multiplicity, while
+`DistinctItems` and `Entries` expose one item or representative/count pair per class in matching
+stable-for-one-version trie order.
 
-From-scratch map/set factories use an internal bulk builder. It stages entries by full hash and
+From-scratch map/set/bag factories use an internal bulk builder. It stages entries by full hash and
 freezes them directly into canonical CHAMP topology, avoiding a persistent path copy for every item.
-The same internal facility is available to the sibling Tungsten assembly
-for association relabel/sort/reverse rebuilds; no mutable storage is ever shared with a published map.
+For the bag only, an internal combining insertion increments a checked multiplicity while retaining
+the first equivalent item; it is construction machinery, not a public mutable builder or transient
+lifecycle. Downstream consumers use the public `CreateRange` contracts. No mutable staging storage
+is ever shared with a published map or bag.
+
+Bag updates preserve the same comparer object and first stored representative as the map/set core.
+Point addition checks the per-class `int` bound, removal uses saturated subtraction and deletes a
+class at zero, and logical no-ops return the receiver. Its `Union`, `Intersect`, `Except`, and `Sum`
+implement maximum, minimum, saturated subtraction, and checked addition respectively. The receiver
+defines equality and representative precedence. A comparer-mismatched argument is eagerly
+normalized under that receiver comparer before any mathematical shortcut, so collapsed argument
+classes contribute a checked sum and observable callback failures are not hidden. Algebra is
+currently element-wise over distinct entries; it does not claim the map's structural lockstep
+bound.
 
 Transient sessions preserve the persistent CHAMP comparer, stored-representative, collision,
 enumeration, and no-op rules. They are unsynchronized and have one logical owner; sequential transfer
@@ -88,6 +109,10 @@ and canonical topology alone does not confer reference identity.
 - `DataStructures.sln` is the solution entry point.
 - `src/Tools.DataStructures.Hamt/` contains the public library.
   - `PersistentHashMap.cs` is the bitmap-indexed HAMT map implementation.
+  - `PersistentHashMap.SinglePassUpdates.cs` implements persistent `GetOrAdd`/`AddOrUpdate` through
+    one hash computation, one trie descent, and one selected factory invocation.
+  - `PersistentHashBag.cs` implements the immutable unordered multiset, including explicit distinct
+    and expanded counts, checked multiplicities, receiver-policy algebra, and expanded enumeration.
   - `PersistentHashMap.Transient.cs` and `PersistentHashMap.OwnerTokenKernel.cs` expose and implement
     the public one-way map transient.
   - `MapDifference.cs` defines the added/removed/changed result vocabulary used by structural diff.
@@ -135,4 +160,5 @@ dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Te
 ```
 
 See [`docs/validation.md`](validation.md) for the restore/build/test split, XML documentation
-warning gate, complete single-node commands, and the 223-test C# HAMT checkpoint.
+warning gate, complete single-node commands, the historical 244-test pre-bag C# HAMT checkpoint,
+and the current 292-test complete HAMT plus 52-test focused bag/bulk-builder checkpoints.

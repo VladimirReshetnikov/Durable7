@@ -20,6 +20,10 @@ new or replaced leaves.
 structural-sharing semantics as the map. Both persistent CHAMP types expose a C#-only, one-way
 `Transient` session for many single-owner point edits followed by one O(1) publication.
 
+`PersistentHashBag<T>` is the immutable unordered multiset in the same project. It stores one
+positive multiplicity per comparer equivalence class in `PersistentHashMap<T, int>` and tracks the
+expanded occurrence count separately as a `long`. It has no mutable builder or transient surface.
+
 `ConcurrentHashTrie<TKey, TValue>` is a lock-free mutable map built from bitmap C-nodes, singleton
 leaves, collision nodes, and generation-stamped indirection nodes. Its public mutation surface is
 linearizable, and `Snapshot()` captures the current Ctrie generation in O(1).
@@ -34,9 +38,9 @@ collision buckets and compared linearly with the configured equality comparer.
 
 Enumeration order is an implementation detail of the trie shape and comparer hash codes. It is stable
 for an unchanged version, but callers must not treat it as insertion order or sorted order. Both
-collections expose public struct enumerators that keep their entire traversal state inline: obtaining
-and draining an enumerator allocates nothing, and a copied enumerator advances independently of the
-original.
+map, set, and bag expose public struct enumerators that keep their entire traversal state inline:
+obtaining and draining a concrete enumerator allocates nothing, and a copied enumerator advances
+independently of the original.
 
 ## Map Contract
 
@@ -46,6 +50,12 @@ original.
 - `Create(comparer)` returns an empty map using a supplied comparer.
 - `CreateRange(items, comparer)` adds entries in enumeration order with last-wins semantics.
 - `SetItem(key, value)` adds or replaces a key.
+- `GetOrAdd(key, addFactory, out value)` returns the current map and stored value on a hit. On a
+  miss, it invokes `addFactory` exactly once with the caller's key and returns the successor map and
+  selected value.
+- `AddOrUpdate(key, addFactory, updateFactory, out value)` invokes exactly one selected factory
+  exactly once. The update factory receives the caller's lookup key and stored value while the map
+  retains the originally stored key representative.
 - `SetItems(items)` adds or replaces entries in enumeration order with last-wins semantics and
   throws `ArgumentNullException` for a null sequence.
 - `Add(key, value)` adds a key and throws `ArgumentException` when the key already exists. This is
@@ -76,16 +86,22 @@ reported output). Independently built equal maps still require O(n) comparison b
 topology does not make separately allocated nodes reference-equal. Equal-hash collision runs are
 matched without regard to order and can require O(c²) key comparisons for a bucket of size c.
 
-`Add` and `TryAdd` hash the key once and walk the trie once; a rejected duplicate allocates nothing.
+`Add`, `TryAdd`, `GetOrAdd`, and `AddOrUpdate` hash the key once and walk the trie once. Persistent
+factory updates have no retry loop. `GetOrAdd` invokes no factory on a hit; `AddOrUpdate` invokes
+exactly one of its two factories. All factory arguments are validated before hashing, even when the
+selected branch would not use one of them. A rejected duplicate, `GetOrAdd` hit, or equal-value
+`AddOrUpdate` no-op allocates nothing.
 The try-pattern `out` values (`TryGetValue`, `TryRemove`) carry `[MaybeNullWhen(false)]`, matching
 the `IReadOnlyDictionary<TKey, TValue>` annotation.
 
-No-op updates preserve instance identity throughout: replacing a value that compares equal under
-`EqualityComparer<TValue>.Default`, removing an absent key, and clearing an empty map all return the
-current instance. Consequently, "last-wins" value semantics hold up to default value equality: when
-an incoming value compares equal to the stored value, the stored value object is retained. When a
-present key is replaced or re-set, the originally stored key object is likewise retained; use
-`TryGetKey` to observe it.
+No-op updates preserve instance identity throughout: a `GetOrAdd` hit, an `AddOrUpdate` replacement
+that compares equal under `EqualityComparer<TValue>.Default`, replacing an equal value through
+`SetItem`, removing an absent key, and clearing an empty map all return the current instance. An
+equal factory result retains and reports the stored value object. When a present key is replaced or
+re-set, the originally stored key object is likewise retained; use `TryGetKey` to observe it.
+
+Factory, key-comparer, or value-equality failure publishes no successor and leaves the source map
+unchanged. A present null value selects the hit/update branch and is never conflated with absence.
 
 The configured comparer defines hash and equality semantics, including any behavior for null keys.
 The comparer must honor the usual hash contract: equivalent keys must produce equal hash codes.
@@ -119,6 +135,170 @@ separate `AddRange`/`RemoveRange` members.
 `SetEquals` materialize their argument into a probe `HashSet<T>` using the set's comparer — an O(m)
 time and space cost documented on each member. `IsSupersetOf` and `Overlaps` stream their argument
 and exit early.
+
+## Hash Bag Contract
+
+`PersistentHashBag<T>` is sealed, immutable, and implements `IEnumerable<T>`. Its exact public
+surface is:
+
+```csharp
+public sealed class PersistentHashBag<T> : IEnumerable<T>
+{
+    public static PersistentHashBag<T> Empty { get; }
+
+    public static PersistentHashBag<T> Create(
+        IEqualityComparer<T>? comparer = null);
+
+    public static PersistentHashBag<T> CreateRange(
+        IEnumerable<T> items,
+        IEqualityComparer<T>? comparer = null);
+
+    public int DistinctCount { get; }
+    public long TotalCount { get; }
+    public bool IsEmpty { get; }
+    public IEqualityComparer<T> Comparer { get; }
+
+    public bool Contains(T item);
+    public int CountOf(T item);
+    public bool TryGetValue(T equalValue, out T actualValue);
+
+    public PersistentHashBag<T> Add(T item);
+    public PersistentHashBag<T> AddCopies(T item, int count);
+    public PersistentHashBag<T> Remove(T item);
+    public PersistentHashBag<T> RemoveCopies(T item, int count);
+    public PersistentHashBag<T> RemoveAll(T item);
+    public PersistentHashBag<T> Clear();
+
+    public PersistentHashBag<T> Union(PersistentHashBag<T> other);
+    public PersistentHashBag<T> Intersect(PersistentHashBag<T> other);
+    public PersistentHashBag<T> Except(PersistentHashBag<T> other);
+    public PersistentHashBag<T> Sum(PersistentHashBag<T> other);
+
+    public IEnumerable<T> DistinctItems { get; }
+    public IEnumerable<KeyValuePair<T, int>> Entries { get; }
+
+    public T[] ToArray();
+    public Enumerator GetEnumerator();
+}
+```
+
+There is intentionally no `Count`, `IReadOnlyCollection<T>`, enumerable algebra overload, public
+mutable builder, transient facade, or content-equality override. Expanded occurrence counts may
+exceed `int.MaxValue`; exposing them through an `int Count` would be lossy and would disagree with
+the meaning of default enumeration.
+
+### Representation, Construction, And Counts
+
+The bag contains an internal `PersistentHashMap<T, int>` from stored representative to
+multiplicity plus a cached `long TotalCount`. The following invariants hold for every published
+instance:
+
+- the map has exactly one entry per comparer equivalence class;
+- every stored multiplicity is in `1 .. int.MaxValue`;
+- `DistinctCount` is the map count;
+- `TotalCount` is the checked sum of all stored multiplicities; and
+- `IsEmpty`, `DistinctCount == 0`, and `TotalCount == 0` are equivalent.
+
+The mathematical maximum valid total is
+`int.MaxValue * (long)int.MaxValue`, which is below `long.MaxValue`; internal total arithmetic is
+still checked as an invariant guard. The publicly reachable overflow boundary is therefore the
+per-class `int` multiplicity, not a valid bag's `long` total.
+
+`Empty`, `Create()`, `Create(null)`, and `Create(EqualityComparer<T>.Default)` return the shared
+default-comparer empty bag. This canonicalization is based on comparer reference identity, not
+semantic comparer equivalence. An empty bag carrying any other comparer object retains that exact
+object through construction, `Clear`, algebra, and every result that becomes empty.
+
+`CreateRange(items, comparer)` throws `ArgumentNullException` before enumerating a null source. It
+processes occurrences in input order, retains the first equivalent item as the class
+representative, and checks each multiplicity increment. Internally it aggregates through one
+single-owner unpublished CHAMP bulk builder and freezes once. The builder's combining insertion
+validates its internal delegate before hashing, hashes each item once, scans one full-hash bucket,
+invokes the combiner exactly once only on a hit, and commits only after hashing, key equality,
+checked increment, and value equality succeed. This is internal construction machinery; no mutable
+staging object is part of the bag API or shared with a published bag.
+
+`Contains` tests whether a class exists. `CountOf` returns its positive multiplicity or zero when
+absent. `TryGetValue` returns the stored representative on a hit and assigns the caller's
+`equalValue` to `actualValue` on a miss, matching the set convention. Comparer behavior determines
+whether null is supported; equivalent items must have equal hashes and comparer behavior must
+remain stable across the lifetime of all derived versions.
+
+### Point Updates, Identity, And Failure
+
+`Add`/`Remove` change one occurrence. `AddCopies` adds the requested count; `RemoveCopies` performs
+saturated subtraction and removes the class rather than storing zero. `RemoveAll` removes the whole
+class in one map descent and obtains the removed multiplicity from that operation. An absent
+addition stores the caller's item, while an update of an existing class retains the stored
+representative.
+
+Negative copy counts are rejected with `ArgumentOutOfRangeException` before any hash or equality
+callback. Zero-copy additions/removals return the exact receiver without hashing. Removing a
+missing class, clearing an empty bag, and any complete algebra result logically equal to the
+receiver are also identity-preserving no-ops. Positive `AddCopies` uses the map's one-descent
+`AddOrUpdate`; positive `RemoveCopies` may first look up the multiplicity and then perform one map
+update, but rebuilds at most one changed path.
+
+Adding beyond `int.MaxValue` copies in one class throws `OverflowException` before a successor is
+returned. Hash, equality, source-enumerator, or checked-arithmetic failure likewise exposes no
+partially published bag and leaves every input version unchanged. Untouched CHAMP subtrees are
+shared normally by successful changed updates.
+
+### Algebra And Comparer Normalization
+
+The four same-type operations combine class multiplicities as follows:
+
+| Operation | Result count for one receiver-policy class |
+| --- | --- |
+| `Union` | `max(receiverCount, argumentCount)` |
+| `Intersect` | `min(receiverCount, argumentCount)` |
+| `Except` | `max(0, receiverCount - argumentCount)` |
+| `Sum` | `checked(receiverCount + argumentCount)` |
+
+The receiver's comparer always governs the result. A surviving receiver class keeps its receiver
+representative. `Union` and `Sum` introduce an argument representative only when that class is
+absent from the receiver; `Intersect` and `Except` never introduce one.
+
+When the comparer objects are reference-identical, the argument already contains one entry per
+receiver class and no normalization is needed. Otherwise the implementation eagerly normalizes all
+distinct argument entries under the receiver comparer immediately after null validation and before
+operation-specific empty, self, or identity shortcuts. Argument classes that collapse under the
+receiver policy contribute the checked sum of their multiplicities. The first representative
+encountered in the particular argument version's stable-but-unspecified distinct trie order becomes
+the normalized representative. Two logically equivalent versions may therefore choose different
+normalized representatives if their observed trie orders differ; map order itself is not semantic.
+
+Eager normalization makes its failures observable even when, for example, an empty receiver makes
+the mathematical intersection obvious. Comparer hashing/equality and checked-collapse exceptions
+leave both operands unchanged. Algebra then derives immutable intermediate CHAMP versions, so a
+later per-class `Sum` overflow is likewise failure-atomic. This initial implementation combines
+distinct entries element by element and retains shared subtrees where ordinary map updates permit;
+it does not claim the map's structural lockstep algebra bound.
+
+Logical no-op results return the receiver instance, including `Union(this)` and `Intersect(this)`.
+`Except(this)` returns the receiver-comparer empty bag. `Sum(this)` performs checked doubling and
+can overflow; it is not an identity case.
+
+### Enumeration, Materialization, And Debugging
+
+Default enumeration is expanded: each representative occurs exactly its multiplicity times, its
+copies are contiguous, and the relative order of the first occurrence of every class matches
+`DistinctItems` and `Entries`. `DistinctItems` yields one stored representative per class;
+`Entries` yields `KeyValuePair<T, int>` pairs. All three orders are stable for an unchanged version
+but otherwise unspecified CHAMP order, not insertion or sorted order. The two distinct views are
+immutable and version-bound; enumerating either interface view allocates its iterator.
+
+The public expanded `Enumerator` is a mutable struct containing the map enumerator, current
+representative, and remaining-copy count. Concrete acquisition and draining allocate nothing, and a
+copied value advances independently. `Current` is `default` before the first successful
+`MoveNext` and after exhaustion, `Dispose` is a no-op, and explicit `IEnumerator.Reset` throws
+`NotSupportedException`. Enumerating through an interface can box the struct.
+
+`ToArray` returns exactly the expanded enumerator order. It checks `TotalCount > Array.MaxLength`
+and throws `OverflowException` before allocating; checking only `int.MaxValue` would be insufficient
+on the CLR. An empty bag returns `Array.Empty<T>()`. The debugger proxy exposes a distinct
+`KeyValuePair<T, int>[]`, never expanded enumeration, so debugger materialization is bounded by
+`DistinctCount` even when one multiplicity or the total is very large.
 
 ## CHAMP Transient Contract
 
@@ -214,12 +394,26 @@ copies before writing those paths.
 Let `w` be the hash width (32 bits), `b` be the branch factor (32), and `c` be the length of an
 equal-hash collision bucket.
 
-- Lookup, insert, replace, and remove: O(w / log2(b) + c), effectively bounded by seven trie levels
-  plus collision-bucket scan for 32-bit hashes. Lookups allocate nothing.
+- Lookup, insert, replace, remove, `GetOrAdd`, and `AddOrUpdate`: O(w / log2(b) + c), effectively
+  bounded by seven trie levels plus collision-bucket scan for 32-bit hashes. Lookups and unchanged
+  single-pass factory updates allocate nothing.
 - Enumeration: O(n) time. The enumerator holds at most seven inline frames (one per trie level) and
   performs no heap allocation.
 - Map `CreateRange` / set `CreateRange`: O(n (w + c)) through hash-bucket staging followed by one
   canonical freeze; unlike repeated persistent updates, the build does not clone every traversed path.
+- Bag `Contains`, `CountOf`, and `TryGetValue`: O(w / log2(b) + c), allocation-free.
+- Bag `Add`, positive `AddCopies`, and `RemoveAll`: O(w / log2(b) + c). A changed update rebuilds
+  only its search path. Positive `RemoveCopies` has the same asymptotic bound through at most two
+  bounded searches and one rebuilt path; zero-copy calls return in O(1) before hashing.
+- Bag `CreateRange`: O(n (w / log2(b) + c)) through checked internal combining insertion followed by
+  one canonical freeze.
+- Bag expanded enumeration and `ToArray`: O(`TotalCount`) time; `ToArray` also uses
+  O(`TotalCount`) result space when the array-length precondition holds. `DistinctItems`, `Entries`,
+  and debugger projection are O(`DistinctCount`).
+- Bag algebra: O((n + m) (w / log2(b) + c)) element-wise distinct-entry work in the general case,
+  where n and m are operand distinct counts. Comparer-mismatched arguments first incur the same
+  normalization bound under the receiver policy. Unchanged map paths may be shared, but no
+  structural bag-algebra bound is claimed.
 - `MapEquals`: O(divergent canonical nodes + collision comparisons), with reference-equal subtrees
   skipped in O(1).
 - `Diff`: O(n + m) in the current public implementation, with an O(1) shared-root fast path.
