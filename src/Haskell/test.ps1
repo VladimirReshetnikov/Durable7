@@ -2,7 +2,7 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet('All', 'Hamt', 'FingerTree', 'Tungsten')]
+    [ValidateSet('All', 'Hamt', 'FingerTree', 'Ordered', 'Tungsten')]
     [string] $Workspace = 'All',
 
     [string[]] $CabalArguments = @()
@@ -18,6 +18,7 @@ $target = switch ($Workspace) {
     'All' { 'all' }
     'Hamt' { 'hamt-test' }
     'FingerTree' { 'ft-test' }
+    'Ordered' { 'ordered-test' }
     'Tungsten' { 'tools-data-structures-tungsten' }
 }
 

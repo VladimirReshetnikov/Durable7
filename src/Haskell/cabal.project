@@ -1,6 +1,7 @@
 packages:
   Hamt
   FingerTree
+  Ordered
   Tungsten
 
 package *

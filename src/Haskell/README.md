@@ -13,15 +13,16 @@ managed C# projects where the language surfaces line up.
 | --- | --- | --- |
 | [Hamt](Hamt/README.md) | `tools-data-structures-hamt` | `Data.Structures.Hamt`; `Data.Structures.Hamt.HashMap` with one-descent persistent factories; `Data.Structures.Hamt.HashBag`; `Data.Structures.Hamt.HashSet`; `Data.Structures.Hamt.Transient` |
 | [FingerTree](FingerTree/README.md) | `tools-data-structures-fingertree` | `Data.Structures.FingerTree`, genuine measured-tree deque/core, count-measured structurally shared ropes with positional/measured/text cursors, newline-measured text helpers, max-high interval tree, sorted collections, and priority queue |
+| [Ordered](Ordered/README.md) | `tools-data-structures-ordered` | Neutral `Data.Structures.Ordered.PersistentOrderedSet` over the public CHAMP and finger-tree substrates, with first-representative insertion order, explicit movement, ranges, stable sorting, and receiver-policy algebra |
 | [Tungsten](Tungsten/README.md) | Application-specific leaf package `tools-data-structures-tungsten` | `Data.Structures.Tungsten`, `Data.Structures.Tungsten.List`, `Data.Structures.Tungsten.Association` |
 
-Build and test all three packages from this directory:
+Build and test all four packages from this directory:
 
 ```powershell
 .\test.ps1
 ```
 
-Use `-Workspace Hamt`, `-Workspace FingerTree`, or `-Workspace Tungsten` for a focused run. The wrapper
+Use `-Workspace Hamt`, `-Workspace FingerTree`, `-Workspace Ordered`, or `-Workspace Tungsten` for a focused run. The wrapper
 invokes Cabal after enabling inherited non-interactive Windows error handling, so assertion, runtime,
 loader, and crash failures stay on the console and return a nonzero exit instead of opening modal UI.
 Additional Cabal options can be passed with `-CabalArguments`; the wrapper appends `--jobs=1`, so
