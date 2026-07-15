@@ -50,6 +50,15 @@ minimum, O(log n) delete-min, and key-range plus priority-threshold queries that
 intervals and subtrees whose minimum priority already exceeds the bound. A query costs O(log n + v)
 for v visited nodes, with v ≤ n and therefore an O(n) worst case.
 
+`RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` is the range-action sequence sibling. A
+static `IRangeUpdateAlgebra` policy defines an ordered element measure, a tag monoid, and the tag's
+action on both individual elements and cached subtree measures. A deterministic implicit-key AVL
+with immutable lazy tags then supports whole-sequence updates in O(1), arbitrary contiguous updates
+and measure queries in O(log n), and indexed edits, split, and concat in O(log n). It is a separate
+core rather than a lazy-tag modification of either finger-tree engine. The
+[range-update sequence contract](range-update-sequence.md) records the algebra laws,
+`Compose(newer, older)` order, representation invariant, exact API, and validation evidence.
+
 `FingerTreeDeque<T>` is the individually tuned sequence/deque (the analogue of Haskell's `Data.Sequence`, kept separate from the general core just as Haskell keeps it separate from `Data.FingerTree`): an immutable `IReadOnlyList<T>` with O(1) endpoint reads, O(log n) worst-case / O(1) amortized endpoint insertion and removal, concatenation logarithmic in the smaller operand (amortized), indexed access and splitting logarithmic in the distance from the nearer end (amortized), and comparer-based sorted search over rightmost-element signposts with a worst-case near-bound comparer-call count. The representation follows the simplified finger tree of Claessen's *Finger Trees Explained Anew, and Slightly Simplified* (digits of one through three elements, middle nodes of two or three children), with element height encoded through polymorphic recursion, leaf counts plus rightmost-leaf signposts cached per node, and the middle subtree of every deep node held behind a memoize-on-first-force suspension — the strict-language strategy from Hinze and Paterson's original paper that makes the amortized bounds hold under fully persistent (branching) version use. The normative API and complexity contract is [docs/api-specification.md](api-specification.md); its complexity columns were realigned with the source papers' amortized claims (worst-case O(log n), amortized sharp under branching persistence, O(1) worst-case endpoint reads) after the specification review.
 
 ## Layout
@@ -79,6 +88,11 @@ for v visited nodes, with v ≤ n and therefore an O(n) worst case.
     worst-case bounds and a public invariant/statistics audit.
   - `PrioritySearchQueue.cs` — the winner-cached keyed AVL priority-search queue, range/threshold
     query surface, and public AVL/winner validation statistics.
+  - `IRangeUpdateAlgebra.cs` / `RangeUpdateSequence.cs` / `RangeUpdateSequence.Core.cs` — the
+    static action policy plus immutable implicit-key AVL sequence with lazily composed range tags
+    and cached ordered measures; the generic algebra, structural bounds, enumeration, failure, and
+    concurrency contracts are specified in the
+    [range-update sequence reference](range-update-sequence.md).
   - `FingerTree.cs` — the public general measured finger tree `FingerTree<TElement, TMeasure, TMeasureOps>`.
   - `Rope.cs` / `Rope.Builder.cs` + `Internal/RopeChunk.cs` — `Rope<T>`, a general-purpose persistent **chunked** sequence (rope): elements live in bounded array chunks (`Chunk<T>`, measured by `ChunkLengthMeasure<T>`) at the leaves of a count-measured finger tree, giving cache-friendly storage and O(log n) indexed insert/remove/split/slice with O(log min) concat and structural-sharing persistence. Element-agnostic (`Rope<char>` is a text buffer, `Rope<byte>` a binary buffer); positional reads/splits use the zero-allocation `ElementIndexPredicate` over `TryLocate`; the nested append-only builder uses frozen-prefix snapshots for incremental construction.
   - `Rope.Cursor.cs` + `Internal/RopeCursorPrototype.cs` — the public immutable `RopeCursor<T>` positional edit cursor and its shared zipper engine. A cursor is a gap in `0 .. Count`; movement and edits return branchable cursor values over a 16-element focus with sub-256-element carries, while a winner-returning memo cell materializes one canonical `Rope<T>` snapshot per logical edit version. Linear local-edit histories are O(1) amortized per operation and O(log n) worst-case; arbitrary fan-out retains the honest O(b log n) bound for b branches. See the [C0 decision](rope-cursor-c0-decision.md) for the selected proof scope and the [API specification](api-specification.md#positional-edit-cursor) for the shipped contract.
@@ -96,14 +110,16 @@ for v visited nodes, with v ≤ n and therefore an O(n) worst case.
   - `Internal/` — the deque's tuned finger-tree core: `TreeElement.cs` (measured-element contract and the struct `Leaf<T>`), `Digit.cs`, `Node.cs`, `Tree.cs` (empty/single/deep levels), `MiddleTree.cs` (memoized middle-subtree suspensions and their pending operations), and `TreeOperations.cs` (smart deep constructors, pulls with the paper's `chop`, and concatenation).
 - [`tests/Tools.DataStructures.FingerTree.Tests/`](../../tests/Tools.DataStructures.FingerTree.Tests/README.md)
   contains the xUnit/CsCheck suite. Its local README maps the deque, measured-tree, derived-collection, rope,
-  sample-smoke, property, model-command, persistence, and tearable-concurrency stress test files.
+  range-update sequence, sample-smoke, property, model-command, persistence, and
+  tearable-concurrency stress test files. The range-update focused and complete FingerTree-project
+  gates pass in Debug and Release; the repository-wide C# solution gate remains pending.
 - `benchmarks/Tools.DataStructures.FingerTree.Benchmarks/` is the shared BenchmarkDotNet harness for
   the C# persistent-collections workspace. Alongside the deque, ropes, measures, sorted collections,
   and measured priority queue, it now contains RRB-vector, DABA Lite, canonical zip-set,
   Brodal-Okasaki heap, priority-search-queue, CHAMP, Ctrie, Patricia, and Merkle search-tree gates;
   see its `README.md` for the class-to-contract matrix and run commands.
 - `samples/` holds three runnable, smoke-tested console tours (see `samples/README.md`): `Tour` (a persistent text buffer — undo/redo over O(1) snapshots, O(log n) line/column navigation, and a background thread taking millions of lock-free, never-torn snapshots while a writer publishes versions), `Showcase` (one measured tree, many structures — priority queue, weighted sampling, order-statistic set, interval index, reversible deque, navigable map), and `Editor` (the editor-grade text extras — chars vs code points vs graphemes, newline detection, and offset addressing). Run e.g. `dotnet run --project samples/Tools.DataStructures.FingerTree.Editor -c Release`.
-- `docs/` contains usage, API, validation, and algorithm design references, including [docs/usage.md](usage.md) as the practical facade-selection and first-use guide; [docs/validation.md](validation.md) as the local restore/build/test, sample, benchmark, and stress-control guide; [docs/FingerTree-Design-Notes.tex](FingerTree-Design-Notes.tex) / [docs/FingerTree-Design-Notes.pdf](FingerTree-Design-Notes.pdf) — a single navigable design-notes tour of the whole library (the two cores, the lazy-memoized spine, the measure framework, the closure-free predicate API, the collection and rope families, the concurrency/memory-model argument, and the three-tier test strategy) — regenerate the PDF from the source with `pwsh -File docs/build-design-notes.ps1`; [docs/benchmarks.md](benchmarks.md) with curated measured results; and [docs/persistence-and-concurrency.md](persistence-and-concurrency.md) — a worked guide to cheap snapshots, structural-sharing undo/redo, and lock-free multi-threaded access (every pattern backed by a runnable example test).
+- `docs/` contains usage, API, validation, and algorithm design references, including [docs/usage.md](usage.md) as the practical facade-selection and first-use guide; the [range-update sequence contract](range-update-sequence.md) for its tag algebra, implicit-AVL invariant, exact surface, and deterministic validation boundary; [docs/validation.md](validation.md) as the local restore/build/test, sample, benchmark, and stress-control guide; [docs/FingerTree-Design-Notes.tex](FingerTree-Design-Notes.tex) / [docs/FingerTree-Design-Notes.pdf](FingerTree-Design-Notes.pdf) — a single navigable design-notes tour of the whole library (the two cores, the lazy-memoized spine, the measure framework, the closure-free predicate API, the collection and rope families, the concurrency/memory-model argument, and the three-tier test strategy) — regenerate the PDF from the source with `pwsh -File docs/build-design-notes.ps1`; [docs/benchmarks.md](benchmarks.md) with curated measured results; and [docs/persistence-and-concurrency.md](persistence-and-concurrency.md) — a worked guide to cheap snapshots, structural-sharing undo/redo, and lock-free multi-threaded access (every pattern backed by a runnable example test).
 
 ## Validation
 

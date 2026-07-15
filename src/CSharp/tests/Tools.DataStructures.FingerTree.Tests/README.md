@@ -81,6 +81,17 @@ reasonable oracle.
   `PrioritySearchQueueAdversarialTests.cs` covers comparer-versus-default equality during replacement,
   public invariant statistics, every AVL rotation and deletion rebalance, a 20,000-operation retained
   history, exact path sharing, tie order, and comparison-count evidence for query pruning.
+- `RangeUpdate*Tests.cs` is the integration test family for the implicit-AVL lazy-tag
+  sequence. Its required scope is the exact API, complete static algebra laws and
+  `Compose(newer, older)` direction, affine assignment/addition, noncommutative measures, all
+  positional/range boundaries, array/list command-model histories with retained branches,
+  AVL/tag/cache invariants, deterministic height/node/allocation/callback ceilings, failpoint
+  atomicity, concrete/interface and copied-enumerator behavior, and concurrent reads. The focused
+  lane passes 62/62 tests; the complete project passes 692/692 in Debug and Release with zero build
+  warnings or errors. The repository-wide C# solution gate remains pending.
+  `RangeUpdateDiagnosticsAdapter.cs` exposes the
+  internal deterministic counters to this test assembly without adding diagnostics to the public
+  collection API.
 - `SampleSmokeTests.cs` captures the Tour, Showcase, and Editor sample output contracts, including
   the Axis 2 C3 retained measured-cursor history, cadence-sixteen snapshot policy, localized Unicode
   editing, line/column result, and alternate branch transcript.
@@ -109,6 +120,16 @@ Filter a class while developing a focused change:
 ```powershell
 .\test.ps1 -Filter FullyQualifiedName~RopePropertyTests
 ```
+
+The range-update integration lane uses the same serialized launcher:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~RangeUpdate
+```
+
+This focused Debug lane passes 62/62 tests. The complete project passes 692/692 tests in Debug and
+Release; follow it with the repository-wide C# solution run before recording final shipment in the
+[range-update sequence contract](../../docs/FingerTree/range-update-sequence.md) and validation guide.
 
 The launcher suppresses modal Windows loader/crash reporting for the complete `dotnet` child-process tree. The
 test assembly repeats the headless process configuration during module initialization, so direct test-runner and

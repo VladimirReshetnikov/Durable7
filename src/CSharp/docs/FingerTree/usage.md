@@ -595,6 +595,48 @@ nodes use radix indexing without size tables; split/concat introduces size table
 spans become irregular. The immutable type has no dedicated tail buffer, so prefer its builder over
 an `AddLast` loop for bulk append construction.
 
+## Range-Update Sequence
+
+Use `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` when a persistent indexed sequence must
+apply one algebraic transformation to a contiguous range and query that range's aggregate without
+visiting every covered element. `TOps` defines both the ordinary ordered element measure and how a
+tag acts on an element and on a combined subtree measure. The central rule is
+`Compose(newer, older)`: it means apply `older` first and `newer` second.
+
+For example, the affine sum policy in the
+[range-update sequence contract](range-update-sequence.md#affine-assignment-and-addition-example)
+defines tags that assign or add `long` values while measuring each range by its sum:
+
+```csharp
+using Sequence = Tools.DataStructures.FingerTree.RangeUpdateSequence<
+    long, long, AffineTag, AffineSumAlgebra>;
+
+var source = Sequence.Create([1, 2, 3, 4]);
+var added = source.ApplyRange(1, 2, AffineTag.Add(10));
+// [1, 12, 13, 4], Measure == 30
+
+var assigned = added.ApplyRange(2, 2, AffineTag.Assign(7));
+// [1, 12, 7, 7], Measure == 27
+
+long middleSum = assigned.MeasureRange(1, 2); // 19
+var (prefix, suffix) = assigned.SplitAt(2);
+var reconstructed = prefix.Concat(suffix);
+
+// source remains [1, 2, 3, 4].
+```
+
+A whole-sequence nonidentity update performs O(1) structural work. An arbitrary contiguous update,
+range measure, indexed edit, split, or concat performs O(log n) structural work in the worst case;
+elapsed time also includes the policy calls. Empty-range and `IsIdentity`-recognized updates return
+the source instance. Range validation happens before policy callbacks, and a throwing policy leaves
+every input snapshot unchanged. The generic core deliberately has no `AddRange` or `AssignRange`
+method because those verbs belong to a particular tag algebra.
+
+Concrete `foreach` uses the public struct enumerator without boxing; interface enumeration boxes.
+Separate enumerators are independent and safe for concurrent reads. Do not copy an in-progress
+enumerator to fork a traversal: copies share traversal state, and the stale copy fails fast after
+the other advances.
+
 ## Choosing A Surface
 
 | Need | Start with |
@@ -612,6 +654,7 @@ an `AddLast` loop for bulk append construction.
 | Chunked persistent positional sequence | `Rope<T>` |
 | Localized persistent positional editing with retained branches | `RopeCursor<T>` from `Rope<T>.GetCursor()` |
 | Uniform random-access persistent sequence | `RrbVector<T>` |
+| Persistent indexed sequence with logarithmic range actions and aggregate queries | `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` |
 | Mutable FIFO window aggregate with worst-case O(1) operations | `DabaLite<T, TMonoid>` |
 | Policy-scoped canonical sorted shape and memoized digest | `CanonicalSortedSet<T>` |
 | Worst-case O(1) persistent insert and meld | `BrodalOkasakiHeap<T>` |

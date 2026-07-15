@@ -9,6 +9,8 @@
   - `src/CSharp/src/Tools.DataStructures.FingerTree/`
 - Related first-use guide:
   - [C# FingerTree usage guide](usage.md)
+- Related range-action contract:
+  - [Range-update sequence contract](range-update-sequence.md)
 - Related docs (external reference material, segregated under [`external/`](external/README.md)):
   - [Finger Trees Explained Anew, and Slightly Simplified](<external/Finger Trees Explained Anew, and Slightly Simplified.tex>)
   - [Finger trees: a simple general-purpose data structure](<external/Finger trees - a simple general-purpose data structure/Finger trees - a simple general-purpose data structure.tex>)
@@ -16,7 +18,7 @@
 
 ## Summary
 
-This document specifies the public API contract for the C# FingerTree workspace. It opens with the tuned `FingerTreeDeque<T>` contract, then records the sibling measured tree, sorted collections, priority queue, interval tree, reversible deque, and rope contracts that now ship from the same library. For first-use examples and facade selection, start with the [usage guide](usage.md).
+This document specifies the public API contract for the C# FingerTree workspace. It opens with the tuned `FingerTreeDeque<T>` contract, then records the sibling measured tree, sorted collections, priority queue, interval tree, reversible deque, rope, and range-update sequence contracts in the same library. For first-use examples and facade selection, start with the [usage guide](usage.md).
 
 ## Scope And Non-Goals
 
@@ -30,6 +32,8 @@ This document specifies the public API contract for the C# FingerTree workspace.
 - Indexed read, update, insertion, deletion, range extraction, and split.
 - Sorted-search helpers on `FingerTreeDeque<T>` for lower bound, upper bound, equal ranges, and comparer-compatible binary-search semantics.
 - The measured tree and derived collection contracts in the later sections of this document.
+- The implicit-AVL `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>`, including its static
+  action algebra, lazy-tag composition order, range operations, and structural bounds.
 - Exact exception and edge-case behavior for public methods.
 - Public complexity guarantees for time and allocation.
 
@@ -922,3 +926,189 @@ HAMT-plus-sorted-set composition.
 cached subtree winner in O(n) time with O(log n) explicit-stack storage. It returns
 `PrioritySearchQueueStatistics` containing the entry count, AVL height, and maximum absolute balance
 factor. `Height` is also exposed as a constant-time diagnostic property.
+
+## Range-Update Sequence
+
+`RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` is an immutable `IReadOnlyList<TElement>`
+implemented by a deterministic implicit-key AVL tree with cached ordered measures and lazily
+composed subtree tags. It is a separate sibling core; it does not add tags to the measured finger
+tree or tuned deque. `TOps` statically supplies the complete action algebra:
+
+```csharp
+public interface IRangeUpdateAlgebra<TElement, TMeasure, TTag>
+    : IMeasure<TElement, TMeasure>
+{
+    static abstract TTag IdentityTag { get; }
+    static abstract bool IsIdentity(TTag tag);
+    static abstract TTag Compose(TTag newer, TTag older);
+    static abstract TElement ApplyElement(TTag tag, TElement element);
+    static abstract TMeasure ApplyMeasure(TTag tag, TMeasure measure, int count);
+}
+```
+
+`Compose(newer, older)` means apply `older` and then apply `newer`. This order is normative. The
+tag operations form a monoid with `IdentityTag`; their action on elements and measures preserves
+identity and composition; `ApplyMeasure` distributes through ordered `Combine`, agrees with
+`ApplyElement` on singleton measures, and maps `Empty` at count zero to `Empty`. More explicitly:
+
+```text
+Compose(IdentityTag, p) = p = Compose(p, IdentityTag)
+Compose(r, Compose(q, p)) = Compose(Compose(r, q), p)
+
+ApplyElement(Compose(q, p), x)
+    = ApplyElement(q, ApplyElement(p, x))
+
+ApplyMeasure(Compose(q, p), a, count)
+    = ApplyMeasure(q, ApplyMeasure(p, a, count), count)
+
+ApplyMeasure(p, Measure(x), 1) = Measure(ApplyElement(p, x))
+ApplyMeasure(p, Combine(a, b), ca + cb)
+    = Combine(ApplyMeasure(p, a, ca), ApplyMeasure(p, b, cb))
+ApplyMeasure(p, Empty, 0) = Empty
+```
+
+`IsIdentity(IdentityTag)` is true. Any value-distinct tag recognized by `IsIdentity` obeys all the
+same identity equations. `Combine` remains ordered and may be noncommutative. The algebra laws,
+including the inherited `IMonoid` laws, are policy preconditions.
+
+### Public Surface
+
+```csharp
+public sealed class RangeUpdateSequence<TElement, TMeasure, TTag, TOps>
+    : IReadOnlyList<TElement>
+    where TOps : IRangeUpdateAlgebra<TElement, TMeasure, TTag>
+{
+    public static RangeUpdateSequence<TElement, TMeasure, TTag, TOps> Empty { get; }
+    public static RangeUpdateSequence<TElement, TMeasure, TTag, TOps> Create(
+        ReadOnlySpan<TElement> items);
+    public static RangeUpdateSequence<TElement, TMeasure, TTag, TOps> CreateRange(
+        IEnumerable<TElement> items);
+
+    public int Count { get; }
+    public bool IsEmpty { get; }
+    public TMeasure Measure { get; }
+    public TElement this[int index] { get; }
+
+    public RangeUpdateSequence<TElement, TMeasure, TTag, TOps> Prepend(TElement item);
+    public RangeUpdateSequence<TElement, TMeasure, TTag, TOps> Append(TElement item);
+    public RangeUpdateSequence<TElement, TMeasure, TTag, TOps> Insert(int index, TElement item);
+    public RangeUpdateSequence<TElement, TMeasure, TTag, TOps> SetItem(int index, TElement item);
+    public RangeUpdateSequence<TElement, TMeasure, TTag, TOps> RemoveAt(int index);
+    public RangeUpdateSequence<TElement, TMeasure, TTag, TOps> Concat(
+        RangeUpdateSequence<TElement, TMeasure, TTag, TOps> other);
+    public (
+        RangeUpdateSequence<TElement, TMeasure, TTag, TOps> Left,
+        RangeUpdateSequence<TElement, TMeasure, TTag, TOps> Right) SplitAt(int index);
+    public RangeUpdateSequence<TElement, TMeasure, TTag, TOps> GetRange(
+        int index,
+        int count);
+
+    public RangeUpdateSequence<TElement, TMeasure, TTag, TOps> ApplyRange(
+        int index,
+        int count,
+        TTag tag);
+    public TMeasure MeasureRange(int index, int count);
+
+    public Enumerator GetEnumerator();
+
+    public struct Enumerator : IEnumerator<TElement>
+    {
+        public TElement Current { get; }
+        public bool MoveNext();
+        public void Dispose();
+    }
+}
+```
+
+The generic surface names the universal operation `ApplyRange`; it does not expose assignment- or
+addition-specific verbs. Those meanings belong to `TTag` and `TOps`.
+
+### Positional, Range, And Identity Semantics
+
+`Create` and `CreateRange` retain input order. Bulk construction is O(n) and creates a deterministic
+balanced tree; `CreateRange` rejects `null`, eagerly enumerates once, and completes enumeration
+before element-measure callbacks begin. An empty input returns the canonical `Empty`.
+
+The indexer, `SetItem`, and `RemoveAt` accept indices in `0 .. Count - 1`. `Insert` and `SplitAt`
+accept positions in `0 .. Count`. `GetRange`, `ApplyRange`, and `MeasureRange` accept exactly those
+`index` and `count` pairs for which both are nonnegative and `count <= Count - index`. This
+subtraction-based test avoids overflow. Validation precedes all algebra calls, so an invalid range
+throws even if its update tag would be an identity.
+
+Boundary identities are observable:
+
+- an empty `Create`/`CreateRange` or empty `GetRange` returns `Empty`;
+- `SplitAt(0)` and `SplitAt(Count)` retain the source as the nonempty result;
+- concatenating an empty side returns the nonempty operand;
+- `GetRange(0, Count)` returns the source; and
+- `ApplyRange` returns the source for an empty range or any tag recognized by `IsIdentity`.
+
+`SetItem` has no equality shortcut because the generic surface owns no element-equality policy.
+Values supplied to `Prepend`, `Append`, `Insert`, and `SetItem` are current logical values; pending
+tags from earlier updates are pushed off the edit path and do not retroactively transform them.
+An empty `ApplyRange` bypasses `IsIdentity`. `Concat` rejects `null` and checks combined-count
+overflow before invoking any tag or measure policy.
+`MeasureRange` of an empty range returns the cached empty measure without invoking element-measure
+or tag callbacks after generic initialization.
+
+### Lazy-Tag And Cache Invariant
+
+Every node stores its element, children, AVL height, count, ordered measure, and an optional pending
+tag. Its element and measure already reflect that pending tag, while the child objects do not. The
+measure equals the ordered aggregate of the node's complete logical subtree, count is one plus both
+child counts, and the child heights differ by at most one.
+
+A full-subtree application transforms the root element and cached measure, composes the newer tag
+after the previous pending tag, and retains both child references. Structural descent and rotations
+immutably push a pending tag into the child roots first. Rotations therefore never move an untagged
+child out from under an action that logically covers it. Split and join copy AVL boundary spines;
+when descent crosses a pending tag, immutable push may additionally allocate a replacement wrapper
+root for an off-spine child, while the structure below that root remains shared. An arbitrary range
+update isolates the middle, applies one tag to its root, and rejoins. A whole-sequence update
+bypasses split/join and changes one root in O(1).
+
+Reads do not push by allocating permanent nodes. They carry inherited actions down the traversal.
+Because a tag inherited from an ancestor is newer than the current node's pending tag, a child sees
+`Compose(inherited, node.PendingTag)`. `MeasureRange` likewise combines fully covered cached
+subtrees under inherited tags and visits only O(log n) boundary structure.
+
+### Failure, Enumeration, And Concurrency
+
+All policy calls required by a persistent operation complete before a result facade is published.
+If `Measure`, `Combine`, `IsIdentity`, `Compose`, `ApplyElement`, or `ApplyMeasure` throws, every
+input version remains unchanged. Count overflow and policy arithmetic overflow likewise publish no
+partial result. Callback side effects outside the collection cannot be rolled back.
+
+Enumeration yields the logical sequence after all inherited tags. The concrete `GetEnumerator`
+path uses the public struct without boxing; `IEnumerable<TElement>` and `IEnumerable` paths box it.
+An empty concrete enumerator has no traversal state. A nonempty enumerator allocates shared
+O(log n) state. Copies of an in-progress enumerator share that state; after either copy advances,
+the stale copy fails fast with `InvalidOperationException`. Separately created enumerators are
+independent. `Reset` throws `NotSupportedException`, `Dispose` is a no-op, and `Current` returns
+`default` outside an active element.
+
+The collection has no mutable tag-propagation cache and is safe for concurrent reads, including
+independent enumeration, indexing, aggregate reads, and range queries over shared versions. Policy
+callbacks can consequently run concurrently; policy-owned mutable state requires external
+synchronization.
+
+### Complexity
+
+| Operation | Worst-case structural bound |
+| --- | --- |
+| `Count`, `IsEmpty`, `Measure` | O(1) |
+| `Create`, `CreateRange` | O(n) time and storage |
+| Index lookup | O(log n), no permanent allocation |
+| Insert, remove, replace | O(log n) time and O(log n) new nodes |
+| Split, concat, nontrivial range extraction | O(log n) time and O(log n) new nodes |
+| Whole-sequence tag application | O(1) time and one new root |
+| Arbitrary range tag application | O(log n) time and O(log n) new nodes |
+| Range measure query | O(1) for empty/full; O(log n) for a proper nonempty range, with no permanent allocation |
+| Enumeration | O(n) time and O(log n) traversal state |
+
+These are deterministic AVL/path-copying bounds, not comparative performance claims. The
+[range-update sequence contract](range-update-sequence.md) gives the complete law table, affine
+assign/add example, implementation invariant, deterministic test matrix, and benchmark boundary.
+Focused Debug validation passes all 62 range-update tests and the complete 692-test FingerTree
+project suite; the same 692-test project suite passes in Release, with zero warnings or errors in
+both project builds. The repository-wide C# solution gate remains pending.

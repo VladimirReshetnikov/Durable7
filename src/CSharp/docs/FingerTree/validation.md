@@ -9,6 +9,8 @@
 Use this guide when changing the C# FingerTree library, tests, samples, benchmark harness, or documentation
 that makes build, validation, API, complexity, or performance claims. For semantic contracts and first-use
 examples, pair it with the [API specification](api-specification.md) and [usage guide](usage.md).
+The [range-update sequence contract](range-update-sequence.md) adds the static action laws,
+implicit-AVL/tag/cache invariant, and deterministic integration matrix for that sibling core.
 
 ## Build Model
 
@@ -143,6 +145,66 @@ The suite covers:
 - persistence/concurrency examples and tearable-struct stress tests;
 - CsCheck property tests and model-based command-sequence tests that shrink operation histories rather than only
   data inputs.
+
+## Range-Update Sequence Integration Gate
+
+Focused and project-level validation for
+`RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` completed serially on
+2026-07-15 UTC:
+
+- Debug project build: zero warnings and zero errors;
+- Debug focused `FullyQualifiedName~RangeUpdate` lane: 62/62 tests passed;
+- Debug complete FingerTree test project: 692/692 tests passed;
+- Release project build: zero warnings and zero errors; and
+- Release complete FingerTree test project: 692/692 tests passed.
+
+The repository-wide C# solution gate remains pending, so this evidence is a stable implementation
+checkpoint rather than the final C# shipment statement. The deterministic, benchmark-independent
+gate covers:
+
+- **API shape:** reflect the exact generic constraint, factories, positional operations, range
+  update/query members, `IReadOnlyList<TElement>` implementation, concrete `GetEnumerator`, and
+  nested public mutable struct enumerator. Assert that no assignment- or addition-specific method
+  leaks onto the generic surface.
+- **Algebra laws:** execute `IMonoid` identity/associativity plus tag identity/associativity,
+  `Compose(newer, older)` action order, `IsIdentity` soundness for value-distinct identities,
+  singleton consistency, empty-measure preservation, and ordered distribution. Include a lawful
+  noncommutative measure and affine assign-after-add/add-after-assign histories.
+- **Boundaries and identity:** cover empty/singleton instances, every valid split boundary, whole,
+  empty, prefix, suffix, and one-element ranges, invalid/overflow-prone index-count pairs,
+  empty-side concat, whole-range extraction, empty/identity updates, and old-version retention.
+  Confirm validation precedes tag callbacks.
+- **Reference model:** run deterministic generated histories against a mutable array/list oracle.
+  Commands include prepend/append/insert/remove/set, split/concat/extract, point reads, whole and
+  range measures, range assignment/addition, retained snapshots, and branches from arbitrary old
+  versions. Shrinking must preserve command order and the selected branch.
+- **Representation:** after every generated command, audit AVL height and balance, cached count,
+  logical cached measure under pending tags, composition direction, in-order logical values,
+  immutable sharing, and a logarithmic height ceiling.
+- **Structural bounds:** instrument node visits, allocations, rotations, element/measure actions,
+  composition, and measure callbacks. Assert operation-specific ceilings as functions of observed
+  AVL height, including one-root whole-sequence update and logarithmic boundary work. Do not replace
+  these guards with elapsed-time thresholds.
+- **Failure atomicity:** use failpoint algebras that throw at every reachable ordinal from
+  `Measure`, `Combine`, `IsIdentity`, `Compose`, `ApplyElement`, and `ApplyMeasure`, including
+  paths that split, join, and rotate. Every source and retained branch must remain unchanged.
+- **Enumeration:** cover empty and nonempty concrete pattern enumeration, boxed generic and
+  nongeneric interface paths, logical tag application/order, `Current` outside the active element,
+  unsupported `Reset`, no-op `Dispose`, shared-state fail-fast copied enumerators, and independent
+  enumerators.
+- **Concurrency:** repeatedly enumerate, index, query range measures, and read whole measures from
+  independent enumerators over shared retained versions. Include tearable carriers where useful;
+  policy callback thread safety remains the caller's responsibility.
+
+The focused run uses the filter documented in the
+[tests README](../../tests/Tools.DataStructures.FingerTree.Tests/README.md#build-and-run), followed
+by the complete project suite in both configurations and then the ordinary full serialized
+workspace gate. The detailed semantic oracle is the
+[range-update sequence contract](range-update-sequence.md).
+
+Benchmarks are explicitly outside this integration gate. They remain postponed until the machine
+can run the benchmark harness in isolation; no wall-clock result gathered under current CPU,
+memory, or I/O contention is acceptable as validation evidence.
 
 ## Stress Controls
 
