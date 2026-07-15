@@ -18,9 +18,10 @@ export class ConcurrentHashTrieSnapshot<K, V> implements Iterable<HamtEntry<K, V
 /**
  * Mutable snapshotting hash trie for JavaScript's single-agent object model.
  *
- * Updates publish persistent CHAMP roots and snapshots capture the current root in O(1). JavaScript
- * objects cannot be shared between worker isolates, so this class intentionally does not claim the
- * lock-free multi-threaded GCAS/RDCSS progress guarantee of the C#/Kotlin Ctries.
+ * Updates publish persistent CHAMP roots through an observed-root retry protocol, including when a
+ * user hash, equivalence, or factory callback reenters the trie. Snapshots capture the current root
+ * in O(1). JavaScript objects cannot be shared between worker isolates, so this class intentionally
+ * does not claim the lock-free multi-threaded GCAS/RDCSS progress guarantee of the C#/Kotlin Ctries.
  */
 export class ConcurrentHashTrie<K, V> implements Iterable<HamtEntry<K, V>> {
     #map: PersistentHashMap<K, V>;
@@ -40,39 +41,82 @@ export class ConcurrentHashTrie<K, V> implements Iterable<HamtEntry<K, V>> {
     public containsKey(key: K): boolean { return this.#map.containsKey(key); }
 
     public set(key: K, value: V): void {
-        const next = this.#map.put(key, value);
-        this.publish(next);
+        while (true) {
+            const observed = this.#map;
+            const next = observed.put(key, value);
+            if (this.tryPublish(observed, next)) return;
+        }
     }
 
     public tryAdd(key: K, value: V): boolean {
-        const result = this.#map.tryAdd(key, value);
-        if (result.added) this.publish(result.value);
-        return result.added;
+        while (true) {
+            const observed = this.#map;
+            const result = observed.tryAdd(key, value);
+            if (this.tryPublish(observed, result.value)) return result.added;
+        }
     }
 
+    /**
+     * Returns the stored value or publishes a factory-produced value.
+     *
+     * A reentrant publication invalidates the observed root and retries the operation. The factory
+     * can consequently run more than once, and every invocation receives the caller's lookup key.
+     */
     public getOrPut(key: K, factory: (key: K) => V): V {
-        const current = this.#map.getEntry(key);
-        if (current !== undefined) return current.value;
-        const value = factory(key);
-        this.publish(this.#map.put(key, value));
-        return value;
+        if (typeof factory !== "function") throw new TypeError("factory must be a function.");
+        while (true) {
+            const observed = this.#map;
+            const current = observed.getEntry(key);
+            if (current !== undefined) {
+                if (this.#map === observed) return current.value;
+                continue;
+            }
+
+            const value = factory(key);
+            if (this.#map !== observed) continue;
+            const next = observed.put(key, value);
+            if (this.tryPublish(observed, next)) return value;
+        }
     }
 
+    /**
+     * Adds a missing value or updates a stored value against one stable observed root.
+     *
+     * Both callbacks receive the caller's lookup key. Reentrant publications cause a retry and may
+     * select a different callback on the next observation; discarded candidates are never published.
+     */
     public compute(key: K, add: (key: K) => V, update: (key: K, value: V) => V): V {
-        const current = this.#map.getEntry(key);
-        const nextValue = current === undefined ? add(key) : update(current.key, current.value);
-        this.publish(this.#map.put(key, nextValue));
-        return this.#map.getEntry(key)!.value;
+        if (typeof add !== "function") throw new TypeError("add must be a function.");
+        if (typeof update !== "function") throw new TypeError("update must be a function.");
+        while (true) {
+            const observed = this.#map;
+            const current = observed.getEntry(key);
+            const nextValue = current === undefined ? add(key) : update(key, current.value);
+            if (this.#map !== observed) continue;
+            const next = observed.put(key, nextValue);
+            const selected = next === observed && current !== undefined ? current.value : nextValue;
+            if (this.tryPublish(observed, next)) return selected;
+        }
     }
 
     public remove(key: K): HamtEntry<K, V> | undefined {
-        const result = this.#map.tryRemoveEntry(key);
-        if (result === undefined) return undefined;
-        this.publish(result.map);
-        return result.entry;
+        while (true) {
+            const observed = this.#map;
+            const result = observed.tryRemoveEntry(key);
+            if (result === undefined) {
+                if (this.#map === observed) return undefined;
+                continue;
+            }
+            if (this.tryPublish(observed, result.map)) return result.entry;
+        }
     }
 
-    public clear(): void { this.publish(this.#map.clear()); }
+    public clear(): void {
+        while (true) {
+            const observed = this.#map;
+            if (this.tryPublish(observed, observed.clear())) return;
+        }
+    }
 
     public snapshot(): ConcurrentHashTrieSnapshot<K, V> {
         return new ConcurrentHashTrieSnapshot(this.#map);
@@ -82,9 +126,12 @@ export class ConcurrentHashTrie<K, V> implements Iterable<HamtEntry<K, V>> {
         return this.snapshot()[Symbol.iterator]();
     }
 
-    private publish(next: PersistentHashMap<K, V>): void {
-        if (next === this.#map) return;
-        this.#map = next;
-        this.#generation++;
+    private tryPublish(observed: PersistentHashMap<K, V>, next: PersistentHashMap<K, V>): boolean {
+        if (this.#map !== observed) return false;
+        if (next !== observed) {
+            this.#map = next;
+            this.#generation++;
+        }
+        return true;
     }
 }

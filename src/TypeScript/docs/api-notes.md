@@ -94,10 +94,31 @@ Positional and measured cursors expose `peekPreviousEntry`/`peekNextEntry` wrapp
 fresh rope even for the identical object, and measured replacement invokes the supplied element's
 measure callback before publication.
 
-`ConcurrentHashTrie` provides synchronous mutation, generation tracking, and O(1) immutable snapshots
-inside one JavaScript isolate. It deliberately does not claim the multi-threaded GCAS/RDCSS progress
-contract of the C# and Kotlin Ctries; JavaScript object graphs cannot be atomically shared between
-workers.
+`ConcurrentHashTrie` is an isolate-local consumer-semantic facade over published persistent CHAMP
+roots. It provides synchronous mutable-map operations, generation tracking, canonical CHAMP
+enumeration, collision and stored-representative behavior, presence-safe entries for stored
+`undefined`, and O(1) immutable snapshots. A snapshot retains exactly one observed root and remains
+stable after every later mutation; converting it to `PersistentHashMap` returns that captured map.
+
+Every mutator derives its result from one observed root and publishes only while that root remains
+current. If a custom hash/equivalence callback or factory reenters the trie and publishes another
+root, `set`, `tryAdd`, `getOrPut`, `compute`, and `remove` discard their stale successor and retry
+against the latest root. Their return values therefore describe the stable winning observation: for
+example, `tryAdd` returns false if a nested same-key insertion wins, while `remove` returns absent if
+a nested same-key removal wins.
+
+A retried factory may run more than once, and `compute` may switch from its add branch to its update
+branch. Both branches receive the caller's lookup key rather than the retained stored representative;
+the update branch also receives the latest stored value. A retry, an equal-value no-op, and a
+discarded candidate do not advance `generation`; each changed root that is actually published
+advances it exactly once. A callback exception publishes no candidate from the failing outer
+operation. Publications made by explicitly nested trie calls are independent completed operations
+and are therefore not rolled back when the outer callback throws.
+
+This retry protocol supplies deterministic reentrancy semantics within one JavaScript agent. It is
+not a lock-free Ctrie implementation and deliberately does not claim the multi-threaded GCAS/RDCSS
+progress contract of the C# and Kotlin Ctries. JavaScript object graphs cannot be atomically shared
+between worker isolates.
 
 ## Lazy range-update sequence
 
