@@ -32,6 +32,10 @@ BenchmarkDotNet.Artifacts/
 # Rust
 target/
 
+# Node.js / TypeScript
+node_modules/
+*.tsbuildinfo
+
 # Generated files
 Generated/
 *.g.cs

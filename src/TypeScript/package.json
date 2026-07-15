@@ -1,0 +1,52 @@
+{
+    "name": "@vladimir-reshetnikov/data-structures",
+    "version": "0.1.0",
+    "description": "Persistent data structures and fixed-width numerics for TypeScript",
+    "license": "MIT-0",
+    "type": "module",
+    "sideEffects": false,
+    "files": [
+        "dist",
+        "README.md"
+    ],
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        },
+        "./hamt": {
+            "types": "./dist/hamt/index.d.ts",
+            "import": "./dist/hamt/index.js"
+        },
+        "./finger-tree": {
+            "types": "./dist/finger-tree/index.d.ts",
+            "import": "./dist/finger-tree/index.js"
+        },
+        "./tungsten": {
+            "types": "./dist/tungsten/index.d.ts",
+            "import": "./dist/tungsten/index.js"
+        },
+        "./numerics": {
+            "types": "./dist/numerics/index.d.ts",
+            "import": "./dist/numerics/index.js"
+        }
+    },
+    "scripts": {
+        "clean": "node --run clean:dist",
+        "clean:dist": "node -e \"import('node:fs').then(({rmSync})=>rmSync('dist',{recursive:true,force:true}))\"",
+        "build": "tsc -p tsconfig.build.json",
+        "check": "tsc -p tsconfig.json --noEmit",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "validate": "node --run check && node --run test && node --run clean:dist && node --run build"
+    },
+    "devDependencies": {
+        "@types/node": "^25.0.0",
+        "fast-check": "^4.9.0",
+        "typescript": "^7.0.2",
+        "vitest": "^4.1.10"
+    },
+    "engines": {
+        "node": ">=24"
+    }
+}

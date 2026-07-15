@@ -49,6 +49,7 @@ entry points for unattended validation.
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | `.\test.ps1 -Workspace FingerTree` from `src/Rust` | [Validation](../../src/Rust/FingerTree/docs/validation.md) | [Tests](../../src/Rust/FingerTree/tests/README.md) | Safe Rust checkpoint crate with positional/measured/text cursor gap, measure, search, model, and overflow gates plus structurally shared storage and cached-measure tests across deque, reversible deque, sorted, priority, interval, rope, measured tree, measured rope, and text helpers |
 | [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten` from `src/Kotlin` | [README](../../src/Kotlin/Tungsten/README.md) | [Tests](../../src/Kotlin/Tungsten/test/tools/datastructures/tungsten/TungstenTests.kt) | Kotlin/JVM executable tests for Tungsten list and association semantics |
 | [`src/Rust/Tungsten`](../../src/Rust/Tungsten/README.md) | `.\test.ps1 -Workspace Tungsten` from `src/Rust` | [README](../../src/Rust/Tungsten/README.md) | [Source tests](../../src/Rust/Tungsten/src/lib.rs) | Safe Rust crate tests for Tungsten list and association semantics |
+| [`src/TypeScript`](../../src/TypeScript/README.md) | `.\test.ps1` or `npm run validate` from `src/TypeScript` | [Validation](../../src/TypeScript/docs/validation.md) | [Tests](../../src/TypeScript/test/README.md) | Strict declaration checking, Vitest examples, fast-check histories, exact `MST2`/`MSP2` vectors, ESM/declaration build, and package surface |
 
 For broad repository edits, run every row that could be affected. For documentation-only edits, run the
 Markdown link check below and any build/test commands whose documented paths changed.
@@ -98,6 +99,20 @@ validation guides define family-specific coverage and optional stress/benchmark 
 - [C# FingerTree tests](../../src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/README.md)
 - [C# Tungsten collections validation](../../src/CSharp/docs/Tungsten/validation.md)
 - [C# Tungsten collections tests](../../src/CSharp/tests/Tools.DataStructures.Tungsten.Tests/README.md)
+
+## TypeScript Workspace
+
+```powershell
+cd C:\DataStructures\src\TypeScript
+npm ci
+npm run validate
+npm pack --dry-run
+```
+
+`npm ci` consumes the committed lockfile. `validate` runs the strict no-emit declaration gate,
+Vitest/fast-check suites, a clean ESM build, and declaration/source-map generation. `npm pack
+--dry-run` is the package-content smoke check. See the [local validation guide](../../src/TypeScript/docs/validation.md)
+and [test map](../../src/TypeScript/test/README.md).
 
 ## Rust Workspaces
 

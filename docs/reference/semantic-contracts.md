@@ -8,7 +8,7 @@
 This reference summarizes the behavioral contracts that should stay recognizable across the repository's
 language workspaces. It is not a replacement for the workspace API specifications, public headers, XML
 documentation, or source tests. Use it as a checklist when reviewing whether a change preserves the
-intended semantics across C#, C, C++, Haskell, Kotlin, and Rust.
+intended semantics across C#, C, C++, Haskell, Kotlin, Rust, and TypeScript.
 
 Authoritative local documents remain:
 
@@ -285,7 +285,7 @@ Shared obligations:
 - Builders must document mutation, snapshot publication, and whether later builder changes can affect
   previously produced immutable ropes.
 
-C#, C, C++, Haskell, Kotlin, and Rust ship positional and measured/text cursors. No deque, RRB,
+C#, C, C++, Haskell, Kotlin, Rust, and TypeScript ship positional and measured/text cursors. No deque, RRB,
 raw-finger-tree, reversible-deque, or Tungsten cursor is implied by those surfaces. Every shipped
 cursor shares these observable obligations:
 
@@ -335,7 +335,7 @@ output unchanged. Peeks copy through the rope's value policy rather than returni
 point edits are O(log n) plus bounded chunk work, while array insertion adds O(m) capture work. It makes no
 zipper, memo-cell, allocation-ceiling, or O(1)-amortized locality claim.
 
-The C#, C, C++, Haskell, Kotlin, and Rust measured cursors additionally share these result semantics:
+The C#, C, C++, Haskell, Kotlin, Rust, and TypeScript measured cursors additionally share these result semantics:
 
 - `MeasureBefore` aggregates `[0, Position)` and `MeasureAfter` aggregates `[Position, Count)`;
   combining them in that order yields the whole version's measure without assuming an inverse,

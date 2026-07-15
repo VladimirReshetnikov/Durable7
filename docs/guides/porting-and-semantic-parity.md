@@ -90,7 +90,7 @@ no edit-throughput or allocation-win claim. Keep each language's lifecycle shape
 - Rust consumes the session through `into_persistent(self)`, expressing use-after-publication
   prevention in ownership rather than a runtime consumed state.
 
-The policy-bound Merkle search tree is complete across all six languages. Every port pins the
+The policy-bound Merkle search tree is complete across all seven languages. Every port pins the
 SHA-256 domain, key framing, empty digest, canonical `MST2` block bytes, seven verification budgets,
 `MSP2` point/range proofs, closure-pruned synchronization, and no-partial-result three-way merge.
 Language-local ownership and callback shapes differ—pure successor stores in Haskell, synchronized
@@ -266,7 +266,7 @@ unnatural, and explicit result records or exceptions for duplicate-key contracts
 
 ## HAMT-Specific Checks
 
-For map/set changes, verify these contracts across C#, C++, C, Haskell, Kotlin, and Rust where exposed:
+For map/set changes, verify these contracts across C#, C++, C, Haskell, Kotlin, Rust, and TypeScript where exposed:
 
 - 32-way bitmap-indexed trie shape over 32 hash bits.
 - Immutable equal-hash collision buckets with linear equality probing.
@@ -306,7 +306,7 @@ Validation guides:
 
 ## FingerTree-Specific Checks
 
-For finger-tree-family changes, verify these contracts across the relevant C#, C++, C, Haskell, Kotlin, and Rust surfaces:
+For finger-tree-family changes, verify these contracts across the relevant C#, C++, C, Haskell, Kotlin, Rust, and TypeScript surfaces:
 
 - Tuned deque and general measured tree remain separate when the language exposes both.
 - Measure policies obey monoid identity and associativity assumptions used by split, locate, and

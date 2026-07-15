@@ -72,18 +72,18 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 
 | Structure or strategy | Axis | Verdict / status | Depends on | Rough size |
 | --- | --- | --- | --- | --- |
-| CHAMP canonicalization + structural equality/diff | 1 | Strong (implemented across all six languages) | Completed with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
-| `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all six languages) | Completed as proposal Tier C1 | 1 shared core, 4 C# public types, structural map/set algebra |
+| CHAMP canonicalization + structural equality/diff | 1 | Strong (implemented across all seven languages) | Completed with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
+| `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all seven languages) | Completed as proposal Tier C1 | 1 shared core, 4 C# public types, structural map/set algebra |
 | DABA Lite sliding-window aggregator | 1, 3 | Strong (implemented in every applicable language: C#, C, C++, Kotlin/JVM, and Rust; pure Haskell is not applicable) | Reuses the language's monoid abstraction | 1 small type, ~8 members |
-| Merkle search tree | 1 | Strong (implemented completely across all six languages) | Deterministic wire + bounded verification | Largest single item in this catalog |
-| RRB vector | 1 | Plausible (implemented across all six languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
-| Zip tree (canonical sorted set) | 1, 3 | Plausible (implemented across all six languages) | Completed: coherent keyed rank policy | 1 new core, set facade |
-| Brodal-Okasaki heap | 1 | Plausible (implemented across all six languages for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
-| Priority search queue (winner-cached AVL) | 1 | Plausible (implemented across all six languages) | Completed as a direct core rather than the addressable composition | 1 new core |
+| Merkle search tree | 1 | Strong (implemented completely across all seven languages) | Deterministic wire + bounded verification | Largest single item in this catalog |
+| RRB vector | 1 | Plausible (implemented across all seven languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
+| Zip tree (canonical sorted set) | 1, 3 | Plausible (implemented across all seven languages) | Completed: coherent keyed rank policy | 1 new core, set facade |
+| Brodal-Okasaki heap | 1 | Plausible (implemented across all seven languages for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
+| Priority search queue (winner-cached AVL) | 1 | Plausible (implemented across all seven languages) | Completed as a direct core rather than the addressable composition | 1 new core |
 | Ctrie (concurrent, O(1) snapshot) | 1 | Managed-only (C# + Kotlin/JVM implemented) | Tracing GC; native ports require reclamation design | 1 new core, concurrency test tier |
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
 | Size-tiered small representations | 2 | Strong, explicitly postponed | Re-entry benchmark after the Axis 2 fixed-layout evidence decision | Internal tier per selected facade + representation-forcing tests |
-| Transient -> persistent -> frozen lifecycle | 2 | C# CHAMP T2 owner-token transient and semantic path-copying sibling sessions implemented; frozen map/set tier remains unshipped and evidence-gated | T0/T1/T2 complete for the optimized transient; sibling lifecycle ports complete; postponed F0 then F1 evidence must precede F2 | Shipped map/set sessions across six languages + planned frozen map/set types |
+| Transient -> persistent -> frozen lifecycle | 2 | C# CHAMP T2 owner-token transient and semantic path-copying sibling sessions implemented; frozen map/set tier remains unshipped and evidence-gated | T0/T1/T2 complete for the optimized transient; sibling lifecycle ports complete; postponed F0 then F1 evidence must precede F2 | Shipped map/set sessions across seven languages + planned frozen map/set types |
 | Version-bound cursor / zipper | 2, 3 | C1 positional cursor, C2 measured/text cursor, and C3 samples implemented in C#; positional/measured/text semantic checkpoints shipped in every sibling language; C4 consumer-gated | C0 selected the C# readonly-struct zipper-as-version; sibling checkpoints reuse persistent rope path copying without its complexity claim | C# positional/measured cursors and Tour/Editor integration plus C/C++/Haskell/Kotlin/Rust semantic facades |
 | Key-type-specialized map factories | 2 | Plausible, explicitly postponed | Named consumer after explicit Patricia consideration | Factory layer; ART only if independently justified |
 | Self-adjusting (splay-style) structures | 2 | Reject | - | Reads allocate under path copying; cursors + freeze substitute |
@@ -935,7 +935,7 @@ all postponed. Benchmarks may contain tiny and string datasets, but those are wo
 permission to select a representation. This isolates the value of the temporal lifecycle before
 combining it with size or key specialization.
 
-**Verdict: CHAMP editing sessions are implemented across all six languages; only C# claims the
+**Verdict: CHAMP editing sessions are implemented across all seven languages; only C# claims the
 owner-token optimization, and the frozen tier remains a strong evidence-gated candidate.** The
 independent C1 cursor, T2 transient, and sibling semantic-session shipments do not clear Track F.
 Advance F only through
@@ -946,7 +946,7 @@ not authorize sibling frozen types or a claim of owner-token edit performance.
 
 ### Cursor / zipper over the sequence family
 
-**Status (2026-07-14): C# C1, C2, and C3 are shipped; C, C++, Haskell, Kotlin, and Rust have
+**Status (2026-07-15): C# C1, C2, and C3 are shipped; C, C++, Haskell, Kotlin, Rust, and TypeScript have
 positional and measured/text semantic checkpoints.**
 `Rope<T>.GetCursor(position)` and the public
 readonly `RopeCursor<T>` implement the positional version-bound gap cursor.
@@ -1301,15 +1301,16 @@ The implementation wave described by this catalog has already landed these refer
 
 CHAMP, Patricia, and RRB have also advanced through the sibling-language work recorded in their
 entries; the canonical zip-zip set, Brodal-Okasaki heap, and priority-search queue are implemented
-across all six languages, and DABA Lite now exists in every applicable imperative
-language (C#, C, C++, Kotlin/JVM, and Rust). The Ctrie's deliberate parity boundary remains C# and
-Kotlin/JVM. The Merkle search tree's full trust-boundary tier is complete across all six languages.
-The one-way CHAMP editing lifecycle now spans all six languages; the owner-token in-place-edit
+across all seven languages, and DABA Lite now exists in every applicable imperative
+language (C#, C, C++, Kotlin/JVM, Rust, and TypeScript). The lock-free Ctrie's deliberate parity
+boundary remains C# and Kotlin/JVM; TypeScript exposes only an isolate-local synchronous facade.
+The Merkle search tree's full trust-boundary tier is complete across all seven languages.
+The one-way CHAMP editing lifecycle now spans all seven languages; the owner-token in-place-edit
 optimization and its performance evidence remain C#-only. These are current-state implementation
 records, not candidates awaiting a consumer.
 Future work on the Axis 1 cores is ordinary hardening, measurement, and demand-driven porting. The
-C/C++/Haskell/Kotlin/Rust checkpoints make no zipper or focus-local complexity claim; measured/text
-cursor parity now spans all six languages. The cursor's C4
+C/C++/Haskell/Kotlin/Rust/TypeScript checkpoints make no zipper or focus-local complexity claim; measured/text
+cursor parity now spans all seven languages. The cursor's C4
 extensions retain the separate status recorded in its entry above.
 
 ### Remaining candidate sequencing
