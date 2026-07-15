@@ -1400,9 +1400,10 @@ catalog's summary alone.
 ## Relationship To Other Documents
 
 - [Benchmark-independent next data structures (2026-07-14)](../proposals/benchmark-independent-next-structures-2026-07-14.md) -
-  the detailed C# execution proposal that sequences the persistent-HAMT single-pass update,
-  hash-bag facade, independently owned ordered-set composite, and this catalog's algebra-law-gated
-  implicit-AVL range-update design without advancing postponed benchmarks.
+  the detailed C# execution proposal whose persistent-HAMT single-pass update and hash-bag facade
+  are now shipped in C#, followed by the independently owned ordered-set composite and this
+  catalog's algebra-law-gated implicit-AVL range-update design without advancing postponed
+  benchmarks.
 - [Derived structure catalog](derived-structure-catalog.md) - compositions of the shipped
   families, the shared enabling API gaps, and the composition design rules this document extends.
   CHAMP's equality/diff entry here is the core-level realization of that catalog's top-ranked gap.

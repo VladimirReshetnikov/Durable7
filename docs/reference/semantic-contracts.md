@@ -85,6 +85,7 @@ Public surfaces:
 | Haskell | `HashMap k v` and `MapTransient k v` | `HashSet a` and `SetTransient a` | `Hashable`, `Eq`, optional `HashPolicy` |
 | Kotlin | `PersistentHashMap<K, V>` and nested `Transient<K, V>` | `PersistentHashSet<T>` and nested `Transient<T>` | runtime `HashPolicy<K>` |
 | Rust | `PersistentHashMap<K, V, S>` and `TransientHashMap<K, V, S>` | `PersistentHashSet<T, S>` and `TransientHashSet<T, S>` | `Eq` plus `BuildHasher` |
+| TypeScript | `PersistentHashMap<K, V>` and `TransientHashMap<K, V>` | `PersistentHashSet<T>` and `TransientHashSet<T>` | runtime `HashPolicy<K>` |
 
 Shared obligations:
 
@@ -124,6 +125,26 @@ Language-specific obligations:
 | Haskell | `HashPolicy` and package-local `Hashable` shape are part of the port, avoiding third-party dependencies while preserving persistent HAMT behavior. |
 | Kotlin | Miss paths and duplicate results should use idiomatic Kotlin null/result/exception shapes documented in API notes. |
 | Rust | Keys that compare equal under `Eq` must hash equally under the chosen `BuildHasher`; removal returns owned cloned values where exposed. |
+| TypeScript | Runtime hash policies define equivalence and representative retention; transient sessions are isolate-local path-copying facades with no cross-worker progress or edit-performance claim. |
+
+### C# persistent hash bag
+
+`PersistentHashBag<T>` is the shipped C# unordered-multiset facade over
+`PersistentHashMap<T, int>`. It stores exactly one representative and one positive multiplicity per
+comparer equivalence class, exposes `DistinctCount : int` separately from expanded
+`TotalCount : long`, and deliberately does not implement `IReadOnlyCollection<T>` or expose an
+ambiguous `int Count`. Construction and point additions retain the first stored representative;
+expanded enumeration repeats each representative contiguously, while `DistinctItems` and `Entries`
+enumerate one class each in the same stable-for-one-version, otherwise unspecified HAMT order.
+
+Bag algebra uses maximum union, minimum intersection, saturated difference, and checked additive
+sum. The receiver comparer defines equivalence and receiver representatives win every surviving
+receiver class. A reference-different argument comparer is normalized eagerly under the receiver
+policy before any operation-specific shortcut; collapsed argument multiplicities are checked and
+use the first representative observed in that argument version's HAMT order. Zero-copy and logical
+no-op updates return the receiver, empty results preserve its comparer object, and `ToArray` rejects
+`TotalCount > Array.MaxLength` before allocation. The complete contract is in the
+[C# HAMT API specification](../../src/CSharp/docs/Hamt/api-specification.md).
 
 ### Managed Ctrie snapshots
 
@@ -137,7 +158,7 @@ key/value representatives, null/present-null semantics, and isolation from later
 
 ### One-way CHAMP editing lifecycle
 
-All six HAMT workspaces expose a single-owner map/set edit-then-publish lifecycle. The shared
+All seven HAMT workspaces expose a single-owner map/set edit-then-publish lifecycle. The shared
 contract is semantic, not representational:
 
 - Creating an empty session or adopting a persistent source and successfully publishing the
@@ -175,12 +196,14 @@ advantage is claimed:
 | Haskell | `MapTransient` / `SetTransient` live in `IO`; `persistMap` / `persistSet` consume the `IORef` state. Candidate construction precedes a masked commit, so synchronous or asynchronous failure cannot partially install an edit. |
 | Kotlin | Nested `Transient` sessions enforce consumption with `IllegalStateException`; acquired views capture the current persistent snapshot and session version, survive logical no-ops, and fail after content changes. Callback failure leaves the active session unchanged and retryable. |
 | Rust | `TransientHashMap` / `TransientHashSet` publish with consuming `into_persistent(self)`, so the type system prevents use-after-publication. `into_transient` moves a source while `to_transient` shares its root; both retain persistent path-copy edit costs. |
+| TypeScript | `TransientHashMap` / `TransientHashSet` enforce one-way publication at runtime inside one JavaScript isolate. Changed edits replace the current persistent root through ordinary path copies; the facade makes no cross-worker progress or transient-performance claim. |
 
 The local authoritative references are the [C API specification](../../src/C/Hamt/docs/api-specification.md),
 [C++ API specification](../../src/Cpp/Hamt/docs/api-specification.md),
 [Haskell HAMT workspace](../../src/Haskell/Hamt/README.md),
 [Kotlin API notes](../../src/Kotlin/Hamt/docs/api-notes.md), and
-[Rust API notes](../../src/Rust/Hamt/docs/api-notes.md).
+[Rust API notes](../../src/Rust/Hamt/docs/api-notes.md), and
+[TypeScript API notes](../../src/TypeScript/docs/api-notes.md).
 
 ## Finger-Tree Core
 
