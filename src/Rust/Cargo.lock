@@ -133,6 +133,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "tools-data-structures-range-update"
+version = "0.1.0"
+dependencies = [
+ "tools-data-structures-fingertree",
+]
+
+[[package]]
 name = "tools-data-structures-tungsten"
 version = "0.1.0"
 dependencies = [
