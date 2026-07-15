@@ -13,11 +13,18 @@ the specification.
 
 ```cpp
 #include <Tools/DataStructures/Hamt/persistent_hash_map.hpp>
+#include <Tools/DataStructures/Hamt/persistent_hash_bag.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_set.hpp>
 #include <Tools/DataStructures/Hamt/persistent_int_map.hpp>
 #include <Tools/DataStructures/Hamt/merkle_search_tree.hpp>
 #include <Tools/DataStructures/Hamt/merkle_persistence.hpp>
 #include <Tools/DataStructures/Hamt/merkle_proofs.hpp>
+
+#include <cstdint>
+#include <limits>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace hamt = tools::data_structures::hamt;
 ```
@@ -101,6 +108,45 @@ auto built = map_type::create_range(std::vector<std::pair<int, std::string>>{
 });
 ```
 
+Use the factory updates when producing a value should be conditional and must share the lookup's
+single hash/trie descent:
+
+```cpp
+auto [with_three, selected_three] = built.get_or_add(
+    3,
+    [](const int& key) { return "value-" + std::to_string(key); });
+
+auto [incremented, selected_one] = with_three.add_or_update(
+    1,
+    [](const int&) { return std::string{"first"}; },
+    [](const int& lookup_key, const std::string& stored) {
+        return stored + "@" + std::to_string(lookup_key);
+    });
+```
+
+`get_or_add` does not invoke its factory on a hit. `add_or_update` invokes only the add branch on a
+miss or only the update branch on a hit. Both return the actual stored value selected by the
+operation. Empty `std::function` objects and null function pointers are rejected before hashing.
+An equal update keeps the stored key and value representatives and shares the source root.
+
+For construction algorithms that need duplicate aggregation without publishing intermediate maps,
+use the reusable builder's combine hook:
+
+```cpp
+auto builder = hamt::persistent_hash_map<std::string, std::int32_t>::create_bulk_builder();
+for (const auto& word : words) {
+    builder.add_or_update(word, 1, [](std::int32_t stored, std::int32_t incoming) {
+        if (stored > std::numeric_limits<std::int32_t>::max() - incoming) {
+            throw std::overflow_error("count overflow");
+        }
+        return static_cast<std::int32_t>(stored + incoming);
+    });
+}
+auto frequencies = builder.to_immutable();
+```
+
+The builder remains usable after freezing; each snapshot is detached from later staging changes.
+
 ## Custom Hash And Equality
 
 Custom policy objects are template arguments and are stored in each map or set value:
@@ -181,6 +227,54 @@ auto [without_one, was_removed] = with_two.try_remove(1);
 
 Use `try_get_value` to recover the originally stored equivalent value when custom equality is in
 play.
+
+## Persistent Hash Bag
+
+`persistent_hash_bag<T, Hash, KeyEqual>` stores positive 32-bit multiplicities and tracks the
+expanded total in 64 bits:
+
+```cpp
+using bag_type = hamt::persistent_hash_bag<std::string>;
+
+auto bag = bag_type::create_range(
+    std::vector<std::string>{"red", "blue", "red"});
+auto more_red = bag.add_copies("red", 3);
+auto one_less_blue = more_red.remove("blue");
+
+std::size_t classes = one_less_blue.distinct_count(); // 1
+std::int64_t occurrences = one_less_blue.total_count(); // 5
+std::int32_t reds = one_less_blue.count_of("red"); // 5
+```
+
+`add_copies`/`remove_copies` accept counts from zero through `INT32_MAX`. Zero and absent removal
+share the receiver root. Per-class addition and the 64-bit total are checked; failure never changes
+the source bag. Removal saturates, and `remove_all` removes the entire equivalence class.
+
+Bag algebra follows multiset rather than set arithmetic:
+
+```cpp
+auto left = bag_type::create_range(std::vector<std::string>{"a", "a", "b"});
+auto right = bag_type::create_range(std::vector<std::string>{"a", "b", "b", "c"});
+
+auto maximums = left.union_with(right);       // a:2, b:2, c:1
+auto minimums = left.intersect_with(right);   // a:1, b:1
+auto subtraction = left.except_with(right);   // a:1
+auto addition = left.sum_with(right);          // a:3, b:3, c:1
+```
+
+The receiver's policy interprets every operation. If the argument was independently created, it is
+first normalized through the receiver's hash/equality objects; collapsed argument multiplicities
+are summed with overflow checks. Existing receiver representatives win, while the first normalized
+argument representative is used for a newly introduced class.
+
+Ordinary iteration expands copies. Use `distinct_items()` for one item per class, `entries()` for
+`(representative, multiplicity)` pairs, or `to_vector()` for checked expanded materialization:
+
+```cpp
+for (const auto& occurrence : addition) { /* repeated items */ }
+for (const auto& item : addition.distinct_items()) { /* one per class */ }
+for (const auto& [item, count] : addition.entries()) { /* counted classes */ }
+```
 
 ## One-Way Edit Sessions
 
@@ -479,9 +573,12 @@ diff, and validation; custom implementations must support the concurrency the ca
 | --- | --- |
 | Immutable unordered key/value collection | `persistent_hash_map<Key, T>` |
 | Duplicate-rejecting insert | `add` or `try_add` |
+| Conditional one-descent map update | `get_or_add` or `add_or_update` |
 | Stored equivalent key recovery | `try_get_key` |
 | Immutable unordered value set | `persistent_hash_set<T>` |
 | Stored equivalent item recovery | `try_get_value` |
+| Immutable unordered multiset | `persistent_hash_bag<T>` |
+| Maximum/minimum/subtract/add bag algebra | `union_with`, `intersect_with`, `except_with`, `sum_with` |
 | One-way map/set edit phase | `to_transient()` / `create_transient()`, then `std::move(session).persist()` |
 | Union/intersection/difference | `union_with`, `intersect_with`, `except_with`, `symmetric_except_with` |
 | Custom value semantics | Template hash/equality policy objects plus `create(...)` or `create_range(...)` |

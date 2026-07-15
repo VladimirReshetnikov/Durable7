@@ -1,4 +1,5 @@
 #include <Tools/DataStructures/Hamt/persistent_hash_map.hpp>
+#include <Tools/DataStructures/Hamt/persistent_hash_bag.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_set.hpp>
 #include <Tools/DataStructures/Hamt/persistent_int_map.hpp>
 #include <tools/data_structures/test_support/headless_test_process.h>
@@ -8,9 +9,12 @@
 #include <cctype>
 #include <cstdint>
 #include <exception>
+#include <functional>
 #include <initializer_list>
 #include <iostream>
 #include <iterator>
+#include <limits>
+#include <memory>
 #include <mutex>
 #include <map>
 #include <random>
@@ -26,6 +30,7 @@
 
 using tools::data_structures::hamt::persistent_hamt_node_kind;
 using tools::data_structures::hamt::map_difference_kind;
+using tools::data_structures::hamt::persistent_hash_bag;
 using tools::data_structures::hamt::persistent_hash_map;
 using tools::data_structures::hamt::persistent_int_map;
 using tools::data_structures::hamt::persistent_int_set;
@@ -280,6 +285,28 @@ struct controlled_throw_hash {
     }
 };
 
+struct controlled_throw_equal {
+    std::shared_ptr<bool> should_throw;
+
+    bool operator()(int left, int right) const {
+        if (*should_throw) {
+            throw std::runtime_error("injected key-equality failure");
+        }
+        return left == right;
+    }
+};
+
+struct controlled_throw_value_equal {
+    std::shared_ptr<bool> should_throw;
+
+    bool operator()(int left, int right) const {
+        if (*should_throw) {
+            throw std::runtime_error("injected value-equality failure");
+        }
+        return left == right;
+    }
+};
+
 struct throwing_move_policy_control {
     bool throw_on_move_construction = false;
     bool throw_on_move_assignment = false;
@@ -323,6 +350,27 @@ struct throwing_move_hash {
 struct mod_ten_equal {
     bool operator()(int left, int right) const noexcept {
         return left % 10 == right % 10;
+    }
+};
+
+struct configurable_string_hash {
+    bool ignore_case = false;
+
+    std::size_t operator()(const std::string& value) const noexcept {
+        if (!ignore_case) {
+            return std::hash<std::string>{}(value);
+        }
+        return case_insensitive_hash{}(value);
+    }
+};
+
+struct configurable_string_equal {
+    bool ignore_case = false;
+
+    bool operator()(const std::string& left, const std::string& right) const noexcept {
+        return ignore_case
+            ? case_insensitive_equal{}(left, right)
+            : left == right;
     }
 };
 
@@ -2028,6 +2076,550 @@ TEST(TransientSet_RelationsUseReceiverPolicyAndRequireActiveSession) {
     CHECK_THROWS_AS(session.is_proper_superset_of(empty), std::logic_error);
     CHECK_THROWS_AS(session.overlaps(empty), std::logic_error);
     CHECK_THROWS_AS(session.set_equals(empty), std::logic_error);
+}
+
+TEST(PersistentMap_FactoryUpdatesValidateBeforeHashAndSelectExactlyOneBranch) {
+    const auto hash_calls = std::make_shared<std::atomic<std::size_t>>(0);
+    using map_type = persistent_hash_map<int, int, counting_hash>;
+    const auto source = map_type::create(counting_hash{hash_calls}).set_item(7, 70);
+    hash_calls->store(0, std::memory_order_relaxed);
+
+    auto empty_add = std::function<int(const int&)>{};
+    CHECK_THROWS_AS(source.get_or_add(7, empty_add), std::invalid_argument);
+    CHECK_EQ(std::size_t{0}, hash_calls->load(std::memory_order_relaxed));
+    auto* null_add = static_cast<int (*)(const int&)>(nullptr);
+    CHECK_THROWS_AS(source.get_or_add(7, null_add), std::invalid_argument);
+    CHECK_EQ(std::size_t{0}, hash_calls->load(std::memory_order_relaxed));
+
+    auto empty_update = std::function<int(const int&, const int&)>{};
+    CHECK_THROWS_AS(
+        source.add_or_update(7, [](const int&) { return 1; }, empty_update),
+        std::invalid_argument);
+    CHECK_EQ(std::size_t{0}, hash_calls->load(std::memory_order_relaxed));
+
+    auto add_calls = 0;
+    auto update_calls = 0;
+    auto [hit, hit_value] = source.add_or_update(
+        7,
+        [&add_calls](const int&) {
+            ++add_calls;
+            return -1;
+        },
+        [&update_calls](const int& lookup_key, const int& stored) {
+            ++update_calls;
+            CHECK_EQ(7, lookup_key);
+            CHECK_EQ(70, stored);
+            return 71;
+        });
+    CHECK_EQ(0, add_calls);
+    CHECK_EQ(1, update_calls);
+    CHECK_EQ(71, hit_value);
+    CHECK_EQ(std::size_t{1}, hash_calls->load(std::memory_order_relaxed));
+    CHECK_EQ(71, hit.at(7));
+
+    hash_calls->store(0, std::memory_order_relaxed);
+    auto [miss, miss_value] = source.add_or_update(
+        8,
+        [&add_calls](const int& lookup_key) {
+            ++add_calls;
+            CHECK_EQ(8, lookup_key);
+            return 80;
+        },
+        [&update_calls](const int&, const int&) {
+            ++update_calls;
+            return -1;
+        });
+    CHECK_EQ(1, add_calls);
+    CHECK_EQ(1, update_calls);
+    CHECK_EQ(80, miss_value);
+    CHECK_EQ(std::size_t{1}, hash_calls->load(std::memory_order_relaxed));
+    CHECK_EQ(80, miss.at(8));
+    CHECK_EQ(std::size_t{1}, source.count());
+
+    hash_calls->store(0, std::memory_order_relaxed);
+    auto get_add_calls = 0;
+    auto [same, stored] = source.get_or_add(7, [&get_add_calls](const int&) {
+        ++get_add_calls;
+        return -1;
+    });
+    CHECK_EQ(0, get_add_calls);
+    CHECK_EQ(70, stored);
+    CHECK(same.shares_root_with(source));
+    CHECK_EQ(std::size_t{1}, hash_calls->load(std::memory_order_relaxed));
+
+    hash_calls->store(0, std::memory_order_relaxed);
+    auto [get_miss, get_miss_value] = source.get_or_add(
+        9,
+        [&get_add_calls](const int& lookup_key) {
+            ++get_add_calls;
+            CHECK_EQ(9, lookup_key);
+            return 90;
+        });
+    CHECK_EQ(1, get_add_calls);
+    CHECK_EQ(90, get_miss_value);
+    CHECK_EQ(std::size_t{1}, hash_calls->load(std::memory_order_relaxed));
+    CHECK_EQ(90, get_miss.at(9));
+}
+
+TEST(PersistentMap_FactoryUpdatesRetainStoredKeyAndValueRepresentatives) {
+    using map_type = persistent_hash_map<
+        std::string,
+        int,
+        case_insensitive_hash,
+        case_insensitive_equal,
+        mod_ten_equal>;
+    const auto source = map_type::create(
+        case_insensitive_hash{}, case_insensitive_equal{}, mod_ten_equal{})
+        .set_item("Alpha", 11);
+
+    auto [equal_update, selected_equal] = source.add_or_update(
+        "ALPHA",
+        [](const std::string&) { return -1; },
+        [](const std::string& lookup_key, const int& stored) {
+            CHECK_EQ(std::string("ALPHA"), lookup_key);
+            CHECK_EQ(11, stored);
+            return 21;
+        });
+    CHECK(equal_update.shares_root_with(source));
+    CHECK_EQ(11, selected_equal);
+    CHECK_EQ(std::string("Alpha"), *equal_update.try_get_key("alpha"));
+    CHECK_EQ(11, equal_update.at("alpha"));
+
+    auto [changed, selected_changed] = source.add_or_update(
+        "ALPHA",
+        [](const std::string&) { return -1; },
+        [](const std::string&, const int&) { return 22; });
+    CHECK(!changed.shares_root_with(source));
+    CHECK_EQ(22, selected_changed);
+    CHECK_EQ(std::string("Alpha"), *changed.try_get_key("alpha"));
+    CHECK_EQ(22, changed.at("alpha"));
+}
+
+TEST(PersistentMap_FactoryUpdatesScanOneCollisionPathAndAreFailureAtomic) {
+    const auto counts = std::make_shared<champ_pruning_counts>();
+    using map_type = persistent_hash_map<
+        explicit_hash_key,
+        int,
+        champ_counting_hash,
+        champ_counting_key_equal,
+        champ_counting_value_equal>;
+    auto source = map_type::create(
+        champ_counting_hash{counts},
+        champ_counting_key_equal{counts},
+        champ_counting_value_equal{counts});
+    for (auto id = 1; id <= 3; ++id) {
+        source = source.set_item(explicit_hash_key{id, 7}, id * 10);
+    }
+
+    counts->reset();
+    auto update_calls = 0;
+    auto [updated, selected] = source.add_or_update(
+        explicit_hash_key{3, 7},
+        [](const explicit_hash_key&) { return -1; },
+        [&update_calls](const explicit_hash_key& lookup_key, const int& stored) {
+            ++update_calls;
+            CHECK_EQ(3, lookup_key.id);
+            CHECK_EQ(30, stored);
+            return 31;
+        });
+    CHECK_EQ(1, update_calls);
+    CHECK_EQ(31, selected);
+    CHECK_EQ(std::size_t{1}, counts->hash_calls.load(std::memory_order_relaxed));
+    CHECK_EQ(std::size_t{3}, counts->key_equal_calls.load(std::memory_order_relaxed));
+    CHECK(updated.debug_validate_canonical());
+
+    const auto source_root = source.debug_root_identity();
+    CHECK_THROWS_AS(
+        source.add_or_update(
+            explicit_hash_key{2, 7},
+            [](const explicit_hash_key&) { return -1; },
+            [](const explicit_hash_key&, const int&) -> int {
+                throw std::runtime_error("factory");
+            }),
+        std::runtime_error);
+    CHECK_EQ(source_root, source.debug_root_identity());
+    CHECK_EQ(20, source.at(explicit_hash_key{2, 7}));
+
+    CHECK_THROWS_AS(
+        source.get_or_add(
+            explicit_hash_key{4, 7},
+            [](const explicit_hash_key&) -> int {
+                throw std::runtime_error("factory");
+            }),
+        std::runtime_error);
+    CHECK_EQ(source_root, source.debug_root_identity());
+    CHECK_EQ(std::size_t{3}, source.count());
+
+    const auto key_equal_failure = std::make_shared<bool>(false);
+    using key_throw_map = persistent_hash_map<
+        int,
+        int,
+        std::hash<int>,
+        controlled_throw_equal>;
+    const auto key_source = key_throw_map::create(
+        std::hash<int>{}, controlled_throw_equal{key_equal_failure})
+        .set_item(1, 10);
+    const auto key_root = key_source.debug_root_identity();
+    *key_equal_failure = true;
+    CHECK_THROWS_AS(
+        key_source.add_or_update(
+            1,
+            [](const int&) { return -1; },
+            [](const int&, const int& stored) { return stored + 1; }),
+        std::runtime_error);
+    *key_equal_failure = false;
+    CHECK_EQ(key_root, key_source.debug_root_identity());
+    CHECK_EQ(10, key_source.at(1));
+
+    const auto value_equal_failure = std::make_shared<bool>(false);
+    using value_throw_map = persistent_hash_map<
+        int,
+        int,
+        std::hash<int>,
+        std::equal_to<int>,
+        controlled_throw_value_equal>;
+    const auto value_source = value_throw_map::create(
+        std::hash<int>{},
+        std::equal_to<int>{},
+        controlled_throw_value_equal{value_equal_failure})
+        .set_item(1, 10);
+    const auto value_root = value_source.debug_root_identity();
+    *value_equal_failure = true;
+    CHECK_THROWS_AS(
+        value_source.add_or_update(
+            1,
+            [](const int&) { return -1; },
+            [](const int&, const int& stored) { return stored + 1; }),
+        std::runtime_error);
+    *value_equal_failure = false;
+    CHECK_EQ(value_root, value_source.debug_root_identity());
+    CHECK_EQ(10, value_source.at(1));
+}
+
+TEST(PersistentMap_BulkBuilderCombinesInOnePathAndKeepsDetachedSnapshots) {
+    using map_type = persistent_hash_map<
+        std::string,
+        int,
+        case_insensitive_hash,
+        case_insensitive_equal,
+        mod_ten_equal>;
+    auto builder = map_type::create_bulk_builder(
+        case_insensitive_hash{}, case_insensitive_equal{}, mod_ten_equal{});
+
+    CHECK_EQ(11, builder.add_or_update(
+        "Alpha", 11, [](const int& stored, const int& incoming) {
+            return stored + incoming;
+        }));
+    CHECK_EQ(11, builder.add_or_update(
+        "ALPHA", 10, [](const int& stored, const int& incoming) {
+            return stored + incoming;
+        }));
+    const auto first = builder.to_immutable();
+    CHECK_EQ(std::size_t{1}, first.count());
+    CHECK_EQ(std::string("Alpha"), *first.try_get_key("alpha"));
+    CHECK_EQ(11, first.at("alpha"));
+
+    CHECK_EQ(22, builder.add_or_update(
+        "alpha", 1, [](const int& stored, const int& incoming) {
+            return stored + incoming + 10;
+        }));
+    CHECK_EQ(5, builder.add_or_update(
+        "Beta", 5, [](const int& stored, const int& incoming) {
+            return stored + incoming;
+        }));
+    const auto second = builder.to_immutable();
+    CHECK_EQ(11, first.at("alpha"));
+    CHECK_EQ(std::size_t{1}, first.count());
+    CHECK_EQ(22, second.at("alpha"));
+    CHECK_EQ(5, second.at("beta"));
+    CHECK_EQ(std::size_t{2}, second.count());
+}
+
+TEST(PersistentMap_BulkBuilderValidatesBeforeOneHashAndSelectsOneBranch) {
+    const auto hash_calls = std::make_shared<std::atomic<std::size_t>>(0);
+    using map_type = persistent_hash_map<int, int, counting_hash>;
+    auto builder = map_type::create_bulk_builder(counting_hash{hash_calls});
+
+    auto empty_update = std::function<int(const int&, const int&)>{};
+    CHECK_THROWS_AS(builder.add_or_update(1, 10, empty_update), std::invalid_argument);
+    CHECK_EQ(std::size_t{0}, hash_calls->load(std::memory_order_relaxed));
+
+    auto update_calls = 0;
+    CHECK_EQ(10, builder.add_or_update(
+        1,
+        10,
+        [&update_calls](const int&, const int&) {
+            ++update_calls;
+            return -1;
+        }));
+    CHECK_EQ(0, update_calls);
+    CHECK_EQ(std::size_t{1}, hash_calls->load(std::memory_order_relaxed));
+
+    hash_calls->store(0, std::memory_order_relaxed);
+    CHECK_EQ(11, builder.add_or_update(
+        1,
+        1,
+        [&update_calls](const int& stored, const int& incoming) {
+            ++update_calls;
+            return stored + incoming;
+        }));
+    CHECK_EQ(1, update_calls);
+    CHECK_EQ(std::size_t{1}, hash_calls->load(std::memory_order_relaxed));
+
+    hash_calls->store(0, std::memory_order_relaxed);
+    CHECK_EQ(20, builder.add_or_update(
+        2,
+        20,
+        [&update_calls](const int&, const int&) {
+            ++update_calls;
+            return -1;
+        }));
+    CHECK_EQ(1, update_calls);
+    CHECK_EQ(std::size_t{1}, hash_calls->load(std::memory_order_relaxed));
+    const auto snapshot = builder.to_immutable();
+    CHECK_EQ(11, snapshot.at(1));
+    CHECK_EQ(20, snapshot.at(2));
+}
+
+TEST(PersistentMap_BulkBuilderCallbackAndComparerFailuresRetainState) {
+    const auto should_throw = std::make_shared<bool>(false);
+    using map_type = persistent_hash_map<int, int, std::hash<int>, controlled_throw_equal>;
+    auto builder = map_type::create_bulk_builder(
+        std::hash<int>{}, controlled_throw_equal{should_throw});
+    CHECK_EQ(10, builder.add_or_update(
+        1, 10, [](const int& stored, const int& incoming) {
+            return stored + incoming;
+        }));
+    const auto before = builder.to_immutable();
+
+    CHECK_THROWS_AS(
+        builder.add_or_update(
+            1,
+            1,
+            [](const int&, const int&) -> int {
+                throw std::runtime_error("factory");
+            }),
+        std::runtime_error);
+    auto after_factory = builder.to_immutable();
+    CHECK_EQ(10, after_factory.at(1));
+    CHECK_EQ(std::size_t{1}, after_factory.count());
+
+    *should_throw = true;
+    CHECK_THROWS_AS(
+        builder.add_or_update(
+            1,
+            1,
+            [](const int& stored, const int& incoming) {
+                return stored + incoming;
+            }),
+        std::runtime_error);
+    *should_throw = false;
+    auto after_equal = builder.to_immutable();
+    CHECK_EQ(10, after_equal.at(1));
+    CHECK_EQ(std::size_t{1}, after_equal.count());
+    CHECK(!after_equal.shares_root_with(before));
+
+    CHECK_EQ(11, builder.add_or_update(
+        1, 1, [](const int& stored, const int& incoming) {
+            return stored + incoming;
+        }));
+    CHECK_EQ(11, builder.to_immutable().at(1));
+
+    const auto value_should_throw = std::make_shared<bool>(false);
+    using value_map_type = persistent_hash_map<
+        int,
+        int,
+        std::hash<int>,
+        std::equal_to<int>,
+        controlled_throw_value_equal>;
+    auto value_builder = value_map_type::create_bulk_builder(
+        std::hash<int>{},
+        std::equal_to<int>{},
+        controlled_throw_value_equal{value_should_throw});
+    CHECK_EQ(10, value_builder.add_or_update(
+        1, 10, [](const int& stored, const int& incoming) {
+            return stored + incoming;
+        }));
+    *value_should_throw = true;
+    CHECK_THROWS_AS(
+        value_builder.add_or_update(
+            1,
+            1,
+            [](const int& stored, const int& incoming) {
+                return stored + incoming;
+            }),
+        std::runtime_error);
+    *value_should_throw = false;
+    CHECK_EQ(10, value_builder.to_immutable().at(1));
+}
+
+TEST(PersistentHashBag_AggregatesCountsRetainsRepresentativesAndEnumeratesViews) {
+    using bag_type = persistent_hash_bag<
+        std::string,
+        case_insensitive_hash,
+        case_insensitive_equal>;
+    const auto bag = bag_type::create_range(
+        std::vector<std::string>{"Alpha", "ALPHA", "Beta"},
+        case_insensitive_hash{},
+        case_insensitive_equal{});
+
+    CHECK_EQ(std::size_t{2}, bag.distinct_count());
+    CHECK_EQ(std::int64_t{3}, bag.total_count());
+    CHECK_EQ(2, bag.count_of("alpha"));
+    CHECK_EQ(1, bag.count_of("BETA"));
+    CHECK_EQ(0, bag.count_of("missing"));
+    CHECK_EQ(std::string("Alpha"), *bag.try_get_value("ALPHA"));
+    CHECK_EQ(
+        sorted(std::vector<std::string>{"Alpha", "Alpha", "Beta"}),
+        sorted(bag.to_vector()));
+
+    auto distinct = std::vector<std::string>{};
+    for (const auto& item : bag.distinct_items()) {
+        distinct.push_back(item);
+    }
+    CHECK_EQ(
+        sorted(std::vector<std::string>{"Alpha", "Beta"}),
+        sorted(std::move(distinct)));
+
+    auto entry_total = std::int64_t{0};
+    auto entry_count = std::size_t{0};
+    for (const auto& [item, multiplicity] : bag.entries()) {
+        CHECK(bag.key_eq()(item, "alpha") || bag.key_eq()(item, "beta"));
+        entry_total += multiplicity;
+        ++entry_count;
+    }
+    CHECK_EQ(std::size_t{2}, entry_count);
+    CHECK_EQ(std::int64_t{3}, entry_total);
+    CHECK(bag.debug_validate_canonical());
+}
+
+TEST(PersistentHashBag_PointEditsValidateAndPreserveNoOpIdentity) {
+    using bag_type = persistent_hash_bag<int>;
+    const auto source = bag_type::empty().add_copies(1, 3).add(2);
+    CHECK_EQ(std::int64_t{4}, source.total_count());
+
+    CHECK(source.add_copies(1, 0).shares_root_with(source));
+    CHECK(source.remove_copies(1, 0).shares_root_with(source));
+    CHECK(source.remove(99).shares_root_with(source));
+    CHECK(source.remove_all(99).shares_root_with(source));
+    CHECK_THROWS_AS(source.add_copies(1, -1), std::out_of_range);
+    CHECK_THROWS_AS(
+        source.add_copies(
+            1,
+            static_cast<std::int64_t>(std::numeric_limits<std::int32_t>::max()) + 1),
+        std::out_of_range);
+
+    const auto reduced = source.remove_copies(1, 2);
+    CHECK_EQ(1, reduced.count_of(1));
+    CHECK_EQ(std::int64_t{2}, reduced.total_count());
+    const auto saturated = reduced.remove_copies(1, 100);
+    CHECK(!saturated.contains(1));
+    CHECK_EQ(std::int64_t{1}, saturated.total_count());
+
+    const auto maxed = bag_type::empty().add_copies(
+        7, std::numeric_limits<std::int32_t>::max());
+    const auto maxed_root = maxed.debug_root_identity();
+    CHECK_THROWS_AS(maxed.add(7), std::overflow_error);
+    CHECK_EQ(maxed_root, maxed.debug_root_identity());
+    CHECK_EQ(std::numeric_limits<std::int32_t>::max(), maxed.count_of(7));
+
+    auto moved_from = source;
+    const auto moved_to = std::move(moved_from);
+    CHECK(moved_from.is_empty());
+    CHECK_EQ(std::int64_t{0}, moved_from.total_count());
+    CHECK_EQ(std::int64_t{4}, moved_to.total_count());
+}
+
+TEST(PersistentHashBag_AlgebraUsesMultisetCountsAndSharesIdentities) {
+    using bag_type = persistent_hash_bag<int>;
+    const auto left = bag_type::empty().add_copies(1, 2).add(2);
+    const auto right = bag_type::empty().add(1).add_copies(2, 3).add(3);
+
+    const auto united = left.union_with(right);
+    CHECK_EQ(2, united.count_of(1));
+    CHECK_EQ(3, united.count_of(2));
+    CHECK_EQ(1, united.count_of(3));
+    CHECK_EQ(std::int64_t{6}, united.total_count());
+
+    const auto intersected = left.intersect_with(right);
+    CHECK_EQ(1, intersected.count_of(1));
+    CHECK_EQ(1, intersected.count_of(2));
+    CHECK_EQ(0, intersected.count_of(3));
+    CHECK_EQ(std::int64_t{2}, intersected.total_count());
+
+    const auto subtracted = left.except_with(right);
+    CHECK_EQ(1, subtracted.count_of(1));
+    CHECK_EQ(0, subtracted.count_of(2));
+    CHECK_EQ(std::int64_t{1}, subtracted.total_count());
+
+    const auto summed = left.sum_with(right);
+    CHECK_EQ(3, summed.count_of(1));
+    CHECK_EQ(4, summed.count_of(2));
+    CHECK_EQ(1, summed.count_of(3));
+    CHECK_EQ(std::int64_t{8}, summed.total_count());
+
+    CHECK(left.union_with(left).shares_root_with(left));
+    CHECK(left.intersect_with(left).shares_root_with(left));
+    CHECK(left.except_with(left).is_empty());
+    CHECK(left.union_with(bag_type::empty()).shares_root_with(left));
+    CHECK(left.sum_with(bag_type::empty()).shares_root_with(left));
+}
+
+TEST(PersistentHashBag_NormalizesArgumentToReceiverPolicyAndKeepsPrecedence) {
+    using bag_type = persistent_hash_bag<
+        std::string,
+        configurable_string_hash,
+        configurable_string_equal>;
+    const auto receiver = bag_type::create(
+        configurable_string_hash{true}, configurable_string_equal{true})
+        .add_copies("Alpha", 2);
+    const auto argument = bag_type::create(
+        configurable_string_hash{false}, configurable_string_equal{false})
+        .add("ALPHA")
+        .add_copies("alpha", 2)
+        .add("Beta")
+        .add("BETA");
+
+    auto first_argument_beta = std::string{};
+    for (const auto& item : argument.distinct_items()) {
+        if (case_insensitive_equal{}(item, "beta")) {
+            first_argument_beta = item;
+            break;
+        }
+    }
+    CHECK(!first_argument_beta.empty());
+
+    const auto united = receiver.union_with(argument);
+    CHECK_EQ(3, united.count_of("alpha"));
+    CHECK_EQ(2, united.count_of("beta"));
+    CHECK_EQ(std::string("Alpha"), *united.try_get_value("ALPHA"));
+    CHECK_EQ(first_argument_beta, *united.try_get_value("beta"));
+    CHECK_EQ(std::int64_t{5}, united.total_count());
+
+    const auto intersected = receiver.intersect_with(argument);
+    CHECK(intersected.shares_root_with(receiver));
+    const auto subtracted = receiver.except_with(argument);
+    CHECK(subtracted.is_empty());
+    const auto summed = receiver.sum_with(argument);
+    CHECK_EQ(5, summed.count_of("alpha"));
+    CHECK_EQ(2, summed.count_of("beta"));
+    CHECK_EQ(std::string("Alpha"), *summed.try_get_value("alpha"));
+    CHECK_EQ(std::int64_t{7}, summed.total_count());
+}
+
+TEST(PersistentHashBag_CheckedSumFailureLeavesBothOperandsUnchanged) {
+    using bag_type = persistent_hash_bag<int>;
+    const auto left = bag_type::empty().add_copies(
+        1, std::numeric_limits<std::int32_t>::max());
+    const auto right = bag_type::empty().add(1);
+    const auto left_root = left.debug_root_identity();
+    const auto right_root = right.debug_root_identity();
+
+    CHECK_THROWS_AS(left.sum_with(right), std::overflow_error);
+    CHECK_EQ(left_root, left.debug_root_identity());
+    CHECK_EQ(right_root, right.debug_root_identity());
+    CHECK_EQ(std::numeric_limits<std::int32_t>::max(), left.count_of(1));
+    CHECK_EQ(1, right.count_of(1));
 }
 
 TEST(PatriciaMap_CachedCountsAndNoOpAlgebraPreserveRoots) {

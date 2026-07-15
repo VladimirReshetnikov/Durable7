@@ -4,6 +4,7 @@
 #include <array>
 #include <bit>
 #include <cassert>
+#include <concepts>
 #include <cstdint>
 #include <exception>
 #include <functional>
@@ -78,6 +79,7 @@ private:
     struct entry_run_view;
     struct diff_operand;
     struct policy_identity final {};
+    struct no_update_factory final {};
 
     using node_ptr = std::shared_ptr<const node>;
     using hash_node_ptr = std::shared_ptr<const hash_node>;
@@ -92,6 +94,8 @@ private:
     using mutable_node_ptr = std::unique_ptr<mutable_node>;
     using mutable_hash_node_ptr = std::unique_ptr<mutable_hash_node>;
     using mutable_leaf_node_ptr = std::unique_ptr<mutable_leaf_node>;
+
+    using bulk_update_function = std::function<T(const T&, const T&)>;
 
 public:
     using key_type = Key;
@@ -191,11 +195,73 @@ public:
             }
 
             bool added = false;
-            auto* const root = root_.get();
-            root_ = root->set(std::move(root_), key, value, hash, 0, key_equal_, value_equal_, added);
+            if (auto replacement = root_->set(
+                key,
+                value,
+                hash,
+                0,
+                key_equal_,
+                value_equal_,
+                nullptr,
+                nullptr,
+                added)) {
+                root_ = std::move(replacement);
+            }
             if (added) {
                 ++count_;
             }
+        }
+
+        // Adds `add_value` for a missing key or combines it with the stored
+        // value for a hit. The update callable is validated before hashing,
+        // the key is hashed once, and exactly one equal-hash path is scanned.
+        // The first equivalent key and any value-equal stored representative
+        // are retained. This is construction-only staging: snapshots returned
+        // by `to_immutable` remain detached from later builder mutations.
+        template <class UpdateFactory>
+            requires std::invocable<UpdateFactory&, const T&, const T&>
+                && std::convertible_to<
+                    std::invoke_result_t<UpdateFactory&, const T&, const T&>,
+                    T>
+        T add_or_update(
+            const Key& key,
+            const T& add_value,
+            UpdateFactory&& update_factory) {
+            bulk_update_function update(std::forward<UpdateFactory>(update_factory));
+            if (!update) {
+                throw std::invalid_argument(
+                    "The bulk_builder update factory must not be empty.");
+            }
+
+            const auto hash = static_cast<std::uint32_t>(std::invoke(hash_, key));
+            if (!root_) {
+                root_ = std::make_unique<mutable_leaf_node>(hash, key, add_value);
+                count_ = 1;
+                return add_value;
+            }
+
+            auto selected = std::optional<T>{};
+            bool added = false;
+            if (auto replacement = root_->set(
+                key,
+                add_value,
+                hash,
+                0,
+                key_equal_,
+                value_equal_,
+                std::addressof(update),
+                std::addressof(selected),
+                added)) {
+                root_ = std::move(replacement);
+            }
+            if (added) {
+                ++count_;
+            }
+            if (!selected) {
+                throw std::logic_error(
+                    "The bulk_builder update path did not select a value.");
+            }
+            return std::move(*selected);
         }
 
         [[nodiscard]] persistent_hash_map to_immutable() const {
@@ -376,6 +442,42 @@ public:
                 policy_identity_),
             true,
         };
+    }
+
+    // Returns the current map and its stored value on a hit, or invokes the
+    // add factory exactly once and returns the resulting successor on a miss.
+    // Callable validation precedes hashing even when the key is present.
+    template <class AddFactory>
+        requires std::invocable<AddFactory&, const Key&>
+            && std::convertible_to<std::invoke_result_t<AddFactory&, const Key&>, T>
+    [[nodiscard]] std::pair<persistent_hash_map, T> get_or_add(
+        const Key& key,
+        AddFactory&& add_factory) const {
+        validate_callable(add_factory, "The add factory must not be empty.");
+        return apply_factory_update(
+            key,
+            add_factory,
+            static_cast<no_update_factory*>(nullptr));
+    }
+
+    // Selects exactly one factory in one hashed trie descent. On a hit the
+    // update factory receives the caller's lookup key and the stored value;
+    // the stored key representative is retained. A value-equal update keeps
+    // and returns the stored value representative and shares the current root.
+    template <class AddFactory, class UpdateFactory>
+        requires std::invocable<AddFactory&, const Key&>
+            && std::convertible_to<std::invoke_result_t<AddFactory&, const Key&>, T>
+            && std::invocable<UpdateFactory&, const Key&, const T&>
+            && std::convertible_to<
+                std::invoke_result_t<UpdateFactory&, const Key&, const T&>,
+                T>
+    [[nodiscard]] std::pair<persistent_hash_map, T> add_or_update(
+        const Key& key,
+        AddFactory&& add_factory,
+        UpdateFactory&& update_factory) const {
+        validate_callable(add_factory, "The add factory must not be empty.");
+        validate_callable(update_factory, "The update factory must not be empty.");
+        return apply_factory_update(key, add_factory, std::addressof(update_factory));
     }
 
     template <class Range>
@@ -1599,6 +1701,296 @@ private:
         size_type count_;
     };
 
+    struct factory_update_result {
+        node_ptr root;
+        bool added;
+        T selected;
+    };
+
+    struct factory_value_selection {
+        std::optional<T> replacement;
+        T selected;
+    };
+
+    template <class Callable>
+    static void validate_callable(const Callable& callable, const char* message) {
+        using callable_type = std::remove_cvref_t<Callable>;
+        if constexpr (std::is_pointer_v<callable_type>
+            || std::is_member_pointer_v<callable_type>) {
+            if (callable == nullptr) {
+                throw std::invalid_argument(message);
+            }
+        } else if constexpr (requires(const callable_type& candidate) {
+            candidate.operator bool();
+        }) {
+            if (!callable.operator bool()) {
+                throw std::invalid_argument(message);
+            }
+        }
+    }
+
+    template <class UpdateFactory>
+    static factory_value_selection select_factory_value(
+        const Key& lookup_key,
+        const T& stored,
+        const ValueEqual& values_equal,
+        UpdateFactory* update_factory) {
+        if constexpr (std::same_as<
+                          std::remove_cv_t<UpdateFactory>,
+                          no_update_factory>) {
+            (void)lookup_key;
+            (void)values_equal;
+            (void)update_factory;
+            return {std::nullopt, stored};
+        } else {
+            assert(update_factory != nullptr);
+            auto selected = T(std::invoke(*update_factory, lookup_key, stored));
+            if (values_equal_by_policy(stored, selected, values_equal)) {
+                return {std::nullopt, stored};
+            }
+
+            return {std::optional<T>(selected), std::move(selected)};
+        }
+    }
+
+    template <class AddFactory, class UpdateFactory>
+    [[nodiscard]] std::pair<persistent_hash_map, T> apply_factory_update(
+        const Key& key,
+        AddFactory& add_factory,
+        UpdateFactory* update_factory) const {
+        const auto hash = get_hash(key);
+        if (!root_) {
+            auto selected = T(std::invoke(add_factory, key));
+            return {
+                persistent_hash_map(
+                    make_leaf(hash, key, selected),
+                    1,
+                    hash_,
+                    key_equal_,
+                    value_equal_,
+                    policy_identity_),
+                std::move(selected),
+            };
+        }
+
+        auto result = factory_update_node(
+            root_,
+            key,
+            hash,
+            0,
+            key_equal_,
+            value_equal_,
+            add_factory,
+            update_factory);
+        if (result.root.get() == root_.get()) {
+            return {*this, std::move(result.selected)};
+        }
+
+        if (result.added && count_ == std::numeric_limits<size_type>::max()) {
+            throw std::length_error("persistent_hash_map count overflow");
+        }
+
+        return {
+            persistent_hash_map(
+                std::move(result.root),
+                count_ + (result.added ? 1u : 0u),
+                hash_,
+                key_equal_,
+                value_equal_,
+                policy_identity_),
+            std::move(result.selected),
+        };
+    }
+
+    template <class AddFactory, class UpdateFactory>
+    static factory_update_result factory_update_node(
+        const node_ptr& current,
+        const Key& key,
+        std::uint32_t hash,
+        int shift,
+        const KeyEqual& equal,
+        const ValueEqual& values_equal,
+        AddFactory& add_factory,
+        UpdateFactory* update_factory) {
+        if (current->kind() != persistent_hamt_node_kind::bitmap_indexed) {
+            return factory_update_hash_node(
+                std::static_pointer_cast<const hash_node>(current),
+                key,
+                hash,
+                shift,
+                equal,
+                values_equal,
+                add_factory,
+                update_factory);
+        }
+
+        const auto branch = std::static_pointer_cast<const bitmap_indexed_node>(current);
+        const auto selected_bit = bit(index(hash, shift));
+        if ((branch->data_map_ & selected_bit) != 0) {
+            const auto data_slot = slot(branch->data_map_, selected_bit);
+            const auto& existing = branch->data_[data_slot];
+            if (existing.hash == hash && std::invoke(equal, existing.entry.first, key)) {
+                auto selection = select_factory_value(
+                    key, existing.entry.second, values_equal, update_factory);
+                if (!selection.replacement) {
+                    return {current, false, std::move(selection.selected)};
+                }
+
+                auto data = branch->data_;
+                data[data_slot] = payload{
+                    existing.hash,
+                    value_type(existing.entry.first, *selection.replacement)};
+                return {
+                    std::make_shared<bitmap_indexed_node>(
+                        branch->data_map_,
+                        branch->node_map_,
+                        std::move(data),
+                        branch->children_),
+                    false,
+                    std::move(selection.selected),
+                };
+            }
+
+            auto selected = T(std::invoke(add_factory, key));
+            auto child = merge_hash_nodes(
+                make_leaf(existing.hash, existing.entry.first, existing.entry.second),
+                make_leaf(hash, key, selected),
+                shift + bits_per_level);
+            auto data = branch->data_;
+            data.erase(data.begin() + static_cast<std::ptrdiff_t>(data_slot));
+            auto children = branch->children_;
+            children.insert(
+                children.begin()
+                    + static_cast<std::ptrdiff_t>(slot(branch->node_map_, selected_bit)),
+                std::move(child));
+            return {
+                std::make_shared<bitmap_indexed_node>(
+                    branch->data_map_ & ~selected_bit,
+                    branch->node_map_ | selected_bit,
+                    std::move(data),
+                    std::move(children)),
+                true,
+                std::move(selected),
+            };
+        }
+
+        if ((branch->node_map_ & selected_bit) != 0) {
+            const auto child_slot = slot(branch->node_map_, selected_bit);
+            auto result = factory_update_node(
+                branch->children_[child_slot],
+                key,
+                hash,
+                shift + bits_per_level,
+                equal,
+                values_equal,
+                add_factory,
+                update_factory);
+            if (result.root.get() == branch->children_[child_slot].get()) {
+                result.root = current;
+                return result;
+            }
+
+            auto children = branch->children_;
+            children[child_slot] = std::move(result.root);
+            result.root = std::make_shared<bitmap_indexed_node>(
+                branch->data_map_, branch->node_map_, branch->data_, std::move(children));
+            return result;
+        }
+
+        auto selected = T(std::invoke(add_factory, key));
+        auto data = branch->data_;
+        data.insert(
+            data.begin()
+                + static_cast<std::ptrdiff_t>(slot(branch->data_map_, selected_bit)),
+            payload{hash, value_type(key, selected)});
+        return {
+            std::make_shared<bitmap_indexed_node>(
+                branch->data_map_ | selected_bit,
+                branch->node_map_,
+                std::move(data),
+                branch->children_),
+            true,
+            std::move(selected),
+        };
+    }
+
+    template <class AddFactory, class UpdateFactory>
+    static factory_update_result factory_update_hash_node(
+        const hash_node_ptr& current,
+        const Key& key,
+        std::uint32_t hash,
+        int shift,
+        const KeyEqual& equal,
+        const ValueEqual& values_equal,
+        AddFactory& add_factory,
+        UpdateFactory* update_factory) {
+        if (current->hash_ != hash) {
+            auto selected = T(std::invoke(add_factory, key));
+            return {
+                merge_hash_nodes(current, make_leaf(hash, key, selected), shift),
+                true,
+                std::move(selected),
+            };
+        }
+
+        if (current->kind() == persistent_hamt_node_kind::leaf) {
+            const auto leaf = std::static_pointer_cast<const leaf_node>(current);
+            if (std::invoke(equal, leaf->entry_.first, key)) {
+                auto selection = select_factory_value(
+                    key, leaf->entry_.second, values_equal, update_factory);
+                if (!selection.replacement) {
+                    return {current, false, std::move(selection.selected)};
+                }
+
+                return {
+                    make_leaf(hash, leaf->entry_.first, *selection.replacement),
+                    false,
+                    std::move(selection.selected),
+                };
+            }
+
+            auto selected = T(std::invoke(add_factory, key));
+            return {
+                collision_node::create(leaf, make_leaf(hash, key, selected)),
+                true,
+                std::move(selected),
+            };
+        }
+
+        const auto collision = std::static_pointer_cast<const collision_node>(current);
+        for (auto index_value = std::size_t{0};
+             index_value < collision->entries_.size();
+             ++index_value) {
+            const auto& existing = collision->entries_[index_value];
+            if (!std::invoke(equal, existing.first, key)) {
+                continue;
+            }
+
+            auto selection = select_factory_value(
+                key, existing.second, values_equal, update_factory);
+            if (!selection.replacement) {
+                return {current, false, std::move(selection.selected)};
+            }
+
+            auto entries = collision->entries_;
+            entries[index_value] = value_type(existing.first, *selection.replacement);
+            return {
+                std::make_shared<collision_node>(hash, std::move(entries)),
+                false,
+                std::move(selection.selected),
+            };
+        }
+
+        auto selected = T(std::invoke(add_factory, key));
+        auto entries = collision->entries_;
+        entries.emplace_back(key, selected);
+        return {
+            std::make_shared<collision_node>(hash, std::move(entries)),
+            true,
+            std::move(selected),
+        };
+    }
+
     struct entry_run_view {
         std::uint32_t hash;
         const value_type* single;
@@ -2014,22 +2406,66 @@ private:
         return false;
     }
 
+    static std::optional<T> select_bulk_replacement(
+        const T& stored,
+        const T& add_value,
+        const ValueEqual& values_equal,
+        const bulk_update_function* update,
+        std::optional<T>* selected) {
+        if (update == nullptr) {
+            if (values_equal_by_policy(stored, add_value, values_equal)) {
+                if (selected != nullptr) {
+                    selected->emplace(stored);
+                }
+                return std::nullopt;
+            }
+            if (selected != nullptr) {
+                selected->emplace(add_value);
+            }
+            return T(add_value);
+        }
+
+        auto candidate = std::invoke(*update, stored, add_value);
+        if (values_equal_by_policy(stored, candidate, values_equal)) {
+            if (selected != nullptr) {
+                selected->emplace(stored);
+            }
+            return std::nullopt;
+        }
+
+        if (selected != nullptr) {
+            selected->emplace(candidate);
+        }
+        return candidate;
+    }
+
+    static void select_bulk_add_value(
+        const T& add_value,
+        std::optional<T>* selected) {
+        if (selected != nullptr) {
+            selected->emplace(add_value);
+        }
+    }
+
     // Unpublished bulk-builder nodes. They are uniquely owned by exactly one
     // builder, are mutated in place, and never escape: `freeze` copies a
     // subtree into detached persistent nodes.
     struct mutable_node {
         virtual ~mutable_node() = default;
 
-        // `self` must own `this`. The call either mutates in place and returns
-        // `self`, or consumes `self` into a replacement subtree.
+        // A null result means this node was updated in place; a non-null
+        // result is a replacement subtree that the caller publishes only
+        // after lookup/factory selection has succeeded. Callback and comparer
+        // failures therefore retain the builder's prior owning pointer.
         [[nodiscard]] virtual mutable_node_ptr set(
-            mutable_node_ptr self,
             const Key& key,
             const T& value,
             std::uint32_t hash,
             int shift,
             const KeyEqual& equal,
             const ValueEqual& values_equal,
+            const bulk_update_function* update,
+            std::optional<T>* selected,
             bool& added) = 0;
 
         [[nodiscard]] virtual node_ptr freeze() const = 0;
@@ -2050,26 +2486,34 @@ private:
         }
 
         [[nodiscard]] mutable_node_ptr set(
-            mutable_node_ptr self,
             const Key& key,
             const T& value,
             std::uint32_t hash,
             int shift,
             const KeyEqual& equal,
             const ValueEqual& values_equal,
+            const bulk_update_function* update,
+            std::optional<T>* selected,
             bool& added) override {
             if (this->hash_ == hash && std::invoke(equal, entry_.first, key)) {
                 added = false;
-                if (!values_equal_by_policy(entry_.second, value, values_equal)) {
-                    entry_.second = value;
+                if (auto replacement = select_bulk_replacement(
+                        entry_.second,
+                        value,
+                        values_equal,
+                        update,
+                        selected)) {
+                    entry_.second = std::move(*replacement);
                 }
 
-                return self;
+                return nullptr;
             }
 
+            select_bulk_add_value(value, selected);
             added = true;
             return merge_mutable_hash_nodes(
-                mutable_hash_node_ptr(static_cast<mutable_hash_node*>(self.release())),
+                std::make_unique<mutable_leaf_node>(
+                    this->hash_, entry_.first, entry_.second),
                 std::make_unique<mutable_leaf_node>(hash, key, value),
                 shift);
         }
@@ -2104,18 +2548,20 @@ private:
         }
 
         [[nodiscard]] mutable_node_ptr set(
-            mutable_node_ptr self,
             const Key& key,
             const T& value,
             std::uint32_t hash,
             int shift,
             const KeyEqual& equal,
             const ValueEqual& values_equal,
+            const bulk_update_function* update,
+            std::optional<T>* selected,
             bool& added) override {
             if (this->hash_ != hash) {
+                select_bulk_add_value(value, selected);
                 added = true;
                 return merge_mutable_hash_nodes(
-                    mutable_hash_node_ptr(static_cast<mutable_hash_node*>(self.release())),
+                    std::make_unique<mutable_collision_node>(this->hash_, entries_),
                     std::make_unique<mutable_leaf_node>(hash, key, value),
                     shift);
             }
@@ -2126,16 +2572,22 @@ private:
                 }
 
                 added = false;
-                if (!values_equal_by_policy(collision_entry.second, value, values_equal)) {
-                    collision_entry.second = value;
+                if (auto replacement = select_bulk_replacement(
+                        collision_entry.second,
+                        value,
+                        values_equal,
+                        update,
+                        selected)) {
+                    collision_entry.second = std::move(*replacement);
                 }
 
-                return self;
+                return nullptr;
             }
 
+            select_bulk_add_value(value, selected);
             entries_.emplace_back(key, value);
             added = true;
-            return self;
+            return nullptr;
         }
 
         [[nodiscard]] node_ptr freeze() const override {
@@ -2158,13 +2610,14 @@ private:
         }
 
         [[nodiscard]] mutable_node_ptr set(
-            mutable_node_ptr self,
             const Key& key,
             const T& value,
             std::uint32_t hash,
             int shift,
             const KeyEqual& equal,
             const ValueEqual& values_equal,
+            const bulk_update_function* update,
+            std::optional<T>* selected,
             bool& added) override {
             const auto selected_bit = bit(index(hash, shift));
             if ((data_map_ & selected_bit) != 0) {
@@ -2172,11 +2625,17 @@ private:
                 auto& existing = data_[data_slot];
                 if (existing.hash == hash && std::invoke(equal, existing.entry.first, key)) {
                     added = false;
-                    if (!values_equal_by_policy(existing.entry.second, value, values_equal)) {
-                        existing.entry.second = value;
+                    if (auto replacement = select_bulk_replacement(
+                            existing.entry.second,
+                            value,
+                            values_equal,
+                            update,
+                            selected)) {
+                        existing.entry.second = std::move(*replacement);
                     }
-                    return self;
+                    return nullptr;
                 }
+                select_bulk_add_value(value, selected);
                 auto child = merge_mutable_hash_nodes(
                     std::make_unique<mutable_leaf_node>(
                         existing.hash, existing.entry.first, existing.entry.second),
@@ -2189,30 +2648,33 @@ private:
                 data_map_ &= ~selected_bit;
                 node_map_ |= selected_bit;
                 added = true;
-                return self;
+                return nullptr;
             }
 
             if ((node_map_ & selected_bit) == 0) {
+                select_bulk_add_value(value, selected);
                 data_.insert(
                     data_.begin() + static_cast<std::ptrdiff_t>(slot(data_map_, selected_bit)),
                     payload{hash, value_type(key, value)});
                 data_map_ |= selected_bit;
                 added = true;
-                return self;
+                return nullptr;
             }
 
             const auto selected_slot = slot(node_map_, selected_bit);
-            auto* const child = children_[selected_slot].get();
-            children_[selected_slot] = child->set(
-                std::move(children_[selected_slot]),
+            if (auto replacement = children_[selected_slot]->set(
                 key,
                 value,
                 hash,
                 shift + bits_per_level,
                 equal,
                 values_equal,
-                added);
-            return self;
+                update,
+                selected,
+                added)) {
+                children_[selected_slot] = std::move(replacement);
+            }
+            return nullptr;
         }
 
         [[nodiscard]] node_ptr freeze() const override {

@@ -21,6 +21,11 @@ search path and any touched equal-hash collision bucket.
 `persistent_hash_map<T, unit, Hash, KeyEqual>`. It preserves the same hash/equality policy and
 structural-sharing behavior as the map.
 
+`persistent_hash_bag<T, Hash, KeyEqual>` is an immutable unordered multiset backed by
+`persistent_hash_map<T, std::int32_t, Hash, KeyEqual>`. It distinguishes the number of equivalence
+classes (`distinct_count`) from the expanded signed-64-bit occurrence count (`total_count`) and
+retains one representative per receiver-policy class.
+
 The port intentionally follows C++ value semantics rather than C# reference identity. No-op updates
 return a value that shares the same root node as the source; `shares_root_with` and the debug root
 inspection helpers expose that property for tests.
@@ -247,9 +252,14 @@ published values keep the ordinary concurrent-read contract.
   bulk construction. `set_item` mutates unpublished nodes in place with the map's duplicate rules
   (first stored key retained; value writes skipped when the incoming value compares equal under
   `ValueEqual`, so the earlier stored value is retained and the last distinct value wins).
+  `add_or_update(key, add_value, update_factory)` is the public construction-only combine hook: it
+  validates a nullable/empty callable before hashing, hashes once, scans one trie path and at most
+  one equal-hash bucket, invokes the update callable only on a hit with `(stored, incoming)`, and
+  retains stored key/value representatives when the selected value compares equal. Callback and
+  key/value-comparer failures occur before the owning root/count commit.
   `to_immutable()` freezes the current contents into a detached persistent map by copying every
   reachable node; the builder never shares mutable storage with frozen maps and stays usable for
-  further `set_item`/`to_immutable` rounds afterwards.
+  further staging/freeze rounds afterwards.
 - `create_transient(hash, equal, values_equal)` creates an empty move-only edit session;
   `to_transient()` adopts an existing value, and rvalue-only `persist()` publishes and consumes the
   session. Session point edits use the persistent path-copy kernel rather than the bulk builder.
@@ -258,6 +268,13 @@ published values keep the ordinary concurrent-read contract.
 - `add(key, value)` adds a key and throws `std::invalid_argument` when an equivalent key already
   exists.
 - `try_add(key, value)` returns `{map, added}` and rejects duplicate keys without throwing.
+- `get_or_add(key, add_factory)` returns `{map, selected_value}`. A hit shares the current root and
+  returns the stored value without invoking the factory; a miss invokes the factory exactly once
+  and stores the caller's key.
+- `add_or_update(key, add_factory, update_factory)` returns `{map, selected_value}`. It invokes
+  exactly one selected factory exactly once in one hashed descent. The update factory receives the
+  caller's lookup key and stored value; the stored key remains in the result. A `ValueEqual` result
+  retains and returns the stored value representative and shares the current root.
 - `remove(key)` removes a key if present and returns a root-sharing value when absent.
 - `try_remove(key)` returns `{map, removed, value}`.
 - `try_get(key)` returns a pointer to the stored value, or `nullptr` when absent.
@@ -279,6 +296,12 @@ published values keep the ordinary concurrent-read contract.
 When replacing an existing key, the originally stored key object inside the trie is retained. When
 the existing value compares equal under `ValueEqual`, the root is reused and the stored value object
 is retained.
+
+Both persistent factory callables are checked for a null function pointer or false-valued callable
+wrapper before the key is hashed, regardless of which branch would be selected. Hashing, key/value
+equality, either selected factory, copying, or allocation may throw; no successor is published and
+the immutable source remains unchanged. Each operation computes the lookup hash once and descends
+the trie once, including a single linear scan of an applicable full-hash collision bucket.
 
 Each map creation owns an internal policy-identity token that is copied into persistent descendants
 and builder snapshots. Algebra over one identity aligns CHAMP slots directly, uses cached subtree
@@ -307,6 +330,42 @@ Range `is_superset_of` and `overlaps` stream their argument and exit early.
 Set `create_range` and `intersect_with` assemble their result through the map bulk builder and
 freeze it once.
 
+## Hash Bag Contract
+
+- `empty`, `create`, and `create_range` construct bags. Range construction aggregates occurrences
+  in enumeration order through one reusable map builder and retains the first representative of
+  each equivalence class.
+- `distinct_count` is the number of equivalence classes; `total_count` is the expanded occurrence
+  count. There is deliberately no ambiguous `count` member.
+- `contains`, `count_of`, and `try_get_value` provide membership, multiplicity, and retained-
+  representative lookup.
+- `add`/`add_copies` and `remove`/`remove_copies` update a class persistently. Copy counts must be
+  in `[0, INT32_MAX]`; zero is an identity, removal saturates at zero, and an absent removal is an
+  identity. `remove_all` removes the complete class.
+- Per-class multiplicities are positive `std::int32_t` values. Addition that would exceed
+  `INT32_MAX` throws `std::overflow_error`; `total_count` addition is checked against `INT64_MAX`.
+  Validation or arithmetic failure leaves every source bag unchanged.
+- `union_with` chooses the maximum multiplicity, `intersect_with` chooses the minimum,
+  `except_with` performs saturating receiver-minus-argument subtraction, and `sum_with` performs
+  checked addition.
+- Algebra always uses the receiver's `Hash`/`KeyEqual` policy. An operand with a different internal
+  policy identity is eagerly normalized through a receiver-policy bulk builder before algebra.
+  Classes that collapse during normalization have their multiplicities checked and summed in
+  operand enumeration order; the first encountered operand representative is retained.
+- When a class already exists in the receiver, its representative wins. Argument representatives
+  are adopted only for newly introduced classes. Semantic no-ops share the receiver root; union and
+  intersection with self are identities, difference with self clears, and algebra with an empty
+  argument preserves the usual identity/annihilator laws.
+- Ordinary iteration expands occurrences. `distinct_items()` and `entries()` return owning views
+  over retained snapshots, and `to_vector()` checks `vector::max_size()` before materializing the
+  expanded sequence. `debug_validate_canonical()` checks the backing CHAMP shape, positive
+  multiplicities, checked multiplicity sum, and cached total agreement.
+
+Bag enumeration follows the backing map's stable trie order rather than insertion or sorted order.
+Equivalent representatives therefore follow receiver/operand precedence, not lexical order. The
+bag is an immutable value safe for concurrent reads under the same policy-object lifetime and
+thread-safety assumptions as the map.
+
 ## Complexity
 
 Let `w` be the hash width used by the port (32 bits), `b` be the branch factor (32), and `c` be the
@@ -314,6 +373,8 @@ length of an equal-hash collision bucket.
 
 - Lookup, insert, replace, and remove: O(w / log2(b) + c), effectively bounded by seven trie levels
   plus collision-bucket scan for 32-bit hashes.
+- `get_or_add` / `add_or_update`: the same O(w / log2(b) + c) bound, with one hash, one descent,
+  and one selected factory invocation (or none for a `get_or_add` hit).
 - Enumeration: O(n) time with at most seven inline branch frames.
 - Same-identity map equality and diff: O(v + r + Σ cᵢ²), where `v` is the unmatched canonical trie
   region visited after pointer-identical descendant pruning, `r` is the number of reported
@@ -324,7 +385,8 @@ length of an equal-hash collision bucket.
 - Map `create_range` / set `create_range` / set `intersect_with`: O(n * (w / log2(b) + c)) through
   the bulk builder. A mutable unpublished trie is updated in place and frozen once, avoiding
   persistent path copies between successive input entries.
-- Bulk builder `set_item`: O(w / log2(b) + c) with in-place mutation of unpublished nodes;
+- Bulk builder `set_item` / `add_or_update`: O(w / log2(b) + c) with in-place mutation of
+  unpublished nodes;
   `to_immutable`: O(n) node copies producing a detached persistent trie.
 - Edit-session adoption/publication: O(1) trie work and no trie traversal; copying or moving custom
   policy objects has the cost defined by those objects. Session lookup and point edits have the
@@ -334,6 +396,10 @@ length of an equal-hash collision bucket.
   one O(1) generation check per iterator operation.
 - Set algebra implemented from public operations: O((n + m) * update-cost) unless the operation
   only probes membership.
+- Bag point edits have map point-operation complexity. Same-policy bag algebra is O((n + m) *
+  update-cost) in the current facade; different-policy algebra additionally performs one O(m *
+  update-cost) eager normalization and O(m) total-count accounting. Expanded iteration and
+  `to_vector` are O(`total_count`), while distinct/entry views are O(`distinct_count`).
 
 For a Merkle tree, let `h` be its height (at most 65), `e` the number of separators in a visited
 wide block, and `r` the number of reported entries. Lookup performs binary search in each visited

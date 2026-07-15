@@ -24,8 +24,8 @@ public `include/Tools` subtree into `build/<Configuration>/package/include`, and
 
 The third program is an installed-header closure gate: it prevents the aggregate/public CHAMP and
 Merkle surfaces from accidentally depending on source-tree-relative files or undeclared transitive
-includes. It instantiates map/set transients through publication as well as the Merkle persistence
-surface. All three programs link Windows CNG through `bcrypt.lib` because the public SHA-256
+includes. It instantiates map factories, the hash bag, map/set transients through publication, and
+the Merkle persistence surface. All three programs link Windows CNG through `bcrypt.lib` because the public SHA-256
 implementation selects CNG on Windows. Non-Windows consumers link OpenSSL Crypto.
 
 The script uses these project-level compiler gates:
@@ -70,7 +70,8 @@ Typical direct GCC/MinGW Merkle lane (repeat for the existing HAMT suite and cop
 ```powershell
 New-Item -ItemType Directory -Force build\portable | Out-Null
 g++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -Iinclude tests\merkle_search_tree_tests.cpp `
-    -lbcrypt -o build\portable\merkle_search_tree_tests_gcc.exe
+    -I..\..\test_support\include -lbcrypt `
+    -o build\portable\merkle_search_tree_tests_gcc.exe
 .\build\portable\merkle_search_tree_tests_gcc.exe
 ```
 
@@ -80,7 +81,7 @@ Typical Clang lane on Windows, using the Visual Studio developer environment for
 $vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
 $clangxx = "C:\Program Files\LLVM\bin\clang++.exe"
 
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$clangxx"" -std=c++20 -Wall -Wextra -Wpedantic -Werror -Iinclude tests\merkle_search_tree_tests.cpp bcrypt.lib -o build\portable\merkle_search_tree_tests_clang.exe && build\portable\merkle_search_tree_tests_clang.exe"
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$clangxx"" -std=c++20 -Wall -Wextra -Wpedantic -Werror -Iinclude -I..\..\test_support\include tests\merkle_search_tree_tests.cpp -lbcrypt -o build\portable\merkle_search_tree_tests_clang.exe && build\portable\merkle_search_tree_tests_clang.exe"
 ```
 
 ## Portable Sanitizer Check
@@ -125,7 +126,15 @@ The suite covers:
 - bulk-builder construction: freeze isolation across later builder mutations, first-key and
   equal-value retention for duplicates, final-hash-level branching, a collision-heavy randomized
   build checked against persistent updates, and builder-backed `create_range`/`intersect_with`
-  semantics.
+  semantics; combine-on-duplicate staging additionally covers one-path selection, retained
+  representatives, detached snapshots, and callback/comparer failure atomicity;
+- one-descent persistent map factories: validation before hashing, exactly one selected add/update
+  branch, caller-key delivery, one hash and one collision-bucket scan, retained key/value
+  representatives, no-op sharing, and factory failure atomicity;
+- persistent hash bags: range aggregation, 32-bit multiplicity and 64-bit total accounting,
+  expanded/distinct/entry enumeration, point-edit identities and validation, overflow atomicity,
+  maximum/minimum/saturating/additive algebra, receiver-policy normalization, and representative
+  precedence;
 - move-only CHAMP map/set edit sessions: empty and retained-value adoption, clean/no-op root and
   policy preservation, stored representatives, point edits and clear, source isolation, active
   lookup and materialization, and rvalue-only one-way publication;
@@ -173,9 +182,10 @@ The Merkle suite covers:
 - concurrent store publication, load, proof verification, and sync reads.
 
 The copied-header consumer includes the installed aggregate header without source-tree include
-paths, instantiates map/set edit sessions and publication, pins the one-entry golden root, and
-instantiates export/save/load, proof verification, and merge. This verifies public include closure
-and the required crypto link independently from the full native suite.
+paths, instantiates a map factory update, hash-bag construction/algebra, map/set edit sessions and
+publication, pins the one-entry golden root, and instantiates export/save/load, proof verification,
+and merge. This verifies public include closure and the required crypto link independently from the
+full native suite.
 
 For new behavior, prefer adding deterministic model checks here before relying on example-only coverage.
 

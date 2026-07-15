@@ -12,6 +12,7 @@ content-addressed ordered-map cores:
 
 - `tools::data_structures::hamt::persistent_hash_map<Key, T, Hash, KeyEqual, ValueEqual>`
 - `tools::data_structures::hamt::persistent_hash_set<T, Hash, KeyEqual>`
+- `tools::data_structures::hamt::persistent_hash_bag<T, Hash, KeyEqual>`
 - `persistent_int_map<T>` / `persistent_long_map<T>` and the corresponding explicit-width
   `persistent_int_set` / `persistent_long_set` types.
 - `merkle_search_tree<K, V>`, `merkle_search_tree_policy<K, V>`, canonical codecs, and exact
@@ -23,9 +24,14 @@ per trie level, canonical CHAMP branches with separate data/node maps, compact i
 child-only vectors, immutable equal-hash collision buckets, custom
 hash/equality policy objects, structural sharing across versions, first equivalent key/item
 retention, no-op root reuse, cached subtree cardinalities, and slot-aligned structural map/set
-algebra that prunes pointer-identical subtries. A construction-only `bulk_builder` mutates
-unpublished nodes in place and freezes them into detached persistent maps; `create_range` and set
-intersection build through it. Separately, both CHAMP facades expose move-only, one-way
+algebra that prunes pointer-identical subtries. Maps additionally provide one-hash, one-descent
+`get_or_add` and `add_or_update` factory updates that select exactly one callable and retain stored
+key/value representatives on semantic no-ops. A construction-only `bulk_builder` mutates
+unpublished nodes in place, supports checked combine-on-duplicate staging, and freezes into
+detached persistent maps; `create_range`, hash-bag aggregation/normalization, and set intersection
+build through it. `persistent_hash_bag` adds checked 32-bit per-class multiplicities, a 64-bit
+expanded total, receiver-policy union/intersection/difference/sum, and expanded/distinct/entry
+enumeration. Separately, the map and set CHAMP facades expose move-only, one-way
 `transient` editing sessions through `create_transient` and `to_transient`. Clean and logical-no-op
 sessions publish the original shared root; real point edits deliberately call the immutable
 path-copy operations, so this lifecycle surface makes no owner-token mutation or throughput claim.
@@ -63,6 +69,8 @@ three-way merge extend that core without weakening move-only key/value support.
   implementation, construction builder, and move-only edit session.
 - `include/Tools/DataStructures/Hamt/persistent_hash_set.hpp` contains the set wrapper and set
   algebra plus its map-backed edit session.
+- `include/Tools/DataStructures/Hamt/persistent_hash_bag.hpp` contains the immutable unordered
+  multiset, checked multiplicity operations, receiver-policy algebra, and enumeration views.
 - `include/Tools/DataStructures/Hamt/persistent_int_map.hpp` contains both widths of Patricia maps
   and sets.
 - `include/Tools/DataStructures/Hamt/merkle_encoding.hpp` contains SHA-256 digests, strict canonical

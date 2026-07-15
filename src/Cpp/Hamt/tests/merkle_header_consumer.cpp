@@ -28,12 +28,18 @@ int main()
 
     const auto champ_source = persistent_hash_map<std::int32_t, std::string>::empty()
         .set_item(1, "one");
+    const auto [champ_factory, champ_selected] = champ_source.add_or_update(
+        1,
+        [](const std::int32_t&) { return std::string("missing"); },
+        [](const std::int32_t&, const std::string& stored) { return stored + "!"; });
     auto champ_edit = champ_source.to_transient();
     champ_edit.set_item(2, "two");
     const auto champ_published = std::move(champ_edit).persist();
     auto set_edit = persistent_hash_set<std::int32_t>::create_transient();
     const auto set_added = set_edit.add(7);
     const auto set_published = std::move(set_edit).persist();
+    const auto bag = persistent_hash_bag<std::int32_t>::create_range({1, 1, 2})
+        .sum_with(persistent_hash_bag<std::int32_t>::create_range({2, 3}));
 
     const auto policy = merkle_search_tree_policy<
         std::int32_t,
@@ -58,8 +64,14 @@ int main()
             && champ_published.count() == 2
             && champ_published.at(1) == "one"
             && champ_published.at(2) == "two"
+            && champ_factory.at(1) == "one!"
+            && champ_selected == "one!"
             && set_added
             && set_published.contains(7)
+            && bag.distinct_count() == 3
+            && bag.total_count() == 5
+            && bag.count_of(1) == 2
+            && bag.count_of(2) == 2
             && populated.at(42) == std::optional<std::string>{"forty-two"}
             && statistics.count == 1
             && pack.block_count() == 1

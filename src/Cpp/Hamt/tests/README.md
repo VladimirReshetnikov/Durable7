@@ -64,6 +64,17 @@ The executable registers these cases:
 - `BulkBuilder_DeepPrefixKeysBranchAtFinalHashLevel`
 - `BulkBuilder_RandomizedBuildMatchesPersistentUpdates`
 - `BulkBuilder_CreateRangeAndIntersectionUseBuilderSemantics`
+- `PersistentMap_FactoryUpdatesValidateBeforeHashAndSelectExactlyOneBranch`
+- `PersistentMap_FactoryUpdatesRetainStoredKeyAndValueRepresentatives`
+- `PersistentMap_FactoryUpdatesScanOneCollisionPathAndAreFailureAtomic`
+- `PersistentMap_BulkBuilderCombinesInOnePathAndKeepsDetachedSnapshots`
+- `PersistentMap_BulkBuilderValidatesBeforeOneHashAndSelectsOneBranch`
+- `PersistentMap_BulkBuilderCallbackAndComparerFailuresRetainState`
+- `PersistentHashBag_AggregatesCountsRetainsRepresentativesAndEnumeratesViews`
+- `PersistentHashBag_PointEditsValidateAndPreserveNoOpIdentity`
+- `PersistentHashBag_AlgebraUsesMultisetCountsAndSharesIdentities`
+- `PersistentHashBag_NormalizesArgumentToReceiverPolicyAndKeepsPrecedence`
+- `PersistentHashBag_CheckedSumFailureLeavesBothOperandsUnchanged`
 - `TransientMap_CleanAndLogicalNoOpPublicationRetainSourceIdentity`
 - `TransientMap_PointEditsPreserveRepresentativesAndVersionBoundIteration`
 - `TransientMap_MoveTransferAndOverwriteHaveDeterministicLifecycles`
@@ -88,6 +99,14 @@ the first native session uses the persistent update kernel. Candidate failures o
 non-throwing root/count commit, so the injected failure also checks generation/iterator stability.
 Set relations cover receiver-policy case folding, duplicate range members, persistent-set and range
 overloads, iterator stability, and consumed-session failures including empty probes.
+
+The map-factory groups instrument hash/equality/factory calls across ordinary and equal-hash
+collision paths, enforce validation before hashing and one selected branch, and check immutable
+failure atomicity plus stored key/value representative retention. The public builder-combiner groups
+cover construction-only aggregation, equal-value no-ops, detached repeated freezes, and recovery
+after updater or key-comparer exceptions. The bag groups lock range aggregation, expanded/distinct/
+entry views, checked point edits, multiplicity algebra and identities, eager receiver-policy
+normalization, receiver/argument representative precedence, and overflow without source changes.
 
 ## Merkle Core, Wire, And Persistence Coverage
 
@@ -140,8 +159,9 @@ proof expansion/tampering, iterative sync, present-null/no-partial merge, move-o
 concurrent store/load/proof/sync.
 
 `merkle_header_consumer.cpp` includes the aggregate header from the copied package tree, instantiates
-map/set edit sessions through one-way publication, creates and validates the one-entry golden tree,
-then instantiates export/save/load, proof verification, and merge. It is an independent
+a one-descent map factory update, hash-bag aggregation/algebra, map/set edit sessions through one-way
+publication, creates and validates the one-entry golden tree, then instantiates export/save/load,
+proof verification, and merge. It is an independent
 public-header closure and crypto-link gate, not a replacement for the model suite.
 
 ## Build And Run
