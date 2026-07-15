@@ -163,6 +163,47 @@ language-local API notes document ownership, failure/result, presence-safe looku
 mappings. The [completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md)
 indexes every port.
 
+### Persistent bidirectional maps
+
+`PersistentBiMap` and its language-local counterparts ship across all eight languages as strict
+immutable bijections over two CHAMP maps. Their shared semantic contract is:
+
+- key and value hash/equality policies are independent retained objects; every successor,
+  including empty and inverse views, preserves the corresponding policies;
+- each policy equivalence class appears at most once in its domain, both maps have the same count,
+  and every forward entry has exactly one equivalent inverse entry and vice versa;
+- strict add rejects an occupied key class or value class even when the complete pair is equivalent
+  and checks the key domain first. Nonthrowing insertion returns an unchanged/root-sharing source;
+  APIs with a domain-bearing result report key conflict before value conflict, while C# deliberately
+  exposes only its established boolean `TryAdd` shape;
+- set adds a missing free pair, treats a configured-value-policy-equivalent update as a no-op that
+  retains both representatives, replaces a present key only with a free value class, and never
+  displaces another key;
+- replacement removes and reinserts both directions rather than relying on the ordinary map value-
+  equality shortcut, which may use a different policy;
+- removal through either domain deletes the same pair and returns or reports the opposite stored
+  representative with an explicit presence discriminator for null-like values;
+- clear preserves both policies and is a semantic no-op on an already empty value; forward
+  enumeration follows stable-for-one-version, otherwise unspecified CHAMP order;
+- inverse is O(1) in pair count and enumerates no entries. Reference-semantic ports cache reciprocal
+  facade objects; value-semantic ports guarantee that double inversion shares the same two roots;
+- callback, comparison, cloning, or allocation failure publishes no one-sided successor and leaves
+  the source valid; and
+- the honest storage model is approximately two map entries per logical pair. No port exposes
+  algebra, a builder, a transient/edit session, or a displacing force-put operation.
+
+C's explicit handle model adds two ownership rules: callback contexts outlive every related bimap,
+and opposite representatives returned by a non-aliased removal borrow the source snapshot. C handle
+reference counts are non-atomic, so retaining/destroying a shared lineage is serialized even though
+already-retained snapshots support concurrent reads. Rust uses lawful `Eq`/`Hash` plus independent
+`BuildHasher` states rather than arbitrary equality callbacks. These mappings preserve the same
+two-domain contract without pretending the APIs have identical identity or ownership mechanics.
+
+The cross-language entry-point matrix is in the
+[data-structure catalog](data-structure-catalog.md#persistent-bidirectional-map), and the detailed
+shipment evidence is in the
+[PersistentBiMap completion audit](../reviews/persistent-bimap-cross-language-completion-2026-07-15.md).
+
 ### Construction-only HAMT bulk builders
 
 C# bulk construction uses an internal mutable unpublished CHAMP builder. C++ and Rust expose the

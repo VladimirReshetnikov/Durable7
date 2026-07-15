@@ -121,12 +121,12 @@ contract.
 | Workspace | Role | Main entry points | Local docs |
 | --- | --- | --- | --- |
 | [C# Numerics](../../src/CSharp/docs/Numerics/overview.md) | Managed fixed-width and sparse integer numerics library | `DataStructures.sln`, `src/Tools.Numerics/`, `tests/Tools.Numerics.Tests/` | [`docs`](../../src/CSharp/docs/Numerics/README.md) |
-| [C# HAMT](../../src/CSharp/docs/Hamt/overview.md) | Canonical managed persistent hash map, set, and multiplicity-bag library | `DataStructures.sln`, `src/Tools.DataStructures.Hamt/`, `tests/Tools.DataStructures.Hamt.Tests/` | [`docs`](../../src/CSharp/docs/Hamt/README.md) |
-| [`src/C/Hamt`](../../src/C/Hamt/README.md) | C17 HAMT/Patricia port and complete type-erased wire-compatible Merkle search tree | `include/Tools/DataStructures/Hamt/*.h`, `build.ps1` | [`docs`](../../src/C/Hamt/docs/README.md), [Merkle guide](../../src/C/Hamt/docs/merkle-search-tree.md) |
-| [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | C++20 HAMT/Patricia port and complete wire-compatible Merkle search tree | `include/Tools/DataStructures/Hamt/*.hpp`, `build.ps1` | [`docs`](../../src/Cpp/Hamt/docs/README.md), [Merkle core](../../src/Cpp/Hamt/docs/merkle-search-tree.md), [persistence](../../src/Cpp/Hamt/docs/merkle-persistence.md) |
-| [`src/Haskell/Hamt`](../../src/Haskell/Hamt/README.md) | Haskell HAMT/Patricia port and complete pure wire-compatible Merkle search tree | `tools-data-structures-hamt.cabal`, `src/Data/Structures/Hamt/` | [`README`](../../src/Haskell/Hamt/README.md), [Merkle guide](../../src/Haskell/Hamt/docs/merkle-search-tree.md) |
-| [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | Kotlin/JVM HAMT/Ctrie/Patricia port and complete wire-compatible Merkle search tree | `src/tools/datastructures/hamt/`, `test/tools/datastructures/hamt/` | [`docs`](../../src/Kotlin/Hamt/docs/README.md) |
-| [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | Rust HAMT/Patricia port and wire-compatible Merkle search tree | `Cargo.toml`, `src/lib.rs`, `src/merkle_search_tree.rs` | [`docs`](../../src/Rust/Hamt/docs/README.md) |
+| [C# HAMT](../../src/CSharp/docs/Hamt/overview.md) | Canonical managed persistent hash map/set, multiplicity bag, strict bimap, Ctrie, Patricia, and Merkle library | `DataStructures.sln`, `src/Tools.DataStructures.Hamt/`, `tests/Tools.DataStructures.Hamt.Tests/` | [`docs`](../../src/CSharp/docs/Hamt/README.md) |
+| [`src/C/Hamt`](../../src/C/Hamt/README.md) | C17 HAMT/bag/bimap/Patricia port and complete type-erased wire-compatible Merkle search tree | `include/Tools/DataStructures/Hamt/*.h`, `build.ps1` | [`docs`](../../src/C/Hamt/docs/README.md), [Merkle guide](../../src/C/Hamt/docs/merkle-search-tree.md) |
+| [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | C++20 HAMT/bag/bimap/Patricia port and complete wire-compatible Merkle search tree | `include/Tools/DataStructures/Hamt/*.hpp`, `build.ps1` | [`docs`](../../src/Cpp/Hamt/docs/README.md), [Merkle core](../../src/Cpp/Hamt/docs/merkle-search-tree.md), [persistence](../../src/Cpp/Hamt/docs/merkle-persistence.md) |
+| [`src/Haskell/Hamt`](../../src/Haskell/Hamt/README.md) | Haskell HAMT/bag/bimap/Patricia port and complete pure wire-compatible Merkle search tree | `tools-data-structures-hamt.cabal`, `src/Data/Structures/Hamt/` | [`README`](../../src/Haskell/Hamt/README.md), [Merkle guide](../../src/Haskell/Hamt/docs/merkle-search-tree.md) |
+| [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | Kotlin/JVM HAMT/bag/bimap/Ctrie/Patricia port and complete wire-compatible Merkle search tree | `src/tools/datastructures/hamt/`, `test/tools/datastructures/hamt/` | [`docs`](../../src/Kotlin/Hamt/docs/README.md) |
+| [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | Rust HAMT/bag/bimap/Patricia port and wire-compatible Merkle search tree | `Cargo.toml`, `src/lib.rs`, `src/merkle_search_tree.rs` | [`docs`](../../src/Rust/Hamt/docs/README.md) |
 | [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | Canonical managed persistent-sequence library: FingerTree family plus the independent implicit-AVL Range-update core | `DataStructures.sln`, `src/Tools.DataStructures.FingerTree/`, `tests/Tools.DataStructures.FingerTree.Tests/`, `samples/`, `benchmarks/` | [`docs`](../../src/CSharp/docs/FingerTree/README.md), [Range contract](../../src/CSharp/docs/FingerTree/range-update-sequence.md) |
 | [C# Ordered collections](../../src/CSharp/docs/Ordered/overview.md) | Independently owned neutral insertion/explicit-position ordered set with first-representative and receiver-policy algebra contracts over public CHAMP/FingerTree substrates | [`DataStructures.sln`](../../src/CSharp/DataStructures.sln), [project](../../src/CSharp/src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj), [tests](../../src/CSharp/tests/Tools.DataStructures.Ordered.Tests/README.md) | [`docs`](../../src/CSharp/docs/Ordered/README.md), [validation](../../src/CSharp/docs/Ordered/validation.md) |
 | [`src/C/Ordered`](../../src/C/Ordered/README.md) | Neutral type-erased C17 ordered-set port | `include/`, `src/`, `tests/`, `CMakePresets.json` | [API](../../src/C/Ordered/docs/api-specification.md), [validation](../../src/C/Ordered/docs/validation.md) |
@@ -172,10 +172,10 @@ HAMT lineage:
    `Arc` structural sharing, and ports the C# Merkle search tree through the exact `MST2` wire,
    bounded verified persistence, `MSP2` proofs, synchronization, and typed three-way merge.
 7. `src/TypeScript` ports the persistent/transient CHAMP, Patricia, and exact `MST2`/`MSP2`
-   contracts to strict ESM, with one-descent map factories, hash bag, reusable unpublished-node
+   contracts to strict ESM, with one-descent map factories, hash bag, strict bimap, reusable unpublished-node
    bulk construction, JavaScript-native policies, and isolate-local concurrency semantics.
 8. `src/Python` ports the same contracts to Python 3.11+ with runtime `HashPolicy`, path-copy
-   one-way sessions, one-descent map factories, hash bag, reusable unpublished-node bulk
+   one-way sessions, one-descent map factories, hash bag, strict bimap, reusable unpublished-node bulk
    construction, a lock-coordinated thread-safe facade over persistent roots, and exact
    byte-compatible Merkle persistence/proofs with all seven verification budgets.
 
@@ -224,8 +224,9 @@ Range-update lineage:
    errors, and both gates pass 1,417/1,417 tests. No benchmark was run; measurements remain
    postponed for isolation.
 
-For the surrounding benchmark-independent tranche, single-pass HAMT updates, `PersistentHashBag`,
-and `PersistentOrderedSet` now ship across all eight languages.
+For the surrounding benchmark-independent tranches, single-pass HAMT updates,
+`PersistentHashBag`, strict `PersistentBiMap`, and `PersistentOrderedSet` now ship across all eight
+languages.
 
 Ordered-set lineage:
 

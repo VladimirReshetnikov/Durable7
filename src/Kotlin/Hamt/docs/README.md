@@ -5,7 +5,7 @@
 - Audience: Maintainers and reviewers of the Kotlin HAMT workspace
 - Scope: Documentation index for `src/Kotlin/Hamt`
 
-The Kotlin HAMT workspace ports the repository persistent HAMT map/set/bag contract to idiomatic JVM
+The Kotlin HAMT workspace ports the repository persistent HAMT map/set/bag/bimap contract to idiomatic JVM
 values. Start here when reviewing Kotlin naming, runtime hash policies, immutable update behavior,
 one-descent map factories, multiset algebra, or dependency-free validation.
 

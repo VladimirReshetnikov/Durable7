@@ -6,6 +6,7 @@
 - Revised (UTC): 2026-07-14T21:14:47Z at faf53286375109fc598e40d5e6da7d1bff7e7415
 - Shipment update (UTC): 2026-07-15T04:33:18Z at c14dfb2e016cff001e0afe4ba30c139ba335786b
 - Cross-language completion (UTC): 2026-07-15 at d71c50e8163c5b12cab5881d9cc0191020ee9fe3
+- PersistentBiMap follow-through (UTC): 2026-07-15 at 6aca92e98e7507eb19326233421f364edcf6e36a
 - Audience: Maintainers selecting the next C# persistent-collection work after Axis 1 and the shipped Axis 2 tranches
 - Scope: Repository-wide plan/proposal audit, candidate disposition, detailed contracts and validation gates for the next C# data structures that do not depend on postponed benchmark evidence, and their required sibling-language follow-through
 
@@ -16,6 +17,12 @@
 > records source, tests, package wiring, dependency direction, review status, and serialized
 > validation evidence. Future-tense wording in the completed sections is retained as historical
 > implementation guidance, not current status.
+
+The proposal's reserve `PersistentBiMap` was subsequently promoted through its own contract pass
+and now ships in all eight languages. That later tranche is not one of the four surfaces selected by
+the historical decision below; its current contract and evidence live in the
+[PersistentBiMap completion audit](../reviews/persistent-bimap-cross-language-completion-2026-07-15.md).
+The value-carrying interval map remains a reserve candidate.
 
 ## Decision
 
@@ -116,9 +123,9 @@ facade were not shipped C# types. Execution Steps 1 and 2 subsequently shipped t
 `GetOrAdd`/`AddOrUpdate` kernel and `PersistentHashBag<T>`, Step 3 shipped the neutral C# Ordered
 project, and TypeScript/Python parity now covers all three surfaces. Step 4 now has C# source, tests,
 documentation, and green focused, project, and complete serialized Debug and Release solution
-gates. All seven sibling Range ports and the five initially outstanding Steps 1–3 ports have since shipped.
-`PersistentBiMap` and the value-carrying interval-map candidate remain unshipped until their own complete
-source/test/documentation tranches land.
+gates. All seven sibling Range ports and the five initially outstanding Steps 1–3 ports have since
+shipped. `PersistentBiMap` later completed its own eight-language source/test/documentation tranche;
+the value-carrying interval-map candidate remains unshipped.
 
 ## Current Baseline
 
@@ -1148,10 +1155,10 @@ FingerTree project passed **692/692** tests in both Debug and Release. Benchmark
 performance conclusion is drawn from this shipment, and measurement remains postponed until an
 isolated machine session.
 
-## Reserve Candidate: `PersistentBiMap<TKey, TValue>`
+## Historical Reserve Candidate: `PersistentBiMap<TKey, TValue>` — Subsequently Shipped
 
-This remains a Strong derived candidate and is implementable as two HAMTs, but its semantic matrix is
-larger than its representation suggests. Before implementation, decide:
+At proposal time this was a Strong derived candidate implementable as two HAMTs, but its semantic
+matrix was larger than its representation suggested. The subsequent contract pass resolved:
 
 - key and value comparer sources;
 - whether adding a pair conflicting on either side throws or displaces an existing pair;
@@ -1169,7 +1176,12 @@ The lowest-risk first contract is strict:
 - forward and reverse comparers are retained independently; and
 - a facade is constructed only after both persistent successor maps have been produced.
 
-This candidate should follow the bag unless a concrete bidirectional-lookup consumer promotes it.
+The shipped eight-language tranche chose the strict contract above, independent key/value policies,
+first-representative retention, non-displacing replacement, symmetric presence-safe removal,
+failure-atomic two-root publication, and O(1)-in-pair-count inverse construction. It deliberately
+omits algebra, builders, transients, and force-displacement. See the
+[completion audit](../reviews/persistent-bimap-cross-language-completion-2026-07-15.md) for the
+language mappings and validation evidence.
 
 ## Reserve Candidate: Value-Carrying Interval Map
 

@@ -5,7 +5,7 @@
 - Audience: Maintainers and reviewers of `tools-data-structures-hamt`
 - Scope: Documentation index for the Rust HAMT workspace
 
-The Rust HAMT crate ports the repository persistent HAMT map/set/bag contract to safe Rust values
+The Rust HAMT crate ports the repository persistent HAMT map/set/bag/bimap contract to safe Rust values
 backed by `Arc`-shared immutable nodes, including one-descent map factories and ownership-native
 one-way map/set edit sessions. Start here when reviewing Rust naming, `BuildHasher` policy behavior,
 borrowed lookup results, cloned removal results, bag arithmetic/algebra, transient publication, or

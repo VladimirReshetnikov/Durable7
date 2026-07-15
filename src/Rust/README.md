@@ -11,7 +11,7 @@ contracts of the C# baseline where the current implementation exposes equivalent
 
 | Workspace | Role | Primary entry points | Validation |
 | --- | --- | --- | --- |
-| [Hamt](Hamt/README.md) | Persistent HAMT map/set port with 32-way bitmap-indexed trie nodes and `Arc` structural sharing | `tools_data_structures_hamt::{PersistentHashMap, PersistentHashSet}` | `.\test.ps1 -Workspace Hamt` |
+| [Hamt](Hamt/README.md) | Persistent CHAMP map/set, hash-bag, strict-bimap, Patricia, and Merkle port with `Arc` structural sharing | `tools_data_structures_hamt::{PersistentHashMap, PersistentHashSet, PersistentHashBag, PersistentBiMap}` | `.\test.ps1 -Workspace Hamt` |
 | [FingerTree](FingerTree/README.md) | Rust checkpoint for the FingerTree family, positional/measured/text rope cursors, and mutable DABA Lite FIFO-window aggregator | `tools_data_structures_fingertree::*` | `.\test.ps1 -Workspace FingerTree` |
 | [Ordered](Ordered/README.md) | Neutral persistent insertion-ordered set with explicit positional movement, ranges, stable one-shot sorting, and receiver-policy set algebra | `tools_data_structures_ordered::PersistentOrderedSet` | `.\test.ps1 -Workspace Ordered` |
 | [RangeUpdate](RangeUpdate/README.md) | Neutral implicit-AVL sequence with ordered cached measures and algebraic lazy contiguous range updates | `tools_data_structures_range_update::{RangeUpdateAlgebra, RangeUpdateSequence}` | `.\test.ps1 -Workspace RangeUpdate` |

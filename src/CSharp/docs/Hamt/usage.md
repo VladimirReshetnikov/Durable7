@@ -6,7 +6,7 @@
 - Scope: Construction, persistent and transient updates, bag multiplicities and algebra, comparer behavior, iteration, concurrency, and content-addressed workflows
 
 This guide is the practical companion to the [C# API specification](api-specification.md). It shows
-the common usage patterns for the CHAMP map/set/bag, Ctrie, Patricia, and Merkle families; the API
+the common usage patterns for the CHAMP map/set/bag/bimap, Ctrie, Patricia, and Merkle families; the API
 specification remains the normative contract for complexity, allocation behavior, and edge cases.
 
 ## Namespace And Build

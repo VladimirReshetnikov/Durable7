@@ -1,6 +1,6 @@
 # Frontier Structure Catalog
 
-- Status: Current-state catalog - shipped Axis 1 cores, completed eight-language benchmark-independent structures, shipped C# Axis 2 C1/C2/C3/T2, cross-language cursor/session checkpoints, and remaining frontier candidates
+- Status: Current-state catalog - shipped Axis 1 cores, completed eight-language benchmark-independent structures including the strict bimap facade, shipped C# Axis 2 C1/C2/C3/T2, cross-language cursor/session checkpoints, and remaining frontier candidates
 - Created (UTC): 2026-07-11T03:31:23Z
 - Repository HEAD: f40e301e8faf26d748f33d8546d7d9216657301e
 - Audience: Maintainers and AI agents planning new repository-owned cores, representation tiers, and specialized sibling collections
@@ -1377,6 +1377,10 @@ The implementation wave described by this catalog has already landed these refer
   snapshots and first-key/last-distinct-value representative rules;
 - `PersistentHashBag` facades across all eight languages with separate distinct/total
   cardinalities and receiver-policy multiset algebra;
+- strict `PersistentBiMap` facades across all eight languages, composing independent forward and
+  inverse CHAMP roots with two-domain uniqueness, non-displacing replacement, symmetric removal,
+  failure atomicity, and O(1)-in-pair-count inversion, as recorded by the
+  [completion audit](../reviews/persistent-bimap-cross-language-completion-2026-07-15.md);
 - neutral, independently owned `PersistentOrderedSet` packages across all eight languages,
   composing public HAMT/FingerTree substrates without a Tungsten dependency or semantic oracle;
 - the C# implicit-AVL `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` reference, all seven
@@ -1419,7 +1423,7 @@ optimization and its performance evidence remain C#-only. These are current-stat
 records, not candidates awaiting a consumer.
 Future work on the already cross-language Axis 1 cores is ordinary hardening and isolated
 measurement. The benchmark-independent parity bill is complete: single-pass HAMT updates, hash
-bags, neutral ordered sets, and Range now ship across all eight languages. The
+bags, strict bimaps, neutral ordered sets, and Range now ship across all eight languages. The
 C/C++/Haskell/Kotlin/Rust/TypeScript/Python checkpoints make no zipper or focus-local complexity claim; measured/text
 cursor parity now spans all eight languages. The cursor's C4
 extensions retain the separate status recorded in its entry above.

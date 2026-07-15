@@ -19,14 +19,16 @@ The normative
 [Tungsten application-leaf dependency boundary](tungsten-application-leaf-boundary.md) requires an
 independently owned fork for any general reuse.
 
-The later benchmark-independent implementation tranche now ships persistent one-descent HAMT
-updates, `PersistentHashBag`, neutral `PersistentOrderedSet`, and the genuinely new non-composite
-`RangeUpdateSequence` core across all eight languages. C# owns the implicit-AVL reference, algebra
+The later benchmark-independent implementation tranches now ship persistent one-descent HAMT
+updates, `PersistentHashBag`, strict `PersistentBiMap`, neutral `PersistentOrderedSet`, and the
+genuinely new non-composite `RangeUpdateSequence` core across all eight languages. C# owns the implicit-AVL reference, algebra
 contract, invariant suite, and public API; siblings preserve those semantics through language-local
 policies and ownership idioms. Both full serialized C# Debug and Release gates pass 1,417/1,417 tests after builds
 with zero warnings and zero errors. No benchmark was run; see the
 [frontier catalog](frontier-structure-catalog.md#range-update-sequence-persistent-lazy-propagation)
-and the [cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md).
+and the [four-surface cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md).
+The later [PersistentBiMap completion audit](../reviews/persistent-bimap-cross-language-completion-2026-07-15.md)
+owns the strict two-domain tranche's language mappings and validation evidence.
 
 ## Provenance And Method
 
@@ -61,7 +63,7 @@ portable to the C model (callback + context pointer) unless noted.
 
 | Surveyed gap / current disposition | Surface | What it unblocks |
 | --- | --- | --- |
-| Persistent `GetOrAdd` / `AddOrUpdate` — **shipped in C#, TypeScript, and Python** | HAMT map | One hash, one trie descent, eager factory validation, and exactly one selected factory invocation support bag increments, multimap inner updates, graph edge operations, interning, and aggregation without a probe followed by `SetItem`. Hit/no-op identity, stored representatives, nullable values, and callback-failure atomicity are locked in all three ports. |
+| Persistent `GetOrAdd` / `AddOrUpdate` — **shipped across all eight languages** | HAMT map | One hash, one trie descent, eager factory validation, and exactly one selected factory invocation support bag increments, multimap inner updates, graph edge operations, interning, and aggregation without a probe followed by `SetItem`. Hit/no-op identity, stored representatives, nullable values, and callback-failure atomicity are locked in every port. |
 | Bulk construction — **shipped**; public editing sessions are a separate lifecycle | HAMT map and set | Canonical range construction stages mutable unpublished CHAMP nodes and freezes once. C# keeps that builder internal; C++ and Rust expose public construction-only builders, and TypeScript and Python now expose equivalent reusable builders whose frozen snapshots are detached. Those builders are not general update sessions. TypeScript/Python map and set factories and bulk-producing set operations route through them. |
 | Structural diff / equality / set-vs-set algebra — **shipped**; 3-way merge remains consumer-gated | HAMT node layer (not composable from outside) | Equality, typed diff, and same-type algebra now ship across all eight languages. The seven established ports use reference-pruned structural traversal; Python currently preserves the semantics with exact-root pruning plus lookup traversal. TypeScript and Python editing sessions also expose all six receiver-policy set-relation predicates. A general 3-way merge still needs a conflict matrix. |
 | Value-comparer parameter for no-op identity | HAMT factories | `SetItem`'s equal-value no-op check hardcodes `EqualityComparer<TValue>.Default`; a factory-supplied value comparer would let structural value equality trigger the identity short-circuit. |
@@ -91,7 +93,7 @@ API additions plus samples than as families.
 | `PersistentOrderedMap<TKey, TValue>` | Independently owned HAMT `key -> (stamp, value)` + persistent stamp-ordered sequence | Still unshipped as a general family. It needs a named consumer, neutral project, independently selected values-in-HAMT versus values-in-both representation, contract, model, and tests; Tungsten is provenance only. |
 | HAMT structural diff / merge / set algebra | Feature inside the Hamt family node layer, phased: (1) `MapEquals` + `Diff` enumerator, (2) structural set-vs-set ops, (3) 3-way `Merge` with a specified conflict matrix | Bound is `O(divergent region)` and history-dependent, not content-diff-dependent; collision buckets are insertion-ordered so equal buckets need key-matched (unordered) comparison; comparer mismatch must be gated by reference equality on the comparer. |
 | `PersistentHashBag<T>` | Facade over HAMT `T -> int` + cached wide total count | **Shipped across all eight languages** with checked positive per-class multiplicities, separate distinct/total cardinalities, first-representative retention, eager receiver-policy normalization, conventional multiset algebra, and expanded/distinct enumeration. TypeScript uses `bigint` and Python uses an unbounded `int` for the total while retaining the shared per-class bound; the other languages use their corresponding bounded wide integer. |
-| `PersistentBiMap<TKey, TValue>` | Forward `K -> V` + inverse `V -> K` HAMTs behind a bijection-enforcing facade | No-op identity must be pre-checked via `inverse.TryGetKey` (the map's internal check hardcodes the default value comparer). Honest 2x memory: every pair stored in both tries. |
+| `PersistentBiMap<TKey, TValue>` | Forward `K -> V` + inverse `V -> K` HAMTs behind a bijection-enforcing facade | **Shipped across all eight languages.** The strict contract retains independent policies, rejects either occupied domain, performs configured-value-policy no-op checks before replacement, removes and reinserts both directions when changing a pair, and constructs O(1) inverse facades over the same roots. Honest 2x memory: every pair is stored in both tries. |
 
 The shipped `PersistentOrderedSet` addresses ordered unique membership without claiming shipment of
 the broader ordered-map candidate. `PersistentOrderedMap` would address the HAMT's unspecified enumeration order, and the Tungsten

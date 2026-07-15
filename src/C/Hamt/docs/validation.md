@@ -17,6 +17,8 @@ the [API specification](api-specification.md) and [usage guide](usage.md).
 `src/hamt.c` and `tests/hamt_tests.c` into `build/<Configuration>/hamt_tests.exe`, then compiles
 `src/hamt.c`, `src/persistent_hash_bag.c`, and `tests/persistent_hash_bag_tests.c` into
 `build/<Configuration>/persistent_hash_bag_tests.exe`, then compiles
+`src/hamt.c`, `src/persistent_bi_map.c`, and `tests/persistent_bi_map_tests.c` into
+`build/<Configuration>/persistent_bi_map_tests.exe`, then compiles
 `src/patricia.c` and `tests/patricia_tests.c` into
 `build/<Configuration>/patricia_tests.exe`, and finally compiles `src/merkle_search_tree.c` and
 `tests/merkle_search_tree_tests.c` into

@@ -10,7 +10,7 @@
 
 - [API Specification](api-specification.md) defines the public C# API shape, semantic contracts,
   persistence/concurrency behavior, complexity targets, canonical wire, verification boundary, and
-  merge contracts for the CHAMP map/set/bag, Ctrie, integer Patricia, and Merkle search-tree
+  merge contracts for the CHAMP map/set/bag/bimap, Ctrie, integer Patricia, and Merkle search-tree
   surfaces. The bag section locks its separate distinct/expanded counts, checked multiplicities,
   comparer normalization, representative precedence, enumeration, debugger, and no-op contracts.
   The bimap section locks its strict two-domain uniqueness, independent policies, representative,
@@ -21,7 +21,7 @@
   synchronization, and three-way merge.
 - [Validation](validation.md) records the local .NET restore/build/test commands, workspace warning
   policy, generated XML-documentation gate, and xUnit/CsCheck/model/stress coverage for the CHAMP
-  map/set/bag, Ctrie, Patricia, and Merkle families.
+  map/set/bag/bimap, Ctrie, Patricia, and Merkle families.
 - [Tests README](../../tests/Tools.DataStructures.Hamt.Tests/README.md) maps the xUnit/CsCheck test project,
   source files, filter commands, wire vectors, proof/persistence adversarial cases, concurrency
   histories, and model/property coverage.

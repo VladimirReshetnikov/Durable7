@@ -23,7 +23,7 @@ and TypeScript package all families into one language-local distribution.
 | [TypeScript](TypeScript/README.md) | Strict TypeScript/ESM npm package with Vitest and fast-check validation | [HAMT, FingerTree, Ordered, Tungsten, and Numerics](TypeScript/README.md#public-families) |
 
 The benchmark-independent rollout now ships one-descent persistent HAMT updates,
-`PersistentHashBag`, neutral `PersistentOrderedSet`, and independently implemented implicit-AVL
+`PersistentHashBag`, strict `PersistentBiMap`, neutral `PersistentOrderedSet`, and independently implemented implicit-AVL
 `RangeUpdateSequence` surfaces across all eight language roots. C# owns the law-gated reference
 `IRangeUpdateAlgebra`, while siblings express the same action through language-local policies. Both complete
 serialized C# Debug and Release solution builds finish with zero warnings and zero errors, and both

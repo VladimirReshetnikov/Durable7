@@ -6,6 +6,12 @@
 - Scope: Final implementation, dependency, review-report, and validation audit for the four
   structures selected by the benchmark-independent C#-first proposal
 
+> **Later shipment note.** This report audits the four-surface proposal at its recorded HEAD.
+> `PersistentBiMap`, which was still a reserve candidate at that checkpoint, subsequently shipped
+> across all eight languages. Its separate
+> [completion audit](persistent-bimap-cross-language-completion-2026-07-15.md) owns that later
+> implementation and validation evidence.
+
 ## Outcome
 
 The proposal is complete across C#, C, C++, Haskell, Kotlin, Rust, TypeScript, and Python. Every
@@ -163,7 +169,8 @@ Benchmarks remain postponed until they can run in isolation without competing ag
 or I/O load. This shipment makes asymptotic and deterministic structural claims only; it makes no
 comparative throughput, allocation, cache-locality, or break-even claim.
 
-The proposal's `PersistentBiMap` and value-carrying interval map are reserve candidates, not omitted
-deliverables. Frozen hash tiers, automatic size tiers, GUID specialization, later cursor phases,
-native lock-free Ctries, and other benchmark- or consumer-gated candidates also remain parked under
-their existing plans.
+At this report's audited HEAD, the proposal's `PersistentBiMap` and value-carrying interval map were
+reserve candidates rather than omitted deliverables. `PersistentBiMap` later shipped in a separate
+eight-language tranche; the value-carrying interval map remains parked. Frozen hash tiers,
+automatic size tiers, GUID specialization, later cursor phases, native lock-free Ctries, and other
+benchmark- or consumer-gated candidates also remain parked under their existing plans.

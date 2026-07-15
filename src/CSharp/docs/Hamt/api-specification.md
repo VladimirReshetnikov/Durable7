@@ -316,7 +316,8 @@ forward-CHAMP order.
   objects are retained independently by every successor, including empty results.
 - `CreateRange` enumerates once and strictly rejects any repeated key class or value class.
 - `Add(key, value)` throws when either equivalence class already exists, even if the complete pair
-  is equivalent. `TryAdd` reports either conflict and returns the exact receiver.
+  is equivalent and checks the key domain first. `TryAdd` returns `false` and the exact receiver
+  for either conflict; unlike result-rich sibling APIs, it does not identify the conflicting domain.
 - `SetItem(key, value)` adds when the key is absent. For an existing key it preserves the stored key
   representative, returns the exact receiver when the configured value comparer considers the old
   and new values equivalent, replaces an unclaimed value, and throws before publication when the

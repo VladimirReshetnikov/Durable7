@@ -15,7 +15,7 @@ test, API, or complexity claims. For semantic contracts and usage examples, pair
 `DataStructures.sln` contains:
 
 - `src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj`, the public library containing
-  the CHAMP map/set/bag, Ctrie, Patricia, and Merkle families.
+  the CHAMP map/set/bag/bimap, Ctrie, Patricia, and Merkle families.
 - `tests/Tools.DataStructures.Hamt.Tests/Tools.DataStructures.Hamt.Tests.csproj`, the xUnit/CsCheck
   test project.
 
@@ -59,7 +59,7 @@ The repository `.\test.ps1` launcher remains useful for unattended full-workspac
 the explicit commands above are the reproducible single-node HAMT gate and give each phase a clear
 failure boundary.
 
-No benchmark is an exit criterion for `PersistentHashBag<T>`. Validate its semantic, invariant,
+No benchmark is an exit criterion for `PersistentHashBag<T>` or `PersistentBiMap<TKey, TValue>`. Validate their semantic, invariant,
 operation-count, allocation-shape, and failure-atomicity contracts through the serialized build and
 test gates; postpone any performance measurements until the machine can run them in isolation.
 
