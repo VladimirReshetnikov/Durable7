@@ -1,6 +1,6 @@
 # Benchmark-Independent Next Data Structures: Detailed C# Implementation Proposal
 
-- Status: Revised proposed execution sequence — benchmark-independent work only
+- Status: Active execution sequence — C# Steps 1 and 2 shipped; benchmark-independent work only
 - Created (UTC): 2026-07-14T19:23:49Z
 - Repository HEAD: ab9a73c6ae20a3b0ee0627bfe810117450e20c3e
 - Revised (UTC): 2026-07-14T21:14:47Z at faf53286375109fc598e40d5e6da7d1bff7e7415
@@ -12,7 +12,7 @@
 Proceed in this order:
 
 1. Add persistent-HAMT single-pass `GetOrAdd`/`AddOrUpdate` operations — **shipped in C#**.
-2. Implement `PersistentHashBag<T>` over `PersistentHashMap<T, int>`.
+2. Implement `PersistentHashBag<T>` over `PersistentHashMap<T, int>` — **shipped in C#**.
 3. Implement `PersistentOrderedSet<T>` as an independently owned composite in a new general
    `Tools.DataStructures.Ordered` project. Fork the useful dual-index and sparse-label mechanics;
    do not reference, wrap, or inherit semantics from Tungsten `PersistentAssociation`.
@@ -39,7 +39,7 @@ The detailed sections discuss the Ordered design before Steps 1 and 2 because co
 ownership boundary is the central revision to this document. The numbered execution steps above,
 the section labels, and the implementation tranches remain the authoritative landing order.
 
-No benchmark is required to begin or ship these three structures. This proposal does not authorize
+No benchmark is required to begin or ship these structures. This proposal does not authorize
 performance comparisons against BCL collections or claims that one representation beats another.
 It requires correctness, persistence, invariant, asymptotic-work, failure, and documentation
 evidence instead.
@@ -78,15 +78,18 @@ The audit covered:
 
 At proposal-audit time, exact-name searches confirmed that `PersistentOrderedSet`,
 `PersistentHashBag`, `RangeUpdateSequence`, `PersistentBiMap`, and a value-carrying interval-map
-facade were not shipped C# types. Execution Step 1 has since shipped the persistent-HAMT
-`GetOrAdd`/`AddOrUpdate` kernel; the named structure candidates remain unshipped until their own
-complete source/test/documentation tranches land.
+facade were not shipped C# types. Execution Steps 1 and 2 have since shipped the persistent-HAMT
+`GetOrAdd`/`AddOrUpdate` kernel and `PersistentHashBag<T>` respectively. The remaining named
+structure candidates stay unshipped until their own complete source/test/documentation tranches
+land.
 
 ## Current Baseline
 
 The following work is complete and must not be mistaken for pending implementation:
 
 - CHAMP canonical nodes, structural equality/diff, and structural map/set algebra;
+- the C# `PersistentHashBag<T>` facade with explicit multiplicity, receiver-policy algebra, and
+  expanded/distinct enumeration contracts;
 - C# owner-token CHAMP transients and semantic one-way editing sessions in the sibling languages;
 - 32-bit and 64-bit Patricia maps and sets;
 - RRB vectors;
@@ -507,7 +510,7 @@ semantics but fail the enabling API’s single-descent purpose.
 
 These are operation-count and correctness gates, not wall-clock gates.
 
-## Execution Step 2: `PersistentHashBag<T>`
+## Execution Step 2: `PersistentHashBag<T>` — Shipped In C#
 
 ### Representation
 
@@ -527,8 +530,9 @@ The map contains one entry for each equivalence class. Its positive `int` value 
 
 `CreateRange` should aggregate through a small internal extension of the existing HAMT
 `BulkBuilder`, retaining the first equivalent key while incrementing a checked count, and freeze
-once into canonical CHAMP shape. This remains an internal staging path, not a second public builder
-or transient lifecycle.
+once into canonical CHAMP shape. The combiner receives both the stored value and incoming add value,
+so checked aggregation can use a capture-free static delegate. This remains an internal staging
+path, not a second public builder or transient lifecycle.
 
 ### Count And Enumeration Contract
 
@@ -589,10 +593,14 @@ public sealed class PersistentHashBag<T> : IEnumerable<T>
 }
 ```
 
-The type deliberately exposes neither `Count` nor `IReadOnlyCollection<T>`. `Entries` uses the
-standard `KeyValuePair<T, int>` representation and follows the same distinct trie order as
-`DistinctItems`. Interface enumeration remains available through `IEnumerable<T>` and the
-non-generic `IEnumerable` base interface.
+The type deliberately exposes neither `Count` nor `IReadOnlyCollection<T>`. It also has no
+enumerable algebra overload, public mutable builder or transient facade, or content-equality
+override. `Entries` uses the standard `KeyValuePair<T, int>` representation and follows the same
+distinct trie order as `DistinctItems`. Interface enumeration remains available through
+`IEnumerable<T>` and the non-generic `IEnumerable` base interface. `TryGetValue` returns the stored
+representative on a hit and assigns the lookup argument itself to `actualValue` on a miss, matching
+the persistent-set convention. Null items are accepted or rejected only through the selected
+comparer's behavior.
 
 The nested public `Enumerator` is a mutable struct that wraps the map's struct enumerator and keeps
 the current representative plus its unexpanded repetition count. Obtaining and draining it through
@@ -600,7 +608,9 @@ the concrete surface allocates nothing; copying it creates an independently adva
 `Current` is `default` before the first successful `MoveNext` and after exhaustion, `Dispose` is a
 no-op, and `IEnumerator.Reset` throws `NotSupportedException`. Enumeration through an interface may
 box the struct. `DistinctItems` is the map's key view and `Entries` is the map's pair view, so each
-view is version-bound and immutable.
+view is version-bound and immutable. Each representative's expanded occurrences are contiguous;
+the relative order of first expanded occurrences, `DistinctItems`, and `Entries` is identical. The
+order is stable for an unchanged version but otherwise unspecified.
 
 The debugger proxy exposes a distinct-entry array, never expanded enumeration. Debugger inspection
 therefore remains bounded by `DistinctCount` even when one multiplicity or `TotalCount` is very
@@ -621,6 +631,10 @@ Construction processes elements in input order. The first representative of an e
 retained while later elements only increment its count. `Clear` and every result that becomes empty
 retain the receiver's comparer object; only the reference-default comparer uses the shared `Empty`
 instance.
+
+`Create()` and `Create(EqualityComparer<T>.Default)` return `Empty`; reference identity with that
+default comparer object, not semantic comparer equivalence, selects the singleton. Point additions
+retain an existing representative, while an absent class stores the caller's item.
 
 `TotalCount` cannot overflow for a valid bag: `DistinctCount <= int.MaxValue` and every
 multiplicity is at most `int.MaxValue`, so the maximum representable total is
@@ -666,6 +680,9 @@ representative encountered in the map's stable-but-unspecified enumeration order
 normalized class. This rule prevents algebra from silently using the argument's equality policy.
 It also means structural lockstep algebra is available only when the implementations explicitly
 prove policy compatibility; normalization otherwise takes element-wise distinct-entry work.
+Because map order is not semantic, two logically equal argument versions may select different
+representatives when their observed entry orders differ; only the rule relative to the particular
+argument version's observed order is guaranteed.
 
 This normalization is semantically eager: after null validation, a comparer-mismatched argument is
 fully normalized before operation-specific empty or identity short-cuts. Consequently, comparer,
@@ -683,6 +700,11 @@ multiplicities and representatives, the exact receiver instance is returned. Eve
 retains the receiver comparer object and canonicalizes only when that object is
 `EqualityComparer<T>.Default` by reference.
 
+In particular, `Union(this)` and `Intersect(this)` return `this`, `Except(this)` returns the
+receiver-comparer empty bag, and `Sum(this)` actually doubles each multiplicity and can overflow.
+Logical equality for the no-op rule is receiver-policy class membership plus multiplicity; the
+argument's representative identities do not displace surviving receiver representatives.
+
 ### Complexity
 
 | Operation | Bound |
@@ -691,11 +713,14 @@ retains the receiver comparer object and canonicalizes only when that object is
 | Point add/remove | O(w + c), one rebuilt search path when changed |
 | Expanded enumeration | O(`TotalCount`) |
 | Distinct/entry enumeration | O(`DistinctCount`) |
-| Same-type structural algebra | Inherit the CHAMP structural bound where implemented directly; otherwise document element-wise work honestly |
+| Same-comparer `Union` / `Sum` | O(argument `DistinctCount` (w + c)) element-wise work |
+| Same-comparer `Intersect` / `Except` | O(receiver `DistinctCount` (w + c)) element-wise work |
+| Mismatched-comparer algebra | O((receiver + argument `DistinctCount`) (w + c)) including normalization |
 
-Do not claim structural bag algebra merely because the underlying map has structural algebra. A
-combining multiplicity operation needs an explicit lockstep implementation before receiving that
-bound.
+The initial implementation is deliberately element-wise and preserves receiver sharing as each
+class is processed. Do not claim structural bag algebra merely because the underlying map has
+structural algebra. A combining multiplicity operation needs an explicit lockstep implementation
+before receiving that bound.
 
 ### Validation Plan
 
@@ -1150,7 +1175,7 @@ If this proposal is accepted, use these self-contained tranches:
 
 1. **Persistent HAMT single-pass update kernel — shipped in C#**
    - node operation, public API, exhaustive transition/callback tests, docs.
-2. **Hash-bag facade**
+2. **Hash-bag facade — shipped in C#**
    - source, count/algebra/representative model tests, docs and catalogs.
 3. **Complete independent ordered set**
    - new Ordered source/test projects and solution entries;
@@ -1193,11 +1218,13 @@ For documentation-only tranches, run the repository stale-path scan, Markdown li
 
 ## Final Recommendation
 
-The persistent HAMT's single-pass point-update kernel is complete in C#. The best immediate next
-implementation is `PersistentHashBag<T>`, which consumes that enabling API inside the shipped HAMT
-family and adds a Strong facade with explicit multiplicity semantics.
+The persistent HAMT's single-pass point-update kernel and `PersistentHashBag<T>` facade are complete
+in C#. The bag consumes that enabling API inside the shipped HAMT family and supplies explicit
+multiplicity, receiver-policy normalization, representative, overflow, identity, and expanded-
+enumeration semantics without depending on benchmark evidence.
 
-`PersistentOrderedSet<T>` follows as the lowest-risk independent composite. It reuses public general
+`PersistentOrderedSet<T>` is now the immediate next C# implementation and the lowest-risk independent
+composite. It reuses public general
 foundations but is not a thin facade: the new Ordered project must own its dual-index invariant,
 sparse-label/relabel implementation, movement and representative contract, independent model, and
 evolution. Tungsten `PersistentAssociation` is useful provenance and a source of adversarial cases,

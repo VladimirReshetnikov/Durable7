@@ -116,7 +116,7 @@ public sealed class PersistentHashMapBulkBuilderTests
         var added = builder.AddOrUpdate(
             storedKey,
             storedValue,
-            _ =>
+            (_, _) =>
             {
                 calls++;
                 return equalCandidate;
@@ -125,7 +125,7 @@ public sealed class PersistentHashMapBulkBuilderTests
         var updated = builder.AddOrUpdate(
             "ALPHA",
             new EquatableReference("unused"),
-            value =>
+            (value, _) =>
             {
                 calls++;
                 Assert.Same(storedValue, value);
@@ -152,11 +152,11 @@ public sealed class PersistentHashMapBulkBuilderTests
         var deep = new ExplicitHashKey(3, 1 << 30);
         var builder = PersistentHashMap<ExplicitHashKey, int>.CreateBulkBuilder(comparer);
 
-        Assert.Equal(1, builder.AddOrUpdate(collision1, 1, static value => checked(value + 1)));
-        Assert.Equal(1, builder.AddOrUpdate(collision2, 1, static value => checked(value + 1)));
-        Assert.Equal(1, builder.AddOrUpdate(deep, 1, static value => checked(value + 1)));
-        Assert.Equal(2, builder.AddOrUpdate(new ExplicitHashKey(1, 0), 99, static value => checked(value + 1)));
-        Assert.Equal(2, builder.AddOrUpdate(new ExplicitHashKey(3, 1 << 30), 99, static value => checked(value + 1)));
+        Assert.Equal(1, builder.AddOrUpdate(collision1, 1, static (value, _) => checked(value + 1)));
+        Assert.Equal(1, builder.AddOrUpdate(collision2, 1, static (value, _) => checked(value + 1)));
+        Assert.Equal(1, builder.AddOrUpdate(deep, 1, static (value, _) => checked(value + 1)));
+        Assert.Equal(2, builder.AddOrUpdate(new ExplicitHashKey(1, 0), 99, static (value, _) => checked(value + 1)));
+        Assert.Equal(2, builder.AddOrUpdate(new ExplicitHashKey(3, 1 << 30), 99, static (value, _) => checked(value + 1)));
 
         var map = builder.ToImmutable();
         Assert.Equal(3, map.Count);
@@ -173,7 +173,7 @@ public sealed class PersistentHashMapBulkBuilderTests
         var comparer = new CountingStringComparer();
         var builder = PersistentHashMap<string, ThrowingEquatableReference>.CreateBulkBuilder(comparer);
         var stored = new ThrowingEquatableReference("stored");
-        builder.AddOrUpdate("alpha", stored, static value => value);
+        builder.AddOrUpdate("alpha", stored, static (value, _) => value);
         var before = builder.ToImmutable();
         var hashesBeforeValidation = comparer.HashCalls;
 
@@ -181,14 +181,14 @@ public sealed class PersistentHashMapBulkBuilderTests
         Assert.Equal(hashesBeforeValidation, comparer.HashCalls);
 
         Assert.Throws<InvalidOperationException>(() =>
-            builder.AddOrUpdate("ALPHA", stored, static _ => throw new InvalidOperationException("factory")));
+            builder.AddOrUpdate("ALPHA", stored, static (_, _) => throw new InvalidOperationException("factory")));
         Assert.Same(stored, builder.ToImmutable()["alpha"]);
 
         ThrowingEquatableReference.ThrowOnEquals = true;
         try
         {
             Assert.Throws<InvalidOperationException>(() =>
-                builder.AddOrUpdate("ALPHA", stored, static _ => new ThrowingEquatableReference("candidate")));
+                builder.AddOrUpdate("ALPHA", stored, static (_, _) => new ThrowingEquatableReference("candidate")));
         }
         finally
         {
@@ -206,16 +206,156 @@ public sealed class PersistentHashMapBulkBuilderTests
     public void AddOrUpdate_FrozenSnapshotsRemainDetached()
     {
         var builder = PersistentHashMap<int, int>.CreateBulkBuilder();
-        builder.AddOrUpdate(1, 1, static value => checked(value + 1));
+        builder.AddOrUpdate(1, 1, static (value, _) => checked(value + 1));
         var first = builder.ToImmutable();
-        builder.AddOrUpdate(1, 99, static value => checked(value + 1));
-        builder.AddOrUpdate(2, 5, static value => checked(value + 1));
+        builder.AddOrUpdate(1, 99, static (value, _) => checked(value + 1));
+        builder.AddOrUpdate(2, 5, static (value, _) => checked(value + 1));
         var second = builder.ToImmutable();
 
         Assert.Equal(1, first[1]);
         Assert.False(first.ContainsKey(2));
         Assert.Equal(2, second[1]);
         Assert.Equal(5, second[2]);
+    }
+
+    /// <summary>Verifies checked update overflow leaves the staged entry unchanged and reusable.</summary>
+    [Fact]
+    public void AddOrUpdate_CheckedOverflowLeavesBuilderUnchanged()
+    {
+        var builder = PersistentHashMap<string, int>.CreateBulkBuilder(StringComparer.OrdinalIgnoreCase);
+        var storedKey = new string(['A', 'l', 'p', 'h', 'a']);
+        builder.AddOrUpdate(storedKey, int.MaxValue, static (value, increment) => checked(value + increment));
+
+        Assert.Throws<OverflowException>(() =>
+            builder.AddOrUpdate("ALPHA", 1, static (value, increment) => checked(value + increment)));
+
+        var map = builder.ToImmutable();
+        Assert.Single(map);
+        Assert.Equal(int.MaxValue, map["alpha"]);
+        Assert.True(map.TryGetKey("alpha", out var actualKey));
+        Assert.Same(storedKey, actualKey);
+        map.ValidateCanonicalityForDiagnostics();
+    }
+
+    /// <summary>Verifies hashing and key-equality failures leave staged state unchanged.</summary>
+    [Fact]
+    public void AddOrUpdate_ComparerFailuresLeaveBuilderUnchanged()
+    {
+        var comparer = new InstrumentedKeyComparer();
+        var stored = new InstrumentedKey(1, 7);
+        var builder = PersistentHashMap<InstrumentedKey, int>.CreateBulkBuilder(comparer);
+        builder.AddOrUpdate(stored, 10, static (value, incoming) => value + incoming);
+        var factoryCalls = 0;
+
+        var hashFailure = new InvalidOperationException("hash");
+        comparer.HashFailure = hashFailure;
+        Assert.Same(
+            hashFailure,
+            Assert.Throws<InvalidOperationException>(() =>
+                builder.AddOrUpdate(
+                    new InstrumentedKey(2, 7),
+                    20,
+                    (value, incoming) =>
+                    {
+                        factoryCalls++;
+                        return value + incoming;
+                    })));
+        comparer.HashFailure = null;
+
+        var equalityFailure = new InvalidOperationException("equality");
+        comparer.EqualityFailure = equalityFailure;
+        Assert.Same(
+            equalityFailure,
+            Assert.Throws<InvalidOperationException>(() =>
+                builder.AddOrUpdate(
+                    new InstrumentedKey(2, 7),
+                    20,
+                    (value, incoming) =>
+                    {
+                        factoryCalls++;
+                        return value + incoming;
+                    })));
+        comparer.EqualityFailure = null;
+
+        Assert.Equal(0, factoryCalls);
+        var map = builder.ToImmutable();
+        Assert.Single(map);
+        Assert.Equal(10, map[stored]);
+        map.ValidateCanonicalityForDiagnostics();
+    }
+
+    /// <summary>Verifies one hash and one full-hash bucket scan select the combining delegate.</summary>
+    [Fact]
+    public void AddOrUpdate_HashesOnceAndScansOneFullHashBucket()
+    {
+        var comparer = new InstrumentedKeyComparer();
+        var builder = PersistentHashMap<InstrumentedKey, int>.CreateBulkBuilder(comparer);
+        builder.AddOrUpdate(new InstrumentedKey(1, 7), 1, static (value, incoming) => value + incoming);
+        builder.AddOrUpdate(new InstrumentedKey(2, 7), 2, static (value, incoming) => value + incoming);
+        builder.AddOrUpdate(new InstrumentedKey(3, 7), 3, static (value, incoming) => value + incoming);
+        builder.AddOrUpdate(new InstrumentedKey(4, 11), 4, static (value, incoming) => value + incoming);
+
+        comparer.ResetCounts();
+        var factoryCalls = 0;
+        Assert.Equal(
+            8,
+            builder.AddOrUpdate(
+                new InstrumentedKey(3, 7),
+                5,
+                (value, incoming) =>
+                {
+                    factoryCalls++;
+                    return value + incoming;
+                }));
+        Assert.Equal(1, comparer.HashCalls);
+        Assert.Equal(3, comparer.EqualityCalls);
+        Assert.Equal(1, factoryCalls);
+
+        comparer.ResetCounts();
+        factoryCalls = 0;
+        Assert.Equal(
+            6,
+            builder.AddOrUpdate(
+                new InstrumentedKey(6, 7),
+                6,
+                (value, incoming) =>
+                {
+                    factoryCalls++;
+                    return value + incoming;
+                }));
+        Assert.Equal(1, comparer.HashCalls);
+        Assert.Equal(3, comparer.EqualityCalls);
+        Assert.Equal(0, factoryCalls);
+
+        comparer.ResetCounts();
+        Assert.Equal(
+            9,
+            builder.AddOrUpdate(
+                new InstrumentedKey(9, 99),
+                9,
+                (_, _) =>
+                {
+                    factoryCalls++;
+                    return -1;
+                }));
+        Assert.Equal(1, comparer.HashCalls);
+        Assert.Equal(0, comparer.EqualityCalls);
+        Assert.Equal(0, factoryCalls);
+    }
+
+    /// <summary>Verifies a null key follows the ordinary comparer-defined map contract.</summary>
+    [Fact]
+    public void AddOrUpdate_NullKeyUsesOrdinaryMapContract()
+    {
+        var builder = PersistentHashMap<string?, int>.CreateBulkBuilder();
+
+        Assert.Equal(1, builder.AddOrUpdate(null, 1, static (value, incoming) => checked(value + incoming)));
+        Assert.Equal(2, builder.AddOrUpdate(null, 1, static (value, incoming) => checked(value + incoming)));
+
+        var map = builder.ToImmutable();
+        Assert.Single(map);
+        Assert.Equal(2, map[null]);
+        map.ValidateCanonicalityForDiagnostics();
     }
 
     private readonly record struct ExplicitHashKey(int Id, int Hash);
@@ -263,5 +403,40 @@ public sealed class PersistentHashMapBulkBuilderTests
         }
 
         public override int GetHashCode() => Value.GetHashCode(StringComparison.Ordinal);
+    }
+
+    private readonly record struct InstrumentedKey(int Id, int Hash);
+
+    private sealed class InstrumentedKeyComparer : IEqualityComparer<InstrumentedKey>
+    {
+        public int HashCalls { get; private set; }
+
+        public int EqualityCalls { get; private set; }
+
+        public Exception? HashFailure { get; set; }
+
+        public Exception? EqualityFailure { get; set; }
+
+        public bool Equals(InstrumentedKey x, InstrumentedKey y)
+        {
+            EqualityCalls++;
+            if (EqualityFailure is not null)
+                throw EqualityFailure;
+            return x.Id == y.Id;
+        }
+
+        public int GetHashCode(InstrumentedKey obj)
+        {
+            HashCalls++;
+            if (HashFailure is not null)
+                throw HashFailure;
+            return obj.Hash;
+        }
+
+        public void ResetCounts()
+        {
+            HashCalls = 0;
+            EqualityCalls = 0;
+        }
     }
 }

@@ -14,7 +14,8 @@ test, API, or complexity claims. For semantic contracts and usage examples, pair
 
 `DataStructures.sln` contains:
 
-- `src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj`, the public library.
+- `src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj`, the public library containing
+  the CHAMP map/set/bag, Ctrie, Patricia, and Merkle families.
 - `tests/Tools.DataStructures.Hamt.Tests/Tools.DataStructures.Hamt.Tests.csproj`, the xUnit/CsCheck
   test project.
 
@@ -58,6 +59,10 @@ The repository `.\test.ps1` launcher remains useful for unattended full-workspac
 the explicit commands above are the reproducible single-node HAMT gate and give each phase a clear
 failure boundary.
 
+No benchmark is an exit criterion for `PersistentHashBag<T>`. Validate its semantic, invariant,
+operation-count, allocation-shape, and failure-atomicity contracts through the serialized build and
+test gates; postpone any performance measurements until the machine can run them in isolation.
+
 For a focused public-transient pass after the Release build, substitute this final command:
 
 ```powershell
@@ -65,6 +70,16 @@ dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Te
     -c Release --no-restore --no-build --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false `
     --filter 'FullyQualifiedName~PersistentHashMapTransientTests|FullyQualifiedName~PersistentHashMapTransientEnumeratorTests|FullyQualifiedName~PersistentHashSetTransientTests|FullyQualifiedName~TransientApiShapeTests' `
+    -- RunConfiguration.MaxCpuCount=1
+```
+
+For a focused hash-bag and internal construction-kernel pass after the Release build, use:
+
+```powershell
+dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+    -c Release --no-restore --no-build --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false `
+    --filter 'FullyQualifiedName~PersistentHashBag|FullyQualifiedName~PersistentHashMapBulkBuilderTests' `
     -- RunConfiguration.MaxCpuCount=1
 ```
 
@@ -80,6 +95,18 @@ The suite covers:
   counts, leaf/collision/bitmap and published-transient node paths, representative/null behavior,
   allocation-free no-ops, failure atomicity, and generated-history canonicality;
 - set construction, membership, add/remove, set algebra, and `IReadOnlySet<T>` behavior;
+- hash-bag construction, lookup, explicit distinct/expanded counts, checked copy boundaries,
+  saturated removal, comparer-preserving empties, first representatives, null/collision policies,
+  no-op identity, retained versions, and callback/enumerator failure atomicity;
+- hash-bag maximum/minimum/subtractive/additive algebra, receiver-comparer normalization, checked
+  collapsed classes, eager normalization failures, representative precedence, and unchanged-result
+  identity;
+- hash-bag expanded/distinct/entry enumeration order, allocation-free copied concrete enumerators,
+  default/before-first/active/exhausted/interface/reset states, `Array.MaxLength` materialization
+  guard, distinct debugger projection, and exact API shape excluding `Count` and
+  `IReadOnlyCollection<T>`;
+- comparer-aware linear-model hash-bag histories with retained snapshots and invariant validation
+  after commands under ordinary, nullable, and collision-heavy policies;
 - Axis 2 map/set contract oracles for comparer identity, stored representatives, nullable keys/items,
   collisions, stable enumeration, no-op identity, retained versions, and callback-exception atomicity;
 - benchmark-only CHAMP diagnostics that pin root/path sharing, retained size, exact ordinary field
@@ -107,8 +134,9 @@ The suite covers:
 - CHAMP data-map/node-map shape, canonical independent-history topology, structural equality,
   slot-aligned semantic diff across every node-shape transition, eager validation, key-representative
   semantics, randomized invariant checking, and reference-pruning bounds through internal test access;
-- bulk-builder semantics, including collision/deep-prefix construction and detachment of
-  already-frozen snapshots from later builder mutations;
+- bulk-builder semantics, including collision/deep-prefix construction, checked combining insertion
+  with first-key/equal-value retention and exact callback selection, callback failure atomicity, and
+  detachment of already-frozen snapshots from later builder mutations;
 - generated map histories checked against model dictionaries with retained snapshots;
 - generated set behavior checked against model set semantics.
 - concurrent hash-trie root/main RDCSS and node GCAS helping, deterministic snapshot/write race
@@ -143,10 +171,13 @@ single-worker command above. The final focused public transient/API filter passe
 existing selected-kernel suite remained 26 tests. Treat these as a named checkpoint rather than a
 permanent expected-count assertion; new tests should increase the total.
 
-The persistent single-pass update tranche advances the current complete-project checkpoint to
-**244 passed, 0 failed**, including 19 focused `PersistentHashMapSinglePassUpdateTests`. The full
-C# workspace gate also passed 319 Numerics, 630 FingerTree, and 52 Tungsten tests under the same
-single-worker policy.
+The persistent single-pass update tranche established the pre-bag complete-project checkpoint at
+**244 passed, 0 failed**, including 19 focused `PersistentHashMapSinglePassUpdateTests`. The C#
+hash-bag tranche now passes **292 tests, 0 failed** for the complete HAMT project; the focused bag
+plus bulk-builder filter passes **52 tests, 0 failed**. The earlier full C# workspace gate also
+passed 319 Numerics, 630 FingerTree, and 52 Tungsten tests under the same single-worker policy; rerun
+that complete workspace gate after integration changes rather than treating the earlier totals as
+current bag evidence.
 
 ## Public Transient Benchmark Validation
 

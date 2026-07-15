@@ -1641,7 +1641,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         /// <param name="key">The key to add or update.</param>
         /// <param name="addValue">The value to store when no equivalent key exists.</param>
         /// <param name="updateFactory">
-        /// The function that computes a candidate replacement from the stored value.
+        /// The function that computes a candidate replacement from the stored and incoming values.
         /// </param>
         /// <returns>
         /// The value stored after the operation. When the candidate replacement compares equal to
@@ -1655,7 +1655,10 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         /// scanned, and <paramref name="updateFactory"/> is invoked exactly once only on a hit. A
         /// delegate or equality failure occurs before builder state is changed.
         /// </remarks>
-        internal TValue AddOrUpdate(TKey key, TValue addValue, Func<TValue, TValue> updateFactory)
+        internal TValue AddOrUpdate(
+            TKey key,
+            TValue addValue,
+            Func<TValue, TValue, TValue> updateFactory)
         {
             ArgumentNullException.ThrowIfNull(updateFactory);
 
@@ -1668,7 +1671,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
                     if (!_comparer.Equals(entry.Key, key))
                         continue;
 
-                    var candidate = updateFactory(entry.Value);
+                    var candidate = updateFactory(entry.Value, addValue);
                     if (ValuesEqual(entry.Value, candidate))
                         return entry.Value;
 

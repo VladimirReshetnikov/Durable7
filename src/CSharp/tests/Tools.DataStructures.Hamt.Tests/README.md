@@ -5,8 +5,9 @@
 - Audience: Maintainers validating the C# HAMT workspace
 - Scope: xUnit and CsCheck test project under `src/CSharp/tests/Tools.DataStructures.Hamt.Tests`
 
-`Tools.DataStructures.Hamt.Tests` is the managed test project for the C# HAMT library. It targets the workspace
-defaults from `Directory.Build.props`, references the public `Tools.DataStructures.Hamt` project, and uses xUnit,
+`Tools.DataStructures.Hamt.Tests` is the managed test project for the C# HAMT library, including the
+CHAMP map/set/bag, Ctrie, Patricia, and Merkle families. It targets the workspace defaults from
+`Directory.Build.props`, references the public `Tools.DataStructures.Hamt` project, and uses xUnit,
 `Microsoft.NET.Test.Sdk`, `xunit.runner.visualstudio`, and CsCheck.
 
 ## Source Map
@@ -17,6 +18,25 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
   delegate validation, exact factory/hash/equality counts, leaf/collision/bitmap and published
   separate-node paths, stored representatives, present nulls, allocation-free no-ops, callback
   failure atomicity, retained roots, and generated-history canonicality.
+- `PersistentHashBagTests.cs` covers construction and lookup, explicit distinct/expanded counts,
+  comparer-preserving empties, first representatives, point updates and saturated removal, zero and
+  negative copy counts, checked multiplicity/array boundaries, null and collision policies, source
+  retention on callback failure, and recursive bag/CHAMP diagnostics.
+- `PersistentHashBagAlgebraTests.cs` covers maximum union, minimum intersection, saturated
+  difference, checked sum, receiver-comparer normalization, checked collapsed argument classes,
+  eager normalization failure, receiver and argument representative precedence, no-op identity,
+  self operations, comparer-preserving empty results, and failure atomicity.
+- `PersistentHashBagEnumeratorTests.cs` covers expanded occurrence order, matching distinct/entry
+  order, concrete/interface/default/before-first/active/exhausted/copied/reset behavior,
+  allocation-free concrete enumeration, immutable retained views, and `ToArray` parity and
+  `Array.MaxLength` preflight failure.
+- `PersistentHashBagApiShapeTests.cs` reflection-locks the exact bag factory/property/query/update/
+  algebra/enumeration surface, excludes ambiguous `Count`/`IReadOnlyCollection<T>` and mutable
+  lifecycle additions, and verifies that the debugger proxy projects distinct entries instead of
+  expanded occurrences.
+- `PersistentHashBagPropertyTests.cs` runs deterministic comparer-aware linear-model histories with
+  retained snapshots, first representatives, nullable and collision-heavy policies, randomized
+  algebra, and invariant validation after commands.
 - `PersistentHashMapContractOracleTests.cs` and `PersistentHashSetContractOracleTests.cs` are the Axis 2
   executable semantic baseline for comparer identity, stored representatives, collisions, nullable keys/items,
   stable enumeration, no-op identity, retained versions, and callback-exception atomicity.
@@ -57,8 +77,10 @@ defaults from `Directory.Build.props`, references the public `Tools.DataStructur
 - `PersistentHamtStructureTests.cs` uses internal test access to verify CHAMP data/node maps, canonical
   independent-history topology, collapse behavior, structural equality, slot-aligned diff through
   leaf/collision/branch transitions, randomized invariants, eager validation, no-op root reuse, and sharing.
-- `PersistentHashMapBulkBuilderTests.cs` verifies duplicate retention, null/deep-prefix keys, collision and branch
-  freezes, and immutable snapshot detachment while the bulk builder continues accepting entries.
+- `PersistentHashMapBulkBuilderTests.cs` verifies ordinary and combining insertion, exact combiner
+  selection, first-key and equal-value retention, checked and callback failure atomicity, null/deep-
+  prefix keys, collision and branch freezes, and immutable snapshot detachment while the bulk
+  builder continues accepting entries.
 - `PersistentHashMapPropertyTests.cs` uses CsCheck generated histories against dictionary-style model state,
   including retained snapshots and deliberately colliding hashes.
 - `PersistentHashSetTests.cs` covers set membership, add/remove, try-add/try-remove, custom equality, set algebra,
@@ -121,6 +143,16 @@ dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Te
     -- RunConfiguration.MaxCpuCount=1
 ```
 
+Run the hash-bag suite together with its internal bulk-construction kernel after the Release build:
+
+```powershell
+dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+    -c Release --no-restore --no-build --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false `
+    --filter 'FullyQualifiedName~PersistentHashBag|FullyQualifiedName~PersistentHashMapBulkBuilderTests' `
+    -- RunConfiguration.MaxCpuCount=1
+```
+
 Run restore, build, and test sequentially. These commands disable NuGet restore parallelism, MSBuild
 project parallelism/node reuse, compiler and .NET build servers, and test-host parallelism, bounding
 both process count and memory use. The repository launcher still suppresses modal Windows
@@ -132,8 +164,11 @@ The T2 shipment checkpoint is **223 passed, 0 failed** for this complete project
 public transient/API filter passed 33 tests, and the selected T1 kernel suite remained 26 tests.
 These counts record the shipment evidence and are not a ceiling for later test growth.
 
-The persistent single-pass update tranche raises the current complete-project checkpoint to
-**244 passed, 0 failed**, including 19 focused factory-update tests.
+The persistent single-pass update tranche established the pre-bag complete-project checkpoint at
+**244 passed, 0 failed**, including 19 focused factory-update tests. The C# hash-bag tranche now
+passes **292 tests, 0 failed** for the complete HAMT project; its focused bag plus bulk-builder filter
+passes **52 tests, 0 failed**. No benchmark is part of the bag acceptance gate; benchmark work
+remains postponed to an isolated machine run.
 
 Use the workspace [validation guide](../../docs/Hamt/validation.md) for restore/build split commands, warning policy,
 and evidence expectations.
