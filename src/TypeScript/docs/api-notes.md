@@ -124,7 +124,8 @@ precision integers.
 
 ## Deliberate non-ports
 
-The repository's frozen CHAMP tier, range-update sequence, order-maintenance list, persistent chunked
-bitset, styled-text rope, and other frontier/derived-catalog entries are proposals or explicitly
-postponed candidates rather than existing shipped data structures. They are therefore not presented
-as TypeScript ports. Benchmark prototypes are evidence machinery, not package API.
+`RangeUpdateSequence` now ships as the C# reference core but remains pending TypeScript parity, so it
+is not yet presented as TypeScript package API. The repository's frozen CHAMP tier, order-maintenance
+list, persistent chunked bitset, styled-text rope, and other unshipped frontier/derived-catalog
+entries remain proposals or explicitly postponed candidates. Benchmark prototypes are evidence
+machinery, not package API.

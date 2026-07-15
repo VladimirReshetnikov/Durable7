@@ -38,14 +38,17 @@ iterable and applies the receiver's policy.
 hashing, and call exactly the selected factory at most once. Both return a frozen `MapUpdateResult`
 containing the successor map and concrete selected value. Hits retain the stored key and value
 representatives, including a stored `None`; updates receive the caller's key and stored value. A
-factory failure leaves the source untouched.
+factory failure leaves the source untouched. Stored-value no-op detection first checks object
+identity and otherwise uses ordinary Python `==`; value-equality exceptions propagate without
+publishing a successor.
 
 `HashMapBulkBuilder` constructs an independent map by mutating unpublished leaf, collision, and
 bitmap nodes. Its public surface is deliberately limited to policy/count state, `set_item`,
 `set_items`, and `to_immutable`. Duplicate keys keep their first representative, the last
 Python-distinct value wins, and an equal value keeps the earlier object. Each freeze copies the
 node topology without policy callbacks, remains detached from earlier snapshots, and leaves the
-builder reusable. Map/set range construction, foreign-policy set probes, and applicable
+builder reusable. Value-equality exceptions leave builder state unchanged. Map/set
+range construction, foreign-policy set probes, and applicable
 intersection results route through this construction path; lookup/removal/adoption remain the
 separate transient lifecycle.
 

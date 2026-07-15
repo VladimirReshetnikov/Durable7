@@ -47,12 +47,13 @@ class _SwitchablePolicy(HashPolicy[_Representative]):
         self.hash_buckets = hash_buckets
         self.throw_hash = False
         self.throw_equality = False
+        self.fail_hash_at: int | None = None
         self.hash_calls = 0
         self.equality_calls = 0
 
     def hash(self, key: _Representative) -> int:
         self.hash_calls += 1
-        if self.throw_hash:
+        if self.throw_hash or self.hash_calls == self.fail_hash_at:
             raise RuntimeError("hash failure")
         return key.equivalence_class % self.hash_buckets
 
@@ -214,6 +215,36 @@ def test_repeated_midpoint_insertions_cross_relabels_and_preserve_branches() -> 
     source._validate_invariants()
     left._validate_invariants()
     right._validate_invariants()
+
+
+def test_move_relabels_an_exhausted_gap_and_rebuild_failure_is_atomic() -> None:
+    policy = _SwitchablePolicy()
+    first = _Representative(-2, "first")
+    last = _Representative(-1, "last")
+    inserted = [_Representative(index, f"inserted-{index}") for index in range(20)]
+    source = PersistentOrderedSet.from_values([first, last], policy)
+    for value in inserted:
+        source = source.insert(1, value)
+
+    expected = [first, *reversed(inserted), last]
+    _assert_representatives(expected, source)
+    assert source._order[0].stamp == 0
+    assert source._order[1].stamp == 1
+
+    policy.reset()
+    policy.fail_hash_at = 2
+    with pytest.raises(RuntimeError, match="hash failure"):
+        source.move_to(1, last)
+    policy.fail_hash_at = None
+    _assert_representatives(expected, source)
+
+    moved = source.move_to(1, last)
+    moved_expected = [first, last, *reversed(inserted)]
+    _assert_representatives(moved_expected, moved)
+    moved_lookup = moved.try_get_value(last)
+    assert moved_lookup.found and moved_lookup.value is last
+    assert moved._order[1].stamp == _ordered_module._STAMP_STRIDE
+    _assert_representatives(expected, source)
 
 
 def test_ranges_clear_reverse_and_boundary_identities() -> None:

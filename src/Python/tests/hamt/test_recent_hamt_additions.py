@@ -38,6 +38,14 @@ class _Value:
         return isinstance(other, _Value) and self.semantic == other.semantic
 
 
+@dataclass(frozen=True, slots=True, eq=False)
+class _EqualityFailingValue:
+    identity: int
+
+    def __eq__(self, other: object) -> bool:
+        raise ValueError("value equality failure")
+
+
 class _CountingPolicy(HashPolicy[_Key]):
     def __init__(self) -> None:
         self.hash_calls = 0
@@ -134,6 +142,73 @@ def test_factory_updates_validate_before_hash_and_publish_nothing_on_failure() -
             lambda _key: (_ for _ in ()).throw(RuntimeError("factory failed")),
         )
     assert not source.contains_key(missing)
+
+
+def test_factory_value_equality_failures_are_atomic_for_every_node_shape() -> None:
+    collision_policy: HashPolicy[int] = create_hash_policy(
+        lambda _key: 0, lambda left, right: left == right
+    )
+    cases: tuple[tuple[HashPolicy[int], list[int], int], ...] = (
+        (default_hash_policy(), [7], 7),
+        (collision_policy, [7, 8, 9], 8),
+        (default_hash_policy(), [0, 32, 1], 32),
+    )
+
+    for policy, keys, target in cases:
+        stored_values = {key: _EqualityFailingValue(key) for key in keys}
+        source = PersistentHashMap.from_items(
+            ((key, stored_values[key]) for key in keys),
+            policy,
+        )
+
+        with pytest.raises(ValueError, match="value equality failure"):
+            source.add_or_update(
+                target,
+                lambda _key: _EqualityFailingValue(-1),
+                lambda key, _stored: _EqualityFailingValue(1000 + key),
+            )
+
+        assert source.size == len(keys)
+        retained = source.get_entry(target)
+        assert retained is not None
+        assert retained.value is stored_values[target]
+        assert (
+            source.add_or_update(
+                target,
+                lambda _key: _EqualityFailingValue(-1),
+                lambda _key, stored: stored,
+            ).map
+            is source
+        )
+
+
+def test_bulk_builder_value_equality_failures_are_atomic_for_every_node_shape() -> None:
+    collision_policy: HashPolicy[int] = create_hash_policy(
+        lambda _key: 0, lambda left, right: left == right
+    )
+    cases: tuple[tuple[HashPolicy[int], list[int], int], ...] = (
+        (default_hash_policy(), [7], 7),
+        (collision_policy, [7, 8, 9], 8),
+        (default_hash_policy(), [0, 32, 1], 32),
+    )
+
+    for policy, keys, target in cases:
+        stored_values = {key: _EqualityFailingValue(key) for key in keys}
+        builder = HashMapBulkBuilder[int, _EqualityFailingValue](policy)
+        builder.set_items((key, stored_values[key]) for key in keys)
+        before = builder.to_immutable()
+
+        with pytest.raises(ValueError, match="value equality failure"):
+            builder.set_item(target, _EqualityFailingValue(1000 + target))
+
+        after = builder.to_immutable()
+        assert builder.size == len(keys)
+        before_entry = before.get_entry(target)
+        after_entry = after.get_entry(target)
+        assert before_entry is not None
+        assert after_entry is not None
+        assert before_entry.value is stored_values[target]
+        assert after_entry.value is stored_values[target]
 
 
 def test_factory_updates_cover_collisions_branches_and_nullable_values() -> None:
@@ -387,6 +462,43 @@ def test_hash_bag_eager_foreign_policy_normalization_checks_collapsed_counts() -
         receiver.intersect(argument)
     assert receiver.is_empty
     assert argument.count_of("A") == _INT_MAX and argument.count_of("a") == 1
+
+
+def test_hash_bag_successful_foreign_policy_normalization_preserves_precedence() -> None:
+    receiver_policy = _CountingPolicy()
+    argument_policy: HashPolicy[_Key] = create_hash_policy(
+        lambda value: value.identity,
+        lambda left, right: left is right,
+    )
+    receiver_value = _Key("alpha", 1)
+    argument_first = _Key("ALPHA", 2)
+    argument_second = _Key("alpha", 3)
+    argument = (
+        PersistentHashBag[_Key]
+        .empty(argument_policy)
+        .add_copies(argument_first, 2)
+        .add_copies(argument_second, 3)
+    )
+    first_in_argument_order = next(argument.entries()).value
+
+    normalized = PersistentHashBag[_Key].empty(receiver_policy).union(argument)
+    normalized_entry = normalized.get_entry(receiver_value)
+    assert normalized_entry is not None
+    assert normalized_entry.count == 5
+    assert normalized_entry.value is first_in_argument_order
+
+    receiver = PersistentHashBag[_Key].empty(receiver_policy).add(receiver_value)
+    union = receiver.union(argument)
+    union_entry = union.get_entry(argument_first)
+    assert union_entry is not None
+    assert union_entry.count == 5
+    assert union_entry.value is receiver_value
+
+    summed = receiver.sum(argument)
+    summed_entry = summed.get_entry(argument_second)
+    assert summed_entry is not None
+    assert summed_entry.count == 6
+    assert summed_entry.value is receiver_value
 
 
 @settings(max_examples=100)

@@ -374,6 +374,13 @@ describe("PersistentOrderedSet movement, ranges, and ordering", () => {
         expectRepresentatives([...expected, appended], sorted.add(appended));
         expect(source.sort(() => 0)).toBe(source);
         expectRepresentatives(items, source);
+
+        const defaultSource = PersistentOrderedSet.from([4, 1, 3, 2]);
+        const defaultSorted = defaultSource.sort();
+        expectRepresentatives([1, 2, 3, 4], defaultSorted);
+        const equivalentButDistinctComparator = (left: number, right: number): number => left - right;
+        expect(defaultSorted.sort(equivalentButDistinctComparator)).toBe(defaultSorted);
+        expectRepresentatives([4, 1, 3, 2], defaultSource);
     });
 
     test("sort and derived-index failures never mutate the source", () => {

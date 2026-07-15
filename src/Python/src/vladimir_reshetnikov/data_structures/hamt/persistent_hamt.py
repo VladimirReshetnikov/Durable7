@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import Generic, Literal, TypeVar, cast
 
-from .hash_policy import HashPolicy, default_hash_policy, same_value
+from .hash_policy import HashPolicy, default_hash_policy
 
 K = TypeVar("K")
 V = TypeVar("V")
@@ -192,7 +192,10 @@ def _bitmap(
 
 
 def _values_equal(left: V, right: V) -> bool:
-    return same_value(left, right)
+    if left is right:
+        return True
+    result = left == right
+    return result if isinstance(result, bool) else False
 
 
 def _hash_fragment(hash_value: int, shift: int) -> int:

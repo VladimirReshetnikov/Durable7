@@ -499,15 +499,20 @@ without competing agents or machine contention.
 ### Why This Is Separate From Builders And Transients
 
 The historical A1 proposal grouped `Update`, `GetOrAdd`, a builder, and transient construction. The
-current repository vocabulary makes that grouping obsolete:
+current repository vocabulary distinguishes those roles:
 
-- `BulkBuilder` is an internal staging mechanism used by canonical one-freeze construction.
-- `Transient` is the public one-way owner-token editing session.
+- C# keeps `BulkBuilder` as internal staging used by canonical one-freeze construction.
+- C++, Rust, TypeScript, and Python expose a reusable construction-only builder as a deliberate
+  language-local extension. It freezes detached immutable snapshots but has no adopt/edit/publish
+  lifecycle, does not create a public hash-bag builder, and does not replace a transient session.
+- `Transient` is the public one-way owner-token editing session where that lifecycle is supported.
 - `GetOrAdd`/`AddOrUpdate` are ordinary persistent point operations returning immutable versions.
 
 Canonical bulk construction and C# transients already shipped before this proposal. Step 1 closed
-the C# single-pass persistent point-operation gap, and TypeScript/Python parity has since shipped;
-this section records the C# reference contract and validation boundary for the remaining ports.
+the C# single-pass persistent point-operation gap, and TypeScript/Python parity has since shipped.
+The remaining factory ports preserve the one-descent operation contract; they are not required to
+copy another language's decision about whether construction-only staging is public. This section
+records the C# reference contract and validation boundary for those remaining ports.
 
 ### Recommended Surface
 
