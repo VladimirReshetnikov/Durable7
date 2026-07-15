@@ -21,6 +21,7 @@ Include the public header:
 #include <tools/data_structures/finger_tree/brodal_okasaki_heap.h>
 #include <tools/data_structures/finger_tree/canonical_sorted_set.h>
 #include <tools/data_structures/finger_tree/priority_search_queue.h>
+#include <tools/data_structures/finger_tree/range_update_sequence.h>
 #include <tools/data_structures/finger_tree/daba_lite.h>
 #include <tools/data_structures/finger_tree/rrb_vector.h>
 ```
@@ -438,6 +439,99 @@ the last read. Queue-producing operations accept exact source/result aliasing an
 `visit` traverses every entry in key order. `visit_at_most` traverses an inclusive key range and emits only
 priorities less than or equal to its threshold, pruning subtrees through cached winners. A reversed range is an
 error even for an empty queue. The checkpoint intentionally offers no split or slice operation.
+
+## Persistent Range-Update Sequence
+
+Use `ft_range_update_sequence` when an immutable indexed sequence needs contiguous lazy actions and ordered
+range measures. The policy is reference counted and retained by every version, so the policy handle may be
+disposed after the first sequence is initialized. Callback contexts and identity-token objects remain
+caller-owned.
+
+For example, an affine sum policy can use `int64_t` elements/measures and a tag containing optional assignment
+plus addition. The callbacks below the configuration must implement the laws in the [API notes](api-notes.md):
+
+```c
+typedef struct affine_tag {
+    bool has_assignment;
+    int64_t assignment;
+    int64_t addition;
+} affine_tag;
+
+static const unsigned char element_type_identity = 0;
+static const unsigned char measure_type_identity = 0;
+static const unsigned char tag_type_identity = 0;
+static const int64_t empty_sum = 0;
+static const affine_tag identity_tag = { false, 0, 0 };
+
+ft_range_update_policy_config config;
+ft_range_update_policy_config_init(
+    &config,
+    sizeof(int64_t), &element_type_identity,
+    sizeof(int64_t), &measure_type_identity,
+    sizeof(affine_tag), &tag_type_identity,
+    &empty_sum,
+    &identity_tag,
+    affine_measure_element,
+    affine_combine,
+    affine_measure_equals,
+    affine_is_identity,
+    affine_compose,       /* compose(newer, older) */
+    affine_apply_element,
+    affine_apply_measure);
+
+ft_range_update_policy policy = {0};
+ft_status status = ft_range_update_policy_create(&policy, &config);
+if (status != FT_STATUS_OK) {
+    return status;
+}
+
+int64_t items[] = { 1, 2, 3, 4 };
+const void* item_refs[] = { &items[0], &items[1], &items[2], &items[3] };
+ft_range_update_sequence original = {0};
+status = ft_range_update_sequence_from_array(
+    &original, &policy, item_refs, 4);
+ft_range_update_policy_dispose(&policy); /* original retained it */
+if (status != FT_STATUS_OK) {
+    return status;
+}
+
+affine_tag add_ten = { false, 0, 10 };
+ft_range_update_sequence added = {0};
+status = ft_range_update_sequence_apply_range(
+    &original, 1, 2, &add_ten, &added);
+if (status == FT_STATUS_OK) {
+    int64_t middle_sum = 0;
+    status = ft_range_update_sequence_measure_range(
+        &added, 1, 2, &middle_sum); /* 25 */
+}
+
+ft_range_update_sequence_dispose(&added);
+ft_range_update_sequence_dispose(&original);
+return status;
+```
+
+The `affine_compose` callback must make assignment-after-add discard the old addition and add-after-assignment
+fold the addition into the assigned value. `affine_apply_measure` transforms the already-combined sum in O(1)
+from the tag, sum, and subtree count. An identity tag may have more than one byte representation; use semantic
+fields in `affine_is_identity` rather than `memcmp`.
+
+All single-result edits accept exact aliasing, so a current snapshot can be replaced directly:
+
+```c
+status = ft_range_update_sequence_apply_range(
+    &sequence, start, count, &tag, &sequence);
+```
+
+On failure the aliased source is unchanged. With a distinct result, initialize the result to zero and dispose it
+only after success. Concat requires exact policy identity and permits the result to alias either operand. Split
+returns two owned handles; dispose both. Values returned by `at`, `measure`, or `measure_range` are constructed in
+uninitialized caller storage and become caller-owned on success. For nontrivial types, invoke the same destroy
+hook configured for that type.
+
+`visit` presents each logical element as a callback-duration borrow. It is the preferred C traversal surface
+when the caller does not need to retain copies. Read-only diagnostics can compare root pointers or exact shared
+node counts; these are representation facts, not value equality. Benchmarks remain intentionally postponed—the
+API's current claims are structural O(1)/O(log n) bounds only.
 
 ## DABA Lite Sliding Aggregate
 

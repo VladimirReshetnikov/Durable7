@@ -123,3 +123,24 @@ target_include_directories(
 fingertree_c_configure_target(priority_search_queue_c_tests)
 
 tds_add_headless_test(NAME fingertree_c.priority_search_queue TARGET priority_search_queue_c_tests)
+
+add_executable(
+    range_update_sequence_c_tests
+    range_update_sequence_tests.c
+)
+
+target_link_libraries(
+    range_update_sequence_c_tests
+    PRIVATE
+        tools::data_structures::finger_tree_c
+)
+
+target_include_directories(
+    range_update_sequence_c_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+fingertree_c_configure_target(range_update_sequence_c_tests)
+
+tds_add_headless_test(NAME fingertree_c.range_update_sequence TARGET range_update_sequence_c_tests)

@@ -16,19 +16,21 @@ The workspace uses CMake presets. The `msvc-*` presets use Visual Studio's bundl
 the `ninja-*` presets use `cmake` and `ninja` from `PATH` for host-agnostic validation. `CMakeLists.txt` builds the
 `tools_data_structures_finger_tree_c` static library from `src/fingertree.c`,
 `src/brodal_okasaki_heap.c`, `src/canonical_sorted_set.c`, `src/priority_search_queue.c`,
-`src/rrb_vector.c`, and `src/daba_lite.c`,
+`src/range_update_sequence.c`, `src/rrb_vector.c`, and `src/daba_lite.c`,
 with these options enabled by default:
 
 - `FINGERTREE_C_BUILD_TESTS`: builds `tests/fingertree_c_tests`,
   `tests/brodal_okasaki_heap_c_tests`, `tests/canonical_sorted_set_c_tests`,
-  `tests/priority_search_queue_c_tests`, `tests/rrb_vector_c_tests`, and `tests/daba_lite_c_tests`, registering
+  `tests/priority_search_queue_c_tests`, `tests/range_update_sequence_c_tests`,
+  `tests/rrb_vector_c_tests`, and `tests/daba_lite_c_tests`, registering
   `fingertree_c.core`, `fingertree_c.brodal_okasaki_heap`, `fingertree_c.canonical_sorted_set`,
-  `fingertree_c.priority_search_queue`, `fingertree_c.rrb_vector`, and `fingertree_c.daba_lite`.
+  `fingertree_c.priority_search_queue`, `fingertree_c.range_update_sequence`,
+  `fingertree_c.rrb_vector`, and `fingertree_c.daba_lite`.
 - `FINGERTREE_C_BUILD_SAMPLES`: builds `samples/fingertree_c_showcase` and
   `samples/fingertree_c_snapshots`, both registered as CTest smoke tests.
 - `FINGERTREE_C_BUILD_BENCHMARKS`: builds `benchmarks/fingertree_c_benchmarks`.
 
-With tests and samples enabled, a complete CTest run contains eight targets: six library test executables and
+With tests and samples enabled, a complete CTest run contains nine targets: seven library test executables and
 two sample smoke tests.
 
 The project is C11 (`C_STANDARD 11`, required, extensions off). MSVC targets build with `/permissive-`,
@@ -152,6 +154,25 @@ type-erased storage, clear/reuse, and every library allocation failpoint in crea
 and clear with state/leak rollback assertions. Handle-move coverage verifies populated ownership
 transfer, moved-from queries/destruction, continued destination use, and final destruction. The C callback policy is infallible by type; callbacks
 must return normally, while injected library allocation failure is fully status-tested.
+
+The independent `fingertree_c.range_update_sequence` executable covers:
+
+- executable measure/tag monoid and action laws, including byte-distinct identity tags, noncommutative ordered
+  measures, assignment-after-add, add-after-assignment, and nullable payload fields;
+- empty/singleton/prefix/suffix/whole/proper range behavior, every split/concat boundary, root identity,
+  exact shared-node counts, visitor/index agreement, overflow-safe rejection, and invalid-before-callback order;
+- a deterministic 1,000-step insert/remove/set/split/concat/get-range/apply-range/query model with retained
+  snapshots and branches from arbitrary old versions;
+- every observed position of element measurement, measure combination, identity recognition, tag composition,
+  element action, aggregate action, and allocation during a nested lazy update, plus validation-time measure
+  equality failure, checking untouched outputs, source validity, exact allocation liveness, and successful retry;
+- a compact shared DAG whose logical count and measure are exactly `SIZE_MAX`, memoized invariant validation,
+  logical-versus-physical node statistics, and append/concat overflow rejection before callbacks; and
+- concurrent index, whole-measure, and range-measure readers over retained original and lazily updated snapshots.
+
+The C Range-update shipment does not run the timing harness. Benchmarks remain postponed until the machine can
+run them in isolation; the gate records compiler, semantic, ownership, failure-atomicity, sharing, and structural
+complexity evidence only.
 
 The independent `fingertree_c.brodal_okasaki_heap` executable covers:
 

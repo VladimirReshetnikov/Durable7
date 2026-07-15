@@ -5,12 +5,13 @@
 - Audience: Maintainers validating the C FingerTree port
 - Scope: Native test executable and source organization under `src/C/FingerTree/tests`
 
-The C FingerTree workspace has six focused native test executables. `fingertree_c_tests` is
+The C FingerTree workspace has seven focused native test executables. `fingertree_c_tests` is
 registered as `fingertree_c.core`; `rrb_vector_c_tests` is registered as
 `fingertree_c.rrb_vector`; `daba_lite_c_tests` is registered as `fingertree_c.daba_lite`;
 `canonical_sorted_set_c_tests` is registered as `fingertree_c.canonical_sorted_set`;
 `brodal_okasaki_heap_c_tests` is registered as `fingertree_c.brodal_okasaki_heap`;
-and `priority_search_queue_c_tests` is registered as `fingertree_c.priority_search_queue`. Each source
+`priority_search_queue_c_tests` is registered as `fingertree_c.priority_search_queue`; and
+`range_update_sequence_c_tests` is registered as `fingertree_c.range_update_sequence`. Each source
 contains its runner, assertion macros, policy helpers, and test cases. The canonical executable uses
 the library's Windows CNG or OpenSSL Crypto backend but no test-framework dependency.
 
@@ -18,7 +19,8 @@ The runner prints one `[pass]` line per named test case, writes failed requireme
 line information, and exits non-zero if any test increments the failure count. A successful core run ends with
 `all C FingerTree tests passed`. Focused runners identify their surface in the corresponding final marker:
 `all C RRB vector tests passed`, `all C DABA Lite tests passed`, `all C canonical sorted-set tests passed`,
-`all C Brodal-Okasaki heap tests passed`, or `all C priority search queue tests passed`.
+`all C Brodal-Okasaki heap tests passed`, `all C priority search queue tests passed`, or
+`all C range-update sequence tests passed`.
 
 ## Test Cases
 
@@ -125,6 +127,23 @@ line information, and exits non-zero if any test increments the failure count. A
 - `PSQ concurrent distinct-handle readers` runs eight independent copy/lookup/minimum/validate/visit/dispose
   readers over a shared 10,000-entry immutable queue.
 
+`range_update_sequence_tests.c` registers these cases:
+
+- `Range-update algebra laws and policy lifecycle` checks policy retention, byte-distinct semantic identities,
+  two-sided identity, associativity, and the observable assignment/addition composition direction.
+- `Range-update surface boundaries sharing and nullable payloads` checks ordered cached measures, logical
+  element reads, every split boundary, extraction, empty/identity root no-ops, invalid-before-callback ordering,
+  nullable inner payloads, physical-node counts, and exact full-update sharing.
+- `Range-update retained thousand-step model` checks every persistent edit/range/query family after each command,
+  retains periodic snapshots, and branches lazy updates from arbitrary old versions.
+- `Range-update callback and allocator failure atomicity` exhausts every observed position of all six algebra
+  action callbacks and the injected allocator through a nested-tag proper-range update, plus diagnostic measure
+  equality failure, verifying rollback, leak freedom, source validity, untouched outputs, and retry.
+- `Range-update maximum-count shared DAG and overflow` constructs a compact `SIZE_MAX` logical sequence, validates
+  it with DAG memoization, and proves overflow rejection before publication.
+- `Range-update concurrent retained snapshot readers` races independent readers across original and updated
+  immutable versions.
+
 `daba_lite_tests.c` covers:
 
 - all 1,024 ten-step insert/evict histories against a noncommutative matrix FIFO model;
@@ -156,6 +175,7 @@ Run the built executables directly when changing runner diagnostics or a focused
 .\out\build\msvc-debug\tests\canonical_sorted_set_c_tests.exe
 .\out\build\msvc-debug\tests\brodal_okasaki_heap_c_tests.exe
 .\out\build\msvc-debug\tests\priority_search_queue_c_tests.exe
+.\out\build\msvc-debug\tests\range_update_sequence_c_tests.exe
 .\out\build\msvc-debug\tests\rrb_vector_c_tests.exe
 .\out\build\msvc-debug\tests\daba_lite_c_tests.exe
 ```

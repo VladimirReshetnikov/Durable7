@@ -10,6 +10,7 @@ The public C API lives in `tools/data_structures/finger_tree/fingertree.h` and t
 `tools/data_structures/finger_tree/canonical_sorted_set.h`,
 `tools/data_structures/finger_tree/brodal_okasaki_heap.h`,
 `tools/data_structures/finger_tree/priority_search_queue.h`,
+`tools/data_structures/finger_tree/range_update_sequence.h`,
 `tools/data_structures/finger_tree/rrb_vector.h`, and
 `tools/data_structures/finger_tree/daba_lite.h` headers. For setup and handle-lifetime examples, start with the
 [usage guide](usage.md). The API uses opaque handles plus explicit policy callbacks rather than C++ templates:
@@ -65,6 +66,9 @@ Implemented in this checkpoint:
 - independent persistent winner-cached priority search queue with fallible type-erased keys, priorities, and
   values, comparer-defined key identity, exact stored representatives, logarithmic keyed updates, constant-time
   minimum selection, logarithmic delete-minimum, key-order traversal, and inclusive range/threshold traversal;
+- independent type-erased `ft_range_update_sequence` with a persistent implicit AVL, ordered cached measures,
+  lazily composed range actions, overflow-safe counts, logarithmic indexed/range operations, O(1) whole-root
+  updates, success-only publication, visitor traversal, and memoized DAG validation;
 - generic persistent minimum-priority queue with caller-supplied value and priority copy policies;
 - generic closed-interval tree facade, plus a signed 64-bit convenience facade, with insertion, removal,
   containment, first-overlap, and overlap count;
@@ -277,6 +281,65 @@ worklists rather than recursive C calls. Every operation stages all allocation, 
 comparisons, and successor construction before success-only output publication. Failure therefore preserves
 source handles, exact aliases, and distinct outputs. The API intentionally has no split or slice operation; the
 range/threshold visitor is the complete bounded-query surface for this checkpoint.
+
+## Persistent Range-Update Sequence Contract
+
+`ft_range_update_sequence` is the neutral C port of the benchmark-independent range-update core. It is not a
+wrapper around either measured finger-tree engine and has no Tungsten dependency. Its immutable nodes form an
+implicit-key AVL tree and store one owned element, child references, checked `size_t` height/count metadata, an
+owned ordered measure, and an optional owned pending tag. A policy handle owns copied empty-measure and
+identity-tag representatives and is retained by every sequence version.
+
+`ft_range_update_policy_config` describes element, measure, and tag storage separately. Each type has a required
+stable identity token, a byte size, and optional fallible copy/infallible destroy hooks. The algebra supplies
+fallible element measurement, ordered measure combination, measure equality, identity recognition,
+`compose(newer, older)`, element action, and aggregate action. Callback destinations are uninitialized storage;
+success constructs an owned value, while failure must leave the destination ownership-free. A destroy hook
+therefore requires a copy hook. The allocator and every context remain caller-owned and must outlive all
+retaining policy/sequence handles.
+
+The required algebra is the C# reference contract: measures form an ordered monoid; tags form a monoid under
+directional composition; tags act lawfully on elements and measures; singleton measurement agrees with element
+action; and aggregate action distributes over ordered combination. `compose(newer, older)` always applies the
+older action first. `is_identity` is authoritative: several byte-distinct tag values may denote identity, and
+the implementation never infers the absence of work from tag byte equality. Policy creation copies the supplied
+identity tag and rejects it with `FT_STATUS_INCONSISTENT_POLICY` if `is_identity` does not recognize it.
+
+A node's element and cached measure already include its pending tag, while its children do not. Whole-subtree
+application transforms the root element/measure, composes the new tag after any old tag, and retains both child
+roots. Structural descent immutably pushes the pending tag into child wrappers before edits or rotations.
+Read-only descent instead carries an owned scratch tag; for a child it computes
+`compose(inherited, node_pending)` because the inherited action is newer. No node reachable from an old version
+is mutated.
+
+`from_array` validates every input pointer before copying or measuring any element and builds deterministic
+balanced shape in input order. Index, set, and remove accept `0 .. size-1`; insert and split accept `0 .. size`;
+range APIs check `index <= size && count <= size-index`, avoiding overflow-prone addition. Validation always
+precedes algebra callbacks. An empty update returns the exact source root without calling `is_identity`; an
+identity update likewise retains the source root. Inserted/replaced elements are current logical values and are
+not retroactively transformed by pending tags above the edit path.
+
+Every handle-producing operation stages a complete successor and supports exact result/source aliasing. Concat
+accepts either operand as its exact result and requires exact policy identity; mismatch returns
+`FT_STATUS_INCOMPATIBLE_POLICY`. Non-aliasing results are output-only. Split publishes two distinct outputs and
+allows either field to alias the source. Allocation, type-copy, or algebra failure publishes nothing and leaves
+all inputs unchanged. Successful `measure`, `measure_range`, and `at` calls construct one owned value in
+caller-provided uninitialized storage; the caller invokes the matching type destroy hook when one exists.
+Visitor elements are borrowed only for the callback duration.
+
+Whole-root nonidentity update is O(1) structural work and allocates one replacement node plus the type-erased
+owned tag/element/measure cells. Proper range update, range measure, split, concat, extraction, and indexed edits
+are O(log n) structural work. Type-erased reads may allocate O(log n) temporary tag/value cells while carrying
+lazy actions; visitation is O(n) and may construct temporary logical elements. These runtime-specific scratch
+allocations do not change the cross-language persistent topology or benchmark-independent complexity claim.
+
+Atomic references protect immutable policy, object, and node reps. Independently held handles can be read,
+copied, updated into distinct outputs, and disposed concurrently when reachable callbacks and allocator hooks
+are themselves safe for that call pattern. The same handle object must not be mutated or disposed concurrently.
+Root identity, unique physical-node count, exact shared-node count, and `validate` are diagnostics. Validation
+memoizes physical DAG nodes, recomputes logical counts/heights/measures and lazy action effects, rejects identity
+pending tags, and reports logical versus physical node counts. Structural invalidity is status OK with
+`valid=false`; allocation/callback failure leaves outputs unchanged.
 
 ## DABA Lite Contract
 
