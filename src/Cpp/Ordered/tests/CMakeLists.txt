@@ -1,0 +1,17 @@
+find_package(Threads REQUIRED)
+
+add_executable(
+    ordered_smoke_tests
+    persistent_ordered_set_tests.cpp
+)
+
+target_link_libraries(
+    ordered_smoke_tests
+    PRIVATE
+        tools::data_structures::ordered
+        Threads::Threads
+)
+
+ordered_configure_target(ordered_smoke_tests)
+
+tds_add_headless_test(NAME ordered.smoke TARGET ordered_smoke_tests)

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('All', 'Hamt', 'FingerTree', 'Tungsten')]
+    [ValidateSet('All', 'Hamt', 'FingerTree', 'Ordered', 'Tungsten')]
     [string[]] $Workspace = @('All'),
 
     [ValidateSet('Debug', 'Release')]
@@ -84,12 +84,37 @@ function Invoke-TungstenBuild {
     }
 }
 
-$selected = if ($Workspace -contains 'All') { @('Hamt', 'FingerTree', 'Tungsten') } else { $Workspace }
+function Invoke-OrderedBuild {
+    $preset = if ($Configuration -eq 'Release') { 'msvc-release' } else { 'msvc-debug' }
+    $steps = @(
+        "call `"$VisualStudioDevCmd`" -arch=x64 -host_arch=x64",
+        "`"$CMake`" --preset $preset",
+        "`"$CMake`" --build --preset $preset --parallel 1"
+    )
+
+    if ($RunTests) {
+        $steps += "`"$CTest`" --preset $preset --parallel 1 --output-on-failure"
+    }
+
+    Push-Location -LiteralPath (Join-Path $PSScriptRoot 'Ordered')
+    try {
+        & cmd.exe /d /c ($steps -join ' && ')
+        if ($LASTEXITCODE -ne 0) {
+            throw "C++ Ordered build failed with exit code $LASTEXITCODE."
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+$selected = if ($Workspace -contains 'All') { @('Hamt', 'FingerTree', 'Ordered', 'Tungsten') } else { $Workspace }
 
 foreach ($item in $selected) {
     switch ($item) {
         'Hamt' { Invoke-HamtBuild }
         'FingerTree' { Invoke-FingerTreeBuild }
+        'Ordered' { Invoke-OrderedBuild }
         'Tungsten' { Invoke-TungstenBuild }
     }
 }
