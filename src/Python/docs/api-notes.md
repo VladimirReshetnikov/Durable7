@@ -14,8 +14,9 @@ The package source and executable tests are authoritative where an API detail is
   semantics, with an identity fallback for values that do not provide a hash.
 - CHAMP edit sessions are explicitly one-way and version-bound. They provide the shared transient
   lifecycle but make no in-place-update performance claim.
-- `ConcurrentHashTrie` is a thread-safe, lock-coordinated Python facade with constant-time immutable
-  snapshots. It is not represented as the lock-free GCAS Ctrie of the managed reference workspace.
+- `ConcurrentHashTrie` is a thread-safe, `RLock`-coordinated Python consumer-semantic facade with
+  constant-time immutable snapshots. It is not the lock-free GCAS/RDCSS Ctrie of the managed
+  reference workspaces and makes no lock-free progress claim.
 - Python `int` supplies the storage substrate for Patricia long keys, fixed-width integers, and
   sparse integers. Public boundaries still enforce signed 32-bit keys and fixed-width wrapping,
   checked arithmetic, byte order, and two's-complement behavior.
@@ -34,6 +35,38 @@ collision buckets. Point edits path-copy only the affected spine, comparer-equiv
 keeps the stored key representative, and semantic no-ops keep object identity. Algebra between maps
 requires the same policy object where structural compatibility matters; set algebra accepts any
 iterable and applies the receiver's policy.
+
+`ConcurrentHashTrie` serializes each public operation with one reentrant lock and publishes whole
+immutable CHAMP roots. `snapshot()` captures the current root in O(1); its lookup, presence-aware
+entry, canonical iteration, and persistent-map conversion remain stable across every later
+publication. `generation` advances exactly once for each changed root actually published by this
+facade. Duplicate additions, equal-value sets or computes, missing removals, and clearing an empty
+facade do not advance it. A stored `None` remains distinct from absence through `contains_key` and
+`get_entry` even though the convenience `get` method is nullable.
+
+Every policy-driven mutation captures the root on which it begins its CHAMP traversal. If a
+same-thread `HashPolicy.hash` or `HashPolicy.equivalent` callback re-enters the facade and publishes
+a different root, `set`, `try_add`, `remove`, and `compute` discard the obsolete successor and retry
+against the nested publication. Their result is therefore determined by the latest stable root:
+an equivalent nested insertion makes an outer `try_add` return `False`, while `remove` returns the
+representative and value from the root it finally removes. Different-key nested updates remain in
+the outer successor. Each changed nested and outer publication advances `generation` separately.
+This deterministic retry contract assumes, as any reentrant callback contract must, that callbacks
+eventually stop publishing new roots so the outer operation can finish.
+
+`get_or_put(key, factory)` skips its factory on a hit and passes the caller's lookup key on a miss.
+Because `RLock` allows same-thread reentry, it checks the latest root again after the callback; an
+equivalent entry published by a nested operation wins and keeps that nested operation's stored key
+and value representatives. Its user factory runs at most once; policy-callback retries reuse the
+already computed candidate. `compute(key, add, update)` likewise passes the caller's lookup key on
+both branches, never the retained stored key; the update branch also receives the latest stored
+value representative. It computes against a captured immutable root and publishes only while that
+exact root is still current. If a callback re-enters the facade and changes the root, `compute`
+discards its stale successor and retries against the nested publication. Compute factories must
+therefore tolerate repeated invocation. A callback or policy failure before the outer publication
+leaves the outer operation unpublished; already completed nested publications are independent
+operations and are not rolled back. These are consumer semantics, not an emulation of managed
+Ctrie internals or their progress guarantee.
 
 `PersistentHashMap.get_or_add(key, add_factory)` and
 `add_or_update(key, add_factory, update_factory)` hash and descend once, validate factories before

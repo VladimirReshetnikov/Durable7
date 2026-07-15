@@ -52,7 +52,9 @@ class ConcurrentHashTrie(Generic[K, V]):
     """Thread-safe snapshotting hash trie coordinated by one reentrant lock.
 
     Updates publish immutable CHAMP roots and snapshots capture the current root in O(1). This is a
-    lock-based Python facade and deliberately makes no lock-free GCAS/RDCSS progress claim.
+    lock-based Python facade and deliberately makes no lock-free GCAS/RDCSS progress claim. A
+    mutation retries whenever a reentrant factory or hash-policy callback replaces its captured
+    root, so it never publishes a successor derived from obsolete state.
     """
 
     __slots__ = ("_generation", "_lock", "_map", "policy")
@@ -94,27 +96,43 @@ class ConcurrentHashTrie(Generic[K, V]):
 
     def set(self, key: K, value: V) -> None:
         with self._lock:
-            self._publish(self._map.put(key, value))
+            while True:
+                captured = self._map
+                next_value = captured.put(key, value)
+                if self._map is not captured:
+                    continue
+                self._publish(next_value)
+                return
 
     def try_add(self, key: K, value: V) -> bool:
         with self._lock:
-            result = self._map.try_add(key, value)
-            if result.added:
-                self._publish(result.value)
-            return result.added
+            while True:
+                captured = self._map
+                result = captured.try_add(key, value)
+                if self._map is not captured:
+                    continue
+                if result.added:
+                    self._publish(result.value)
+                return result.added
 
     def get_or_put(self, key: K, factory: Callable[[K], V]) -> V:
+        """Return a present value or publish one produced from the caller's lookup key.
+
+        A stored ``None`` is present. If the factory re-enters this facade and publishes an
+        equivalent key, that nested value wins the post-callback recheck. The user factory runs at
+        most once; retries caused by hash-policy reentry reuse its candidate.
+        """
+
         with self._lock:
-            current = self._map.get_entry(key)
-            if current is not None:
-                return current.value
-            value = factory(key)
-            # A callback may re-enter because this facade uses RLock. Respect a value it published.
-            current = self._map.get_entry(key)
-            if current is not None:
-                return current.value
-            self._publish(self._map.put(key, value))
-            return value
+            while True:
+                captured = self._map
+                current = captured.get_entry(key)
+                if self._map is not captured:
+                    continue
+                if current is not None:
+                    return current.value
+                value = factory(key)
+                return self._publish_get_or_put_candidate(key, value)
 
     def compute(
         self,
@@ -122,22 +140,36 @@ class ConcurrentHashTrie(Generic[K, V]):
         add: Callable[[K], V],
         update: Callable[[K, V], V],
     ) -> V:
+        """Add or update through the caller's key and the latest stored value.
+
+        Reentrant factories can change the immutable root while the outer operation is computing.
+        Such an operation retries against the newly published root, so either factory may run more
+        than once and no successor derived from an obsolete root is installed.
+        """
+
         with self._lock:
-            current = self._map.get_entry(key)
-            next_value = add(key) if current is None else update(current.key, current.value)
-            self._publish(self._map.put(key, next_value))
-            stored = self._map.get_entry(key)
-            if stored is None:
-                raise RuntimeError("Concurrent trie publication lost its computed entry.")
-            return stored.value
+            while True:
+                captured = self._map
+                result = captured.add_or_update(key, add, update)
+                if self._map is not captured:
+                    # RLock permits a factory to call back into this facade. Never publish the
+                    # successor it computed from an obsolete root; retry against the root installed
+                    # by that nested operation instead.
+                    continue
+                self._publish(result.map)
+                return result.value
 
     def remove(self, key: K) -> HamtEntry[K, V] | None:
         with self._lock:
-            result = self._map.try_remove_entry(key)
-            if result is None:
-                return None
-            self._publish(result.map)
-            return result.entry
+            while True:
+                captured = self._map
+                result = captured.try_remove_entry(key)
+                if self._map is not captured:
+                    continue
+                if result is None:
+                    return None
+                self._publish(result.map)
+                return result.entry
 
     def clear(self) -> None:
         with self._lock:
@@ -149,6 +181,15 @@ class ConcurrentHashTrie(Generic[K, V]):
 
     def __iter__(self) -> Iterator[HamtEntry[K, V]]:
         return iter(self.snapshot())
+
+    def _publish_get_or_put_candidate(self, key: K, value: V) -> V:
+        while True:
+            captured = self._map
+            result = captured.get_or_add(key, lambda _key: value)
+            if self._map is not captured:
+                continue
+            self._publish(result.map)
+            return result.value
 
     def _publish(self, next_value: PersistentHashMap[K, V]) -> None:
         if next_value is self._map:

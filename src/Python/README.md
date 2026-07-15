@@ -18,8 +18,11 @@ exact policy identity, `MST2` block encoding, and `MSP2` proof envelope used acr
 
 - `hamt` contains the real 32-way CHAMP map/set, one-descent map factory updates, a persistent hash
   bag, a reusable construction-only bulk builder, one-way edit sessions with all six set relations,
-  a lock-coordinated snapshotting concurrent facade, signed 32/64-bit Patricia collections, and the
-  authenticated Merkle tree with persistence, synchronization, proofs, budgets, and typed merge.
+  an `RLock`-coordinated consumer-semantic snapshotting facade, signed 32/64-bit Patricia
+  collections, and the authenticated Merkle tree with persistence, synchronization, proofs,
+  budgets, and typed merge. The facade preserves Ctrie-facing mutation and snapshot behavior but
+  makes no lock-free GCAS/RDCSS progress claim; root-identity retries prevent a reentrant factory
+  or hash/equality-policy callback from publishing over a newer nested update.
 - `finger_tree` contains the persistent measured AVL engine and deque/finger-tree facades, derived
   sorted/priority/interval collections, positional/measured/text ropes and cursors, a true 32-way
   RRB vector, canonical HMAC-ranked zip-zip set, Brodal-Okasaki heap, winner-cached priority-search

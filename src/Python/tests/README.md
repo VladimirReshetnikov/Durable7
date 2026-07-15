@@ -6,9 +6,14 @@
 Tests are grouped by shipped collection family:
 
 - `hamt/`: CHAMP maps/sets and transients, one-descent factory updates, construction-only mutable
-  builders, the persistent hash bag, transient-set relations, thread-safe snapshots, Patricia
-  maps/sets, exact Merkle wire vectors, verified persistence and sync, proofs, budgets, and typed
-  merge.
+  builders, the persistent hash bag, transient-set relations, and the `RLock`-coordinated
+  concurrent facade. Facade coverage includes caller-key factories, retained representatives,
+  present `None`, exact generations, stable canonical snapshots, collision-model histories,
+  failure atomicity, serialized writers, factory reentry, and hash/equality-policy reentry across
+  every policy-driven mutation. Same-key and different-key hooks lock down stale-root retry, return
+  values, cached `get_or_put` candidates, and generation accounting. The same group also covers
+  Patricia maps/sets, exact Merkle wire vectors, verified persistence and sync, proofs, budgets,
+  and typed merge.
 - `finger_tree/`: measured sequences and derived collections, ropes and cursors, DABA Lite, RRB
   vectors, canonical zip-zip sets, Brodal-Okasaki heaps, priority-search queues, and the lazy-tagged
   range-update sequence. Range coverage includes algebra laws, every range boundary, retained

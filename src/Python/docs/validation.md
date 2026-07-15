@@ -36,7 +36,13 @@ atomicity, concurrent snapshot readers, and generated construction/algebra/branc
 Recent HAMT coverage locks one-descent factory selection and failure atomicity, reusable detached
 mutable-builder freezes (including the final two hash bits and collision buckets), routed map/set
 construction, all transient-set relations, and hash-bag multiplicity, representative, overflow,
-foreign-policy algebra, and generated collision models.
+foreign-policy algebra, and generated collision models. The `RLock`-coordinated concurrent facade
+adds retained-representative and present-`None` checks, exact publication generations, stable
+canonical snapshots, all-collision generated histories, callback failure atomicity, and adversarial
+same-thread reentry proving that compute retries instead of publishing an obsolete root. One-shot
+reentrant hash/equality-policy hooks exercise `set`, `try_add`, `get_or_put`, and `remove` against
+same-key and different-key nested publications, including exact return values, cached factory use,
+and generation accounting.
 
 Use `test.ps1 -SkipInstall` after the pinned tools in `requirements-dev.txt` are already installed.
 `-SkipPackageSmoke` is reserved for narrow local iteration and is not a complete validation result.
