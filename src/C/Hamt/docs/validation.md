@@ -133,6 +133,9 @@ The suite covers:
 
 - empty map/set behavior and count/lookup invariants;
 - persistent `set`, `try_add`, `remove`, `try_remove`, `set_many`, and `clear` behavior;
+- one-hash/one-descent `get_or_add` and `add_or_update` factory selection across leaf, collision,
+  inline bitmap, and child bitmap paths, including eager validation, stored representative
+  retention, copied-retain outputs, callback failure, and fail-at-every-allocation atomicity;
 - first equivalent key/item retention for custom equality policies;
 - equal-hash collision buckets, collision-bucket splitting, and hash-mismatch misses;
 - deep shared hash-prefix lookup/removal cases;

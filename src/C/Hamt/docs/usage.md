@@ -271,6 +271,31 @@ tds_hamt_map result;
 tds_hamt_status status = tds_hamt_map_try_add(&map, key, value, &result, &added);
 ```
 
+Use the factory operations when selecting a value depends on presence and the operation must hash
+and descend only once. Factories return borrowed candidates; the map retains the selected candidate
+under its policy and reports the concrete retained representative:
+
+```c
+static tds_hamt_status add_value(
+    const void *lookup_key,
+    void *context,
+    const void **value) {
+    (void)lookup_key;
+    *value = context;
+    return TDS_HAMT_OK;
+}
+
+const void *selected = NULL;
+tds_hamt_map next;
+tds_hamt_status status = tds_hamt_map_get_or_add(
+    &map, key, add_value, candidate, &next, &selected);
+```
+
+`tds_hamt_map_add_or_update` additionally accepts an update callback receiving the caller's lookup
+key and the stored value. It retains the stored key representative. An equal selected value is a
+root-sharing no-op and `selected` is the earlier stored value. All callback pointers are validated
+before hashing, and failures leave the source and output parameters unchanged.
+
 `tds_hamt_map_try_remove` reports whether anything was removed and returns the stored value pointer
 through an out parameter:
 

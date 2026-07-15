@@ -400,6 +400,113 @@ static tds_hamt_policy explicit_map_policy(void) {
     return policy;
 }
 
+static void assert_explicit_value(
+    const tds_hamt_map *map,
+    const explicit_hash_key *key,
+    int expected) {
+    const void *actual = NULL;
+    CHECK(tds_hamt_map_try_get(map, key, &actual));
+    CHECK(actual != NULL);
+    CHECK(*(const int *)actual == expected);
+}
+
+typedef struct factory_test_state {
+    size_t hash_calls;
+    size_t key_equal_calls;
+    size_t value_equal_calls;
+    size_t add_calls;
+    size_t update_calls;
+    bool constant_hash;
+    tds_hamt_status add_status;
+    tds_hamt_status update_status;
+    const void *add_candidate;
+    const void *update_candidate;
+    const void *observed_key;
+    const void *observed_stored_value;
+} factory_test_state;
+
+static uint32_t factory_test_hash(const void *item, void *context) {
+    factory_test_state *state = (factory_test_state *)context;
+    ++state->hash_calls;
+    return state->constant_hash ? 0u : ((const explicit_hash_key *)item)->hash;
+}
+
+static bool factory_test_key_equal(const void *left, const void *right, void *context) {
+    factory_test_state *state = (factory_test_state *)context;
+    ++state->key_equal_calls;
+    return ((const explicit_hash_key *)left)->id == ((const explicit_hash_key *)right)->id;
+}
+
+static bool factory_test_value_equal(const void *left, const void *right, void *context) {
+    factory_test_state *state = (factory_test_state *)context;
+    ++state->value_equal_calls;
+    return *(const int *)left == *(const int *)right;
+}
+
+static tds_hamt_status factory_test_add(
+    const void *key,
+    void *context,
+    const void **value) {
+    factory_test_state *state = (factory_test_state *)context;
+    ++state->add_calls;
+    state->observed_key = key;
+    if (state->add_status == TDS_HAMT_OK) {
+        *value = state->add_candidate;
+    }
+    return state->add_status;
+}
+
+static tds_hamt_status factory_test_update(
+    const void *key,
+    const void *stored_value,
+    void *context,
+    const void **value) {
+    factory_test_state *state = (factory_test_state *)context;
+    ++state->update_calls;
+    state->observed_key = key;
+    state->observed_stored_value = stored_value;
+    if (state->update_status == TDS_HAMT_OK) {
+        *value = state->update_candidate;
+    }
+    return state->update_status;
+}
+
+static tds_hamt_policy factory_test_policy(factory_test_state *state) {
+    tds_hamt_policy policy = tds_hamt_policy_default();
+    policy.hash = factory_test_hash;
+    policy.key_equal = factory_test_key_equal;
+    policy.value_equal = factory_test_value_equal;
+    policy.context = state;
+    return policy;
+}
+
+static void factory_test_reset_counts(factory_test_state *state) {
+    state->hash_calls = 0;
+    state->key_equal_calls = 0;
+    state->value_equal_calls = 0;
+    state->add_calls = 0;
+    state->update_calls = 0;
+    state->observed_key = NULL;
+    state->observed_stored_value = NULL;
+}
+
+static void *clone_int_value(const void *value, void *context) {
+    (void)context;
+    if (value == NULL) {
+        return NULL;
+    }
+    int *clone = (int *)malloc(sizeof(*clone));
+    if (clone != NULL) {
+        *clone = *(const int *)value;
+    }
+    return clone;
+}
+
+static void release_cloned_int_value(void *value, void *context) {
+    (void)context;
+    free(value);
+}
+
 static uint32_t rng_next(uint32_t *state) {
     *state = *state * 1664525u + 1013904223u;
     return *state;
@@ -484,6 +591,331 @@ static void test_add_and_try_add_reject_duplicates(void) {
     tds_hamt_map_destroy(&with_two);
     tds_hamt_map_destroy(&map);
     tds_hamt_map_destroy(&empty);
+}
+
+static void test_factories_select_once_and_preserve_representatives(void) {
+    factory_test_state state = { 0 };
+    tds_hamt_policy policy = factory_test_policy(&state);
+    explicit_hash_key stored_key = { 1, 0u };
+    explicit_hash_key lookup_key = { 1, 0u };
+    explicit_hash_key missing_key = { 2, 32u };
+    int stored_value = 10;
+    int equal_candidate = 10;
+    int changed_candidate = 11;
+    int added_candidate = 20;
+
+    tds_hamt_map empty = tds_hamt_map_create(&policy);
+    tds_hamt_map source;
+    CHECK_STATUS(tds_hamt_map_set(&empty, &stored_key, &stored_value, &source));
+
+    factory_test_reset_counts(&state);
+    tds_hamt_map untouched = tds_hamt_map_clone(&source);
+    const void *untouched_root = tds_hamt_map_debug_root_identity(&untouched);
+    const void *selected = &added_candidate;
+    CHECK(tds_hamt_map_get_or_add(
+        &source, &lookup_key, NULL, &state, &untouched, &selected)
+        == TDS_HAMT_INVALID_ARGUMENT);
+    CHECK(state.hash_calls == 0 && state.add_calls == 0 && state.update_calls == 0);
+    CHECK(tds_hamt_map_debug_root_identity(&untouched) == untouched_root);
+    CHECK(selected == &added_candidate);
+    CHECK(tds_hamt_map_add_or_update(
+        &source,
+        &lookup_key,
+        factory_test_add,
+        &state,
+        NULL,
+        &state,
+        &untouched,
+        &selected) == TDS_HAMT_INVALID_ARGUMENT);
+    CHECK(state.hash_calls == 0);
+    tds_hamt_map_destroy(&untouched);
+
+    state.add_candidate = &added_candidate;
+    factory_test_reset_counts(&state);
+    tds_hamt_map hit;
+    selected = NULL;
+    CHECK_STATUS(tds_hamt_map_get_or_add(
+        &source, &lookup_key, factory_test_add, &state, &hit, &selected));
+    CHECK(state.hash_calls == 1);
+    CHECK(state.add_calls == 0 && state.update_calls == 0);
+    CHECK(state.value_equal_calls == 0);
+    CHECK(tds_hamt_map_shares_root(&source, &hit));
+    CHECK(selected == &stored_value);
+    tds_hamt_map_destroy(&hit);
+
+    state.update_candidate = &equal_candidate;
+    factory_test_reset_counts(&state);
+    tds_hamt_map equal;
+    CHECK_STATUS(tds_hamt_map_add_or_update(
+        &source,
+        &lookup_key,
+        factory_test_add,
+        &state,
+        factory_test_update,
+        &state,
+        &equal,
+        &selected));
+    CHECK(state.hash_calls == 1);
+    CHECK(state.add_calls == 0 && state.update_calls == 1);
+    CHECK(state.value_equal_calls == 1);
+    CHECK(state.observed_key == &lookup_key);
+    CHECK(state.observed_stored_value == &stored_value);
+    CHECK(tds_hamt_map_shares_root(&source, &equal));
+    CHECK(selected == &stored_value);
+    tds_hamt_map_destroy(&equal);
+
+    state.update_candidate = &changed_candidate;
+    factory_test_reset_counts(&state);
+    tds_hamt_map changed;
+    CHECK_STATUS(tds_hamt_map_add_or_update(
+        &source,
+        &lookup_key,
+        factory_test_add,
+        &state,
+        factory_test_update,
+        &state,
+        &changed,
+        &selected));
+    CHECK(state.hash_calls == 1);
+    CHECK(state.add_calls == 0 && state.update_calls == 1);
+    CHECK(state.observed_key == &lookup_key);
+    CHECK(!tds_hamt_map_shares_root(&source, &changed));
+    CHECK(selected == &changed_candidate);
+    const void *actual_key = NULL;
+    CHECK(tds_hamt_map_try_get_key(&changed, &lookup_key, &actual_key));
+    CHECK(actual_key == &stored_key);
+    assert_explicit_value(&source, &stored_key, stored_value);
+
+    factory_test_reset_counts(&state);
+    tds_hamt_map added;
+    selected = NULL;
+    CHECK_STATUS(tds_hamt_map_get_or_add(
+        &source, &missing_key, factory_test_add, &state, &added, &selected));
+    CHECK(state.hash_calls == 1);
+    CHECK(state.add_calls == 1 && state.update_calls == 0);
+    CHECK(state.observed_key == &missing_key);
+    CHECK(selected == &added_candidate);
+    CHECK(tds_hamt_map_count(&added) == 2);
+    CHECK(!tds_hamt_map_contains_key(&source, &missing_key));
+
+    tds_hamt_map_destroy(&added);
+    tds_hamt_map_destroy(&changed);
+    tds_hamt_map_destroy(&source);
+    tds_hamt_map_destroy(&empty);
+}
+
+static void test_factories_cover_collision_bitmap_and_retained_outputs(void) {
+    factory_test_state collision_state = { 0 };
+    collision_state.constant_hash = true;
+    tds_hamt_policy collision_policy = factory_test_policy(&collision_state);
+    explicit_hash_key first = { 1, 0u };
+    explicit_hash_key second = { 2, 0u };
+    explicit_hash_key third = { 3, 0u };
+    int one = 1;
+    int two = 2;
+    int twenty = 20;
+    int three = 3;
+    tds_hamt_map collisions = tds_hamt_map_create(&collision_policy);
+    CHECK_STATUS(tds_hamt_map_set(&collisions, &first, &one, &collisions));
+    CHECK_STATUS(tds_hamt_map_set(&collisions, &second, &two, &collisions));
+    CHECK(tds_hamt_map_debug_root_kind(&collisions) == TDS_HAMT_NODE_COLLISION);
+
+    collision_state.add_candidate = &three;
+    collision_state.update_candidate = &twenty;
+    factory_test_reset_counts(&collision_state);
+    const void *selected = NULL;
+    tds_hamt_map replaced;
+    CHECK_STATUS(tds_hamt_map_add_or_update(
+        &collisions,
+        &second,
+        factory_test_add,
+        &collision_state,
+        factory_test_update,
+        &collision_state,
+        &replaced,
+        &selected));
+    CHECK(collision_state.hash_calls == 1 && collision_state.update_calls == 1);
+    CHECK(selected == &twenty);
+    assert_explicit_value(&replaced, &second, twenty);
+
+    factory_test_reset_counts(&collision_state);
+    tds_hamt_map expanded;
+    CHECK_STATUS(tds_hamt_map_get_or_add(
+        &collisions,
+        &third,
+        factory_test_add,
+        &collision_state,
+        &expanded,
+        &selected));
+    CHECK(collision_state.hash_calls == 1 && collision_state.add_calls == 1);
+    CHECK(selected == &three);
+    CHECK(tds_hamt_map_count(&expanded) == 3);
+    CHECK(tds_hamt_map_debug_root_kind(&expanded) == TDS_HAMT_NODE_COLLISION);
+
+    factory_test_state bitmap_state = { 0 };
+    tds_hamt_policy bitmap_policy = factory_test_policy(&bitmap_state);
+    explicit_hash_key zero = { 10, 0u };
+    explicit_hash_key deep = { 11, 32u };
+    explicit_hash_key side = { 12, 1u };
+    int ten = 10;
+    int eleven = 11;
+    int twelve = 12;
+    int changed_eleven = 111;
+    int changed_twelve = 120;
+    int thirteen = 13;
+    explicit_hash_key new_side = { 13, 2u };
+    tds_hamt_map bitmap = tds_hamt_map_create(&bitmap_policy);
+    CHECK_STATUS(tds_hamt_map_set(&bitmap, &zero, &ten, &bitmap));
+    CHECK_STATUS(tds_hamt_map_set(&bitmap, &deep, &eleven, &bitmap));
+    CHECK_STATUS(tds_hamt_map_set(&bitmap, &side, &twelve, &bitmap));
+    CHECK(tds_hamt_map_debug_root_kind(&bitmap) == TDS_HAMT_NODE_BITMAP_INDEXED);
+    bitmap_state.add_candidate = &twelve;
+    bitmap_state.update_candidate = &changed_eleven;
+    factory_test_reset_counts(&bitmap_state);
+    tds_hamt_map bitmap_changed;
+    CHECK_STATUS(tds_hamt_map_add_or_update(
+        &bitmap,
+        &deep,
+        factory_test_add,
+        &bitmap_state,
+        factory_test_update,
+        &bitmap_state,
+        &bitmap_changed,
+        &selected));
+    CHECK(bitmap_state.hash_calls == 1 && bitmap_state.update_calls == 1);
+    CHECK(selected == &changed_eleven);
+    assert_explicit_value(&bitmap_changed, &deep, changed_eleven);
+
+    bitmap_state.update_candidate = &changed_twelve;
+    factory_test_reset_counts(&bitmap_state);
+    tds_hamt_map bitmap_inline_changed;
+    CHECK_STATUS(tds_hamt_map_add_or_update(
+        &bitmap,
+        &side,
+        factory_test_add,
+        &bitmap_state,
+        factory_test_update,
+        &bitmap_state,
+        &bitmap_inline_changed,
+        &selected));
+    CHECK(bitmap_state.hash_calls == 1 && bitmap_state.update_calls == 1);
+    CHECK(selected == &changed_twelve);
+    assert_explicit_value(&bitmap_inline_changed, &side, changed_twelve);
+
+    bitmap_state.add_candidate = &thirteen;
+    factory_test_reset_counts(&bitmap_state);
+    tds_hamt_map bitmap_added;
+    CHECK_STATUS(tds_hamt_map_get_or_add(
+        &bitmap,
+        &new_side,
+        factory_test_add,
+        &bitmap_state,
+        &bitmap_added,
+        &selected));
+    CHECK(bitmap_state.hash_calls == 1 && bitmap_state.add_calls == 1);
+    CHECK(selected == &thirteen);
+    assert_explicit_value(&bitmap_added, &new_side, thirteen);
+
+    factory_test_state retained_state = { 0 };
+    retained_state.add_candidate = &three;
+    tds_hamt_policy retained_policy = factory_test_policy(&retained_state);
+    retained_policy.retain_value = clone_int_value;
+    retained_policy.release_value = release_cloned_int_value;
+    tds_hamt_map retained_empty = tds_hamt_map_create(&retained_policy);
+    tds_hamt_map retained;
+    selected = NULL;
+    CHECK_STATUS(tds_hamt_map_get_or_add(
+        &retained_empty,
+        &third,
+        factory_test_add,
+        &retained_state,
+        &retained,
+        &selected));
+    CHECK(selected != &three);
+    CHECK(*(const int *)selected == three);
+    const void *looked_up = NULL;
+    CHECK(tds_hamt_map_try_get(&retained, &third, &looked_up));
+    CHECK(looked_up == selected);
+
+    tds_hamt_map_destroy(&retained);
+    tds_hamt_map_destroy(&retained_empty);
+    tds_hamt_map_destroy(&bitmap_added);
+    tds_hamt_map_destroy(&bitmap_inline_changed);
+    tds_hamt_map_destroy(&bitmap_changed);
+    tds_hamt_map_destroy(&bitmap);
+    tds_hamt_map_destroy(&expanded);
+    tds_hamt_map_destroy(&replaced);
+    tds_hamt_map_destroy(&collisions);
+}
+
+static void test_factory_failures_leave_sources_and_outputs_unchanged(void) {
+    factory_test_state state = { 0 };
+    state.constant_hash = true;
+    tds_hamt_policy policy = factory_test_policy(&state);
+    explicit_hash_key keys[] = { { 1, 0u }, { 2, 0u }, { 3, 0u } };
+    int values[] = { 10, 20, 30 };
+    tds_hamt_map source = tds_hamt_map_create(&policy);
+    CHECK_STATUS(tds_hamt_map_set(&source, &keys[0], &values[0], &source));
+    CHECK_STATUS(tds_hamt_map_set(&source, &keys[1], &values[1], &source));
+    const void *source_root = tds_hamt_map_debug_root_identity(&source);
+
+    state.update_status = TDS_HAMT_INVALID_ARGUMENT;
+    state.update_candidate = &values[2];
+    factory_test_reset_counts(&state);
+    tds_hamt_map failed_result;
+    memset(&failed_result, 0xa5, sizeof(failed_result));
+    tds_hamt_map failed_before = failed_result;
+    const void *selected = &values[0];
+    CHECK(tds_hamt_map_add_or_update(
+        &source,
+        &keys[1],
+        factory_test_add,
+        &state,
+        factory_test_update,
+        &state,
+        &failed_result,
+        &selected) == TDS_HAMT_INVALID_ARGUMENT);
+    CHECK(state.hash_calls == 1 && state.update_calls == 1 && state.add_calls == 0);
+    CHECK(memcmp(&failed_result, &failed_before, sizeof(failed_result)) == 0);
+    CHECK(selected == &values[0]);
+    CHECK(tds_hamt_map_debug_root_identity(&source) == source_root);
+    assert_explicit_value(&source, &keys[1], values[1]);
+
+    state.update_status = TDS_HAMT_OK;
+    state.add_candidate = &values[2];
+    bool saw_failure = false;
+    bool completed = false;
+    for (size_t fail_after = 0; fail_after < 128 && !completed; ++fail_after) {
+        memset(&failed_result, 0xa5, sizeof(failed_result));
+        failed_before = failed_result;
+        selected = &values[0];
+        tds_hamt_test_fail_allocations_after(fail_after);
+        const tds_hamt_status status = tds_hamt_map_get_or_add(
+            &source,
+            &keys[2],
+            factory_test_add,
+            &state,
+            &failed_result,
+            &selected);
+        tds_hamt_test_reset_allocator();
+        if (status == TDS_HAMT_OUT_OF_MEMORY) {
+            saw_failure = true;
+            CHECK(memcmp(&failed_result, &failed_before, sizeof(failed_result)) == 0);
+            CHECK(selected == &values[0]);
+            CHECK(tds_hamt_map_debug_root_identity(&source) == source_root);
+            assert_explicit_value(&source, &keys[0], values[0]);
+            assert_explicit_value(&source, &keys[1], values[1]);
+        } else {
+            CHECK(status == TDS_HAMT_OK);
+            CHECK(*(const int *)selected == values[2]);
+            CHECK(tds_hamt_map_count(&failed_result) == 3);
+            tds_hamt_map_destroy(&failed_result);
+            completed = true;
+        }
+    }
+    CHECK(saw_failure && completed);
+
+    tds_hamt_map_destroy(&source);
 }
 
 static void test_remove_and_try_remove_delete_present_keys(void) {
@@ -3039,6 +3471,12 @@ static const test_case tests[] = {
     { "empty map has no entries", test_empty_map_has_no_entries },
     { "set item adds replaces and preserves old versions", test_set_adds_replaces_and_preserves_old_versions },
     { "add and try_add reject duplicates", test_add_and_try_add_reject_duplicates },
+    { "factories select once and preserve representatives",
+      test_factories_select_once_and_preserve_representatives },
+    { "factories cover collision bitmap and retained outputs",
+      test_factories_cover_collision_bitmap_and_retained_outputs },
+    { "factory failures leave sources and outputs unchanged",
+      test_factory_failures_leave_sources_and_outputs_unchanged },
     { "remove and try_remove delete present keys", test_remove_and_try_remove_delete_present_keys },
     { "set_many and clear preserve contracts", test_set_many_and_clear_preserve_contracts },
     { "create_range last wins and retains first equivalent key", test_create_range_last_wins_and_retains_first_equivalent_key },

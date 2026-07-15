@@ -189,6 +189,12 @@ source map or set remains alive.
   exists.
 - `tds_hamt_map_try_add` returns an added flag and rejects duplicate keys without reporting an
   error.
+- `tds_hamt_map_get_or_add` invokes its add factory exactly once on a miss and not at all on a hit.
+- `tds_hamt_map_add_or_update` invokes exactly one add/update factory once. Both functions hash
+  once, descend once, retain the first equivalent key, and return the concrete stored value
+  representative through `selected_value` without a second lookup. Factory outputs are borrowed
+  candidates retained through the map policy; eager null-factory validation precedes hashing, and
+  callback, retention, or allocation failure publishes no output.
 - `tds_hamt_map_remove` removes a key if present.
 - `tds_hamt_map_try_remove` returns removed flag and removed value pointer; when `result` aliases
   the source map the removed value pointer is reported as `NULL` (see [Ownership](#ownership)).
@@ -242,7 +248,7 @@ Set operations that need distinct right-side membership materialize their argume
 Let `w` be the hash width (32 bits), `b` be the branch factor (32), and `c` be the length of an
 equal-hash collision bucket.
 
-- Lookup, insert, replace, and remove: O(w / log2(b) + c), effectively bounded by seven trie levels
+- Lookup, insert, replace, remove, and one-descent factory update: O(w / log2(b) + c), effectively bounded by seven trie levels
   plus collision-bucket scan for 32-bit hashes.
 - Transient create/adoption: O(1) in trie size, with one opaque-state allocation and one root retain.
 - Transient publication: O(1) in trie size, transferring the already-retained persistent handle.

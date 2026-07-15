@@ -9,7 +9,8 @@
 `src/C/Hamt` is the C17 port of the persistent HAMT collection family. It provides a type-erased C API
 for immutable unordered collections backed by a hash-array mapped trie:
 
-- `tds_hamt_map`, a persistent map from `void *` keys to `void *` values.
+- `tds_hamt_map`, a persistent map from `void *` keys to `void *` values, including one-descent
+  `get_or_add` / `add_or_update` factory operations that return the concrete retained value.
 - `tds_hamt_set`, a persistent set wrapper over the map core.
 - `tds_hamt_map_transient` / `tds_hamt_set_transient`, explicit one-way edit-session handles over
   the persistent CHAMP values. Adoption and terminal publication are O(1) handle operations; point

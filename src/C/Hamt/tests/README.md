@@ -29,6 +29,9 @@ The executable registers these cases:
 - `empty map has no entries`
 - `set item adds replaces and preserves old versions`
 - `add and try_add reject duplicates`
+- `factories select once and preserve representatives`
+- `factories cover collision bitmap and retained outputs`
+- `factory failures leave sources and outputs unchanged`
 - `remove and try_remove delete present keys`
 - `set_many and clear preserve contracts`
 - `create_range last wins and retains first equivalent key`

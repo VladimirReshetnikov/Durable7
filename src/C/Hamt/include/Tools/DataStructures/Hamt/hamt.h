@@ -29,6 +29,15 @@ typedef uint32_t (*tds_hamt_hash_fn)(const void *item, void *context);
 typedef bool (*tds_hamt_equal_fn)(const void *left, const void *right, void *context);
 typedef void *(*tds_hamt_retain_fn)(const void *item, void *context);
 typedef void (*tds_hamt_release_fn)(void *item, void *context);
+typedef tds_hamt_status (*tds_hamt_map_add_factory_fn)(
+    const void *lookup_key,
+    void *context,
+    const void **value);
+typedef tds_hamt_status (*tds_hamt_map_update_factory_fn)(
+    const void *lookup_key,
+    const void *stored_value,
+    void *context,
+    const void **value);
 
 typedef struct tds_hamt_policy {
     tds_hamt_hash_fn hash;
@@ -172,6 +181,28 @@ tds_hamt_status tds_hamt_map_try_add(
     const void *value,
     tds_hamt_map *result,
     bool *added);
+/* Selects and publishes one value through a single hash-trie descent. Factory
+ * outputs are borrowed candidates and are retained under the map policy before
+ * publication. `selected_value`, when non-NULL, receives the concrete value
+ * representative stored in `result`; it remains borrowed from that result.
+ * Every factory argument is validated before hashing, even when its branch is
+ * not selected. On failure, `result` and `selected_value` are unchanged. */
+tds_hamt_status tds_hamt_map_get_or_add(
+    const tds_hamt_map *map,
+    const void *key,
+    tds_hamt_map_add_factory_fn add_factory,
+    void *add_context,
+    tds_hamt_map *result,
+    const void **selected_value);
+tds_hamt_status tds_hamt_map_add_or_update(
+    const tds_hamt_map *map,
+    const void *key,
+    tds_hamt_map_add_factory_fn add_factory,
+    void *add_context,
+    tds_hamt_map_update_factory_fn update_factory,
+    void *update_context,
+    tds_hamt_map *result,
+    const void **selected_value);
 tds_hamt_status tds_hamt_map_remove(
     const tds_hamt_map *map,
     const void *key,
