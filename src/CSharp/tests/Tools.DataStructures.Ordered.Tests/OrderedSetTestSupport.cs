@@ -50,6 +50,8 @@ internal sealed class SwitchableRepresentativeComparer(int hashBuckets = 1)
 
     internal bool ThrowFromHash { get; set; }
 
+    internal int? ThrowOnHashCall { get; set; }
+
     internal bool ThrowFromEquals { get; set; }
 
     public override bool Equals(Representative? left, Representative? right)
@@ -61,7 +63,7 @@ internal sealed class SwitchableRepresentativeComparer(int hashBuckets = 1)
 
     public override int GetHashCode(Representative? value)
     {
-        if (ThrowFromHash)
+        if (ThrowFromHash || ThrowOnHashCall == HashCalls + 1)
             throw Failure;
         return base.GetHashCode(value);
     }

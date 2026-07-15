@@ -121,7 +121,10 @@ var later = byLength.Add("z");
 ```
 
 Stable sorting uses old order to break ordering-comparer ties. If the stable result is already in the
-same order, `Sort` returns the receiver. A comparer exception cannot modify the source.
+same order, `Sort` returns the receiver. For a set with more than one element, an exception thrown by
+the effective ordering comparer is surfaced as `InvalidOperationException`, with the original
+exception in `InnerException`; it cannot modify the source. Counts zero and one do not invoke the
+ordering comparer.
 
 ## Receiver-Policy Set Algebra
 
@@ -171,8 +174,11 @@ var v2 = v0.Add(4);          // [1, 2, 3, 4]
 ```
 
 Separate readers may enumerate any retained version concurrently. A single struct enumerator is not
-a cross-thread cursor. Nonempty enumerators own bounded traversal state; copying an in-progress
-enumerator and advancing divergent copies fails fast, following the underlying finger-tree contract.
+a cross-thread cursor. An empty concrete enumerator allocates no traversal state. A nonempty concrete
+enumerator allocates one shared state object and one initial stack array; deeper traversal may allocate
+replacement arrays as the O(log n) stack grows. Pattern-based enumeration avoids boxing, while either
+interface path additionally boxes the struct. Copying an in-progress enumerator shares its state, and
+advancing divergent copies fails fast, following the underlying finger-tree contract.
 
 ## Comparer-Defined Null
 

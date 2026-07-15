@@ -1469,9 +1469,10 @@ catalog's summary alone.
 ## Relationship To Other Documents
 
 - [Benchmark-independent next data structures (2026-07-14)](../proposals/benchmark-independent-next-structures-2026-07-14.md) -
-  the detailed C# execution proposal whose persistent-HAMT single-pass update and hash-bag facade
-  are now shipped in C#, followed by the independently owned ordered-set composite and this
-  catalog's algebra-law-gated implicit-AVL range-update design without advancing postponed
+  the detailed C# execution proposal whose persistent-HAMT single-pass update, hash-bag facade, and
+  independently owned ordered-set composite are now shipped in C#. This catalog's algebra-law-gated
+  implicit-AVL range-update design is the immediate next C# step; all four additions then require
+  ports to C, C++, Haskell, Kotlin, Rust, TypeScript, and Python without advancing postponed
   benchmarks.
 - [Derived structure catalog](derived-structure-catalog.md) - compositions of the shipped
   families, the shared enabling API gaps, and the composition design rules this document extends.

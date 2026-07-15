@@ -1,3 +1,4 @@
+using System.Reflection;
 using Xunit;
 
 namespace Tools.DataStructures.Ordered.Tests;
@@ -54,9 +55,9 @@ public sealed class PersistentOrderedSetMovementRangeAndSortTests
         OrderedSetAssert.Matches(new[] { first, middle, last }, source);
     }
 
-    /// <summary>Verifies repeated same-point insertions survive multiple private relabels.</summary>
+    /// <summary>Verifies insertion- and movement-triggered relabels preserve snapshots and failure atomicity.</summary>
     [Fact]
-    public void RepeatedSamePointInserts_PreserveOrderLookupsAndRepresentatives()
+    public void RelabelFallbacks_PreserveOrderRepresentativesAndFailureAtomicity()
     {
         var comparer = new RepresentativeComparer();
         var start = new Representative(-1, "start");
@@ -81,6 +82,36 @@ public sealed class PersistentOrderedSetMovementRangeAndSortTests
             Assert.True(set.TryGetValue(new Representative(item.EquivalenceClass, "probe"), out var stored));
             Assert.Same(item, stored);
         }
+
+        var moveComparer = new SwitchableRepresentativeComparer(hashBuckets: 4096);
+        var mover = new Representative(1000, "mover");
+        var left = new Representative(1001, "left");
+        var right = new Representative(1002, "right");
+        var moveSource = PersistentOrderedSet<Representative>.CreateRange([mover, left, right], moveComparer);
+        var nextClass = 1100;
+        while (PrivateStampGapAt(moveSource, 2) != 1)
+        {
+            Assert.True(nextClass < 1356, "The private sparse-label policy did not expose an exhausted gap.");
+            moveSource = moveSource.Insert(2, new Representative(nextClass, $"gap-{nextClass}"));
+            nextClass++;
+        }
+
+        var moveSourceExpected = moveSource.ToArray();
+        var lookup = new Representative(mover.EquivalenceClass, "lookup");
+        moveComparer.ResetCounts();
+        moveComparer.ThrowOnHashCall = 2;
+        var rebuildFailure = Assert.Throws<ComparerCallbackException>(() => moveSource.MoveTo(1, lookup));
+        Assert.Same(moveComparer.Failure, rebuildFailure);
+        Assert.Equal(1, moveComparer.HashCalls);
+        moveComparer.ThrowOnHashCall = null;
+        OrderedSetAssert.Matches(moveSourceExpected, moveSource);
+
+        var moved = moveSource.MoveTo(1, lookup);
+        var movedExpected = moveSourceExpected.Skip(1).ToList();
+        movedExpected.Insert(1, mover);
+        OrderedSetAssert.Matches(movedExpected, moved);
+        Assert.Same(mover, moved[1]);
+        OrderedSetAssert.Matches(moveSourceExpected, moveSource);
     }
 
     /// <summary>Verifies sibling histories repay relabel work independently without altering their branch source.</summary>
@@ -230,5 +261,23 @@ public sealed class PersistentOrderedSetMovementRangeAndSortTests
         Assert.Same(PersistentOrderedSet<Representative>.Empty, PersistentOrderedSet<Representative>.Empty.Sort(allTies));
         var single = PersistentOrderedSet<Representative>.Create(equalityComparer).Add(items[0]);
         Assert.Same(single, single.Sort(allTies));
+
+        var defaultSource = PersistentOrderedSet<int>.CreateRange([3, 1, 4, 2]);
+        var defaultSorted = defaultSource.Sort();
+        OrderedSetAssert.Matches(new[] { 1, 2, 3, 4 }, defaultSorted);
+        Assert.Same(defaultSorted, defaultSorted.Sort());
+        OrderedSetAssert.Matches(new[] { 3, 1, 4, 2 }, defaultSource);
+    }
+
+    private static ulong PrivateStampGapAt<T>(PersistentOrderedSet<T> set, int rightIndex)
+    {
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var order = (System.Collections.IEnumerable)typeof(PersistentOrderedSet<T>)
+            .GetField("_order", flags)!
+            .GetValue(set)!;
+        var stamps = order.Cast<object>()
+            .Select(entry => (long)entry.GetType().GetProperty("Stamp")!.GetValue(entry)!)
+            .ToArray();
+        return unchecked((ulong)(stamps[rightIndex] - stamps[rightIndex - 1]));
     }
 }

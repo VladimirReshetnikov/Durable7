@@ -18,9 +18,9 @@ Use this guide with the [API specification](api-specification.md) and [test-suit
   referencing only Ordered plus ordinary test packages.
 
 `Directory.Build.props` targets .NET 10, enables nullable annotations and preview C#, generates XML
-documentation, promotes missing/malformed public XML documentation warnings to errors, and disables
-parallel project builds, parallel restore, and compiler sharing. `test.runsettings` limits the test
-host and xUnit to one worker.
+documentation, promotes missing-public-member and mismatched-parameter documentation warnings
+(`CS1591` and `CS1573`) to errors, and disables parallel project builds, parallel restore, and compiler
+sharing. `test.runsettings` limits the test host and xUnit to one worker.
 
 ## Serialized Commands
 
@@ -40,15 +40,30 @@ dotnet restore .\tests\Tools.DataStructures.Ordered.Tests\Tools.DataStructures.O
 dotnet build .\tests\Tools.DataStructures.Ordered.Tests\Tools.DataStructures.Ordered.Tests.csproj `
     -c Release --no-restore --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false
-dotnet test .\tests\Tools.DataStructures.Ordered.Tests\Tools.DataStructures.Ordered.Tests.csproj `
-    -c Release --no-restore --no-build --disable-build-servers -m:1 -nr:false `
-    -p:BuildInParallel=false -p:UseSharedCompilation=false `
-    -- RunConfiguration.MaxCpuCount=1
+.\test.ps1 `
+    -Project .\tests\Tools.DataStructures.Ordered.Tests\Tools.DataStructures.Ordered.Tests.csproj `
+    -Configuration Release -NoRestore -NoBuild
 ```
 
-For the final managed-workspace gate, apply the same flags to `DataStructures.sln`, then run every
-test project through `./test.ps1` or equivalent serialized `dotnet test` invocations. Do not overlap
-restore, build, test, native toolchains, npm, Cargo, Cabal, Kotlin, or benchmark processes.
+The launcher establishes inherited headless Windows failure handling before the SDK and testhost
+start, supplies `test.runsettings`, and reasserts the one-worker build and test settings. For the final
+managed-workspace gate, apply the same flags to `DataStructures.sln`, then run every test project
+through `./test.ps1`. Do not overlap restore, build, test, native toolchains, npm, Cargo, Cabal,
+Kotlin, or benchmark processes.
+
+## Recorded Shipment Evidence
+
+The C# shipment gate completed with every phase serialized and build parallelism, node reuse, build
+servers, and compiler sharing disabled:
+
+- the focused Debug lane built with zero warnings or errors and passed 62 of 62 tests;
+- the focused Release lane built with zero warnings or errors and passed 62 of 62 tests;
+- the complete C# Release solution built with zero warnings or errors; and
+- the complete test run passed 1,355 of 1,355 tests: Numerics 319, HAMT 292, FingerTree 630,
+  Ordered 62, and Tungsten 52.
+
+The solution build compiled the benchmark project as an ordinary project dependency, but no
+benchmark was executed and no performance evidence was recorded.
 
 ## Required Coverage
 
@@ -60,7 +75,8 @@ The Ordered suite independently covers:
 - duplicate addition versus explicit movement and final-index movement semantics;
 - absent removal/movement, empty endpoints, eager positional validation, and identity no-ops;
 - range extraction, smaller-side index reconciliation, reverse, stable sort, and unchanged-sort identity;
-- repeated same-position histories that cross private label gaps and exercise relabel rebuilds;
+- repeated same-position histories that cross private label gaps, plus a deterministic move-triggered
+  relabel and its rebuild-failure atomicity;
 - same-type and enumerable algebra under equal, reference-different, and semantically different comparer objects;
 - receiver ordering, receiver representatives, first normalized argument representatives, and all six relations;
 - eager argument normalization, throwing enumerables/comparers, and source failure atomicity;
@@ -77,7 +93,8 @@ Validation rejects:
 
 - an Ordered production or test project reference to `Tools.DataStructures.Tungsten`;
 - a compiled Ordered assembly reference to Tungsten;
-- a Tungsten namespace/type use, linked Tungsten source file, or source-generator route;
+- a Tungsten namespace/type use, nested or linked Tungsten source file, unapproved package, analyzer,
+  additional-file, project-as-analyzer, import, target, task, SDK, or other manifest generator route;
 - a new Ordered friend grant in HAMT or FingerTree; and
 - a live `PersistentAssociation` test oracle.
 

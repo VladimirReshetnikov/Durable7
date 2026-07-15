@@ -144,7 +144,10 @@ assigns fresh private labels, and rebuilds both indexes.
 equality comparer is unchanged. Old order breaks ordering-comparer ties. Counts zero and one return
 the receiver without invoking the ordering comparer. If the stable output sequence is unchanged,
 the receiver is returned. Otherwise both indexes are rebuilt. An ordering-comparer exception leaves
-the source unchanged.
+the source unchanged. For a set with more than one element, an exception thrown by the effective
+ordering comparer is surfaced as `InvalidOperationException`, with the original exception retained
+as `InnerException`; this is the `Array.Sort` wrapping contract used by the implementation. Counts
+zero and one do not invoke the comparer and therefore do not produce that wrapper.
 
 The result is an ordinary insertion-ordered set. It does not retain or reapply the ordering comparer.
 
@@ -191,10 +194,15 @@ late argument-enumeration or comparer failure is not hidden by an earlier decisi
 ## Enumeration And Debugging
 
 Pattern-based enumeration returns a public struct `Enumerator` that projects the persistent ordered
-sequence without hashing. Generic and non-generic interface enumeration box that struct normally.
-A nonempty enumerator owns the finger-tree traversal's bounded state. Value copies of one in-progress
-enumerator share that state and fail fast if advanced divergently; independently obtained enumerators
-are independent and safe for concurrent read-only use.
+sequence without hashing. Constructing the concrete enumerator for an empty set allocates no traversal
+state. Constructing it for a nonempty set allocates one shared traversal-state object and one initial
+traversal-stack array; deeper traversal can allocate replacement arrays as that O(log n) stack grows.
+Pattern-based enumeration does not box the struct. Generic and non-generic interface enumeration
+preserves the corresponding empty/nonempty state behavior and additionally boxes the struct.
+
+Value copies of one in-progress nonempty enumerator share its allocated state and fail fast if
+advanced divergently; independently obtained enumerators own independent state and are safe for
+concurrent read-only use.
 
 `Current` is unspecified before the first successful `MoveNext` and after completion; the default
 enumerator yields no values. `IEnumerator.Reset` throws `NotSupportedException`. `Dispose` is a no-op.

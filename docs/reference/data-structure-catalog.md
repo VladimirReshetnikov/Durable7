@@ -106,6 +106,43 @@ represented without eagerly copying the sequence.
 | TypeScript | `ReversibleDeque<T>` | [API notes](../../src/TypeScript/docs/api-notes.md), [source](../../src/TypeScript/src/finger-tree/core.ts) |
 | Python | `ReversibleDeque` | [API notes](../../src/Python/docs/api-notes.md), [source](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/core.py), [tests](../../src/Python/tests/README.md) |
 
+## Insertion-Ordered Set
+
+The independently owned C# Ordered workspace exposes `PersistentOrderedSet<T>`, an immutable set
+whose retained equality comparer defines membership while insertion and explicit positional
+operations define enumeration order. “Ordered” here does not mean comparison-sorted: ordinary
+`Add` appends an absent equality class, `AddFirst` and `Insert` place only absent classes, duplicate
+adds preserve both position and the first stored representative, and movement is available only
+through explicit `MoveToFirst`, `MoveToLast`, and final-index `MoveTo` operations. A stable one-shot
+`Sort` changes one version's order but does not install a persistent sorting policy; later additions
+append normally.
+
+Each version owns a dual index assembled exclusively from public general-purpose substrates: a
+`PersistentHashMap<T, long>` owns equality-class membership and private order stamps, while a
+`FingerTreeDeque<Entry>` owns the ordered representative sequence. Count equality, strictly
+ascending stamps, bidirectional map/deque correspondence, representative identity, comparer
+retention, and immutable retained versions are Ordered-owned invariants. The Ordered production and
+test projects do not reference `Tools.DataStructures.Tungsten`, consume Tungsten internals, or use
+Tungsten behavior as their semantic baseline.
+
+Set algebra and relations normalize the complete argument under the receiver's comparer. Receiver
+representatives win surviving receiver classes; the first argument representative observed during
+receiver-policy normalization wins argument-only classes. Union enumerates the receiver followed by new
+argument classes, intersection and difference retain receiver order, and symmetric difference emits
+receiver-only classes followed by argument-only classes. This deterministic ordering is part of the
+Ordered contract, independently of an argument set's comparer or traversal policy.
+
+| Language | Public entry points | Primary references |
+| --- | --- | --- |
+| C# | `PersistentOrderedSet<T>` | [Workspace](../../src/CSharp/docs/Ordered/overview.md), [usage guide](../../src/CSharp/docs/Ordered/usage.md), [API specification](../../src/CSharp/docs/Ordered/api-specification.md), [project](../../src/CSharp/src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj), [source](../../src/CSharp/src/Tools.DataStructures.Ordered/PersistentOrderedSet.cs), [validation](../../src/CSharp/docs/Ordered/validation.md), [tests](../../src/CSharp/tests/Tools.DataStructures.Ordered.Tests/README.md) |
+
+The shipped reference surface is currently C#. Ports to C, C++, Haskell, Kotlin, Rust, TypeScript,
+and Python are the required follow-through after the C# proposal sequence completes; they must
+derive from this independent Ordered contract rather than Tungsten. Focused single-worker Debug and
+Release lanes each pass 62 tests, and the complete serialized C# Release gate builds with zero
+warnings or errors and passes all 1,355 tests. Benchmarks are not a shipment gate and are postponed
+until an isolated, contention-free run can produce meaningful measurements.
+
 ## Sorted Collections
 
 Sorted collections expose immutable sorted bags/multisets, sets, and key-value maps with

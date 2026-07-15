@@ -417,11 +417,17 @@ public sealed partial class PersistentOrderedSet<T> : IReadOnlySet<T>
     /// <returns>
     /// This instance when the stable order is unchanged; otherwise, a freshly indexed ordered set.
     /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// The effective ordering comparer threw while sorting a set with more than one element. The
+    /// original comparer exception is retained as <see cref="Exception.InnerException"/>.
+    /// </exception>
     /// <remarks>
     /// Later additions append normally; the result is not a comparison-sorted-set data structure.
-    /// Comparer failure leaves the source unchanged. Sorting performs O(n log n) ordering-comparer
-    /// calls and, when the order changes, O(n (w + c)) rebuild work. Unchanged detection compares the
-    /// original unique order stamps, not item equality.
+    /// An effective ordering-comparer exception is surfaced through the
+    /// <see cref="InvalidOperationException"/> wrapper produced by the underlying array sort;
+    /// comparer failure leaves the source unchanged. Sorting performs O(n log n) ordering-comparer
+    /// calls and, when the order changes, O(n (w + c)) rebuild work. Unchanged detection compares
+    /// the original unique order stamps, not item equality.
     /// </remarks>
     public PersistentOrderedSet<T> Sort(IComparer<T>? comparer = null)
     {
@@ -460,6 +466,13 @@ public sealed partial class PersistentOrderedSet<T> : IReadOnlySet<T>
     /// Returns a struct enumerator over stored representatives in ordered-set order.
     /// </summary>
     /// <returns>An enumerator positioned before the first representative.</returns>
+    /// <remarks>
+    /// Constructing the concrete enumerator for an empty set allocates no traversal state. For a
+    /// nonempty set it allocates one shared traversal-state object and one initial traversal-stack
+    /// array; deeper traversal may replace that array as the O(log n) stack grows. Pattern-based
+    /// enumeration does not box the struct. Generic or non-generic interface enumeration preserves
+    /// the corresponding empty/nonempty state behavior and additionally boxes the struct.
+    /// </remarks>
     public Enumerator GetEnumerator() => new(this);
 
     IEnumerator<T> IEnumerable<T>.GetEnumerator() => GetEnumerator();
@@ -470,9 +483,11 @@ public sealed partial class PersistentOrderedSet<T> : IReadOnlySet<T>
     /// Enumerates one immutable ordered-set snapshot without hashing.
     /// </summary>
     /// <remarks>
-    /// Enumeration is O(n) total and O(1) amortized per yield with O(log n) traversal state. Value
-    /// copies share that state; after one copy advances, advancing a stale copy throws
-    /// <see cref="InvalidOperationException"/>. Obtain separate enumerators for independent traversal.
+    /// Enumeration is O(n) total and O(1) amortized per yield with O(log n) traversal state. A
+    /// nonempty enumerator owns an allocated state object and initial stack array; an empty concrete
+    /// enumerator owns no allocated traversal state. Value copies share nonempty state; after one
+    /// copy advances, advancing a stale copy throws <see cref="InvalidOperationException"/>. Obtain
+    /// separate enumerators for independent traversal.
     /// </remarks>
     public struct Enumerator : IEnumerator<T>
     {

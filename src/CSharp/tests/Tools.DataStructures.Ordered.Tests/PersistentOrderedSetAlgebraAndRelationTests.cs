@@ -5,7 +5,7 @@ namespace Tools.DataStructures.Ordered.Tests;
 /// <summary>Receiver-ordered algebra, normalization, representative, relation, and eagerness tests.</summary>
 public sealed class PersistentOrderedSetAlgebraAndRelationTests
 {
-    /// <summary>Verifies all algebra operations use their specified deterministic order and representatives.</summary>
+    /// <summary>Verifies algebra and relations across shared and reference-distinct equivalent comparer objects.</summary>
     [Fact]
     public void Algebra_UsesReceiverOrderAndRepresentativePrecedence()
     {
@@ -24,6 +24,31 @@ public sealed class PersistentOrderedSetAlgebraAndRelationTests
             receiverA, receiverB, receiverC, argumentD);
         OrderedSetAssert.Matches(new[] { receiverA, receiverB, receiverC }, receiver);
         OrderedSetAssert.Matches(new[] { argumentA, argumentD }, argument);
+
+        var equivalentComparer = new RepresentativeComparer();
+        Assert.NotSame(comparer, equivalentComparer);
+        var equivalentArgument = PersistentOrderedSet<Representative>.CreateRange(
+            [argumentA, argumentD], equivalentComparer);
+        AssertAlgebraResults(receiver, equivalentArgument, receiverA, receiverB, receiverC, argumentD);
+        Assert.False(receiver.IsSubsetOf(equivalentArgument));
+        Assert.False(receiver.IsProperSubsetOf(equivalentArgument));
+        Assert.False(receiver.IsSupersetOf(equivalentArgument));
+        Assert.False(receiver.IsProperSupersetOf(equivalentArgument));
+        Assert.True(receiver.Overlaps(equivalentArgument));
+        Assert.False(receiver.SetEquals(equivalentArgument));
+
+        var equivalentSet = PersistentOrderedSet<Representative>.CreateRange(
+            [new Representative(1, "equivalent-a"), new Representative(2, "equivalent-b"),
+                new Representative(3, "equivalent-c")],
+            equivalentComparer);
+        Assert.True(receiver.IsSubsetOf(equivalentSet));
+        Assert.False(receiver.IsProperSubsetOf(equivalentSet));
+        Assert.True(receiver.IsSupersetOf(equivalentSet));
+        Assert.False(receiver.IsProperSupersetOf(equivalentSet));
+        Assert.True(receiver.Overlaps(equivalentSet));
+        Assert.True(receiver.SetEquals(equivalentSet));
+        Assert.True(receiver.IsProperSubsetOf(equivalentSet.Add(argumentD)));
+        Assert.True(receiver.IsProperSupersetOf(equivalentSet.Remove(new Representative(3, "lookup-c"))));
     }
 
     /// <summary>Verifies foreign-policy arguments collapse in enumeration order under receiver policy.</summary>

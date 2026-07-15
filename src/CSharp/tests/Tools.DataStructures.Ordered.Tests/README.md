@@ -13,14 +13,14 @@ tests, internals, and runtime behavior.
 | File | Coverage |
 | --- | --- |
 | `PersistentOrderedSetCoreTests.cs` | Empty/comparer identity, construction collapse, comparer-defined null, representative lookup, addition/removal, retained versions, clear, and owned exceptions |
-| `PersistentOrderedSetMovementRangeAndSortTests.cs` | Exhaustive small final-index movement, endpoint moves, repeated same-point relabel histories and branches, every small range boundary, reverse, stable one-shot sort, and result behavior after sort |
-| `PersistentOrderedSetAlgebraAndRelationTests.cs` | Receiver order/representatives, same-type and enumerable overloads, mismatched comparers, first argument representative, eager normalization/failures, no-op identity, null, exhaustive small relation truth tables, and null operands |
+| `PersistentOrderedSetMovementRangeAndSortTests.cs` | Exhaustive small final-index movement, endpoint moves, insertion- and move-triggered relabel histories with rebuild-failure atomicity, every small range boundary, reverse, default and custom stable one-shot sort, and result behavior after sort |
+| `PersistentOrderedSetAlgebraAndRelationTests.cs` | Receiver order/representatives, same-type and enumerable overloads, shared, reference-distinct equivalent, and semantically different comparers, first argument representative, eager normalization/failures, no-op identity, null, exhaustive small relation truth tables, and null operands |
 | `PersistentOrderedSetEnumeratorTests.cs` | Default/current/reset/dispose behavior, ordered representatives, fail-fast divergent copies, independent enumerators, exhausted copies, interface paths, and version binding |
 | `PersistentOrderedSetFailureAndInvariantTests.cs` | Validation-before-callback precedence, hash/equality/rebuild/sort failure atomicity, extreme comparer results, callback-bypassing identity paths, and deliberate invariant corruption detection |
 | `PersistentOrderedSetPropertyTests.cs` | Deterministic generated branching command histories against an independent comparer-aware ordered-list model, validating retained branches and invariants after every command |
 | `PersistentOrderedSetConcurrencyTests.cs` | Concurrent readers over current and retained snapshots, including enumeration, membership, positional lookup, and branch publication |
 | `PersistentOrderedSetApiShapeTests.cs` | Exact type/property/method/enumerator signatures, absence of extra sorted-set vocabulary, and bounded ordered debugger projection |
-| `OrderedDependencyBoundaryTests.cs` | Project references, friend grants, compiled references, public-type leakage, linked sources, namespace uses, and live-oracle/source scans |
+| `OrderedDependencyBoundaryTests.cs` | Allowlisted packages/project references, generator-route rejection, friend grants, compiled references, public-type leakage, recursive and linked source scans, namespace uses, and live-oracle guards |
 | `OrderedSetTestSupport.cs` | Independent model, representative/comparer fixtures, throwing policies/enumerables, and shared assertions |
 
 ## Serialized Commands
@@ -28,21 +28,25 @@ tests, internals, and runtime behavior.
 From `src/CSharp`, run phases sequentially:
 
 ```powershell
+$configuration = 'Debug' # Repeat the build/test phases with 'Release'.
+
 dotnet restore .\tests\Tools.DataStructures.Ordered.Tests\Tools.DataStructures.Ordered.Tests.csproj `
     --disable-parallel --disable-build-servers -m:1 -nr:false `
     -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
 dotnet build .\tests\Tools.DataStructures.Ordered.Tests\Tools.DataStructures.Ordered.Tests.csproj `
-    --no-restore --disable-build-servers -m:1 -nr:false `
+    -c $configuration --no-restore --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false
-dotnet test .\tests\Tools.DataStructures.Ordered.Tests\Tools.DataStructures.Ordered.Tests.csproj `
-    --no-restore --no-build --disable-build-servers -m:1 -nr:false `
-    -p:BuildInParallel=false -p:UseSharedCompilation=false `
-    -- RunConfiguration.MaxCpuCount=1
+.\test.ps1 `
+    -Project .\tests\Tools.DataStructures.Ordered.Tests\Tools.DataStructures.Ordered.Tests.csproj `
+    -Configuration $configuration -NoRestore -NoBuild
 ```
 
-The first serialized Debug checkpoint discovered and passed 62 tests with zero build warnings. Run
-the corresponding Release lane and the complete managed solution before final C# shipment evidence
-is recorded.
+The launcher enables inherited headless Windows failure handling before the SDK/testhost starts,
+uses the repository runsettings, and reasserts the single-worker build and test policies.
+
+The serialized Debug and Release lanes each discovered and passed 62 of 62 tests with zero build
+warnings or errors. The complete serialized C# Release solution built with zero warnings or errors
+and passed all 1,355 tests: Numerics 319, HAMT 292, FingerTree 630, Ordered 62, and Tungsten 52.
 
 Benchmarks are deliberately outside this suite and remain postponed to an isolated machine run.
 See the [Ordered validation guide](../../docs/Ordered/validation.md) for the full gate and dependency

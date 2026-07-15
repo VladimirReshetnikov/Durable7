@@ -32,11 +32,13 @@ src/
 │   │   ├── FingerTree/
 │   │   ├── Hamt/
 │   │   ├── Numerics/
+│   │   ├── Ordered/
 │   │   └── Tungsten/
 │   ├── samples/
 │   ├── src/
 │   │   ├── Tools.DataStructures.FingerTree/
 │   │   ├── Tools.DataStructures.Hamt/
+│   │   ├── Tools.DataStructures.Ordered/
 │   │   ├── Tools.DataStructures.Tungsten/
 │   │   └── Tools.Numerics/
 │   └── tests/
@@ -100,6 +102,20 @@ See the detailed
 [Tungsten application-leaf dependency boundary](tungsten-application-leaf-boundary.md) for the
 normative code, test, documentation, porting, and extraction rules.
 
+`Tools.DataStructures.Ordered` is an independently owned general workspace created under that rule.
+Its dependency graph is deliberately limited to public general substrates:
+
+```text
+Tools.DataStructures.Ordered
+├── Tools.DataStructures.Hamt
+└── Tools.DataStructures.FingerTree
+```
+
+There is no Ordered-to-Tungsten project, source, test-oracle, or semantic-authority edge. Ordered and
+Tungsten are separately owned sibling consumers of HAMT/FingerTree mechanics; similarity in sparse
+order labels does not create shared ownership or permission for either family to define the other's
+contract.
+
 ## Workspace Roles
 
 | Workspace | Role | Main entry points | Local docs |
@@ -117,6 +133,7 @@ normative code, test, documentation, porting, and extraction rules.
 | [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) | Haskell FingerTree/RRB/canonical-set family port with positional/measured/text rope cursors | `tools-data-structures-fingertree.cabal`, `src/Data/Structures/FingerTree/` | [`README`](../../src/Haskell/FingerTree/README.md) |
 | [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | Kotlin/JVM persistent measured-tree/RRB/canonical-set/optimal-priority family plus managed DABA Lite | `src/tools/datastructures/fingertree/`, `test/tools/datastructures/fingertree/` | [`docs`](../../src/Kotlin/FingerTree/docs/README.md) |
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | Rust FingerTree/RRB/canonical-set checkpoint with non-`Clone` Brodal/PSQ cores plus single-threaded DABA Lite | `Cargo.toml`, `src/` | [`docs`](../../src/Rust/FingerTree/docs/README.md) |
+| [C# Ordered collections](../../src/CSharp/docs/Ordered/overview.md) | Independently owned general-purpose insertion/explicit-position ordered set with first-representative and receiver-policy algebra contracts over a dual CHAMP/FingerTree index | [`DataStructures.sln`](../../src/CSharp/DataStructures.sln), [project](../../src/CSharp/src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj), [tests](../../src/CSharp/tests/Tools.DataStructures.Ordered.Tests/README.md) | [`docs`](../../src/CSharp/docs/Ordered/README.md), [validation](../../src/CSharp/docs/Ordered/validation.md) |
 | [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) | Application-specific leaf collections for the Tungsten project; canonical only within the sibling Tungsten port family and not a general collection foundation | `DataStructures.sln`, `src/Tools.DataStructures.Tungsten/`, `tests/Tools.DataStructures.Tungsten.Tests/` | [`docs`](../../src/CSharp/docs/Tungsten/README.md) |
 | [`src/C/Tungsten`](../../src/C/Tungsten/README.md) | C17 Tungsten `List` and `Association` port | `include/tools/data_structures/tungsten/tungsten.h`, `CMakePresets.json` | [`README`](../../src/C/Tungsten/README.md) |
 | [`src/Cpp/Tungsten`](../../src/Cpp/Tungsten/README.md) | C++23 Tungsten `List` and `Association` port | `include/tools/data_structures/tungsten/`, `CMakePresets.json` | [`README`](../../src/Cpp/Tungsten/README.md) |
@@ -184,6 +201,17 @@ FingerTree lineage:
    mutable DABA Lite, and positional/measured/text gap cursors whose text offsets count Unicode code
    points.
 
+Ordered collections lineage:
+
+1. C# Ordered (`src/CSharp/src/Tools.DataStructures.Ordered`) currently owns the only shipped
+   `PersistentOrderedSet<T>` contract. It composes the public CHAMP map and FingerTree deque behind
+   Ordered-owned sparse labels, dual-index invariants, first-representative retention, explicit
+   movement, and receiver-policy algebra. It is not a Tungsten port or Tungsten semantic facade.
+2. The complete C# contract, focused Debug/Release lanes, whole-workspace Release gate, and
+   documentation are now stable. Required ports to C, C++, Haskell, Kotlin, Rust, TypeScript, and
+   Python remain pending; each must derive from the Ordered contract in its language-local
+   ownership model, never from Tungsten.
+
 Tungsten collections lineage:
 
 This lineage is application-local. It establishes parity only among the Tungsten ports; it creates
@@ -238,4 +266,6 @@ Workspace-level docs live near the code they describe:
 - Use `Numerics` for fixed-width and sparse integer numeric workspaces.
 - Use `Hamt` for hash-array mapped trie workspaces, matching the public project names.
 - Use `FingerTree` for the measured finger-tree family, including derived collections and ropes.
+- Use `Ordered` for independently owned insertion/explicit-position ordered general collections;
+  do not place comparison-sorted collections or application-specific Tungsten surfaces there.
 - Write current paths in active documentation. Put historical paths only in explicit provenance or review reports.

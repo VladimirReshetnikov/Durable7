@@ -12,8 +12,11 @@ public sealed class OrderedDependencyBoundaryTests
     public void ProjectManifests_HaveOnlyApprovedRepositoryDependencies()
     {
         var root = RepositoryRoot();
+        var csharpDirectory = Path.Combine(root, "src", "CSharp");
         var productProject = Path.Combine(root, "src", "CSharp", "src", "Tools.DataStructures.Ordered", "Tools.DataStructures.Ordered.csproj");
         var testProject = Path.Combine(root, "src", "CSharp", "tests", "Tools.DataStructures.Ordered.Tests", "Tools.DataStructures.Ordered.Tests.csproj");
+        var buildProps = Path.Combine(csharpDirectory, "Directory.Build.props");
+        var buildTargets = Path.Combine(csharpDirectory, "Directory.Build.targets");
 
         Assert.Equal(
             new[] { "Tools.DataStructures.FingerTree.csproj", "Tools.DataStructures.Hamt.csproj" },
@@ -22,16 +25,47 @@ public sealed class OrderedDependencyBoundaryTests
             new[] { "Tools.DataStructures.Ordered.csproj" },
             ProjectReferences(testProject).Select(Path.GetFileName));
 
-        foreach (var project in new[] { productProject, testProject })
+        var productDocument = XDocument.Load(productProject);
+        var testDocument = XDocument.Load(testProject);
+        AssertPackageReferences(productDocument);
+        AssertPackageReferences(
+            testDocument,
+            ("CsCheck", "4.7.0"),
+            ("Microsoft.NET.Test.Sdk", "17.13.0"),
+            ("xunit", "2.9.3"),
+            ("xunit.runner.visualstudio", "2.8.2"));
+
+        foreach (var document in new[] { productDocument, testDocument })
         {
-            var document = XDocument.Load(project);
+            Assert.Equal("Microsoft.NET.Sdk", document.Root!.Attribute("Sdk")?.Value);
+            AssertNoSourceInjectionRoutes(document);
+            Assert.Empty(document.Descendants("Compile"));
+            foreach (var reference in document.Descendants("ProjectReference"))
+            {
+                Assert.Equal(new[] { "Include" }, reference.Attributes().Select(attribute => attribute.Name.LocalName));
+                Assert.Empty(reference.Elements());
+            }
             Assert.DoesNotContain(
                 document.Descendants().Attributes("Include"),
                 attribute => attribute.Value.Contains("Tungsten", StringComparison.OrdinalIgnoreCase));
-            Assert.DoesNotContain(
-                document.Descendants("Compile"),
-                element => element.Attribute("Link") is not null || element.Attribute("Include") is not null);
         }
+
+        var propsDocument = XDocument.Load(buildProps);
+        AssertNoSourceInjectionRoutes(propsDocument);
+        Assert.Empty(propsDocument.Descendants("Compile"));
+        Assert.Empty(propsDocument.Descendants("ProjectReference"));
+        Assert.Empty(propsDocument.Descendants("PackageReference"));
+
+        var targetsDocument = XDocument.Load(buildTargets);
+        AssertNoSourceInjectionRoutes(targetsDocument);
+        Assert.Empty(targetsDocument.Descendants("ProjectReference"));
+        Assert.Empty(targetsDocument.Descendants("PackageReference"));
+        var sharedCompile = Assert.Single(targetsDocument.Descendants("Compile"));
+        Assert.Equal(
+            "$(MSBuildThisFileDirectory)tests\\TestInfrastructure\\HeadlessTestProcess.cs",
+            sharedCompile.Attribute("Include")?.Value);
+        Assert.Equal("TestInfrastructure\\HeadlessTestProcess.cs", sharedCompile.Attribute("Link")?.Value);
+        Assert.Equal(new[] { "Include", "Link" }, sharedCompile.Attributes().Select(attribute => attribute.Name.LocalName));
     }
 
     /// <summary>Verifies Ordered alone grants its tests internal access and foundations grant it none.</summary>
@@ -100,9 +134,11 @@ public sealed class OrderedDependencyBoundaryTests
         var root = RepositoryRoot();
         var productDirectory = Path.Combine(root, "src", "CSharp", "src", "Tools.DataStructures.Ordered");
         var testDirectory = Path.Combine(root, "src", "CSharp", "tests", "Tools.DataStructures.Ordered.Tests");
-        var files = Directory.EnumerateFiles(productDirectory, "*.cs", SearchOption.TopDirectoryOnly)
-            .Concat(Directory.EnumerateFiles(testDirectory, "*.cs", SearchOption.TopDirectoryOnly)
+        var sharedTestDirectory = Path.Combine(root, "src", "CSharp", "tests", "TestInfrastructure");
+        var files = EnumerateSdkSources(productDirectory)
+            .Concat(EnumerateSdkSources(testDirectory)
                 .Where(path => !path.EndsWith(nameof(OrderedDependencyBoundaryTests) + ".cs", StringComparison.Ordinal)));
+        files = files.Concat(EnumerateSdkSources(sharedTestDirectory));
         foreach (var file in files)
         {
             var source = File.ReadAllText(file);
@@ -117,6 +153,82 @@ public sealed class OrderedDependencyBoundaryTests
         XDocument.Load(project)
             .Descendants("ProjectReference")
             .Select(element => element.Attribute("Include")!.Value);
+
+    private static void AssertPackageReferences(
+        XDocument document,
+        params (string Id, string Version)[] expected)
+    {
+        var references = document.Descendants("PackageReference").ToArray();
+        Assert.Equal(
+            expected.OrderBy(package => package.Id, StringComparer.Ordinal),
+            references
+                .Select(reference => (
+                    Id: reference.Attribute("Include")!.Value,
+                    Version: reference.Attribute("Version")!.Value))
+                .OrderBy(package => package.Id, StringComparer.Ordinal));
+
+        foreach (var reference in references)
+        {
+            Assert.Equal(
+                new[] { "Include", "Version" },
+                reference.Attributes().Select(attribute => attribute.Name.LocalName).OrderBy(name => name, StringComparer.Ordinal));
+            var id = reference.Attribute("Include")!.Value;
+            if (id == "xunit.runner.visualstudio")
+            {
+                Assert.Equal(
+                    new[]
+                    {
+                        (Name: "IncludeAssets", Value: "runtime; build; native; contentfiles; analyzers; buildtransitive"),
+                        (Name: "PrivateAssets", Value: "all"),
+                    },
+                    reference.Elements().Select(element => (element.Name.LocalName, element.Value.Trim())));
+            }
+            else
+            {
+                Assert.Empty(reference.Elements());
+            }
+        }
+    }
+
+    private static void AssertNoSourceInjectionRoutes(XDocument document)
+    {
+        Assert.DoesNotContain(
+            "Tungsten",
+            document.ToString(SaveOptions.DisableFormatting),
+            StringComparison.OrdinalIgnoreCase);
+        string[] forbiddenElements =
+        [
+            "AdditionalFiles",
+            "Analyzer",
+            "CompilerVisibleItemMetadata",
+            "CompilerVisibleProperty",
+            "Import",
+            "OutputItemType",
+            "ReferenceOutputAssembly",
+            "Sdk",
+            "Target",
+            "UsingTask",
+        ];
+        foreach (var elementName in forbiddenElements)
+            Assert.Empty(document.Descendants(elementName));
+
+        foreach (var attribute in document.Root!.DescendantsAndSelf().Attributes())
+        {
+            Assert.DoesNotContain("Tungsten", attribute.Value, StringComparison.OrdinalIgnoreCase);
+            if (attribute.Name.LocalName == "Sdk")
+                Assert.Equal("Microsoft.NET.Sdk", attribute.Value);
+            Assert.False(
+                attribute.Name.LocalName is "OutputItemType" or "ReferenceOutputAssembly",
+                $"Build metadata '{attribute.Name.LocalName}' can turn an approved dependency into a compiler extension.");
+        }
+    }
+
+    private static IEnumerable<string> EnumerateSdkSources(string directory) =>
+        Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories)
+            .Where(path => !Path.GetRelativePath(directory, path)
+                .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                .Any(segment => segment.Equals("bin", StringComparison.OrdinalIgnoreCase)
+                    || segment.Equals("obj", StringComparison.OrdinalIgnoreCase)));
 
     private static IEnumerable<Type> PublicSignatureTypes(Type type)
     {

@@ -3,7 +3,7 @@
 - Created (UTC): 2026-07-03T23:50:37Z
 - Repository HEAD: 96a766f45fa42b5bd14c5ae3173956300cbff21b
 - Audience: Maintainers and AI agents preserving cross-workspace behavior
-- Scope: Shared contracts for repository-owned numerics, HAMT, FingerTree-family structures, ownership models, and documentation obligations
+- Scope: Shared contracts for repository-owned numerics, HAMT, Ordered, FingerTree-family structures, ownership models, and documentation obligations
 
 This reference summarizes the behavioral contracts that should stay recognizable across the repository's
 language workspaces. It is not a replacement for the workspace API specifications, public headers, XML
@@ -17,6 +17,7 @@ Authoritative local documents remain:
 - [C HAMT API specification](../../src/C/Hamt/docs/api-specification.md)
 - [C++ HAMT API specification](../../src/Cpp/Hamt/docs/api-specification.md)
 - [C# FingerTree API specification](../../src/CSharp/docs/FingerTree/api-specification.md)
+- [C# Ordered API specification](../../src/CSharp/docs/Ordered/api-specification.md)
 - [C FingerTree API notes](../../src/C/FingerTree/docs/api-notes.md)
 - [C++ FingerTree API notes](../../src/Cpp/FingerTree/docs/api-notes.md)
 - [Kotlin FingerTree API notes](../../src/Kotlin/FingerTree/docs/api-notes.md)
@@ -38,6 +39,8 @@ behavior change through sibling workspaces.
 | Reference-first equality | When two stored/incoming references are provably identical, implementations may accept equality without invoking user equality. A non-identical reference never proves semantic inequality. |
 | Policy preservation | Hash, equality, comparison, measure, allocator, ownership, and callback policies flow into derived versions unless a local API explicitly creates a new policy. |
 | Stable but unspecified order | Enumeration order is deterministic for unchanged structure versions, but callers must not treat the exact trie/tree traversal order as a sorted or insertion order unless the API says so. |
+| Insertion/explicit-position order | Enumeration follows first insertion plus unmistakable positional operations; equality decides membership but does not determine order, and comparison order is not retained unless separately promised. |
+| Dual-index composite | One public collection owns two persistent indexes for different query dimensions and must publish them only when their cross-index correspondence invariants hold. |
 | Measure | A monoidal summary cached on a finger-tree node, chunk, or facade element and used for split, locate, rank, priority, interval, rope, or text navigation. |
 | Version-bound cursor | An immutable working value that owns one persistent sequence version and a position within it; navigation and editing never redirect it to a different version implicitly. |
 | Checkpoint port | A port that preserves observable API semantics and tests while documenting a remaining representation or asymptotic parity boundary. |
@@ -257,6 +260,65 @@ Shared obligations:
 
 Use the [reversible deque complexity audit](reversible-deque-complexity-audit.md) when changing any
 orientation-aware implementation.
+
+## Insertion-Ordered Set
+
+`Tools.DataStructures.Ordered.PersistentOrderedSet<T>` is currently the C#-only general-purpose
+insertion-ordered set. Its retained `IEqualityComparer<T>` defines equality classes, membership,
+lookup, duplicate collapse, and algebra. Enumeration order is a separate semantic dimension:
+construction retains first-occurrence order, ordinary `Add` appends an absent class, and
+`AddFirst`/`Insert` place only absent classes. Adding a comparer-equivalent value is an identity
+no-op that neither moves the class nor replaces its first stored representative. Movement is
+available only through explicit `MoveToFirst`, `MoveToLast`, and final-result-index `MoveTo`
+operations, all of which move the stored representative rather than the lookup argument.
+
+The order is not comparison-sorted. `Sort` is a stable one-shot transformation whose ties retain the
+old order; it preserves the equality comparer but does not store the ordering comparer or change the
+meaning of later additions. Ranges, reversal, sorting, movement, and removal preserve immutable old
+versions, comparer identity, and stored representatives for surviving classes. Logical no-ops
+return the receiver where the API specification promises identity.
+
+Every version owns two persistent indexes:
+
+```text
+PersistentHashMap<T, long>  membership class -> private stamp
+FingerTreeDeque<Entry>      private stamp + stored representative in enumeration order
+```
+
+Ordered owns their composition. Its published invariants require equal counts, strictly increasing
+deque stamps, exactly one map entry per deque entry and vice versa, the same representative in both
+indexes, the receiver's exact comparer object, and isolation of every retained version. Sparse stamp
+selection and relabel cadence are private. If an insertion or movement exhausts a label gap, the new
+version may rebuild and relabel both indexes; that O(n) work belongs to that produced branch, so no
+amortization claim spans siblings derived from the same old version.
+
+Set-producing algebra and all six set relations eagerly normalize the entire argument under the
+receiver's comparer, even for another `PersistentOrderedSet<T>` with a different comparer object.
+The first argument representative encountered during that normalization wins each collapsed
+argument class, while receiver representatives win every surviving receiver class. Result order is
+deterministic:
+
+| Operation | Ordered result |
+| --- | --- |
+| `Union` | Receiver classes in receiver order, then argument-only classes in normalized argument order |
+| `Intersect` | Surviving receiver classes in receiver order |
+| `Except` | Surviving receiver classes in receiver order |
+| `SymmetricExcept` | Receiver-only classes in receiver order, then argument-only classes in normalized argument order |
+
+The workspace is independently owned and depends only on the public C# HAMT and FingerTree projects.
+Neither production nor tests may reference `Tools.DataStructures.Tungsten`, consume Tungsten source
+or internals, use `PersistentAssociation` as a live oracle, or adopt Tungsten as semantic authority.
+Similar sparse-order mechanics are provenance, not shared ownership. Ports to C, C++, Haskell,
+Kotlin, Rust, TypeScript, and Python are required after the C# proposal sequence completes and must
+derive from this Ordered contract through language-local ownership and policy models.
+
+The [Ordered validation guide](../../src/CSharp/docs/Ordered/validation.md) and
+[test map](../../src/CSharp/tests/Tools.DataStructures.Ordered.Tests/README.md) define the evidence
+boundary. Focused single-worker Debug and Release lanes each discover and pass 62 tests. The
+complete serialized C# Release gate builds with zero warnings or errors and passes all 1,355 tests.
+Correctness, deterministic operation-count, invariant, persistence, failure, API-shape, and
+dependency gates are the current evidence. Benchmarks are not a shipment requirement and remain
+postponed to an isolated, contention-free run.
 
 ## Sorted Collections
 
