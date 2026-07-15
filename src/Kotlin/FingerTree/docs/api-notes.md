@@ -22,6 +22,8 @@ Current public families:
 - `ZipTreeRankPolicy<T>`, `CanonicalSortedSet<T>`, `CanonicalSetLookup<T>`, and
   `CanonicalSortedSetStatistics`;
 - `Monoid<T>`, `DabaLite<T>`, and `DabaLiteStatistics`;
+- `RangeUpdateAlgebra<T, M, Tag>`, `RangeUpdateSequence<T, M, Tag>`,
+  `RangeUpdateSplit<T, M, Tag>`, and `RangeUpdateValidationStatistics`;
 - `Rope<T>`, positional `RopeCursor<T>`, nullable-safe `RopeCursorPeek<T>`, `MeasuredRope<T, M>`,
   `MeasuredRopeCursor<T, M>`, `MeasuredRopeCursorSearch<T, M>`, `TextRope`, `TextRopeCursor`,
   `TextRopeCursorSearch`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
@@ -37,6 +39,15 @@ The Kotlin surface follows Kotlin/JVM conventions:
 - `SortedMap.from(values, comparator)` provides comparator-aware bulk construction and keeps the last supplied
   entry, including its key instance, from every comparator-equal run;
 - text offsets are Kotlin `Char` offsets, matching the repository's `Rope<char>` interpretation.
+
+`RangeUpdateSequence` retains a runtime algebra extending `MeasurePolicy`. Its
+`compose(newer, older)` direction matches the C# reference exactly, and a wrapper distinguishes an
+absent pending action from nullable/default-like/value-distinct identity tags. Indexed edits and
+ranges follow the workspace's nullable invalid-result convention; count growth uses checked `Int`
+arithmetic. Concatenation requires identical or value-equal algebra policies, empty/no-op paths
+retain exact facades, and independent iterators own their immutable traversal state. The full
+algebra, lazy-node, complexity, and validation contract is documented in
+[range-update-sequence.md](range-update-sequence.md).
 
 `RrbVector` uses `append`/`prepend`, `concat`, `splitAt`, `setItem`, `insertAt`/`insertRange`,
 `removeAt`/`removeRange`, and `tryRemoveLast`. Invalid indexed edits and boundaries return `null`,

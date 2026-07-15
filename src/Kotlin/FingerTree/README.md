@@ -19,6 +19,8 @@ names for the public families:
 - `RrbVector<T>` and its append-only `RrbVector.Builder<T>`;
 - `ZipTreeRankPolicy<T>`, `CanonicalSortedSet<T>`, and `CanonicalSortedSetStatistics`;
 - `Monoid<T>`, `DabaLite<T>`, and `DabaLiteStatistics` for mutable FIFO window aggregation;
+- `RangeUpdateAlgebra<T, M, Tag>`, `RangeUpdateSequence<T, M, Tag>`, and its split/validation
+  result types;
 - `Rope<T>`, its immutable positional `RopeCursor<T>` and nullable-safe `RopeCursorPeek<T>`,
   `MeasuredRope<T, M>`, `MeasuredRopeCursor<T, M>`, `MeasuredRopeCursorSearch<T, M>`, `TextRope`,
   `TextRopeCursor`, `TextRopeCursorSearch`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
@@ -29,6 +31,13 @@ the affected paths and retain untouched JVM nodes. The same substrate drives `Pe
 general `FingerTree`, sorted facades, stable priority selection, max-high interval pruning,
 positional/measured ropes, and newline-measured text. `ReversibleDeque` keeps its specialized
 orientation-aware balanced tree so whole-value reversal remains O(1).
+
+`RangeUpdateSequence` is a separate implicit-key AVL sibling whose nodes additionally cache an
+optional algebraic lazy tag. Its runtime algebra extends `MeasurePolicy`, with directional
+`compose(newer, older)` and actions on elements and combined subtree measures. Full-range updates
+replace one root in O(1); proper updates and queries visit O(log n) boundary paths. Structural
+descent immutably pushes tags before rotations, while reads carry inherited actions without
+publishing pushed nodes. See the [range-update contract](docs/range-update-sequence.md).
 
 `RopeCursor<T>` and `MeasuredRopeCursor<T, M>` are immutable semantic checkpoints retaining an exact
 rope snapshot plus a validated gap in `0..size`. Both preserve branchable edits, nullable-safe wrapped
@@ -99,6 +108,7 @@ Validate from `src/Kotlin`:
 .\build.ps1 -Workspace FingerTree
 ```
 
-See [API notes](docs/api-notes.md), [priority-core notes](docs/priority-cores.md),
+See [API notes](docs/api-notes.md), [range-update contract](docs/range-update-sequence.md),
+[priority-core notes](docs/priority-cores.md),
 [validation](docs/validation.md), and the
 [test map](tests/README.md).

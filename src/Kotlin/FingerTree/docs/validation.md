@@ -47,6 +47,17 @@ growth path and cursor overflow path fails before publication while all retained
 The measured case arms measure, combine, and distinct-policy equality to throw and proves count
 overflow wins before any is invoked.
 
+Range-update validation covers affine assignment/addition composition in both observable orders,
+value-distinct identity tags, noncommutative ordered measures, complete point/range/split behavior,
+one-shot source capture before measurement, callback failure/retry, and exact no-op root identity.
+A 1,000-command list model branches from retained old versions and independently validates AVL height/balance,
+counts, pending-tag canonicality, logical enumeration, and cached measures after every command. A
+shared DAG reaches exact `Int.MAX_VALUE` count and locks checked insertion/concatenation failure;
+four bounded readers concurrently index, enumerate, and measure retained tagged snapshots. Callback
+failpoints sweep every reachable ordinal of element measurement, measure combination, identity
+recognition, tag composition, element action, and aggregate action; iterator-specific failures prove
+retry resumes at the same child/element instead of committing traversal state early.
+
 RRB validation covers every 32-way boundary through 100,000 elements, unequal-height and uneven
 fragment concatenation, exact-boundary leaf identity, regular-versus-relaxed size-table invariants,
 a 10,000-operation retained-snapshot model, and 2,000 adversarial split/concat rounds with explicit

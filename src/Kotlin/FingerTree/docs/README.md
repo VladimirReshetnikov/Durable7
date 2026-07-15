@@ -19,6 +19,8 @@ difference.
 - [Priority-core notes](priority-cores.md) specify the bootstrapped skew-binomial
   `BrodalOkasakiHeap<T>` and winner-cached AVL `PrioritySearchQueue<K, P, V>`, including comparator
   identity, representative/tie rules, operation bounds, validation, and the JVM audit boundary.
+- [Range-update sequence](range-update-sequence.md) specifies the runtime algebra, directional tag
+  composition, implicit-AVL lazy-tag invariant, public surface, structural bounds, and validation.
 - [Validation](validation.md) records the `src/Kotlin/build.ps1` command shape, local JDK and Kotlin
   compiler bootstrap behavior, generated-output locations, and executable-test coverage boundary.
 - [Tests README](../tests/README.md) maps deterministic coverage for deque operations, reversible

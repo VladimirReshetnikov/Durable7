@@ -40,6 +40,10 @@ Coverage groups:
   all four six-cursor fixups, exact combine ceilings, 64-slot chunk boundaries and churn, callback
   failure at every reachable mutation ordinal, atomic boundary rollback, O(1) clear/reuse,
   callback-free structural statistics, nullable identity, and prompt slot/chunk reclamation;
+- `RangeUpdateSequence` directional affine laws, value-distinct identities, noncommutative measures,
+  lazy-tag point/range edits, nullable elements/measures/tags, exact no-op and off-root sharing,
+  every policy-callback failure ordinal plus iterator retry, a 1,000-command branching retained list
+  model with recursive validation, exact-`Int` shared-DAG overflow, and bounded concurrent readers;
 - `CanonicalSortedSet` bulk/incremental permutation and delete/reinsert topology convergence, a
   15,000-command retained-snapshot model, bulk first-representative and nullable-lookup semantics,
   exact keyed/public-seed HMAC derivation, hidden-key and same-seed policy behavior, unsigned
