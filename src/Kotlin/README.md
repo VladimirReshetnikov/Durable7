@@ -13,6 +13,7 @@ where the language surfaces line up.
 | --- | --- | --- | --- |
 | [Hamt](Hamt/README.md) | Persistent HAMT map/set port with 32-way bitmap-indexed trie nodes and immutable collision buckets | `tools.datastructures.hamt.PersistentHashMap`, `PersistentHashSet` | `.\build.ps1 -Workspace Hamt` |
 | [FingerTree](FingerTree/README.md) | Persistent measured-tree port of the FingerTree family, positional/measured/text rope cursors, RRB vectors, the policy-canonical zip-zip sorted set, Brodal-Okasaki and priority-search-queue cores, and the mutable DABA Lite FIFO aggregator | `tools.datastructures.fingertree.*` | `.\build.ps1 -Workspace FingerTree` |
+| [Ordered](Ordered/README.md) | Neutral persistent insertion-ordered set over the public HAMT and FingerTree APIs, with explicit positional movement and receiver-policy set algebra | `tools.datastructures.ordered.PersistentOrderedSet` | `.\build.ps1 -Workspace Ordered` |
 | [Tungsten](Tungsten/README.md) | Application-specific leaf port of Tungsten `List` and `Association` over Kotlin persistent substrates | `tools.datastructures.tungsten.PersistentList`, `PersistentAssociation` | `.\build.ps1 -Workspace Tungsten` |
 
 Run the full Kotlin validation from this directory:
@@ -31,6 +32,12 @@ unless a caller already selected another collector.
 On Windows, the script enables inherited non-interactive OS error handling before launching build tools or tests,
 and starts every test JVM with `-Djava.awt.headless=true`. Assertion, exception, loader, and crash failures therefore
 remain console diagnostics with nonzero exits instead of opening modal UI.
+
+The Ordered workspace compiles against the public source roots of both Hamt and FingerTree. It does
+not compile, reference, wrap, or otherwise depend on the application-specific Tungsten workspace.
+Its `PersistentOrderedSet<T>` retains the caller's runtime `HashPolicy<T>`, keeps the first stored
+representative of each equality class (including nullable representatives), and maintains an
+independently owned sparse-`Long` order index with deterministic relabel fallback.
 
 The FingerTree workspace uses immutable measured AVL sequence nodes throughout the public family.
 Cached size and monoidal measures drive logarithmic indexed edits, splits, prefix location, priority,

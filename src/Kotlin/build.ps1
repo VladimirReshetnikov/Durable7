@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("All", "Hamt", "FingerTree", "Tungsten")]
+    [ValidateSet("All", "Hamt", "FingerTree", "Ordered", "Tungsten")]
     [string]$Workspace = "All"
 )
 
@@ -249,6 +249,10 @@ if ($Workspace -eq "All" -or $Workspace -eq "Hamt") {
 
 if ($Workspace -eq "All" -or $Workspace -eq "FingerTree") {
     Invoke-KotlinWorkspaceTests "FingerTree" "FingerTree" $kotlinc $javaToolchain.Java
+}
+
+if ($Workspace -eq "All" -or $Workspace -eq "Ordered") {
+    Invoke-KotlinWorkspaceTests "Ordered" "Ordered" $kotlinc $javaToolchain.Java @("Hamt/src", "FingerTree/src")
 }
 
 if ($Workspace -eq "All" -or $Workspace -eq "Tungsten") {
