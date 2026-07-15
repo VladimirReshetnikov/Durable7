@@ -22,6 +22,10 @@
             "types": "./dist/finger-tree/index.d.ts",
             "import": "./dist/finger-tree/index.js"
         },
+        "./ordered": {
+            "types": "./dist/ordered/index.d.ts",
+            "import": "./dist/ordered/index.js"
+        },
         "./tungsten": {
             "types": "./dist/tungsten/index.d.ts",
             "import": "./dist/tungsten/index.js"

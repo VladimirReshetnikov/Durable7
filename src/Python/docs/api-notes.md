@@ -22,6 +22,8 @@ The package source and executable tests are authoritative where an API detail is
 - Strings are indexed by Python Unicode code point. Consequently `TextRope` positions differ from
   UTF-16-code-unit workspaces for non-BMP characters; all internal Python text APIs use one
   consistent coordinate system.
+- Python ordered-set iteration uses ordinary independent, snapshot-bound iterators. It does not
+  reproduce the shared mutable-copy state of the C# value-type enumerator.
 
 ## Hash collections
 
@@ -31,6 +33,33 @@ keeps the stored key representative, and semantic no-ops keep object identity. A
 requires the same policy object where structural compatibility matters; set algebra accepts any
 iterable and applies the receiver's policy.
 
+`PersistentHashMap.get_or_add(key, add_factory)` and
+`add_or_update(key, add_factory, update_factory)` hash and descend once, validate factories before
+hashing, and call exactly the selected factory at most once. Both return a frozen `MapUpdateResult`
+containing the successor map and concrete selected value. Hits retain the stored key and value
+representatives, including a stored `None`; updates receive the caller's key and stored value. A
+factory failure leaves the source untouched.
+
+`HashMapBulkBuilder` constructs an independent map by mutating unpublished leaf, collision, and
+bitmap nodes. Its public surface is deliberately limited to policy/count state, `set_item`,
+`set_items`, and `to_immutable`. Duplicate keys keep their first representative, the last
+Python-distinct value wins, and an equal value keeps the earlier object. Each freeze copies the
+node topology without policy callbacks, remains detached from earlier snapshots, and leaves the
+builder reusable. Map/set range construction, foreign-policy set probes, and applicable
+intersection results route through this construction path; lookup/removal/adoption remain the
+separate transient lifecycle.
+
+`PersistentHashBag[T]` stores one representative and a positive signed-32-bit multiplicity per
+policy class. `distinct_count` counts classes and unbounded Python `int` supplies exact
+`total_count`; there is intentionally no ambiguous `size` or `len`. Copy counts are checked before
+hashing, zero-copy edits are identity no-ops, expanded iteration repeats each representative
+contiguously, and `distinct_items`, `entries`, and `get_entry` provide unambiguous distinct views.
+Bag algebra accepts another bag: union takes maxima, intersection minima, `except_` saturated
+subtraction, and `sum` checked addition. A foreign policy is eagerly normalized under the receiver
+policy, receiver representatives win surviving classes, and collapsed argument classes retain the
+first representative encountered in that version's CHAMP order. The narrow bag deliberately has
+no transient, builder, symmetric difference, arbitrary-iterable algebra, or content equality.
+
 The shared default policy follows coherent Python hash/equality behavior. Hashable values use
 `hash` and `==`; the identical-object fast path recovers non-reflexive values such as a retained
 `NaN`. Unhashable objects use process-local identity hashing and are equivalent only to themselves;
@@ -38,11 +67,60 @@ use `create_hash_policy` for structural unhashable keys. Hashes are normalized t
 
 Transient sessions retain the cross-language one-way lifecycle, clean-publication identity, and
 version-invalidated iterators. Their changed edits remain persistent path copies; Python makes no
-owner-token in-place-update claim.
+owner-token in-place-update claim. `TransientHashSet` exposes all six read-only relations; they do
+not change its mutation version and reject access after publication before consuming an operand.
 
 Patricia int maps/sets enforce signed 32-bit or signed 64-bit boundaries and traverse in ascending
 signed-key order. Negative keys are masked before sign-bit biasing so Python's infinite-width
 negative integers cannot leak into trie prefixes.
+
+## Ordered collections
+
+`PersistentOrderedSet[T]` lives in the neutral `ordered` package and composes only
+`PersistentHashMap` with `PersistentDeque`; neither its implementation nor its semantic baseline
+depends on Tungsten. The HAMT maps each receiver-policy equivalence class to a private signed
+64-bit order stamp, while the deque stores `(stamp, representative)` entries. New neighboring
+positions use sparse `2^20` labels and deterministically relabel when a gap is exhausted.
+
+The public construction and query surface is:
+
+```text
+empty, from_values
+size, is_empty, policy, first, last
+contains, try_get_value, get, get_at, index_of, to_list
+__len__, __bool__, __contains__, __getitem__, __iter__
+```
+
+Point and ordered updates are `add`, `add_first`, `insert`, `move_to_first`, `move_to_last`,
+`move_to`, `remove`, `try_remove`, `remove_at`, `remove_first`, `remove_last`, and `clear`. Range
+and order operations are `get_range`, `take`, `drop`, `reverse`, and `sort`. Algebra comprises
+`union`, `intersect`, `except_`, `symmetric_except`, `is_subset_of`, `is_proper_subset_of`,
+`is_superset_of`, `is_proper_superset_of`, `overlaps`, and `set_equals`. The package also exports
+the frozen `OrderedSetValueResult` and `OrderedSetRemoveResult` carriers in place of C# `out`
+parameters. `except_` has a trailing underscore because `except` is a Python keyword.
+
+Construction and every insertion retain the first representative and first position of an
+equivalence class. Duplicate `add`, `add_first`, or `insert` operations are identity no-ops and
+never imply movement; only the explicit movement methods reorder an existing stored
+representative, with `move_to(index, value)` interpreting `index` as the final result position.
+Default-policy emptiness is canonical, while custom empty sets retain the exact `HashPolicy`
+object. Full-range extraction, already-sorted order, and logical algebra no-ops retain receiver
+identity.
+
+Every algebra and relation operation eagerly consumes and deduplicates its entire operand under
+the receiver's policy before applying any shortcut. Union emits receiver representatives followed
+by argument-only first representatives; intersection and difference retain receiver order;
+symmetric difference emits receiver-only values followed by argument-only values. Sorting is
+stable and one-shot: it accepts a two-argument Python comparator, uses Python's default ordering
+when omitted, and does not retain that comparator for later additions.
+
+Python maps invalid positions and empty endpoints to `IndexError`, invalid counts to `ValueError`,
+missing movement targets to `KeyError`, and null iterable operands to `TypeError`. The nullable
+`get` convenience method returns `None` on a miss; use `try_get_value` when stored `None` must
+remain distinct from absence. `index_of` first performs a HAMT lookup and then binary-searches
+through the public deque index API. Since one deque index is O(log n), this language-local
+implementation is O(log^2 n) for that second phase rather than the C# workspace's O(log n)
+specialized lower bound. All updates remain immutable and failure-atomic.
 
 ## Measured and frontier structures
 
@@ -58,9 +136,11 @@ the same presence-preserving representation for nullable endpoints.
 Sequence, measured-tree, and measured-rope splits and cursor searches return frozen named
 dataclasses, so callers can use semantic fields such as `left`, `right`, `item`, `cursor`, and
 `found`. A measured-rope concatenation requires the exact same measure-policy object even when one
-operand is empty. `RopeCursor.peek_previous()` and `peek_next()` remain convenient nullable reads;
-the corresponding `peek_previous_entry()` and `peek_next_entry()` methods wrap a present value in
-`RopeCursorPeek`, preserving the distinction between a stored `None` and a cursor boundary.
+operand is empty. Positional and measured cursors retain convenient nullable `peek_previous()` and
+`peek_next()` reads; their corresponding `peek_previous_entry()` and `peek_next_entry()` methods
+wrap a present value in `RopeCursorPeek`, preserving the distinction between a stored `None` and a
+cursor boundary. `replace_next()` is unconditional: it produces a fresh rope even for an identical
+object and measured replacement invokes the replacement's measure callback before publication.
 
 The frontier structures keep their actual sibling algorithms rather than flattening to tuples or
 dicts: 32-way regular/relaxed RRB nodes, HMAC-SHA256 `ZZT2` zip-zip ranks, bootstrapped skew-binomial

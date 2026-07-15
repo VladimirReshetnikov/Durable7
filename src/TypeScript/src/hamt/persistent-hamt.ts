@@ -1,9 +1,12 @@
+import { getBulkBuilderCombiner } from "./bulk-builder-internals.js";
 import { defaultHashPolicy, sameValueZero, type HashPolicy } from "./hash-policy.js";
 
 const bitsPerLevel = 5;
 const branchMask = 0x1f;
 
 type Node<K, V> = Leaf<K, V> | Collision<K, V> | BitmapNode<K, V>;
+
+type MutableNode<K, V> = MutableLeaf<K, V> | MutableCollision<K, V> | MutableBitmapNode<K, V>;
 
 interface Leaf<K, V> {
     readonly kind: "leaf";
@@ -29,11 +32,44 @@ interface BitmapNode<K, V> {
     readonly entryCount: number;
 }
 
+interface MutableLeaf<K, V> {
+    readonly kind: "leaf";
+    readonly hash: number;
+    readonly key: K;
+    value: V;
+}
+
+interface MutableCollision<K, V> {
+    readonly kind: "collision";
+    readonly hash: number;
+    readonly entries: MutableLeaf<K, V>[];
+}
+
+interface MutableBitmapNode<K, V> {
+    readonly kind: "bitmap";
+    dataMap: number;
+    nodeMap: number;
+    readonly data: MutableLeaf<K, V>[];
+    readonly nodes: MutableNode<K, V>[];
+}
+
+interface MutableInsertResult<K, V> {
+    readonly node: MutableNode<K, V>;
+    readonly added: boolean;
+}
+
 interface InsertResult<K, V> {
     readonly node: Node<K, V>;
     readonly added: boolean;
     readonly changed: boolean;
     readonly duplicate: boolean;
+}
+
+interface FactoryUpdateNodeResult<K, V> {
+    readonly node: Node<K, V>;
+    readonly value: V;
+    readonly added: boolean;
+    readonly changed: boolean;
 }
 
 interface RemoveResult<K, V> {
@@ -64,6 +100,12 @@ export interface MapRemoveResult<K, V> {
 export interface MapRemoveEntryResult<K, V> {
     readonly map: PersistentHashMap<K, V>;
     readonly entry: HamtEntry<K, V>;
+}
+
+/** Result of a factory-driven persistent map update. */
+export interface MapUpdateResult<K, V> {
+    readonly map: PersistentHashMap<K, V>;
+    readonly value: V;
 }
 
 /** Result of removing a set element, including its stored representative. */
@@ -190,6 +232,171 @@ function collectLeaves<K, V>(node: Node<K, V>): readonly Leaf<K, V>[] {
     return [...node.data, ...node.nodes.flatMap(collectLeaves)];
 }
 
+function mutableLeaf<K, V>(hash: number, key: K, value: V): MutableLeaf<K, V> {
+    return { kind: "leaf", hash: hash | 0, key, value };
+}
+
+function mutableBitmap<K, V>(
+    dataMap: number,
+    nodeMap: number,
+    data: MutableLeaf<K, V>[],
+    nodes: MutableNode<K, V>[],
+): MutableBitmapNode<K, V> {
+    return { kind: "bitmap", dataMap: dataMap | 0, nodeMap: nodeMap | 0, data, nodes };
+}
+
+function collectMutableLeaves<K, V>(node: MutableNode<K, V>): MutableLeaf<K, V>[] {
+    if (node.kind === "leaf") return [node];
+    if (node.kind === "collision") return [...node.entries];
+    return [...node.data, ...node.nodes.flatMap(collectMutableLeaves)];
+}
+
+function mergeMutableNodes<K, V>(
+    left: MutableNode<K, V>,
+    leftHash: number,
+    right: MutableNode<K, V>,
+    rightHash: number,
+    shift: number,
+): MutableNode<K, V> {
+    if (leftHash === rightHash) {
+        return {
+            kind: "collision",
+            hash: leftHash | 0,
+            entries: [...collectMutableLeaves(left), ...collectMutableLeaves(right)],
+        };
+    }
+    if (shift > 30) throw new Error("Distinct 32-bit hashes exhausted the CHAMP hash width.");
+    const leftBit = bitPosition(hashFragment(leftHash, shift));
+    const rightBit = bitPosition(hashFragment(rightHash, shift));
+    if (leftBit === rightBit) {
+        if (shift === 30) throw new Error("Distinct 32-bit hashes collided at the final CHAMP level.");
+        return mutableBitmap(
+            0,
+            leftBit,
+            [],
+            [mergeMutableNodes(left, leftHash, right, rightHash, shift + bitsPerLevel)],
+        );
+    }
+    const ordered = (leftBit >>> 0) < (rightBit >>> 0)
+        ? [[leftBit, left], [rightBit, right]] as const
+        : [[rightBit, right], [leftBit, left]] as const;
+    const data: MutableLeaf<K, V>[] = [];
+    const nodes: MutableNode<K, V>[] = [];
+    let dataMap = 0;
+    let nodeMap = 0;
+    for (const [bit, node] of ordered) {
+        if (node.kind === "leaf") {
+            dataMap |= bit;
+            data.push(node);
+        } else {
+            nodeMap |= bit;
+            nodes.push(node);
+        }
+    }
+    return mutableBitmap(dataMap, nodeMap, data, nodes);
+}
+
+function insertMutableNode<K, V>(
+    node: MutableNode<K, V>,
+    hash: number,
+    key: K,
+    value: V,
+    shift: number,
+    policy: HashPolicy<K>,
+    combine: ((existing: V, incoming: V) => V) | undefined,
+): MutableInsertResult<K, V> {
+    if (node.kind === "leaf") {
+        if (node.hash === hash && policy.equivalent(node.key, key)) {
+            const selected = combine === undefined ? value : combine(node.value, value);
+            if (!valuesEqual(node.value, selected)) node.value = selected;
+            return { node, added: false };
+        }
+        return {
+            node: mergeMutableNodes(node, node.hash, mutableLeaf(hash, key, value), hash, shift),
+            added: true,
+        };
+    }
+    if (node.kind === "collision") {
+        if (node.hash !== hash) {
+            return {
+                node: mergeMutableNodes(node, node.hash, mutableLeaf(hash, key, value), hash, shift),
+                added: true,
+            };
+        }
+        const existing = node.entries.find((entry) => policy.equivalent(entry.key, key));
+        if (existing === undefined) {
+            node.entries.push(mutableLeaf(hash, key, value));
+            return { node, added: true };
+        }
+        const selected = combine === undefined ? value : combine(existing.value, value);
+        if (!valuesEqual(existing.value, selected)) existing.value = selected;
+        return { node, added: false };
+    }
+
+    const bit = bitPosition(hashFragment(hash, shift));
+    if ((node.dataMap & bit) !== 0) {
+        const dataIndex = sparseIndex(node.dataMap, bit);
+        const existing = node.data[dataIndex];
+        if (existing === undefined) throw new Error("Corrupt mutable CHAMP data bitmap.");
+        if (existing.hash === hash && policy.equivalent(existing.key, key)) {
+            const selected = combine === undefined ? value : combine(existing.value, value);
+            if (!valuesEqual(existing.value, selected)) existing.value = selected;
+            return { node, added: false };
+        }
+        const child = mergeMutableNodes(
+            existing,
+            existing.hash,
+            mutableLeaf(hash, key, value),
+            hash,
+            shift + bitsPerLevel,
+        );
+        node.data.splice(dataIndex, 1);
+        node.nodes.splice(sparseIndex(node.nodeMap, bit), 0, child);
+        node.dataMap = (node.dataMap & ~bit) | 0;
+        node.nodeMap = (node.nodeMap | bit) | 0;
+        return { node, added: true };
+    }
+    if ((node.nodeMap & bit) !== 0) {
+        const nodeIndex = sparseIndex(node.nodeMap, bit);
+        const existing = node.nodes[nodeIndex];
+        if (existing === undefined) throw new Error("Corrupt mutable CHAMP node bitmap.");
+        const result = insertMutableNode(
+            existing,
+            hash,
+            key,
+            value,
+            shift + bitsPerLevel,
+            policy,
+            combine,
+        );
+        node.nodes[nodeIndex] = result.node;
+        return { node, added: result.added };
+    }
+    node.data.splice(
+        sparseIndex(node.dataMap, bit),
+        0,
+        mutableLeaf(hash, key, value),
+    );
+    node.dataMap = (node.dataMap | bit) | 0;
+    return { node, added: true };
+}
+
+function freezeMutableNode<K, V>(node: MutableNode<K, V>): Node<K, V> {
+    if (node.kind === "leaf") return leaf(node.hash, node.key, node.value);
+    if (node.kind === "collision") {
+        return collision(
+            node.hash,
+            node.entries.map((entry) => leaf(entry.hash, entry.key, entry.value)),
+        );
+    }
+    return bitmap(
+        node.dataMap,
+        node.nodeMap,
+        node.data.map((entry) => leaf(entry.hash, entry.key, entry.value)),
+        node.nodes.map(freezeMutableNode),
+    );
+}
+
 function mergeNodes<K, V>(
     left: Node<K, V>,
     leftHash: number,
@@ -305,6 +512,165 @@ function insertNode<K, V>(
     };
 }
 
+function factoryUpdateNode<K, V>(
+    node: Node<K, V>,
+    hash: number,
+    key: K,
+    shift: number,
+    policy: HashPolicy<K>,
+    addFactory: (key: K) => V,
+    updateFactory: ((key: K, value: V) => V) | undefined,
+): FactoryUpdateNodeResult<K, V> {
+    if (node.kind === "leaf") {
+        if (node.hash === hash && policy.equivalent(node.key, key)) {
+            if (updateFactory === undefined) {
+                return { node, value: node.value, added: false, changed: false };
+            }
+            const selected = updateFactory(key, node.value);
+            if (valuesEqual(node.value, selected)) {
+                return { node, value: node.value, added: false, changed: false };
+            }
+            return {
+                node: leaf(hash, node.key, selected),
+                value: selected,
+                added: false,
+                changed: true,
+            };
+        }
+        const selected = addFactory(key);
+        return {
+            node: mergeNodes(node, node.hash, leaf(hash, key, selected), hash, shift),
+            value: selected,
+            added: true,
+            changed: true,
+        };
+    }
+
+    if (node.kind === "collision") {
+        if (node.hash !== hash) {
+            const selected = addFactory(key);
+            return {
+                node: mergeNodes(node, node.hash, leaf(hash, key, selected), hash, shift),
+                value: selected,
+                added: true,
+                changed: true,
+            };
+        }
+        const index = node.entries.findIndex((entry) => policy.equivalent(entry.key, key));
+        if (index < 0) {
+            const selected = addFactory(key);
+            return {
+                node: collision(hash, [...node.entries, leaf(hash, key, selected)]),
+                value: selected,
+                added: true,
+                changed: true,
+            };
+        }
+        const current = node.entries[index];
+        if (current === undefined) throw new Error("Corrupt CHAMP collision bucket.");
+        if (updateFactory === undefined) {
+            return { node, value: current.value, added: false, changed: false };
+        }
+        const selected = updateFactory(key, current.value);
+        if (valuesEqual(current.value, selected)) {
+            return { node, value: current.value, added: false, changed: false };
+        }
+        return {
+            node: collision(hash, replaceAt(node.entries, index, leaf(hash, current.key, selected))),
+            value: selected,
+            added: false,
+            changed: true,
+        };
+    }
+
+    const bit = bitPosition(hashFragment(hash, shift));
+    if ((node.dataMap & bit) !== 0) {
+        const dataIndex = sparseIndex(node.dataMap, bit);
+        const current = node.data[dataIndex];
+        if (current === undefined) throw new Error("Corrupt CHAMP data bitmap.");
+        if (current.hash === hash && policy.equivalent(current.key, key)) {
+            if (updateFactory === undefined) {
+                return { node, value: current.value, added: false, changed: false };
+            }
+            const selected = updateFactory(key, current.value);
+            if (valuesEqual(current.value, selected)) {
+                return { node, value: current.value, added: false, changed: false };
+            }
+            return {
+                node: bitmap(
+                    node.dataMap,
+                    node.nodeMap,
+                    replaceAt(node.data, dataIndex, leaf(hash, current.key, selected)),
+                    node.nodes,
+                ),
+                value: selected,
+                added: false,
+                changed: true,
+            };
+        }
+        const selected = addFactory(key);
+        const child = mergeNodes(
+            current,
+            current.hash,
+            leaf(hash, key, selected),
+            hash,
+            shift + bitsPerLevel,
+        );
+        return {
+            node: bitmap(
+                node.dataMap & ~bit,
+                node.nodeMap | bit,
+                removeAt(node.data, dataIndex),
+                insertAt(node.nodes, sparseIndex(node.nodeMap, bit), child),
+            ),
+            value: selected,
+            added: true,
+            changed: true,
+        };
+    }
+    if ((node.nodeMap & bit) !== 0) {
+        const index = sparseIndex(node.nodeMap, bit);
+        const current = node.nodes[index];
+        if (current === undefined) throw new Error("Corrupt CHAMP node bitmap.");
+        const child = factoryUpdateNode(
+            current,
+            hash,
+            key,
+            shift + bitsPerLevel,
+            policy,
+            addFactory,
+            updateFactory,
+        );
+        if (!child.changed) {
+            return { node, value: child.value, added: false, changed: false };
+        }
+        return {
+            node: bitmap(
+                node.dataMap,
+                node.nodeMap,
+                node.data,
+                replaceAt(node.nodes, index, child.node),
+            ),
+            value: child.value,
+            added: child.added,
+            changed: true,
+        };
+    }
+
+    const selected = addFactory(key);
+    return {
+        node: bitmap(
+            node.dataMap | bit,
+            node.nodeMap,
+            insertAt(node.data, sparseIndex(node.dataMap, bit), leaf(hash, key, selected)),
+            node.nodes,
+        ),
+        value: selected,
+        added: true,
+        changed: true,
+    };
+}
+
 function singletonLeaf<K, V>(node: Node<K, V>): Leaf<K, V> | undefined {
     if (node.kind === "leaf") return node;
     if (node.kind === "collision") return node.entries.length === 1 ? node.entries[0] : undefined;
@@ -408,12 +774,19 @@ export class PersistentHashMap<K, V> implements Iterable<HamtEntry<K, V>> {
         items: Iterable<readonly [K, V]>,
         policy: HashPolicy<K> = defaultHashPolicy<K>(),
     ): PersistentHashMap<K, V> {
-        return PersistentHashMap.empty<K, V>(policy).setItems(items);
+        return new HashMapBulkBuilder<K, V>(policy).setItems(items).toImmutable();
     }
 
     /** Creates an empty single-owner mutable editing session. */
     public static createTransient<K, V>(policy: HashPolicy<K> = defaultHashPolicy<K>()): TransientHashMap<K, V> {
         return new TransientHashMap(PersistentHashMap.empty<K, V>(policy));
+    }
+
+    /** Creates an empty reusable construction-only bulk builder. */
+    public static createBulkBuilder<K, V>(
+        policy: HashPolicy<K> = defaultHashPolicy<K>(),
+    ): HashMapBulkBuilder<K, V> {
+        return new HashMapBulkBuilder(policy);
     }
 
     /** Adopts this immutable map in O(1); a clean session republishes this exact object. */
@@ -451,6 +824,23 @@ export class PersistentHashMap<K, V> implements Iterable<HamtEntry<K, V>> {
         return result.duplicate
             ? { value: this, added: false }
             : { value: new PersistentHashMap(result.node, this.size + (result.added ? 1 : 0), this.policy), added: result.added };
+    }
+
+    /** Returns a stored value or adds one selected by the factory in one trie descent. */
+    public getOrAdd(key: K, addFactory: (key: K) => V): MapUpdateResult<K, V> {
+        if (typeof addFactory !== "function") throw new TypeError("addFactory must be a function.");
+        return this.applyFactoryUpdate(key, addFactory, undefined);
+    }
+
+    /** Adds or updates one value, invoking exactly one selected factory in one trie descent. */
+    public addOrUpdate(
+        key: K,
+        addFactory: (key: K) => V,
+        updateFactory: (key: K, value: V) => V,
+    ): MapUpdateResult<K, V> {
+        if (typeof addFactory !== "function") throw new TypeError("addFactory must be a function.");
+        if (typeof updateFactory !== "function") throw new TypeError("updateFactory must be a function.");
+        return this.applyFactoryUpdate(key, addFactory, updateFactory);
     }
 
     public setItems(items: Iterable<readonly [K, V]>): PersistentHashMap<K, V> {
@@ -539,8 +929,105 @@ export class PersistentHashMap<K, V> implements Iterable<HamtEntry<K, V>> {
         return this.#root === undefined ? [][Symbol.iterator]() : entriesOfNode(this.#root);
     }
 
+    private applyFactoryUpdate(
+        key: K,
+        addFactory: (key: K) => V,
+        updateFactory: ((key: K, value: V) => V) | undefined,
+    ): MapUpdateResult<K, V> {
+        const hash = this.policy.hash(key) | 0;
+        if (this.#root === undefined) {
+            const value = addFactory(key);
+            return { map: new PersistentHashMap(leaf(hash, key, value), 1, this.policy), value };
+        }
+        const result = factoryUpdateNode(
+            this.#root,
+            hash,
+            key,
+            0,
+            this.policy,
+            addFactory,
+            updateFactory,
+        );
+        const map = result.changed
+            ? new PersistentHashMap(result.node, this.size + (result.added ? 1 : 0), this.policy)
+            : this;
+        return { map, value: result.value };
+    }
+
     private requireSamePolicy(other: PersistentHashMap<K, V>): void {
         if (this.policy !== other.policy) throw new TypeError("Maps must retain the same hash policy object.");
+    }
+}
+
+function persistentMapFromBulkRoot<K, V>(
+    root: Node<K, V> | undefined,
+    size: number,
+    policy: HashPolicy<K>,
+): PersistentHashMap<K, V> {
+    const constructor = PersistentHashMap as unknown as new (
+        root: Node<K, V> | undefined,
+        size: number,
+        policy: HashPolicy<K>,
+    ) => PersistentHashMap<K, V>;
+    return new constructor(root, size, policy);
+}
+
+/** Reusable construction-only map builder whose freezes are detached immutable snapshots. */
+export class HashMapBulkBuilder<K, V> {
+    #root: MutableNode<K, V> | undefined;
+    #size = 0;
+    readonly #policy: HashPolicy<K>;
+
+    public constructor(policy: HashPolicy<K> = defaultHashPolicy<K>()) {
+        this.#policy = policy;
+    }
+
+    public get size(): number { return this.#size; }
+    public get isEmpty(): boolean { return this.#size === 0; }
+    public get policy(): HashPolicy<K> { return this.#policy; }
+
+    public setItem(key: K, value: V): HashMapBulkBuilder<K, V> {
+        this.applyItem(key, value);
+        return this;
+    }
+
+    public setItems(items: Iterable<readonly [K, V]>): HashMapBulkBuilder<K, V> {
+        if (items === null || items === undefined) throw new TypeError("items must be iterable.");
+        for (const [key, value] of items) this.setItem(key, value);
+        return this;
+    }
+
+    /** Copies all CHAMP nodes into a detached persistent snapshot and keeps the builder active. */
+    public toImmutable(): PersistentHashMap<K, V> {
+        return persistentMapFromBulkRoot(
+            this.#root === undefined ? undefined : freezeMutableNode(this.#root),
+            this.#size,
+            this.#policy,
+        );
+    }
+
+    private applyItem(
+        key: K,
+        value: V,
+        combine: ((existing: V, incoming: V) => V) | undefined = getBulkBuilderCombiner<V>(this),
+    ): void {
+        const hash = this.#policy.hash(key) | 0;
+        if (this.#root === undefined) {
+            this.#root = mutableLeaf(hash, key, value);
+            this.#size = 1;
+            return;
+        }
+        const result = insertMutableNode(
+            this.#root,
+            hash,
+            key,
+            value,
+            0,
+            this.#policy,
+            combine,
+        );
+        this.#root = result.node;
+        if (result.added) this.#size++;
     }
 }
 
@@ -555,7 +1042,10 @@ export class PersistentHashSet<T> implements Iterable<T> {
     }
 
     public static from<T>(values: Iterable<T>, policy: HashPolicy<T> = defaultHashPolicy<T>()): PersistentHashSet<T> {
-        return PersistentHashSet.empty<T>(policy).union(values);
+        if (values === null || values === undefined) throw new TypeError("values must be iterable.");
+        const builder = PersistentHashMap.createBulkBuilder<T, true>(policy);
+        for (const value of values) builder.setItem(value, true);
+        return new PersistentHashSet(builder.toImmutable());
     }
 
     public static createTransient<T>(policy: HashPolicy<T> = defaultHashPolicy<T>()): TransientHashSet<T> {
@@ -597,9 +1087,10 @@ export class PersistentHashSet<T> implements Iterable<T> {
     public intersect(values: Iterable<T> | PersistentHashSet<T>): PersistentHashSet<T> {
         if (values instanceof PersistentHashSet && values.policy === this.policy) return this.withMap(this.#map.intersect(values.#map));
         const probe = PersistentHashSet.from(values, this.policy);
-        let result = PersistentHashSet.empty<T>(this.policy);
-        for (const value of this) if (probe.contains(value)) result = result.put(value);
-        return result.setEquals(this) ? this : result;
+        const builder = PersistentHashMap.createBulkBuilder<T, true>(this.policy);
+        for (const value of this) if (probe.contains(value)) builder.setItem(value, true);
+        const result = new PersistentHashSet(builder.toImmutable());
+        return result.size === this.size ? this : result;
     }
 
     public except(values: Iterable<T> | PersistentHashSet<T>): PersistentHashSet<T> {
@@ -742,6 +1233,12 @@ export class TransientHashSet<T> implements Iterable<T> {
     public put(value: T): void { this.publishMutation(this.#current.put(value)); }
     public remove(value: T): boolean { this.ensureActive(); const result = this.#current.tryRemove(value); if (result === undefined) return false; this.publishMutation(result.set); return true; }
     public clear(): void { this.publishMutation(this.#current.clear()); }
+    public isSubsetOf(values: Iterable<T>): boolean { this.ensureActive(); return this.#current.isSubsetOf(values); }
+    public isProperSubsetOf(values: Iterable<T>): boolean { this.ensureActive(); return this.#current.isProperSubsetOf(values); }
+    public isSupersetOf(values: Iterable<T>): boolean { this.ensureActive(); return this.#current.isSupersetOf(values); }
+    public isProperSupersetOf(values: Iterable<T>): boolean { this.ensureActive(); return this.#current.isProperSupersetOf(values); }
+    public overlaps(values: Iterable<T>): boolean { this.ensureActive(); return this.#current.overlaps(values); }
+    public setEquals(values: Iterable<T>): boolean { this.ensureActive(); return this.#current.setEquals(values); }
     public persist(): PersistentHashSet<T> { this.ensureActive(); this.#active = false; return this.#current; }
     public [Symbol.iterator](): IterableIterator<T> {
         this.ensureActive(); const expected = this.#version, owner = this, iterator = this.#current[Symbol.iterator]();

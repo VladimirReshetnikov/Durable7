@@ -9,6 +9,7 @@ from hypothesis import strategies as st
 from vladimir_reshetnikov.data_structures.finger_tree.measures import (
     IntegerSumMeasure,
     NumberSumMeasure,
+    SizeMeasure,
 )
 from vladimir_reshetnikov.data_structures.finger_tree.rope import (
     LineColumn,
@@ -96,6 +97,52 @@ def test_cursor_entry_peeks_distinguish_stored_none_from_boundaries() -> None:
     assert end.peek_previous() is None
     assert end.peek_previous_entry() == RopeCursorPeek(None)
     assert end.peek_next_entry() is None
+
+
+def test_measured_cursor_entry_peeks_distinguish_stored_none_from_boundaries() -> None:
+    source = MeasuredRope.from_iterable([None], SizeMeasure())
+    start = source.get_cursor()
+    assert start.peek_next() is None
+    assert start.peek_previous_entry() is None
+    assert start.peek_next_entry() == RopeCursorPeek(None)
+
+    end = start.move_next()
+    assert end.peek_previous() is None
+    assert end.peek_previous_entry() == RopeCursorPeek(None)
+    assert end.peek_next_entry() is None
+
+
+def test_cursor_replacement_always_publishes_a_fresh_edit_without_equality() -> None:
+    class Value:
+        def __eq__(self, other: object) -> bool:
+            raise AssertionError("cursor replacement must not compare elements")
+
+    class CountingMeasure:
+        identity = 0
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def combine(self, left: int, right: int) -> int:
+            return left + right
+
+        def measure(self, element: Value) -> int:
+            self.calls += 1
+            return 1
+
+    value = Value()
+    positional = Rope.from_iterable([value])
+    positional_edit = positional.get_cursor().replace_next(value).snapshot()
+    assert positional_edit is not positional
+    assert positional_edit.get(0) is value
+
+    policy = CountingMeasure()
+    measured = MeasuredRope.from_iterable([value], policy)
+    policy.calls = 0
+    measured_edit = measured.get_cursor().replace_next(value).snapshot()
+    assert measured_edit is not measured
+    assert measured_edit.get(0) is value
+    assert policy.calls > 0
 
 
 def test_measured_cursors_retain_ordered_prefix_and_suffix_aggregates() -> None:

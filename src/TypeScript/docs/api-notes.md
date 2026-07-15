@@ -17,6 +17,66 @@ primitives and identity for objects. Callers can supply a `HashPolicy` for struc
 replacement retains the stored key representative across the HAMT, Patricia, sorted, Merkle, and
 Tungsten families.
 
+## HAMT maps, bags, builders, and sessions
+
+`PersistentHashMap.getOrAdd(key, addFactory)` and
+`addOrUpdate(key, addFactory, updateFactory)` return a `MapUpdateResult` containing the selected
+value and persistent map. They hash once, descend once, validate all supplied factories before
+hashing, and invoke exactly one selected factory at most once. A hit containing `undefined` remains
+a hit because branch selection uses the stored entry rather than its value. Updates retain the
+first equivalent key representative. SameValueZero is the TypeScript value-equivalence rule, so an
+equal update retains and reports the stored value representative and returns the receiver map.
+The small `{ map, value }` result carrier is necessarily allocated even on a map no-op; the no-op
+claim concerns CHAMP nodes and successor maps rather than the whole method call.
+
+`PersistentHashBag<T>` is an immutable unordered multiset with one stored representative and a
+positive `number` multiplicity per policy class. `distinctCount` counts classes; exact expanded
+`totalCount` is an uncapped `bigint`, deliberately avoiding an ambiguous or lossy `size`. Per-class counts
+preserve the C# `1 .. 2^31 - 1` bound. Copy-count arguments must be integers in
+`0 .. 2^31 - 1` and are validated before hashing; zero-copy updates, missing removals, and empty
+clears preserve receiver identity. Expanded iteration repeats each representative contiguously;
+`distinctItems()` and `entries()` expose the matching distinct order. `tryGetValue` uses a
+presence-discriminated result so a stored `undefined` representative is unambiguous. `toArray()`
+preflights its exact total against JavaScript's `2^32 - 1` maximum array length.
+
+Bag algebra accepts another bag and is governed by the receiver's exact `HashPolicy` object:
+`union` takes maximum counts, `intersect` takes minimum counts, `except` uses saturated subtraction,
+and `sum` uses checked addition. Receiver representatives win surviving classes. A mismatched-policy
+argument is eagerly normalized under the receiver policy before shortcuts; collapsed classes are
+checked-summed and retain the first representative observed in that argument version's stable
+HAMT order. The bag intentionally has no transient, builder, symmetric-difference, arbitrary-
+iterable algebra, or content-equality surface.
+
+`HashMapBulkBuilder<K, V>` is a reusable construction-only staging object, also available through
+`PersistentHashMap.createBulkBuilder`. It exposes only policy/count state, `setItem`, `setItems`, and
+`toImmutable`. First key representatives win, the last SameValueZero-distinct value wins, and equal
+values retain the earlier value object. Every freeze copies the reachable CHAMP nodes into a
+detached immutable snapshot while leaving the builder reusable; no key-policy callback runs during
+that freeze. Staging uses uniquely owned mutable leaf, collision, and bitmap nodes that are never
+published directly. The builder remains construction-only and is deliberately separate from the
+lookup/removal/adoption lifecycle of a transient session.
+
+`TransientHashSet` exposes the six read-only set relations in addition to lookup and mutation.
+Relations use the transient's receiver policy, do not advance its mutation version, and obey the
+same one-way lifecycle: every relation throws `TransientConsumedError` after publication before
+enumerating its argument.
+
+## Independent insertion-ordered set
+
+`PersistentOrderedSet<T>` is a neutral general-purpose family exported through the `ordered`
+subpath. It composes only the public CHAMP map and FingerTree families and never imports or delegates
+to Tungsten. A `HashPolicy<T>` defines equality classes; the set retains the first representative,
+insertion or explicitly requested order, private sparse `bigint` labels, positional lookup/removal/
+ranges, explicit final-index movement, reversal, and stable one-shot sorting.
+
+Algebra and all six relations eagerly normalize the complete argument under the receiver policy,
+including another ordered set with a different policy object. Receiver order and representatives win
+shared classes; first normalized argument representatives supply argument-only classes. Logical
+no-ops preserve the exact receiver, and empty results preserve the policy. Stored `undefined` is
+unambiguous through `tryGetValue`'s `{ found, value }` result. TypeScript iterators retain immutable
+snapshots but do not emulate the C# struct-enumerator copy/fail-fast mechanics. The full local contract
+and API mapping are in [the ordered-set notes](ordered.md).
+
 ## Persistence and sharing
 
 The CHAMP, Patricia, measured AVL, RRB, canonical zip-zip, Brodal–Okasaki, priority-search, interval,
@@ -29,6 +89,10 @@ semantics, version-bound enumeration, and one-way publication. Their edits call 
 kernel; they do not claim the C# T2 owner-token in-place mutation bound. Rope cursors likewise preserve
 immutable branching, gap semantics, navigation/edit behavior, measures, and text line/column mapping,
 but use persistent path-copying edits instead of the C# bounded-window zipper optimization.
+Positional and measured cursors expose `peekPreviousEntry`/`peekNextEntry` wrappers so stored
+`undefined` is distinct from a boundary. `replaceNext` is an unconditional edit: it publishes a
+fresh rope even for the identical object, and measured replacement invokes the supplied element's
+measure callback before publication.
 
 `ConcurrentHashTrie` provides synchronous mutation, generation tracking, and O(1) immutable snapshots
 inside one JavaScript isolate. It deliberately does not claim the multi-threaded GCAS/RDCSS progress

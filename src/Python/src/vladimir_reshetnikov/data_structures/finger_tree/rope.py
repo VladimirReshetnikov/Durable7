@@ -575,7 +575,10 @@ class RopeCursor(Generic[T]):
     def replace_next(self, value: T) -> RopeCursor[T]:
         if self.is_at_end:
             raise IndexError("No element follows the cursor.")
-        rope = self.rope.set_item(self.position, value)
+        without_current = self.rope.remove_at(self.position)
+        if without_current is None:
+            raise AssertionError("Cursor replacement removal failed.")
+        rope = without_current.insert_at(self.position, value)
         if rope is None:
             raise AssertionError("Cursor replacement failed.")
         return RopeCursor(rope, self.position)
@@ -621,6 +624,14 @@ class MeasuredRopeCursor(Generic[T, M]):
 
     def peek_next(self) -> T | None:
         return None if self.is_at_end else self.rope.get(self.position)
+
+    def peek_previous_entry(self) -> RopeCursorPeek[T] | None:
+        return (
+            None if self.is_at_start else RopeCursorPeek(cast(T, self.rope.get(self.position - 1)))
+        )
+
+    def peek_next_entry(self) -> RopeCursorPeek[T] | None:
+        return None if self.is_at_end else RopeCursorPeek(cast(T, self.rope.get(self.position)))
 
     def move_previous(self) -> MeasuredRopeCursor[T, M]:
         if self.is_at_start:
@@ -679,7 +690,10 @@ class MeasuredRopeCursor(Generic[T, M]):
     def replace_next(self, value: T) -> MeasuredRopeCursor[T, M]:
         if self.is_at_end:
             raise IndexError("No element follows the cursor.")
-        rope = self.rope.set_item(self.position, value)
+        without_current = self.rope.remove_at(self.position)
+        if without_current is None:
+            raise AssertionError("Cursor replacement removal failed.")
+        rope = without_current.insert_at(self.position, value)
         if rope is None:
             raise AssertionError("Cursor replacement failed.")
         return MeasuredRopeCursor(rope, self.position)

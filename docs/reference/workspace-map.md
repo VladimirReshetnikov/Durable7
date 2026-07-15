@@ -128,12 +128,12 @@ contract.
 | [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | Kotlin/JVM HAMT/Ctrie/Patricia port and complete wire-compatible Merkle search tree | `src/tools/datastructures/hamt/`, `test/tools/datastructures/hamt/` | [`docs`](../../src/Kotlin/Hamt/docs/README.md) |
 | [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | Rust HAMT/Patricia port and wire-compatible Merkle search tree | `Cargo.toml`, `src/lib.rs`, `src/merkle_search_tree.rs` | [`docs`](../../src/Rust/Hamt/docs/README.md) |
 | [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | Canonical managed FingerTree library | `DataStructures.sln`, `src/Tools.DataStructures.FingerTree/`, `tests/Tools.DataStructures.FingerTree.Tests/`, `samples/`, `benchmarks/` | [`docs`](../../src/CSharp/docs/FingerTree/README.md) |
+| [C# Ordered collections](../../src/CSharp/docs/Ordered/overview.md) | Independently owned neutral insertion/explicit-position ordered set with first-representative and receiver-policy algebra contracts over public CHAMP/FingerTree substrates | [`DataStructures.sln`](../../src/CSharp/DataStructures.sln), [project](../../src/CSharp/src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj), [tests](../../src/CSharp/tests/Tools.DataStructures.Ordered.Tests/README.md) | [`docs`](../../src/CSharp/docs/Ordered/README.md), [validation](../../src/CSharp/docs/Ordered/validation.md) |
 | [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | C++23 FingerTree/RRB/canonical-set family with Brodal/PSQ cores, positional/measured/text rope cursors, and native DABA Lite | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/Cpp/FingerTree/docs/README.md) |
 | [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | C11 FingerTree/RRB/canonical-set family with positional/measured/text rope cursors, type-erased Brodal/PSQ cores, and DABA Lite | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/C/FingerTree/docs/README.md) |
 | [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) | Haskell FingerTree/RRB/canonical-set family port with positional/measured/text rope cursors | `tools-data-structures-fingertree.cabal`, `src/Data/Structures/FingerTree/` | [`README`](../../src/Haskell/FingerTree/README.md) |
 | [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | Kotlin/JVM persistent measured-tree/RRB/canonical-set/optimal-priority family plus managed DABA Lite | `src/tools/datastructures/fingertree/`, `test/tools/datastructures/fingertree/` | [`docs`](../../src/Kotlin/FingerTree/docs/README.md) |
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | Rust FingerTree/RRB/canonical-set checkpoint with non-`Clone` Brodal/PSQ cores plus single-threaded DABA Lite | `Cargo.toml`, `src/` | [`docs`](../../src/Rust/FingerTree/docs/README.md) |
-| [C# Ordered collections](../../src/CSharp/docs/Ordered/overview.md) | Independently owned general-purpose insertion/explicit-position ordered set with first-representative and receiver-policy algebra contracts over a dual CHAMP/FingerTree index | [`DataStructures.sln`](../../src/CSharp/DataStructures.sln), [project](../../src/CSharp/src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj), [tests](../../src/CSharp/tests/Tools.DataStructures.Ordered.Tests/README.md) | [`docs`](../../src/CSharp/docs/Ordered/README.md), [validation](../../src/CSharp/docs/Ordered/validation.md) |
 | [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) | Application-specific leaf collections for the Tungsten project; canonical only within the sibling Tungsten port family and not a general collection foundation | `DataStructures.sln`, `src/Tools.DataStructures.Tungsten/`, `tests/Tools.DataStructures.Tungsten.Tests/` | [`docs`](../../src/CSharp/docs/Tungsten/README.md) |
 | [`src/C/Tungsten`](../../src/C/Tungsten/README.md) | C17 Tungsten `List` and `Association` port | `include/tools/data_structures/tungsten/tungsten.h`, `CMakePresets.json` | [`README`](../../src/C/Tungsten/README.md) |
 | [`src/Cpp/Tungsten`](../../src/Cpp/Tungsten/README.md) | C++23 Tungsten `List` and `Association` port | `include/tools/data_structures/tungsten/`, `CMakePresets.json` | [`README`](../../src/Cpp/Tungsten/README.md) |
@@ -166,9 +166,11 @@ HAMT lineage:
    `Arc` structural sharing, and ports the C# Merkle search tree through the exact `MST2` wire,
    bounded verified persistence, `MSP2` proofs, synchronization, and typed three-way merge.
 7. `src/TypeScript` ports the persistent/transient CHAMP, Patricia, and exact `MST2`/`MSP2`
-   contracts to strict ESM, with JavaScript-native policies and isolate-local concurrency semantics.
+   contracts to strict ESM, with one-descent map factories, hash bag, reusable unpublished-node
+   bulk construction, JavaScript-native policies, and isolate-local concurrency semantics.
 8. `src/Python` ports the same contracts to Python 3.11+ with runtime `HashPolicy`, path-copy
-   one-way sessions, a lock-coordinated thread-safe facade over persistent roots, and exact
+   one-way sessions, one-descent map factories, hash bag, reusable unpublished-node bulk
+   construction, a lock-coordinated thread-safe facade over persistent roots, and exact
    byte-compatible Merkle persistence/proofs with all seven verification budgets.
 
 FingerTree lineage:
@@ -201,16 +203,21 @@ FingerTree lineage:
    mutable DABA Lite, and positional/measured/text gap cursors whose text offsets count Unicode code
    points.
 
-Ordered collections lineage:
+Ordered-set lineage:
 
-1. C# Ordered (`src/CSharp/src/Tools.DataStructures.Ordered`) currently owns the only shipped
-   `PersistentOrderedSet<T>` contract. It composes the public CHAMP map and FingerTree deque behind
-   Ordered-owned sparse labels, dual-index invariants, first-representative retention, explicit
-   movement, and receiver-policy algebra. It is not a Tungsten port or Tungsten semantic facade.
-2. The complete C# contract, focused Debug/Release lanes, whole-workspace Release gate, and
-   documentation are now stable. Required ports to C, C++, Haskell, Kotlin, Rust, TypeScript, and
-   Python remain pending; each must derive from the Ordered contract in its language-local
-   ownership model, never from Tungsten.
+1. C# Ordered (`src/CSharp/src/Tools.DataStructures.Ordered`) owns the neutral
+   `PersistentOrderedSet<T>` contract, dual-index invariants, sparse labels, explicit movement,
+   positional ranges, stable one-shot sort, receiver-policy algebra, and the enforced absence of a
+   Tungsten dependency. Deterministic relabel fallback, eager failure behavior, focused serialized
+   Debug/Release lanes, and the full serialized C# Release gate are locked by its hardened tests.
+2. `src/TypeScript/src/ordered` ports the same observable contract to strict ESM with a runtime
+   `HashPolicy`, persistent measured sequence, bigint-private labels, typed lookup/removal
+   results, and a public invariant diagnostic used by package tests.
+3. `src/Python/src/vladimir_reshetnikov/data_structures/ordered` ports it to typed Python with a
+   retained `HashPolicy`, persistent deque order index, presence-safe dataclass results, and
+   Python-native exceptions. Neither sibling package imports or delegates to its Tungsten module.
+4. C, C++, Haskell, Kotlin, and Rust ports remain pending. Each must derive from the neutral Ordered
+   contract in its language-local ownership model, never from Tungsten.
 
 Tungsten collections lineage:
 

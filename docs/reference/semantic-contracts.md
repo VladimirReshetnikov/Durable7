@@ -134,27 +134,49 @@ Language-specific obligations:
 | Haskell | `HashPolicy` and package-local `Hashable` shape are part of the port, avoiding third-party dependencies while preserving persistent HAMT behavior. |
 | Kotlin | Miss paths and duplicate results should use idiomatic Kotlin null/result/exception shapes documented in API notes. |
 | Rust | Keys that compare equal under `Eq` must hash equally under the chosen `BuildHasher`; removal returns owned cloned values where exposed. |
-| TypeScript | Runtime hash policies define equivalence and representative retention; transient sessions are isolate-local path-copying facades with no cross-worker progress or edit-performance claim. |
-| Python | Equality and hashing are explicit retained policy; mutable application objects require caller discipline, and changed or consumed sessions invalidate version-bound iterators dynamically. |
+| TypeScript | Runtime hash policies define equivalence and representative retention; `getOrAdd`/`addOrUpdate` follow the C# one-descent selected-factory contract; transient sessions are isolate-local path-copying facades with no cross-worker progress or edit-performance claim. |
+| Python | Equality and hashing are explicit retained policy; `get_or_add`/`add_or_update` preserve one-descent factory selection and presence-safe result values; mutable application objects require caller discipline, and changed or consumed sessions invalidate version-bound iterators dynamically. |
 
-### C# persistent hash bag
+### Persistent hash bags
 
-`PersistentHashBag<T>` is the shipped C# unordered-multiset facade over
-`PersistentHashMap<T, int>`. It stores exactly one representative and one positive multiplicity per
-comparer equivalence class, exposes `DistinctCount : int` separately from expanded
-`TotalCount : long`, and deliberately does not implement `IReadOnlyCollection<T>` or expose an
-ambiguous `int Count`. Construction and point additions retain the first stored representative;
-expanded enumeration repeats each representative contiguously, while `DistinctItems` and `Entries`
-enumerate one class each in the same stable-for-one-version, otherwise unspecified HAMT order.
+`PersistentHashBag` ships in C#, TypeScript, and Python as an unordered-multiset facade over the
+language-local persistent HAMT. It stores exactly one representative and one positive multiplicity
+in `1 .. 2^31 - 1` per policy equivalence class. Distinct-class count is separate from expanded
+total count, and no ambiguous collection `Count`/`size` is exposed for expanded enumeration. C# uses
+a checked `long` total, TypeScript uses `bigint`, and Python uses `int`. Construction and point
+additions retain the first stored representative; expanded enumeration repeats each representative
+contiguously, while distinct-item and entry views enumerate one class each in the same
+stable-for-one-version, otherwise unspecified HAMT order.
 
 Bag algebra uses maximum union, minimum intersection, saturated difference, and checked additive
 sum. The receiver comparer defines equivalence and receiver representatives win every surviving
 receiver class. A reference-different argument comparer is normalized eagerly under the receiver
 policy before any operation-specific shortcut; collapsed argument multiplicities are checked and
 use the first representative observed in that argument version's HAMT order. Zero-copy and logical
-no-op updates return the receiver, empty results preserve its comparer object, and `ToArray` rejects
-`TotalCount > Array.MaxLength` before allocation. The complete contract is in the
-[C# HAMT API specification](../../src/CSharp/docs/Hamt/api-specification.md).
+no-op updates return the receiver, and empty results preserve its policy object. Array/list
+materialization validates the local runtime representation before allocation. The normative semantic
+reference is the [C# HAMT API specification](../../src/CSharp/docs/Hamt/api-specification.md); the
+[TypeScript API notes](../../src/TypeScript/docs/api-notes.md) and
+[Python API notes](../../src/Python/docs/api-notes.md) document their presence-safe lookup and
+wide-count mappings.
+
+### Construction-only HAMT bulk builders
+
+C# bulk construction uses an internal mutable unpublished CHAMP builder. C++ and Rust expose the
+same construction facility publicly; TypeScript and Python now expose reusable public builders as
+well. Their common contract is narrower than a transient editing session:
+
+- mutable leaf, collision, and bitmap nodes are unpublished and mutated in place during one-pass
+  construction, avoiding a persistent path copy between successive input entries;
+- duplicate assignment retains the first stored key representative, keeps an earlier equal value
+  representative, and otherwise installs the last distinct value;
+- freezing produces a detached immutable CHAMP—later builder mutation cannot affect an earlier
+  snapshot—and the reusable freeze leaves the builder active; and
+- map/set bulk factories and documented construction-heavy internal routes use the builder, while
+  ordinary updates on an existing persistent collection retain structural-sharing path copies.
+
+Rust additionally offers a consuming freeze that moves owned nodes. These builders do not acquire
+the adoption, iterator, or one-way publication lifecycle of map/set transients.
 
 ### Concurrent snapshot facades
 
@@ -222,6 +244,34 @@ The local authoritative references are the [C API specification](../../src/C/Ham
 [Rust API notes](../../src/Rust/Hamt/docs/api-notes.md),
 [TypeScript API notes](../../src/TypeScript/docs/api-notes.md), and
 [Python API notes](../../src/Python/docs/api-notes.md).
+
+## Insertion-Ordered Persistent Set
+
+`PersistentOrderedSet` ships in the neutral C#, TypeScript, and Python Ordered modules. It composes
+a persistent HAMT membership/stamp index with a persistent ordered sequence and must not depend on
+the application-specific Tungsten family. Shared obligations are:
+
+- equality/hash policy defines membership, duplicate collapse, stored representatives, algebra,
+  and relations; the exact receiver policy is retained by every result, including empties;
+- construction and duplicate additions retain the first representative and its position;
+  movement is explicit, retains the stored representative, and interprets a supplied destination
+  as the final result index;
+- positional reads/removals/ranges, reversal, and stable one-shot sort preserve immutable prior
+  versions; a sort does not remain active for later additions;
+- union appends argument-only classes after receiver order; intersection and difference retain
+  receiver order; symmetric difference emits receiver-only then argument-only classes;
+- all algebra and all six set relations eagerly enumerate and normalize the complete argument under
+  the receiver policy before applying a shortcut, so late enumeration/policy failures are visible;
+- receiver representatives win surviving receiver classes, while the first normalized argument
+  representative wins an argument-only class; and
+- documented logical no-ops return the receiver, failures publish nothing, private sparse labels
+  are not API, and a relabel rebuild leaves retained versions untouched.
+
+The normative surface and bounds are in the
+[C# Ordered API specification](../../src/CSharp/docs/Ordered/api-specification.md). Runtime-native
+result/exception shapes and diagnostic adaptations are documented in the
+[TypeScript](../../src/TypeScript/docs/api-notes.md) and
+[Python](../../src/Python/docs/api-notes.md) package notes.
 
 ## Finger-Tree Core
 
@@ -512,7 +562,9 @@ TypeScript and Python retain their immutable measured-rope checkpoints plus vali
 before/after measures, absolute prefix search, retained branching, unconditional replacement, and
 text-facade preservation follow the shared result semantics above. TypeScript keeps JavaScript
 UTF-16 indexing. Python's measured rope uses an immutable measured-AVL checkpoint and its text cursor
-counts Unicode code points. Neither package claims the C# focus/carry zipper, snapshot-memo,
+counts Unicode code points. Positional and measured cursors in both packages expose entry/wrapper
+peeks so a stored `undefined`/`None` remains distinct from a missing neighbor; measured replacement
+invokes the replacement's measure callbacks even when the object is identical. Neither package claims the C# focus/carry zipper, snapshot-memo,
 allocation, callback-count, or amortized-locality bounds.
 
 The normative C# details and evidence are in the

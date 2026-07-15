@@ -15,12 +15,12 @@ and TypeScript package all families into one language-local distribution.
 | --- | --- | --- |
 | [C](C/README.md) | MSVC C builds; `build.ps1` for HAMT and CMake/CTest presets for FingerTree and Tungsten | [Hamt](C/Hamt/README.md), [FingerTree](C/FingerTree/README.md), [Tungsten](C/Tungsten/README.md) |
 | [Cpp](Cpp/README.md) | MSVC C++ builds; `build.ps1` for HAMT and CMake/CTest presets for FingerTree and Tungsten | [Hamt](Cpp/Hamt/README.md), [FingerTree](Cpp/FingerTree/README.md), [Tungsten](Cpp/Tungsten/README.md) |
-| [CSharp](CSharp/README.md) | One .NET 10 solution with xUnit/CsCheck validation | [Numerics](CSharp/docs/Numerics/overview.md), [HAMT](CSharp/docs/Hamt/overview.md), [FingerTree](CSharp/docs/FingerTree/overview.md), [Tungsten](CSharp/docs/Tungsten/overview.md) |
+| [CSharp](CSharp/README.md) | One .NET 10 solution with xUnit/CsCheck validation | [Numerics](CSharp/docs/Numerics/overview.md), [HAMT](CSharp/docs/Hamt/overview.md), [FingerTree](CSharp/docs/FingerTree/overview.md), [Ordered](CSharp/docs/Ordered/overview.md), [Tungsten](CSharp/docs/Tungsten/overview.md) |
 | [Haskell](Haskell/README.md) | GHC/cabal packages with dependency-light executable tests | [Hamt](Haskell/Hamt/README.md), [FingerTree](Haskell/FingerTree/README.md), [Tungsten](Haskell/Tungsten/README.md) |
 | [Kotlin](Kotlin/README.md) | Kotlin/JVM command-line compiler with dependency-free executable tests bootstrapped by `build.ps1` | [Hamt](Kotlin/Hamt/README.md), [FingerTree](Kotlin/FingerTree/README.md), [Tungsten](Kotlin/Tungsten/README.md) |
-| [Python](Python/README.md) | Typed Python 3.11+ package with Ruff, strict Mypy, pytest/Hypothesis, and wheel validation | [HAMT, FingerTree, Tungsten, and Numerics](Python/README.md) |
+| [Python](Python/README.md) | Typed Python 3.11+ package with Ruff, strict Mypy, pytest/Hypothesis, and wheel validation | [HAMT, FingerTree, Ordered, Tungsten, and Numerics](Python/README.md) |
 | [Rust](Rust/README.md) | Cargo workspace with safe Rust crates and inline unit tests | [Hamt](Rust/Hamt/README.md), [FingerTree](Rust/FingerTree/README.md), [Tungsten](Rust/Tungsten/README.md) |
-| [TypeScript](TypeScript/README.md) | Strict TypeScript/ESM npm package with Vitest and fast-check validation | [HAMT, FingerTree, Tungsten, and Numerics](TypeScript/README.md#public-families) |
+| [TypeScript](TypeScript/README.md) | Strict TypeScript/ESM npm package with Vitest and fast-check validation | [HAMT, FingerTree, Ordered, Tungsten, and Numerics](TypeScript/README.md#public-families) |
 
 Across every language root, Tungsten is an application-specific leaf consumer. It may depend on
 general libraries; no general workspace may depend on it. See the normative

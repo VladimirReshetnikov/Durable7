@@ -1,6 +1,6 @@
 # Frontier Structure Catalog
 
-- Status: Current-state catalog - shipped Axis 1 cores, shipped C# Axis 2 C1/C2/C3/T2, cross-language positional/measured/text cursor checkpoints, cross-language semantic CHAMP sessions, and remaining frontier candidates
+- Status: Current-state catalog - shipped Axis 1 cores, shipped C# Axis 2 C1/C2/C3/T2, cross-language positional/measured/text cursor checkpoints, cross-language semantic CHAMP sessions, recent C#/TypeScript/Python derived-surface parity, and remaining frontier candidates
 - Created (UTC): 2026-07-11T03:31:23Z
 - Repository HEAD: f40e301e8faf26d748f33d8546d7d9216657301e
 - Audience: Maintainers and AI agents planning new repository-owned cores, representation tiers, and specialized sibling collections
@@ -139,7 +139,14 @@ callers. Two-set/map structural algebra is failure-atomic and reference-pruned.
 
 **TypeScript and Python status (2026-07-15): Implemented.** Both strict dynamic-language packages
 ship canonical split-bitmap CHAMP nodes, collision buckets, persistent path copying, retained hash
-policies, stored representatives, and typed equality/difference surfaces. TypeScript retains the
+policies, stored representatives, one-descent map factories, public reusable construction-only bulk
+builders, complete transient-set relation predicates, and typed equality/difference surfaces. Their
+map/set factories and bulk-producing set operations freeze genuinely mutable unpublished CHAMP
+nodes rather than repeatedly path-copying published roots; each frozen snapshot is detached from
+later builder reuse. The one-descent factories validate both callbacks before hashing, invoke only
+the selected branch, retain stored key representatives, and publish no partial result on failure.
+`PersistentHashBag` in each package consumes those foundations while retaining the C# per-class
+multiplicity and receiver-policy contracts. TypeScript retains the
 established structural/reference-pruning checkpoint. Python deliberately performs semantic
 lookup-based equality and diff, including exact-policy fast paths, but does not claim the sibling
 ports' lockstep descendant-pruning optimization. The canonical CHAMP core and public semantics are
@@ -1127,7 +1134,10 @@ own this checkpoint's contract and complexity boundary.
 plus a validated gap and create a new snapshot on edit. Their positional, measured, and text cursors
 preserve before/after measures, absolute prefix search, retained branches, unconditional replacement,
 and usable snapshots without claiming the C# focus/carry zipper or its locality and allocation
-bounds. TypeScript retains its UTF-16 text indexing contract. Python builds on the package's
+bounds. Entry-shaped previous/next peeks distinguish a missing neighbor from a stored
+`undefined`/`None` value. `ReplaceNext` never takes an element-equality shortcut: it creates an edit
+version, and measured replacement invokes the element-measure callback for the supplied replacement
+before publication. TypeScript retains its UTF-16 text indexing contract. Python builds on the package's
 immutable measured-AVL checkpoint and counts positions, lines, and columns in Unicode code points;
 its API and executable models, not the C# zipper analysis below, define the complexity boundary.
 
@@ -1342,12 +1352,21 @@ New rules this survey adds to the derived catalog's seven:
 The implementation wave described by this catalog has already landed these reference and port surfaces:
 
 - CHAMP canonical nodes plus structural equality/diff;
-- C# persistent CHAMP `GetOrAdd`/`AddOrUpdate` with one hash, one descent, deterministic factory
-  selection, representative retention, and callback-failure atomicity;
+- C#, TypeScript, and Python persistent CHAMP `GetOrAdd`/`AddOrUpdate` counterparts with one hash,
+  one descent, deterministic factory selection, representative retention, and callback-failure
+  atomicity;
+- public reusable construction-only CHAMP bulk builders in C++, Rust, TypeScript, and Python (the
+  C# canonical range path keeps its equivalent staging builder internal), with detached frozen
+  snapshots and first-key/last-distinct-value representative rules;
+- `PersistentHashBag` facades in C#, TypeScript, and Python with separate distinct/total
+  cardinalities and receiver-policy multiset algebra;
+- neutral, independently owned `PersistentOrderedSet` packages in C#, TypeScript, and Python,
+  composing public HAMT/FingerTree substrates without a Tungsten dependency or semantic oracle;
 - the C# `PersistentHashMap<TKey, TValue>.Transient` and `PersistentHashSet<T>.Transient` one-way
   owner-token editing sessions;
 - semantic one-way CHAMP map/set editing sessions in C, C++, Haskell, Kotlin, Rust, TypeScript, and Python, retaining
-  persistent path-copy costs;
+  persistent path-copy costs, with TypeScript and Python now exposing all six transient-set relation
+  predicates;
 - 32-bit and 64-bit Patricia maps and sets;
 - `RrbVector<T>`;
 - the Merkle search tree, including its deterministic wire, bounded verification, proofs, sync,
@@ -1364,7 +1383,8 @@ The implementation wave described by this catalog has already landed these refer
   `MeasuredRopeCursor v a`/`TextRopeCursor`, Kotlin
   `MeasuredRopeCursor<T, M>`/`TextRopeCursor`, and Rust
   `MeasuredRopeCursor<T, P>`/`TextRopeCursor` measured/text checkpoints, plus the corresponding
-  TypeScript and Python `MeasuredRopeCursor<T, M>`/`TextRopeCursor` surfaces.
+  TypeScript and Python `MeasuredRopeCursor<T, M>`/`TextRopeCursor` surfaces, including
+  presence-safe entry peeks and unconditional measured replacement callbacks.
 
 CHAMP, Patricia, and RRB have also advanced through the sibling-language work recorded in their
 entries; the canonical zip-zip set, Brodal-Okasaki heap, and priority-search queue are implemented
@@ -1415,7 +1435,8 @@ remaining work is sequenced as follows:
    It is not a cursor prerequisite; the later styled-text sample depends on both tracks.
 8. **Order-maintenance list** and **persistent chunked bitset**, each only for a concrete general
    client not served by existing composition; Tungsten remains evidence rather than a substrate or
-   semantic baseline.
+   semantic baseline. The shipped neutral ordered set keeps its sparse labels private and does not
+   constitute shipment of the public precedes-query order-maintenance core.
 9. **Styled-text rope sample**, after measured cursor and range-update foundations settle.
 
 This numbering expresses dependencies and gates, not a ceremonial landing order: the independent C3

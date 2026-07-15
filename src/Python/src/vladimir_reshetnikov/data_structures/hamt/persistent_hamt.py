@@ -57,12 +57,45 @@ class _BitmapNode(_Node[K, V]):
         )
 
 
+class _MutableNode(Generic[K, V]):
+    __slots__ = ()
+
+
+@dataclass(slots=True)
+class _MutableLeaf(_MutableNode[K, V]):
+    hash: int
+    key: K
+    value: V
+
+
+@dataclass(slots=True)
+class _MutableCollision(_MutableNode[K, V]):
+    hash: int
+    entries: list[_MutableLeaf[K, V]]
+
+
+@dataclass(slots=True)
+class _MutableBitmap(_MutableNode[K, V]):
+    data_map: int
+    node_map: int
+    data: list[_MutableLeaf[K, V]]
+    nodes: list[_MutableNode[K, V]]
+
+
 @dataclass(frozen=True, slots=True)
 class _InsertResult(Generic[K, V]):
     node: _Node[K, V]
     added: bool
     changed: bool
     duplicate: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _FactoryNodeUpdate(Generic[K, V]):
+    node: _Node[K, V]
+    value: V
+    added: bool
+    changed: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +135,14 @@ class MapRemoveEntryResult(Generic[K, V]):
 
     map: PersistentHashMap[K, V]
     entry: HamtEntry[K, V]
+
+
+@dataclass(frozen=True, slots=True)
+class MapUpdateResult(Generic[K, V]):
+    """A persistent factory update and the concrete value it selected."""
+
+    map: PersistentHashMap[K, V]
+    value: V
 
 
 @dataclass(frozen=True, slots=True)
@@ -338,6 +379,286 @@ def _insert_node(
     )
 
 
+def _mutable_leaves(node: _MutableNode[K, V]) -> list[_MutableLeaf[K, V]]:
+    if isinstance(node, _MutableLeaf):
+        return [node]
+    if isinstance(node, _MutableCollision):
+        return list(node.entries)
+    assert isinstance(node, _MutableBitmap)
+    result = list(node.data)
+    for child in node.nodes:
+        result.extend(_mutable_leaves(child))
+    return result
+
+
+def _merge_mutable_nodes(
+    left: _MutableNode[K, V],
+    left_hash: int,
+    right: _MutableNode[K, V],
+    right_hash: int,
+    shift: int,
+) -> _MutableNode[K, V]:
+    if left_hash == right_hash:
+        return _MutableCollision(left_hash, _mutable_leaves(left) + _mutable_leaves(right))
+    left_bit = _bit_position(_hash_fragment(left_hash, shift))
+    right_bit = _bit_position(_hash_fragment(right_hash, shift))
+    if left_bit == right_bit:
+        child = _merge_mutable_nodes(left, left_hash, right, right_hash, shift + _BITS_PER_LEVEL)
+        return _MutableBitmap(0, left_bit, [], [child])
+    ordered = [(left_bit, left), (right_bit, right)]
+    ordered.sort(key=lambda item: item[0])
+    data: list[_MutableLeaf[K, V]] = []
+    nodes: list[_MutableNode[K, V]] = []
+    data_map = 0
+    node_map = 0
+    for bit, node in ordered:
+        if isinstance(node, _MutableLeaf):
+            data_map |= bit
+            data.append(node)
+        else:
+            node_map |= bit
+            nodes.append(node)
+    return _MutableBitmap(data_map, node_map, data, nodes)
+
+
+def _set_mutable_node(
+    node: _MutableNode[K, V],
+    hash_value: int,
+    key: K,
+    value: V,
+    shift: int,
+    policy: HashPolicy[K],
+    update: Callable[[V, V], V] | None = None,
+) -> tuple[_MutableNode[K, V], bool, V]:
+    if isinstance(node, _MutableLeaf):
+        if node.hash == hash_value and policy.equivalent(node.key, key):
+            selected = value if update is None else update(node.value, value)
+            if _values_equal(node.value, selected):
+                return node, False, node.value
+            node.value = selected
+            return node, False, selected
+        return (
+            _merge_mutable_nodes(
+                node,
+                node.hash,
+                _MutableLeaf(hash_value, key, value),
+                hash_value,
+                shift,
+            ),
+            True,
+            value,
+        )
+
+    if isinstance(node, _MutableCollision):
+        if node.hash != hash_value:
+            return (
+                _merge_mutable_nodes(
+                    node,
+                    node.hash,
+                    _MutableLeaf(hash_value, key, value),
+                    hash_value,
+                    shift,
+                ),
+                True,
+                value,
+            )
+        for entry in node.entries:
+            if not policy.equivalent(entry.key, key):
+                continue
+            selected = value if update is None else update(entry.value, value)
+            if _values_equal(entry.value, selected):
+                return node, False, entry.value
+            entry.value = selected
+            return node, False, selected
+        node.entries.append(_MutableLeaf(hash_value, key, value))
+        return node, True, value
+
+    assert isinstance(node, _MutableBitmap)
+    bit = _bit_position(_hash_fragment(hash_value, shift))
+    if node.data_map & bit:
+        data_index = _sparse_index(node.data_map, bit)
+        current = node.data[data_index]
+        if current.hash == hash_value and policy.equivalent(current.key, key):
+            selected = value if update is None else update(current.value, value)
+            if _values_equal(current.value, selected):
+                return node, False, current.value
+            current.value = selected
+            return node, False, selected
+        child = _merge_mutable_nodes(
+            current,
+            current.hash,
+            _MutableLeaf(hash_value, key, value),
+            hash_value,
+            shift + _BITS_PER_LEVEL,
+        )
+        node.data.pop(data_index)
+        node.data_map &= ~bit
+        node.nodes.insert(_sparse_index(node.node_map, bit), child)
+        node.node_map |= bit
+        return node, True, value
+    if node.node_map & bit:
+        node_index = _sparse_index(node.node_map, bit)
+        child, added, selected = _set_mutable_node(
+            node.nodes[node_index],
+            hash_value,
+            key,
+            value,
+            shift + _BITS_PER_LEVEL,
+            policy,
+            update,
+        )
+        node.nodes[node_index] = child
+        return node, added, selected
+    node.data.insert(_sparse_index(node.data_map, bit), _MutableLeaf(hash_value, key, value))
+    node.data_map |= bit
+    return node, True, value
+
+
+def _freeze_mutable(node: _MutableNode[K, V]) -> _Node[K, V]:
+    if isinstance(node, _MutableLeaf):
+        return _leaf(node.hash, node.key, node.value)
+    if isinstance(node, _MutableCollision):
+        return _collision(
+            node.hash,
+            tuple(_leaf(entry.hash, entry.key, entry.value) for entry in node.entries),
+        )
+    assert isinstance(node, _MutableBitmap)
+    return _bitmap(
+        node.data_map,
+        node.node_map,
+        tuple(_leaf(entry.hash, entry.key, entry.value) for entry in node.data),
+        tuple(_freeze_mutable(child) for child in node.nodes),
+    )
+
+
+def _factory_update_node(
+    node: _Node[K, V],
+    hash_value: int,
+    key: K,
+    shift: int,
+    policy: HashPolicy[K],
+    add_factory: Callable[[K], V],
+    update_factory: Callable[[K, V], V] | None,
+) -> _FactoryNodeUpdate[K, V]:
+    if isinstance(node, _Leaf):
+        if node.hash == hash_value and policy.equivalent(node.key, key):
+            if update_factory is None:
+                return _FactoryNodeUpdate(node, node.value, False, False)
+            selected = update_factory(key, node.value)
+            if _values_equal(node.value, selected):
+                return _FactoryNodeUpdate(node, node.value, False, False)
+            return _FactoryNodeUpdate(_leaf(hash_value, node.key, selected), selected, False, True)
+        selected = add_factory(key)
+        return _FactoryNodeUpdate(
+            _merge_nodes(node, node.hash, _leaf(hash_value, key, selected), hash_value, shift),
+            selected,
+            True,
+            True,
+        )
+
+    if isinstance(node, _Collision):
+        if node.hash != hash_value:
+            selected = add_factory(key)
+            return _FactoryNodeUpdate(
+                _merge_nodes(node, node.hash, _leaf(hash_value, key, selected), hash_value, shift),
+                selected,
+                True,
+                True,
+            )
+        for index, entry in enumerate(node.entries):
+            if not policy.equivalent(entry.key, key):
+                continue
+            if update_factory is None:
+                return _FactoryNodeUpdate(node, entry.value, False, False)
+            selected = update_factory(key, entry.value)
+            if _values_equal(entry.value, selected):
+                return _FactoryNodeUpdate(node, entry.value, False, False)
+            entries = _replace_at(node.entries, index, _leaf(hash_value, entry.key, selected))
+            return _FactoryNodeUpdate(_collision(hash_value, entries), selected, False, True)
+        selected = add_factory(key)
+        return _FactoryNodeUpdate(
+            _collision(hash_value, (*node.entries, _leaf(hash_value, key, selected))),
+            selected,
+            True,
+            True,
+        )
+
+    assert isinstance(node, _BitmapNode)
+    bit = _bit_position(_hash_fragment(hash_value, shift))
+    if node.data_map & bit:
+        data_index = _sparse_index(node.data_map, bit)
+        current = node.data[data_index]
+        if current.hash == hash_value and policy.equivalent(current.key, key):
+            if update_factory is None:
+                return _FactoryNodeUpdate(node, current.value, False, False)
+            selected = update_factory(key, current.value)
+            if _values_equal(current.value, selected):
+                return _FactoryNodeUpdate(node, current.value, False, False)
+            data = _replace_at(node.data, data_index, _leaf(hash_value, current.key, selected))
+            return _FactoryNodeUpdate(
+                _bitmap(node.data_map, node.node_map, data, node.nodes),
+                selected,
+                False,
+                True,
+            )
+        selected = add_factory(key)
+        merged_child = _merge_nodes(
+            current,
+            current.hash,
+            _leaf(hash_value, key, selected),
+            hash_value,
+            shift + _BITS_PER_LEVEL,
+        )
+        nodes = _insert_at(node.nodes, _sparse_index(node.node_map, bit), merged_child)
+        return _FactoryNodeUpdate(
+            _bitmap(
+                node.data_map & ~bit,
+                node.node_map | bit,
+                _remove_at(node.data, data_index),
+                nodes,
+            ),
+            selected,
+            True,
+            True,
+        )
+    if node.node_map & bit:
+        index = _sparse_index(node.node_map, bit)
+        child = _factory_update_node(
+            node.nodes[index],
+            hash_value,
+            key,
+            shift + _BITS_PER_LEVEL,
+            policy,
+            add_factory,
+            update_factory,
+        )
+        if not child.changed:
+            return _FactoryNodeUpdate(node, child.value, child.added, False)
+        return _FactoryNodeUpdate(
+            _bitmap(
+                node.data_map,
+                node.node_map,
+                node.data,
+                _replace_at(node.nodes, index, child.node),
+            ),
+            child.value,
+            child.added,
+            True,
+        )
+    selected = add_factory(key)
+    data = _insert_at(
+        node.data,
+        _sparse_index(node.data_map, bit),
+        _leaf(hash_value, key, selected),
+    )
+    return _FactoryNodeUpdate(
+        _bitmap(node.data_map | bit, node.node_map, data, node.nodes),
+        selected,
+        True,
+        True,
+    )
+
+
 def _singleton_leaf(node: _Node[K, V]) -> _Leaf[K, V] | None:
     if isinstance(node, _Leaf):
         return node
@@ -462,7 +783,13 @@ class PersistentHashMap(Generic[K, V]):
         items: Iterable[tuple[K, V]],
         policy: HashPolicy[K] | None = None,
     ) -> PersistentHashMap[K, V]:
-        return cls.empty(policy).set_items(items)
+        builder = HashMapBulkBuilder[K, V](policy)
+        builder.set_items(items)
+        return builder.to_immutable()
+
+    @classmethod
+    def create_bulk_builder(cls, policy: HashPolicy[K] | None = None) -> HashMapBulkBuilder[K, V]:
+        return HashMapBulkBuilder(policy)
 
     @classmethod
     def create_transient(cls, policy: HashPolicy[K] | None = None) -> TransientHashMap[K, V]:
@@ -535,6 +862,60 @@ class PersistentHashMap(Generic[K, V]):
         return AddResult(
             PersistentHashMap(result.node, self.size + int(result.added), self.policy),
             result.added,
+        )
+
+    def get_or_add(
+        self,
+        key: K,
+        add_factory: Callable[[K], V],
+    ) -> MapUpdateResult[K, V]:
+        """Get a stored value or add one from a factory in one trie descent."""
+
+        if not callable(add_factory):
+            raise TypeError("add_factory must be callable.")
+        return self._apply_factory_update(key, add_factory, None)
+
+    def add_or_update(
+        self,
+        key: K,
+        add_factory: Callable[[K], V],
+        update_factory: Callable[[K, V], V],
+    ) -> MapUpdateResult[K, V]:
+        """Add or update through exactly one selected factory and one trie descent."""
+
+        if not callable(add_factory):
+            raise TypeError("add_factory must be callable.")
+        if not callable(update_factory):
+            raise TypeError("update_factory must be callable.")
+        return self._apply_factory_update(key, add_factory, update_factory)
+
+    def _apply_factory_update(
+        self,
+        key: K,
+        add_factory: Callable[[K], V],
+        update_factory: Callable[[K, V], V] | None,
+    ) -> MapUpdateResult[K, V]:
+        hash_value = self.policy.hash(key)
+        if self._root is None:
+            value = add_factory(key)
+            return MapUpdateResult(
+                PersistentHashMap(_leaf(hash_value, key, value), 1, self.policy),
+                value,
+            )
+        result = _factory_update_node(
+            self._root,
+            hash_value,
+            key,
+            0,
+            self.policy,
+            add_factory,
+            update_factory,
+        )
+        if not result.changed:
+            return MapUpdateResult(self, result.value)
+        return MapUpdateResult(
+            PersistentHashMap(result.node, self.size + int(result.added), self.policy),
+            result.value,
         )
 
     def set_items(self, items: Iterable[tuple[K, V]]) -> PersistentHashMap[K, V]:
@@ -655,6 +1036,63 @@ class PersistentHashMap(Generic[K, V]):
         return iter(()) if self._root is None else _entries_of_node(self._root)
 
 
+class HashMapBulkBuilder(Generic[K, V]):
+    """Mutable scratch constructor over unpublished CHAMP nodes."""
+
+    __slots__ = ("_root", "policy", "size")
+
+    def __init__(self, policy: HashPolicy[K] | None = None) -> None:
+        self._root: _MutableNode[K, V] | None = None
+        self.size = 0
+        self.policy = default_hash_policy() if policy is None else policy
+
+    @property
+    def is_empty(self) -> bool:
+        return self.size == 0
+
+    def set_item(self, key: K, value: V) -> None:
+        self._set_item(key, value, None)
+
+    def _add_or_update(
+        self,
+        key: K,
+        add_value: V,
+        update: Callable[[V, V], V],
+    ) -> V:
+        return self._set_item(key, add_value, update)
+
+    def _set_item(
+        self,
+        key: K,
+        value: V,
+        update: Callable[[V, V], V] | None,
+    ) -> V:
+        hash_value = self.policy.hash(key)
+        if self._root is None:
+            self._root = _MutableLeaf(hash_value, key, value)
+            self.size = 1
+            return value
+        self._root, added, selected = _set_mutable_node(
+            self._root,
+            hash_value,
+            key,
+            value,
+            0,
+            self.policy,
+            update,
+        )
+        self.size += int(added)
+        return selected
+
+    def set_items(self, items: Iterable[tuple[K, V]]) -> None:
+        for key, value in items:
+            self.set_item(key, value)
+
+    def to_immutable(self) -> PersistentHashMap[K, V]:
+        root = None if self._root is None else _freeze_mutable(self._root)
+        return PersistentHashMap(root, self.size, self.policy)
+
+
 class PersistentHashSet(Generic[T]):
     """Immutable CHAMP set preserving stored representatives and policy identity."""
 
@@ -671,7 +1109,10 @@ class PersistentHashSet(Generic[T]):
     def from_values(
         cls, values: Iterable[T], policy: HashPolicy[T] | None = None
     ) -> PersistentHashSet[T]:
-        return cls.empty(policy).union(values)
+        builder = HashMapBulkBuilder[T, bool](policy)
+        for value in values:
+            builder.set_item(value, True)
+        return cls(builder.to_immutable())
 
     @classmethod
     def create_transient(cls, policy: HashPolicy[T] | None = None) -> TransientHashSet[T]:
@@ -748,10 +1189,11 @@ class PersistentHashSet(Generic[T]):
         if isinstance(values, PersistentHashSet) and values.policy is self.policy:
             return self._with_map(self._map.intersect(values._map))
         probe = PersistentHashSet.from_values(values, self.policy)
-        result: PersistentHashSet[T] = PersistentHashSet.empty(self.policy)
+        builder = HashMapBulkBuilder[T, bool](self.policy)
         for value in self:
             if probe.contains(value):
-                result = result.put(value)
+                builder.set_item(value, True)
+        result = PersistentHashSet(builder.to_immutable())
         return self if result.set_equals(self) else result
 
     def except_(self, values: Iterable[T]) -> PersistentHashSet[T]:
@@ -966,6 +1408,30 @@ class TransientHashSet(Generic[T]):
         self._ensure_active()
         return self._current.get(value)
 
+    def is_subset_of(self, values: Iterable[T]) -> bool:
+        self._ensure_active()
+        return self._current.is_subset_of(values)
+
+    def is_proper_subset_of(self, values: Iterable[T]) -> bool:
+        self._ensure_active()
+        return self._current.is_proper_subset_of(values)
+
+    def is_superset_of(self, values: Iterable[T]) -> bool:
+        self._ensure_active()
+        return self._current.is_superset_of(values)
+
+    def is_proper_superset_of(self, values: Iterable[T]) -> bool:
+        self._ensure_active()
+        return self._current.is_proper_superset_of(values)
+
+    def overlaps(self, values: Iterable[T]) -> bool:
+        self._ensure_active()
+        return self._current.overlaps(values)
+
+    def set_equals(self, values: Iterable[T]) -> bool:
+        self._ensure_active()
+        return self._current.set_equals(values)
+
     def add(self, value: T) -> bool:
         self._ensure_active()
         result = self._current.try_add(value)
@@ -1015,10 +1481,12 @@ __all__ = [
     "AddResult",
     "DuplicateKeyError",
     "HamtEntry",
+    "HashMapBulkBuilder",
     "MapDifference",
     "MapDifferenceKind",
     "MapRemoveEntryResult",
     "MapRemoveResult",
+    "MapUpdateResult",
     "PersistentHashMap",
     "PersistentHashSet",
     "SetRemoveResult",
