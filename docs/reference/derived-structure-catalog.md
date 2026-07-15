@@ -54,7 +54,7 @@ portable to the C model (callback + context pointer) unless noted.
 | --- | --- | --- |
 | `Update(key, func)` / `GetOrAdd` | HAMT map and set | Halves every read-modify-write (currently `TryGetValue` + `SetItem` = two trie walks). Consumers: bag increments, multimap inner updates, graph edge ops, union-find compression, interning, `Counts`/`Merge`-style aggregation. |
 | Bulk construction — **shipped**; public editing sessions are a separate lifecycle | HAMT map and set | Canonical `CreateRange` now stages through an internal mutable builder and freezes once. C# also ships an owner-token `Transient`; sibling ports preserve the edit-then-publish semantics without sharing its performance claim. This historical row no longer blocks facade construction. |
-| Structural diff / equality / set-vs-set algebra — **shipped**; 3-way merge remains consumer-gated | HAMT node layer (not composable from outside) | Reference-equality-pruned lockstep traversal and same-type structural algebra now ship across all seven languages. A general 3-way merge still needs a conflict matrix. |
+| Structural diff / equality / set-vs-set algebra — **shipped**; 3-way merge remains consumer-gated | HAMT node layer (not composable from outside) | Equality, typed diff, and same-type algebra now ship across all eight languages. The seven established ports use reference-pruned structural traversal; Python currently preserves the semantics with exact-root pruning plus lookup traversal. A general 3-way merge still needs a conflict matrix. |
 | Value-comparer parameter for no-op identity | HAMT factories | `SetItem`'s equal-value no-op check hardcodes `EqualityComparer<TValue>.Default`; a factory-supplied value comparer would let structural value equality trigger the identity short-circuit. |
 | Reverse support | `Rope<T>` and `FingerTreeDeque<T>` | A reversal bit or reverse enumerator. `ReversibleDeque` exists but lacks the sorted adapter and range operations, materializes an `O(n)` array per enumeration, and its amortized bounds are documented for single-threaded linear use only - facades keep rejecting it. |
 | Struct enumerator for `Rope<T>` / `MeasuredRope` | Rope family | Both use compiler-generated yield iterators; `FingerTreeDeque` already has a public struct enumerator, and the general measured tree gained one on 2026-07-01. Iteration-hot consumers (evaluators) notice the difference. |
@@ -67,7 +67,8 @@ exist, rank writes do not), and a floor/ceiling lookup in the C sorted-map port 
 
 ## Candidate Catalog
 
-Every shipped family carries ports across the language workspaces (C#, C++, C, Haskell, Kotlin, Rust),
+Every shipped family carries ports across the language workspaces (C#, C++, C, Haskell, Kotlin,
+Rust, TypeScript, Python),
 each with its own docs and tests, plus benchmark evidence for complexity and allocation claims
 where the parity guide requires it. That parity bill - not feasibility -
 is what separates many "plausible" verdicts from "strong": thin facades are often better shipped as
@@ -87,7 +88,7 @@ case study independently specialized the broad composition idea for `Association
 *Application-specific shipment 2026-07-07*: the Tungsten workspaces own a values-in-both
 `PersistentAssociation` (plus the `PersistentList` sequence facade), with the C# workspace
 ([`Tools.DataStructures.Tungsten`](../../src/CSharp/docs/Tungsten/overview.md)) as the semantic
-reference only for C, C++, Haskell, Kotlin, and Rust Tungsten ports linked from the
+reference only for C, C++, Haskell, Kotlin, Rust, TypeScript, and Python Tungsten ports linked from the
 [data-structure catalog](data-structure-catalog.md#tungsten-application-collections). This did not
 ship the generic ordered-map candidate. The generic values-in-HAMT-only variant and the other
 candidates below remain unshipped. The

@@ -8,7 +8,7 @@
 This reference summarizes the behavioral contracts that should stay recognizable across the repository's
 language workspaces. It is not a replacement for the workspace API specifications, public headers, XML
 documentation, or source tests. Use it as a checklist when reviewing whether a change preserves the
-intended semantics across C#, C, C++, Haskell, Kotlin, Rust, and TypeScript.
+intended semantics across C#, C, C++, Haskell, Kotlin, Rust, TypeScript, and Python.
 
 Authoritative local documents remain:
 
@@ -21,6 +21,8 @@ Authoritative local documents remain:
 - [C++ FingerTree API notes](../../src/Cpp/FingerTree/docs/api-notes.md)
 - [Kotlin FingerTree API notes](../../src/Kotlin/FingerTree/docs/api-notes.md)
 - [Rust FingerTree API notes](../../src/Rust/FingerTree/docs/api-notes.md)
+- [TypeScript package API notes](../../src/TypeScript/docs/api-notes.md)
+- [Python package API notes](../../src/Python/docs/api-notes.md)
 
 Use the [data-structure catalog](data-structure-catalog.md) for the inventory of public entry points.
 Use the [porting guide](../guides/porting-and-semantic-parity.md) for the workflow that carries a
@@ -44,8 +46,9 @@ behavior change through sibling workspaces.
 
 ## Fixed-Width Integer Numerics
 
-`Tools.Numerics` currently lives in the C# workspace. Its contract covers fixed-width signed and
-unsigned integers plus sparse integer helpers.
+`Tools.Numerics` in C# is the semantic reference; TypeScript and Python expose sibling ports of its
+fixed-width signed and unsigned integers plus sparse integer helpers. TypeScript uses `bigint`, and
+Python uses arbitrary-precision `int`, behind explicit fixed-width normalization and validation.
 
 Public entry points:
 
@@ -70,6 +73,8 @@ Primary evidence:
 - [Numerics validation](../../src/CSharp/docs/Numerics/validation.md)
 - [Numerics tests README](../../src/CSharp/tests/Tools.Numerics.Tests/README.md)
 - [Wide-integer maintainer guidance](../../src/CSharp/docs/Numerics/wide-integer-maintainer-guidance.md)
+- [TypeScript API notes](../../src/TypeScript/docs/api-notes.md) and [validation](../../src/TypeScript/docs/validation.md)
+- [Python API notes](../../src/Python/docs/api-notes.md) and [validation](../../src/Python/docs/validation.md)
 
 ## HAMT Map And Set
 
@@ -85,6 +90,8 @@ Public surfaces:
 | Haskell | `HashMap k v` and `MapTransient k v` | `HashSet a` and `SetTransient a` | `Hashable`, `Eq`, optional `HashPolicy` |
 | Kotlin | `PersistentHashMap<K, V>` and nested `Transient<K, V>` | `PersistentHashSet<T>` and nested `Transient<T>` | runtime `HashPolicy<K>` |
 | Rust | `PersistentHashMap<K, V, S>` and `TransientHashMap<K, V, S>` | `PersistentHashSet<T, S>` and `TransientHashSet<T, S>` | `Eq` plus `BuildHasher` |
+| TypeScript | `PersistentHashMap<K, V>` and `TransientHashMap<K, V>` | `PersistentHashSet<T>` and `TransientHashSet<T>` | runtime `HashPolicy<K>` |
+| Python | `PersistentHashMap[K, V]` and `TransientHashMap[K, V]` | `PersistentHashSet[T]` and `TransientHashSet[T]` | retained `HashPolicy[K]` |
 
 Shared obligations:
 
@@ -124,10 +131,12 @@ Language-specific obligations:
 | Haskell | `HashPolicy` and package-local `Hashable` shape are part of the port, avoiding third-party dependencies while preserving persistent HAMT behavior. |
 | Kotlin | Miss paths and duplicate results should use idiomatic Kotlin null/result/exception shapes documented in API notes. |
 | Rust | Keys that compare equal under `Eq` must hash equally under the chosen `BuildHasher`; removal returns owned cloned values where exposed. |
+| TypeScript | Equality and hashing are explicit runtime policy, not JavaScript object identity by accident; session and iterator validity are checked dynamically. |
+| Python | Equality and hashing are explicit retained policy; mutable application objects require caller discipline, and changed or consumed sessions invalidate version-bound iterators dynamically. |
 
-### Managed Ctrie snapshots
+### Concurrent snapshot facades
 
-The C# and Kotlin/JVM Ctries are the deliberate managed-only concurrent tier. `Snapshot` captures a
+The C# and Kotlin/JVM Ctries are the deliberate lock-free managed tier. `Snapshot` captures a
 generation in O(1); later writes lazily renew paths and cannot alter the captured view. Snapshot
 enumeration follows canonical CHAMP ordering: singleton/data entries precede multi-entry child/node
 runs at each bitmap level, frozen empty tombs are skipped, frozen singleton tombs are promoted
@@ -135,9 +144,15 @@ logically into the data run, and equal-hash collision buckets retain their local
 snapshot-to-CHAMP conversion is O(n) and preserves that sequence, the exact policy object, stored
 key/value representatives, null/present-null semantics, and isolation from later live writes.
 
+TypeScript and Python preserve the consumer-level mutable-map/O(1)-snapshot vocabulary without
+claiming that protocol. TypeScript is isolate-local and synchronous. Python serializes operations
+with an `RLock` and publishes immutable CHAMP roots. Neither facade uses GCAS/RDCSS descriptors,
+generation renewal, or a lock-free progress guarantee; conversion and concurrency claims must follow
+its local API notes and tests.
+
 ### One-way CHAMP editing lifecycle
 
-All six HAMT workspaces expose a single-owner map/set edit-then-publish lifecycle. The shared
+All eight HAMT workspaces expose a single-owner map/set edit-then-publish lifecycle. The shared
 contract is semantic, not representational:
 
 - Creating an empty session or adopting a persistent source and successfully publishing the
@@ -175,12 +190,16 @@ advantage is claimed:
 | Haskell | `MapTransient` / `SetTransient` live in `IO`; `persistMap` / `persistSet` consume the `IORef` state. Candidate construction precedes a masked commit, so synchronous or asynchronous failure cannot partially install an edit. |
 | Kotlin | Nested `Transient` sessions enforce consumption with `IllegalStateException`; acquired views capture the current persistent snapshot and session version, survive logical no-ops, and fail after content changes. Callback failure leaves the active session unchanged and retryable. |
 | Rust | `TransientHashMap` / `TransientHashSet` publish with consuming `into_persistent(self)`, so the type system prevents use-after-publication. `into_transient` moves a source while `to_transient` shares its root; both retain persistent path-copy edit costs. |
+| TypeScript | `TransientHashMap` / `TransientHashSet` enforce one-way publication and version-bound iteration dynamically; changed edits use persistent path copying and failed callbacks leave the active session retryable. |
+| Python | `TransientHashMap` / `TransientHashSet` retain a persistent current value, consume on publication, and invalidate iterators after content changes or publication; changed edits remain persistent path copies rather than owner-token mutation. |
 
 The local authoritative references are the [C API specification](../../src/C/Hamt/docs/api-specification.md),
 [C++ API specification](../../src/Cpp/Hamt/docs/api-specification.md),
 [Haskell HAMT workspace](../../src/Haskell/Hamt/README.md),
-[Kotlin API notes](../../src/Kotlin/Hamt/docs/api-notes.md), and
-[Rust API notes](../../src/Rust/Hamt/docs/api-notes.md).
+[Kotlin API notes](../../src/Kotlin/Hamt/docs/api-notes.md),
+[Rust API notes](../../src/Rust/Hamt/docs/api-notes.md),
+[TypeScript API notes](../../src/TypeScript/docs/api-notes.md), and
+[Python API notes](../../src/Python/docs/api-notes.md).
 
 ## Finger-Tree Core
 
@@ -278,14 +297,15 @@ Shared obligations:
 - Chunking is an implementation detail unless a public API exposes chunks; exposed chunk APIs must
   state whether chunks are immutable, borrowed, copied, compacted, or normalized.
 - Measured rope split and locate inherit the same measure-law requirements as measured trees.
-- Text rope offsets are element offsets in the local text representation. In C#, Kotlin, Rust, and
-  Haskell docs, be explicit about `char`, UTF-16, Unicode scalar, byte, or `Text` semantics when it matters.
+- Text rope offsets are element offsets in the local text representation. In every language's docs,
+  be explicit about byte, `char`, UTF-16, Unicode scalar/code-point, or `Text` semantics when it matters;
+  Python indexes Unicode code points.
 - Newline navigation must define line numbering, column numbering, trailing newline behavior, and
   invalid offset behavior.
 - Builders must document mutation, snapshot publication, and whether later builder changes can affect
   previously produced immutable ropes.
 
-C#, C, C++, Haskell, Kotlin, Rust, and TypeScript ship positional and measured/text cursors. No deque, RRB,
+C#, C, C++, Haskell, Kotlin, Rust, TypeScript, and Python ship positional and measured/text cursors. No deque, RRB,
 raw-finger-tree, reversible-deque, or Tungsten cursor is implied by those surfaces. Every shipped
 cursor shares these observable obligations:
 
@@ -315,10 +335,11 @@ retained cursors
   at a boundary has the conservative O(b log n) aggregate bound; there is no unqualified
   arbitrary-version-DAG O(1)-amortized claim.
 
-The C, C++, Haskell, Kotlin, and Rust positional checkpoints store an already-canonical retained rope
-plus its gap. Construction, navigation, and snapshot are O(1). C++, Haskell, and Rust peeks and
-point edits are O(log n) plus bounded chunk work; Kotlin peeks and point edits are O(log n) over its
-measured AVL substrate. None has a default-constructed cursor or makes a zipper, memo-cell, or
+The C, C++, Haskell, Kotlin, Rust, TypeScript, and Python positional checkpoints store an
+already-canonical retained rope plus its gap. The first five native/JVM checkpoints have the
+complexity boundaries documented in their local API notes; TypeScript and Python likewise inherit
+their package-local persistent checkpoint costs rather than the C# zipper bounds. None has a
+default-constructed cursor or makes a zipper, memo-cell, or
 O(1)-amortized local-edit claim. Haskell uses outer `Maybe` for the boundary, so a stored `Nothing`
 at element type `Maybe a` is `Just Nothing`; invalid movement/edit operations also return `Nothing`.
 Its pure growth failures raise a length-overflow exception before publishing a result, leaving all
@@ -335,7 +356,7 @@ output unchanged. Peeks copy through the rope's value policy rather than returni
 point edits are O(log n) plus bounded chunk work, while array insertion adds O(m) capture work. It makes no
 zipper, memo-cell, allocation-ceiling, or O(1)-amortized locality claim.
 
-The C#, C, C++, Haskell, Kotlin, Rust, and TypeScript measured cursors additionally share these result semantics:
+The C#, C, C++, Haskell, Kotlin, Rust, TypeScript, and Python measured cursors additionally share these result semantics:
 
 - `MeasureBefore` aggregates `[0, Position)` and `MeasureAfter` aggregates `[Position, Count)`;
   combining them in that order yields the whole version's measure without assuming an inverse,
@@ -343,9 +364,10 @@ The C#, C, C++, Haskell, Kotlin, Rust, and TypeScript measured cursors additiona
 - Absolute measure seek selects the gap before the first element whose inclusive prefix satisfies a
   lawful monotone predicate. A predicate already true at the identity selects zero for a nonempty rope; misses and empty ropes
   return `false` with an end cursor whose before measure is the whole measure.
-- The newline specialization uses the language's existing zero-based line/column rules. C# and
-  Kotlin positions are UTF-16 code units; C and C++ positions are `char`/`std::string` bytes; Haskell positions
-  are `Char` elements; Rust positions are Unicode scalar values. None denotes a grapheme-cluster index.
+- The newline specialization uses the language's existing zero-based line/column rules. C#, Kotlin,
+  and TypeScript positions are UTF-16 code units; C and C++ positions are `char`/`std::string` bytes;
+  Haskell positions are `Char` elements; Rust positions are Unicode scalar values; Python positions
+  are Unicode code points. None denotes a grapheme-cluster index.
   Navigation and edits preserve access to the existing text helpers.
 
 The C# measured zipper additionally prepares element measures in the immutable cursor lineage,
@@ -405,6 +427,13 @@ count preflights reject unrepresentable `usize` growth before attempted element-
 No focused zipper, snapshot memo, allocation ceiling, callback-count ceiling, or amortized-locality
 claim is made.
 
+TypeScript and Python retain their immutable measured-rope checkpoints plus validated gaps. Ordered
+before/after measures, absolute prefix search, retained branching, unconditional replacement, and
+text-facade preservation follow the shared result semantics above. TypeScript keeps JavaScript
+UTF-16 indexing. Python's measured rope uses an immutable measured-AVL checkpoint and its text cursor
+counts Unicode code points. Neither package claims the C# focus/carry zipper, snapshot-memo,
+allocation, callback-count, or amortized-locality bounds.
+
 The normative C# details and evidence are in the
 [FingerTree API specification](../../src/CSharp/docs/FingerTree/api-specification.md),
 [usage guide](../../src/CSharp/docs/FingerTree/usage.md),
@@ -420,7 +449,9 @@ specified by its [workspace README](../../src/Haskell/FingerTree/README.md) and 
 its [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) and
 [validation guide](../../src/Cpp/FingerTree/docs/validation.md). The C cursor checkpoints are
 specified by its [API notes](../../src/C/FingerTree/docs/api-notes.md) and
-[validation guide](../../src/C/FingerTree/docs/validation.md).
+[validation guide](../../src/C/FingerTree/docs/validation.md). The TypeScript and Python checkpoints
+are specified by their [TypeScript API notes](../../src/TypeScript/docs/api-notes.md) and
+[Python API notes](../../src/Python/docs/api-notes.md), respectively.
 
 ## Tungsten Collections
 
@@ -470,6 +501,8 @@ Shared obligations:
 | Haskell | Pure immutable values plus explicitly scoped `IO` editing sessions where exposed | Total versus `Maybe` operations, session consumption, package-local type classes, dependency-light design, strictness where relevant |
 | Kotlin | Immutable JVM values plus runtime policies and dynamically consumed editing sessions where exposed | Null/result/exception shapes, version-bound views, JVM comparator/hash policy behavior, structural sharing, and documented engine complexity |
 | Rust | Owned values, borrows, `Arc` sharing, consuming editing sessions where exposed, traits, and `Option`/`Result` | Clone requirements, borrowed lookup results, ownership-enforced publication, panic boundaries, safe Rust guarantees, Send/Sync claims only when proven |
+| TypeScript | Garbage-collected JavaScript objects, immutable public versions, runtime policies, and dynamically consumed sessions where exposed | ESM exports, `undefined`/miss/result shapes, stable hashing versus JavaScript identity, iterator invalidation, isolate-local concurrency, and UTF-16 indexing |
+| Python | Garbage-collected Python objects, immutable public versions, runtime policies, and dynamically consumed sessions where exposed | Typing/runtime validation, `None` versus absence, equality/hash coherence, iterator invalidation, lock-coordinated facades, code-point indexing, and mutable-value caveats |
 
 ## What A New Public Surface Must Document
 

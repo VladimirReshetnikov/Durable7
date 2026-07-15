@@ -50,6 +50,7 @@ entry points for unattended validation.
 | [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten` from `src/Kotlin` | [README](../../src/Kotlin/Tungsten/README.md) | [Tests](../../src/Kotlin/Tungsten/test/tools/datastructures/tungsten/TungstenTests.kt) | Kotlin/JVM executable tests for Tungsten list and association semantics |
 | [`src/Rust/Tungsten`](../../src/Rust/Tungsten/README.md) | `.\test.ps1 -Workspace Tungsten` from `src/Rust` | [README](../../src/Rust/Tungsten/README.md) | [Source tests](../../src/Rust/Tungsten/src/lib.rs) | Safe Rust crate tests for Tungsten list and association semantics |
 | [`src/TypeScript`](../../src/TypeScript/README.md) | `.\test.ps1` or `npm run validate` from `src/TypeScript` | [Validation](../../src/TypeScript/docs/validation.md) | [Tests](../../src/TypeScript/test/README.md) | Strict declaration checking, Vitest examples, fast-check histories, exact `MST2`/`MSP2` vectors, ESM/declaration build, and package surface |
+| [`src/Python`](../../src/Python/README.md) | `.\test.ps1` from `src/Python` | [Validation](../../src/Python/docs/validation.md) | [Tests](../../src/Python/tests/README.md) | Python 3.11+ Ruff and strict Mypy gates, pytest/Hypothesis examples and histories, exact `MST2`/`MSP2` vectors and all seven verification budgets, source/wheel builds, metadata checks, and installed-wheel smoke validation |
 
 For broad repository edits, run every row that could be affected. For documentation-only edits, run the
 Markdown link check below and any build/test commands whose documented paths changed.
@@ -113,6 +114,23 @@ npm pack --dry-run
 Vitest/fast-check suites, a clean ESM build, and declaration/source-map generation. `npm pack
 --dry-run` is the package-content smoke check. See the [local validation guide](../../src/TypeScript/docs/validation.md)
 and [test map](../../src/TypeScript/test/README.md).
+
+## Python Workspace
+
+```powershell
+cd C:\DataStructures\src\Python
+.\test.ps1
+```
+
+The launcher requires Python 3.11 or newer and creates `.venv` when necessary. It installs the
+pinned tools from `requirements-dev.txt`, installs the package in editable mode, fixes
+`PYTHONHASHSEED=0` for the validation process, and runs Ruff format/lint checks, strict Mypy, and
+the complete pytest/Hypothesis suite. It then builds a PEP 517 source distribution and wheel,
+checks package metadata with Twine, installs the wheel into a clean environment, and smoke-tests
+the public package surface. Use `-SkipInstall` only after the pinned tools are installed and
+`-SkipPackageSmoke` only for narrow iteration; neither changes the canonical full command above.
+See the [local validation guide](../../src/Python/docs/validation.md) and
+[test map](../../src/Python/tests/README.md).
 
 ## Rust Workspaces
 

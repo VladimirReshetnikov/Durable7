@@ -14,7 +14,7 @@ documentation placement rules. Use [the semantic contracts reference](../referen
 for shared behavior obligations across repository-owned numerics and data structures. Use
 [the build and validation guide](build-and-validation.md) for the complete cross-repository validation
 matrix. Use [the porting and semantic parity guide](porting-and-semantic-parity.md) when a behavior or
-public API change may need to cross C#, C++, C, Haskell, Kotlin, Rust, and TypeScript workspaces.
+public API change may need to cross C#, C++, C, Haskell, Kotlin, Rust, TypeScript, and Python workspaces.
 
 ## Tungsten Dependency Check
 
@@ -57,6 +57,21 @@ cd C:\DataStructures\src\Rust
 
 The wrapper locates Cargo on `PATH` or under the default rustup profile and enables inherited,
 non-interactive Windows error handling before test binaries start.
+
+## Python validation
+
+Use the checked-in Python launcher from the language root:
+
+```powershell
+cd C:\DataStructures\src\Python
+.\test.ps1
+```
+
+The launcher requires Python 3.11 or newer, creates an isolated virtual environment, installs the
+pinned validation tools, fixes `PYTHONHASHSEED` for reproducible test histories, and runs Ruff,
+strict Mypy, pytest/Hypothesis, source/wheel builds, metadata checks, and an installed-wheel smoke
+test. Use `-SkipInstall` only when the pinned tools are already present; use
+`-SkipPackageSmoke` only for narrow local iteration.
 
 ## XML documentation
 
