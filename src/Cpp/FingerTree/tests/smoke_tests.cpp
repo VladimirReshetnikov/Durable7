@@ -33,6 +33,7 @@ void add_measured_rope_tests(suite& tests);
 void add_persistent_deque_tests(suite& tests);
 void add_priority_queue_tests(suite& tests);
 void add_priority_search_queue_tests(suite& tests);
+void add_range_update_sequence_tests(suite& tests);
 void add_reversible_deque_tests(suite& tests);
 void add_rope_tests(suite& tests);
 void add_rope_text_tests(suite& tests);
@@ -158,6 +159,9 @@ int main(const int argument_count, const char* const* arguments)
 
     tests.set_group("priority-search-queue");
     add_priority_search_queue_tests(tests);
+
+    tests.set_group("range-update-sequence");
+    add_range_update_sequence_tests(tests);
 
     tests.set_group("reversible-deque");
     add_reversible_deque_tests(tests);

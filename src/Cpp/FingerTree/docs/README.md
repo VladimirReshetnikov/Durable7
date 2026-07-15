@@ -16,8 +16,9 @@
   especially lazy memoization, type erasure, comparator regimes, and C++ memory-model rules.
 - [Implementation notes](implementation-notes.md) records concrete C# comparisons, justified C++ divergences,
   validation observations, and links to any defect reports found during the port.
-- [API notes](api-notes.md) records C++ API conventions, canonical zip-tree, Brodal-Okasaki, and winner-cached
-  priority-search semantics, the mutable DABA Lite ownership exception, and active differences from C#.
+- [API notes](api-notes.md) records C++ API conventions, range-update algebra and lazy implicit-AVL semantics,
+  canonical zip-tree, Brodal-Okasaki, and winner-cached priority-search semantics, the mutable DABA Lite ownership
+  exception, and active differences from C#.
 - [Usage guide](usage.md) shows public include paths, value-semantics patterns, both new priority cores and their
   representative handles, mutable sliding-window use, common update flows, and facade quick starts.
 - [Validation](validation.md) records build, test, stress, warning-policy, generated-output, and

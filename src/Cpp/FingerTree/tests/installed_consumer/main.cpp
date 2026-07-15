@@ -23,6 +23,37 @@ struct sum_monoid final {
     }
 };
 
+struct range_add_algebra final {
+    using measure_type = int;
+    using tag_type = int;
+
+    [[nodiscard]] static constexpr measure_type empty() noexcept { return 0; }
+    [[nodiscard]] static constexpr measure_type measure(const int element) noexcept { return element; }
+    [[nodiscard]] static constexpr measure_type combine(
+        const measure_type left,
+        const measure_type right) noexcept
+    {
+        return left + right;
+    }
+    [[nodiscard]] static constexpr tag_type identity_tag() noexcept { return 0; }
+    [[nodiscard]] static constexpr bool is_identity(const tag_type tag) noexcept { return tag == 0; }
+    [[nodiscard]] static constexpr tag_type compose(const tag_type newer, const tag_type older) noexcept
+    {
+        return older + newer;
+    }
+    [[nodiscard]] static constexpr int apply_element(const tag_type tag, const int element) noexcept
+    {
+        return element + tag;
+    }
+    [[nodiscard]] static constexpr measure_type apply_measure(
+        const tag_type tag,
+        const measure_type measure_value,
+        const std::size_t count) noexcept
+    {
+        return measure_value + tag * static_cast<int>(count);
+    }
+};
+
 } // namespace
 
 int main()
@@ -46,6 +77,8 @@ int main()
         .set_item(1, 10, 100)
         .set_item(3, 5, 300);
     const auto priority_search_deletion = priority_search.delete_minimum();
+    const auto ranged = ft::range_update_sequence<int, range_add_algebra>::from_range(source)
+        .apply_range(1, 2, 10);
     const auto text = ft::to_text_rope("alpha\nbeta\ngamma");
     auto daba = ft::daba_lite<int, sum_monoid>{};
     daba.insert(7);
@@ -60,6 +93,7 @@ int main()
         || priority_search.minimum().key() != 3
         || priority_search_deletion.entry.value() != 300
         || priority_search_deletion.remainder.minimum().key() != 1
+        || ranged[1] != 12 || ranged.measure_range(1, 2) != 25 || ranged.measure() != 30
         || ft::line_count(text) != 3 || ft::get_line(text, 1) != "beta" || daba.aggregate() != 11) {
         std::cerr << "installed public API smoke check failed\n";
         return 1;

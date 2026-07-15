@@ -115,6 +115,73 @@ Notable C++ differences and limits:
 - there is deliberately no persistent tail buffer, so immutable endpoint append is a boundary-spine operation
   rather than a worst-case O(1) tail write.
 
+## `range_update_sequence<T, Algebra>`
+
+`range_update_sequence<T, Algebra>` is the C++ port of C#
+`RangeUpdateSequence<TElement, TMeasure, TTag, TOps>`. It is a separate persistent implicit-key AVL core in the
+FingerTree package, not a modification of either finger-tree engine. `Algebra::measure_type` and
+`Algebra::tag_type` supply the two remaining C# type parameters. The `range_update_algebra` concept requires the
+following static surface:
+
+```cpp
+struct algebra {
+    using measure_type = /* ... */;
+    using tag_type = /* ... */;
+
+    static measure_type empty();
+    static measure_type measure(const T& element);
+    static measure_type combine(const measure_type& left, const measure_type& right);
+    static tag_type identity_tag();
+    static bool is_identity(const tag_type& tag);
+    static tag_type compose(const tag_type& newer, const tag_type& older);
+    static T apply_element(const tag_type& tag, const T& element);
+    static measure_type apply_measure(
+        const tag_type& tag,
+        const measure_type& measure,
+        std::size_t count);
+};
+```
+
+`compose(newer, older)` always means “apply `older`, then apply `newer`.” Policies must obey both monoid laws,
+consistent element and measure actions, singleton agreement, and ordered distributivity. `combine` need not be
+commutative. Every value accepted by `is_identity` must have complete identity behavior even when it is
+value-distinct from `identity_tag`. The implementation stores pending absence in `std::optional<tag_type>` and
+never compares a tag with a default or identity sentinel.
+
+Primary operations are:
+
+- construction: default/initializer-list construction, `create(span)`, and eager one-shot `from_range`;
+- observation: `empty`, `size`, O(1) `measure`, value-returning `at`/`operator[]`, retained input iteration,
+  and `to_vector`;
+- indexed edits: `prepend`, `append`, `push_front`, `push_back`, `insert_at`, `set_item`, `set_at`, and
+  `remove_at`;
+- persistent structure: `concat`, named `range_update_split` from `split_at`, and `get_range`;
+- algebraic ranges: `apply_range` and ordered `measure_range`; and
+- diagnostics: `validate_structure`, `shares_root_with`, `physical_node_count`,
+  `shared_node_count_with`, and `shares_structure_with`.
+
+Counts and indices use `std::size_t`. Index, boundary, and range errors throw `std::out_of_range`; range checks
+use `count > size - index` and never form an unchecked `index + count`. Insert and concatenation preflight
+`size_t` overflow before measuring or combining new nodes. The element, measure, and tag types are constrained to
+`std::copyable`, matching path copying, iterator copies, and immutable publication. A stored
+`std::optional<U>` element is not confused with an absent lookup because indexing throws on absence and returns
+the logical element value directly.
+
+The static algebra type makes policy compatibility a compile-time property: only the same closed sequence type
+can be concatenated. `from_range` returns an exact sequence operand by value while retaining its root. Empty
+ranges bypass `is_identity`; empty and recognized-identity updates retain the root. A whole nonidentity update is
+O(1) and allocates one transformed root; proper updates, queries, edits, splits, and joins are O(log n). Callback
+exceptions cannot mutate or partially publish a facade. Read-only descent carries inherited tags, while rotations
+operate only on immutably pushed nodes.
+
+`const_iterator` is a copyable input iterator with independent copied traversal state and value-returning
+dereference. Value return is intentional: a logical element may require an inherited tag action, so exposing a
+reference to iterator-owned transformed storage would give that reference an invalid forward-iterator lifetime.
+The iterator owns the immutable root and therefore remains traversable after the facade that created it is
+destroyed. Independent iterators and immutable snapshots may be read concurrently when the algebra and any
+caller-owned state are safe for the same access. Diagnostics count distinct physical nodes separately from the
+logical cached count, including when concatenation creates a legal shared DAG.
+
 ## `zip_tree_rank_policy<T>` And `canonical_sorted_set<T>`
 
 `canonical_sorted_set<T>` is the C++ port of C# `CanonicalSortedSet<T>`, with the retained

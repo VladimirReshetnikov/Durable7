@@ -8,11 +8,11 @@
 - Scope: Native test executable, source grouping, and stress controls under `src/Cpp/FingerTree/tests`
 
 The C++ FingerTree workspace has one repository-owned native test executable, `fingertree_smoke_tests`; it uses no
-third-party test framework. CTest runs that executable through 21 subsystem entries (`fingertree.atomic-box`,
+third-party test framework. CTest runs that executable through 22 subsystem entries (`fingertree.atomic-box`,
 `fingertree.brodal-okasaki-heap`, `fingertree.canonical-sorted-set`, `fingertree.command-model`,
 `fingertree.concurrency`, `fingertree.daba-lite`, `fingertree.deque`, `fingertree.interval-tree`, `fingertree.lazy-cell`,
 `fingertree.measure`, `fingertree.measured-lazy-cell`, `fingertree.measured-rope`, `fingertree.measured-tree`,
-`fingertree.priority-queue`, `fingertree.priority-search-queue`, `fingertree.reversible-deque`, `fingertree.rope`, `fingertree.rope-text`,
+`fingertree.priority-queue`, `fingertree.priority-search-queue`, `fingertree.range-update-sequence`, `fingertree.reversible-deque`, `fingertree.rope`, `fingertree.rope-text`,
 `fingertree.rrb-vector`,
 `fingertree.sorted-collections`, and `fingertree.support`). This preserves the small runner in
 `test_support/test_runner.hpp` while making CTest failures identify the affected subsystem.
@@ -68,6 +68,11 @@ listing, and replay-seed selection.
   handles, custom ties, eager inclusive range pruning with exact comparator equations, optional and move-only
   components, quantified sharing/allocation growth, injected comparator/equality/component failures, and
   concurrent readers.
+- `range_update_sequence_tests.cpp` covers the ordered-measure and directional-tag laws, value-distinct
+  identities, nullable elements, noncommutative measures, complete boundary/edit behavior, a retained 1,000-step
+  vector model with old-version branches, exact sharing and one-root allocation, iterator/facade lifetime,
+  one-shot factory ordering, every reachable ordinal of six throwing policy callbacks, exact-maximum shared-DAG
+  count overflow, recursive validation, and concurrent snapshot readers.
 - `interval_tree_tests.cpp` covers insertion, forward traversal/copy, overlap, containment, streaming coalescing,
   removal, and sweep-model checks.
 - `rope_tests.cpp`, `measured_rope_tests.cpp`, and `rope_text_tests.cpp` cover chunked sequence editing, retained
@@ -101,6 +106,7 @@ Run one subsystem through the same headless CTest launcher:
 & "$cmakeDir\ctest.exe" --test-dir out\build\msvc-debug --parallel 1 --output-on-failure -R '^fingertree\.command-model$'
 & "$cmakeDir\ctest.exe" --test-dir out\build\msvc-debug --parallel 1 --output-on-failure -R '^fingertree\.canonical-sorted-set$'
 & "$cmakeDir\ctest.exe" --test-dir out\build\msvc-debug --parallel 1 --output-on-failure -R '^fingertree\.daba-lite$'
+& "$cmakeDir\ctest.exe" --test-dir out\build\msvc-debug --parallel 1 --output-on-failure -R '^fingertree\.range-update-sequence$'
 ```
 
 Run the built executable directly when changing runner output, failure diagnostics, or tests that need local
@@ -111,6 +117,7 @@ iteration outside CTest. The executable enters headless mode itself, so direct f
 .\out\build\msvc-debug\tests\fingertree_smoke_tests.exe --group command-model
 .\out\build\msvc-debug\tests\fingertree_smoke_tests.exe --group canonical-sorted-set
 .\out\build\msvc-debug\tests\fingertree_smoke_tests.exe --group daba-lite
+.\out\build\msvc-debug\tests\fingertree_smoke_tests.exe --group range-update-sequence
 .\out\build\msvc-debug\tests\fingertree_smoke_tests.exe --group rope --filter randomized
 ```
 

@@ -141,13 +141,13 @@ lane does not provide a viable TSan runtime.
 
 ## Current Coverage
 
-CTest registers 23 cases: 21 subsystem cases backed by `tests/fingertree_smoke_tests`, including the focused
+CTest registers 24 cases: 22 subsystem cases backed by `tests/fingertree_smoke_tests`, including the focused
 `fingertree.brodal-okasaki-heap`, `fingertree.canonical-sorted-set`, `fingertree.daba-lite`, and
-`fingertree.priority-search-queue` groups. Each case invokes the same local runner with an exact
+`fingertree.priority-search-queue` and `fingertree.range-update-sequence` groups. Each case invokes the same local runner with an exact
 `--group` filter through the repository
 headless launcher, so a subsystem failure is isolated without introducing Catch2/GoogleTest or duplicating test
 execution. `fingertree.samples` checks two deterministic transcripts, and `fingertree.installed-consumer` performs
-the staged package integration test. All 23 carry the `fingertree` label and all Windows invocations—including the
+the staged package integration test. All 24 carry the `fingertree` label and all Windows invocations—including the
 nested install/configure/build/test command—inherit the no-dialog error mode. Use
 `ctest --test-dir out/build/msvc-debug --parallel 1 -N -L fingertree` to list the cases, or `-R` with one exact case name for a
 focused run. See the [tests README](../tests/README.md) for the complete group list, direct runner options,
@@ -164,6 +164,11 @@ The suite covers:
 - RRB-vector packed construction at every 32-way boundary tier, regular/relaxed metadata, persistent point and
   range edits, unequal concatenation, exact-boundary identity reuse, 10,000-step vector-model histories,
   adversarial density/height sequences, append-builder snapshot isolation, and injected-copy exception safety;
+- the persistent range-update implicit AVL across directional tag laws, value-distinct identities,
+  noncommutative and nullable measures, every boundary and indexed edit, a 1,000-step retained-branch model,
+  exact root/physical-node sharing, one-root whole-update allocation, facade-independent value iterators,
+  source-enumeration ordering, every reachable callback-failure ordinal for all six policy callbacks, a compact
+  exact-`size_t`-maximum shared DAG, recursive invariant validation, installed-package use, and concurrent readers;
 - canonical zip-zip ranks against exact C# keyed/public-seed vectors, CSPRNG and key-ownership boundaries,
   bulk/incremental permutation convergence, first-representative retention, comparer/hash incoherence,
   fully colliding 4,096-node operation stack safety, allocation-free destruction of a 16,384-node chain,
@@ -234,7 +239,7 @@ fresh project with `FINGERTREE_BUILD_TESTS`, `FINGERTREE_BUILD_SAMPLES`, and
 `find_package(ToolsDataStructuresFingerTree CONFIG)`, the exported
 `tools::data_structures::finger_tree` target, and installed headers. Its aggregate-header program instantiates
 the canonical rank policy (thereby proving the transitive crypto link), Brodal-Okasaki heap, winner-cached
-priority-search queue, DABA Lite, and persistent collections:
+priority-search queue, range-update sequence, DABA Lite, and persistent collections:
 
 ```powershell
 ctest --preset msvc-debug --parallel 1 -R '^fingertree\.installed-consumer$' --output-on-failure

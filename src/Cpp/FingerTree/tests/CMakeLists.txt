@@ -14,6 +14,7 @@ add_executable(
     persistent_deque_tests.cpp
     priority_queue_tests.cpp
     priority_search_queue_tests.cpp
+    range_update_sequence_tests.cpp
     reversible_deque_tests.cpp
     rope_tests.cpp
     rope_text_tests.cpp
@@ -63,6 +64,7 @@ set(
     measured-tree
     priority-queue
     priority-search-queue
+    range-update-sequence
     reversible-deque
     rope
     rope-text

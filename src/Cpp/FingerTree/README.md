@@ -19,6 +19,15 @@ concatenation, and an append builder whose immutable snapshots remain isolated f
 aggregate header includes the vector and its builder; representation diagnostics and adversarial model tests keep
 the regular/relaxed distinction, density, height, and sharing contracts observable to maintainers.
 
+`range_update_sequence<T, Algebra>` is the independently implemented persistent implicit-AVL sibling for
+algebraic range transformation. Its static policy supplies an ordered measure monoid, a directional tag monoid,
+and consistent actions on elements and cached subtree measures. Optional pending tags are pushed immutably only
+for structural edits; indexing, forward iteration, and range measurement instead carry inherited tags without
+publishing replacement nodes. A full nonidentity update replaces one root in O(1), and arbitrary updates,
+queries, splits, concatenations, and indexed edits remain O(log n). Checked `size_t` growth, policy-exception
+atomicity, physical-sharing diagnostics, retained-root value iterators, and a compact exact-maximum shared-DAG fixture
+are part of the native contract. No benchmark claim accompanies this shipment.
+
 The same public package also ships `daba_lite<T, MonoidPolicy>`, the deliberately mutable six-cursor DABA Lite
 sliding-window aggregator. Insert, eviction, and query have exact three/two/one `combine` ceilings; linked
 64-slot blocks keep every slide worst-case O(1), retire crossed blocks promptly, and expose callback-free

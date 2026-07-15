@@ -110,6 +110,55 @@ auto second = builder.to_immutable();       // first remains [0, 1000); second i
 The immutable facade deliberately has no persistent tail buffer. `push_back` and `pop_last` therefore remain
 boundary-spine operations; use the builder for bulk append staging.
 
+## Range-Update Sequence
+
+Use `range_update_sequence<T, Algebra>` when indexed persistent editing must coexist with logarithmic contiguous
+updates and ordered aggregate queries. The static policy defines both the measure monoid and the tag action. This
+additive sum example is intentionally small; assignment-capable policies must preserve the documented
+`compose(newer, older)` direction.
+
+```cpp
+struct add_sum final {
+    using measure_type = long long;
+    using tag_type = long long;
+
+    static constexpr measure_type empty() noexcept { return 0; }
+    static constexpr measure_type measure(long long value) noexcept { return value; }
+    static constexpr measure_type combine(measure_type left, measure_type right) noexcept {
+        return left + right;
+    }
+    static constexpr tag_type identity_tag() noexcept { return 0; }
+    static constexpr bool is_identity(tag_type tag) noexcept { return tag == 0; }
+    static constexpr tag_type compose(tag_type newer, tag_type older) noexcept {
+        return older + newer; // older is applied first
+    }
+    static constexpr long long apply_element(tag_type tag, long long value) noexcept {
+        return value + tag;
+    }
+    static constexpr measure_type apply_measure(
+        tag_type tag,
+        measure_type measure,
+        std::size_t count) noexcept {
+        return measure + tag * static_cast<long long>(count);
+    }
+};
+
+using sequence = ft::range_update_sequence<long long, add_sum>;
+auto original = sequence::from_range(std::array{1LL, 2LL, 3LL, 4LL});
+auto changed = original.apply_range(1, 2, 10);
+
+// original == [1, 2, 3, 4], changed == [1, 12, 13, 4]
+long long middle = changed.measure_range(1, 2); // 25
+auto split = changed.split_at(3);
+auto round_trip = split.left.concat(split.right);
+```
+
+`apply_range(0, size(), tag)` is O(1) for a nonidentity tag; proper range updates and queries are O(log n).
+Every operation returns a new facade and retains older versions. Bounds errors throw `std::out_of_range`, and
+checked count overflow throws `std::overflow_error` before new algebra callbacks. Algebra exceptions likewise
+leave every input snapshot usable. The policy laws and the full lazy-node invariant are normative in the C#
+[range-update contract](../../../CSharp/docs/FingerTree/range-update-sequence.md).
+
 ## Canonical Sorted Set
 
 Use `canonical_sorted_set<T>` when reproducible same-policy topology, persistent sharing, and a memoized content
