@@ -20,6 +20,9 @@ and concurrency tests. Python 3.11 and 3.14 lanes exercise the runtime surface; 
 targets the declared Python 3.11 language floor. Record exact test counts only from a completed full
 gate, never by inferring parameterized or generated executions from source files.
 
+The current complete Python 3.14 serialized gate passes Ruff, strict Mypy, all 170/170 pytest
+tests, isolated source and wheel builds, Twine metadata checks, and the installed-wheel smoke test.
+
 Range-update coverage includes exhaustive affine-tag monoid/action checks, an ordered
 noncommutative measure, all small split/rejoin boundaries, nested assignment/addition/affine tags,
 edits through pending tags, nullable values and an active `None` tag, all callback failpoint
@@ -36,7 +39,10 @@ atomicity, concurrent snapshot readers, and generated construction/algebra/branc
 Recent HAMT coverage locks one-descent factory selection and failure atomicity, reusable detached
 mutable-builder freezes (including the final two hash bits and collision buckets), routed map/set
 construction, all transient-set relations, and hash-bag multiplicity, representative, overflow,
-foreign-policy algebra, and generated collision models. The `RLock`-coordinated concurrent facade
+foreign-policy algebra, and generated collision models. The strict bimap gate covers two-domain
+conflicts, policy-driven replacement, representatives, symmetric removal, presence-safe `None`,
+failure atomicity, cached inverse identity, retained Hypothesis models, and concurrent readers.
+The `RLock`-coordinated concurrent facade
 adds retained-representative and present-`None` checks, exact publication generations, stable
 canonical snapshots, all-collision generated histories, callback failure atomicity, and adversarial
 same-thread reentry proving that compute retries instead of publishing an obsolete root. One-shot

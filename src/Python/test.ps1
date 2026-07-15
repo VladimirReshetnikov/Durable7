@@ -95,6 +95,7 @@ from vladimir_reshetnikov.data_structures import (
     PersistentAssociation,
     PersistentDeque,
     PersistentHashBag,
+    PersistentBiMap,
     PersistentHashMap,
     PersistentOrderedSet,
     RangeUpdateSequence,
@@ -131,6 +132,7 @@ builder = HashMapBulkBuilder()
 builder.set_item("built", 44)
 assert builder.to_immutable().get("built") == 44
 assert PersistentHashBag.from_values(["x", "x", "y"]).count_of("x") == 2
+assert PersistentBiMap.empty().add("answer", 42).inverse[42] == "answer"
 assert PersistentDeque.from_iterable([1, 2]).append(3).to_list() == [1, 2, 3]
 assert PersistentOrderedSet.from_values(["alpha", "beta", "alpha"]).to_list() == ["alpha", "beta"]
 assert PersistentAssociation.from_pairs([("a", 1)]).get("a") == 1

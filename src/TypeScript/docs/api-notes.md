@@ -17,7 +17,7 @@ primitives and identity for objects. Callers can supply a `HashPolicy` for struc
 replacement retains the stored key representative across the HAMT, Patricia, sorted, Merkle, and
 Tungsten families.
 
-## HAMT maps, bags, builders, and sessions
+## HAMT maps, bags, bimaps, builders, and sessions
 
 `PersistentHashMap.getOrAdd(key, addFactory)` and
 `addOrUpdate(key, addFactory, updateFactory)` return a `MapUpdateResult` containing the selected
@@ -46,6 +46,19 @@ argument is eagerly normalized under the receiver policy before shortcuts; colla
 checked-summed and retain the first representative observed in that argument version's stable
 HAMT order. The bag intentionally has no transient, builder, symmetric-difference, arbitrary-
 iterable algebra, or content-equality surface.
+
+`PersistentBiMap<K, V>` is a strict immutable bijection backed by independent forward and inverse
+CHAMP maps. `keyPolicy` and `valuePolicy` define the two equivalence domains. `add` rejects an
+existing class on either side; `tryAdd` reports `"key"` or `"value"`; and `set` may replace one
+key's value only when the new value is unclaimed. Equivalent `set` operations use `valuePolicy`,
+retain both stored representatives, and return the receiver. Replacement removes and re-adds both
+entries so no substrate-level SameValueZero shortcut can override the configured value policy.
+
+`get` and `getKey` return presence-discriminated results, including for stored `undefined`.
+Key/value removal is symmetric and exposes nonthrowing result carriers. `inverse` swaps the existing
+roots and policy roles in O(1), is cached, and points back to the original facade. Forward iteration
+follows stable-for-one-version, otherwise unspecified CHAMP order. Every pair is stored twice; the
+type deliberately has no algebra, builder, transient, or displacement mode.
 
 `HashMapBulkBuilder<K, V>` is a reusable construction-only staging object, also available through
 `PersistentHashMap.createBulkBuilder`. It exposes only policy/count state, `setItem`, `setItems`, and

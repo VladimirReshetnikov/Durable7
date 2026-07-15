@@ -17,7 +17,7 @@ exact policy identity, `MST2` block encoding, and `MSP2` proof envelope used acr
 ## Package families
 
 - `hamt` contains the real 32-way CHAMP map/set, one-descent map factory updates, a persistent hash
-  bag, a reusable construction-only bulk builder, one-way edit sessions with all six set relations,
+  bag, a strict persistent bimap, a reusable construction-only bulk builder, one-way edit sessions with all six set relations,
   an `RLock`-coordinated consumer-semantic snapshotting facade, signed 32/64-bit Patricia
   collections, and the authenticated Merkle tree with persistence, synchronization, proofs,
   budgets, and typed merge. The facade preserves Ctrie-facing mutation and snapshot behavior but
@@ -41,6 +41,7 @@ The root namespace re-exports every public family member:
 ```python
 from vladimir_reshetnikov.data_structures import (
     PersistentHashBag,
+    PersistentBiMap,
     PersistentHashMap,
     PersistentOrderedSet,
     RangeUpdateSequence,
@@ -50,6 +51,7 @@ from vladimir_reshetnikov.data_structures import (
 
 snapshot = PersistentHashMap.empty().put("answer", 42)
 bag = PersistentHashBag.from_values(["alpha", "alpha", "beta"])
+bimap = PersistentBiMap.empty().add("answer", 42)
 ordered = PersistentOrderedSet.from_values(["alpha", "beta", "alpha"])
 text = TextRope.from_text("alpha\nbeta")
 wrapped = UInt256(-1)
@@ -83,6 +85,7 @@ ranged = ranged.apply_range(1, 2, 10)
 
 assert snapshot["answer"] == 42
 assert bag.count_of("alpha") == 2 and bag.total_count == 3
+assert bimap.inverse[42] == "answer"
 assert ordered.to_list() == ["alpha", "beta"]
 assert text.lines() == ["alpha", "beta"]
 assert int(wrapped) == 2**256 - 1

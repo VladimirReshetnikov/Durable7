@@ -20,20 +20,16 @@ The checked-in launcher limits npm registry concurrency and native helper builds
 pinned to one worker and disables file-level and in-file test concurrency. Validation therefore
 never fans out into parallel test processes.
 
-The last recorded complete serialized parity gate before the range-update tranche passed strict
-checking, 18/18 Vitest files and 124/124 tests, the clean declaration/ESM build, and
-`npm pack --dry-run`. The range-update implementation adds seven dedicated suites; update the
-recorded aggregate only from a subsequent serialized complete gate.
-
-The range-update tranche's serialized focused gate passes 7/7 files and 45/45 tests with
-`--maxWorkers=1 --no-file-parallelism`. The subsequent `npm run check` strict no-emit gate and
-`npm run build` declaration/ESM gate also pass with zero diagnostics. The full aggregate test gate,
-clean build, and package dry run remain intentionally deferred to the next complete workspace gate.
+The current complete serialized gate passes strict checking, 27/27 Vitest files and 187/187 tests,
+the clean declaration/ESM build, and `npm pack --dry-run`. This aggregate includes the seven-file
+range-update tranche and the strict bimap's eight focused tests. No benchmark is part of this gate;
+local performance runs remain postponed until they can execute in isolation.
 
 High-risk contracts receive direct executable coverage:
 
 - retained immutable snapshots, no-op identity, collision representatives, one-descent map factory
-  updates, detached reusable bulk-builder freezes, hash-bag multiplicity/algebra models, all six
+  updates, detached reusable bulk-builder freezes, hash-bag multiplicity/algebra models, strict
+  bimap two-domain conflicts, policy-driven replacement, cached inverse identity, retained models, all six
   transient-set relations, transient consumption, and generated CHAMP/Patricia histories;
 - RRB 32-way boundary shapes, concatenation/slicing, retained versions, and structural validation;
 - range-update algebra laws, noncommutative ordered measures, lazy composition direction, exhaustive

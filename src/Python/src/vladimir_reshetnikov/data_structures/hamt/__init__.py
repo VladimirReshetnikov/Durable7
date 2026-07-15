@@ -67,6 +67,13 @@ from .merkle_search_tree import (
     MerkleSearchTree,
     MerkleSearchTreeStatistics,
 )
+from .persistent_bi_map import (
+    BiMapAddResult,
+    BiMapConflictError,
+    BiMapLookupResult,
+    BiMapRemoveResult,
+    PersistentBiMap,
+)
 from .persistent_hamt import (
     AddResult,
     DuplicateKeyError,
@@ -99,6 +106,10 @@ __all__ = [
     "NULLABLE_UTF8_MERKLE_CODEC",
     "RFC4122_UUID_MERKLE_CODEC",
     "AddResult",
+    "BiMapAddResult",
+    "BiMapConflictError",
+    "BiMapLookupResult",
+    "BiMapRemoveResult",
     "ConcurrentHashTrie",
     "ConcurrentHashTrieSnapshot",
     "DuplicateKeyError",
@@ -146,6 +157,7 @@ __all__ = [
     "MerkleVerificationBudget",
     "NullableBytesMerkleCodec",
     "NullableUtf8MerkleCodec",
+    "PersistentBiMap",
     "PersistentHashBag",
     "PersistentHashMap",
     "PersistentHashSet",

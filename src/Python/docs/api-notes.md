@@ -98,6 +98,19 @@ policy, receiver representatives win surviving classes, and collapsed argument c
 first representative encountered in that version's CHAMP order. The narrow bag deliberately has
 no transient, builder, symmetric difference, arbitrary-iterable algebra, or content equality.
 
+`PersistentBiMap[K, V]` stores every association in forward and inverse CHAMP maps under independent
+`key_policy` and `value_policy` objects. `add` rejects a represented class on either side;
+`try_add` identifies the conflicting domain; and `set` replaces one key's value only when the new
+value is unclaimed. Policy-equivalent sets retain both stored representatives and return the exact
+receiver. Replacement removes and re-adds both entries so ordinary Python value equality cannot
+override the configured value policy.
+
+`get` and `get_key` return `BiMapLookupResult`, keeping stored `None` distinct from absence.
+Key/value removal is symmetric. The lock-coordinated cached `inverse` facade swaps existing roots in
+O(1) and points back to the original object under concurrent access. Forward iteration follows
+stable-for-one-version, otherwise unspecified CHAMP order. The honest storage cost is approximately
+twice one map; no algebra, builder, transient, or displacement surface is exposed.
+
 The shared default policy follows coherent Python hash/equality behavior. Hashable values use
 `hash` and `==`; the identical-object fast path recovers non-reflexive values such as a retained
 `NaN`. Unhashable objects use process-local identity hashing and are equivalent only to themselves;
