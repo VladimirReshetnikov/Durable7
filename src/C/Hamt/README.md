@@ -12,6 +12,10 @@ for immutable unordered collections backed by a hash-array mapped trie:
 - `tds_hamt_map`, a persistent map from `void *` keys to `void *` values, including one-descent
   `get_or_add` / `add_or_update` factory operations that return the concrete retained value.
 - `tds_hamt_set`, a persistent set wrapper over the map core.
+- `tds_hamt_bag`, a persistent unordered multiset over the map core. Each receiver-policy item
+  class retains its first representative and a positive `int32_t` multiplicity, while the expanded
+  total is a checked `int64_t`. The bag exposes expanded, distinct, and entry iteration plus
+  receiver-policy union/intersection/difference/sum.
 - `tds_hamt_map_transient` / `tds_hamt_set_transient`, explicit one-way edit-session handles over
   the persistent CHAMP values. Adoption and terminal publication are O(1) handle operations; point
   edits deliberately reuse the persistent path-copy engine rather than claiming owner-token
@@ -29,10 +33,10 @@ payload runs and child-only subtrie runs, immutable equal-hash collision
 buckets, custom hash/equality policy callbacks, first equivalent key/item retention, no-op root
 reuse, cached subtree cardinalities, and slot-aligned structural map/set algebra that prunes
 pointer-identical subtries. Because this is C, ownership is explicit: maps and
-sets are value structs whose roots are reference-counted, and callers use `clone`/`destroy` to manage
-version lifetimes. Transient session states are also reference-counted: explicit transient clones
-alias one active session, terminal publication consumes every alias, and each initialized handle is
-destroyed independently.
+sets and bags are value structs whose roots are reference-counted, and callers use `clone`/`destroy`
+to manage version lifetimes. Transient session states are also reference-counted: explicit
+transient clones alias one active session, terminal publication consumes every alias, and each
+initialized handle is destroyed independently.
 
 The Patricia family sign-flips signed keys before branching, so visitor traversal is ascending
 signed order for both 32- and 64-bit keys. Compressed prefixes support subtree-aware union,
@@ -64,15 +68,17 @@ callbacks and callback-owned contexts remain responsible for their own synchroni
 ## Layout
 
 - `include/Tools/DataStructures/Hamt/hamt.h` contains the public C API.
+- `include/Tools/DataStructures/Hamt/persistent_hash_bag.h` contains the persistent hash-bag API.
 - `include/Tools/DataStructures/Hamt/patricia.h` contains the integer Patricia map/set API.
 - `include/Tools/DataStructures/Hamt/merkle_search_tree.h` contains the Merkle policy, codec, tree,
   traversal, diff, wire-block, store, persistence, proof, sync, merge, and validation API.
 - `src/hamt.c` contains the HAMT implementation.
+- `src/persistent_hash_bag.c` contains the map-backed hash-bag implementation.
 - `src/patricia.c` contains the shared 32-/64-bit Patricia implementation.
 - `src/merkle_search_tree.c` contains the canonical Merkle search tree implementation and CNG /
   OpenSSL SHA-256 backend.
-- `tests/` contains the [deterministic native test executable](tests/README.md).
-- `build.ps1` imports the MSVC toolchain through Scriptorium and compiles all three native test
+- `tests/` contains the [deterministic native test executables](tests/README.md).
+- `build.ps1` imports the MSVC toolchain through Scriptorium and compiles all four native test
   executables.
 - `docs/api-specification.md` documents the C API adaptation and complexity guarantees.
 - `docs/usage.md` provides practical policy, lifetime, update, iteration, and set-algebra examples.

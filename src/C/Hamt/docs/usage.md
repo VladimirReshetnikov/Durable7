@@ -3,15 +3,18 @@
 - Created (UTC): 2026-07-02T20:07:09Z
 - Repository HEAD: c58fc1159beb94e985ca66861bdc2ed3767eb2da
 - Audience: C consumers and maintainers using the HAMT, Patricia, and Merkle families
-- Scope: Includes, policies, ownership, persistent updates, one-way edit sessions, iteration, and set algebra
+- Scope: Includes, policies, ownership, persistent updates, one-way edit sessions, iteration, set algebra, and persistent hash bags
 
 This guide is the practical companion to the [C API specification](api-specification.md). The public
-declarations live in [`hamt.h`](../include/Tools/DataStructures/Hamt/hamt.h).
+declarations live in [`hamt.h`](../include/Tools/DataStructures/Hamt/hamt.h),
+[`persistent_hash_bag.h`](../include/Tools/DataStructures/Hamt/persistent_hash_bag.h), and the
+family-specific headers shown below.
 
 ## Include And Link
 
 ```c
 #include <Tools/DataStructures/Hamt/hamt.h>
+#include <Tools/DataStructures/Hamt/persistent_hash_bag.h>
 #include <Tools/DataStructures/Hamt/patricia.h>
 #include <Tools/DataStructures/Hamt/merkle_search_tree.h>
 ```
@@ -83,7 +86,7 @@ call. Store lookups return owning `tds_merkle_block` snapshots that must be disp
 synchronization, repeatedly call `tds_merkle_search_tree_plan_sync`, export the requested digests,
 insert those blocks, and repeat until `tds_merkle_sync_plan_requires_blocks` is false.
 
-The workspace builds a static library and test executable through `build.ps1`:
+The workspace compiles and can run its four native test executables through `build.ps1`:
 
 ```powershell
 .\build.ps1 -RunTests
@@ -92,8 +95,8 @@ The workspace builds a static library and test executable through `build.ps1`:
 ## Status And Lifetime Pattern
 
 Most update operations return `tds_hamt_status`. Treat `TDS_HAMT_OK` as the only success value.
-Maps and sets are small value structs, but assignment does not retain the root. Use `clone` when two
-live values should share one version, and call `destroy` for every initialized map or set.
+Maps, sets, and bags are small value structs, but assignment does not retain the root. Use `clone`
+when two live values should share one version, and call `destroy` for every initialized handle.
 
 For "replace the current snapshot" updates:
 
@@ -120,8 +123,8 @@ tds_hamt_map_destroy(&snapshot);
 tds_hamt_map_destroy(&map);
 ```
 
-Do not copy a live map or set with plain assignment unless you are moving ownership from one local
-variable to another and will destroy it only once.
+Do not copy a live map, set, or bag with plain assignment unless you are moving ownership from one
+local variable to another and will destroy it only once.
 
 ## One-Way Edit Sessions
 
@@ -418,6 +421,91 @@ Available operations:
 Operations that need distinct right-side membership materialize a temporary set under the receiver's
 policy. Superset and overlap checks stream the input and can exit early.
 
+## Persistent Hash Bag
+
+Use `tds_hamt_bag` when each receiver-policy item class needs a positive occurrence count. The
+default policy uses pointer identity; a custom `tds_hamt_set_policy` supplies value hashing,
+equality, and item ownership in exactly the same way as `tds_hamt_set`. The bag owns its internal
+count values independently of the item policy.
+
+```c
+int apple = 1;
+int pear = 2;
+
+tds_hamt_bag stock = tds_hamt_bag_create(NULL);
+tds_hamt_status status =
+    tds_hamt_bag_add_copies(&stock, &apple, 3, &stock);
+if (status == TDS_HAMT_OK) {
+    status = tds_hamt_bag_add(&stock, &pear, &stock);
+}
+
+if (status == TDS_HAMT_OK) {
+    int32_t apples = tds_hamt_bag_count_of(&stock, &apple); /* 3 */
+    int64_t all_items = tds_hamt_bag_total_count(&stock);   /* 4 */
+    size_t kinds = tds_hamt_bag_distinct_count(&stock);     /* 2 */
+    (void)apples;
+    (void)all_items;
+    (void)kinds;
+}
+
+tds_hamt_bag_destroy(&stock);
+```
+
+The iterator and algebra fragments below are independent; their named bag handles are assumed to
+have been initialized successfully and to remain live for the fragment.
+
+A result may alias its input, as above. On failure the aliased bag remains unchanged and still owns
+its original handle. A distinct result must be uninitialized rather than a live bag. Destroy it
+only after a successful call. Zero additions and removals return a root-sharing handle without
+hashing; negative or greater-than-`INT32_MAX` copy requests return
+`TDS_HAMT_INVALID_ARGUMENT` before callbacks. `TDS_HAMT_OVERFLOW` reports checked per-class,
+expanded-total, or foreign-policy-collapse overflow.
+
+The first equivalent item supplied under a custom policy remains the stored representative. Recover
+it with `tds_hamt_bag_try_get_value`; as with map/set lookup, the output echoes the query pointer on
+a miss. `tds_hamt_bag_try_get_entry` returns the same representative together with its copied
+`int32_t` multiplicity.
+
+For any live bag, three iterator surfaces separate expanded and distinct work:
+
+```c
+tds_hamt_bag_entry_iterator entries;
+tds_hamt_bag_entry_iterator_init(&stock, &entries);
+tds_hamt_bag_entry entry;
+while (tds_hamt_bag_entry_iterator_next(&entries, &entry)) {
+    /* entry.item occurs entry.count times. */
+}
+
+tds_hamt_bag_iterator expanded;
+tds_hamt_bag_iterator_init(&stock, &expanded);
+const void *item = NULL;
+while (tds_hamt_bag_iterator_next(&expanded, &item)) {
+    /* One callback-free step per occurrence. */
+}
+```
+
+Initialize iterators only while the source is live, and keep it live through traversal. Copying an
+iterator value creates an independently advancing cursor. Use
+`tds_hamt_bag_distinct_iterator_init` / `next` when only one representative per class is needed.
+
+Given live `stock` and `incoming` bags, algebra always returns a bag under the receiver's policy:
+
+```c
+tds_hamt_bag combined;
+status = tds_hamt_bag_union(&stock, &incoming, &combined); /* per-class max */
+if (status == TDS_HAMT_OK) {
+    /* Use combined. */
+    tds_hamt_bag_destroy(&combined);
+}
+```
+
+`intersect` takes per-class minima, `except` performs saturated receiver-minus-argument
+subtraction, and `sum` performs checked addition. A policy-incompatible argument is fully and
+eagerly normalized under the receiver policy before any no-op shortcut, so collapsed classes,
+retaining-callback failures, and collapse overflow are observable. Receiver representatives win
+surviving receiver classes. There is deliberately no public bag builder or transient session; use
+`create_range` for array construction and persistent point/algebra operations thereafter.
+
 ## Integer Patricia Maps And Sets
 
 Use the Patricia family when keys are signed 32- or 64-bit integers and ordered traversal or
@@ -469,6 +557,9 @@ the same reader-safety contract.
 | Value-semantic set over `void*` payloads | `tds_hamt_set` with custom policy callbacks |
 | One-way set edit session | `tds_hamt_set_to_transient` / `tds_hamt_set_transient_persist` |
 | Set union/intersection/difference | `tds_hamt_set_*_many` APIs |
+| Persistent unordered multiset | `tds_hamt_bag` |
+| Expanded/distinct/bag-entry traversal | `tds_hamt_bag_iterator`, `tds_hamt_bag_distinct_iterator`, or `tds_hamt_bag_entry_iterator` |
+| Bag max/min/difference/checked sum | `tds_hamt_bag_union` / `intersect` / `except` / `sum` |
 
 For cross-language contract alignment, see the repository
 [porting and semantic parity guide](../../../../docs/guides/porting-and-semantic-parity.md).

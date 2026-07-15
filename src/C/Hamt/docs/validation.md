@@ -15,6 +15,8 @@ the [API specification](api-specification.md) and [usage guide](usage.md).
 `build.ps1` is the validation entry point. It imports the local MSVC environment through
 `C:\Scriptorium\windows\Import-VisualCppEnvironment.ps1 -IncludePrerelease`, then compiles
 `src/hamt.c` and `tests/hamt_tests.c` into `build/<Configuration>/hamt_tests.exe`, then compiles
+`src/hamt.c`, `src/persistent_hash_bag.c`, and `tests/persistent_hash_bag_tests.c` into
+`build/<Configuration>/persistent_hash_bag_tests.exe`, then compiles
 `src/patricia.c` and `tests/patricia_tests.c` into
 `build/<Configuration>/patricia_tests.exe`, and finally compiles `src/merkle_search_tree.c` and
 `tests/merkle_search_tree_tests.c` into
@@ -28,8 +30,8 @@ The script uses these project-level compiler gates:
 - Exception mode: `/EHsc-`; the C port does not use C++ exceptions.
 - Flexible-array-member warning suppression: `/wd4200`, because the implementation intentionally uses
   flexible storage for compact HAMT nodes.
-- Test-only allocation hooks: `/DTDS_HAMT_TESTING`, enabling deterministic fail-after-N allocation injection
-  inside the native executable without adding hooks to the public header.
+- Test-only allocation hooks: `/DTDS_HAMT_TESTING`, enabling deterministic fail-after-N allocation
+  injection inside the native executables without adding hooks to the public headers.
 - Debug configuration: `/Od`, `/Zi`, `/MDd`.
 - Release configuration: `/O2`, `/MD`, `/DNDEBUG`.
 
@@ -65,9 +67,20 @@ Typical direct GCC lane:
 
 ```powershell
 New-Item -ItemType Directory -Force build\portable | Out-Null
-gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -DTDS_HAMT_TESTING -Iinclude src\hamt.c tests\hamt_tests.c `
+gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -DTDS_HAMT_TESTING `
+    -Iinclude -I../../test_support/include src\hamt.c tests\hamt_tests.c `
     -o build\portable\hamt_tests_gcc.exe
 .\build\portable\hamt_tests_gcc.exe
+```
+
+Compile the bag executable against both production sources in the same serialized lane:
+
+```powershell
+gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -DTDS_HAMT_TESTING `
+    -Iinclude -I../../test_support/include `
+    src\hamt.c src\persistent_hash_bag.c tests\persistent_hash_bag_tests.c `
+    -o build\portable\persistent_hash_bag_tests_gcc.exe
+.\build\portable\persistent_hash_bag_tests_gcc.exe
 ```
 
 The Merkle lane on Windows uses CNG:
@@ -87,7 +100,7 @@ Typical Clang lane on Windows, using the Visual Studio developer environment for
 $vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
 $clang = "C:\Program Files\LLVM\bin\clang.exe"
 
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$clang"" -std=c17 -Wall -Wextra -Wpedantic -Werror -DTDS_HAMT_TESTING -Iinclude src\hamt.c tests\hamt_tests.c -o build\portable\hamt_tests_clang.exe && build\portable\hamt_tests_clang.exe"
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$clang"" -std=c17 -Wall -Wextra -Wpedantic -Werror -DTDS_HAMT_TESTING -Iinclude -I../../test_support/include src\hamt.c tests\hamt_tests.c -o build\portable\hamt_tests_clang.exe && build\portable\hamt_tests_clang.exe"
 ```
 
 ## Portable Sanitizer Check
@@ -97,7 +110,7 @@ ownership-policy and collision-bucket changes:
 
 ```powershell
 gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -DTDS_HAMT_TESTING -fsanitize=address,undefined -fno-omit-frame-pointer `
-    -Iinclude src/hamt.c tests/hamt_tests.c -o build/hamt_tests_asan
+    -Iinclude -I../../test_support/include src/hamt.c tests/hamt_tests.c -o build/hamt_tests_asan
 ./build/hamt_tests_asan
 ```
 
@@ -106,6 +119,15 @@ gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -DTDS_HAMT_TESTING -fsanitize=addr
 `tests/hamt_tests.c` is a deterministic native test executable. It prints `[PASS]` lines and exits nonzero
 on the first failed check. See the [tests README](../tests/README.md) for named test cases, the direct
 executable path, and runner failure behavior.
+
+`tests/persistent_hash_bag_tests.c` is the deterministic map-backed multiset executable. It covers
+first-representative retention, positive one-descent factory updates, checked `int32_t`/`int64_t`
+overflow, validation-before-callback behavior, root-sharing no-ops, saturated removal, alias-safe
+publication, expanded/distinct/entry iteration, same- and cross-policy algebra, eager foreign-policy
+collapse, retained snapshots, and a 1,000-step model history. Independent fail-after-N sweeps cover
+HAMT node and internal count allocation in point updates and all four foreign-policy algebra
+operations. Targeted item-retain and range-construction failures add unchanged-output and
+balanced-owner checks.
 
 `tests/patricia_tests.c` is the explicit-width integer-map/set executable. It covers signed extrema
 and traversal order, root-sharing no-ops, retained snapshots, fixed and callback-combining map

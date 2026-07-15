@@ -78,6 +78,8 @@ static tds_tungsten_status tds_tungsten_from_hamt(tds_hamt_status status)
         return TDS_TUNGSTEN_OUT_OF_MEMORY;
     case TDS_HAMT_DUPLICATE_KEY:
         return TDS_TUNGSTEN_DUPLICATE_KEY;
+    case TDS_HAMT_OVERFLOW:
+        return TDS_TUNGSTEN_OVERFLOW;
     case TDS_HAMT_INVALID_ARGUMENT:
     default:
         return TDS_TUNGSTEN_INVALID_ARGUMENT;

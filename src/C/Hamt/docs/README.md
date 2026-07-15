@@ -10,13 +10,14 @@
 
 - [API Specification](api-specification.md) defines the C public API shape, semantic adaptation from
   the C# and C++ workspaces, persistence behavior, ownership rules, and complexity targets for
-  `tds_hamt_map` and `tds_hamt_set`, including their one-way transient edit-session handles.
+  `tds_hamt_map`, `tds_hamt_set`, and `tds_hamt_bag`, including map/set one-way transient
+  edit-session handles and the bag's checked multiplicity/algebra contract.
 - [Usage guide](usage.md) shows policy setup, borrowed/owned lifetime rules, persistent update
-  patterns, one-way edit sessions, iteration, and set algebra for `tds_hamt_map` and `tds_hamt_set`.
+  patterns, one-way edit sessions, iteration, set algebra, and persistent hash-bag operations.
 - [Validation](validation.md) records the local MSVC build script, Debug/Release commands, warning
   policy, generated outputs, and native model-test coverage.
 - [Merkle search tree](merkle-search-tree.md) specifies the type-erased persistent ordered map,
   exact `mst-sha256-b16-v2` domain framing, canonical MST2 node blocks, verified persistence,
   bounded load/import, MSP2 proofs, synchronization, three-way merge, ownership, and diagnostics.
-- [Tests README](../tests/README.md) maps the native executable, named test cases, direct executable path,
-  and runner failure behavior.
+- [Tests README](../tests/README.md) maps the native executables, named test cases, direct executable
+  paths, and runner failure behavior.

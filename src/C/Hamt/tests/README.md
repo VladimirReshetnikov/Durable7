@@ -9,22 +9,26 @@
 [`build.ps1`](../build.ps1) script compiles it together with `src/hamt.c` into
 `build/<Configuration>/hamt_tests.exe`.
 
+`persistent_hash_bag_tests.c` is the focused persistent unordered-multiset executable. The build
+script compiles it with `src/hamt.c` and `src/persistent_hash_bag.c` into
+`build/<Configuration>/persistent_hash_bag_tests.exe` and runs it after the core HAMT suite.
+
 `patricia_tests.c` is the companion dependency-free executable for the explicit-width Patricia
 maps and sets. The build script compiles it with `src/patricia.c` into
-`build/<Configuration>/patricia_tests.exe` and runs it after the HAMT suite.
+`build/<Configuration>/patricia_tests.exe` and runs it after the hash-bag suite.
 
 `merkle_search_tree_tests.c` is the focused executable for the ordered content-addressed map and
-its complete persistence tier. It
-compiles with `src/merkle_search_tree.c` into
+its complete persistence tier. It compiles with `src/merkle_search_tree.c` into
 `build/<Configuration>/merkle_search_tree_tests.exe`, links CNG through `bcrypt.lib`, and runs after
-the HAMT and Patricia suites.
+the core HAMT, hash-bag, and Patricia suites.
 
-The runner keeps a static table of named test cases, prints `[PASS]` after each successful case, and exits on the
-first failed check with file, line, and expression diagnostics. A successful run ends with `<N> test(s) passed`.
+Each runner keeps a static table of named test cases, prints `[PASS]` after each successful case,
+and exits on the first failed check with file, line, and expression diagnostics. A successful run
+ends with `<N> test(s) passed`.
 
 ## Test Cases
 
-The executable registers these cases:
+The core HAMT executable registers these cases:
 
 - `empty map has no entries`
 - `set item adds replaces and preserves old versions`
@@ -77,6 +81,26 @@ retaining-callback failure atomicity across map and set operations. Set-relation
 all six predicates over duplicate-heavy arrays and cross-policy persistent-set operands, then sweeps
 both allocation-bearing paths to prove boolean-output atomicity.
 
+The hash-bag executable registers:
+
+- `construction queries representatives and one-descent add`
+- `copy-count validation overflow and root-sharing no-ops`
+- `remove clear and aliasing preserve versions`
+- `expanded distinct entry iterators and copy independence`
+- `same-policy algebra and receiver representatives`
+- `foreign-policy eager normalization and collapse overflow`
+- `validation and allocation failures leave outputs and owners unchanged`
+- `algebra allocation failure sweeps are atomic`
+- `deterministic model history and retained snapshots`
+
+These cases distinguish `tds_hamt_bag_distinct_count` from the checked expanded total, prove positive additions
+select their multiplicity through one `add_or_update` descent, and cover maximum/minimum/saturated-
+difference/checked-sum algebra. The cross-policy fixtures deliberately collapse exact classes under
+the receiver's broader equality policy; a count-allocation failpoint proves that normalization runs
+before even a logically unchanged intersection. Allocation sweeps and targeted retaining-callback
+failures assert byte-for-byte output nonpublication, unchanged source roots, canonical survivors,
+and balanced item ownership.
+
 The Merkle executable registers:
 
 - `digest and built-in codecs`
@@ -113,6 +137,12 @@ Run the built executable directly when changing runner diagnostics or investigat
 
 ```powershell
 .\build\Debug\hamt_tests.exe
+```
+
+Run the bag executable directly when investigating multiplicity, normalization, or bag ownership:
+
+```powershell
+.\build\Debug\persistent_hash_bag_tests.exe
 ```
 
 Use the workspace [validation guide](../docs/validation.md) for Release validation, compiler flags, generated-output

@@ -21,6 +21,11 @@ collision bucket.
 `tds_hamt_set` is a value-set wrapper over the same map core. It stores set items as map keys and
 uses a unit value.
 
+`tds_hamt_bag` is an immutable unordered multiset wrapper over the map core. It stores one retained
+item representative and one library-owned positive `int32_t` multiplicity per equivalence class,
+plus a checked nonnegative `int64_t` expanded total. It intentionally has no public builder or
+transient surface: construction and every edit publish ordinary persistent versions.
+
 `tds_hamt_map_transient` and `tds_hamt_set_transient` are one-way, single-owner edit-session
 surfaces over those persistent values. They preserve the C# transient's lifecycle and collection
 semantics in C ownership terms, but intentionally delegate changed point edits to the established
@@ -89,9 +94,9 @@ identities. A result may alias either operand.
 
 ## Ownership
 
-Maps and sets are small value structs. Copying them with assignment does not retain the root. Use
-`tds_hamt_map_clone` / `tds_hamt_set_clone` when two live values should share the same version, and
-call `tds_hamt_map_destroy` / `tds_hamt_set_destroy` for every initialized value.
+Maps, sets, and bags are small value structs. Copying them with assignment does not retain the root.
+Use `tds_hamt_map_clone`, `tds_hamt_set_clone`, or `tds_hamt_bag_clone` when two live values should
+share the same version, and call the matching `destroy` function for every initialized value.
 
 The default policy hashes and compares pointer identity and stores borrowed pointers. Custom
 policies can provide:
@@ -120,6 +125,13 @@ version's root before publishing the new one, so `tds_hamt_map_set(&map, k, v, &
 in-place updates are safe (the previous version is no longer reachable afterwards). On a rejected
 duplicate, `tds_hamt_map_add` leaves an aliased `result` holding the unchanged source version,
 while a distinct `result` is left destroyed (empty, not a live handle).
+
+Bag result parameters may likewise alias either input. A distinct result must not already own a
+live bag. On every non-OK status the result bytes, both input handles, retained representatives,
+and cached totals remain unchanged. On success the result owns exactly one handle, including when
+it root-shares a logical no-op. Bag lookups and iterators return borrowed representative pointers;
+keep the source bag alive until the pointer is no longer used. Entry iteration copies the
+multiplicity into the public `tds_hamt_bag_entry` and never exposes the internal owned count object.
 
 ## One-Way CHAMP Edit Sessions
 
@@ -243,6 +255,60 @@ policy so the established receiver-policy semantics remain intact.
 Set operations that need distinct right-side membership materialize their argument into a temporary
 `tds_hamt_set` using the receiver's policy. Superset and overlap checks stream their argument.
 
+## Persistent Hash Bag Contract
+
+Include `persistent_hash_bag.h` for `tds_hamt_bag`, `tds_hamt_bag_entry`, and the three iterator
+types. A bag accepts the item portion of `tds_hamt_set_policy`; the implementation supplies its own
+count equality/retain/release callbacks and stores multiplicities as owned heap values in an
+underlying `tds_hamt_map`. `tds_hamt_bag_get_policy` recovers the normalized item policy. The same
+callback/context identity rules that define map policy compatibility define bag policy
+compatibility.
+
+The point and construction contract is:
+
+- `tds_hamt_bag_create` creates an empty policy-preserving bag and cannot fail.
+- `tds_hamt_bag_create_range` consumes the item array in order, adding one occurrence at a time.
+  Equivalent later items increase the count without replacing the first retained representative.
+- `distinct_count`, `total_count`, and `is_empty` report equivalence classes, expanded occurrences,
+  and emptiness independently.
+- `contains` and `count_of` use the item policy. `try_get_value` returns the stored representative
+  when present and echoes the query pointer on a miss. `try_get_entry` returns the representative
+  and copied multiplicity together and zeroes its entry output on a miss.
+- `add` and positive `add_copies` use `tds_hamt_map_add_or_update`, selecting the next multiplicity
+  during the single update descent. They hash once, retain the existing representative on a hit,
+  and path-copy only after checked arithmetic succeeds.
+- `remove_copies` performs saturated subtraction, `remove_all` drops the complete class, and
+  `clear` preserves policy. Zero additions/removals, missing-class removals, and clearing an empty
+  bag return a root-sharing version.
+
+An explicit copy request is an `int64_t` API value but must be in `[0, INT32_MAX]`. A negative or
+larger request returns `TDS_HAMT_INVALID_ARGUMENT`; validation occurs before hash, equality, retain,
+or allocation callbacks. Zero returns before callbacks and shares the source root. A positive
+request that would make one class exceed `INT32_MAX`, make the expanded total exceed `INT64_MAX`,
+or collapse policy-incompatible argument classes beyond `INT32_MAX` returns
+`TDS_HAMT_OVERFLOW`. Allocation or retaining-callback failure returns
+`TDS_HAMT_OUT_OF_MEMORY`. No partially changed bag is published for any of these statuses.
+
+Bag algebra is receiver-policy algebra:
+
+- `union` selects the maximum multiplicity in each receiver-policy class;
+- `intersect` selects the minimum multiplicity;
+- `except` subtracts argument multiplicities from receiver multiplicities with saturation at zero;
+- `sum` adds multiplicities with checked per-class and expanded-total arithmetic.
+
+When the policies differ, the complete argument is first normalized under the receiver's hash,
+equality, retain/release callbacks, and context. This is deliberately eager even when a later
+algebra shortcut might otherwise ignore part or all of the argument: foreign classes can collapse,
+retain callbacks can fail, and collapse can overflow. Surviving receiver classes retain receiver
+representatives. An argument-only class uses the first representative encountered while
+normalizing/iterating the argument. Logical no-op results share the receiver root.
+
+`tds_hamt_bag_iterator` expands each class into `count` consecutive occurrences.
+`tds_hamt_bag_distinct_iterator` returns each representative once, and
+`tds_hamt_bag_entry_iterator` returns one `{ item, count }` record per class. All three follow the
+underlying stable-for-one-version trie/collision order, borrow the source bag, use a fixed inline
+traversal stack, and can be copied by value to obtain independently advancing cursors.
+
 ## Complexity
 
 Let `w` be the hash width (32 bits), `b` be the branch factor (32), and `c` be the length of an
@@ -263,6 +329,12 @@ equal-hash collision bucket.
   build.
 - Set algebra implemented from public operations: O((n + m) * update-cost), except for streaming
   predicates.
+- Bag lookup and positive addition: O(w / log2(b) + c); positive addition selects its count in one
+  trie descent. Removal may perform a lookup followed by one update.
+- Bag range construction and receiver-policy algebra: O((n + m) * update-cost) in the current C
+  implementation, including eager normalization when policies differ. Distinct and entry
+  iteration are O(d); expanded iteration is O(t), where `d` is distinct count and `t` is total
+  count.
 - Patricia lookup, insert, and remove: O(W), with `W` fixed at 32 or 64 and usually far fewer hops
   because unary paths are compressed.
 - Patricia structural algebra: O(v), where `v` is the prefix structure visited after shared-root and
@@ -274,9 +346,10 @@ changed path and any touched collision bucket. Published nodes are immutable apa
 
 ## Concurrency
 
-Reference counts are non-atomic. Concurrent read-only access to already-retained map/set handles is safe when
-the configured hash/equality callbacks and pointed-to payloads are themselves safe to read concurrently. A
-handle must remain alive for the full read; do not copy or destroy that handle concurrently.
+Reference counts are non-atomic. Concurrent read-only access to already-retained map/set/bag
+handles is safe when the configured hash/equality callbacks and pointed-to payloads are themselves
+safe to read concurrently. A handle must remain alive for the full read; do not copy or destroy
+that handle concurrently.
 
 Copying, updating, clearing, set algebra, and destroying versions retain or release nodes, including untouched
 nodes shared with sibling snapshots. Serialize those operations across every structurally shared lineage:
