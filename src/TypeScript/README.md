@@ -14,12 +14,13 @@ runtimes without native addons and publishes declaration files alongside ES modu
 | Import | Main types |
 | --- | --- |
 | `@vladimir-reshetnikov/data-structures/hamt` | `PersistentHashMap` with one-descent factory updates, `PersistentHashSet`, `PersistentHashBag`, reusable `HashMapBulkBuilder`, map/set single-owner transients, `ConcurrentHashTrie`, 32/64-bit Patricia maps and sets, the exact-wire `MerkleSearchTree`, codecs, stores, packs, finite verification budgets, `MSP2` proofs, synchronization, and typed merge |
-| `@vladimir-reshetnikov/data-structures/finger-tree` | `PersistentDeque`, general measured `FingerTree`, `ReversibleDeque`, `RrbVector`, sorted bag/set/map, canonical zip-zip set, measured and Brodal–Okasaki priority queues, priority-search queue, interval tree, rope/measured-rope/text cursors, and `DabaLite` |
+| `@vladimir-reshetnikov/data-structures/finger-tree` | `PersistentDeque`, general measured `FingerTree`, lazy algebraic `RangeUpdateSequence`, `ReversibleDeque`, `RrbVector`, sorted bag/set/map, canonical zip-zip set, measured and Brodal–Okasaki priority queues, priority-search queue, interval tree, rope/measured-rope/text cursors, and `DabaLite` |
 | `@vladimir-reshetnikov/data-structures/ordered` | independent insertion-ordered `PersistentOrderedSet` with positional movement/ranges, stable one-shot sorting, receiver-policy algebra, and first-representative retention |
 | `@vladimir-reshetnikov/data-structures/tungsten` | `PersistentList` and insertion-ordered `PersistentAssociation` |
 | `@vladimir-reshetnikov/data-structures/numerics` | signed and unsigned 256/512/1024-bit integers, `SparseInteger`, and `BitConverterEx` |
 
-The root import re-exports all five families. See [API and semantic notes](docs/api-notes.md) and the
+The root import re-exports all five families. See [API and semantic notes](docs/api-notes.md), the
+[range-update sequence notes](docs/range-update-sequence.md), and the
 [ordered-set notes](docs/ordered.md) for language-specific mappings and deliberately different
 performance claims.
 

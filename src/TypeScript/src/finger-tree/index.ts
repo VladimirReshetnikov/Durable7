@@ -9,3 +9,5 @@ export * from "./rrb-vector.js";
 export * from "./canonical-sorted-set.js";
 export * from "./brodal-okasaki-heap.js";
 export * from "./priority-search-queue.js";
+export * from "./range-update-algebra.js";
+export * from "./range-update-sequence.js";

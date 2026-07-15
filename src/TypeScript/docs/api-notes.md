@@ -79,10 +79,10 @@ and API mapping are in [the ordered-set notes](ordered.md).
 
 ## Persistence and sharing
 
-The CHAMP, Patricia, measured AVL, RRB, canonical zip-zip, Brodal–Okasaki, priority-search, interval,
-and Merkle cores use immutable nodes and path copying. No-op operations return the receiver where the
-corresponding semantic contract defines a no-op. Builders and transient sessions never mutate an
-already published persistent version.
+The CHAMP, Patricia, measured AVL, lazy range-update AVL, RRB, canonical zip-zip,
+Brodal–Okasaki, priority-search, interval, and Merkle cores use immutable nodes and path copying.
+No-op operations return the receiver where the corresponding semantic contract defines a no-op.
+Builders and transient sessions never mutate an already published persistent version.
 
 TypeScript CHAMP transients preserve O(1) adoption, clean/no-op identity publication, single-owner
 semantics, version-bound enumeration, and one-way publication. Their edits call the immutable CHAMP
@@ -98,6 +98,27 @@ measure callback before publication.
 inside one JavaScript isolate. It deliberately does not claim the multi-threaded GCAS/RDCSS progress
 contract of the C# and Kotlin Ctries; JavaScript object graphs cannot be atomically shared between
 workers.
+
+## Lazy range-update sequence
+
+`RangeUpdateSequence<Element, Measure, Tag>` is the independent implicit-AVL sequence with cached
+ordered measures and algebraic lazy range tags. Each instance retains one exact
+`RangeUpdateAlgebra` object. That runtime object replaces the C# static `TOps` parameter and is part
+of sequence identity: canonical empties, source factory shortcuts, and concatenation all preserve or
+require the exact object.
+
+`compose(newer, older)` represents older-then-newer application. Pending absence uses a separate
+boolean and never `undefined`, a default tag, or `identityTag`, so both stored `undefined` elements
+and an `undefined` tag remain valid. Structural edits push tags by immutable path copying. Indexed
+reads, range queries, and iteration carry inherited tags and allocate no persistent nodes. Empty
+updates are callback-free, recognized identities retain the receiver, whole nonidentity updates
+replace only the root wrapper, and counts/ranges retain the C# `Int32.MaxValue` boundary and
+validation order.
+
+TypeScript iterators are independent snapshot-bound JavaScript iterators rather than C# copyable
+struct enumerators. The port consequently makes no struct-copy fail-fast or same-object worker-thread
+claim. The complete contract and API mapping are in the
+[range-update sequence notes](range-update-sequence.md).
 
 ## Exact Merkle interoperability
 
@@ -124,8 +145,6 @@ precision integers.
 
 ## Deliberate non-ports
 
-`RangeUpdateSequence` now ships as the C# reference core but remains pending TypeScript parity, so it
-is not yet presented as TypeScript package API. The repository's frozen CHAMP tier, order-maintenance
-list, persistent chunked bitset, styled-text rope, and other unshipped frontier/derived-catalog
-entries remain proposals or explicitly postponed candidates. Benchmark prototypes are evidence
-machinery, not package API.
+The repository's frozen CHAMP tier, order-maintenance list, persistent chunked bitset, styled-text
+rope, and other unshipped frontier/derived-catalog entries remain proposals or explicitly postponed
+candidates. Benchmark prototypes are evidence machinery, not package API.
