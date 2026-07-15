@@ -2,7 +2,7 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet('All', 'Hamt', 'FingerTree', 'Tungsten')]
+    [ValidateSet('All', 'Hamt', 'FingerTree', 'Ordered', 'Tungsten')]
     [string] $Workspace = 'All',
 
     [switch] $Release,
@@ -33,6 +33,7 @@ $selection = switch ($Workspace) {
     'All' { @('--workspace') }
     'Hamt' { @('-p', 'tools-data-structures-hamt') }
     'FingerTree' { @('-p', 'tools-data-structures-fingertree') }
+    'Ordered' { @('-p', 'tools-data-structures-ordered') }
     'Tungsten' { @('-p', 'tools-data-structures-tungsten') }
 }
 

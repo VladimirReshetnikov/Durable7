@@ -125,6 +125,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tools-data-structures-ordered"
+version = "0.1.0"
+dependencies = [
+ "tools-data-structures-fingertree",
+ "tools-data-structures-hamt",
+]
+
+[[package]]
 name = "tools-data-structures-tungsten"
 version = "0.1.0"
 dependencies = [
