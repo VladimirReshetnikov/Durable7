@@ -19,6 +19,8 @@ Primary entry points:
 - `MapUpdateResult<K, V, S = RandomState>`;
 - `MapDifference<K, V>`;
 - `PersistentHashBag<T, S = RandomState>`, `HashBagEntry<T>`, `BagIter<T>`, and `HashBagError`;
+- `PersistentBiMap<K, V, SK = RandomState, SV = RandomState>`, `BiMapConflict`,
+  `BiMapAddResult`, and `BiMapRemoveResult`;
 - `PersistentIntMap<V>` / `PersistentIntSet` and `PersistentLongMap<V>` / `PersistentLongSet`.
 - `MerkleSearchTree<K, V>`, `MerkleSearchTreePolicy<K, V>`, `MerkleEntry<K, V>`, and
   `MerkleMapDifference<K, V>`;
@@ -125,6 +127,28 @@ returned. No structural-algebra or benchmark claim is made for the bag tranche.
 There is intentionally no `PersistentHashBag` transient, edit session, or public bulk builder.
 `BulkBuilder` remains the existing construction-only map facility; its public surface was not
 expanded for bag mutation.
+
+## Persistent bidirectional map
+
+`PersistentBiMap<K, V, SK, SV>` composes a forward `PersistentHashMap<K, V, SK>` and inverse
+`PersistentHashMap<V, K, SV>` into a strict immutable bijection. Rust supplies equivalence through
+the types' lawful `Eq`/`Hash` implementations; `SK` and `SV` are independent retained hash-builder
+states. `add` returns `BiMapConflict::Key` or `Value`, while `try_add` returns a root-sharing
+receiver on conflict and gives key conflict precedence when both classes are represented.
+
+`set` adds a missing pair only when the value is free. For a present key, an equal value is an exact
+root-sharing no-op; a distinct free value replaces the old value while retaining the stored key
+representative; an occupied value returns `BiMapConflict::Value` and never displaces its owner.
+Both maps are updated only in local immutable successors, so a panic in hashing, equality, cloning,
+or allocation cannot publish a half-bijection. `try_remove_key` and `try_remove_value` return the
+opposite stored representative in `Option<T>` and a root-sharing receiver on a miss; nested
+`Option` therefore distinguishes a removed `None` from absence.
+
+`inverse` is O(1) and enumerates no pairs: it clones two small map facades and swaps their
+`Arc`-shared roots and hash-builder roles. Rust collections are values, so the observable contract
+is `inverse().inverse().shares_roots_with(source)`, not object-reference identity. The bimap has no
+algebra, transient, builder, or displacing force-put surface, and honestly stores approximately two
+map entries per logical pair.
 
 ## One-way edit sessions
 

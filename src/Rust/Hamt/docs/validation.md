@@ -11,13 +11,22 @@ Run from `src/Rust`:
 .\test.ps1 -Workspace Hamt
 ```
 
+The current serialized Debug and Release gates each pass 91/91 tests plus doc tests with one Cargo
+job and one rusttest thread. The strict bimap suite contributes 8/8 tests. `cargo fmt --all --check`
+passes, and focused Clippy for the library plus `persistent_bi_map` target passes with warnings
+denied after allowing only the crate's pre-existing Rust 1.96 `double_must_use` baseline. An
+all-target Clippy run additionally reaches a pre-existing hash-bag test literal-grouping warning;
+neither baseline warning originates in the bimap tranche. Benchmarks are excluded and remain
+postponed until an isolated run.
+
 The wrapper locates Cargo on `PATH` or under the default rustup profile and applies inherited,
 non-interactive Windows error handling before Cargo starts the test executable.
 
 The crate uses `#![forbid(unsafe_code)]`. HAMT, hash-bag invariant, and Patricia unit tests are inline
 in `Hamt/src/lib.rs`, `Hamt/src/hash_bag.rs`, and `Hamt/src/patricia.rs`; one-descent map factories
 and the hash bag have focused integration suites in `Hamt/tests/map_factory_updates.rs` and
-`Hamt/tests/persistent_hash_bag.rs`; Merkle core/wire and persistence integration tests live in
+`Hamt/tests/persistent_hash_bag.rs`; the strict bimap has its focused suite in
+`Hamt/tests/persistent_bi_map.rs`; Merkle core/wire and persistence integration tests live in
 `Hamt/tests/merkle_core_wire.rs` and `Hamt/tests/merkle_persistence.rs`. Coverage includes:
 
 - persistent snapshot preservation;
@@ -31,6 +40,10 @@ and the hash bag have focused integration suites in `Hamt/tests/map_factory_upda
   saturated removal; max/min/saturated/checked receiver-policy algebra; eager mismatched-policy
   normalization; representative precedence; failure atomicity; and a deterministic 4,096-command
   collision-heavy multiset model;
+- strict bimap key-first two-domain conflicts, independent hash builders, `Eq` representatives,
+  non-displacing replacement, symmetric removal, nested-`Option` presence, root-sharing inversion
+  and clear, a deterministic 2,000-command two-map model, retained snapshots, panic atomicity, and
+  concurrent readers;
 - same-hash collision insertion, lookup, and removal;
 - CHAMP inline-payload/child-run invariants, independent insertion histories, and typed diff,
   including exact callback counters proving same-policy equality/diff rehash no keys and prune a

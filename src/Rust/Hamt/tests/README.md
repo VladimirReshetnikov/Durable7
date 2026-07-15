@@ -9,7 +9,8 @@ HAMT, hash-bag invariant, and Patricia tests live inline in [`../src/lib.rs`](..
 [`../src/hash_bag.rs`](../src/hash_bag.rs), and [`../src/patricia.rs`](../src/patricia.rs).
 One-descent map-factory tests live in
 [`map_factory_updates.rs`](map_factory_updates.rs), hash-bag tests live in
-[`persistent_hash_bag.rs`](persistent_hash_bag.rs), and Merkle core/wire and persistence tests live
+[`persistent_hash_bag.rs`](persistent_hash_bag.rs), bimap tests live in
+[`persistent_bi_map.rs`](persistent_bi_map.rs), and Merkle core/wire and persistence tests live
 in [`merkle_core_wire.rs`](merkle_core_wire.rs) and
 [`merkle_persistence.rs`](merkle_persistence.rs). Run them from `src/Rust`:
 
@@ -26,6 +27,9 @@ Coverage groups:
 - persistent hash-bag construction, checked counts, retained representatives, expanded/distinct/
   entry iteration, saturated removal, receiver-policy algebra and eager normalization, algebra
   failure atomicity, and a deterministic collision-heavy multiset model;
+- persistent bimap strict conflicts, independent hash builders, retained representatives,
+  non-displacing replacement, symmetric removal, presence-safe optional values, O(1) inversion,
+  failure atomicity, retained histories, concurrent readers, and a 2,000-command two-map model;
 - duplicate-key rejection;
 - equal-hash collision buckets and insertion-order-independent collision-key topology comparison;
 - CHAMP hash-prefix routing through the final two-bit level, with deliberately malformed routing,

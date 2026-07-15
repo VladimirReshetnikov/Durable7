@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-#![doc = "Persistent HAMT map/set/bag, Patricia, and canonical Merkle search-tree collections."]
+#![doc = "Persistent HAMT map/set/bag/bimap, Patricia, and canonical Merkle search-tree collections."]
 
 use std::collections::hash_map::RandomState;
 use std::fmt;
@@ -8,11 +8,13 @@ use std::iter::FusedIterator;
 use std::ops::Index;
 use std::sync::Arc;
 
+mod bi_map;
 mod hash_bag;
 mod merkle_encoding;
 mod merkle_persistence;
 mod merkle_search_tree;
 mod patricia;
+pub use bi_map::{BiMapAddResult, BiMapConflict, BiMapRemoveResult, PersistentBiMap};
 pub use hash_bag::{BagIter, HashBagEntry, HashBagError, PersistentHashBag};
 pub use merkle_encoding::{
     Int32MerkleCodec, Int64MerkleCodec, MerkleCodec, MerkleCodecError, MerkleDigest,
