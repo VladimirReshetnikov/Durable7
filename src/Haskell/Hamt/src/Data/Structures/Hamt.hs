@@ -1,5 +1,7 @@
 module Data.Structures.Hamt
   ( HashMap.HashMap
+  , BiMap.BiMap
+  , BiMap.BiMapConflict(..)
   , HashSet.HashSet
   , HashBag.HashBag
   , HashBag.HashBagError(..)
@@ -16,6 +18,7 @@ module Data.Structures.Hamt
 import Data.Structures.Hamt.Hashable
 import Data.Structures.Hamt.Patricia
 import Data.Structures.Hamt.Transient
+import qualified Data.Structures.Hamt.BiMap as BiMap
 import qualified Data.Structures.Hamt.HashBag as HashBag
 import qualified Data.Structures.Hamt.HashMap as HashMap
 import qualified Data.Structures.Hamt.HashSet as HashSet

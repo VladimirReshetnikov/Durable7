@@ -1,8 +1,8 @@
 cabal-version: 3.0
 name: tools-data-structures-hamt
 version: 0.1.0.0
-synopsis: Persistent CHAMP maps, sets, bags, Patricia collections, and Merkle maps
-description: Haskell port of the DataStructures repository HAMT, hash-bag, Patricia, and Merkle search-tree families.
+synopsis: Persistent CHAMP maps, sets, bags, bimaps, Patricia collections, and Merkle maps
+description: Haskell port of the DataStructures repository HAMT, hash-bag, bimap, Patricia, and Merkle search-tree families.
 category: Data
 license: MIT-0
 author: Vladimir Reshetnikov
@@ -12,6 +12,7 @@ build-type: Simple
 library
   exposed-modules:
     Data.Structures.Hamt
+    Data.Structures.Hamt.BiMap
     Data.Structures.Hamt.HashBag
     Data.Structures.Hamt.Hashable
     Data.Structures.Hamt.HashMap
@@ -34,6 +35,7 @@ test-suite hamt-test
   type: exitcode-stdio-1.0
   main-is: Main.hs
   other-modules:
+    BiMapTests
     PersistenceTests
   hs-source-dirs: test
   build-depends:

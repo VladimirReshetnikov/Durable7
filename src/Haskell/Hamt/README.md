@@ -115,6 +115,25 @@ empty bag, and sum with self genuinely doubles multiplicities and may fail with
 `MultiplicityOverflow`. Algebra is intentionally element-wise and makes no structural-combiner or
 performance claim.
 
+## Persistent Bidirectional Map
+
+`Data.Structures.Hamt.BiMap` composes forward `HashMap k v` and inverse `HashMap v k` values into a
+strict immutable bijection. `emptyWith` retains independent `HashPolicy` values for the key and
+value domains. `add` returns `Either BiMapConflict`, while `tryAdd` returns the exact two-root source
+on conflict and gives `KeyConflict` precedence when both classes are occupied. `set` adds a missing
+free pair, retains both representatives for a value-policy-equivalent no-op, replaces a present
+key only when the new value is free, and never displaces another key.
+
+Lookup, stored-representative recovery, deletion, and presence-safe `tryRemove` results are
+symmetric. A `Maybe (Maybe a)` opposite result distinguishes removing a stored `Nothing` from a
+miss. `inverse` is O(1), merely swapping the two immutable map facades; therefore double inversion
+shares both source roots without requiring an object-identity concept for pure values. `clear`
+retains both policies, and `validStructure` verifies both CHAMPs and every cross-direction entry.
+The strict facade fields force both successor map headers before publication, while immutable
+sources remain untouched if hashing, equality, or allocation raises an exception. The bimap
+deliberately has no algebra, transient, builder, or displacing force-put mode and stores roughly
+two map entries per logical pair.
+
 `Data.Structures.Hamt.Transient` adds one-way `MapTransient` and `SetTransient` editing sessions in
 `IO`. Creating a session adopts an immutable source by reference, and `persistMap` / `persistSet`
 publish the current value by reference and consume the session. Clean and logical-no-op sessions
@@ -152,6 +171,12 @@ promotion, and collision-bucket demotion after deletion.
 cd src\Haskell
 .\test.ps1 -Workspace Hamt
 ```
+
+The current serialized GHC 9.12.4 gate passes the complete `hamt-test` suite with one Cabal job and
+`-Werror`. Bimap coverage includes strict conflicts, independent policies, representatives,
+replacement, symmetric nullable removal, O(1) inversion, clear, a 2,000-step two-map model,
+retained snapshots, failure atomicity, and concurrent readers. Benchmarks remain postponed until
+an isolated run.
 
 The local [test README](test/README.md) lists the deterministic coverage areas.
 

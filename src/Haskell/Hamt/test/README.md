@@ -33,6 +33,10 @@ intersection, saturated difference, checked sum, self/empty root identities, eag
 normalization, checked collapsed classes, receiver representative precedence, and first argument-
 order representatives for new classes. A 1,000-operation all-collision model compares every class,
 total, expanded sequence, and invariant at deterministic checkpoints.
+The strict-bimap tier covers key-first two-domain conflicts, independent key/value policies,
+stored representatives, non-displacing replacement, symmetric lookup/removal, a removed
+`Nothing` versus a miss, two-root clear/inversion identity, structural validation, injected hash
+failure atomicity, `forkIO` readers, retained versions, and a 2,000-step two-map model.
 The CHAMP diagnostics additionally validate full hash-prefix routing through terminal shift-30
 fragments and compare collision key sets independently of insertion order under the map's policy.
 The CHAMP algebra tier additionally checks right-valued map union with left key representatives,

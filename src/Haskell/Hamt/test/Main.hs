@@ -38,6 +38,7 @@ import Data.Structures.Hamt.MerkleEncoding
 import qualified Data.Structures.Hamt.MerkleSearchTree as Merkle
 import qualified Data.Structures.Hamt.Patricia as Patricia
 import PersistenceTests (runPersistenceTests)
+import BiMapTests (runBiMapTests)
 
 data CountedValue = CountedValue !(IORef Int) !Int !Int
 
@@ -82,6 +83,7 @@ main = do
   testPersistentHashBag
   testPersistentHashBagAlgebra
   testPersistentHashBagDeterministicModel
+  runBiMapTests
   testSetAlgebra
   testCrossPolicySetRelations
   testTransientSessions
