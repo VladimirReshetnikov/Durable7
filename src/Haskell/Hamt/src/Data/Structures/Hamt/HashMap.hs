@@ -24,6 +24,10 @@ module Data.Structures.Hamt.HashMap
   , actualKey
   , insert
   , insertNew
+  , getOrAdd
+  , getOrAddEither
+  , addOrUpdate
+  , addOrUpdateEither
   , delete
   , tryRemove
   , adjust
@@ -44,6 +48,7 @@ module Data.Structures.Hamt.HashMap
 import Prelude hiding (lookup, null)
 
 import Data.Bits (Bits((.&.), (.|.), complement), popCount, shiftL, shiftR)
+import Data.Functor.Identity (Identity(..))
 import qualified Data.List as List
 import Data.Word (Word32)
 import GHC.Exts (isTrue#, reallyUnsafePtrEquality#)
@@ -78,6 +83,12 @@ data RemoveResult k v
 data AdjustResult k v
   = NotFound
   | Adjusted !(Node k v)
+
+-- Existing hit values stay lazy. Every selected factory result is forced at
+-- its call site before one of these constructors is produced.
+data FactoryUpdateResult k v
+  = FactoryUnchanged v
+  | FactoryChanged !Bool !(Node k v) v
 
 data MapDifference k v
   = EntryAdded k v
@@ -235,6 +246,60 @@ insertNew key value (HashMap hashPolicy count root) =
     Inserted root' -> Just (HashMap hashPolicy (count + 1) root')
     Replaced root' -> Just (HashMap hashPolicy count root')
     Duplicate -> Nothing
+
+-- | Returns the source map and stored value on a hit, or invokes the add
+-- factory exactly once and returns a successor on a miss. The key is hashed
+-- once and exactly one CHAMP route is visited.
+getOrAdd :: k -> (k -> v) -> HashMap k v -> (HashMap k v, v)
+getOrAdd key addFactory mapValue =
+  runIdentity
+    (applyFactoryUpdate unusedValueEquality key (Identity . addFactory) Nothing mapValue)
+  where
+    unusedValueEquality _ _ = error "getOrAdd does not compare stored values"
+
+-- | Fallible 'getOrAdd'. A selected 'Left' publishes no successor; the source
+-- remains available because every intermediate node is immutable.
+getOrAddEither
+  :: k
+  -> (k -> Either e v)
+  -> HashMap k v
+  -> Either e (HashMap k v, v)
+getOrAddEither key addFactory =
+  applyFactoryUpdate unusedValueEquality key addFactory Nothing
+  where
+    unusedValueEquality _ _ = error "getOrAddEither does not compare stored values"
+
+-- | Invokes exactly one of the add or update factories in one hashed CHAMP
+-- descent. The update factory receives the caller key and stored value. A
+-- value equal to the stored value retains the stored value representative and
+-- exact source root.
+addOrUpdate
+  :: Eq v
+  => k
+  -> (k -> v)
+  -> (k -> v -> v)
+  -> HashMap k v
+  -> (HashMap k v, v)
+addOrUpdate key addFactory updateFactory mapValue =
+  runIdentity
+    (applyFactoryUpdate
+      valuesEqual
+      key
+      (Identity . addFactory)
+      (Just (\caller stored -> Identity (updateFactory caller stored)))
+      mapValue)
+
+-- | Fallible 'addOrUpdate'. Only the selected effect is evaluated; a 'Left'
+-- leaves the immutable source untouched and returns no partial successor.
+addOrUpdateEither
+  :: Eq v
+  => k
+  -> (k -> Either e v)
+  -> (k -> v -> Either e v)
+  -> HashMap k v
+  -> Either e (HashMap k v, v)
+addOrUpdateEither key addFactory updateFactory =
+  applyFactoryUpdate valuesEqual key addFactory (Just updateFactory)
 
 delete :: k -> HashMap k v -> HashMap k v
 delete key mapValue =
@@ -738,6 +803,164 @@ insertCollision hashPolicy addOnly key value ((candidate, oldValue) : rest)
         ReplacedEntries entries -> ReplacedEntries ((candidate, oldValue) : entries)
         DuplicateEntry -> DuplicateEntry
 
+applyFactoryUpdate
+  :: Monad f
+  => (v -> v -> Bool)
+  -> k
+  -> (k -> f v)
+  -> Maybe (k -> v -> f v)
+  -> HashMap k v
+  -> f (HashMap k v, v)
+applyFactoryUpdate valueEquality key addFactory updateFactory mapValue@(HashMap hashPolicy count root) =
+  let !hashValue = hashFor hashPolicy key
+   in case root of
+        EmptyNode -> do
+          selected <- addFactory key
+          selected `seq`
+            pure (HashMap hashPolicy (count + 1) (Leaf hashValue key selected), selected)
+        _ -> do
+          result <- factoryUpdateNode
+            valueEquality hashPolicy addFactory updateFactory hashValue key 0 root
+          case result of
+            FactoryUnchanged selected -> pure (mapValue, selected)
+            FactoryChanged added root' selected ->
+              let !count' = count + (if added then 1 else 0)
+               in pure (HashMap hashPolicy count' root', selected)
+
+selectFactoryValue
+  :: Monad f
+  => (v -> v -> Bool)
+  -> k
+  -> v
+  -> Maybe (k -> v -> f v)
+  -> f (Bool, v)
+selectFactoryValue _ _ stored Nothing = pure (False, stored)
+selectFactoryValue valueEquality key stored (Just updateFactory) = do
+  selected <- updateFactory key stored
+  selected `seq`
+    if valueEquality stored selected
+      then pure (False, stored)
+      else pure (True, selected)
+
+factoryUpdateNode
+  :: Monad f
+  => (v -> v -> Bool)
+  -> HashPolicy k
+  -> (k -> f v)
+  -> Maybe (k -> v -> f v)
+  -> Word32
+  -> k
+  -> Int
+  -> Node k v
+  -> f (FactoryUpdateResult k v)
+factoryUpdateNode _ _ addFactory _ hashValue key _ EmptyNode = do
+  selected <- addFactory key
+  selected `seq`
+    pure (FactoryChanged True (Leaf hashValue key selected) selected)
+factoryUpdateNode valueEquality hashPolicy addFactory updateFactory hashValue key shift leaf@(Leaf leafHash leafKey leafValue)
+  | hashValue == leafHash && equalKeys hashPolicy key leafKey = do
+      (changed, selected) <- selectFactoryValue valueEquality key leafValue updateFactory
+      pure $ if changed
+        then FactoryChanged False (Leaf leafHash leafKey selected) selected
+        else FactoryUnchanged selected
+  | otherwise = do
+      selected <- addFactory key
+      selected `seq`
+        pure
+          (FactoryChanged True
+            (mergeTwo shift leafHash leaf hashValue (Leaf hashValue key selected))
+            selected)
+factoryUpdateNode valueEquality hashPolicy addFactory updateFactory hashValue key shift collision@(Collision _ collisionHash entries)
+  | hashValue /= collisionHash = do
+      selected <- addFactory key
+      selected `seq`
+        pure
+          (FactoryChanged True
+            (mergeTwo shift collisionHash collision hashValue (Leaf hashValue key selected))
+            selected)
+  | otherwise =
+      case List.findIndex (equalKeys hashPolicy key . fst) entries of
+        Nothing -> do
+          selected <- addFactory key
+          selected `seq`
+            pure
+              (FactoryChanged True
+                (makeCollision collisionHash (entries ++ [(key, selected)]))
+                selected)
+        Just index -> do
+          let (storedKey, storedValue) = entries !! index
+          (changed, selected) <- selectFactoryValue valueEquality key storedValue updateFactory
+          pure $ if changed
+            then FactoryChanged False
+              (makeCollision collisionHash (replaceAt index (storedKey, selected) entries))
+              selected
+            else FactoryUnchanged selected
+factoryUpdateNode valueEquality hashPolicy addFactory updateFactory hashValue key shift
+                  (Branch _ dataMap nodeMap payloads children)
+  | dataMap .&. bit /= 0 =
+      let dataIndex = childIndex dataMap bit
+          (leafHash, leafKey, leafValue) = payloads !! dataIndex
+       in if hashValue == leafHash && equalKeys hashPolicy key leafKey
+            then do
+              (changed, selected) <- selectFactoryValue valueEquality key leafValue updateFactory
+              pure $ if changed
+                then FactoryChanged False
+                  (makeBranchNode
+                    dataMap
+                    nodeMap
+                    (replaceAt dataIndex (leafHash, leafKey, selected) payloads)
+                    children)
+                  selected
+                else FactoryUnchanged selected
+            else do
+              selected <- addFactory key
+              selected `seq`
+                let child = mergeTwo
+                      (shift + bitsPerLevel)
+                      leafHash
+                      (Leaf leafHash leafKey leafValue)
+                      hashValue
+                      (Leaf hashValue key selected)
+                 in pure
+                      (FactoryChanged True
+                        (makeBranchNode
+                          (dataMap .&. complement bit)
+                          (nodeMap .|. bit)
+                          (removeAt dataIndex payloads)
+                          (insertAt (childIndex nodeMap bit) child children))
+                        selected)
+  | nodeMap .&. bit /= 0 =
+      let nodeIndex = childIndex nodeMap bit
+       in do
+          childResult <- factoryUpdateNode
+            valueEquality
+            hashPolicy
+            addFactory
+            updateFactory
+            hashValue
+            key
+            (shift + bitsPerLevel)
+            (children !! nodeIndex)
+          pure $ case childResult of
+            FactoryUnchanged selected -> FactoryUnchanged selected
+            FactoryChanged added child selected ->
+              FactoryChanged added
+                (makeBranchNode dataMap nodeMap payloads (replaceAt nodeIndex child children))
+                selected
+  | otherwise = do
+      selected <- addFactory key
+      selected `seq`
+        pure
+          (FactoryChanged True
+            (makeBranchNode
+              (dataMap .|. bit)
+              nodeMap
+              (insertAt (childIndex dataMap bit) (hashValue, key, selected) payloads)
+              children)
+            selected)
+  where
+    bit = bitFor hashValue shift
+
 removeNode :: HashPolicy k -> Word32 -> k -> Int -> Node k v -> RemoveResult k v
 removeNode _ _ _ _ EmptyNode = Missing
 removeNode hashPolicy hashValue key _ (Leaf leafHash leafKey value)
@@ -842,6 +1065,7 @@ entriesToNode hashValue entries = makeCollision hashValue entries
 
 mergeTwo :: Int -> Word32 -> Node k v -> Word32 -> Node k v -> Node k v
 mergeTwo shift leftHash leftNode rightHash rightNode
+  | leftHash == rightHash = makeCollision leftHash (nodeEntries leftNode ++ nodeEntries rightNode)
   | shift >= hashBits = makeCollision leftHash (nodeEntries leftNode ++ nodeEntries rightNode)
   | leftBit == rightBit = makeBranchNode 0 leftBit [] [mergeTwo (shift + bitsPerLevel) leftHash leftNode rightHash rightNode]
   | otherwise = makeBranch leftBit leftNode rightBit rightNode

@@ -1,6 +1,8 @@
 module Data.Structures.Hamt
   ( HashMap.HashMap
   , HashSet.HashSet
+  , HashBag.HashBag
+  , HashBag.HashBagError(..)
   , HashMap.HashPolicy(..)
   , HashMap.defaultPolicy
   , module Data.Structures.Hamt.Hashable
@@ -14,5 +16,6 @@ module Data.Structures.Hamt
 import Data.Structures.Hamt.Hashable
 import Data.Structures.Hamt.Patricia
 import Data.Structures.Hamt.Transient
+import qualified Data.Structures.Hamt.HashBag as HashBag
 import qualified Data.Structures.Hamt.HashMap as HashMap
 import qualified Data.Structures.Hamt.HashSet as HashSet

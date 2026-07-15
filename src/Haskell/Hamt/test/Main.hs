@@ -12,10 +12,12 @@ import Data.Char (toLower)
 import Data.Int (Int32, Int64)
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef, writeIORef)
 import Data.List (sort)
+import Data.Maybe (listToMaybe)
 import Data.Word (Word8)
 import System.IO.Unsafe (unsafePerformIO)
 
 import Data.Structures.Hamt.Hashable (hash)
+import qualified Data.Structures.Hamt.HashBag as HashBag
 import Data.Structures.Hamt.HashMap (HashPolicy(..))
 import qualified Data.Structures.Hamt.HashMap as HashMap
 import qualified Data.Structures.Hamt.HashSet as HashSet
@@ -51,6 +53,17 @@ countedValuesEqual (CountedValue calls left _) (CountedValue _ right _) = unsafe
   pure (left == right)
 {-# NOINLINE countedValuesEqual #-}
 
+instrumentHash :: IORef Int -> (k -> Int) -> k -> Int
+instrumentHash calls hashFunction key = unsafePerformIO $ do
+  atomicModifyIORef' calls (\count -> (count + 1, ()))
+  pure (hashFunction key)
+{-# NOINLINE instrumentHash #-}
+
+data ExplosiveValue = ExplosiveValue !Int
+
+instance Eq ExplosiveValue where
+  _ == _ = error "intentional value-equality failure"
+
 main :: IO ()
 main = do
   testMapBasics
@@ -65,6 +78,10 @@ main = do
   testPatriciaMapsAndSets
   testActualKeyPreservation
   testAdjustAndStrictMapping
+  testPersistentMapFactories
+  testPersistentHashBag
+  testPersistentHashBagAlgebra
+  testPersistentHashBagDeterministicModel
   testSetAlgebra
   testCrossPolicySetRelations
   testTransientSessions
@@ -346,6 +363,508 @@ testAdjustAndStrictMapping = do
   assertEqual "absent adjust preserves contents" (sort (HashMap.toList adjusted)) (sort (HashMap.toList absent))
   strictResult <- try (evaluate (HashMap.mapValues (\_ -> error "mapped value stayed lazy") values)) :: IO (Either SomeException (HashMap.HashMap String Int))
   assertBool "mapValues forces mapped results to WHNF" (isLeft strictResult)
+
+testPersistentMapFactories :: IO ()
+testPersistentMapFactories = do
+  hashCalls <- newIORef (0 :: Int)
+  equalityCalls <- newIORef (0 :: Int)
+  addCalls <- newIORef (0 :: Int)
+  updateCalls <- newIORef (0 :: Int)
+  let countedHash key = unsafePerformIO $ do
+        atomicModifyIORef' hashCalls (\count -> (count + 1, ()))
+        pure (hash key)
+      countedEquality left right = unsafePerformIO $ do
+        atomicModifyIORef' equalityCalls (\count -> (count + 1, ()))
+        pure (left == right)
+      countedAdd key = unsafePerformIO $
+        atomicModifyIORef' addCalls (\count -> (count + 1, key * 10))
+      countedUpdate caller stored = unsafePerformIO $ do
+        atomicModifyIORef' updateCalls (\count -> (count + 1, ()))
+        pure (if caller == (7 :: Int) then stored + 1 else error "wrong caller key")
+      countedPolicy = HashPolicy countedHash countedEquality
+      source = HashMap.singletonWith countedPolicy (7 :: Int) 70
+
+  _ <- evaluate (HashMap.size source)
+  mapM_ (`writeIORef` 0) [hashCalls, equalityCalls, addCalls, updateCalls]
+  (hitMap, hitValue) <- evaluate (HashMap.getOrAdd 7 countedAdd source)
+  assertBool "getOrAdd hit preserves the exact root" (HashMap.sharesRootWith source hitMap)
+  assertEqual "getOrAdd hit returns the stored value" 70 hitValue
+  assertEqual "getOrAdd hit skips the add factory" 0 =<< readIORef addCalls
+  assertEqual "getOrAdd hit hashes exactly once" 1 =<< readIORef hashCalls
+  assertEqual "getOrAdd hit compares one leaf" 1 =<< readIORef equalityCalls
+
+  let functionSource = HashMap.singleton (1 :: Int) ((+ 1) :: Int -> Int)
+  (functionHit, selectedFunction) <- evaluate
+    (HashMap.getOrAdd 1 (const ((* 2) :: Int -> Int)) functionSource)
+  assertBool "getOrAdd remains unconstrained by value Eq"
+    (HashMap.sharesRootWith functionSource functionHit)
+  assertEqual "unconstrained getOrAdd returns stored function" 3 (selectedFunction 2)
+
+  let lazyStoredSource = HashMap.singleton
+        (1 :: Int)
+        (error "stored hit value was forced" :: Int)
+  writeIORef addCalls 0
+  lazyHit <- try
+    (evaluate (HashMap.getOrAdd 1 countedAdd lazyStoredSource)) ::
+    IO (Either SomeException (HashMap.HashMap Int Int, Int))
+  case lazyHit of
+    Left problem -> fail ("getOrAdd hit forced an unselected value: " ++ show problem)
+    Right (lazyHitMap, _) -> do
+      assertEqual "lazy stored hit preserves cardinality" 1 (HashMap.size lazyHitMap)
+      assertBool "lazy stored hit preserves the exact root"
+        (HashMap.sharesRootWith lazyStoredSource lazyHitMap)
+      assertEqual "lazy stored hit skips the add factory" 0 =<< readIORef addCalls
+
+  mapM_ (`writeIORef` 0) [hashCalls, equalityCalls, addCalls, updateCalls]
+  (missMap, missValue) <- evaluate (HashMap.getOrAdd 8 countedAdd source)
+  assertEqual "getOrAdd miss returns its selected value" 80 missValue
+  assertEqual "getOrAdd miss invokes its factory once" 1 =<< readIORef addCalls
+  assertEqual "getOrAdd miss hashes exactly once" 1 =<< readIORef hashCalls
+  assertEqual "getOrAdd miss publishes the selected value" (Just 80) (HashMap.lookup 8 missMap)
+
+  mapM_ (`writeIORef` 0) [hashCalls, equalityCalls, addCalls, updateCalls]
+  (updatedMap, updatedValue) <- evaluate
+    (HashMap.addOrUpdate 7 countedAdd countedUpdate source)
+  assertEqual "addOrUpdate hit returns its update" 71 updatedValue
+  assertEqual "addOrUpdate hit skips add" 0 =<< readIORef addCalls
+  assertEqual "addOrUpdate hit invokes update once" 1 =<< readIORef updateCalls
+  assertEqual "addOrUpdate hit hashes exactly once" 1 =<< readIORef hashCalls
+  assertEqual "addOrUpdate hit publishes its update" (Just 71) (HashMap.lookup 7 updatedMap)
+
+  mapM_ (`writeIORef` 0) [hashCalls, equalityCalls, addCalls, updateCalls]
+  (addedMap, addedValue) <- evaluate
+    (HashMap.addOrUpdate 9 countedAdd countedUpdate source)
+  assertEqual "addOrUpdate miss returns its add value" 90 addedValue
+  assertEqual "addOrUpdate miss invokes add once" 1 =<< readIORef addCalls
+  assertEqual "addOrUpdate miss skips update" 0 =<< readIORef updateCalls
+  assertEqual "addOrUpdate miss hashes exactly once" 1 =<< readIORef hashCalls
+  assertEqual "addOrUpdate miss publishes its value" (Just 90) (HashMap.lookup 9 addedMap)
+
+  collisionHashes <- newIORef (0 :: Int)
+  collisionEqualities <- newIORef (0 :: Int)
+  let collisionPolicy = HashPolicy
+        (instrumentHash collisionHashes (const 0))
+        (\left right -> unsafePerformIO $ do
+          atomicModifyIORef' collisionEqualities (\count -> (count + 1, ()))
+          pure (left == right))
+      collisionSource :: HashMap.HashMap Int Int
+      collisionSource = HashMap.fromListWith collisionPolicy
+        [(1, 10), (2, 20), (3, 30)]
+  _ <- evaluate (HashMap.size collisionSource)
+  assertBool "collision factory source starts canonical"
+    (HashMap.validStructure collisionSource)
+  writeIORef collisionHashes 0
+  writeIORef collisionEqualities 0
+  (collisionUpdated, collisionValue) <- evaluate
+    (HashMap.addOrUpdate 3 (const (-1)) (\_ stored -> stored + 1) collisionSource)
+  assertEqual "collision factory hit updates the selected entry" 31 collisionValue
+  assertEqual "collision factory hit preserves cached size" 3
+    (HashMap.size collisionUpdated)
+  assertEqual "collision factory hit preserves enumeration cardinality" 3
+    (length (HashMap.toList collisionUpdated))
+  assertEqual "collision factory hit hashes once" 1 =<< readIORef collisionHashes
+  assertEqual "collision factory hit scans its bucket once" 3 =<< readIORef collisionEqualities
+  assertBool "collision factory hit preserves topology"
+    (HashMap.sameTopology collisionSource collisionUpdated)
+  assertBool "collision factory hit remains canonical"
+    (HashMap.validStructure collisionUpdated)
+  writeIORef collisionHashes 0
+  writeIORef collisionEqualities 0
+  (collisionAdded, collisionMissValue) <- evaluate
+    (HashMap.getOrAdd 4 (const 40) collisionSource)
+  assertEqual "collision factory miss adds its value" 40 collisionMissValue
+  assertBool "collision factory miss remains canonical"
+    (HashMap.validStructure collisionAdded)
+  assertEqual "collision factory miss hashes once" 1 =<< readIORef collisionHashes
+  assertEqual "collision factory miss scans its bucket once" 3 =<< readIORef collisionEqualities
+
+  bitmapHashes <- newIORef (0 :: Int)
+  bitmapEqualities <- newIORef (0 :: Int)
+  let tableHash key = case key of
+        1 -> 0
+        2 -> 32
+        3 -> 1
+        4 -> 64
+        _ -> key
+      bitmapPolicy = HashPolicy
+        (\key -> unsafePerformIO $ do
+          atomicModifyIORef' bitmapHashes (\count -> (count + 1, ()))
+          pure (tableHash key))
+        (\left right -> unsafePerformIO $ do
+          atomicModifyIORef' bitmapEqualities (\count -> (count + 1, ()))
+          pure (left == right))
+      bitmapSource :: HashMap.HashMap Int Int
+      bitmapSource = HashMap.fromListWith bitmapPolicy
+        [(1, 10), (2, 20), (3, 30)]
+  _ <- evaluate (HashMap.size bitmapSource)
+  writeIORef bitmapHashes 0
+  writeIORef bitmapEqualities 0
+  (bitmapHit, bitmapValue) <- evaluate
+    (HashMap.getOrAdd 2 (\_ -> error "bitmap hit selected add") bitmapSource)
+  assertBool "bitmap child hit preserves the exact root"
+    (HashMap.sharesRootWith bitmapSource bitmapHit)
+  assertEqual "bitmap child hit returns stored value" 20 bitmapValue
+  assertEqual "bitmap child hit hashes once" 1 =<< readIORef bitmapHashes
+  assertEqual "bitmap child hit compares one payload" 1 =<< readIORef bitmapEqualities
+
+  writeIORef bitmapHashes 0
+  writeIORef bitmapEqualities 0
+  (_, inlineValue) <- evaluate
+    (HashMap.addOrUpdate 3
+      (\_ -> error "bitmap inline hit selected add")
+      (\_ stored -> stored + 1)
+      bitmapSource)
+  assertEqual "bitmap inline payload updates in one route" 31 inlineValue
+  assertEqual "bitmap inline hit hashes once" 1 =<< readIORef bitmapHashes
+  assertEqual "bitmap inline hit compares one payload" 1 =<< readIORef bitmapEqualities
+
+  writeIORef bitmapHashes 0
+  writeIORef bitmapEqualities 0
+  (_, bitmapMissValue) <- evaluate
+    (HashMap.getOrAdd 4 (const 40) bitmapSource)
+  assertEqual "bitmap child miss adds its value" 40 bitmapMissValue
+  assertEqual "bitmap child miss hashes once" 1 =<< readIORef bitmapHashes
+  assertEqual "bitmap child miss compares no unrelated payload" 0 =<< readIORef bitmapEqualities
+
+  case HashMap.addOrUpdateEither 7
+        (\_ -> Left "unselected add")
+        (\_ stored -> Right (stored + 2))
+        source of
+    Right (_, selected) -> assertEqual "fallible hit selects only update" 72 selected
+    Left problem -> fail problem
+  case HashMap.getOrAddEither 99 (\_ -> Left "selected add failed") source of
+    Left problem -> assertEqual "fallible selected factory propagates" "selected add failed" problem
+    Right _ -> fail "fallible selected factory unexpectedly published a map"
+  case HashMap.addOrUpdateEither 7
+        (\_ -> Right 0)
+        (\_ _ -> Left "selected update failed")
+        source of
+    Left problem -> assertEqual "fallible selected update propagates" "selected update failed" problem
+    Right _ -> fail "fallible selected update unexpectedly published a map"
+  assertEqual "fallible failure leaves source usable" (Just 70) (HashMap.lookup 7 source)
+
+  pureFactoryFailure <- try
+    (evaluate (HashMap.getOrAdd 99 (\_ -> error "selected pure factory failed") source)) ::
+    IO (Either SomeException (HashMap.HashMap Int Int, Int))
+  assertBool "pure selected factory failure exposes no successor" (isLeft pureFactoryFailure)
+  let hashFailurePolicy :: HashPolicy Int
+      hashFailurePolicy = HashPolicy
+        (\_ -> error "intentional hash failure")
+        (==)
+      hashFailureSource = HashMap.emptyWith hashFailurePolicy
+  hashFailure <- try
+    (evaluate (HashMap.getOrAdd 1 (const (10 :: Int)) hashFailureSource)) ::
+    IO (Either SomeException (HashMap.HashMap Int Int, Int))
+  assertBool "hash failure exposes no successor" (isLeft hashFailure)
+  let equalityFailurePolicy :: HashPolicy Int
+      equalityFailurePolicy = HashPolicy
+        (const 0)
+        (\_ _ -> error "intentional key-equality failure")
+      equalityFailureSource = HashMap.singletonWith equalityFailurePolicy 1 (10 :: Int)
+  keyEqualityFailure <- try
+    (evaluate (HashMap.addOrUpdate 1 (const 0) (\_ stored -> stored + 1) equalityFailureSource)) ::
+    IO (Either SomeException (HashMap.HashMap Int Int, Int))
+  assertBool "key-equality failure exposes no successor" (isLeft keyEqualityFailure)
+  assertEqual "callback failures leave source cardinality" 1 (HashMap.size source)
+
+  valueEqualityCalls <- newIORef (0 :: Int)
+  let representativePolicy = HashPolicy (hash . fst) (\left right -> fst left == fst right)
+      storedKey = ("alpha", 1 :: Int)
+      lookupKey = ("alpha", 2 :: Int)
+      storedValue = CountedValue valueEqualityCalls 10 1
+      equalCandidate = CountedValue valueEqualityCalls 10 2
+      representativeSource = HashMap.singletonWith representativePolicy storedKey storedValue
+      updateRepresentative caller stored =
+        case (caller, stored) of
+          (("alpha", 2), CountedValue _ 10 1) -> equalCandidate
+          _ -> error "update factory did not receive caller key and stored value"
+  (equalMap, selectedRepresentative) <- evaluate
+    (HashMap.addOrUpdate lookupKey
+      (\_ -> CountedValue valueEqualityCalls 0 0)
+      updateRepresentative
+      representativeSource)
+  assertBool "equal update preserves the exact source root"
+    (HashMap.sharesRootWith representativeSource equalMap)
+  assertEqual "equal update retains stored key representative"
+    (Just storedKey) (HashMap.actualKey lookupKey equalMap)
+  case selectedRepresentative of
+    CountedValue _ value identity -> do
+      assertEqual "equal update returns stored value" 10 value
+      assertEqual "equal update returns stored value representative" 1 identity
+  assertEqual "equal update performs one value comparison" 1 =<< readIORef valueEqualityCalls
+
+  let explosiveStored = ExplosiveValue 1
+  _ <- evaluate explosiveStored
+  let explosiveSource = HashMap.singleton (1 :: Int) explosiveStored
+  (sameReferenceMap, _) <- evaluate
+    (HashMap.addOrUpdate 1 (const (ExplosiveValue 0)) (\_ _ -> explosiveStored) explosiveSource)
+  assertBool "same-reference update bypasses value equality"
+    (HashMap.sharesRootWith explosiveSource sameReferenceMap)
+  equalityFailure <- try
+    (evaluate
+      (HashMap.addOrUpdate
+        1
+        (const (ExplosiveValue 0))
+        (\_ _ -> ExplosiveValue 2)
+        explosiveSource)) ::
+    IO (Either SomeException (HashMap.HashMap Int ExplosiveValue, ExplosiveValue))
+  assertBool "value-equality failure exposes no successor" (isLeft equalityFailure)
+  assertEqual "value-equality failure leaves source cardinality" 1
+    (HashMap.size explosiveSource)
+
+  let nullableSource = HashMap.singleton (1 :: Int) (Nothing :: Maybe Int)
+  (nullableMap, nullableValue) <- evaluate
+    (HashMap.getOrAdd 1 (const (Just 2)) nullableSource)
+  assertBool "present Nothing is a getOrAdd hit"
+    (HashMap.sharesRootWith nullableSource nullableMap)
+  assertEqual "present Nothing remains distinguishable from absence" Nothing nullableValue
+
+testPersistentHashBag :: IO ()
+testPersistentHashBag = do
+  let representativePolicy = HashPolicy
+        (hash . map toLower . fst)
+        (\left right -> map toLower (fst left) == map toLower (fst right))
+      alpha = ("Alpha", 1 :: Int)
+      equalAlpha = ("alpha", 2 :: Int)
+      beta = ("Beta", 3 :: Int)
+  bag <- expectRight "construct representative hash bag"
+    (HashBag.fromListWith representativePolicy [alpha, equalAlpha, beta])
+  assertEqual "hash bag distinct count" 2 (HashBag.distinctCount bag)
+  assertEqual "hash bag expanded total" 3 (HashBag.totalCount bag)
+  assertEqual "hash bag multiplicity uses its policy" 2 (HashBag.countOf equalAlpha bag)
+  assertEqual "hash bag retains first representative" (Just alpha) (HashBag.actualValue equalAlpha bag)
+  assertEqual "distinct and entry views have identical order"
+    (HashBag.distinctItems bag) (map fst (HashBag.entries bag))
+  assertEqual "expanded enumeration size" 3 (length (HashBag.toList bag))
+  assertEqual "expanded enumeration repeats retained representative"
+    2 (length (filter (== alpha) (HashBag.toList bag)))
+  assertBool "constructed hash bag satisfies invariants" (HashBag.validStructure bag)
+
+  hashCalls <- newIORef (0 :: Int)
+  let countedPolicy = HashPolicy
+        (\key -> unsafePerformIO $ do
+          atomicModifyIORef' hashCalls (\count -> (count + 1, ()))
+          pure (hash key))
+        (==)
+  counted <- expectRight "construct counted bag"
+    (HashBag.addCopies (1 :: Int) 3 (HashBag.emptyWith countedPolicy))
+  writeIORef hashCalls 0
+  assertBool "negative copies are rejected" $
+    case HashBag.addCopies 1 (-1) counted of
+      Left (HashBag.NegativeCopies copies) -> copies == -1
+      _ -> False
+  assertEqual "negative copies are rejected before hashing" 0 =<< readIORef hashCalls
+  zero <- expectRight "zero-copy addition" (HashBag.addCopies 1 0 counted)
+  assertBool "zero-copy addition preserves the root" (HashBag.sharesRootWith counted zero)
+  assertBool "negative removal is rejected" $
+    case HashBag.removeCopies 1 (-1) counted of
+      Left (HashBag.NegativeCopies copies) -> copies == -1
+      _ -> False
+  zeroRemoval <- expectRight "zero-copy removal" (HashBag.removeCopies 1 0 counted)
+  assertBool "zero-copy removal preserves the root"
+    (HashBag.sharesRootWith counted zeroRemoval)
+  assertEqual "zero-copy addition avoids hashing" 0 =<< readIORef hashCalls
+  positive <- expectRight "positive one-descent bag addition" (HashBag.addCopies 1 2 counted)
+  assertEqual "positive bag addition hashes once" 1 =<< readIORef hashCalls
+  assertEqual "positive bag addition updates multiplicity" 5 (HashBag.countOf 1 positive)
+
+  partial <- expectRight "partial hash-bag removal" (HashBag.removeCopies 1 2 counted)
+  assertEqual "partial removal retains class" 1 (HashBag.countOf 1 partial)
+  saturated <- expectRight "saturated hash-bag removal"
+    (HashBag.removeCopies 1 maxBound partial)
+  assertBool "saturated removal deletes the class" (HashBag.null saturated)
+  assertEqual "saturated removal updates total" 0 (HashBag.totalCount saturated)
+
+  maximumBag <- expectRight "construct maximum multiplicity"
+    (HashBag.addCopies (7 :: Int) maxBound HashBag.empty)
+  assertBool "per-class overflow is checked" $
+    case HashBag.add 7 maximumBag of
+      Left HashBag.MultiplicityOverflow -> True
+      _ -> False
+  assertEqual "overflow retains source multiplicity" maxBound (HashBag.countOf 7 maximumBag)
+  assertEqual "overflow retains source total"
+    (fromIntegral (maxBound :: Int32)) (HashBag.totalCount maximumBag)
+
+  nullable <- expectRight "construct nullable hash bag"
+    (HashBag.fromList [Nothing, Nothing, Just ("value" :: String)])
+  assertBool "hash bag supports Nothing representatives" (HashBag.member Nothing nullable)
+  assertEqual "Nothing multiplicity" 2 (HashBag.countOf Nothing nullable)
+  assertEqual "Nothing representative" (Just Nothing) (HashBag.actualValue Nothing nullable)
+
+testPersistentHashBagAlgebra :: IO ()
+testPersistentHashBagAlgebra = do
+  let collisionPolicy = HashPolicy (const 0) (==)
+  leftOne <- expectRight "left bag first class"
+    (HashBag.addCopies (1 :: Int) 2 (HashBag.emptyWith collisionPolicy))
+  left <- expectRight "left bag second class" (HashBag.add 2 leftOne)
+  rightOne <- expectRight "right bag first class"
+    (HashBag.add (1 :: Int) (HashBag.emptyWith collisionPolicy))
+  rightTwo <- expectRight "right bag second class" (HashBag.addCopies 2 3 rightOne)
+  right <- expectRight "right bag third class" (HashBag.add 3 rightTwo)
+
+  united <- expectRight "hash-bag union" (HashBag.union left right)
+  intersected <- expectRight "hash-bag intersection" (HashBag.intersection left right)
+  excepted <- expectRight "hash-bag difference" (HashBag.difference left right)
+  added <- expectRight "hash-bag sum" (HashBag.sum left right)
+  assertEqual "union uses maximum multiplicities" [2, 3, 1]
+    [HashBag.countOf key united | key <- [1, 2, 3]]
+  assertEqual "intersection uses minimum multiplicities" [1, 1, 0]
+    [HashBag.countOf key intersected | key <- [1, 2, 3]]
+  assertEqual "difference uses saturating subtraction" [1, 0, 0]
+    [HashBag.countOf key excepted | key <- [1, 2, 3]]
+  assertEqual "sum uses checked addition" [3, 4, 1]
+    [HashBag.countOf key added | key <- [1, 2, 3]]
+  assertEqual "union total" 6 (HashBag.totalCount united)
+  assertEqual "intersection total" 2 (HashBag.totalCount intersected)
+  assertEqual "difference total" 1 (HashBag.totalCount excepted)
+  assertEqual "sum total" 8 (HashBag.totalCount added)
+  assertBool "union preserves invariants" (HashBag.validStructure united)
+  assertBool "intersection preserves invariants" (HashBag.validStructure intersected)
+  assertBool "difference preserves invariants" (HashBag.validStructure excepted)
+  assertBool "sum preserves invariants" (HashBag.validStructure added)
+
+  selfUnion <- expectRight "self union" (HashBag.union left left)
+  selfIntersection <- expectRight "self intersection" (HashBag.intersection left left)
+  selfDifference <- expectRight "self difference" (HashBag.difference left left)
+  selfSum <- expectRight "self sum" (HashBag.sum left left)
+  assertBool "self union shares receiver root" (HashBag.sharesRootWith left selfUnion)
+  assertBool "self intersection shares receiver root" (HashBag.sharesRootWith left selfIntersection)
+  assertBool "self difference is empty" (HashBag.null selfDifference)
+  assertEqual "self sum genuinely doubles multiplicities" [4, 2]
+    [HashBag.countOf key selfSum | key <- [1, 2]]
+  let emptyArgument = HashBag.emptyWith collisionPolicy
+  emptyUnion <- expectRight "union with empty" (HashBag.union left emptyArgument)
+  emptySum <- expectRight "sum with empty" (HashBag.sum left emptyArgument)
+  assertBool "union with empty shares receiver root" (HashBag.sharesRootWith left emptyUnion)
+  assertBool "sum with empty shares receiver root" (HashBag.sharesRootWith left emptySum)
+  maximumSelf <- expectRight "construct self-sum overflow bag"
+    (HashBag.addCopies (99 :: Int) maxBound emptyArgument)
+  assertBool "self sum checks multiplicity overflow" $
+    case HashBag.sum maximumSelf maximumSelf of
+      Left HashBag.MultiplicityOverflow -> True
+      _ -> False
+
+  let receiverPolicy = HashPolicy
+        (hash . fst)
+        (\candidateLeft candidateRight -> fst candidateLeft == fst candidateRight)
+      argumentPolicy = HashPolicy hash (==)
+      receiverAlpha = ("alpha", 0 :: Int)
+      argumentAlphaOne = ("alpha", 1 :: Int)
+      argumentAlphaTwo = ("alpha", 2 :: Int)
+      argumentBetaOne = ("beta", 3 :: Int)
+      argumentBetaTwo = ("beta", 4 :: Int)
+  receiver <- expectRight "construct receiver-policy bag"
+    (HashBag.addCopies receiverAlpha 2 (HashBag.emptyWith receiverPolicy))
+  argument0 <- expectRight "construct strict alpha one"
+    (HashBag.add argumentAlphaOne (HashBag.emptyWith argumentPolicy))
+  argument1 <- expectRight "construct strict alpha two"
+    (HashBag.addCopies argumentAlphaTwo 2 argument0)
+  argument2 <- expectRight "construct strict beta one" (HashBag.add argumentBetaOne argument1)
+  argument <- expectRight "construct strict beta two" (HashBag.add argumentBetaTwo argument2)
+  let firstArgumentBeta = case listToMaybe
+        [item | item <- HashBag.distinctItems argument, fst item == "beta"] of
+        Just item -> item
+        Nothing -> error "expected a beta representative in the normalized argument"
+  normalizedUnion <- expectRight "receiver-policy normalized union"
+    (HashBag.union receiver argument)
+  assertEqual "normalization sums collapsed alpha class" 3
+    (HashBag.countOf receiverAlpha normalizedUnion)
+  assertEqual "normalization sums collapsed beta class" 2
+    (HashBag.countOf argumentBetaOne normalizedUnion)
+  assertEqual "receiver representative wins surviving class"
+    (Just receiverAlpha) (HashBag.actualValue argumentAlphaOne normalizedUnion)
+  assertEqual "first argument-order representative wins absent class"
+    (Just firstArgumentBeta) (HashBag.actualValue argumentBetaOne normalizedUnion)
+  normalizedIntersection <- expectRight "receiver-policy normalized intersection"
+    (HashBag.intersection receiver argument)
+  normalizedDifference <- expectRight "receiver-policy normalized difference"
+    (HashBag.difference receiver argument)
+  normalizedSum <- expectRight "receiver-policy normalized sum"
+    (HashBag.sum receiver argument)
+  assertBool "normalized logical no-op intersection shares receiver root"
+    (HashBag.sharesRootWith receiver normalizedIntersection)
+  assertBool "normalized difference saturates the receiver class"
+    (HashBag.null normalizedDifference)
+  assertEqual "normalized sum adds collapsed alpha counts" 5
+    (HashBag.countOf receiverAlpha normalizedSum)
+  assertEqual "normalized sum introduces collapsed beta counts" 2
+    (HashBag.countOf argumentBetaOne normalizedSum)
+  assertEqual "normalized sum retains receiver representative"
+    (Just receiverAlpha) (HashBag.actualValue argumentAlphaOne normalizedSum)
+
+  overflow0 <- expectRight "construct normalization maximum"
+    (HashBag.addCopies argumentAlphaOne maxBound (HashBag.emptyWith argumentPolicy))
+  overflowArgument <- expectRight "construct normalization overflow argument"
+    (HashBag.add argumentAlphaTwo overflow0)
+  let emptyReceiver = HashBag.emptyWith receiverPolicy
+  assertBool "mismatched-policy normalization is eager and checked" $
+    case HashBag.intersection emptyReceiver overflowArgument of
+      Left HashBag.MultiplicityOverflow -> True
+      _ -> False
+  assertEqual "normalization failure leaves receiver unchanged" 0
+    (HashBag.totalCount emptyReceiver)
+  assertEqual "normalization failure leaves argument unchanged"
+    (fromIntegral (maxBound :: Int32) + 1) (HashBag.totalCount overflowArgument)
+
+testPersistentHashBagDeterministicModel :: IO ()
+testPersistentHashBagDeterministicModel =
+  go 0 0x5eedba9 (HashBag.emptyWith (HashPolicy (const 0) (==))) []
+  where
+    go operation seed bagValue model
+      | operation == (1000 :: Int) = validate operation bagValue model
+      | otherwise = do
+          let seed' = (seed * 1103515245 + 12345) .&. 0x7fffffff :: Int64
+              item = fromIntegral (seed' `mod` 24) :: Int
+              copies = fromIntegral (1 + (seed' `div` 24) `mod` 4) :: Int32
+              command = fromIntegral ((seed' `div` 97) `mod` 4) :: Int
+          (nextBag, nextModel) <- case command of
+            0 -> do
+              updated <- expectRight "model addCopies" (HashBag.addCopies item copies bagValue)
+              pure (updated, modelAdd item copies model)
+            1 -> do
+              updated <- expectRight "model removeCopies" (HashBag.removeCopies item copies bagValue)
+              pure (updated, modelRemove item copies model)
+            2 -> pure (HashBag.removeAll item bagValue, modelRemoveAll item model)
+            _ -> do
+              updated <- expectRight "model add" (HashBag.add item bagValue)
+              pure (updated, modelAdd item 1 model)
+          if operation `mod` 37 == 0
+            then validate operation nextBag nextModel
+            else pure ()
+          go (operation + 1) seed' nextBag nextModel
+
+    validate operation bagValue model = do
+      let orderedModel = sort model
+          expectedTotal = Prelude.sum [fromIntegral count | (_, count) <- model]
+          expectedExpanded = concatMap
+            (\(item, copies) -> replicate (fromIntegral copies) item)
+            orderedModel
+      assertEqual ("model distinct count at " ++ show operation)
+        (length model) (HashBag.distinctCount bagValue)
+      assertEqual ("model total at " ++ show operation)
+        expectedTotal (HashBag.totalCount bagValue)
+      assertEqual ("model entries at " ++ show operation)
+        orderedModel (sort (HashBag.entries bagValue))
+      assertEqual ("model expanded values at " ++ show operation)
+        expectedExpanded (sort (HashBag.toList bagValue))
+      assertBool ("model invariants at " ++ show operation)
+        (HashBag.validStructure bagValue)
+
+modelAdd :: Int -> Int32 -> [(Int, Int32)] -> [(Int, Int32)]
+modelAdd item copies [] = [(item, copies)]
+modelAdd item copies ((candidate, count) : rest)
+  | item == candidate = (candidate, count + copies) : rest
+  | otherwise = (candidate, count) : modelAdd item copies rest
+
+modelRemove :: Int -> Int32 -> [(Int, Int32)] -> [(Int, Int32)]
+modelRemove _ _ [] = []
+modelRemove item copies ((candidate, count) : rest)
+  | item /= candidate = (candidate, count) : modelRemove item copies rest
+  | count > copies = (candidate, count - copies) : rest
+  | otherwise = rest
+
+modelRemoveAll :: Int -> [(Int, Int32)] -> [(Int, Int32)]
+modelRemoveAll item = filter ((/= item) . fst)
 
 testSetAlgebra :: IO ()
 testSetAlgebra = do

@@ -18,6 +18,21 @@ canonicalization, receiver-policy set relations, one-pass adjustment behavior, s
 independent-history CHAMP equality, typed diff classification, partially shared same-policy
 lockstep equality/diff callback ceilings, semantic fallback across compatible policies with
 different hash functions, and 100,000-entry bulk construction.
+The persistent factory tier checks exact one-hash and selected-callback counts for hits and misses,
+leaf, collision, inline-bitmap, and child-bitmap routes; caller-key delivery; stored key/value
+representative retention; equal-value root identity; a non-strict bottom-valued stored hit; present
+`Nothing`; and `Either`-reported add or update failures with no successor. Injected hash,
+key-equality, pure-factory, and value-equality
+exceptions likewise leave every source version intact. These are operation-count tests rather than
+elapsed-time measurements.
+The hash-bag tier covers first-representative construction, explicit `Int` distinct and `Int64`
+expanded counts, positive checked `Int32` multiplicities, negative/zero pre-hash behavior,
+one-descent addition, saturated removal, nullable-style `Maybe` representatives, expanded/distinct/
+entry traversal, and internal CHAMP/count invariants. Its algebra tables pin maximum union, minimum
+intersection, saturated difference, checked sum, self/empty root identities, eager receiver-policy
+normalization, checked collapsed classes, receiver representative precedence, and first argument-
+order representatives for new classes. A 1,000-operation all-collision model compares every class,
+total, expanded sequence, and invariant at deterministic checkpoints.
 The CHAMP diagnostics additionally validate full hash-prefix routing through terminal shift-30
 fragments and compare collision key sets independently of insertion order under the map's policy.
 The CHAMP algebra tier additionally checks right-valued map union with left key representatives,
