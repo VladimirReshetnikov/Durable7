@@ -19,6 +19,16 @@ The normative
 [Tungsten application-leaf dependency boundary](tungsten-application-leaf-boundary.md) requires an
 independently owned fork for any general reuse.
 
+The later benchmark-independent implementation tranche now ships persistent one-descent HAMT
+updates, `PersistentHashBag`, and neutral `PersistentOrderedSet` packages in C#, TypeScript, and
+Python. Those three surfaces remain pending in C, C++, Haskell, Kotlin, and Rust. The same tranche
+also promoted `RangeUpdateSequence` as a genuinely new, non-composite core: its C# implicit-AVL
+reference, algebra contract, invariant suite, and public API now ship, while all seven sibling ports
+remain pending. Both full serialized C# Debug and Release gates pass 1,417/1,417 tests after builds
+with zero warnings and zero errors. No benchmark was run; see the
+[frontier catalog](frontier-structure-catalog.md#range-update-sequence-persistent-lazy-propagation)
+and the [C# Range contract](../../src/CSharp/docs/FingerTree/range-update-sequence.md).
+
 ## Provenance And Method
 
 Findings come from two multi-agent design surveys run on 2026-07-02 and 2026-07-03:
@@ -198,6 +208,9 @@ the engine-level small/packed tiers (those stay behind the client's expression s
 
 - [Data structure catalog](data-structure-catalog.md) - shipped families only; when a candidate
   from this document ships, move its authoritative description there.
+- [Frontier structure catalog](frontier-structure-catalog.md) - independently implemented cores
+  rather than compositions, including the shipped C# `RangeUpdateSequence` reference and its
+  remaining seven-language parity bill.
 - [Porting and semantic parity](../guides/porting-and-semantic-parity.md) - the parity workflow a
   shipped candidate must satisfy.
 - Workspace improvement proposals (for example the C# FingerTree enumerator-allocation and

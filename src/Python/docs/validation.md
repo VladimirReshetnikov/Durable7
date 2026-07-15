@@ -11,9 +11,15 @@ Run `test.ps1` from this workspace. Its required gates are:
 4. Isolated PEP 517 source-distribution and wheel builds.
 5. Twine metadata checks and a clean-environment installed-wheel smoke test.
 
+The checked-in launcher keeps pytest single-process, disables pytest's optional on-disk cache, and
+pins Rayon, CMake, and Make-compatible helper work to one worker. This keeps validation memory and
+I/O predictable without weakening any executable gate.
+
 The complete suite currently executes 128 example, property, model, adversarial, exact-wire,
 failure-atomicity, and concurrency tests. Python 3.11.15 and 3.14.4 have both run the full suite;
-the static gate targets the declared Python 3.11 language surface.
+the static gate targets the declared Python 3.11 language surface. The current post-parity Python
+3.14.4 gate passes Ruff, strict Mypy, 128/128 tests without pytest warnings, source/wheel builds,
+Twine metadata checks, and installed-wheel smoke validation.
 
 Ordered-set coverage includes exact first-representative and receiver-policy semantics, exhaustive
 small final-index movements and relation truth tables, repeated sparse-label exhaustion with

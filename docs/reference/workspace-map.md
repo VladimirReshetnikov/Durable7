@@ -127,7 +127,7 @@ contract.
 | [`src/Haskell/Hamt`](../../src/Haskell/Hamt/README.md) | Haskell HAMT/Patricia port and complete pure wire-compatible Merkle search tree | `tools-data-structures-hamt.cabal`, `src/Data/Structures/Hamt/` | [`README`](../../src/Haskell/Hamt/README.md), [Merkle guide](../../src/Haskell/Hamt/docs/merkle-search-tree.md) |
 | [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | Kotlin/JVM HAMT/Ctrie/Patricia port and complete wire-compatible Merkle search tree | `src/tools/datastructures/hamt/`, `test/tools/datastructures/hamt/` | [`docs`](../../src/Kotlin/Hamt/docs/README.md) |
 | [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | Rust HAMT/Patricia port and wire-compatible Merkle search tree | `Cargo.toml`, `src/lib.rs`, `src/merkle_search_tree.rs` | [`docs`](../../src/Rust/Hamt/docs/README.md) |
-| [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | Canonical managed FingerTree library | `DataStructures.sln`, `src/Tools.DataStructures.FingerTree/`, `tests/Tools.DataStructures.FingerTree.Tests/`, `samples/`, `benchmarks/` | [`docs`](../../src/CSharp/docs/FingerTree/README.md) |
+| [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | Canonical managed persistent-sequence library: FingerTree family plus the independent implicit-AVL Range-update core | `DataStructures.sln`, `src/Tools.DataStructures.FingerTree/`, `tests/Tools.DataStructures.FingerTree.Tests/`, `samples/`, `benchmarks/` | [`docs`](../../src/CSharp/docs/FingerTree/README.md), [Range contract](../../src/CSharp/docs/FingerTree/range-update-sequence.md) |
 | [C# Ordered collections](../../src/CSharp/docs/Ordered/overview.md) | Independently owned neutral insertion/explicit-position ordered set with first-representative and receiver-policy algebra contracts over public CHAMP/FingerTree substrates | [`DataStructures.sln`](../../src/CSharp/DataStructures.sln), [project](../../src/CSharp/src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj), [tests](../../src/CSharp/tests/Tools.DataStructures.Ordered.Tests/README.md) | [`docs`](../../src/CSharp/docs/Ordered/README.md), [validation](../../src/CSharp/docs/Ordered/validation.md) |
 | [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | C++23 FingerTree/RRB/canonical-set family with Brodal/PSQ cores, positional/measured/text rope cursors, and native DABA Lite | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/Cpp/FingerTree/docs/README.md) |
 | [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | C11 FingerTree/RRB/canonical-set family with positional/measured/text rope cursors, type-erased Brodal/PSQ cores, and DABA Lite | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/C/FingerTree/docs/README.md) |
@@ -140,8 +140,8 @@ contract.
 | [`src/Haskell/Tungsten`](../../src/Haskell/Tungsten/README.md) | Haskell Tungsten `List` and `Association` port | `tools-data-structures-tungsten.cabal`, `src/Data/Structures/Tungsten/` | [`README`](../../src/Haskell/Tungsten/README.md) |
 | [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md) | Kotlin/JVM Tungsten `List` and `Association` port | `src/tools/datastructures/tungsten/`, `test/tools/datastructures/tungsten/` | [`README`](../../src/Kotlin/Tungsten/README.md) |
 | [`src/Rust/Tungsten`](../../src/Rust/Tungsten/README.md) | Safe Rust Tungsten `List` and `Association` crate | `Cargo.toml`, `src/lib.rs` | [`README`](../../src/Rust/Tungsten/README.md) |
-| [`src/TypeScript`](../../src/TypeScript/README.md) | Strict TypeScript/ESM port of all shipped general families plus the application-leaf Tungsten collections | `package.json`, `src/`, `test.ps1` | [API notes](../../src/TypeScript/docs/api-notes.md), [validation](../../src/TypeScript/docs/validation.md) |
-| [`src/Python`](../../src/Python/README.md) | Typed Python 3.11+ port of all shipped general families plus the application-leaf Tungsten collections | `pyproject.toml`, `src/vladimir_reshetnikov/data_structures/`, `tests/`, `test.ps1` | [API notes](../../src/Python/docs/api-notes.md), [validation](../../src/Python/docs/validation.md), [tests](../../src/Python/tests/README.md) |
+| [`src/TypeScript`](../../src/TypeScript/README.md) | Strict TypeScript/ESM port of the current HAMT/FingerTree-derived/Ordered/Numerics surfaces plus application-leaf Tungsten; Range-update sequence pending | `package.json`, `src/`, `test.ps1` | [API notes](../../src/TypeScript/docs/api-notes.md), [validation](../../src/TypeScript/docs/validation.md) |
+| [`src/Python`](../../src/Python/README.md) | Typed Python 3.11+ port of the current HAMT/FingerTree-derived/Ordered/Numerics surfaces plus application-leaf Tungsten; Range-update sequence pending | `pyproject.toml`, `src/vladimir_reshetnikov/data_structures/`, `tests/`, `test.ps1` | [API notes](../../src/Python/docs/api-notes.md), [validation](../../src/Python/docs/validation.md), [tests](../../src/Python/tests/README.md) |
 
 ## Port Lineage
 
@@ -175,7 +175,7 @@ HAMT lineage:
 
 FingerTree lineage:
 
-1. C# FingerTree (`src/CSharp/src/Tools.DataStructures.FingerTree`) is the broadest implementation and documentation source: tuned deque, general measured tree, derived sorted/priority/interval collections, ropes, text helpers, samples, benchmarks, and design notes.
+1. C# FingerTree (`src/CSharp/src/Tools.DataStructures.FingerTree`) is the broadest implementation and documentation source: tuned deque, general measured tree, derived sorted/priority/interval collections, ropes, text helpers, the independently implemented implicit-AVL `RangeUpdateSequence`, samples, benchmarks, and design notes.
 2. `src/Cpp/FingerTree` ports the persistent family to a header-first C++23 library, adds the
    system-crypto-backed policy-canonical zip-zip set and move-only-capable Brodal-Okasaki and
    winner-cached priority-search cores, includes positional/measured/text root-sharing rope cursor
@@ -202,6 +202,25 @@ FingerTree lineage:
    sorted/priority/interval facades, the canonical zip-zip set, Brodal and priority-search cores,
    mutable DABA Lite, and positional/measured/text gap cursors whose text offsets count Unicode code
    points.
+
+Range-update lineage:
+
+1. C# owns the semantic reference in
+   `src/CSharp/src/Tools.DataStructures.FingerTree`: `IRangeUpdateAlgebra` defines the tag monoid and
+   its count-aware action on elements and ordered measures, while `RangeUpdateSequence` owns the
+   path-copied implicit-AVL node/tag invariant, indexed and range API, public struct enumerator,
+   failure atomicity, and deterministic structural bounds. The exact contract is
+   [range-update-sequence.md](../../src/CSharp/docs/FingerTree/range-update-sequence.md).
+2. C, C++, Haskell, Kotlin, Rust, TypeScript, and Python ports remain pending. Each must preserve the
+   algebra laws, logical cached-measure invariant, composition direction, persistence, validation,
+   and failure semantics through language-local policy and ownership idioms.
+3. Both full serialized C# Debug and Release solution builds complete with zero warnings and zero
+   errors, and both gates pass 1,417/1,417 tests. No benchmark was run; measurements remain
+   postponed for isolation.
+
+For the surrounding benchmark-independent tranche, single-pass HAMT updates, `PersistentHashBag`,
+and `PersistentOrderedSet` ship in C#, TypeScript, and Python but remain pending in C, C++, Haskell,
+Kotlin, and Rust.
 
 Ordered-set lineage:
 

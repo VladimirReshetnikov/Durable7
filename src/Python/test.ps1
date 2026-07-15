@@ -20,7 +20,13 @@ if ($LASTEXITCODE -ne 0 -or [version]$versionText -lt [version]'3.11') {
 }
 
 $previousHashSeed = $env:PYTHONHASHSEED
+$previousRayonThreads = $env:RAYON_NUM_THREADS
+$previousCmakeParallelLevel = $env:CMAKE_BUILD_PARALLEL_LEVEL
+$previousMakeFlags = $env:MAKEFLAGS
 $env:PYTHONHASHSEED = '0'
+$env:RAYON_NUM_THREADS = '1'
+$env:CMAKE_BUILD_PARALLEL_LEVEL = '1'
+$env:MAKEFLAGS = '-j1'
 Push-Location $workspace
 
 try {
@@ -62,7 +68,7 @@ try {
     & $python -m mypy
     if ($LASTEXITCODE -ne 0) { throw "Mypy validation failed." }
 
-    & $python -m pytest
+    & $python -m pytest -p no:cacheprovider
     if ($LASTEXITCODE -ne 0) { throw "Python tests failed." }
 
     $dist = Get-ValidatedWorkspaceChild (Join-Path $workspace 'dist')
@@ -117,5 +123,23 @@ finally {
     }
     else {
         $env:PYTHONHASHSEED = $previousHashSeed
+    }
+    if ($null -eq $previousRayonThreads) {
+        Remove-Item Env:RAYON_NUM_THREADS -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:RAYON_NUM_THREADS = $previousRayonThreads
+    }
+    if ($null -eq $previousCmakeParallelLevel) {
+        Remove-Item Env:CMAKE_BUILD_PARALLEL_LEVEL -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:CMAKE_BUILD_PARALLEL_LEVEL = $previousCmakeParallelLevel
+    }
+    if ($null -eq $previousMakeFlags) {
+        Remove-Item Env:MAKEFLAGS -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:MAKEFLAGS = $previousMakeFlags
     }
 }

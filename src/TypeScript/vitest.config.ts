@@ -4,6 +4,8 @@ const config: ReturnType<typeof defineConfig> = defineConfig({
     test: {
         include: ["test/**/*.test.ts"],
         pool: "forks",
+        fileParallelism: false,
+        maxWorkers: 1,
         sequence: { concurrent: false },
         testTimeout: 30_000,
     },

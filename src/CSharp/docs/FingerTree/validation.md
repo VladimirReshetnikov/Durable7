@@ -148,19 +148,20 @@ The suite covers:
 
 ## Range-Update Sequence Integration Gate
 
-Focused and project-level validation for
+Focused, project-level, and full-solution validation for
 `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` completed serially on
 2026-07-15 UTC:
 
-- Debug project build: zero warnings and zero errors;
+- Debug full-solution build: zero warnings and zero errors;
 - Debug focused `FullyQualifiedName~RangeUpdate` lane: 62/62 tests passed;
 - Debug complete FingerTree test project: 692/692 tests passed;
-- Release project build: zero warnings and zero errors; and
-- Release complete FingerTree test project: 692/692 tests passed.
+- Debug full C# solution: 1,417/1,417 tests passed;
+- Release full-solution build: zero warnings and zero errors;
+- Release complete FingerTree test project: 692/692 tests passed; and
+- Release full C# solution: 1,417/1,417 tests passed.
 
-The repository-wide C# solution gate remains pending, so this evidence is a stable implementation
-checkpoint rather than the final C# shipment statement. The deterministic, benchmark-independent
-gate covers:
+Each full-solution total is 319 Numerics + 292 HAMT + 692 FingerTree + 62 Ordered + 52 Tungsten.
+The C# reference is shipped on this deterministic, benchmark-independent evidence. The gate covers:
 
 - **API shape:** reflect the exact generic constraint, factories, positional operations, range
   update/query members, `IReadOnlyList<TElement>` implementation, concrete `GetEnumerator`, and
@@ -197,9 +198,9 @@ gate covers:
   policy callback thread safety remains the caller's responsibility.
 
 The focused run uses the filter documented in the
-[tests README](../../tests/Tools.DataStructures.FingerTree.Tests/README.md#build-and-run), followed
-by the complete project suite in both configurations and then the ordinary full serialized
-workspace gate. The detailed semantic oracle is the
+[tests README](../../tests/Tools.DataStructures.FingerTree.Tests/README.md#build-and-run). The
+recorded shipment then runs the complete project suite and ordinary full serialized workspace gate
+in both configurations. The detailed semantic oracle is the
 [range-update sequence contract](range-update-sequence.md).
 
 Benchmarks are explicitly outside this integration gate. They remain postponed until the machine

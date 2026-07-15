@@ -1,10 +1,10 @@
 # Benchmark-Independent Next Data Structures: Detailed C# Implementation Proposal
 
-- Status: Historical design and active execution — Steps 1–3 shipped in C#, TypeScript, and Python; C# Step 4 focused/project gates green, full C# solution gate pending; benchmark-independent work only
+- Status: Historical design and active sibling-parity execution — Steps 1–4 shipped in C#; Steps 1–3 also shipped in TypeScript and Python; benchmark-independent work only
 - Created (UTC): 2026-07-14T19:23:49Z
 - Repository HEAD: ab9a73c6ae20a3b0ee0627bfe810117450e20c3e
 - Revised (UTC): 2026-07-14T21:14:47Z at faf53286375109fc598e40d5e6da7d1bff7e7415
-- Shipment update (UTC): 2026-07-15T02:27:01Z at 6dbabd71db65ea2771a0b6581c119a367d96d106
+- Shipment update (UTC): 2026-07-15T04:33:18Z at c14dfb2e016cff001e0afe4ba30c139ba335786b
 - Audience: Maintainers selecting the next C# persistent-collection work after Axis 1 and the shipped Axis 2 tranches
 - Scope: Repository-wide plan/proposal audit, candidate disposition, detailed contracts and validation gates for the next C# data structures that do not depend on postponed benchmark evidence, and their required sibling-language follow-through
 
@@ -13,10 +13,11 @@
 > `PersistentHashBag`, and the independently owned neutral `PersistentOrderedSet` have shipped in
 > C#, TypeScript, and Python. TypeScript and Python also carry the public construction-only CHAMP
 > builder and complete transient-set relation surface added during parity work. The C#
-> `RangeUpdateSequence` source, tests, and documentation now form a green focused-project
-> checkpoint, but Step 4 remains unshipped until the full serialized C# solution gate passes. No
-> sibling-language `RangeUpdateSequence` port has started. Future-tense wording in the completed
-> sections is retained as historical implementation guidance, not current status.
+> `RangeUpdateSequence` source, tests, documentation, focused lane, FingerTree project lane, and
+> complete serialized Debug and Release solution gates have now passed, so Step 4 is shipped in C#
+> and the sibling rollout is authorized. Steps 1–3 remain pending in C, C++, Haskell, Kotlin, and
+> Rust; `RangeUpdateSequence` remains pending in all seven siblings. Future-tense wording in the
+> completed sections is retained as historical implementation guidance, not current status.
 
 ## Decision
 
@@ -33,9 +34,9 @@ Proceed in this order:
 4. Implement `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` as the next genuinely new
    structure core, after locking its tag-action algebra and executable laws. Prefer a separate
    path-copied implicit AVL core over adding lazy tags to the existing measured finger-tree engine
-   — **C# source, tests, documentation, and focused/project gates are complete; the full C# solution
-   gate remains pending, and sibling ports have not started**.
-5. After C# Step 4 fully ships, complete the remaining parity matrix: port Steps 1–3 to C, C++,
+   — **shipped in C# after the focused, project, and complete serialized Debug and Release solution
+   gates passed; sibling ports remain pending**.
+5. With C# Step 4 shipped, complete the remaining parity matrix: port Steps 1–3 to C, C++,
    Haskell, Kotlin, and Rust, and port `RangeUpdateSequence` to all seven sibling workspaces,
    including TypeScript and Python.
 6. Keep `PersistentBiMap<TKey, TValue>` and a value-carrying interval map as reserve candidates.
@@ -52,8 +53,8 @@ This order deliberately distinguishes two notions of “next”:
   places it after the HAMT/bag tranche.
 - **Next new core in the current frontier roadmap:** `RangeUpdateSequence` is the only candidate
   that the current frontier catalog calls Strong and actively sequences without a benchmark
-  pre-gate. Its focused C# checkpoint is green, but it is not shipped until the full C# solution
-  gate passes.
+  pre-gate. Its C# reference implementation has now shipped after passing the focused, project, and
+  complete serialized solution gates in both Debug and Release.
 
 The detailed sections discuss the Ordered design before Steps 1 and 2 because correcting its
 ownership boundary is the central revision to this document. The numbered execution steps above,
@@ -62,9 +63,9 @@ the section labels, and the implementation tranches remain the authoritative lan
 ### C#-First Cross-Language Follow-Through
 
 C# remains the reference implementation. TypeScript and Python parity for the already-complete
-Steps 1–3 landed before the new-core tranche finished; that completed work does not relax the gate
-for Step 4. The C# `RangeUpdateSequence` must pass its full solution gate before any sibling
-`RangeUpdateSequence` rollout begins. Cross-language completion remains required, not a
+Steps 1–3 landed before the new-core tranche finished. The C# `RangeUpdateSequence` has now passed
+its complete serialized Debug and Release solution gates, satisfying the C#-first rollout gate.
+Sibling implementation is therefore authorized. Cross-language completion remains required, not a
 discretionary follow-up, and covers all four surfaces introduced in this execution sequence:
 
 - the persistent-HAMT single-pass `GetOrAdd`/`AddOrUpdate` APIs and their one-descent callback and
@@ -124,9 +125,9 @@ At proposal-audit time, exact-name searches confirmed that `PersistentOrderedSet
 facade were not shipped C# types. Execution Steps 1 and 2 subsequently shipped the persistent-HAMT
 `GetOrAdd`/`AddOrUpdate` kernel and `PersistentHashBag<T>`, Step 3 shipped the neutral C# Ordered
 project, and TypeScript/Python parity now covers all three surfaces. Step 4 now has C# source, tests,
-documentation, and green focused/project gates, but `RangeUpdateSequence` remains unshipped pending
-the full serialized C# solution gate; no sibling Range port has started. `PersistentBiMap` and the
-value-carrying interval-map candidate remain unshipped until their own complete
+documentation, and green focused, project, and complete serialized Debug and Release solution
+gates, so `RangeUpdateSequence` is shipped in C#; no sibling Range port has started.
+`PersistentBiMap` and the value-carrying interval-map candidate remain unshipped until their own complete
 source/test/documentation tranches land.
 
 ## Current Baseline
@@ -143,6 +144,9 @@ The following work is complete and must not be mistaken for pending implementati
   dual-index invariant, explicit movement, stable representatives, receiver-policy algebra,
   deterministic and failure-atomic relabel fallback, and strict Ordered-to-Tungsten dependency
   guard;
+- C# `RangeUpdateSequence` with its immutable implicit-AVL core, lazily composed range actions,
+  ordered measures, deterministic structural diagnostics, retained-version model coverage, and
+  serialized Debug and Release shipment gates;
 - C# owner-token CHAMP transients and semantic one-way editing sessions in the sibling languages;
 - 32-bit and 64-bit Patricia maps and sets;
 - RRB vectors;
@@ -480,14 +484,15 @@ The type ships when:
 - workspace overview/usage/API/validation docs and repository catalogs are updated; and
 - the complete C# suite passes with one build/test worker.
 
-### C# Shipment Evidence
+### C# Shipment Evidence (Pre-Range Checkpoint)
 
-The complete source, tests, documentation, solution integration, invariant diagnostics, and
-Ordered-to-Tungsten dependency guards have landed. Serialized focused validation passed **62/62**
-tests in Debug and **62/62** tests in Release. The full serialized C# Release solution build
-completed with **0 warnings and 0 errors**, and the complete C# test gate passed **1,355/1,355**
-tests. Benchmarks were not run and no performance result is inferred; benchmark execution remains
-postponed until it can run in isolation without competing agents or machine contention.
+At the earlier pre-Range checkpoint, the complete source, tests, documentation, solution
+integration, invariant diagnostics, and Ordered-to-Tungsten dependency guards had landed.
+Serialized focused validation passed **62/62** tests in Debug and **62/62** tests in Release. The
+pre-Range full serialized C# Release solution build completed with **0 warnings and 0 errors**, and
+the corresponding complete C# test gate passed **1,355/1,355** tests. Benchmarks were not run and no
+performance result is inferred; benchmark execution remains postponed until it can run in isolation
+without competing agents or machine contention.
 
 ## Execution Step 1: Persistent HAMT Single-Pass Updates — Shipped In C#, TypeScript, And Python
 
@@ -816,11 +821,11 @@ tests lock distinct rather than expanded projection.
 
 No benchmark is an exit criterion.
 
-## Execution Step 4: `RangeUpdateSequence` — C# Focused Checkpoint Green, Full Solution Gate Pending
+## Execution Step 4: `RangeUpdateSequence` — Shipped In C#
 
-The C# source, tests, and documentation are implemented, and the focused project validation gates
-pass. This is an intermediate checkpoint rather than shipment: the full serialized C# solution gate
-is still pending, and no sibling-language `RangeUpdateSequence` port has started.
+The C# source, tests, documentation, focused lane, FingerTree project lane, and complete serialized
+Debug and Release solution gates pass. This completes the C# reference shipment and authorizes the
+sibling rollout. No sibling-language `RangeUpdateSequence` port has started.
 
 ### Why It Is The Next Core
 
@@ -1123,7 +1128,7 @@ assertions.
 
 ### Exit Criteria
 
-Before shipment:
+The C# shipment satisfied these proposal-time exit criteria:
 
 - the algebra and composition order are documented and law-tested;
 - an executable array/list model covers generated branching histories;
@@ -1135,6 +1140,19 @@ Before shipment:
 
 Benchmark evidence is intentionally absent from this exit list. Performance positioning remains a
 later isolated activity.
+
+### C# Shipment Evidence
+
+The serialized solution restore completed successfully. The Debug solution build completed with
+**0 warnings and 0 errors**, and its full test gate passed **1,417/1,417** tests: Numerics **319**,
+HAMT **292**, FingerTree **692**, Ordered **62**, and Tungsten **52**. The Release solution build
+also completed with **0 warnings and 0 errors**, and the same **1,417/1,417** tests passed with the
+same project distribution.
+
+Within that result, the focused `RangeUpdateSequence` lane passed **62/62** tests and the complete
+FingerTree project passed **692/692** tests in both Debug and Release. Benchmarks were not run; no
+performance conclusion is drawn from this shipment, and measurement remains postponed until an
+isolated machine session.
 
 ## Reserve Candidate: `PersistentBiMap<TKey, TValue>`
 
@@ -1262,11 +1280,11 @@ If this proposal is accepted, use these self-contained tranches:
    - no Tungsten reference, friend grant, linked source, or live test oracle;
    - land no public stub or throwing placeholder: source, tests, and docs pass together;
    - no benchmark changes or claims.
-4. **Range-update algebra and private core — C# focused checkpoint implemented and green**
+4. **Range-update algebra and private core — shipped in C#**
    - law harness, node/tag invariants, split/join, deterministic counters.
-5. **Range-update public facade — C# focused checkpoint implemented; full solution gate pending**
+5. **Range-update public facade — shipped in C#**
    - API, model/failure/concurrency tests, docs, catalogs, semantic contracts.
-6. **Remaining seven-sibling parity rollout — only after C# Step 4 ships**
+6. **Remaining seven-sibling parity rollout — authorized by the completed C# Step 4 gate**
    - port the single-pass HAMT APIs, hash bag, and ordered set to C, C++, Haskell, Kotlin, and Rust;
    - port the range-update sequence to C, C++, Haskell, Kotlin, Rust, TypeScript, and Python;
    - preserve the shared semantic contracts through language-local naming, ownership, error,
@@ -1316,17 +1334,18 @@ of adversarial cases, never a dependency or semantic oracle. Its focused Debug a
 each pass 62/62 tests; the serialized C# Release solution build reports 0 warnings and 0 errors, and
 the corresponding pre-Range full C# test gate passes 1,355/1,355 tests.
 
-`RangeUpdateSequence` is the active next new core. Its C# source, tests, documentation, and focused
-project gates are green, but final C# shipment awaits the full serialized solution gate and no
-sibling Range port has started. It is not as low-risk as the HAMT facade or Ordered composite, but
-it is specification-driven rather than benchmark-driven. A separate
+`RangeUpdateSequence` has now shipped as the C# reference new core. The serialized solution restore
+completed successfully; Debug and Release solution builds each report 0 warnings and 0 errors, and
+each complete gate passes 1,417/1,417 tests. The focused Range lane passes 62/62 and the complete
+FingerTree project passes 692/692 in both configurations. It is not as low-risk as the HAMT facade
+or Ordered composite, but it is specification-driven rather than benchmark-driven. A separate
 persistent implicit AVL keeps that risk local, provides deterministic worst-case bounds, and leaves
 the shipped measured finger tree untouched.
 
-After the C# `RangeUpdateSequence` tranche completes, Steps 1–3 must be ported to C, C++, Haskell,
-Kotlin, and Rust, while `RangeUpdateSequence` must be ported to all seven siblings. Use language-local
-APIs and serialized per-workspace validation. TypeScript and Python remain mandatory parts of that
-rollout; their outstanding surface is `RangeUpdateSequence`.
+The completed C# gate now authorizes the remaining sibling rollout. Steps 1–3 must be ported to C,
+C++, Haskell, Kotlin, and Rust, while `RangeUpdateSequence` must be ported to all seven siblings.
+Use language-local APIs and serialized per-workspace validation. TypeScript and Python remain
+mandatory parts of that rollout; their outstanding surface is `RangeUpdateSequence`.
 
 Benchmarks were not run and remain postponed for an isolated machine session.
 

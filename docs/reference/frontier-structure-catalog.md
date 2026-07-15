@@ -1,6 +1,6 @@
 # Frontier Structure Catalog
 
-- Status: Current-state catalog - shipped Axis 1 cores, shipped C# Axis 2 C1/C2/C3/T2, cross-language positional/measured/text cursor checkpoints, cross-language semantic CHAMP sessions, recent C#/TypeScript/Python derived-surface parity, and remaining frontier candidates
+- Status: Current-state catalog - shipped Axis 1 cores, shipped C# Range-update core, shipped C# Axis 2 C1/C2/C3/T2, cross-language cursor/session checkpoints, recent C#/TypeScript/Python derived-surface parity, and remaining frontier candidates
 - Created (UTC): 2026-07-11T03:31:23Z
 - Repository HEAD: f40e301e8faf26d748f33d8546d7d9216657301e
 - Audience: Maintainers and AI agents planning new repository-owned cores, representation tiers, and specialized sibling collections
@@ -12,8 +12,9 @@ records what can be built *by composing* the shipped HAMT and FingerTree familie
 three complementary axes. Axis 1 now includes both implemented reference cores and unimplemented
 candidates. Axis 2 now includes the shipped C# positional and measured rope cursors, their Tour and
 Editor integration, measured/text semantic cursor checkpoints in every sibling language, the optimized C#
-one-way CHAMP transient, and semantic path-copying CHAMP editing sessions in every sibling language;
-frozen-hash and later phases remain planning material, as does Axis 3:
+   one-way CHAMP transient, and semantic path-copying CHAMP editing sessions in every sibling language;
+frozen-hash and later phases remain planning material. Axis 3 now includes the shipped C#
+range-update reference alongside still-unimplemented specialized candidates:
 
 1. **New cores** - structures that need their own node layer, including several invented or refined
    in the last decade.
@@ -87,7 +88,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | Version-bound cursor / zipper | 2, 3 | C1 positional cursor, C2 measured/text cursor, and C3 samples implemented in C#; positional/measured/text semantic checkpoints shipped in every sibling language; C4 consumer-gated | C0 selected the C# readonly-struct zipper-as-version; sibling checkpoints reuse persistent rope path copying without its complexity claim | C# positional/measured cursors and Tour/Editor integration plus C/C++/Haskell/Kotlin/Rust/TypeScript/Python semantic facades |
 | Key-type-specialized map factories | 2 | Plausible, explicitly postponed | Named consumer after explicit Patricia consideration | Factory layer; ART only if independently justified |
 | Self-adjusting (splay-style) structures | 2 | Reject | - | Reads allocate under path copying; cursors + freeze substitute |
-| Range-update sequence (lazy propagation) | 3 | Strong | Measure action interface | 1 sibling core + tag algebra + property tests |
+| Range-update sequence (lazy propagation) | 3 | Strong (C# implicit-AVL reference shipped; all seven sibling ports pending) | Lawful `IRangeUpdateAlgebra` tag action | 1 sibling core + tag algebra + property/model/invariant tests |
 | Order-maintenance list | 3 | Plausible | Named general precedes-query consumer | 1 independently owned public type; Tungsten stamps are provenance only |
 | Persistent chunked bitset | 3 | Plausible | - (tree-only form per derived catalog follow-up) | 1 facade over measured tree |
 | Styled-text rope | 3 | Sample, not family | Range-update sequence (or interval runs) | Composition sample + docs |
@@ -1223,38 +1224,54 @@ Self-adjusting shared state remains unnecessary. **Reject.**
 
 ### Range-update sequence (persistent lazy propagation)
 
-**What it is.** A measured sequence supporting O(log n) *range-assign* and *range-add* - the
-persistent form of the segment-tree "lazy propagation" technique. A pending tag (assign v / add d)
-attaches to an internal node and applies logically to its whole subtree; descent pushes tags down;
-tags compose (assign absorbs prior tags; add composes additively over assign or add).
+**C# status (2026-07-15): Shipped.**
+`RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` is an immutable indexed sequence supporting
+persistent point edits, split/concat/range extraction, lazy range updates, and ordered range-measure
+queries. The implementation is a separately owned path-copied implicit AVL inside the FingerTree
+assembly, not an invasive change to either shipped finger-tree engine. A nonidentity update over the
+whole sequence transforms one root in O(1); proper subranges, point edits, splits, concatenations,
+and range queries perform O(log n) boundary work. Retained versions remain immutable and safe for
+concurrent reads when the caller's algebra callbacks are themselves safe.
 
-**Why this workspace can build it well.** The memoized-suspension machinery that publishes lazy
-middles is exactly the mechanism deferred tags need: a tag push-down is a pending operation
-resolved on first force, CAS-published once, and the amortized persistence-robustness argument
-carries over. Essentially no mainstream persistent-collections library ships this; it is a genuine
-differentiator.
+**Algebra.** `IRangeUpdateAlgebra<TElement, TMeasure, TTag>` extends the ordinary ordered measure
+monoid with `IdentityTag`, `IsIdentity`, `Compose`, `ApplyElement`, and `ApplyMeasure`.
+`Compose(newer, older)` is directional: it denotes applying `older` first and `newer` second. The
+executable law gate covers tag identity and associativity, element and measure action composition,
+singleton consistency, count-aware ordered distribution (including a noncommutative measure),
+empty-measure preservation, and value-distinct identity representations. The collection cannot
+repair an unlawful action; such policies are outside its logical contract.
 
-**The design's one real requirement: a measure action.** Cached measures must be updatable *without
-visiting elements*: applying tag t to a subtree of k elements with cached measure m must compute
-the new measure as `Apply(t, m, k)`. That is an algebraic requirement on the measure - an action of
-the tag monoid on the measure monoid:
+**Representation invariant.** Each node stores a value, left/right children, AVL height, subtree
+count, ordered logical measure, and an optional pending tag. Its stored value and measure already
+reflect its own pending tag; its children do not. Descent and rotations push a pending tag before
+rearranging nodes, while indexing, range measurement, and enumeration carry inherited composed tags
+without pushing tags into or mutating shared storage. This convention makes whole-subtree application a
+single-node path copy and keeps cached measures queryable without visiting every element.
 
-- `SizeMeasure`: unchanged by any tag.
-- `SumMeasure`: assign v over k elements -> k*v; add d -> m + k*d.
-- `MaxMeasure`: assign v -> v; add d -> m + d.
-- Arbitrary user measures: must implement the action interface or the tree rejects the tag kind.
+**API, identity, and failure.** The public facade implements `IReadOnlyList<TElement>` and exposes
+`Create`/`CreateRange`, indexed/endpoint edits, `SplitAt`, `Concat`, `GetRange`, `ApplyRange`,
+`MeasureRange`, and a concrete public struct enumerator. Empty updates and recognized identity tags
+preserve the receiver where specified; validation precedes policy callbacks; exceptions publish no
+new version. Copied enumerators deliberately share traversal state and fail fast if advanced out of
+sync, while independently created enumerators and retained versions remain independent.
 
-Concretely, a new static-abstract interface alongside `IMonoid`/`IMeasure` (e.g.
-`ITagAction<TTag, TMeasure>`) with laws (identity tag acts trivially; action distributes over
-measure combine) that the property suite enforces, mirroring how the monoid laws are enforced
-today.
+The normative [Range contract](../../src/CSharp/docs/FingerTree/range-update-sequence.md) owns the
+algebra, node invariant, operation semantics, complexity, and affine assignment/addition example.
+The [API specification](../../src/CSharp/docs/FingerTree/api-specification.md#range-update-sequence)
+and [validation gate](../../src/CSharp/docs/FingerTree/validation.md#range-update-sequence-integration-gate)
+own the exact surface and evidence. Both complete serialized C# Debug and Release solution builds
+finish with zero warnings and zero errors, and both test gates pass 1,417/1,417. Coverage includes
+62 focused Range tests, 692 complete FingerTree tests, algebra/model/invariant/operation-count gates,
+failpoints, retained branches, enumeration, and concurrency. No benchmark was run; measurements
+remain postponed until the machine can run them in isolation.
 
-**Costs and the sibling-type trade.** Every read pays a pending-tag check on descent - the
-`ReversibleDeque` pattern exactly: an opt-in sibling (`RangeUpdateSequence<T, ...>`), not a change
-to the shipped trees. Uses: bulk text styling runs, weighted timeline editing, simulation grids,
-Fenwick-style structures with range updates *and* range queries.
+**Parity status.** The C, C++, Haskell, Kotlin, Rust, TypeScript, and Python Range ports remain
+pending. They must preserve the same algebra and logical invariants through language-local policy,
+ownership, failure, and iteration idioms; none may infer shipment from the existing measured-tree
+engines.
 
-**Verdict: Strong.** The most differentiating single new structure in this catalog after CHAMP.
+**Verdict: Strong (C# reference shipped; sibling parity pending).** This remains the most
+differentiating specialized core in the catalog after CHAMP.
 
 ### Order-maintenance list
 
@@ -1362,6 +1379,9 @@ The implementation wave described by this catalog has already landed these refer
   cardinalities and receiver-policy multiset algebra;
 - neutral, independently owned `PersistentOrderedSet` packages in C#, TypeScript, and Python,
   composing public HAMT/FingerTree substrates without a Tungsten dependency or semantic oracle;
+- the C# implicit-AVL `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` and its lawful
+  `IRangeUpdateAlgebra<TElement, TMeasure, TTag>` action contract, with persistent indexed edits,
+  logarithmic range updates/queries, cached logical measures, and lazy-tag invariants;
 - the C# `PersistentHashMap<TKey, TValue>.Transient` and `PersistentHashSet<T>.Transient` one-way
   owner-token editing sessions;
 - semantic one-way CHAMP map/set editing sessions in C, C++, Haskell, Kotlin, Rust, TypeScript, and Python, retaining
@@ -1397,7 +1417,11 @@ same seven verification budgets.
 The one-way CHAMP editing lifecycle now spans all eight languages; the owner-token in-place-edit
 optimization and its performance evidence remain C#-only. These are current-state implementation
 records, not candidates awaiting a consumer.
-Future work on the Axis 1 cores is ordinary hardening, measurement, and demand-driven porting. The
+Future work on the already cross-language Axis 1 cores is ordinary hardening, measurement, and
+demand-driven porting. The benchmark-independent parity bill is more specific: Steps 1–3
+(single-pass HAMT updates, hash bag, and neutral ordered set) remain pending in C, C++, Haskell,
+Kotlin, and Rust, while Range remains pending in all seven siblings, including TypeScript and
+Python. The
 C/C++/Haskell/Kotlin/Rust/TypeScript/Python checkpoints make no zipper or focus-local complexity claim; measured/text
 cursor parity now spans all eight languages. The cursor's C4
 extensions retain the separate status recorded in its entry above.
@@ -1431,8 +1455,9 @@ remaining work is sequenced as follows:
    Advance F2 only if one general C# frozen hash layout clears the named lookup, enumeration,
    retained-memory, construction, and break-even gates; evaluate F3 Ctrie snapshot conversion only
    after that C# frozen contract ships.
-7. **Range-update sequence**, independently reviewing and law-testing the measure-action interface.
-   It is not a cursor prerequisite; the later styled-text sample depends on both tracks.
+7. **Range-update sequence C# reference is shipped:** port its law-gated implicit-AVL contract to
+   C, C++, Haskell, Kotlin, Rust, TypeScript, and Python. It is not a cursor prerequisite; the later
+   styled-text sample depends on both tracks.
 8. **Order-maintenance list** and **persistent chunked bitset**, each only for a concrete general
    client not served by existing composition; Tungsten remains evidence rather than a substrate or
    semantic baseline. The shipped neutral ordered set keeps its sparse labels private and does not
@@ -1491,10 +1516,10 @@ catalog's summary alone.
 
 - [Benchmark-independent next data structures (2026-07-14)](../proposals/benchmark-independent-next-structures-2026-07-14.md) -
   the detailed C# execution proposal whose persistent-HAMT single-pass update, hash-bag facade, and
-  independently owned ordered-set composite are now shipped in C#. This catalog's algebra-law-gated
-  implicit-AVL range-update design is the immediate next C# step; all four additions then require
-  ports to C, C++, Haskell, Kotlin, Rust, TypeScript, and Python without advancing postponed
-  benchmarks.
+  independently owned ordered-set composite are now shipped in C#, TypeScript, and Python. Its
+  algebra-law-gated implicit-AVL Range core now also ships in C#. Steps 1–3 remain pending in C,
+  C++, Haskell, Kotlin, and Rust; Range remains pending in all seven siblings. This work advances
+  without benchmark evidence, and measurements remain postponed for isolation.
 - [Derived structure catalog](derived-structure-catalog.md) - compositions of the shipped
   families, the shared enabling API gaps, and the composition design rules this document extends.
   CHAMP's equality/diff entry here is the core-level realization of that catalog's top-ranked gap.

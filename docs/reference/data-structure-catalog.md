@@ -92,6 +92,34 @@ position or measure, indexed access where exposed, and immutable structural shar
 | TypeScript | `PersistentDeque<T>`, `FingerTree<T, M>`, `MeasurePolicy<T, M>`, `RrbVector<T>`, `RrbVectorBuilder<T>` | [Workspace](../../src/TypeScript/README.md), [core](../../src/TypeScript/src/finger-tree/core.ts), [RRB vector](../../src/TypeScript/src/finger-tree/rrb-vector.ts) |
 | Python | `PersistentDeque`, `FingerTree`, `MeasuredSequence`, `MeasurePolicy`, `RrbVector`, `RrbVectorBuilder` | [Workspace](../../src/Python/README.md), [API notes](../../src/Python/docs/api-notes.md), [measured AVL/core](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/measured_sequence.py), [RRB vector](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/rrb_vector.py), [tests](../../src/Python/tests/README.md) |
 
+## Range-Update Sequence
+
+C# ships `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` as an immutable indexed sequence
+with logarithmic persistent point edits, concatenation/splitting, range extraction, lazy range
+updates, and ordered range-measure queries. It is an independently implemented path-copied implicit
+AVL sibling in the FingerTree assembly, not a tagged modification of either existing finger-tree
+engine. `IRangeUpdateAlgebra<TElement, TMeasure, TTag>` combines the ordinary ordered measure
+monoid with a tag monoid and actions on elements and cached measures;
+`Compose(newer, older)` means apply `older` first and `newer` second.
+
+Each node's logical value and cached measure already include its own pending tag while its children
+do not. Structural descent and rotations push tags before rearranging nodes, and read-only indexing,
+measurement, and enumeration carry inherited tags without mutating shared storage. The public
+contract locks algebra laws, validation precedence, no-op identity, failure atomicity, retained-version
+isolation, a fail-fast copied struct enumerator, AVL balance/count/measure invariants, and deterministic
+operation-count ceilings. Whole-sequence application of a nonidentity tag allocates one new root;
+proper subrange updates and queries perform logarithmic boundary work.
+
+| Language | Public entry points | Primary references |
+| --- | --- | --- |
+| C# | `IRangeUpdateAlgebra<TElement, TMeasure, TTag>`, `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` | [Contract, algebra, and invariants](../../src/CSharp/docs/FingerTree/range-update-sequence.md), [API specification](../../src/CSharp/docs/FingerTree/api-specification.md#range-update-sequence), [source](../../src/CSharp/src/Tools.DataStructures.FingerTree/RangeUpdateSequence.cs), [algebra source](../../src/CSharp/src/Tools.DataStructures.FingerTree/IRangeUpdateAlgebra.cs), [validation](../../src/CSharp/docs/FingerTree/validation.md#range-update-sequence-integration-gate), [tests](../../src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/README.md) |
+
+Both full serialized C# Debug and Release solution builds complete with zero warnings and zero
+errors, and both configurations pass 1,417/1,417 tests. No benchmark was run; measurement remains
+postponed until an isolated session. Range-update ports remain pending in C, C++, Haskell, Kotlin,
+Rust, TypeScript, and Python. Separately, the single-pass HAMT updates, hash bag, and ordered set
+remain pending in C, C++, Haskell, Kotlin, and Rust; their TypeScript and Python ports already ship.
+
 ## Reversible Deque
 
 Reversible deques add orientation-aware views over persistent deque storage so reversal can be
@@ -107,43 +135,6 @@ represented without eagerly copying the sequence.
 | Rust | `ReversibleDeque<T>` | [API notes](../../src/Rust/FingerTree/docs/api-notes.md), [source](../../src/Rust/FingerTree/src/deque.rs) |
 | TypeScript | `ReversibleDeque<T>` | [API notes](../../src/TypeScript/docs/api-notes.md), [source](../../src/TypeScript/src/finger-tree/core.ts) |
 | Python | `ReversibleDeque` | [API notes](../../src/Python/docs/api-notes.md), [source](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/core.py), [tests](../../src/Python/tests/README.md) |
-
-## Insertion-Ordered Set
-
-The independently owned C# Ordered workspace exposes `PersistentOrderedSet<T>`, an immutable set
-whose retained equality comparer defines membership while insertion and explicit positional
-operations define enumeration order. “Ordered” here does not mean comparison-sorted: ordinary
-`Add` appends an absent equality class, `AddFirst` and `Insert` place only absent classes, duplicate
-adds preserve both position and the first stored representative, and movement is available only
-through explicit `MoveToFirst`, `MoveToLast`, and final-index `MoveTo` operations. A stable one-shot
-`Sort` changes one version's order but does not install a persistent sorting policy; later additions
-append normally.
-
-Each version owns a dual index assembled exclusively from public general-purpose substrates: a
-`PersistentHashMap<T, long>` owns equality-class membership and private order stamps, while a
-`FingerTreeDeque<Entry>` owns the ordered representative sequence. Count equality, strictly
-ascending stamps, bidirectional map/deque correspondence, representative identity, comparer
-retention, and immutable retained versions are Ordered-owned invariants. The Ordered production and
-test projects do not reference `Tools.DataStructures.Tungsten`, consume Tungsten internals, or use
-Tungsten behavior as their semantic baseline.
-
-Set algebra and relations normalize the complete argument under the receiver's comparer. Receiver
-representatives win surviving receiver classes; the first argument representative observed during
-receiver-policy normalization wins argument-only classes. Union enumerates the receiver followed by new
-argument classes, intersection and difference retain receiver order, and symmetric difference emits
-receiver-only classes followed by argument-only classes. This deterministic ordering is part of the
-Ordered contract, independently of an argument set's comparer or traversal policy.
-
-| Language | Public entry points | Primary references |
-| --- | --- | --- |
-| C# | `PersistentOrderedSet<T>` | [Workspace](../../src/CSharp/docs/Ordered/overview.md), [usage guide](../../src/CSharp/docs/Ordered/usage.md), [API specification](../../src/CSharp/docs/Ordered/api-specification.md), [project](../../src/CSharp/src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj), [source](../../src/CSharp/src/Tools.DataStructures.Ordered/PersistentOrderedSet.cs), [validation](../../src/CSharp/docs/Ordered/validation.md), [tests](../../src/CSharp/tests/Tools.DataStructures.Ordered.Tests/README.md) |
-
-The shipped reference surface is currently C#. Ports to C, C++, Haskell, Kotlin, Rust, TypeScript,
-and Python are the required follow-through after the C# proposal sequence completes; they must
-derive from this independent Ordered contract rather than Tungsten. Focused single-worker Debug and
-Release lanes each pass 62 tests, and the complete serialized C# Release gate builds with zero
-warnings or errors and passes all 1,355 tests. Benchmarks are not a shipment gate and are postponed
-until an isolated, contention-free run can produce meaningful measurements.
 
 ## Sorted Collections
 
@@ -262,6 +253,13 @@ applying shortcuts, retaining receiver representatives and first normalized argu
 | C# | `PersistentOrderedSet<T>` | [Workspace](../../src/CSharp/docs/Ordered/overview.md), [usage guide](../../src/CSharp/docs/Ordered/usage.md), [API specification](../../src/CSharp/docs/Ordered/api-specification.md), [source](../../src/CSharp/src/Tools.DataStructures.Ordered), [validation](../../src/CSharp/docs/Ordered/validation.md), [tests](../../src/CSharp/tests/Tools.DataStructures.Ordered.Tests/README.md) |
 | TypeScript | `PersistentOrderedSet<T>`, idiomatic lookup/removal result values | [Workspace](../../src/TypeScript/README.md), [API notes](../../src/TypeScript/docs/api-notes.md), [source](../../src/TypeScript/src/ordered), [tests](../../src/TypeScript/test/ordered) |
 | Python | `PersistentOrderedSet`, `OrderedSetValueResult`, `OrderedSetRemoveResult` | [Workspace](../../src/Python/README.md), [API notes](../../src/Python/docs/api-notes.md), [source](../../src/Python/src/vladimir_reshetnikov/data_structures/ordered), [tests](../../src/Python/tests/ordered) |
+
+C, C++, Haskell, Kotlin, and Rust ports remain pending. The C# focused single-worker Debug and
+Release lanes each pass 62 tests. At the historical pre-Range Ordered shipment checkpoint, the full
+serialized C# Release build had zero warnings and zero errors and the complete gate passed
+1,355/1,355 tests; current full-workspace evidence is the 1,417/1,417 Debug and Release Range gate
+recorded above. No benchmark was run for either shipment, and measurements remain postponed for an
+isolated session.
 
 ## Tungsten Application Collections
 

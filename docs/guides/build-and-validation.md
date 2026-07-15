@@ -117,6 +117,8 @@ npm pack --dry-run
 Vitest/fast-check suites, a clean ESM build, and declaration/source-map generation. `npm pack
 --dry-run` is the package-content smoke check. See the [local validation guide](../../src/TypeScript/docs/validation.md)
 and [test map](../../src/TypeScript/test/README.md).
+The checked-in launcher limits npm registry sockets and native helper builds, while
+`vitest.config.ts` pins one worker and disables file-level and in-file concurrency.
 
 ## Python Workspace
 
@@ -132,6 +134,8 @@ the complete pytest/Hypothesis suite. It then builds a PEP 517 source distributi
 checks package metadata with Twine, installs the wheel into a clean environment, and smoke-tests
 the public package surface. Use `-SkipInstall` only after the pinned tools are installed and
 `-SkipPackageSmoke` only for narrow iteration; neither changes the canonical full command above.
+The launcher keeps pytest in its default single-process mode, disables its optional on-disk cache,
+and pins Rayon, CMake helper builds, and Make-compatible helpers to one worker.
 See the [local validation guide](../../src/Python/docs/validation.md) and
 [test map](../../src/Python/tests/README.md).
 

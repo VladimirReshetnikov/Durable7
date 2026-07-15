@@ -17,6 +17,7 @@ Authoritative local documents remain:
 - [C HAMT API specification](../../src/C/Hamt/docs/api-specification.md)
 - [C++ HAMT API specification](../../src/Cpp/Hamt/docs/api-specification.md)
 - [C# FingerTree API specification](../../src/CSharp/docs/FingerTree/api-specification.md)
+- [C# Range-update sequence contract](../../src/CSharp/docs/FingerTree/range-update-sequence.md)
 - [C# Ordered API specification](../../src/CSharp/docs/Ordered/api-specification.md)
 - [C FingerTree API notes](../../src/C/FingerTree/docs/api-notes.md)
 - [C++ FingerTree API notes](../../src/Cpp/FingerTree/docs/api-notes.md)
@@ -42,6 +43,7 @@ behavior change through sibling workspaces.
 | Insertion/explicit-position order | Enumeration follows first insertion plus unmistakable positional operations; equality decides membership but does not determine order, and comparison order is not retained unless separately promised. |
 | Dual-index composite | One public collection owns two persistent indexes for different query dimensions and must publish them only when their cross-index correspondence invariants hold. |
 | Measure | A monoidal summary cached on a finger-tree node, chunk, or facade element and used for split, locate, rank, priority, interval, rope, or text navigation. |
+| Tag action | A tag monoid acting consistently on individual elements and cached ordered measures; composition order, subtree cardinality, identity recognition, and distribution laws are part of the public policy contract. |
 | Version-bound cursor | An immutable working value that owns one persistent sequence version and a position within it; navigation and editing never redirect it to a different version implicitly. |
 | Checkpoint port | A port that preserves observable API semantics and tests while documenting a remaining representation or asymptotic parity boundary. |
 | Facade | A public collection built on a shared core engine, such as sorted sets on measured trees or text ropes on measured ropes. |
@@ -295,6 +297,61 @@ Shared obligations:
 - Checkpoint ports may use simpler internals, but their API notes must state the remaining complexity
   boundary clearly.
 
+## Range-Update Sequence
+
+The C# FingerTree assembly ships
+`RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` as a separate path-copied implicit-AVL core.
+It is an immutable indexed sequence with persistent point edits, split/concat/range extraction,
+lazy range updates, and ordered whole/range measures. It does not add lazy tags to the existing
+finger-tree engines. The C# reference is the semantic baseline for the pending C, C++, Haskell,
+Kotlin, Rust, TypeScript, and Python ports.
+
+Its `IRangeUpdateAlgebra<TElement, TMeasure, TTag>` policy extends `IMeasure` and must satisfy all
+of these obligations:
+
+- the measure has an identity and associative ordered combine;
+- tags have an identity and associative composition, with `Compose(newer, older)` meaning apply
+  `older` first and `newer` second;
+- tag action on an element composes in that same order;
+- tag action on a cached measure composes in that same order and receives the represented element
+  count;
+- applying a tag to a singleton measure agrees with measuring the tagged element;
+- the action distributes over ordered measure combination with the left/right counts, including
+  noncommutative measures;
+- applying any tag to the empty measure at count zero preserves the empty measure; and
+- every tag recognized by `IsIdentity`, including a value-distinct representation, obeys the full
+  identity equations.
+
+The implementation invariant is logical rather than merely physical: a node's stored value and
+cached measure already include that node's pending tag, while its children do not. Descent and
+rotations push pending tags before structural rearrangement. Non-mutating reads instead carry the
+newer inherited tag down the path and compose it after the node's older tag, so indexing,
+measurement, and enumeration never mutate shared versions. Count, AVL height/balance, ordered
+measure, composition direction, and logical enumeration are executable invariants.
+
+Public behavior must preserve these contracts:
+
+- all retained versions remain immutable; successful updates share unaffected interiors, and an
+  exception from any policy callback publishes no successor;
+- range validation precedes tag callbacks; empty ranges preserve the receiver/empty measure without
+  invoking the tag policy, and recognized identity updates preserve the receiver;
+- whole-sequence nonidentity application is O(1) and allocates one replacement root; proper
+  subrange updates and measures perform O(log n) boundary work;
+- direct insert, replacement, and removal push old tags before installing a new element, so a prior
+  range tag never applies accidentally to newly inserted/replaced content;
+- concrete enumeration uses the public mutable struct enumerator; copied enumerators share traversal
+  state and fail fast if advanced out of sync, while independently created enumerators remain safe;
+  and
+- concurrent reads of retained versions are safe subject to the caller's policy callback safety.
+
+The exact API, affine assignment/addition example, invariants, and complexity live in the
+[Range contract](../../src/CSharp/docs/FingerTree/range-update-sequence.md); the executable gate is
+recorded in the [C# validation guide](../../src/CSharp/docs/FingerTree/validation.md#range-update-sequence-integration-gate).
+Both full serialized C# Debug and Release builds complete with zero warnings and zero errors, and
+both configurations pass 1,417/1,417 tests. No benchmark was run; measurements remain postponed
+until an isolated session. Steps 1–3 of the same parity tranche remain pending in C, C++, Haskell,
+Kotlin, and Rust, while Range remains pending in all seven sibling workspaces.
+
 ## Reversible Deque
 
 Reversible deques provide logical orientation without eagerly copying the sequence.
@@ -313,8 +370,9 @@ orientation-aware implementation.
 
 ## Insertion-Ordered Set
 
-`Tools.DataStructures.Ordered.PersistentOrderedSet<T>` is currently the C#-only general-purpose
-insertion-ordered set. Its retained `IEqualityComparer<T>` defines equality classes, membership,
+`Tools.DataStructures.Ordered.PersistentOrderedSet<T>` is the C# reference for a general-purpose
+insertion-ordered set that also ships in TypeScript and Python. Its retained `IEqualityComparer<T>`
+defines equality classes, membership,
 lookup, duplicate collapse, and algebra. Enumeration order is a separate semantic dimension:
 construction retains first-occurrence order, ordinary `Add` appends an absent class, and
 `AddFirst`/`Insert` place only absent classes. Adding a comparer-equivalent value is an identity
@@ -359,13 +417,14 @@ The workspace is independently owned and depends only on the public C# HAMT and 
 Neither production nor tests may reference `Tools.DataStructures.Tungsten`, consume Tungsten source
 or internals, use `PersistentAssociation` as a live oracle, or adopt Tungsten as semantic authority.
 Similar sparse-order mechanics are provenance, not shared ownership. Ports to C, C++, Haskell,
-Kotlin, Rust, TypeScript, and Python are required after the C# proposal sequence completes and must
-derive from this Ordered contract through language-local ownership and policy models.
+Kotlin, and Rust remain pending and must derive from this Ordered contract through language-local
+ownership and policy models; TypeScript and Python already ship neutral sibling implementations.
 
 The [Ordered validation guide](../../src/CSharp/docs/Ordered/validation.md) and
 [test map](../../src/CSharp/tests/Tools.DataStructures.Ordered.Tests/README.md) define the evidence
-boundary. Focused single-worker Debug and Release lanes each discover and pass 62 tests. The
-complete serialized C# Release gate builds with zero warnings or errors and passes all 1,355 tests.
+boundary. Focused single-worker Debug and Release lanes each discover and pass 62 tests. At the
+historical pre-Range Ordered shipment checkpoint, the complete serialized C# Release gate built
+with zero warnings or errors and passed all 1,355 tests.
 Correctness, deterministic operation-count, invariant, persistence, failure, API-shape, and
 dependency gates are the current evidence. Benchmarks are not a shipment requirement and remain
 postponed to an isolated, contention-free run.

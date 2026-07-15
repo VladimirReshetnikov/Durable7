@@ -16,7 +16,7 @@ under `benchmarks/`, and family-specific documentation under `docs/<Family>/`.
 | --- | --- | --- | --- |
 | [Numerics](docs/Numerics/overview.md) | Fixed-width and sparse integer numerics library | [project](src/Tools.Numerics/Tools.Numerics.csproj), [API reference](docs/Numerics/api-and-behavior-reference.md), [validation](docs/Numerics/validation.md), [maintainer guidance](docs/Numerics/wide-integer-maintainer-guidance.md) | `.\test.ps1`; see [tests](tests/Tools.Numerics.Tests/README.md) |
 | [HAMT](docs/Hamt/overview.md) | Canonical CHAMP map/set with one-descent persistent map factories and one-way owner-token transients; immutable hash bag with checked multiplicities and receiver-policy algebra; lock-free snapshotting Ctrie; 32/64-bit Patricia maps/sets; and the policy-bound Merkle search tree | [project](src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj), [usage](docs/Hamt/usage.md), [API spec](docs/Hamt/api-specification.md), [T2 shipment decision](docs/Hamt/transient-t2-decision.md), [validation](docs/Hamt/validation.md) | `.\test.ps1`; see [tests](tests/Tools.DataStructures.Hamt.Tests/README.md) |
-| [FingerTree](docs/FingerTree/overview.md) | Persistent sequence and aggregation family: finger trees, RRB vector, DABA Lite, sorted/priority/interval facades, ropes, and text | [project](src/Tools.DataStructures.FingerTree/Tools.DataStructures.FingerTree.csproj), [usage](docs/FingerTree/usage.md), [API spec](docs/FingerTree/api-specification.md), [validation](docs/FingerTree/validation.md) | `.\test.ps1`; see [tests](tests/Tools.DataStructures.FingerTree.Tests/README.md), [samples](samples/README.md), and [benchmark project](benchmarks/Tools.DataStructures.FingerTree.Benchmarks/README.md) |
+| [FingerTree](docs/FingerTree/overview.md) | Persistent sequence and aggregation family: finger trees, RRB vector, DABA Lite, sorted/priority/interval facades, ropes/text, and the independent implicit-AVL `RangeUpdateSequence` with a law-gated lazy tag action | [project](src/Tools.DataStructures.FingerTree/Tools.DataStructures.FingerTree.csproj), [usage](docs/FingerTree/usage.md), [API spec](docs/FingerTree/api-specification.md), [Range contract](docs/FingerTree/range-update-sequence.md), [validation](docs/FingerTree/validation.md) | `.\test.ps1`; see [tests](tests/Tools.DataStructures.FingerTree.Tests/README.md), [samples](samples/README.md), and [benchmark project](benchmarks/Tools.DataStructures.FingerTree.Benchmarks/README.md) |
 | [Ordered](docs/Ordered/overview.md) | Independently owned general-purpose `PersistentOrderedSet<T>` over the public HAMT and FingerTree substrates, with comparer-defined membership, insertion/explicit-position order, first-representative retention, positional ranges, stable one-shot sorting, receiver-comparer algebra, and a dual CHAMP/FingerTree index | [project](src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj), [usage](docs/Ordered/usage.md), [API spec](docs/Ordered/api-specification.md), [validation](docs/Ordered/validation.md) | `.\test.ps1 -Project .\tests\Tools.DataStructures.Ordered.Tests\Tools.DataStructures.Ordered.Tests.csproj`; see [tests](tests/Tools.DataStructures.Ordered.Tests/README.md) |
 | [Tungsten](docs/Tungsten/overview.md) | Application-specific leaf collections for the Tungsten project, composed from the public HAMT and FingerTree families: `PersistentList<T>` and insertion-ordered `PersistentAssociation<TKey, TValue>` | [project](src/Tools.DataStructures.Tungsten/Tools.DataStructures.Tungsten.csproj), [usage](docs/Tungsten/usage.md), [API spec](docs/Tungsten/api-specification.md), [validation](docs/Tungsten/validation.md) | `.\test.ps1`; see [tests](tests/Tools.DataStructures.Tungsten.Tests/README.md) |
 
@@ -59,9 +59,21 @@ separator literally, for example
 PowerShell. Run restore, build, and test sequentially.
 
 The focused serialized Ordered Debug and Release lanes each discover and pass 62 tests with zero
-build warnings. The complete serialized C# Release gate builds with zero warnings or errors and
-passes all 1,355 tests. Ordered has no benchmark shipment gate; performance measurements are
-postponed until they can run without competing agents or other CPU, memory, and I/O contention.
+build warnings. At its historical pre-Range shipment checkpoint, the complete serialized C# Release
+gate built with zero warnings or errors and passed all 1,355 tests.
+
+The shipped Range-update tranche adds 62 focused Range tests to a 692-test FingerTree project.
+Both current complete serialized C# Debug and Release solution builds finish with zero warnings and
+zero errors, and both full gates pass 1,417/1,417 tests (319 Numerics + 292 HAMT + 692 FingerTree +
+62 Ordered + 52 Tungsten). The Range gate covers algebra laws, implicit-AVL/tag/measure invariants,
+API and identity semantics, generated retained-branch models, deterministic operation ceilings,
+failure atomicity, enumerator behavior, and concurrent readers. No benchmark was run for shipment;
+all performance measurements remain postponed until they can run without competing agents or other
+CPU, memory, and I/O contention.
+
+Cross-language follow-through remains explicit: the one-descent HAMT operations, hash bag, and
+neutral ordered set are pending in C, C++, Haskell, Kotlin, and Rust, while `RangeUpdateSequence` is
+pending in C, C++, Haskell, Kotlin, Rust, TypeScript, and Python.
 
 Use the parent [source index](../README.md) for the full language list, the repository
 [workspace map](../../docs/reference/workspace-map.md) for port lineage, and the

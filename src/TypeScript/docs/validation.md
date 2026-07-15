@@ -16,6 +16,13 @@ The gate requires TypeScript strict mode with unchecked-index, exact-optional, u
 isolated-declaration checks; all Vitest examples and fast-check histories; a clean ESM/declaration
 build; and a package manifest containing only documented output.
 
+The checked-in launcher limits npm registry concurrency and native helper builds, while Vitest is
+pinned to one worker and disables file-level and in-file test concurrency. Validation therefore
+never fans out into parallel test processes.
+
+The current serialized parity gate passes strict checking, 18/18 Vitest files and 124/124 tests,
+the clean declaration/ESM build, and `npm pack --dry-run`.
+
 High-risk contracts receive direct executable coverage:
 
 - retained immutable snapshots, no-op identity, collision representatives, one-descent map factory
