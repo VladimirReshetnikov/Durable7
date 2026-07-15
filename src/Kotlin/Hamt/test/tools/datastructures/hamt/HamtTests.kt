@@ -19,6 +19,19 @@ private class EquivalentKeyPolicy : HashPolicy<EquivalentKey> {
     override fun equivalent(left: EquivalentKey, right: EquivalentKey): Boolean = left.text == right.text
 }
 
+private class IdentityEquivalentKeyPolicy : HashPolicy<EquivalentKey> {
+    override fun hash(key: EquivalentKey): Int = 31 * key.text.hashCode() + key.identity
+    override fun equivalent(left: EquivalentKey, right: EquivalentKey): Boolean = left == right
+}
+
+private class CountingConstantPolicy<T> : HashPolicy<T> {
+    var hashCalls: Int = 0
+    var equalityCalls: Int = 0
+    override fun hash(key: T): Int { hashCalls++; return 0 }
+    override fun equivalent(left: T, right: T): Boolean { equalityCalls++; return left == right }
+    fun reset() { hashCalls = 0; equalityCalls = 0 }
+}
+
 private class ModuloTenPolicy : HashPolicy<Int> {
     override fun hash(key: Int): Int = key.mod(10)
     override fun equivalent(left: Int, right: Int): Boolean = left.mod(10) == right.mod(10)
@@ -28,6 +41,15 @@ private class CountingIntPolicy : HashPolicy<Int> {
     var hashCalls: Int = 0
     var equalityCalls: Int = 0
     override fun hash(key: Int): Int { hashCalls++; return key * -0x61c88647 }
+    override fun equivalent(left: Int, right: Int): Boolean { equalityCalls++; return left == right }
+    fun reset() { hashCalls = 0; equalityCalls = 0 }
+}
+
+/** Assigns exact hashes while counting the callbacks selected by one point operation. */
+private class CountingTableHashPolicy(private val hashes: Map<Int, Int>) : HashPolicy<Int> {
+    var hashCalls: Int = 0
+    var equalityCalls: Int = 0
+    override fun hash(key: Int): Int { hashCalls++; return hashes[key] ?: key }
     override fun equivalent(left: Int, right: Int): Boolean { equalityCalls++; return left == right }
     fun reset() { hashCalls = 0; equalityCalls = 0 }
 }
@@ -458,6 +480,434 @@ private fun concurrentReadersObserveConsistentSnapshots() {
             checkEquals(256, set.size, "concurrent set size")
             check(set.contains(200), "concurrent set membership")
             check(set.setEquals(0 until 256), "concurrent set equality")
+        }
+    }
+}
+
+private fun persistentMapFactoriesUseOneDescentAndSelectOneBranch() {
+    val policy = CountingIntPolicy()
+    val source = PersistentHashMap.empty<Int, Int>(policy).put(7, 70)
+
+    val getOrAddMethod = PersistentHashMap::class.java.declaredMethods.single {
+        it.name == "getOrAdd" && it.parameterCount == 2
+    }
+    policy.reset()
+    val nullAddFailure = checkThrows<java.lang.reflect.InvocationTargetException>(
+        "getOrAdd rejects a null factory at the public JVM boundary",
+    ) {
+        getOrAddMethod.invoke(source, 7, null)
+    }
+    check(nullAddFailure.cause is NullPointerException, "getOrAdd null factory failure is immediate")
+    checkEquals(0, policy.hashCalls, "getOrAdd validates a null factory before hashing a hit")
+
+    val addOrUpdateMethod = PersistentHashMap::class.java.declaredMethods.single {
+        it.name == "addOrUpdate" && it.parameterCount == 3
+    }
+    val validAdd: (Int) -> Int = { it * 10 }
+    val validUpdate: (Int, Int) -> Int = { _, stored -> stored + 1 }
+    policy.reset()
+    val nullSelectedAddFailure = checkThrows<java.lang.reflect.InvocationTargetException>(
+        "addOrUpdate rejects a null add factory before selecting the hit branch",
+    ) {
+        addOrUpdateMethod.invoke(source, 7, null, validUpdate)
+    }
+    check(
+        nullSelectedAddFailure.cause is NullPointerException,
+        "addOrUpdate null add factory failure is immediate",
+    )
+    checkEquals(0, policy.hashCalls, "addOrUpdate validates a null add factory before hashing")
+    policy.reset()
+    val nullUpdateFailure = checkThrows<java.lang.reflect.InvocationTargetException>(
+        "addOrUpdate rejects a null update factory before selecting the miss branch",
+    ) {
+        addOrUpdateMethod.invoke(source, 8, validAdd, null)
+    }
+    check(nullUpdateFailure.cause is NullPointerException, "addOrUpdate null update failure is immediate")
+    checkEquals(0, policy.hashCalls, "addOrUpdate validates a null update factory before hashing")
+
+    policy.reset()
+    var addCalls = 0
+    val hit = source.getOrAdd(7) { key -> addCalls++; key * 10 }
+    check(hit.map === source, "getOrAdd hit preserves the exact map")
+    checkEquals(70, hit.value, "getOrAdd hit returns the stored value")
+    checkEquals(0, addCalls, "getOrAdd hit does not select the add factory")
+    checkEquals(1, policy.hashCalls, "getOrAdd hit hashes once")
+
+    policy.reset()
+    val miss = source.getOrAdd(8) { key -> addCalls++; key * 10 }
+    checkEquals(80, miss.value, "getOrAdd miss returns the added value")
+    checkEquals(1, addCalls, "getOrAdd miss selects its factory exactly once")
+    checkEquals(1, policy.hashCalls, "getOrAdd miss hashes once")
+    checkEquals(80, miss.map[8], "getOrAdd miss stores the caller key and selected value")
+
+    policy.reset()
+    var updateCalls = 0
+    val updated = source.addOrUpdate(
+        7,
+        { key -> addCalls++; key * 10 },
+        { key, stored ->
+            updateCalls++
+            checkEquals(7, key, "update factory receives the caller lookup key")
+            checkEquals(70, stored, "update factory receives the stored value")
+            stored + 1
+        },
+    )
+    checkEquals(1, addCalls, "addOrUpdate hit does not select the add factory")
+    checkEquals(1, updateCalls, "addOrUpdate hit selects the update factory exactly once")
+    checkEquals(71, updated.value, "addOrUpdate reports the changed value")
+    checkEquals(1, policy.hashCalls, "addOrUpdate hit hashes once")
+    checkEquals(71, updated.map[7], "addOrUpdate hit publishes its successor")
+
+    policy.reset()
+    val added = source.addOrUpdate(
+        9,
+        { key -> addCalls++; key * 10 },
+        { _, stored -> updateCalls++; stored + 1 },
+    )
+    checkEquals(2, addCalls, "addOrUpdate miss selects the add factory exactly once")
+    checkEquals(1, updateCalls, "addOrUpdate miss does not select the update factory")
+    checkEquals(90, added.value, "addOrUpdate miss reports the selected add value")
+    checkEquals(1, policy.hashCalls, "addOrUpdate miss hashes once")
+    checkEquals(90, added.map[9], "addOrUpdate miss stores its value")
+
+    val bitmapPolicy = CountingTableHashPolicy(mapOf(1 to 0, 2 to 32, 3 to 1, 4 to 64))
+    val bitmap = PersistentHashMap.empty<Int, Int>(bitmapPolicy)
+        .put(1, 10)
+        .put(2, 20)
+        .put(3, 30)
+    bitmapPolicy.reset()
+    val inlineHit = bitmap.addOrUpdate(
+        3,
+        { throw AssertionError("bitmap inline hit must not invoke the add factory") },
+        { _, stored -> stored + 1 },
+    )
+    checkEquals(31, inlineHit.value, "bitmap inline payload is updated in one route")
+    checkEquals(1, bitmapPolicy.hashCalls, "bitmap inline hit hashes once")
+    checkEquals(1, bitmapPolicy.equalityCalls, "bitmap inline hit compares one payload")
+
+    bitmapPolicy.reset()
+    val childHit = bitmap.getOrAdd(2) {
+        throw AssertionError("bitmap child hit must not invoke the add factory")
+    }
+    check(childHit.map === bitmap, "bitmap child getOrAdd hit preserves the source")
+    checkEquals(20, childHit.value, "bitmap child hit returns the stored value")
+    checkEquals(1, bitmapPolicy.hashCalls, "bitmap child hit hashes once")
+    checkEquals(1, bitmapPolicy.equalityCalls, "bitmap child hit compares one payload")
+
+    bitmapPolicy.reset()
+    var bitmapAddCalls = 0
+    val childMiss = bitmap.getOrAdd(4) { key -> bitmapAddCalls++; key * 10 }
+    checkEquals(40, childMiss.value, "bitmap child miss adds the selected value")
+    checkEquals(1, bitmapAddCalls, "bitmap child miss invokes its factory once")
+    checkEquals(1, bitmapPolicy.hashCalls, "bitmap child miss hashes once")
+
+    val collisionPolicy = CountingConstantPolicy<Int>()
+    val collision = PersistentHashMap.empty<Int, Int>(collisionPolicy)
+        .put(1, 10)
+        .put(2, 20)
+        .put(3, 30)
+    collisionPolicy.reset()
+    val collisionHit = collision.addOrUpdate(3, { -1 }) { _, stored -> stored + 1 }
+    checkEquals(31, collisionHit.value, "collision hit updates the selected entry")
+    checkEquals(1, collisionPolicy.hashCalls, "collision hit hashes once")
+    checkEquals(3, collisionPolicy.equalityCalls, "collision hit scans one full-hash bucket once")
+    collisionPolicy.reset()
+    val collisionMiss = collision.getOrAdd(4) { 40 }
+    checkEquals(40, collisionMiss.value, "collision miss adds one entry")
+    checkEquals(1, collisionPolicy.hashCalls, "collision miss hashes once")
+    checkEquals(3, collisionPolicy.equalityCalls, "collision miss scans one full-hash bucket once")
+}
+
+private fun persistentMapFactoriesRetainRepresentativesNullsAndFailureAtomicity() {
+    val representativePolicy = EquivalentKeyPolicy()
+    val storedKey = EquivalentKey("alpha", 1)
+    val lookupKey = EquivalentKey("alpha", 2)
+    val storedValue = CtrieRepresentativeValue("stored")
+    val equalCandidate = CtrieRepresentativeValue("stored")
+    val source = PersistentHashMap.empty<EquivalentKey, CtrieRepresentativeValue>(representativePolicy)
+        .put(storedKey, storedValue)
+
+    val noOp = source.addOrUpdate(lookupKey, { CtrieRepresentativeValue("add") }) { key, value ->
+        check(key === lookupKey, "update receives the exact caller key")
+        check(value === storedValue, "update receives the stored value instance")
+        equalCandidate
+    }
+    check(noOp.map === source, "equal update preserves the exact source map")
+    check(noOp.value === storedValue, "equal update reports the stored value representative")
+    check(noOp.map.getEntry(lookupKey)?.key === storedKey, "equal update retains the stored key representative")
+
+    val nullable = PersistentHashMap.empty<Int, String?>().put(1, null)
+    var nullableAddCalls = 0
+    val nullableHit = nullable.getOrAdd(1) { nullableAddCalls++; "missing" }
+    check(nullableHit.map === nullable, "present-null getOrAdd is a hit")
+    checkEquals(null, nullableHit.value, "present-null getOrAdd returns null")
+    checkEquals(0, nullableAddCalls, "present-null getOrAdd skips its factory")
+    val nullableUpdate = nullable.addOrUpdate(1, { "missing" }) { _, stored ->
+        checkEquals(null, stored, "present-null update receives the stored null")
+        "one"
+    }
+    checkEquals("one", nullableUpdate.value, "present-null update can select a non-null value")
+
+    val throwingPolicy = ThrowingIntPolicy()
+    val failureSource = PersistentHashMap.empty<Int, Int>(throwingPolicy).put(1, 10)
+    throwingPolicy.throwOnHash = true
+    checkThrows<InjectedPolicyFailure>("hash failure propagates without a successor") {
+        failureSource.getOrAdd(2) { 20 }
+    }
+    throwingPolicy.throwOnHash = false
+    throwingPolicy.throwOnEquivalent = true
+    checkThrows<InjectedPolicyFailure>("key equality failure propagates without a successor") {
+        failureSource.addOrUpdate(1, { 20 }) { _, stored -> stored + 1 }
+    }
+    throwingPolicy.throwOnEquivalent = false
+    check(failureSource.getEntry(1)?.value == 10, "policy failures leave the source unchanged")
+
+    checkThrows<InjectedPolicyFailure>("hit factory failure leaves the source unchanged") {
+        failureSource.addOrUpdate(1, { 20 }) { _, _ -> throw InjectedPolicyFailure() }
+    }
+    checkThrows<InjectedPolicyFailure>("miss factory failure leaves the source unchanged") {
+        failureSource.getOrAdd(2) { throw InjectedPolicyFailure() }
+    }
+    checkEquals(1, failureSource.size, "factory failures retain source cardinality")
+
+    val throwingStoredValue = ThrowingValue(1)
+    val valueSource = PersistentHashMap.empty<Int, ThrowingValue>().put(1, throwingStoredValue)
+    throwingStoredValue.throwOnEquals = true
+    val sameReference = valueSource.addOrUpdate(1, { ThrowingValue(0) }) { _, stored -> stored }
+    check(sameReference.map === valueSource, "same-reference update bypasses throwing value equality")
+    check(sameReference.value === throwingStoredValue, "same-reference update reports the stored instance")
+    checkThrows<InjectedPolicyFailure>("value equality failure leaves the source unchanged") {
+        valueSource.addOrUpdate(1, { ThrowingValue(0) }) { _, _ -> ThrowingValue(2) }
+    }
+    throwingStoredValue.throwOnEquals = false
+    check(valueSource.getEntry(1)?.value === throwingStoredValue, "value failure retains the stored instance")
+}
+
+private fun persistentHashBagConstructionPointEditsAndViews() {
+    val policy = EquivalentKeyPolicy()
+    val alpha = EquivalentKey("alpha", 1)
+    val equalAlpha = EquivalentKey("alpha", 2)
+    val beta = EquivalentKey("beta", 3)
+    val bag = PersistentHashBag.from(listOf(alpha, equalAlpha, beta), policy)
+
+    checkEquals(2, bag.distinctCount, "bag construction aggregates equivalence classes")
+    checkEquals(3L, bag.totalCount, "bag construction tracks expanded count")
+    checkEquals(2, bag.countOf(equalAlpha), "countOf uses the retained policy")
+    check(bag.get(equalAlpha) === alpha, "bag construction retains the first representative")
+    val distinct = bag.distinctItems().toList()
+    val entries = bag.entries().toList()
+    checkEquals(distinct, entries.map { it.key }, "distinct and entry views have identical order")
+    checkEquals(3, bag.toList().size, "default bag iteration expands multiplicities")
+    checkEquals(2, bag.toList().count { it === alpha }, "expanded copies use the retained representative")
+    check(bag.hasValidInvariants(), "constructed bag satisfies CHAMP and count invariants")
+
+    val countingPolicy = CountingIntPolicy()
+    val counted = PersistentHashBag.empty<Int>(countingPolicy).addCopies(1, 3).add(2)
+    countingPolicy.reset()
+    val increased = counted.addCopies(1, 2)
+    checkEquals(1, countingPolicy.hashCalls, "positive addition uses one map-factory hash")
+    checkEquals(5, increased.countOf(1), "positive addition updates the selected class")
+    countingPolicy.reset()
+    checkThrows<IllegalArgumentException>("negative copy count is rejected before hashing") {
+        counted.addCopies(1, -1)
+    }
+    checkEquals(0, countingPolicy.hashCalls, "negative validation performs no hash callback")
+    check(counted.addCopies(1, 0) === counted, "zero addition preserves exact identity")
+    check(counted.removeCopies(1, 0) === counted, "zero removal preserves exact identity")
+    checkEquals(0, countingPolicy.hashCalls, "zero copy operations perform no hash callback")
+    check(counted.remove(99) === counted, "absent removal preserves exact identity")
+
+    val reduced = counted.removeCopies(1, 2)
+    checkEquals(1, reduced.countOf(1), "partial removal retains the class")
+    checkEquals(2L, reduced.totalCount, "partial removal updates the total")
+    val saturated = reduced.removeCopies(1, Int.MAX_VALUE)
+    check(!saturated.contains(1), "saturating removal deletes the class")
+    checkEquals(1L, saturated.totalCount, "saturating removal subtracts the stored count")
+
+    val maxed = PersistentHashBag.empty<Int>().addCopies(7, Int.MAX_VALUE)
+    checkThrows<ArithmeticException>("per-class addition is checked") { maxed.add(7) }
+    checkEquals(Int.MAX_VALUE, maxed.countOf(7), "overflow leaves the source multiplicity unchanged")
+    checkEquals(Int.MAX_VALUE.toLong(), maxed.totalCount, "overflow leaves the source total unchanged")
+
+    val nullable = PersistentHashBag.from(listOf<String?>(null, null, "value"))
+    check(nullable.contains(null), "bags support null under a policy that supports null")
+    checkEquals(2, nullable.countOf(null), "null equivalence class is counted")
+    checkEquals(null, nullable.get(null), "stored null representative is observable with contains")
+}
+
+private fun persistentHashBagAlgebraUsesMultisetCountsAndIdentities() {
+    val policy = ConstantPolicy<Int>()
+    val left = PersistentHashBag.empty<Int>(policy).addCopies(1, 2).add(2)
+    val right = PersistentHashBag.empty<Int>(policy).add(1).addCopies(2, 3).add(3)
+
+    val union = left.union(right)
+    checkEquals(
+        listOf(2, 3, 1),
+        listOf(union.countOf(1), union.countOf(2), union.countOf(3)),
+        "union selects maximum multiplicities",
+    )
+    checkEquals(6L, union.totalCount, "union total")
+
+    val intersection = left.intersect(right)
+    checkEquals(
+        listOf(1, 1, 0),
+        listOf(intersection.countOf(1), intersection.countOf(2), intersection.countOf(3)),
+        "intersection selects minimum multiplicities",
+    )
+    checkEquals(2L, intersection.totalCount, "intersection total")
+
+    val difference = left.except(right)
+    checkEquals(
+        listOf(1, 0, 0),
+        listOf(difference.countOf(1), difference.countOf(2), difference.countOf(3)),
+        "except performs saturating subtraction",
+    )
+    checkEquals(1L, difference.totalCount, "except total")
+
+    val sum = left.sum(right)
+    checkEquals(
+        listOf(3, 4, 1),
+        listOf(sum.countOf(1), sum.countOf(2), sum.countOf(3)),
+        "sum adds multiplicities",
+    )
+    checkEquals(8L, sum.totalCount, "sum total")
+
+    check(left.union(left) === left, "union with self preserves exact identity")
+    check(left.intersect(left) === left, "intersection with self preserves exact identity")
+    check(left.except(left).isEmpty, "except with self clears the bag")
+    val empty = PersistentHashBag.empty<Int>(policy)
+    check(left.union(empty) === left, "union with empty preserves exact identity")
+    check(left.sum(empty) === left, "sum with empty preserves exact identity")
+    check(
+        union.hasValidInvariants() && intersection.hasValidInvariants() &&
+            difference.hasValidInvariants() && sum.hasValidInvariants(),
+        "bag algebra preserves invariants",
+    )
+}
+
+private fun persistentHashBagNormalizesReceiverPolicyAndRepresentativePrecedence() {
+    val receiverPolicy = EquivalentKeyPolicy()
+    val argumentPolicy = IdentityEquivalentKeyPolicy()
+    val receiverAlpha = EquivalentKey("alpha", 0)
+    val argumentAlphaOne = EquivalentKey("alpha", 1)
+    val argumentAlphaTwo = EquivalentKey("alpha", 2)
+    val argumentBetaOne = EquivalentKey("beta", 3)
+    val argumentBetaTwo = EquivalentKey("beta", 4)
+    val receiver = PersistentHashBag.empty<EquivalentKey>(receiverPolicy).addCopies(receiverAlpha, 2)
+    val argument = PersistentHashBag.empty<EquivalentKey>(argumentPolicy)
+        .add(argumentAlphaOne)
+        .addCopies(argumentAlphaTwo, 2)
+        .add(argumentBetaOne)
+        .add(argumentBetaTwo)
+    val firstArgumentBeta = argument.distinctItems().first { it.text == "beta" }
+
+    val union = receiver.union(argument)
+    checkEquals(3, union.countOf(receiverAlpha), "normalization sums collapsed argument classes")
+    checkEquals(2, union.countOf(argumentBetaOne), "normalization retains beta multiplicity")
+    check(union.get(argumentAlphaOne) === receiverAlpha, "receiver representative wins a surviving class")
+    check(
+        union.get(argumentBetaOne) === firstArgumentBeta,
+        "first argument enumeration representative wins a new normalized class",
+    )
+    checkEquals(5L, union.totalCount, "normalized union total")
+
+    check(
+        receiver.intersect(argument) === receiver,
+        "normalized intersection returns the receiver for an unchanged logical result",
+    )
+    check(receiver.except(argument).isEmpty, "normalized difference removes a saturated receiver class")
+    val sum = receiver.sum(argument)
+    checkEquals(5, sum.countOf(receiverAlpha), "normalized sum adds collapsed argument counts")
+    checkEquals(2, sum.countOf(argumentBetaOne), "normalized sum introduces absent classes")
+    check(sum.get(receiverAlpha) === receiverAlpha, "normalized sum retains receiver representative precedence")
+
+    val overflowArgument = PersistentHashBag.empty<EquivalentKey>(argumentPolicy)
+        .addCopies(argumentAlphaOne, Int.MAX_VALUE)
+        .add(argumentAlphaTwo)
+    val emptyReceiver = PersistentHashBag.empty<EquivalentKey>(receiverPolicy)
+    checkThrows<ArithmeticException>("mismatched-policy normalization is eager and checked") {
+        emptyReceiver.intersect(overflowArgument)
+    }
+    checkEquals(0L, emptyReceiver.totalCount, "normalization failure leaves the receiver unchanged")
+    checkEquals(
+        Int.MAX_VALUE.toLong() + 1L,
+        overflowArgument.totalCount,
+        "normalization failure leaves the argument unchanged",
+    )
+
+    val throwingPolicy = ThrowingIntPolicy()
+    val throwingReceiver = PersistentHashBag.empty<Int>(throwingPolicy)
+    val strictArgument = PersistentHashBag.from(listOf(1, 2))
+    throwingPolicy.throwOnHash = true
+    checkThrows<InjectedPolicyFailure>("normalization hash failure is failure-atomic") {
+        throwingReceiver.union(strictArgument)
+    }
+    throwingPolicy.throwOnHash = false
+    throwingPolicy.throwOnEquivalent = true
+    checkThrows<InjectedPolicyFailure>("normalization equality failure is failure-atomic") {
+        throwingReceiver.sum(strictArgument)
+    }
+    throwingPolicy.throwOnEquivalent = false
+    check(throwingReceiver.isEmpty, "normalization callback failures leave the receiver unchanged")
+    checkEquals(2L, strictArgument.totalCount, "normalization callback failures leave the argument unchanged")
+
+    val methodNames = PersistentHashBag::class.java.declaredMethods.map { it.name }.toSet()
+    check(
+        "getSize" !in methodNames && "getCount" !in methodNames,
+        "bag API exposes neither ambiguous size nor count",
+    )
+    val nestedNames = PersistentHashBag::class.java.declaredClasses.map { it.simpleName }.toSet()
+    check(
+        "Transient" !in nestedNames && "Builder" !in nestedNames,
+        "bag API exposes no transient or public builder lifecycle",
+    )
+}
+
+private fun persistentHashBagDeterministicModel() {
+    val policy = ConstantPolicy<Int>()
+    var bag = PersistentHashBag.empty<Int>(policy)
+    val model = mutableMapOf<Int, Int>()
+    val random = Random(0x5eedba9L)
+
+    repeat(1_000) { operation ->
+        val item = random.nextInt(24)
+        val copies = 1 + random.nextInt(4)
+        when (random.nextInt(4)) {
+            0 -> {
+                bag = bag.addCopies(item, copies)
+                model[item] = Math.addExact(model[item] ?: 0, copies)
+            }
+            1 -> {
+                bag = bag.removeCopies(item, copies)
+                val next = (model[item] ?: 0) - copies
+                if (next > 0) model[item] = next else model.remove(item)
+            }
+            2 -> {
+                bag = bag.removeAll(item)
+                model.remove(item)
+            }
+            else -> {
+                bag = bag.add(item)
+                model[item] = Math.addExact(model[item] ?: 0, 1)
+            }
+        }
+
+        if (operation % 37 == 0) {
+            checkEquals(model.size, bag.distinctCount, "model distinct count at operation $operation")
+            checkEquals(
+                model.values.sumOf { it.toLong() },
+                bag.totalCount,
+                "model total count at operation $operation",
+            )
+            for (key in 0 until 24) {
+                checkEquals(model[key] ?: 0, bag.countOf(key), "model multiplicity for $key at $operation")
+            }
+            checkEquals(
+                model,
+                bag.asSequence().groupingBy { it }.eachCount(),
+                "expanded enumeration model at operation $operation",
+            )
+            check(bag.hasValidInvariants(), "bag invariants at operation $operation")
         }
     }
 }
@@ -1510,6 +1960,17 @@ public fun main() {
         "structuralSetAlgebraPrunesSharedNodesAndMatchesModels" to ::structuralSetAlgebraPrunesSharedNodesAndMatchesModels,
         "crossPolicyRelationsUseReceiverPolicy" to ::crossPolicyRelationsUseReceiverPolicy,
         "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,
+        "persistentMapFactoriesUseOneDescentAndSelectOneBranch" to
+            ::persistentMapFactoriesUseOneDescentAndSelectOneBranch,
+        "persistentMapFactoriesRetainRepresentativesNullsAndFailureAtomicity" to
+            ::persistentMapFactoriesRetainRepresentativesNullsAndFailureAtomicity,
+        "persistentHashBagConstructionPointEditsAndViews" to
+            ::persistentHashBagConstructionPointEditsAndViews,
+        "persistentHashBagAlgebraUsesMultisetCountsAndIdentities" to
+            ::persistentHashBagAlgebraUsesMultisetCountsAndIdentities,
+        "persistentHashBagNormalizesReceiverPolicyAndRepresentativePrecedence" to
+            ::persistentHashBagNormalizesReceiverPolicyAndRepresentativePrecedence,
+        "persistentHashBagDeterministicModel" to ::persistentHashBagDeterministicModel,
         "transientMapLifecyclePreservesIdentityAndRepresentatives" to ::transientMapLifecyclePreservesIdentityAndRepresentatives,
         "transientMapPointEditsEnumerationAndFailureAtomicity" to ::transientMapPointEditsEnumerationAndFailureAtomicity,
         "transientMapDeterministicModelAcrossPublications" to ::transientMapDeterministicModelAcrossPublications,

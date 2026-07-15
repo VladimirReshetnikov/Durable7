@@ -5,15 +5,16 @@
 - Audience: Maintainers and reviewers of the Kotlin HAMT workspace
 - Scope: Documentation index for `src/Kotlin/Hamt`
 
-The Kotlin HAMT workspace ports the repository persistent HAMT map/set contract to idiomatic JVM
-values. Start here when reviewing Kotlin naming, runtime hash policies, immutable update behavior, or
-dependency-free validation.
+The Kotlin HAMT workspace ports the repository persistent HAMT map/set/bag contract to idiomatic JVM
+values. Start here when reviewing Kotlin naming, runtime hash policies, immutable update behavior,
+one-descent map factories, multiset algebra, or dependency-free validation.
 
 ## Current Documents
 
 - [API notes](api-notes.md) describe `PersistentHashMap<K, V>`, `PersistentHashSet<T>`,
-  `HashPolicy<K>`, collision behavior, no-op sharing diagnostics, duplicate handling, null miss paths,
-  and intentional differences from the C# and native ports.
+  `PersistentHashBag<T>`, `HashPolicy<K>`, one-descent map factories, collision behavior, no-op
+  sharing diagnostics, multiplicity and receiver-policy algebra, duplicate handling, null miss
+  paths, and intentional differences from the C# and native ports.
 - [Merkle search tree](merkle-search-tree.md) specifies the `mst-sha256-b16-v2` policy domain,
   strict canonical codecs, SHA-256 key layering, immutable wide-tree operations, exact `MST2`
   block framing, verified persistence, exact `MSP2` proofs, synchronization, three-way merge,
@@ -21,10 +22,11 @@ dependency-free validation.
 - [Validation](validation.md) records the `src/Kotlin/build.ps1` command shape, JDK/Kotlin compiler
   bootstrap behavior, generated-output locations, and the coverage boundary for the executable tests.
 - [Tests README](../tests/README.md) maps deterministic executable coverage for collisions, root
-  sharing, replacement, key retention, iteration, set algebra, Merkle golden bytes, canonical
-  history convergence, structural sharing, bounded hostile-input rejection, proof tampering,
-  iterative synchronization, present-null merge conflicts, randomized retained versions, and
-  concurrent readers/stores.
+  sharing, single-descent callback counts, replacement, key/value representative retention,
+  hash-bag point edits and algebra, iteration, set algebra, Merkle golden bytes, canonical history
+  convergence, structural sharing, bounded hostile-input rejection, proof tampering, iterative
+  synchronization, present-null merge conflicts, randomized retained versions, and concurrent
+  readers/stores.
 
 ## Related Repository Docs
 

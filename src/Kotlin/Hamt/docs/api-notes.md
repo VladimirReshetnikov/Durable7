@@ -9,6 +9,8 @@ Primary entry points:
 
 - `PersistentHashMap<K, V>`;
 - `PersistentHashSet<T>`;
+- `PersistentHashBag<T>`;
+- `MapValueResult<K, V>` for persistent map factory operations;
 - `PersistentHashMap.Transient<K, V>` and `PersistentHashSet.Transient<T>` one-way editing
   sessions;
 - `HashPolicy<K>` for runtime hash/equality policy injection;
@@ -60,6 +62,82 @@ Kotlin-specific differences:
 
 The hash contract is the standard hash-map contract: keys considered equivalent by the active
 `HashPolicy` must produce the same hash through that policy.
+
+## One-Descent Persistent Map Factories
+
+`PersistentHashMap.getOrAdd(key, addFactory)` and
+`PersistentHashMap.addOrUpdate(key, addFactory, updateFactory)` are ordinary immutable point
+operations. Their `MapValueResult<K, V>` reports both the successor `map` and the `value` actually
+stored, avoiding a second lookup. They do not adopt a map into a transient session and do not use a
+lookup-then-`put` composition internally.
+
+Both operations compute the key hash exactly once and use the existing CHAMP recursion to select a
+leaf, collision entry, inline bitmap payload, or child subtree and rebuild at most that route.
+`getOrAdd` invokes no factory on a hit and its add factory exactly once on a miss. `addOrUpdate`
+invokes exactly one of its two factories exactly once. The add factory receives the caller's key;
+the update factory receives the exact caller lookup key plus the stored value. Kotlin's non-null
+function parameters are validated by the generated JVM entry checks before the method body hashes
+the key, including when a factory's branch would not be selected.
+
+A miss stores the caller's key and selected value. A hit always retains the first stored key
+representative. If an update result is identical to or equal to the stored value under Kotlin's
+ordinary value equality, the map retains the stored value instance, returns that instance in
+`MapValueResult.value`, and returns the exact source map. A present `null` value remains distinct
+from absence because trie traversal selects the branch before interpreting the value. Hash-policy,
+factory, or value-equality exceptions escape without publishing a successor; every source version
+therefore remains unchanged and usable.
+
+The operation bound is O(w + c), where `w` is the bounded CHAMP depth and `c` is the scanned
+equal-full-hash collision bucket. The single hash/descent and callback counts are semantic operation
+contracts, not benchmark claims.
+
+## Persistent Hash Bag
+
+`PersistentHashBag<T>` is an immutable unordered multiset backed only by
+`PersistentHashMap<T, Int>`. Its map contains one positive multiplicity per `HashPolicy`
+equivalence class. `distinctCount` is the number of classes; `totalCount: Long` is the expanded
+occurrence count. The type deliberately exposes neither an ambiguous `size`/`count` property nor a
+public builder or transient session. `empty(policy)` and `from(items, policy)` retain the exact
+policy object, and construction processes input in iteration order while keeping the first
+representative of each class.
+
+`contains` tests class membership, `countOf` returns a class multiplicity or zero, and `get` returns
+the retained representative or `null`. For nullable element types, call `contains` to distinguish a
+stored null representative from a miss. `add`/`remove` change one occurrence;
+`addCopies`/`removeCopies` change a requested nonnegative number; `removeAll` removes a complete
+class. Negative copy counts fail before hashing, zero-copy operations return the receiver without
+hashing, removal saturates at zero, and missing removal is an identity-preserving no-op. Stored
+multiplicities are checked `Int` values in `1..Int.MAX_VALUE`; an addition that would overflow
+throws before a successor is returned. Internal `Long` total arithmetic is checked defensively.
+
+Default `Iterable<T>` and `asSequence()` traversal are expanded: every retained representative is
+yielded once per occurrence, with a class's copies contiguous. `distinctItems()` yields one
+representative per class, and `entries()` yields the same representatives paired with their
+positive multiplicities in identical stable-for-that-version, otherwise unspecified CHAMP order.
+Kotlin's standard iterable materializers can be used when the expanded result fits the target JVM
+collection.
+
+Bag algebra is receiver-policy multiset algebra:
+
+- `union` selects the maximum multiplicity per class;
+- `intersect` selects the minimum;
+- `except` computes saturating receiver-minus-argument multiplicities; and
+- `sum` performs checked per-class addition.
+
+When the policy objects are not reference-identical, the complete argument is first normalized
+under the receiver's policy, before any operation-specific empty or identity shortcut. Argument
+classes that collapse contribute a checked sum, and the first representative in that argument
+version's distinct CHAMP order represents a normalized class. A surviving receiver class always
+keeps its receiver representative; only a class absent from the receiver can introduce an argument
+representative. Thus comparer/hash/equality or checked-collapse failures remain observable even
+when an empty intersection could otherwise be answered immediately.
+
+Logical no-op algebra returns the exact receiver. In particular, union or intersection with self
+returns the receiver, except with self returns an empty bag retaining the receiver policy, and sum
+with self genuinely doubles every multiplicity and can overflow. Algebra and point operations build
+only immutable intermediate maps, so callback and arithmetic failures leave both operands intact.
+The implementation is deliberately element-wise over distinct entries and claims no structural
+lockstep or benchmark advantage.
 
 ## One-Way CHAMP Editing Sessions
 

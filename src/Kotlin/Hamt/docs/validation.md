@@ -27,6 +27,22 @@ rehashing, reference-pruned shared ancestry, all four structural algebra truth t
 set models. A focused partially shared CHAMP lineage proves that `mapEquals` and typed `diff` skip
 every reference-identical descendant, perform no rehashing, and invoke key-policy and value equality
 exactly once for the single changed leaf.
+Persistent factory-operation tests count exactly one hash and one selected callback across hit,
+miss, collision, and bitmap paths. They verify caller-key callback identity, retained stored key and
+equal-value representatives, present-null hits and updates, exact source-map identity for logical
+no-ops, and failure atomicity when hashing, key equivalence, a selected factory, or value equality
+throws.
+
+Hash-bag tests cover first-representative construction, explicit distinct and 64-bit total counts,
+expanded/distinct/entry order agreement, null elements, zero and negative pre-hash handling,
+saturating removal, checked `Int` multiplicity overflow, and CHAMP/count invariants. Algebra tables
+pin maximum union, minimum intersection, saturating difference, and checked additive sum. Separate
+policy-mismatch cases verify eager receiver-policy normalization, checked class collapse, receiver
+representative precedence, first-argument-order representatives for newly introduced classes,
+identity-preserving no-ops, and operand retention after failure. A 1,000-operation deterministic,
+constant-hash history compares point edits, totals, every class count, expanded iteration, and
+internal invariants with a mutable model. Reflection guards lock the absence of ambiguous
+`size`/`count` members and public bag builder/transient types.
 The one-way CHAMP-session tier checks O(1)-shape adoption/publication through exact object identity,
 policy identity, first stored representatives, null and collision entries, all point verbs, clear,
 active reads and receiver-policy set relations, exact trie-order enumeration, acquisition-time view

@@ -20,6 +20,10 @@ public class DuplicateKeyException(message: String = "An equivalent key is alrea
 
 public data class HamtEntry<K, V>(public val key: K, public val value: V)
 public data class AddResult<T>(public val value: T, public val added: Boolean)
+public data class MapValueResult<K, V>(
+    public val map: PersistentHashMap<K, V>,
+    public val value: V,
+)
 public data class MapRemoveResult<K, V>(public val map: PersistentHashMap<K, V>, public val value: V)
 public data class MapRemoveEntryResult<K, V>(
     public val map: PersistentHashMap<K, V>,
@@ -76,6 +80,11 @@ private data class RemoveResult<K, V>(
     val node: Node<K, V>?,
     val removed: HamtEntry<K, V>?,
     val changed: Boolean,
+)
+private data class FactoryUpdateResult<K, V>(
+    val node: Node<K, V>,
+    val added: Boolean,
+    val selected: V,
 )
 
 private const val ConsumedTransientMessage: String =
@@ -158,6 +167,45 @@ public class PersistentHashMap<K, V> private constructor(
         val result = insertNode(current, hash, key, value, 0, overwrite = false, policy)
         if (result.duplicate) return AddResult(this, false)
         return AddResult(PersistentHashMap(result.node, size + if (result.added) 1 else 0, policy), result.added)
+    }
+
+    /**
+     * Returns this map and its stored value on a hit, or invokes [addFactory] exactly once and
+     * returns a successor containing the caller's key on a miss.
+     *
+     * Kotlin's non-null function parameter is checked at the JVM method boundary before this body
+     * hashes [key]. The operation computes one hash and performs one recursive CHAMP descent.
+     */
+    public fun getOrAdd(key: K, addFactory: (K) -> V): MapValueResult<K, V> =
+        applyFactoryUpdate(key, addFactory, null)
+
+    /**
+     * Invokes exactly one selected factory in one hashed CHAMP descent. On a hit [updateFactory]
+     * receives the caller's lookup key and stored value; the stored key representative remains in
+     * the map. An equal result retains and returns the stored value instance and this map.
+     */
+    public fun addOrUpdate(
+        key: K,
+        addFactory: (K) -> V,
+        updateFactory: (K, V) -> V,
+    ): MapValueResult<K, V> = applyFactoryUpdate(key, addFactory, updateFactory)
+
+    private fun applyFactoryUpdate(
+        key: K,
+        addFactory: (K) -> V,
+        updateFactory: ((K, V) -> V)?,
+    ): MapValueResult<K, V> {
+        val hash = policy.hash(key)
+        val current = root
+        if (current == null) {
+            val selected = addFactory(key)
+            return MapValueResult(PersistentHashMap(Leaf(hash, key, selected), 1, policy), selected)
+        }
+
+        val result = factoryUpdateNode(current, hash, key, 0, policy, addFactory, updateFactory)
+        if (result.node === current) return MapValueResult(this, result.selected)
+        val nextSize = if (result.added) Math.addExact(size, 1) else size
+        return MapValueResult(PersistentHashMap(result.node, nextSize, policy), result.selected)
     }
 
     public fun setItems(items: Iterable<Pair<K, V>>): PersistentHashMap<K, V> {
@@ -656,6 +704,168 @@ private fun <K, V> insertBitmap(
     return InsertResult(
         node.copy(dataMap = node.dataMap or bit, data = inserted(node.data, sparseIndex(node.dataMap, bit), Leaf(hash, key, value))),
         true, true, false,
+    )
+}
+
+private data class FactoryValueSelection<V>(
+    val changed: Boolean,
+    val selected: V,
+)
+
+private fun <K, V> selectFactoryValue(
+    key: K,
+    stored: V,
+    updateFactory: ((K, V) -> V)?,
+): FactoryValueSelection<V> {
+    if (updateFactory == null) return FactoryValueSelection(false, stored)
+    val selected = updateFactory(key, stored)
+    return if (hamtValuesEqual(stored, selected)) {
+        FactoryValueSelection(false, stored)
+    } else {
+        FactoryValueSelection(true, selected)
+    }
+}
+
+private fun <K, V> factoryUpdateNode(
+    node: Node<K, V>,
+    hash: Int,
+    key: K,
+    shift: Int,
+    policy: HashPolicy<K>,
+    addFactory: (K) -> V,
+    updateFactory: ((K, V) -> V)?,
+): FactoryUpdateResult<K, V> = when (node) {
+    is Leaf -> factoryUpdateLeaf(node, hash, key, shift, policy, addFactory, updateFactory)
+    is Collision -> factoryUpdateCollision(node, hash, key, shift, policy, addFactory, updateFactory)
+    is BitmapNode -> factoryUpdateBitmap(node, hash, key, shift, policy, addFactory, updateFactory)
+}
+
+private fun <K, V> factoryUpdateLeaf(
+    node: Leaf<K, V>,
+    hash: Int,
+    key: K,
+    shift: Int,
+    policy: HashPolicy<K>,
+    addFactory: (K) -> V,
+    updateFactory: ((K, V) -> V)?,
+): FactoryUpdateResult<K, V> {
+    if (node.hash == hash && policy.equivalent(node.key, key)) {
+        val selection = selectFactoryValue(key, node.value, updateFactory)
+        return if (selection.changed) {
+            FactoryUpdateResult(Leaf(hash, node.key, selection.selected), false, selection.selected)
+        } else {
+            FactoryUpdateResult(node, false, selection.selected)
+        }
+    }
+
+    val selected = addFactory(key)
+    return FactoryUpdateResult(
+        mergeNodes(node, node.hash, Leaf(hash, key, selected), hash, shift),
+        true,
+        selected,
+    )
+}
+
+private fun <K, V> factoryUpdateCollision(
+    node: Collision<K, V>,
+    hash: Int,
+    key: K,
+    shift: Int,
+    policy: HashPolicy<K>,
+    addFactory: (K) -> V,
+    updateFactory: ((K, V) -> V)?,
+): FactoryUpdateResult<K, V> {
+    if (node.hash != hash) {
+        val selected = addFactory(key)
+        return FactoryUpdateResult(
+            mergeNodes(node, node.hash, Leaf(hash, key, selected), hash, shift),
+            true,
+            selected,
+        )
+    }
+
+    val index = node.entries.indexOfFirst { policy.equivalent(it.key, key) }
+    if (index < 0) {
+        val selected = addFactory(key)
+        return FactoryUpdateResult(
+            Collision(hash, node.entries + Leaf(hash, key, selected)),
+            true,
+            selected,
+        )
+    }
+
+    val stored = node.entries[index]
+    val selection = selectFactoryValue(key, stored.value, updateFactory)
+    if (!selection.changed) return FactoryUpdateResult(node, false, selection.selected)
+    val entries = node.entries.toMutableList()
+    entries[index] = Leaf(hash, stored.key, selection.selected)
+    return FactoryUpdateResult(Collision(hash, entries.toList()), false, selection.selected)
+}
+
+private fun <K, V> factoryUpdateBitmap(
+    node: BitmapNode<K, V>,
+    hash: Int,
+    key: K,
+    shift: Int,
+    policy: HashPolicy<K>,
+    addFactory: (K) -> V,
+    updateFactory: ((K, V) -> V)?,
+): FactoryUpdateResult<K, V> {
+    val bit = bitPosition(hashFragment(hash, shift))
+    if (node.dataMap and bit != 0) {
+        val index = sparseIndex(node.dataMap, bit)
+        val stored = node.data[index]
+        if (stored.hash == hash && policy.equivalent(stored.key, key)) {
+            val selection = selectFactoryValue(key, stored.value, updateFactory)
+            if (!selection.changed) return FactoryUpdateResult(node, false, selection.selected)
+            return FactoryUpdateResult(
+                node.copy(data = replaced(node.data, index, Leaf(hash, stored.key, selection.selected))),
+                false,
+                selection.selected,
+            )
+        }
+
+        val selected = addFactory(key)
+        val child = mergeNodes(stored, stored.hash, Leaf(hash, key, selected), hash, shift + BitsPerLevel)
+        return FactoryUpdateResult(
+            BitmapNode(
+                node.dataMap and bit.inv(),
+                node.nodeMap or bit,
+                removed(node.data, index),
+                inserted(node.nodes, sparseIndex(node.nodeMap, bit), child),
+            ),
+            true,
+            selected,
+        )
+    }
+
+    if (node.nodeMap and bit != 0) {
+        val index = sparseIndex(node.nodeMap, bit)
+        val child = factoryUpdateNode(
+            node.nodes[index],
+            hash,
+            key,
+            shift + BitsPerLevel,
+            policy,
+            addFactory,
+            updateFactory,
+        )
+        if (child.node === node.nodes[index]) return FactoryUpdateResult(node, child.added, child.selected)
+        return FactoryUpdateResult(
+            node.copy(nodes = replaced(node.nodes, index, child.node)),
+            child.added,
+            child.selected,
+        )
+    }
+
+    val selected = addFactory(key)
+    return FactoryUpdateResult(
+        node.copy(
+            dataMap = node.dataMap or bit,
+            data = inserted(node.data, sparseIndex(node.dataMap, bit), Leaf(hash, key, selected)),
+        ),
+        true,
+        selected,
     )
 }
 

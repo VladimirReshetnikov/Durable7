@@ -27,6 +27,18 @@ Coverage groups:
 - set algebra, equality, and proper subset/superset relations;
 - cross-policy subset/superset/equality/overlap relations under the receiver's `HashPolicy`;
 - JVM concurrent readers over shared immutable map/set snapshots;
+- one-descent persistent-map `getOrAdd`/`addOrUpdate`: exact one-hash and selected-factory counts,
+  leaf/collision/bitmap routing, caller-key callback identity, retained stored key and equal-value
+  representatives, present-null values, exact no-op map identity, and immutable source retention
+  across injected hash, equivalence, factory, and value-equality failures;
+- persistent hash-bag construction and point edits: first representatives, checked positive `Int`
+  multiplicities, explicit `distinctCount`/`totalCount`, negative and zero pre-hash behavior,
+  saturating removal, null classes, expanded/distinct/entry iteration, and internal CHAMP/count
+  invariants;
+- persistent hash-bag maximum/minimum/saturating/additive algebra, eager receiver-policy
+  normalization and checked class collapse, receiver and first-argument representative precedence,
+  self/empty identity behavior, API-shape guards excluding ambiguous count and mutable lifecycle
+  surfaces, plus a 1,000-operation constant-hash deterministic model;
 - one-way CHAMP map/set editing sessions: exact clean-source and policy identity, stored
   representatives, null/collision point edits, clear, active trie-order enumeration, version-bound
   views captured at acquisition, receiver-policy set relations, consumed-session failures,

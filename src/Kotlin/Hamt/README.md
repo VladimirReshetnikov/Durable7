@@ -16,6 +16,14 @@ and let map equality, typed diff, algebra, and same-policy set relations prune
 JVM-reference-identical roots and descendants; cross-policy relations retain receiver-policy
 semantics.
 
+Persistent maps also provide one-descent `getOrAdd` and `addOrUpdate` point combinators. Each
+operation hashes once, follows one CHAMP route, invokes only the selected factory, and returns a
+`MapValueResult<K, V>` containing both the successor map and the value actually retained. Hits keep
+the original key representative; an update equal to the stored value keeps that value instance and
+the exact source map. `PersistentHashBag<T>` builds an immutable unordered multiset over the same
+map, with explicit `distinctCount`, 64-bit `totalCount`, positive checked 32-bit multiplicities,
+expanded/default iteration, distinct and entry views, and receiver-policy multiset algebra.
+
 The CHAMP map and set also expose one-way `Transient` editing sessions through `toTransient()` and
 `createTransient(...)`. Adoption and `persist()` are O(1) reference transfers, clean or logically
 unchanged sessions publish the exact adopted persistent object, and successful publication consumes
@@ -40,10 +48,10 @@ subtree cardinality, so algebra results publish their count without a finishing 
 and intersection also provide `(key, leftValue, rightValue)` combining overloads. Rebuilds retain the
 receiver and its root whenever an update or algebra operation is semantically unchanged.
 
-The default factories use Kotlin `hashCode`/`equals`, keeping the public shape close to JVM collection
-expectations while preserving the repository HAMT contracts: persistent updates, duplicate-key
-rejection, last-wins bulk replacement, original-key retention on equivalent-key replacement, and set
-algebra.
+The default collection factories use Kotlin `hashCode`/`equals`, keeping the public shape close to
+JVM collection expectations while preserving the repository HAMT contracts: persistent updates,
+duplicate-key rejection, last-wins bulk replacement, original-key retention on equivalent-key
+replacement, multiset counts, and set/bag algebra.
 
 The workspace also exposes `MerkleSearchTree<K, V>`, the exact safe-JVM core/wire port of the C#
 paper-style B=16 wide Merkle search tree. `MerkleSearchTreePolicy<K, V>` binds a comparator and
