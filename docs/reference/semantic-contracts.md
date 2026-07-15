@@ -141,11 +141,12 @@ Language-specific obligations:
 
 ### Persistent hash bags
 
-`PersistentHashBag` ships in C#, TypeScript, and Python as an unordered-multiset facade over the
+`PersistentHashBag` ships across all eight languages as an unordered-multiset facade over the
 language-local persistent HAMT. It stores exactly one representative and one positive multiplicity
 in `1 .. 2^31 - 1` per policy equivalence class. Distinct-class count is separate from expanded
 total count, and no ambiguous collection `Count`/`size` is exposed for expanded enumeration. C# uses
-a checked `long` total, TypeScript uses `bigint`, and Python uses `int`. Construction and point
+a checked `long` total; C/C++/Haskell/Kotlin/Rust use their corresponding bounded wide integer;
+TypeScript uses `bigint`; and Python uses `int`. Construction and point
 additions retain the first stored representative; expanded enumeration repeats each representative
 contiguously, while distinct-item and entry views enumerate one class each in the same
 stable-for-one-version, otherwise unspecified HAMT order.
@@ -157,10 +158,10 @@ policy before any operation-specific shortcut; collapsed argument multiplicities
 use the first representative observed in that argument version's HAMT order. Zero-copy and logical
 no-op updates return the receiver, and empty results preserve its policy object. Array/list
 materialization validates the local runtime representation before allocation. The normative semantic
-reference is the [C# HAMT API specification](../../src/CSharp/docs/Hamt/api-specification.md); the
-[TypeScript API notes](../../src/TypeScript/docs/api-notes.md) and
-[Python API notes](../../src/Python/docs/api-notes.md) document their presence-safe lookup and
-wide-count mappings.
+reference is the [C# HAMT API specification](../../src/CSharp/docs/Hamt/api-specification.md);
+language-local API notes document ownership, failure/result, presence-safe lookup, and wide-count
+mappings. The [completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md)
+indexes every port.
 
 ### Construction-only HAMT bulk builders
 
@@ -249,7 +250,7 @@ The local authoritative references are the [C API specification](../../src/C/Ham
 
 ## Insertion-Ordered Persistent Set
 
-`PersistentOrderedSet` ships in the neutral C#, TypeScript, and Python Ordered modules. It composes
+`PersistentOrderedSet` ships in neutral Ordered modules across all eight languages. It composes
 a persistent HAMT membership/stamp index with a persistent ordered sequence and must not depend on
 the application-specific Tungsten family. Shared obligations are:
 
@@ -271,9 +272,9 @@ the application-specific Tungsten family. Shared obligations are:
 
 The normative surface and bounds are in the
 [C# Ordered API specification](../../src/CSharp/docs/Ordered/api-specification.md). Runtime-native
-result/exception shapes and diagnostic adaptations are documented in the
-[TypeScript](../../src/TypeScript/docs/api-notes.md) and
-[Python](../../src/Python/docs/api-notes.md) package notes.
+result/exception, ownership, and diagnostic adaptations are documented in each sibling workspace;
+the [completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md)
+indexes them.
 
 ## Finger-Tree Core
 
@@ -303,7 +304,7 @@ The C# FingerTree assembly ships
 `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` as a separate path-copied implicit-AVL core.
 It is an immutable indexed sequence with persistent point edits, split/concat/range extraction,
 lazy range updates, and ordered whole/range measures. It does not add lazy tags to the existing
-finger-tree engines. The C# reference is the semantic baseline for the pending C, C++, Haskell,
+finger-tree engines. The C# reference is the semantic baseline for the shipped C, C++, Haskell,
 Kotlin, Rust, TypeScript, and Python ports.
 
 Its `IRangeUpdateAlgebra<TElement, TMeasure, TTag>` policy extends `IMeasure` and must satisfy all
@@ -348,9 +349,12 @@ The exact API, affine assignment/addition example, invariants, and complexity li
 [Range contract](../../src/CSharp/docs/FingerTree/range-update-sequence.md); the executable gate is
 recorded in the [C# validation guide](../../src/CSharp/docs/FingerTree/validation.md#range-update-sequence-integration-gate).
 Both full serialized C# Debug and Release builds complete with zero warnings and zero errors, and
-both configurations pass 1,417/1,417 tests. No benchmark was run; measurements remain postponed
-until an isolated session. Steps 1–3 of the same parity tranche remain pending in C, C++, Haskell,
-Kotlin, and Rust, while Range remains pending in all seven sibling workspaces.
+both configurations pass 1,417/1,417 tests. Language-local Range ports, together with the same
+tranche's HAMT factories, hash bags, and neutral ordered sets, now ship in C, C++, Haskell, Kotlin,
+Rust, TypeScript, and Python. The
+[cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md)
+records their exact mappings and gates. No benchmark was run; measurements remain postponed until
+an isolated session.
 
 ## Reversible Deque
 
@@ -416,9 +420,9 @@ deterministic:
 The workspace is independently owned and depends only on the public C# HAMT and FingerTree projects.
 Neither production nor tests may reference `Tools.DataStructures.Tungsten`, consume Tungsten source
 or internals, use `PersistentAssociation` as a live oracle, or adopt Tungsten as semantic authority.
-Similar sparse-order mechanics are provenance, not shared ownership. Ports to C, C++, Haskell,
-Kotlin, and Rust remain pending and must derive from this Ordered contract through language-local
-ownership and policy models; TypeScript and Python already ship neutral sibling implementations.
+Similar sparse-order mechanics are provenance, not shared ownership. C, C++, Haskell, Kotlin,
+Rust, TypeScript, and Python ship neutral sibling implementations derived from this Ordered
+contract through language-local ownership and policy models.
 
 The [Ordered validation guide](../../src/CSharp/docs/Ordered/validation.md) and
 [test map](../../src/CSharp/tests/Tools.DataStructures.Ordered.Tests/README.md) define the evidence

@@ -94,7 +94,7 @@ position or measure, indexed access where exposed, and immutable structural shar
 
 ## Range-Update Sequence
 
-C# ships `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` as an immutable indexed sequence
+All eight languages ship a language-local `RangeUpdateSequence` as an immutable indexed sequence
 with logarithmic persistent point edits, concatenation/splitting, range extraction, lazy range
 updates, and ordered range-measure queries. It is an independently implemented path-copied implicit
 AVL sibling in the FingerTree assembly, not a tagged modification of either existing finger-tree
@@ -113,12 +113,19 @@ proper subrange updates and queries perform logarithmic boundary work.
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
 | C# | `IRangeUpdateAlgebra<TElement, TMeasure, TTag>`, `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` | [Contract, algebra, and invariants](../../src/CSharp/docs/FingerTree/range-update-sequence.md), [API specification](../../src/CSharp/docs/FingerTree/api-specification.md#range-update-sequence), [source](../../src/CSharp/src/Tools.DataStructures.FingerTree/RangeUpdateSequence.cs), [algebra source](../../src/CSharp/src/Tools.DataStructures.FingerTree/IRangeUpdateAlgebra.cs), [validation](../../src/CSharp/docs/FingerTree/validation.md#range-update-sequence-integration-gate), [tests](../../src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/README.md) |
+| C | `ft_range_update_policy`, `ft_range_update_sequence` | [public header](../../src/C/FingerTree/include/tools/data_structures/finger_tree/range_update_sequence.h), [implementation](../../src/C/FingerTree/src/range_update_sequence.c), [tests](../../src/C/FingerTree/tests/range_update_sequence_tests.c) |
+| C++ | `range_update_sequence<Element, Algebra>` | [header](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/range_update_sequence.hpp), [tests](../../src/Cpp/FingerTree/tests/range_update_sequence_tests.cpp), [validation](../../src/Cpp/FingerTree/docs/validation.md) |
+| Haskell | `RangeUpdateAlgebra`, `RangeUpdateSequence` | [source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/RangeUpdateSequence.hs), [tests](../../src/Haskell/FingerTree/test/RangeUpdateSequenceTests.hs) |
+| Kotlin | `RangeUpdateAlgebra<T, M, Tag>`, `RangeUpdateSequence<T, M, Tag>` | [source](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/RangeUpdateSequence.kt), [contract](../../src/Kotlin/FingerTree/docs/range-update-sequence.md), [tests](../../src/Kotlin/FingerTree/test/tools/datastructures/fingertree/RangeUpdateSequenceTests.kt) |
+| Rust | `RangeUpdateAlgebra`, `RangeUpdateSequence` | [crate](../../src/Rust/RangeUpdate/README.md), [source](../../src/Rust/RangeUpdate/src/lib.rs), [tests](../../src/Rust/RangeUpdate/tests/range_update_sequence.rs) |
+| TypeScript | `RangeUpdateAlgebra<T, M, Tag>`, `RangeUpdateSequence<T, M, Tag>` | [contract](../../src/TypeScript/docs/range-update-sequence.md), [source](../../src/TypeScript/src/finger-tree/range-update-sequence.ts), [tests](../../src/TypeScript/test/finger-tree/range-update-sequence.test.ts) |
+| Python | `RangeUpdateAlgebra`, `RangeUpdateSequence` | [contract](../../src/Python/docs/range-update-sequence.md), [source](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/range_update_sequence.py), [tests](../../src/Python/tests/finger_tree/test_range_update_sequence.py) |
 
 Both full serialized C# Debug and Release solution builds complete with zero warnings and zero
 errors, and both configurations pass 1,417/1,417 tests. No benchmark was run; measurement remains
-postponed until an isolated session. Range-update ports remain pending in C, C++, Haskell, Kotlin,
-Rust, TypeScript, and Python. Separately, the single-pass HAMT updates, hash bag, and ordered set
-remain pending in C, C++, Haskell, Kotlin, and Rust; their TypeScript and Python ports already ship.
+postponed until an isolated session. The single-pass HAMT updates, hash bag, ordered set, and
+range-update sequence now ship across all eight languages; the detailed evidence is in the
+[cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md).
 
 ## Reversible Deque
 
@@ -251,11 +258,16 @@ applying shortcuts, retaining receiver representatives and first normalized argu
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
 | C# | `PersistentOrderedSet<T>` | [Workspace](../../src/CSharp/docs/Ordered/overview.md), [usage guide](../../src/CSharp/docs/Ordered/usage.md), [API specification](../../src/CSharp/docs/Ordered/api-specification.md), [source](../../src/CSharp/src/Tools.DataStructures.Ordered), [validation](../../src/CSharp/docs/Ordered/validation.md), [tests](../../src/CSharp/tests/Tools.DataStructures.Ordered.Tests/README.md) |
+| C | `tds_ordered_set` | [workspace](../../src/C/Ordered/README.md), [public header](../../src/C/Ordered/include/tools/data_structures/ordered/ordered_set.h), [tests](../../src/C/Ordered/tests/ordered_set_tests.c) |
+| C++ | `persistent_ordered_set<T, Hash, KeyEqual>` | [workspace](../../src/Cpp/Ordered/README.md), [header](../../src/Cpp/Ordered/include/tools/data_structures/ordered/persistent_ordered_set.hpp), [tests](../../src/Cpp/Ordered/tests/persistent_ordered_set_tests.cpp) |
+| Haskell | `PersistentOrderedSet` | [workspace](../../src/Haskell/Ordered/README.md), [source](../../src/Haskell/Ordered/src/Data/Structures/Ordered/PersistentOrderedSet.hs) |
+| Kotlin | `PersistentOrderedSet<T>` | [workspace](../../src/Kotlin/Ordered/README.md), [source](../../src/Kotlin/Ordered/src/tools/datastructures/ordered/PersistentOrderedSet.kt) |
+| Rust | `PersistentOrderedSet<T, S>` | [workspace](../../src/Rust/Ordered/README.md), [source](../../src/Rust/Ordered/src/lib.rs), [tests](../../src/Rust/Ordered/tests/persistent_ordered_set.rs) |
 | TypeScript | `PersistentOrderedSet<T>`, idiomatic lookup/removal result values | [Workspace](../../src/TypeScript/README.md), [API notes](../../src/TypeScript/docs/api-notes.md), [source](../../src/TypeScript/src/ordered), [tests](../../src/TypeScript/test/ordered) |
 | Python | `PersistentOrderedSet`, `OrderedSetValueResult`, `OrderedSetRemoveResult` | [Workspace](../../src/Python/README.md), [API notes](../../src/Python/docs/api-notes.md), [source](../../src/Python/src/vladimir_reshetnikov/data_structures/ordered), [tests](../../src/Python/tests/ordered) |
 
-C, C++, Haskell, Kotlin, and Rust ports remain pending. The C# focused single-worker Debug and
-Release lanes each pass 62 tests. At the historical pre-Range Ordered shipment checkpoint, the full
+All eight ports ship. The C# focused single-worker Debug and Release lanes each pass 62 tests. At
+the historical pre-Range Ordered shipment checkpoint, the full
 serialized C# Release build had zero warnings and zero errors and the complete gate passed
 1,355/1,355 tests; current full-workspace evidence is the 1,417/1,417 Debug and Release Range gate
 recorded above. No benchmark was run for either shipment, and measurements remain postponed for an

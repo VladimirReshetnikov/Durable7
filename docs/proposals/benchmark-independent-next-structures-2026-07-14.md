@@ -1,44 +1,38 @@
 # Benchmark-Independent Next Data Structures: Detailed C# Implementation Proposal
 
-- Status: Historical design and active sibling-parity execution — Steps 1–4 shipped in C#; Steps 1–3 also shipped in TypeScript and Python; benchmark-independent work only
+- Status: Historical design and completed eight-language execution — all four surfaces shipped in C#, C, C++, Haskell, Kotlin, Rust, TypeScript, and Python; benchmark-independent work only
 - Created (UTC): 2026-07-14T19:23:49Z
 - Repository HEAD: ab9a73c6ae20a3b0ee0627bfe810117450e20c3e
 - Revised (UTC): 2026-07-14T21:14:47Z at faf53286375109fc598e40d5e6da7d1bff7e7415
 - Shipment update (UTC): 2026-07-15T04:33:18Z at c14dfb2e016cff001e0afe4ba30c139ba335786b
+- Cross-language completion (UTC): 2026-07-15 at d71c50e8163c5b12cab5881d9cc0191020ee9fe3
 - Audience: Maintainers selecting the next C# persistent-collection work after Axis 1 and the shipped Axis 2 tranches
 - Scope: Repository-wide plan/proposal audit, candidate disposition, detailed contracts and validation gates for the next C# data structures that do not depend on postponed benchmark evidence, and their required sibling-language follow-through
 
 > **Current shipment note.** This document preserves the proposal-time design reasoning and staged
-> exit criteria. Since that reasoning was written, the one-descent HAMT factory operations,
-> `PersistentHashBag`, and the independently owned neutral `PersistentOrderedSet` have shipped in
-> C#, TypeScript, and Python. TypeScript and Python also carry the public construction-only CHAMP
-> builder and complete transient-set relation surface added during parity work. The C#
-> `RangeUpdateSequence` source, tests, documentation, focused lane, FingerTree project lane, and
-> complete serialized Debug and Release solution gates have now passed, so Step 4 is shipped in C#
-> and the sibling rollout is authorized. Steps 1–3 remain pending in C, C++, Haskell, Kotlin, and
-> Rust; `RangeUpdateSequence` remains pending in all seven siblings. Future-tense wording in the
-> completed sections is retained as historical implementation guidance, not current status.
+> exit criteria. All four selected surfaces now ship in C#, C, C++, Haskell, Kotlin, Rust,
+> TypeScript, and Python. The detailed
+> [cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md)
+> records source, tests, package wiring, dependency direction, review status, and serialized
+> validation evidence. Future-tense wording in the completed sections is retained as historical
+> implementation guidance, not current status.
 
 ## Decision
 
 Proceed in this order:
 
-1. Add persistent-HAMT single-pass `GetOrAdd`/`AddOrUpdate` operations — **shipped in C#,
-   TypeScript, and Python**.
-2. Implement `PersistentHashBag<T>` over `PersistentHashMap<T, int>` — **shipped in C#,
-   TypeScript, and Python** (with language-appropriate wide total-count types).
+1. Add persistent-HAMT single-pass `GetOrAdd`/`AddOrUpdate` operations — **shipped across all eight languages**.
+2. Implement `PersistentHashBag<T>` over `PersistentHashMap<T, int>` — **shipped across all eight languages** (with language-appropriate wide total-count types).
 3. Implement `PersistentOrderedSet<T>` as an independently owned composite in a new general
    `Tools.DataStructures.Ordered` project. Fork the useful dual-index and sparse-label mechanics;
    do not reference, wrap, or inherit semantics from Tungsten `PersistentAssociation` — **shipped
-   in C#, TypeScript, and Python neutral Ordered packages**.
+   across all eight languages in neutral Ordered packages**.
 4. Implement `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` as the next genuinely new
    structure core, after locking its tag-action algebra and executable laws. Prefer a separate
    path-copied implicit AVL core over adding lazy tags to the existing measured finger-tree engine
-   — **shipped in C# after the focused, project, and complete serialized Debug and Release solution
-   gates passed; sibling ports remain pending**.
-5. With C# Step 4 shipped, complete the remaining parity matrix: port Steps 1–3 to C, C++,
-   Haskell, Kotlin, and Rust, and port `RangeUpdateSequence` to all seven sibling workspaces,
-   including TypeScript and Python.
+   — **shipped across all eight languages after the C#-first gate and serialized sibling validation**.
+5. Complete the remaining parity matrix — **complete in C, C++, Haskell, Kotlin, Rust, TypeScript,
+   and Python**.
 6. Keep `PersistentBiMap<TKey, TValue>` and a value-carrying interval map as reserve candidates.
    Give either a dedicated contract pass before promoting it into the active sequence.
 
@@ -62,11 +56,10 @@ the section labels, and the implementation tranches remain the authoritative lan
 
 ### C#-First Cross-Language Follow-Through
 
-C# remains the reference implementation. TypeScript and Python parity for the already-complete
-Steps 1–3 landed before the new-core tranche finished. The C# `RangeUpdateSequence` has now passed
-its complete serialized Debug and Release solution gates, satisfying the C#-first rollout gate.
-Sibling implementation is therefore authorized. Cross-language completion remains required, not a
-discretionary follow-up, and covers all four surfaces introduced in this execution sequence:
+C# remains the reference implementation. TypeScript and Python parity for Steps 1–3 landed before
+the new-core tranche finished. The C# `RangeUpdateSequence` then passed its complete serialized
+Debug and Release solution gates, satisfying the C#-first rollout gate. The sibling rollout has now
+completed for all four surfaces introduced in this execution sequence:
 
 - the persistent-HAMT single-pass `GetOrAdd`/`AddOrUpdate` APIs and their one-descent callback and
   representative contracts;
@@ -74,14 +67,11 @@ discretionary follow-up, and covers all four surfaces introduced in this executi
 - `PersistentOrderedSet`; and
 - `RangeUpdateSequence`.
 
-Each surface must ultimately ship in all seven sibling workspaces: C, C++, Haskell, Kotlin, Rust,
-TypeScript, and Python. The remaining work is Steps 1–3 in C, C++, Haskell, Kotlin, and Rust, plus
-`RangeUpdateSequence` in all seven siblings. TypeScript and Python remain mandatory members of the
-parity set, including tests and documentation; they are not optional trailing ports. Each
-implementation should preserve the semantic contract while using language-local naming, ownership,
-error, enumeration, and policy idioms rather than mechanically copying the C# API shape. Validate
-one language workspace at a time with its checked-in single-worker or otherwise serialized
-build/test path, and never overlap sibling toolchains.
+Each surface ships in all seven sibling workspaces: C, C++, Haskell, Kotlin, Rust, TypeScript, and
+Python. The ports preserve the semantic contract while using language-local naming, ownership,
+error, enumeration, and policy idioms rather than mechanically copying the C# API shape. Each
+language workspace was validated through its checked-in single-worker or otherwise serialized
+build/test path without overlapping sibling toolchains.
 
 No benchmark is required to begin or ship these structures. This proposal does not authorize
 performance comparisons against BCL collections or claims that one representation beats another.
@@ -126,7 +116,7 @@ facade were not shipped C# types. Execution Steps 1 and 2 subsequently shipped t
 `GetOrAdd`/`AddOrUpdate` kernel and `PersistentHashBag<T>`, Step 3 shipped the neutral C# Ordered
 project, and TypeScript/Python parity now covers all three surfaces. Step 4 now has C# source, tests,
 documentation, and green focused, project, and complete serialized Debug and Release solution
-gates, so `RangeUpdateSequence` is shipped in C#; no sibling Range port has started.
+gates. All seven sibling Range ports and the five initially outstanding Steps 1–3 ports have since shipped.
 `PersistentBiMap` and the value-carrying interval-map candidate remain unshipped until their own complete
 source/test/documentation tranches land.
 
@@ -135,16 +125,16 @@ source/test/documentation tranches land.
 The following work is complete and must not be mistaken for pending implementation:
 
 - CHAMP canonical nodes, structural equality/diff, and structural map/set algebra;
-- one-descent persistent-HAMT map factories in C#, TypeScript, and Python, plus public reusable
+- one-descent persistent-HAMT map factories across all eight languages, plus public reusable
   construction-only CHAMP builders in C++, Rust, TypeScript, and Python;
-- `PersistentHashBag` facades in C#, TypeScript, and Python with explicit multiplicity,
+- `PersistentHashBag` facades across all eight languages with explicit multiplicity,
   receiver-policy algebra, and expanded/distinct enumeration contracts;
-- neutral `PersistentOrderedSet` packages in C#, TypeScript, and Python with independent contracts,
+- neutral `PersistentOrderedSet` packages across all eight languages with independent contracts,
   dependency graphs, models, and validation; the hardened C# implementation additionally locks its
   dual-index invariant, explicit movement, stable representatives, receiver-policy algebra,
   deterministic and failure-atomic relabel fallback, and strict Ordered-to-Tungsten dependency
   guard;
-- C# `RangeUpdateSequence` with its immutable implicit-AVL core, lazily composed range actions,
+- eight-language `RangeUpdateSequence` implementations with immutable implicit-AVL cores, lazily composed range actions,
   ordered measures, deterministic structural diagnostics, retained-version model coverage, and
   serialized Debug and Release shipment gates;
 - C# owner-token CHAMP transients and semantic one-way editing sessions in the sibling languages;
@@ -188,11 +178,10 @@ A candidate enters this proposal only when all of the following are true:
 source, representative rules, order, failure atomicity, no-op identity, and model oracle can all be
 stated before implementation.
 
-## Historical Independent Composite Design (Execution Step 3): `PersistentOrderedSet<T>` — Shipped In C#, TypeScript, And Python
+## Historical Independent Composite Design (Execution Step 3): `PersistentOrderedSet<T>` — Shipped Across All Eight Languages
 
 The design and exit criteria in this section are retained because they define the ownership boundary
-that the shipped C#, TypeScript, and Python ports follow. The C# hardening and shipment evidence are
-retained as the reference checkpoint for the remaining ports.
+that all eight shipped ports follow. The C# hardening and shipment evidence remain the reference checkpoint.
 
 ### Why It Was Selected And Remains General
 
@@ -494,7 +483,7 @@ the corresponding complete C# test gate passed **1,355/1,355** tests. Benchmarks
 performance result is inferred; benchmark execution remains postponed until it can run in isolation
 without competing agents or machine contention.
 
-## Execution Step 1: Persistent HAMT Single-Pass Updates — Shipped In C#, TypeScript, And Python
+## Execution Step 1: Persistent HAMT Single-Pass Updates — Shipped Across All Eight Languages
 
 ### Why This Is Separate From Builders And Transients
 
@@ -509,10 +498,10 @@ current repository vocabulary distinguishes those roles:
 - `GetOrAdd`/`AddOrUpdate` are ordinary persistent point operations returning immutable versions.
 
 Canonical bulk construction and C# transients already shipped before this proposal. Step 1 closed
-the C# single-pass persistent point-operation gap, and TypeScript/Python parity has since shipped.
-The remaining factory ports preserve the one-descent operation contract; they are not required to
-copy another language's decision about whether construction-only staging is public. This section
-records the C# reference contract and validation boundary for those remaining ports.
+the C# single-pass persistent point-operation gap, followed by all seven sibling ports. Those ports
+preserve the one-descent operation contract without copying another language's decision about
+whether construction-only staging is public. This section records the C# reference contract and
+validation boundary they followed.
 
 ### Recommended Surface
 
@@ -589,7 +578,7 @@ semantics but fail the enabling API’s single-descent purpose.
 
 These are operation-count and correctness gates, not wall-clock gates.
 
-## Execution Step 2: `PersistentHashBag<T>` — Shipped In C#, TypeScript, And Python
+## Execution Step 2: `PersistentHashBag<T>` — Shipped Across All Eight Languages
 
 ### Representation
 
@@ -1271,13 +1260,13 @@ rewriting proposal-time reasoning.
 
 ## Implementation And Commit Tranches
 
-If this proposal is accepted, use these self-contained tranches:
+The proposal landed through these self-contained tranches:
 
-1. **Persistent HAMT single-pass update kernel — shipped in C#, TypeScript, and Python**
+1. **Persistent HAMT single-pass update kernel — shipped across all eight languages**
    - node operation, public API, exhaustive transition/callback tests, docs.
-2. **Hash-bag facade — shipped in C#, TypeScript, and Python**
+2. **Hash-bag facade — shipped across all eight languages**
    - source, count/algebra/representative model tests, docs and catalogs.
-3. **Complete independent ordered set — shipped in C#, TypeScript, and Python**
+3. **Complete independent ordered set — shipped across all eight languages**
    - new Ordered source/test projects and solution entries;
    - independent API, invariants, representative/movement/algebra decisions, complexity contract;
    - forked private sparse-label mechanics, comparer-aware model, invariant and dependency guards;
@@ -1285,11 +1274,11 @@ If this proposal is accepted, use these self-contained tranches:
    - no Tungsten reference, friend grant, linked source, or live test oracle;
    - land no public stub or throwing placeholder: source, tests, and docs pass together;
    - no benchmark changes or claims.
-4. **Range-update algebra and private core — shipped in C#**
+4. **Range-update algebra and private core — shipped in C# and ported to all seven siblings**
    - law harness, node/tag invariants, split/join, deterministic counters.
-5. **Range-update public facade — shipped in C#**
+5. **Range-update public facade — shipped across all eight languages**
    - API, model/failure/concurrency tests, docs, catalogs, semantic contracts.
-6. **Remaining seven-sibling parity rollout — authorized by the completed C# Step 4 gate**
+6. **Remaining seven-sibling parity rollout — completed after the C# Step 4 gate**
    - port the single-pass HAMT APIs, hash bag, and ordered set to C, C++, Haskell, Kotlin, and Rust;
    - port the range-update sequence to C, C++, Haskell, Kotlin, Rust, TypeScript, and Python;
    - preserve the shared semantic contracts through language-local naming, ownership, error,
@@ -1326,12 +1315,12 @@ For documentation-only tranches, run the repository stale-path scan, Markdown li
 ## Final Recommendation
 
 The persistent HAMT's single-pass point-update kernel and `PersistentHashBag<T>` facade are complete
-in C#, TypeScript, and Python. The bag consumes that enabling API inside the shipped HAMT family and
+across all eight languages. The bag consumes that enabling API inside the shipped HAMT family and
 supplies explicit multiplicity, receiver-policy normalization, representative, overflow, identity,
 and expanded-enumeration semantics without depending on benchmark evidence.
 
-`PersistentOrderedSet<T>` has likewise shipped in independently owned neutral C#, TypeScript, and
-Python packages. Each port reuses public general foundations but owns its dual-index invariant,
+`PersistentOrderedSet<T>` has likewise shipped in independently owned neutral packages across all
+eight languages. Each port reuses public general foundations but owns its dual-index invariant,
 sparse-label/relabel implementation, movement and representative contract, independent model, and
 evolution. The hardened C# tranche also locks deterministic, failure-atomic relabel fallback and
 strict dependency guards. Tungsten `PersistentAssociation` remains useful provenance and a source
@@ -1339,7 +1328,7 @@ of adversarial cases, never a dependency or semantic oracle. Its focused Debug a
 each pass 62/62 tests; the serialized C# Release solution build reports 0 warnings and 0 errors, and
 the corresponding pre-Range full C# test gate passes 1,355/1,355 tests.
 
-`RangeUpdateSequence` has now shipped as the C# reference new core. The serialized solution restore
+`RangeUpdateSequence` has shipped as the C# reference new core and in all seven sibling languages. The serialized C# solution restore
 completed successfully; Debug and Release solution builds each report 0 warnings and 0 errors, and
 each complete gate passes 1,417/1,417 tests. The focused Range lane passes 62/62 and the complete
 FingerTree project passes 692/692 in both configurations. It is not as low-risk as the HAMT facade
@@ -1347,10 +1336,9 @@ or Ordered composite, but it is specification-driven rather than benchmark-drive
 persistent implicit AVL keeps that risk local, provides deterministic worst-case bounds, and leaves
 the shipped measured finger tree untouched.
 
-The completed C# gate now authorizes the remaining sibling rollout. Steps 1–3 must be ported to C,
-C++, Haskell, Kotlin, and Rust, while `RangeUpdateSequence` must be ported to all seven siblings.
-Use language-local APIs and serialized per-workspace validation. TypeScript and Python remain
-mandatory parts of that rollout; their outstanding surface is `RangeUpdateSequence`.
+The completed C# gate authorized and preceded the now-complete sibling rollout. Each sibling uses
+language-local APIs and serialized per-workspace validation; TypeScript and Python are full members
+of the completed parity set.
 
 Benchmarks were not run and remain postponed for an isolated machine session.
 

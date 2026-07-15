@@ -438,7 +438,7 @@ Validation guides:
 
 ## Ordered-Set-Specific Checks
 
-For `PersistentOrderedSet` changes, verify the shared general contract in C#, TypeScript, and Python:
+For `PersistentOrderedSet` changes, verify the shared general contract across all eight languages:
 
 - neutral package ownership and a one-way dependency on public HAMT/FingerTree substrates, with no
   production, test, documentation-oracle, or privileged-access dependency on Tungsten;
@@ -461,10 +461,16 @@ Primary semantic and validation docs:
 - [C# Ordered overview](../../src/CSharp/docs/Ordered/overview.md)
 - [C# Ordered API specification](../../src/CSharp/docs/Ordered/api-specification.md)
 - [C# Ordered validation](../../src/CSharp/docs/Ordered/validation.md)
+- [C Ordered workspace](../../src/C/Ordered/README.md)
+- [C++ Ordered workspace](../../src/Cpp/Ordered/README.md)
+- [Haskell Ordered workspace](../../src/Haskell/Ordered/README.md)
+- [Kotlin Ordered workspace](../../src/Kotlin/Ordered/README.md)
+- [Rust Ordered workspace](../../src/Rust/Ordered/README.md)
 - [TypeScript API notes](../../src/TypeScript/docs/api-notes.md)
 - [TypeScript validation](../../src/TypeScript/docs/validation.md)
 - [Python API notes](../../src/Python/docs/api-notes.md)
 - [Python validation](../../src/Python/docs/validation.md)
+- [Cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md)
 
 ## Validation Evidence
 

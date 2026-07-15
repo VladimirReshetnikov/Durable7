@@ -20,14 +20,13 @@ The normative
 independently owned fork for any general reuse.
 
 The later benchmark-independent implementation tranche now ships persistent one-descent HAMT
-updates, `PersistentHashBag`, and neutral `PersistentOrderedSet` packages in C#, TypeScript, and
-Python. Those three surfaces remain pending in C, C++, Haskell, Kotlin, and Rust. The same tranche
-also promoted `RangeUpdateSequence` as a genuinely new, non-composite core: its C# implicit-AVL
-reference, algebra contract, invariant suite, and public API now ship, while all seven sibling ports
-remain pending. Both full serialized C# Debug and Release gates pass 1,417/1,417 tests after builds
+updates, `PersistentHashBag`, neutral `PersistentOrderedSet`, and the genuinely new non-composite
+`RangeUpdateSequence` core across all eight languages. C# owns the implicit-AVL reference, algebra
+contract, invariant suite, and public API; siblings preserve those semantics through language-local
+policies and ownership idioms. Both full serialized C# Debug and Release gates pass 1,417/1,417 tests after builds
 with zero warnings and zero errors. No benchmark was run; see the
 [frontier catalog](frontier-structure-catalog.md#range-update-sequence-persistent-lazy-propagation)
-and the [C# Range contract](../../src/CSharp/docs/FingerTree/range-update-sequence.md).
+and the [cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md).
 
 ## Provenance And Method
 
@@ -88,10 +87,10 @@ API additions plus samples than as families.
 
 | Candidate | Composition | Key caveat |
 | --- | --- | --- |
-| `PersistentOrderedSet<T>` | Independently owned HAMT `item -> stamp` + persistent stamp-ordered sequence | **Shipped in C#, TypeScript, and Python** in neutral Ordered packages. The three ports own first-representative retention, explicit movement, positional ranges, stable one-shot sorting, receiver-policy algebra, sparse-label/relabel behavior, models, and tests without a Tungsten dependency or oracle. The hardened C# reference additionally locks deterministic relabel fallback and failure atomicity; C, C++, Haskell, Kotlin, and Rust ports remain pending. |
+| `PersistentOrderedSet<T>` | Independently owned HAMT `item -> stamp` + persistent stamp-ordered sequence | **Shipped across all eight languages** in neutral Ordered packages. The ports own first-representative retention, explicit movement, positional ranges, stable one-shot sorting, receiver-policy algebra, sparse-label/relabel behavior, models, and tests without a Tungsten dependency or oracle. The hardened C# reference additionally locks deterministic relabel fallback and failure atomicity. |
 | `PersistentOrderedMap<TKey, TValue>` | Independently owned HAMT `key -> (stamp, value)` + persistent stamp-ordered sequence | Still unshipped as a general family. It needs a named consumer, neutral project, independently selected values-in-HAMT versus values-in-both representation, contract, model, and tests; Tungsten is provenance only. |
 | HAMT structural diff / merge / set algebra | Feature inside the Hamt family node layer, phased: (1) `MapEquals` + `Diff` enumerator, (2) structural set-vs-set ops, (3) 3-way `Merge` with a specified conflict matrix | Bound is `O(divergent region)` and history-dependent, not content-diff-dependent; collision buckets are insertion-ordered so equal buckets need key-matched (unordered) comparison; comparer mismatch must be gated by reference equality on the comparer. |
-| `PersistentHashBag<T>` | Facade over HAMT `T -> int` + cached wide total count | **Shipped in C#, TypeScript, and Python** with checked positive per-class multiplicities, separate distinct/total cardinalities, first-representative retention, eager receiver-policy normalization, conventional multiset algebra, and expanded/distinct enumeration. TypeScript uses `bigint` and Python uses an unbounded `int` for the total while retaining the C# per-class bound; C, C++, Haskell, Kotlin, and Rust ports remain pending. |
+| `PersistentHashBag<T>` | Facade over HAMT `T -> int` + cached wide total count | **Shipped across all eight languages** with checked positive per-class multiplicities, separate distinct/total cardinalities, first-representative retention, eager receiver-policy normalization, conventional multiset algebra, and expanded/distinct enumeration. TypeScript uses `bigint` and Python uses an unbounded `int` for the total while retaining the shared per-class bound; the other languages use their corresponding bounded wide integer. |
 | `PersistentBiMap<TKey, TValue>` | Forward `K -> V` + inverse `V -> K` HAMTs behind a bijection-enforcing facade | No-op identity must be pre-checked via `inverse.TryGetKey` (the map's internal check hardcodes the default value comparer). Honest 2x memory: every pair stored in both tries. |
 
 The shipped `PersistentOrderedSet` addresses ordered unique membership without claiming shipment of

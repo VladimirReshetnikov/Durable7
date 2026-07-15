@@ -13,23 +13,23 @@ and TypeScript package all families into one language-local distribution.
 
 | Language root | Toolchain model | Workspaces |
 | --- | --- | --- |
-| [C](C/README.md) | MSVC C builds; `build.ps1` for HAMT and CMake/CTest presets for FingerTree and Tungsten | [Hamt](C/Hamt/README.md), [FingerTree](C/FingerTree/README.md), [Tungsten](C/Tungsten/README.md) |
-| [Cpp](Cpp/README.md) | MSVC C++ builds; `build.ps1` for HAMT and CMake/CTest presets for FingerTree and Tungsten | [Hamt](Cpp/Hamt/README.md), [FingerTree](Cpp/FingerTree/README.md), [Tungsten](Cpp/Tungsten/README.md) |
+| [C](C/README.md) | Serialized MSVC/GCC/Clang builds through `build.ps1` and CMake/CTest presets | [Hamt](C/Hamt/README.md), [FingerTree + Range](C/FingerTree/README.md), [Ordered](C/Ordered/README.md), [Tungsten](C/Tungsten/README.md) |
+| [Cpp](Cpp/README.md) | Serialized MSVC/GCC/Clang builds through `build.ps1` and CMake/CTest presets | [Hamt](Cpp/Hamt/README.md), [FingerTree + Range](Cpp/FingerTree/README.md), [Ordered](Cpp/Ordered/README.md), [Tungsten](Cpp/Tungsten/README.md) |
 | [CSharp](CSharp/README.md) | One .NET 10 solution with xUnit/CsCheck validation | [Numerics](CSharp/docs/Numerics/overview.md), [HAMT](CSharp/docs/Hamt/overview.md), [FingerTree and Range-update sequence](CSharp/docs/FingerTree/overview.md), [Ordered](CSharp/docs/Ordered/overview.md), [Tungsten](CSharp/docs/Tungsten/overview.md) |
-| [Haskell](Haskell/README.md) | GHC/cabal packages with dependency-light executable tests | [Hamt](Haskell/Hamt/README.md), [FingerTree](Haskell/FingerTree/README.md), [Tungsten](Haskell/Tungsten/README.md) |
-| [Kotlin](Kotlin/README.md) | Kotlin/JVM command-line compiler with dependency-free executable tests bootstrapped by `build.ps1` | [Hamt](Kotlin/Hamt/README.md), [FingerTree](Kotlin/FingerTree/README.md), [Tungsten](Kotlin/Tungsten/README.md) |
+| [Haskell](Haskell/README.md) | GHC/cabal packages with dependency-light executable tests | [Hamt](Haskell/Hamt/README.md), [FingerTree + Range](Haskell/FingerTree/README.md), [Ordered](Haskell/Ordered/README.md), [Tungsten](Haskell/Tungsten/README.md) |
+| [Kotlin](Kotlin/README.md) | Kotlin/JVM command-line compiler with dependency-free executable tests bootstrapped by `build.ps1` | [Hamt](Kotlin/Hamt/README.md), [FingerTree + Range](Kotlin/FingerTree/README.md), [Ordered](Kotlin/Ordered/README.md), [Tungsten](Kotlin/Tungsten/README.md) |
 | [Python](Python/README.md) | Typed Python 3.11+ package with Ruff, strict Mypy, pytest/Hypothesis, and wheel validation | [HAMT, FingerTree, Ordered, Tungsten, and Numerics](Python/README.md) |
-| [Rust](Rust/README.md) | Cargo workspace with safe Rust crates and inline unit tests | [Hamt](Rust/Hamt/README.md), [FingerTree](Rust/FingerTree/README.md), [Tungsten](Rust/Tungsten/README.md) |
+| [Rust](Rust/README.md) | Cargo workspace with safe Rust crates and integration tests | [Hamt](Rust/Hamt/README.md), [FingerTree](Rust/FingerTree/README.md), [Ordered](Rust/Ordered/README.md), [RangeUpdate](Rust/RangeUpdate/README.md), [Tungsten](Rust/Tungsten/README.md) |
 | [TypeScript](TypeScript/README.md) | Strict TypeScript/ESM npm package with Vitest and fast-check validation | [HAMT, FingerTree, Ordered, Tungsten, and Numerics](TypeScript/README.md#public-families) |
 
-The benchmark-independent rollout currently ships one-descent persistent HAMT updates,
-`PersistentHashBag`, and neutral `PersistentOrderedSet` implementations in C#, TypeScript, and
-Python; those three surfaces remain pending in C, C++, Haskell, Kotlin, and Rust. C# additionally
-ships the independently implemented implicit-AVL `RangeUpdateSequence` and its law-gated
-`IRangeUpdateAlgebra`; Range remains pending in all seven sibling language roots. Both complete
+The benchmark-independent rollout now ships one-descent persistent HAMT updates,
+`PersistentHashBag`, neutral `PersistentOrderedSet`, and independently implemented implicit-AVL
+`RangeUpdateSequence` surfaces across all eight language roots. C# owns the law-gated reference
+`IRangeUpdateAlgebra`, while siblings express the same action through language-local policies. Both complete
 serialized C# Debug and Release solution builds finish with zero warnings and zero errors, and both
 test gates pass 1,417/1,417. No benchmark was run, and measurements remain postponed until an
-isolated session.
+isolated session. The detailed [completion audit](../docs/reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md)
+indexes every source, test, dependency, and validation checkpoint.
 
 Across every language root, Tungsten is an application-specific leaf consumer. It may depend on
 general libraries; no general workspace may depend on it. See the normative

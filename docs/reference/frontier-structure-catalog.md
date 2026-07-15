@@ -1,6 +1,6 @@
 # Frontier Structure Catalog
 
-- Status: Current-state catalog - shipped Axis 1 cores, shipped C# Range-update core, shipped C# Axis 2 C1/C2/C3/T2, cross-language cursor/session checkpoints, recent C#/TypeScript/Python derived-surface parity, and remaining frontier candidates
+- Status: Current-state catalog - shipped Axis 1 cores, completed eight-language benchmark-independent structures, shipped C# Axis 2 C1/C2/C3/T2, cross-language cursor/session checkpoints, and remaining frontier candidates
 - Created (UTC): 2026-07-11T03:31:23Z
 - Repository HEAD: f40e301e8faf26d748f33d8546d7d9216657301e
 - Audience: Maintainers and AI agents planning new repository-owned cores, representation tiers, and specialized sibling collections
@@ -13,8 +13,8 @@ three complementary axes. Axis 1 now includes both implemented reference cores a
 candidates. Axis 2 now includes the shipped C# positional and measured rope cursors, their Tour and
 Editor integration, measured/text semantic cursor checkpoints in every sibling language, the optimized C#
    one-way CHAMP transient, and semantic path-copying CHAMP editing sessions in every sibling language;
-frozen-hash and later phases remain planning material. Axis 3 now includes the shipped C#
-range-update reference alongside still-unimplemented specialized candidates:
+frozen-hash and later phases remain planning material. Axis 3 now includes the shipped
+eight-language range-update family alongside still-unimplemented specialized candidates:
 
 1. **New cores** - structures that need their own node layer, including several invented or refined
    in the last decade.
@@ -88,7 +88,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | Version-bound cursor / zipper | 2, 3 | C1 positional cursor, C2 measured/text cursor, and C3 samples implemented in C#; positional/measured/text semantic checkpoints shipped in every sibling language; C4 consumer-gated | C0 selected the C# readonly-struct zipper-as-version; sibling checkpoints reuse persistent rope path copying without its complexity claim | C# positional/measured cursors and Tour/Editor integration plus C/C++/Haskell/Kotlin/Rust/TypeScript/Python semantic facades |
 | Key-type-specialized map factories | 2 | Plausible, explicitly postponed | Named consumer after explicit Patricia consideration | Factory layer; ART only if independently justified |
 | Self-adjusting (splay-style) structures | 2 | Reject | - | Reads allocate under path copying; cursors + freeze substitute |
-| Range-update sequence (lazy propagation) | 3 | Strong (C# implicit-AVL reference shipped; all seven sibling ports pending) | Lawful `IRangeUpdateAlgebra` tag action | 1 sibling core + tag algebra + property/model/invariant tests |
+| Range-update sequence (lazy propagation) | 3 | Strong (C# implicit-AVL reference and all seven sibling ports shipped) | Lawful range-update tag action | Eight language-local cores + algebra/property/model/invariant tests |
 | Order-maintenance list | 3 | Plausible | Named general precedes-query consumer | 1 independently owned public type; Tungsten stamps are provenance only |
 | Persistent chunked bitset | 3 | Plausible | - (tree-only form per derived catalog follow-up) | 1 facade over measured tree |
 | Styled-text rope | 3 | Sample, not family | Range-update sequence (or interval runs) | Composition sample + docs |
@@ -1265,12 +1265,12 @@ finish with zero warnings and zero errors, and both test gates pass 1,417/1,417.
 failpoints, retained branches, enumeration, and concurrency. No benchmark was run; measurements
 remain postponed until the machine can run them in isolation.
 
-**Parity status.** The C, C++, Haskell, Kotlin, Rust, TypeScript, and Python Range ports remain
-pending. They must preserve the same algebra and logical invariants through language-local policy,
-ownership, failure, and iteration idioms; none may infer shipment from the existing measured-tree
-engines.
+**Parity status.** The C, C++, Haskell, Kotlin, Rust, TypeScript, and Python Range ports ship with
+the same algebra and logical invariants expressed through language-local policy, ownership,
+failure, and iteration idioms. They are separate implicit-AVL cores rather than inferred facades
+over the existing measured-tree engines.
 
-**Verdict: Strong (C# reference shipped; sibling parity pending).** This remains the most
+**Verdict: Strong (C# reference and sibling parity shipped).** This remains the most
 differentiating specialized core in the catalog after CHAMP.
 
 ### Order-maintenance list
@@ -1369,18 +1369,18 @@ New rules this survey adds to the derived catalog's seven:
 The implementation wave described by this catalog has already landed these reference and port surfaces:
 
 - CHAMP canonical nodes plus structural equality/diff;
-- C#, TypeScript, and Python persistent CHAMP `GetOrAdd`/`AddOrUpdate` counterparts with one hash,
+- eight-language persistent CHAMP `GetOrAdd`/`AddOrUpdate` counterparts with one hash,
   one descent, deterministic factory selection, representative retention, and callback-failure
   atomicity;
 - public reusable construction-only CHAMP bulk builders in C++, Rust, TypeScript, and Python (the
   C# canonical range path keeps its equivalent staging builder internal), with detached frozen
   snapshots and first-key/last-distinct-value representative rules;
-- `PersistentHashBag` facades in C#, TypeScript, and Python with separate distinct/total
+- `PersistentHashBag` facades across all eight languages with separate distinct/total
   cardinalities and receiver-policy multiset algebra;
-- neutral, independently owned `PersistentOrderedSet` packages in C#, TypeScript, and Python,
+- neutral, independently owned `PersistentOrderedSet` packages across all eight languages,
   composing public HAMT/FingerTree substrates without a Tungsten dependency or semantic oracle;
-- the C# implicit-AVL `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` and its lawful
-  `IRangeUpdateAlgebra<TElement, TMeasure, TTag>` action contract, with persistent indexed edits,
+- the C# implicit-AVL `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` reference, all seven
+  language-local sibling ports, and their lawful range-action contracts, with persistent indexed edits,
   logarithmic range updates/queries, cached logical measures, and lazy-tag invariants;
 - the C# `PersistentHashMap<TKey, TValue>.Transient` and `PersistentHashSet<T>.Transient` one-way
   owner-token editing sessions;
@@ -1417,11 +1417,9 @@ same seven verification budgets.
 The one-way CHAMP editing lifecycle now spans all eight languages; the owner-token in-place-edit
 optimization and its performance evidence remain C#-only. These are current-state implementation
 records, not candidates awaiting a consumer.
-Future work on the already cross-language Axis 1 cores is ordinary hardening, measurement, and
-demand-driven porting. The benchmark-independent parity bill is more specific: Steps 1–3
-(single-pass HAMT updates, hash bag, and neutral ordered set) remain pending in C, C++, Haskell,
-Kotlin, and Rust, while Range remains pending in all seven siblings, including TypeScript and
-Python. The
+Future work on the already cross-language Axis 1 cores is ordinary hardening and isolated
+measurement. The benchmark-independent parity bill is complete: single-pass HAMT updates, hash
+bags, neutral ordered sets, and Range now ship across all eight languages. The
 C/C++/Haskell/Kotlin/Rust/TypeScript/Python checkpoints make no zipper or focus-local complexity claim; measured/text
 cursor parity now spans all eight languages. The cursor's C4
 extensions retain the separate status recorded in its entry above.
@@ -1515,11 +1513,13 @@ catalog's summary alone.
 ## Relationship To Other Documents
 
 - [Benchmark-independent next data structures (2026-07-14)](../proposals/benchmark-independent-next-structures-2026-07-14.md) -
-  the detailed C# execution proposal whose persistent-HAMT single-pass update, hash-bag facade, and
-  independently owned ordered-set composite are now shipped in C#, TypeScript, and Python. Its
-  algebra-law-gated implicit-AVL Range core now also ships in C#. Steps 1–3 remain pending in C,
-  C++, Haskell, Kotlin, and Rust; Range remains pending in all seven siblings. This work advances
-  without benchmark evidence, and measurements remain postponed for isolation.
+  the detailed C#-first execution proposal whose persistent-HAMT single-pass update, hash-bag
+  facade, independently owned ordered-set composite, and algebra-law-gated implicit-AVL Range core
+  now ship across all eight languages. This work advanced without benchmark evidence, and
+  measurements remain postponed for isolation.
+- [Cross-language completion audit (2026-07-15)](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md) -
+  the per-language source, test, dependency, review-status, and validation evidence for the
+  completed proposal.
 - [Derived structure catalog](derived-structure-catalog.md) - compositions of the shipped
   families, the shared enabling API gaps, and the composition design rules this document extends.
   CHAMP's equality/diff entry here is the core-level realization of that catalog's top-ranked gap.

@@ -71,9 +71,9 @@ failure atomicity, enumerator behavior, and concurrent readers. No benchmark was
 all performance measurements remain postponed until they can run without competing agents or other
 CPU, memory, and I/O contention.
 
-Cross-language follow-through remains explicit: the one-descent HAMT operations, hash bag, and
-neutral ordered set are pending in C, C++, Haskell, Kotlin, and Rust, while `RangeUpdateSequence` is
-pending in C, C++, Haskell, Kotlin, Rust, TypeScript, and Python.
+Cross-language follow-through is complete: the one-descent HAMT operations, hash bag, neutral
+ordered set, and `RangeUpdateSequence` now ship in C, C++, Haskell, Kotlin, Rust, TypeScript, and
+Python under language-local APIs and ownership models.
 
 Use the parent [source index](../README.md) for the full language list, the repository
 [workspace map](../../docs/reference/workspace-map.md) for port lineage, and the
