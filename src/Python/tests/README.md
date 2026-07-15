@@ -10,7 +10,10 @@ Tests are grouped by shipped collection family:
   maps/sets, exact Merkle wire vectors, verified persistence and sync, proofs, budgets, and typed
   merge.
 - `finger_tree/`: measured sequences and derived collections, ropes and cursors, DABA Lite, RRB
-  vectors, canonical zip-zip sets, Brodal-Okasaki heaps, and priority-search queues.
+  vectors, canonical zip-zip sets, Brodal-Okasaki heaps, priority-search queues, and the lazy-tagged
+  range-update sequence. Range coverage includes algebra laws, every range boundary, retained
+  branching models, callback failure atomicity, structural invariants/sharing, and iterator and
+  concurrent-read semantics.
 - `ordered/`: the neutral HAMT-plus-deque persistent ordered set, including representative and
   policy retention, explicit movement, sparse-stamp relabeling, ranges, stable sorting, eager
   receiver-policy algebra, relations, failure atomicity, concurrency, and generated histories.
@@ -20,7 +23,6 @@ Tests are grouped by shipped collection family:
 Hypothesis stateful/model tests supplement example and adversarial tests. Tests use public APIs
 except where white-box structural assertions are necessary to establish sharing or invariants.
 
-The current suite contains 128 tests: 47 HAMT/Patricia/Merkle tests, 51
-measured/frontier-structure tests, 12 ordered-set tests, 5 Tungsten tests, and 13 numerics tests.
-Parameterized and Hypothesis executions expand those test functions across all fixed widths and
-generated retained-snapshot histories.
+Parameterized and Hypothesis executions expand the test functions across all fixed widths and
+generated retained-snapshot histories. Exact totals belong to completed validation records rather
+than this durable coverage map.

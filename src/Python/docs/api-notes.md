@@ -24,6 +24,8 @@ The package source and executable tests are authoritative where an API detail is
   consistent coordinate system.
 - Python ordered-set iteration uses ordinary independent, snapshot-bound iterators. It does not
   reproduce the shared mutable-copy state of the C# value-type enumerator.
+- `RangeUpdateSequence` likewise exposes ordinary independent, snapshot-bound Python iterators.
+  It does not emulate C# `Current`, `Reset`, disposal, or fail-fast copies of a value enumerator.
 
 ## Hash collections
 
@@ -130,6 +132,47 @@ specialized lower bound. All updates remain immutable and failure-atomic.
 The general sequence substrate is a persistent implicit AVL tree caching caller-supplied ordered
 monoid measures. Deques, sorted collections, stable priority queues, max-high interval trees, ropes,
 and immutable gap cursors share its path-copied nodes.
+
+`RangeUpdateSequence[T, M, U]` is a separate persistent implicit-AVL core whose nodes cache height,
+signed-32-bit-bounded element count, and the ordered logical measure. Its runtime
+`RangeUpdateAlgebra[T, M, U]` supplies `identity`, `combine`, `measure`, `identity_tag`,
+`is_identity`, `compose`, `apply_element`, and `apply_measure`. The package also exports
+`create_range_update_algebra` as the functional-policy adapter. Composition is intentionally
+directional: `compose(newer, older)` means apply `older` first and then `newer`. Ordered measure
+combination need not commute. The algebra laws in the C# normative specification remain required;
+the Python runtime does not attempt to prove them.
+
+Each construction lineage retains the exact algebra object, captures its empty measure once, and
+owns one canonical empty facade reused by derived empty results. Concatenation requires identical
+algebra objects even when one operand is empty; compatible empty operands retain the nonempty
+operand by identity. Independently constructed empty lineages need not be the same Python object.
+`from_iterable` eagerly materializes its source completely before reading the algebra identity or
+measuring an element, and passing a `RangeUpdateSequence` with the same algebra returns it directly.
+
+A node's own value and cached measure already reflect its pending tag, while its children do not.
+The pending marker is a separate bit: neither `identity_tag`, equality, nor `None` denotes absence,
+so nullable values and an active `None` tag are supported. Structural descent immutably pushes the
+old tag before inserting or replacing an element. Read-only indexing, range measurement, and
+iteration instead carry inherited tags as local state; an ancestor tag is newer and child
+inheritance therefore composes it as `compose(inherited, node_pending)`. A composed tag recognized
+as identity has its marker erased without undoing the already-logical value or measure.
+
+The public sequence operations are `empty`, `from_iterable`, `get_at`, integer-only `__getitem__`,
+`prepend`, `append`, `insert`, `set_item`, `remove_at`, `concat`, `split_at`, `get_range`,
+`apply_range`, `measure_range`, `to_list`, `__iter__`, `__len__`, `is_empty`, `algebra`, and
+`measure`. `split_at` returns frozen `RangeUpdateSplit(left, right)`. There are deliberately no
+policy-specific `add_range` or `assign_range` shortcuts. Negative or excessive positions raise
+`IndexError`; negative or excessive counts raise `ValueError`; an operation exceeding the
+signed-32-bit count ceiling raises `OverflowError`. Range validation occurs before policy calls.
+
+Empty and identity updates retain the receiver, endpoint splits retain the source on the nonempty
+side, a full extraction retains the receiver, and `set_item` always creates a successor because no
+element-equality policy exists. A nonidentity whole-sequence update touches and allocates one tree
+node. Proper updates split twice, tag the isolated middle root, and rejoin. Range queries consume
+cached fully covered subtree measures and allocate no persistent nodes. All policy work precedes
+facade publication, so a throwing callback leaves every older version unchanged and usable.
+The [Python range-update document](range-update-sequence.md) gives the complete runtime and
+implementation mapping.
 
 Extremal measures use the explicit `OptionalValue` carrier rather than reserving `None` as their
 identity. Consequently, `MaxMeasure` and `MinMeasure` can measure nullable elements without losing

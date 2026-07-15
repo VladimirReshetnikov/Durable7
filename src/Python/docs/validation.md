@@ -15,11 +15,18 @@ The checked-in launcher keeps pytest single-process, disables pytest's optional 
 pins Rayon, CMake, and Make-compatible helper work to one worker. This keeps validation memory and
 I/O predictable without weakening any executable gate.
 
-The complete suite currently executes 128 example, property, model, adversarial, exact-wire,
-failure-atomicity, and concurrency tests. Python 3.11.15 and 3.14.4 have both run the full suite;
-the static gate targets the declared Python 3.11 language surface. The current post-parity Python
-3.14.4 gate passes Ruff, strict Mypy, 128/128 tests without pytest warnings, source/wheel builds,
-Twine metadata checks, and installed-wheel smoke validation.
+The complete suite executes example, property, model, adversarial, exact-wire, failure-atomicity,
+and concurrency tests. Python 3.11 and 3.14 lanes exercise the runtime surface; the static gate
+targets the declared Python 3.11 language floor. Record exact test counts only from a completed full
+gate, never by inferring parameterized or generated executions from source files.
+
+Range-update coverage includes exhaustive affine-tag monoid/action checks, an ordered
+noncommutative measure, all small split/rejoin boundaries, nested assignment/addition/affine tags,
+edits through pending tags, nullable values and an active `None` tag, all callback failpoint
+ordinals, validation precedence, cached-measure and AVL invariants, node sharing, deterministic
+operation counters, independent snapshot iterators, concurrent readers, and generated branching
+histories. These are structural and semantic gates; local benchmarks remain explicitly postponed
+until they can run in isolation.
 
 Ordered-set coverage includes exact first-representative and receiver-policy semantics, exhaustive
 small final-index movements and relation truth tables, repeated sparse-label exhaustion with
@@ -33,3 +40,5 @@ foreign-policy algebra, and generated collision models.
 
 Use `test.ps1 -SkipInstall` after the pinned tools in `requirements-dev.txt` are already installed.
 `-SkipPackageSmoke` is reserved for narrow local iteration and is not a complete validation result.
+All commands in the launcher run sequentially. Do not overlap Ruff, Mypy, pytest, package building,
+or wheel smoke work with another language workspace's validation.

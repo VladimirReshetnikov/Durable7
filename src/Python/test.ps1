@@ -97,8 +97,32 @@ from vladimir_reshetnikov.data_structures import (
     PersistentHashBag,
     PersistentHashMap,
     PersistentOrderedSet,
+    RangeUpdateSequence,
     UInt256,
 )
+
+class AdditiveRangeAlgebra:
+    identity = 0
+    identity_tag = 0
+
+    def combine(self, left, right):
+        return left + right
+
+    def measure(self, element):
+        return element
+
+    def is_identity(self, tag):
+        return tag == 0
+
+    def compose(self, newer, older):
+        return newer + older
+
+    def apply_element(self, tag, element):
+        return element + tag
+
+    def apply_measure(self, tag, measure, count):
+        return measure + tag * count
+
 
 assert PersistentHashMap.empty().set("answer", 42).get("answer") == 42
 factory = PersistentHashMap.empty().get_or_add("factory", lambda _key: 43)
@@ -110,6 +134,8 @@ assert PersistentHashBag.from_values(["x", "x", "y"]).count_of("x") == 2
 assert PersistentDeque.from_iterable([1, 2]).append(3).to_list() == [1, 2, 3]
 assert PersistentOrderedSet.from_values(["alpha", "beta", "alpha"]).to_list() == ["alpha", "beta"]
 assert PersistentAssociation.from_pairs([("a", 1)]).get("a") == 1
+range_sequence = RangeUpdateSequence.from_iterable([1, 2, 3], AdditiveRangeAlgebra())
+assert range_sequence.apply_range(1, 2, 10).to_list() == [1, 12, 13]
 assert int(UInt256(-1)) == 2**256 - 1
 '@
         & "$smoke\Scripts\python.exe" -c $smokeScript

@@ -58,6 +58,12 @@ from .priority_search_queue import (
     PrioritySearchQueueStatistics,
     PrioritySearchRemoveResult,
 )
+from .range_update_sequence import (
+    RangeUpdateAlgebra,
+    RangeUpdateSequence,
+    RangeUpdateSplit,
+    create_range_update_algebra,
+)
 from .rope import (
     LineColumn,
     MeasuredRope,
@@ -142,6 +148,9 @@ __all__ = [
     "PrioritySearchQueueStatistics",
     "PrioritySearchRemoveResult",
     "ProductMeasure",
+    "RangeUpdateAlgebra",
+    "RangeUpdateSequence",
+    "RangeUpdateSplit",
     "ReversibleDeque",
     "Rope",
     "RopeBuilder",
@@ -170,6 +179,7 @@ __all__ = [
     "ZipTreeRank",
     "ZipTreeRankPolicy",
     "create_measure_policy",
+    "create_range_update_algebra",
     "default_comparator",
     "reverse_comparator",
     "stable_rank_hash",
