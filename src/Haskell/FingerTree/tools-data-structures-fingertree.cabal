@@ -21,6 +21,7 @@ library
     Data.Structures.FingerTree.Measures
     Data.Structures.FingerTree.PriorityQueue
     Data.Structures.FingerTree.PrioritySearchQueue
+    Data.Structures.FingerTree.RangeUpdateSequence
     Data.Structures.FingerTree.ReversibleDeque
     Data.Structures.FingerTree.Rope
     Data.Structures.FingerTree.Rope.Text
@@ -45,6 +46,7 @@ test-suite ft-test
   hs-source-dirs: test
   other-modules:
     CanonicalSortedSetTests
+    RangeUpdateSequenceTests
   build-depends:
     base >=4.21 && <4.22,
     array >=0.5 && <0.6,

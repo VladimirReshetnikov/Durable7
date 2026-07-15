@@ -9,8 +9,20 @@ This package ports the repository finger-tree family to Haskell. It includes a g
 finger tree, a size-and-rightmost-leaf-measured deque, a reversible deque, sorted bag/set/map
 facades, a stable meldable priority queue, a worst-case-optimal Brodal-Okasaki heap, a keyed
 priority-search queue, interval tree helpers, positional ropes, measured ropes, text-rope navigation
-helpers, immutable positional/measured/text rope cursors, a persistent RRB vector, and a policy-canonical
-zip-zip-tree sorted set.
+helpers, immutable positional/measured/text rope cursors, a persistent RRB vector, a policy-canonical
+zip-zip-tree sorted set, and a persistent lazy range-update sequence.
+
+`RangeUpdateSequence` is a deterministic implicit-key AVL tree with cached count, height, and
+ordered logical measure. A retained `RangeUpdateAlgebra` record defines element measurement,
+ordered measure combination, identity recognition, directional `compose newer older`, and tag
+actions on elements and cached subtree measures. Whole-sequence nonidentity updates replace one
+root in O(1); indexed edits, splits, joins, proper range updates, and proper range queries copy or
+visit O(log n) boundary nodes. Reads carry pending tags without publishing pushed trees, while
+structural descent pushes tags immutably before rotations. Empty ranges and semantically identity
+tags retain the source root. As with `MeasuredRope`, operands passed to `append` must retain
+extensionally identical policy functions because Haskell functions have no decidable equality.
+The port uses `Maybe` for invalid indices and ranges and the package's checked-`Int` pure exception
+for count overflow.
 
 [`CanonicalSortedSet`](docs/canonical-sorted-set.md) derives exact HMAC-SHA-256 ranks from a caller's
 equivalence-class hash and a retained seeded, keyed, or fresh-random policy. Policy creation is an

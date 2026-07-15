@@ -34,6 +34,7 @@ import qualified Data.Structures.FingerTree.SortedBag as SortedBag
 import qualified Data.Structures.FingerTree.SortedMap as SortedMap
 import qualified Data.Structures.FingerTree.SortedSet as SortedSet
 import qualified CanonicalSortedSetTests
+import qualified RangeUpdateSequenceTests
 
 main :: IO ()
 main = do
@@ -49,6 +50,7 @@ main = do
   testBrodalOkasakiHeap
   testPrioritySearchQueue
   CanonicalSortedSetTests.run
+  RangeUpdateSequenceTests.run
   testIntervalTree
   testRrbVector
   testRopes

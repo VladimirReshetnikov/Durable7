@@ -39,6 +39,13 @@ list model with retained snapshots, 2,000 adversarial split/rejoin operations, u
 and concurrent pure readers. Every history checks cached count/height/size-table invariants and
 density ceilings.
 
+Range-update-sequence coverage exercises affine assignment/addition composition in both observable
+orders, value-distinct identity tags, noncommutative ordered measures, every indexed edit and
+split/join/range boundary, retained snapshots, exact root reuse for no-op operations, and a
+deterministic 240-command list model whose every version is structurally validated. A shared-DAG
+construction reaches the exact `Int` maximum and proves insertion and concatenation reject growth
+before corrupting the retained maximum-count source.
+
 Positional-cursor coverage locks empty/start/end gap behavior, nested-`Maybe` peeks, invalid seek
 and edit results, exact snapshot/no-op identity under optimized GHC, chunk-boundary edits,
 equality-free representative replacement, retained branches, and far-chunk sharing. Measured-cursor
