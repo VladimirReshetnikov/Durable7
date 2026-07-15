@@ -10,6 +10,8 @@ Primary entry points:
 - `PersistentHashMap<K, V>`;
 - `PersistentHashSet<T>`;
 - `PersistentHashBag<T>`;
+- `PersistentBiMap<K, V>`, `BiMapConflict`, `BiMapLookup`, `BiMapAddResult`, and
+  `BiMapRemoveResult`;
 - `MapValueResult<K, V>` for persistent map factory operations;
 - `PersistentHashMap.Transient<K, V>` and `PersistentHashSet.Transient<T>` one-way editing
   sessions;
@@ -92,6 +94,26 @@ equal-full-hash collision bucket. The single hash/descent and callback counts ar
 contracts, not benchmark claims.
 
 ## Persistent Hash Bag
+
+## Persistent bidirectional map
+
+`PersistentBiMap<K, V>` owns forward `K -> V` and inverse `V -> K` CHAMP maps with independent
+retained `HashPolicy` objects. `add` throws `BiMapConflictException`; `tryAdd` returns this exact
+object on conflict and gives `KEY` precedence when both classes are present. `set` adds a missing
+free pair, returns this object for a value-policy-equivalent update, retains the stored key when
+replacing with a distinct free value, and never displaces another key.
+
+`BiMapLookup.Found` versus `Missing` and the `removed` flag on `BiMapRemoveResult` keep stored nulls
+unambiguous. Lookup, removal, and stored representatives are symmetric. `clear` preserves both
+policy objects and an already-empty identity. The lazily cached `inverse` constructs a reciprocal
+facade in O(1) over the same roots; synchronization and a volatile cache make concurrent first
+access safe, and `map.inverse.inverse === map` holds. Every point edit constructs both immutable
+successors before the facade is returned, so a callback failure exposes no half-bijection.
+`validateStructure` checks both CHAMP counts and every cross-direction entry. The type deliberately
+omits algebra, transients, builders, and a displacing force-put operation and stores approximately
+two map entries per pair.
+
+## Persistent hash bag
 
 `PersistentHashBag<T>` is an immutable unordered multiset backed only by
 `PersistentHashMap<T, Int>`. Its map contains one positive multiplicity per `HashPolicy`

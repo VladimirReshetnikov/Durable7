@@ -43,6 +43,10 @@ identity-preserving no-ops, and operand retention after failure. A 1,000-operati
 constant-hash history compares point edits, totals, every class count, expanded iteration, and
 internal invariants with a mutable model. Reflection guards lock the absence of ambiguous
 `size`/`count` members and public bag builder/transient types.
+Bimap tests cover key-first strict conflicts, independent hash/equality policies, stored
+representatives, non-displacing replacement, symmetric lookup/removal, nullable values, policy-
+preserving clear, cached reciprocal inverse identity, a 2,000-operation two-map model, retained
+snapshots, policy-failure atomicity, structural validation, and concurrent readers.
 The one-way CHAMP-session tier checks O(1)-shape adoption/publication through exact object identity,
 policy identity, first stored representatives, null and collision entries, all point verbs, clear,
 active reads and receiver-policy set relations, exact trie-order enumeration, acquisition-time view
@@ -95,3 +99,7 @@ The persistence tier additionally validates:
 
 For the stricter compiler gate used during persistence work, compile the same `Hamt/src` and
 `Hamt/test` source set with Kotlin 2.4.0 and `-Werror`; the workspace is warning-clean.
+
+The current serialized Kotlin 2.4.0/JVM 21 gate compiles with one backend thread, runs with one
+active processor and the serial GC, and passes all 69 registered groups. Benchmarks are excluded
+and remain postponed until an isolated run.

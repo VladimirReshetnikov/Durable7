@@ -1971,6 +1971,7 @@ public fun main() {
         "persistentHashBagNormalizesReceiverPolicyAndRepresentativePrecedence" to
             ::persistentHashBagNormalizesReceiverPolicyAndRepresentativePrecedence,
         "persistentHashBagDeterministicModel" to ::persistentHashBagDeterministicModel,
+        "persistentBiMapStrictPoliciesModelAndConcurrency" to ::runPersistentBiMapTests,
         "transientMapLifecyclePreservesIdentityAndRepresentatives" to ::transientMapLifecyclePreservesIdentityAndRepresentatives,
         "transientMapPointEditsEnumerationAndFailureAtomicity" to ::transientMapPointEditsEnumerationAndFailureAtomicity,
         "transientMapDeterministicModelAcrossPublications" to ::transientMapDeterministicModelAcrossPublications,

@@ -14,6 +14,9 @@ root build script. Run them from `src/Kotlin`:
 
 Coverage groups:
 
+- strict persistent bimap conflicts, independent policies, first representatives, non-displacing
+  replacement, symmetric nullable removal, cached inverse identity, clear, invariant validation,
+  a 2,000-step two-map model, injected policy failure, retained snapshots, and concurrent readers;
 - map persistence and version isolation;
 - root-sharing no-op behavior;
 - duplicate-key rejection;

@@ -16,6 +16,11 @@ and let map equality, typed diff, algebra, and same-policy set relations prune
 JVM-reference-identical roots and descendants; cross-policy relations retain receiver-policy
 semantics.
 
+`PersistentBiMap<K, V>` composes two independently policy-bound CHAMP maps into a strict immutable
+bijection. It rejects occupied classes in either domain, retains the first key and value
+representatives, replaces only with a free value, supports symmetric lookup/removal, and caches a
+reciprocal O(1) inverse facade whose inverse is the exact source object.
+
 Persistent maps also provide one-descent `getOrAdd` and `addOrUpdate` point combinators. Each
 operation hashes once, follows one CHAMP route, invokes only the selected factory, and returns a
 `MapValueResult<K, V>` containing both the successor map and the value actually retained. Hits keep
@@ -72,6 +77,11 @@ Validate from `src/Kotlin`:
 ```powershell
 .\build.ps1 -Workspace Hamt
 ```
+
+The current fully serialized Kotlin 2.4.0/JVM 21 gate passes all 69 registered test groups. The
+bimap group includes strict conflicts, independent policies, representatives, non-displacing
+replacement, nullable values, cached inverse identity, a 2,000-step two-map model, failure
+atomicity, and concurrent readers. Benchmarks remain postponed until an isolated run.
 
 See [API notes](docs/api-notes.md), [Merkle search tree](docs/merkle-search-tree.md),
 [validation](docs/validation.md), and the [test map](tests/README.md).
