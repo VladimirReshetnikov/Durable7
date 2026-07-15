@@ -129,6 +129,11 @@ HAMT node and internal count allocation in point updates and all four foreign-po
 operations. Targeted item-retain and range-construction failures add unchanged-output and
 balanced-owner checks.
 
+`tests/persistent_bi_map_tests.c` covers independent key/value callback contexts, strict conflict
+precedence, first representatives, policy-aware non-displacing replacement, symmetric removal,
+stored `NULL`, clear, O(1) inverse round trips, a 2,000-operation collision-heavy two-map model,
+canonical validation, and failpoint atomicity.
+
 `tests/patricia_tests.c` is the explicit-width integer-map/set executable. It covers signed extrema
 and traversal order, root-sharing no-ops, retained snapshots, fixed and callback-combining map
 algebra, set algebra, 10,000 deterministic randomized updates against an array model, randomized
@@ -187,6 +192,22 @@ The suite covers:
   pruning, cached-cardinality validation, and duplicate treatment for symmetric difference.
 
 For new behavior, prefer adding deterministic model checks here before relying on example-only coverage.
+
+## Persistent Bidirectional Map Shipment Evidence
+
+The persistent bidirectional map was validated on 2026-07-15 without running benchmarks. All
+commands ran sequentially with a single build worker:
+
+- `./build.ps1 -RunTests` built the MSVC Debug executables and passed 43 core HAMT tests, 9 hash-bag
+  tests, the persistent-bimap suite, the Patricia suite, and 22 Merkle tests;
+- `./build.ps1 -Configuration Release -RunTests` passed the same complete set under MSVC Release;
+- a focused GCC C17 build of `hamt.c`, `persistent_bi_map.c`, and
+  `persistent_bi_map_tests.c` passed with `-Wall -Wextra -Wpedantic -Werror`; and
+- the equivalent focused LLVM/Clang C17 build passed with the same strict warning flags.
+
+The focused portable lanes exercise the complete bimap executable, including the 2,000-operation
+model history and allocation-failure atomicity checks. Performance measurements remain deliberately
+postponed until they can run in an isolated environment.
 
 ## Evidence To Record
 

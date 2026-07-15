@@ -506,6 +506,36 @@ retaining-callback failures, and collapse overflow are observable. Receiver repr
 surviving receiver classes. There is deliberately no public bag builder or transient session; use
 `create_range` for array construction and persistent point/algebra operations thereafter.
 
+## Persistent Bidirectional Map
+
+Include the dedicated header and initialize every owning output handle exactly once:
+
+```c
+#include <Tools/DataStructures/Hamt/persistent_bi_map.h>
+
+tds_hamt_set_policy keys = tds_hamt_set_policy_default();
+tds_hamt_set_policy values = tds_hamt_set_policy_default();
+tds_hamt_bi_map empty;
+tds_hamt_bi_map one;
+
+tds_hamt_bi_map_create(&keys, &values, &empty);
+tds_hamt_bi_map_add(&empty, key, value, &one);
+
+const void *stored_key = NULL;
+bool found = tds_hamt_bi_map_try_get_key(&one, value, &stored_key);
+
+tds_hamt_bi_map_destroy(&one);
+tds_hamt_bi_map_destroy(&empty);
+```
+
+The key and value policies may use different callback functions and context pointers. Their
+callback-owned contexts must outlive every cloned, updated, or inverted related handle. Strict
+`add` distinguishes duplicate key and duplicate value status; `try_add` additionally publishes a
+root-sharing result and explicit conflict enum. Removal presence flags keep stored `NULL`
+unambiguous. Opposite pointers borrow a non-aliased source version, so retain them through the
+appropriate policy before destroying or overwriting that source. `inverse` performs no traversal:
+it clones and swaps the two map handles.
+
 ## Integer Patricia Maps And Sets
 
 Use the Patricia family when keys are signed 32- or 64-bit integers and ordered traversal or

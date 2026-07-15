@@ -309,6 +309,33 @@ normalizing/iterating the argument. Logical no-op results share the receiver roo
 underlying stable-for-one-version trie/collision order, borrow the source bag, use a fixed inline
 traversal stack, and can be copied by value to obtain independently advancing cursors.
 
+## Persistent Bidirectional Map Contract
+
+Include `persistent_bi_map.h` for `tds_hamt_bi_map`. Each handle owns forward and inverse
+`tds_hamt_map` values plus a reference-counted policy bridge. The bridge copies independent
+`tds_hamt_set_policy` records for the key and value domains and dispatches each hash, equality,
+retain, release, and context callback in the correct direction. Callback-owned contexts remain the
+caller's lifetime responsibility until the last related bimap is destroyed.
+
+`try_add` returns a cloned two-root source on conflict and reports key conflict before value
+conflict. Strict `add` maps those cases to `TDS_HAMT_DUPLICATE_KEY` and the bimap-specific
+`TDS_HAMT_DUPLICATE_VALUE`. `set` adds a missing free pair, preserves both roots and
+representatives for a value-policy-equivalent update, replaces a present key only with a free
+value, and never displaces another key. Replacement deliberately removes and reinserts both
+directions. Both successor maps are complete before publication, and a failure leaves output and
+source unchanged.
+
+Lookup and removal are symmetric. A boolean presence output distinguishes stored `NULL` from a
+miss. Opposite representatives returned by non-aliased removal borrow the source snapshot; the
+aliased form reports `NULL` rather than a possibly released pointer, matching the base map's C
+ownership rule. `inverse` is O(1), cloning and swapping two reference-counted roots. Double
+inversion shares both source roots. `clear` retains both policy directions, iteration follows the
+forward CHAMP order, and `debug_validate` checks both canonical maps and every cross-direction
+entry. The bimap exposes no algebra, transient, builder, or displacing force-put surface and stores
+approximately two map entries per pair. Handles share the base HAMT's non-atomic reference-count
+rule: concurrent reads of an already-retained snapshot are safe, but clone/update/destroy on one
+shared lineage must be serialized.
+
 ## Complexity
 
 Let `w` be the hash width (32 bits), `b` be the branch factor (32), and `c` be the length of an
@@ -316,6 +343,9 @@ equal-hash collision bucket.
 
 - Lookup, insert, replace, remove, and one-descent factory update: O(w / log2(b) + c), effectively bounded by seven trie levels
   plus collision-bucket scan for 32-bit hashes.
+- Bimap lookup: one CHAMP lookup. Bimap point edits: up to two lookups and two persistent CHAMP
+  updates; storage is approximately twice a single map. Inverse and handle clone are O(1) in pair
+  count.
 - Transient create/adoption: O(1) in trie size, with one opaque-state allocation and one root retain.
 - Transient publication: O(1) in trie size, transferring the already-retained persistent handle.
 - Transient lookup and point edits: the same bounds and allocation behavior as the corresponding

@@ -28,6 +28,11 @@ ends with `<N> test(s) passed`.
 
 ## Test Cases
 
+The persistent-bimap executable covers independent callback policies and contexts, strict key/value
+conflicts, representatives, non-displacing replacement, symmetric nullable removal, clear,
+two-root inversion, a 2,000-operation model, validation, and allocation-failure atomicity. It
+prints `persistent bimap tests passed` on success.
+
 The core HAMT executable registers these cases:
 
 - `empty map has no entries`

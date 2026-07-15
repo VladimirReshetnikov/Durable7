@@ -16,7 +16,8 @@ typedef enum tds_hamt_status {
     TDS_HAMT_INVALID_ARGUMENT = 3,
     TDS_HAMT_TRANSIENT_CONSUMED = 4,
     TDS_HAMT_TRANSIENT_MODIFIED = 5,
-    TDS_HAMT_OVERFLOW = 6
+    TDS_HAMT_OVERFLOW = 6,
+    TDS_HAMT_DUPLICATE_VALUE = 7
 } tds_hamt_status;
 
 typedef enum tds_hamt_node_kind {
