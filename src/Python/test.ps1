@@ -1,0 +1,98 @@
+# SPDX-License-Identifier: MIT-0
+
+[CmdletBinding()]
+param(
+    [switch]$SkipInstall,
+    [switch]$SkipPackageSmoke
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+$workspace = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $workspace '..\..\eng\Enable-HeadlessTestMode.ps1')
+$null = Enable-HeadlessTestMode
+
+$launcher = Get-Command python -ErrorAction SilentlyContinue
+if ($null -eq $launcher) { throw 'Python was not found on PATH.' }
+$versionText = & $launcher.Source -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'
+if ($LASTEXITCODE -ne 0 -or [version]$versionText -lt [version]'3.11') {
+    throw "Python 3.11 or newer is required; found $versionText."
+}
+
+$previousHashSeed = $env:PYTHONHASHSEED
+$env:PYTHONHASHSEED = '0'
+Push-Location $workspace
+
+try {
+    function Get-ValidatedWorkspaceChild([string] $Path) {
+        $root = [IO.Path]::GetFullPath($workspace).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+        $full = [IO.Path]::GetFullPath($Path)
+        if (-not $full.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to operate outside the Python workspace: $full"
+        }
+        return $full
+    }
+
+    $venv = Join-Path $workspace '.venv'
+    $python = Join-Path $venv 'Scripts\python.exe'
+    if (-not (Test-Path $python)) {
+        python -m venv $venv
+        if ($LASTEXITCODE -ne 0) { throw "Creating the Python validation environment failed." }
+    }
+
+    & $python -c 'import pip' 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        & $python -m ensurepip --upgrade
+        if ($LASTEXITCODE -ne 0) { throw "Bootstrapping pip in the validation environment failed." }
+    }
+
+    if (-not $SkipInstall) {
+        & $python -m pip install --disable-pip-version-check --requirement requirements-dev.txt
+        if ($LASTEXITCODE -ne 0) { throw "Installing Python validation dependencies failed." }
+        & $python -m pip install --disable-pip-version-check --no-deps --editable .
+        if ($LASTEXITCODE -ne 0) { throw "Installing the Python workspace failed." }
+    }
+
+    & $python -m ruff format --check .
+    if ($LASTEXITCODE -ne 0) { throw "Ruff formatting validation failed." }
+
+    & $python -m ruff check .
+    if ($LASTEXITCODE -ne 0) { throw "Ruff lint validation failed." }
+
+    & $python -m mypy
+    if ($LASTEXITCODE -ne 0) { throw "Mypy validation failed." }
+
+    & $python -m pytest
+    if ($LASTEXITCODE -ne 0) { throw "Python tests failed." }
+
+    $dist = Get-ValidatedWorkspaceChild (Join-Path $workspace 'dist')
+    Remove-Item -LiteralPath $dist -Recurse -Force -ErrorAction SilentlyContinue
+    & $python -m build
+    if ($LASTEXITCODE -ne 0) { throw "Python package build failed." }
+
+    & $python -m twine check dist\*
+    if ($LASTEXITCODE -ne 0) { throw "Python package metadata validation failed." }
+
+    if (-not $SkipPackageSmoke) {
+        $smoke = Get-ValidatedWorkspaceChild (Join-Path $workspace 'build\package-smoke')
+        Remove-Item -LiteralPath $smoke -Recurse -Force -ErrorAction SilentlyContinue
+        & $launcher.Source -m venv $smoke
+        if ($LASTEXITCODE -ne 0) { throw "Creating package-smoke environment failed." }
+
+        $wheel = Get-ChildItem -LiteralPath $dist -Filter '*.whl' | Select-Object -First 1
+        & "$smoke\Scripts\python.exe" -m pip install --disable-pip-version-check $wheel.FullName
+        if ($LASTEXITCODE -ne 0) { throw "Installing the built wheel failed." }
+
+        & "$smoke\Scripts\python.exe" -c "from vladimir_reshetnikov.data_structures import PersistentAssociation, PersistentDeque, PersistentHashMap, UInt256; assert PersistentHashMap.empty().set('answer', 42).get('answer') == 42; assert PersistentDeque.from_iterable([1, 2]).append(3).to_list() == [1, 2, 3]; assert PersistentAssociation.from_pairs([('a', 1)]).get('a') == 1; assert int(UInt256(-1)) == 2**256 - 1"
+        if ($LASTEXITCODE -ne 0) { throw "Installed-wheel smoke test failed." }
+    }
+}
+finally {
+    Pop-Location
+    if ($null -eq $previousHashSeed) {
+        Remove-Item Env:PYTHONHASHSEED -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:PYTHONHASHSEED = $previousHashSeed
+    }
+}

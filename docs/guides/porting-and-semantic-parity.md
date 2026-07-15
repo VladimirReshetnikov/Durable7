@@ -39,6 +39,8 @@ before extracting or generalizing a Tungsten mechanism.
 | Native API specs and public headers under `src/C/*` and `src/Cpp/*` | Idiomatic C and C++ surface shape, ownership model, and local divergences. |
 | Kotlin API notes under `src/Kotlin/*/docs` | Kotlin/JVM value semantics, null/result shapes, tool bootstrap, persistent representation, complexity, and intentional engine differences. |
 | Rust API notes under `src/Rust/*/docs` | Rust value semantics, `Result`/`Option` shape, Cargo validation, and checkpoint divergences. |
+| [TypeScript API notes](../../src/TypeScript/docs/api-notes.md) | Strict ESM value semantics, JavaScript runtime mappings, isolate-local concurrency, `bigint` numerics, and intentional engine differences. |
+| [Python API notes](../../src/Python/docs/api-notes.md) | Python 3.11+ naming and result shapes, measured-AVL checkpoints, lock-coordinated concurrency, Unicode-code-point text positions, and bigint-backed numerics. |
 | [Data structure catalog](../reference/data-structure-catalog.md) | Cross-language inventory of public data-structure entry points. |
 | [Workspace map](../reference/workspace-map.md) | Port lineage, path conventions, and documentation placement. |
 | [Build and validation guide](build-and-validation.md) plus workspace validation guides | Commands that prove the affected workspaces still build and pass tests, and the local warning policy, coverage map, stress controls, benchmark boundary, and evidence wording for each workspace. |
@@ -66,8 +68,13 @@ HAMT lineage:
 6. [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) ports the HAMT contract to Rust value types,
    `BuildHasher` hash policies, `Eq` key equality, `Arc` structural sharing, and `Result`/`Option`
    result shapes.
+7. [`src/TypeScript`](../../src/TypeScript/README.md) ports the contract to strict ESM with
+   JavaScript-native policies, path-copy editing sessions, and an isolate-local snapshot facade.
+8. [`src/Python`](../../src/Python/README.md) ports the contract to typed Python values with runtime
+   `HashPolicy`, path-copy editing sessions, a lock-coordinated thread-safe snapshot facade, and
+   Python-native exception/optional result shapes.
 
-The one-way CHAMP map/set editing lifecycle now exists in all six workspaces. Preserve these shared
+The one-way CHAMP map/set editing lifecycle now exists in all eight workspaces. Preserve these shared
 semantics when changing it: O(1)-in-trie adoption and terminal publication, one logical owner,
 one-way consumption, exact policy and stored-representative preservation, retained-source
 isolation, unchanged-root identity after logical no-ops, receiver-policy set relations, and
@@ -75,9 +82,10 @@ failure-atomic point edits.
 
 Do not mechanically copy the C# representation claim into a sibling port. C# alone currently has
 the optimized owner-token kernel: it mutates token-owned nodes and path-copies shared/sealed nodes.
-C, C++, Haskell, Kotlin, and Rust expose semantic lifecycle facades whose changed point edits invoke
-the persistent path-copying kernel; their adoption/publication are O(1) in trie size, but they make
-no edit-throughput or allocation-win claim. Keep each language's lifecycle shape explicit:
+C, C++, Haskell, Kotlin, Rust, TypeScript, and Python expose semantic lifecycle facades whose changed
+point edits invoke the persistent path-copying kernel; their adoption/publication are O(1) in trie
+size, but they make no edit-throughput or allocation-win claim. Keep each language's lifecycle
+shape explicit:
 
 - C clone handles alias one ref-counted session state, share consumption, and surface consumed or
   modified-iterator conditions through status codes.
@@ -89,28 +97,34 @@ no edit-throughput or allocation-win claim. Keep each language's lifecycle shape
 - Kotlin rejects post-publication access dynamically and binds acquired views to the session version.
 - Rust consumes the session through `into_persistent(self)`, expressing use-after-publication
   prevention in ownership rather than a runtime consumed state.
+- TypeScript and Python reject post-publication access dynamically; their iterators capture a
+  session version, survive logical no-ops, and reject subsequent content changes.
 
-The policy-bound Merkle search tree is complete across all seven languages. Every port pins the
+The policy-bound Merkle search tree is complete across all eight languages. Every port pins the
 SHA-256 domain, key framing, empty digest, canonical `MST2` block bytes, seven verification budgets,
 `MSP2` point/range proofs, closure-pruned synchronization, and no-partial-result three-way merge.
 Language-local ownership and callback shapes differ—pure successor stores in Haskell, synchronized
 managed/native stores elsewhere, and type-erased fallible callbacks in C—but golden blocks and
 every accepted/rejected trust-boundary input must remain cross-language compatible.
 
-The Ctrie is an intentional parity exception. `ConcurrentHashTrie<TKey, TValue>` and its
-Kotlin/JVM counterpart are managed-runtime mutable structures whose lock-free indirection-node
-protocol relies on tracing garbage collection and offers O(1) immutable generation snapshots.
-Keep their observable map, snapshot, helping, and stored-key contracts aligned with each other.
-Do not treat the absence of C, C++, Rust, or Haskell ports as drift: native versions require an
-explicit epoch/hazard-pointer reclamation design, while a pure Haskell port would be a different
-structure. Promoting another language requires a separately reviewed reclamation and concurrency
-contract, not a mechanical HAMT port.
+The Ctrie is an intentional parity exception. `ConcurrentHashTrie<TKey, TValue>` and its Kotlin/JVM
+counterpart are managed-runtime mutable structures whose lock-free indirection-node protocol relies
+on tracing garbage collection and offers O(1) immutable generation snapshots. TypeScript exposes a
+synchronous isolate-local facade without a cross-worker progress claim. Python exposes a thread-safe,
+lock-coordinated facade over persistent CHAMP roots: writes are serialized and snapshots remain O(1),
+but it is not the GCAS/RDCSS Ctrie and makes no lock-free claim. Keep observable map, generation,
+snapshot, and stored-key contracts aligned while preserving those progress distinctions. Do not
+treat the absence of C, C++, Rust, or Haskell ports as drift: native versions require an explicit
+epoch/hazard-pointer reclamation design, while a pure Haskell port would be a different structure.
+Promoting another language requires a separately reviewed reclamation and concurrency contract, not
+a mechanical HAMT port.
 
 DABA Lite is another deliberately mutable member, but its algorithm is portable independently of
-its lifetime policy. C#, C, C++, Kotlin/JVM, and Rust preserve FIFO ordering, the six-cursor
+its lifetime policy. C#, C, C++, Kotlin/JVM, Rust, TypeScript, and Python preserve FIFO ordering, the six-cursor
 schedule, three/two/one combine ceilings, callback-atomic or status-atomic mutators, callback-free
-structural validation, and the absence of raw-value iteration. Managed tracing-GC ports can replace
-the active chunk chain in O(1). C, C++, and safe Rust instead clear in O(n + c), iteratively
+structural validation, and the absence of raw-value iteration. C#, Kotlin/JVM, TypeScript, and Python
+can replace the active chunk chain in O(1); Python leaves eventual cycle reclamation to the runtime.
+C, C++, and safe Rust instead clear in O(n + c), iteratively
 destroying `n` owned values in `c` chunks; deferring that work would violate prompt reclamation. C's
 existing callbacks are infallible and non-reentrant by contract, C++ requires no-throw moves so its
 planned publication phase cannot tear, and Rust's stable `Rc` cursor representation makes the
@@ -118,7 +132,7 @@ mutable core `!Send` and `!Sync`. Treat these ownership/concurrency differences 
 semantics, not parity failures. A pure Haskell value would not preserve DABA's ephemeral incremental
 schedule, so omission there is intentional.
 
-The canonical zip-zip sorted set is a policy-canonical persistent member implemented in all six
+The canonical zip-zip sorted set is a policy-canonical persistent member implemented in all eight
 languages. Every port derives a 32-byte HMAC key as SHA-256 of ASCII `ZZT2`
 followed by the public seed in big-endian order, feed an eight-byte big-endian equivalence-class hash to
 HMAC-SHA-256, and interpret the first three big-endian words as leading-zero geometric rank,
@@ -153,6 +167,11 @@ generic element type. Preserve output atomicity, exact-operand aliasing, callbac
 key zeroing, non-reentrancy, and the rule that concurrent distinct-handle reads require thread-safe
 caller hooks.
 
+Python uses `hashlib`/`hmac`, retains an owned rank key, and lock-protects lazy digest publication.
+Because Python's built-in string/bytes hashes are randomized, its natural factory supplies a pinned
+stable rank hash only for supported immutable values and requires an explicit equivalence-coherent
+rank hash for application objects.
+
 FingerTree lineage:
 
 1. [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) is the broadest semantic source:
@@ -185,6 +204,12 @@ FingerTree lineage:
    the workspace documents the remaining asymptotic boundary until the lazy measured spine is
    ported through the whole family. Its separate DABA Lite core is mutable, single-threaded, and
    documents deterministic-drop clear semantics.
+7. [`src/TypeScript`](../../src/TypeScript/README.md) ports the measured family and shipped derived
+   cores to strict ESM with persistent JavaScript gap cursors and a mutable isolate-local DABA Lite.
+8. [`src/Python`](../../src/Python/README.md) ports the family over immutable measured AVL and RRB
+   substrates. It exposes deque/measured, sorted, priority, interval, canonical zip-zip, Brodal,
+   priority-search, rope, and snapshot-plus-gap cursor surfaces; text positions count Python Unicode
+   code points. Its mutable DABA Lite is single-threaded and separately documented.
 
 Tungsten collections lineage:
 
@@ -203,6 +228,9 @@ refactoring Tungsten into a dependency.
 4. [`src/Haskell/Tungsten`](../../src/Haskell/Tungsten/README.md), [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md),
    and [`src/Rust/Tungsten`](../../src/Rust/Tungsten/README.md) port the same behavior to their
    language-local immutable value, policy, and test-runner shapes.
+5. [`src/TypeScript`](../../src/TypeScript/README.md) and [`src/Python`](../../src/Python/README.md)
+   port the same application-leaf `PersistentList`/`PersistentAssociation` vocabulary into their
+   language-local packages.
 
 A port can still reveal a baseline bug. When that happens, fix or document the baseline contract
 first, then carry the corrected semantics through the sibling workspaces that expose the same
@@ -219,7 +247,7 @@ Check these items before calling a cross-language change complete:
 | Policy preservation | Are hash, equality, comparison, measure, ownership, and callback policies preserved across derived versions? |
 | Ordering | Are enumeration, sorted order, tie-breaking, rank, interval, rope, and text-boundary semantics equivalent where exposed? |
 | Failure behavior | Do duplicate-key, absent-key, empty-collection, invalid-rank, allocation, and callback failures match the documented contract? |
-| Ownership and lifetime | Are C# references, C++ values/shared nodes, C handle clone/destroy rules, Haskell immutable values, Kotlin/JVM references, and Rust owned values/borrows/`Arc` sharing all respected by examples and tests? |
+| Ownership and lifetime | Are C# references, C++ values/shared nodes, C handle clone/destroy rules, Haskell immutable values, Kotlin/JVM references, Rust owned values/borrows/`Arc` sharing, JavaScript objects, and Python references all respected by examples and tests? |
 | Complexity and allocation | Do docs and tests protect the promised asymptotic shape and hot-path allocation behavior? |
 | Concurrency | Are immutable publication and family-specific reference-counting rules documented without overstating guarantees? |
 | Validation | Do tests cover the affected behavior in every touched workspace, including model or property tests when those are the relevant evidence? |
@@ -242,6 +270,11 @@ Do not copy names mechanically. Preserve contracts while using each language's n
 Kotlin ports should preserve the same observable contracts with idiomatic JVM shapes: immutable return
 values, `null` for miss paths, runtime policy/comparator objects when type-level policies would be
 unnatural, and explicit result records or exceptions for duplicate-key contracts.
+
+TypeScript and Python ports likewise preserve contracts with runtime-native shapes: ESM/camelCase and
+`undefined`/exceptions for TypeScript; importable typed modules, snake_case, `None`, named dataclass
+results, and exceptions for Python. Neither runtime shape authorizes a stronger concurrency or
+owner-token performance claim than the local implementation proves.
 
 ## Change Workflow
 
@@ -266,7 +299,7 @@ unnatural, and explicit result records or exceptions for duplicate-key contracts
 
 ## HAMT-Specific Checks
 
-For map/set changes, verify these contracts across C#, C++, C, Haskell, Kotlin, Rust, and TypeScript where exposed:
+For map/set changes, verify these contracts across C#, C++, C, Haskell, Kotlin, Rust, TypeScript, and Python where exposed:
 
 - 32-way bitmap-indexed trie shape over 32 hash bits.
 - Immutable equal-hash collision buckets with linear equality probing.
@@ -294,6 +327,8 @@ Primary semantic docs:
 - [Haskell HAMT workspace](../../src/Haskell/Hamt/README.md)
 - [Kotlin HAMT API notes](../../src/Kotlin/Hamt/docs/api-notes.md)
 - [Rust HAMT API notes](../../src/Rust/Hamt/docs/api-notes.md)
+- [TypeScript API notes](../../src/TypeScript/docs/api-notes.md)
+- [Python API notes](../../src/Python/docs/api-notes.md)
 
 Validation guides:
 
@@ -303,10 +338,12 @@ Validation guides:
 - [Haskell HAMT tests](../../src/Haskell/Hamt/test/README.md)
 - [Kotlin HAMT validation](../../src/Kotlin/Hamt/docs/validation.md)
 - [Rust HAMT validation](../../src/Rust/Hamt/docs/validation.md)
+- [TypeScript validation](../../src/TypeScript/docs/validation.md)
+- [Python validation](../../src/Python/docs/validation.md)
 
 ## FingerTree-Specific Checks
 
-For finger-tree-family changes, verify these contracts across the relevant C#, C++, C, Haskell, Kotlin, Rust, and TypeScript surfaces:
+For finger-tree-family changes, verify these contracts across the relevant C#, C++, C, Haskell, Kotlin, Rust, TypeScript, and Python surfaces:
 
 - Tuned deque and general measured tree remain separate when the language exposes both.
 - Measure policies obey monoid identity and associativity assumptions used by split, locate, and
@@ -339,6 +376,8 @@ Primary semantic docs:
 - [Haskell FingerTree workspace](../../src/Haskell/FingerTree/README.md)
 - [Kotlin FingerTree API notes](../../src/Kotlin/FingerTree/docs/api-notes.md)
 - [Rust FingerTree API notes](../../src/Rust/FingerTree/docs/api-notes.md)
+- [TypeScript API notes](../../src/TypeScript/docs/api-notes.md)
+- [Python API notes](../../src/Python/docs/api-notes.md)
 
 Validation guides:
 
@@ -348,6 +387,8 @@ Validation guides:
 - [Haskell FingerTree tests](../../src/Haskell/FingerTree/test/README.md)
 - [Kotlin FingerTree validation](../../src/Kotlin/FingerTree/docs/validation.md)
 - [Rust FingerTree validation](../../src/Rust/FingerTree/docs/validation.md)
+- [TypeScript validation](../../src/TypeScript/docs/validation.md)
+- [Python validation](../../src/Python/docs/validation.md)
 
 ## Validation Evidence
 

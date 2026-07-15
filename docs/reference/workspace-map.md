@@ -7,7 +7,8 @@
 
 The repository is organized by programming language first. Native, Haskell, Kotlin, and Rust roots keep
 library-family directories directly under the language root. The C# root is a single managed solution
-with projects grouped by role:
+with projects grouped by role; Python and TypeScript each package their family modules into one
+language-local distribution:
 
 ```text
 src/
@@ -49,11 +50,17 @@ src/
 │   ├── FingerTree/
 │   ├── Hamt/
 │   └── Tungsten/
+├── Python/
+│   ├── README.md
+│   ├── docs/
+│   ├── src/vladimir_reshetnikov/data_structures/
+│   ├── tests/
+│   └── test.ps1
 ├── Rust/
-    ├── README.md
-    ├── FingerTree/
-    ├── Hamt/
-    └── Tungsten/
+│   ├── README.md
+│   ├── FingerTree/
+│   ├── Hamt/
+│   └── Tungsten/
 └── TypeScript/
     ├── README.md
     ├── docs/
@@ -69,7 +76,8 @@ surface.
 Use the [source index](../../src/README.md) when browsing by language, or jump directly to the
 [C](../../src/C/README.md), [C++](../../src/Cpp/README.md), [C#](../../src/CSharp/README.md),
 [Haskell](../../src/Haskell/README.md), [Kotlin](../../src/Kotlin/README.md),
-[Rust](../../src/Rust/README.md), or [TypeScript](../../src/TypeScript/README.md) language index.
+[Python](../../src/Python/README.md), [Rust](../../src/Rust/README.md), or
+[TypeScript](../../src/TypeScript/README.md) language index.
 
 For the cross-language list of public library surfaces, see the
 [data structure catalog](data-structure-catalog.md). For the shared behavior, ownership, policy,
@@ -116,6 +124,7 @@ normative code, test, documentation, porting, and extraction rules.
 | [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md) | Kotlin/JVM Tungsten `List` and `Association` port | `src/tools/datastructures/tungsten/`, `test/tools/datastructures/tungsten/` | [`README`](../../src/Kotlin/Tungsten/README.md) |
 | [`src/Rust/Tungsten`](../../src/Rust/Tungsten/README.md) | Safe Rust Tungsten `List` and `Association` crate | `Cargo.toml`, `src/lib.rs` | [`README`](../../src/Rust/Tungsten/README.md) |
 | [`src/TypeScript`](../../src/TypeScript/README.md) | Strict TypeScript/ESM port of all shipped general families plus the application-leaf Tungsten collections | `package.json`, `src/`, `test.ps1` | [API notes](../../src/TypeScript/docs/api-notes.md), [validation](../../src/TypeScript/docs/validation.md) |
+| [`src/Python`](../../src/Python/README.md) | Typed Python 3.11+ port of all shipped general families plus the application-leaf Tungsten collections | `pyproject.toml`, `src/vladimir_reshetnikov/data_structures/`, `tests/`, `test.ps1` | [API notes](../../src/Python/docs/api-notes.md), [validation](../../src/Python/docs/validation.md), [tests](../../src/Python/tests/README.md) |
 
 ## Port Lineage
 
@@ -141,6 +150,9 @@ HAMT lineage:
    bounded verified persistence, `MSP2` proofs, synchronization, and typed three-way merge.
 7. `src/TypeScript` ports the persistent/transient CHAMP, Patricia, and exact `MST2`/`MSP2`
    contracts to strict ESM, with JavaScript-native policies and isolate-local concurrency semantics.
+8. `src/Python` ports the same contracts to Python 3.11+ with runtime `HashPolicy`, path-copy
+   one-way sessions, a lock-coordinated thread-safe facade over persistent roots, and exact
+   byte-compatible Merkle persistence/proofs with all seven verification budgets.
 
 FingerTree lineage:
 
@@ -167,6 +179,10 @@ FingerTree lineage:
    DABA Lite whose deterministic-drop clear cost is documented locally.
 7. `src/TypeScript` ports the measured family and all shipped derived/new cores, with persistent
    JavaScript gap cursors and a mutable single-isolate DABA Lite.
+8. `src/Python` ports the measured family over immutable measured AVL and RRB substrates, including
+   sorted/priority/interval facades, the canonical zip-zip set, Brodal and priority-search cores,
+   mutable DABA Lite, and positional/measured/text gap cursors whose text offsets count Unicode code
+   points.
 
 Tungsten collections lineage:
 
@@ -181,12 +197,14 @@ than by making another family depend on Tungsten.
    [derived structure catalog](derived-structure-catalog.md) case study, with the kernel-verified
    Tungsten ordering rules as the family-local fidelity spec.
 2. `src/Cpp/Tungsten`, `src/C/Tungsten`, `src/Haskell/Tungsten`, `src/Kotlin/Tungsten`,
-   `src/Rust/Tungsten`, and `src/TypeScript` port the same public family to their language-local ownership and policy
+   `src/Rust/Tungsten`, `src/TypeScript`, and `src/Python` port the same public family to their language-local ownership and policy
    models while preserving the substrate composition, sparse-stamp relabel behavior, and
    average/worst-case operation bounds.
 
-Numerics originates in `src/CSharp/src/Tools.Numerics`; `src/TypeScript/src/numerics` ports the six
-fixed-width types, binary/format semantics, `SparseInteger`, and `BitConverterEx` over native `bigint`.
+Numerics originates in `src/CSharp/src/Tools.Numerics`; `src/TypeScript/src/numerics` and
+`src/Python/src/vladimir_reshetnikov/data_structures/numerics` port the six fixed-width types,
+binary/format semantics, `SparseInteger`, and `BitConverterEx` over their native arbitrary-precision
+integer substrates.
 
 When porting behavior across languages, prefer the managed workspace for the semantic contract, the adjacent
 native workspace for local idioms, and the local tests for the exact validation shape. Use the
@@ -206,6 +224,8 @@ Workspace-level docs live near the code they describe:
 - C# API contracts and library-specific design notes belong under `src/CSharp/docs/<Family>/`.
 - Other language API contracts and library-specific design notes belong under the family workspace's `docs/`
   directory.
+- Python and TypeScript package-wide API and validation notes belong under their language-root
+  `docs/` directories, with family modules under their package `src/` trees.
 - Build entry points and quick orientation belong in the language-root or family-root `README.md`, whichever owns
   the build entry point.
 - Long-lived repository-wide reports belong under `docs/`, not inside one language workspace.

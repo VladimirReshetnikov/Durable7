@@ -181,6 +181,19 @@ and a worked ordered-set example, is the
     │       ├── README.md
     │       ├── src/
     │       └── test/
+    ├── Python/
+    │   ├── README.md
+    │   ├── pyproject.toml
+    │   ├── requirements-dev.txt
+    │   ├── test.ps1
+    │   ├── docs/
+    │   ├── src/
+    │   │   └── vladimir_reshetnikov/data_structures/
+    │   │       ├── finger_tree/
+    │   │       ├── hamt/
+    │   │       ├── numerics/
+    │   │       └── tungsten/
+    │   └── tests/
     ├── test_support/
     │   └── include/
     ├── Rust/
@@ -221,12 +234,12 @@ and a worked ordered-set example, is the
 
 The [source index](src/README.md) and language indexes for [C](src/C/README.md),
 [C++](src/Cpp/README.md), [C#](src/CSharp/README.md), [Haskell](src/Haskell/README.md),
-[Kotlin](src/Kotlin/README.md), [Rust](src/Rust/README.md), and
+[Kotlin](src/Kotlin/README.md), [Python](src/Python/README.md), [Rust](src/Rust/README.md), and
 [TypeScript](src/TypeScript/README.md) are the quickest way to browse the
 language-first layout.
 
 - [C# Numerics](src/CSharp/docs/Numerics/overview.md) is a .NET 10 fixed-width and sparse integer numerics library under [src/CSharp/src/Tools.Numerics](src/CSharp/src/Tools.Numerics/Tools.Numerics.csproj). It provides `UInt256`/`Int256`, `UInt512`/`Int512`, `UInt1024`/`Int1024`, `SparseInteger`, deterministic two's-complement and binary conversion semantics, declaration-parity guardrails, and xUnit tests.
-- [C# HAMT](src/CSharp/docs/Hamt/overview.md) is a .NET 10 hash-trie library under [src/CSharp/src/Tools.DataStructures.Hamt](src/CSharp/src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj). Its canonical CHAMP `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` preserve comparers, stored representatives, and structural sharing; the map exposes one-descent persistent `GetOrAdd`/`AddOrUpdate`, and both collections expose optimized single-owner `Transient` sessions with owner-token in-place edits, O(1) adoption, and one-way O(1) publication. `PersistentHashBag<T>` adds an immutable unordered multiset with separate `DistinctCount`/`TotalCount`, checked multiplicities, first-representative retention, and receiver-comparer union/intersection/difference/sum. C, C++, Haskell, Kotlin, Rust, and TypeScript expose the same semantic edit-then-publish lifecycle through language-local sessions whose changed point edits remain persistent path copies and carry no performance claim. The workspace also owns the lock-free snapshotting Ctrie, 32/64-bit Patricia maps and sets, and the policy-bound Merkle search tree; xUnit/CsCheck suites cover persistent, transient, and concurrent behavior.
+- [C# HAMT](src/CSharp/docs/Hamt/overview.md) is a .NET 10 hash-trie library under [src/CSharp/src/Tools.DataStructures.Hamt](src/CSharp/src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj). Its canonical CHAMP `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` preserve comparers, stored representatives, and structural sharing; the map exposes one-descent persistent `GetOrAdd`/`AddOrUpdate`, and both collections expose optimized single-owner `Transient` sessions with owner-token in-place edits, O(1) adoption, and one-way O(1) publication. `PersistentHashBag<T>` adds an immutable unordered multiset with separate `DistinctCount`/`TotalCount`, checked multiplicities, first-representative retention, and receiver-comparer union/intersection/difference/sum. C, C++, Haskell, Kotlin, Rust, TypeScript, and Python expose the same semantic edit-then-publish lifecycle through language-local sessions whose changed point edits remain persistent path copies and carry no performance claim. The workspace also owns the lock-free snapshotting Ctrie, 32/64-bit Patricia maps and sets, and the policy-bound Merkle search tree; xUnit/CsCheck suites cover persistent, transient, and concurrent behavior.
 - [C# FingerTree](src/CSharp/docs/FingerTree/overview.md) is a .NET 10 persistent finger-tree library under [src/CSharp/src/Tools.DataStructures.FingerTree](src/CSharp/src/Tools.DataStructures.FingerTree/Tools.DataStructures.FingerTree.csproj): two engine cores (a tuned catenable deque and a general monoid-measured tree), a full collection family (sorted bag/set/dictionary, priority queue, interval tree, reversible deque), product/sum/built-in measures with a closure-free predicate API, and a rope family (positional, measured, and text) with version-bound positional and measured edit cursors. It ships a navigable design-notes document ([FingerTree-Design-Notes.pdf](src/CSharp/docs/FingerTree/FingerTree-Design-Notes.pdf), with `.tex` source and a rebuild script alongside), a BenchmarkDotNet harness, three runnable samples, and a three-tier (example + property + model-based command) test suite plus tearable-struct concurrency stress tests.
 - [C# Tungsten collections](src/CSharp/docs/Tungsten/overview.md) is a .NET 10 application-specific leaf library under [src/CSharp/src/Tools.DataStructures.Tungsten](src/CSharp/src/Tools.DataStructures.Tungsten/Tools.DataStructures.Tungsten.csproj) composing the HAMT and FingerTree families into persistent collections for the Tungsten project: `PersistentList<T>` (the `List` operation vocabulary over the catenable deque) and `PersistentAssociation<TKey, TValue>` (an insertion-ordered map with keyed and positional access following the kernel-verified `Association` ordering rules). The primary external client is the Tungsten engine in the Smithereens repository; the C# implementation is the semantic reference only for sibling Tungsten ports and is never a foundation for general collections.
 - [src/C/Hamt](src/C/Hamt/README.md) is a C17 port of the persistent HAMT library. It provides type-erased
@@ -279,10 +292,17 @@ language-first layout.
   Tungsten `List`/`Association`, and fixed-width numerics. Its `MST2`/`MSP2` wire is byte-identical
   to the sibling ports; runtime-specific concurrency and owner-token performance distinctions are
   documented locally.
+- [src/Python](src/Python/README.md) is the typed Python 3.11+ distribution. It packages CHAMP with
+  path-copy one-way sessions, a lock-coordinated concurrent facade, Patricia maps/sets, the exact
+  `MST2`/`MSP2` Merkle tier with seven verification budgets, measured-AVL and RRB sequence families,
+  canonical zip-zip/Brodal/priority-search/DABA cores, code-point-indexed rope cursors, the
+  application-leaf Tungsten `List`/`Association`, and bigint-backed fixed-width/sparse numerics.
+  Ruff, strict Mypy, pytest/Hypothesis, source/wheel builds, metadata checks, and an installed-wheel
+  smoke test form its validation gate.
 
 ## Build and test
 
-Use [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) as the complete validation guide. In short, use the local .NET SDK toolchain for the C# workspace, the language-root MSVC build wrappers for C and C++, cabal for the Haskell packages, and Cargo for the Rust crates.
+Use [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) as the complete validation guide. In short, use the local .NET SDK toolchain for the C# workspace, the language-root MSVC build wrappers for C and C++, cabal for the Haskell packages, Cargo for the Rust crates, npm for TypeScript, and Python 3.11+ with the checked-in launcher for Python.
 
 ```powershell
 cd C:\DataStructures\src\CSharp
@@ -309,6 +329,9 @@ cd C:\DataStructures\src\Rust
 cd C:\DataStructures\src\TypeScript
 npm ci
 npm run validate
+
+cd C:\DataStructures\src\Python
+.\test.ps1
 
 cd C:\DataStructures\src\C
 .\build.ps1 -Workspace FingerTree -RunTests
@@ -347,9 +370,9 @@ Release configuration is required for meaningful benchmark numbers.
 - [docs/guides/agent-workflows.md](docs/guides/agent-workflows.md) holds compact task-conditional workflow guidance.
 - [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) is the repository-wide validation matrix and command guide.
 - [docs/guides/documentation-maintenance.md](docs/guides/documentation-maintenance.md) defines documentation placement, writing standards, metadata, and validation.
-- [docs/guides/porting-and-semantic-parity.md](docs/guides/porting-and-semantic-parity.md) defines the workflow for keeping C#, C++, C, Haskell, Kotlin, Rust, and TypeScript data-structure surfaces semantically aligned.
+- [docs/guides/porting-and-semantic-parity.md](docs/guides/porting-and-semantic-parity.md) defines the workflow for keeping C#, C++, C, Haskell, Kotlin, Rust, TypeScript, and Python data-structure surfaces semantically aligned.
 - [docs/reference/README.md](docs/reference/README.md) indexes durable cross-workspace reference material.
-- [docs/reference/data-structure-catalog.md](docs/reference/data-structure-catalog.md) catalogs repository-owned data-structure families, public entry points, and primary references across C#, C, C++, Haskell, Kotlin, Rust, and TypeScript.
+- [docs/reference/data-structure-catalog.md](docs/reference/data-structure-catalog.md) catalogs repository-owned data-structure families, public entry points, and primary references across C#, C, C++, Haskell, Kotlin, Rust, TypeScript, and Python.
 - [docs/reference/navigation-matrix.md](docs/reference/navigation-matrix.md) maps common tasks to the right usage, API, validation, porting, history, and maintenance documents.
 - [docs/reference/semantic-contracts.md](docs/reference/semantic-contracts.md) summarizes shared behavior, ownership, policy, ordering, and documentation obligations for repository-owned numerics and data structures.
 - [docs/reference/workspace-map.md](docs/reference/workspace-map.md) explains the language-first, library-family layout and port lineage.
@@ -379,6 +402,9 @@ Release configuration is required for meaningful benchmark numbers.
 - [src/TypeScript/README.md](src/TypeScript/README.md) indexes the TypeScript package;
   [API notes](src/TypeScript/docs/api-notes.md), [validation](src/TypeScript/docs/validation.md),
   and the [test map](src/TypeScript/test/README.md) document its runtime mappings and gates.
+- [src/Python/README.md](src/Python/README.md) indexes the Python package;
+  [API notes](src/Python/docs/api-notes.md), [validation](src/Python/docs/validation.md), and the
+  [test map](src/Python/tests/README.md) document its runtime mappings and gates.
 
 The large `TECHNICAL_DOCUMENTATION_STANDARD.md` and `XML_DOCUMENTATION_STANDARD.md` files from Tools are intentionally not part of this repository. Keep documentation thorough and current-state oriented, and write XML documentation in semantic terms: contracts, invariants, ordering, failure behavior, complexity, allocation behavior, and examples where they help.
 
@@ -402,7 +428,7 @@ The expected local Windows environment includes:
 - `pwsh` / PowerShell 7.
 - `rg` for repository search.
 - `git` and `gh` for source-control and GitHub workflows.
-- `python` for ad hoc tooling.
+- Python 3.11 or newer with `venv` and `pip`, both for `src/Python` and ad hoc tooling.
 - .NET SDK 10.0 or newer with the .NET 10 targeting packs.
 - Visual Studio native C/C++ toolchain, including C++23 `/std:c++latest` support for `src/Cpp/FingerTree`, plus the bundled CMake and Ninja used by the `src/C/FingerTree` and `src/Cpp/FingerTree` presets.
 - LLVM/Clang for native portability validation. The local Windows installation normally exposes

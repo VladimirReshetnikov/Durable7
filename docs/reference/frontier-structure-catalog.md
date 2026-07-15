@@ -48,7 +48,7 @@ family (proposal Tier C1), the cursor/zipper (proposal A3), and the RRB vector (
 benchmark-first grounds). Patricia and RRB have since shipped across the language workspaces, and
 the positional cursor, measured/text cursor, sample integration, and CHAMP owner-token transients
 have shipped as C# Axis 2 C1, C2, C3, and T2. The one-way lifecycle has since gained semantic
-path-copying ports in C, C++, Haskell, Kotlin, and Rust, and every sibling language now has positional,
+path-copying ports in C, C++, Haskell, Kotlin, Rust, TypeScript, and Python, and every sibling language now has positional,
 measured, and text snapshot-plus-gap cursor checkpoints without zipper or performance parity. The frozen tier and
 later cursor families remain planned. The cursor and the temporal-lifecycle work have a dedicated
 [Axis 2 final plan](../proposals/axis2-lifecycle-and-sequence-cursors.md), which is authoritative where
@@ -72,19 +72,19 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 
 | Structure or strategy | Axis | Verdict / status | Depends on | Rough size |
 | --- | --- | --- | --- | --- |
-| CHAMP canonicalization + structural equality/diff | 1 | Strong (implemented across all seven languages) | Completed with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
-| `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all seven languages) | Completed as proposal Tier C1 | 1 shared core, 4 C# public types, structural map/set algebra |
-| DABA Lite sliding-window aggregator | 1, 3 | Strong (implemented in every applicable language: C#, C, C++, Kotlin/JVM, and Rust; pure Haskell is not applicable) | Reuses the language's monoid abstraction | 1 small type, ~8 members |
-| Merkle search tree | 1 | Strong (implemented completely across all seven languages) | Deterministic wire + bounded verification | Largest single item in this catalog |
-| RRB vector | 1 | Plausible (implemented across all seven languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
-| Zip tree (canonical sorted set) | 1, 3 | Plausible (implemented across all seven languages) | Completed: coherent keyed rank policy | 1 new core, set facade |
-| Brodal-Okasaki heap | 1 | Plausible (implemented across all seven languages for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
-| Priority search queue (winner-cached AVL) | 1 | Plausible (implemented across all seven languages) | Completed as a direct core rather than the addressable composition | 1 new core |
-| Ctrie (concurrent, O(1) snapshot) | 1 | Managed-only (C# + Kotlin/JVM implemented) | Tracing GC; native ports require reclamation design | 1 new core, concurrency test tier |
+| CHAMP canonicalization + structural equality/diff | 1 | Strong (canonical core and equality/diff semantics implemented across all eight languages; Python uses semantic lookup rather than lockstep descendant pruning) | Completed with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
+| `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all eight languages) | Completed as proposal Tier C1 | 1 shared core, 4 C# public types, structural map/set algebra |
+| DABA Lite sliding-window aggregator | 1, 3 | Strong (implemented in every applicable language: C#, C, C++, Kotlin/JVM, Rust, TypeScript, and Python; pure Haskell is not applicable) | Reuses the language's monoid abstraction | 1 small type, ~8 members |
+| Merkle search tree | 1 | Strong (implemented completely across all eight languages) | Deterministic wire + bounded verification | Largest single item in this catalog |
+| RRB vector | 1 | Plausible (implemented across all eight languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
+| Zip tree (canonical sorted set) | 1, 3 | Plausible (implemented across all eight languages) | Completed: coherent keyed rank policy | 1 new core, set facade |
+| Brodal-Okasaki heap | 1 | Plausible (implemented across all eight languages for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
+| Priority search queue (winner-cached AVL) | 1 | Plausible (implemented across all eight languages) | Completed as a direct core rather than the addressable composition | 1 new core |
+| Ctrie (concurrent, O(1) snapshot) | 1 | Lock-free managed tier in C# + Kotlin/JVM; synchronous snapshot facades in TypeScript and Python | Tracing GC; native lock-free ports require reclamation design | 1 new core, concurrency test tier |
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
 | Size-tiered small representations | 2 | Strong, explicitly postponed | Re-entry benchmark after the Axis 2 fixed-layout evidence decision | Internal tier per selected facade + representation-forcing tests |
-| Transient -> persistent -> frozen lifecycle | 2 | C# CHAMP T2 owner-token transient and semantic path-copying sibling sessions implemented; frozen map/set tier remains unshipped and evidence-gated | T0/T1/T2 complete for the optimized transient; sibling lifecycle ports complete; postponed F0 then F1 evidence must precede F2 | Shipped map/set sessions across seven languages + planned frozen map/set types |
-| Version-bound cursor / zipper | 2, 3 | C1 positional cursor, C2 measured/text cursor, and C3 samples implemented in C#; positional/measured/text semantic checkpoints shipped in every sibling language; C4 consumer-gated | C0 selected the C# readonly-struct zipper-as-version; sibling checkpoints reuse persistent rope path copying without its complexity claim | C# positional/measured cursors and Tour/Editor integration plus C/C++/Haskell/Kotlin/Rust semantic facades |
+| Transient -> persistent -> frozen lifecycle | 2 | C# CHAMP T2 owner-token transient and semantic path-copying sibling sessions implemented; frozen map/set tier remains unshipped and evidence-gated | T0/T1/T2 complete for the optimized transient; sibling lifecycle ports complete; postponed F0 then F1 evidence must precede F2 | Shipped map/set sessions across eight languages + planned frozen map/set types |
+| Version-bound cursor / zipper | 2, 3 | C1 positional cursor, C2 measured/text cursor, and C3 samples implemented in C#; positional/measured/text semantic checkpoints shipped in every sibling language; C4 consumer-gated | C0 selected the C# readonly-struct zipper-as-version; sibling checkpoints reuse persistent rope path copying without its complexity claim | C# positional/measured cursors and Tour/Editor integration plus C/C++/Haskell/Kotlin/Rust/TypeScript/Python semantic facades |
 | Key-type-specialized map factories | 2 | Plausible, explicitly postponed | Named consumer after explicit Patricia consideration | Factory layer; ART only if independently justified |
 | Self-adjusting (splay-style) structures | 2 | Reject | - | Reads allocate under path copying; cursors + freeze substitute |
 | Range-update sequence (lazy propagation) | 3 | Strong | Measure action interface | 1 sibling core + tag algebra + property tests |
@@ -135,8 +135,15 @@ policies retain semantic lookup equality/diff, including different coherent hash
 and child-only flexible-array runs while preserving retain/release policy balance and allocation-
 failure rollback. Exact callback/context-compatible equality and visitor-based typed diff traverse
 stored hashes in lockstep and prune shared descendants; diff avoids imposing an allocator on
-callers. Two-set/map structural algebra is failure-atomic and reference-pruned. CHAMP is now
-implemented across all six repository languages.
+callers. Two-set/map structural algebra is failure-atomic and reference-pruned.
+
+**TypeScript and Python status (2026-07-15): Implemented.** Both strict dynamic-language packages
+ship canonical split-bitmap CHAMP nodes, collision buckets, persistent path copying, retained hash
+policies, stored representatives, and typed equality/difference surfaces. TypeScript retains the
+established structural/reference-pruning checkpoint. Python deliberately performs semantic
+lookup-based equality and diff, including exact-policy fast paths, but does not claim the sibling
+ports' lockstep descendant-pruning optimization. The canonical CHAMP core and public semantics are
+therefore implemented across all eight repository languages; that optimization is not universal.
 
 **What it is.** CHAMP (Compressed Hash-Array Mapped Prefix-tree; Steindorfer & Vinju, OOPSLA 2015)
 is a refinement of Bagwell's HAMT with two changes that matter here:
@@ -211,6 +218,12 @@ root-preserving semantic no-ops.
 `tds_long_map` / `set` share a reference-counted C17 core with explicit value ownership policy,
 cached subtree counts, signed-order visitors, prefix-aware structural algebra, typed combining
 callbacks, alias-safe updates, and deterministic model/lifetime tests.
+
+**TypeScript and Python status (2026-07-15): Implemented for both widths.** Both packages expose
+signed 32- and 64-bit persistent Patricia maps and sets over immutable compressed-prefix nodes,
+with signed-order iteration, cached counts, no-op identity, and prefix-aware structural algebra.
+Python uses arbitrary-precision integers at runtime but validates and normalizes keys to the named
+fixed-width domains at the public boundary.
 
 **What it is.** Okasaki & Gill's mergeable integer maps (1998): a binary trie over the bits of an
 integer key, path-compressed so each internal node stores a prefix and the single branching bit,
@@ -293,7 +306,13 @@ publication. Validation spans MSVC Debug/Release, warning-strict GCC and Clang, 
 allocation-failure rollback, tracked lifetimes, retained snapshots, concurrent readers, and release
 benchmark smoke coverage.
 
-**Representation boundary.** All six ports deliberately implement boundary-spine concatenation,
+**TypeScript and Python status (2026-07-15): Implemented.** Both packages provide immutable
+32-way RRB checkpoints with regular and relaxed branches, persistent indexing and edits,
+boundary-spine concatenation, structural splits, ordered iteration, and append-oriented builders.
+They preserve the same representation boundary described below and make no stronger global-density
+claim.
+
+**Representation boundary.** All eight ports deliberately implement boundary-spine concatenation,
 not the full Stucki-et-al. redistribution pass. The two seam child arrays are repartitioned, but no
 global minimum-fullness invariant is promised for leaves or branches away from that seam. The
 adversarial density assertions are regression and benchmark gates for the histories they exercise,
@@ -302,7 +321,8 @@ not a validator-certified representation contract. Validators do certify a size-
 required anywhere in the count domain; the extra level admits the boundary-only concatenation
 contract's legal `minimum height + 1` slack even in the top count band. The resulting caps are seven
 for the C#/Kotlin `Int` count domain and thirteen on the repository's 64-bit
-`size_t`/`Int`/`usize` C, C++, Haskell, and Rust targets.
+`size_t`/`Int`/`usize` C, C++, Haskell, and Rust targets. TypeScript and Python apply their own
+checked runtime count domains rather than inheriting either native cap.
 
 **What it is.** The relaxed radix-balanced tree (Bagwell & Rompf 2011; practical treatment with
 transients in Stucki et al., ICFP 2015): a 32-way branching persistent vector where nodes are
@@ -415,6 +435,14 @@ reference tampering, sync convergence, concurrent stores, and present-null/move-
 MSVC Debug/Release, strict GCC/Clang lanes, both analyzers, and copied aggregate-header consumers are
 clean.
 
+**TypeScript and Python status (2026-07-15): Implemented through the complete persistence tier with
+exact wire compatibility.** Both packages emit byte-identical `MST2` blocks and exact `MSP2`
+membership, nonmembership, and range-query proofs; verify canonical encodings under the same seven
+positive finite budgets; synchronize missing frontiers; and perform typed, present-null-safe
+three-way merge. Their in-memory stores publish only after complete bounded
+verification. Python uses an `RLock`-coordinated store, preserves atomic import on every rejection,
+and does not reinterpret the seven verification budgets as a language-count statement.
+
 **What they are.** Two convergent designs for *uniquely represented, content-addressed* search
 trees. Merkle search trees (Auvolat & Taïani, SRDS 2019) place each key at a layer derived from its
 hash (geometric distribution), producing a deterministic B-tree-like shape independent of insertion
@@ -503,6 +531,13 @@ equality accept non-`Clone` elements; only path-copying edits, algebra, and the 
 `T: Clone`. Its 14 focused tests include stable-hash and C#-compatible `ZZT2` vectors, unsigned
 secondary ordering, direct first-representative identity, receiver-comparer asymmetry, a
 20,000-operation retained-history model, deep destruction, and barrier-started cold digest readers.
+
+**TypeScript and Python status (2026-07-15): Implemented.** Both packages ship the policy-canonical
+zip-zip sorted set with persistent zip/unzip, first-representative semantics, policy-gated structural
+algebra, and memoized digest equality. Python uses `hashlib`/`hmac`, owns caller-supplied keys, and
+publishes lazy digests under a lock. Its built-in immutable-value policies avoid randomized
+`str`/`bytes` hashing; application-defined equivalence classes require an explicit coherent rank
+hash.
 
 **What they are.** Zip trees (Tarjan, Levy & Timmel, 2018/2019) are randomized-rank binary search
 trees - a reformulation of treaps where insertion and deletion are single root-to-position *unzip*
@@ -628,6 +663,12 @@ groups cover 50,000 ascending keys, every rotation/deletion, 20,000 retained ope
 equations, exhaustive allocation/copy/equality/comparator failpoints, alias publication, lifetimes,
 nullable representations, sharing, and concurrent readers under the full five-lane C matrix.
 
+**TypeScript and Python status (2026-07-15): Implemented.** Both packages provide the persistent
+bootstrapped skew-binomial Brodal-Okasaki heap and direct winner-cached priority-search queue,
+including retained versions, policy-aware meld/update semantics, O(1) minimum access, keyed/range
+operations, invariant validation, and model-based tests. These checkpoints preserve the public
+semantic and operation-bound contracts without importing native ownership mechanics.
+
 - **Brodal-Okasaki heap** (JFP 1996; skew binomial queues + data-structural bootstrapping): purely
   functional with O(1) *worst-case* insert, meld, and findMin, O(log n) deleteMin. The shipped
   finger-tree `PriorityQueue` has the same bounds amortized (meld O(log min)). The niche is
@@ -710,6 +751,12 @@ so a callback unwind cannot expose a partial mutation. Occupied positions and ag
 mutable type `!Send` and `!Sync`. Successful eviction promptly clears its retired slot and severs a
 retired predecessor block.
 
+**TypeScript and Python status (2026-07-15): Implemented for their single-threaded runtimes.** Both
+mutable checkpoints preserve the six-cursor DABA Lite schedule, bounded three/two/one combine calls,
+FIFO monoid order, callback-failure atomicity, and explicit unsynchronized ownership. Python clears
+by replacing the active chain in O(1); unreachable cyclic backing may be reclaimed later by the
+runtime collector, so this is not the native ports' prompt deterministic-destruction contract.
+
 **Native clear divergence.** C, C++, and Rust `clear` are intentionally O(n + c), unlike the
 managed O(1) reset: deterministic destruction must release `n` generic owned values across `c`
 chunks to satisfy prompt reclamation. All three implementations iteratively break the chain,
@@ -727,7 +774,7 @@ These invocation ceilings are unconditional, but the complete operations are wor
 when both `IMonoid<T>.Combine` and `Empty` are O(1). A finger tree answers the same FIFO-window
 query in O(log n); DABA Lite removes that logarithm for this deliberately mutable special case.
 
-**Managed-runtime contract and ownership.** In both managed implementations, a throwing monoid
+**Tracing-runtime contract and ownership.** In C#, Kotlin/JVM, TypeScript, and Python, a throwing monoid
 callback leaves the published window unchanged for every mutating operation. `Clear`/`clear` swaps
 in one fresh empty chunk in O(1), invokes combine zero times, and likewise commits only after
 obtaining the identity. Successful eviction promptly clears a retired reference-bearing slot and
@@ -785,24 +832,33 @@ validation, retained generations, and explicit snapshot-to-CHAMP conversion. Its
 matches the same canonical data-run-before-node-run order, with mixed-branch and tomb-bearing
 fixtures proving exact conversion sequence.
 
-**Other-language status: Not applicable without a separate reclamation project.** C and C++ need
-epochs or hazard pointers before indirection-node CAS can reclaim safely. Rust's `Arc` ownership
-alone does not make an atomic child-pointer protocol safe; an `ArcSwap`/epoch design would be a new
-dependency and core. Haskell has GC, but this imperative GCAS/generation algorithm is not a useful
-port of the repository's pure persistent API; STM or an atomic root wrapper is a different structure.
+**TypeScript and Python status (2026-07-15): Synchronous snapshot facades, not Ctrie protocol
+ports.** TypeScript exposes an isolate-local synchronous facade. Python's `ConcurrentHashTrie`
+serializes access with an `RLock` and swaps immutable CHAMP roots, yielding thread-safe operations
+and O(1) immutable snapshots. Neither implementation uses node GCAS, root/main RDCSS, generation
+renewal, tomb cleanup, or a lock-free progress guarantee; the names preserve the consumer-level
+snapshot vocabulary, not representation or concurrency parity.
+
+**Remaining-language status: Not applicable without a separate reclamation project.** C and C++
+need epochs or hazard pointers before indirection-node CAS can reclaim safely. Rust's `Arc`
+ownership alone does not make an atomic child-pointer protocol safe; an `ArcSwap`/epoch design would
+be a new dependency and core. Haskell has GC, but this imperative GCAS/generation algorithm is not a
+useful port of the repository's pure persistent API; STM or an atomic root wrapper is a different
+structure.
 
 **What it is.** Prokopec, Bronson, Bagwell & Odersky (PPoPP 2012): a lock-free *mutable* hash trie
 (CAS on indirection nodes, generation-stamped GCAS) whose `Snapshot()` is O(1) - subsequent writers
 copy-on-write lazily against the frozen generation. It bridges mutable-map throughput and
 persistent snapshotting: `ConcurrentDictionary` performance with `PersistentHashMap` snapshots.
 
-**Why managed runtimes only.** In .NET and on the JVM the garbage collector solves the memory-reclamation problem that
+**Why the lock-free tier remains C# and Kotlin/JVM only.** In .NET and on the JVM the garbage collector solves the memory-reclamation problem that
 makes lock-free tries hard in native code; the C port would be an epoch/hazard-pointer project (the
 derived catalog's `Atom<T>` entry records the same conclusion for a far simpler cell). Parity
 economics therefore cap this at the implemented C# + Kotlin/JVM managed tier, which the porting
 guide acknowledges explicitly.
 
-**Verdict: Implemented for the managed tier.** The use case is hot shared caches that periodically
+**Verdict: Lock-free protocol implemented for the C# and Kotlin/JVM managed tier; synchronous
+snapshot facades implemented in TypeScript and Python.** The use case is hot shared caches that periodically
 publish immutable snapshots into the persistent world. Deterministic descriptor interleavings,
 model-checked short histories, retained-generation tests, and larger contention stress form the
 required concurrency-validation tier; the native reclamation exception remains explicit above.
@@ -858,8 +914,8 @@ independently demonstrated by the Axis 2 fixed-layout tier, if that tier ships.
 
 ### The transient -> persistent -> frozen lifecycle
 
-**Status (2026-07-13): T2 owner-token transients are shipped for the C# CHAMP map and set, and C,
-C++, Haskell, Kotlin, and Rust now ship semantic one-way editing sessions over their persistent
+**Status (2026-07-15): T2 owner-token transients are shipped for the C# CHAMP map and set, and C,
+C++, Haskell, Kotlin, Rust, TypeScript, and Python now ship semantic one-way editing sessions over their persistent
 path-copying kernels. The repository-owned frozen collection tier is not shipped: the faithful F0
 prototype exists, but its advance/defer evidence and the dependent F1 layout evidence are postponed
 until isolated benchmark runs, and F2 is not authorized. No frozen parity is committed. The
@@ -879,7 +935,7 @@ transient lifecycle contract but do not claim the owner-token representation.
 
 ```text
 Persistent --O(1) ToTransient--> single-owner Transient --O(1) Persist--> Persistent  [C# optimized T2]
-Persistent --O(1) adopt-------> single-owner session ---O(1) publish--> Persistent  [C/C++/Haskell/Kotlin/Rust; path-copy edits]
+Persistent --O(1) adopt-------> single-owner session ---O(1) publish--> Persistent  [C/C++/Haskell/Kotlin/Rust/TypeScript/Python; path-copy edits]
 Persistent --O(n) Freeze-------> fixed-layout Frozen --O(n) ToPersistent--> Persistent [planned]
 ```
 
@@ -906,7 +962,8 @@ consumed state and expose lifecycle/iterator failures through status codes; C++ 
 move-only, terminally invalidate affected sessions after a throwing policy move, and document the
 separate publication caveat; Haskell sessions
 live in `IO`; Kotlin checks consumption dynamically and binds views to session versions; Rust uses
-consuming ownership for publication.
+consuming ownership for publication; TypeScript and Python consume sessions dynamically and reject
+stale version-bound iterators after mutation or publication.
 
 The first frozen types are separate `FrozenHashMap<TKey, TValue>` and `FrozenHashSet<T>` types with
 no update-shaped API. They use one offline-built general hash layout for every count and key type,
@@ -935,7 +992,7 @@ all postponed. Benchmarks may contain tiny and string datasets, but those are wo
 permission to select a representation. This isolates the value of the temporal lifecycle before
 combining it with size or key specialization.
 
-**Verdict: CHAMP editing sessions are implemented across all seven languages; only C# claims the
+**Verdict: CHAMP editing sessions are implemented across all eight languages; only C# claims the
 owner-token optimization, and the frozen tier remains a strong evidence-gated candidate.** The
 independent C1 cursor, T2 transient, and sibling semantic-session shipments do not clear Track F.
 Advance F only through
@@ -946,7 +1003,7 @@ not authorize sibling frozen types or a claim of owner-token edit performance.
 
 ### Cursor / zipper over the sequence family
 
-**Status (2026-07-15): C# C1, C2, and C3 are shipped; C, C++, Haskell, Kotlin, Rust, and TypeScript have
+**Status (2026-07-15): C# C1, C2, and C3 are shipped; C, C++, Haskell, Kotlin, Rust, TypeScript, and Python have
 positional and measured/text semantic checkpoints.**
 `Rope<T>.GetCursor(position)` and the public
 readonly `RopeCursor<T>` implement the positional version-bound gap cursor.
@@ -954,14 +1011,15 @@ readonly `RopeCursor<T>` implement the positional version-bound gap cursor.
 `TryGetCursorByMeasure` add the measured/text specialization through the public readonly
 `MeasuredRopeCursor<T, TMeasure, TMeasureOps>`. The Tour retains measured cursor versions for
 undo/redo, and the Editor demonstrates a sixteen-edit local Unicode/line/branch history. C4 cursor
-adapters remain consumer-gated. C `ft_rope_cursor`, C++ `rope_cursor<T>`, Haskell `RopeCursor a`, plus Kotlin and Rust `RopeCursor<T>` preserve
+adapters remain consumer-gated. C `ft_rope_cursor`, C++ `rope_cursor<T>`, Haskell `RopeCursor a`, plus Kotlin, Rust,
+TypeScript, and Python `RopeCursor<T>` preserve
 the positional gap, immutable branching, unconditional replacement, and retained-snapshot semantics
 through root-sharing snapshot-plus-position facades. C `ft_measured_rope_cursor`, C++ `measured_rope_cursor<T, MeasurePolicy>`,
-Haskell `MeasuredRopeCursor v a`, Kotlin `MeasuredRopeCursor<T, M>`, and Rust
-`MeasuredRopeCursor<T, P>` add ordered before/after measures
+Haskell `MeasuredRopeCursor v a`, Kotlin `MeasuredRopeCursor<T, M>`, Rust
+`MeasuredRopeCursor<T, P>`, and the TypeScript and Python `MeasuredRopeCursor<T, M>` checkpoints add ordered before/after measures
 and absolute prefix search over their existing measured checkpoint cores. Their `TextRopeCursor`
 surfaces retain the existing text helpers with byte-oriented C/C++, `Char`-element Haskell, UTF-16
-Kotlin, and Unicode-scalar Rust positions. They deliberately do not claim the C# zipper
+Kotlin and TypeScript, Unicode-scalar Rust, and Python Unicode-code-point positions. They deliberately do not claim the C# zipper
 representation or its focus-local complexity. The
 [Axis 2 final cursor plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) remains normative for
 the unshipped phases, while the [C0 decision record](../../src/CSharp/docs/FingerTree/rope-cursor-c0-decision.md)
@@ -1065,6 +1123,14 @@ before element-measure callbacks are correctness gates. They provide no focused-
 locality, or benchmark evidence. The [Rust API notes](../../src/Rust/FingerTree/docs/api-notes.md)
 own this checkpoint's contract and complexity boundary.
 
+**TypeScript and Python measured/text checkpoints.** Both packages retain an immutable rope snapshot
+plus a validated gap and create a new snapshot on edit. Their positional, measured, and text cursors
+preserve before/after measures, absolute prefix search, retained branches, unconditional replacement,
+and usable snapshots without claiming the C# focus/carry zipper or its locality and allocation
+bounds. TypeScript retains its UTF-16 text indexing contract. Python builds on the package's
+immutable measured-AVL checkpoint and counts positions, lines, and columns in Unicode code points;
+its API and executable models, not the C# zipper analysis below, define the complexity boundary.
+
 **Gap and version semantics.** A cursor denotes a boundary `0 .. Count`, not an element. Previous
 peek/movement/backspace address `p - 1`; next peek/movement/delete/replace address `p`. Insertion
 returns the gap after the inserted values, backspace returns `p - 1`, and forward deletion or
@@ -1101,7 +1167,7 @@ until a consumer and benchmark justify them.
 **Verdict: C1, C2, and C3 implemented; C4 remains consumer-gated.** The
 positional and measured cursors separately cleared their named local-edit, query, allocation,
 callback, and validation gates; the samples lock retained-history, branch, coordinate, and
-cadence-sixteen transcripts. The C, C++, Haskell, Kotlin, and Rust positional/measured/text
+cadence-sixteen transcripts. The C, C++, Haskell, Kotlin, Rust, TypeScript, and Python positional/measured/text
 checkpoints add semantic behavior parity without asserting zipper or
 benchmark parity. Those results do not
 pre-approve later sequence adapters or a broader branched-history complexity claim.
@@ -1280,7 +1346,7 @@ The implementation wave described by this catalog has already landed these refer
   selection, representative retention, and callback-failure atomicity;
 - the C# `PersistentHashMap<TKey, TValue>.Transient` and `PersistentHashSet<T>.Transient` one-way
   owner-token editing sessions;
-- semantic one-way CHAMP map/set editing sessions in C, C++, Haskell, Kotlin, and Rust, retaining
+- semantic one-way CHAMP map/set editing sessions in C, C++, Haskell, Kotlin, Rust, TypeScript, and Python, retaining
   persistent path-copy costs;
 - 32-bit and 64-bit Patricia maps and sets;
 - `RrbVector<T>`;
@@ -1293,24 +1359,27 @@ The implementation wave described by this catalog has already landed these refer
 - the Axis 2 C1 positional `RopeCursor<T>` and C2 measured/text
   `MeasuredRopeCursor<T, TMeasure, TMeasureOps>` in C#, plus C `ft_rope_cursor`/`ft_measured_rope_cursor`/
   `ft_text_rope_cursor`, C++ `rope_cursor<T>`,
-  Haskell `RopeCursor a`, and Kotlin/Rust `RopeCursor<T>` snapshot-plus-gap positional semantic checkpoints,
+  Haskell `RopeCursor a`, and Kotlin/Rust/TypeScript/Python `RopeCursor<T>` snapshot-plus-gap positional semantic checkpoints,
   with C++ `measured_rope_cursor<T, MeasurePolicy>`/`text_rope_cursor`, Haskell
   `MeasuredRopeCursor v a`/`TextRopeCursor`, Kotlin
   `MeasuredRopeCursor<T, M>`/`TextRopeCursor`, and Rust
-  `MeasuredRopeCursor<T, P>`/`TextRopeCursor` measured/text checkpoints.
+  `MeasuredRopeCursor<T, P>`/`TextRopeCursor` measured/text checkpoints, plus the corresponding
+  TypeScript and Python `MeasuredRopeCursor<T, M>`/`TextRopeCursor` surfaces.
 
 CHAMP, Patricia, and RRB have also advanced through the sibling-language work recorded in their
 entries; the canonical zip-zip set, Brodal-Okasaki heap, and priority-search queue are implemented
-across all seven languages, and DABA Lite now exists in every applicable imperative
-language (C#, C, C++, Kotlin/JVM, Rust, and TypeScript). The lock-free Ctrie's deliberate parity
-boundary remains C# and Kotlin/JVM; TypeScript exposes only an isolate-local synchronous facade.
-The Merkle search tree's full trust-boundary tier is complete across all seven languages.
-The one-way CHAMP editing lifecycle now spans all seven languages; the owner-token in-place-edit
+across all eight languages, and DABA Lite now exists in every applicable imperative
+language (C#, C, C++, Kotlin/JVM, Rust, TypeScript, and Python). The lock-free Ctrie's deliberate parity
+boundary remains C# and Kotlin/JVM; TypeScript exposes only an isolate-local synchronous facade,
+while Python exposes an `RLock`-coordinated persistent-root facade.
+The Merkle search tree's full trust-boundary tier is complete across all eight languages under the
+same seven verification budgets.
+The one-way CHAMP editing lifecycle now spans all eight languages; the owner-token in-place-edit
 optimization and its performance evidence remain C#-only. These are current-state implementation
 records, not candidates awaiting a consumer.
 Future work on the Axis 1 cores is ordinary hardening, measurement, and demand-driven porting. The
-C/C++/Haskell/Kotlin/Rust/TypeScript checkpoints make no zipper or focus-local complexity claim; measured/text
-cursor parity now spans all seven languages. The cursor's C4
+C/C++/Haskell/Kotlin/Rust/TypeScript/Python checkpoints make no zipper or focus-local complexity claim; measured/text
+cursor parity now spans all eight languages. The cursor's C4
 extensions retain the separate status recorded in its entry above.
 
 ### Remaining candidate sequencing
@@ -1328,7 +1397,7 @@ remaining work is sequenced as follows:
 2. **T2's optimized kernel is shipped in C#, and semantic sessions are shipped across the sibling
    languages:** T0 qualified the clustered many-edit regime, T1 selected the direct separate-node
    owner-token kernel, and T2 published the C# one-way CHAMP map/set transient after lifecycle,
-   failure, retained-memory, and API-shape gates. C, C++, Haskell, Kotlin, and Rust port the
+   failure, retained-memory, and API-shape gates. C, C++, Haskell, Kotlin, Rust, TypeScript, and Python port the
    lifecycle through persistent path copying without inheriting the performance claim.
 3. **C2 is shipped:** the measured/text cursor cleared its measure-law, failure/race, text-helper,
    callback, allocation, dirty-query, and measured-workload gates.
