@@ -76,7 +76,7 @@ Tungsten's API names, edge cases, exact constants, tests, or future changes auth
 | --- | --- |
 | Application-specific leaf | A workspace that consumes general libraries but is neither a code dependency nor a semantic baseline for general structures. |
 | General library | A repository-owned collection or core whose contract is selected for reusable data-structure value rather than Tungsten-kernel fidelity. |
-| Sibling Tungsten port | A C, C++, Haskell, Kotlin, or Rust implementation whose purpose is to reproduce the C# Tungsten family in its language-local ownership model. |
+| Sibling Tungsten port | A C, C++, Haskell, Kotlin, Rust, TypeScript, or Python implementation whose purpose is to reproduce the C# Tungsten family in its language-local ownership model. |
 | Independent fork | A separately named and owned implementation that may reuse an algorithmic idea or copied logic but has no code, type, test-oracle, or evolution dependency on Tungsten. |
 | Provenance | A citation explaining where a design idea, adversarial case, or implementation lesson came from. |
 | Semantic baseline | The contract against which an API or test suite decides what behavior is correct. Tungsten may be the baseline only for sibling Tungsten ports. |
@@ -278,6 +278,12 @@ Tools.DataStructures.Tungsten
 Neither consumer references the other. The first version should not refactor Tungsten to consume
 Ordered merely because they share a design idea; their contracts evolve independently.
 
+**Shipment (2026-07-15).** This topology now exists in C#, and the corresponding neutral
+`ordered` modules have shipped in TypeScript and Python. All three `PersistentOrderedSet` ports
+compose their language-local public HAMT and FingerTree substrates without importing, wrapping,
+testing against, or granting privileged access to a Tungsten artifact. The worked design below is
+therefore an implemented boundary example, not merely a hypothetical recommendation.
+
 ### Independently owned representation
 
 One suitable representation is:
@@ -334,6 +340,9 @@ values, retained branches, relabel histories, stable sorting, no-op identity, ex
 concurrent readers are still valuable scenarios, but their expected results come from the Ordered
 contract.
 
+The shipped C#, TypeScript, and Python suites follow that rule with language-local models and
+dependency audits; none uses Tungsten output as a live oracle.
+
 ## Porting And Change Propagation
 
 The propagation rule differs by family:
@@ -348,7 +357,9 @@ C# Tungsten contract
         ├────► C++ Tungsten
         ├────► Haskell Tungsten
         ├────► Kotlin Tungsten
-        └────► Rust Tungsten
+        ├────► Rust Tungsten
+        ├────► TypeScript Tungsten
+        └────► Python Tungsten
 
         no automatic edge
         ╳
@@ -357,7 +368,8 @@ C# Tungsten contract
 
 General forks may initially remain C#-only while their contract settles. Cross-language parity is a
 separate decision based on the general family's value and port economics, not on Tungsten already
-having sibling ports.
+having sibling ports. That separate decision has now produced neutral TypeScript and Python
+`PersistentOrderedSet` ports; it creates no change-propagation edge from either Tungsten family.
 
 ## Future Extraction Protocol
 
@@ -391,6 +403,8 @@ As of the repository HEAD recorded above:
 - no general workspace has a project/package/link dependency on Tungsten;
 - C# HAMT and FingerTree no longer grant `InternalsVisibleTo` access to Tungsten;
 - C# `PersistentAssociation` composes public HAMT/FingerTree APIs; and
+- the C#, TypeScript, and Python neutral Ordered packages compose public HAMT/FingerTree APIs and
+  have no source, package, test-oracle, or privileged-access dependency on Tungsten; and
 - canonical repository and workspace documentation identifies Tungsten as an application-specific
   leaf and C# as authoritative only within the Tungsten port lineage.
 
@@ -426,7 +440,7 @@ Use this checklist for a new structure, project move, refactor, or parity change
 - The [data-structure catalog](data-structure-catalog.md) inventories the shipped Tungsten surfaces
   without presenting them as general foundations.
 - The [benchmark-independent implementation proposal](../proposals/benchmark-independent-next-structures-2026-07-14.md)
-  applies this policy to the proposed general ordered set.
+  records how this policy was applied to the now-shipped general ordered set.
 
 When a shorter summary conflicts with this document on ownership, dependency, or fork
 independence, this detailed boundary is the controlling repository policy.

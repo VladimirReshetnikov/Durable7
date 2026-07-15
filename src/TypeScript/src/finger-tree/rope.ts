@@ -187,7 +187,11 @@ export class RopeCursor<T> {
     }
     public deletePrevious(): RopeCursor<T> { if (this.isAtStart) throw new RangeError("No element precedes the cursor."); return new RopeCursor(this.rope.removeAt(this.position - 1)!, this.position - 1); }
     public deleteNext(): RopeCursor<T> { if (this.isAtEnd) throw new RangeError("No element follows the cursor."); return new RopeCursor(this.rope.removeAt(this.position)!, this.position); }
-    public replaceNext(value: T): RopeCursor<T> { if (this.isAtEnd) throw new RangeError("No element follows the cursor."); return new RopeCursor(this.rope.setItem(this.position, value)!, this.position); }
+    public replaceNext(value: T): RopeCursor<T> {
+        if (this.isAtEnd) throw new RangeError("No element follows the cursor.");
+        const withoutCurrent = this.rope.removeAt(this.position)!;
+        return new RopeCursor(withoutCurrent.insertAt(this.position, value)!, this.position);
+    }
     public snapshot(): Rope<T> { return this.rope; }
 }
 
@@ -203,6 +207,8 @@ export class MeasuredRopeCursor<T, M> {
     public get measureAfter(): M { return this.rope.slice(this.position, this.count - this.position)!.measure(); }
     public peekPrevious(): T | undefined { return this.position === 0 ? undefined : this.rope.get(this.position - 1); }
     public peekNext(): T | undefined { return this.position === this.count ? undefined : this.rope.get(this.position); }
+    public peekPreviousEntry(): RopeCursorPeek<T> | undefined { return this.position === 0 ? undefined : { value: this.rope.get(this.position - 1)! }; }
+    public peekNextEntry(): RopeCursorPeek<T> | undefined { return this.position === this.count ? undefined : { value: this.rope.get(this.position)! }; }
     public movePrevious(): MeasuredRopeCursor<T, M> { if (this.isAtStart) throw new RangeError("Cursor is already at the start."); return new MeasuredRopeCursor(this.rope, this.position - 1); }
     public moveNext(): MeasuredRopeCursor<T, M> { if (this.isAtEnd) throw new RangeError("Cursor is already at the end."); return new MeasuredRopeCursor(this.rope, this.position + 1); }
     public seek(position: number): MeasuredRopeCursor<T, M> { return position === this.position ? this : new MeasuredRopeCursor(this.rope, position); }
@@ -220,7 +226,11 @@ export class MeasuredRopeCursor<T, M> {
     }
     public deletePrevious(): MeasuredRopeCursor<T, M> { if (this.isAtStart) throw new RangeError("No element precedes the cursor."); return new MeasuredRopeCursor(this.rope.removeAt(this.position - 1)!, this.position - 1); }
     public deleteNext(): MeasuredRopeCursor<T, M> { if (this.isAtEnd) throw new RangeError("No element follows the cursor."); return new MeasuredRopeCursor(this.rope.removeAt(this.position)!, this.position); }
-    public replaceNext(value: T): MeasuredRopeCursor<T, M> { if (this.isAtEnd) throw new RangeError("No element follows the cursor."); return new MeasuredRopeCursor(this.rope.setItem(this.position, value)!, this.position); }
+    public replaceNext(value: T): MeasuredRopeCursor<T, M> {
+        if (this.isAtEnd) throw new RangeError("No element follows the cursor.");
+        const withoutCurrent = this.rope.removeAt(this.position)!;
+        return new MeasuredRopeCursor(withoutCurrent.insertAt(this.position, value)!, this.position);
+    }
     public snapshot(): MeasuredRope<T, M> { return this.rope; }
 }
 

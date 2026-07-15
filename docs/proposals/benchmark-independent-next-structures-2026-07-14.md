@@ -1,21 +1,33 @@
 # Benchmark-Independent Next Data Structures: Detailed C# Implementation Proposal
 
-- Status: Active execution sequence — C# Steps 1 and 2 shipped; benchmark-independent work only
+- Status: Historical design and active remainder — C# Steps 1–3 shipped; TypeScript/Python Steps 1–3 parity shipped; Step 4 remains next
 - Created (UTC): 2026-07-14T19:23:49Z
 - Repository HEAD: ab9a73c6ae20a3b0ee0627bfe810117450e20c3e
 - Revised (UTC): 2026-07-14T21:14:47Z at faf53286375109fc598e40d5e6da7d1bff7e7415
+- Shipment update (UTC): 2026-07-15T02:27:01Z at 6dbabd71db65ea2771a0b6581c119a367d96d106
 - Audience: Maintainers selecting the next C# persistent-collection work after Axis 1 and the shipped Axis 2 tranches
 - Scope: Repository-wide plan/proposal audit, candidate disposition, and detailed contracts and validation gates for the next C# data structures that do not depend on postponed benchmark evidence
+
+> **Current shipment note.** This document preserves the proposal-time design reasoning and staged
+> exit criteria. Since that reasoning was written, the one-descent HAMT factory operations,
+> `PersistentHashBag`, and the independently owned neutral `PersistentOrderedSet` have shipped in
+> C#, TypeScript, and Python. TypeScript and Python also carry the public construction-only CHAMP
+> builder and complete transient-set relation surface added during parity work. The next unshipped
+> step in this sequence is `RangeUpdateSequence`; future-tense wording in the completed sections is
+> retained as historical implementation guidance, not current status.
 
 ## Decision
 
 Proceed in this order:
 
-1. Add persistent-HAMT single-pass `GetOrAdd`/`AddOrUpdate` operations — **shipped in C#**.
-2. Implement `PersistentHashBag<T>` over `PersistentHashMap<T, int>` — **shipped in C#**.
+1. Add persistent-HAMT single-pass `GetOrAdd`/`AddOrUpdate` operations — **shipped in C#,
+   TypeScript, and Python**.
+2. Implement `PersistentHashBag<T>` over `PersistentHashMap<T, int>` — **shipped in C#,
+   TypeScript, and Python** (with language-appropriate wide total-count types).
 3. Implement `PersistentOrderedSet<T>` as an independently owned composite in a new general
    `Tools.DataStructures.Ordered` project. Fork the useful dual-index and sparse-label mechanics;
-   do not reference, wrap, or inherit semantics from Tungsten `PersistentAssociation`.
+   do not reference, wrap, or inherit semantics from Tungsten `PersistentAssociation` — **shipped
+   in C#, TypeScript, and Python neutral Ordered packages**.
 4. Implement `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` as the next genuinely new
    structure core, after locking its tag-action algebra and executable laws. Prefer a separate
    path-copied implicit AVL core over adding lazy tags to the existing measured finger-tree engine.
@@ -78,18 +90,23 @@ The audit covered:
 
 At proposal-audit time, exact-name searches confirmed that `PersistentOrderedSet`,
 `PersistentHashBag`, `RangeUpdateSequence`, `PersistentBiMap`, and a value-carrying interval-map
-facade were not shipped C# types. Execution Steps 1 and 2 have since shipped the persistent-HAMT
-`GetOrAdd`/`AddOrUpdate` kernel and `PersistentHashBag<T>` respectively. The remaining named
-structure candidates stay unshipped until their own complete source/test/documentation tranches
-land.
+facade were not shipped C# types. Execution Steps 1 and 2 subsequently shipped the persistent-HAMT
+`GetOrAdd`/`AddOrUpdate` kernel and `PersistentHashBag<T>`, Step 3 shipped the neutral C# Ordered
+project, and TypeScript/Python parity now covers all three surfaces. `RangeUpdateSequence`,
+`PersistentBiMap`, and the value-carrying interval-map candidate remain unshipped until their own
+complete source/test/documentation tranches land.
 
 ## Current Baseline
 
 The following work is complete and must not be mistaken for pending implementation:
 
 - CHAMP canonical nodes, structural equality/diff, and structural map/set algebra;
-- the C# `PersistentHashBag<T>` facade with explicit multiplicity, receiver-policy algebra, and
-  expanded/distinct enumeration contracts;
+- one-descent persistent-HAMT map factories in C#, TypeScript, and Python, plus public reusable
+  construction-only CHAMP builders in C++, Rust, TypeScript, and Python;
+- `PersistentHashBag` facades in C#, TypeScript, and Python with explicit multiplicity,
+  receiver-policy algebra, and expanded/distinct enumeration contracts;
+- neutral `PersistentOrderedSet` packages in C#, TypeScript, and Python with independent contracts,
+  dependency graphs, models, and validation;
 - C# owner-token CHAMP transients and semantic one-way editing sessions in the sibling languages;
 - 32-bit and 64-bit Patricia maps and sets;
 - RRB vectors;
@@ -130,9 +147,12 @@ A candidate enters this proposal only when all of the following are true:
 source, representative rules, order, failure atomicity, no-op identity, and model oracle can all be
 stated before implementation.
 
-## Independent Composite Candidate (Execution Step 3): `PersistentOrderedSet<T>`
+## Historical Independent Composite Design (Execution Step 3): `PersistentOrderedSet<T>`
 
-### Why It Remains Selected
+The design and exit criteria in this section are retained because they define the ownership boundary
+that the shipped C#, TypeScript, and Python ports follow.
+
+### Why It Was Selected
 
 The historical next-structures proposal correctly noticed that a hashed membership index plus a
 persistent ordered sequence can support a valuable insertion-ordered set. It incorrectly concluded
@@ -149,10 +169,10 @@ general foundations it needs:
   bounds over private stamp entries; and
 - canonical public bulk construction on both sides.
 
-The set does not need a new balancing algorithm, but it does need an independently owned composite:
+The set did not need a new balancing algorithm, but it did need an independently owned composite:
 a new assembly, a set-specific dual-index invariant, private sparse-label/relabel code, an explicit
 general contract, an independent model suite, and its own evolution policy. That bounded work is why
-it remains selected but moves behind the HAMT point-update kernel and hash bag.
+it was selected and placed behind the HAMT point-update kernel and hash bag.
 
 ### Placement And Representation
 
@@ -1173,11 +1193,11 @@ rewriting proposal-time reasoning.
 
 If this proposal is accepted, use these self-contained tranches:
 
-1. **Persistent HAMT single-pass update kernel — shipped in C#**
+1. **Persistent HAMT single-pass update kernel — shipped in C#, TypeScript, and Python**
    - node operation, public API, exhaustive transition/callback tests, docs.
-2. **Hash-bag facade — shipped in C#**
+2. **Hash-bag facade — shipped in C#, TypeScript, and Python**
    - source, count/algebra/representative model tests, docs and catalogs.
-3. **Complete independent ordered set**
+3. **Complete independent ordered set — shipped in C#, TypeScript, and Python**
    - new Ordered source/test projects and solution entries;
    - independent API, invariants, representative/movement/algebra decisions, complexity contract;
    - forked private sparse-label mechanics, comparer-aware model, invariant and dependency guards;
@@ -1219,18 +1239,17 @@ For documentation-only tranches, run the repository stale-path scan, Markdown li
 ## Final Recommendation
 
 The persistent HAMT's single-pass point-update kernel and `PersistentHashBag<T>` facade are complete
-in C#. The bag consumes that enabling API inside the shipped HAMT family and supplies explicit
+in C#, TypeScript, and Python. The bag consumes that enabling API inside the shipped HAMT family and supplies explicit
 multiplicity, receiver-policy normalization, representative, overflow, identity, and expanded-
 enumeration semantics without depending on benchmark evidence.
 
-`PersistentOrderedSet<T>` is now the immediate next C# implementation and the lowest-risk independent
-composite. It reuses public general
-foundations but is not a thin facade: the new Ordered project must own its dual-index invariant,
+`PersistentOrderedSet<T>` has likewise shipped in independently owned neutral C#, TypeScript, and
+Python packages. Each port reuses public general foundations but owns its dual-index invariant,
 sparse-label/relabel implementation, movement and representative contract, independent model, and
-evolution. Tungsten `PersistentAssociation` is useful provenance and a source of adversarial cases,
-never a dependency or semantic oracle.
+evolution. Tungsten `PersistentAssociation` remains useful provenance and a source of adversarial
+cases, never a dependency or semantic oracle.
 
-`RangeUpdateSequence` should then become the next new core. It is not as low-risk as the HAMT facade
+`RangeUpdateSequence` is therefore the next new core. It is not as low-risk as the HAMT facade
 or Ordered composite, but it is specification-driven rather than benchmark-driven. A separate
 persistent implicit AVL keeps that risk local, provides deterministic worst-case bounds, and leaves
 the shipped measured finger tree untouched.

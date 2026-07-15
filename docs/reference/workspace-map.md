@@ -32,11 +32,13 @@ src/
 │   │   ├── FingerTree/
 │   │   ├── Hamt/
 │   │   ├── Numerics/
+│   │   ├── Ordered/
 │   │   └── Tungsten/
 │   ├── samples/
 │   ├── src/
 │   │   ├── Tools.DataStructures.FingerTree/
 │   │   ├── Tools.DataStructures.Hamt/
+│   │   ├── Tools.DataStructures.Ordered/
 │   │   ├── Tools.DataStructures.Tungsten/
 │   │   └── Tools.Numerics/
 │   └── tests/
@@ -112,6 +114,7 @@ normative code, test, documentation, porting, and extraction rules.
 | [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | Kotlin/JVM HAMT/Ctrie/Patricia port and complete wire-compatible Merkle search tree | `src/tools/datastructures/hamt/`, `test/tools/datastructures/hamt/` | [`docs`](../../src/Kotlin/Hamt/docs/README.md) |
 | [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | Rust HAMT/Patricia port and wire-compatible Merkle search tree | `Cargo.toml`, `src/lib.rs`, `src/merkle_search_tree.rs` | [`docs`](../../src/Rust/Hamt/docs/README.md) |
 | [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | Canonical managed FingerTree library | `DataStructures.sln`, `src/Tools.DataStructures.FingerTree/`, `tests/Tools.DataStructures.FingerTree.Tests/`, `samples/`, `benchmarks/` | [`docs`](../../src/CSharp/docs/FingerTree/README.md) |
+| [C# Ordered](../../src/CSharp/docs/Ordered/overview.md) | Neutral insertion-ordered persistent set composed from public HAMT and FingerTree APIs, independently owned from Tungsten | `DataStructures.sln`, `src/Tools.DataStructures.Ordered/`, `tests/Tools.DataStructures.Ordered.Tests/` | [`docs`](../../src/CSharp/docs/Ordered/README.md) |
 | [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | C++23 FingerTree/RRB/canonical-set family with Brodal/PSQ cores, positional/measured/text rope cursors, and native DABA Lite | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/Cpp/FingerTree/docs/README.md) |
 | [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | C11 FingerTree/RRB/canonical-set family with positional/measured/text rope cursors, type-erased Brodal/PSQ cores, and DABA Lite | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/C/FingerTree/docs/README.md) |
 | [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) | Haskell FingerTree/RRB/canonical-set family port with positional/measured/text rope cursors | `tools-data-structures-fingertree.cabal`, `src/Data/Structures/FingerTree/` | [`README`](../../src/Haskell/FingerTree/README.md) |
@@ -149,9 +152,11 @@ HAMT lineage:
    `Arc` structural sharing, and ports the C# Merkle search tree through the exact `MST2` wire,
    bounded verified persistence, `MSP2` proofs, synchronization, and typed three-way merge.
 7. `src/TypeScript` ports the persistent/transient CHAMP, Patricia, and exact `MST2`/`MSP2`
-   contracts to strict ESM, with JavaScript-native policies and isolate-local concurrency semantics.
+   contracts to strict ESM, with one-descent map factories, hash bag, reusable unpublished-node
+   bulk construction, JavaScript-native policies, and isolate-local concurrency semantics.
 8. `src/Python` ports the same contracts to Python 3.11+ with runtime `HashPolicy`, path-copy
-   one-way sessions, a lock-coordinated thread-safe facade over persistent roots, and exact
+   one-way sessions, one-descent map factories, hash bag, reusable unpublished-node bulk
+   construction, a lock-coordinated thread-safe facade over persistent roots, and exact
    byte-compatible Merkle persistence/proofs with all seven verification budgets.
 
 FingerTree lineage:
@@ -183,6 +188,19 @@ FingerTree lineage:
    sorted/priority/interval facades, the canonical zip-zip set, Brodal and priority-search cores,
    mutable DABA Lite, and positional/measured/text gap cursors whose text offsets count Unicode code
    points.
+
+Ordered-set lineage:
+
+1. C# Ordered (`src/CSharp/src/Tools.DataStructures.Ordered`) owns the neutral
+   `PersistentOrderedSet<T>` contract, dual-index invariants, sparse labels, explicit movement,
+   positional ranges, stable one-shot sort, receiver-policy algebra, and the enforced absence of a
+   Tungsten dependency.
+2. `src/TypeScript/src/ordered` ports the same observable contract to strict ESM with a runtime
+   `HashPolicy`, persistent measured sequence, bigint-private labels, typed lookup/removal
+   results, and a public invariant diagnostic used by package tests.
+3. `src/Python/src/vladimir_reshetnikov/data_structures/ordered` ports it to typed Python with a
+   retained `HashPolicy`, persistent deque order index, presence-safe dataclass results, and
+   Python-native exceptions. Neither sibling package imports or delegates to its Tungsten module.
 
 Tungsten collections lineage:
 

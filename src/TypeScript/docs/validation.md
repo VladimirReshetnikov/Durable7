@@ -18,9 +18,13 @@ build; and a package manifest containing only documented output.
 
 High-risk contracts receive direct executable coverage:
 
-- retained immutable snapshots, no-op identity, collision representatives, transient consumption,
-  and generated CHAMP/Patricia histories;
+- retained immutable snapshots, no-op identity, collision representatives, one-descent map factory
+  updates, detached reusable bulk-builder freezes, hash-bag multiplicity/algebra models, all six
+  transient-set relations, transient consumption, and generated CHAMP/Patricia histories;
 - RRB 32-way boundary shapes, concatenation/slicing, retained versions, and structural validation;
+- independent ordered-set representative/order invariants, exhaustive movement/range/relation
+  boundaries, repeated sparse-label relabel histories, eager receiver-policy algebra failures,
+  retained branches, and generated comparer-aware command models;
 - deterministic zip-zip ranks/topology, heap drains, priority-search winner caches, interval pruning,
   rope cursor branching, and 10,000-operation noncommutative DABA churn;
 - cross-language golden `MST2` blocks and roots, strict codecs, tamper/conflict rejection, verified

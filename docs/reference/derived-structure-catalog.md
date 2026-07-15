@@ -52,9 +52,9 @@ portable to the C model (callback + context pointer) unless noted.
 
 | Surveyed gap / current disposition | Surface | What it unblocks |
 | --- | --- | --- |
-| Persistent `GetOrAdd` / `AddOrUpdate` — **shipped in C#** | HAMT map | One hash, one trie descent, and exactly one selected factory invocation now support bag increments, multimap inner updates, graph edge operations, interning, and aggregation without a probe followed by `SetItem`. Sibling-language parity follows after the complete C# proposal stabilizes. |
-| Bulk construction — **shipped**; public editing sessions are a separate lifecycle | HAMT map and set | Canonical `CreateRange` now stages through an internal mutable builder and freezes once. C# also ships an owner-token `Transient`; sibling ports preserve the edit-then-publish semantics without sharing its performance claim. This historical row no longer blocks facade construction. |
-| Structural diff / equality / set-vs-set algebra — **shipped**; 3-way merge remains consumer-gated | HAMT node layer (not composable from outside) | Equality, typed diff, and same-type algebra now ship across all eight languages. The seven established ports use reference-pruned structural traversal; Python currently preserves the semantics with exact-root pruning plus lookup traversal. A general 3-way merge still needs a conflict matrix. |
+| Persistent `GetOrAdd` / `AddOrUpdate` — **shipped in C#, TypeScript, and Python** | HAMT map | One hash, one trie descent, eager factory validation, and exactly one selected factory invocation support bag increments, multimap inner updates, graph edge operations, interning, and aggregation without a probe followed by `SetItem`. Hit/no-op identity, stored representatives, nullable values, and callback-failure atomicity are locked in all three ports. |
+| Bulk construction — **shipped**; public editing sessions are a separate lifecycle | HAMT map and set | Canonical range construction stages mutable unpublished CHAMP nodes and freezes once. C# keeps that builder internal; C++ and Rust expose public construction-only builders, and TypeScript and Python now expose equivalent reusable builders whose frozen snapshots are detached. Those builders are not general update sessions. TypeScript/Python map and set factories and bulk-producing set operations route through them. |
+| Structural diff / equality / set-vs-set algebra — **shipped**; 3-way merge remains consumer-gated | HAMT node layer (not composable from outside) | Equality, typed diff, and same-type algebra now ship across all eight languages. The seven established ports use reference-pruned structural traversal; Python currently preserves the semantics with exact-root pruning plus lookup traversal. TypeScript and Python editing sessions also expose all six receiver-policy set-relation predicates. A general 3-way merge still needs a conflict matrix. |
 | Value-comparer parameter for no-op identity | HAMT factories | `SetItem`'s equal-value no-op check hardcodes `EqualityComparer<TValue>.Default`; a factory-supplied value comparer would let structural value equality trigger the identity short-circuit. |
 | Reverse support | `Rope<T>` and `FingerTreeDeque<T>` | A reversal bit or reverse enumerator. `ReversibleDeque` exists but lacks the sorted adapter and range operations, materializes an `O(n)` array per enumeration, and its amortized bounds are documented for single-threaded linear use only - facades keep rejecting it. |
 | Struct enumerator for `Rope<T>` / `MeasuredRope` | Rope family | Both use compiler-generated yield iterators; `FingerTreeDeque` already has a public struct enumerator, and the general measured tree gained one on 2026-07-01. Iteration-hot consumers (evaluators) notice the difference. |
@@ -67,10 +67,10 @@ exist, rank writes do not), and a floor/ceiling lookup in the C sorted-map port 
 
 ## Candidate Catalog
 
-Every shipped family carries ports across the language workspaces (C#, C++, C, Haskell, Kotlin,
-Rust, TypeScript, Python),
-each with its own docs and tests, plus benchmark evidence for complexity and allocation claims
-where the parity guide requires it. That parity bill - not feasibility -
+Each disposition below names the languages in which a candidate has actually shipped; shipment in
+one workspace does not silently imply all eight. Cross-language families carry local docs and tests
+in every named port, plus benchmark evidence for complexity and allocation claims where the parity
+guide requires it. That parity bill - not feasibility -
 is what separates many "plausible" verdicts from "strong": thin facades are often better shipped as
 API additions plus samples than as families.
 
@@ -78,20 +78,22 @@ API additions plus samples than as families.
 
 | Candidate | Composition | Key caveat |
 | --- | --- | --- |
+| `PersistentOrderedSet<T>` | Independently owned HAMT `item -> stamp` + persistent stamp-ordered sequence | **Shipped in C#, TypeScript, and Python** in neutral Ordered packages. The three ports own first-representative retention, explicit movement, positional range, stable one-shot sorting, receiver-policy algebra, sparse-label/relabel behavior, models, and tests without a Tungsten dependency or oracle. |
 | `PersistentOrderedMap<TKey, TValue>` | Independently owned HAMT `key -> (stamp, value)` + persistent stamp-ordered sequence | Still unshipped as a general family. It needs a named consumer, neutral project, independently selected values-in-HAMT versus values-in-both representation, contract, model, and tests; Tungsten is provenance only. |
 | HAMT structural diff / merge / set algebra | Feature inside the Hamt family node layer, phased: (1) `MapEquals` + `Diff` enumerator, (2) structural set-vs-set ops, (3) 3-way `Merge` with a specified conflict matrix | Bound is `O(divergent region)` and history-dependent, not content-diff-dependent; collision buckets are insertion-ordered so equal buckets need key-matched (unordered) comparison; comparer mismatch must be gated by reference equality on the comparer. |
-| `PersistentHashBag<T>` | Facade over HAMT `T -> int` + cached `long` total count | **Shipped in C#** with checked positive `int` multiplicities, explicit `DistinctCount`/`TotalCount`, first-representative retention, eager receiver-policy normalization, conventional multiset algebra, and expanded/distinct enumeration. Sibling ports remain pending the C#-first proposal sequence. |
+| `PersistentHashBag<T>` | Facade over HAMT `T -> int` + cached wide total count | **Shipped in C#, TypeScript, and Python** with checked positive per-class multiplicities, separate distinct/total cardinalities, first-representative retention, eager receiver-policy normalization, conventional multiset algebra, and expanded/distinct enumeration. TypeScript uses `bigint` and Python uses an unbounded `int` for the total while retaining the C# per-class bound. |
 | `PersistentBiMap<TKey, TValue>` | Forward `K -> V` + inverse `V -> K` HAMTs behind a bijection-enforcing facade | No-op identity must be pre-checked via `inverse.TryGetKey` (the map's internal check hardcodes the default value comparer). Honest 2x memory: every pair stored in both tries. |
 
-`PersistentOrderedMap` would address the HAMT's unspecified enumeration order, and the Tungsten
+The shipped `PersistentOrderedSet` addresses ordered unique membership without claiming shipment of
+the broader ordered-map candidate. `PersistentOrderedMap` would address the HAMT's unspecified enumeration order, and the Tungsten
 case study independently specialized the broad composition idea for `Association`.
 *Application-specific shipment 2026-07-07*: the Tungsten workspaces own a values-in-both
 `PersistentAssociation` (plus the `PersistentList` sequence facade), with the C# workspace
 ([`Tools.DataStructures.Tungsten`](../../src/CSharp/docs/Tungsten/overview.md)) as the semantic
 reference only for C, C++, Haskell, Kotlin, Rust, TypeScript, and Python Tungsten ports linked from the
 [data-structure catalog](data-structure-catalog.md#tungsten-application-collections). This did not
-ship the generic ordered-map candidate. The generic values-in-HAMT-only variant and the other
-candidates below remain unshipped. The
+ship the generic ordered-map candidate. The generic values-in-HAMT-only map variant and the other
+unmarked candidates below remain unshipped. The
 structural diff feature is the one candidate that cannot be built by composition - the node layer
 is internal - and the one that upgrades the most other candidates from "store versions" to "reason
 about versions".

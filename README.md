@@ -128,6 +128,7 @@ and a worked ordered-set example, is the
     │   │   ├── FingerTree/
     │   │   ├── Hamt/
     │   │   ├── Numerics/
+    │   │   ├── Ordered/
     │   │   └── Tungsten/
     │   ├── samples/
     │   │   ├── Tools.DataStructures.FingerTree.Editor/
@@ -136,11 +137,13 @@ and a worked ordered-set example, is the
     │   ├── src/
     │   │   ├── Tools.DataStructures.FingerTree/
     │   │   ├── Tools.DataStructures.Hamt/
+    │   │   ├── Tools.DataStructures.Ordered/
     │   │   ├── Tools.DataStructures.Tungsten/
     │   │   └── Tools.Numerics/
     │   └── tests/
     │       ├── Tools.DataStructures.FingerTree.Tests/
     │       ├── Tools.DataStructures.Hamt.Tests/
+    │       ├── Tools.DataStructures.Ordered.Tests/
     │       ├── Tools.DataStructures.Tungsten.Tests/
     │       └── Tools.Numerics.Tests/
     ├── Haskell/
@@ -192,6 +195,7 @@ and a worked ordered-set example, is the
     │   │       ├── finger_tree/
     │   │       ├── hamt/
     │   │       ├── numerics/
+    │   │       ├── ordered/
     │   │       └── tungsten/
     │   └── tests/
     ├── test_support/
@@ -226,6 +230,7 @@ and a worked ordered-set example, is the
         │   ├── finger-tree/
         │   ├── hamt/
         │   ├── numerics/
+        │   ├── ordered/
         │   └── tungsten/
         └── test/
 ```
@@ -241,6 +246,7 @@ language-first layout.
 - [C# Numerics](src/CSharp/docs/Numerics/overview.md) is a .NET 10 fixed-width and sparse integer numerics library under [src/CSharp/src/Tools.Numerics](src/CSharp/src/Tools.Numerics/Tools.Numerics.csproj). It provides `UInt256`/`Int256`, `UInt512`/`Int512`, `UInt1024`/`Int1024`, `SparseInteger`, deterministic two's-complement and binary conversion semantics, declaration-parity guardrails, and xUnit tests.
 - [C# HAMT](src/CSharp/docs/Hamt/overview.md) is a .NET 10 hash-trie library under [src/CSharp/src/Tools.DataStructures.Hamt](src/CSharp/src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj). Its canonical CHAMP `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` preserve comparers, stored representatives, and structural sharing; the map exposes one-descent persistent `GetOrAdd`/`AddOrUpdate`, and both collections expose optimized single-owner `Transient` sessions with owner-token in-place edits, O(1) adoption, and one-way O(1) publication. `PersistentHashBag<T>` adds an immutable unordered multiset with separate `DistinctCount`/`TotalCount`, checked multiplicities, first-representative retention, and receiver-comparer union/intersection/difference/sum. C, C++, Haskell, Kotlin, Rust, TypeScript, and Python expose the same semantic edit-then-publish lifecycle through language-local sessions whose changed point edits remain persistent path copies and carry no performance claim. The workspace also owns the lock-free snapshotting Ctrie, 32/64-bit Patricia maps and sets, and the policy-bound Merkle search tree; xUnit/CsCheck suites cover persistent, transient, and concurrent behavior.
 - [C# FingerTree](src/CSharp/docs/FingerTree/overview.md) is a .NET 10 persistent finger-tree library under [src/CSharp/src/Tools.DataStructures.FingerTree](src/CSharp/src/Tools.DataStructures.FingerTree/Tools.DataStructures.FingerTree.csproj): two engine cores (a tuned catenable deque and a general monoid-measured tree), a full collection family (sorted bag/set/dictionary, priority queue, interval tree, reversible deque), product/sum/built-in measures with a closure-free predicate API, and a rope family (positional, measured, and text) with version-bound positional and measured edit cursors. It ships a navigable design-notes document ([FingerTree-Design-Notes.pdf](src/CSharp/docs/FingerTree/FingerTree-Design-Notes.pdf), with `.tex` source and a rebuild script alongside), a BenchmarkDotNet harness, three runnable samples, and a three-tier (example + property + model-based command) test suite plus tearable-struct concurrency stress tests.
+- [C# Ordered](src/CSharp/docs/Ordered/overview.md) is the neutral .NET 10 insertion-ordered-set library under [src/CSharp/src/Tools.DataStructures.Ordered](src/CSharp/src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj). `PersistentOrderedSet<T>` composes the public HAMT and FingerTree substrates while owning its comparer, first-representative, explicit movement, positional range, stable one-shot sort, receiver-policy algebra, sparse-label, and relabel contracts independently. Its production and test projects have no Tungsten dependency; TypeScript and Python provide sibling ports in their neutral `ordered` modules.
 - [C# Tungsten collections](src/CSharp/docs/Tungsten/overview.md) is a .NET 10 application-specific leaf library under [src/CSharp/src/Tools.DataStructures.Tungsten](src/CSharp/src/Tools.DataStructures.Tungsten/Tools.DataStructures.Tungsten.csproj) composing the HAMT and FingerTree families into persistent collections for the Tungsten project: `PersistentList<T>` (the `List` operation vocabulary over the catenable deque) and `PersistentAssociation<TKey, TValue>` (an insertion-ordered map with keyed and positional access following the kernel-verified `Association` ordering rules). The primary external client is the Tungsten engine in the Smithereens repository; the C# implementation is the semantic reference only for sibling Tungsten ports and is never a foundation for general collections.
 - [src/C/Hamt](src/C/Hamt/README.md) is a C17 port of the persistent HAMT library. It provides type-erased
   `tds_hamt_map` and `tds_hamt_set` value structs with callback-driven hash/equality/ownership
@@ -287,16 +293,18 @@ language-first layout.
   `PersistentList<T>` and `PersistentAssociation<K, V, S>` over the Rust FingerTree and HAMT crates,
   preserving the Tungsten Association ordering rules, slicing, sorting, and relabel behavior.
 - [src/TypeScript](src/TypeScript/README.md) is the strict ESM port for Node.js 24+. It packages the
-  HAMT/transient/Ctrie/Patricia/Merkle family, measured sequence and derived FingerTree collections,
+  HAMT/transient/Ctrie/Patricia/Merkle family—including one-descent map factories, the hash bag,
+  construction-only bulk builder, and complete transient-set relations—measured sequence and derived FingerTree collections,
   RRB/canonical-set/Brodal/priority-search/DABA cores, positional/measured/text rope cursors,
-  Tungsten `List`/`Association`, and fixed-width numerics. Its `MST2`/`MSP2` wire is byte-identical
+  the neutral insertion-ordered set, Tungsten `List`/`Association`, and fixed-width numerics. Its `MST2`/`MSP2` wire is byte-identical
   to the sibling ports; runtime-specific concurrency and owner-token performance distinctions are
   documented locally.
 - [src/Python](src/Python/README.md) is the typed Python 3.11+ distribution. It packages CHAMP with
-  path-copy one-way sessions, a lock-coordinated concurrent facade, Patricia maps/sets, the exact
+  one-descent map factories, a construction-only bulk builder, the hash bag, complete path-copy
+  one-way sessions, a lock-coordinated concurrent facade, Patricia maps/sets, the exact
   `MST2`/`MSP2` Merkle tier with seven verification budgets, measured-AVL and RRB sequence families,
   canonical zip-zip/Brodal/priority-search/DABA cores, code-point-indexed rope cursors, the
-  application-leaf Tungsten `List`/`Association`, and bigint-backed fixed-width/sparse numerics.
+  neutral insertion-ordered set, application-leaf Tungsten `List`/`Association`, and bigint-backed fixed-width/sparse numerics.
   Ruff, strict Mypy, pytest/Hypothesis, source/wheel builds, metadata checks, and an installed-wheel
   smoke test form its validation gate.
 
@@ -382,6 +390,7 @@ Release configuration is required for meaningful benchmark numbers.
 - [src/Cpp/Hamt/docs/README.md](src/Cpp/Hamt/docs/README.md) indexes the C++ HAMT port's usage
   guide, API specification, exact-wire Merkle specification, and validation guide.
 - [src/CSharp/docs/FingerTree/README.md](src/CSharp/docs/FingerTree/README.md) indexes the library's usage guide, specifications, validation guide, design notes, benchmark notes, and external references.
+- [src/CSharp/docs/Ordered/README.md](src/CSharp/docs/Ordered/README.md) indexes the neutral insertion-ordered set's overview, usage guide, API specification, validation guide, and independently owned Tungsten-free contract.
 - [src/CSharp/docs/Tungsten/README.md](src/CSharp/docs/Tungsten/README.md) indexes the Tungsten-collections library's overview, usage guide, API specification, and validation guide.
 - [src/C/Tungsten/README.md](src/C/Tungsten/README.md) indexes the C Tungsten-collections port.
 - [src/Cpp/Tungsten/README.md](src/Cpp/Tungsten/README.md) indexes the C++ Tungsten-collections port.

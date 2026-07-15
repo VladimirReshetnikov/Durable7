@@ -31,7 +31,7 @@ Library-specific design and API documentation lives beside each workspace under 
 
 ## Proposals
 
-- [Benchmark-independent next data structures (2026-07-14)](proposals/benchmark-independent-next-structures-2026-07-14.md) - active detailed C# execution proposal after the Axis 1 and shipped Axis 2 tranches: persistent-HAMT single-pass updates and `PersistentHashBag<T>` are shipped in C#; an independently owned `Tools.DataStructures.Ordered` set composite with no Tungsten dependency comes next, followed by an algebra-law-gated persistent AVL `RangeUpdateSequence`; frozen layouts, size tiers, GUID specialization, and other evidence- or consumer-gated work remain parked.
+- [Benchmark-independent next data structures (2026-07-14)](proposals/benchmark-independent-next-structures-2026-07-14.md) - historical design and execution record after the Axis 1 and shipped Axis 2 tranches: persistent-HAMT single-pass updates and `PersistentHashBag<T>` now ship in C#, TypeScript, and Python; the independently owned neutral `PersistentOrderedSet` has shipped in those three languages with no Tungsten dependency; the algebra-law-gated persistent AVL `RangeUpdateSequence` is the next remaining active step, while frozen layouts, size tiers, GUID specialization, and other evidence- or consumer-gated work remain parked.
 - [Axis 2 final plan: lifecycle and sequence cursors](proposals/axis2-lifecycle-and-sequence-cursors.md) - authoritative C#-first plan: a version-bound Rope/MeasuredRope cursor leads, while one-way CHAMP transients and a fixed-layout frozen hash tier advance independently through workload, representation, correctness, memory, and break-even gates; automatic size/key specialization remains deferred.
 - [Axis 2, cursor-first alternative (2026-07-13)](proposals/axis2-cursor-first-alternative-2026-07-13.md) - historical sequencing proposal incorporated into the final plan with corrections. It supplied cursor priority, a frozen signal gate, and branched-history scrutiny; its current-consumer, calendar-spike, transient-workload, and canonical-order claims are not the final contract.
 - [Next data structures (2026-07-09)](proposals/new-data-structures-2026-07-09.md) - historical, partially realized slate: structural HAMT equality/diff, Patricia, and the C# hash bag shipped; Axis 2 supersedes its cursor schedule, and the remaining builder/facade/numerics ideas require current catalog and consumer evidence.
@@ -72,7 +72,8 @@ API, port, and validation documents under [src/Cpp/FingerTree/docs](../src/Cpp/F
 documents under [src/Kotlin/Hamt/docs](../src/Kotlin/Hamt/docs/README.md) and
 [src/Kotlin/FingerTree/docs](../src/Kotlin/FingerTree/docs/README.md). Put Haskell package entry points under
 [src/Haskell](../src/Haskell/README.md), with test coverage notes beside each package's cabal test
-executable.
+executable. Put the neutral C# insertion-ordered-set overview, usage, API, and validation documents
+under [src/CSharp/docs/Ordered](../src/CSharp/docs/Ordered/README.md).
 TypeScript package API and validation notes live under
 [src/TypeScript/docs](../src/TypeScript/docs/api-notes.md), with its executable test map under
 [src/TypeScript/test](../src/TypeScript/test/README.md).

@@ -1,5 +1,6 @@
 export * from "./hash-policy.js";
 export * from "./persistent-hamt.js";
+export * from "./persistent-hash-bag.js";
 export * from "./persistent-patricia.js";
 export * from "./concurrent-hash-trie.js";
 export * from "./merkle-encoding.js";

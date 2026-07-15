@@ -74,6 +74,13 @@ HAMT lineage:
    `HashPolicy`, path-copy editing sessions, a lock-coordinated thread-safe snapshot facade, and
    Python-native exception/optional result shapes.
 
+C#, TypeScript, and Python additionally expose one-descent persistent map factories and
+`PersistentHashBag`; TypeScript and Python expose reusable construction-only CHAMP bulk builders
+and all six transient-set relation predicates. C++ and Rust already expose their corresponding
+public construction-only builders. These staging builders are not editing sessions: they own
+unpublished mutable nodes, may be reused after freeze, and each frozen persistent snapshot must be
+detached from later builder mutation.
+
 The one-way CHAMP map/set editing lifecycle now exists in all eight workspaces. Preserve these shared
 semantics when changing it: O(1)-in-trie adoption and terminal publication, one logical owner,
 one-way consumption, exact policy and stored-representative preservation, retained-source
@@ -211,6 +218,26 @@ FingerTree lineage:
    priority-search, rope, and snapshot-plus-gap cursor surfaces; text positions count Python Unicode
    code points. Its mutable DABA Lite is single-threaded and separately documented.
 
+Ordered-set lineage:
+
+This is a neutral general composition lineage, independent of the application-specific Tungsten
+family. The three ports compose public HAMT membership/stamp indexes with public persistent ordered
+sequences and own their contracts, sparse-label mechanics, tests, and evolution separately.
+
+1. [C# Ordered](../../src/CSharp/docs/Ordered/overview.md) is the semantic reference for
+   `PersistentOrderedSet<T>`: first representatives, addition without implicit movement, explicit
+   movement, positional ranges, stable one-shot sorting, receiver-policy algebra, no-op identity,
+   sparse relabeling, and retained versions.
+2. [`src/TypeScript`](../../src/TypeScript/README.md) ports that contract to a neutral strict-ESM
+   `ordered` export with discriminated lookup and explicit removal results, keeping absence distinct
+   from a stored `undefined`.
+3. [`src/Python`](../../src/Python/README.md) ports it to the neutral typed `ordered` module with
+   named result objects and Python-native indexing and exception shapes.
+
+No Ordered port references a Tungsten package, type, source file, test oracle, or privileged API.
+Port Ordered changes among these three workspaces only when the general contract changes; do not
+propagate a kernel-driven Tungsten change into this lineage.
+
 Tungsten collections lineage:
 
 This is a family-local application lineage, not a general collection lineage. Its behavior may
@@ -304,6 +331,18 @@ For map/set changes, verify these contracts across C#, C++, C, Haskell, Kotlin, 
 - 32-way bitmap-indexed trie shape over 32 hash bits.
 - Immutable equal-hash collision buckets with linear equality probing.
 - Last-wins behavior for bulk set/update operations.
+- For public construction-only builders, genuine mutable unpublished leaf/collision/bitmap nodes,
+  first-key and last-distinct-value representative rules, the final 30-bit hash shift, reusable
+  post-freeze state, and detached frozen snapshots. Map/set range factories and bulk-producing set
+  operations should route through the builder where the local public contract says they do.
+- For one-descent map factories, eager validation of every supplied callback before hashing; one
+  hash and one trie descent; exactly one selected add/update factory call; caller-key use on a miss;
+  stored-key retention on a hit; exact source identity on a logical no-op; nullable-safe result
+  shapes; and failure-atomic publication.
+- For persistent hash bags, positive bounded per-class multiplicities, separate distinct and total
+  cardinalities, zero-delta identity, first representatives, expanded plus distinct enumeration,
+  eager receiver-policy normalization, and checked max/min/subtract/sum algebra. Preserve each
+  language's documented wide total-count type rather than forcing the C# `long` shape mechanically.
 - Duplicate-key rejection for `Add`/`add`, including no-allocation duplicate try-add paths where
   documented.
 - Preservation of originally stored key/value objects when an equivalent no-op replacement occurs.
@@ -313,8 +352,9 @@ For map/set changes, verify these contracts across C#, C++, C, Haskell, Kotlin, 
 - Structural sharing and no-op root/instance behavior expressed in each language's ownership model.
 - For one-way editing sessions, adoption/publication without a trie walk, single-owner consumption,
   active-read and version-bound-iteration behavior, exact clean/no-op identity, retained-source
-  isolation, policy/representative preservation, receiver-policy set relations, and failure-atomic
-  edits. Require separate evidence before claiming owner-token in-place edits or a performance win.
+  isolation, policy/representative preservation, all six receiver-policy set relations (subset,
+  proper subset, superset, proper superset, overlap, and equality), and failure-atomic edits.
+  Require separate evidence before claiming owner-token in-place edits or a performance win.
 - For Merkle ports, byte-identical policy domains, `MST2` blocks, and `MSP2` queries; finite resource
   budgets enforced before untrusted allocation or decoding; complete closure validation; atomic
   publication; and merge semantics that distinguish deletion from a present nullable value.
@@ -360,6 +400,12 @@ For finger-tree-family changes, verify these contracts across the relevant C#, C
 - Interval trees use the documented endpoint comparison, overlap, containment, and removal rules.
 - Ropes preserve chunked persistence, split/concat/indexing semantics, and text newline navigation
   rules where exposed.
+- Positional and measured cursor peeks must distinguish a missing neighbor from a present nullable
+  or dynamic-runtime sentinel value. Use an explicit presence/result shape where `undefined` or
+  `None` can itself be stored.
+- Cursor `ReplaceNext` is an unconditional edit: it creates a successor version even when element
+  equality would say the replacement is unchanged. A measured cursor must invoke the element-
+  measure callback for the supplied replacement and publish nothing if that callback fails.
 - DABA Lite ports preserve FIFO order, six-cursor region equations, bounded callback counts,
   callback-failure atomicity, and the no-iteration surface; clear and concurrency claims must match
   tracing-GC versus deterministic-ownership semantics rather than being copied mechanically.
@@ -388,6 +434,36 @@ Validation guides:
 - [Kotlin FingerTree validation](../../src/Kotlin/FingerTree/docs/validation.md)
 - [Rust FingerTree validation](../../src/Rust/FingerTree/docs/validation.md)
 - [TypeScript validation](../../src/TypeScript/docs/validation.md)
+- [Python validation](../../src/Python/docs/validation.md)
+
+## Ordered-Set-Specific Checks
+
+For `PersistentOrderedSet` changes, verify the shared general contract in C#, TypeScript, and Python:
+
+- neutral package ownership and a one-way dependency on public HAMT/FingerTree substrates, with no
+  production, test, documentation-oracle, or privileged-access dependency on Tungsten;
+- one stored representative and one strictly ordered stamp per equality class, with exact agreement
+  between the hash index and ordered sequence;
+- first-occurrence construction, addition that never moves an existing class, explicit movement
+  that retains its representative, and exact no-op identity;
+- positional lookup, insertion, removal, ranges, take/drop, reverse, and stable one-shot sort with
+  eager bounds validation and comparer-preserving empty results;
+- receiver-policy union/intersection/difference/symmetric-difference order and all six set relations,
+  including eager normalization of foreign-policy arguments;
+- sparse-label exhaustion and relabel histories under branching persistence, without promising a
+  Tungsten constant or cross-branch amortized bound;
+- presence-safe lookup/removal result shapes for stored `undefined`/`None` values; and
+- retained-version immutability, callback-failure atomicity, invariant validation, generated
+  comparer-aware histories, and language-appropriate concurrent-read evidence.
+
+Primary semantic and validation docs:
+
+- [C# Ordered overview](../../src/CSharp/docs/Ordered/overview.md)
+- [C# Ordered API specification](../../src/CSharp/docs/Ordered/api-specification.md)
+- [C# Ordered validation](../../src/CSharp/docs/Ordered/validation.md)
+- [TypeScript API notes](../../src/TypeScript/docs/api-notes.md)
+- [TypeScript validation](../../src/TypeScript/docs/validation.md)
+- [Python API notes](../../src/Python/docs/api-notes.md)
 - [Python validation](../../src/Python/docs/validation.md)
 
 ## Validation Evidence

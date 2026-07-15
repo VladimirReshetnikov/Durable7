@@ -52,6 +52,46 @@ describe("rope family", () => {
         expect(source.toArray().join("")).toBe("abcdef");
     });
 
+    test("cursor entry peeks distinguish stored undefined from boundaries", () => {
+        const positional = Rope.from<number | undefined>([undefined]).getCursor();
+        expect(positional.peekPreviousEntry()).toBeUndefined();
+        expect(positional.peekNext()).toBeUndefined();
+        expect(positional.peekNextEntry()).toEqual({ value: undefined });
+        expect(positional.moveNext().peekPreviousEntry()).toEqual({ value: undefined });
+
+        const policy = {
+            identity: 0,
+            combine: (left: number, right: number): number => left + right,
+            measure: (_value: number | undefined): number => 1,
+        };
+        const measured = MeasuredRope.from<number | undefined, number>([undefined], policy).getCursor();
+        expect(measured.peekPreviousEntry()).toBeUndefined();
+        expect(measured.peekNext()).toBeUndefined();
+        expect(measured.peekNextEntry()).toEqual({ value: undefined });
+        expect(measured.moveNext().peekPreviousEntry()).toEqual({ value: undefined });
+    });
+
+    test("cursor replacement always publishes a fresh edit without equality shortcuts", () => {
+        const value = {};
+        const positional = Rope.from([value]);
+        const positionalEdit = positional.getCursor().replaceNext(value).snapshot();
+        expect(positionalEdit).not.toBe(positional);
+        expect(positionalEdit.get(0)).toBe(value);
+
+        let measureCalls = 0;
+        const policy = {
+            identity: 0,
+            combine: (left: number, right: number): number => left + right,
+            measure: (_value: object): number => { measureCalls++; return 1; },
+        };
+        const measured = MeasuredRope.from([value], policy);
+        measureCalls = 0;
+        const measuredEdit = measured.getCursor().replaceNext(value).snapshot();
+        expect(measuredEdit).not.toBe(measured);
+        expect(measuredEdit.get(0)).toBe(value);
+        expect(measureCalls).toBeGreaterThan(0);
+    });
+
     test("measured cursors retain ordered prefix and suffix aggregates", () => {
         const rope = MeasuredRope.from([2, 3, 5, 7], new NumberSumMeasure());
         const cursor = rope.getCursor(2);
