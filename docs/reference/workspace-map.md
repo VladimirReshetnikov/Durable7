@@ -49,11 +49,16 @@ src/
 │   ├── FingerTree/
 │   ├── Hamt/
 │   └── Tungsten/
-└── Rust/
+├── Rust/
     ├── README.md
     ├── FingerTree/
     ├── Hamt/
     └── Tungsten/
+└── TypeScript/
+    ├── README.md
+    ├── docs/
+    ├── src/
+    └── test/
 ```
 
 This makes language-local build systems, toolchains, include paths, and idioms easy to find while keeping
@@ -63,8 +68,8 @@ surface.
 
 Use the [source index](../../src/README.md) when browsing by language, or jump directly to the
 [C](../../src/C/README.md), [C++](../../src/Cpp/README.md), [C#](../../src/CSharp/README.md),
-[Haskell](../../src/Haskell/README.md), [Kotlin](../../src/Kotlin/README.md), or
-[Rust](../../src/Rust/README.md) language index.
+[Haskell](../../src/Haskell/README.md), [Kotlin](../../src/Kotlin/README.md),
+[Rust](../../src/Rust/README.md), or [TypeScript](../../src/TypeScript/README.md) language index.
 
 For the cross-language list of public library surfaces, see the
 [data structure catalog](data-structure-catalog.md). For the shared behavior, ownership, policy,
@@ -110,6 +115,7 @@ normative code, test, documentation, porting, and extraction rules.
 | [`src/Haskell/Tungsten`](../../src/Haskell/Tungsten/README.md) | Haskell Tungsten `List` and `Association` port | `tools-data-structures-tungsten.cabal`, `src/Data/Structures/Tungsten/` | [`README`](../../src/Haskell/Tungsten/README.md) |
 | [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md) | Kotlin/JVM Tungsten `List` and `Association` port | `src/tools/datastructures/tungsten/`, `test/tools/datastructures/tungsten/` | [`README`](../../src/Kotlin/Tungsten/README.md) |
 | [`src/Rust/Tungsten`](../../src/Rust/Tungsten/README.md) | Safe Rust Tungsten `List` and `Association` crate | `Cargo.toml`, `src/lib.rs` | [`README`](../../src/Rust/Tungsten/README.md) |
+| [`src/TypeScript`](../../src/TypeScript/README.md) | Strict TypeScript/ESM port of all shipped general families plus the application-leaf Tungsten collections | `package.json`, `src/`, `test.ps1` | [API notes](../../src/TypeScript/docs/api-notes.md), [validation](../../src/TypeScript/docs/validation.md) |
 
 ## Port Lineage
 
@@ -133,6 +139,8 @@ HAMT lineage:
 6. `src/Rust/Hamt` ports the HAMT contract to Rust value types, `BuildHasher` hash policies, and
    `Arc` structural sharing, and ports the C# Merkle search tree through the exact `MST2` wire,
    bounded verified persistence, `MSP2` proofs, synchronization, and typed three-way merge.
+7. `src/TypeScript` ports the persistent/transient CHAMP, Patricia, and exact `MST2`/`MSP2`
+   contracts to strict ESM, with JavaScript-native policies and isolate-local concurrency semantics.
 
 FingerTree lineage:
 
@@ -157,6 +165,8 @@ FingerTree lineage:
    tree/RRB storage, includes the keyed policy-canonical zip-zip sorted set and `Arc`-owned
    Brodal-Okasaki heap and winner-cached priority-search queue, and keeps a separate single-threaded
    DABA Lite whose deterministic-drop clear cost is documented locally.
+7. `src/TypeScript` ports the measured family and all shipped derived/new cores, with persistent
+   JavaScript gap cursors and a mutable single-isolate DABA Lite.
 
 Tungsten collections lineage:
 
@@ -170,15 +180,13 @@ than by making another family depend on Tungsten.
    `PersistentAssociation<TKey, TValue>` composed per the historical
    [derived structure catalog](derived-structure-catalog.md) case study, with the kernel-verified
    Tungsten ordering rules as the family-local fidelity spec.
-2. `src/Cpp/Tungsten`, `src/C/Tungsten`, `src/Haskell/Tungsten`, `src/Kotlin/Tungsten`, and
-   `src/Rust/Tungsten` port the same public family to their language-local ownership and policy
+2. `src/Cpp/Tungsten`, `src/C/Tungsten`, `src/Haskell/Tungsten`, `src/Kotlin/Tungsten`,
+   `src/Rust/Tungsten`, and `src/TypeScript` port the same public family to their language-local ownership and policy
    models while preserving the substrate composition, sparse-stamp relabel behavior, and
    average/worst-case operation bounds.
 
-Numerics currently has a C# project only. `src/CSharp/src/Tools.Numerics` owns the fixed-width integer and
-sparse-integer contract and implementation, with tests under `src/CSharp/tests/Tools.Numerics.Tests`; add
-future ports or generated variants as separate language-family workspaces only when they have their own
-toolchain and validation shape.
+Numerics originates in `src/CSharp/src/Tools.Numerics`; `src/TypeScript/src/numerics` ports the six
+fixed-width types, binary/format semantics, `SparseInteger`, and `BitConverterEx` over native `bigint`.
 
 When porting behavior across languages, prefer the managed workspace for the semantic contract, the adjacent
 native workspace for local idioms, and the local tests for the exact validation shape. Use the

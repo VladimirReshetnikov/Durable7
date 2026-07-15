@@ -18,6 +18,7 @@ projects grouped by role under `src/CSharp/src`, `tests`, `samples`, and `benchm
 | [Haskell](Haskell/README.md) | GHC/cabal packages with dependency-light executable tests | [Hamt](Haskell/Hamt/README.md), [FingerTree](Haskell/FingerTree/README.md), [Tungsten](Haskell/Tungsten/README.md) |
 | [Kotlin](Kotlin/README.md) | Kotlin/JVM command-line compiler with dependency-free executable tests bootstrapped by `build.ps1` | [Hamt](Kotlin/Hamt/README.md), [FingerTree](Kotlin/FingerTree/README.md), [Tungsten](Kotlin/Tungsten/README.md) |
 | [Rust](Rust/README.md) | Cargo workspace with safe Rust crates and inline unit tests | [Hamt](Rust/Hamt/README.md), [FingerTree](Rust/FingerTree/README.md), [Tungsten](Rust/Tungsten/README.md) |
+| [TypeScript](TypeScript/README.md) | Strict TypeScript/ESM npm package with Vitest and fast-check validation | [HAMT, FingerTree, Tungsten, and Numerics](TypeScript/README.md#public-families) |
 
 Across every language root, Tungsten is an application-specific leaf consumer. It may depend on
 general libraries; no general workspace may depend on it. See the normative

@@ -53,8 +53,10 @@ patterns.
 | Haskell FingerTree | [src/Haskell/FingerTree/README.md](../../src/Haskell/FingerTree/README.md) and [canonical-set guide](../../src/Haskell/FingerTree/docs/canonical-sorted-set.md) | General measured tree, deque, reversible deque, policy-canonical zip-zip set, sorted/priority facades, intervals, ropes, positional/measured/text cursors, and text helpers |
 | Kotlin FingerTree | [src/Kotlin/FingerTree/docs/api-notes.md](../../src/Kotlin/FingerTree/docs/api-notes.md) | Kotlin measured-AVL/RRB persistence, positional/measured/text rope cursors, policy-canonical zip-zip set, Brodal-Okasaki heap, winner-cached AVL priority-search queue, derived collections, ropes/text, and mutable DABA Lite aggregation |
 | Rust FingerTree | [src/Rust/FingerTree/docs/api-notes.md](../../src/Rust/FingerTree/docs/api-notes.md) | Rust shared-storage persistent surfaces, positional/measured/text rope cursors, policy-canonical zip-zip set, Brodal heap, priority-search queue, ordering policies, plus single-threaded DABA Lite and deterministic-drop semantics |
+| TypeScript package | [src/TypeScript/README.md](../../src/TypeScript/README.md) and [API notes](../../src/TypeScript/docs/api-notes.md) | Strict ESM ports of HAMT, FingerTree-derived, Tungsten, and numerics families; JavaScript runtime mappings and exact Merkle wire |
 | C# Tungsten collections | [src/CSharp/docs/Tungsten/usage.md](../../src/CSharp/docs/Tungsten/usage.md) | Application-specific `PersistentList<T>` and `PersistentAssociation<TKey, TValue>` with the Tungsten operation correspondence; never a general collection substrate |
 | C/C++/Haskell/Kotlin/Rust Tungsten collections | [data-structure catalog](data-structure-catalog.md#tungsten-application-collections) | Language-local application-leaf Tungsten `List` and `Association` entry points, README links, tests, and substrate notes |
+| TypeScript validation | [src/TypeScript/docs/validation.md](../../src/TypeScript/docs/validation.md) | npm lockfile, strict declarations, Vitest/fast-check, ESM build, and package smoke validation |
 
 ## API Contracts
 

@@ -15,7 +15,7 @@ Library-specific design and API documentation lives beside each workspace under 
 - [Agent workflows](guides/agent-workflows.md) - compact task-conditional workflow guidance inherited from the Tools repository where relevant.
 - [Build and validation](guides/build-and-validation.md) - repository-wide validation matrix, exact build/test commands, CMake cache notes, and Markdown checks.
 - [Documentation maintenance](guides/documentation-maintenance.md) - documentation placement, writing standards, metadata, and validation.
-- [Porting and semantic parity](guides/porting-and-semantic-parity.md) - workflow for carrying behavior and documentation changes across C#, C++, C, Haskell, Kotlin, and Rust workspaces.
+- [Porting and semantic parity](guides/porting-and-semantic-parity.md) - workflow for carrying behavior and documentation changes across C#, C++, C, Haskell, Kotlin, Rust, and TypeScript workspaces.
 
 ## Reference
 
@@ -73,3 +73,6 @@ documents under [src/Kotlin/Hamt/docs](../src/Kotlin/Hamt/docs/README.md) and
 [src/Kotlin/FingerTree/docs](../src/Kotlin/FingerTree/docs/README.md). Put Haskell package entry points under
 [src/Haskell](../src/Haskell/README.md), with test coverage notes beside each package's cabal test
 executable.
+TypeScript package API and validation notes live under
+[src/TypeScript/docs](../src/TypeScript/docs/api-notes.md), with its executable test map under
+[src/TypeScript/test](../src/TypeScript/test/README.md).

@@ -149,7 +149,7 @@ what those documents prove is useful for maintainers.
 - Treat C# Tungsten as a baseline only for sibling Tungsten ports. General collections must fork
   useful mechanics and choose their contracts independently.
 - Treat C and C++ docs as authoritative for ownership, callback, RAII, and native build details.
-- Treat Haskell, Kotlin, and Rust docs as authoritative for idiomatic result shapes, persistent
+- Treat Haskell, Kotlin, Rust, and TypeScript docs as authoritative for idiomatic result shapes, persistent
   representation choices, and explicitly documented engine-level complexity differences.
 - Do not infer parity from similar names. Confirm the contract in the local API notes or source.
 - When a sibling port intentionally differs, document the shared semantic contract first and the local

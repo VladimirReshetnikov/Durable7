@@ -14,7 +14,7 @@ documentation placement rules. Use [the semantic contracts reference](../referen
 for shared behavior obligations across repository-owned numerics and data structures. Use
 [the build and validation guide](build-and-validation.md) for the complete cross-repository validation
 matrix. Use [the porting and semantic parity guide](porting-and-semantic-parity.md) when a behavior or
-public API change may need to cross C#, C++, C, Haskell, Kotlin, and Rust workspaces.
+public API change may need to cross C#, C++, C, Haskell, Kotlin, Rust, and TypeScript workspaces.
 
 ## Tungsten Dependency Check
 

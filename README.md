@@ -183,7 +183,7 @@ and a worked ordered-set example, is the
     │       └── test/
     ├── test_support/
     │   └── include/
-    └── Rust/
+    ├── Rust/
         ├── Cargo.toml
         ├── README.md
         ├── test.ps1
@@ -203,13 +203,26 @@ and a worked ordered-set example, is the
             ├── Cargo.toml
             ├── README.md
             └── src/
+    └── TypeScript/
+        ├── README.md
+        ├── package.json
+        ├── package-lock.json
+        ├── test.ps1
+        ├── docs/
+        ├── src/
+        │   ├── finger-tree/
+        │   ├── hamt/
+        │   ├── numerics/
+        │   └── tungsten/
+        └── test/
 ```
 
 ## Workspaces
 
 The [source index](src/README.md) and language indexes for [C](src/C/README.md),
 [C++](src/Cpp/README.md), [C#](src/CSharp/README.md), [Haskell](src/Haskell/README.md),
-[Kotlin](src/Kotlin/README.md), and [Rust](src/Rust/README.md) are the quickest way to browse the
+[Kotlin](src/Kotlin/README.md), [Rust](src/Rust/README.md), and
+[TypeScript](src/TypeScript/README.md) are the quickest way to browse the
 language-first layout.
 
 - [C# Numerics](src/CSharp/docs/Numerics/overview.md) is a .NET 10 fixed-width and sparse integer numerics library under [src/CSharp/src/Tools.Numerics](src/CSharp/src/Tools.Numerics/Tools.Numerics.csproj). It provides `UInt256`/`Int256`, `UInt512`/`Int512`, `UInt1024`/`Int1024`, `SparseInteger`, deterministic two's-complement and binary conversion semantics, declaration-parity guardrails, and xUnit tests.
@@ -260,6 +273,12 @@ language-first layout.
 - [src/Rust/Tungsten](src/Rust/Tungsten/README.md) is the safe Rust Tungsten-collections crate. It exposes
   `PersistentList<T>` and `PersistentAssociation<K, V, S>` over the Rust FingerTree and HAMT crates,
   preserving the Tungsten Association ordering rules, slicing, sorting, and relabel behavior.
+- [src/TypeScript](src/TypeScript/README.md) is the strict ESM port for Node.js 24+. It packages the
+  HAMT/transient/Ctrie/Patricia/Merkle family, measured sequence and derived FingerTree collections,
+  RRB/canonical-set/Brodal/priority-search/DABA cores, positional/measured/text rope cursors,
+  Tungsten `List`/`Association`, and fixed-width numerics. Its `MST2`/`MSP2` wire is byte-identical
+  to the sibling ports; runtime-specific concurrency and owner-token performance distinctions are
+  documented locally.
 
 ## Build and test
 
@@ -286,6 +305,10 @@ cd C:\DataStructures\src\Cpp
 
 cd C:\DataStructures\src\Rust
 .\test.ps1
+
+cd C:\DataStructures\src\TypeScript
+npm ci
+npm run validate
 
 cd C:\DataStructures\src\C
 .\build.ps1 -Workspace FingerTree -RunTests
@@ -324,9 +347,9 @@ Release configuration is required for meaningful benchmark numbers.
 - [docs/guides/agent-workflows.md](docs/guides/agent-workflows.md) holds compact task-conditional workflow guidance.
 - [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) is the repository-wide validation matrix and command guide.
 - [docs/guides/documentation-maintenance.md](docs/guides/documentation-maintenance.md) defines documentation placement, writing standards, metadata, and validation.
-- [docs/guides/porting-and-semantic-parity.md](docs/guides/porting-and-semantic-parity.md) defines the workflow for keeping C#, C++, C, Haskell, Kotlin, and Rust data-structure surfaces semantically aligned.
+- [docs/guides/porting-and-semantic-parity.md](docs/guides/porting-and-semantic-parity.md) defines the workflow for keeping C#, C++, C, Haskell, Kotlin, Rust, and TypeScript data-structure surfaces semantically aligned.
 - [docs/reference/README.md](docs/reference/README.md) indexes durable cross-workspace reference material.
-- [docs/reference/data-structure-catalog.md](docs/reference/data-structure-catalog.md) catalogs repository-owned data-structure families, public entry points, and primary references across C#, C, C++, Haskell, Kotlin, and Rust.
+- [docs/reference/data-structure-catalog.md](docs/reference/data-structure-catalog.md) catalogs repository-owned data-structure families, public entry points, and primary references across C#, C, C++, Haskell, Kotlin, Rust, and TypeScript.
 - [docs/reference/navigation-matrix.md](docs/reference/navigation-matrix.md) maps common tasks to the right usage, API, validation, porting, history, and maintenance documents.
 - [docs/reference/semantic-contracts.md](docs/reference/semantic-contracts.md) summarizes shared behavior, ownership, policy, ordering, and documentation obligations for repository-owned numerics and data structures.
 - [docs/reference/workspace-map.md](docs/reference/workspace-map.md) explains the language-first, library-family layout and port lineage.
@@ -353,6 +376,9 @@ Release configuration is required for meaningful benchmark numbers.
   Merkle search-tree API notes and validation guidance.
 - [src/Rust/FingerTree/docs/README.md](src/Rust/FingerTree/docs/README.md) indexes the Rust
   FingerTree-family API notes and validation guide.
+- [src/TypeScript/README.md](src/TypeScript/README.md) indexes the TypeScript package;
+  [API notes](src/TypeScript/docs/api-notes.md), [validation](src/TypeScript/docs/validation.md),
+  and the [test map](src/TypeScript/test/README.md) document its runtime mappings and gates.
 
 The large `TECHNICAL_DOCUMENTATION_STANDARD.md` and `XML_DOCUMENTATION_STANDARD.md` files from Tools are intentionally not part of this repository. Keep documentation thorough and current-state oriented, and write XML documentation in semantic terms: contracts, invariants, ordering, failure behavior, complexity, allocation behavior, and examples where they help.
 
@@ -394,6 +420,7 @@ The expected local Windows environment includes:
   Kotlin compiler under `src/Kotlin/build/tools` when Java 21+ is not already available.
 - Rust toolchain with Cargo for `src/Rust`; the local profile may expose Cargo as
   `$env:USERPROFILE\.cargo\bin\cargo.exe` even when it is not on `PATH`.
+- Node.js 24 or newer and npm for `src/TypeScript`; use the committed lockfile with `npm ci`.
 
 Use `dotnet` directly for C# restore/build operations and `src/CSharp/test.ps1` for unattended
 test validation in this local environment.
