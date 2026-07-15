@@ -85,6 +85,18 @@ dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Te
 
 ## Test Coverage
 
+`PersistentBiMapTests` provides the bimap shipment gate: strict two-domain uniqueness, independent
+policy retention, configured-value-comparer replacement, first representatives, inverse identity,
+symmetric removal, nullable values, failure atomicity, retained 1,000-command histories, concurrent
+readers, enumeration, public API shape, and the bidirectional invariant. Run it alone with:
+
+```powershell
+dotnet test tests/Tools.DataStructures.Hamt.Tests/Tools.DataStructures.Hamt.Tests.csproj `
+    --no-restore --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false `
+    --filter FullyQualifiedName~PersistentBiMapTests
+```
+
 `tests/Tools.DataStructures.Hamt.Tests/` covers the xUnit/CsCheck suite. See the
 [tests README](../../tests/Tools.DataStructures.Hamt.Tests/README.md) for source-file grouping and filter examples.
 
@@ -172,8 +184,9 @@ existing selected-kernel suite remained 26 tests. Treat these as a named checkpo
 permanent expected-count assertion; new tests should increase the total.
 
 The persistent single-pass update tranche established the pre-bag complete-project checkpoint at
-**244 passed, 0 failed**, including 19 focused `PersistentHashMapSinglePassUpdateTests`. The C#
-hash-bag tranche now passes **292 tests, 0 failed** for the complete HAMT project; the focused bag
+**244 passed, 0 failed**, including 19 focused `PersistentHashMapSinglePassUpdateTests`. The current
+C# bimap tranche passes **308 tests, 0 failed** for the complete HAMT project in both Debug and
+Release; the focused bimap gate passes 16/16. The earlier focused bag
 plus bulk-builder filter passes **52 tests, 0 failed**. The earlier full C# workspace gate also
 passed 319 Numerics, 630 FingerTree, and 52 Tungsten tests under the same single-worker policy; rerun
 that complete workspace gate after integration changes rather than treating the earlier totals as

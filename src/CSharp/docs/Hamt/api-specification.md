@@ -24,6 +24,10 @@ structural-sharing semantics as the map. Both persistent CHAMP types expose a C#
 positive multiplicity per comparer equivalence class in `PersistentHashMap<T, int>` and tracks the
 expanded occurrence count separately as a `long`. It has no mutable builder or transient surface.
 
+`PersistentBiMap<TKey, TValue>` is the immutable bijection facade in the same project. It stores
+every pair in forward and inverse CHAMP maps, retains independent key and value comparers, and
+exposes an O(1) cached inverse facade without rebuilding either trie.
+
 `ConcurrentHashTrie<TKey, TValue>` is a lock-free mutable map built from bitmap C-nodes, singleton
 leaves, collision nodes, and generation-stamped indirection nodes. Its public mutation surface is
 linearizable, and `Snapshot()` captures the current Ctrie generation in O(1).
@@ -299,6 +303,49 @@ and throws `OverflowException` before allocating; checking only `int.MaxValue` w
 on the CLR. An empty bag returns `Array.Empty<T>()`. The debugger proxy exposes a distinct
 `KeyValuePair<T, int>[]`, never expanded enumeration, so debugger materialization is bounded by
 `DistinctCount` even when one multiplicity or the total is very large.
+
+## Persistent Bimap Contract
+
+`PersistentBiMap<TKey, TValue>` implements `IReadOnlyDictionary<TKey, TValue>` and maintains two
+maps whose entries are exact inverses. `Count`, forward enumeration, `Keys`, `Values`, the indexer,
+`ContainsKey`, and `TryGetValue` observe the forward map. `ContainsValue` and `TryGetKey` observe the
+inverse map. Enumeration is stable for an unchanged version but otherwise follows unspecified
+forward-CHAMP order.
+
+- `Empty` and `Create(keyComparer, valueComparer)` create empty bijections. Key and value comparer
+  objects are retained independently by every successor, including empty results.
+- `CreateRange` enumerates once and strictly rejects any repeated key class or value class.
+- `Add(key, value)` throws when either equivalence class already exists, even if the complete pair
+  is equivalent. `TryAdd` reports either conflict and returns the exact receiver.
+- `SetItem(key, value)` adds when the key is absent. For an existing key it preserves the stored key
+  representative, returns the exact receiver when the configured value comparer considers the old
+  and new values equivalent, replaces an unclaimed value, and throws before publication when the
+  new value belongs to another key class. Replacement deliberately removes and re-adds both sides:
+  calling the map's ordinary `SetItem` would apply `EqualityComparer<TValue>.Default` rather than
+  the bimap's configured value policy.
+- `RemoveKey`/`TryRemoveKey` and `RemoveValue`/`TryRemoveValue` remove the same pair through either
+  domain. An absent removal returns the exact receiver. Try-removal exposes the opposite stored
+  representative.
+- `Clear` preserves both comparer objects and returns the receiver when already empty.
+- `Inverse` swaps the two existing map roots and comparer roles in O(1), performs no enumeration,
+  is cached safely for concurrent readers, and satisfies `ReferenceEquals(map,
+  map.Inverse.Inverse)`.
+
+The invariant is bidirectional: both maps have the same count; every forward `(key, value)` finds an
+equivalent inverse `(value, key)` under the retained policies; and every inverse entry finds the
+corresponding forward entry. A public operation constructs the facade only after both successor
+maps have been produced. Comparer or allocation failure therefore publishes neither half and leaves
+the source and any cached inverse facade unchanged. Retained versions support concurrent reads when
+the supplied comparers do.
+
+Point lookup is O(w + c) in its selected direction. Addition and removal perform one bounded HAMT
+operation per side after conflict/representative probes; replacement performs remove-plus-add on
+both sides to honor independent policies. Space is honestly approximately twice a single map:
+every association is stored in both tries. Concrete enumeration wraps the allocation-free forward
+map enumerator.
+
+There is intentionally no algebra, builder, transient, displacement mode, or mutable inverse view.
+Future algebra would first need a receiver-policy conflict matrix for collisions on both domains.
 
 ## CHAMP Transient Contract
 

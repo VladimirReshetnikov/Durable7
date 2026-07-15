@@ -3,7 +3,7 @@
 - Status: Implemented workspace
 - Created (UTC): 2026-07-02T05:02:24Z
 - Repository HEAD: 3c639e02d05377685676923a13b30a3d22fd4994
-- Audience: Maintainers implementing and reviewing the CHAMP, hash-bag, Ctrie, Patricia, and Merkle families
+- Audience: Maintainers implementing and reviewing the CHAMP, hash-bag, bimap, Ctrie, Patricia, and Merkle families
 - Scope: Project layout and validation entry points for `src/CSharp/src/Tools.DataStructures.Hamt`
 
 `src/CSharp/src/Tools.DataStructures.Hamt` contains the .NET 10 C# preview workspace for
@@ -23,6 +23,13 @@ itself, not an additional public facade allocation; the set surface is a thin `I
 facade over that map engine. C, C++, Haskell, Kotlin, and Rust separately expose the same one-way
 lifecycle through semantic sessions whose changed edits remain persistent path-copy operations;
 they do not inherit this C# engine's owner-token performance claim.
+
+`PersistentBiMap<TKey, TValue>` composes two persistent CHAMP maps into a strict immutable
+bijection. It retains independent key and value comparers, rejects duplicates in either domain,
+supports conflict-safe replacement and symmetric removal, preserves first representatives, and
+exposes a cached O(1) inverse facade whose inverse is the original object. Each association is
+stored in both tries; the type makes no memory-saving claim and deliberately exposes no algebra,
+builder, transient, or displacement mode.
 
 `ConcurrentHashTrie<TKey, TValue>` is the deliberately mutable member of the family. It applies
 GCAS descriptors to generation-stamped indirection nodes and a root/main RDCSS transition for
@@ -113,6 +120,7 @@ and canonical topology alone does not confer reference identity.
     one hash computation, one trie descent, and one selected factory invocation.
   - `PersistentHashBag.cs` implements the immutable unordered multiset, including explicit distinct
     and expanded counts, checked multiplicities, receiver-policy algebra, and expanded enumeration.
+  - `PersistentBiMap.cs` implements the strict two-HAMT bijection and cached inverse facade.
   - `PersistentHashMap.Transient.cs` and `PersistentHashMap.OwnerTokenKernel.cs` expose and implement
     the public one-way map transient.
   - `MapDifference.cs` defines the added/removed/changed result vocabulary used by structural diff.
@@ -161,4 +169,4 @@ dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Te
 
 See [`docs/validation.md`](validation.md) for the restore/build/test split, XML documentation
 warning gate, complete single-node commands, the historical 244-test pre-bag C# HAMT checkpoint,
-and the current 292-test complete HAMT plus 52-test focused bag/bulk-builder checkpoints.
+and the current 308-test complete HAMT, 16-test focused bimap, and 52-test focused bag/bulk-builder checkpoints.

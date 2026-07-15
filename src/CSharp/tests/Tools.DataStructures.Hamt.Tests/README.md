@@ -6,7 +6,7 @@
 - Scope: xUnit and CsCheck test project under `src/CSharp/tests/Tools.DataStructures.Hamt.Tests`
 
 `Tools.DataStructures.Hamt.Tests` is the managed test project for the C# HAMT library, including the
-CHAMP map/set/bag, Ctrie, Patricia, and Merkle families. It targets the workspace defaults from
+CHAMP map/set/bag/bimap, Ctrie, Patricia, and Merkle families. It targets the workspace defaults from
 `Directory.Build.props`, references the public `Tools.DataStructures.Hamt` project, and uses xUnit,
 `Microsoft.NET.Test.Sdk`, `xunit.runner.visualstudio`, and CsCheck.
 
@@ -37,6 +37,11 @@ CHAMP map/set/bag, Ctrie, Patricia, and Merkle families. It targets the workspac
 - `PersistentHashBagPropertyTests.cs` runs deterministic comparer-aware linear-model histories with
   retained snapshots, first representatives, nullable and collision-heavy policies, randomized
   algebra, and invariant validation after commands.
+- `PersistentBiMapTests.cs` covers independent comparer retention, strict duplicate rejection on
+  both domains, stored representatives, configured-value-comparer replacement, claimed-value
+  conflicts, symmetric removal, cached inverse identity, nullable representatives, enumerator
+  behavior, comparer failure atomicity, a 1,000-command retained-version model, concurrent readers,
+  recursive bijection validation, and the closed immutable API shape.
 - `PersistentHashMapContractOracleTests.cs` and `PersistentHashSetContractOracleTests.cs` are the Axis 2
   executable semantic baseline for comparer identity, stored representatives, collisions, nullable keys/items,
   stable enumeration, no-op identity, retained versions, and callback-exception atomicity.
@@ -165,8 +170,8 @@ public transient/API filter passed 33 tests, and the selected T1 kernel suite re
 These counts record the shipment evidence and are not a ceiling for later test growth.
 
 The persistent single-pass update tranche established the pre-bag complete-project checkpoint at
-**244 passed, 0 failed**, including 19 focused factory-update tests. The C# hash-bag tranche now
-passes **292 tests, 0 failed** for the complete HAMT project; its focused bag plus bulk-builder filter
+**244 passed, 0 failed**, including 19 focused factory-update tests. The current C# bimap tranche
+passes **308 tests, 0 failed** for the complete HAMT project after adding the 16-test gate; the focused bag plus bulk-builder filter
 passes **52 tests, 0 failed**. No benchmark is part of the bag acceptance gate; benchmark work
 remains postponed to an isolated machine run.
 

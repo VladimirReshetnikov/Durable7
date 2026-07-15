@@ -380,6 +380,37 @@ collapse failures therefore remain observable and leave both inputs unchanged. U
 comparer object for both operands when their policies are intentionally identical and normalization
 is unnecessary.
 
+## Persistent Bidirectional Map
+
+Use `PersistentBiMap<TKey, TValue>` when both domains must be unique and lookup must work in either
+direction:
+
+```csharp
+var ids = PersistentBiMap<string, int>
+    .Create(StringComparer.OrdinalIgnoreCase)
+    .Add("alpha", 10)
+    .Add("beta", 20);
+
+Console.WriteLine(ids["ALPHA"]);       // 10
+Console.WriteLine(ids.Inverse[20]);    // beta
+
+var revised = ids.SetItem("alpha", 11);
+Console.WriteLine(revised.Inverse[11]);
+Console.WriteLine(ids.Inverse[10]);    // retained version is unchanged
+```
+
+`Add` is strict on both sides. `SetItem` may replace the value for an existing key, but it never
+displaces a different key that already owns the requested value. `TryAdd` is the nonthrowing
+alternative for either conflict. `RemoveKey` and `RemoveValue` are symmetric.
+
+The key and value comparers are independent. An equivalent update retains the original key and
+value representatives and returns the same facade. `Inverse` is cached O(1) root swapping rather
+than an O(n) rebuild, and `map.Inverse.Inverse` is the original object. Enumeration follows the
+forward HAMT's stable-for-one-version, otherwise unspecified order.
+
+The bimap intentionally stores every pair twice. Choose it for bidirectional uniqueness and lookup,
+not as a memory-saving wrapper around an ordinary map.
+
 ## One-Way Transient Editing
 
 Use a transient when one logical owner will apply many point edits before publishing the next

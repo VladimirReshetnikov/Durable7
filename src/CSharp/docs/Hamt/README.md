@@ -13,9 +13,11 @@
   merge contracts for the CHAMP map/set/bag, Ctrie, integer Patricia, and Merkle search-tree
   surfaces. The bag section locks its separate distinct/expanded counts, checked multiplicities,
   comparer normalization, representative precedence, enumeration, debugger, and no-op contracts.
+  The bimap section locks its strict two-domain uniqueness, independent policies, representative,
+  replacement, symmetric removal, inverse-view, failure-atomicity, and honest double-storage contracts.
 - [Usage guide](usage.md) shows persistent CHAMP updates and structural diff, hash-bag counting and
   algebra, comparer and stored-representative behavior, one-way map/set transient edit sessions,
-  set algebra, Ctrie snapshots, Patricia structural algebra, and Merkle persistence, proofs,
+  strict bidirectional mappings, set algebra, Ctrie snapshots, Patricia structural algebra, and Merkle persistence, proofs,
   synchronization, and three-way merge.
 - [Validation](validation.md) records the local .NET restore/build/test commands, workspace warning
   policy, generated XML-documentation gate, and xUnit/CsCheck/model/stress coverage for the CHAMP
