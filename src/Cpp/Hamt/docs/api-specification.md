@@ -26,9 +26,22 @@ structural-sharing behavior as the map.
 classes (`distinct_count`) from the expanded signed-64-bit occurrence count (`total_count`) and
 retains one representative per receiver-policy class.
 
+`persistent_bi_map<Key, T, KeyHash, KeyEqual, ValueHash, ValueEqual>` is a strict immutable
+bijection backed by forward `Key -> T` and inverse `T -> Key` CHAMP maps. The key and value domains
+own independent hash/equality objects. `add` rejects an equivalent class in either domain;
+`try_add` reports key conflict before value conflict and returns both source roots on failure.
+`set_item` adds a missing free pair, preserves both stored representatives for a value-equivalent
+no-op, replaces one key's value only when the new value class is free, and never displaces another
+key. Removal is symmetric through `try_remove_key` and `try_remove_value`. `inverse()` is O(1): it
+returns the swapped value-semantic facade over the same two immutable roots. Consequently,
+`inverse().inverse().shares_roots_with(source)` holds even though C++ does not expose reference
+identity for collection values. The facade deliberately omits algebra, transients, builders, and a
+displacing force-put mode.
+
 The port intentionally follows C++ value semantics rather than C# reference identity. No-op updates
-return a value that shares the same root node as the source; `shares_root_with` and the debug root
-inspection helpers expose that property for tests.
+return values that share the same roots as the source; `shares_root_with`,
+`persistent_bi_map::shares_roots_with`, and the debug root inspection helpers expose that property
+for tests.
 
 The CHAMP map and set also expose nested move-only `transient` types for an explicit edit-then-
 publish lifecycle. These sessions port the C# lifecycle and representative contracts, not its

@@ -75,6 +75,12 @@ The executable registers these cases:
 - `PersistentHashBag_AlgebraUsesMultisetCountsAndSharesIdentities`
 - `PersistentHashBag_NormalizesArgumentToReceiverPolicyAndKeepsPrecedence`
 - `PersistentHashBag_CheckedSumFailureLeavesBothOperandsUnchanged`
+- `PersistentBiMap_StrictAddsRejectEitherRepresentedDomain`
+- `PersistentBiMap_IndependentPoliciesRetainRepresentativesAndGovernReplacement`
+- `PersistentBiMap_SymmetricRemovalAndInverseShareTheSameRoots`
+- `PersistentBiMap_ClearAndEnumerationPreserveForwardContracts`
+- `PersistentBiMap_RandomHistoryMatchesTwoMapModelAndRetainsSnapshots`
+- `PersistentBiMap_PolicyFailureLeavesPublishedSnapshotUnchanged`
 - `TransientMap_CleanAndLogicalNoOpPublicationRetainSourceIdentity`
 - `TransientMap_PointEditsPreserveRepresentativesAndVersionBoundIteration`
 - `TransientMap_MoveTransferAndOverwriteHaveDeterministicLifecycles`

@@ -1,3 +1,4 @@
+#include <Tools/DataStructures/Hamt/persistent_bi_map.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_map.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_bag.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_set.hpp>
@@ -30,6 +31,9 @@
 
 using tools::data_structures::hamt::persistent_hamt_node_kind;
 using tools::data_structures::hamt::map_difference_kind;
+using tools::data_structures::hamt::bimap_conflict;
+using tools::data_structures::hamt::bimap_conflict_error;
+using tools::data_structures::hamt::persistent_bi_map;
 using tools::data_structures::hamt::persistent_hash_bag;
 using tools::data_structures::hamt::persistent_hash_map;
 using tools::data_structures::hamt::persistent_int_map;
@@ -2620,6 +2624,252 @@ TEST(PersistentHashBag_CheckedSumFailureLeavesBothOperandsUnchanged) {
     CHECK_EQ(right_root, right.debug_root_identity());
     CHECK_EQ(std::numeric_limits<std::int32_t>::max(), left.count_of(1));
     CHECK_EQ(1, right.count_of(1));
+}
+
+TEST(PersistentBiMap_StrictAddsRejectEitherRepresentedDomain) {
+    const auto source = persistent_bi_map<int, std::string>::empty().add(1, "one");
+    CHECK_EQ(std::size_t{1}, source.count());
+    CHECK_EQ(std::string("one"), source.at(1));
+    CHECK_EQ(1, *source.try_get_key("one"));
+
+    const auto [key_conflict_map, key_added, key_conflict] = source.try_add(1, "uno");
+    CHECK(!key_added);
+    CHECK_EQ(bimap_conflict::key, key_conflict);
+    CHECK(key_conflict_map.shares_roots_with(source));
+
+    const auto [value_conflict_map, value_added, value_conflict] = source.try_add(2, "one");
+    CHECK(!value_added);
+    CHECK_EQ(bimap_conflict::value, value_conflict);
+    CHECK(value_conflict_map.shares_roots_with(source));
+
+    const auto [same_pair_map, same_pair_added, same_pair_conflict] = source.try_add(1, "one");
+    CHECK(!same_pair_added);
+    CHECK_EQ(bimap_conflict::key, same_pair_conflict);
+    CHECK(same_pair_map.shares_roots_with(source));
+
+    CHECK_THROWS_AS(source.add(1, "one"), bimap_conflict_error);
+    CHECK(source.validate_structure());
+}
+
+TEST(PersistentBiMap_IndependentPoliciesRetainRepresentativesAndGovernReplacement) {
+    using map_type = persistent_bi_map<
+        std::string,
+        std::string,
+        configurable_string_hash,
+        configurable_string_equal,
+        configurable_string_hash,
+        configurable_string_equal>;
+    const auto source = map_type::create(
+        configurable_string_hash{true},
+        configurable_string_equal{true},
+        configurable_string_hash{true},
+        configurable_string_equal{true})
+        .add("Alpha", "One")
+        .add("Beta", "Two");
+
+    CHECK(source.key_hash_function().ignore_case);
+    CHECK(source.key_eq().ignore_case);
+    CHECK(source.value_hash_function().ignore_case);
+    CHECK(source.value_eq().ignore_case);
+    CHECK_EQ(std::string("One"), source.at("ALPHA"));
+    CHECK_EQ(std::string("Alpha"), *source.try_get_key("ONE"));
+
+    const auto equivalent = source.set_item("ALPHA", "ONE");
+    CHECK(equivalent.shares_roots_with(source));
+    CHECK_EQ(std::string("One"), equivalent.at("alpha"));
+
+    const auto replaced = source.set_item("ALPHA", "Three");
+    CHECK_EQ(std::string("Three"), replaced.at("alpha"));
+    CHECK_EQ(std::string("Alpha"), *replaced.try_get_key("THREE"));
+    CHECK(!replaced.contains_value("one"));
+    CHECK_THROWS_AS(source.set_item("alpha", "TWO"), bimap_conflict_error);
+    CHECK(source.validate_structure());
+    CHECK(replaced.validate_structure());
+}
+
+TEST(PersistentBiMap_SymmetricRemovalAndInverseShareTheSameRoots) {
+    const auto source = persistent_bi_map<int, std::string>::empty()
+        .add(1, "one")
+        .add(2, "two");
+    const auto inverse = source.inverse();
+    CHECK_EQ(1, inverse.at("one"));
+    CHECK(inverse.inverse().shares_roots_with(source));
+    CHECK(inverse.validate_structure());
+
+    const auto [after_key, key_removed, removed_value] = source.try_remove_key(1);
+    CHECK(key_removed);
+    CHECK_EQ(std::optional<std::string>("one"), removed_value);
+    CHECK(!after_key.contains_key(1));
+    CHECK(!after_key.contains_value("one"));
+    CHECK(source.contains_key(1));
+
+    const auto [after_value, value_removed, removed_key] = source.try_remove_value("two");
+    CHECK(value_removed);
+    CHECK_EQ(std::optional<int>(2), removed_key);
+    CHECK(!after_value.contains_key(2));
+    CHECK(!after_value.contains_value("two"));
+
+    const auto [key_miss, missed_key, missing_value] = source.try_remove_key(99);
+    CHECK(!missed_key);
+    CHECK(!missing_value.has_value());
+    CHECK(key_miss.shares_roots_with(source));
+    const auto [value_miss, missed_value, missing_key] = source.try_remove_value("missing");
+    CHECK(!missed_value);
+    CHECK(!missing_key.has_value());
+    CHECK(value_miss.shares_roots_with(source));
+}
+
+TEST(PersistentBiMap_ClearAndEnumerationPreserveForwardContracts) {
+    const std::vector<std::pair<int, std::string>> entries{{1, "one"}, {2, "two"}, {3, "three"}};
+    const auto source = persistent_bi_map<int, std::string>::create_range(entries);
+    CHECK_EQ(std::size_t{3}, source.count());
+
+    std::unordered_map<int, std::string> enumerated;
+    for (const auto& [key, value] : source) {
+        enumerated.emplace(key, value);
+    }
+    CHECK_EQ(std::size_t{3}, enumerated.size());
+    CHECK_EQ(std::string("two"), enumerated.at(2));
+
+    const auto cleared = source.clear();
+    CHECK(cleared.is_empty());
+    CHECK(cleared.key_hash_function()(7) == source.key_hash_function()(7));
+    CHECK(cleared.value_hash_function()("seven") == source.value_hash_function()("seven"));
+    CHECK(cleared.clear().shares_roots_with(cleared));
+    CHECK_THROWS_AS(
+        (persistent_bi_map<int, std::string>::create_range(
+            std::vector<std::pair<int, std::string>>{{1, "one"}, {1, "uno"}})),
+        bimap_conflict_error);
+}
+
+TEST(PersistentBiMap_RandomHistoryMatchesTwoMapModelAndRetainsSnapshots) {
+    using map_type = persistent_bi_map<
+        int,
+        int,
+        few_buckets_hash,
+        std::equal_to<int>,
+        few_buckets_hash,
+        std::equal_to<int>>;
+    auto map = map_type::create(few_buckets_hash{}, {}, few_buckets_hash{}, {});
+    std::unordered_map<int, int> forward;
+    std::unordered_map<int, int> inverse;
+    std::vector<map_type> snapshots;
+    std::mt19937 random(0xB1A4u);
+    std::uniform_int_distribution<int> operation(0, 3);
+    std::uniform_int_distribution<int> key_distribution(0, 31);
+    std::uniform_int_distribution<int> value_distribution(100, 131);
+
+    for (int step = 0; step < 2'000; ++step) {
+        const auto key = key_distribution(random);
+        const auto value = value_distribution(random);
+        switch (operation(random)) {
+        case 0: {
+            const auto expected_added = !forward.contains(key) && !inverse.contains(value);
+            const auto [candidate, added, conflict] = map.try_add(key, value);
+            CHECK_EQ(expected_added, added);
+            if (expected_added) {
+                CHECK_EQ(bimap_conflict::none, conflict);
+                map = candidate;
+                forward.emplace(key, value);
+                inverse.emplace(value, key);
+            } else {
+                CHECK_EQ(
+                    forward.contains(key) ? bimap_conflict::key : bimap_conflict::value,
+                    conflict);
+                CHECK(candidate.shares_roots_with(map));
+            }
+            break;
+        }
+        case 1: {
+            const auto old = forward.find(key);
+            const auto claimed = inverse.find(value);
+            if (claimed != inverse.end() && (old == forward.end() || claimed->second != key)) {
+                const auto before = map;
+                CHECK_THROWS_AS(map.set_item(key, value), bimap_conflict_error);
+                CHECK(map.shares_roots_with(before));
+            } else {
+                map = map.set_item(key, value);
+                if (old != forward.end()) {
+                    inverse.erase(old->second);
+                    old->second = value;
+                } else {
+                    forward.emplace(key, value);
+                }
+                inverse[value] = key;
+            }
+            break;
+        }
+        case 2: {
+            const auto old = forward.find(key);
+            const auto [candidate, removed, removed_value] = map.try_remove_key(key);
+            CHECK_EQ(old != forward.end(), removed);
+            if (old != forward.end()) {
+                CHECK_EQ(std::optional<int>(old->second), removed_value);
+                inverse.erase(old->second);
+                forward.erase(old);
+                map = candidate;
+            } else {
+                CHECK(candidate.shares_roots_with(map));
+            }
+            break;
+        }
+        default: {
+            const auto old = inverse.find(value);
+            const auto [candidate, removed, removed_key] = map.try_remove_value(value);
+            CHECK_EQ(old != inverse.end(), removed);
+            if (old != inverse.end()) {
+                CHECK_EQ(std::optional<int>(old->second), removed_key);
+                forward.erase(old->second);
+                inverse.erase(old);
+                map = candidate;
+            } else {
+                CHECK(candidate.shares_roots_with(map));
+            }
+            break;
+        }
+        }
+
+        CHECK_EQ(forward.size(), map.count());
+        CHECK(map.validate_structure());
+        for (const auto& [expected_key, expected_value] : forward) {
+            CHECK_EQ(expected_value, map.at(expected_key));
+            CHECK_EQ(expected_key, *map.try_get_key(expected_value));
+        }
+        if (step % 127 == 0) {
+            snapshots.push_back(map);
+        }
+    }
+
+    for (const auto& snapshot : snapshots) {
+        CHECK(snapshot.validate_structure());
+    }
+}
+
+TEST(PersistentBiMap_PolicyFailureLeavesPublishedSnapshotUnchanged) {
+    using map_type = persistent_bi_map<
+        int,
+        int,
+        std::hash<int>,
+        std::equal_to<int>,
+        controlled_throw_hash,
+        std::equal_to<int>>;
+    const auto should_throw = std::make_shared<bool>(false);
+    const auto source = map_type::create(
+        std::hash<int>{},
+        std::equal_to<int>{},
+        controlled_throw_hash{should_throw},
+        std::equal_to<int>{})
+        .add(1, 10);
+    const auto root_identity = source;
+
+    *should_throw = true;
+    CHECK_THROWS_AS(source.add(2, 20), std::runtime_error);
+    *should_throw = false;
+
+    CHECK(source.shares_roots_with(root_identity));
+    CHECK_EQ(std::size_t{1}, source.count());
+    CHECK_EQ(10, source.at(1));
+    CHECK(source.validate_structure());
 }
 
 TEST(PatriciaMap_CachedCountsAndNoOpAlgebraPreserveRoots) {

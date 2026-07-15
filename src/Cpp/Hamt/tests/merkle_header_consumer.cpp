@@ -40,6 +40,10 @@ int main()
     const auto set_published = std::move(set_edit).persist();
     const auto bag = persistent_hash_bag<std::int32_t>::create_range({1, 1, 2})
         .sum_with(persistent_hash_bag<std::int32_t>::create_range({2, 3}));
+    const auto bimap = persistent_bi_map<std::int32_t, std::string>::empty()
+        .add(1, "one")
+        .set_item(1, "uno");
+    const auto inverse_bimap = bimap.inverse();
 
     const auto policy = merkle_search_tree_policy<
         std::int32_t,
@@ -72,6 +76,9 @@ int main()
             && bag.total_count() == 5
             && bag.count_of(1) == 2
             && bag.count_of(2) == 2
+            && bimap.at(1) == "uno"
+            && inverse_bimap.at("uno") == 1
+            && inverse_bimap.inverse().shares_roots_with(bimap)
             && populated.at(42) == std::optional<std::string>{"forty-two"}
             && statistics.count == 1
             && pack.block_count() == 1

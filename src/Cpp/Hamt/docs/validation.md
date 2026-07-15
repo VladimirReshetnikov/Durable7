@@ -53,6 +53,13 @@ From `src/Cpp/Hamt`:
 Use the first command when you only need a compile gate. Use the `-RunTests` forms before committing
 behavior changes, public API changes, policy-object changes, or documentation that claims the tests pass.
 
+The current serialized MSVC Debug and Release gates each pass 67/67 CHAMP/Patricia tests, 20/20
+Merkle tests, and the copied installed-header consumer with `/W4 /WX`. The aggregate consumer
+constructs, replaces, inverts, and round-trips a `persistent_bi_map`; the bimap tests account for
+six of the 67 CHAMP/Patricia groups. The corresponding single-process GCC and Clang strict-warning
+lanes also compile and pass all 67/67 CHAMP/Patricia tests with `-Werror`. Benchmarks are not part
+of this evidence and remain postponed until an isolated run.
+
 ## Compiler Matrix Policy
 
 For changes to C++ HAMT public headers, tests, examples, or behavior documentation, compile and run
@@ -135,6 +142,10 @@ The suite covers:
   expanded/distinct/entry enumeration, point-edit identities and validation, overflow atomicity,
   maximum/minimum/saturating/additive algebra, receiver-policy normalization, and representative
   precedence;
+- persistent bimaps: two-domain strict conflicts and precedence, independent stateful policies,
+  stored representatives, non-displacing replacement, symmetric removal, clear/enumeration,
+  shared-root inversion, a 2,000-operation collision-heavy two-map model, retained snapshots,
+  structural validation, and policy-failure atomicity;
 - move-only CHAMP map/set edit sessions: empty and retained-value adoption, clean/no-op root and
   policy preservation, stored representatives, point edits and clear, source isolation, active
   lookup and materialization, and rvalue-only one-way publication;

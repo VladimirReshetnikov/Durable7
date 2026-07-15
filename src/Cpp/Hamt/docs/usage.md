@@ -14,6 +14,7 @@ the specification.
 ```cpp
 #include <Tools/DataStructures/Hamt/persistent_hash_map.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_bag.hpp>
+#include <Tools/DataStructures/Hamt/persistent_bi_map.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_set.hpp>
 #include <Tools/DataStructures/Hamt/persistent_int_map.hpp>
 #include <Tools/DataStructures/Hamt/merkle_search_tree.hpp>
@@ -146,6 +147,30 @@ auto frequencies = builder.to_immutable();
 ```
 
 The builder remains usable after freezing; each snapshot is detached from later staging changes.
+
+## Persistent Bidirectional Map
+
+Use `persistent_bi_map` when keys and values must each be unique under independently configured
+policies:
+
+```cpp
+using bimap_type = hamt::persistent_bi_map<int, std::string>;
+
+auto names = bimap_type::empty()
+    .add(1, "one")
+    .add(2, "two");
+auto renamed = names.set_item(2, "second");
+auto by_name = renamed.inverse();
+
+int two = by_name.at("second");
+```
+
+`add` throws `bimap_conflict_error` if either class is occupied. `try_add` returns the candidate,
+an added flag, and `bimap_conflict::key` or `bimap_conflict::value`; key conflict has precedence
+when both apply. `set_item` never evicts a different key that owns the requested value. Forward and
+inverse lookup pointers are snapshot-bound, and both removal directions return the opposite stored
+representative in `std::optional`. Inversion copies only two small CHAMP facades, so it is O(1) and
+shares both roots; no enumeration or pair rebuilding occurs.
 
 ## Custom Hash And Equality
 
