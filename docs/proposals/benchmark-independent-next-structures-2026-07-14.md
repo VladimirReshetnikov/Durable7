@@ -546,14 +546,65 @@ enumeration or silently truncate `TotalCount`.
 
 ### Proposed Public Surface
 
-| Area | Members |
-| --- | --- |
-| Construction | `Empty`, `Create(comparer)`, `CreateRange(items, comparer)` |
-| State | `DistinctCount`, `TotalCount`, `IsEmpty`, `Comparer` |
-| Lookup | `Contains`, `CountOf`, `TryGetValue` for the stored representative |
-| Update | `Add`, `AddCopies`, `Remove`, `RemoveCopies`, `RemoveAll`, `Clear` |
-| Algebra | `Union`, `Intersect`, `Except`, `Sum` |
-| Enumeration | expanded enumerator, `DistinctItems`, `Entries`, `ToArray` with explicit overflow behavior |
+The C# reference surface is exact rather than illustrative:
+
+```csharp
+public sealed class PersistentHashBag<T> : IEnumerable<T>
+{
+    public static PersistentHashBag<T> Empty { get; }
+
+    public static PersistentHashBag<T> Create(
+        IEqualityComparer<T>? comparer = null);
+
+    public static PersistentHashBag<T> CreateRange(
+        IEnumerable<T> items,
+        IEqualityComparer<T>? comparer = null);
+
+    public int DistinctCount { get; }
+    public long TotalCount { get; }
+    public bool IsEmpty { get; }
+    public IEqualityComparer<T> Comparer { get; }
+
+    public bool Contains(T item);
+    public int CountOf(T item);
+    public bool TryGetValue(T equalValue, out T actualValue);
+
+    public PersistentHashBag<T> Add(T item);
+    public PersistentHashBag<T> AddCopies(T item, int count);
+    public PersistentHashBag<T> Remove(T item);
+    public PersistentHashBag<T> RemoveCopies(T item, int count);
+    public PersistentHashBag<T> RemoveAll(T item);
+    public PersistentHashBag<T> Clear();
+
+    public PersistentHashBag<T> Union(PersistentHashBag<T> other);
+    public PersistentHashBag<T> Intersect(PersistentHashBag<T> other);
+    public PersistentHashBag<T> Except(PersistentHashBag<T> other);
+    public PersistentHashBag<T> Sum(PersistentHashBag<T> other);
+
+    public IEnumerable<T> DistinctItems { get; }
+    public IEnumerable<KeyValuePair<T, int>> Entries { get; }
+
+    public T[] ToArray();
+    public Enumerator GetEnumerator();
+}
+```
+
+The type deliberately exposes neither `Count` nor `IReadOnlyCollection<T>`. `Entries` uses the
+standard `KeyValuePair<T, int>` representation and follows the same distinct trie order as
+`DistinctItems`. Interface enumeration remains available through `IEnumerable<T>` and the
+non-generic `IEnumerable` base interface.
+
+The nested public `Enumerator` is a mutable struct that wraps the map's struct enumerator and keeps
+the current representative plus its unexpanded repetition count. Obtaining and draining it through
+the concrete surface allocates nothing; copying it creates an independently advancing value. Its
+`Current` is `default` before the first successful `MoveNext` and after exhaustion, `Dispose` is a
+no-op, and `IEnumerator.Reset` throws `NotSupportedException`. Enumeration through an interface may
+box the struct. `DistinctItems` is the map's key view and `Entries` is the map's pair view, so each
+view is version-bound and immutable.
+
+The debugger proxy exposes a distinct-entry array, never expanded enumeration. Debugger inspection
+therefore remains bounded by `DistinctCount` even when one multiplicity or `TotalCount` is very
+large.
 
 ### Multiplicity And Overflow Rules
 
@@ -576,6 +627,25 @@ multiplicity is at most `int.MaxValue`, so the maximum representable total is
 `(int.MaxValue * (long)int.MaxValue) < long.MaxValue`. Keep internal total arithmetic checked as a
 defensive invariant guard, but do not advertise an unreachable public total-overflow case.
 
+`AddCopies` and `RemoveCopies` validate a negative `count` before hashing or equality callbacks.
+They return the receiver for zero without hashing or invoking equality. Positive `AddCopies` uses
+the map's one-descent persistent `AddOrUpdate`; positive `RemoveCopies` may perform a lookup followed
+by one changed map update because the map combinator cannot delete an entry. This is two bounded
+searches but only one rebuilt path and retains the stated O(w + c) bound. `RemoveAll` uses the map's
+single-descent `TryRemove` and obtains the removed multiplicity from that operation.
+
+`ToArray` returns expanded enumeration in exactly the bag enumerator's order. Before allocating, it
+throws `OverflowException` when `TotalCount > Array.MaxLength`; checking only `int.MaxValue` is not
+sufficient because the CLR's maximum single-dimensional array length is lower. An empty bag returns
+an empty array. No partially populated array is observable if enumeration unexpectedly fails.
+
+`CreateRange` rejects a null source before enumeration. Its internal bulk combine validates its
+update delegate before hashing, hashes each source item once, scans one full-hash bucket, invokes the
+update delegate exactly once only for an equivalent stored key, retains the first key
+representative, retains an equal stored value representative, and leaves builder state unchanged if
+hashing, key equality, count increment, or value equality throws. Freezing owns all published arrays;
+later builder changes cannot mutate an earlier immutable snapshot.
+
 ### Algebra
 
 Use conventional multiset operations and name the additive operation separately:
@@ -596,6 +666,22 @@ representative encountered in the map's stable-but-unspecified enumeration order
 normalized class. This rule prevents algebra from silently using the argument's equality policy.
 It also means structural lockstep algebra is available only when the implementations explicitly
 prove policy compatibility; normalization otherwise takes element-wise distinct-entry work.
+
+This normalization is semantically eager: after null validation, a comparer-mismatched argument is
+fully normalized before operation-specific empty or identity short-cuts. Consequently, comparer,
+hash, equality, or checked-collapse failures during normalization remain observable even for an
+intersection with an empty receiver or another case whose mathematical answer could be known
+without examining the argument. Reference-identical comparer objects skip normalization because
+each input already has one entry per receiver equivalence class.
+
+All four operations are failure-atomic because they build only immutable intermediate versions.
+`Union` and `Sum` introduce the normalized argument representative only for a class absent from the
+receiver; every surviving receiver class keeps the receiver representative. `Intersect` and
+`Except` never introduce an argument representative. `Sum` checks every per-class addition before
+publishing that changed version. If the complete logical result equals the receiver, including its
+multiplicities and representatives, the exact receiver instance is returned. Every empty result
+retains the receiver comparer object and canonicalizes only when that object is
+`EqualityComparer<T>.Default` by reference.
 
 ### Complexity
 
@@ -627,6 +713,12 @@ Cover:
 - no-op identity and retained versions;
 - comparer and input-enumerator exceptions; and
 - randomized command histories with invariant validation.
+
+Internal invariant diagnostics must first validate canonical CHAMP routing and ownership sealing,
+then verify that every stored multiplicity is positive and that their checked sum equals
+`TotalCount`. API-shape tests lock the absence of `Count` and `IReadOnlyCollection<T>`; enumerator
+tests lock default, before-first, active, copied, exhausted, interface, and reset behavior; debugger
+tests lock distinct rather than expanded projection.
 
 No benchmark is an exit criterion.
 

@@ -1634,6 +1634,59 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
             _entries.Add(new Entry(hash, key, value));
         }
 
+        /// <summary>
+        /// Adds a value for a missing key or replaces an existing value computed from the stored
+        /// value, retaining the first equivalent key and an equal stored value representative.
+        /// </summary>
+        /// <param name="key">The key to add or update.</param>
+        /// <param name="addValue">The value to store when no equivalent key exists.</param>
+        /// <param name="updateFactory">
+        /// The function that computes a candidate replacement from the stored value.
+        /// </param>
+        /// <returns>
+        /// The value stored after the operation. When the candidate replacement compares equal to
+        /// the existing value, the existing value representative is returned.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="updateFactory"/> is <see langword="null"/>.
+        /// </exception>
+        /// <remarks>
+        /// The delegate is validated before hashing. The key is hashed once, one full-hash bucket is
+        /// scanned, and <paramref name="updateFactory"/> is invoked exactly once only on a hit. A
+        /// delegate or equality failure occurs before builder state is changed.
+        /// </remarks>
+        internal TValue AddOrUpdate(TKey key, TValue addValue, Func<TValue, TValue> updateFactory)
+        {
+            ArgumentNullException.ThrowIfNull(updateFactory);
+
+            var hash = unchecked((uint)_comparer.GetHashCode(key!));
+            if (_hashBuckets.TryGetValue(hash, out var bucket))
+            {
+                foreach (var index in bucket)
+                {
+                    var entry = _entries[index];
+                    if (!_comparer.Equals(entry.Key, key))
+                        continue;
+
+                    var candidate = updateFactory(entry.Value);
+                    if (ValuesEqual(entry.Value, candidate))
+                        return entry.Value;
+
+                    _entries[index] = new Entry(hash, entry.Key, candidate);
+                    return candidate;
+                }
+            }
+            else
+            {
+                bucket = [];
+                _hashBuckets.Add(hash, bucket);
+            }
+
+            bucket.Add(_entries.Count);
+            _entries.Add(new Entry(hash, key, addValue));
+            return addValue;
+        }
+
         internal PersistentHashMap<TKey, TValue> ToImmutable()
         {
             if (_entries.Count == 0)

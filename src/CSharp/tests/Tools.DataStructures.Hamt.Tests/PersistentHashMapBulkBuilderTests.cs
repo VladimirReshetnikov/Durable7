@@ -102,6 +102,122 @@ public sealed class PersistentHashMapBulkBuilderTests
         Assert.Equal(persistent.ToArray(), built.ToArray());
     }
 
+    /// <summary>Verifies the combining operation selects one path and retains representatives.</summary>
+    [Fact]
+    public void AddOrUpdate_SelectsExactlyOnePathAndRetainsRepresentatives()
+    {
+        var comparer = new CountingStringComparer();
+        var storedKey = new string(['A', 'l', 'p', 'h', 'a']);
+        var storedValue = new EquatableReference("value");
+        var equalCandidate = new EquatableReference("value");
+        var builder = PersistentHashMap<string, EquatableReference>.CreateBulkBuilder(comparer);
+        var calls = 0;
+
+        var added = builder.AddOrUpdate(
+            storedKey,
+            storedValue,
+            _ =>
+            {
+                calls++;
+                return equalCandidate;
+            });
+        var hashesAfterMiss = comparer.HashCalls;
+        var updated = builder.AddOrUpdate(
+            "ALPHA",
+            new EquatableReference("unused"),
+            value =>
+            {
+                calls++;
+                Assert.Same(storedValue, value);
+                return equalCandidate;
+            });
+
+        var map = builder.ToImmutable();
+        Assert.Same(storedValue, added);
+        Assert.Same(storedValue, updated);
+        Assert.Equal(1, calls);
+        Assert.Equal(hashesAfterMiss + 1, comparer.HashCalls);
+        Assert.True(map.TryGetKey("alpha", out var actualKey));
+        Assert.Same(storedKey, actualKey);
+        Assert.Same(storedValue, map["alpha"]);
+    }
+
+    /// <summary>Verifies combining scans only the matching full-hash bucket across branch shapes.</summary>
+    [Fact]
+    public void AddOrUpdate_AggregatesCollisionAndDeepPrefixEntries()
+    {
+        var comparer = new ExplicitHashComparer();
+        var collision1 = new ExplicitHashKey(1, 0);
+        var collision2 = new ExplicitHashKey(2, 0);
+        var deep = new ExplicitHashKey(3, 1 << 30);
+        var builder = PersistentHashMap<ExplicitHashKey, int>.CreateBulkBuilder(comparer);
+
+        Assert.Equal(1, builder.AddOrUpdate(collision1, 1, static value => checked(value + 1)));
+        Assert.Equal(1, builder.AddOrUpdate(collision2, 1, static value => checked(value + 1)));
+        Assert.Equal(1, builder.AddOrUpdate(deep, 1, static value => checked(value + 1)));
+        Assert.Equal(2, builder.AddOrUpdate(new ExplicitHashKey(1, 0), 99, static value => checked(value + 1)));
+        Assert.Equal(2, builder.AddOrUpdate(new ExplicitHashKey(3, 1 << 30), 99, static value => checked(value + 1)));
+
+        var map = builder.ToImmutable();
+        Assert.Equal(3, map.Count);
+        Assert.Equal(2, map[collision1]);
+        Assert.Equal(1, map[collision2]);
+        Assert.Equal(2, map[deep]);
+        map.ValidateCanonicalityForDiagnostics();
+    }
+
+    /// <summary>Verifies delegate validation and callback failures cannot partially update a builder.</summary>
+    [Fact]
+    public void AddOrUpdate_CallbackFailuresLeaveBuilderUnchanged()
+    {
+        var comparer = new CountingStringComparer();
+        var builder = PersistentHashMap<string, ThrowingEquatableReference>.CreateBulkBuilder(comparer);
+        var stored = new ThrowingEquatableReference("stored");
+        builder.AddOrUpdate("alpha", stored, static value => value);
+        var before = builder.ToImmutable();
+        var hashesBeforeValidation = comparer.HashCalls;
+
+        Assert.Throws<ArgumentNullException>(() => builder.AddOrUpdate("alpha", stored, null!));
+        Assert.Equal(hashesBeforeValidation, comparer.HashCalls);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            builder.AddOrUpdate("ALPHA", stored, static _ => throw new InvalidOperationException("factory")));
+        Assert.Same(stored, builder.ToImmutable()["alpha"]);
+
+        ThrowingEquatableReference.ThrowOnEquals = true;
+        try
+        {
+            Assert.Throws<InvalidOperationException>(() =>
+                builder.AddOrUpdate("ALPHA", stored, static _ => new ThrowingEquatableReference("candidate")));
+        }
+        finally
+        {
+            ThrowingEquatableReference.ThrowOnEquals = false;
+        }
+
+        var after = builder.ToImmutable();
+        Assert.Single(after);
+        Assert.Same(stored, after["alpha"]);
+        Assert.Same(stored, before["alpha"]);
+    }
+
+    /// <summary>Verifies frozen maps stay detached after later combining updates.</summary>
+    [Fact]
+    public void AddOrUpdate_FrozenSnapshotsRemainDetached()
+    {
+        var builder = PersistentHashMap<int, int>.CreateBulkBuilder();
+        builder.AddOrUpdate(1, 1, static value => checked(value + 1));
+        var first = builder.ToImmutable();
+        builder.AddOrUpdate(1, 99, static value => checked(value + 1));
+        builder.AddOrUpdate(2, 5, static value => checked(value + 1));
+        var second = builder.ToImmutable();
+
+        Assert.Equal(1, first[1]);
+        Assert.False(first.ContainsKey(2));
+        Assert.Equal(2, second[1]);
+        Assert.Equal(5, second[2]);
+    }
+
     private readonly record struct ExplicitHashKey(int Id, int Hash);
 
     private sealed class ExplicitHashComparer : IEqualityComparer<ExplicitHashKey>
@@ -109,5 +225,43 @@ public sealed class PersistentHashMapBulkBuilderTests
         public bool Equals(ExplicitHashKey x, ExplicitHashKey y) => x.Id == y.Id;
 
         public int GetHashCode(ExplicitHashKey obj) => obj.Hash;
+    }
+
+    private sealed class CountingStringComparer : IEqualityComparer<string>
+    {
+        public int HashCalls { get; private set; }
+
+        public bool Equals(string? x, string? y) => StringComparer.OrdinalIgnoreCase.Equals(x, y);
+
+        public int GetHashCode(string obj)
+        {
+            HashCalls++;
+            return StringComparer.OrdinalIgnoreCase.GetHashCode(obj);
+        }
+    }
+
+    private sealed class EquatableReference(string value)
+    {
+        public string Value { get; } = value;
+
+        public override bool Equals(object? obj) => obj is EquatableReference other && Value == other.Value;
+
+        public override int GetHashCode() => Value.GetHashCode(StringComparison.Ordinal);
+    }
+
+    private sealed class ThrowingEquatableReference(string value)
+    {
+        public static bool ThrowOnEquals { get; set; }
+
+        public string Value { get; } = value;
+
+        public override bool Equals(object? obj)
+        {
+            if (ThrowOnEquals)
+                throw new InvalidOperationException("value equality");
+            return obj is ThrowingEquatableReference other && Value == other.Value;
+        }
+
+        public override int GetHashCode() => Value.GetHashCode(StringComparison.Ordinal);
     }
 }
