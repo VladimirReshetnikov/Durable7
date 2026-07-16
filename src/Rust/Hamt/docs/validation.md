@@ -35,6 +35,9 @@ and the hash bag have focused integration suites in `Hamt/tests/map_factory_upda
 - hash-multimap independent hash policies, first representatives, distinct key/pair counts,
   duplicate root sharing, empty-group contraction, whole-key removal, branching histories, and
   recursive invariants;
+- relation many-to-many adjacency, global representatives, duplicate two-index root sharing,
+  O(1) inverse root swapping, symmetric pair/whole-domain removal, retained branches, and mutually
+  inverse invariants;
 - same-hash collision insertion, lookup, and removal;
 - CHAMP inline-payload/child-run invariants, independent insertion histories, and typed diff,
   including exact callback counters proving same-policy equality/diff rehash no keys and prune a

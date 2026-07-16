@@ -14,6 +14,7 @@ mod merkle_encoding;
 mod merkle_persistence;
 mod merkle_search_tree;
 mod patricia;
+mod relation;
 pub use hash_bag::{BagIter, HashBagEntry, HashBagError, PersistentHashBag};
 pub use hash_multimap::{
     HashMultimapInvariantError, HashMultimapIter, HashMultimapStatistics, PersistentHashMultimap,
@@ -37,6 +38,7 @@ pub use merkle_search_tree::{
     MerkleTreeIter,
 };
 pub use patricia::{PersistentIntMap, PersistentIntSet, PersistentLongMap, PersistentLongSet};
+pub use relation::{PersistentRelation, RelationInvariantError, RelationStatistics};
 
 const BITS_PER_LEVEL: u32 = 5;
 const BRANCH_MASK: u32 = 0x1f;

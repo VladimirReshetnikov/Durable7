@@ -21,6 +21,7 @@ Primary entry points:
 - `PersistentHashBag<T, S = RandomState>`, `HashBagEntry<T>`, `BagIter<T>`, and `HashBagError`;
 - `PersistentHashMultimap<K, V, SK = RandomState, SV = RandomState>`, its flattened iterator, and
   invariant result types;
+- `PersistentRelation<L, R, SL = RandomState, SR = RandomState>` and its invariant result types;
 - `PersistentIntMap<V>` / `PersistentIntSet` and `PersistentLongMap<V>` / `PersistentLongSet`.
 - `MerkleSearchTree<K, V>`, `MerkleSearchTreePolicy<K, V>`, `MerkleEntry<K, V>`, and
   `MerkleMapDifference<K, V>`;
@@ -140,6 +141,19 @@ value removes the outer key in the same successor. `get_key` and `get_value` rec
 representatives, `groups` exposes immutable adjacency sets, and `iter` flattens them in stable-for-
 one-version nested CHAMP order. `try_remove_key` returns the stored key and persistent adjacency set.
 The type has no multiplicity, algebra, transient, or mutable builder.
+
+## Persistent relation
+
+`PersistentRelation<L, R, SL, SR>` maintains mutually inverse persistent multimaps. Addition first
+normalizes through existing outer representatives so one first representative is reused globally
+across all adjacency groups. Pair removal contracts both indexes; `try_remove_left` and
+`try_remove_right` remove all incident pairs and return the stored representative plus immutable
+adjacency set. Each whole-domain removal costs O(d log n) for degree d.
+
+`inverse` clones and swaps the two existing root pairs in O(1) and performs no traversal. Rust
+facades are ordinary values, so the port does not build a cyclic identity cache: applying `inverse`
+twice yields a facade sharing both original roots, which is the ownership-native counterpart of the
+C# inverse-identity contract. The honest space cost remains two indexes.
 
 ## One-way edit sessions
 
