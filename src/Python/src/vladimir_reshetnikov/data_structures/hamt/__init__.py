@@ -104,6 +104,7 @@ from .persistent_patricia import (
     PersistentLongMap,
     PersistentLongSet,
 )
+from .persistent_relation import PersistentRelation, RelationEntry
 
 __all__ = [
     "INT32_MERKLE_CODEC",
@@ -121,10 +122,10 @@ __all__ = [
     "DuplicateKeyError",
     "HamtEntry",
     "HashBagEntry",
+    "HashMapBulkBuilder",
     "HashMultimapEntry",
     "HashMultimapKeyResult",
     "HashMultimapValuesResult",
-    "HashMapBulkBuilder",
     "HashPolicy",
     "InMemoryMerkleBlockStore",
     "Int32MerkleCodec",
@@ -168,13 +169,15 @@ __all__ = [
     "NullableUtf8MerkleCodec",
     "PersistentBiMap",
     "PersistentHashBag",
-    "PersistentHashMultimap",
     "PersistentHashMap",
+    "PersistentHashMultimap",
     "PersistentHashSet",
     "PersistentIntMap",
     "PersistentIntSet",
     "PersistentLongMap",
     "PersistentLongSet",
+    "PersistentRelation",
+    "RelationEntry",
     "Rfc4122UuidMerkleCodec",
     "SetRemoveResult",
     "TransientConsumedError",
