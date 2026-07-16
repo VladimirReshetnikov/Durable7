@@ -16,6 +16,10 @@ for immutable unordered collections backed by a hash-array mapped trie:
   class retains its first representative and a positive `int32_t` multiplicity, while the expanded
   total is a checked `int64_t`. The bag exposes expanded, distinct, and entry iteration plus
   receiver-policy union/intersection/difference/sum.
+- `tds_hamt_multimap`, a persistent set-valued multimap with independent key/value policies,
+  nonempty groups, checked pair counts, and receiver-policy union/intersection/difference.
+- `tds_hamt_relation`, a persistent bidirectional relation maintaining exact forward and inverse
+  multimaps under failure-atomic pair edits.
 - `tds_hamt_map_transient` / `tds_hamt_set_transient`, explicit one-way edit-session handles over
   the persistent CHAMP values. Adoption and terminal publication are O(1) handle operations; point
   edits deliberately reuse the persistent path-copy engine rather than claiming owner-token
@@ -69,16 +73,20 @@ callbacks and callback-owned contexts remain responsible for their own synchroni
 
 - `include/Tools/DataStructures/Hamt/hamt.h` contains the public C API.
 - `include/Tools/DataStructures/Hamt/persistent_hash_bag.h` contains the persistent hash-bag API.
+- `include/Tools/DataStructures/Hamt/persistent_hash_multimap.h` and `persistent_relation.h`
+  contain the set-valued multimap and bidirectional relation APIs.
 - `include/Tools/DataStructures/Hamt/patricia.h` contains the integer Patricia map/set API.
 - `include/Tools/DataStructures/Hamt/merkle_search_tree.h` contains the Merkle policy, codec, tree,
   traversal, diff, wire-block, store, persistence, proof, sync, merge, and validation API.
 - `src/hamt.c` contains the HAMT implementation.
 - `src/persistent_hash_bag.c` contains the map-backed hash-bag implementation.
+- `src/persistent_hash_multimap.c` and `src/persistent_relation.c` contain the derived multi-index
+  implementations.
 - `src/patricia.c` contains the shared 32-/64-bit Patricia implementation.
 - `src/merkle_search_tree.c` contains the canonical Merkle search tree implementation and CNG /
   OpenSSL SHA-256 backend.
 - `tests/` contains the [deterministic native test executables](tests/README.md).
-- `build.ps1` imports the MSVC toolchain through Scriptorium and compiles all four native test
+- `build.ps1` imports the MSVC toolchain through Scriptorium and compiles all five native test
   executables.
 - `docs/api-specification.md` documents the C API adaptation and complexity guarantees.
 - `docs/usage.md` provides practical policy, lifetime, update, iteration, and set-algebra examples.

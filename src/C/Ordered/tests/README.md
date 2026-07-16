@@ -4,7 +4,7 @@
 - Created (UTC): 2026-07-15T09:00:00Z
 - Repository HEAD: 2d75a79feb424f4476ec32c2d6e4f19263441bf3
 - Audience: Maintainers and reviewers of the C ordered-set port
-- Scope: `ordered_set_tests.c`
+- Scope: `ordered_set_tests.c` and `ordered_map_tests.c`
 
 `ordered_c_tests` is a deterministic native executable registered as `ordered_c.core`. It uses
 plain value arrays and a small comparer-aware ordered-list model; it does not call or include any
@@ -23,3 +23,8 @@ The scenario groups cover:
 
 The headless process helper suppresses interactive crash UI. CTest is fixed to one job by the
 workspace preset.
+
+`ordered_map_c_tests` is registered as `ordered_c.map`. Its deterministic scenario covers explicit
+insertion order, keyed and positional reads, value replacement with snapshot isolation, component
+root sharing, movement, stable sorting by payload, range rebuilding, duplicate `try_add`, removal,
+and validation after every multi-index edit.

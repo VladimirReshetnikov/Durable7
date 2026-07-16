@@ -26,6 +26,18 @@ item representative and one library-owned positive `int32_t` multiplicity per eq
 plus a checked nonnegative `int64_t` expanded total. It intentionally has no public builder or
 transient surface: construction and every edit publish ordinary persistent versions.
 
+`tds_hamt_multimap` is an immutable set-valued multimap. A key maps to one nonempty persistent set
+of distinct values under an independent value policy; empty groups are never stored. It tracks
+distinct-key count and a checked `int64_t` pair count, retains the first representative of every key
+and value class, and supports pair/group edits plus receiver-policy union, intersection, and
+difference. Group sets are reference-counted values stored by the outer CHAMP, so untouched groups
+and outer paths share across versions.
+
+`tds_hamt_relation` maintains the same pair set in forward and inverse multimaps. Pair insertion and
+removal build both successors before publishing either, so allocation failure cannot expose a
+one-sided relation. Forward and reverse lookup use their respective policies; validation checks
+counts, both component invariants, and exact inverse membership.
+
 `tds_hamt_map_transient` and `tds_hamt_set_transient` are one-way, single-owner edit-session
 surfaces over those persistent values. They preserve the C# transient's lifecycle and collection
 semantics in C ownership terms, but intentionally delegate changed point edits to the established

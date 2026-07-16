@@ -568,7 +568,7 @@ static ft_status ft_rrb_concat_nodes(
     }
 
     ft_rrb_nodes boundary;
-    ft_rrb_node* children[FT_RRB_BRANCH_FACTOR * 2];
+    ft_rrb_node* children[FT_RRB_BRANCH_FACTOR * 2] = { NULL };
     size_t child_count = 0;
     ft_status status = FT_STATUS_OK;
     if (left->height > right->height) {

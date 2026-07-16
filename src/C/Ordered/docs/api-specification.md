@@ -1,10 +1,10 @@
-# C Persistent Ordered Set API Specification
+# C Persistent Ordered Collections API Specification
 
 - Status: Normative current API and behavior specification
 - Created (UTC): 2026-07-15T09:00:00Z
 - Repository HEAD: 2d75a79feb424f4476ec32c2d6e4f19263441bf3
 - Audience: C consumers, maintainers, reviewers, and sibling-port authors
-- Scope: `tds_ordered_set` in `tools/data_structures/ordered/ordered_set.h`
+- Scope: `tds_ordered_set` and `tds_ordered_map`
 
 ## Ownership and policy
 
@@ -104,3 +104,29 @@ argument input count.
 
 These are asymptotic capability contracts, not benchmark claims. No amortization crosses two
 persistent branches that independently relabel.
+
+## Ordered map
+
+`tds_ordered_map` is the payload-bearing sibling declared in
+`tools/data_structures/ordered/ordered_map.h`. It owns an embedded ordered set of keys and a CHAMP
+map from those keys to values under one heap-owned policy context. Its result, callback-lifetime,
+non-aliasing, snapshot-concurrency, and first-key-representative rules match the ordered set.
+
+Strict `add`, `add_first`, and positional `insert` reject an existing receiver-equivalent key;
+`try_add` instead publishes a structural clone and reports `added == false`. `set` appends an absent
+key, but an existing key retains both its first representative and its position. A semantically
+equal value is a complete no-op clone; a changed value shares the entire key-order root and changes
+only the CHAMP path. Reordering, reversal, and stable sorting share the value root. Removal edits
+both indexes, while a range rebuilds the value index for precisely its selected keys.
+
+Reads and visitors return borrowed key/value pointers. `entry_at`, `front`, and `back` use explicit
+order; keyed lookup and containment use the receiver's hash/equality policy. Stable sort receives
+both key and value for each comparison and does not install a maintained ordering policy.
+`tds_ordered_map_debug_validate` checks each component's native invariant, equal counts, and both
+directions of cross-index membership.
+
+Let `w <= 7` be CHAMP depth and `c` an equal-full-hash collision scan. Keyed lookup is O(w+c), an
+indexed entry read is O(log n + w+c), ordinary insertion/removal/movement is O(log n + w+c), and
+value-only replacement is O(w+c). Range extraction is O(log n + k(w+c)) for `k` retained entries;
+stable sorting is O(n log n) comparisons plus the ordered-set rebuild cost. These are capability
+contracts rather than benchmark results.

@@ -1,4 +1,4 @@
-# C Persistent Ordered Set
+# C Persistent Ordered Collections
 
 - Status: Active neutral collection workspace
 - Created (UTC): 2026-07-15T09:00:00Z
@@ -6,9 +6,9 @@
 - Audience: C consumers, maintainers, reviewers, and sibling-port authors
 - Scope: `src/C/Ordered`
 
-This workspace owns the C17 port of the neutral `PersistentOrderedSet` family. It combines the
-public C CHAMP map with the public C FingerTree deque and has no source, link, API, test-oracle, or
-semantic dependency on a Tungsten workspace.
+This workspace owns the C17 port of the neutral persistent ordered-set and ordered-map family. It
+combines the public C CHAMP map with the public C FingerTree deque and has no source, link, API,
+test-oracle, or semantic dependency on a Tungsten workspace.
 
 ## Surface
 
@@ -25,6 +25,12 @@ semantic dependency on a Tungsten workspace.
 - receiver-policy subset, proper-subset, superset, proper-superset, overlap, and equality relations;
 - ordered visitation and two-way structural validation; and
 - diagnostics for unchanged order/index root reuse.
+
+`tds_ordered_map` adds payload-bearing entries while retaining the set's explicit key order. It
+supports strict and conditional positional insertion, value-only replacement, movement, keyed and
+positional removal, range/take/drop, reversal, stable entry sorting, and ordered visitation. Its
+ordered-set key index and CHAMP value index publish failure-atomically; reordering shares the value
+root, while replacing an existing value shares the complete order root.
 
 The representation uses one ref-counted representative cell per equality class. Both the CHAMP
 membership/stamp index and the sparse-stamped FingerTree entry retain that cell, so the first

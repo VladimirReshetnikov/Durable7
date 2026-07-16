@@ -38,6 +38,8 @@ included are:
 - `ft_priority_queue`, a generic persistent minimum-priority queue with FIFO tie-breaking for equal priorities;
 - `ft_interval_tree`, a generic closed-interval tree facade over caller-supplied endpoint policies;
 - `ft_interval_tree_i64`, a convenience closed-interval facade for signed 64-bit endpoints;
+- `ft_persistent_interval_map`, a unique closed-interval-to-payload map composing the augmented
+  interval tree with a complete-key sorted map for pruned overlap queries and exact lookup;
 - `ft_rrb_vector`, a type-erased 32-way relaxed radix-balanced vector with atomic structural
   sharing, checked prefix sizes, persistent range edits, and an append-only builder;
 - `ft_daba_lite`, a mutable six-cursor FIFO monoid aggregator with 64-slot blocks, worst-case
@@ -87,6 +89,8 @@ validation, benchmark entry points, warning policy, and generated-output locatio
   priority-search queue, owned-entry, and policy API.
 - `include/tools/data_structures/finger_tree/range_update_sequence.h` contains the independent persistent
   range-update sequence, algebra-policy, ownership, visitor, and diagnostic API.
+- `include/tools/data_structures/finger_tree/persistent_interval_map.h` contains the derived
+  payload-bearing interval-map API.
 - `include/tools/data_structures/finger_tree/rrb_vector.h` contains the separate RRB vector API.
 - `include/tools/data_structures/finger_tree/daba_lite.h` contains the separate mutable DABA Lite API.
 - `src/fingertree.c` contains the measured-tree implementation and its wrappers;
@@ -94,6 +98,7 @@ validation, benchmark entry points, warning policy, and generated-output locatio
   `src/canonical_sorted_set.c` contains the immutable zip-zip core and cryptographic policy implementation;
   `src/priority_search_queue.c` contains the persistent winner-cached AVL;
   `src/range_update_sequence.c` contains the lazy implicit-AVL range-update core;
+  `src/persistent_interval_map.c` contains the dual-index interval map;
   `src/rrb_vector.c` contains the independent RRB core and builder; and `src/daba_lite.c` contains
   the independent sliding-window aggregator.
 - `tests/` contains the [core and focused CTest executables](tests/README.md).
