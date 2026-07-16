@@ -1,5 +1,6 @@
 #include <Tools/DataStructures/Hamt/persistent_hash_map.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_bag.hpp>
+#include <Tools/DataStructures/Hamt/persistent_hash_multimap.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_set.hpp>
 #include <Tools/DataStructures/Hamt/persistent_int_map.hpp>
 #include <tools/data_structures/test_support/headless_test_process.h>
@@ -32,6 +33,7 @@ using tools::data_structures::hamt::persistent_hamt_node_kind;
 using tools::data_structures::hamt::map_difference_kind;
 using tools::data_structures::hamt::persistent_hash_bag;
 using tools::data_structures::hamt::persistent_hash_map;
+using tools::data_structures::hamt::persistent_hash_multimap;
 using tools::data_structures::hamt::persistent_int_map;
 using tools::data_structures::hamt::persistent_int_set;
 using tools::data_structures::hamt::persistent_long_map;
@@ -2620,6 +2622,56 @@ TEST(PersistentHashBag_CheckedSumFailureLeavesBothOperandsUnchanged) {
     CHECK_EQ(right_root, right.debug_root_identity());
     CHECK_EQ(std::numeric_limits<std::int32_t>::max(), left.count_of(1));
     CHECK_EQ(1, right.count_of(1));
+}
+
+TEST(PersistentHashMultimap_RetainsRepresentativesAndContractsGroups) {
+    using multimap_type = persistent_hash_multimap<
+        std::string,
+        std::string,
+        case_insensitive_hash,
+        case_insensitive_equal,
+        case_insensitive_hash,
+        case_insensitive_equal>;
+    const auto key = std::string{"Alpha"};
+    const auto value = std::string{"First"};
+    const auto source = multimap_type::create(
+        case_insensitive_hash{},
+        case_insensitive_equal{},
+        case_insensitive_hash{},
+        case_insensitive_equal{})
+        .add(key, value)
+        .add("ALPHA", "FIRST")
+        .add("alpha", "Second")
+        .add("Beta", "Third");
+
+    CHECK_EQ(std::size_t{2}, source.key_count());
+    CHECK_EQ(std::int64_t{3}, source.pair_count());
+    CHECK_EQ(key, *source.try_get_key("ALPHA"));
+    CHECK_EQ(value, *source.try_get_values("alpha")->try_get_value("FIRST"));
+    CHECK(source.debug_validate());
+
+    const auto reduced = source.remove("alpha", "first");
+    const auto contracted = reduced.remove("ALPHA", "second");
+    CHECK(!contracted.contains_key("alpha"));
+    CHECK_EQ(std::size_t{1}, contracted.key_count());
+    CHECK_EQ(std::int64_t{1}, contracted.pair_count());
+    CHECK(source.contains("Alpha", "First"));
+}
+
+TEST(PersistentHashMultimap_NoOpsPoliciesAndWholeKeyRemoval) {
+    using multimap_type = persistent_hash_multimap<int, int>;
+    const auto source = multimap_type::empty().add(1, 10).add(1, 20).add(2, 20);
+    CHECK(source.add(1, 10).shares_root_with(source));
+    CHECK(source.remove(1, 99).shares_root_with(source));
+    CHECK(source.remove_key(99).shares_root_with(source));
+
+    const auto branch = source.remove_key(1);
+    CHECK_EQ(std::size_t{1}, branch.key_count());
+    CHECK_EQ(std::int64_t{1}, branch.pair_count());
+    CHECK(branch.contains(2, 20));
+    CHECK_EQ(std::int64_t{3}, source.pair_count());
+    CHECK(branch.debug_validate());
+    CHECK(branch.clear().debug_validate());
 }
 
 TEST(PatriciaMap_CachedCountsAndNoOpAlgebraPreserveRoots) {
