@@ -24,6 +24,10 @@ structural-sharing semantics as the map. Both persistent CHAMP types expose a C#
 positive multiplicity per comparer equivalence class in `PersistentHashMap<T, int>` and tracks the
 expanded occurrence count separately as a `long`. It has no mutable builder or transient surface.
 
+`PersistentHashMultimap<TKey, TValue>` is the immutable set-valued multimap in the same project. It
+stores nonempty persistent value sets in a persistent map and applies independent equality policies
+to the key and value domains.
+
 `PersistentBiMap<TKey, TValue>` is the immutable bijection facade in the same project. It stores
 every pair in forward and inverse CHAMP maps, retains independent key and value comparers, and
 exposes an O(1) cached inverse facade without rebuilding either trie.
@@ -303,6 +307,68 @@ and throws `OverflowException` before allocating; checking only `int.MaxValue` w
 on the CLR. An empty bag returns `Array.Empty<T>()`. The debugger proxy exposes a distinct
 `KeyValuePair<T, int>[]`, never expanded enumeration, so debugger materialization is bounded by
 `DistinctCount` even when one multiplicity or the total is very large.
+
+## Persistent Hash Multimap Contract
+
+`PersistentHashMultimap<TKey, TValue>` is sealed, immutable, and implements
+`IEnumerable<KeyValuePair<TKey, TValue>>`. Its public surface intentionally distinguishes key-group
+count from total distinct-pair count:
+
+```csharp
+public sealed class PersistentHashMultimap<TKey, TValue>
+    : IEnumerable<KeyValuePair<TKey, TValue>>
+{
+    public static PersistentHashMultimap<TKey, TValue> Empty { get; }
+    public static PersistentHashMultimap<TKey, TValue> Create(
+        IEqualityComparer<TKey>? keyComparer = null,
+        IEqualityComparer<TValue>? valueComparer = null);
+    public static PersistentHashMultimap<TKey, TValue> CreateRange(
+        IEnumerable<KeyValuePair<TKey, TValue>> pairs,
+        IEqualityComparer<TKey>? keyComparer = null,
+        IEqualityComparer<TValue>? valueComparer = null);
+
+    public int KeyCount { get; }
+    public long PairCount { get; }
+    public bool IsEmpty { get; }
+    public IEqualityComparer<TKey> KeyComparer { get; }
+    public IEqualityComparer<TValue> ValueComparer { get; }
+    public IEnumerable<TKey> Keys { get; }
+    public IEnumerable<KeyValuePair<TKey, PersistentHashSet<TValue>>> Groups { get; }
+
+    public bool ContainsKey(TKey key);
+    public bool Contains(TKey key, TValue value);
+    public int CountValues(TKey key);
+    public PersistentHashSet<TValue> GetValues(TKey key);
+    public bool TryGetValues(TKey key, out PersistentHashSet<TValue> values);
+    public bool TryGetKey(TKey equalKey, out TKey actualKey);
+    public bool TryGetValue(TKey key, TValue equalValue, out TValue actualValue);
+    public PersistentHashMultimap<TKey, TValue> Add(TKey key, TValue value);
+    public bool TryAdd(TKey key, TValue value, out PersistentHashMultimap<TKey, TValue> result);
+    public PersistentHashMultimap<TKey, TValue> Remove(TKey key, TValue value);
+    public bool TryRemove(TKey key, TValue value, out PersistentHashMultimap<TKey, TValue> result);
+    public PersistentHashMultimap<TKey, TValue> RemoveKey(TKey key);
+    public bool TryRemoveKey(
+        TKey key,
+        out PersistentHashMultimap<TKey, TValue> result,
+        out PersistentHashSet<TValue> values);
+    public PersistentHashMultimap<TKey, TValue> Clear();
+    public KeyValuePair<TKey, TValue>[] ToArray();
+}
+```
+
+The multimap represents a mathematical set of comparer-distinct pairs: adding an existing pair is
+an identity-preserving no-op. `KeyCount` counts nonempty groups and `PairCount` counts distinct
+pairs as a `long`; there is no ambiguous `Count`. Each group uses the exact `ValueComparer` object,
+and empty groups are forbidden. Removing a group's last value therefore removes the outer key in
+the same successor. Absent `GetValues`/`TryGetValues` results are empty persistent sets retaining
+the value comparer.
+
+The first key representative survives all updates to its group, and the first value representative
+survives equivalent additions within that group. Enumeration visits outer groups in the CHAMP
+map's stable-for-one-version order and each group's values in its CHAMP set order. Neither level is
+insertion ordered or sorted. A point update copies only the affected outer and inner trie paths and
+shares all other nodes. The type deliberately exposes no bag multiplicity, duplicate-pair mode,
+algebra, transient, or mutable builder.
 
 ## Persistent Bimap Contract
 

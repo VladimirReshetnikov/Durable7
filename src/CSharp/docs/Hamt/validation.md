@@ -15,7 +15,7 @@ test, API, or complexity claims. For semantic contracts and usage examples, pair
 `DataStructures.sln` contains:
 
 - `src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj`, the public library containing
-  the CHAMP map/set/bag, Ctrie, Patricia, and Merkle families.
+  the CHAMP map/set/bag/multimap, Ctrie, Patricia, and Merkle families.
 - `tests/Tools.DataStructures.Hamt.Tests/Tools.DataStructures.Hamt.Tests.csproj`, the xUnit/CsCheck
   test project.
 
@@ -83,6 +83,16 @@ dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Te
     -- RunConfiguration.MaxCpuCount=1
 ```
 
+For a focused set-valued hash-multimap pass, use:
+
+```powershell
+dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+    --no-restore --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false `
+    --filter FullyQualifiedName~PersistentHashMultimapTests `
+    -- RunConfiguration.MaxCpuCount=1
+```
+
 ## Test Coverage
 
 `PersistentBiMapTests` provides the bimap shipment gate: strict two-domain uniqueness, independent
@@ -117,6 +127,9 @@ The suite covers:
   default/before-first/active/exhausted/interface/reset states, `Array.MaxLength` materialization
   guard, distinct debugger projection, and exact API shape excluding `Count` and
   `IReadOnlyCollection<T>`;
+- hash-multimap construction, independent comparer retention, first representatives in both
+  domains, distinct key/pair counts, duplicate identity, comparer-preserving absent groups,
+  last-value group contraction, whole-group removal, retained histories, and recursive invariants;
 - comparer-aware linear-model hash-bag histories with retained snapshots and invariant validation
   after commands under ordinary, nullable, and collision-heavy policies;
 - Axis 2 map/set contract oracles for comparer identity, stored representatives, nullable keys/items,
