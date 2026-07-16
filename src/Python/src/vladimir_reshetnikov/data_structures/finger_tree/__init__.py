@@ -42,6 +42,13 @@ from .measures import (
     create_measure_policy,
 )
 from .ordering import Comparator, default_comparator, reverse_comparator
+from .persistent_interval_map import (
+    DuplicateIntervalError,
+    IntervalMapAddResult,
+    IntervalMapEntry,
+    IntervalMapLookup,
+    PersistentIntervalMap,
+)
 from .priority_interval import (
     Interval,
     IntervalRemoveResult,
@@ -114,9 +121,13 @@ __all__ = [
     "DequePop",
     "DequeRangeSplit",
     "DequeSplit",
+    "DuplicateIntervalError",
     "FingerTree",
     "IntegerSumMeasure",
     "Interval",
+    "IntervalMapAddResult",
+    "IntervalMapEntry",
+    "IntervalMapLookup",
     "IntervalRemoveResult",
     "IntervalTree",
     "LineColumn",
@@ -138,6 +149,7 @@ __all__ = [
     "NumberSumMeasure",
     "OptionalValue",
     "PersistentDeque",
+    "PersistentIntervalMap",
     "PriorityDequeue",
     "PriorityEntry",
     "PriorityQueue",
