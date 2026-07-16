@@ -20,25 +20,29 @@ The checked-in launcher limits npm registry concurrency and native helper builds
 pinned to one worker and disables file-level and in-file test concurrency. Validation therefore
 never fans out into parallel test processes.
 
-The current complete serialized gate passes strict checking, 27/27 Vitest files and 187/187 tests,
+The 2026-07-16 complete serialized gate passes strict checking, 31/31 Vitest files and 211/211 tests,
 the clean declaration/ESM build, and `npm pack --dry-run`. This aggregate includes the seven-file
-range-update tranche and the strict bimap's eight focused tests. No benchmark is part of this gate;
-local performance runs remain postponed until they can execute in isolation.
+range-update tranche, the strict bimap's eight focused tests, and four focused 6/6 suites for the
+ordered map, set-valued hash multimap, payload interval map, and bidirectional relation. No
+benchmark is part of this gate; local performance runs remain postponed until they can execute in
+isolation.
 
 High-risk contracts receive direct executable coverage:
 
 - retained immutable snapshots, no-op identity, collision representatives, one-descent map factory
   updates, detached reusable bulk-builder freezes, hash-bag multiplicity/algebra models, strict
-  bimap two-domain conflicts, policy-driven replacement, cached inverse identity, retained models, all six
+  multimap contraction/counts, relation global representatives and inverse indexes, strict bimap
+  two-domain conflicts, policy-driven replacement, cached inverse identity, retained models, all six
   transient-set relations, transient consumption, and generated CHAMP/Patricia histories;
 - RRB 32-way boundary shapes, concatenation/slicing, retained versions, and structural validation;
 - range-update algebra laws, noncommutative ordered measures, lazy composition direction, exhaustive
   split/slice/range boundaries, edits through pending tags, branching array models, failpoint sweeps,
   structural sharing, deterministic operation counters, and undefined-safe snapshot iteration;
-- independent ordered-set representative/order invariants, exhaustive movement/range/relation
+- independent ordered-set and ordered-map representative/order invariants, exhaustive movement/range/relation
   boundaries, repeated sparse-label relabel histories, eager receiver-policy algebra failures,
   retained branches, and generated comparer-aware command models;
-- deterministic zip-zip ranks/topology, heap drains, priority-search winner caches, interval pruning,
+- deterministic zip-zip ranks/topology, heap drains, priority-search winner caches, interval-tree and
+  payload interval-map pruning,
   rope cursor branching, and 10,000-operation noncommutative DABA churn;
 - cross-language golden `MST2` blocks and roots, strict codecs, tamper/conflict rejection, verified
   save/load/import, iterative synchronization, canonical membership/absence/range proofs, and

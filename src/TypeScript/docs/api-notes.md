@@ -17,7 +17,7 @@ primitives and identity for objects. Callers can supply a `HashPolicy` for struc
 replacement retains the stored key representative across the HAMT, Patricia, sorted, Merkle, and
 Tungsten families.
 
-## HAMT maps, bags, bimaps, builders, and sessions
+## HAMT maps, bags, multimaps, relations, bimaps, builders, and sessions
 
 `PersistentHashMap.getOrAdd(key, addFactory)` and
 `addOrUpdate(key, addFactory, updateFactory)` return a `MapUpdateResult` containing the selected
@@ -60,6 +60,17 @@ roots and policy roles in O(1), is cached, and points back to the original facad
 follows stable-for-one-version, otherwise unspecified CHAMP order. Every pair is stored twice; the
 type deliberately has no algebra, builder, transient, or displacement mode.
 
+`PersistentHashMultimap<K, V>` composes the public CHAMP map and set with independent key and value
+policies. It stores no empty value groups, reports exact `keyCount` and flattened `pairCount`, and
+retains first representatives in both domains. Duplicate addition and missing removal return the
+receiver. Removing a final pair contracts its outer key; `removeKey` removes a complete adjacency
+group. Iteration flattens the stable-for-one-version, otherwise unspecified CHAMP order.
+
+`PersistentRelation<L, R>` maintains mutually inverse multimaps. Before inserting, it normalizes
+both arguments to the globally retained representatives, so the same right class cannot acquire
+different stored objects in different left groups. Pair and whole-side removals update both indexes.
+The cached `inverse` facade swaps existing roots in O(1), and `inverse.inverse` is the receiver.
+
 `HashMapBulkBuilder<K, V>` is a reusable construction-only staging object, also available through
 `PersistentHashMap.createBulkBuilder`. It exposes only policy/count state, `setItem`, `setItems`, and
 `toImmutable`. First key representatives win, the last SameValueZero-distinct value wins, and equal
@@ -74,7 +85,7 @@ Relations use the transient's receiver policy, do not advance its mutation versi
 same one-way lifecycle: every relation throws `TransientConsumedError` after publication before
 enumerating its argument.
 
-## Independent insertion-ordered set
+## Independent insertion-ordered collections
 
 `PersistentOrderedSet<T>` is a neutral general-purpose family exported through the `ordered`
 subpath. It composes only the public CHAMP map and FingerTree families and never imports or delegates
@@ -89,6 +100,23 @@ no-ops preserve the exact receiver, and empty results preserve the policy. Store
 unambiguous through `tryGetValue`'s `{ found, value }` result. TypeScript iterators retain immutable
 snapshots but do not emulate the C# struct-enumerator copy/fail-fast mechanics. The full local contract
 and API mapping are in [the ordered-set notes](ordered.md).
+
+`PersistentOrderedMap<K, V>` uses the same neutral dependency boundary and sparse-label order
+maintenance. Its positional tree owns each key/value payload; CHAMP stores only key-to-stamp
+navigation, avoiding a duplicate retained value. Construction keeps the first key representative
+and position while the last value-equivalence-distinct payload wins. `set` never moves an existing
+key. Only explicit movement, reversal, and stable one-shot sorting change order; range extraction
+reconciles both indexes and all logical no-ops preserve the receiver.
+
+## Payload interval map
+
+`PersistentIntervalMap<T, V>` is exported through the finger-tree subpath. It orders validated
+closed interval keys lexicographically by `(low, high)`, retains the first key representative, and
+uses a supplied value equality function for replacement no-ops. Its measured sequence caches the
+complete rightmost interval and maximum high endpoint, which supports exact same-low positioning
+and pruned overlap/stabbing queries in one index. Distinct overlapping intervals remain independent;
+the type intentionally does not expose interval coalescing because payload merge semantics require
+an explicit application policy.
 
 ## Persistence and sharing
 
