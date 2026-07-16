@@ -92,6 +92,12 @@ from .persistent_hamt import (
     TransientHashSet,
 )
 from .persistent_hash_bag import HashBagEntry, PersistentHashBag
+from .persistent_hash_multimap import (
+    HashMultimapEntry,
+    HashMultimapKeyResult,
+    HashMultimapValuesResult,
+    PersistentHashMultimap,
+)
 from .persistent_patricia import (
     PersistentIntMap,
     PersistentIntSet,
@@ -115,6 +121,9 @@ __all__ = [
     "DuplicateKeyError",
     "HamtEntry",
     "HashBagEntry",
+    "HashMultimapEntry",
+    "HashMultimapKeyResult",
+    "HashMultimapValuesResult",
     "HashMapBulkBuilder",
     "HashPolicy",
     "InMemoryMerkleBlockStore",
@@ -159,6 +168,7 @@ __all__ = [
     "NullableUtf8MerkleCodec",
     "PersistentBiMap",
     "PersistentHashBag",
+    "PersistentHashMultimap",
     "PersistentHashMap",
     "PersistentHashSet",
     "PersistentIntMap",
