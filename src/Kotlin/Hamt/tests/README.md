@@ -39,6 +39,8 @@ Coverage groups:
   normalization and checked class collapse, receiver and first-argument representative precedence,
   self/empty identity behavior, API-shape guards excluding ambiguous count and mutable lifecycle
   surfaces, plus a 1,000-operation constant-hash deterministic model;
+- persistent hash-multimap nonempty groups, key/pair counts, retained snapshots and pair removal,
+  plus relation reverse lookup, inversion, whole-endpoint removal, and exact inverse validation;
 - one-way CHAMP map/set editing sessions: exact clean-source and policy identity, stored
   representatives, null/collision point edits, clear, active trie-order enumeration, version-bound
   views captured at acquisition, receiver-policy set relations, consumed-session failures,

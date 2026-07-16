@@ -24,6 +24,11 @@ the exact source map. `PersistentHashBag<T>` builds an immutable unordered multi
 map, with explicit `distinctCount`, 64-bit `totalCount`, positive checked 32-bit multiplicities,
 expanded/default iteration, distinct and entry views, and receiver-policy multiset algebra.
 
+`PersistentHashMultimap<K, V>` adds nonempty set-valued groups under independent key/value
+`HashPolicy` objects, checked `Long` pair counts, pair/group edits, receiver-normalized algebra, and
+validation. `PersistentRelation<L, R>` maintains exact forward and reverse multimaps with
+bidirectional lookup, inversion, endpoint-group removal, and complete inverse validation.
+
 The CHAMP map and set also expose one-way `Transient` editing sessions through `toTransient()` and
 `createTransient(...)`. Adoption and `persist()` are O(1) reference transfers, clean or logically
 unchanged sessions publish the exact adopted persistent object, and successful publication consumes

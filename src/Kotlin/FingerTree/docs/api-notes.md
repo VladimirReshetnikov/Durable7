@@ -18,6 +18,7 @@ Current public families:
   `PrioritySearchAddResult<K, P, V>`, `PrioritySearchRemoveResult<K, P, V>`,
   `PrioritySearchMinimumView<K, P, V>`, and `PrioritySearchQueueStatistics`;
 - `Interval<T>` and `IntervalTree<T>`;
+- `PersistentIntervalMap<T, V>` and `IntervalMapEntry<T, V>`;
 - `RrbVector<T>` and `RrbVector.Builder<T>`;
 - `ZipTreeRankPolicy<T>`, `CanonicalSortedSet<T>`, `CanonicalSetLookup<T>`, and
   `CanonicalSortedSetStatistics`;

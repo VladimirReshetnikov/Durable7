@@ -32,6 +32,8 @@ Coverage groups:
   exact no-op and far-subtree identity, range/threshold pruning comparison equations, invalid
   ranges, nullable key/priority/payload result semantics, and concurrent immutable readers;
 - `IntervalTree` closed overlap, containment, removal, and coalescing;
+- `PersistentIntervalMap` exact payload replacement, retained snapshots, overlap enumeration/count,
+  removal, and cross-index validation;
 - `RrbVector` radix boundaries, regular/relaxed layouts, unequal-height and adversarial
   concatenation, exact leaf sharing, split/insert/remove/pop, 10,000 randomized edits with retained
   snapshots, append-builder isolation/caching, nullable elements, checked overflow, and concurrent

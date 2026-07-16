@@ -1942,6 +1942,26 @@ private fun setTryRemoveDistinguishesStoredNull() {
     check(!removed.set.contains(null), "null should be gone after removal")
 }
 
+private fun persistentHashMultimapAndRelationMaintainDerivedIndexes() {
+    val source = PersistentHashMultimap.empty<Int, String>()
+        .add(1, "a").add(1, "b").add(2, "b")
+    val branch = source.remove(1, "a")
+    checkEquals(3L, source.pairCount, "multimap pair count")
+    checkEquals(2, source.keyCount, "multimap key count")
+    check(source.contains(1, "a"), "multimap snapshot")
+    check(!branch.contains(1, "a"), "multimap removal")
+    branch.validateStructure()
+
+    val relation = PersistentRelation.empty<Int, String>()
+        .add(1, "a").add(1, "b").add(2, "b")
+    val removed = relation.removeLeft(1)
+    checkEquals(3L, relation.pairCount, "relation pair count")
+    check(relation.leftsFor("b")?.contains(2) == true, "relation reverse lookup")
+    check(relation.inverse().contains("b", 2), "relation inverse")
+    checkEquals(1L, removed.pairCount, "relation group removal")
+    removed.validateStructure()
+}
+
 public fun main() {
     val tests = listOf(
         "mapUpdatesPreserveOldVersions" to ::mapUpdatesPreserveOldVersions,
@@ -1971,6 +1991,8 @@ public fun main() {
         "persistentHashBagNormalizesReceiverPolicyAndRepresentativePrecedence" to
             ::persistentHashBagNormalizesReceiverPolicyAndRepresentativePrecedence,
         "persistentHashBagDeterministicModel" to ::persistentHashBagDeterministicModel,
+        "persistentHashMultimapAndRelationMaintainDerivedIndexes" to
+            ::persistentHashMultimapAndRelationMaintainDerivedIndexes,
         "transientMapLifecyclePreservesIdentityAndRepresentatives" to ::transientMapLifecyclePreservesIdentityAndRepresentatives,
         "transientMapPointEditsEnumerationAndFailureAtomicity" to ::transientMapPointEditsEnumerationAndFailureAtomicity,
         "transientMapDeterministicModelAcrossPublications" to ::transientMapDeterministicModelAcrossPublications,

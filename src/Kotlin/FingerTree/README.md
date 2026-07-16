@@ -15,7 +15,7 @@ names for the public families:
 - `PriorityQueue<T, P>` and `PriorityEntry<T, P>`;
 - `BrodalOkasakiHeap<T>`, `BrodalMinimumView<T>`, and `BrodalOkasakiHeapStatistics`;
 - `PrioritySearchQueue<K, P, V>`, `PrioritySearchEntry<K, P, V>`, and result/statistics types;
-- `Interval<T>` and `IntervalTree<T>`;
+- `Interval<T>`, `IntervalTree<T>`, and `PersistentIntervalMap<T, V>`;
 - `RrbVector<T>` and its append-only `RrbVector.Builder<T>`;
 - `ZipTreeRankPolicy<T>`, `CanonicalSortedSet<T>`, and `CanonicalSortedSetStatistics`;
 - `Monoid<T>`, `DabaLite<T>`, and `DabaLiteStatistics` for mutable FIFO window aggregation;
@@ -31,6 +31,11 @@ the affected paths and retain untouched JVM nodes. The same substrate drives `Pe
 general `FingerTree`, sorted facades, stable priority selection, max-high interval pruning,
 positional/measured ropes, and newline-measured text. `ReversibleDeque` keeps its specialized
 orientation-aware balanced tree so whole-value reversal remains O(1).
+
+`PersistentIntervalMap<T, V>` composes the maximum-high-augmented interval tree with the persistent
+sorted map. It provides unique complete interval keys, exact and indexed payload lookup, strict and
+conditional add, replacement, removal, pruned first/all/count overlap queries, component-sharing
+diagnostics, and cross-index validation.
 
 `RangeUpdateSequence` is a separate implicit-key AVL sibling whose nodes additionally cache an
 optional algebraic lazy tag. Its runtime algebra extends `MeasurePolicy`, with directional

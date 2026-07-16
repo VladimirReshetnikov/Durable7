@@ -5,7 +5,7 @@
 - Audience: Kotlin/JVM collection users, maintainers, reviewers, and sibling-port authors
 - Scope: Neutral ordered collections under `src/Kotlin/Ordered`
 
-This workspace owns the Kotlin/JVM `PersistentOrderedSet<T>` port. It combines equality-class
+This workspace owns the Kotlin/JVM `PersistentOrderedSet<T>` and `PersistentOrderedMap<K, V>` ports. They combine equality-class
 membership with durable insertion and explicit-position order while preserving immutable snapshots.
 The public type lives in `tools.datastructures.ordered`.
 
@@ -42,6 +42,12 @@ API, diagnostics, tests, and evolution policy are independently owned here.
 “Ordered” means insertion and explicit-position order, not persistent comparison-sorted order.
 `sort` performs one stable reorder and does not retain the ordering comparator; later additions
 append normally.
+
+`PersistentOrderedMap<K, V>` composes the ordered set of keys with a CHAMP payload index. It adds
+strict positional insertion, value replacement without movement, keyed and positional removal,
+ranges, reversal, stable entry sorting, ordered iteration, component-sharing diagnostics, and
+two-way validation. The first key representative and position win; bulk construction's last
+payload wins.
 
 ## Documentation
 
