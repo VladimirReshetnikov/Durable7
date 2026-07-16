@@ -5,6 +5,7 @@ mod brodal_okasaki_heap;
 mod canonical_sorted_set;
 mod daba_lite;
 mod deque;
+mod interval_map;
 mod interval_tree;
 mod measured;
 mod ordering;
@@ -30,6 +31,10 @@ pub use daba_lite::{
 pub use deque::{
     DequeItemSplit, DequePop, DequeRangeSplit, DequeSplit, PersistentDeque, ReversibleDeque,
     ReversibleDequePop, ReversibleDequeSplit,
+};
+pub use interval_map::{
+    IntervalMapEntry, IntervalMapError, IntervalMapInvariantError, IntervalMapStatistics,
+    PersistentIntervalMap,
 };
 pub use interval_tree::{Interval, IntervalTree};
 pub use measured::{

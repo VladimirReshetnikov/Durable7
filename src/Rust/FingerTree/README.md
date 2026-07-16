@@ -21,7 +21,7 @@ family. It exposes Rust-native names for the same public families:
 - `ReversibleDeque<T>`;
 - `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>`;
 - `PriorityQueue<T, P>`;
-- `Interval<T>` and `IntervalTree<T>`;
+- `Interval<T>`, `IntervalTree<T>`, and payload-bearing `PersistentIntervalMap<T, V>`;
 - `Rope<T>` and its immutable positional `RopeCursor<T>`, `MeasuredRope<T, P>` and
   `MeasuredRopeCursor<T, P>`, `MeasuredRopeBuilder<T, P>`, `TextRope` and `TextRopeCursor`, and
   `RopeBuilder`, including Unicode text extras and newline-style classification.
@@ -98,6 +98,9 @@ conveniences; character and text ropes also expose scalar/code-point addressing,
 extended-grapheme addressing, newline-style detection, and CRLF-aware line text. `PriorityQueue<T, P>`
 now composes the measured core with cached minimum-priority measures, and `IntervalTree<T>` uses a cached
 last-low/maximum-high product summary for O(log n) first-hit and O((k + 1) log n) full-overlap search.
+`PersistentIntervalMap<T, V>` adds unique lexicographic interval keys and payload updates over a
+separate full-key/maximum-high measure, validates every interval argument, retains the first key
+representative, and deliberately omits payload-ambiguous coalescing.
 `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>` now use
 order-statistic measured tree storage with cached count plus last-key measures. The crate still does
 not claim the C#/C++ lazy finger-tree asymptotic profile overall; derived algorithms remain

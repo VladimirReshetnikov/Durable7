@@ -25,7 +25,7 @@ Current public families:
   `OrderStatisticMeasure<T>` with `RankedKey<T>`;
 - `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>`;
 - `PriorityQueue<T, P>` and `PriorityEntry<T, P>`;
-- `Interval<T>` and `IntervalTree<T>`;
+- `Interval<T>`, `IntervalTree<T>`, `PersistentIntervalMap<T, V>`, and interval-map result types;
 - `Rope<T>`, positional `RopeCursor<T>`, `MeasuredRope<T, P>`, `MeasuredRopeCursor<T, P>`,
   `MeasuredRopeCursorSearch<T, P>`, `MeasuredRopeBuilder<T, P>`, `TextRope`, `TextRopeCursor`,
   `TextRopeCursorSearch`, `RopeBuilder`, `NewlineMeasure`, `NewlineStyle`, and `LineColumn`.
@@ -53,6 +53,20 @@ The Rust surface follows Rust conventions:
 - out-of-range positional rope edits and text offset conversions return `None`.
 - out-of-range RRB indexing, splitting, and range edits return `None`; indexing through `Index`
   retains Rust's ordinary panic-on-invalid-index convention.
+
+## Persistent interval map
+
+`PersistentIntervalMap<T, V>` stores one payload per lexicographically unique closed interval and
+allows distinct keys to overlap. Unlike `Interval::new`, which asserts its constructor precondition,
+the map validates even directly constructed public-field intervals and returns `IntervalMapError`
+from exact mutations and overlap queries. `add` is strict; `set_item` is last-value-wins while
+retaining the first interval representative, and an equal payload is a storage-sharing no-op.
+
+The measured summary combines the rightmost full `(low, high)` key with maximum high endpoint.
+Exact lookup/update/removal therefore avoid same-low scans, while first-overlap search is logarithmic
+and full overlap enumeration is output-sensitive. Endpoint order is Rust `Ord`; payload no-op
+detection is ordinary `PartialEq`. There is no `coalesce`, because no general payload merge rule is
+available.
 
 ## Positional rope cursor
 

@@ -60,6 +60,9 @@ they cover:
   enqueue/meld/dequeue paths;
 - closed interval overlap, containment, coalescing, last-low/maximum-high measured descent (including a
   100,000-interval sparse-hit case), and shared-storage insert/remove paths;
+- payload interval-map strict/replacing edits, lexicographic same-low order, invalid-interval
+  rejection, first key representatives, equal-value storage sharing, overlap-model parity,
+  removal, retained versions, and full-key/maximum-high annotation invariants;
 - chunked positional rope construction from chunks, caller-supplied copy targets, edits, cached length measures,
   and chunk/subtree sharing; positional cursor gap boundaries and non-`Clone` navigation/snapshot,
   chunk-edge edits, exact seek/empty-insert no-ops, retained branch isolation, root-sharing snapshots,
