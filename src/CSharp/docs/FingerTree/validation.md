@@ -77,13 +77,20 @@ Release configuration is required for meaningful benchmark numbers.
 [tests README](../../tests/Tools.DataStructures.FingerTree.Tests/README.md) for source-file grouping, filter examples,
 sample-smoke hooks, and stress controls.
 
+During interval-map development, run its focused model/invariant lane with:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~PersistentIntervalMapTests
+```
+
 The suite covers:
 
 - `FingerTreeDeque<T>` endpoint, indexing, splitting, concatenation, sorted-search, enumeration, invariant,
   branching-persistence, randomized model, and complexity-guard behavior;
 - the general measured tree, built-in measures, custom comparisons, product measures, sum measures, zero-closure
   named operations, and `TryLocate`/`TrySplitFind` equivalence;
-- derived sorted bag/set/dictionary, sorted mutable builders, priority queue, interval tree, and reversible deque
+- derived sorted bag/set/dictionary, sorted mutable builders, priority queue, interval tree,
+  persistent interval map, and reversible deque
   behavior against BCL or brute-force models where appropriate;
 - `Rope<T>`, its public immutable `RopeCursor<T>` gap editor, `MeasuredRope<T, TMeasure, TMeasureOps>`,
   text helpers, editor-grade Unicode/newline helpers, `RopeBuilder`, and nested append-only rope builders;
