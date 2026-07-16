@@ -14,6 +14,12 @@ Run from `src/Rust`:
 The wrapper locates Cargo on `PATH` or under the default rustup profile and applies inherited,
 non-interactive Windows error handling before Cargo starts the test executable.
 
+## Current derived-structure evidence
+
+On 2026-07-16, the focused payload interval-map suite passed 6/6 tests. The serialized full Rust
+workspace subsequently passed in both Debug and Release, including all FingerTree unit,
+integration, compile-fail, and documentation tests. Benchmarks were not run.
+
 The crate uses `#![forbid(unsafe_code)]`. Unit tests are inline in the module files under
 `FingerTree/src/`; representation-scale integration tests live under `FingerTree/tests/`. Together
 they cover:

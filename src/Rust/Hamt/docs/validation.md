@@ -14,6 +14,12 @@ Run from `src/Rust`:
 The wrapper locates Cargo on `PATH` or under the default rustup profile and applies inherited,
 non-interactive Windows error handling before Cargo starts the test executable.
 
+## Current derived-structure evidence
+
+On 2026-07-16, the focused set-valued hash-multimap and relation suites each passed 6/6 tests. The
+serialized full Rust workspace subsequently passed in both Debug and Release, including all HAMT
+unit, integration, and documentation tests. Benchmarks were not run.
+
 The crate uses `#![forbid(unsafe_code)]`. HAMT, hash-bag invariant, and Patricia unit tests are inline
 in `Hamt/src/lib.rs`, `Hamt/src/hash_bag.rs`, and `Hamt/src/patricia.rs`; one-descent map factories
 and the hash bag have focused integration suites in `Hamt/tests/map_factory_updates.rs` and

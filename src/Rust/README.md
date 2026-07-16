@@ -11,9 +11,9 @@ contracts of the C# baseline where the current implementation exposes equivalent
 
 | Workspace | Role | Primary entry points | Validation |
 | --- | --- | --- | --- |
-| [Hamt](Hamt/README.md) | Persistent HAMT map/set port with 32-way bitmap-indexed trie nodes and `Arc` structural sharing | `tools_data_structures_hamt::{PersistentHashMap, PersistentHashSet}` | `.\test.ps1 -Workspace Hamt` |
-| [FingerTree](FingerTree/README.md) | Rust checkpoint for the FingerTree family, positional/measured/text rope cursors, and mutable DABA Lite FIFO-window aggregator | `tools_data_structures_fingertree::*` | `.\test.ps1 -Workspace FingerTree` |
-| [Ordered](Ordered/README.md) | Neutral persistent insertion-ordered set with explicit positional movement, ranges, stable one-shot sorting, and receiver-policy set algebra | `tools_data_structures_ordered::PersistentOrderedSet` | `.\test.ps1 -Workspace Ordered` |
+| [Hamt](Hamt/README.md) | Persistent HAMT map/set, set-valued multimap, and bidirectional relation port with 32-way bitmap-indexed trie nodes and `Arc` structural sharing | `tools_data_structures_hamt::{PersistentHashMap, PersistentHashSet, PersistentHashMultimap, PersistentRelation}` | `.\test.ps1 -Workspace Hamt` |
+| [FingerTree](FingerTree/README.md) | Rust checkpoint for the FingerTree family, payload interval map, positional/measured/text rope cursors, and mutable DABA Lite FIFO-window aggregator | `tools_data_structures_fingertree::{PersistentIntervalMap, *}` | `.\test.ps1 -Workspace FingerTree` |
+| [Ordered](Ordered/README.md) | Neutral persistent insertion-ordered set and map with explicit positional movement, ranges, stable one-shot sorting, and receiver-policy set algebra | `tools_data_structures_ordered::{PersistentOrderedMap, PersistentOrderedSet}` | `.\test.ps1 -Workspace Ordered` |
 | [RangeUpdate](RangeUpdate/README.md) | Neutral implicit-AVL sequence with ordered cached measures and algebraic lazy contiguous range updates | `tools_data_structures_range_update::{RangeUpdateAlgebra, RangeUpdateSequence}` | `.\test.ps1 -Workspace RangeUpdate` |
 | [Tungsten](Tungsten/README.md) | Application-specific leaf port of Tungsten `List` and `Association` over Rust persistent substrates | `tools_data_structures_tungsten::{PersistentList, PersistentAssociation}` | `.\test.ps1 -Workspace Tungsten` |
 
@@ -22,6 +22,12 @@ Run the full Rust validation from this directory:
 ```powershell
 .\test.ps1
 ```
+
+On 2026-07-16, after adding the ordered map, set-valued hash multimap, payload interval map, and
+bidirectional relation, the serialized full workspace gate passed in both Debug and Release. All
+unit, integration, compile-fail, and documentation tests completed successfully. The four focused
+new integration suites each passed 6/6 tests. Benchmarks were not run because they are outside the
+correctness gate.
 
 The wrapper finds Cargo on `PATH` or under the default rustup profile. On Windows it enables inherited
 non-interactive OS error handling before Cargo starts a test binary, so assertion, panic, loader, and crash

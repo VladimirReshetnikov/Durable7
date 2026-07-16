@@ -15,6 +15,12 @@ The wrapper forces one Cargo build job and one Rust test thread. Use `-Release` 
 correctness build; do not run Debug and Release concurrently. Benchmarks are separate and are not a
 routine validation requirement.
 
+## Current derived-structure evidence
+
+On 2026-07-16, the focused ordered-map suite passed 6/6 tests. The serialized full Rust workspace
+subsequently passed in both Debug and Release, including all Ordered unit and documentation tests.
+Benchmarks were not run.
+
 The crate's deterministic suite covers:
 
 - ordered-map first-key/last-value construction, strict and replacing updates, positional insertion
