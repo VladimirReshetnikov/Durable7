@@ -3,6 +3,7 @@ export * from "./measures.js";
 export * from "./core.js";
 export * from "./sorted.js";
 export * from "./priority-interval.js";
+export * from "./persistent-interval-map.js";
 export * from "./rope.js";
 export * from "./daba-lite.js";
 export * from "./rrb-vector.js";
