@@ -1,5 +1,6 @@
 #pragma once
 
+#include <tools/data_structures/ordered/persistent_ordered_map.hpp>
 #include <tools/data_structures/ordered/persistent_ordered_set.hpp>
 
 #include <string_view>
