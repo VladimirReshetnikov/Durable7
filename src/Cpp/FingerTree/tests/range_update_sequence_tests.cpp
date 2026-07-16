@@ -266,10 +266,9 @@ struct one_shot_range final {
             return false;
         }
 
-        friend bool operator==(sentinel marker, const iterator& value) noexcept
-        {
-            return value == marker;
-        }
+        // C++20 equality rewriting supplies sentinel == iterator from the
+        // iterator == sentinel overload above. Keeping both overloads causes
+        // current Clang to reject the redundant internal friend under -Werror.
     };
 
     [[nodiscard]] iterator begin() const noexcept { return {}; }

@@ -220,7 +220,7 @@ void add_tearable_concurrency_tests_impl(suite& tests)
                 return;
             }
 
-            const auto located = cursor.seek_by_measure([expected_through_next](const tearable& sum) {
+            const auto located = cursor.seek_by_measure([](const tearable& sum) {
                 return sum.value() >= expected_through_next;
             });
             if (!located.found || located.cursor.position() != 2048
