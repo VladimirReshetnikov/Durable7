@@ -4,10 +4,11 @@
 - Created (UTC): 2026-07-15T01:28:46Z
 - Repository HEAD: 5fd1a85c5ec58886f0dbabe805552bd37ec40871
 - Audience: Users and maintainers of `Tools.DataStructures.Ordered`
-- Scope: The independently owned C# insertion-ordered persistent-set workspace
+- Scope: The independently owned C# insertion-ordered persistent map/set workspace
 
-`Tools.DataStructures.Ordered` is the neutral owner of `PersistentOrderedSet<T>`, an immutable
-insertion-ordered set composed from the public C# HAMT and FingerTree libraries. It is a general
+`Tools.DataStructures.Ordered` is the neutral owner of `PersistentOrderedMap<TKey, TValue>` and
+`PersistentOrderedSet<T>`, immutable insertion-ordered collections composed from the public C#
+HAMT and FingerTree libraries. It is a general
 collection project: neither its production contract nor its tests depend on the application-specific
 Tungsten collections.
 
@@ -21,6 +22,7 @@ Tungsten collections.
 Primary code and tests:
 
 - [library project](../../src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj)
+- [`PersistentOrderedMap<TKey, TValue>` source](../../src/Tools.DataStructures.Ordered/PersistentOrderedMap.cs)
 - [`PersistentOrderedSet<T>` source](../../src/Tools.DataStructures.Ordered/PersistentOrderedSet.cs)
 - [algebra and relations](../../src/Tools.DataStructures.Ordered/PersistentOrderedSet.Algebra.cs)
 - [invariant diagnostics](../../src/Tools.DataStructures.Ordered/PersistentOrderedSet.Diagnostics.cs)

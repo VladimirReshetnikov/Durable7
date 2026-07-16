@@ -1,10 +1,10 @@
-# C# Persistent Ordered Set API Specification
+# C# Persistent Ordered Collections API Specification
 
 - Status: Normative current API and behavior specification
 - Created (UTC): 2026-07-15T01:28:46Z
 - Repository HEAD: 5fd1a85c5ec58886f0dbabe805552bd37ec40871
 - Audience: API consumers, maintainers, reviewers, and sibling-language port authors
-- Scope: `Tools.DataStructures.Ordered.PersistentOrderedSet<T>`
+- Scope: `PersistentOrderedMap<TKey, TValue>` and `PersistentOrderedSet<T>`
 
 This document is normative for the C# type. The source XML documentation is its concise executable
 surface; this specification fixes interactions among ordering, equality policy, representatives,
@@ -22,6 +22,34 @@ internals, semantics, or a live Tungsten oracle.
 
 The type does not override object equality or hashing. Collection equality is explicit through
 `SetEquals`; ordered sequence equality is explicit through enumeration/`SequenceEqual`.
+
+## Persistent Ordered Map
+
+```csharp
+public sealed class PersistentOrderedMap<TKey, TValue> : IReadOnlyDictionary<TKey, TValue>
+```
+
+The map retains independent `KeyComparer` and `ValueComparer` objects. `CreateRange` processes
+entries once in order: the first equivalent key fixes the stored key representative and position,
+and the last value wins. `SetItem` updates an existing value in place and returns the receiver when
+the configured value comparer considers it unchanged. Strict `Add`, `AddFirst`, and `Insert` reject
+an equivalent key; `TryAdd` instead returns `false` and the receiver.
+
+`EntryAt` and ordered enumeration read the finger-tree sequence. `ContainsKey`, the key indexer,
+`TryGetValue`, and `TryGetKey` use the CHAMP index. `IndexOfKey` combines a hash lookup with a
+stamp lower bound. `MoveToFirst`, `MoveToLast`, and `MoveTo` are the only operations that move an
+existing entry. Removal is available by key and by position; `TryRemove` returns the stored value.
+`GetRange`, `Take`, `Drop`, and `Reverse` preserve the policies and immutable retained versions.
+
+Every entry is one immutable object referenced by both indexes. Published invariants require equal
+index counts, strictly increasing sequence stamps, exactly one entry per key class, and reference
+identity between the object stored in the CHAMP and at the corresponding sequence position. Sparse
+label exhaustion rebuilds one unpublished result with evenly spaced labels; no relabel amortization
+is claimed across branches.
+
+Key operations cost O(w + c), positional operations cost O(log n), and operations needing both cost
+O(w + c + log n), where `w <= 7` is CHAMP depth and `c` is an equal-hash collision scan. A relabel or
+reverse costs O(n (w + c)). Enumeration is O(n) and performs no key hashing.
 
 ## Public Surface
 

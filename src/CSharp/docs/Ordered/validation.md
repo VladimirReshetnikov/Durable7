@@ -62,6 +62,10 @@ servers, and compiler sharing disabled:
 - the complete test run passed 1,355 of 1,355 tests: Numerics 319, HAMT 292, FingerTree 630,
   Ordered 62, and Tungsten 52.
 
+The later ordered-map development lane adds seven focused map tests and currently passes 69 of 69
+Ordered tests in Debug with zero build warnings or errors. This is development evidence; the final
+cross-language shipment record will replace it after all four derived structures complete.
+
 The solution build compiled the benchmark project as an ordinary project dependency, but no
 benchmark was executed and no performance evidence was recorded.
 
@@ -70,6 +74,8 @@ benchmark was executed and no performance evidence was recorded.
 The Ordered suite independently covers:
 
 - every public member and positional boundary;
+- ordered-map independent key/value policies, first-key/last-value construction, in-place value
+  replacement, strict insertion, explicit movement, ranges, reversal, relabeling, and retained branches;
 - default, custom, constant-hash, case-folding, and comparer-defined-null policies;
 - first-representative retention with equal but object-distinct values;
 - duplicate addition versus explicit movement and final-index movement semantics;

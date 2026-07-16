@@ -1,16 +1,38 @@
-# C# Persistent Ordered Set Usage
+# C# Persistent Ordered Collections Usage
 
 - Status: Current usage guide
 - Created (UTC): 2026-07-15T01:28:46Z
 - Repository HEAD: 5fd1a85c5ec58886f0dbabe805552bd37ec40871
-- Audience: C# callers using `PersistentOrderedSet<T>`
-- Scope: Common construction, update, movement, range, sort, algebra, and persistence patterns
+- Audience: C# callers using the neutral ordered map and set
+- Scope: Common map/set construction, update, movement, ranges, algebra, and persistence patterns
 
 Import the neutral namespace:
 
 ```csharp
 using Tools.DataStructures.Ordered;
 ```
+
+## Ordered Maps
+
+```csharp
+var headers = PersistentOrderedMap<string, string>.Create(
+        StringComparer.OrdinalIgnoreCase,
+        StringComparer.Ordinal)
+    .Add("Accept", "application/json")
+    .Add("X-Trace", "first")
+    .SetItem("x-trace", "updated");
+
+// The first key representative and position are retained.
+Console.WriteLine(headers.EntryAt(1));       // [X-Trace, updated]
+Console.WriteLine(headers.IndexOfKey("ACCEPT")); // 0
+
+var reordered = headers.MoveToFirst("x-trace");
+// [X-Trace, updated], [Accept, application/json]
+```
+
+`Add`, `AddFirst`, and `Insert` reject equivalent keys; `TryAdd` is the nonthrowing alternative.
+`SetItem` alone adds-or-replaces, and replacement never moves a key. `GetRange`, `Take`, `Drop`,
+`Reverse`, removal by key/position, and enumeration all operate in the explicit map order.
 
 ## Construction And First Representatives
 
