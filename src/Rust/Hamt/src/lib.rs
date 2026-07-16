@@ -9,11 +9,15 @@ use std::ops::Index;
 use std::sync::Arc;
 
 mod hash_bag;
+mod hash_multimap;
 mod merkle_encoding;
 mod merkle_persistence;
 mod merkle_search_tree;
 mod patricia;
 pub use hash_bag::{BagIter, HashBagEntry, HashBagError, PersistentHashBag};
+pub use hash_multimap::{
+    HashMultimapInvariantError, HashMultimapIter, HashMultimapStatistics, PersistentHashMultimap,
+};
 pub use merkle_encoding::{
     Int32MerkleCodec, Int64MerkleCodec, MerkleCodec, MerkleCodecError, MerkleDigest,
     MerkleDigestParseError, MerkleDigestWriteError, MerkleKeyComparer, MerklePolicyError,

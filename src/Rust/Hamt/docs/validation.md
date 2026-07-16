@@ -17,7 +17,8 @@ non-interactive Windows error handling before Cargo starts the test executable.
 The crate uses `#![forbid(unsafe_code)]`. HAMT, hash-bag invariant, and Patricia unit tests are inline
 in `Hamt/src/lib.rs`, `Hamt/src/hash_bag.rs`, and `Hamt/src/patricia.rs`; one-descent map factories
 and the hash bag have focused integration suites in `Hamt/tests/map_factory_updates.rs` and
-`Hamt/tests/persistent_hash_bag.rs`; Merkle core/wire and persistence integration tests live in
+`Hamt/tests/persistent_hash_bag.rs`; the set-valued multimap is covered by
+`Hamt/tests/persistent_hash_multimap.rs`; Merkle core/wire and persistence integration tests live in
 `Hamt/tests/merkle_core_wire.rs` and `Hamt/tests/merkle_persistence.rs`. Coverage includes:
 
 - persistent snapshot preservation;
@@ -31,6 +32,9 @@ and the hash bag have focused integration suites in `Hamt/tests/map_factory_upda
   saturated removal; max/min/saturated/checked receiver-policy algebra; eager mismatched-policy
   normalization; representative precedence; failure atomicity; and a deterministic 4,096-command
   collision-heavy multiset model;
+- hash-multimap independent hash policies, first representatives, distinct key/pair counts,
+  duplicate root sharing, empty-group contraction, whole-key removal, branching histories, and
+  recursive invariants;
 - same-hash collision insertion, lookup, and removal;
 - CHAMP inline-payload/child-run invariants, independent insertion histories, and typed diff,
   including exact callback counters proving same-policy equality/diff rehash no keys and prune a

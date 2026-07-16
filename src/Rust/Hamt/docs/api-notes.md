@@ -19,6 +19,8 @@ Primary entry points:
 - `MapUpdateResult<K, V, S = RandomState>`;
 - `MapDifference<K, V>`;
 - `PersistentHashBag<T, S = RandomState>`, `HashBagEntry<T>`, `BagIter<T>`, and `HashBagError`;
+- `PersistentHashMultimap<K, V, SK = RandomState, SV = RandomState>`, its flattened iterator, and
+  invariant result types;
 - `PersistentIntMap<V>` / `PersistentIntSet` and `PersistentLongMap<V>` / `PersistentLongSet`.
 - `MerkleSearchTree<K, V>`, `MerkleSearchTreePolicy<K, V>`, `MerkleEntry<K, V>`, and
   `MerkleMapDifference<K, V>`;
@@ -125,6 +127,19 @@ returned. No structural-algebra or benchmark claim is made for the bag tranche.
 There is intentionally no `PersistentHashBag` transient, edit session, or public bulk builder.
 `BulkBuilder` remains the existing construction-only map facility; its public surface was not
 expanded for bag mutation.
+
+## Persistent hash multimap
+
+`PersistentHashMultimap<K, V, SK, SV>` is a set-valued multimap composed from the public CHAMP map
+and set. Rust `Eq`/`Hash` define both equivalence domains, while `SK` and `SV` retain independent
+`BuildHasher` policies. `key_count` reports nonempty groups and `pair_count` reports distinct pairs;
+duplicate insertion returns a clone sharing the outer root.
+
+Every stored group is nonempty and uses a clone of the retained value hasher. Removing its final
+value removes the outer key in the same successor. `get_key` and `get_value` recover first stored
+representatives, `groups` exposes immutable adjacency sets, and `iter` flattens them in stable-for-
+one-version nested CHAMP order. `try_remove_key` returns the stored key and persistent adjacency set.
+The type has no multiplicity, algebra, transient, or mutable builder.
 
 ## One-way edit sessions
 

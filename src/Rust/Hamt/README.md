@@ -9,6 +9,7 @@
 search-tree families to safe Rust. It exposes `PersistentHashMap<K, V, S = RandomState>`,
 `PersistentHashSet<T, S = RandomState>`, their one-way `TransientHashMap` / `TransientHashSet`
 editing sessions, `PersistentHashBag<T, S = RandomState>`, and
+`PersistentHashMultimap<K, V, SK = RandomState, SV = RandomState>`, and
 `BulkBuilder<K, V, S = RandomState>`, the independent one-pass scratch constructor (mutable
 unpublished nodes frozen into detached persistent nodes; used by map/set `FromIterator`, set
 intersection, set-relation probes, and Tungsten association index rebuilds). The map additionally
@@ -35,6 +36,10 @@ The trie follows the existing ports:
   distinct/entry iteration avoids expansion. Bag union/intersection/difference/sum use max/min/
   saturated subtraction/checked addition after eagerly rebuilding an independently created
   argument under the receiver's `BuildHasher` policy identity;
+- `PersistentHashMultimap` stores nonempty persistent value sets in a persistent outer map,
+  retains independent key/value hash builders, preserves first representatives in both domains,
+  distinguishes key and pair counts, contracts the outer key after the last value removal, and
+  shares every unaffected inner and outer CHAMP path;
 - map equality and diff traverse same-policy CHAMP nodes in lockstep, use stored hashes, and prune
   every `Arc`-identical descendant before key or value comparison. Diff returns owned typed
   additions, removals, and changes. Across distinct `BuildHasher` policy identities both operations
