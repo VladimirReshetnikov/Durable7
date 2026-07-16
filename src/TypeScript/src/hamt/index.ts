@@ -2,6 +2,7 @@ export * from "./hash-policy.js";
 export * from "./persistent-hamt.js";
 export * from "./persistent-hash-bag.js";
 export * from "./persistent-hash-multimap.js";
+export * from "./persistent-relation.js";
 export * from "./persistent-bi-map.js";
 export * from "./persistent-patricia.js";
 export * from "./concurrent-hash-trie.js";
