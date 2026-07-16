@@ -62,14 +62,19 @@ The focused serialized Ordered Debug and Release lanes each discover and pass 62
 build warnings. At its historical pre-Range shipment checkpoint, the complete serialized C# Release
 gate built with zero warnings or errors and passed all 1,355 tests.
 
-The shipped Range-update tranche adds 62 focused Range tests to a 692-test FingerTree project.
-Both current complete serialized C# Debug and Release solution builds finish with zero warnings and
-zero errors, and both full gates pass 1,417/1,417 tests (319 Numerics + 292 HAMT + 692 FingerTree +
-62 Ordered + 52 Tungsten). The Range gate covers algebra laws, implicit-AVL/tag/measure invariants,
+The shipped Range-update tranche added 62 focused Range tests to the then-692-test FingerTree
+project. Its historical complete serialized C# Debug and Release gates passed 1,417/1,417 tests.
+The Range gate covers algebra laws, implicit-AVL/tag/measure invariants,
 API and identity semantics, generated retained-branch models, deterministic operation ceilings,
 failure atomicity, enumerator behavior, and concurrent readers. No benchmark was run for shipment;
 all performance measurements remain postponed until they can run without competing agents or other
 CPU, memory, and I/O contention.
+
+The current C# derived-structure tranche adds `PersistentOrderedMap`, `PersistentHashMultimap`,
+`PersistentIntervalMap`, and `PersistentRelation`. Complete serialized Debug and Release solution
+builds both finish with zero warnings and zero errors, and both full gates pass 1,465/1,465 tests:
+319 Numerics + 324 HAMT + 701 FingerTree + 69 Ordered + 52 Tungsten. Focused new-structure lanes
+pass 7 ordered-map, 7 hash-multimap, 9 interval-map, and 9 relation tests. Benchmarks were not run.
 
 Cross-language follow-through is complete: the one-descent HAMT operations, hash bag, neutral
 ordered set, and `RangeUpdateSequence` now ship in C, C++, Haskell, Kotlin, Rust, TypeScript, and

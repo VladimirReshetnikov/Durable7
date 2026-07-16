@@ -105,6 +105,13 @@ dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Te
 
 ## Test Coverage
 
+### Current Derived-Structure Integration Evidence
+
+On 2026-07-16 UTC, the complete HAMT project passed 324/324 tests in both the full serialized Debug
+and Release solution gates. The focused new lanes pass 7/7 `PersistentHashMultimapTests` and 9/9
+`PersistentRelationTests`. Both complete solution builds finish with zero warnings and zero errors,
+and both full C# gates pass 1,465/1,465 tests. Benchmarks were not run.
+
 `PersistentBiMapTests` provides the bimap shipment gate: strict two-domain uniqueness, independent
 policy retention, configured-value-comparer replacement, first representatives, inverse identity,
 symmetric removal, nullable values, failure atomicity, retained 1,000-command histories, concurrent

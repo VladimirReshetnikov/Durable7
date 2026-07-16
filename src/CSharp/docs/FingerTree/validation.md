@@ -73,6 +73,13 @@ Release configuration is required for meaningful benchmark numbers.
 
 ## Test Coverage
 
+### Current Derived-Structure Integration Evidence
+
+On 2026-07-16 UTC, the focused `PersistentIntervalMapTests` lane passed 9/9 tests and the complete
+FingerTree project passed 701/701 tests in both full serialized Debug and Release solution gates.
+Both complete solution builds finish with zero warnings and zero errors, and both full C# gates pass
+1,465/1,465 tests. Benchmarks were not run.
+
 `tests/Tools.DataStructures.FingerTree.Tests/` covers the xUnit/CsCheck suite. See the
 [tests README](../../tests/Tools.DataStructures.FingerTree.Tests/README.md) for source-file grouping, filter examples,
 sample-smoke hooks, and stress controls.
