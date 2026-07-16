@@ -12,19 +12,22 @@ which repository API additions those candidates keep asking for, and the composi
 survived adversarial review. It complements the
 [data-structure catalog](data-structure-catalog.md), which describes shipped surface only.
 
-Some survey items have since shipped, as called out locally. Tungsten `PersistentAssociation` is an
-application-specific realization of one composition idea, not shipment of a general
-`PersistentOrderedMap` and not a permitted substrate or semantic baseline for general collections.
+Several survey items have since shipped, as called out locally. Tungsten `PersistentAssociation`
+was an application-specific realization of one composition idea; the later general
+`PersistentOrderedMap` shipment is an independently owned neutral implementation and does not use
+Tungsten as a substrate or semantic baseline.
 The normative
 [Tungsten application-leaf dependency boundary](tungsten-application-leaf-boundary.md) requires an
 independently owned fork for any general reuse.
 
-The later benchmark-independent implementation tranche now ships persistent one-descent HAMT
-updates, `PersistentHashBag`, neutral `PersistentOrderedSet`, and the genuinely new non-composite
-`RangeUpdateSequence` core across all eight languages. C# owns the implicit-AVL reference, algebra
-contract, invariant suite, and public API; siblings preserve those semantics through language-local
-policies and ownership idioms. Both full serialized C# Debug and Release gates pass 1,417/1,417 tests after builds
-with zero warnings and zero errors. No benchmark was run; see the
+The benchmark-independent implementation tranches now ship persistent one-descent HAMT updates,
+`PersistentHashBag`, neutral `PersistentOrderedSet` and `PersistentOrderedMap`, set-valued
+`PersistentHashMultimap`, bidirectional `PersistentRelation`, payload-bearing
+`PersistentIntervalMap`, and the genuinely new non-composite `RangeUpdateSequence` core across all
+eight languages. C# owns the detailed managed contracts; siblings preserve the same logical
+semantics through language-local policies and ownership idioms. Both full serialized C# Debug and
+Release gates pass 1,465/1,465 tests after builds with zero warnings and zero errors. No benchmark
+was run; see the
 [frontier catalog](frontier-structure-catalog.md#range-update-sequence-persistent-lazy-propagation)
 and the [cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md).
 
@@ -88,20 +91,20 @@ API additions plus samples than as families.
 | Candidate | Composition | Key caveat |
 | --- | --- | --- |
 | `PersistentOrderedSet<T>` | Independently owned HAMT `item -> stamp` + persistent stamp-ordered sequence | **Shipped across all eight languages** in neutral Ordered packages. The ports own first-representative retention, explicit movement, positional ranges, stable one-shot sorting, receiver-policy algebra, sparse-label/relabel behavior, models, and tests without a Tungsten dependency or oracle. The hardened C# reference additionally locks deterministic relabel fallback and failure atomicity. |
-| `PersistentOrderedMap<TKey, TValue>` | Independently owned HAMT `key -> (stamp, value)` + persistent stamp-ordered sequence | Still unshipped as a general family. It needs a named consumer, neutral project, independently selected values-in-HAMT versus values-in-both representation, contract, model, and tests; Tungsten is provenance only. |
+| `PersistentOrderedMap<TKey, TValue>` | Independently owned HAMT keyed index + neutral persistent ordered sequence | **Shipped across all eight languages.** The general map retains first key representatives, keeps payload replacement position-stable, separates explicit movement from setting, and owns its contract, model, invariants, and tests without a Tungsten dependency or oracle. Ports may store entries in both indexes or keep only labels in the HAMT; that representation choice is not public semantics. |
 | HAMT structural diff / merge / set algebra | Feature inside the Hamt family node layer, phased: (1) `MapEquals` + `Diff` enumerator, (2) structural set-vs-set ops, (3) 3-way `Merge` with a specified conflict matrix | Bound is `O(divergent region)` and history-dependent, not content-diff-dependent; collision buckets are insertion-ordered so equal buckets need key-matched (unordered) comparison; comparer mismatch must be gated by reference equality on the comparer. |
 | `PersistentHashBag<T>` | Facade over HAMT `T -> int` + cached wide total count | **Shipped across all eight languages** with checked positive per-class multiplicities, separate distinct/total cardinalities, first-representative retention, eager receiver-policy normalization, conventional multiset algebra, and expanded/distinct enumeration. TypeScript uses `bigint` and Python uses an unbounded `int` for the total while retaining the shared per-class bound; the other languages use their corresponding bounded wide integer. |
 | `PersistentBiMap<TKey, TValue>` | Forward `K -> V` + inverse `V -> K` HAMTs behind a bijection-enforcing facade | No-op identity must be pre-checked via `inverse.TryGetKey` (the map's internal check hardcodes the default value comparer). Honest 2x memory: every pair stored in both tries. |
 
-The shipped `PersistentOrderedSet` addresses ordered unique membership without claiming shipment of
-the broader ordered-map candidate. `PersistentOrderedMap` would address the HAMT's unspecified enumeration order, and the Tungsten
-case study independently specialized the broad composition idea for `Association`.
+The shipped `PersistentOrderedSet` and `PersistentOrderedMap` address ordered unique membership and
+ordered key/value lookup respectively. The generic map owns a representation-neutral contract;
+the Tungsten case study independently specialized the broad composition idea for `Association`.
 *Application-specific shipment 2026-07-07*: the Tungsten workspaces own a values-in-both
 `PersistentAssociation` (plus the `PersistentList` sequence facade), with the C# workspace
 ([`Tools.DataStructures.Tungsten`](../../src/CSharp/docs/Tungsten/overview.md)) as the semantic
 reference only for C, C++, Haskell, Kotlin, Rust, TypeScript, and Python Tungsten ports linked from the
 [data-structure catalog](data-structure-catalog.md#tungsten-application-collections). This did not
-ship the generic ordered-map candidate. The generic values-in-HAMT-only map variant and the other
+ship the generic ordered-map candidate at that time; the later neutral shipment did. Other
 unmarked candidates below remain unshipped. The
 structural diff feature is the one candidate that cannot be built by composition - the node layer
 is internal - and the one that upgrades the most other candidates from "store versions" to "reason
@@ -112,7 +115,7 @@ about versions".
 | Candidate | Composition | Key caveat |
 | --- | --- | --- |
 | `AddressablePriorityQueue<TKey, TPriority>` | HAMT `key -> (stamp, priority)` + `SortedSet<(priority, stamp, key)>` | The plain composition dominates a bespoke `ProductMeasure` design on every op except `Enqueue`; `TrySplitFind` + `Concat` already excises located elements, so no new core API is needed. Its use cases cover the delete-by-handle timer/interval niche. |
-| `PersistentHashMultimap<TKey, TValue>` (set-valued) | HAMT `K -> PersistentHashSet<V>` | Whole-multimap no-op identity composes from the nested contracts. The deque-valued (event-stream) variant is weaker: every append pays the outer `SetItem` walk, and it adds a cross-family dependency. |
+| `PersistentHashMultimap<TKey, TValue>` (set-valued) | HAMT `K -> PersistentHashSet<V>` | **Shipped across all eight languages**, together with a bidirectional `PersistentRelation` that owns exact forward/reverse multimap indexes. Whole-multimap no-op identity composes from the nested contracts. The deque-valued (event-stream) variant remains weaker: every append pays the outer update walk and adds a cross-family dependency. |
 | `VersionedKvStore<TKey, TValue>` | `SortedDictionary<revision, HAMT>` snapshot index + optional finger-tree journal with checkpoints | Decompose into two small layered types, not one modal store. Per-key temporal queries are `O(journal)` without an opt-in `key -> revision-list` secondary index, which doubles write cost. |
 | `OverlayMap` / layered config | Base HAMT + small overlay HAMT with tombstones | `O(1)` effective `Count` and overlay-only writes are mutually exclusive; effective enumeration pays a per-key suppression probe. |
 | `IndexedHashSet<T>` / `WeightedKeyedSampler<TKey>` | HAMT `key -> stamp` + size x sum x key product-measured tree | One parameterized family (uniform = weight 1). `TryLocate` already returns the full product measure, so cross-component projection is a convenience extension, not a core change. Weighted variant needs the size component for rank ops and non-negative-weight enforcement. |
@@ -122,6 +125,12 @@ about versions".
 | `PersistentTable<TKey, TRow>` | HAMT primary + `SortedDictionary` unique indexes + custom-measured non-unique indexes | Row-count-in-range needs a custom `(entryCount, rowCount, lastKey)` measure (stock rank counts distinct column values). Stage as a single-language reference composition before committing to parity. |
 | `PersistentWorkspace` (trie-of-HAMTs VFS) | Directory nodes as HAMT `name -> node`, files as `Rope<byte>` | The genuine differentiator is `O(depth)` subtree rename; a flat sorted map also snapshots in `O(1)` and gives prefix ranges free. Node-value `ReferenceEquals` pruning already enables an `O(changed paths)` diff. |
 | `MerkleHamt<TKey, TValue>` | Node-type fork with per-node memoized digest (CAS-published, finger-tree precedent) | Largest-effort candidate. Requires a pinned deterministic key hash (default .NET string hashing is per-process randomized - fatal for cross-process addressing), an encoder constant on comparer-equality classes, and a serialization story the repository lacks. Defer until structural diff and serialization exist. |
+
+The later `PersistentIntervalMap` was selected from the broader planning work rather than this
+original composition survey. It now ships across all eight languages as an exact interval-key map
+plus an augmented overlap-search index; consult the
+[shipped catalog](data-structure-catalog.md#derived-persistent-maps-and-relations) rather than
+retrofitting its contract into this historical candidate ranking.
 
 ### Weak
 
@@ -151,10 +160,11 @@ Cross-cutting findings that adversarial review kept re-deriving:
    Document linear-history bounds honestly and give the worst case.
 3. **Values-in-both for dual-access structures.** When both `by-key` and `by-position` reads are
    hot (caches with recency order, Tungsten-style associations where `Keys`/`Values`/`Normal`
-   dominate), store values in both the HAMT and the tree: one extra reference per entry buys
-   allocation-free key reads and hash-free ordered reads, at the price of updates touching both
-   structures. When ordered reads are rare, commit values to the HAMT only - the verified
-   recommendation for the generic `PersistentOrderedMap`.
+   dominate), storing one shared entry in both indexes buys allocation-free key reads and hash-free
+   ordered reads, at the price of updates touching both structures. A label-only HAMT avoids
+   duplicated payload storage but makes keyed lookup locate the ordered entry. The shipped generic
+   `PersistentOrderedMap` contract permits either language-local representation and tests the
+   logical dual-index invariant instead of prescribing storage placement.
 4. **The load-bearing test.** Reject a candidate when a sorted finger tree alone suffices (keys
    already ordered, no hashed lookup on the hot path) or when keys are dense integers. The HAMT
    earns its place through near-constant persistent keyed lookup over arbitrary hashable keys.

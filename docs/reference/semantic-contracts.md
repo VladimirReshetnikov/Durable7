@@ -248,6 +248,30 @@ The local authoritative references are the [C API specification](../../src/C/Ham
 [TypeScript API notes](../../src/TypeScript/docs/api-notes.md), and
 [Python API notes](../../src/Python/docs/api-notes.md).
 
+## Set-Valued Hash Multimap And Persistent Relation
+
+All eight languages ship a set-valued persistent hash multimap and a bidirectional persistent
+relation over their local HAMT maps and sets. Shared obligations are:
+
+- the key/left policy and value/right policy are independent, retained by every result, and define
+  equality classes plus first-representative retention on their respective axes;
+- a multimap stores only nonempty value sets, distinguishes distinct-key count from checked pair
+  count, and removes an outer key when its last pair is removed;
+- duplicate pair insertion and removal of an absent pair are identity no-ops;
+- union, intersection, and difference normalize argument pairs under the receiver's two policies,
+  preserve receiver representatives for surviving classes, and publish no partially normalized
+  result if enumeration or policy code fails;
+- a relation's forward and reverse multimaps contain exactly the same logical pairs, its pair count
+  agrees with both indexes, and `Inverse`/`inverse` swaps those persistent indexes without scanning
+  the relation; and
+- adding or removing a relation pair updates both directions atomically, leaving every retained
+  version and both current indexes mutually consistent on failure.
+
+Language-local result values, overflow types, callback failure reporting, and ownership are allowed
+to be idiomatic. The [derived-family catalog](data-structure-catalog.md#derived-persistent-maps-and-relations)
+links every public surface; the C# [HAMT API specification](../../src/CSharp/docs/Hamt/api-specification.md)
+is the detailed managed reference.
+
 ## Insertion-Ordered Persistent Set
 
 `PersistentOrderedSet` ships in neutral Ordered modules across all eight languages. It composes
@@ -275,6 +299,30 @@ The normative surface and bounds are in the
 result/exception, ownership, and diagnostic adaptations are documented in each sibling workspace;
 the [completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md)
 indexes them.
+
+## Insertion-Ordered Persistent Map
+
+`PersistentOrderedMap` ships beside the neutral ordered set across all eight languages. It uses the
+same equality-defined key classes and explicit positional order while attaching one payload to each
+class. Shared obligations are:
+
+- range construction retains the first key representative and its first position while the last
+  payload for that equality class wins;
+- setting an existing key changes only its payload: it neither replaces the stored key
+  representative nor moves the entry; movement remains explicit;
+- setting an absent key appends it, and positional reads, removals, ranges, reversal, movement, and
+  stable one-shot sorting preserve all older versions;
+- key lookup and ordered enumeration describe one logical entry set, counts agree across indexes,
+  and no entry exists in only one index;
+- equality policy controls key identity but never payload equality or sort order; and
+- where a local value-equality policy is part of the surface, documented equal-payload updates are
+  identity no-ops; already-positioned movement is likewise a documented no-op where exposed, while
+  callback, allocation, or comparison failure publishes neither index.
+
+The general map is independently owned by each neutral Ordered workspace. Tungsten
+`PersistentAssociation` supplied historical design evidence only and is neither a dependency nor a
+semantic authority. See the C# [Ordered API specification](../../src/CSharp/docs/Ordered/api-specification.md)
+and the [cross-language catalog](data-structure-catalog.md#derived-persistent-maps-and-relations).
 
 ## Finger-Tree Core
 
@@ -478,6 +526,26 @@ Shared obligations:
   comparison-equivalent representative.
 - Measured implementations use cached interval summaries, commonly count, last low endpoint, and max
   high endpoint, so subtree pruning remains valid.
+
+## Persistent Interval Maps
+
+The payload-bearing interval map ships across all eight languages as a derived companion to the
+interval tree. Its complete `(low, high)` pair is the unique key; intervals that share only one
+endpoint remain distinct. Shared obligations are:
+
+- endpoint policy defines interval-key ordering, equality, validity, and inclusive overlap;
+- exact lookup, insertion/replacement, and removal operate on the complete interval key;
+- replacing a payload preserves the stored interval representative and does not duplicate or move
+  the interval key;
+- stabbing and overlap queries use the augmented interval index and return entries in the local
+  deterministic interval order;
+- the exact-key index and augmented search index contain the same intervals, payloads, and count;
+  and
+- a logical no-op returns the receiver, while allocation, comparison, or callback failure leaves
+  both indexes and all retained versions unchanged.
+
+See the C# [FingerTree API specification](../../src/CSharp/docs/FingerTree/api-specification.md) and
+the [cross-language catalog](data-structure-catalog.md#derived-persistent-maps-and-relations).
 
 ## Ropes And Text
 
