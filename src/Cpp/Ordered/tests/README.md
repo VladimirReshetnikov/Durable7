@@ -1,15 +1,20 @@
 # C++ Ordered Test Map
 
 - Created (UTC): 2026-07-15T09:20:15Z
-- Repository HEAD: a47ada790d8028a744990c4608c32ab001376683
-- Audience: Maintainers and reviewers of the neutral C++ ordered-set port
-- Scope: `persistent_ordered_set_tests.cpp`
+- Repository HEAD: 88164edb086096800b2fb32eeaa7e7a1e556e183
+- Updated (UTC): 2026-07-16T22:52:15Z
+- Audience: Maintainers and reviewers of the neutral C++ ordered collections
+- Scope: `persistent_ordered_set_tests.cpp` and `persistent_ordered_map_tests.cpp`
 
 The independent executable test suite uses no Tungsten production code, test oracle, linked target,
 or source. Expected results come from direct ordered unique-list models and the neutral Ordered API
 contract.
 
 Coverage includes:
+
+- ordered-map first-key/first-position/last-value construction, strict and conditional insertion,
+  value-only root-sharing replacement, explicit movement, removal, ranges, reverse, stable sort,
+  custom value equality, retained snapshots, and forced sparse-label relabeling;
 
 - default, custom-policy, and equal-hash-collision construction, duplicate collapse,
   first-representative retention, lookup, position, endpoints, forward iteration, and invalid

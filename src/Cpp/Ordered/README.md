@@ -1,14 +1,16 @@
 # C++ Persistent Ordered Collections
 
 - Created (UTC): 2026-07-15T09:20:15Z
-- Repository HEAD: a47ada790d8028a744990c4608c32ab001376683
+- Repository HEAD: 88164edb086096800b2fb32eeaa7e7a1e556e183
+- Updated (UTC): 2026-07-16T22:52:15Z
 - Audience: C++ consumers, maintainers, reviewers, and sibling-port authors
 - Scope: Neutral C++23 ordered collections under `src/Cpp/Ordered`
 
-This header-first workspace owns the neutral C++ `persistent_ordered_set<T, Hash, KeyEqual>`.
-Membership is comparer-defined and hashed; enumeration follows insertion order or explicit
-positional movement. The implementation composes only the public C++ CHAMP map and FingerTree
-deque. It neither references nor delegates to the application-specific Tungsten workspace.
+This header-first workspace owns the neutral C++ `persistent_ordered_set<T, Hash, KeyEqual>` and
+`persistent_ordered_map<Key, Value, Hash, KeyEqual, ValueEqual>`. Membership is comparer-defined
+and hashed; enumeration follows insertion order or explicit positional movement. Both types
+compose only the public C++ CHAMP map and FingerTree deque. They neither reference nor delegate to
+the application-specific Tungsten workspace.
 
 The public headers live under
 [`include/tools/data_structures/ordered`](include/tools/data_structures/ordered):
@@ -17,10 +19,15 @@ The public headers live under
   defines construction, lookup, addition, movement, removal, ranges, reversal, stable one-shot
   sorting, receiver-policy algebra, relations, iteration, root-sharing diagnostics, and invariant
   validation.
+- [`persistent_ordered_map.hpp`](include/tools/data_structures/ordered/persistent_ordered_map.hpp)
+  defines keyed and positional lookup, strict insertion, representative-preserving value updates,
+  explicit movement, removal, ranges, reversal, stable sorting, policy access, and validation.
 - [`ordered.hpp`](include/tools/data_structures/ordered/ordered.hpp) is the aggregate header and
   exposes library version metadata.
 
-The set retains the first representative installed for each equality class. `add`, `add_first`,
+Both collections retain the first key representative installed for each equality class. The map
+also retains the first position while letting the last distinct construction value win; replacing
+a value never changes its key or position. `add`, `add_first`,
 and `insert` do not move or replace a present representative. Movement is deliberately explicit,
 and `move_to(index, value)` interprets `index` as the representative's final result position.
 Sparse signed 64-bit labels make ordinary inserts persistent path-copy operations; exhausted gaps

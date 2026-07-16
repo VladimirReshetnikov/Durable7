@@ -3,6 +3,8 @@
 - Status: Current API specification
 - Created (UTC): 2026-07-02T17:58:46Z
 - Repository HEAD: 9bba9109d24a3a104e05212e3828f12783fe8aaa
+- Updated (UTC): 2026-07-16T22:52:15Z
+- Updated against repository HEAD: 88164edb086096800b2fb32eeaa7e7a1e556e183
 - Audience: Maintainers and reviewers of `tools::data_structures::hamt`
 - Scope: Public C++ API, immutable-version semantics, wire contracts, and complexity guarantees
 
@@ -25,6 +27,13 @@ structural-sharing behavior as the map.
 `persistent_hash_map<T, std::int32_t, Hash, KeyEqual>`. It distinguishes the number of equivalence
 classes (`distinct_count`) from the expanded signed-64-bit occurrence count (`total_count`) and
 retains one representative per receiver-policy class.
+
+`persistent_hash_multimap<Key, Value, ...>` is a set-valued immutable multimap composed from the
+public CHAMP map and set. It stores no empty group, retains first representatives independently in
+both domains, tracks key-class and pair counts separately, and supports pair removal plus whole-key
+contraction. `persistent_relation<Left, Right, ...>` owns mutually inverse multimaps, enforcing one
+global representative per equality class on either side. Pair and whole-side edits update both
+directions atomically; `inverse()` swaps the two persistent roots without rebuilding pairs.
 
 The port intentionally follows C++ value semantics rather than C# reference identity. No-op updates
 return a value that shares the same root node as the source; `shares_root_with` and the debug root

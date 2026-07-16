@@ -3,8 +3,8 @@
 - Status: Current API notes
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-14T04:50:00Z
-- Updated against repository HEAD: f814076ceba253306517114ff94d30f952af92e6
+- Updated (UTC): 2026-07-16T22:52:15Z
+- Updated against repository HEAD: 88164edb086096800b2fb32eeaa7e7a1e556e183
 - Audience: Maintainers implementing and reviewing public C++ APIs
 - Scope: C++ naming, contracts, and intentional differences from the C# workspace
 
@@ -616,3 +616,17 @@ Notable C++ differences from C#:
   the C# comparer-equality contract;
 - iteration and `copy_to` stream nondecreasing low-endpoint order. `count_overlaps` counts directly, and
   `coalesce` sweeps the iterator into a rebuilt tree without first materializing all source intervals.
+
+## `persistent_interval_map<Endpoint, Value, Comparison, ValueEqual>`
+
+The persistent interval map stores one payload for each comparison-distinct closed interval and
+orders complete keys lexicographically by `(low, high)`. Its measure caches count, the complete last
+interval, and maximum high endpoint. The complete key is essential when several intervals share a
+low endpoint: exact lookup and insertion remain strictly ordered while overlap queries prune through
+the independent maximum-high annotation.
+
+The surface includes `create`/`create_range`, pointer and throwing lookup, stored-entry recovery,
+strict `add`, conditional `try_add`, representative-preserving `set_item`, removal/clear, stabbing,
+single and all-overlap queries, ordered iteration, key/value materialization, and invariant
+diagnostics. Every public interval is validated. `ValueEqual` recognizes replacement no-ops, and
+the compile-time `Comparison` policy defines endpoint and exact-key equivalence.

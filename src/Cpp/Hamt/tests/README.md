@@ -2,6 +2,8 @@
 
 - Created (UTC): 2026-07-02T21:13:37Z
 - Repository HEAD: 30159246f73321480596ee7d9971a951f939280d
+- Updated (UTC): 2026-07-16T22:52:15Z
+- Updated against repository HEAD: 88164edb086096800b2fb32eeaa7e7a1e556e183
 - Audience: Maintainers validating the C++ HAMT port
 - Scope: Native test executable and source organization under `src/Cpp/Hamt/tests`
 
@@ -75,6 +77,10 @@ The executable registers these cases:
 - `PersistentHashBag_AlgebraUsesMultisetCountsAndSharesIdentities`
 - `PersistentHashBag_NormalizesArgumentToReceiverPolicyAndKeepsPrecedence`
 - `PersistentHashBag_CheckedSumFailureLeavesBothOperandsUnchanged`
+- `PersistentHashMultimap_RetainsRepresentativesAndContractsGroups`
+- `PersistentHashMultimap_NoOpsPoliciesAndWholeKeyRemoval`
+- `PersistentRelation_NormalizesGlobalRepresentativesAndSwapsInverseRoots`
+- `PersistentRelation_RemovesPairsAndWholeSidesSymmetrically`
 - `TransientMap_CleanAndLogicalNoOpPublicationRetainSourceIdentity`
 - `TransientMap_PointEditsPreserveRepresentativesAndVersionBoundIteration`
 - `TransientMap_MoveTransferAndOverwriteHaveDeterministicLifecycles`
@@ -107,6 +113,9 @@ cover construction-only aggregation, equal-value no-ops, detached repeated freez
 after updater or key-comparer exceptions. The bag groups lock range aggregation, expanded/distinct/
 entry views, checked point edits, multiplicity algebra and identities, eager receiver-policy
 normalization, receiver/argument representative precedence, and overflow without source changes.
+The multimap and relation groups cover independent domain policies, first representatives, no-op
+root identity, group contraction, whole-side removal, global representative normalization, inverse
+root swapping, and forward/reverse invariant validation.
 
 ## Merkle Core, Wire, And Persistence Coverage
 
