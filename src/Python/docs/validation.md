@@ -20,8 +20,10 @@ and concurrency tests. Python 3.11 and 3.14 lanes exercise the runtime surface; 
 targets the declared Python 3.11 language floor. Record exact test counts only from a completed full
 gate, never by inferring parameterized or generated executions from source files.
 
-The current complete Python 3.14 serialized gate passes Ruff, strict Mypy, all 170/170 pytest
-tests, isolated source and wheel builds, Twine metadata checks, and the installed-wheel smoke test.
+The 2026-07-16 complete Python 3.13 serialized gate passes Ruff across 63 files, strict Mypy, all
+194/194 pytest tests, isolated source and wheel builds, Twine metadata checks, and the installed-wheel
+smoke test. The aggregate includes four focused 6/6 suites for the ordered map, set-valued hash
+multimap, payload interval map, and bidirectional relation. No benchmark is part of this gate.
 
 Range-update coverage includes exhaustive affine-tag monoid/action checks, an ordered
 noncommutative measure, all small split/rejoin boundaries, nested assignment/addition/affine tags,
@@ -35,6 +37,12 @@ Ordered-set coverage includes exact first-representative and receiver-policy sem
 small final-index movements and relation truth tables, repeated sparse-label exhaustion with
 retained branches, every range boundary, stable sort and algebra ordering, callback-failure
 atomicity, concurrent snapshot readers, and generated construction/algebra/branching histories.
+
+The ordered-map suite covers first-key/last-value construction, strict and replacing edits,
+movement, ranges, stable sorting, relabel pressure, retained branches, and dual-index invariants.
+Hash-multimap and relation suites cover no-empty-group contraction, exact counts, global
+representatives, inverse roots, and symmetric removal. Interval-map coverage locks lexicographic
+same-low keys, input validation, maximum-high pruning, policy identity, and cached annotations.
 
 Recent HAMT coverage locks one-descent factory selection and failure atomicity, reusable detached
 mutable-builder freezes (including the final two hash bits and collision buckets), routed map/set

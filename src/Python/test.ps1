@@ -92,12 +92,17 @@ try {
         $smokeScript = @'
 from vladimir_reshetnikov.data_structures import (
     HashMapBulkBuilder,
+    Interval,
     PersistentAssociation,
     PersistentDeque,
     PersistentHashBag,
+    PersistentHashMultimap,
     PersistentBiMap,
     PersistentHashMap,
+    PersistentIntervalMap,
+    PersistentOrderedMap,
     PersistentOrderedSet,
+    PersistentRelation,
     RangeUpdateSequence,
     UInt256,
 )
@@ -132,8 +137,12 @@ builder = HashMapBulkBuilder()
 builder.set_item("built", 44)
 assert builder.to_immutable().get("built") == 44
 assert PersistentHashBag.from_values(["x", "x", "y"]).count_of("x") == 2
+assert PersistentHashMultimap.empty().add("a", 1).contains("a", 1)
 assert PersistentBiMap.empty().add("answer", 42).inverse[42] == "answer"
+assert PersistentRelation.empty().add("a", 1).inverse.contains(1, "a")
 assert PersistentDeque.from_iterable([1, 2]).append(3).to_list() == [1, 2, 3]
+assert PersistentIntervalMap.empty().add(Interval(1, 2), "x")[Interval(1, 2)] == "x"
+assert list(PersistentOrderedMap.empty().add("a", 1).keys()) == ["a"]
 assert PersistentOrderedSet.from_values(["alpha", "beta", "alpha"]).to_list() == ["alpha", "beta"]
 assert PersistentAssociation.from_pairs([("a", 1)]).get("a") == 1
 range_sequence = RangeUpdateSequence.from_iterable([1, 2, 3], AdditiveRangeAlgebra())
