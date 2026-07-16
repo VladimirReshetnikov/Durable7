@@ -3,13 +3,19 @@
 - Created (UTC): 2026-07-15T00:00:00Z
 - Repository HEAD: a47ada790d8028a744990c4608c32ab001376683
 - Audience: Consumers, maintainers, reviewers, and sibling-language port authors
-- Scope: Neutral Rust `PersistentOrderedSet` crate, contracts, and validation entry point
+- Scope: Neutral Rust persistent ordered set/map crate, contracts, and validation entry point
 
 `tools-data-structures-ordered` provides the safe-Rust port of the repository's neutral persistent
 insertion-ordered set. `PersistentOrderedSet<T, S = RandomState>` combines the public CHAMP
 `PersistentHashMap<T, i64, S>` membership index with the public FingerTree `PersistentDeque`
 positional sequence. It is independently owned general-purpose code: the crate has no dependency on
 Tungsten production code, tests, internals, or behavior.
+
+`PersistentOrderedMap<K, V, S = RandomState>` uses the same sparse-stamp design. Its CHAMP stores
+key-to-stamp navigation while the positional deque owns key/value entries, so arbitrary payloads
+are not duplicated across indexes. It retains the first key representative and position while
+`set_item` replaces only the value; strict addition, explicit movement, ranges, reversal, stable
+one-shot sorting, removal, sharing diagnostics, and full dual-index validation mirror the set.
 
 Rust's `Eq` and `Hash` define membership classes. The retained `BuildHasher` defines hash routing,
 and every set-producing algebra operation and relation eagerly normalizes its entire argument under

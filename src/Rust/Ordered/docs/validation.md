@@ -2,7 +2,7 @@
 
 - Created (UTC): 2026-07-15T00:00:00Z
 - Repository HEAD: a47ada790d8028a744990c4608c32ab001376683
-- Audience: Maintainers and reviewers validating the Rust ordered-set port
+- Audience: Maintainers and reviewers validating the Rust ordered set/map port
 - Scope: Serialized build/test gate and invariant evidence
 
 Run the focused gate from `src/Rust`:
@@ -16,6 +16,10 @@ correctness build; do not run Debug and Release concurrently. Benchmarks are sep
 routine validation requirement.
 
 The crate's deterministic suite covers:
+
+- ordered-map first-key/last-value construction, strict and replacing updates, positional insertion
+  and movement, keyed/positional removal, ranges, reversal, stable sorting, sparse-gap relabeling,
+  root sharing, retained branches, and dual-index invariants;
 
 - construction, duplicate collapse, first-representative retention, and full-hash collisions;
 - every positional addition, movement, removal, range, reverse, and stable-sort operation;

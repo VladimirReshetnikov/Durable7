@@ -1,9 +1,26 @@
-# Rust Persistent Ordered Set API Notes
+# Rust Persistent Ordered Collections API Notes
 
 - Created (UTC): 2026-07-15T00:00:00Z
 - Repository HEAD: a47ada790d8028a744990c4608c32ab001376683
 - Audience: Rust API consumers, maintainers, and port reviewers
-- Scope: `tools_data_structures_ordered::PersistentOrderedSet`
+- Scope: `PersistentOrderedSet` and `PersistentOrderedMap`
+
+## Persistent ordered map
+
+`PersistentOrderedMap<K, V, S = RandomState>` composes a positional deque of stamped key/value
+entries with a `PersistentHashMap<K, i64, S>` navigation index. Values occur only in the deque.
+`get` performs a CHAMP lookup followed by binary search over strictly increasing private stamps;
+positional reads need no hashing.
+
+`add`/`add_first` and valid `insert` are strict and return `DuplicateKey`; `try_add` is nonthrowing.
+`set_item` appends an absent key or replaces only the payload in place, retaining the first key
+representative and explicit position. Equal values share both roots. Movement is explicit through
+`move_to_first`/`move_to_last`/`move_to`; removal, ranges, reversal, and stable `sort_by` retain the
+set's sparse-label and deterministic relabel rules. The map deliberately exposes no key algebra.
+
+`validate_structure` checks count agreement, strict stamps, bidirectional key coverage, stamp
+agreement, and representative equivalence. Representative identity follows Rust clone semantics;
+use `Arc<K>` when allocation identity matters.
 
 ## Type and policy
 
