@@ -15,11 +15,13 @@ library
     Data.Structures.Hamt.HashBag
     Data.Structures.Hamt.Hashable
     Data.Structures.Hamt.HashMap
+    Data.Structures.Hamt.HashMultimap
     Data.Structures.Hamt.HashSet
     Data.Structures.Hamt.MerkleEncoding
     Data.Structures.Hamt.MerklePersistence
     Data.Structures.Hamt.MerkleSearchTree
     Data.Structures.Hamt.Patricia
+    Data.Structures.Hamt.Relation
     Data.Structures.Hamt.Transient
   hs-source-dirs: src
   build-depends:

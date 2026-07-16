@@ -27,6 +27,8 @@ Sorted-bag rank coverage exercises 20,000 distinct keys plus a 100,000-instance 
 including measured count bounds, final-rank access, and slices both across and within buckets.
 Deque sorted-bound coverage uses a 65,536-element tree and a counting comparator to enforce a
 logarithmic comparison ceiling for lower bound, upper bound, and binary search.
+Interval-map coverage adds exact payload replacement, retained-source lookup, overlap enumeration
+and counting, removal, and cross-index validation over equal-low intervals.
 Priority-search-queue coverage includes last-wins keyed construction, minimum/tie semantics,
 range/priority filtering, ascending-key adversarial AVL construction, cached-winner validation,
 and a 10,000-operation map model with retained immutable snapshots.

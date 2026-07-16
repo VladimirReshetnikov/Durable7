@@ -16,6 +16,7 @@ library
     Data.Structures.FingerTree.CanonicalSortedSet
     Data.Structures.FingerTree.Deque
     Data.Structures.FingerTree.IntervalTree
+    Data.Structures.FingerTree.IntervalMap
     Data.Structures.FingerTree.Measured
     Data.Structures.FingerTree.MeasuredRope
     Data.Structures.FingerTree.Measures

@@ -25,6 +25,9 @@ representative retention; equal-value root identity; a non-strict bottom-valued 
 key-equality, pure-factory, and value-equality
 exceptions likewise leave every source version intact. These are operation-count tests rather than
 elapsed-time measurements.
+The derived-collection scenario covers multimap key/pair counts, nonempty groups, pair removal,
+retained snapshots and validation, plus relation forward/reverse lookup, inversion, whole-left
+removal, and exact inverse validation.
 The hash-bag tier covers first-representative construction, explicit `Int` distinct and `Int64`
 expanded counts, positive checked `Int32` multiplicities, negative/zero pre-hash behavior,
 one-descent addition, saturated removal, nullable-style `Maybe` representatives, expanded/distinct/

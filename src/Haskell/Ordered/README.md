@@ -1,4 +1,4 @@
-# Haskell Persistent Ordered Set
+# Haskell Persistent Ordered Collections
 
 - Created (UTC): 2026-07-15T09:12:49Z
 - Repository HEAD: a47ada790d8028a744990c4608c32ab001376683
@@ -6,7 +6,7 @@
 - Scope: ownership, representation, public behavior, and validation of `tools-data-structures-ordered`
 
 This package is the independently owned Haskell port of the repository's neutral insertion-ordered
-set. It composes the public CHAMP map from `tools-data-structures-hamt` with the public persistent
+set and map. It composes the public CHAMP map from `tools-data-structures-hamt` with the public persistent
 deque from `tools-data-structures-fingertree`; it has no dependency on the application-specific
 Tungsten package and does not use Tungsten behavior as an oracle.
 
@@ -32,6 +32,12 @@ policy equivalence class, matching labels on both sides, and agreement on the st
 `validStructure` checks this contract together with the CHAMP substrate's canonical-shape validator.
 Values are immutable and therefore safe for concurrent evaluation when caller-supplied hash/equality
 callbacks are themselves safe.
+
+`Data.Structures.Ordered.PersistentOrderedMap` composes that ordered key set with a CHAMP payload
+index. Its API covers strict positional insertion, existing-value replacement without movement,
+explicit movement, keyed/positional removal, ranges, reversal, stable entry sorting, ordered
+enumeration, component-root sharing diagnostics, and two-way validation. The first key
+representative and position win while construction's last payload wins.
 
 Run the focused, single-job gate from `src/Haskell`:
 
