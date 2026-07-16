@@ -2,6 +2,7 @@
 #include <Tools/DataStructures/Hamt/persistent_hash_bag.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_multimap.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_set.hpp>
+#include <Tools/DataStructures/Hamt/persistent_relation.hpp>
 #include <Tools/DataStructures/Hamt/persistent_int_map.hpp>
 #include <tools/data_structures/test_support/headless_test_process.h>
 
@@ -38,6 +39,7 @@ using tools::data_structures::hamt::persistent_int_map;
 using tools::data_structures::hamt::persistent_int_set;
 using tools::data_structures::hamt::persistent_long_map;
 using tools::data_structures::hamt::persistent_hash_set;
+using tools::data_structures::hamt::persistent_relation;
 
 namespace {
 
@@ -2672,6 +2674,60 @@ TEST(PersistentHashMultimap_NoOpsPoliciesAndWholeKeyRemoval) {
     CHECK_EQ(std::int64_t{3}, source.pair_count());
     CHECK(branch.debug_validate());
     CHECK(branch.clear().debug_validate());
+}
+
+TEST(PersistentRelation_NormalizesGlobalRepresentativesAndSwapsInverseRoots) {
+    using relation_type = persistent_relation<
+        std::string,
+        std::string,
+        case_insensitive_hash,
+        case_insensitive_equal,
+        case_insensitive_hash,
+        case_insensitive_equal>;
+    const auto relation = relation_type::create(
+        case_insensitive_hash{},
+        case_insensitive_equal{},
+        case_insensitive_hash{},
+        case_insensitive_equal{})
+        .add("LeftOne", "Right")
+        .add("LeftTwo", "RIGHT")
+        .add("LEFTONE", "Other");
+
+    CHECK_EQ(std::int64_t{3}, relation.pair_count());
+    CHECK_EQ(std::size_t{2}, relation.left_count());
+    CHECK_EQ(std::size_t{2}, relation.right_count());
+    CHECK_EQ(std::string("Right"), *relation.rights_or_empty("lefttwo").try_get_value("right"));
+    CHECK(relation.debug_validate());
+
+    const auto inverse = relation.inverse();
+    CHECK(inverse.contains("right", "leftone"));
+    CHECK(inverse.inverse().shares_roots_with(relation));
+    CHECK(inverse.debug_validate());
+}
+
+TEST(PersistentRelation_RemovesPairsAndWholeSidesSymmetrically) {
+    using relation_type = persistent_relation<std::string, int>;
+    const auto source = relation_type::empty()
+        .add("a", 1)
+        .add("a", 2)
+        .add("b", 2)
+        .add("c", 3);
+    CHECK(source.add("a", 1).shares_roots_with(source));
+    CHECK(source.remove("a", 9).shares_roots_with(source));
+
+    const auto branch = source.remove("a", 2);
+    CHECK(!branch.contains("a", 2));
+    CHECK(branch.contains("b", 2));
+    CHECK(source.contains("a", 2));
+
+    const auto no_a = source.remove_left("a");
+    CHECK(!no_a.contains_left("a"));
+    CHECK(no_a.contains("b", 2));
+    const auto no_two = source.remove_right(2);
+    CHECK(!no_two.contains_right(2));
+    CHECK(no_two.contains("a", 1));
+    CHECK(no_a.debug_validate());
+    CHECK(no_two.debug_validate());
 }
 
 TEST(PatriciaMap_CachedCountsAndNoOpAlgebraPreserveRoots) {
