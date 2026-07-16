@@ -24,6 +24,7 @@ target_sources(
         src/daba_lite.c
         src/fingertree.c
         src/priority_search_queue.c
+        src/persistent_interval_map.c
         src/range_update_sequence.c
         src/rrb_vector.c
 )
