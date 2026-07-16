@@ -3,7 +3,7 @@
 - Status: Informational
 - Created (UTC): 2026-07-02T05:02:24Z
 - Repository HEAD: 3c639e02d05377685676923a13b30a3d22fd4994
-- Audience: Maintainers and implementers working on the C# CHAMP, hash-bag, hash-multimap, Ctrie, Patricia, and Merkle families
+- Audience: Maintainers and implementers working on the C# CHAMP, hash-bag, hash-multimap, relation, Ctrie, Patricia, and Merkle families
 - Scope: Index of current specifications, usage, and validation for `src/CSharp/src/Tools.DataStructures.Hamt`
 
 ## Current Documents
@@ -17,13 +17,15 @@
   replacement, symmetric removal, inverse-view, failure-atomicity, and honest double-storage contracts.
   The multimap section locks its set-valued pair semantics, independent policies, first
   representatives, exact pair count, and no-empty-group invariant.
+  The relation section locks mutually inverse multimap indexes, global representatives, symmetric
+  whole-domain removal, cached inversion, and two-index publication semantics.
 - [Usage guide](usage.md) shows persistent CHAMP updates and structural diff, hash-bag counting and
   algebra, comparer and stored-representative behavior, one-way map/set transient edit sessions,
-  set-valued hash multimaps, strict bidirectional mappings, set algebra, Ctrie snapshots, Patricia structural algebra, and Merkle persistence, proofs,
+  set-valued hash multimaps, many-to-many relations, strict bidirectional mappings, set algebra, Ctrie snapshots, Patricia structural algebra, and Merkle persistence, proofs,
   synchronization, and three-way merge.
 - [Validation](validation.md) records the local .NET restore/build/test commands, workspace warning
   policy, generated XML-documentation gate, and xUnit/CsCheck/model/stress coverage for the CHAMP
-  map/set/bag/multimap, Ctrie, Patricia, and Merkle families.
+  map/set/bag/multimap/relation, Ctrie, Patricia, and Merkle families.
 - [Tests README](../../tests/Tools.DataStructures.Hamt.Tests/README.md) maps the xUnit/CsCheck test project,
   source files, filter commands, wire vectors, proof/persistence adversarial cases, concurrency
   histories, and model/property coverage.

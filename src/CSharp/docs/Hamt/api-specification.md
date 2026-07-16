@@ -28,6 +28,9 @@ expanded occurrence count separately as a `long`. It has no mutable builder or t
 stores nonempty persistent value sets in a persistent map and applies independent equality policies
 to the key and value domains.
 
+`PersistentRelation<TLeft, TRight>` is the immutable many-to-many bidirectional relation. It stores
+every pair in forward and reverse multimaps and caches an O(1) inverse facade.
+
 `PersistentBiMap<TKey, TValue>` is the immutable bijection facade in the same project. It stores
 every pair in forward and inverse CHAMP maps, retains independent key and value comparers, and
 exposes an O(1) cached inverse facade without rebuilding either trie.
@@ -369,6 +372,37 @@ map's stable-for-one-version order and each group's values in its CHAMP set orde
 insertion ordered or sorted. A point update copies only the affected outer and inner trie paths and
 shares all other nodes. The type deliberately exposes no bag multiplicity, duplicate-pair mode,
 algebra, transient, or mutable builder.
+
+## Persistent Relation Contract
+
+`PersistentRelation<TLeft, TRight>` represents a mathematical set of pairs through mutually
+inverse `PersistentHashMultimap` indexes. `LeftCount` and `RightCount` report represented domain
+classes, while checked `long PairCount` reports the same distinct-pair count in either direction.
+`LeftComparer` and `RightComparer` are retained independently and swap roles through `Inverse`.
+
+`Add` is idempotent and `TryAdd` reports whether a new pair was published. Before editing either
+index, addition recovers any existing outer left and right representatives and inserts those exact
+objects into both adjacency sets. This normalization is necessary because an ordinary nested
+multimap retains representatives per group; the relation instead promises one first representative
+globally for each represented domain class. A logical duplicate returns the receiver.
+
+`Contains`, `ContainsLeft`, and `ContainsRight` query membership. `GetRights`/`GetLefts` return
+persistent comparer-compatible adjacency sets, including comparer-preserving empties for absent
+classes. `TryGetRights`/`TryGetLefts`, `CountRights`/`CountLefts`, and
+`TryGetLeft`/`TryGetRight` expose presence, degree, and stored representatives without rebuilding a
+set. Forward enumeration and `Groups` use stable-for-one-version nested CHAMP order.
+
+`Remove` deletes one pair and automatically contracts any now-empty groups in both indexes.
+`RemoveLeft` and `RemoveRight` delete an entire adjacency class; their try forms return the removed
+persistent adjacency set. Whole-class removal is O(d log n) for degree d because it removes the
+corresponding pair from each inverse group. Failures during construction of either successor remain
+local: no partially updated relation is published and every retained source version is unchanged.
+
+`Inverse` swaps the already-existing multimap roots in O(1), performs no pair traversal, is safely
+cached for concurrent readers, and satisfies `ReferenceEquals(relation,
+relation.Inverse.Inverse)`. The honest space cost is approximately twice a forward multimap because
+every pair and adjacency membership occurs in both indexes. The relation exposes no displacement,
+bag multiplicity, algebra, transient, or mutable builder.
 
 ## Persistent Bimap Contract
 

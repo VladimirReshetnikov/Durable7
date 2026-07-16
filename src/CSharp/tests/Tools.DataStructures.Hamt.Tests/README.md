@@ -6,7 +6,7 @@
 - Scope: xUnit and CsCheck test project under `src/CSharp/tests/Tools.DataStructures.Hamt.Tests`
 
 `Tools.DataStructures.Hamt.Tests` is the managed test project for the C# HAMT library, including the
-CHAMP map/set/bag/multimap/bimap, Ctrie, Patricia, and Merkle families. It targets the workspace defaults from
+CHAMP map/set/bag/multimap/relation/bimap, Ctrie, Patricia, and Merkle families. It targets the workspace defaults from
 `Directory.Build.props`, references the public `Tools.DataStructures.Hamt` project, and uses xUnit,
 `Microsoft.NET.Test.Sdk`, `xunit.runner.visualstudio`, and CsCheck.
 
@@ -41,6 +41,10 @@ CHAMP map/set/bag/multimap/bimap, Ctrie, Patricia, and Merkle families. It targe
   both domains, distinct key/pair counts, duplicate identity, grouped and flattened traversal,
   comparer-preserving absent groups, pair and whole-key removal, last-value group contraction,
   retained branching histories, and recursive invariant validation.
+- `PersistentRelationTests.cs` covers many-to-many adjacency, independent domain policies, duplicate
+  identity, globally normalized first representatives, symmetric pair and whole-domain removal,
+  comparer-preserving absent results, cached inverse identity, branching persistence, and mutually
+  inverse multimap invariants.
 - `PersistentBiMapTests.cs` covers independent comparer retention, strict duplicate rejection on
   both domains, stored representatives, configured-value-comparer replacement, claimed-value
   conflicts, symmetric removal, cached inverse identity, nullable representatives, enumerator

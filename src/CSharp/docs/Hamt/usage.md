@@ -411,6 +411,35 @@ the key group; `RemoveKey` removes a whole group in one outer-trie update. `TryR
 returns the removed persistent set. Earlier multimap versions and returned group sets remain
 immutable and share untouched CHAMP paths with their successors.
 
+## Persistent Many-To-Many Relation
+
+Use `PersistentRelation<TLeft, TRight>` when adjacency must be queried and updated efficiently in
+both directions:
+
+```csharp
+var membership = PersistentRelation<string, string>
+    .Create(StringComparer.OrdinalIgnoreCase, StringComparer.OrdinalIgnoreCase)
+    .Add("alice", "reviewers")
+    .Add("alice", "maintainers")
+    .Add("bob", "reviewers");
+
+foreach (string group in membership.GetRights("ALICE")) { }
+foreach (string member in membership.GetLefts("REVIEWERS")) { }
+
+var withoutReviewers = membership.RemoveRight("reviewers");
+var reverse = membership.Inverse; // no index rebuild
+```
+
+Duplicate pairs are identity-preserving no-ops. The first representative introduced for a left or
+right equivalence class is reused globally across every adjacency group. `Remove` deletes one pair;
+`RemoveLeft` and `RemoveRight` delete all incident pairs and contract empty groups on both sides.
+Their try forms return the removed persistent adjacency set. `Inverse` swaps the two existing
+multimap indexes in O(1), is cached, and points back to the original relation.
+
+The relation deliberately stores every pair twice. Choose it when symmetric adjacency lookup and
+whole-domain removal justify that space; use `PersistentHashMultimap<TKey, TValue>` for a single
+forward index.
+
 ## Persistent Bidirectional Map
 
 Use `PersistentBiMap<TKey, TValue>` when both domains must be unique and lookup must work in either
