@@ -1,0 +1,218 @@
+type ('element, 'measure) node =
+  | Empty
+  | Leaf of 'element * 'measure
+  | Node of int * 'measure * ('element, 'measure) node * ('element, 'measure) node
+
+type ('element, 'measure) t = {
+  tree_policy : ('element, 'measure) Measures.policy;
+  root : ('element, 'measure) node;
+}
+
+let node_length = function Empty -> 0 | Leaf _ -> 1 | Node (length, _, _, _) -> length
+
+let node_measure policy = function
+  | Empty -> Measures.empty policy
+  | Leaf (_, measure) | Node (_, measure, _, _) -> measure
+
+let make_node policy left right =
+  if node_length left = 0 then right
+  else if node_length right = 0 then left
+  else
+    Node
+      ( node_length left + node_length right,
+        Measures.append policy (node_measure policy left) (node_measure policy right),
+        left,
+        right )
+
+let rec join policy left right =
+  let left_length = node_length left in
+  let right_length = node_length right in
+  if left_length = 0 then right
+  else if right_length = 0 then left
+  else if left_length > (4 * right_length) + 1 then
+    match left with
+    | Node (_, _, left_left, left_right) ->
+        make_node policy left_left (join policy left_right right)
+    | Empty | Leaf _ -> make_node policy left right
+  else if right_length > (4 * left_length) + 1 then
+    match right with
+    | Node (_, _, right_left, right_right) ->
+        make_node policy (join policy left right_left) right_right
+    | Empty | Leaf _ -> make_node policy left right
+  else make_node policy left right
+
+let empty tree_policy = { tree_policy; root = Empty }
+
+let singleton tree_policy value =
+  { tree_policy; root = Leaf (value, Measures.measure tree_policy value) }
+
+let of_list tree_policy values =
+  let rec build length values =
+    if length = 0 then (Empty, values)
+    else if length = 1 then
+      match values with
+      | [] -> assert false
+      | value :: rest -> (Leaf (value, Measures.measure tree_policy value), rest)
+    else
+      let left_length = length / 2 in
+      let left, remaining = build left_length values in
+      let right, remaining = build (length - left_length) remaining in
+      (make_node tree_policy left right, remaining)
+  in
+  let root, _ = build (List.length values) values in
+  { tree_policy; root }
+
+let policy tree = tree.tree_policy
+let is_empty tree = node_length tree.root = 0
+let length tree = node_length tree.root
+let measure tree = node_measure tree.tree_policy tree.root
+
+let fold_left folder state tree =
+  let rec loop state = function
+    | Empty -> state
+    | Leaf (value, _) -> folder state value
+    | Node (_, _, left, right) -> loop (loop state left) right
+  in
+  loop state tree.root
+
+let fold_right folder tree state =
+  let rec loop node state =
+    match node with
+    | Empty -> state
+    | Leaf (value, _) -> folder value state
+    | Node (_, _, left, right) -> loop left (loop right state)
+  in
+  loop tree.root state
+
+let to_list tree = fold_right List.cons tree []
+let iter action tree = fold_left (fun () value -> action value) () tree
+
+let cons value tree =
+  {
+    tree with
+    root = join tree.tree_policy (Leaf (value, Measures.measure tree.tree_policy value)) tree.root;
+  }
+
+let snoc tree value =
+  {
+    tree with
+    root = join tree.tree_policy tree.root (Leaf (value, Measures.measure tree.tree_policy value));
+  }
+
+let concat left right =
+  if not (Measures.compatible left.tree_policy right.tree_policy) then
+    Error "cannot concatenate trees with different measurement policies"
+  else Ok { left with root = join left.tree_policy left.root right.root }
+
+let rec first_node = function
+  | Empty -> None
+  | Leaf (value, _) -> Some value
+  | Node (_, _, left, right) -> (
+      match first_node left with Some _ as value -> value | None -> first_node right)
+
+let rec last_node = function
+  | Empty -> None
+  | Leaf (value, _) -> Some value
+  | Node (_, _, left, right) -> (
+      match last_node right with Some _ as value -> value | None -> last_node left)
+
+let first tree = first_node tree.root
+let last tree = last_node tree.root
+
+let rec nth_node index = function
+  | Empty -> None
+  | Leaf (value, _) -> if index = 0 then Some value else None
+  | Node (_, _, left, right) ->
+      let left_length = node_length left in
+      if index < left_length then nth_node index left else nth_node (index - left_length) right
+
+let nth index tree = if index < 0 then None else nth_node index tree.root
+
+let rec split_node policy index node =
+  if index <= 0 then (Empty, node)
+  else if index >= node_length node then (node, Empty)
+  else
+    match node with
+    | Empty -> (Empty, Empty)
+    | Leaf _ -> if index = 0 then (Empty, node) else (node, Empty)
+    | Node (_, _, left, right) ->
+        let left_length = node_length left in
+        if index < left_length then
+          let prefix, suffix = split_node policy index left in
+          (prefix, join policy suffix right)
+        else if index = left_length then (left, right)
+        else
+          let prefix, suffix = split_node policy (index - left_length) right in
+          (join policy left prefix, suffix)
+
+let split_at index tree =
+  let left, right = split_node tree.tree_policy index tree.root in
+  ({ tree with root = left }, { tree with root = right })
+
+let take count tree = fst (split_at count tree)
+let drop count tree = snd (split_at count tree)
+
+let insert_at index value tree =
+  if index < 0 || index > length tree then Error "sequence insertion index is out of range"
+  else
+    let left, right = split_at index tree in
+    let with_value = snoc left value in
+    concat with_value right
+
+let update_at index update tree =
+  if index < 0 || index >= length tree then Error "sequence update index is out of range"
+  else
+    let left, tail = split_at index tree in
+    let _, right = split_at 1 tail in
+    match nth 0 tail with
+    | None -> assert false
+    | Some current -> concat (snoc left (update current)) right
+
+let remove_at index tree =
+  if index < 0 || index >= length tree then Error "sequence removal index is out of range"
+  else
+    let left, tail = split_at index tree in
+    let removed, right = split_at 1 tail in
+    match first removed with
+    | None -> assert false
+    | Some value -> Result.map (fun successor -> (value, successor)) (concat left right)
+
+let measure_range start count tree =
+  if start < 0 || count < 0 || start > length tree - count then
+    Error "sequence measure range is out of bounds"
+  else Ok (measure (take count (drop start tree)))
+
+let locate predicate tree =
+  let rec descend index prefix = function
+    | Empty -> None
+    | Leaf (value, value_measure) ->
+        if predicate (Measures.append tree.tree_policy prefix value_measure) then
+          Some (index, prefix, value)
+        else None
+    | Node (_, _, left, right) ->
+        let through_left =
+          Measures.append tree.tree_policy prefix (node_measure tree.tree_policy left)
+        in
+        if predicate through_left then descend index prefix left
+        else descend (index + node_length left) through_left right
+  in
+  if predicate (Measures.empty tree.tree_policy) then None
+  else descend 0 (Measures.empty tree.tree_policy) tree.root
+
+let validate tree =
+  let rec loop = function
+    | Empty -> Ok 0
+    | Leaf _ -> Ok 1
+    | Node (cached_length, _, left, right) -> (
+        match (loop left, loop right) with
+        | Error message, _ | _, Error message -> Error message
+        | Ok left_length, Ok right_length ->
+            if cached_length <> left_length + right_length then
+              Error "cached sequence length is invalid"
+            else Ok cached_length)
+  in
+  (* Generic measures need not support equality, so validation recomputes shape and length while
+     construction centralizes every cached-measure write. *)
+  match loop tree.root with
+  | Error message -> Error message
+  | Ok _ -> Ok ()

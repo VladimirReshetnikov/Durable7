@@ -79,5 +79,11 @@ typed three-way merge distinguishes a missing key from a present encoded value. 
 producer deliberately sends a complete authenticated block set; verification and wire semantics
 are exact, but proof minimization is not claimed.
 
+The FingerTree foundation is a structurally shared measured sequence with cached monoidal
+summaries, balanced concatenation, indexed editing and splitting, range measurement, and prefix
+search. `Persistent_deque` specializes it with the size monoid, `Measured_sequence` retains an
+arbitrary runtime measurement policy, and `Reversible_deque` adds an O(1) logical reversal bit.
+Published snapshots remain immutable across end edits, concatenation, splits, and indexed changes.
+
 Each remaining collection-family checkpoint adds its public modules and corresponding focused tests
 before the repository-level indexes claim that family as shipped.
