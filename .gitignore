@@ -72,3 +72,8 @@ dist-newstyle/
 cabal.project.local
 cabal.project.local~
 .ghc.environment.*
+
+# OCaml / Dune / opam
+_build/
+_opam/
+*.install

@@ -1,0 +1,15 @@
+(include_subdirs qualified)
+
+(library
+ (name tools_data_structures)
+ (public_name tools-data-structures)
+ (libraries zarith digestif threads)
+ (flags
+  (:standard
+   -safe-string
+   -strict-sequence
+   -strict-formats
+   -w
+   @a-4-42-44-48-70
+   -warn-error
+   @a-4-42-44-48-70)))
