@@ -19,6 +19,7 @@ Current public families:
   `PrioritySearchMinimumView<K, P, V>`, and `PrioritySearchQueueStatistics`;
 - `Interval<T>` and `IntervalTree<T>`;
 - `PersistentIntervalMap<T, V>` and `IntervalMapEntry<T, V>`;
+- `PersistentChunkedBitSet` and `PersistentChunkedBitSetStatistics`;
 - `RrbVector<T>` and `RrbVector.Builder<T>`;
 - `ZipTreeRankPolicy<T>`, `CanonicalSortedSet<T>`, `CanonicalSetLookup<T>`, and
   `CanonicalSortedSetStatistics`;
@@ -30,6 +31,10 @@ Current public families:
   `TextRopeCursorSearch`, `RopeBuilder`, `NewlineMeasure`, and `LineColumn`.
 
 The Kotlin surface follows Kotlin/JVM conventions:
+
+`PersistentChunkedBitSet` stores only ascending nonzero 64-bit words in the shared measured tree.
+Its cached population annotation drives logarithmic membership, inclusive `rank`, and zero-based
+`select`; algebra merges sparse word streams over the nonnegative signed-32-bit domain.
 
 - fallible indexed operations return `null`;
 - duplicate sorted-map insertion throws `SortedDuplicateKeyException` for `insert` and returns

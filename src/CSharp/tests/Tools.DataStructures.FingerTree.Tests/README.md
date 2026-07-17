@@ -32,6 +32,9 @@ reasonable oracle.
   order, configured payload equality, first interval representatives, reversed-endpoint rejection,
   point and overlap queries against a brute-force model, removal, policy-preserving clear,
   branching persistence, and annotation invariants.
+- `PersistentChunkedBitSetTests.cs` covers negative and maximum indexes, 64-bit word boundaries,
+  deduplication, inclusive rank, zero-based select, chunk contraction, four-way set algebra,
+  identity, retained branches, randomized sorted-set parity, and measured-tree invariants.
 - `ComparerEquivalentFacadeTests.cs` covers canonical-instance behavior when comparer equality is coarser than
   object equality across all sorted facades, plus duplicate-low interval-tree stress.
 - `RopeTests.cs`, `RopeModelTests.cs`, `MeasuredRopeTests.cs`, `RopeTextTests.cs`, `RopeTextExtrasTests.cs`, and

@@ -41,6 +41,8 @@ The dependency-free executable test program covers:
   preservation of every source snapshot;
 - 1,200 deterministic mixed-operation model steps plus retained branches and invariant checks; and
 - version-bound iterators and concurrent readers of shared immutable snapshots.
+- ordered-multimap independent policies, nested grouped order, first key/value representatives,
+  duplicate identity, pair/group removal, snapshot isolation, checked counts, and validation.
 
 `validateStructure()` runs after deterministic and generated histories, checking both directions of
 the Ordered-owned map/sequence invariant without relying on Hamt or FingerTree internals.

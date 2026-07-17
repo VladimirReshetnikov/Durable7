@@ -34,6 +34,12 @@ expanded/default iteration, distinct and entry views, and receiver-policy multis
 validation. `PersistentRelation<L, R>` maintains exact forward and reverse multimaps with
 bidirectional lookup, inversion, endpoint-group removal, and complete inverse validation.
 
+`PersistentMapPatch<K, V>` adds presence-safe strict before/after changes with preflight apply,
+inversion, and policy-compatible composition. `PersistentDirectedGraph<V>` combines explicit
+vertices with the relation for forward/reverse adjacency. `PersistentIndexedMap<K, V, I>` combines
+primary rows with one selector-maintained nonunique secondary index. All retain runtime policy
+objects, first representatives, immutable snapshots, and atomic composite publication.
+
 The CHAMP map and set also expose one-way `Transient` editing sessions through `toTransient()` and
 `createTransient(...)`. Adoption and `persist()` are O(1) reference transfers, clean or logically
 unchanged sessions publish the exact adopted persistent object, and successful publication consumes

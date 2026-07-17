@@ -34,6 +34,9 @@ This document specifies the public API contract for the C# FingerTree workspace.
 - The measured tree and derived collection contracts in the later sections of this document.
 - The implicit-AVL `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>`, including its static
   action algebra, lazy-tag composition order, range operations, and structural bounds.
+- `PersistentChunkedBitSet`, including sparse nonnegative-int membership, inclusive rank,
+  zero-based select, chunk contraction, and set algebra. Its detailed normative surface is the
+  [persistent chunked bit set contract](persistent-chunked-bit-set.md).
 - Exact exception and edge-case behavior for public methods.
 - Public complexity guarantees for time and allocation.
 

@@ -25,6 +25,11 @@ header consumer reports only failures and exits zero after its compile/link/runt
 
 ## CHAMP And Patricia Test Cases
 
+The current CHAMP executable also includes strict map-patch apply/invert/compose and conflict
+preflight, explicit-vertex directed-graph forward/reverse adjacency and incident-edge removal, and
+indexed-map secondary-membership movement. These groups cover custom policies, stored
+representatives, nullable/presence-safe states, retained snapshots, and composite invariants.
+
 The executable registers these cases:
 
 - `EmptyMap_HasNoEntries`

@@ -105,10 +105,21 @@ force-put mode. The honest storage cost is approximately two map entries per log
 | TypeScript | `PersistentBiMap<K, V>` | [API notes](../../src/TypeScript/docs/api-notes.md#hamt-maps-bags-bimaps-builders-and-sessions), [validation](../../src/TypeScript/docs/validation.md) |
 | Python | `PersistentBiMap[K, V]` | [API notes](../../src/Python/docs/api-notes.md), [validation](../../src/Python/docs/validation.md) |
 
-## Derived Persistent Maps And Relations
+## Derived Persistent Maps, Relations, And Sparse Bit Sets
 
-Four composition-first families now ship across all eight language roots. They reuse the public
-HAMT, ordered-sequence, and interval-search substrates instead of introducing new core trees:
+Nine composition-first families now ship across all eight language roots. They reuse the public
+HAMT, ordered-sequence, measured-tree, and interval-search substrates instead of introducing
+unnecessary new core trees. In addition to the established multimap, relation, ordered-map, and
+interval-map families, the current tranche adds:
+
+- an ordered multimap whose key groups and distinct values each retain first-insertion order;
+- a strict presence-safe map patch with preflight application, inversion, and composition;
+- an explicit-vertex directed graph with forward and reverse adjacency;
+- a primary map with one automatically maintained nonunique secondary index; and
+- a sparse chunked bit set with logarithmic point lookup, inclusive rank, and select over cached
+  population measures.
+
+The established composition-first families remain:
 
 - set-valued hash multimaps store only nonempty value sets and expose distinct-key and pair
   cardinalities separately;
@@ -126,14 +137,14 @@ independently owned and has no Tungsten dependency or Tungsten semantic baseline
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
-| C# | `PersistentHashMultimap<TKey, TValue>`, `PersistentRelation<TLeft, TRight>`, `PersistentOrderedMap<TKey, TValue>`, `PersistentIntervalMap<TEndpoint, TValue>` | [HAMT API](../../src/CSharp/docs/Hamt/api-specification.md), [Ordered API](../../src/CSharp/docs/Ordered/api-specification.md), [FingerTree API](../../src/CSharp/docs/FingerTree/api-specification.md), [sources](../../src/CSharp/src) |
-| C | `tds_hamt_multimap`, `tds_hamt_relation`, `tds_ordered_map`, `ft_persistent_interval_map` | [HAMT workspace](../../src/C/Hamt/README.md), [Ordered workspace](../../src/C/Ordered/README.md), [FingerTree workspace](../../src/C/FingerTree/README.md) |
-| C++ | `persistent_hash_multimap`, `persistent_relation`, `persistent_ordered_map`, `persistent_interval_map` | [HAMT workspace](../../src/Cpp/Hamt/README.md), [Ordered workspace](../../src/Cpp/Ordered/README.md), [FingerTree workspace](../../src/Cpp/FingerTree/README.md) |
-| Haskell | `HashMultimap`, `Relation`, `PersistentOrderedMap`, `IntervalMap` | [HAMT workspace](../../src/Haskell/Hamt/README.md), [Ordered workspace](../../src/Haskell/Ordered/README.md), [FingerTree workspace](../../src/Haskell/FingerTree/README.md) |
-| Kotlin | `PersistentHashMultimap<K, V>`, `PersistentRelation<L, R>`, `PersistentOrderedMap<K, V>`, `PersistentIntervalMap<T, V>` | [HAMT workspace](../../src/Kotlin/Hamt/README.md), [Ordered workspace](../../src/Kotlin/Ordered/README.md), [FingerTree workspace](../../src/Kotlin/FingerTree/README.md) |
-| Rust | `PersistentHashMultimap<K, V, SK, SV>`, `PersistentRelation<L, R, SL, SR>`, `PersistentOrderedMap<K, V, S>`, `PersistentIntervalMap<T, V>` | [HAMT workspace](../../src/Rust/Hamt/README.md), [Ordered workspace](../../src/Rust/Ordered/README.md), [FingerTree workspace](../../src/Rust/FingerTree/README.md) |
-| TypeScript | `PersistentHashMultimap<K, V>`, `PersistentRelation<L, R>`, `PersistentOrderedMap<K, V>`, `PersistentIntervalMap<T, V>` | [Workspace](../../src/TypeScript/README.md), [API notes](../../src/TypeScript/docs/api-notes.md), [sources](../../src/TypeScript/src) |
-| Python | `PersistentHashMultimap`, `PersistentRelation`, `PersistentOrderedMap`, `PersistentIntervalMap` | [Workspace](../../src/Python/README.md), [API notes](../../src/Python/docs/api-notes.md), [sources](../../src/Python/src/vladimir_reshetnikov/data_structures) |
+| C# | `PersistentHashMultimap`, `PersistentRelation`, `PersistentOrderedMap`, `PersistentIntervalMap`, `PersistentOrderedMultimap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap`, `PersistentChunkedBitSet` | [HAMT API](../../src/CSharp/docs/Hamt/api-specification.md), [derived HAMT contract](../../src/CSharp/docs/Hamt/derived-persistent-structures.md), [Ordered multimap](../../src/CSharp/docs/Ordered/persistent-ordered-multimap.md), [chunked bit set](../../src/CSharp/docs/FingerTree/persistent-chunked-bit-set.md) |
+| C | `tds_hamt_multimap`, `tds_hamt_relation`, `tds_ordered_map`, `ft_persistent_interval_map`, `tds_ordered_multimap`, `tds_map_patch`, `tds_directed_graph`, `tds_indexed_map`, `ft_persistent_chunked_bit_set` | [HAMT workspace](../../src/C/Hamt/README.md), [Ordered workspace](../../src/C/Ordered/README.md), [FingerTree workspace](../../src/C/FingerTree/README.md) |
+| C++ | `persistent_hash_multimap`, `persistent_relation`, `persistent_ordered_map`, `persistent_interval_map`, `persistent_ordered_multimap`, `persistent_map_patch`, `persistent_directed_graph`, `persistent_indexed_map`, `persistent_chunked_bit_set` | [HAMT workspace](../../src/Cpp/Hamt/README.md), [Ordered workspace](../../src/Cpp/Ordered/README.md), [FingerTree workspace](../../src/Cpp/FingerTree/README.md) |
+| Haskell | `HashMultimap`, `Relation`, `PersistentOrderedMap`, `IntervalMap`, `PersistentOrderedMultimap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap`, `PersistentChunkedBitSet` | [HAMT workspace](../../src/Haskell/Hamt/README.md), [Ordered workspace](../../src/Haskell/Ordered/README.md), [FingerTree workspace](../../src/Haskell/FingerTree/README.md) |
+| Kotlin | `PersistentHashMultimap`, `PersistentRelation`, `PersistentOrderedMap`, `PersistentIntervalMap`, `PersistentOrderedMultimap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap`, `PersistentChunkedBitSet` | [HAMT workspace](../../src/Kotlin/Hamt/README.md), [Ordered workspace](../../src/Kotlin/Ordered/README.md), [FingerTree workspace](../../src/Kotlin/FingerTree/README.md) |
+| Rust | `PersistentHashMultimap`, `PersistentRelation`, `PersistentOrderedMap`, `PersistentIntervalMap`, `PersistentOrderedMultimap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap`, `PersistentChunkedBitSet` | [HAMT workspace](../../src/Rust/Hamt/README.md), [Ordered workspace](../../src/Rust/Ordered/README.md), [FingerTree workspace](../../src/Rust/FingerTree/README.md) |
+| TypeScript | `PersistentHashMultimap`, `PersistentRelation`, `PersistentOrderedMap`, `PersistentIntervalMap`, `PersistentOrderedMultimap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap`, `PersistentChunkedBitSet` | [Workspace](../../src/TypeScript/README.md), [API notes](../../src/TypeScript/docs/api-notes.md), [sources](../../src/TypeScript/src) |
+| Python | `PersistentHashMultimap`, `PersistentRelation`, `PersistentOrderedMap`, `PersistentIntervalMap`, `PersistentOrderedMultimap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap`, `PersistentChunkedBitSet` | [Workspace](../../src/Python/README.md), [API notes](../../src/Python/docs/api-notes.md), [sources](../../src/Python/src/vladimir_reshetnikov/data_structures) |
 
 ## Finger-Tree Core And Deque
 
@@ -183,7 +194,7 @@ proper subrange updates and queries perform logarithmic boundary work.
 
 At the Range shipment checkpoint, both full serialized C# Debug and Release solution builds
 completed with zero warnings and zero errors and passed 1,417/1,417 tests. The current derived-
-structure checkpoint passes 1,465/1,465 in both configurations. No benchmark was run; measurement
+structure checkpoint passes 1,503/1,503 in both configurations. No benchmark was run; measurement
 remains postponed until an isolated session. The single-pass HAMT updates, hash bag, ordered set,
 and range-update sequence ship across all eight languages; the detailed earlier evidence is in the
 [cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md).
@@ -330,7 +341,7 @@ applying shortcuts, retaining receiver representatives and first normalized argu
 All eight ports ship. The C# focused single-worker Debug and Release lanes each pass 62 tests. At
 the historical pre-Range Ordered shipment checkpoint, the full
 serialized C# Release build had zero warnings and zero errors and the complete gate passed
-1,355/1,355 tests; current full-workspace evidence is the 1,465/1,465 Debug and Release derived-
+1,355/1,355 tests; current full-workspace evidence is the 1,503/1,503 Debug and Release derived-
 structure gate recorded above. No benchmark was run for either shipment, and measurements remain postponed for an
 isolated session.
 

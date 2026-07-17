@@ -7,6 +7,10 @@ module Data.Structures.Hamt
   , HashBag.HashBagError(..)
   , HashMultimap.HashMultimap
   , Relation.Relation
+  , PersistentDirectedGraph.PersistentDirectedGraph
+  , PersistentIndexedMap.PersistentIndexedMap
+  , PersistentMapPatch.PersistentMapPatch
+  , PersistentMapPatch.MapPatchEntry(..)
   , HashMap.HashPolicy(..)
   , HashMap.defaultPolicy
   , module Data.Structures.Hamt.Hashable
@@ -26,3 +30,6 @@ import qualified Data.Structures.Hamt.HashMap as HashMap
 import qualified Data.Structures.Hamt.HashMultimap as HashMultimap
 import qualified Data.Structures.Hamt.HashSet as HashSet
 import qualified Data.Structures.Hamt.Relation as Relation
+import qualified Data.Structures.Hamt.PersistentDirectedGraph as PersistentDirectedGraph
+import qualified Data.Structures.Hamt.PersistentIndexedMap as PersistentIndexedMap
+import qualified Data.Structures.Hamt.PersistentMapPatch as PersistentMapPatch

@@ -2,9 +2,14 @@
 #![doc = "Neutral persistent insertion-ordered collections for Rust."]
 
 mod ordered_map;
+mod ordered_multimap;
 pub use ordered_map::{
     OrderedMapMoveError, OrderedMapRemoveResult, PersistentOrderedMap,
     PersistentOrderedMapInvariantError, PersistentOrderedMapStatistics,
+};
+pub use ordered_multimap::{
+    PersistentOrderedMultimap, PersistentOrderedMultimapInvariantError,
+    PersistentOrderedMultimapStatistics,
 };
 
 use std::cmp::Ordering;

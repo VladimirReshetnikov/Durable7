@@ -103,14 +103,27 @@ dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Te
     -- RunConfiguration.MaxCpuCount=1
 ```
 
+For the strict patch, directed graph, and indexed-map contracts, use:
+
+```powershell
+dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+    --no-restore --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false `
+    --filter 'FullyQualifiedName~PersistentMapPatchTests|FullyQualifiedName~PersistentDirectedGraphTests|FullyQualifiedName~PersistentIndexedMapTests' `
+    -- RunConfiguration.MaxCpuCount=1
+```
+
+The focused lane currently passes 23/23 tests: 8 patch, 7 graph, and 8 indexed-map tests.
+
 ## Test Coverage
 
 ### Current Derived-Structure Integration Evidence
 
-On 2026-07-16 UTC, the complete HAMT project passed 324/324 tests in both the full serialized Debug
-and Release solution gates. The focused new lanes pass 7/7 `PersistentHashMultimapTests` and 9/9
-`PersistentRelationTests`. Both complete solution builds finish with zero warnings and zero errors,
-and both full C# gates pass 1,465/1,465 tests. Benchmarks were not run.
+On 2026-07-17 UTC, the complete HAMT project passed 347/347 tests in both the full serialized Debug
+and Release solution gates. The focused new lanes pass 7/7 `PersistentHashMultimapTests`, 9/9
+`PersistentRelationTests`, and 23/23 derived-structure tests. Both complete solution builds finish
+with zero warnings and zero errors, and both full C# gates pass 1,503/1,503 tests. Benchmarks were
+not run.
 
 `PersistentBiMapTests` provides the bimap shipment gate: strict two-domain uniqueness, independent
 policy retention, configured-value-comparer replacement, first representatives, inverse identity,
@@ -128,6 +141,13 @@ dotnet test tests/Tools.DataStructures.Hamt.Tests/Tools.DataStructures.Hamt.Test
 [tests README](../../tests/Tools.DataStructures.Hamt.Tests/README.md) for source-file grouping and filter examples.
 
 The suite covers:
+
+- strict presence-safe map patches, conflict atomicity, null/absence, inversion, composition,
+  policy compatibility, representatives, and invariant validation;
+- explicit-vertex directed graphs, bidirectional adjacency, self-loops, incident removal, cached
+  reversal, representatives, retained branches, and coupled-index invariants;
+- selector-maintained indexed maps, nonunique group movement/contraction, exact selector invocation,
+  selector failure atomicity, policies, representatives, retained branches, and index agreement;
 
 - map construction, lookup, replacement, removal, no-op behavior, and enumeration;
 - persistent single-pass `GetOrAdd`/`AddOrUpdate` factory selection, exact hash/equality callback

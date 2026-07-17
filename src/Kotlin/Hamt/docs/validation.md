@@ -27,6 +27,9 @@ rehashing, reference-pruned shared ancestry, all four structural algebra truth t
 set models. A focused partially shared CHAMP lineage proves that `mapEquals` and typed `diff` skip
 every reference-identical descendant, perform no rehashing, and invoke key-policy and value equality
 exactly once for the single changed leaf.
+The derived-structure groups cover strict patch conflict preflight, present-null states,
+inverse/composition, explicit-vertex graph reversal and incident-edge removal, indexed-map
+secondary-group movement, retained snapshots, policy preservation, and composite validation.
 Persistent factory-operation tests count exactly one hash and one selected callback across hit,
 miss, collision, and bitmap paths. They verify caller-key callback identity, retained stored key and
 equal-value representatives, present-null hits and updates, exact source-map identity for logical

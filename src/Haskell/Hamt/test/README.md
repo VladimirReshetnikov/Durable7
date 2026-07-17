@@ -28,6 +28,9 @@ elapsed-time measurements.
 The derived-collection scenario covers multimap key/pair counts, nonempty groups, pair removal,
 retained snapshots and validation, plus relation forward/reverse lookup, inversion, whole-left
 removal, and exact inverse validation.
+It additionally covers strict patch apply/invert/compose and conflict isolation, graph endpoint and
+reverse-adjacency maintenance, indexed-map group movement, retained snapshots, and composite
+invariants.
 The hash-bag tier covers first-representative construction, explicit `Int` distinct and `Int64`
 expanded counts, positive checked `Int32` multiplicities, negative/zero pre-hash behavior,
 one-descent addition, saturated removal, nullable-style `Maybe` representatives, expanded/distinct/

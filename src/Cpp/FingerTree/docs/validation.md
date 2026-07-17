@@ -141,14 +141,14 @@ lane does not provide a viable TSan runtime.
 
 ## Current Coverage
 
-CTest registers 25 cases: 23 subsystem cases backed by `tests/fingertree_smoke_tests`, including the focused
+CTest registers 26 cases: 24 subsystem cases backed by `tests/fingertree_smoke_tests`, including the focused
 `fingertree.brodal-okasaki-heap`, `fingertree.canonical-sorted-set`, `fingertree.daba-lite`, and
-`fingertree.interval-map`, `fingertree.priority-search-queue`, and
+`fingertree.interval-map`, `fingertree.chunked-bit-set`, `fingertree.priority-search-queue`, and
 `fingertree.range-update-sequence` groups. Each case invokes the same local runner with an exact
 `--group` filter through the repository
 headless launcher, so a subsystem failure is isolated without introducing Catch2/GoogleTest or duplicating test
 execution. `fingertree.samples` checks two deterministic transcripts, and `fingertree.installed-consumer` performs
-the staged package integration test. All 25 carry the `fingertree` label and all Windows invocations—including the
+the staged package integration test. All 26 carry the `fingertree` label and all Windows invocations—including the
 nested install/configure/build/test command—inherit the no-dialog error mode. Use
 `ctest --test-dir out/build/msvc-debug --parallel 1 -N -L fingertree` to list the cases, or `-R` with one exact case name for a
 focused run. See the [tests README](../tests/README.md) for the complete group list, direct runner options,

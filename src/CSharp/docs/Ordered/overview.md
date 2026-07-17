@@ -4,7 +4,7 @@
 - Created (UTC): 2026-07-15T01:28:46Z
 - Repository HEAD: 5fd1a85c5ec58886f0dbabe805552bd37ec40871
 - Audience: Users choosing the collection and maintainers reviewing its architecture
-- Scope: `Tools.DataStructures.Ordered.PersistentOrderedMap<TKey, TValue>` and `PersistentOrderedSet<T>`
+- Scope: `PersistentOrderedMap<TKey, TValue>`, `PersistentOrderedSet<T>`, and `PersistentOrderedMultimap<TKey, TValue>`
 
 ## Ordered Map
 
@@ -18,6 +18,15 @@ key representative and position; a value equal under `ValueComparer` returns the
 `AddFirst`, and `Insert` are strict about duplicate keys, while `MoveToFirst`, `MoveToLast`, and
 `MoveTo` are the only ordering mutations. Ranges, reversal, removal by key or position, and retained
 branching versions follow the same sparse-label and failure-atomic publication discipline as the set.
+
+## Ordered Multimap
+
+`PersistentOrderedMultimap<TKey, TValue>` composes an ordered map of ordered sets. It retains the
+first-insertion order of nonempty key groups and a separate first-insertion order for distinct
+values within each group. Pair enumeration is deliberately key-grouped, not one globally
+interleaved arrival history. Empty groups are contracted, duplicate pairs preserve receiver
+identity, and independent key/value comparers and representatives are retained. The complete
+contract is [specified separately](persistent-ordered-multimap.md).
 
 ## What The Type Provides
 

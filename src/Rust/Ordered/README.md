@@ -6,7 +6,7 @@
 - Scope: Neutral Rust persistent ordered set/map crate, contracts, and validation entry point
 
 `tools-data-structures-ordered` provides the safe-Rust port of the repository's neutral persistent
-insertion-ordered set. `PersistentOrderedSet<T, S = RandomState>` combines the public CHAMP
+insertion-ordered collections. `PersistentOrderedSet<T, S = RandomState>` combines the public CHAMP
 `PersistentHashMap<T, i64, S>` membership index with the public FingerTree `PersistentDeque`
 positional sequence. It is independently owned general-purpose code: the crate has no dependency on
 Tungsten production code, tests, internals, or behavior.
@@ -16,6 +16,11 @@ key-to-stamp navigation while the positional deque owns key/value entries, so ar
 are not duplicated across indexes. It retains the first key representative and position while
 `set_item` replaces only the value; strict addition, explicit movement, ranges, reversal, stable
 one-shot sorting, removal, sharing diagnostics, and full dual-index validation mirror the set.
+
+`PersistentOrderedMultimap<K, V, SK = RandomState, SV = RandomState>` composes the ordered map and
+ordered set into a set-valued multimap. It retains insertion order for key groups and independently
+within each value group, while key and value equality domains retain independent hash builders.
+Enumeration is deliberately key-grouped rather than a globally interleaved pair-arrival history.
 
 Rust's `Eq` and `Hash` define membership classes. The retained `BuildHasher` defines hash routing,
 and every set-producing algebra operation and relation eagerly normalizes its entire argument under
@@ -34,7 +39,9 @@ The public surface covers:
   convenience forms that deliberately ignore the argument's hash-builder state;
 - subset, proper-subset, superset, proper-superset, overlap, and set-equality relations;
 - ordered iteration, vector conversion, indexing, root-sharing diagnostics, and complete dual-index
-  validation.
+  validation; and
+- grouped ordered-multimap construction, lookup, insertion, pair/key-group removal, clear,
+  root-sharing diagnostics, and nested invariant validation.
 
 Private signed 64-bit sparse stamps leave a large gap between ordinary neighbors. Positional inserts
 and moves choose an endpoint label or midpoint when possible. Exhausted gaps and endpoint overflow

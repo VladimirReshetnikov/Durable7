@@ -62,10 +62,11 @@ servers, and compiler sharing disabled:
 - the complete test run passed 1,355 of 1,355 tests: Numerics 319, HAMT 292, FingerTree 630,
   Ordered 62, and Tungsten 52.
 
-The later derived-structure integration gate on 2026-07-16 UTC adds seven focused ordered-map
-tests. The complete Ordered project passes 69/69 tests in both full serialized Debug and Release
-solution gates. Both builds finish with zero warnings and zero errors, and both full C# gates pass
-1,465/1,465 tests: Numerics 319, HAMT 324, FingerTree 701, Ordered 69, and Tungsten 52. This is the
+The later derived-structure integration gate on 2026-07-17 UTC adds seven focused ordered-map and
+seven focused ordered-multimap tests. The complete Ordered project passes 76/76 tests in both full
+serialized Debug and Release solution gates. Both builds finish with zero warnings and zero errors,
+and both full C# gates pass
+1,503/1,503 tests: Numerics 319, HAMT 347, FingerTree 709, Ordered 76, and Tungsten 52. This is the
 complete C# tranche evidence; the final cross-language shipment record will supersede it after all
 ports are complete.
 
@@ -73,6 +74,17 @@ The solution build compiled the benchmark project as an ordinary project depende
 benchmark was executed and no performance evidence was recorded.
 
 ## Required Coverage
+
+The focused ordered-multimap lane is:
+
+```powershell
+.\test.ps1 `
+    -Project .\tests\Tools.DataStructures.Ordered.Tests\Tools.DataStructures.Ordered.Tests.csproj `
+    -Filter FullyQualifiedName~PersistentOrderedMultimapTests
+```
+
+It currently passes 7/7 tests covering grouped order, policies, representatives, identity,
+contraction, retained branches, and recursive invariants.
 
 The Ordered suite independently covers:
 

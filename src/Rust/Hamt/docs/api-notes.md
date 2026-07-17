@@ -24,6 +24,9 @@ Primary entry points:
 - `PersistentHashMultimap<K, V, SK = RandomState, SV = RandomState>`, its flattened iterator, and
   invariant result types;
 - `PersistentRelation<L, R, SL = RandomState, SR = RandomState>` and its invariant result types;
+- `PersistentMapPatch<K, V, S = RandomState>`, `MapPatchEntry`, and typed apply/compose conflicts;
+- `PersistentDirectedGraph<T, S = RandomState>` and its invariant result types;
+- `PersistentIndexedMap<K, V, I, F, SK = RandomState, SI = RandomState>` and its invariant result types;
 - `PersistentIntMap<V>` / `PersistentIntSet` and `PersistentLongMap<V>` / `PersistentLongSet`.
 - `MerkleSearchTree<K, V>`, `MerkleSearchTreePolicy<K, V>`, `MerkleEntry<K, V>`, and
   `MerkleMapDifference<K, V>`;
@@ -177,6 +180,30 @@ adjacency set. Each whole-domain removal costs O(d log n) for degree d.
 facades are ordinary values, so the port does not build a cyclic identity cache: applying `inverse`
 twice yields a facade sharing both original roots, which is the ownership-native counterpart of the
 C# inverse-identity contract. The honest space cost remains two indexes.
+
+## Derived persistent structures
+
+`PersistentMapPatch<K, V, S>` stores strict `Option<V>` before/after states in a persistent map.
+The outer `Option` represents presence, so `V = Option<T>` distinguishes absence from a present
+`None`. `between` consumes structural `diff` results when maps share policy lineage and inherits its
+semantic fallback otherwise. `apply` validates every expectation before building a successor and
+returns `MapPatchConflict<K>` without changing the source on mismatch. `invert` swaps states;
+`compose` verifies shared intermediate states and removes net no-ops. Rust `PartialEq` is the value
+policy, and same-type hash builders are semantically compatible even when independently created.
+
+`PersistentDirectedGraph<T, S>` stores explicit vertices in a persistent set and unique directed
+edges in a relation using clones of the same hash builder. Adding an edge adds missing endpoints and
+normalizes them through the vertex set's first representatives. Self-loops are allowed; parallel
+edges collapse. Edge removal retains vertices, while vertex removal deletes incoming, outgoing,
+and self-loop edges. `reversed` clones/swaps relation roots in O(1), and reversing twice shares all
+original roots. Missing adjacency queries return `None`, following the Rust multimap API.
+
+`PersistentIndexedMap<K, V, I, F, SK, SI>` stores primary entries with their exact selected index
+representative and maintains `PersistentHashMultimap<I, K, SI, SK>` in reverse. The selector is
+retained as `Arc<F>` and runs once for a new row or a `V: PartialEq`-distinct update. Duplicate add,
+equal-value update, removal, lookup, enumeration, and validation never invoke it. Changed rows move
+groups only when the selected `I: Eq` class changes. A selector panic or hashing/equality panic can
+abandon only unpublished persistent successors; every source root remains valid.
 
 ## One-way edit sessions
 

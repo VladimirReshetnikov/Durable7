@@ -22,6 +22,9 @@ the [API specification](api-specification.md) and [usage guide](usage.md).
 `src/persistent_hash_multimap.c`, `src/persistent_relation.c`, and
 `tests/persistent_hash_multimap_tests.c` into
 `build/<Configuration>/persistent_hash_multimap_tests.exe`, then compiles
+`src/persistent_map_patch.c`, `src/persistent_directed_graph.c`,
+`src/persistent_indexed_map.c`, and `tests/persistent_derived_structures_tests.c` into
+`build/<Configuration>/persistent_derived_structures_tests.exe`, then compiles
 `src/patricia.c` and `tests/patricia_tests.c` into
 `build/<Configuration>/patricia_tests.exe`, and finally compiles `src/merkle_search_tree.c` and
 `tests/merkle_search_tree_tests.c` into

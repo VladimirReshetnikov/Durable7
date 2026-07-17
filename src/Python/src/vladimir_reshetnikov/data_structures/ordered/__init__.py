@@ -7,6 +7,13 @@ from .persistent_ordered_map import (
     OrderedMapRemoveResult,
     PersistentOrderedMap,
 )
+from .persistent_ordered_multimap import (
+    OrderedMultimapAddResult,
+    OrderedMultimapEntry,
+    OrderedMultimapKeyResult,
+    OrderedMultimapValuesResult,
+    PersistentOrderedMultimap,
+)
 from .persistent_ordered_set import (
     OrderedSetRemoveResult,
     OrderedSetValueResult,
@@ -18,8 +25,13 @@ __all__ = [
     "OrderedMapEntry",
     "OrderedMapLookup",
     "OrderedMapRemoveResult",
+    "OrderedMultimapAddResult",
+    "OrderedMultimapEntry",
+    "OrderedMultimapKeyResult",
+    "OrderedMultimapValuesResult",
     "OrderedSetRemoveResult",
     "OrderedSetValueResult",
     "PersistentOrderedMap",
+    "PersistentOrderedMultimap",
     "PersistentOrderedSet",
 ]

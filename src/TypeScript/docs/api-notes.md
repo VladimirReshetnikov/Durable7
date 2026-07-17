@@ -17,7 +17,7 @@ primitives and identity for objects. Callers can supply a `HashPolicy` for struc
 replacement retains the stored key representative across the HAMT, Patricia, sorted, Merkle, and
 Tungsten families.
 
-## HAMT maps, bags, multimaps, relations, bimaps, builders, and sessions
+## HAMT maps, bags, multimaps, relations, bimaps, derived facades, builders, and sessions
 
 `PersistentHashMap.getOrAdd(key, addFactory)` and
 `addOrUpdate(key, addFactory, updateFactory)` return a `MapUpdateResult` containing the selected
@@ -71,6 +71,25 @@ both arguments to the globally retained representatives, so the same right class
 different stored objects in different left groups. Pair and whole-side removals update both indexes.
 The cached `inverse` facade swaps existing roots in O(1), and `inverse.inverse` is the receiver.
 
+`PersistentMapPatch<K, V>` records presence-discriminated before/after states for changes between
+maps retaining the same key-policy object. This preserves the distinction between absence and a
+present `undefined`. Strict `apply` validates every expectation before publishing any successor;
+conflicts leave the source untouched. Inversion swaps states, and composition checks the complete
+intermediate state and removes round trips. Composition also requires the same value-equality
+function object so no equality domain is silently mixed.
+
+`PersistentDirectedGraph<V>` composes an explicit CHAMP vertex set with a bidirectional relation.
+Edges automatically install both endpoints, isolated vertices remain first-class, self-loops are
+allowed, and parallel equivalent edges collapse. Removing an edge retains endpoints; removing a
+vertex removes all incident edges. `reversed` swaps the already-built relation roots in O(1) and is
+an involution.
+
+`PersistentIndexedMap<K, V, I>` composes a primary CHAMP map with a nonunique secondary multimap.
+The selector is not invoked for duplicate strict adds, equal-value updates, removals, or lookups.
+Changed values are selected before publication and atomically move their primary representative
+between secondary groups; an exception leaves the source reusable. Primary and secondary equality
+domains retain independent `HashPolicy` objects.
+
 `HashMapBulkBuilder<K, V>` is a reusable construction-only staging object, also available through
 `PersistentHashMap.createBulkBuilder`. It exposes only policy/count state, `setItem`, `setItems`, and
 `toImmutable`. First key representatives win, the last SameValueZero-distinct value wins, and equal
@@ -108,7 +127,13 @@ and position while the last value-equivalence-distinct payload wins. `set` never
 key. Only explicit movement, reversal, and stable one-shot sorting change order; range extraction
 reconciles both indexes and all logical no-ops preserve the receiver.
 
-## Payload interval map
+`PersistentOrderedMultimap<K, V>` nests one ordered value set in an ordered map. Key groups follow
+first key insertion and each group follows first value insertion, so flattened enumeration is
+key-grouped rather than a globally interleaved pair-arrival history. Key and value domains retain
+independent `HashPolicy` objects. Duplicate pairs and removal misses return the receiver; removing a
+last value contracts the group, and reintroducing that key appends a new group.
+
+## Payload interval map and chunked bit set
 
 `PersistentIntervalMap<T, V>` is exported through the finger-tree subpath. It orders validated
 closed interval keys lexicographically by `(low, high)`, retains the first key representative, and
@@ -117,6 +142,13 @@ complete rightmost interval and maximum high endpoint, which supports exact same
 and pruned overlap/stabbing queries in one index. Distinct overlapping intervals remain independent;
 the type intentionally does not expose interval coalescing because payload merge semantics require
 an explicit application policy.
+
+`PersistentChunkedBitSet` stores only nonzero 64-bit `bigint` words in the shared measured sequence.
+Its public domain is nonnegative signed-32-bit `number` indexes; point updates validate this domain,
+while negative membership/removal/rank queries behave as empty-prefix queries. Cached population
+and last-word summaries provide logarithmic point edits, inclusive rank, and zero-based select in
+the number of represented words. Iteration is ascending and the four algebra operations merge word
+streams in linear represented-word time.
 
 ## Persistence and sharing
 
@@ -207,6 +239,6 @@ precision integers.
 
 ## Deliberate non-ports
 
-The repository's frozen CHAMP tier, order-maintenance list, persistent chunked bitset, styled-text
-rope, and other unshipped frontier/derived-catalog entries remain proposals or explicitly postponed
-candidates. Benchmark prototypes are evidence machinery, not package API.
+The repository's frozen CHAMP tier, order-maintenance list, styled-text rope, and other unshipped
+frontier/derived-catalog entries remain proposals or explicitly postponed candidates. Benchmark
+prototypes are evidence machinery, not package API.

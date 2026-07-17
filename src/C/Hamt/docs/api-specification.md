@@ -21,6 +21,14 @@ collision bucket.
 `tds_hamt_set` is a value-set wrapper over the same map core. It stores set items as map keys and
 uses a unit value.
 
+The composition-first `tds_hamt_map_patch`, `tds_hamt_directed_graph`, and
+`tds_hamt_indexed_map` facades retain the underlying callback policies and explicit ownership.
+Patch entries carry a separate presence flag so a present null pointer is not deletion; apply
+preflights every expected state. Graph edge insertion installs missing endpoints and vertex removal
+removes both incident directions. Indexed-map updates move exactly one primary representative
+between secondary groups when the selector changes class. All three use clone/move/destroy handles,
+write outputs only after success, and expose structural validation.
+
 `tds_hamt_bag` is an immutable unordered multiset wrapper over the map core. It stores one retained
 item representative and one library-owned positive `int32_t` multiplicity per equivalence class,
 plus a checked nonnegative `int64_t` expanded total. It intentionally has no public builder or

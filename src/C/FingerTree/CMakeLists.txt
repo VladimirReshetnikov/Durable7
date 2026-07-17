@@ -25,6 +25,7 @@ target_sources(
         src/fingertree.c
         src/priority_search_queue.c
         src/persistent_interval_map.c
+        src/persistent_chunked_bit_set.c
         src/range_update_sequence.c
         src/rrb_vector.c
 )

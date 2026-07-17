@@ -19,6 +19,11 @@ measured finger tree whose annotation retains both the complete rightmost interv
 endpoint. Exact lookup, strict or replacing edits, point stabbing, and output-sensitive overlap
 enumeration therefore need no second index; distinct overlapping intervals remain distinct.
 
+`persistent_chunked_bit_set` stores ascending nonzero 64-bit words in the measured tree. Cached
+word/population/last-word annotations give logarithmic membership, inclusive rank, and select in
+the nonnegative signed-32-bit domain; algebra merges represented word streams without scanning
+clear space.
+
 Alongside the measured-tree family, the workspace now ships `rrb_vector<T>`: a persistent 32-way relaxed
 radix-balanced vector with dense regular branches, cumulative-size relaxed branches, boundary-spine split and
 concatenation, and an append builder whose immutable snapshots remain isolated from later staging. The public

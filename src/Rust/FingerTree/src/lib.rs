@@ -3,6 +3,7 @@
 
 mod brodal_okasaki_heap;
 mod canonical_sorted_set;
+mod chunked_bit_set;
 mod daba_lite;
 mod deque;
 mod interval_map;
@@ -24,6 +25,9 @@ pub use canonical_sorted_set::{
     CanonicalSetDifference, CanonicalSetError, CanonicalSetInvariantError, CanonicalSortedSet,
     CanonicalSortedSetIter, CanonicalSortedSetStatistics, NaturalZipTreeComparer, StableRankHash,
     StableZipTreeRankHash, ZipTreeComparer, ZipTreePolicyError, ZipTreeRankHash, ZipTreeRankPolicy,
+};
+pub use chunked_bit_set::{
+    ChunkedBitSetInvariantError, ChunkedBitSetStatistics, NegativeBitIndex, PersistentChunkedBitSet,
 };
 pub use daba_lite::{
     DabaLite, DabaLiteInvariantError, DabaLiteStatistics, DabaMonoid, EmptyDabaLiteError,

@@ -3,6 +3,7 @@ find_package(Threads REQUIRED)
 add_executable(
     ordered_smoke_tests
     persistent_ordered_map_tests.cpp
+    persistent_ordered_multimap_tests.cpp
     persistent_ordered_set_tests.cpp
 )
 

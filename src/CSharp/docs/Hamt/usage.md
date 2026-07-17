@@ -822,6 +822,31 @@ var merged = merge.IsSuccess
 Resolvers can also return `UseBase`, `UseLeft`, `UseRight`, or `Delete`. If any conflict remains
 unresolved, the result exposes every unresolved conflict and no partial tree.
 
+## Derived Persistent Structures
+
+Three repository-general facades cover strict deltas, directed adjacency, and one secondary index:
+
+```csharp
+var patch = PersistentMapPatch<string, int>.Between(before, after);
+var published = patch.Apply(before); // validates every expected before-state first
+
+var graph = PersistentDirectedGraph<string>.Empty
+    .AddEdge("parse", "bind")
+    .AddEdge("bind", "emit");
+var prerequisites = graph.GetPredecessors("emit");
+
+var byDepartment = PersistentIndexedMap<int, string, string>.Create(
+    static (_, row) => row.Split(':')[0],
+    indexComparer: StringComparer.OrdinalIgnoreCase)
+    .Add(1, "engineering:Ada")
+    .Add(2, "research:Grace");
+var engineeringIds = byDepartment.GetKeysByIndex("ENGINEERING");
+```
+
+Patches are strict and invertible; graphs retain isolated vertices and normalize edge endpoints;
+indexed maps invoke their selector only for new or genuinely changed rows. See
+[derived persistent structures](derived-persistent-structures.md) for the complete contracts.
+
 ## Choosing A Surface
 
 | Need | Start with |
@@ -840,6 +865,9 @@ unresolved, the result exposes every unresolved conflict and no partial tree.
 | Maximum/minimum/subtractive/additive bag algebra | `Union`, `Intersect`, `Except`, `Sum` |
 | Expanded bag materialization | `ToArray` (when `TotalCount <= Array.MaxLength`) |
 | Custom value semantics | `Create(comparer)` or `CreateRange(items, comparer)` |
+| Strict, invertible changes between compatible maps | `PersistentMapPatch<TKey, TValue>` |
+| Explicit-vertex directed adjacency with predecessor lookup | `PersistentDirectedGraph<TVertex>` |
+| Primary map with one maintained nonunique secondary index | `PersistentIndexedMap<TKey, TValue, TIndexKey>` |
 | Shared mutable map with O(1) immutable snapshots | `ConcurrentHashTrie<TKey, TValue>` |
 | Signed integer keys with ordered structural merge | `PersistentIntMap<TValue>` / `PersistentLongMap<TValue>` |
 | Canonical cross-process content address and ordered ranges | `MerkleSearchTree<TKey, TValue>` |

@@ -159,3 +159,23 @@ target_link_libraries(
 fingertree_c_configure_target(persistent_interval_map_c_tests)
 
 tds_add_headless_test(NAME fingertree_c.persistent_interval_map TARGET persistent_interval_map_c_tests)
+
+add_executable(
+    persistent_chunked_bit_set_c_tests
+    persistent_chunked_bit_set_tests.c
+)
+target_link_libraries(
+    persistent_chunked_bit_set_c_tests
+    PRIVATE
+        tools::data_structures::finger_tree_c
+)
+target_include_directories(
+    persistent_chunked_bit_set_c_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+fingertree_c_configure_target(persistent_chunked_bit_set_c_tests)
+tds_add_headless_test(
+    NAME fingertree_c.persistent_chunked_bit_set
+    TARGET persistent_chunked_bit_set_c_tests
+)

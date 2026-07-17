@@ -12,9 +12,15 @@ The public C API lives in `tools/data_structures/finger_tree/fingertree.h` and t
 `tools/data_structures/finger_tree/priority_search_queue.h`,
 `tools/data_structures/finger_tree/range_update_sequence.h`,
 `tools/data_structures/finger_tree/persistent_interval_map.h`,
+`tools/data_structures/finger_tree/persistent_chunked_bit_set.h`,
 `tools/data_structures/finger_tree/rrb_vector.h`, and
 `tools/data_structures/finger_tree/daba_lite.h` headers. For setup and handle-lifetime examples, start with the
 [usage guide](usage.md). The API uses opaque handles plus explicit policy callbacks rather than C++ templates:
+
+`ft_persistent_chunked_bit_set` owns a measured `ft_tree` of ascending nonzero 64-bit words over
+the nonnegative `int32_t` domain. Cached population counts drive inclusive rank and zero-based
+select; point edits split one measured route, while algebra merges only represented word streams.
+Copy/destroy and out-parameter failure rules match other persistent C handles.
 
 - `ft_value_type` describes element size and optional copy/destroy callbacks.
 - `ft_measure_policy` describes the monoid identity, element measure, and measure combine operations.

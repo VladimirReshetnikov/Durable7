@@ -16,6 +16,9 @@ Primary entry points:
 - `PersistentHashMap.Transient<K, V>` and `PersistentHashSet.Transient<T>` one-way editing
   sessions;
 - `HashPolicy<K>` for runtime hash/equality policy injection;
+- `PersistentMapPatch<K, V>` and presence-safe `MapPatchValue<V>`;
+- `PersistentDirectedGraph<V>` with forward/reverse adjacency;
+- `PersistentIndexedMap<K, V, I>` with one nonunique selector-maintained secondary index;
 - `DuplicateKeyException`, `AddResult<T>`, and removal result records.
 - `ConcurrentHashTrie<K,V>` and its immutable `Snapshot<K,V>`.
 - `PersistentIntMap<V>` / `PersistentIntSet` and `PersistentLongMap<V>` / `PersistentLongSet`.

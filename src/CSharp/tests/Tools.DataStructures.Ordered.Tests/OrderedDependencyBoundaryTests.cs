@@ -109,12 +109,18 @@ public sealed class OrderedDependencyBoundaryTests
             new[]
             {
                 typeof(PersistentOrderedMap<,>).FullName,
+                typeof(PersistentOrderedMultimap<,>).FullName,
                 typeof(PersistentOrderedSet<>).FullName,
                 typeof(PersistentOrderedSet<>.Enumerator).FullName,
             }.OrderBy(name => name),
             assembly.GetExportedTypes().Select(type => type.FullName).OrderBy(name => name));
 
-        foreach (var closed in new[] { typeof(PersistentOrderedSet<string>), typeof(PersistentOrderedMap<string, string>) })
+        foreach (var closed in new[]
+                 {
+                     typeof(PersistentOrderedSet<string>),
+                     typeof(PersistentOrderedMap<string, string>),
+                     typeof(PersistentOrderedMultimap<string, string>),
+                 })
         {
             foreach (var memberType in PublicSignatureTypes(closed))
             {

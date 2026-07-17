@@ -11,9 +11,9 @@ where the language surfaces line up.
 
 | Workspace | Role | Primary entry points | Validation |
 | --- | --- | --- | --- |
-| [Hamt](Hamt/README.md) | Persistent CHAMP map/set, hash-bag, strict-bimap, Ctrie, Patricia, and Merkle port | `tools.datastructures.hamt.PersistentHashMap`, `PersistentHashSet`, `PersistentHashBag`, `PersistentBiMap` | `.\build.ps1 -Workspace Hamt` |
-| [FingerTree](FingerTree/README.md) | Persistent measured-tree port of the FingerTree family, positional/measured/text rope cursors, RRB vectors, the policy-canonical zip-zip sorted set, Brodal-Okasaki and priority-search-queue cores, and the mutable DABA Lite FIFO aggregator | `tools.datastructures.fingertree.*` | `.\build.ps1 -Workspace FingerTree` |
-| [Ordered](Ordered/README.md) | Neutral persistent insertion-ordered set and map over the public HAMT and FingerTree APIs, with payload lookup, explicit positional movement, and receiver-policy set algebra | `tools.datastructures.ordered.PersistentOrderedSet`, `PersistentOrderedMap` | `.\build.ps1 -Workspace Ordered` |
+| [Hamt](Hamt/README.md) | Persistent CHAMP collections plus strict patches, directed graphs, indexed maps, Ctrie, Patricia, and Merkle | `PersistentHashMap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap` | `.\build.ps1 -Workspace Hamt` |
+| [FingerTree](FingerTree/README.md) | Persistent measured-tree family, sparse chunked bit set, cursors, RRB, priority cores, and DABA Lite | `tools.datastructures.fingertree.*` | `.\build.ps1 -Workspace FingerTree` |
+| [Ordered](Ordered/README.md) | Neutral persistent insertion-ordered set, map, and grouped multimap | `PersistentOrderedSet`, `PersistentOrderedMap`, `PersistentOrderedMultimap` | `.\build.ps1 -Workspace Ordered` |
 | [Tungsten](Tungsten/README.md) | Application-specific leaf port of Tungsten `List` and `Association` over Kotlin persistent substrates | `tools.datastructures.tungsten.PersistentList`, `PersistentAssociation` | `.\build.ps1 -Workspace Tungsten` |
 
 Run the full Kotlin validation from this directory:

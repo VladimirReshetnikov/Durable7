@@ -12,7 +12,7 @@ cd src/Kotlin
 .\build.ps1 -Workspace Ordered
 ```
 
-The eleven named scenarios form four layers:
+The twelve named scenarios form four layers:
 
 1. construction, nullable values, representative retention, point edits, endpoints, and eager
    positional validation;
@@ -31,3 +31,7 @@ compile Tungsten and do not execute benchmarks.
 The ordered-map scenario additionally covers payload replacement without movement, retained source
 values, order/value root sharing, explicit movement, stable entry sorting, range extraction, and
 dual-index validation.
+
+The ordered-multimap scenario covers independent policies, nested grouped order, stored key/value
+representatives, duplicate no-ops, pair and whole-group removal, retained snapshots, counts, and
+nested invariant validation.

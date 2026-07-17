@@ -4,13 +4,16 @@
 - Repository HEAD: 88164edb086096800b2fb32eeaa7e7a1e556e183
 - Updated (UTC): 2026-07-16T22:52:15Z
 - Audience: Maintainers and reviewers of the neutral C++ ordered collections
-- Scope: `persistent_ordered_set_tests.cpp` and `persistent_ordered_map_tests.cpp`
+- Scope: ordered-set, ordered-map, and ordered-multimap native tests
 
 The independent executable test suite uses no Tungsten production code, test oracle, linked target,
 or source. Expected results come from direct ordered unique-list models and the neutral Ordered API
 contract.
 
 Coverage includes:
+
+- ordered-multimap independent policies, first key/value representatives, grouped iteration,
+  duplicate no-ops, pair/group removal, retained snapshots, counts, and nested validation;
 
 - ordered-map first-key/first-position/last-value construction, strict and conditional insertion,
   value-only root-sharing replacement, explicit movement, removal, ranges, reverse, stable sort,

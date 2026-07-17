@@ -25,13 +25,15 @@ and TypeScript package all families into one language-local distribution.
 The benchmark-independent rollouts now ship one-descent persistent HAMT updates,
 `PersistentHashBag`, strict `PersistentBiMap`, neutral `PersistentOrderedSet` and `PersistentOrderedMap`, set-valued
 `PersistentHashMultimap`, bidirectional `PersistentRelation`, payload-bearing
-`PersistentIntervalMap`, and the independently implemented implicit-AVL `RangeUpdateSequence`
-across all eight language roots. C# owns the detailed managed contracts while siblings express the
-same semantics through language-local policies and ownership. Both complete serialized C# Debug
-and Release solution builds finish with zero warnings and zero errors, and both test gates pass
-1,465/1,465. No benchmark was run, and measurements remain postponed until an isolated session.
-The [data-structure catalog](../docs/reference/data-structure-catalog.md#derived-persistent-maps-and-relations)
-indexes the four newest cross-language surfaces. The earlier
+`PersistentIntervalMap`, the independently implemented implicit-AVL `RangeUpdateSequence`, and the
+current `PersistentOrderedMultimap`, `PersistentMapPatch`, `PersistentDirectedGraph`,
+`PersistentIndexedMap`, and `PersistentChunkedBitSet` tranche across all eight language roots. C#
+owns the detailed managed contracts while siblings express the same semantics through language-local
+policies and ownership. Both complete serialized C# Debug and Release solution builds finish with
+zero warnings and zero errors, and both test gates pass 1,503/1,503. No benchmark was run, and
+measurements remain postponed until an isolated session. The
+[data-structure catalog](../docs/reference/data-structure-catalog.md#derived-persistent-maps-relations-and-sparse-bit-sets)
+indexes the composition-first cross-language surfaces. The earlier
 [completion audit](../docs/reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md)
 and [bimap completion audit](../docs/reviews/persistent-bimap-cross-language-completion-2026-07-15.md)
 index the preceding tranches.

@@ -22,6 +22,7 @@ library
     Data.Structures.FingerTree.Measures
     Data.Structures.FingerTree.PriorityQueue
     Data.Structures.FingerTree.PrioritySearchQueue
+    Data.Structures.FingerTree.PersistentChunkedBitSet
     Data.Structures.FingerTree.RangeUpdateSequence
     Data.Structures.FingerTree.ReversibleDeque
     Data.Structures.FingerTree.Rope

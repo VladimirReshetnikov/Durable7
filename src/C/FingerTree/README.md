@@ -40,6 +40,8 @@ included are:
 - `ft_interval_tree_i64`, a convenience closed-interval facade for signed 64-bit endpoints;
 - `ft_persistent_interval_map`, a unique closed-interval-to-payload map composing the augmented
   interval tree with a complete-key sorted map for pruned overlap queries and exact lookup;
+- `ft_persistent_chunked_bit_set`, a sparse measured sequence of nonzero 64-bit words with
+  logarithmic membership, inclusive rank/select, ascending visitation, and linear sparse algebra;
 - `ft_rrb_vector`, a type-erased 32-way relaxed radix-balanced vector with atomic structural
   sharing, checked prefix sizes, persistent range edits, and an append-only builder;
 - `ft_daba_lite`, a mutable six-cursor FIFO monoid aggregator with 64-slot blocks, worst-case

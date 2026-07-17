@@ -1962,6 +1962,60 @@ private fun persistentHashMultimapAndRelationMaintainDerivedIndexes() {
     removed.validateStructure()
 }
 
+private fun persistentMapPatchIsStrictInvertibleAndComposable() {
+    val policy = defaultHashPolicy<Int>()
+    val source = PersistentHashMap.from(listOf(1 to "one", 2 to "two", 4 to "four"), policy)
+    val target = PersistentHashMap.from(listOf(1 to "ONE", 3 to "three", 4 to "four"), policy)
+    val patch = PersistentMapPatch.between(source, target)
+    val applied = patch.apply(source)
+    check(target.mapEquals(applied), "patch should reach target")
+    check(source.mapEquals(patch.invert().apply(applied)), "inverse patch should restore source")
+    checkThrows<IllegalStateException>("patch conflict must be strict") {
+        patch.apply(source.put(1, "wrong"))
+    }
+    val final = target.put(5, "five")
+    val composed = patch.compose(PersistentMapPatch.between(target, final))
+    check(final.mapEquals(composed.apply(source)), "composed patch should reach final map")
+
+    val nullableSource = PersistentHashMap.from<Int, String?>(listOf(1 to null), policy)
+    val nullableTarget = PersistentHashMap.from<Int, String?>(listOf(1 to "value"), policy)
+    checkEquals("value", PersistentMapPatch.between(nullableSource, nullableTarget).apply(nullableSource)[1],
+        "patch must distinguish present null from absence")
+    composed.validateStructure()
+}
+
+private fun persistentDirectedGraphMaintainsBothDirectionsAndSnapshots() {
+    val source = PersistentDirectedGraph.empty<Int>()
+        .addVertex(4)
+        .addEdge(2, 3)
+        .addEdge(1, 2)
+    val reversed = source.reversed
+    val removed = source.removeVertex(2)
+    checkEquals(4, source.vertexCount, "graph vertex count")
+    checkEquals(2L, source.edgeCount, "graph edge count")
+    check(source.containsVertex(3), "edges should add missing endpoints")
+    checkEquals(listOf(2), source.successors(1).toList().sorted(), "graph successors")
+    check(reversed.containsEdge(2, 1), "graph reverse")
+    checkEquals(0L, removed.edgeCount, "vertex removal should remove incident edges")
+    check(source.containsEdge(1, 2), "graph source snapshot")
+    removed.validateStructure()
+}
+
+private fun persistentIndexedMapMovesSecondaryMembership() {
+    val source = PersistentIndexedMap.from(
+        listOf(1 to 10, 2 to 11, 3 to 12),
+        indexSelector = { _, value -> value % 2 },
+    )
+    val moved = source.set(1, 13)
+    val removed = moved.remove(2)
+    checkEquals(listOf(1, 3), source.keysByIndex(0)?.toList()?.sorted(), "initial secondary group")
+    checkEquals(listOf(1, 2), moved.keysByIndex(1)?.toList()?.sorted(), "moved secondary group")
+    checkEquals(10, source[1], "indexed map source snapshot")
+    checkEquals(null, removed[2], "indexed map removal")
+    checkEquals(2, removed.size, "indexed map count")
+    removed.validateStructure()
+}
+
 public fun main() {
     val tests = listOf(
         "mapUpdatesPreserveOldVersions" to ::mapUpdatesPreserveOldVersions,
@@ -1994,6 +2048,12 @@ public fun main() {
         "persistentBiMapStrictPoliciesModelAndConcurrency" to ::runPersistentBiMapTests,
         "persistentHashMultimapAndRelationMaintainDerivedIndexes" to
             ::persistentHashMultimapAndRelationMaintainDerivedIndexes,
+        "persistentMapPatchIsStrictInvertibleAndComposable" to
+            ::persistentMapPatchIsStrictInvertibleAndComposable,
+        "persistentDirectedGraphMaintainsBothDirectionsAndSnapshots" to
+            ::persistentDirectedGraphMaintainsBothDirectionsAndSnapshots,
+        "persistentIndexedMapMovesSecondaryMembership" to
+            ::persistentIndexedMapMovesSecondaryMembership,
         "transientMapLifecyclePreservesIdentityAndRepresentatives" to ::transientMapLifecyclePreservesIdentityAndRepresentatives,
         "transientMapPointEditsEnumerationAndFailureAtomicity" to ::transientMapPointEditsEnumerationAndFailureAtomicity,
         "transientMapDeterministicModelAcrossPublications" to ::transientMapDeterministicModelAcrossPublications,

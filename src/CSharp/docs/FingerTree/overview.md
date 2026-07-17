@@ -63,6 +63,11 @@ passes 692/692 tests in Debug and Release. At the pre-bimap Range shipment check
 serialized C# solution passed 1,417/1,417 tests with zero build warnings or errors in both
 configurations. No benchmark result is part of that shipment evidence.
 
+`PersistentChunkedBitSet` stores ascending nonzero 64-bit words in a measured finger tree whose
+annotation caches population and word boundaries. It provides sparse point edits, inclusive rank,
+zero-based select, ascending enumeration, and chunk-stream set algebra over the full nonnegative
+`int` domain. See the [chunked-bit-set contract](persistent-chunked-bit-set.md).
+
 `FingerTreeDeque<T>` is the individually tuned sequence/deque (the analogue of Haskell's `Data.Sequence`, kept separate from the general core just as Haskell keeps it separate from `Data.FingerTree`): an immutable `IReadOnlyList<T>` with O(1) endpoint reads, O(log n) worst-case / O(1) amortized endpoint insertion and removal, concatenation logarithmic in the smaller operand (amortized), indexed access and splitting logarithmic in the distance from the nearer end (amortized), and comparer-based sorted search over rightmost-element signposts with a worst-case near-bound comparer-call count. The representation follows the simplified finger tree of Claessen's *Finger Trees Explained Anew, and Slightly Simplified* (digits of one through three elements, middle nodes of two or three children), with element height encoded through polymorphic recursion, leaf counts plus rightmost-leaf signposts cached per node, and the middle subtree of every deep node held behind a memoize-on-first-force suspension — the strict-language strategy from Hinze and Paterson's original paper that makes the amortized bounds hold under fully persistent (branching) version use. The normative API and complexity contract is [docs/api-specification.md](api-specification.md); its complexity columns were realigned with the source papers' amortized claims (worst-case O(log n), amortized sharp under branching persistence, O(1) worst-case endpoint reads) after the specification review.
 
 ## Layout
@@ -80,6 +85,7 @@ configurations. No benchmark result is part of that shipment evidence.
   - `PersistentIntervalMap.cs` — a payload-bearing measured interval index with validated closed
     intervals, unique lexicographic interval keys, independent value equality, logarithmic exact
     lookup/update and first-overlap search, and output-sensitive overlap enumeration.
+  - `PersistentChunkedBitSet.cs` — a sparse measured word sequence with rank/select and set algebra.
   - `SortedBag.cs` — `SortedBag<T>`, an immutable sorted multiset on the order-statistic measure (runtime `IComparer<T>`): O(log n) add/remove/search/rank, order-statistic indexing, range extraction, and O(1) count/min/max.
   - `SortedSet.cs` / `SortedSet.Builder.cs` — `SortedSet<T>`, the uniqueness-enforcing sibling: navigable-set queries (floor/ceiling/lower/higher), order-statistic indexing and ranking, range extraction, O(n + m) set algebra and relations, plus a nested mutable builder for batched edits and cached snapshots.
   - `SortedDictionary.cs` / `SortedDictionary.Builder.cs` — `SortedDictionary<TKey, TValue>` (an `IReadOnlyDictionary`) on a key-projecting order-statistic measure (`EntryMeasure<TKey, TValue>`): O(log n) lookup/set/add/remove, navigable-map neighbor queries, order-statistic access by rank, key-range extraction, plus a nested mutable builder for batched entry edits.

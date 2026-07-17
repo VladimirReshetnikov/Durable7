@@ -78,6 +78,9 @@ listing, and replay-seed selection.
 - `persistent_interval_map_tests.cpp` covers full-key same-low ordering, strict insertion,
   representative-preserving replacement, invalid intervals, persistence, custom value equality,
   point stabbing, overlap pruning, and annotation validation.
+- `persistent_chunked_bit_set_tests.cpp` covers signed-domain boundaries, 64-bit word seams,
+  duplicate and missing no-ops, inclusive rank, select, all four sparse algebra operations,
+  retained snapshots, ascending enumeration, and measured-tree validation.
 - `rope_tests.cpp`, `measured_rope_tests.cpp`, and `rope_text_tests.cpp` cover chunked sequence editing, retained
   chunk-aware forward traversal, bounded nonmaterializing copy, same-type insertion regression guards, positional
   and measured cursor endpoints, chunk seams, no-ops, copy-on-move validity, lvalue-only borrowed peeks, retained

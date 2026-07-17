@@ -10,7 +10,9 @@ finger tree, a size-and-rightmost-leaf-measured deque, a reversible deque, sorte
 facades, a stable meldable priority queue, a worst-case-optimal Brodal-Okasaki heap, a keyed
 priority-search queue, interval tree and payload-bearing interval-map helpers, positional ropes, measured ropes, text-rope navigation
 helpers, immutable positional/measured/text rope cursors, a persistent RRB vector, a policy-canonical
-zip-zip-tree sorted set, and a persistent lazy range-update sequence.
+zip-zip-tree sorted set, a persistent lazy range-update sequence, and
+`PersistentChunkedBitSet`, a measured sparse sequence of nonzero 64-bit words with logarithmic
+membership, inclusive rank/select, and sparse linear algebra.
 
 `IntervalMap a v` composes the augmented low-sorted `IntervalTree` with an ordered exact-key map.
 It provides unique closed-interval keys, strict addition, payload replacement, exact and indexed

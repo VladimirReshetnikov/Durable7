@@ -74,6 +74,7 @@ from .persistent_bi_map import (
     BiMapRemoveResult,
     PersistentBiMap,
 )
+from .persistent_directed_graph import DirectedEdge, PersistentDirectedGraph
 from .persistent_hamt import (
     AddResult,
     DuplicateKeyError,
@@ -98,6 +99,20 @@ from .persistent_hash_multimap import (
     HashMultimapValuesResult,
     PersistentHashMultimap,
 )
+from .persistent_indexed_map import (
+    IndexedMapAddResult,
+    IndexedMapEntry,
+    IndexedMapIndexResult,
+    IndexedMapLookup,
+    PersistentIndexedMap,
+)
+from .persistent_map_patch import (
+    MapPatchCompositionError,
+    MapPatchConflictError,
+    MapPatchEntry,
+    MapPatchValue,
+    PersistentMapPatch,
+)
 from .persistent_patricia import (
     PersistentIntMap,
     PersistentIntSet,
@@ -119,6 +134,7 @@ __all__ = [
     "BiMapRemoveResult",
     "ConcurrentHashTrie",
     "ConcurrentHashTrieSnapshot",
+    "DirectedEdge",
     "DuplicateKeyError",
     "HamtEntry",
     "HashBagEntry",
@@ -128,10 +144,18 @@ __all__ = [
     "HashMultimapValuesResult",
     "HashPolicy",
     "InMemoryMerkleBlockStore",
+    "IndexedMapAddResult",
+    "IndexedMapEntry",
+    "IndexedMapIndexResult",
+    "IndexedMapLookup",
     "Int32MerkleCodec",
     "Int64MerkleCodec",
     "MapDifference",
     "MapDifferenceKind",
+    "MapPatchCompositionError",
+    "MapPatchConflictError",
+    "MapPatchEntry",
+    "MapPatchValue",
     "MapRemoveEntryResult",
     "MapRemoveResult",
     "MapUpdateResult",
@@ -168,14 +192,17 @@ __all__ = [
     "NullableBytesMerkleCodec",
     "NullableUtf8MerkleCodec",
     "PersistentBiMap",
+    "PersistentDirectedGraph",
     "PersistentHashBag",
     "PersistentHashMap",
     "PersistentHashMultimap",
     "PersistentHashSet",
+    "PersistentIndexedMap",
     "PersistentIntMap",
     "PersistentIntSet",
     "PersistentLongMap",
     "PersistentLongSet",
+    "PersistentMapPatch",
     "PersistentRelation",
     "RelationEntry",
     "Rfc4122UuidMerkleCodec",

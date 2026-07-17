@@ -35,6 +35,11 @@ every pair in forward and reverse multimaps and caches an O(1) inverse facade.
 every pair in forward and inverse CHAMP maps, retains independent key and value comparers, and
 exposes an O(1) cached inverse facade without rebuilding either trie.
 
+`PersistentMapPatch<TKey, TValue>`, `PersistentDirectedGraph<TVertex>`, and
+`PersistentIndexedMap<TKey, TValue, TIndexKey>` are repository-general derived CHAMP facades. Their
+normative presence, adjacency, indexing, policy, failure, and complexity contracts are defined by
+[Derived Persistent HAMT Structures](derived-persistent-structures.md).
+
 `ConcurrentHashTrie<TKey, TValue>` is a lock-free mutable map built from bitmap C-nodes, singleton
 leaves, collision nodes, and generation-stamped indirection nodes. Its public mutation surface is
 linearizable, and `Snapshot()` captures the current Ctrie generation in O(1).

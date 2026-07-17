@@ -42,6 +42,11 @@ from .measures import (
     create_measure_policy,
 )
 from .ordering import Comparator, default_comparator, reverse_comparator
+from .persistent_chunked_bit_set import (
+    ChunkedBitSetStatistics,
+    ChunkedBitSetUpdateResult,
+    PersistentChunkedBitSet,
+)
 from .persistent_interval_map import (
     DuplicateIntervalError,
     IntervalMapAddResult,
@@ -114,6 +119,8 @@ __all__ = [
     "CanonicalSetLookup",
     "CanonicalSortedSet",
     "CanonicalSortedSetStatistics",
+    "ChunkedBitSetStatistics",
+    "ChunkedBitSetUpdateResult",
     "Comparator",
     "DabaLite",
     "DabaLiteStatistics",
@@ -148,6 +155,7 @@ __all__ = [
     "NewlineMeasure",
     "NumberSumMeasure",
     "OptionalValue",
+    "PersistentChunkedBitSet",
     "PersistentDeque",
     "PersistentIntervalMap",
     "PriorityDequeue",

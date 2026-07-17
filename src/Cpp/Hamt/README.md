@@ -17,6 +17,8 @@ content-addressed ordered-map cores:
 - `tools::data_structures::hamt::persistent_hash_bag<T, Hash, KeyEqual>`
 - `tools::data_structures::hamt::persistent_bi_map<Key, T, KeyHash, KeyEqual, ValueHash, ValueEqual>`
 - `persistent_hash_multimap<Key, Value, ...>` and `persistent_relation<Left, Right, ...>`
+- `persistent_map_patch<Key, Value, ...>`, `persistent_directed_graph<Vertex, ...>`, and
+  `persistent_indexed_map<Key, Value, IndexKey, ...>`
 - `persistent_int_map<T>` / `persistent_long_map<T>` and the corresponding explicit-width
   `persistent_int_set` / `persistent_long_set` types.
 - `merkle_search_tree<K, V>`, `merkle_search_tree_policy<K, V>`, canonical codecs, and exact
@@ -41,7 +43,11 @@ retention, shared-root no-op results, and O(1) value-semantic inversion.
 `persistent_hash_multimap` composes the public map and set into nonempty value groups
 with independent key/value policies and a checked 64-bit pair count. `persistent_relation` keeps
 two such multimaps mutually inverse, normalizes representatives globally, and exposes constant-time
-inverse root swapping. Separately, the map and set CHAMP facades expose move-only, one-way
+inverse root swapping. `persistent_map_patch` records presence-safe strict changes and preflights
+apply/compose; `persistent_directed_graph` composes explicit vertices with a bidirectional relation;
+and `persistent_indexed_map` keeps one selector-derived nonunique secondary group per primary row.
+All three publish composite state atomically and retain policy values and representatives.
+Separately, the map and set CHAMP facades expose move-only, one-way
 `transient` editing sessions through `create_transient` and `to_transient`. Clean and logical-no-op
 sessions publish the original shared root; real point edits deliberately call the immutable
 path-copy operations, so this lifecycle surface makes no owner-token mutation or throughput claim.

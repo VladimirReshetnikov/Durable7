@@ -34,6 +34,10 @@ movement, payload-based stable sort, range extraction, conditional duplicate ins
 and two-way cross-index validation. Focused ASan/UBSan validation additionally checks its shared
 policy-context and type-erased ownership paths.
 
+The ordered-multimap executable covers independent policies, first key/value representatives,
+grouped enumeration order, duplicate no-ops, pair/group removal, retained snapshots, checked pair
+counts, nested structural validation, and ownership balance.
+
 ## Dependency audit
 
 Ordered may include only its own header plus the public HAMT and FingerTree headers. Its CMake target

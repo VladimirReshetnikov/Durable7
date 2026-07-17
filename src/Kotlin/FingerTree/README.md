@@ -16,6 +16,7 @@ names for the public families:
 - `BrodalOkasakiHeap<T>`, `BrodalMinimumView<T>`, and `BrodalOkasakiHeapStatistics`;
 - `PrioritySearchQueue<K, P, V>`, `PrioritySearchEntry<K, P, V>`, and result/statistics types;
 - `Interval<T>`, `IntervalTree<T>`, and `PersistentIntervalMap<T, V>`;
+- `PersistentChunkedBitSet`, a sparse measured nonzero-word set with rank/select and algebra;
 - `RrbVector<T>` and its append-only `RrbVector.Builder<T>`;
 - `ZipTreeRankPolicy<T>`, `CanonicalSortedSet<T>`, and `CanonicalSortedSetStatistics`;
 - `Monoid<T>`, `DabaLite<T>`, and `DabaLiteStatistics` for mutable FIFO window aggregation;

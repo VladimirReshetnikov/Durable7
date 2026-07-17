@@ -24,10 +24,10 @@ and concurrency tests. Python 3.11 and 3.14 lanes exercise the runtime surface; 
 targets the declared Python 3.11 language floor. Record exact test counts only from a completed full
 gate, never by inferring parameterized or generated executions from source files.
 
-The 2026-07-16 complete Python 3.13 serialized gate passes Ruff across 63 files, strict Mypy, all
-194/194 pytest tests, isolated source and wheel builds, Twine metadata checks, and the installed-wheel
-smoke test. The aggregate includes four focused 6/6 suites for the ordered map, set-valued hash
-multimap, payload interval map, and bidirectional relation. No benchmark is part of this gate.
+The 2026-07-17 complete Python 3.13 serialized gate passes Ruff across 73 files, strict Mypy, all
+225/225 pytest tests, isolated source and wheel builds, Twine metadata checks, and the installed-wheel
+smoke test. The aggregate includes 31/31 new focused tests for the ordered multimap, map patch,
+directed graph, indexed map, and chunked bit set. No benchmark is part of this gate.
 
 Range-update coverage includes exhaustive affine-tag monoid/action checks, an ordered
 noncommutative measure, all small split/rejoin boundaries, nested assignment/addition/affine tags,
@@ -47,6 +47,9 @@ movement, ranges, stable sorting, relabel pressure, retained branches, and dual-
 Hash-multimap and relation suites cover no-empty-group contraction, exact counts, global
 representatives, inverse roots, and symmetric removal. Interval-map coverage locks lexicographic
 same-low keys, input validation, maximum-high pruning, policy identity, and cached annotations.
+The new derived suites add grouped ordered-pair order, strict presence-safe patch composition,
+explicit-vertex graph reversal, selector-atomic secondary indexing, and sparse-word rank/select
+algebra with retained snapshots and structural diagnostics.
 
 Recent HAMT coverage locks one-descent factory selection and failure atomicity, reusable detached
 mutable-builder freezes (including the final two hash bits and collision buckets), routed map/set

@@ -24,10 +24,12 @@ The benchmark-independent implementation tranches now ship persistent one-descen
 `PersistentHashBag`, strict `PersistentBiMap`, neutral `PersistentOrderedSet` and
 `PersistentOrderedMap`, set-valued
 `PersistentHashMultimap`, bidirectional `PersistentRelation`, payload-bearing
-`PersistentIntervalMap`, and the genuinely new non-composite `RangeUpdateSequence` core across all
-eight languages. C# owns the detailed managed contracts; siblings preserve the same logical
-semantics through language-local policies and ownership idioms. Both full serialized C# Debug and
-Release gates pass 1,465/1,465 tests after builds with zero warnings and zero errors. No benchmark
+`PersistentIntervalMap`, `PersistentOrderedMultimap`, `PersistentMapPatch`,
+`PersistentDirectedGraph`, `PersistentIndexedMap`, `PersistentChunkedBitSet`, and the genuinely new
+non-composite `RangeUpdateSequence` core across all eight languages. C# owns the detailed managed
+contracts; siblings preserve the same logical semantics through language-local policies and
+ownership idioms. Both full serialized C# Debug and Release gates pass 1,503/1,503 tests after
+builds with zero warnings and zero errors. No benchmark
 was run; see the
 [frontier catalog](frontier-structure-catalog.md#range-update-sequence-persistent-lazy-propagation)
 and the [four-surface cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md).
@@ -132,7 +134,7 @@ about versions".
 The later `PersistentIntervalMap` was selected from the broader planning work rather than this
 original composition survey. It now ships across all eight languages as an exact interval-key map
 plus an augmented overlap-search index; consult the
-[shipped catalog](data-structure-catalog.md#derived-persistent-maps-and-relations) rather than
+[shipped catalog](data-structure-catalog.md#derived-persistent-maps-relations-and-sparse-bit-sets) rather than
 retrofitting its contract into this historical candidate ranking.
 
 ### Weak

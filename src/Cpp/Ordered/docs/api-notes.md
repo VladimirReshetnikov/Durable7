@@ -4,7 +4,15 @@
 - Repository HEAD: 88164edb086096800b2fb32eeaa7e7a1e556e183
 - Updated (UTC): 2026-07-16T22:52:15Z
 - Audience: C++ API consumers, maintainers, and cross-language parity reviewers
-- Scope: `persistent_ordered_set` and `persistent_ordered_map`
+- Scope: `persistent_ordered_set`, `persistent_ordered_map`, and `persistent_ordered_multimap`
+
+## Persistent Ordered Multimap
+
+`persistent_ordered_multimap<Key, Value, ...>` owns an ordered map of nonempty ordered value sets.
+Key-group order and each group's value order are independent first-insertion orders under retained
+key/value hash and equivalence policies. Pair addition is idempotent, removing a final value removes
+its group, flattened iteration is grouped, and checked 64-bit pair counts are distinct from group
+counts. Nested edits preserve C++ value semantics, immutable roots, and exception atomicity.
 
 ## Persistent Ordered Map
 

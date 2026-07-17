@@ -55,11 +55,13 @@ From `src/Cpp/Hamt`:
 Use the first command when you only need a compile gate. Use the `-RunTests` forms before committing
 behavior changes, public API changes, policy-object changes, or documentation that claims the tests pass.
 
-The current serialized MSVC Debug and Release gates each pass 67/67 CHAMP/Patricia tests, 20/20
+The current native CHAMP/Patricia executable contains 80 tests after adding the patch, graph, and
+indexed-map groups; the focused strict GCC C++20 audit passes 80/80. The established serialized
+MSVC Debug and Release gates previously passed 67/67 CHAMP/Patricia tests, 20/20
 Merkle tests, and the copied installed-header consumer with `/W4 /WX`. The aggregate consumer
 constructs, replaces, inverts, and round-trips a `persistent_bi_map`; the bimap tests account for
 six of the 67 CHAMP/Patricia groups. The corresponding single-process GCC and Clang strict-warning
-lanes also compile and pass all 67/67 CHAMP/Patricia tests with `-Werror`. Benchmarks are not part
+lanes covered the preceding 67-test checkpoint with `-Werror`. Benchmarks are not part
 of this evidence and remain postponed until an isolated run.
 
 ## Compiler Matrix Policy

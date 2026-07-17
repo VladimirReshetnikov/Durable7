@@ -3,6 +3,9 @@
 #include <Tools/DataStructures/Hamt/persistent_hash_bag.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_multimap.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_set.hpp>
+#include <Tools/DataStructures/Hamt/persistent_directed_graph.hpp>
+#include <Tools/DataStructures/Hamt/persistent_indexed_map.hpp>
+#include <Tools/DataStructures/Hamt/persistent_map_patch.hpp>
 #include <Tools/DataStructures/Hamt/persistent_relation.hpp>
 #include <Tools/DataStructures/Hamt/persistent_int_map.hpp>
 #include <tools/data_structures/test_support/headless_test_process.h>
@@ -44,6 +47,10 @@ using tools::data_structures::hamt::persistent_int_set;
 using tools::data_structures::hamt::persistent_long_map;
 using tools::data_structures::hamt::persistent_hash_set;
 using tools::data_structures::hamt::persistent_relation;
+using tools::data_structures::hamt::map_patch_entry;
+using tools::data_structures::hamt::persistent_directed_graph;
+using tools::data_structures::hamt::persistent_indexed_map;
+using tools::data_structures::hamt::persistent_map_patch;
 
 namespace {
 
@@ -2978,6 +2985,147 @@ TEST(PersistentRelation_RemovesPairsAndWholeSidesSymmetrically) {
     CHECK(no_two.contains("a", 1));
     CHECK(no_a.debug_validate());
     CHECK(no_two.debug_validate());
+}
+
+TEST(PersistentMapPatch_BetweenApplyInvertAndComposeRoundTrip) {
+    using map_type = persistent_hash_map<int, std::string>;
+    using patch_type = persistent_map_patch<int, std::string>;
+    const auto source = map_type{}.set_item(1, "one").set_item(2, "two");
+    const auto middle = source.remove(1).set_item(2, "TWO").set_item(3, "three");
+    const auto target = middle.set_item(3, "THREE").set_item(4, "four");
+
+    const auto first = patch_type::between(source, middle);
+    const auto second = patch_type::between(middle, target);
+    const auto composed = first.compose(second);
+    CHECK(composed.apply(source).map_equals(target));
+    CHECK(composed.invert().apply(target).map_equals(source));
+    CHECK(first.debug_validate());
+    CHECK(composed.debug_validate());
+}
+
+TEST(PersistentMapPatch_IsStrictPresenceSafeAndPreservesNoOpIdentity) {
+    using value_type = std::optional<int>;
+    using map_type = persistent_hash_map<int, value_type>;
+    using patch_type = persistent_map_patch<int, value_type>;
+    const auto source = map_type{}.set_item(1, std::nullopt);
+    const auto target = source.set_item(2, value_type{7});
+    const auto patch = patch_type::between(source, target);
+    CHECK_EQ(std::size_t{1}, patch.count());
+    CHECK(patch.apply(source).map_equals(target));
+    const auto conflicting = source.set_item(2, value_type{9});
+    const auto [unchanged, conflict] = patch.try_apply(conflicting);
+    CHECK(conflict.has_value());
+    CHECK(unchanged.shares_root_with(conflicting));
+
+    const auto no_op = patch.add(map_patch_entry<int, value_type>{
+        8, value_type{3}, value_type{3}});
+    CHECK(no_op.shares_root_with(patch));
+    CHECK_THROWS_AS(
+        patch.add(map_patch_entry<int, value_type>{
+            2, std::nullopt, value_type{8}}),
+        std::invalid_argument);
+}
+
+TEST(PersistentMapPatch_ComposeRejectsMismatchedIntermediateState) {
+    using patch_type = persistent_map_patch<int, int>;
+    const auto first = patch_type{}.add({1, 10, 20});
+    const auto next = patch_type{}.add({1, 99, 30});
+    CHECK_THROWS_AS(first.compose(next), std::invalid_argument);
+    CHECK(first.remove(8).shares_root_with(first));
+}
+
+TEST(PersistentDirectedGraph_AddsEndpointsAndMaintainsBothDirections) {
+    const auto graph = persistent_directed_graph<std::string>{}
+        .add_vertex("isolated")
+        .add_edge("a", "b")
+        .add_edge("a", "c")
+        .add_edge("b", "c");
+    CHECK_EQ(std::size_t{4}, graph.vertex_count());
+    CHECK_EQ(std::int64_t{3}, graph.edge_count());
+    CHECK_EQ(std::size_t{2}, graph.out_degree("a"));
+    CHECK_EQ(std::size_t{2}, graph.in_degree("c"));
+    CHECK(graph.successors_or_empty("a").contains("b"));
+    CHECK(graph.predecessors_or_empty("c").contains("b"));
+    CHECK(graph.debug_validate());
+}
+
+TEST(PersistentDirectedGraph_ReverseAndRemovalRetainPersistentBranches) {
+    const auto source = persistent_directed_graph<int>{}
+        .add_edge(1, 2).add_edge(2, 3).add_edge(3, 1).add_vertex(9);
+    const auto reversed = source.reversed();
+    CHECK(reversed.contains_edge(2, 1));
+    CHECK(reversed.reversed().shares_roots_with(source));
+    const auto reduced = source.remove_vertex(2);
+    CHECK(!reduced.contains_vertex(2));
+    CHECK(!reduced.contains_edge(1, 2));
+    CHECK(source.contains_edge(1, 2));
+    CHECK(source.remove_edge(8, 9).shares_roots_with(source));
+    CHECK(reduced.debug_validate());
+}
+
+TEST(PersistentDirectedGraph_CustomEqualityRetainsVertexRepresentatives) {
+    using graph_type = persistent_directed_graph<
+        std::string, case_insensitive_hash, case_insensitive_equal>;
+    const auto graph = graph_type::create(
+        case_insensitive_hash{}, case_insensitive_equal{})
+        .add_edge("Source", "Target")
+        .add_edge("SOURCE", "TARGET");
+    CHECK_EQ(std::int64_t{1}, graph.edge_count());
+    CHECK_EQ(std::string{"Source"}, *graph.try_get_vertex("source"));
+    CHECK(graph.debug_validate());
+}
+
+TEST(PersistentIndexedMap_MaintainsNonUniqueSecondaryGroups) {
+    using selector_type = std::function<char(const int&, const std::string&)>;
+    using map_type = persistent_indexed_map<int, std::string, char, selector_type>;
+    auto selector = selector_type{[](const int&, const std::string& value) {
+        return value.front();
+    }};
+    const auto map = map_type::create(selector)
+        .add(1, "apple").add(2, "apricot").add(3, "banana");
+    CHECK_EQ(std::size_t{3}, map.count());
+    CHECK_EQ(std::size_t{2}, map.index_key_count());
+    CHECK_EQ(std::size_t{2}, map.count_by_index('a'));
+    CHECK(map.keys_by_index_or_empty('a').contains(2));
+    CHECK(map.debug_validate());
+}
+
+TEST(PersistentIndexedMap_UpdatesMoveMembershipAndSuppressEqualValues) {
+    using selector_type = std::function<char(const int&, const std::string&)>;
+    using map_type = persistent_indexed_map<int, std::string, char, selector_type>;
+    auto calls = 0;
+    const auto map = map_type::create(selector_type{[&calls](const int&, const std::string& value) {
+        ++calls;
+        return value.front();
+    }}).add(1, "apple");
+    const auto calls_after_add = calls;
+    const auto unchanged = map.set_item(1, "apple");
+    CHECK(unchanged.shares_roots_with(map));
+    CHECK_EQ(calls_after_add, calls);
+    const auto moved = map.set_item(1, "banana");
+    CHECK_EQ(std::size_t{0}, moved.count_by_index('a'));
+    CHECK_EQ(std::size_t{1}, moved.count_by_index('b'));
+    CHECK_EQ(std::string{"banana"}, moved.at(1));
+    CHECK(moved.debug_validate());
+}
+
+TEST(PersistentIndexedMap_StrictAddsRemovalAndBranchesArePersistent) {
+    using selector_type = std::function<int(const int&, const int&)>;
+    using map_type = persistent_indexed_map<int, int, int, selector_type>;
+    const auto root = map_type::create(selector_type{
+        [](const int&, const int& value) { return value % 2; }})
+        .add(1, 10).add(2, 11);
+    CHECK_THROWS_AS(root.add(1, 12), std::invalid_argument);
+    const auto [same, added] = root.try_add(1, 12);
+    CHECK(!added);
+    CHECK(same.shares_roots_with(root));
+    const auto left = root.set_item(1, 13);
+    const auto right = root.remove(2);
+    CHECK_EQ(10, root.at(1));
+    CHECK_EQ(13, left.at(1));
+    CHECK(!right.contains_key(2));
+    CHECK(root.remove(9).shares_roots_with(root));
+    CHECK(left.debug_validate() && right.debug_validate());
 }
 
 TEST(PatriciaMap_CachedCountsAndNoOpAlgebraPreserveRoots) {

@@ -13,6 +13,7 @@ import Data.Structures.Hamt.Hashable (hash)
 import Data.Structures.Hamt.HashMap (HashPolicy(..))
 import qualified Data.Structures.Ordered.PersistentOrderedSet as Ordered
 import qualified Data.Structures.Ordered.PersistentOrderedMap as OrderedMap
+import qualified Data.Structures.Ordered.PersistentOrderedMultimap as OrderedMultimap
 
 main :: IO ()
 main = do
@@ -24,7 +25,26 @@ main = do
   testFailureIsolation
   testConcurrentReads
   testOrderedMap
+  testOrderedMultimap
   putStrLn "tools-data-structures-ordered tests passed"
+
+testOrderedMultimap :: IO ()
+testOrderedMultimap = do
+  let values0 = OrderedMultimap.fromListWith casePolicy casePolicy
+        [("Alpha", "One"), ("Beta", "Two"), ("ALPHA", "Three"), ("alpha", "ONE")]
+      snapshot = values0
+      values1 = OrderedMultimap.delete "ALPHA" "one" values0
+      values2 = OrderedMultimap.deleteKey "beta" values1
+  assertEqual "ordered multimap grouped order"
+    [("Alpha", "One"), ("Alpha", "Three"), ("Beta", "Two")]
+    (OrderedMultimap.toList values0)
+  assertEqual "ordered multimap pair count" 3 (OrderedMultimap.size values0)
+  assertEqual "ordered multimap key count" 2 (OrderedMultimap.keyCount values0)
+  assertEqual "ordered multimap key representative" (Just "Alpha") (OrderedMultimap.actualKey "alpha" values0)
+  assertEqual "ordered multimap value representative" (Just "Three") (OrderedMultimap.actualValue "alpha" "THREE" values0)
+  assertBool "ordered multimap removal preserves snapshot" (OrderedMultimap.member "alpha" "one" snapshot)
+  assertEqual "ordered multimap group removal" [("Alpha", "Three")] (OrderedMultimap.toList values2)
+  assertBool "ordered multimap invariant" (OrderedMultimap.validStructure values2)
 
 testOrderedMap :: IO ()
 testOrderedMap = do

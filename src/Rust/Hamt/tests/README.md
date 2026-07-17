@@ -12,7 +12,10 @@ One-descent map-factory tests live in
 [`persistent_hash_bag.rs`](persistent_hash_bag.rs), bimap tests live in
 [`persistent_bi_map.rs`](persistent_bi_map.rs), hash-multimap tests live in
 [`persistent_hash_multimap.rs`](persistent_hash_multimap.rs), relation tests live in
-[`persistent_relation.rs`](persistent_relation.rs), and Merkle core/wire and persistence tests live
+[`persistent_relation.rs`](persistent_relation.rs), and the new derived facades are covered by
+[`persistent_map_patch.rs`](persistent_map_patch.rs),
+[`persistent_directed_graph.rs`](persistent_directed_graph.rs), and
+[`persistent_indexed_map.rs`](persistent_indexed_map.rs). Merkle core/wire and persistence tests live
 in [`merkle_core_wire.rs`](merkle_core_wire.rs) and
 [`merkle_persistence.rs`](merkle_persistence.rs). Run them from `src/Rust`:
 
@@ -36,6 +39,12 @@ Coverage groups:
   last-value group contraction, whole-key removal, retained branches, and invariants;
 - many-to-many relation adjacency, global representatives, duplicate root sharing, inverse root
   swapping, pair and whole-domain removal, retained branches, and two-index invariants;
+- strict presence-safe patches, conflict atomicity, inversion, composition, no-op elimination, and
+  nested `Option` values;
+- explicit/isolated graph vertices, adjacency in both directions, endpoint representatives,
+  self-loops, incident removal, O(1) reversed roots, retained branches, and invariants;
+- automatically indexed primary rows, nonunique secondary groups, selector call counts and panic
+  atomicity, group movement/contraction, no-op sharing, retained branches, and index agreement;
 - duplicate-key rejection;
 - equal-hash collision buckets and insertion-order-independent collision-key topology comparison;
 - CHAMP hash-prefix routing through the final two-bit level, with deliberately malformed routing,

@@ -635,6 +635,28 @@ private fun orderedMapRetainsPositionsAcrossPayloadEdits() {
     range.validateStructure()
 }
 
+private fun orderedMultimapPreservesGroupedOrderAndRepresentatives() {
+    val policy = FoldingStringPolicy()
+    val source = PersistentOrderedMultimap.from(
+        listOf("Alpha" to "One", "Beta" to "Two", "ALPHA" to "Three", "alpha" to "ONE"),
+        policy,
+        policy,
+    )
+    val removed = source.remove("ALPHA", "one").removeKey("beta")
+    assertEquals(
+        listOf("Alpha" to "One", "Alpha" to "Three", "Beta" to "Two"),
+        source.toList().map { it.key to it.value },
+        "ordered multimap grouped order",
+    )
+    assertEquals(2, source.keyCount, "ordered multimap key count")
+    assertEquals(3L, source.pairCount, "ordered multimap pair count")
+    assertEquals("Alpha", source.actualKey("alpha"), "ordered multimap key representative")
+    assertEquals("Three", source.actualValue("alpha", "THREE"), "ordered multimap value representative")
+    assertEquals(listOf("Alpha" to "Three"), removed.toList().map { it.key to it.value }, "ordered multimap removal")
+    assertThat(source.contains("alpha", "one"), "ordered multimap source snapshot")
+    removed.validateStructure()
+}
+
 public fun main() {
     val tests = listOf(
         "constructionRetainsPoliciesAndFirstRepresentatives" to ::constructionRetainsPoliciesAndFirstRepresentatives,
@@ -648,6 +670,8 @@ public fun main() {
         "generatedHistoriesMatchAListSetModelAndRetainedBranches" to ::generatedHistoriesMatchAListSetModelAndRetainedBranches,
         "iteratorsAndConcurrentReadersObserveImmutableSnapshots" to ::iteratorsAndConcurrentReadersObserveImmutableSnapshots,
         "orderedMapRetainsPositionsAcrossPayloadEdits" to ::orderedMapRetainsPositionsAcrossPayloadEdits,
+        "orderedMultimapPreservesGroupedOrderAndRepresentatives" to
+            ::orderedMultimapPreservesGroupedOrderAndRepresentatives,
     )
 
     for ((name, test) in tests) {

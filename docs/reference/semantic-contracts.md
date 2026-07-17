@@ -309,7 +309,7 @@ relation over their local HAMT maps and sets. Shared obligations are:
   version and both current indexes mutually consistent on failure.
 
 Language-local result values, overflow types, callback failure reporting, and ownership are allowed
-to be idiomatic. The [derived-family catalog](data-structure-catalog.md#derived-persistent-maps-and-relations)
+to be idiomatic. The [derived-family catalog](data-structure-catalog.md#derived-persistent-maps-relations-and-sparse-bit-sets)
 links every public surface; the C# [HAMT API specification](../../src/CSharp/docs/Hamt/api-specification.md)
 is the detailed managed reference.
 
@@ -363,7 +363,37 @@ class. Shared obligations are:
 The general map is independently owned by each neutral Ordered workspace. Tungsten
 `PersistentAssociation` supplied historical design evidence only and is neither a dependency nor a
 semantic authority. See the C# [Ordered API specification](../../src/CSharp/docs/Ordered/api-specification.md)
-and the [cross-language catalog](data-structure-catalog.md#derived-persistent-maps-and-relations).
+and the [cross-language catalog](data-structure-catalog.md#derived-persistent-maps-relations-and-sparse-bit-sets).
+
+## Composition-First Derived Structures
+
+`PersistentOrderedMultimap`, `PersistentMapPatch`, `PersistentDirectedGraph`,
+`PersistentIndexedMap`, and `PersistentChunkedBitSet` ship across all eight languages with
+language-local naming, result, ownership, and policy shapes. Their shared obligations are:
+
+- ordered multimaps retain the first key representative and key-group position, retain the first
+  value representative and position within each group, enumerate in grouped order, and never store
+  an empty group;
+- map patches distinguish absence from every present value (including null-like values), validate
+  all before-states before applying any edit, preserve source maps on conflict, invert by swapping
+  states, and compose only through equal intermediate states;
+- directed graphs store explicit vertices separately from unique edges, add missing endpoints when
+  adding an edge, maintain forward and reverse adjacency together, and remove every incident edge
+  when removing a vertex;
+- indexed maps retain one selected secondary key per primary row, keep exactly one secondary pair
+  per primary key, move membership atomically when the selector changes class, and preserve stored
+  primary and secondary representatives; and
+- chunked bit sets accept only nonnegative signed-32-bit indexes, omit zero 64-bit words, enumerate
+  ascending bits, cache represented-word and population counts, implement inclusive rank and
+  zero-based select by measured descent, and perform algebra over sparse word streams rather than
+  scanning to the largest index.
+
+Every composite publishes all constituent indexes together or publishes no successor. The general
+families depend only on general HAMT, Ordered, and FingerTree substrates; none references Tungsten
+or adopts its behavior as a semantic baseline. The detailed managed contracts are the
+[derived HAMT structures](../../src/CSharp/docs/Hamt/derived-persistent-structures.md),
+[ordered multimap](../../src/CSharp/docs/Ordered/persistent-ordered-multimap.md), and
+[chunked bit set](../../src/CSharp/docs/FingerTree/persistent-chunked-bit-set.md) references.
 
 ## Finger-Tree Core
 
@@ -587,7 +617,7 @@ endpoint remain distinct. Shared obligations are:
   both indexes and all retained versions unchanged.
 
 See the C# [FingerTree API specification](../../src/CSharp/docs/FingerTree/api-specification.md) and
-the [cross-language catalog](data-structure-catalog.md#derived-persistent-maps-and-relations).
+the [cross-language catalog](data-structure-catalog.md#derived-persistent-maps-relations-and-sparse-bit-sets).
 
 ## Ropes And Text
 

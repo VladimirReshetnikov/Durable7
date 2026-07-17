@@ -1,9 +1,9 @@
-# Kotlin Persistent Ordered Set API And Behavior
+# Kotlin Persistent Ordered Collections API And Behavior
 
 - Created (UTC): 2026-07-15T09:10:22Z
 - Repository HEAD: a47ada790d8028a744990c4608c32ab001376683
 - Audience: Kotlin/JVM API users, maintainers, reviewers, and sibling-port authors
-- Scope: neutral persistent ordered set and map
+- Scope: neutral persistent ordered set, map, and multimap
 
 ## Ownership And Type
 
@@ -16,6 +16,11 @@ public class PersistentOrderedSet<T> : Iterable<T>
 and position; movement/reversal/sort share the payload root, while value-only replacement retains
 the exact ordered-set object. Range extraction rebuilds precisely the selected payload index, and
 `validateStructure()` checks both directions of the composite invariant.
+
+`PersistentOrderedMultimap<K, V>` retains an ordered map of nonempty ordered value sets under
+independent key/value `HashPolicy` objects. First representatives and positions win in both levels;
+iteration is grouped, pair addition is idempotent, final-value removal contracts the group, and
+`pairCount` is a checked `Long` distinct from `keyCount`.
 
 The type is a general-purpose Ordered-owned collection. Production code imports only public
 `tools.datastructures.hamt` and `tools.datastructures.fingertree` APIs. It has no Tungsten

@@ -28,6 +28,7 @@ module Data.Structures.FingerTree
   , PrioritySearchQueue.PrioritySearchQueue
   , PrioritySearchQueue.PrioritySearchEntry(..)
   , PrioritySearchQueue.PrioritySearchQueueStatistics(..)
+  , PersistentChunkedBitSet.PersistentChunkedBitSet
   , IntervalTree.Interval(..)
   , IntervalTree.IntervalTree
   , IntervalMap.IntervalMap
@@ -51,6 +52,7 @@ import qualified Data.Structures.FingerTree.PriorityQueue as PriorityQueue
 import qualified Data.Structures.FingerTree.BrodalOkasakiHeap as BrodalOkasakiHeap
 import qualified Data.Structures.FingerTree.CanonicalSortedSet as CanonicalSortedSet
 import qualified Data.Structures.FingerTree.PrioritySearchQueue as PrioritySearchQueue
+import qualified Data.Structures.FingerTree.PersistentChunkedBitSet as PersistentChunkedBitSet
 import qualified Data.Structures.FingerTree.ReversibleDeque as ReversibleDeque
 import qualified Data.Structures.FingerTree.Rope as Rope
 import qualified Data.Structures.FingerTree.Rope.Text as RopeText

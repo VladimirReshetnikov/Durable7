@@ -22,6 +22,9 @@ library
     Data.Structures.Hamt.MerklePersistence
     Data.Structures.Hamt.MerkleSearchTree
     Data.Structures.Hamt.Patricia
+    Data.Structures.Hamt.PersistentDirectedGraph
+    Data.Structures.Hamt.PersistentIndexedMap
+    Data.Structures.Hamt.PersistentMapPatch
     Data.Structures.Hamt.Relation
     Data.Structures.Hamt.Transient
   hs-source-dirs: src

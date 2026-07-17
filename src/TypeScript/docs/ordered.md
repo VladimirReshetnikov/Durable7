@@ -1,8 +1,8 @@
-# TypeScript persistent ordered set
+# TypeScript persistent ordered collections
 
 - Created (UTC): 2026-07-15T02:15:19Z
 - Repository HEAD: 6dbabd71db65ea2771a0b6581c119a367d96d106
-- Scope: `PersistentOrderedSet<T>` API, contracts, runtime mapping, and validation
+- Scope: Ordered set, map, and grouped multimap APIs, contracts, runtime mapping, and validation
 
 `PersistentOrderedSet<T>` is the strict TypeScript port of the independently owned C# insertion-
 ordered set. It is exported from `@vladimir-reshetnikov/data-structures/ordered` and the package root.
@@ -24,6 +24,10 @@ with a private `bigint` order-maintenance stamp. A right-biased last-stamp measu
 FingerTree sequence supplies logarithmic stamp location and positional edits. Sparse labels use the
 C# implementation's `2^20` initial spacing and signed-64-bit relabel boundary, but labels are private
 and do not appear in the public API.
+
+`PersistentOrderedMap<K, V>` owns key/value entries in its positional tree and stores only
+key-to-stamp navigation in CHAMP. `PersistentOrderedMultimap<K, V>` composes that map with one
+ordered value set per nonempty group; neither facade changes the dependency direction.
 
 Every version maintains one ordered representative and one matching stamp-map entry per policy
 class. Published values are immutable. Ordinary point operations path-copy affected HAMT/FingerTree
@@ -62,6 +66,13 @@ fail-fast rule has no JavaScript analogue.
 `validateStructure()` is the TypeScript package's established public-diagnostics adaptation: it
 recomputes the Ordered-owned dual-index invariants and returns the validated count. The analogous C#
 hook is test-internal, where an `InternalsVisibleTo` seam is available.
+
+The ordered map adds keyed value replacement without implicit movement. The ordered multimap adds
+independent key/value policies, group and pair counts, grouped iteration, group lookup, pair/group
+removal, and nested validation. Its order is first key-group insertion followed by first value
+insertion within each group; it intentionally does not preserve one globally interleaved pair
+arrival history. Removing a group's final pair contracts it, and re-adding that key appends a new
+group.
 
 ## Equality, representatives, and order
 
@@ -105,8 +116,9 @@ not inherit the tuned C# deque's endpoint amortization or struct-enumerator allo
 
 ## Validation
 
-The Ordered suites port the C# examples, boundaries, representative rules, exhaustive small movement
-and relation tables, repeated relabel histories, sibling branches, eager/failing normalization,
+The Ordered suites port the C# examples, boundaries, representative rules, grouped-multimap order
+and empty-group contraction, exhaustive small movement and relation tables, repeated relabel
+histories, sibling branches, eager/failing normalization,
 stable sorting, retained iterators/readers, public surface, package export, and dependency-boundary
 checks. A fast-check branching command model compares every retained version against an independent
 policy-aware ordered-list model. Run:

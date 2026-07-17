@@ -938,6 +938,23 @@ private fun persistentIntervalMapCombinesExactAndOverlapIndexes() {
     removed.validateStructure()
 }
 
+private fun persistentChunkedBitSetSupportsRankSelectAndSparseAlgebra() {
+    val source = PersistentChunkedBitSet.from(listOf(0, 1, 63, 64, 130, 130))
+    val edited = source.add(65).remove(64)
+    val other = PersistentChunkedBitSet.from(listOf(1, 64, 129))
+    checkEquals(listOf(0, 1, 63, 64, 130), source.toList(), "chunked bit-set enumeration")
+    checkEquals(5L, source.count, "chunked bit-set count")
+    checkEquals(3, source.chunkCount, "chunked bit-set chunks")
+    checkEquals(4L, source.rank(64), "chunked bit-set inclusive rank")
+    checkEquals(63, source.select(2), "chunked bit-set select")
+    checkEquals(listOf(0, 1, 63, 65, 130), edited.toList(), "chunked bit-set point edits")
+    checkEquals(listOf(0, 1, 63, 64, 129, 130), source.union(other).toList(), "chunked bit-set union")
+    checkEquals(listOf(1, 64), source.intersect(other).toList(), "chunked bit-set intersection")
+    checkEquals(listOf(0, 63, 130), source.except(other).toList(), "chunked bit-set difference")
+    check(source.contains(64), "chunked bit-set source snapshot")
+    edited.validateStructure()
+}
+
 public fun main() {
     val tests = listOf(
         "dequePreservesSnapshots" to ::dequePreservesSnapshots,
@@ -956,6 +973,8 @@ public fun main() {
         "intervalTreeInsertsNewEqualLowIntervalsFirst" to ::intervalTreeInsertsNewEqualLowIntervalsFirst,
         "persistentIntervalMapCombinesExactAndOverlapIndexes" to
             ::persistentIntervalMapCombinesExactAndOverlapIndexes,
+        "persistentChunkedBitSetSupportsRankSelectAndSparseAlgebra" to
+            ::persistentChunkedBitSetSupportsRankSelectAndSparseAlgebra,
         "recurringPortingRegressionsStayLocked" to ::recurringPortingRegressionsStayLocked,
         "ropesEditAndNavigateText" to ::ropesEditAndNavigateText,
         "ropeCursorHandlesBoundariesNullsAndPersistentEdits" to ::ropeCursorHandlesBoundariesNullsAndPersistentEdits,

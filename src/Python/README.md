@@ -18,7 +18,8 @@ exact policy identity, `MST2` block encoding, and `MSP2` proof envelope used acr
 
 - `hamt` contains the real 32-way CHAMP map/set, one-descent map factory updates, a persistent hash
   bag, a set-valued persistent hash multimap, a bidirectional persistent relation, a strict
-  persistent bimap, a reusable construction-only bulk builder, one-way edit sessions with all six set relations,
+  persistent bimap, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap`, a
+  reusable construction-only bulk builder, one-way edit sessions with all six set relations,
   an `RLock`-coordinated consumer-semantic snapshotting facade, signed 32/64-bit Patricia
   collections, and the authenticated Merkle tree with persistence, synchronization, proofs,
   budgets, and typed merge. The facade preserves Ctrie-facing mutation and snapshot behavior but
@@ -26,11 +27,13 @@ exact policy identity, `MST2` block encoding, and `MSP2` proof envelope used acr
   or hash/equality-policy callback from publishing over a newer nested update.
 - `finger_tree` contains the persistent measured AVL engine and deque/finger-tree facades, derived
   sorted/priority/interval collections, the payload-bearing `PersistentIntervalMap`,
+  `PersistentChunkedBitSet`,
   positional/measured/text ropes and cursors, a true 32-way
   RRB vector, canonical HMAC-ranked zip-zip set, Brodal-Okasaki heap, winner-cached priority-search
   queue, mutable six-cursor DABA Lite, and the independently implemented implicit-AVL
   `RangeUpdateSequence` with logarithmic measured range edits and lazy algebraic tags.
-- `ordered` contains the general-purpose `PersistentOrderedSet` and `PersistentOrderedMap`,
+- `ordered` contains the general-purpose `PersistentOrderedSet`, `PersistentOrderedMap`, and
+  grouped `PersistentOrderedMultimap`,
   independently composed from the HAMT and persistent deque. They retain first representatives,
   receiver `HashPolicy` identity, insertion order, explicit positional movement, sparse labels,
   ranges, and stable one-shot sorting; the set also provides receiver-ordered algebra. Neither

@@ -36,6 +36,13 @@ the first left and right representatives are global across all adjacency groups,
 successor indexes atomically, supports symmetric pair and whole-domain removal, and exposes a
 cached O(1) inverse facade whose inverse is the original relation.
 
+`PersistentMapPatch<TKey, TValue>` records strict presence-safe before/after map changes and supports
+atomic validation/application, inversion, and compatible composition. `PersistentDirectedGraph<TVertex>`
+combines an explicit vertex set with a bidirectional relation for degree-local adjacency and a
+cached reversed view. `PersistentIndexedMap<TKey, TValue, TIndexKey>` combines a primary CHAMP map
+with one selector-maintained nonunique secondary index. Their shared contract is documented in
+[derived persistent structures](derived-persistent-structures.md).
+
 `PersistentBiMap<TKey, TValue>` composes two persistent CHAMP maps into a strict immutable
 bijection. It retains independent key and value comparers, rejects duplicates in either domain,
 supports conflict-safe replacement and symmetric removal, preserves first representatives, and
@@ -136,6 +143,9 @@ and canonical topology alone does not confer reference identity.
     policies, exact pair counting, and automatic empty-group contraction.
   - `PersistentRelation.cs` implements the mutually inverse multimap relation, global representative
     normalization, symmetric domain removal, and cached inverse facade.
+  - `PersistentMapPatch.cs` implements strict presence-safe map deltas, inversion, and composition.
+  - `PersistentDirectedGraph.cs` implements explicit vertices and bidirectionally indexed edges.
+  - `PersistentIndexedMap.cs` implements a primary map with one maintained nonunique secondary index.
   - `PersistentBiMap.cs` implements the strict two-HAMT bijection and cached inverse facade.
   - `PersistentHashMap.Transient.cs` and `PersistentHashMap.OwnerTokenKernel.cs` expose and implement
     the public one-way map transient.

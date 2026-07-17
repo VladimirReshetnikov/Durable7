@@ -39,6 +39,9 @@ import Data.Structures.Hamt.MerkleEncoding
   )
 import qualified Data.Structures.Hamt.MerkleSearchTree as Merkle
 import qualified Data.Structures.Hamt.Patricia as Patricia
+import qualified Data.Structures.Hamt.PersistentDirectedGraph as DirectedGraph
+import qualified Data.Structures.Hamt.PersistentIndexedMap as IndexedMap
+import qualified Data.Structures.Hamt.PersistentMapPatch as MapPatch
 import PersistenceTests (runPersistenceTests)
 import BiMapTests (runBiMapTests)
 
@@ -87,6 +90,9 @@ main = do
   testPersistentHashBagDeterministicModel
   runBiMapTests
   testHashMultimapAndRelation
+  testPersistentMapPatch
+  testPersistentDirectedGraph
+  testPersistentIndexedMap
   testSetAlgebra
   testCrossPolicySetRelations
   testTransientSessions
@@ -95,6 +101,56 @@ main = do
   runPersistenceTests
   testConcurrentReads
   putStrLn "tools-data-structures-hamt tests passed"
+
+testPersistentMapPatch :: IO ()
+testPersistentMapPatch = do
+  let source = HashMap.fromList [(1 :: Int, "one"), (2, "two"), (4, "four")]
+      target = HashMap.fromList [(1 :: Int, "ONE"), (3, "three"), (4, "four")]
+      patch = MapPatch.between source target
+  applied <- expectRight "map patch apply" (MapPatch.apply patch source)
+  assertBool "map patch reaches target" (HashMap.mapEquals target applied)
+  restored <- expectRight "map patch invert" (MapPatch.apply (MapPatch.invert patch) applied)
+  assertBool "map patch inverse restores source" (HashMap.mapEquals source restored)
+  assertEqual "map patch strict conflict" (Left (1 :: Int))
+    (fmap HashMap.toList (MapPatch.apply patch (HashMap.insert 1 "wrong" source)))
+  let middle = HashMap.insert 5 "five" target
+      next = MapPatch.between target middle
+  composed <- expectRight "map patch compose" (MapPatch.compose patch next)
+  final <- expectRight "composed patch apply" (MapPatch.apply composed source)
+  assertBool "map patch composition reaches final map" (HashMap.mapEquals middle final)
+  assertBool "map patch invariant" (MapPatch.validStructure composed)
+
+testPersistentDirectedGraph :: IO ()
+testPersistentDirectedGraph = do
+  let graph0 = DirectedGraph.empty :: DirectedGraph.PersistentDirectedGraph Int
+      graph1 = DirectedGraph.insertEdge 1 2 (DirectedGraph.insertEdge 2 3 (DirectedGraph.insertVertex 4 graph0))
+      snapshot = graph1
+      reversed = DirectedGraph.reverse graph1
+      graph2 = DirectedGraph.deleteVertex 2 graph1
+  assertEqual "directed graph vertex count" 4 (DirectedGraph.vertexCount graph1)
+  assertEqual "directed graph edge count" 2 (DirectedGraph.edgeCount graph1)
+  assertBool "directed graph implicit endpoints" (DirectedGraph.memberVertex 3 graph1)
+  assertEqual "directed graph successor" [2] (sort (HashSet.toList (DirectedGraph.successors 1 graph1)))
+  assertBool "directed graph reverse" (DirectedGraph.memberEdge 2 1 reversed)
+  assertBool "directed graph vertex removal clears incident edges" (DirectedGraph.edgeCount graph2 == 0)
+  assertBool "directed graph snapshot preserved" (DirectedGraph.memberEdge 1 2 snapshot)
+  assertBool "directed graph invariant" (DirectedGraph.validStructure graph2)
+
+testPersistentIndexedMap :: IO ()
+testPersistentIndexedMap = do
+  let selector _ value = value `mod` (2 :: Int)
+      values0 = IndexedMap.fromList selector [(1 :: Int, 10 :: Int), (2, 11), (3, 12)]
+      snapshot = values0
+      values1 = IndexedMap.set 1 13 values0
+      values2 = IndexedMap.delete 2 values1
+  assertEqual "indexed map size" 3 (IndexedMap.size values0)
+  assertEqual "indexed map secondary group" (Just [1, 3])
+    (sort . HashSet.toList <$> IndexedMap.lookupKeysByIndex 0 values0)
+  assertEqual "indexed map moves secondary membership" (Just [1, 2])
+    (sort . HashSet.toList <$> IndexedMap.lookupKeysByIndex 1 values1)
+  assertEqual "indexed map snapshot value" (Just 10) (IndexedMap.lookup 1 snapshot)
+  assertEqual "indexed map removal" Nothing (IndexedMap.lookup 2 values2)
+  assertBool "indexed map invariant" (IndexedMap.validStructure values2)
 
 testHashMultimapAndRelation :: IO ()
 testHashMultimapAndRelation = do

@@ -32,6 +32,11 @@ positional removal, range/take/drop, reversal, stable entry sorting, and ordered
 ordered-set key index and CHAMP value index publish failure-atomically; reordering shares the value
 root, while replacing an existing value shares the complete order root.
 
+`tds_ordered_multimap` composes an ordered map of ordered sets under independent key and value
+policies. It preserves first-insertion order for key groups and separately for distinct values in
+each group, reports key and checked pair counts, removes empty groups, and publishes every nested
+edit failure-atomically with explicit clone/move/destroy ownership.
+
 The representation uses one ref-counted representative cell per equality class. Both the CHAMP
 membership/stamp index and the sparse-stamped FingerTree entry retain that cell, so the first
 representative is shared rather than copied independently between indexes. The private stamp gap,

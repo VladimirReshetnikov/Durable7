@@ -9,18 +9,26 @@ use std::ops::Index;
 use std::sync::Arc;
 
 mod bi_map;
+mod directed_graph;
 mod hash_bag;
 mod hash_multimap;
+mod indexed_map;
+mod map_patch;
 mod merkle_encoding;
 mod merkle_persistence;
 mod merkle_search_tree;
 mod patricia;
 pub use bi_map::{BiMapAddResult, BiMapConflict, BiMapRemoveResult, PersistentBiMap};
+pub use directed_graph::{
+    DirectedGraphInvariantError, DirectedGraphStatistics, PersistentDirectedGraph,
+};
 mod relation;
 pub use hash_bag::{BagIter, HashBagEntry, HashBagError, PersistentHashBag};
 pub use hash_multimap::{
     HashMultimapInvariantError, HashMultimapIter, HashMultimapStatistics, PersistentHashMultimap,
 };
+pub use indexed_map::{IndexedMapInvariantError, IndexedMapStatistics, PersistentIndexedMap};
+pub use map_patch::{MapPatchComposeError, MapPatchConflict, MapPatchEntry, PersistentMapPatch};
 pub use merkle_encoding::{
     Int32MerkleCodec, Int64MerkleCodec, MerkleCodec, MerkleCodecError, MerkleDigest,
     MerkleDigestParseError, MerkleDigestWriteError, MerkleKeyComparer, MerklePolicyError,

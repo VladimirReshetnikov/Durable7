@@ -17,6 +17,8 @@ Cargo validation.
   `PersistentHashBag<T, S>`, one-descent factory results, `TransientHashMap<K, V, S>`,
   `TransientHashSet<T, S>`, checked bag errors, `DuplicateKey`, `BuildHasher` policy preservation,
   collision buckets, root-sharing diagnostics, iteration order, and Rust-specific result shapes.
+  They also specify the strict map-patch, explicit-vertex directed-graph, and maintained
+  single-secondary-index facades.
 - [Merkle search tree](merkle-search-tree.md) specifies the Rust B=16 wide-tree API, policy domain,
   built-in strict codecs, `MST2` block framing, canonical shape, block-store persistence, bounded
   verification, `MSP2` proofs, synchronization, and typed three-way merge.

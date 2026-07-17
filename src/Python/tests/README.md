@@ -7,7 +7,7 @@ Tests are grouped by shipped collection family:
 
 - `hamt/`: CHAMP maps/sets and transients, one-descent factory updates, construction-only mutable
   builders, the persistent hash bag, set-valued multimap, bidirectional relation, strict persistent
-  bimap, transient-set relations, and the `RLock`-coordinated
+  bimap, strict map patches, directed graphs, indexed maps, transient-set relations, and the `RLock`-coordinated
   concurrent facade. Facade coverage includes caller-key factories, retained representatives,
   present `None`, exact generations, stable canonical snapshots, collision-model histories,
   failure atomicity, serialized writers, factory reentry, and hash/equality-policy reentry across
@@ -17,12 +17,13 @@ Tests are grouped by shipped collection family:
   and typed merge. Bimap coverage locks both-domain conflicts, representatives, policy-driven
   replacement, symmetric removal, cached inverse identity, `None` presence, failure atomicity,
   retained Hypothesis models, and concurrent readers.
-- `finger_tree/`: measured sequences and derived collections, the payload interval map, ropes and cursors, DABA Lite, RRB
+- `finger_tree/`: measured sequences and derived collections, the payload interval map, persistent
+  chunked bit set, ropes and cursors, DABA Lite, RRB
   vectors, canonical zip-zip sets, Brodal-Okasaki heaps, priority-search queues, and the lazy-tagged
   range-update sequence. Range coverage includes algebra laws, every range boundary, retained
   branching models, callback failure atomicity, structural invariants/sharing, and iterator and
   concurrent-read semantics.
-- `ordered/`: the neutral HAMT-plus-deque persistent ordered set and map, including representative
+- `ordered/`: the neutral HAMT-plus-deque persistent ordered set, map, and grouped multimap, including representative
   and policy retention, explicit movement, sparse-stamp relabeling, ranges, stable sorting, dual
   indexes, eager set algebra and relations, failure atomicity, concurrency, and generated histories.
 - `tungsten/`: application-leaf persistent list and insertion-ordered association semantics.

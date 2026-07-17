@@ -20,12 +20,16 @@ $bagSourcePath = Join-Path $root 'src\persistent_hash_bag.c'
 $biMapSourcePath = Join-Path $root 'src\persistent_bi_map.c'
 $multimapSourcePath = Join-Path $root 'src\persistent_hash_multimap.c'
 $relationSourcePath = Join-Path $root 'src\persistent_relation.c'
+$derivedGraphSourcePath = Join-Path $root 'src\persistent_directed_graph.c'
+$indexedMapSourcePath = Join-Path $root 'src\persistent_indexed_map.c'
+$mapPatchSourcePath = Join-Path $root 'src\persistent_map_patch.c'
 $patriciaSourcePath = Join-Path $root 'src\patricia.c'
 $merkleSourcePath = Join-Path $root 'src\merkle_search_tree.c'
 $testSource = Join-Path $root 'tests\hamt_tests.c'
 $bagTestSource = Join-Path $root 'tests\persistent_hash_bag_tests.c'
 $biMapTestSource = Join-Path $root 'tests\persistent_bi_map_tests.c'
 $multimapTestSource = Join-Path $root 'tests\persistent_hash_multimap_tests.c'
+$derivedTestSource = Join-Path $root 'tests\persistent_derived_structures_tests.c'
 $patriciaTestSource = Join-Path $root 'tests\patricia_tests.c'
 $merkleTestSource = Join-Path $root 'tests\merkle_search_tree_tests.c'
 $objectDir = Join-Path $buildDir 'obj'
@@ -37,6 +41,8 @@ $biMapPdbPath = Join-Path $buildDir 'persistent_bi_map_tests.pdb'
 $biMapExePath = Join-Path $buildDir 'persistent_bi_map_tests.exe'
 $multimapPdbPath = Join-Path $buildDir 'persistent_hash_multimap_tests.pdb'
 $multimapExePath = Join-Path $buildDir 'persistent_hash_multimap_tests.exe'
+$derivedPdbPath = Join-Path $buildDir 'persistent_derived_structures_tests.pdb'
+$derivedExePath = Join-Path $buildDir 'persistent_derived_structures_tests.exe'
 $patriciaPdbPath = Join-Path $buildDir 'patricia_tests.pdb'
 $patriciaExePath = Join-Path $buildDir 'patricia_tests.exe'
 $merklePdbPath = Join-Path $buildDir 'merkle_search_tree_tests.pdb'
@@ -96,6 +102,13 @@ if ($LASTEXITCODE -ne 0) {
     throw "cl.exe failed for the persistent hash multimap tests with exit code $LASTEXITCODE."
 }
 
+& cl.exe @commonArgs @configurationArgs "/Fd$derivedPdbPath" "/Fe:$derivedExePath" `
+    $hamtSourcePath $multimapSourcePath $relationSourcePath $derivedGraphSourcePath `
+    $indexedMapSourcePath $mapPatchSourcePath $derivedTestSource
+if ($LASTEXITCODE -ne 0) {
+    throw "cl.exe failed for the derived persistent structure tests with exit code $LASTEXITCODE."
+}
+
 & cl.exe @commonArgs @configurationArgs "/Fd$patriciaPdbPath" "/Fe:$patriciaExePath" $patriciaSourcePath $patriciaTestSource
 if ($LASTEXITCODE -ne 0) {
     throw "cl.exe failed for the Patricia tests with exit code $LASTEXITCODE."
@@ -125,6 +138,11 @@ if ($RunTests) {
     & $multimapExePath
     if ($LASTEXITCODE -ne 0) {
         throw "persistent_hash_multimap_tests.exe failed with exit code $LASTEXITCODE."
+    }
+
+    & $derivedExePath
+    if ($LASTEXITCODE -ne 0) {
+        throw "persistent_derived_structures_tests.exe failed with exit code $LASTEXITCODE."
     }
 
     & $patriciaExePath

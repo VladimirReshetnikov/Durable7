@@ -14,6 +14,9 @@ root build script. Run them from `src/Kotlin`:
 
 Coverage groups:
 
+- `PersistentChunkedBitSet` signed-domain boundaries, word seams, point no-ops, inclusive rank,
+  select, sparse algebra, retained snapshots, ascending enumeration, and validation;
+
 - `PersistentDeque` snapshot preservation, splitting, and endpoint edits;
 - `ReversibleDeque` logical orientation, storage sharing across whole-deque reverse, mixed-orientation
   concatenation, split/rejoin behavior, endpoint views, and larger mixed concat histories;

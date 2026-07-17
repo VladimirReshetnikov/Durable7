@@ -30,9 +30,9 @@ ctest --preset ninja-debug --parallel 1 --output-on-failure
 
 The target compiles with strict warnings-as-errors (`/W4 /WX` on MSVC or
 `-Wall -Wextra -Wpedantic -Werror` elsewhere). CTest enters the repository headless process mode.
-The test executable covers both ordered collections and the semantic areas listed in the
-[test map](../tests/README.md). The current executable runs 23 tests, including six ordered-map
-tests. The 2026-07-16 portable audit passed the complete 23-test target with strict Clang 21 in
+The test executable covers all three ordered collections and the semantic areas listed in the
+[test map](../tests/README.md). The current executable runs 27 tests, including six ordered-map
+tests and four ordered-multimap tests. The current portable audit passed the complete 27-test target with strict GCC in
 both Debug and Release. Ordered sorting uses each entry's monotone stamp as its final tie-break, so
 `std::sort` preserves the public stable-order contract without depending on deprecated temporary-buffer
 internals in older standard libraries.

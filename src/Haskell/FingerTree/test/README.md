@@ -29,6 +29,9 @@ Deque sorted-bound coverage uses a 65,536-element tree and a counting comparator
 logarithmic comparison ceiling for lower bound, upper bound, and binary search.
 Interval-map coverage adds exact payload replacement, retained-source lookup, overlap enumeration
 and counting, removal, and cross-index validation over equal-low intervals.
+Chunked-bit-set coverage crosses word seams, checks duplicate and missing no-ops, inclusive rank,
+select, union/intersection/difference, retained snapshots, ascending enumeration, and cached
+measure validation.
 Priority-search-queue coverage includes last-wins keyed construction, minimum/tie semantics,
 range/priority filtering, ascending-key adversarial AVL construction, cached-winner validation,
 and a 10,000-operation map model with retained immutable snapshots.

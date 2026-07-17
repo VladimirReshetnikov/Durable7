@@ -4,10 +4,11 @@
 - Created (UTC): 2026-07-15T01:28:46Z
 - Repository HEAD: 5fd1a85c5ec58886f0dbabe805552bd37ec40871
 - Audience: Users and maintainers of `Tools.DataStructures.Ordered`
-- Scope: The independently owned C# insertion-ordered persistent map/set workspace
+- Scope: The independently owned C# insertion-ordered persistent map/set/multimap workspace
 
-`Tools.DataStructures.Ordered` is the neutral owner of `PersistentOrderedMap<TKey, TValue>` and
-`PersistentOrderedSet<T>`, immutable insertion-ordered collections composed from the public C#
+`Tools.DataStructures.Ordered` is the neutral owner of `PersistentOrderedMap<TKey, TValue>`,
+`PersistentOrderedSet<T>`, and `PersistentOrderedMultimap<TKey, TValue>`, immutable
+insertion-ordered collections composed from the public C#
 HAMT and FingerTree libraries. It is a general
 collection project: neither its production contract nor its tests depend on the application-specific
 Tungsten collections.
@@ -17,6 +18,7 @@ Tungsten collections.
 | [Overview](overview.md) | Representation, ownership, invariants, capability boundaries, and headline complexity |
 | [Usage](usage.md) | Construction, representative recovery, explicit movement, slicing, sorting, algebra, and identity examples |
 | [API specification](api-specification.md) | Normative member-by-member semantics, ordering, comparer normalization, failure behavior, enumeration, and complexity |
+| [Persistent ordered multimap](persistent-ordered-multimap.md) | Normative grouped-order, representative, API, and complexity contract for the set-valued ordered multimap |
 | [Validation](validation.md) | Single-worker restore/build/test commands, coverage map, dependency audit, and benchmark boundary |
 
 Primary code and tests:
@@ -24,6 +26,7 @@ Primary code and tests:
 - [library project](../../src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj)
 - [`PersistentOrderedMap<TKey, TValue>` source](../../src/Tools.DataStructures.Ordered/PersistentOrderedMap.cs)
 - [`PersistentOrderedSet<T>` source](../../src/Tools.DataStructures.Ordered/PersistentOrderedSet.cs)
+- [`PersistentOrderedMultimap<TKey, TValue>` source](../../src/Tools.DataStructures.Ordered/PersistentOrderedMultimap.cs)
 - [algebra and relations](../../src/Tools.DataStructures.Ordered/PersistentOrderedSet.Algebra.cs)
 - [invariant diagnostics](../../src/Tools.DataStructures.Ordered/PersistentOrderedSet.Diagnostics.cs)
 - [test project](../../tests/Tools.DataStructures.Ordered.Tests/Tools.DataStructures.Ordered.Tests.csproj)

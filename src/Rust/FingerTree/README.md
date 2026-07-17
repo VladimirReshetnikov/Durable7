@@ -22,6 +22,7 @@ family. It exposes Rust-native names for the same public families:
 - `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>`;
 - `PriorityQueue<T, P>`;
 - `Interval<T>`, `IntervalTree<T>`, and payload-bearing `PersistentIntervalMap<T, V>`;
+- `PersistentChunkedBitSet` over the shared measured tree;
 - `Rope<T>` and its immutable positional `RopeCursor<T>`, `MeasuredRope<T, P>` and
   `MeasuredRopeCursor<T, P>`, `MeasuredRopeBuilder<T, P>`, `TextRope` and `TextRopeCursor`, and
   `RopeBuilder`, including Unicode text extras and newline-style classification.
@@ -101,6 +102,11 @@ last-low/maximum-high product summary for O(log n) first-hit and O((k + 1) log n
 `PersistentIntervalMap<T, V>` adds unique lexicographic interval keys and payload updates over a
 separate full-key/maximum-high measure, validates every interval argument, retains the first key
 representative, and deliberately omits payload-ambiguous coalescing.
+`PersistentChunkedBitSet` stores only nonzero 64-bit words over the shared measured tree. Its cached
+word-order and population summaries provide logarithmic membership, point edits, inclusive rank,
+and zero-based select in the number of represented words. It accepts the shared nonnegative signed
+32-bit index domain, shares unchanged storage, drops empty words, and supplies persistent union,
+intersection, difference, and symmetric difference.
 `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>` now use
 order-statistic measured tree storage with cached count plus last-key measures. The crate still does
 not claim the C#/C++ lazy finger-tree asymptotic profile overall; derived algorithms remain

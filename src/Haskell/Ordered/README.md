@@ -39,6 +39,11 @@ explicit movement, keyed/positional removal, ranges, reversal, stable entry sort
 enumeration, component-root sharing diagnostics, and two-way validation. The first key
 representative and position win while construction's last payload wins.
 
+`Data.Structures.Ordered.PersistentOrderedMultimap` composes an ordered map of nonempty ordered
+value sets under independent runtime policies. It retains first key and value representatives,
+enumerates key groups and their values in nested first-insertion order, removes empty groups, and
+tracks group and pair counts separately.
+
 Run the focused, single-job gate from `src/Haskell`:
 
 ```powershell

@@ -24,6 +24,9 @@ for immutable unordered collections backed by a hash-array mapped trie:
   nonempty groups, checked pair counts, and receiver-policy union/intersection/difference.
 - `tds_hamt_relation`, a persistent bidirectional relation maintaining exact forward and inverse
   multimaps under failure-atomic pair edits.
+- `tds_hamt_map_patch`, a presence-safe strict patch with preflight application, inversion, and
+  compatible composition; `tds_hamt_directed_graph`, an explicit-vertex graph over a relation; and
+  `tds_hamt_indexed_map`, a primary map with one maintained nonunique secondary index.
 - `tds_hamt_map_transient` / `tds_hamt_set_transient`, explicit one-way edit-session handles over
   the persistent CHAMP values. Adoption and terminal publication are O(1) handle operations; point
   edits deliberately reuse the persistent path-copy engine rather than claiming owner-token

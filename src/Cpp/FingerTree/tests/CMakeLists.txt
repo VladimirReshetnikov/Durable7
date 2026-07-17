@@ -7,6 +7,7 @@ add_executable(
     daba_lite_tests.cpp
     interval_tree_tests.cpp
     persistent_interval_map_tests.cpp
+    persistent_chunked_bit_set_tests.cpp
     lazy_cell_tests.cpp
     measured_finger_tree_tests.cpp
     measured_lazy_cell_tests.cpp
@@ -59,6 +60,7 @@ set(
     deque
     interval-tree
     interval-map
+    chunked-bit-set
     lazy-cell
     measure
     measured-lazy-cell

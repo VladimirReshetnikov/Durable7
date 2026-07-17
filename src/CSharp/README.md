@@ -71,15 +71,17 @@ failure atomicity, enumerator behavior, and concurrent readers. No benchmark was
 all performance measurements remain postponed until they can run without competing agents or other
 CPU, memory, and I/O contention.
 
-The current C# derived-structure tranche adds `PersistentOrderedMap`, `PersistentHashMultimap`,
-`PersistentIntervalMap`, and `PersistentRelation`. Complete serialized Debug and Release solution
-builds both finish with zero warnings and zero errors, and both full gates pass 1,465/1,465 tests:
-319 Numerics + 324 HAMT + 701 FingerTree + 69 Ordered + 52 Tungsten. Focused new-structure lanes
-pass 7 ordered-map, 7 hash-multimap, 9 interval-map, and 9 relation tests. Benchmarks were not run.
+The current C# derived-structure tranche additionally ships `PersistentOrderedMultimap`,
+`PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap`, and
+`PersistentChunkedBitSet`. Complete serialized Debug and Release solution builds both finish with
+zero warnings and zero errors, and both full gates pass 1,503/1,503 tests: 319 Numerics + 347 HAMT
++ 709 FingerTree + 76 Ordered + 52 Tungsten. The five focused new-structure lanes pass 38/38 tests.
+Benchmarks were not run.
 
 Cross-language follow-through is complete: the one-descent HAMT operations, hash bag, strict bimap,
-neutral ordered set/map, hash multimap, relation, interval map, and `RangeUpdateSequence` now ship
-in C, C++, Haskell, Kotlin, Rust, TypeScript, and Python under language-local APIs and ownership models.
+neutral ordered set/map/multimap, hash multimap, relation, interval map, map patch, directed graph,
+indexed map, chunked bit set, and `RangeUpdateSequence` now ship in C, C++, Haskell, Kotlin, Rust,
+TypeScript, and Python under language-local APIs and ownership models.
 
 Use the parent [source index](../README.md) for the full language list, the repository
 [workspace map](../../docs/reference/workspace-map.md) for port lineage, and the

@@ -27,6 +27,7 @@ import Data.Structures.FingerTree.Measures (Elem(..), Size(..))
 import qualified Data.Structures.FingerTree.MeasuredRope as MeasuredRope
 import qualified Data.Structures.FingerTree.PriorityQueue as PriorityQueue
 import qualified Data.Structures.FingerTree.PrioritySearchQueue as PrioritySearchQueue
+import qualified Data.Structures.FingerTree.PersistentChunkedBitSet as ChunkedBitSet
 import qualified Data.Structures.FingerTree.ReversibleDeque as ReversibleDeque
 import qualified Data.Structures.FingerTree.Rope as Rope
 import qualified Data.Structures.FingerTree.Rope.Text as RopeText
@@ -50,6 +51,7 @@ main = do
   testPriorityQueue
   testBrodalOkasakiHeap
   testPrioritySearchQueue
+  testPersistentChunkedBitSet
   CanonicalSortedSetTests.run
   RangeUpdateSequenceTests.run
   testIntervalTree
@@ -61,6 +63,31 @@ main = do
   testTextRope
   testConcurrentReads
   putStrLn "tools-data-structures-fingertree tests passed"
+
+testPersistentChunkedBitSet :: IO ()
+testPersistentChunkedBitSet = do
+  let values0 = ChunkedBitSet.fromList [0, 1, 63, 64, 130, 130]
+      snapshot = values0
+      values1 = ChunkedBitSet.delete 64 (ChunkedBitSet.insert 65 values0)
+      other = ChunkedBitSet.fromList [1, 64, 129]
+  assertEqual "chunked bit-set enumeration" [0, 1, 63, 64, 130] (ChunkedBitSet.toList values0)
+  assertEqual "chunked bit-set count" 5 (ChunkedBitSet.size values0)
+  assertEqual "chunked bit-set chunks" 3 (ChunkedBitSet.chunkCount values0)
+  assertEqual "chunked bit-set inclusive rank" 4 (ChunkedBitSet.rank 64 values0)
+  assertEqual "chunked bit-set select" (Just 63) (ChunkedBitSet.select 2 values0)
+  assertEqual "chunked bit-set edit" [0, 1, 63, 65, 130] (ChunkedBitSet.toList values1)
+  assertEqual "chunked bit-set union" [0, 1, 63, 64, 129, 130]
+    (ChunkedBitSet.toList (ChunkedBitSet.union values0 other))
+  assertEqual "chunked bit-set intersection" [1, 64]
+    (ChunkedBitSet.toList (ChunkedBitSet.intersection values0 other))
+  assertEqual "chunked bit-set difference" [0, 63, 130]
+    (ChunkedBitSet.toList (ChunkedBitSet.difference values0 other))
+  let boundary = ChunkedBitSet.insert 2147483647 ChunkedBitSet.empty
+  assertEqual "chunked bit-set signed-32 boundary" [2147483647] (ChunkedBitSet.toList boundary)
+  assertBool "chunked bit-set rejects membership beyond signed-32 domain"
+    (not (ChunkedBitSet.member 2147483648 boundary))
+  assertBool "chunked bit-set snapshot preserved" (ChunkedBitSet.member 64 snapshot)
+  assertBool "chunked bit-set invariant" (ChunkedBitSet.validStructure values1)
 
 testIntervalMap :: IO ()
 testIntervalMap = do

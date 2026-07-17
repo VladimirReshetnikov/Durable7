@@ -47,6 +47,13 @@ contraction. `persistent_relation<Left, Right, ...>` owns mutually inverse multi
 global representative per equality class on either side. Pair and whole-side edits update both
 directions atomically; `inverse()` swaps the two persistent roots without rebuilding pairs.
 
+`persistent_map_patch`, `persistent_directed_graph`, and `persistent_indexed_map` are
+composition-first general facades. Patch before/after optionals distinguish absence, strict apply
+validates every expectation before editing, and composition requires equal intermediate states.
+Graphs add missing edge endpoints and remove all incident edges with a vertex. Indexed maps retain
+the selected index representative beside each primary value and update the primary CHAMP plus
+secondary multimap together. No facade depends on Tungsten.
+
 The port intentionally follows C++ value semantics rather than C# reference identity. No-op updates
 return values that share the same roots as the source; `shares_root_with`,
 `persistent_bi_map::shares_roots_with`, and the debug root inspection helpers expose that property

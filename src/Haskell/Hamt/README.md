@@ -18,6 +18,12 @@ policies, with distinct-key and checked pair counts, first representatives, pair
 receiver-policy algebra. `Relation a b` maintains exact forward and reverse multimaps; every pure
 edit constructs both successors together, and `validStructure` verifies complete inverse parity.
 
+`PersistentMapPatch k v` stores strict presence-safe before/after states and supports preflight
+apply, inversion, and compatible composition. `PersistentDirectedGraph v` combines explicit
+vertices with a bidirectional relation, and `PersistentIndexedMap k v i` combines primary rows with
+one selector-maintained nonunique secondary index. The modules preserve runtime hash policies and
+stored representatives through idiomatic pure `Maybe`/`Either` results.
+
 ## One-Descent Map Factories
 
 `Data.Structures.Hamt.HashMap` exposes the following persistent point combinators:

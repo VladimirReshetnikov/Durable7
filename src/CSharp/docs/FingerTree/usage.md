@@ -658,6 +658,23 @@ Separate enumerators are independent and safe for concurrent reads. Do not copy 
 enumerator to fork a traversal: copies share traversal state, and the stale copy fails fast after
 the other advances.
 
+## Persistent Chunked Bit Set
+
+Use `PersistentChunkedBitSet` for a sparse nonnegative integer set when population rank/select and
+word-wise algebra matter:
+
+```csharp
+var occupied = PersistentChunkedBitSet.CreateRange([0, 63, 64, 10_000]);
+occupied = occupied.Add(65).Remove(0);
+
+var upTo64 = occupied.Rank(64); // inclusive
+var second = occupied.Select(1); // zero-based population order
+var common = occupied.Intersect(otherBits);
+```
+
+Storage is proportional to nonzero 64-bit chunks, not the largest bit index. See the
+[complete contract](persistent-chunked-bit-set.md).
+
 ## Choosing A Surface
 
 | Need | Start with |
@@ -677,6 +694,7 @@ the other advances.
 | Localized persistent positional editing with retained branches | `RopeCursor<T>` from `Rope<T>.GetCursor()` |
 | Uniform random-access persistent sequence | `RrbVector<T>` |
 | Persistent indexed sequence with logarithmic range actions and aggregate queries | `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` |
+| Sparse nonnegative integer set with population rank/select | `PersistentChunkedBitSet` |
 | Mutable FIFO window aggregate with worst-case O(1) operations | `DabaLite<T, TMonoid>` |
 | Policy-scoped canonical sorted shape and memoized digest | `CanonicalSortedSet<T>` |
 | Worst-case O(1) persistent insert and meld | `BrodalOkasakiHeap<T>` |

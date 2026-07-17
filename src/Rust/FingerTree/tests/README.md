@@ -55,6 +55,9 @@ Coverage groups:
 - `persistent_interval_map.rs`: payload-bearing lexicographic interval keys, strict and replacing
   edits, invalid-interval errors, first representatives, overlap-model parity, point stabbing,
   removal, storage sharing, retained versions, and annotation invariants;
+- `persistent_chunked_bit_set.rs`: sparse-word boundaries, duplicate/negative-index behavior,
+  ascending iteration, inclusive rank, zero-based select, persistent algebra, storage-sharing
+  no-ops, retained versions, and cached word/population invariants;
 - `rope.rs`: chunked positional and measured rope storage over cached count/user-measure summaries, chunk-copy
   construction, caller-supplied copy targets, positional cursor boundaries/non-`Clone` navigation/chunk-edge
   edits/no-op seeks and inserts/retained branches/root-sharing snapshots/gap-vector model replay,

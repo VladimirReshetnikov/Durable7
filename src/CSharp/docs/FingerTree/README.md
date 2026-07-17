@@ -16,6 +16,8 @@ project.
   interval-set and interval-map queries, common update/query patterns, samples, and pointers to the
   API, benchmark, and concurrency references.
 - [C# FingerTree API Specification](api-specification.md) defines the normative public C# API shape, semantic contracts, and complexity targets for the implementation in `src/Tools.DataStructures.FingerTree/`.
+- [Persistent chunked bit set](persistent-chunked-bit-set.md) specifies the sparse nonnegative-int
+  domain, inclusive rank, zero-based select, chunk-stream algebra, API, and complexity contract.
 - [Range-update sequence contract](range-update-sequence.md) specifies the static tag/action algebra,
   `Compose(newer, older)` direction, implicit-AVL lazy-tag invariant, exact public API, structural
   bounds, affine assign/add example, and deterministic validation boundary for

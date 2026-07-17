@@ -3,7 +3,7 @@
 - Status: Informational
 - Created (UTC): 2026-07-02T05:02:24Z
 - Repository HEAD: 3c639e02d05377685676923a13b30a3d22fd4994
-- Audience: Maintainers and implementers working on the C# CHAMP, hash-bag, hash-multimap, relation, Ctrie, Patricia, and Merkle families
+- Audience: Maintainers and implementers working on the C# CHAMP and derived persistent structures, Ctrie, Patricia, and Merkle families
 - Scope: Index of current specifications, usage, and validation for `src/CSharp/src/Tools.DataStructures.Hamt`
 
 ## Current Documents
@@ -19,6 +19,9 @@
   representatives, exact pair count, and no-empty-group invariant.
   The relation section locks mutually inverse multimap indexes, global representatives, symmetric
   whole-domain removal, cached inversion, and two-index publication semantics.
+- [Derived persistent structures](derived-persistent-structures.md) specifies strict invertible map
+  patches, explicit-vertex directed graphs, and automatically maintained single-secondary-index
+  maps, including their policy, representative, failure, and complexity contracts.
 - [Usage guide](usage.md) shows persistent CHAMP updates and structural diff, hash-bag counting and
   algebra, comparer and stored-representative behavior, one-way map/set transient edit sessions,
   set-valued hash multimaps, many-to-many relations, strict bidirectional mappings, set algebra, Ctrie snapshots, Patricia structural algebra, and Merkle persistence, proofs,

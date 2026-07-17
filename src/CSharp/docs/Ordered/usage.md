@@ -202,6 +202,28 @@ replacement arrays as the O(log n) stack grows. Pattern-based enumeration avoids
 interface path additionally boxes the struct. Copying an in-progress enumerator shares its state, and
 advancing divergent copies fails fast, following the underlying finger-tree contract.
 
+## Ordered Multimaps
+
+Use `PersistentOrderedMultimap<TKey, TValue>` when key groups and the distinct values inside each
+group each need insertion order:
+
+```csharp
+var tags = PersistentOrderedMultimap<string, string>
+    .Create(StringComparer.OrdinalIgnoreCase, StringComparer.OrdinalIgnoreCase)
+    .Add("article", "csharp")
+    .Add("video", "persistent")
+    .Add("ARTICLE", "collections");
+
+// Keys: article, video
+// Pairs: (article, csharp), (article, collections), (video, persistent)
+var articleTags = tags.GetValues("ARTICLE");
+var withoutCSharp = tags.Remove("article", "CSHARP");
+```
+
+Pair enumeration finishes one group before starting the next. Removing a group's final value
+removes that group; re-adding it appends a new group. See the
+[complete multimap contract](persistent-ordered-multimap.md).
+
 ## Comparer-Defined Null
 
 The type has no `notnull` constraint. With the default comparer, nullable-reference null is an

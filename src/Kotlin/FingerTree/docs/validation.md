@@ -23,6 +23,8 @@ On Windows the script enables inherited non-interactive OS error handling before
 the test JVM in AWT headless mode so failures stay on the console and return a nonzero exit.
 
 The test executable covers persistent deque snapshots, reversible orientation, measured prefix
+navigation, plus chunked-bit-set word seams, duplicate/missing no-ops, rank/select, all sparse
+algebra operations, retained snapshots, ascending enumeration, and measured-tree invariants. It also covers
 splits/locates, sorted bag/set/map ordering and ranges, stable cached-priority dequeue, max-high closed
 interval queries and coalescing, complete positional/range editing surfaces for positional and measured ropes,
 comparator-aware sorted-map bulk construction, measured text line navigation, and rope builder conveniences.

@@ -5,7 +5,7 @@
 - Audience: Maintainers validating the C FingerTree port
 - Scope: Native test executable and source organization under `src/C/FingerTree/tests`
 
-The C FingerTree workspace has eight focused native test executables. `fingertree_c_tests` is
+The C FingerTree workspace has nine focused native test executables. `fingertree_c_tests` is
 registered as `fingertree_c.core`; `rrb_vector_c_tests` is registered as
 `fingertree_c.rrb_vector`; `daba_lite_c_tests` is registered as `fingertree_c.daba_lite`;
 `canonical_sorted_set_c_tests` is registered as `fingertree_c.canonical_sorted_set`;
@@ -15,6 +15,10 @@ registered as `fingertree_c.core`; `rrb_vector_c_tests` is registered as
 `persistent_interval_map_c_tests` is registered as `fingertree_c.persistent_interval_map`. Each source
 contains its runner, assertion macros, policy helpers, and test cases. The canonical executable uses
 the library's Windows CNG or OpenSSL Crypto backend but no test-framework dependency.
+
+`persistent_chunked_bit_set_c_tests` is registered as `fingertree_c.persistent_chunked_bit_set`.
+It covers signed-domain boundaries, word seams, duplicate/no-op edits, rank/select, all four sparse
+algebra operations, retained snapshots, ascending visitation, and measured-tree invariants.
 
 The runner prints one `[pass]` line per named test case, writes failed requirements to standard error with file and
 line information, and exits non-zero if any test increments the failure count. A successful core run ends with

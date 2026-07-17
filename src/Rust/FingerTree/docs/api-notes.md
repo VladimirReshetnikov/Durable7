@@ -26,6 +26,7 @@ Current public families:
 - `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>`;
 - `PriorityQueue<T, P>` and `PriorityEntry<T, P>`;
 - `Interval<T>`, `IntervalTree<T>`, `PersistentIntervalMap<T, V>`, and interval-map result types;
+- `PersistentChunkedBitSet`, `ChunkedBitSetStatistics`, `NegativeBitIndex`, and its invariant error;
 - `Rope<T>`, positional `RopeCursor<T>`, `MeasuredRope<T, P>`, `MeasuredRopeCursor<T, P>`,
   `MeasuredRopeCursorSearch<T, P>`, `MeasuredRopeBuilder<T, P>`, `TextRope`, `TextRopeCursor`,
   `TextRopeCursorSearch`, `RopeBuilder`, `NewlineMeasure`, `NewlineStyle`, and `LineColumn`.
@@ -67,6 +68,23 @@ Exact lookup/update/removal therefore avoid same-low scans, while first-overlap 
 and full overlap enumeration is output-sensitive. Endpoint order is Rust `Ord`; payload no-op
 detection is ordinary `PartialEq`. There is no `coalesce`, because no general payload merge rule is
 available.
+
+## Persistent chunked bit set
+
+`PersistentChunkedBitSet` represents nonnegative signed 32-bit bit indexes and stores only nonzero
+64-bit words in a measured persistent tree. `from_indices` and `insert` reject a negative index with
+`NegativeBitIndex`; `contains` returns false, `remove` is a root-sharing no-op, and inclusive `rank`
+returns zero for a negative query. Duplicate insertion and absent removal share the original tree.
+
+`len` and `rank` use `u64` population counts. `rank(index)` counts set indexes less than or equal to
+`index`; `select(rank)` uses a zero-based rank and returns `None` when it is outside the population.
+Iteration is ascending. Union, intersection, difference, and symmetric difference merge sorted
+word streams, omit zero results, and preserve immutable inputs. Structural validation checks strict
+word order, nonzero words, and exact cached chunk/population summaries.
+
+Lookup, point edits, rank, and select are logarithmic in the number of represented words, plus
+constant 64-bit word work. Algebra is linear in the combined represented-word counts. The signed
+32-bit domain is intentional cross-language API parity rather than a Rust machine-word limit.
 
 ## Positional rope cursor
 

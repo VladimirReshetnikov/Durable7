@@ -11,8 +11,8 @@ Run from `src/Rust`:
 .\test.ps1 -Workspace Hamt
 ```
 
-The current serialized Debug and Release gates each pass 91/91 tests plus doc tests with one Cargo
-job and one rusttest thread. The strict bimap suite contributes 8/8 tests. `cargo fmt --all --check`
+The current serialized HAMT gate passes 122/122 tests plus doc tests with one Cargo job and one
+rusttest thread. The strict bimap suite contributes 8/8 tests. `cargo fmt --all --check`
 passes, and focused Clippy for the library plus `persistent_bi_map` target passes with warnings
 denied after allowing only the crate's pre-existing Rust 1.96 `double_must_use` baseline. An
 all-target Clippy run additionally reaches a pre-existing hash-bag test literal-grouping warning;
@@ -28,12 +28,18 @@ On 2026-07-16, the focused set-valued hash-multimap and relation suites each pas
 serialized full Rust workspace subsequently passed in both Debug and Release, including all HAMT
 unit, integration, and documentation tests. Benchmarks were not run.
 
+On 2026-07-17, the focused map-patch, directed-graph, and indexed-map suites pass 7/7, 6/6, and
+6/6 tests. Together they cover presence-safe nested options, strict conflict atomicity, inversion
+and composition, adjacency/reversal/incident removal, selector cardinality and panic atomicity,
+retained representatives, root sharing, branching versions, and coupled-index validation.
+
 The crate uses `#![forbid(unsafe_code)]`. HAMT, hash-bag invariant, and Patricia unit tests are inline
 in `Hamt/src/lib.rs`, `Hamt/src/hash_bag.rs`, and `Hamt/src/patricia.rs`; one-descent map factories
 and the hash bag have focused integration suites in `Hamt/tests/map_factory_updates.rs` and
 `Hamt/tests/persistent_hash_bag.rs`; the strict bimap, set-valued multimap, and relation have focused
 suites in `Hamt/tests/persistent_bi_map.rs`, `Hamt/tests/persistent_hash_multimap.rs`, and
-`Hamt/tests/persistent_relation.rs`; Merkle core/wire and persistence integration tests live in
+`Hamt/tests/persistent_relation.rs`; patch, graph, and indexed-map suites live in their corresponding
+`persistent_*.rs` files; Merkle core/wire and persistence integration tests live in
 `Hamt/tests/merkle_core_wire.rs` and `Hamt/tests/merkle_persistence.rs`. Coverage includes:
 
 - persistent snapshot preservation;

@@ -16,21 +16,24 @@ The workspace uses CMake presets. The `msvc-*` presets use Visual Studio's bundl
 the `ninja-*` presets use `cmake` and `ninja` from `PATH` for host-agnostic validation. `CMakeLists.txt` builds the
 `tools_data_structures_finger_tree_c` static library from `src/fingertree.c`,
 `src/brodal_okasaki_heap.c`, `src/canonical_sorted_set.c`, `src/priority_search_queue.c`,
-`src/range_update_sequence.c`, `src/persistent_interval_map.c`, `src/rrb_vector.c`, and `src/daba_lite.c`,
+`src/range_update_sequence.c`, `src/persistent_interval_map.c`, `src/persistent_chunked_bit_set.c`,
+`src/rrb_vector.c`, and `src/daba_lite.c`,
 with these options enabled by default:
 
 - `FINGERTREE_C_BUILD_TESTS`: builds `tests/fingertree_c_tests`,
   `tests/brodal_okasaki_heap_c_tests`, `tests/canonical_sorted_set_c_tests`,
   `tests/priority_search_queue_c_tests`, `tests/range_update_sequence_c_tests`,
-  `tests/persistent_interval_map_c_tests`, `tests/rrb_vector_c_tests`, and `tests/daba_lite_c_tests`, registering
+  `tests/persistent_interval_map_c_tests`, `tests/persistent_chunked_bit_set_c_tests`,
+  `tests/rrb_vector_c_tests`, and `tests/daba_lite_c_tests`, registering
   `fingertree_c.core`, `fingertree_c.brodal_okasaki_heap`, `fingertree_c.canonical_sorted_set`,
   `fingertree_c.priority_search_queue`, `fingertree_c.range_update_sequence`,
-  `fingertree_c.persistent_interval_map`, `fingertree_c.rrb_vector`, and `fingertree_c.daba_lite`.
+  `fingertree_c.persistent_interval_map`, `fingertree_c.persistent_chunked_bit_set`,
+  `fingertree_c.rrb_vector`, and `fingertree_c.daba_lite`.
 - `FINGERTREE_C_BUILD_SAMPLES`: builds `samples/fingertree_c_showcase` and
   `samples/fingertree_c_snapshots`, both registered as CTest smoke tests.
 - `FINGERTREE_C_BUILD_BENCHMARKS`: builds `benchmarks/fingertree_c_benchmarks`.
 
-With tests and samples enabled, a complete CTest run contains ten targets: eight library test executables and
+With tests and samples enabled, a complete CTest run contains eleven targets: nine library test executables and
 two sample smoke tests.
 
 The project is C11 (`C_STANDARD 11`, required, extensions off). MSVC targets build with `/permissive-`,

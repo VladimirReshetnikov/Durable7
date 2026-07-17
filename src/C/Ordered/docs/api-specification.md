@@ -4,7 +4,17 @@
 - Created (UTC): 2026-07-15T09:00:00Z
 - Repository HEAD: 2d75a79feb424f4476ec32c2d6e4f19263441bf3
 - Audience: C consumers, maintainers, reviewers, and sibling-port authors
-- Scope: `tds_ordered_set` and `tds_ordered_map`
+- Scope: `tds_ordered_set`, `tds_ordered_map`, and `tds_ordered_multimap`
+
+## Ordered multimap
+
+`tds_ordered_multimap` retains independent `tds_ordered_policy` values for keys and values and an
+ordered map whose payloads are nonempty ordered sets. The first key representative fixes group
+position; the first value representative fixes its position inside that group. Visiting flattens
+groups in key order, then values in group order. Duplicate pair addition and absent removal clone a
+logically unchanged version; removing the last value removes its group. Every published handle owns
+its nested state and follows the same uninitialized-output, clone/move/destroy, overflow, and
+failure-atomicity rules as the base ordered collections.
 
 ## Ownership and policy
 

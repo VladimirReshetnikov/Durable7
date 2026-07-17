@@ -3,7 +3,7 @@
 - Created (UTC): 2026-07-15T00:00:00Z
 - Repository HEAD: a47ada790d8028a744990c4608c32ab001376683
 - Audience: Rust API consumers, maintainers, and port reviewers
-- Scope: `PersistentOrderedSet` and `PersistentOrderedMap`
+- Scope: `PersistentOrderedSet`, `PersistentOrderedMap`, and `PersistentOrderedMultimap`
 
 ## Persistent ordered map
 
@@ -21,6 +21,25 @@ set's sparse-label and deterministic relabel rules. The map deliberately exposes
 `validate_structure` checks count agreement, strict stamps, bidirectional key coverage, stamp
 agreement, and representative equivalence. Representative identity follows Rust clone semantics;
 use `Arc<K>` when allocation identity matters.
+
+## Persistent ordered multimap
+
+`PersistentOrderedMultimap<K, V, SK = RandomState, SV = RandomState>` composes an outer
+`PersistentOrderedMap` with one `PersistentOrderedSet` per key. Key-group order follows first key
+insertion, and each group's value order follows first insertion within that group. Pair iteration is
+therefore grouped by key; the facade does not retain a globally interleaved pair-arrival history.
+
+Key and value `Eq`/`Hash` domains are independent, as are their `BuildHasher` policies. Equivalent
+key and value representatives are retained until their group or pair is removed. Duplicate pair
+insertion shares the original nested roots. Removing the last value contracts the empty group;
+re-adding it later appends a new key group. `remove_key` removes a whole group, and `clear` retains
+both hash policies.
+
+`get_values` returns the immutable ordered value set for a group, while `get_key` and `get_value`
+recover retained representatives. `key_count` and `pair_count` distinguish the two cardinalities.
+Validation checks the outer map, every nonempty value group, and the cached total pair count.
+Lookup and point edits inherit hashed outer/group probes and persistent path copying; iteration is
+linear in the emitted keys or pairs.
 
 ## Type and policy
 

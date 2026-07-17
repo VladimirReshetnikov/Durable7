@@ -617,6 +617,15 @@ Notable C++ differences from C#:
 - iteration and `copy_to` stream nondecreasing low-endpoint order. `count_overlaps` counts directly, and
   `coalesce` sweeps the iterator into a rebuilt tree without first materializing all source intervals.
 
+## `persistent_chunked_bit_set`
+
+`persistent_chunked_bit_set` is a persistent sparse set over nonnegative signed 32-bit indexes.
+It stores only ascending nonzero 64-bit chunks in the measured tree; the cached annotation carries
+chunk count, population count, and last word. Point edits, membership, inclusive `rank`, and
+zero-based `select` descend logarithmically in represented chunks. Union, intersection, difference,
+and symmetric difference merge sparse chunk streams and retain a source when its exact chunk result
+is unchanged.
+
 ## `persistent_interval_map<Endpoint, Value, Comparison, ValueEqual>`
 
 The persistent interval map stores one payload for each comparison-distinct closed interval and

@@ -17,15 +17,18 @@ routine validation requirement.
 
 ## Current derived-structure evidence
 
-On 2026-07-16, the focused ordered-map suite passed 6/6 tests. The serialized full Rust workspace
-subsequently passed in both Debug and Release, including all Ordered unit and documentation tests.
-Benchmarks were not run.
+On 2026-07-17, the focused ordered-multimap suite passed 6/6 tests, in addition to the prior 6/6
+ordered-map suite. The serialized full Rust workspace subsequently passed in both Debug and
+Release, including all Ordered unit and documentation tests. Benchmarks were not run.
 
 The crate's deterministic suite covers:
 
 - ordered-map first-key/last-value construction, strict and replacing updates, positional insertion
   and movement, keyed/positional removal, ranges, reversal, stable sorting, sparse-gap relabeling,
   root sharing, retained branches, and dual-index invariants;
+- ordered-multimap grouped key/value order, duplicate suppression, independent hash policies,
+  representative retention, pair and group removal, empty-group contraction/reappend, root-sharing
+  no-ops, retained versions, and nested invariants;
 
 - construction, duplicate collapse, first-representative retention, and full-hash collisions;
 - every positional addition, movement, removal, range, reverse, and stable-sort operation;

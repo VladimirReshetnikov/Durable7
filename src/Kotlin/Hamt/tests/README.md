@@ -14,6 +14,10 @@ root build script. Run them from `src/Kotlin`:
 
 Coverage groups:
 
+- strict map patches with present-null states, conflict preflight, inversion, composition, and
+  source isolation; directed graph endpoints, reverse adjacency, and incident-edge removal; and
+  indexed-map secondary-group movement with retained snapshots and invariant validation;
+
 - strict persistent bimap conflicts, independent policies, first representatives, non-displacing
   replacement, symmetric nullable removal, cached inverse identity, clear, invariant validation,
   a 2,000-step two-map model, injected policy failure, retained snapshots, and concurrent readers;

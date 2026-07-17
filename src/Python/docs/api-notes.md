@@ -122,6 +122,24 @@ to globally retained representatives before updating either index, so equivalent
 drift between adjacency groups. Pair and whole-side removals remain symmetric. Its lock-published
 cached `inverse` swaps existing roots in O(1), and `inverse.inverse` is the receiver.
 
+`PersistentMapPatch[K, V]` records explicit absent/present before and after states for maps retaining
+the same key-policy object, so a present `None` is never confused with absence. Strict application
+preflights every expectation before publishing any successor. Inversion swaps states; composition
+requires the same key and value-policy objects, validates the complete intermediate state, and drops
+round trips. Typed conflict exceptions leave every input reusable.
+
+`PersistentDirectedGraph[V]` composes an explicit vertex set with a bidirectional relation. Edge
+insertion installs both endpoints, isolated vertices remain first-class, self-loops are allowed,
+and equivalent parallel edges collapse. Edge removal keeps endpoints; vertex removal deletes every
+incident edge. The lock-published cached `reversed` facade swaps relation roots in O(1) and points
+back to the original graph.
+
+`PersistentIndexedMap[K, V, I]` composes a primary map with a nonunique secondary multimap. Its
+selector is skipped for duplicate strict adds, equal-value updates, removals, and reads. A changed
+value is selected before publication and atomically moves its retained primary representative
+between secondary groups; selector failure leaves the source unchanged. Primary and secondary
+domains keep independent `HashPolicy` objects.
+
 The shared default policy follows coherent Python hash/equality behavior. Hashable values use
 `hash` and `==`; the identical-object fast path recovers non-reflexive values such as a retained
 `NaN`. Unhashable objects use process-local identity hashing and are equivalent only to themselves;
@@ -192,6 +210,11 @@ and stable one-shot `sort` change order. Keyed/positional removal, range extract
 and dual-index validation follow the ordered-set conventions. Strict addition raises
 `DuplicateKeyError`; presence-safe lookup uses `OrderedMapLookup`.
 
+`PersistentOrderedMultimap[K, V]` nests one ordered value set per ordered key group. Flattened
+iteration is deliberately key-grouped rather than a global pair-arrival history. Independent key
+and value policies retain their first representatives; duplicates and misses return the receiver,
+removing a final value contracts its group, and reintroducing that key appends a new group.
+
 ## Measured and frontier structures
 
 The general sequence substrate is a persistent implicit AVL tree caching caller-supplied ordered
@@ -251,6 +274,13 @@ replacement no-ops. One measured sequence caches the complete rightmost key and 
 endpoint, supporting exact same-low lookup and pruned overlap/stabbing queries. Distinct overlapping
 keys remain independent, and no coalescing API is provided because combining payloads requires an
 explicit application policy.
+
+`PersistentChunkedBitSet` represents nonnegative signed-32-bit indexes using only nonzero 64-bit
+Python-integer words in the shared measured sequence. Cached population and last-word annotations
+support logarithmic membership, point edits, inclusive `rank`, and zero-based `select` in represented
+words. Iteration is ascending; union, intersection, `except_`, and symmetric difference merge word
+streams in linear represented-word time. Python's arbitrary-precision integers are only the word
+substrate and do not widen the public index domain.
 
 Sequence, measured-tree, and measured-rope splits and cursor searches return frozen named
 dataclasses, so callers can use semantic fields such as `left`, `right`, `item`, `cursor`, and

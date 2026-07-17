@@ -6,8 +6,9 @@
 - Audience: C++ consumers, maintainers, reviewers, and sibling-port authors
 - Scope: Neutral C++23 ordered collections under `src/Cpp/Ordered`
 
-This header-first workspace owns the neutral C++ `persistent_ordered_set<T, Hash, KeyEqual>` and
-`persistent_ordered_map<Key, Value, Hash, KeyEqual, ValueEqual>`. Membership is comparer-defined
+This header-first workspace owns the neutral C++ `persistent_ordered_set<T, Hash, KeyEqual>`,
+`persistent_ordered_map<Key, Value, Hash, KeyEqual, ValueEqual>`, and
+`persistent_ordered_multimap<Key, Value, ...>`. Membership is comparer-defined
 and hashed; enumeration follows insertion order or explicit positional movement. Both types
 compose only the public C++ CHAMP map and FingerTree deque. They neither reference nor delegate to
 the application-specific Tungsten workspace.
@@ -22,6 +23,9 @@ The public headers live under
 - [`persistent_ordered_map.hpp`](include/tools/data_structures/ordered/persistent_ordered_map.hpp)
   defines keyed and positional lookup, strict insertion, representative-preserving value updates,
   explicit movement, removal, ranges, reversal, stable sorting, policy access, and validation.
+- [`persistent_ordered_multimap.hpp`](include/tools/data_structures/ordered/persistent_ordered_multimap.hpp)
+  composes ordered key groups with ordered distinct values under independent policies, preserving
+  first representatives and grouped enumeration while removing empty groups.
 - [`ordered.hpp`](include/tools/data_structures/ordered/ordered.hpp) is the aggregate header and
   exposes library version metadata.
 

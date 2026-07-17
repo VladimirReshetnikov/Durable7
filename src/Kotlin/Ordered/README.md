@@ -5,7 +5,8 @@
 - Audience: Kotlin/JVM collection users, maintainers, reviewers, and sibling-port authors
 - Scope: Neutral ordered collections under `src/Kotlin/Ordered`
 
-This workspace owns the Kotlin/JVM `PersistentOrderedSet<T>` and `PersistentOrderedMap<K, V>` ports. They combine equality-class
+This workspace owns the Kotlin/JVM `PersistentOrderedSet<T>`, `PersistentOrderedMap<K, V>`, and
+`PersistentOrderedMultimap<K, V>` ports. They combine equality-class
 membership with durable insertion and explicit-position order while preserving immutable snapshots.
 The public type lives in `tools.datastructures.ordered`.
 
@@ -48,6 +49,10 @@ strict positional insertion, value replacement without movement, keyed and posit
 ranges, reversal, stable entry sorting, ordered iteration, component-sharing diagnostics, and
 two-way validation. The first key representative and position win; bulk construction's last
 payload wins.
+
+`PersistentOrderedMultimap<K, V>` composes an ordered map of nonempty ordered value sets under
+independent runtime policies. It retains first key/value representatives, nested first-insertion
+order, separate key/pair counts, idempotent pair addition, and empty-group removal.
 
 ## Documentation
 

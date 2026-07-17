@@ -18,6 +18,10 @@ the relation built from that core. It covers nonempty group normalization, check
 representative and snapshot retention, receiver-policy multimap algebra, inverse relation lookup,
 failure-atomic two-index edits, and structural validation.
 
+`persistent_derived_structures_tests.c` covers strict map-patch apply/invert/compose behavior,
+directed-graph forward/reverse adjacency and incident-edge cleanup, indexed-map secondary-group
+movement, retained snapshots, callback ownership, and independent cross-index validation.
+
 `patricia_tests.c` is the companion dependency-free executable for the explicit-width Patricia
 maps and sets. The build script compiles it with `src/patricia.c` into
 `build/<Configuration>/patricia_tests.exe` and runs it after the hash-bag suite.

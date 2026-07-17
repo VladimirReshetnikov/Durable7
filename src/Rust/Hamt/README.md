@@ -11,7 +11,9 @@ search-tree families to safe Rust. It exposes `PersistentHashMap<K, V, S = Rando
 editing sessions, `PersistentHashBag<T, S = RandomState>`,
 `PersistentBiMap<K, V, SK = RandomState, SV = RandomState>`,
 `PersistentHashMultimap<K, V, SK = RandomState, SV = RandomState>`, and
-`PersistentRelation<L, R, SL = RandomState, SR = RandomState>`, plus
+`PersistentRelation<L, R, SL = RandomState, SR = RandomState>`, plus strict
+`PersistentMapPatch<K, V, S>`, `PersistentDirectedGraph<T, S>`, and
+`PersistentIndexedMap<K, V, I, F, SK, SI>`, plus
 `BulkBuilder<K, V, S = RandomState>`, the independent one-pass scratch constructor (mutable
 unpublished nodes frozen into detached persistent nodes; used by map/set `FromIterator`, set
 intersection, set-relation probes, and Tungsten association index rebuilds). The map additionally
@@ -49,6 +51,15 @@ The trie follows the existing ports:
 - `PersistentRelation` stores mutually inverse multimaps, normalizes one global representative per
   represented class, supports symmetric pair and whole-domain removal, and creates an inverse by
   O(1) cloning/swapping of existing roots rather than pair traversal;
+- `PersistentMapPatch` stores presence-safe before/after states, validates all expectations before
+  application, distinguishes absence from a present `None` through nested `Option`, and supports
+  inversion and composition with typed conflict results;
+- `PersistentDirectedGraph` composes an explicit vertex set and relation, automatically adds edge
+  endpoints, permits self-loops but not parallel edges, removes incident edges with a vertex, and
+  reverses by O(1) root swapping;
+- `PersistentIndexedMap` composes a primary CHAMP and nonunique secondary multimap. Its retained
+  `Arc<F>` selector runs only for new or genuinely value-changing rows; removals use the exact
+  stored index key and never invoke the selector;
 - map equality and diff traverse same-policy CHAMP nodes in lockstep, use stored hashes, and prune
   every `Arc`-identical descendant before key or value comparison. Diff returns owned typed
   additions, removals, and changes. Across distinct `BuildHasher` policy identities both operations

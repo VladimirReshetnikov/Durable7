@@ -4,7 +4,7 @@
 - Created (UTC): 2026-07-15T01:28:46Z
 - Repository HEAD: 5fd1a85c5ec58886f0dbabe805552bd37ec40871
 - Audience: API consumers, maintainers, reviewers, and sibling-language port authors
-- Scope: `PersistentOrderedMap<TKey, TValue>` and `PersistentOrderedSet<T>`
+- Scope: `PersistentOrderedMap<TKey, TValue>`, `PersistentOrderedSet<T>`, and `PersistentOrderedMultimap<TKey, TValue>`
 
 This document is normative for the C# type. The source XML documentation is its concise executable
 surface; this specification fixes interactions among ordering, equality policy, representatives,
@@ -50,6 +50,12 @@ is claimed across branches.
 Key operations cost O(w + c), positional operations cost O(log n), and operations needing both cost
 O(w + c + log n), where `w <= 7` is CHAMP depth and `c` is an equal-hash collision scan. A relabel or
 reverse costs O(n (w + c)). Enumeration is O(n) and performs no key hashing.
+
+## Persistent Ordered Multimap
+
+`PersistentOrderedMultimap<TKey, TValue>` is the set-valued grouped-order sibling. Its normative
+API, nested ordering, representative, empty-group, failure, and complexity rules are defined by the
+[persistent ordered multimap contract](persistent-ordered-multimap.md).
 
 ## Public Surface
 
