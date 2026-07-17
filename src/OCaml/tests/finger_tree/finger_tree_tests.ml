@@ -1,4 +1,5 @@
-open Tools_data_structures.Finger_tree
+open Tools_data_structures
+open Finger_tree
 
 let check_int_list label expected actual = Alcotest.(check (list int)) label expected actual
 
@@ -55,6 +56,80 @@ let deque_model_property =
       expected = Persistent_deque.to_list actual)
 
 let test_deque_model () = QCheck.Test.check_exn deque_model_property
+let int_order = Common.Comparator.create Int.compare
+
+let test_sorted_collections () =
+  let bag = Sorted_bag.of_list int_order [ 3; 1; 2; 2; 4 ] in
+  Alcotest.(check int) "bag multiplicity" 2 (Sorted_bag.count_of 2 bag);
+  check_int_list "bag value range" [ 2; 2; 3 ]
+    (Sorted_bag.to_list (Sorted_bag.value_range ~minimum:2 ~maximum:3 bag));
+  check_int_list "bag removes all" [ 1; 3; 4 ] (Sorted_bag.to_list (Sorted_bag.remove_all 2 bag));
+  let case_insensitive =
+    Common.Comparator.create (fun left right ->
+        String.compare (String.lowercase_ascii left) (String.lowercase_ascii right))
+  in
+  let set = Sorted_set.of_list case_insensitive [ "Alpha"; "beta" ] in
+  let added, same = Sorted_set.add "alpha" set in
+  Alcotest.(check bool) "equivalent set member rejected" false added;
+  Alcotest.(check (option string))
+    "first representative retained" (Some "Alpha") (Sorted_set.find "ALPHA" same);
+  let map = Result.get_ok (Sorted_map.of_list case_insensitive [ ("Alpha", 1); ("beta", 2) ]) in
+  let inserted, updated = Sorted_map.set "ALPHA" 10 map in
+  Alcotest.(check bool) "equivalent map key updates" false inserted;
+  let entry = Option.get (Sorted_map.find_entry "alpha" updated) in
+  Alcotest.(check string) "map key representative retained" "Alpha" (Sorted_map.entry_key entry);
+  Alcotest.(check int) "map value replaced" 10 (Sorted_map.entry_value entry);
+  let builder = Sorted_map.Builder.create updated in
+  ignore (Sorted_map.Builder.set "gamma" 3 builder);
+  let first_snapshot = Sorted_map.Builder.freeze builder in
+  ignore (Sorted_map.Builder.set "delta" 4 builder);
+  Alcotest.(check bool)
+    "frozen builder snapshot detached" false
+    (Sorted_map.mem "delta" first_snapshot)
+
+let test_priority_queue () =
+  let queue =
+    Priority_queue.empty int_order |> Priority_queue.enqueue "later" 2
+    |> Priority_queue.enqueue "first-min" 1
+    |> Priority_queue.enqueue "second-min" 1
+  in
+  let first, queue = Option.get (Priority_queue.dequeue queue) in
+  Alcotest.(check string) "stable first minimum" "first-min" (Priority_queue.entry_value first);
+  let second, _ = Option.get (Priority_queue.dequeue queue) in
+  Alcotest.(check string) "stable second minimum" "second-min" (Priority_queue.entry_value second)
+
+let test_interval_collections () =
+  let interval low high = Result.get_ok (Interval_tree.make_interval int_order low high) in
+  let tree =
+    Interval_tree.of_list int_order [ interval 10 20; interval 15 18; interval 30 40; interval 0 5 ]
+  in
+  Alcotest.(check int) "point overlaps" 2 (List.length (Interval_tree.query_point 16 tree));
+  Alcotest.(check (option int)) "maximum high cached" (Some 40) (Interval_tree.maximum_high tree);
+  let query = interval 17 31 in
+  Alcotest.(check int)
+    "interval overlaps" 3
+    (List.length (Interval_tree.find_all_overlaps query tree));
+  let interval_map = Persistent_interval_map.empty int_order in
+  let interval_map =
+    Result.get_ok (Persistent_interval_map.add ~low:10 ~high:20 "outer" interval_map)
+  in
+  let interval_map =
+    Result.get_ok (Persistent_interval_map.add ~low:12 ~high:14 "inner" interval_map)
+  in
+  Alcotest.(check int)
+    "payload point query" 2
+    (List.length (Persistent_interval_map.query_point 13 interval_map));
+  Alcotest.(check bool)
+    "duplicate exact interval rejected" true
+    (Result.is_error (Persistent_interval_map.add ~low:10 ~high:20 "duplicate" interval_map));
+  let removed, successor =
+    Option.get (Persistent_interval_map.remove ~low:12 ~high:14 interval_map)
+  in
+  Alcotest.(check string) "removed payload" "inner" removed;
+  Alcotest.(check int) "source remains intact" 2 (Persistent_interval_map.count interval_map);
+  Alcotest.(check int)
+    "successor removes exact interval" 1
+    (Persistent_interval_map.count successor)
 
 let () =
   Alcotest.run "FingerTree core"
@@ -65,5 +140,8 @@ let () =
           Alcotest.test_case "measured search" `Quick test_measured_sequence;
           Alcotest.test_case "reversible facade" `Quick test_reversible_deque;
           Alcotest.test_case "deque list model" `Quick test_deque_model;
+          Alcotest.test_case "sorted collections" `Quick test_sorted_collections;
+          Alcotest.test_case "stable priority queue" `Quick test_priority_queue;
+          Alcotest.test_case "interval collections" `Quick test_interval_collections;
         ] );
     ]

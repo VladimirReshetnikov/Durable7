@@ -85,5 +85,11 @@ search. `Persistent_deque` specializes it with the size monoid, `Measured_sequen
 arbitrary runtime measurement policy, and `Reversible_deque` adds an O(1) logical reversal bit.
 Published snapshots remain immutable across end edits, concatenation, splits, and indexed changes.
 
+The first derived sequence facades add order-statistic `Sorted_bag`, representative-retaining
+`Sorted_set` and `Sorted_map`, a stable `Priority_queue`, max-high `Interval_tree`, and the
+payload-bearing `Persistent_interval_map`. Sorted collections retain comparator identity for
+cross-value operations; set/map builders are mutable construction aids whose frozen snapshots stay
+detached from later edits. Exact interval identity remains separate from overlap and point queries.
+
 Each remaining collection-family checkpoint adds its public modules and corresponding focused tests
 before the repository-level indexes claim that family as shipped.
