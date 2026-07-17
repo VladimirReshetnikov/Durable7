@@ -131,6 +131,63 @@ let test_interval_collections () =
     "successor removes exact interval" 1
     (Persistent_interval_map.count successor)
 
+let test_rrb_vector () =
+  let source = Rrb_vector.of_list (List.init 100 Fun.id) in
+  let left, right = Rrb_vector.split_at 37 source in
+  Alcotest.(check int) "left length" 37 (Rrb_vector.length left);
+  Alcotest.(check int) "right first" 37 (Option.get (Rrb_vector.nth 0 right));
+  let joined = Rrb_vector.concat left right in
+  check_int_list "split concatenation" (List.init 100 Fun.id) (Rrb_vector.to_list joined);
+  let updated = Result.get_ok (Rrb_vector.set 50 500 source) in
+  Alcotest.(check int) "updated value" 500 (Option.get (Rrb_vector.nth 50 updated));
+  Alcotest.(check int) "source retained" 50 (Option.get (Rrb_vector.nth 50 source));
+  let builder = Rrb_vector.Builder.create source in
+  Rrb_vector.Builder.append 100 builder;
+  let frozen = Rrb_vector.Builder.freeze builder in
+  Rrb_vector.Builder.append 101 builder;
+  Alcotest.(check int) "detached vector freeze" 101 (Rrb_vector.length frozen)
+
+let test_chunked_bit_set () =
+  let set = Result.get_ok (Persistent_chunked_bit_set.of_list [ 0; 1; 63; 64; 1_000_000 ]) in
+  Alcotest.(check int) "deduplicated count" 5 (Persistent_chunked_bit_set.count set);
+  Alcotest.(check int) "rank" 4 (Persistent_chunked_bit_set.rank 65 set);
+  Alcotest.(check (option int)) "select" (Some 64) (Persistent_chunked_bit_set.select 3 set);
+  Alcotest.(check (option int)) "next" (Some 63) (Persistent_chunked_bit_set.next_set_bit 2 set);
+  Alcotest.(check (option int))
+    "previous" (Some 64)
+    (Persistent_chunked_bit_set.previous_set_bit 999_999 set);
+  let removed, successor = Persistent_chunked_bit_set.remove 64 set in
+  Alcotest.(check bool) "removed" true removed;
+  Alcotest.(check bool) "source retained" true (Persistent_chunked_bit_set.mem 64 set);
+  Alcotest.(check bool) "successor changed" false (Persistent_chunked_bit_set.mem 64 successor);
+  Alcotest.(check bool)
+    "negative bit rejected" true
+    (Result.is_error (Persistent_chunked_bit_set.add (-1) set))
+
+let test_range_update_sequence () =
+  let rejected =
+    Range_update_sequence.create_algebra ~id:"unchecked-add" ~identity:0 ~combine:( + )
+      ~measure:Fun.id ~apply_element:( + )
+      ~apply_measure:(fun tag ~length measure -> measure + (tag * length))
+      ~compose:( + ) ~laws_verified:false ()
+  in
+  Alcotest.(check bool) "law gate" true (Result.is_error rejected);
+  let algebra =
+    Result.get_ok
+      (Range_update_sequence.create_algebra ~id:"range-add-sum-v1" ~identity:0 ~combine:( + )
+         ~measure:Fun.id ~apply_element:( + )
+         ~apply_measure:(fun tag ~length measure -> measure + (tag * length))
+         ~compose:( + ) ~laws_verified:true ())
+  in
+  let source = Range_update_sequence.of_list algebra [ 1; 2; 3; 4; 5 ] in
+  let updated = Result.get_ok (Range_update_sequence.update_range ~start:1 ~length:3 10 source) in
+  check_int_list "range update" [ 1; 12; 13; 14; 5 ] (Range_update_sequence.to_list updated);
+  check_int_list "range source retained" [ 1; 2; 3; 4; 5 ] (Range_update_sequence.to_list source);
+  Alcotest.(check int) "updated aggregate" 45 (Range_update_sequence.measure updated);
+  Alcotest.(check (result int string))
+    "range aggregate" (Ok 39)
+    (Range_update_sequence.measure_range ~start:1 ~length:3 updated)
+
 let () =
   Alcotest.run "FingerTree core"
     [
@@ -143,5 +200,8 @@ let () =
           Alcotest.test_case "sorted collections" `Quick test_sorted_collections;
           Alcotest.test_case "stable priority queue" `Quick test_priority_queue;
           Alcotest.test_case "interval collections" `Quick test_interval_collections;
+          Alcotest.test_case "RRB vector" `Quick test_rrb_vector;
+          Alcotest.test_case "chunked bit set" `Quick test_chunked_bit_set;
+          Alcotest.test_case "range update sequence" `Quick test_range_update_sequence;
         ] );
     ]

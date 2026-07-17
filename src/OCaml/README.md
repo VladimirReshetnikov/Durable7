@@ -91,5 +91,12 @@ payload-bearing `Persistent_interval_map`. Sorted collections retain comparator 
 cross-value operations; set/map builders are mutable construction aids whose frozen snapshots stay
 detached from later edits. Exact interval identity remains separate from overlap and point queries.
 
+Indexed sequence derivatives include `Rrb_vector` over the shared balanced sequence,
+`Persistent_chunked_bit_set` with sparse rank/select and navigation, and
+`Range_update_sequence` with an explicit algebra-law admission gate. The initial range-update
+checkpoint rebuilds affected immutable arrays and their measures at publication, so it preserves
+the sibling semantics without yet claiming the implicit-AVL implementation's logarithmic lazy
+update bound. Vector builders remain reusable and publish snapshots detached from subsequent edits.
+
 Each remaining collection-family checkpoint adds its public modules and corresponding focused tests
 before the repository-level indexes claim that family as shipped.
