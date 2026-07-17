@@ -2,6 +2,8 @@
 
 - Created (UTC): 2026-07-15T00:31:34Z
 - Repository HEAD: fa29fbb535a231b166e75ea873d56f170a609a87
+- Updated (UTC): 2026-07-17T00:25:16Z
+- Updated Repository HEAD: a26aac8f4ec2fa60a2d4871568c2c02d24c9b2a2
 
 Run `test.ps1` from this workspace. Its required gates are:
 
@@ -13,7 +15,9 @@ Run `test.ps1` from this workspace. Its required gates are:
 
 The checked-in launcher keeps pytest single-process, disables pytest's optional on-disk cache, and
 pins Rayon, CMake, and Make-compatible helper work to one worker. This keeps validation memory and
-I/O predictable without weakening any executable gate.
+I/O predictable without weakening any executable gate. It selects `Scripts/python.exe` for Windows
+virtual environments and `bin/python` for POSIX virtual environments, including the clean
+installed-wheel smoke, so the same PowerShell entry point is portable across supported hosts.
 
 The complete suite executes example, property, model, adversarial, exact-wire, failure-atomicity,
 and concurrency tests. Python 3.11 and 3.14 lanes exercise the runtime surface; the static gate

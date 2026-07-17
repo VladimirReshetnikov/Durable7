@@ -3,8 +3,8 @@
 - Status: Current validation guide
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-14T04:50:00Z
-- Updated Repository HEAD: f814076ceba253306517114ff94d30f952af92e6
+- Updated (UTC): 2026-07-17T00:25:16Z
+- Updated Repository HEAD: a26aac8f4ec2fa60a2d4871568c2c02d24c9b2a2
 - Audience: Maintainers validating the C++ port
 - Scope: Local/CI build, test, stress, sample, packaging, sanitizer, and benchmark guidance
 
@@ -141,13 +141,14 @@ lane does not provide a viable TSan runtime.
 
 ## Current Coverage
 
-CTest registers 24 cases: 22 subsystem cases backed by `tests/fingertree_smoke_tests`, including the focused
+CTest registers 25 cases: 23 subsystem cases backed by `tests/fingertree_smoke_tests`, including the focused
 `fingertree.brodal-okasaki-heap`, `fingertree.canonical-sorted-set`, `fingertree.daba-lite`, and
-`fingertree.priority-search-queue` and `fingertree.range-update-sequence` groups. Each case invokes the same local runner with an exact
+`fingertree.interval-map`, `fingertree.priority-search-queue`, and
+`fingertree.range-update-sequence` groups. Each case invokes the same local runner with an exact
 `--group` filter through the repository
 headless launcher, so a subsystem failure is isolated without introducing Catch2/GoogleTest or duplicating test
 execution. `fingertree.samples` checks two deterministic transcripts, and `fingertree.installed-consumer` performs
-the staged package integration test. All 24 carry the `fingertree` label and all Windows invocations—including the
+the staged package integration test. All 25 carry the `fingertree` label and all Windows invocations—including the
 nested install/configure/build/test command—inherit the no-dialog error mode. Use
 `ctest --test-dir out/build/msvc-debug --parallel 1 -N -L fingertree` to list the cases, or `-R` with one exact case name for a
 focused run. See the [tests README](../tests/README.md) for the complete group list, direct runner options,
@@ -192,6 +193,9 @@ The suite covers:
 - sorted bag/set/map ranking, navigation, range, custom order, set algebra, and randomized model checks;
 - priority queue ordering, stability, and command-model behavior;
 - interval tree insertion, overlap, containment, coalescing, removal, and model comparisons;
+- persistent interval-map full-key ordering, strict and replacing edits, stored low-endpoint
+  representative retention, invalid-interval rejection, point and overlap queries, maximum-high
+  pruning, retained snapshots, custom value equality, and cached-annotation validation;
 - `rope<T>`, measured rope, text rope, and their positional/measured/text snapshot-plus-gap cursors; ordered
   noncommutative measures; absolute hit/miss/chunk-boundary search; callback retry; retained cursor branches;
   copy-on-move source validity; lvalue-only borrowed peeks; byte-oriented text line positions and exact snapshots;
@@ -204,6 +208,11 @@ The suite covers:
 - stateful command programs over the measured tree, tuned deque, reversible deque, positional/measured ropes, and
   sorted set, including five default seeds, retained versions, invariant checks after every command, automatic
   failure shrinking, exhaustive size-0-through-24 checks, and non-group locate/split-find equivalence.
+
+The 2026-07-16 portable audit passed all 25/25 CTest cases in both Debug and Release with Clang 21.
+That host paired Clang with libstdc++ 12, whose deprecated internal temporary-buffer API required
+disabling only `-Wdeprecated-declarations`; all project warning categories remained warnings-as-errors.
+This is current portable evidence, not a replacement for the full MSVC/GCC/Clang policy matrix.
 
 ## Benchmark Harness Status
 

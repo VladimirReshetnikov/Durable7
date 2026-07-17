@@ -40,7 +40,11 @@ try {
     }
 
     $venv = Join-Path $workspace '.venv'
-    $python = Join-Path $venv 'Scripts\python.exe'
+    # Python's venv layout is platform-specific even when the launcher is
+    # PowerShell on both hosts. Keep one validated relative path and reuse it
+    # for the developer environment and the clean installed-wheel smoke.
+    $venvPythonRelativePath = if ($IsWindows) { 'Scripts\python.exe' } else { 'bin/python' }
+    $python = Join-Path $venv $venvPythonRelativePath
     if (-not (Test-Path $python)) {
         python -m venv $venv
         if ($LASTEXITCODE -ne 0) { throw "Creating the Python validation environment failed." }
@@ -86,7 +90,8 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Creating package-smoke environment failed." }
 
         $wheel = Get-ChildItem -LiteralPath $dist -Filter '*.whl' | Select-Object -First 1
-        & "$smoke\Scripts\python.exe" -m pip install --disable-pip-version-check $wheel.FullName
+        $smokePython = Join-Path $smoke $venvPythonRelativePath
+        & $smokePython -m pip install --disable-pip-version-check $wheel.FullName
         if ($LASTEXITCODE -ne 0) { throw "Installing the built wheel failed." }
 
         $smokeScript = @'
@@ -149,7 +154,7 @@ range_sequence = RangeUpdateSequence.from_iterable([1, 2, 3], AdditiveRangeAlgeb
 assert range_sequence.apply_range(1, 2, 10).to_list() == [1, 12, 13]
 assert int(UInt256(-1)) == 2**256 - 1
 '@
-        & "$smoke\Scripts\python.exe" -c $smokeScript
+        & $smokePython -c $smokeScript
         if ($LASTEXITCODE -ne 0) { throw "Installed-wheel smoke test failed." }
     }
 }
