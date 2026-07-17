@@ -3,7 +3,7 @@
 (library
  (name tools_data_structures)
  (public_name tools-data-structures)
- (libraries zarith digestif threads)
+ (libraries zarith digestif threads uutf)
  (flags
   (:standard
    -safe-string

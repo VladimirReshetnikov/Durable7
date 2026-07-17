@@ -70,5 +70,14 @@ facade is returned.
 serializes writers and readers capture immutable HAMT roots in O(1). It preserves generation and
 snapshot behavior while explicitly making no lock-free progress claim.
 
+`Merkle_search_tree` provides the policy-bound authenticated ordered map. Canonical codecs,
+SHA-256 policy domains, and B=16 construction produce exact `MST2` blocks shared with the sibling
+ports. Verified stores and packs enforce seven independent resource limits, reject malformed or
+noncanonical graphs before publication, and support missing-block synchronization. `MSP2`
+membership, nonmembership, and range proofs account for every supplied block and query byte, while
+typed three-way merge distinguishes a missing key from a present encoded value. The current proof
+producer deliberately sends a complete authenticated block set; verification and wire semantics
+are exact, but proof minimization is not claimed.
+
 Each remaining collection-family checkpoint adds its public modules and corresponding focused tests
 before the repository-level indexes claim that family as shipped.

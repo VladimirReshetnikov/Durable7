@@ -271,6 +271,140 @@ let test_concurrent_snapshot_facade () =
     "generation advances" true
     (Int64.compare (Concurrent_hash_trie.generation trie) 200L >= 0)
 
+let bytes_hex bytes =
+  let alphabet = "0123456789abcdef" in
+  String.init
+    (Bytes.length bytes * 2)
+    (fun index ->
+      let value = Char.code (Bytes.get bytes (index / 2)) in
+      alphabet.[if index mod 2 = 0 then value lsr 4 else value land 15])
+
+let test_merkle_golden_wire () =
+  let policy =
+    Result.get_ok
+      (Merkle_encoding.create_policy ~policy_id:"golden-int-string-v1" ~compare:Int32.compare
+         ~key_codec:Merkle_encoding.int32_codec ~value_codec:Merkle_encoding.nullable_utf8_codec ())
+  in
+  Alcotest.(check string)
+    "policy domain" "fe140762a080abb39de83f70e7505c8b94c4baa428eea76d468a0f3163bc56c2"
+    (Merkle_encoding.digest_hex (Merkle_encoding.domain_digest policy));
+  Alcotest.(check string)
+    "empty root" "98900ab6355e8ea553b5cd087d6ec4b976dc3e0953e35c6f46bc756ac75ddcb3"
+    (Merkle_encoding.digest_hex (Merkle_encoding.empty_digest policy));
+  let tree =
+    Result.get_ok (Merkle_search_tree.add 42l (Some "forty-two") (Merkle_search_tree.empty policy))
+  in
+  Alcotest.(check string)
+    "single-entry root" "1b464818e8934692ad28f35f520fa0c834634e2200f9e5873d0327e6524bcc94"
+    (Merkle_encoding.digest_hex (Merkle_search_tree.root_digest tree));
+  let block = List.hd (Merkle_search_tree.blocks_preorder tree) in
+  Alcotest.(check string)
+    "exact MST2 block"
+    "4d53543201fe140762a080abb39de83f70e7505c8b94c4baa428eea76d468a0f3163bc56c2000000000100000001000000040000002a0000000a01666f7274792d74776f98900ab6355e8ea553b5cd087d6ec4b976dc3e0953e35c6f46bc756ac75ddcb398900ab6355e8ea553b5cd087d6ec4b976dc3e0953e35c6f46bc756ac75ddcb3"
+    (bytes_hex block.Merkle_search_tree.content);
+  Alcotest.(check (result unit string)) "valid" (Ok ()) (Merkle_search_tree.validate tree)
+
+let merkle_int_policy policy_id =
+  Result.get_ok
+    (Merkle_encoding.create_policy ~policy_id ~compare:Int32.compare
+       ~key_codec:Merkle_encoding.int32_codec ~value_codec:Merkle_encoding.int32_codec ())
+
+let test_merkle_persistence_and_proofs () =
+  let policy = merkle_int_policy "ocaml-persistence-int32-v1" in
+  let entries = List.init 100 (fun index -> (Int32.of_int index, Int32.of_int (-index - 1))) in
+  let tree = Result.get_ok (Merkle_search_tree.of_list policy entries) in
+  Alcotest.(check bool) "multi-block tree" true (Merkle_search_tree.block_count tree > 1);
+  let added, store = Result.get_ok (Merkle_persistence.save tree Merkle_persistence.empty_store) in
+  Alcotest.(check int) "all blocks saved" (Merkle_search_tree.block_count tree) added;
+  let added_again, same_store = Result.get_ok (Merkle_persistence.save tree store) in
+  Alcotest.(check int) "save is idempotent" 0 added_again;
+  Alcotest.(check int)
+    "store remains deduplicated"
+    (Merkle_search_tree.block_count tree)
+    (Merkle_persistence.store_count same_store);
+  let loaded =
+    Result.get_ok (Merkle_persistence.load (Merkle_search_tree.root_digest tree) policy store)
+  in
+  Alcotest.(check string)
+    "root round trips"
+    (Merkle_encoding.digest_hex (Merkle_search_tree.root_digest tree))
+    (Merkle_encoding.digest_hex (Merkle_search_tree.root_digest loaded));
+  Alcotest.(check (list (pair int32 int32)))
+    "entries round trip" entries
+    (List.map
+       (fun entry -> (Merkle_search_tree.entry_key entry, Merkle_search_tree.entry_value entry))
+       (Merkle_search_tree.to_list loaded));
+  let pack = Merkle_persistence.export_pack tree in
+  let imported, imported_store =
+    Result.get_ok (Merkle_persistence.import_pack pack policy Merkle_persistence.empty_store)
+  in
+  Alcotest.(check string)
+    "pack import preserves root"
+    (Merkle_encoding.digest_hex (Merkle_search_tree.root_digest tree))
+    (Merkle_encoding.digest_hex (Merkle_search_tree.root_digest imported));
+  Alcotest.(check int)
+    "complete peer needs no blocks" 0
+    (List.length
+       (Merkle_persistence.pack_blocks (Merkle_persistence.missing_pack tree imported_store)));
+  let tight_budget =
+    { Merkle_persistence.default_budget with Merkle_persistence.maximum_blocks = 1 }
+  in
+  (match
+     Merkle_persistence.load ~budget:tight_budget (Merkle_search_tree.root_digest tree) policy store
+   with
+  | Error problem ->
+      if problem.Merkle_persistence.error_kind <> Merkle_persistence.Resource_limit_exceeded then
+        Alcotest.failf "unexpected budget failure: %s" problem.Merkle_persistence.error_message
+  | Ok _ -> Alcotest.fail "a one-block budget unexpectedly loaded a multi-block tree");
+  let membership = Merkle_proof_merge.create_proof tree 42l in
+  Alcotest.(check string)
+    "MSP2 query envelope" "4d535032"
+    (String.sub (bytes_hex (Merkle_proof_merge.proof_query_bytes membership)) 0 8);
+  let membership_result = Merkle_proof_merge.verify membership policy in
+  Alcotest.(check bool) "membership proof verifies" true membership_result.Merkle_proof_merge.valid;
+  Alcotest.(check int)
+    "membership returns one entry" 1
+    (List.length membership_result.Merkle_proof_merge.entries);
+  let absence_result =
+    Merkle_proof_merge.verify (Merkle_proof_merge.create_proof tree 999l) policy
+  in
+  Alcotest.(check bool) "nonmembership proof verifies" true absence_result.Merkle_proof_merge.valid;
+  let range_result =
+    Merkle_proof_merge.verify (Merkle_proof_merge.create_range_proof tree 10l 19l) policy
+  in
+  Alcotest.(check bool) "range proof verifies" true range_result.Merkle_proof_merge.valid;
+  Alcotest.(check int)
+    "range proof materializes bounds" 10
+    (List.length range_result.Merkle_proof_merge.entries)
+
+let test_merkle_three_way_merge () =
+  let policy = merkle_int_policy "ocaml-merge-int32-v1" in
+  let make entries = Result.get_ok (Merkle_search_tree.of_list policy entries) in
+  let base = make [ (1l, 10l); (2l, 20l) ] in
+  let left = Result.get_ok (Merkle_search_tree.set 1l 11l base) in
+  let right = Result.get_ok (Merkle_search_tree.add 3l 30l base) in
+  (match
+     Merkle_proof_merge.merge ~base ~left ~right ~resolve:(fun _ _ _ _ ->
+         Merkle_proof_merge.Conflict)
+   with
+  | Merkle_proof_merge.Merged merged ->
+      Alcotest.(check (option int32))
+        "left update retained" (Some 11l)
+        (Merkle_search_tree.find_opt 1l merged);
+      Alcotest.(check (option int32))
+        "right insertion retained" (Some 30l)
+        (Merkle_search_tree.find_opt 3l merged)
+  | Merkle_proof_merge.Conflicted _ -> Alcotest.fail "independent changes conflicted");
+  let competing_left = Result.get_ok (Merkle_search_tree.set 2l 21l base) in
+  let competing_right = Result.get_ok (Merkle_search_tree.set 2l 22l base) in
+  match
+    Merkle_proof_merge.merge ~base ~left:competing_left ~right:competing_right
+      ~resolve:(fun _ _ _ _ -> Merkle_proof_merge.Conflict)
+  with
+  | Merkle_proof_merge.Conflicted [ key ] -> Alcotest.(check int32) "conflict key" 2l key
+  | Merkle_proof_merge.Conflicted _ -> Alcotest.fail "unexpected conflict set"
+  | Merkle_proof_merge.Merged _ -> Alcotest.fail "competing updates unexpectedly merged"
+
 let map_model_property =
   let generator = QCheck.(list (pair (int_bound 63) (int_range (-10_000) 10_000))) in
   QCheck.Test.make ~count:200 ~name:"HAMT agrees with a mutable finite-map model" generator
@@ -313,5 +447,9 @@ let () =
           Alcotest.test_case "indexed map" `Quick test_indexed_map;
           Alcotest.test_case "Patricia maps and sets" `Quick test_patricia_maps_and_sets;
           Alcotest.test_case "concurrent snapshots" `Quick test_concurrent_snapshot_facade;
+          Alcotest.test_case "Merkle golden wire" `Quick test_merkle_golden_wire;
+          Alcotest.test_case "Merkle persistence and proofs" `Quick
+            test_merkle_persistence_and_proofs;
+          Alcotest.test_case "Merkle three-way merge" `Quick test_merkle_three_way_merge;
         ] );
     ]
