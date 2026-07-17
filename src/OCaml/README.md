@@ -53,5 +53,11 @@ modules preserve modulo arithmetic, checked overflow, signed truncating division
 bit operations, and exact 32/64/128-byte two's-complement conversion. Zarith is an implementation
 substrate only; the public fixed-width contract never widens at runtime.
 
+The HAMT core is a persistent 32-way bitmap-indexed trie with immutable equal-hash collision
+buckets. `Persistent_hamt` retains key representatives and policies, exposes one-descent
+`get_or_add`/`add_or_update`, reusable detached-freeze builders, and one-way path-copy transient
+sessions. `Persistent_hash_set`, `Persistent_hash_bag`, and strict `Persistent_bi_map` compose that
+core without introducing mutable published state.
+
 Each remaining collection-family checkpoint adds its public modules and corresponding focused tests
 before the repository-level indexes claim that family as shipped.
