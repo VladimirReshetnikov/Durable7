@@ -188,6 +188,48 @@ let test_range_update_sequence () =
     "range aggregate" (Ok 39)
     (Range_update_sequence.measure_range ~start:1 ~length:3 updated)
 
+let test_rope_and_cursor () =
+  let source = Rope.of_list [ 1; 2; 3; 4 ] in
+  let cursor = Result.get_ok (Rope_cursor.create ~position:2 source) in
+  let cursor = Rope_cursor.insert_many [ 8; 9 ] cursor in
+  let edited = Result.get_ok (Rope_cursor.delete_after 1 cursor) in
+  check_int_list "cursor edit" [ 1; 2; 8; 9; 4 ] (Rope.to_list (Rope_cursor.rope edited));
+  check_int_list "cursor source retained" [ 1; 2; 3; 4 ] (Rope.to_list source);
+  Alcotest.(check int) "cursor position after insertion" 4 (Rope_cursor.position edited);
+  let builder = Rope.Builder.create () in
+  Rope.Builder.append 1 builder;
+  Rope.Builder.append_rope (Rope.of_list [ 2; 3 ]) builder;
+  check_int_list "rope builder" [ 1; 2; 3 ] (Rope.to_list (Rope.Builder.freeze builder));
+  let measured = Measured_rope.of_list Measures.int_sum [ 2; 3; 5; 7 ] in
+  let measured_cursor = Result.get_ok (Measured_rope.create_cursor ~position:3 measured) in
+  Alcotest.(check int)
+    "measure before cursor" 10
+    (Measured_rope.cursor_measure_before measured_cursor)
+
+let test_text_rope_and_cursor () =
+  let source = Result.get_ok (Text_rope.of_utf8 "α\n😀z") in
+  Alcotest.(check int) "Unicode scalar length" 4 (Text_rope.length source);
+  Alcotest.(check string) "UTF-8 round trip" "α\n😀z" (Text_rope.to_utf8 source);
+  Alcotest.(check int) "line count" 2 (Text_rope.line_count source);
+  Alcotest.(check (result (pair int int) string))
+    "line column"
+    (Ok (1, 1))
+    (Text_rope.line_column 3 source);
+  Alcotest.(check (result int string))
+    "reverse line lookup" (Ok 3)
+    (Text_rope.index_of_line_column ~line:1 ~column:1 source);
+  let cursor = Result.get_ok (Text_rope_cursor.create ~position:2 source) in
+  let cursor = Result.get_ok (Text_rope_cursor.insert_utf8 "λ" cursor) in
+  Alcotest.(check string)
+    "text cursor insertion" "α\nλ😀z"
+    (Text_rope.to_utf8 (Text_rope_cursor.text cursor));
+  Alcotest.(check (result (option int) string))
+    "code-point search" (Ok (Some 3))
+    (Text_rope_cursor.find_forward "😀" cursor);
+  Alcotest.(check bool)
+    "malformed UTF-8 rejected" true
+    (Result.is_error (Text_rope.of_utf8 "\xC3\x28"))
+
 let () =
   Alcotest.run "FingerTree core"
     [
@@ -203,5 +245,7 @@ let () =
           Alcotest.test_case "RRB vector" `Quick test_rrb_vector;
           Alcotest.test_case "chunked bit set" `Quick test_chunked_bit_set;
           Alcotest.test_case "range update sequence" `Quick test_range_update_sequence;
+          Alcotest.test_case "rope cursors" `Quick test_rope_and_cursor;
+          Alcotest.test_case "text rope cursors" `Quick test_text_rope_and_cursor;
         ] );
     ]

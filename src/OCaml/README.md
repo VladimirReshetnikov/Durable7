@@ -98,5 +98,11 @@ checkpoint rebuilds affected immutable arrays and their measures at publication,
 the sibling semantics without yet claiming the implicit-AVL implementation's logarithmic lazy
 update bound. Vector builders remain reusable and publish snapshots detached from subsequent edits.
 
+`Rope`, `Measured_rope`, and their immutable snapshot-bound cursors provide split/concat editing,
+indexed insertion/deletion, and cursor-local measurement. `Text_rope` validates UTF-8 through Uutf,
+stores Unicode scalar values, indexes by code point, and supports newline-aware line/column mapping;
+its cursor adds Unicode-safe insertion, deletion, peeking, positioning, and forward search. Cursor
+edits return newly bound values and never mutate the source rope snapshot.
+
 Each remaining collection-family checkpoint adds its public modules and corresponding focused tests
 before the repository-level indexes claim that family as shipped.
