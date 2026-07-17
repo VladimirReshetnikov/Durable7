@@ -111,5 +111,12 @@ identity, priority-then-key tie breaking, persistent heap/queue snapshots, FIFO 
 failure-atomic callback publication. The initial heap and DABA implementations favor simple OCaml
 storage and do not claim the specialized sibling cores' worst-case callback or asymptotic bounds.
 
+The independently owned neutral ordered family provides `Persistent_ordered_set`,
+`Persistent_ordered_map`, and grouped `Persistent_ordered_multimap`. Equality policy defines
+identity while array position defines order; first key/value representatives survive equivalent
+lookups and replacements. The facades own insertion, final-index movement, positional ranges,
+reversal, stable one-shot sorting, receiver-policy set algebra, independent key/value policies, and
+nested value movement. These modules depend only on general repository code and never on Tungsten.
+
 Each remaining collection-family checkpoint adds its public modules and corresponding focused tests
 before the repository-level indexes claim that family as shipped.
