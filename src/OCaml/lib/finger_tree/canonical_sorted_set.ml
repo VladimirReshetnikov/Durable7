@@ -3,7 +3,7 @@ type rank = { geometric : int; secondary : int64; content : int64 }
 type 'element rank_policy = {
   order : 'element Common.Comparator.t;
   rank_hash : 'element -> int64;
-  seed : int64;
+  rank_key : string;
 }
 
 type 'element t = { policy : 'element rank_policy; set : 'element Sorted_set.t }
@@ -32,7 +32,13 @@ let digest_rank tag payload =
 
 let stable_rank_hash_bytes = digest_rank "bytes"
 let stable_rank_hash_string value = digest_rank "str" (Bytes.of_string value)
-let create_policy ~comparator ~rank_hash ~seed = { order = comparator; rank_hash; seed }
+let create_policy ~comparator ~rank_hash ~seed =
+  let rank_key =
+    Digestif.SHA256.to_raw_string
+      (Digestif.SHA256.digest_bytes
+         (Bytes.concat Bytes.empty [ Bytes.of_string "ZZT2"; int64_bytes seed ]))
+  in
+  { order = comparator; rank_hash; rank_key }
 let comparator policy = policy.order
 
 let leading_zero_bits value =
@@ -45,9 +51,7 @@ let leading_zero_bits value =
 
 let rank policy value =
   let digest =
-    Digestif.SHA256.digest_bytes
-      (Bytes.concat Bytes.empty
-         [ Bytes.of_string "ZZT2"; int64_bytes policy.seed; int64_bytes (policy.rank_hash value) ])
+    Digestif.SHA256.hmac_bytes ~key:policy.rank_key (int64_bytes (policy.rank_hash value))
   in
   let primary = first_int64 digest 0 in
   {

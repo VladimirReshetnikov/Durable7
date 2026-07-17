@@ -236,6 +236,12 @@ let test_canonical_sorted_set () =
   in
   let first = Canonical_sorted_set.of_list policy [ 5; 1; 9; 3; 7; 2 ] in
   let second = Canonical_sorted_set.of_list policy [ 2; 7; 3; 9; 1; 5 ] in
+  let rank = Canonical_sorted_set.rank policy 5 in
+  Alcotest.(check int) "golden geometric rank" 2 rank.Canonical_sorted_set.geometric;
+  Alcotest.(check int64) "golden secondary rank" (-8249747124219652860L)
+    rank.Canonical_sorted_set.secondary;
+  Alcotest.(check int64) "golden content rank" 840465094988975138L
+    rank.Canonical_sorted_set.content;
   check_int_list "canonical order" [ 1; 2; 3; 5; 7; 9 ] (Canonical_sorted_set.to_list first);
   let first_stats = Canonical_sorted_set.statistics first in
   let second_stats = Canonical_sorted_set.statistics second in
