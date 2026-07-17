@@ -16,14 +16,15 @@ recognizable across language ports.
 
 ## Fixed-Width Integer Numerics
 
-`Tools.Numerics` is the C# reference workspace for fixed-width and sparse integer values; TypeScript
-and Python port the same semantic family over native arbitrary-precision integer substrates. The family provides
+`Tools.Numerics` is the C# reference workspace for fixed-width and sparse integer values; OCaml,
+TypeScript, and Python port the same semantic family over arbitrary-precision integer substrates. The family provides
 deterministic two's-complement arithmetic, parse/format behavior, binary conversion APIs, and declaration-parity
 guardrails for the wide-integer family.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
 | C# | `UInt256`, `Int256`, `UInt512`, `Int512`, `UInt1024`, `Int1024`, `SparseInteger`, `BitConverterEx` | [Workspace](../../src/CSharp/docs/Numerics/overview.md), [API and behavior reference](../../src/CSharp/docs/Numerics/api-and-behavior-reference.md), [validation](../../src/CSharp/docs/Numerics/validation.md), [wide-integer guidance](../../src/CSharp/docs/Numerics/wide-integer-maintainer-guidance.md), [tests](../../src/CSharp/tests/Tools.Numerics.Tests/README.md) |
+| OCaml | `Wide_integer.UInt256`/`Int256`, `UInt512`/`Int512`, `UInt1024`/`Int1024`, `Sparse_integer`, `Bit_converter_ex` | [Workspace](../../src/OCaml/README.md), [API notes](../../src/OCaml/docs/api-notes.md), [source](../../src/OCaml/lib/numerics), [tests](../../src/OCaml/tests/README.md) |
 | TypeScript | `UInt256`, `Int256`, `UInt512`, `Int512`, `UInt1024`, `Int1024`, `SparseInteger`, `BitConverterEx` | [Workspace](../../src/TypeScript/README.md), [API notes](../../src/TypeScript/docs/api-notes.md), [tests](../../src/TypeScript/test/README.md) |
 | Python | `UInt256`, `Int256`, `UInt512`, `Int512`, `UInt1024`, `Int1024`, `FixedWidthInteger`, `SparseInteger`, `BitConverterEx` | [Workspace](../../src/Python/README.md), [API notes](../../src/Python/docs/api-notes.md), [source](../../src/Python/src/vladimir_reshetnikov/data_structures/numerics), [tests](../../src/Python/tests/README.md) |
 
@@ -31,27 +32,28 @@ guardrails for the wide-integer family.
 
 The HAMT workspaces implement persistent hash-array mapped trie maps and sets with 32-way
 bitmap-indexed branching, immutable equal-hash collision buckets, structural sharing between
-versions, and comparer/hash-policy preservation. All eight languages expose one-way CHAMP map/set
+versions, and comparer/hash-policy preservation. All nine languages expose one-way CHAMP map/set
 editing sessions with O(1)-in-trie adoption and publication. C# implements the optimized owner-token
-kernel, including in-place edits of token-owned nodes. C, C++, Haskell, Kotlin, Rust, TypeScript, and
+kernel, including in-place edits of token-owned nodes. C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and
 Python preserve the same observable lifecycle through semantic facades whose changed point edits
 remain ordinary persistent path copies; those sibling sessions make no edit-performance claim. The
-seven established ports align same-policy equality/diff through canonical logical slots and prune
-shared descendants; Python exposes the same results and exact-root short circuit through
-lookup-based traversal rather than claiming that structural optimization. Independently created
+optimized ports align same-policy equality/diff through canonical logical slots and prune shared
+descendants; Python and OCaml expose the same results through their documented checkpoint traversal
+without claiming that structural optimization. Independently created
 hash policies retain semantic fallback or explicit rejection according to the local contract. All
-eight languages expose persistent map `GetOrAdd`/`AddOrUpdate` counterparts that hash once, descend
-once, and invoke exactly one selected factory without a retry loop. All eight also ship persistent
+nine languages expose persistent map `GetOrAdd`/`AddOrUpdate` counterparts that hash once, descend
+once, and invoke exactly one selected factory without a retry loop. All nine also ship persistent
 hash bags with positive 32-bit per-class multiplicities, widened expanded counts, receiver-policy
 multiset algebra, and stored-representative recovery, plus strict persistent bidirectional maps over
-independent key/value policies. C# uses a checked `long` bag total, TypeScript uses `bigint`, and
-Python uses `int`. C++ and Rust expose construction-only
-bulk builders over unpublished mutable CHAMP nodes; TypeScript and Python now port that reusable,
-detached-freeze surface as well. All eight languages expose explicit-width Patricia
+independent key/value policies. C# uses a checked `long` bag total, TypeScript uses `bigint`, Python
+uses an unbounded `int`, and OCaml uses a checked native `int`. C++ and Rust expose construction-only
+bulk builders over unpublished mutable CHAMP nodes; TypeScript and Python port that reusable,
+detached-freeze surface as well. OCaml's reusable staging builder preserves detached freezes but
+uses persistent path copies. All nine languages expose explicit-width Patricia
 maps/sets; C# and Kotlin/JVM intentionally own the managed-only
 Ctrie, whose snapshots enumerate in canonical CHAMP order for exact sequence-preserving conversion;
 TypeScript supplies the synchronous isolate-local snapshot facade without a cross-worker progress
-claim, and Python supplies a thread-safe, lock-coordinated facade over persistent roots. All eight
+claim, while OCaml and Python supply thread-safe, lock-coordinated facades over persistent roots. All nine
 languages own complete wire-compatible policy-bound Merkle search trees.
 
 | Language | Public entry points | Primary references |
@@ -62,6 +64,7 @@ languages own complete wire-compatible policy-bound Merkle search trees.
 | Haskell | `HashMap k v`, `MapTransient k v`, `HashSet a`, `SetTransient a`, `HashBag a`, `BiMap k v`, `HashPolicy k`, `Hashable`, `IntMap32 v`, `IntMap64 v`, `IntSet32`, `IntSet64`, `MerkleSearchTree k v`, `MerkleBlockStore`, `MerkleProof`, `MerkleVerificationBudget` | [Workspace](../../src/Haskell/Hamt/README.md), [map source](../../src/Haskell/Hamt/src/Data/Structures/Hamt/HashMap.hs), [bimap source](../../src/Haskell/Hamt/src/Data/Structures/Hamt/BiMap.hs), [transient source](../../src/Haskell/Hamt/src/Data/Structures/Hamt/Transient.hs), [Patricia source](../../src/Haskell/Hamt/src/Data/Structures/Hamt/Patricia.hs), [Merkle guide](../../src/Haskell/Hamt/docs/merkle-search-tree.md), [encoding](../../src/Haskell/Hamt/src/Data/Structures/Hamt/MerkleEncoding.hs), [Merkle core](../../src/Haskell/Hamt/src/Data/Structures/Hamt/MerkleSearchTree.hs), [persistence, proofs, sync, and merge](../../src/Haskell/Hamt/src/Data/Structures/Hamt/MerklePersistence.hs), [tests](../../src/Haskell/Hamt/test/README.md) |
 | Kotlin | `PersistentHashMap<K, V>` and nested `Transient<K, V>`, `PersistentHashSet<T>` and nested `Transient<T>`, `PersistentHashBag<T>`, `PersistentBiMap<K, V>`, `HashPolicy<K>`, `ConcurrentHashTrie<K, V>`, `PersistentIntMap<V>`, `PersistentIntSet`, `PersistentLongMap<V>`, `PersistentLongSet`, `MerkleSearchTree<K, V>`, `MerkleBlockStore`, `MerkleProof`, `MerkleVerificationBudget` | [Workspace](../../src/Kotlin/Hamt/README.md), [API notes](../../src/Kotlin/Hamt/docs/api-notes.md), [bimap source](../../src/Kotlin/Hamt/src/tools/datastructures/hamt/PersistentBiMap.kt), [Merkle guide](../../src/Kotlin/Hamt/docs/merkle-search-tree.md), [validation](../../src/Kotlin/Hamt/docs/validation.md), [CHAMP and transient source](../../src/Kotlin/Hamt/src/tools/datastructures/hamt/PersistentHamt.kt), [Ctrie source](../../src/Kotlin/Hamt/src/tools/datastructures/hamt/ConcurrentHashTrie.kt), [Patricia source](../../src/Kotlin/Hamt/src/tools/datastructures/hamt/PersistentPatricia.kt), [Merkle encoding](../../src/Kotlin/Hamt/src/tools/datastructures/hamt/MerkleEncoding.kt), [Merkle core](../../src/Kotlin/Hamt/src/tools/datastructures/hamt/MerkleSearchTree.kt), [persistence vocabulary](../../src/Kotlin/Hamt/src/tools/datastructures/hamt/MerklePersistence.kt), [verification, proofs, sync, and merge](../../src/Kotlin/Hamt/src/tools/datastructures/hamt/MerkleSearchTreePersistence.kt), [tests](../../src/Kotlin/Hamt/tests/README.md) |
 | Rust | `PersistentHashMap<K, V, S>`, `BulkBuilder<K, V, S>`, `TransientHashMap<K, V, S>`, `PersistentHashSet<T, S>`, `TransientHashSet<T, S>`, `PersistentHashBag<T, S>`, `PersistentBiMap<K, V, SK, SV>`, Patricia and Merkle families | [Workspace](../../src/Rust/Hamt/README.md), [API notes](../../src/Rust/Hamt/docs/api-notes.md), [CHAMP, builder, and transient source](../../src/Rust/Hamt/src/lib.rs), [bimap source](../../src/Rust/Hamt/src/bi_map.rs), [Merkle search tree](../../src/Rust/Hamt/docs/merkle-search-tree.md), [validation](../../src/Rust/Hamt/docs/validation.md), [Merkle core](../../src/Rust/Hamt/src/merkle_search_tree.rs), [encoding](../../src/Rust/Hamt/src/merkle_encoding.rs), [persistence, proofs, sync, and merge](../../src/Rust/Hamt/src/merkle_persistence.rs) |
+| OCaml | `Persistent_hamt` with builders/transients/factories, `Persistent_hash_set`, `Persistent_hash_bag`, `Persistent_bi_map`, `Persistent_patricia`, `Concurrent_hash_trie`, and complete `Merkle_*` modules | [Workspace](../../src/OCaml/README.md), [API notes](../../src/OCaml/docs/api-notes.md), [HAMT source](../../src/OCaml/lib/hamt), [tests](../../src/OCaml/tests/README.md) |
 | TypeScript | `PersistentHashMap<K, V>` with `getOrAdd`/`addOrUpdate`, `HashMapBulkBuilder<K, V>`, `TransientHashMap<K, V>`, `PersistentHashSet<T>`, `TransientHashSet<T>`, `PersistentHashBag<T>`, `PersistentBiMap<K, V>`, `ConcurrentHashTrie<K, V>`, Patricia and complete Merkle families | [Workspace](../../src/TypeScript/README.md), [API notes](../../src/TypeScript/docs/api-notes.md), [HAMT source](../../src/TypeScript/src/hamt), [tests](../../src/TypeScript/test/README.md) |
 | Python | `PersistentHashMap` with `get_or_add`/`add_or_update`, `HashMapBulkBuilder`, `TransientHashMap`, `PersistentHashSet`, `TransientHashSet`, `PersistentHashBag`, `PersistentBiMap`, `HashPolicy`, `ConcurrentHashTrie`, Patricia and complete Merkle families | [Workspace](../../src/Python/README.md), [API notes](../../src/Python/docs/api-notes.md), [HAMT source](../../src/Python/src/vladimir_reshetnikov/data_structures/hamt), [tests](../../src/Python/tests/README.md) |
 
@@ -102,12 +105,13 @@ force-put mode. The honest storage cost is approximately two map entries per log
 | Haskell | `Data.Structures.Hamt.BiMap.BiMap k v` | [Workspace contract](../../src/Haskell/Hamt/README.md#persistent-bidirectional-map), [tests](../../src/Haskell/Hamt/test/README.md) |
 | Kotlin | `PersistentBiMap<K, V>` | [API notes](../../src/Kotlin/Hamt/docs/api-notes.md#persistent-bidirectional-map), [validation](../../src/Kotlin/Hamt/docs/validation.md) |
 | Rust | `PersistentBiMap<K, V, SK, SV>` | [API notes](../../src/Rust/Hamt/docs/api-notes.md#persistent-bidirectional-map), [validation](../../src/Rust/Hamt/docs/validation.md) |
+| OCaml | `Persistent_bi_map` | [API notes](../../src/OCaml/docs/api-notes.md), [source](../../src/OCaml/lib/hamt/persistent_bi_map.mli), [tests](../../src/OCaml/tests/README.md) |
 | TypeScript | `PersistentBiMap<K, V>` | [API notes](../../src/TypeScript/docs/api-notes.md#hamt-maps-bags-bimaps-builders-and-sessions), [validation](../../src/TypeScript/docs/validation.md) |
 | Python | `PersistentBiMap[K, V]` | [API notes](../../src/Python/docs/api-notes.md), [validation](../../src/Python/docs/validation.md) |
 
 ## Derived Persistent Maps, Relations, And Sparse Bit Sets
 
-Nine composition-first families now ship across all eight language roots. They reuse the public
+Nine composition-first families now ship across all nine language roots. They reuse the public
 HAMT, ordered-sequence, measured-tree, and interval-search substrates instead of introducing
 unnecessary new core trees. In addition to the established multimap, relation, ordered-map, and
 interval-map families, the current tranche adds:
@@ -143,6 +147,7 @@ independently owned and has no Tungsten dependency or Tungsten semantic baseline
 | Haskell | `HashMultimap`, `Relation`, `PersistentOrderedMap`, `IntervalMap`, `PersistentOrderedMultimap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap`, `PersistentChunkedBitSet` | [HAMT workspace](../../src/Haskell/Hamt/README.md), [Ordered workspace](../../src/Haskell/Ordered/README.md), [FingerTree workspace](../../src/Haskell/FingerTree/README.md) |
 | Kotlin | `PersistentHashMultimap`, `PersistentRelation`, `PersistentOrderedMap`, `PersistentIntervalMap`, `PersistentOrderedMultimap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap`, `PersistentChunkedBitSet` | [HAMT workspace](../../src/Kotlin/Hamt/README.md), [Ordered workspace](../../src/Kotlin/Ordered/README.md), [FingerTree workspace](../../src/Kotlin/FingerTree/README.md) |
 | Rust | `PersistentHashMultimap`, `PersistentRelation`, `PersistentOrderedMap`, `PersistentIntervalMap`, `PersistentOrderedMultimap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap`, `PersistentChunkedBitSet` | [HAMT workspace](../../src/Rust/Hamt/README.md), [Ordered workspace](../../src/Rust/Ordered/README.md), [FingerTree workspace](../../src/Rust/FingerTree/README.md) |
+| OCaml | `Persistent_hash_multimap`, `Persistent_relation`, `Persistent_ordered_map`, `Persistent_interval_map`, `Persistent_ordered_multimap`, `Persistent_map_patch`, `Persistent_directed_graph`, `Persistent_indexed_map`, `Persistent_chunked_bit_set` | [Workspace](../../src/OCaml/README.md), [API notes](../../src/OCaml/docs/api-notes.md), [source](../../src/OCaml/lib), [tests](../../src/OCaml/tests/README.md) |
 | TypeScript | `PersistentHashMultimap`, `PersistentRelation`, `PersistentOrderedMap`, `PersistentIntervalMap`, `PersistentOrderedMultimap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap`, `PersistentChunkedBitSet` | [Workspace](../../src/TypeScript/README.md), [API notes](../../src/TypeScript/docs/api-notes.md), [sources](../../src/TypeScript/src) |
 | Python | `PersistentHashMultimap`, `PersistentRelation`, `PersistentOrderedMap`, `PersistentIntervalMap`, `PersistentOrderedMultimap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap`, `PersistentChunkedBitSet` | [Workspace](../../src/Python/README.md), [API notes](../../src/Python/docs/api-notes.md), [sources](../../src/Python/src/vladimir_reshetnikov/data_structures) |
 
@@ -160,12 +165,13 @@ position or measure, indexed access where exposed, and immutable structural shar
 | Haskell | `Deque a`, `FingerTree v a`, `Measured v a`, `RrbVector a` | [Workspace](../../src/Haskell/FingerTree/README.md), [deque source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Deque.hs), [measured tree source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Measured.hs), [RRB source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/RrbVector.hs), [tests](../../src/Haskell/FingerTree/test/README.md) |
 | Kotlin | `PersistentDeque<T>`, `FingerTree<T, M>`, `MeasurePolicy<T, M>`, `RrbVector<T>`, `RrbVector.Builder<T>` | [Workspace](../../src/Kotlin/FingerTree/README.md), [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [public facades](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Core.kt), [measured AVL engine](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/PersistentMeasuredTree.kt), [RRB source](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/RrbVector.kt), [tests](../../src/Kotlin/FingerTree/tests/README.md) |
 | Rust | `PersistentDeque<T>`, `FingerTree<T, P>`, `MeasurePolicy<T>`, `RrbVector<T>`, `RrbVectorBuilder<T>` | [Workspace](../../src/Rust/FingerTree/README.md), [API notes](../../src/Rust/FingerTree/docs/api-notes.md), [deque source](../../src/Rust/FingerTree/src/deque.rs), [measured source](../../src/Rust/FingerTree/src/measured.rs), [RRB source](../../src/Rust/FingerTree/src/rrb_vector.rs) |
+| OCaml | `Persistent_deque`, `Measured_tree`, `Measured_sequence`, `Measures`, `Rrb_vector` and builder | [Workspace](../../src/OCaml/README.md), [API notes](../../src/OCaml/docs/api-notes.md), [source](../../src/OCaml/lib/finger_tree), [tests](../../src/OCaml/tests/README.md) |
 | TypeScript | `PersistentDeque<T>`, `FingerTree<T, M>`, `MeasurePolicy<T, M>`, `RrbVector<T>`, `RrbVectorBuilder<T>` | [Workspace](../../src/TypeScript/README.md), [core](../../src/TypeScript/src/finger-tree/core.ts), [RRB vector](../../src/TypeScript/src/finger-tree/rrb-vector.ts) |
 | Python | `PersistentDeque`, `FingerTree`, `MeasuredSequence`, `MeasurePolicy`, `RrbVector`, `RrbVectorBuilder` | [Workspace](../../src/Python/README.md), [API notes](../../src/Python/docs/api-notes.md), [measured AVL/core](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/measured_sequence.py), [RRB vector](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/rrb_vector.py), [tests](../../src/Python/tests/README.md) |
 
 ## Range-Update Sequence
 
-All eight languages ship a language-local `RangeUpdateSequence` as an immutable indexed sequence
+All nine languages ship a language-local `RangeUpdateSequence` as an immutable indexed sequence
 with logarithmic persistent point edits, concatenation/splitting, range extraction, lazy range
 updates, and ordered range-measure queries. It is an independently implemented path-copied implicit
 AVL sibling in the FingerTree assembly, not a tagged modification of either existing finger-tree
@@ -189,6 +195,7 @@ proper subrange updates and queries perform logarithmic boundary work.
 | Haskell | `RangeUpdateAlgebra`, `RangeUpdateSequence` | [source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/RangeUpdateSequence.hs), [tests](../../src/Haskell/FingerTree/test/RangeUpdateSequenceTests.hs) |
 | Kotlin | `RangeUpdateAlgebra<T, M, Tag>`, `RangeUpdateSequence<T, M, Tag>` | [source](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/RangeUpdateSequence.kt), [contract](../../src/Kotlin/FingerTree/docs/range-update-sequence.md), [tests](../../src/Kotlin/FingerTree/test/tools/datastructures/fingertree/RangeUpdateSequenceTests.kt) |
 | Rust | `RangeUpdateAlgebra`, `RangeUpdateSequence` | [crate](../../src/Rust/RangeUpdate/README.md), [source](../../src/Rust/RangeUpdate/src/lib.rs), [tests](../../src/Rust/RangeUpdate/tests/range_update_sequence.rs) |
+| OCaml | `Range_update_sequence` and law-gated algebra | [API notes](../../src/OCaml/docs/api-notes.md), [source](../../src/OCaml/lib/finger_tree/range_update_sequence.mli), [tests](../../src/OCaml/tests/README.md) |
 | TypeScript | `RangeUpdateAlgebra<T, M, Tag>`, `RangeUpdateSequence<T, M, Tag>` | [contract](../../src/TypeScript/docs/range-update-sequence.md), [source](../../src/TypeScript/src/finger-tree/range-update-sequence.ts), [tests](../../src/TypeScript/test/finger-tree/range-update-sequence.test.ts) |
 | Python | `RangeUpdateAlgebra`, `RangeUpdateSequence` | [contract](../../src/Python/docs/range-update-sequence.md), [source](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/range_update_sequence.py), [tests](../../src/Python/tests/finger_tree/test_range_update_sequence.py) |
 
@@ -196,7 +203,7 @@ At the Range shipment checkpoint, both full serialized C# Debug and Release solu
 completed with zero warnings and zero errors and passed 1,417/1,417 tests. The current derived-
 structure checkpoint passes 1,503/1,503 in both configurations. No benchmark was run; measurement
 remains postponed until an isolated session. The single-pass HAMT updates, hash bag, ordered set,
-and range-update sequence ship across all eight languages; the detailed earlier evidence is in the
+and range-update sequence ship across all nine languages; the detailed earlier evidence is in the
 [cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md).
 
 ## Reversible Deque
@@ -212,6 +219,7 @@ represented without eagerly copying the sequence.
 | Haskell | `ReversibleDeque a` | [source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/ReversibleDeque.hs), [tests](../../src/Haskell/FingerTree/test/README.md), [complexity audit](reversible-deque-complexity-audit.md) |
 | Kotlin | `ReversibleDeque<T>` | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [source](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Core.kt), [complexity audit](reversible-deque-complexity-audit.md) |
 | Rust | `ReversibleDeque<T>` | [API notes](../../src/Rust/FingerTree/docs/api-notes.md), [source](../../src/Rust/FingerTree/src/deque.rs) |
+| OCaml | `Reversible_deque` | [API notes](../../src/OCaml/docs/api-notes.md), [source](../../src/OCaml/lib/finger_tree/reversible_deque.mli), [tests](../../src/OCaml/tests/README.md) |
 | TypeScript | `ReversibleDeque<T>` | [API notes](../../src/TypeScript/docs/api-notes.md), [source](../../src/TypeScript/src/finger-tree/core.ts) |
 | Python | `ReversibleDeque` | [API notes](../../src/Python/docs/api-notes.md), [source](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/core.py), [tests](../../src/Python/tests/README.md) |
 
@@ -230,6 +238,7 @@ measured tree while its API notes track the remaining lazy-spine parity boundary
 | Haskell | `SortedBag a`, `SortedSet a`, `SortedMap k v`, `CanonicalSortedSet a`, `ZipTreeRankPolicy a` | [canonical-set guide](../../src/Haskell/FingerTree/docs/canonical-sorted-set.md), [canonical source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/CanonicalSortedSet.hs), [bag source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/SortedBag.hs), [set source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/SortedSet.hs), [map source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/SortedMap.hs), [tests](../../src/Haskell/FingerTree/test/README.md) |
 | Kotlin | `SortedBag<T>`, `SortedSet<T>`, `SortedMap<K, V>`, `CanonicalSortedSet<T>`, `ZipTreeRankPolicy<T>` | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [measured sorted collections](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Sorted.kt), [canonical set and rank policy](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/CanonicalSortedSet.kt), [tests](../../src/Kotlin/FingerTree/tests/README.md) |
 | Rust | `SortedBag<T>`, `SortedSet<T>`, `SortedMap<K, V>`, `CanonicalSortedSet<T>`, `ZipTreeRankPolicy<T>` | [API notes](../../src/Rust/FingerTree/docs/api-notes.md), [measured sorted collections](../../src/Rust/FingerTree/src/sorted.rs), [canonical set and rank policy](../../src/Rust/FingerTree/src/canonical_sorted_set.rs), [tests](../../src/Rust/FingerTree/tests/README.md) |
+| OCaml | `Sorted_bag`, `Sorted_set` and builder, `Sorted_map` and builder, `Canonical_sorted_set` and rank policy | [API notes](../../src/OCaml/docs/api-notes.md), [source](../../src/OCaml/lib/finger_tree), [tests](../../src/OCaml/tests/README.md) |
 | TypeScript | `SortedBag<T>`, `SortedSet<T>`, `SortedMap<K, V>`, builders, `CanonicalSortedSet<T>`, `ZipTreeRankPolicy<T>` | [sorted facades](../../src/TypeScript/src/finger-tree/sorted.ts), [canonical set](../../src/TypeScript/src/finger-tree/canonical-sorted-set.ts), [tests](../../src/TypeScript/test/README.md) |
 | Python | `SortedBag`, `SortedSet`, `SortedMap`, `SortedSetBuilder`, `SortedMapBuilder`, `CanonicalSortedSet`, `ZipTreeRankPolicy` | [API notes](../../src/Python/docs/api-notes.md), [sorted facades](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/sorted.py), [canonical set](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/canonical_sorted_set.py), [tests](../../src/Python/tests/README.md) |
 
@@ -248,6 +257,7 @@ lazy-spine parity boundary.
 | Haskell | `PriorityQueue p a`, `BrodalOkasakiHeap a`, `PrioritySearchQueue k p v`, `PrioritySearchEntry k p v` | [measured priority queue](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/PriorityQueue.hs), [Brodal-Okasaki heap](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/BrodalOkasakiHeap.hs), [priority-search queue](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/PrioritySearchQueue.hs), [tests](../../src/Haskell/FingerTree/test/README.md) |
 | Kotlin | `PriorityQueue<T, P>`, `PriorityEntry<T, P>`, `BrodalOkasakiHeap<T>`, `BrodalMinimumView<T>`, `PrioritySearchQueue<K, P, V>`, `PrioritySearchEntry<K, P, V>` | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [measured priority queue](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/PriorityAndInterval.kt), [Brodal-Okasaki heap](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/BrodalOkasakiHeap.kt), [priority-search queue](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/PrioritySearchQueue.kt), [priority-core notes](../../src/Kotlin/FingerTree/docs/priority-cores.md) |
 | Rust | `PriorityQueue<T, P>`, `PriorityEntry<T, P>`, `BrodalOkasakiHeap<T>`, `BrodalMinimumView<T>`, `PrioritySearchQueue<K, P, V>`, `PrioritySearchEntry<K, P, V>`, `OrderPolicy<T>` | [API notes](../../src/Rust/FingerTree/docs/api-notes.md), [measured priority queue](../../src/Rust/FingerTree/src/priority_queue.rs), [Brodal-Okasaki heap](../../src/Rust/FingerTree/src/brodal_okasaki_heap.rs), [priority-search queue](../../src/Rust/FingerTree/src/priority_search_queue.rs), [ordering policy](../../src/Rust/FingerTree/src/ordering.rs), [Brodal notes](../../src/Rust/FingerTree/docs/brodal-okasaki-heap.md), [PSQ notes](../../src/Rust/FingerTree/docs/priority-search-queue.md) |
+| OCaml | `Priority_queue`, `Brodal_okasaki_heap`, `Priority_search_queue` and typed entry/statistics values | [API notes](../../src/OCaml/docs/api-notes.md), [source](../../src/OCaml/lib/finger_tree), [tests](../../src/OCaml/tests/README.md) |
 | TypeScript | `PriorityQueue<T, P>`, `BrodalOkasakiHeap<T>`, `PrioritySearchQueue<K, P, V>` and typed view/result values | [measured queue](../../src/TypeScript/src/finger-tree/priority-interval.ts), [Brodal heap](../../src/TypeScript/src/finger-tree/brodal-okasaki-heap.ts), [priority-search queue](../../src/TypeScript/src/finger-tree/priority-search-queue.ts) |
 | Python | `PriorityQueue`, `PriorityEntry`, `BrodalOkasakiHeap`, `BrodalMinimumView`, `PrioritySearchQueue`, `PrioritySearchEntry`, and typed result/statistics values | [API notes](../../src/Python/docs/api-notes.md), [measured queue](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/priority_interval.py), [Brodal heap](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/brodal_okasaki_heap.py), [priority-search queue](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/priority_search_queue.py), [tests](../../src/Python/tests/README.md) |
 
@@ -266,6 +276,7 @@ its measured tree while its API notes track the remaining lazy-spine parity boun
 | Haskell | `IntervalTree a`, `Interval a` | [source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/IntervalTree.hs), [tests](../../src/Haskell/FingerTree/test/README.md) |
 | Kotlin | `IntervalTree<T>`, `Interval<T>` | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [source](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/PriorityAndInterval.kt) |
 | Rust | `IntervalTree<T>`, `Interval<T>` | [API notes](../../src/Rust/FingerTree/docs/api-notes.md), [source](../../src/Rust/FingerTree/src/interval_tree.rs) |
+| OCaml | `Interval_tree`, `Persistent_interval_map` | [API notes](../../src/OCaml/docs/api-notes.md), [source](../../src/OCaml/lib/finger_tree), [tests](../../src/OCaml/tests/README.md) |
 | TypeScript | `IntervalTree<T>`, `Interval<T>` | [source](../../src/TypeScript/src/finger-tree/priority-interval.ts), [tests](../../src/TypeScript/test/finger-tree/core.test.ts) |
 | Python | `IntervalTree`, `Interval` | [API notes](../../src/Python/docs/api-notes.md), [source](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/priority_interval.py), [tests](../../src/Python/tests/README.md) |
 
@@ -297,6 +308,7 @@ grapheme clusters.
 | Haskell | `Rope a`, `RopeCursor a`, `MeasuredRope v a`, `MeasuredRopeCursor v a`, `MeasuredRopeCursorSearch v a`, `TextRope`, `TextRopeCursor`, `TextRopeCursorSearch`, `NewlineMeasure` | [workspace and cursor contract](../../src/Haskell/FingerTree/README.md), [rope/cursor source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Rope.hs), [measured rope/cursor source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/MeasuredRope.hs), [text cursor source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Rope/Text.hs), [tests](../../src/Haskell/FingerTree/test/README.md) |
 | Kotlin | `Rope<T>`, `RopeCursor<T>`, `RopeCursorPeek<T>`, `MeasuredRope<T, M>`, `MeasuredRopeCursor<T, M>`, `MeasuredRopeCursorSearch<T, M>`, `TextRope`, `TextRopeCursor`, `TextRopeCursorSearch`, `RopeBuilder`, `NewlineMeasure`, `LineColumn` | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [rope source](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Rope.kt), [measured cursor](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/MeasuredRopeCursor.kt), [text cursor](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/TextRopeCursor.kt) |
 | Rust | `Rope<T>`, `RopeCursor<T>`, `MeasuredRope<T, P>`, `MeasuredRopeCursor<T, P>`, `MeasuredRopeCursorSearch<T, P>`, `TextRope`, `TextRopeCursor`, `TextRopeCursorSearch`, `RopeBuilder`, `NewlineMeasure`, `LineColumn` | [API notes](../../src/Rust/FingerTree/docs/api-notes.md), [source](../../src/Rust/FingerTree/src/rope.rs) |
+| OCaml | `Rope` and builder, `Rope_cursor`, `Measured_rope` and cursor, `Text_rope`, `Text_rope_cursor` | [API notes](../../src/OCaml/docs/api-notes.md), [source](../../src/OCaml/lib/finger_tree), [tests](../../src/OCaml/tests/README.md) |
 | TypeScript | `Rope<T>`, `RopeCursor<T>`, `RopeCursorPeek<T>`, `MeasuredRope<T, M>`, `MeasuredRopeCursor<T, M>`, `TextRope`, `TextRopeCursor`, `RopeBuilder`, `NewlineMeasure`, `LineColumn` | [API notes](../../src/TypeScript/docs/api-notes.md), [source](../../src/TypeScript/src/finger-tree/rope.ts), [tests](../../src/TypeScript/test/finger-tree/rope-daba.test.ts) |
 | Python | `Rope`, `RopeCursor`, `RopeCursorPeek`, `MeasuredRope`, `MeasuredRopeCursor`, `TextRope`, `TextRopeCursor`, `RopeBuilder`, `NewlineMeasure`, `LineColumn` | [API notes](../../src/Python/docs/api-notes.md), [source](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/rope.py), [tests](../../src/Python/tests/README.md) |
 
@@ -314,6 +326,7 @@ surfaces require them); the C workspace exposes equivalent policy callbacks and 
 | Haskell | `Measured v a`, `Size`, `Elem`, `MeasurePair`, `Maximum`, `Minimum`; predicates are ordinary pure functions `v -> Bool` | [measured tree source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Measured.hs), [measures source](../../src/Haskell/FingerTree/src/Data/Structures/FingerTree/Measures.hs), [tests](../../src/Haskell/FingerTree/test/README.md) |
 | Kotlin | `Monoid<T>`, `MeasurePolicy<T, M>`, `DabaLite<T>`, `DabaLiteStatistics`, `SizeMeasure<T>`, `IntSumMeasure`, `MaxMeasure<T>`, `MinMeasure<T>`, `ProductMeasure<T, A, B>`, `MeasurePair<A, B>`, `NewlineMeasure` | [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [monoids and measures](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Core.kt), [DABA Lite](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/DabaLite.kt), [newline measure](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Rope.kt) |
 | Rust | `DabaMonoid<T>`, `DabaLite<T, M>`, `DabaLiteStatistics`, `MeasurePolicy<T>`, `SizeMeasure`, `SumMeasure<T>`, `MaxMeasure`, `MinMeasure`, `KeyMeasure<T>`, `ProductMeasure<T, PFirst, PSecond>`, `MeasurePair<TFirst, TSecond>`, `SizeAndSumMeasure<T>`, `SizeAndMaxMeasure<T>`, `SizeAndMinMeasure<T>`, `OrderStatisticMeasure<T>`, `RankedKey<T>`, `NewlineMeasure` | [API notes](../../src/Rust/FingerTree/docs/api-notes.md), [DABA Lite](../../src/Rust/FingerTree/src/daba_lite.rs), [measures](../../src/Rust/FingerTree/src/measured.rs), [newline measure](../../src/Rust/FingerTree/src/rope.rs) |
+| OCaml | `Measures` policies and monoids, `Daba_lite` and statistics, `Common.Comparator` | [API notes](../../src/OCaml/docs/api-notes.md), [source](../../src/OCaml/lib/finger_tree), [tests](../../src/OCaml/tests/README.md) |
 | TypeScript | `Monoid<M>`, `MeasurePolicy<T, M>`, `DabaLite<T, M>`, size/sum/min/max/product measures, comparators, and `NewlineMeasure` | [measures](../../src/TypeScript/src/finger-tree/measures.ts), [DABA Lite](../../src/TypeScript/src/finger-tree/daba-lite.ts), [API notes](../../src/TypeScript/docs/api-notes.md) |
 | Python | `Monoid`, `MeasurePolicy`, `DabaLite`, `DabaLiteStatistics`, size/sum/min/max/product measures, comparators, and `NewlineMeasure` | [API notes](../../src/Python/docs/api-notes.md), [measures](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/measures.py), [DABA Lite](../../src/Python/src/vladimir_reshetnikov/data_structures/finger_tree/daba_lite.py), [tests](../../src/Python/tests/README.md) |
 
@@ -335,10 +348,11 @@ applying shortcuts, retaining receiver representatives and first normalized argu
 | Haskell | `PersistentOrderedSet` | [workspace](../../src/Haskell/Ordered/README.md), [source](../../src/Haskell/Ordered/src/Data/Structures/Ordered/PersistentOrderedSet.hs) |
 | Kotlin | `PersistentOrderedSet<T>` | [workspace](../../src/Kotlin/Ordered/README.md), [source](../../src/Kotlin/Ordered/src/tools/datastructures/ordered/PersistentOrderedSet.kt) |
 | Rust | `PersistentOrderedSet<T, S>` | [workspace](../../src/Rust/Ordered/README.md), [source](../../src/Rust/Ordered/src/lib.rs), [tests](../../src/Rust/Ordered/tests/persistent_ordered_set.rs) |
+| OCaml | `Persistent_ordered_set`, `Persistent_ordered_map`, `Persistent_ordered_multimap` | [workspace](../../src/OCaml/README.md), [API notes](../../src/OCaml/docs/api-notes.md), [source](../../src/OCaml/lib/ordered), [tests](../../src/OCaml/tests/README.md) |
 | TypeScript | `PersistentOrderedSet<T>`, idiomatic lookup/removal result values | [Workspace](../../src/TypeScript/README.md), [API notes](../../src/TypeScript/docs/api-notes.md), [source](../../src/TypeScript/src/ordered), [tests](../../src/TypeScript/test/ordered) |
 | Python | `PersistentOrderedSet`, `OrderedSetValueResult`, `OrderedSetRemoveResult` | [Workspace](../../src/Python/README.md), [API notes](../../src/Python/docs/api-notes.md), [source](../../src/Python/src/vladimir_reshetnikov/data_structures/ordered), [tests](../../src/Python/tests/ordered) |
 
-All eight ports ship. The C# focused single-worker Debug and Release lanes each pass 62 tests. At
+All nine ports ship. The C# focused single-worker Debug and Release lanes each pass 62 tests. At
 the historical pre-Range Ordered shipment checkpoint, the full
 serialized C# Release build had zero warnings and zero errors and the complete gate passed
 1,355/1,355 tests; current full-workspace evidence is the 1,503/1,503 Debug and Release derived-
@@ -371,6 +385,7 @@ evidence, not permission to make a general structure depend on Tungsten.
 | Haskell | `PersistentList a`, `PersistentAssociation k v` | [Workspace](../../src/Haskell/Tungsten/README.md), [list source](../../src/Haskell/Tungsten/src/Data/Structures/Tungsten/List.hs), [association source](../../src/Haskell/Tungsten/src/Data/Structures/Tungsten/Association.hs), [tests](../../src/Haskell/Tungsten/test/Main.hs) |
 | Kotlin | `PersistentList<T>`, `PersistentAssociation<K, V>` | [Workspace](../../src/Kotlin/Tungsten/README.md), [source](../../src/Kotlin/Tungsten/src/tools/datastructures/tungsten/PersistentTungsten.kt), [tests](../../src/Kotlin/Tungsten/test/tools/datastructures/tungsten/TungstenTests.kt) |
 | Rust | `PersistentList<T>`, `PersistentAssociation<K, V, S>` | [Workspace](../../src/Rust/Tungsten/README.md), [source](../../src/Rust/Tungsten/src/lib.rs) |
+| OCaml | `Persistent_list`, `Persistent_association` | [Workspace](../../src/OCaml/README.md), [API notes](../../src/OCaml/docs/api-notes.md), [source](../../src/OCaml/lib/tungsten), [tests](../../src/OCaml/tests/README.md) |
 | TypeScript | `PersistentList<T>`, `PersistentAssociation<K, V>` | [Workspace](../../src/TypeScript/README.md), [list](../../src/TypeScript/src/tungsten/persistent-list.ts), [association](../../src/TypeScript/src/tungsten/persistent-association.ts), [tests](../../src/TypeScript/test/tungsten/tungsten.test.ts) |
 | Python | `PersistentList`, `PersistentAssociation` | [Workspace](../../src/Python/README.md), [API notes](../../src/Python/docs/api-notes.md), [source](../../src/Python/src/vladimir_reshetnikov/data_structures/tungsten), [tests](../../src/Python/tests/README.md) |
 

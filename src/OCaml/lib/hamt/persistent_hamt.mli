@@ -75,6 +75,13 @@ module Transient : sig
   val create : ('key, 'value) map -> ('key, 'value) t
   val count : ('key, 'value) t -> int
   val find_opt : 'key -> ('key, 'value) t -> 'value option
+
+  val fold :
+    ('accumulator -> 'key -> 'value -> 'accumulator) ->
+    'accumulator ->
+    ('key, 'value) t ->
+    'accumulator
+
   val set : 'key -> 'value -> ('key, 'value) t -> unit
   val remove : 'key -> ('key, 'value) t -> unit
   val persistent : ('key, 'value) t -> ('key, 'value) map

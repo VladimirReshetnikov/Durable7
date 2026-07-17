@@ -47,6 +47,29 @@ module Transient = struct
   let create = Persistent_hamt.Transient.create
   let count = Persistent_hamt.Transient.count
   let mem element session = Option.is_some (Persistent_hamt.Transient.find_opt element session)
+
+  let subset session other =
+    count session <= Persistent_hamt.count other
+    && Persistent_hamt.Transient.fold
+         (fun result element () -> result && Persistent_hamt.mem element other)
+         true session
+
+  let proper_subset session other =
+    count session < Persistent_hamt.count other && subset session other
+
+  let superset session other =
+    count session >= Persistent_hamt.count other
+    && List.for_all (fun (element, ()) -> mem element session) (Persistent_hamt.to_list other)
+
+  let proper_superset session other =
+    count session > Persistent_hamt.count other && superset session other
+
+  let overlaps session other =
+    Persistent_hamt.Transient.fold
+      (fun result element () -> result || Persistent_hamt.mem element other)
+      false session
+
+  let equal session other = count session = Persistent_hamt.count other && subset session other
   let add element session = Persistent_hamt.Transient.set element () session
   let remove = Persistent_hamt.Transient.remove
   let persistent = Persistent_hamt.Transient.persistent

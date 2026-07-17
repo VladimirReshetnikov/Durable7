@@ -184,6 +184,20 @@ and a worked ordered-set example, is the
     │       ├── README.md
     │       ├── src/
     │       └── test/
+    ├── OCaml/
+    │   ├── README.md
+    │   ├── dune-project
+    │   ├── tools-data-structures.opam
+    │   ├── test.ps1
+    │   ├── docs/
+    │   ├── lib/
+    │   │   ├── common/
+    │   │   ├── finger_tree/
+    │   │   ├── hamt/
+    │   │   ├── numerics/
+    │   │   ├── ordered/
+    │   │   └── tungsten/
+    │   └── tests/
     ├── Python/
     │   ├── README.md
     │   ├── pyproject.toml
@@ -239,14 +253,14 @@ and a worked ordered-set example, is the
 
 The [source index](src/README.md) and language indexes for [C](src/C/README.md),
 [C++](src/Cpp/README.md), [C#](src/CSharp/README.md), [Haskell](src/Haskell/README.md),
-[Kotlin](src/Kotlin/README.md), [Python](src/Python/README.md), [Rust](src/Rust/README.md), and
+[Kotlin](src/Kotlin/README.md), [OCaml](src/OCaml/README.md), [Python](src/Python/README.md), [Rust](src/Rust/README.md), and
 [TypeScript](src/TypeScript/README.md) are the quickest way to browse the
 language-first layout.
 
 - [C# Numerics](src/CSharp/docs/Numerics/overview.md) is a .NET 10 fixed-width and sparse integer numerics library under [src/CSharp/src/Tools.Numerics](src/CSharp/src/Tools.Numerics/Tools.Numerics.csproj). It provides `UInt256`/`Int256`, `UInt512`/`Int512`, `UInt1024`/`Int1024`, `SparseInteger`, deterministic two's-complement and binary conversion semantics, declaration-parity guardrails, and xUnit tests.
-- [C# HAMT](src/CSharp/docs/Hamt/overview.md) is a .NET 10 hash-trie library under [src/CSharp/src/Tools.DataStructures.Hamt](src/CSharp/src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj). Its canonical CHAMP `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` preserve comparers, stored representatives, and structural sharing; the map exposes one-descent persistent `GetOrAdd`/`AddOrUpdate`, and both collections expose optimized single-owner `Transient` sessions with owner-token in-place edits, O(1) adoption, and one-way O(1) publication. `PersistentHashBag<T>`, strict `PersistentBiMap<TKey, TValue>`, set-valued `PersistentHashMultimap<TKey, TValue>`, bidirectional `PersistentRelation<TLeft, TRight>`, strict `PersistentMapPatch<TKey, TValue>`, `PersistentDirectedGraph<TVertex>`, and `PersistentIndexedMap<TKey, TValue, TIndexKey>` add composition-first families with retained policies and atomic multi-index publication. These derived families ship across all eight languages. All seven siblings expose the same semantic edit-then-publish lifecycle through language-local sessions whose changed point edits remain persistent path copies and carry no performance claim. The workspace also owns the lock-free snapshotting Ctrie, 32/64-bit Patricia maps and sets, and the policy-bound Merkle search tree; xUnit/CsCheck suites cover persistent, transient, and concurrent behavior.
-- [C# FingerTree](src/CSharp/docs/FingerTree/overview.md) is a .NET 10 persistent-sequence library under [src/CSharp/src/Tools.DataStructures.FingerTree](src/CSharp/src/Tools.DataStructures.FingerTree/Tools.DataStructures.FingerTree.csproj): two finger-tree engines (a tuned catenable deque and a general monoid-measured tree), a full derived collection family including payload-bearing `PersistentIntervalMap<TEndpoint, TValue>`, sparse rank/select `PersistentChunkedBitSet`, RRB vectors, ropes/text with version-bound cursors, and the independently implemented implicit-AVL `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>`. The range-update sibling combines indexed persistent edits with lazy logarithmic range updates and range measures under the law-gated `IRangeUpdateAlgebra`; its cached logical-measure and pending-tag invariant is specified in the [range-update contract](src/CSharp/docs/FingerTree/range-update-sequence.md). Language-local IntervalMap, chunked-bit-set, and Range siblings ship in C, C++, Haskell, Kotlin, Rust, TypeScript, and Python. Both complete serialized C# Debug and Release solution builds finish with zero warnings and zero errors, and both full test gates pass 1,503/1,503 tests. It also ships navigable design notes, three runnable samples, and example/property/model/concurrency suites. Benchmarks were not run for this shipment and remain postponed until an isolated session.
-- [C# Ordered collections](src/CSharp/docs/Ordered/overview.md) is an independently owned neutral .NET 10 general-purpose library under [src/CSharp/src/Tools.DataStructures.Ordered](src/CSharp/src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj). `PersistentOrderedSet<T>`, `PersistentOrderedMap<TKey, TValue>`, and `PersistentOrderedMultimap<TKey, TValue>` separate equality-defined identity from insertion and explicit-position order, retain first key/value representatives, and own explicit movement, positional range, stable one-shot sort, sparse-label, relabel, and grouped-order contracts; the set additionally owns receiver-policy algebra. Their indexes compose public CHAMP and FingerTree surfaces, and the project and its tests have no Tungsten dependency or Tungsten semantic baseline. Neutral sibling ports ship in C, C++, Haskell, Kotlin, Rust, TypeScript, and Python. The current complete serialized C# Debug and Release gates each pass 1,503/1,503 tests with zero build warnings or errors. Benchmarks remain postponed until they can run in isolation.
+- [C# HAMT](src/CSharp/docs/Hamt/overview.md) is a .NET 10 hash-trie library under [src/CSharp/src/Tools.DataStructures.Hamt](src/CSharp/src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj). Its canonical CHAMP `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` preserve comparers, stored representatives, and structural sharing; the map exposes one-descent persistent `GetOrAdd`/`AddOrUpdate`, and both collections expose optimized single-owner `Transient` sessions with owner-token in-place edits, O(1) adoption, and one-way O(1) publication. `PersistentHashBag<T>`, strict `PersistentBiMap<TKey, TValue>`, set-valued `PersistentHashMultimap<TKey, TValue>`, bidirectional `PersistentRelation<TLeft, TRight>`, strict `PersistentMapPatch<TKey, TValue>`, `PersistentDirectedGraph<TVertex>`, and `PersistentIndexedMap<TKey, TValue, TIndexKey>` add composition-first families with retained policies and atomic multi-index publication. These derived families ship across all nine languages. All eight siblings expose the same semantic edit-then-publish lifecycle through language-local sessions whose changed point edits remain persistent path copies and carry no performance claim. The workspace also owns the lock-free snapshotting Ctrie, 32/64-bit Patricia maps and sets, and the policy-bound Merkle search tree; xUnit/CsCheck suites cover persistent, transient, and concurrent behavior.
+- [C# FingerTree](src/CSharp/docs/FingerTree/overview.md) is a .NET 10 persistent-sequence library under [src/CSharp/src/Tools.DataStructures.FingerTree](src/CSharp/src/Tools.DataStructures.FingerTree/Tools.DataStructures.FingerTree.csproj): two finger-tree engines (a tuned catenable deque and a general monoid-measured tree), a full derived collection family including payload-bearing `PersistentIntervalMap<TEndpoint, TValue>`, sparse rank/select `PersistentChunkedBitSet`, RRB vectors, ropes/text with version-bound cursors, and the independently implemented implicit-AVL `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>`. The range-update sibling combines indexed persistent edits with lazy logarithmic range updates and range measures under the law-gated `IRangeUpdateAlgebra`; its cached logical-measure and pending-tag invariant is specified in the [range-update contract](src/CSharp/docs/FingerTree/range-update-sequence.md). Language-local IntervalMap, chunked-bit-set, and Range siblings ship in C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml. Both complete serialized C# Debug and Release solution builds finish with zero warnings and zero errors, and both full test gates pass 1,503/1,503 tests. It also ships navigable design notes, three runnable samples, and example/property/model/concurrency suites. Benchmarks were not run for this shipment and remain postponed until an isolated session.
+- [C# Ordered collections](src/CSharp/docs/Ordered/overview.md) is an independently owned neutral .NET 10 general-purpose library under [src/CSharp/src/Tools.DataStructures.Ordered](src/CSharp/src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj). `PersistentOrderedSet<T>`, `PersistentOrderedMap<TKey, TValue>`, and `PersistentOrderedMultimap<TKey, TValue>` separate equality-defined identity from insertion and explicit-position order, retain first key/value representatives, and own explicit movement, positional range, stable one-shot sort, sparse-label, relabel, and grouped-order contracts; the set additionally owns receiver-policy algebra. Their indexes compose public CHAMP and FingerTree surfaces, and the project and its tests have no Tungsten dependency or Tungsten semantic baseline. Neutral sibling ports ship in C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml. The current complete serialized C# Debug and Release gates each pass 1,503/1,503 tests with zero build warnings or errors. Benchmarks remain postponed until they can run in isolation.
 - [C# Tungsten collections](src/CSharp/docs/Tungsten/overview.md) is a .NET 10 application-specific leaf library under [src/CSharp/src/Tools.DataStructures.Tungsten](src/CSharp/src/Tools.DataStructures.Tungsten/Tools.DataStructures.Tungsten.csproj) composing the HAMT and FingerTree families into persistent collections for the Tungsten project: `PersistentList<T>` (the `List` operation vocabulary over the catenable deque) and `PersistentAssociation<TKey, TValue>` (an insertion-ordered map with keyed and positional access following the kernel-verified `Association` ordering rules). The primary external client is the Tungsten engine in the Smithereens repository; the C# implementation is the semantic reference only for sibling Tungsten ports and is never a foundation for general collections.
 - [src/C/Hamt](src/C/Hamt/README.md) is a C17 port of the persistent HAMT library. It provides type-erased
   `tds_hamt_map`, `tds_hamt_set`, `tds_hamt_bag`, strict `tds_hamt_bi_map`, set-valued
@@ -276,6 +290,7 @@ language-first layout.
 - [src/Kotlin/Hamt](src/Kotlin/Hamt/README.md) is a Kotlin/JVM persistent-map workspace. It provides CHAMP hash maps/sets, a checked hash bag, strict `PersistentBiMap`, set-valued `PersistentHashMultimap`, bidirectional `PersistentRelation`, runtime-consumed version-view-bound `Transient` sessions, the managed Ctrie, Patricia integer maps/sets, and a wire-compatible Merkle search tree with bounded verified persistence, `MSP2` proofs, frontier synchronization, and typed three-way merge.
 - [src/Kotlin/FingerTree](src/Kotlin/FingerTree/README.md) is a Kotlin/JVM port of the FingerTree-family collections and newer sequence/streaming cores. Its immutable measured AVL, RRB, canonical zip-zip-tree, bootstrapped skew-binomial heap, and winner-cached AVL substrates provide structurally shared deque, measured sequence, vector, sorted bag/set/map, policy-canonical sorted set, both measured and worst-case-optimal meldable priority queues, a keyed priority-search queue, max-high interval tree, positional/measured ropes, snapshot-plus-gap positional and measured cursors, and a UTF-16 text cursor that retains the `TextRope` facade; the separate mutable DABA Lite core maintains FIFO monoid aggregates with worst-case bounded callbacks.
 - [src/Kotlin/Tungsten](src/Kotlin/Tungsten/README.md) is the Kotlin/JVM Tungsten-collections port. It exposes `PersistentList<T>` and `PersistentAssociation<K, V>` with immutable snapshots, runtime `HashPolicy` support, sparse stamps, and generated-history executable tests.
+- [src/OCaml](src/OCaml/README.md) is the opam/Dune port of every repository-owned family: fixed-width and sparse numerics; CHAMP/derived HAMT, Patricia, synchronized snapshots, and exact `MST2` Merkle persistence/proofs; measured, sorted, priority, interval, vector, bit-set, Range, rope/cursor, canonical-set, heap/search, and DABA collections; neutral ordered set/map/multimap; and application-leaf Tungsten List/Association. Strict warnings, ocamlformat, odoc, Alcotest, QCheck, and one-worker validation define its gate; [API notes](src/OCaml/docs/api-notes.md) record intentional OCaml implementation distinctions.
 - [src/Rust/Hamt](src/Rust/Hamt/README.md) is a safe Rust persistent-map workspace. It provides
   CHAMP hash maps/sets, a checked hash bag, strict `PersistentBiMap`, set-valued
   `PersistentHashMultimap`, bidirectional `PersistentRelation`, ownership-consuming `TransientHashMap`/`TransientHashSet` sessions, and
@@ -315,7 +330,7 @@ language-first layout.
 
 ## Build and test
 
-Use [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) as the complete validation guide. In short, use the local .NET SDK toolchain for the C# workspace, the language-root MSVC build wrappers for C and C++, cabal for the Haskell packages, Cargo for the Rust crates, npm for TypeScript, and Python 3.11+ with the checked-in launcher for Python.
+Use [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) as the complete validation guide. In short, use the local .NET SDK toolchain for the C# workspace, the language-root MSVC build wrappers for C and C++, cabal for the Haskell packages, Cargo for the Rust crates, opam/Dune for OCaml, npm for TypeScript, and Python 3.11+ with the checked-in launcher for Python.
 
 ```powershell
 cd C:\DataStructures\src\CSharp
@@ -357,6 +372,11 @@ cd C:\DataStructures\src\Haskell
 
 cd C:\DataStructures\src\Kotlin
 .\build.ps1
+
+cd C:\DataStructures\src\OCaml
+opam install . --deps-only --with-test --with-doc --with-dev-setup
+opam exec -- dune build -j 1 @check @fmt @doc
+opam exec -- dune runtest -j 1 --force
 ```
 
 The checked-in launchers and native presets force one build worker/job; test runners are likewise
@@ -383,9 +403,9 @@ Release configuration is required for meaningful benchmark numbers.
 - [docs/guides/agent-workflows.md](docs/guides/agent-workflows.md) holds compact task-conditional workflow guidance.
 - [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) is the repository-wide validation matrix and command guide.
 - [docs/guides/documentation-maintenance.md](docs/guides/documentation-maintenance.md) defines documentation placement, writing standards, metadata, and validation.
-- [docs/guides/porting-and-semantic-parity.md](docs/guides/porting-and-semantic-parity.md) defines the workflow for keeping C#, C++, C, Haskell, Kotlin, Rust, TypeScript, and Python data-structure surfaces semantically aligned.
+- [docs/guides/porting-and-semantic-parity.md](docs/guides/porting-and-semantic-parity.md) defines the workflow for keeping C#, C++, C, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python data-structure surfaces semantically aligned.
 - [docs/reference/README.md](docs/reference/README.md) indexes durable cross-workspace reference material.
-- [docs/reference/data-structure-catalog.md](docs/reference/data-structure-catalog.md) catalogs repository-owned data-structure families, public entry points, and primary references across C#, C, C++, Haskell, Kotlin, Rust, TypeScript, and Python.
+- [docs/reference/data-structure-catalog.md](docs/reference/data-structure-catalog.md) catalogs repository-owned data-structure families, public entry points, and primary references across C#, C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python.
 - [docs/reference/navigation-matrix.md](docs/reference/navigation-matrix.md) maps common tasks to the right usage, API, validation, porting, history, and maintenance documents.
 - [docs/reference/semantic-contracts.md](docs/reference/semantic-contracts.md) summarizes shared behavior, ownership, policy, ordering, and documentation obligations for repository-owned numerics and data structures.
 - [docs/reference/workspace-map.md](docs/reference/workspace-map.md) explains the language-first, library-family layout and port lineage.
@@ -419,6 +439,9 @@ Release configuration is required for meaningful benchmark numbers.
 - [src/Python/README.md](src/Python/README.md) indexes the Python package;
   [API notes](src/Python/docs/api-notes.md), [validation](src/Python/docs/validation.md), and the
   [test map](src/Python/tests/README.md) document its runtime mappings and gates.
+- [src/OCaml/README.md](src/OCaml/README.md) indexes the OCaml package;
+  [API notes](src/OCaml/docs/api-notes.md), [validation](src/OCaml/docs/validation.md), and the
+  [test map](src/OCaml/tests/README.md) document its qualified modules and gates.
 
 The large `TECHNICAL_DOCUMENTATION_STANDARD.md` and `XML_DOCUMENTATION_STANDARD.md` files from Tools are intentionally not part of this repository. Keep documentation thorough and current-state oriented, and write XML documentation in semantic terms: contracts, invariants, ordering, failure behavior, complexity, allocation behavior, and examples where they help.
 
@@ -460,6 +483,8 @@ The expected local Windows environment includes:
   Kotlin compiler under `src/Kotlin/build/tools` when Java 21+ is not already available.
 - Rust toolchain with Cargo for `src/Rust`; the local profile may expose Cargo as
   `$env:USERPROFILE\.cargo\bin\cargo.exe` even when it is not on `PATH`.
+- opam 2.1+, OCaml 4.14+, and Dune 3.20+ for `src/OCaml`; install the package dependencies from
+  `tools-data-structures.opam` and keep both opam and Dune at one job during repository validation.
 - Node.js 24 or newer and npm for `src/TypeScript`; use the committed lockfile with `npm ci`.
 
 Use `dotnet` directly for C# restore/build operations and `src/CSharp/test.ps1` for unattended

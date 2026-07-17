@@ -278,8 +278,8 @@ Tools.DataStructures.Tungsten
 Neither consumer references the other. The first version should not refactor Tungsten to consume
 Ordered merely because they share a design idea; their contracts evolve independently.
 
-**Shipment (2026-07-15).** This topology now exists in C#, and the corresponding neutral
-`ordered` modules have shipped in TypeScript and Python. All three `PersistentOrderedSet` ports
+**Shipment (updated 2026-07-17).** This topology now exists across all nine language workspaces.
+All neutral `PersistentOrderedSet` ports
 compose their language-local public HAMT and FingerTree substrates without importing, wrapping,
 testing against, or granting privileged access to a Tungsten artifact. The worked design below is
 therefore an implemented boundary example, not merely a hypothetical recommendation.
@@ -340,7 +340,7 @@ values, retained branches, relabel histories, stable sorting, no-op identity, ex
 concurrent readers are still valuable scenarios, but their expected results come from the Ordered
 contract.
 
-The shipped C#, TypeScript, and Python suites follow that rule with language-local models and
+The shipped suites in all nine languages follow that rule with language-local models and
 dependency audits; none uses Tungsten output as a live oracle.
 
 ## Porting And Change Propagation
@@ -368,8 +368,8 @@ C# Tungsten contract
 
 General forks may initially remain C#-only while their contract settles. Cross-language parity is a
 separate decision based on the general family's value and port economics, not on Tungsten already
-having sibling ports. That separate decision has now produced neutral TypeScript and Python
-`PersistentOrderedSet` ports; it creates no change-propagation edge from either Tungsten family.
+having sibling ports. That separate decision has now produced neutral Ordered ports in all nine
+languages; it creates no change-propagation edge from any Tungsten family.
 
 ## Future Extraction Protocol
 
@@ -403,7 +403,7 @@ As of the repository HEAD recorded above:
 - no general workspace has a project/package/link dependency on Tungsten;
 - C# HAMT and FingerTree no longer grant `InternalsVisibleTo` access to Tungsten;
 - C# `PersistentAssociation` composes public HAMT/FingerTree APIs; and
-- the C#, TypeScript, and Python neutral Ordered packages compose public HAMT/FingerTree APIs and
+- all nine neutral Ordered packages compose public HAMT/FingerTree APIs and
   have no source, package, test-oracle, or privileged-access dependency on Tungsten; and
 - canonical repository and workspace documentation identifies Tungsten as an application-specific
   leaf and C# as authoritative only within the Tungsten port lineage.

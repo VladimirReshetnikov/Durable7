@@ -26,7 +26,7 @@ The benchmark-independent implementation tranches now ship persistent one-descen
 `PersistentHashMultimap`, bidirectional `PersistentRelation`, payload-bearing
 `PersistentIntervalMap`, `PersistentOrderedMultimap`, `PersistentMapPatch`,
 `PersistentDirectedGraph`, `PersistentIndexedMap`, `PersistentChunkedBitSet`, and the genuinely new
-non-composite `RangeUpdateSequence` core across all eight languages. C# owns the detailed managed
+non-composite `RangeUpdateSequence` core across all nine languages. C# owns the detailed managed
 contracts; siblings preserve the same logical semantics through language-local policies and
 ownership idioms. Both full serialized C# Debug and Release gates pass 1,503/1,503 tests after
 builds with zero warnings and zero errors. No benchmark
@@ -69,9 +69,9 @@ portable to the C model (callback + context pointer) unless noted.
 
 | Surveyed gap / current disposition | Surface | What it unblocks |
 | --- | --- | --- |
-| Persistent `GetOrAdd` / `AddOrUpdate` — **shipped across all eight languages** | HAMT map | One hash, one trie descent, eager factory validation, and exactly one selected factory invocation support bag increments, multimap inner updates, graph edge operations, interning, and aggregation without a probe followed by `SetItem`. Hit/no-op identity, stored representatives, nullable values, and callback-failure atomicity are locked in every port. |
-| Bulk construction — **shipped**; public editing sessions are a separate lifecycle | HAMT map and set | Canonical range construction stages mutable unpublished CHAMP nodes and freezes once. C# keeps that builder internal; C++ and Rust expose public construction-only builders, and TypeScript and Python now expose equivalent reusable builders whose frozen snapshots are detached. Those builders are not general update sessions. TypeScript/Python map and set factories and bulk-producing set operations route through them. |
-| Structural diff / equality / set-vs-set algebra — **shipped**; 3-way merge remains consumer-gated | HAMT node layer (not composable from outside) | Equality, typed diff, and same-type algebra now ship across all eight languages. The seven established ports use reference-pruned structural traversal; Python currently preserves the semantics with exact-root pruning plus lookup traversal. TypeScript and Python editing sessions also expose all six receiver-policy set-relation predicates. A general 3-way merge still needs a conflict matrix. |
+| Persistent `GetOrAdd` / `AddOrUpdate` — **shipped across all nine languages** | HAMT map | One hash, one trie descent, eager factory validation, and exactly one selected factory invocation support bag increments, multimap inner updates, graph edge operations, interning, and aggregation without a probe followed by `SetItem`. Hit/no-op identity, stored representatives, nullable values, and callback-failure atomicity are locked in every port. |
+| Bulk construction — **shipped**; public editing sessions are a separate lifecycle | HAMT map and set | Canonical range construction stages mutable unpublished CHAMP nodes and freezes once. C# keeps that builder internal; C++ and Rust expose public construction-only builders, and TypeScript and Python expose equivalent reusable builders whose frozen snapshots are detached. Those builders are not general update sessions. OCaml adds a detached reusable staging facade whose edits remain persistent path copies and therefore makes no construction-throughput claim. |
+| Structural diff / equality / set-vs-set algebra — **shipped**; 3-way merge remains consumer-gated | HAMT node layer (not composable from outside) | Equality, typed diff, and same-type algebra now ship across all nine languages. The established structural ports use reference-pruned traversal; Python and OCaml preserve the semantics through their documented checkpoint traversal. TypeScript, Python, and OCaml editing sessions expose receiver-policy set relations. A general 3-way merge still needs a conflict matrix. |
 | Value-comparer parameter for no-op identity | HAMT factories | `SetItem`'s equal-value no-op check hardcodes `EqualityComparer<TValue>.Default`; a factory-supplied value comparer would let structural value equality trigger the identity short-circuit. |
 | Reverse support | `Rope<T>` and `FingerTreeDeque<T>` | A reversal bit or reverse enumerator. `ReversibleDeque` exists but lacks the sorted adapter and range operations, materializes an `O(n)` array per enumeration, and its amortized bounds are documented for single-threaded linear use only - facades keep rejecting it. |
 | Struct enumerator for `Rope<T>` / `MeasuredRope` | Rope family | Both use compiler-generated yield iterators; `FingerTreeDeque` already has a public struct enumerator, and the general measured tree gained one on 2026-07-01. Iteration-hot consumers (evaluators) notice the difference. |
@@ -85,7 +85,7 @@ exist, rank writes do not), and a floor/ceiling lookup in the C sorted-map port 
 ## Candidate Catalog
 
 Each disposition below names the languages in which a candidate has actually shipped; shipment in
-one workspace does not silently imply all eight. Cross-language families carry local docs and tests
+one workspace does not silently imply all nine. Cross-language families carry local docs and tests
 in every named port, plus benchmark evidence for complexity and allocation claims where the parity
 guide requires it. That parity bill - not feasibility -
 is what separates many "plausible" verdicts from "strong": thin facades are often better shipped as
@@ -95,11 +95,11 @@ API additions plus samples than as families.
 
 | Candidate | Composition | Key caveat |
 | --- | --- | --- |
-| `PersistentOrderedSet<T>` | Independently owned HAMT `item -> stamp` + persistent stamp-ordered sequence | **Shipped across all eight languages** in neutral Ordered packages. The ports own first-representative retention, explicit movement, positional ranges, stable one-shot sorting, receiver-policy algebra, sparse-label/relabel behavior, models, and tests without a Tungsten dependency or oracle. The hardened C# reference additionally locks deterministic relabel fallback and failure atomicity. |
-| `PersistentOrderedMap<TKey, TValue>` | Independently owned HAMT keyed index + neutral persistent ordered sequence | **Shipped across all eight languages.** The general map retains first key representatives, keeps payload replacement position-stable, separates explicit movement from setting, and owns its contract, model, invariants, and tests without a Tungsten dependency or oracle. Ports may store entries in both indexes or keep only labels in the HAMT; that representation choice is not public semantics. |
+| `PersistentOrderedSet<T>` | Independently owned HAMT `item -> stamp` + persistent stamp-ordered sequence | **Shipped across all nine languages** in neutral Ordered packages. The ports own first-representative retention, explicit movement, positional ranges, stable one-shot sorting, receiver-policy algebra, sparse-label/relabel behavior, models, and tests without a Tungsten dependency or oracle. The hardened C# reference additionally locks deterministic relabel fallback and failure atomicity. |
+| `PersistentOrderedMap<TKey, TValue>` | Independently owned HAMT keyed index + neutral persistent ordered sequence | **Shipped across all nine languages.** The general map retains first key representatives, keeps payload replacement position-stable, separates explicit movement from setting, and owns its contract, model, invariants, and tests without a Tungsten dependency or oracle. Ports may store entries in both indexes or keep only labels in the HAMT; that representation choice is not public semantics. |
 | HAMT structural diff / merge / set algebra | Feature inside the Hamt family node layer, phased: (1) `MapEquals` + `Diff` enumerator, (2) structural set-vs-set ops, (3) 3-way `Merge` with a specified conflict matrix | Bound is `O(divergent region)` and history-dependent, not content-diff-dependent; collision buckets are insertion-ordered so equal buckets need key-matched (unordered) comparison; comparer mismatch must be gated by reference equality on the comparer. |
-| `PersistentHashBag<T>` | Facade over HAMT `T -> int` + cached wide total count | **Shipped across all eight languages** with checked positive per-class multiplicities, separate distinct/total cardinalities, first-representative retention, eager receiver-policy normalization, conventional multiset algebra, and expanded/distinct enumeration. TypeScript uses `bigint` and Python uses an unbounded `int` for the total while retaining the shared per-class bound; the other languages use their corresponding bounded wide integer. |
-| `PersistentBiMap<TKey, TValue>` | Forward `K -> V` + inverse `V -> K` HAMTs behind a bijection-enforcing facade | **Shipped across all eight languages.** The strict contract retains independent policies, rejects either occupied domain, performs configured-value-policy no-op checks before replacement, removes and reinserts both directions when changing a pair, and constructs O(1) inverse facades over the same roots. Honest 2x memory: every pair is stored in both tries. |
+| `PersistentHashBag<T>` | Facade over HAMT `T -> int` + cached wide total count | **Shipped across all nine languages** with checked positive per-class multiplicities, separate distinct/total cardinalities, first-representative retention, eager receiver-policy normalization, conventional multiset algebra, and expanded/distinct enumeration. TypeScript uses `bigint`, Python uses an unbounded `int`, and OCaml uses a checked native `int` total while retaining the shared positive per-class contract. |
+| `PersistentBiMap<TKey, TValue>` | Forward `K -> V` + inverse `V -> K` HAMTs behind a bijection-enforcing facade | **Shipped across all nine languages.** The strict contract retains independent policies, rejects either occupied domain, performs configured-value-policy no-op checks before replacement, removes and reinserts both directions when changing a pair, and constructs O(1) inverse facades over the same roots. Honest 2x memory: every pair is stored in both tries. |
 
 The shipped `PersistentOrderedSet` and `PersistentOrderedMap` address ordered unique membership and
 ordered key/value lookup respectively. The generic map owns a representation-neutral contract;
@@ -107,7 +107,7 @@ the Tungsten case study independently specialized the broad composition idea for
 *Application-specific shipment 2026-07-07*: the Tungsten workspaces own a values-in-both
 `PersistentAssociation` (plus the `PersistentList` sequence facade), with the C# workspace
 ([`Tools.DataStructures.Tungsten`](../../src/CSharp/docs/Tungsten/overview.md)) as the semantic
-reference only for C, C++, Haskell, Kotlin, Rust, TypeScript, and Python Tungsten ports linked from the
+reference only for C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml Tungsten ports linked from the
 [data-structure catalog](data-structure-catalog.md#tungsten-application-collections). This did not
 ship the generic ordered-map candidate at that time; the later neutral shipment did. Other
 unmarked candidates below remain unshipped. The
@@ -120,7 +120,7 @@ about versions".
 | Candidate | Composition | Key caveat |
 | --- | --- | --- |
 | `AddressablePriorityQueue<TKey, TPriority>` | HAMT `key -> (stamp, priority)` + `SortedSet<(priority, stamp, key)>` | The plain composition dominates a bespoke `ProductMeasure` design on every op except `Enqueue`; `TrySplitFind` + `Concat` already excises located elements, so no new core API is needed. Its use cases cover the delete-by-handle timer/interval niche. |
-| `PersistentHashMultimap<TKey, TValue>` (set-valued) | HAMT `K -> PersistentHashSet<V>` | **Shipped across all eight languages**, together with a bidirectional `PersistentRelation` that owns exact forward/reverse multimap indexes. Whole-multimap no-op identity composes from the nested contracts. The deque-valued (event-stream) variant remains weaker: every append pays the outer update walk and adds a cross-family dependency. |
+| `PersistentHashMultimap<TKey, TValue>` (set-valued) | HAMT `K -> PersistentHashSet<V>` | **Shipped across all nine languages**, together with a bidirectional `PersistentRelation` that owns exact forward/reverse multimap indexes. Whole-multimap no-op identity composes from the nested contracts. The deque-valued (event-stream) variant remains weaker: every append pays the outer update walk and adds a cross-family dependency. |
 | `VersionedKvStore<TKey, TValue>` | `SortedDictionary<revision, HAMT>` snapshot index + optional finger-tree journal with checkpoints | Decompose into two small layered types, not one modal store. Per-key temporal queries are `O(journal)` without an opt-in `key -> revision-list` secondary index, which doubles write cost. |
 | `OverlayMap` / layered config | Base HAMT + small overlay HAMT with tombstones | `O(1)` effective `Count` and overlay-only writes are mutually exclusive; effective enumeration pays a per-key suppression probe. |
 | `IndexedHashSet<T>` / `WeightedKeyedSampler<TKey>` | HAMT `key -> stamp` + size x sum x key product-measured tree | One parameterized family (uniform = weight 1). `TryLocate` already returns the full product measure, so cross-component projection is a convenience extension, not a core change. Weighted variant needs the size component for rank ops and non-negative-weight enforcement. |
@@ -132,7 +132,7 @@ about versions".
 | `MerkleHamt<TKey, TValue>` | Node-type fork with per-node memoized digest (CAS-published, finger-tree precedent) | Largest-effort candidate. Requires a pinned deterministic key hash (default .NET string hashing is per-process randomized - fatal for cross-process addressing), an encoder constant on comparer-equality classes, and a serialization story the repository lacks. Defer until structural diff and serialization exist. |
 
 The later `PersistentIntervalMap` was selected from the broader planning work rather than this
-original composition survey. It now ships across all eight languages as an exact interval-key map
+original composition survey. It now ships across all nine languages as an exact interval-key map
 plus an augmented overlap-search index; consult the
 [shipped catalog](data-structure-catalog.md#derived-persistent-maps-relations-and-sparse-bit-sets) rather than
 retrofitting its contract into this historical candidate ranking.

@@ -8,7 +8,7 @@
 This reference summarizes the behavioral contracts that should stay recognizable across the repository's
 language workspaces. It is not a replacement for the workspace API specifications, public headers, XML
 documentation, or source tests. Use it as a checklist when reviewing whether a change preserves the
-intended semantics across C#, C, C++, Haskell, Kotlin, Rust, TypeScript, and Python.
+intended semantics across C#, C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python.
 
 Authoritative local documents remain:
 
@@ -23,6 +23,7 @@ Authoritative local documents remain:
 - [C++ FingerTree API notes](../../src/Cpp/FingerTree/docs/api-notes.md)
 - [Kotlin FingerTree API notes](../../src/Kotlin/FingerTree/docs/api-notes.md)
 - [Rust FingerTree API notes](../../src/Rust/FingerTree/docs/api-notes.md)
+- [OCaml package API notes](../../src/OCaml/docs/api-notes.md)
 - [TypeScript package API notes](../../src/TypeScript/docs/api-notes.md)
 - [Python package API notes](../../src/Python/docs/api-notes.md)
 
@@ -51,9 +52,10 @@ behavior change through sibling workspaces.
 
 ## Fixed-Width Integer Numerics
 
-`Tools.Numerics` in C# is the semantic reference; TypeScript and Python expose sibling ports of its
-fixed-width signed and unsigned integers plus sparse integer helpers. TypeScript uses `bigint`, and
-Python uses arbitrary-precision `int`, behind explicit fixed-width normalization and validation.
+`Tools.Numerics` in C# is the semantic reference; OCaml, TypeScript, and Python expose sibling ports
+of its fixed-width signed and unsigned integers plus sparse integer helpers. OCaml uses Zarith,
+TypeScript uses `bigint`, and Python uses arbitrary-precision `int`, behind explicit fixed-width
+normalization and validation.
 
 Public entry points:
 
@@ -78,6 +80,7 @@ Primary evidence:
 - [Numerics validation](../../src/CSharp/docs/Numerics/validation.md)
 - [Numerics tests README](../../src/CSharp/tests/Tools.Numerics.Tests/README.md)
 - [Wide-integer maintainer guidance](../../src/CSharp/docs/Numerics/wide-integer-maintainer-guidance.md)
+- [OCaml API notes](../../src/OCaml/docs/api-notes.md) and [validation](../../src/OCaml/docs/validation.md)
 - [TypeScript API notes](../../src/TypeScript/docs/api-notes.md) and [validation](../../src/TypeScript/docs/validation.md)
 - [Python API notes](../../src/Python/docs/api-notes.md) and [validation](../../src/Python/docs/validation.md)
 
@@ -94,6 +97,7 @@ Public surfaces:
 | C++ | `persistent_hash_map<Key, T, Hash, KeyEqual, ValueEqual>` and nested `transient` | `persistent_hash_set<T, Hash, KeyEqual>` and nested `transient` | template policy objects |
 | Haskell | `HashMap k v` and `MapTransient k v` | `HashSet a` and `SetTransient a` | `Hashable`, `Eq`, optional `HashPolicy` |
 | Kotlin | `PersistentHashMap<K, V>` and nested `Transient<K, V>` | `PersistentHashSet<T>` and nested `Transient<T>` | runtime `HashPolicy<K>` |
+| OCaml | `Persistent_hamt` and `Transient` | `Persistent_hash_set` and its edit session | retained `Common.Hash_policy` |
 | Rust | `PersistentHashMap<K, V, S>` and `TransientHashMap<K, V, S>` | `PersistentHashSet<T, S>` and `TransientHashSet<T, S>` | `Eq` plus `BuildHasher` |
 | TypeScript | `PersistentHashMap<K, V>` and `TransientHashMap<K, V>` | `PersistentHashSet<T>` and `TransientHashSet<T>` | runtime `HashPolicy<K>` |
 | Python | `PersistentHashMap[K, V]` and `TransientHashMap[K, V]` | `PersistentHashSet[T]` and `TransientHashSet[T]` | retained `HashPolicy[K]` |
@@ -135,18 +139,20 @@ Language-specific obligations:
 | C++ | Value objects should remain cheap to copy through shared immutable nodes; template policies must stay part of the value's semantic identity. |
 | Haskell | `HashPolicy` and package-local `Hashable` shape are part of the port, avoiding third-party dependencies while preserving persistent HAMT behavior. |
 | Kotlin | Miss paths and duplicate results should use idiomatic Kotlin null/result/exception shapes documented in API notes. |
+| OCaml | Runtime hash policies define equivalence and representative retention; persistent operations use immutable successors, absence uses `option`, fallible indexed/trust-boundary operations use `result`, and one-way sessions reject access after publication. |
 | Rust | Keys that compare equal under `Eq` must hash equally under the chosen `BuildHasher`; removal returns owned cloned values where exposed. |
 | TypeScript | Runtime hash policies define equivalence and representative retention; `getOrAdd`/`addOrUpdate` follow the C# one-descent selected-factory contract; transient sessions are isolate-local path-copying facades with no cross-worker progress or edit-performance claim. |
 | Python | Equality and hashing are explicit retained policy; `get_or_add`/`add_or_update` preserve one-descent factory selection and presence-safe result values; mutable application objects require caller discipline, and changed or consumed sessions invalidate version-bound iterators dynamically. |
 
 ### Persistent hash bags
 
-`PersistentHashBag` ships across all eight languages as an unordered-multiset facade over the
+`PersistentHashBag` ships across all nine languages as an unordered-multiset facade over the
 language-local persistent HAMT. It stores exactly one representative and one positive multiplicity
 in `1 .. 2^31 - 1` per policy equivalence class. Distinct-class count is separate from expanded
 total count, and no ambiguous collection `Count`/`size` is exposed for expanded enumeration. C# uses
 a checked `long` total; C/C++/Haskell/Kotlin/Rust use their corresponding bounded wide integer;
-TypeScript uses `bigint`; and Python uses `int`. Construction and point
+OCaml uses a checked native count for the current facade, TypeScript uses `bigint`, and Python uses
+`int`. Construction and point
 additions retain the first stored representative; expanded enumeration repeats each representative
 contiguously, while distinct-item and entry views enumerate one class each in the same
 stable-for-one-version, otherwise unspecified HAMT order.
@@ -165,7 +171,7 @@ indexes every port.
 
 ### Persistent bidirectional maps
 
-`PersistentBiMap` and its language-local counterparts ship across all eight languages as strict
+`PersistentBiMap` and its language-local counterparts ship across all nine languages as strict
 immutable bijections over two CHAMP maps. Their shared semantic contract is:
 
 - key and value hash/equality policies are independent retained objects; every successor,
@@ -207,7 +213,7 @@ shipment evidence is in the
 ### Construction-only HAMT bulk builders
 
 C# bulk construction uses an internal mutable unpublished CHAMP builder. C++ and Rust expose the
-same construction facility publicly; TypeScript and Python now expose reusable public builders as
+same construction facility publicly; TypeScript and Python expose reusable public builders as
 well. Their common contract is narrower than a transient editing session:
 
 - mutable leaf, collision, and bitmap nodes are unpublished and mutated in place during one-pass
@@ -222,6 +228,10 @@ well. Their common contract is narrower than a transient editing session:
 Rust additionally offers a consuming freeze that moves owned nodes. These builders do not acquire
 the adoption, iterator, or one-way publication lifecycle of map/set transients.
 
+OCaml exposes a reusable staging builder with detached freezes and the same representative rules,
+but builder edits currently invoke persistent path copying. It does not claim the unpublished
+mutable-node construction bound above.
+
 ### Concurrent snapshot facades
 
 The C# and Kotlin/JVM Ctries are the deliberate lock-free managed tier. `Snapshot` captures a
@@ -232,15 +242,15 @@ logically into the data run, and equal-hash collision buckets retain their local
 snapshot-to-CHAMP conversion is O(n) and preserves that sequence, the exact policy object, stored
 key/value representatives, null/present-null semantics, and isolation from later live writes.
 
-TypeScript and Python preserve the consumer-level mutable-map/O(1)-snapshot vocabulary without
-claiming that protocol. TypeScript is isolate-local and synchronous. Python serializes operations
-with an `RLock` and publishes immutable CHAMP roots. Neither facade uses GCAS/RDCSS descriptors,
+OCaml, TypeScript, and Python preserve the consumer-level mutable-map/O(1)-snapshot vocabulary
+without claiming that protocol. TypeScript is isolate-local and synchronous. OCaml and Python
+serialize operations with a mutex/`RLock` and publish immutable CHAMP roots. None of these facades uses GCAS/RDCSS descriptors,
 generation renewal, or a lock-free progress guarantee; conversion and concurrency claims must follow
 its local API notes and tests.
 
 ### One-way CHAMP editing lifecycle
 
-All eight HAMT workspaces expose a single-owner map/set edit-then-publish lifecycle. The shared
+All nine HAMT workspaces expose a single-owner map/set edit-then-publish lifecycle. The shared
 contract is semantic, not representational:
 
 - Creating an empty session or adopting a persistent source and successfully publishing the
@@ -277,6 +287,7 @@ advantage is claimed:
 | C++ | Nested sessions are movable but not copyable and publish only through `std::move(session).persist()`. Generation-bound iterators reject changed or consumed sessions. A throwing custom policy move terminally invalidates the source and, for assignment, the destination; publication has no retry/content-preservation guarantee after a throwing policy move. Nothrow-movable policies avoid both exceptional boundaries. |
 | Haskell | `MapTransient` / `SetTransient` live in `IO`; `persistMap` / `persistSet` consume the `IORef` state. Candidate construction precedes a masked commit, so synchronous or asynchronous failure cannot partially install an edit. |
 | Kotlin | Nested `Transient` sessions enforce consumption with `IllegalStateException`; acquired views capture the current persistent snapshot and session version, survive logical no-ops, and fail after content changes. Callback failure leaves the active session unchanged and retryable. |
+| OCaml | `Persistent_hamt.Transient` retains one persistent current root, replaces it with path-copy successors, and dynamically rejects access after one-way publication. Reusable `Bulk_builder` is a separate construction facility. |
 | Rust | `TransientHashMap` / `TransientHashSet` publish with consuming `into_persistent(self)`, so the type system prevents use-after-publication. `into_transient` moves a source while `to_transient` shares its root; both retain persistent path-copy edit costs. |
 | TypeScript | `TransientHashMap` / `TransientHashSet` enforce one-way publication at runtime inside one JavaScript isolate. Changed edits replace the current persistent root through ordinary path copies; the facade makes no cross-worker progress or transient-performance claim. |
 | Python | `TransientHashMap` / `TransientHashSet` retain a persistent current value, consume on publication, and invalidate iterators after content changes or publication; changed edits remain persistent path copies rather than owner-token mutation. |
@@ -285,13 +296,14 @@ The local authoritative references are the [C API specification](../../src/C/Ham
 [C++ API specification](../../src/Cpp/Hamt/docs/api-specification.md),
 [Haskell HAMT workspace](../../src/Haskell/Hamt/README.md),
 [Kotlin API notes](../../src/Kotlin/Hamt/docs/api-notes.md),
+[OCaml API notes](../../src/OCaml/docs/api-notes.md),
 [Rust API notes](../../src/Rust/Hamt/docs/api-notes.md),
 [TypeScript API notes](../../src/TypeScript/docs/api-notes.md), and
 [Python API notes](../../src/Python/docs/api-notes.md).
 
 ## Set-Valued Hash Multimap And Persistent Relation
 
-All eight languages ship a set-valued persistent hash multimap and a bidirectional persistent
+All nine languages ship a set-valued persistent hash multimap and a bidirectional persistent
 relation over their local HAMT maps and sets. Shared obligations are:
 
 - the key/left policy and value/right policy are independent, retained by every result, and define
@@ -315,7 +327,7 @@ is the detailed managed reference.
 
 ## Insertion-Ordered Persistent Set
 
-`PersistentOrderedSet` ships in neutral Ordered modules across all eight languages. It composes
+`PersistentOrderedSet` ships in neutral Ordered modules across all nine languages. It composes
 a persistent HAMT membership/stamp index with a persistent ordered sequence and must not depend on
 the application-specific Tungsten family. Shared obligations are:
 
@@ -343,7 +355,7 @@ indexes them.
 
 ## Insertion-Ordered Persistent Map
 
-`PersistentOrderedMap` ships beside the neutral ordered set across all eight languages. It uses the
+`PersistentOrderedMap` ships beside the neutral ordered set across all nine languages. It uses the
 same equality-defined key classes and explicit positional order while attaching one payload to each
 class. Shared obligations are:
 
@@ -368,7 +380,7 @@ and the [cross-language catalog](data-structure-catalog.md#derived-persistent-ma
 ## Composition-First Derived Structures
 
 `PersistentOrderedMultimap`, `PersistentMapPatch`, `PersistentDirectedGraph`,
-`PersistentIndexedMap`, and `PersistentChunkedBitSet` ship across all eight languages with
+`PersistentIndexedMap`, and `PersistentChunkedBitSet` ship across all nine languages with
 language-local naming, result, ownership, and policy shapes. Their shared obligations are:
 
 - ordered multimaps retain the first key representative and key-group position, retain the first
@@ -424,7 +436,8 @@ The C# FingerTree assembly ships
 It is an immutable indexed sequence with persistent point edits, split/concat/range extraction,
 lazy range updates, and ordered whole/range measures. It does not add lazy tags to the existing
 finger-tree engines. The C# reference is the semantic baseline for the shipped C, C++, Haskell,
-Kotlin, Rust, TypeScript, and Python ports.
+Kotlin, Rust, TypeScript, Python, and OCaml ports. OCaml preserves the observable algebra and
+persistence contract through immutable arrays and makes no implicit-AVL lazy-update bound claim.
 
 Its `IRangeUpdateAlgebra<TElement, TMeasure, TTag>` policy extends `IMeasure` and must satisfy all
 of these obligations:
@@ -471,7 +484,7 @@ At the pre-bimap Range shipment checkpoint, both full serialized C# Debug and Re
 completed with zero warnings and zero errors, and both configurations passed 1,417/1,417 tests.
 Language-local Range ports, together with the same
 tranche's HAMT factories, hash bags, and neutral ordered sets, now ship in C, C++, Haskell, Kotlin,
-Rust, TypeScript, and Python. The
+Rust, TypeScript, Python, and OCaml. The
 [cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md)
 records their exact mappings and gates. No benchmark was run; measurements remain postponed until
 an isolated session.
@@ -495,7 +508,7 @@ orientation-aware implementation.
 ## Insertion-Ordered Set
 
 `Tools.DataStructures.Ordered.PersistentOrderedSet<T>` is the C# reference for a general-purpose
-insertion-ordered set that also ships in TypeScript and Python. Its retained `IEqualityComparer<T>`
+insertion-ordered set that also ships in the eight sibling languages, including OCaml. Its retained `IEqualityComparer<T>`
 defines equality classes, membership,
 lookup, duplicate collapse, and algebra. Enumeration order is a separate semantic dimension:
 construction retains first-occurrence order, ordinary `Add` appends an absent class, and
@@ -541,7 +554,7 @@ The workspace is independently owned and depends only on the public C# HAMT and 
 Neither production nor tests may reference `Tools.DataStructures.Tungsten`, consume Tungsten source
 or internals, use `PersistentAssociation` as a live oracle, or adopt Tungsten as semantic authority.
 Similar sparse-order mechanics are provenance, not shared ownership. C, C++, Haskell, Kotlin,
-Rust, TypeScript, and Python ship neutral sibling implementations derived from this Ordered
+Rust, TypeScript, Python, and OCaml ship neutral sibling implementations derived from this Ordered
 contract through language-local ownership and policy models.
 
 The [Ordered validation guide](../../src/CSharp/docs/Ordered/validation.md) and
@@ -601,7 +614,7 @@ Shared obligations:
 
 ## Persistent Interval Maps
 
-The payload-bearing interval map ships across all eight languages as a derived companion to the
+The payload-bearing interval map ships across all nine languages as a derived companion to the
 interval tree. Its complete `(low, high)` pair is the unique key; intervals that share only one
 endpoint remain distinct. Shared obligations are:
 
@@ -639,7 +652,7 @@ Shared obligations:
 - Builders must document mutation, snapshot publication, and whether later builder changes can affect
   previously produced immutable ropes.
 
-C#, C, C++, Haskell, Kotlin, Rust, TypeScript, and Python ship positional and measured/text cursors. No deque, RRB,
+C#, C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python ship positional and measured/text cursors. No deque, RRB,
 raw-finger-tree, reversible-deque, or Tungsten cursor is implied by those surfaces. Every shipped
 cursor shares these observable obligations:
 
@@ -669,9 +682,9 @@ retained cursors
   at a boundary has the conservative O(b log n) aggregate bound; there is no unqualified
   arbitrary-version-DAG O(1)-amortized claim.
 
-The C, C++, Haskell, Kotlin, Rust, TypeScript, and Python positional checkpoints store an
-already-canonical retained rope plus its gap. The first five native/JVM checkpoints have the
-complexity boundaries documented in their local API notes; TypeScript and Python likewise inherit
+The C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python positional checkpoints store an
+already-canonical retained rope plus its gap. Their language-local checkpoints have the
+complexity boundaries documented in their local API notes; TypeScript, Python, and OCaml likewise inherit
 their package-local persistent checkpoint costs rather than the C# zipper bounds. None has a
 default-constructed cursor or makes a zipper, memo-cell, or
 O(1)-amortized local-edit claim. Haskell uses outer `Maybe` for the boundary, so a stored `Nothing`
@@ -690,7 +703,7 @@ output unchanged. Peeks copy through the rope's value policy rather than returni
 point edits are O(log n) plus bounded chunk work, while array insertion adds O(m) capture work. It makes no
 zipper, memo-cell, allocation-ceiling, or O(1)-amortized locality claim.
 
-The C#, C, C++, Haskell, Kotlin, Rust, TypeScript, and Python measured cursors additionally share these result semantics:
+The C#, C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python measured cursors additionally share these result semantics:
 
 - `MeasureBefore` aggregates `[0, Position)` and `MeasureAfter` aggregates `[Position, Count)`;
   combining them in that order yields the whole version's measure without assuming an inverse,
@@ -700,8 +713,8 @@ The C#, C, C++, Haskell, Kotlin, Rust, TypeScript, and Python measured cursors a
   return `false` with an end cursor whose before measure is the whole measure.
 - The newline specialization uses the language's existing zero-based line/column rules. C#, Kotlin,
   and TypeScript positions are UTF-16 code units; C and C++ positions are `char`/`std::string` bytes;
-  Haskell positions are `Char` elements; Rust positions are Unicode scalar values; Python positions
-  are Unicode code points. None denotes a grapheme-cluster index.
+  Haskell positions are `Char` elements; OCaml and Rust positions are Unicode scalar values; Python
+  positions are Unicode code points. None denotes a grapheme-cluster index.
   Navigation and edits preserve access to the existing text helpers.
 
 The C# measured zipper additionally prepares element measures in the immutable cursor lineage,
@@ -761,14 +774,15 @@ count preflights reject unrepresentable `usize` growth before attempted element-
 No focused zipper, snapshot memo, allocation ceiling, callback-count ceiling, or amortized-locality
 claim is made.
 
-TypeScript and Python retain their immutable measured-rope checkpoints plus validated gaps. Ordered
+TypeScript, Python, and OCaml retain their immutable measured-rope checkpoints plus validated gaps. Ordered
 before/after measures, absolute prefix search, retained branching, unconditional replacement, and
 text-facade preservation follow the shared result semantics above. TypeScript keeps JavaScript
 UTF-16 indexing. Python's measured rope uses an immutable measured-AVL checkpoint and its text cursor
-counts Unicode code points. Positional and measured cursors in both packages expose entry/wrapper
-peeks so a stored `undefined`/`None` remains distinct from a missing neighbor; measured replacement
-invokes the replacement's measure callbacks even when the object is identical. Neither package claims the C# focus/carry zipper, snapshot-memo,
-allocation, callback-count, or amortized-locality bounds.
+counts Unicode code points; OCaml validates UTF-8 and indexes `Uchar.t` scalar values. Positional and
+measured cursors expose presence-safe results where the element domain requires them, so a stored
+`undefined`/`None` remains distinct from a missing neighbor. Measured replacement invokes the
+replacement's measure callbacks even when the object is identical. None of these packages claims
+the C# focus/carry zipper, snapshot-memo, allocation, callback-count, or amortized-locality bounds.
 
 The normative C# details and evidence are in the
 [FingerTree API specification](../../src/CSharp/docs/FingerTree/api-specification.md),
@@ -785,9 +799,10 @@ specified by its [workspace README](../../src/Haskell/FingerTree/README.md) and 
 its [API notes](../../src/Cpp/FingerTree/docs/api-notes.md) and
 [validation guide](../../src/Cpp/FingerTree/docs/validation.md). The C cursor checkpoints are
 specified by its [API notes](../../src/C/FingerTree/docs/api-notes.md) and
-[validation guide](../../src/C/FingerTree/docs/validation.md). The TypeScript and Python checkpoints
+[validation guide](../../src/C/FingerTree/docs/validation.md). The TypeScript, Python, and OCaml checkpoints
 are specified by their [TypeScript API notes](../../src/TypeScript/docs/api-notes.md) and
-[Python API notes](../../src/Python/docs/api-notes.md), respectively.
+[Python API notes](../../src/Python/docs/api-notes.md), and
+[OCaml API notes](../../src/OCaml/docs/api-notes.md), respectively.
 
 ## Tungsten Collections
 
@@ -836,6 +851,7 @@ Shared obligations:
 | C++ | RAII values over shared immutable nodes plus move-only editing sessions where exposed | Move/copy cost, exception behavior including policy moves during session movement and publication, policy object lifetime, iterator/materialization behavior |
 | Haskell | Pure immutable values plus explicitly scoped `IO` editing sessions where exposed | Total versus `Maybe` operations, session consumption, package-local type classes, dependency-light design, strictness where relevant |
 | Kotlin | Immutable JVM values plus runtime policies and dynamically consumed editing sessions where exposed | Null/result/exception shapes, version-bound views, JVM comparator/hash policy behavior, structural sharing, and documented engine complexity |
+| OCaml | Garbage-collected immutable algebraic values plus runtime policy records and dynamically consumed sessions where exposed | `option`/`result` boundaries, policy identity, qualified modules, strict warnings, Unicode-scalar text positions, mutex-coordinated facades, and documented checkpoint complexity |
 | Rust | Owned values, borrows, `Arc` sharing, consuming editing sessions where exposed, traits, and `Option`/`Result` | Clone requirements, borrowed lookup results, ownership-enforced publication, panic boundaries, safe Rust guarantees, Send/Sync claims only when proven |
 | TypeScript | Garbage-collected JavaScript objects, immutable public versions, runtime policies, and dynamically consumed sessions where exposed | ESM exports, `undefined`/miss/result shapes, stable hashing versus JavaScript identity, iterator invalidation, isolate-local concurrency, and UTF-16 indexing |
 | Python | Garbage-collected Python objects, immutable public versions, runtime policies, and dynamically consumed sessions where exposed | Typing/runtime validation, `None` versus absence, equality/hash coherence, iterator invalidation, lock-coordinated facades, code-point indexing, and mutable-value caveats |

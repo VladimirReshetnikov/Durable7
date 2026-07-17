@@ -8,8 +8,8 @@
 `src` is organized by programming language first. Each language root owns the toolchain assumptions,
 build idioms, and language-specific documentation for the workspaces under it. Most language roots keep
 library-family directories directly under the language root; C# is a single managed solution with
-projects grouped by role under `src/CSharp/src`, `tests`, `samples`, and `benchmarks`, while Python
-and TypeScript package all families into one language-local distribution.
+projects grouped by role under `src/CSharp/src`, `tests`, `samples`, and `benchmarks`, while Python,
+OCaml, and TypeScript package all families into one language-local distribution.
 
 | Language root | Toolchain model | Workspaces |
 | --- | --- | --- |
@@ -18,6 +18,7 @@ and TypeScript package all families into one language-local distribution.
 | [CSharp](CSharp/README.md) | One .NET 10 solution with xUnit/CsCheck validation | [Numerics](CSharp/docs/Numerics/overview.md), [HAMT](CSharp/docs/Hamt/overview.md), [FingerTree and Range-update sequence](CSharp/docs/FingerTree/overview.md), [Ordered](CSharp/docs/Ordered/overview.md), [Tungsten](CSharp/docs/Tungsten/overview.md) |
 | [Haskell](Haskell/README.md) | GHC/cabal packages with dependency-light executable tests | [Hamt](Haskell/Hamt/README.md), [FingerTree + Range](Haskell/FingerTree/README.md), [Ordered](Haskell/Ordered/README.md), [Tungsten](Haskell/Tungsten/README.md) |
 | [Kotlin](Kotlin/README.md) | Kotlin/JVM command-line compiler with dependency-free executable tests bootstrapped by `build.ps1` | [Hamt](Kotlin/Hamt/README.md), [FingerTree + Range](Kotlin/FingerTree/README.md), [Ordered](Kotlin/Ordered/README.md), [Tungsten](Kotlin/Tungsten/README.md) |
+| [OCaml](OCaml/README.md) | opam/Dune package with strict warnings, ocamlformat, odoc, Alcotest, and QCheck | [Numerics, HAMT, FingerTree + Range, Ordered, and Tungsten](OCaml/docs/api-notes.md#public-families) |
 | [Python](Python/README.md) | Typed Python 3.11+ package with Ruff, strict Mypy, pytest/Hypothesis, and wheel validation | [HAMT, FingerTree, Ordered, Tungsten, and Numerics](Python/README.md) |
 | [Rust](Rust/README.md) | Cargo workspace with safe Rust crates and integration tests | [Hamt](Rust/Hamt/README.md), [FingerTree](Rust/FingerTree/README.md), [Ordered](Rust/Ordered/README.md), [RangeUpdate](Rust/RangeUpdate/README.md), [Tungsten](Rust/Tungsten/README.md) |
 | [TypeScript](TypeScript/README.md) | Strict TypeScript/ESM npm package with Vitest and fast-check validation | [HAMT, FingerTree, Ordered, Tungsten, and Numerics](TypeScript/README.md#public-families) |
@@ -25,11 +26,12 @@ and TypeScript package all families into one language-local distribution.
 The benchmark-independent rollouts now ship one-descent persistent HAMT updates,
 `PersistentHashBag`, strict `PersistentBiMap`, neutral `PersistentOrderedSet` and `PersistentOrderedMap`, set-valued
 `PersistentHashMultimap`, bidirectional `PersistentRelation`, payload-bearing
-`PersistentIntervalMap`, the independently implemented implicit-AVL `RangeUpdateSequence`, and the
+`PersistentIntervalMap`, the law-gated `RangeUpdateSequence` family, and the
 current `PersistentOrderedMultimap`, `PersistentMapPatch`, `PersistentDirectedGraph`,
-`PersistentIndexedMap`, and `PersistentChunkedBitSet` tranche across all eight language roots. C#
+`PersistentIndexedMap`, and `PersistentChunkedBitSet` tranche across all nine language roots. C#
 owns the detailed managed contracts while siblings express the same semantics through language-local
-policies and ownership. Both complete serialized C# Debug and Release solution builds finish with
+policies and ownership; the OCaml API notes identify checkpoint implementations that do not inherit
+specialized sibling topology or complexity claims. Both complete serialized C# Debug and Release solution builds finish with
 zero warnings and zero errors, and both test gates pass 1,503/1,503. No benchmark was run, and
 measurements remain postponed until an isolated session. The
 [data-structure catalog](../docs/reference/data-structure-catalog.md#derived-persistent-maps-relations-and-sparse-bit-sets)
@@ -54,7 +56,7 @@ and the [navigation matrix](../docs/reference/navigation-matrix.md) for task-ori
   `src/CSharp/samples`, benchmarks under `src/CSharp/benchmarks`, and family docs under
   `src/CSharp/docs/<LibraryFamily>/`.
 - For other languages, add source workspaces under `src/<Language>/<LibraryFamily>/` unless the
-  language root already has a stronger native workspace convention. Python and TypeScript keep
+  language root already has a stronger native workspace convention. OCaml, Python, and TypeScript keep
   family modules inside one package workspace rather than creating separately built family roots.
 - Use `CSharp` and `Cpp` for path names; avoid `Cs`, `C#`, or `C++` in directory names.
 - Keep workspace-specific API, usage, validation, sample, benchmark, and test documentation inside that

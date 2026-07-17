@@ -53,7 +53,33 @@ let test_builder_and_transient_lifecycle () =
   let published = Persistent_hamt.Transient.persistent transient in
   Alcotest.(check (option string)) "published" (Some "four") (Persistent_hamt.find_opt 4 published);
   Alcotest.check_raises "consumed" Persistent_hamt.Transient_consumed (fun () ->
-      ignore (Persistent_hamt.Transient.count transient))
+      ignore (Persistent_hamt.Transient.count transient));
+  let set_source = Persistent_hash_set.of_list (int_policy ()) [ 1; 2 ] in
+  let set_session = Persistent_hash_set.Transient.create set_source in
+  Persistent_hash_set.Transient.add 3 set_session;
+  let set values = Persistent_hash_set.of_list (Persistent_hash_set.policy set_source) values in
+  Alcotest.(check bool)
+    "transient subset" true
+    (Persistent_hash_set.Transient.subset set_session (set [ 1; 2; 3; 4 ]));
+  Alcotest.(check bool)
+    "transient proper subset" true
+    (Persistent_hash_set.Transient.proper_subset set_session (set [ 1; 2; 3; 4 ]));
+  Alcotest.(check bool)
+    "transient superset" true
+    (Persistent_hash_set.Transient.superset set_session (set [ 1; 2 ]));
+  Alcotest.(check bool)
+    "transient proper superset" true
+    (Persistent_hash_set.Transient.proper_superset set_session (set [ 1; 2 ]));
+  Alcotest.(check bool)
+    "transient overlap" true
+    (Persistent_hash_set.Transient.overlaps set_session (set [ 3; 9 ]));
+  Alcotest.(check bool)
+    "transient equality" true
+    (Persistent_hash_set.Transient.equal set_session (set [ 1; 2; 3 ]));
+  let set_published = Persistent_hash_set.Transient.persistent set_session in
+  Alcotest.(check int) "set publication" 3 (Persistent_hash_set.count set_published);
+  Alcotest.check_raises "set relation after publication" Persistent_hamt.Transient_consumed
+    (fun () -> ignore (Persistent_hash_set.Transient.overlaps set_session (set [ 3 ])))
 
 let test_set_algebra () =
   let policy = int_policy () in

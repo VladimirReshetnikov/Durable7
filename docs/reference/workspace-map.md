@@ -7,7 +7,7 @@
 
 The repository is organized by programming language first. Native, Haskell, Kotlin, and Rust roots keep
 library-family directories directly under the language root. The C# root is a single managed solution
-with projects grouped by role; Python and TypeScript each package their family modules into one
+with projects grouped by role; OCaml, Python, and TypeScript each package their family modules into one
 language-local distribution:
 
 ```text
@@ -52,6 +52,14 @@ src/
 │   ├── FingerTree/
 │   ├── Hamt/
 │   └── Tungsten/
+├── OCaml/
+│   ├── README.md
+│   ├── dune-project
+│   ├── tools-data-structures.opam
+│   ├── lib/
+│   ├── docs/
+│   ├── tests/
+│   └── test.ps1
 ├── Python/
 │   ├── README.md
 │   ├── docs/
@@ -78,7 +86,7 @@ surface.
 Use the [source index](../../src/README.md) when browsing by language, or jump directly to the
 [C](../../src/C/README.md), [C++](../../src/Cpp/README.md), [C#](../../src/CSharp/README.md),
 [Haskell](../../src/Haskell/README.md), [Kotlin](../../src/Kotlin/README.md),
-[Python](../../src/Python/README.md), [Rust](../../src/Rust/README.md), or
+[OCaml](../../src/OCaml/README.md), [Python](../../src/Python/README.md), [Rust](../../src/Rust/README.md), or
 [TypeScript](../../src/TypeScript/README.md) language index.
 
 For the cross-language list of public library surfaces, see the
@@ -146,6 +154,7 @@ contract.
 | [`src/Haskell/Tungsten`](../../src/Haskell/Tungsten/README.md) | Haskell Tungsten `List` and `Association` port | `tools-data-structures-tungsten.cabal`, `src/Data/Structures/Tungsten/` | [`README`](../../src/Haskell/Tungsten/README.md) |
 | [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md) | Kotlin/JVM Tungsten `List` and `Association` port | `src/tools/datastructures/tungsten/`, `test/tools/datastructures/tungsten/` | [`README`](../../src/Kotlin/Tungsten/README.md) |
 | [`src/Rust/Tungsten`](../../src/Rust/Tungsten/README.md) | Safe Rust Tungsten `List` and `Association` crate | `Cargo.toml`, `src/lib.rs` | [`README`](../../src/Rust/Tungsten/README.md) |
+| [`src/OCaml`](../../src/OCaml/README.md) | Qualified Dune package covering Numerics, HAMT/Merkle, FingerTree/Range, neutral Ordered, and application-leaf Tungsten | `dune-project`, `tools-data-structures.opam`, `lib/`, `tests/`, `test.ps1` | [API notes](../../src/OCaml/docs/api-notes.md), [validation](../../src/OCaml/docs/validation.md), [tests](../../src/OCaml/tests/README.md) |
 | [`src/TypeScript`](../../src/TypeScript/README.md) | Strict TypeScript/ESM port of the current HAMT/FingerTree-derived/Range/Ordered/Numerics surfaces plus application-leaf Tungsten | `package.json`, `src/`, `test.ps1` | [API notes](../../src/TypeScript/docs/api-notes.md), [validation](../../src/TypeScript/docs/validation.md) |
 | [`src/Python`](../../src/Python/README.md) | Typed Python 3.11+ port of the current HAMT/FingerTree-derived/Range/Ordered/Numerics surfaces plus application-leaf Tungsten | `pyproject.toml`, `src/vladimir_reshetnikov/data_structures/`, `tests/`, `test.ps1` | [API notes](../../src/Python/docs/api-notes.md), [validation](../../src/Python/docs/validation.md), [tests](../../src/Python/tests/README.md) |
 
@@ -217,7 +226,7 @@ Range-update lineage:
    path-copied implicit-AVL node/tag invariant, indexed and range API, public struct enumerator,
    failure atomicity, and deterministic structural bounds. The exact contract is
    [range-update-sequence.md](../../src/CSharp/docs/FingerTree/range-update-sequence.md).
-2. C, C++, Haskell, Kotlin, Rust, TypeScript, and Python now ship language-local ports preserving
+2. C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml now ship language-local ports preserving
    the algebra laws, logical cached-measure invariant, composition direction, persistence,
    validation, and failure semantics through their native policy and ownership idioms.
 3. At the pre-bimap Range shipment checkpoint, both full serialized C# Debug and Release solution
@@ -226,7 +235,7 @@ Range-update lineage:
    configurations. No benchmark was run; measurements remain postponed for isolation.
 
 For the surrounding benchmark-independent tranches, single-pass HAMT updates,
-`PersistentHashBag`, strict `PersistentBiMap`, and `PersistentOrderedSet` now ship across all eight
+`PersistentHashBag`, strict `PersistentBiMap`, and `PersistentOrderedSet` now ship across all nine
 languages.
 
 Ordered-set lineage:
@@ -245,6 +254,8 @@ Ordered-set lineage:
 4. `src/C/Ordered`, `src/Cpp/Ordered`, `src/Haskell/Ordered`, `src/Kotlin/Ordered`, and
    `src/Rust/Ordered` complete the neutral sibling family through their language-local ownership
    models, never through Tungsten.
+5. `src/OCaml/lib/ordered` provides the same neutral family through OCaml persistent values and
+   retained policy records, with no dependency on `src/OCaml/lib/tungsten`.
 
 Tungsten collections lineage:
 
@@ -259,12 +270,12 @@ than by making another family depend on Tungsten.
    [derived structure catalog](derived-structure-catalog.md) case study, with the kernel-verified
    Tungsten ordering rules as the family-local fidelity spec.
 2. `src/Cpp/Tungsten`, `src/C/Tungsten`, `src/Haskell/Tungsten`, `src/Kotlin/Tungsten`,
-   `src/Rust/Tungsten`, `src/TypeScript`, and `src/Python` port the same public family to their language-local ownership and policy
+   `src/Rust/Tungsten`, `src/TypeScript`, `src/Python`, and `src/OCaml` port the same public family to their language-local ownership and policy
    models while preserving the substrate composition, sparse-stamp relabel behavior, and
    average/worst-case operation bounds.
 
-Numerics originates in `src/CSharp/src/Tools.Numerics`; `src/TypeScript/src/numerics` and
-`src/Python/src/vladimir_reshetnikov/data_structures/numerics` port the six fixed-width types,
+Numerics originates in `src/CSharp/src/Tools.Numerics`; `src/TypeScript/src/numerics`,
+`src/Python/src/vladimir_reshetnikov/data_structures/numerics`, and `src/OCaml/lib/numerics` port the six fixed-width types,
 binary/format semantics, `SparseInteger`, and `BitConverterEx` over their native arbitrary-precision
 integer substrates.
 

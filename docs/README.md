@@ -15,14 +15,14 @@ Library-specific design and API documentation lives beside each workspace under 
 - [Agent workflows](guides/agent-workflows.md) - compact task-conditional workflow guidance inherited from the Tools repository where relevant.
 - [Build and validation](guides/build-and-validation.md) - repository-wide validation matrix, exact build/test commands, CMake cache notes, and Markdown checks.
 - [Documentation maintenance](guides/documentation-maintenance.md) - documentation placement, writing standards, metadata, and validation.
-- [Porting and semantic parity](guides/porting-and-semantic-parity.md) - workflow for carrying behavior and documentation changes across C#, C++, C, Haskell, Kotlin, Rust, TypeScript, and Python workspaces.
+- [Porting and semantic parity](guides/porting-and-semantic-parity.md) - workflow for carrying behavior and documentation changes across C#, C++, C, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml workspaces.
 
 ## Reference
 
 - [Reference index](reference/README.md) - durable cross-workspace reference material.
-- [Data structure catalog](reference/data-structure-catalog.md) - cross-language catalog of repository-owned data-structure families, including the strict persistent bimap and the current five-structure derived tranche in all eight languages, public entry points, and primary references.
+- [Data structure catalog](reference/data-structure-catalog.md) - cross-language catalog of repository-owned data-structure families, including the strict persistent bimap and the current five-structure derived tranche in all nine languages, public entry points, and primary references.
 - [Derived structure catalog](reference/derived-structure-catalog.md) - historical verified composition survey with current disposition notes for the shipped bimap, ordered map, hash multimap/relation, and other facades, remaining candidates, and the distinction between Tungsten application evidence and independently owned general structures.
-- [Frontier structure catalog](reference/frontier-structure-catalog.md) - current-state record of shipped Axis 1/selected Axis 2 work, the eight-language implicit-AVL Range-update family, and remaining candidates beyond composition: new cores, hybrid/adaptive representation tiers, niche-specialized siblings, verdicts, and sequencing.
+- [Frontier structure catalog](reference/frontier-structure-catalog.md) - current-state record of shipped Axis 1/selected Axis 2 work, nine-language semantic coverage and OCaml checkpoint boundaries, and remaining candidates beyond composition: new cores, hybrid/adaptive representation tiers, niche-specialized siblings, verdicts, and sequencing.
 - [Documentation navigation matrix](reference/navigation-matrix.md) - task-oriented entry points for usage, API, validation, porting, history, and maintenance work.
 - [Semantic contracts](reference/semantic-contracts.md) - shared behavior, ownership, policy, ordering, and documentation obligations across repository-owned numerics and data structures.
 - [Test suite map](reference/test-suite-map.md) - cross-workspace map of test runners, routine commands, stress knobs, sample smoke tests, and benchmark boundaries.
@@ -31,9 +31,9 @@ Library-specific design and API documentation lives beside each workspace under 
 
 ## Proposals
 
-- [Benchmark-independent next data structures (2026-07-14)](proposals/benchmark-independent-next-structures-2026-07-14.md) - C#-first design and completed execution record: persistent-HAMT single-pass updates, `PersistentHashBag`, the independently owned neutral `PersistentOrderedSet`, and the algebra-law-gated implicit-AVL `RangeUpdateSequence` ship across all eight languages. Benchmarks were not run and remain postponed for an isolated session. Frozen layouts, size tiers, GUID specialization, and other evidence- or consumer-gated work remain parked.
+- [Benchmark-independent next data structures (2026-07-14)](proposals/benchmark-independent-next-structures-2026-07-14.md) - C#-first design and original eight-language execution record for persistent-HAMT single-pass updates, `PersistentHashBag`, the neutral `PersistentOrderedSet`, and `RangeUpdateSequence`; the later OCaml extension is indexed by the current catalogs. Benchmarks were not run and remain postponed for an isolated session.
 - [Benchmark-independent cross-language completion audit (2026-07-15)](reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md) - detailed per-language implementation, test, package-wiring, dependency-boundary, review-report, and serialized-validation evidence for the completed four-surface proposal.
-- [PersistentBiMap cross-language completion audit (2026-07-15)](reviews/persistent-bimap-cross-language-completion-2026-07-15.md) - detailed shared contract, language API/identity/ownership mappings, implementation locations, test evidence, validation lanes, storage boundary, and benchmark deferral for the strict eight-language bimap shipment.
+- [PersistentBiMap cross-language completion audit (2026-07-15)](reviews/persistent-bimap-cross-language-completion-2026-07-15.md) - detailed shared contract and evidence for the original strict eight-language bimap shipment; the OCaml extension is documented in the current catalog and OCaml test map.
 - [Axis 2 final plan: lifecycle and sequence cursors](proposals/axis2-lifecycle-and-sequence-cursors.md) - authoritative C#-first plan: a version-bound Rope/MeasuredRope cursor leads, while one-way CHAMP transients and a fixed-layout frozen hash tier advance independently through workload, representation, correctness, memory, and break-even gates; automatic size/key specialization remains deferred.
 - [Axis 2, cursor-first alternative (2026-07-13)](proposals/axis2-cursor-first-alternative-2026-07-13.md) - historical sequencing proposal incorporated into the final plan with corrections. It supplied cursor priority, a frozen signal gate, and branched-history scrutiny; its current-consumer, calendar-spike, transient-workload, and canonical-order claims are not the final contract.
 - [Next data structures (2026-07-09)](proposals/new-data-structures-2026-07-09.md) - historical, partially realized slate: structural HAMT equality/diff, Patricia, and the C# hash bag shipped; Axis 2 supersedes its cursor schedule, and the remaining builder/facade/numerics ideas require current catalog and consumer evidence.
@@ -82,3 +82,6 @@ TypeScript package API and validation notes live under
 Python package API and validation notes live under
 [src/Python/docs](../src/Python/docs/api-notes.md), with its pytest/Hypothesis test map under
 [src/Python/tests](../src/Python/tests/README.md).
+OCaml package API and validation notes live under
+[src/OCaml/docs](../src/OCaml/docs/api-notes.md), with its Alcotest/QCheck map under
+[src/OCaml/tests](../src/OCaml/tests/README.md).

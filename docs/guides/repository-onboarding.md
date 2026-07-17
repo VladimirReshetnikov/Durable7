@@ -27,7 +27,7 @@ idioms local while preserving family-level parity across languages.
 | Root | What is this repository, what workspaces exist, and how should agents work here? | [Root README](../../README.md), [AGENTS.md](../../AGENTS.md), [source index](../../src/README.md) |
 | Repository guides | How do I perform recurring repository tasks? | [Guides index](README.md), [validation](build-and-validation.md), [porting](porting-and-semantic-parity.md), [documentation maintenance](documentation-maintenance.md) |
 | Repository reference | What facts stay true across workspaces? | [Reference index](../reference/README.md), [workspace map](../reference/workspace-map.md), [catalog](../reference/data-structure-catalog.md), [contracts](../reference/semantic-contracts.md), [test suite map](../reference/test-suite-map.md) |
-| Workspace docs | What does this library expose, how is it used, and how is it validated? | `src/<Language>/<Family>/README.md`, `src/<Language>/<Family>/docs/`, `src/CSharp/docs/<Family>/`, or package-level `src/Python/docs/` and `src/TypeScript/docs/` |
+| Workspace docs | What does this library expose, how is it used, and how is it validated? | `src/<Language>/<Family>/README.md`, `src/<Language>/<Family>/docs/`, `src/CSharp/docs/<Family>/`, or package-level `src/Python/docs/`, `src/TypeScript/docs/`, and `src/OCaml/docs/` |
 | Local test docs | What tests exist and which behavior do they cover? | `tests/README.md` beside the affected workspace or project |
 | Migration docs | What happened during extraction or path rewriting? | [Migration index](../migration/README.md) |
 
@@ -149,7 +149,7 @@ what those documents prove is useful for maintainers.
 - Treat C# Tungsten as a baseline only for sibling Tungsten ports. General collections must fork
   useful mechanics and choose their contracts independently.
 - Treat C and C++ docs as authoritative for ownership, callback, RAII, and native build details.
-- Treat Haskell, Kotlin, Rust, TypeScript, and Python docs as authoritative for idiomatic result
+- Treat Haskell, Kotlin, Rust, TypeScript, Python, and OCaml docs as authoritative for idiomatic result
   shapes, persistent representation choices, and explicitly documented engine-level complexity
   differences.
 - Do not infer parity from similar names. Confirm the contract in the local API notes or source.
@@ -173,7 +173,7 @@ Validation:
 For skipped validation, say why:
 
 ```text
-Not run: C/C++/Rust/Haskell/Kotlin/TypeScript/Python builds, because this change only updates repository-level Markdown indexes and does not alter commands, source, or workspace contracts.
+Not run: C/C++/Rust/Haskell/Kotlin/TypeScript/Python/OCaml builds, because this change only updates repository-level Markdown indexes and does not alter commands, source, or workspace contracts.
 ```
 
 Avoid saying "all tests pass" unless every relevant command actually ran. Prefer exact commands and

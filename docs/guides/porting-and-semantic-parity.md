@@ -41,6 +41,7 @@ before extracting or generalizing a Tungsten mechanism.
 | Rust API notes under `src/Rust/*/docs` | Rust value semantics, `Result`/`Option` shape, Cargo validation, and checkpoint divergences. |
 | [TypeScript API notes](../../src/TypeScript/docs/api-notes.md) | Strict ESM value semantics, JavaScript runtime mappings, isolate-local concurrency, `bigint` numerics, and intentional engine differences. |
 | [Python API notes](../../src/Python/docs/api-notes.md) | Python 3.11+ naming and result shapes, measured-AVL checkpoints, lock-coordinated concurrency, Unicode-code-point text positions, and bigint-backed numerics. |
+| [OCaml API notes](../../src/OCaml/docs/api-notes.md) | OCaml module/functor shape, Zarith numerics, mutex-backed snapshots, Unicode-scalar text positions, and documented algorithmic checkpoint boundaries. |
 | [Data structure catalog](../reference/data-structure-catalog.md) | Cross-language inventory of public data-structure entry points. |
 | [Workspace map](../reference/workspace-map.md) | Port lineage, path conventions, and documentation placement. |
 | [Build and validation guide](build-and-validation.md) plus workspace validation guides | Commands that prove the affected workspaces still build and pass tests, and the local warning policy, coverage map, stress controls, benchmark boundary, and evidence wording for each workspace. |
@@ -73,15 +74,22 @@ HAMT lineage:
 8. [`src/Python`](../../src/Python/README.md) ports the contract to typed Python values with runtime
    `HashPolicy`, path-copy editing sessions, a lock-coordinated thread-safe snapshot facade, and
    Python-native exception/optional result shapes.
+9. [`src/OCaml`](../../src/OCaml/README.md) ports the contract to immutable OCaml values with explicit
+   runtime hash policies, path-copy editing sessions, mutex-backed snapshots, and `option`/`result`
+   miss and failure shapes.
 
-C#, TypeScript, and Python additionally expose one-descent persistent map factories and
-`PersistentHashBag`; TypeScript and Python expose reusable construction-only CHAMP bulk builders
-and all six transient-set relation predicates. C++ and Rust already expose their corresponding
+C#, TypeScript, Python, and OCaml additionally expose one-descent persistent map factories and
+`PersistentHashBag`; TypeScript and Python expose reusable construction-only CHAMP bulk builders,
+and TypeScript, Python, and OCaml expose all six transient-set relation predicates. C++ and Rust already expose their corresponding
 public construction-only builders. These staging builders are not editing sessions: they own
 unpublished mutable nodes, may be reused after freeze, and each frozen persistent snapshot must be
 detached from later builder mutation.
 
-The one-way CHAMP map/set editing lifecycle now exists in all eight workspaces. Preserve these shared
+OCaml's reusable `Bulk_builder` preserves detached freeze and representative semantics, but each
+edit currently delegates to the persistent path-copy kernel. It is a staging convenience and makes
+no unpublished-mutable-node or construction-throughput claim.
+
+The one-way CHAMP map/set editing lifecycle now exists in all nine workspaces. Preserve these shared
 semantics when changing it: O(1)-in-trie adoption and terminal publication, one logical owner,
 one-way consumption, exact policy and stored-representative preservation, retained-source
 isolation, unchanged-root identity after logical no-ops, receiver-policy set relations, and
@@ -89,7 +97,7 @@ failure-atomic point edits.
 
 Do not mechanically copy the C# representation claim into a sibling port. C# alone currently has
 the optimized owner-token kernel: it mutates token-owned nodes and path-copies shared/sealed nodes.
-C, C++, Haskell, Kotlin, Rust, TypeScript, and Python expose semantic lifecycle facades whose changed
+C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml expose semantic lifecycle facades whose changed
 point edits invoke the persistent path-copying kernel; their adoption/publication are O(1) in trie
 size, but they make no edit-throughput or allocation-win claim. Keep each language's lifecycle
 shape explicit:
@@ -106,8 +114,10 @@ shape explicit:
   prevention in ownership rather than a runtime consumed state.
 - TypeScript and Python reject post-publication access dynamically; their iterators capture a
   session version, survive logical no-ops, and reject subsequent content changes.
+- OCaml sessions expose the same terminal publication rule through an explicit consumed state;
+  changed edits retain the persistent path-copy kernel and make no owner-token performance claim.
 
-The policy-bound Merkle search tree is complete across all eight languages. Every port pins the
+The policy-bound Merkle search tree is complete across all nine languages. Every port pins the
 SHA-256 domain, key framing, empty digest, canonical `MST2` block bytes, seven verification budgets,
 `MSP2` point/range proofs, closure-pruned synchronization, and no-partial-result three-way merge.
 Language-local ownership and callback shapes differ—pure successor stores in Haskell, synchronized
@@ -117,11 +127,11 @@ every accepted/rejected trust-boundary input must remain cross-language compatib
 The Ctrie is an intentional parity exception. `ConcurrentHashTrie<TKey, TValue>` and its Kotlin/JVM
 counterpart are managed-runtime mutable structures whose lock-free indirection-node protocol relies
 on tracing garbage collection and offers O(1) immutable generation snapshots. TypeScript exposes a
-synchronous isolate-local facade without a cross-worker progress claim. Python exposes a thread-safe,
-lock-coordinated facade over persistent CHAMP roots: writes are serialized and snapshots remain O(1),
-but it is not the GCAS/RDCSS Ctrie and makes no lock-free claim. Keep observable map, generation,
+synchronous isolate-local facade without a cross-worker progress claim. Python and OCaml expose thread-safe,
+lock-coordinated facades over persistent CHAMP roots: writes are serialized and snapshots remain O(1),
+but neither is the GCAS/RDCSS Ctrie or makes a lock-free claim. Keep observable map, generation,
 snapshot, and stored-key contracts aligned while preserving those progress distinctions. Do not
-treat the absence of C, C++, Rust, or Haskell ports as drift: native versions require an explicit
+treat the absence of C, C++, Rust, or Haskell GCAS/RDCSS ports as drift: native versions require an explicit
 epoch/hazard-pointer reclamation design, while a pure Haskell port would be a different structure.
 Promoting another language requires a separately reviewed reclamation and concurrency contract, not
 a mechanical HAMT port.
@@ -139,16 +149,26 @@ mutable core `!Send` and `!Sync`. Treat these ownership/concurrency differences 
 semantics, not parity failures. A pure Haskell value would not preserve DABA's ephemeral incremental
 schedule, so omission there is intentional.
 
-The canonical zip-zip sorted set is a policy-canonical persistent member implemented in all eight
-languages. Every port derives a 32-byte HMAC key as SHA-256 of ASCII `ZZT2`
-followed by the public seed in big-endian order, feed an eight-byte big-endian equivalence-class hash to
-HMAC-SHA-256, and interpret the first three big-endian words as leading-zero geometric rank,
-unsigned secondary rank, and digest content. Preserve random-key and caller-keyed modes, the
+OCaml exposes the same FIFO aggregation operations and callback-failure atomicity as a semantic
+checkpoint, but its current immutable queue facade does not claim the specialized six-cursor
+schedule or worst-case callback bounds. Treat those missing performance guarantees as an explicit
+checkpoint boundary.
+
+The canonical sorted-set rank contract is implemented in all nine languages. Every port derives a
+32-byte HMAC key as SHA-256 of ASCII `ZZT2`
+followed by the public seed in big-endian order, feeds an eight-byte big-endian equivalence-class hash to
+HMAC-SHA-256, and interprets the first three big-endian words as leading-zero geometric rank,
+unsigned secondary rank, and digest content. The established zip-tree ports also preserve random-key and caller-keyed modes, the
 minimum 32-byte caller-key contract, comparer-smaller final priority tie, first-representative bulk
 semantics, policy-object identity for canonical algebra, and receiver-comparer semantics for
 cross-policy equality. A port must test exact rank vectors, unsigned secondary ordering,
 equivalence/hash incoherence, insertion-order-independent topology, deep colliding chains, and
 concurrent lazy-digest publication where the language exposes shared readers.
+
+OCaml reproduces the exact HMAC rank vectors and insertion-history-independent sorted contents, but
+its current public policy factory is seeded and its storage delegates to the persistent sorted-set
+facade. It therefore makes no random/caller-key factory, canonical zip-tree topology, lazy-digest
+publication, or zip-zip complexity claim.
 
 Rust deliberately admits natural factories only for explicitly pinned stable hash types; it does
 not inherit `DefaultHasher`, `usize`, or `isize` as reproducibility contracts. Its bulk/read/clear/
@@ -217,11 +237,15 @@ FingerTree lineage:
    substrates. It exposes deque/measured, sorted, priority, interval, canonical zip-zip, Brodal,
    priority-search, rope, and snapshot-plus-gap cursor surfaces; text positions count Python Unicode
    code points. Its mutable DABA Lite is single-threaded and separately documented.
+9. [`src/OCaml`](../../src/OCaml/README.md) ports the family through immutable measured sequences and
+   language-local derived facades, including Unicode-scalar text cursors. Its API notes identify
+   checkpoint implementations that preserve observable behavior without inheriting specialized
+   topology or worst-case bounds.
 
 Ordered-set lineage:
 
 This is a neutral general composition lineage, independent of the application-specific Tungsten
-family. The three ports compose public HAMT membership/stamp indexes with public persistent ordered
+family. The ports compose public HAMT membership/stamp indexes with public persistent ordered
 sequences and own their contracts, sparse-label mechanics, tests, and evolution separately.
 
 1. [C# Ordered](../../src/CSharp/docs/Ordered/overview.md) is the semantic reference for
@@ -233,9 +257,16 @@ sequences and own their contracts, sparse-label mechanics, tests, and evolution 
    from a stored `undefined`.
 3. [`src/Python`](../../src/Python/README.md) ports it to the neutral typed `ordered` module with
    named result objects and Python-native indexing and exception shapes.
+4. [`src/C/Ordered`](../../src/C/Ordered/README.md), [`src/Cpp/Ordered`](../../src/Cpp/Ordered/README.md),
+   [`src/Haskell/Ordered`](../../src/Haskell/Ordered/README.md),
+   [`src/Kotlin/Ordered`](../../src/Kotlin/Ordered/README.md), and
+   [`src/Rust/Ordered`](../../src/Rust/Ordered/README.md) provide the native and functional sibling ports.
+5. [`src/OCaml`](../../src/OCaml/README.md) ports the neutral ordered set, map, and grouped multimap
+   with persistent values, explicit movement, positional operations, stable sorting, and retained
+   first representatives.
 
 No Ordered port references a Tungsten package, type, source file, test oracle, or privileged API.
-Port Ordered changes among these three workspaces only when the general contract changes; do not
+Port Ordered changes among these neutral workspaces only when the general contract changes; do not
 propagate a kernel-driven Tungsten change into this lineage.
 
 Tungsten collections lineage:
@@ -258,6 +289,9 @@ refactoring Tungsten into a dependency.
 5. [`src/TypeScript`](../../src/TypeScript/README.md) and [`src/Python`](../../src/Python/README.md)
    port the same application-leaf `PersistentList`/`PersistentAssociation` vocabulary into their
    language-local packages.
+6. [`src/OCaml`](../../src/OCaml/README.md) ports that vocabulary into a separate application-leaf
+   library that depends on the general OCaml HAMT and FingerTree libraries; no dependency points
+   back from a general library into Tungsten.
 
 A port can still reveal a baseline bug. When that happens, fix or document the baseline contract
 first, then carry the corrected semantics through the sibling workspaces that expose the same
@@ -274,7 +308,7 @@ Check these items before calling a cross-language change complete:
 | Policy preservation | Are hash, equality, comparison, measure, ownership, and callback policies preserved across derived versions? |
 | Ordering | Are enumeration, sorted order, tie-breaking, rank, interval, rope, and text-boundary semantics equivalent where exposed? |
 | Failure behavior | Do duplicate-key, absent-key, empty-collection, invalid-rank, allocation, and callback failures match the documented contract? |
-| Ownership and lifetime | Are C# references, C++ values/shared nodes, C handle clone/destroy rules, Haskell immutable values, Kotlin/JVM references, Rust owned values/borrows/`Arc` sharing, JavaScript objects, and Python references all respected by examples and tests? |
+| Ownership and lifetime | Are C# references, C++ values/shared nodes, C handle clone/destroy rules, Haskell and OCaml immutable values, Kotlin/JVM references, Rust owned values/borrows/`Arc` sharing, JavaScript objects, and Python references all respected by examples and tests? |
 | Complexity and allocation | Do docs and tests protect the promised asymptotic shape and hot-path allocation behavior? |
 | Concurrency | Are immutable publication and family-specific reference-counting rules documented without overstating guarantees? |
 | Validation | Do tests cover the affected behavior in every touched workspace, including model or property tests when those are the relevant evidence? |
@@ -303,6 +337,11 @@ TypeScript and Python ports likewise preserve contracts with runtime-native shap
 results, and exceptions for Python. Neither runtime shape authorizes a stronger concurrency or
 owner-token performance claim than the local implementation proves.
 
+OCaml ports use module-qualified immutable values, `option` for ordinary miss paths, `result` for
+recoverable contract failures, first-class policy records, and explicit mutable handles only for
+transient or synchronized facades. Those shapes do not imply stronger topology, complexity, or
+progress guarantees than the OCaml API notes state.
+
 ## Change Workflow
 
 1. Locate the data-structure family in the [catalog](../reference/data-structure-catalog.md) and
@@ -326,7 +365,7 @@ owner-token performance claim than the local implementation proves.
 
 ## HAMT-Specific Checks
 
-For map/set changes, verify these contracts across C#, C++, C, Haskell, Kotlin, Rust, TypeScript, and Python where exposed:
+For map/set changes, verify these contracts across C#, C++, C, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml where exposed:
 
 - 32-way bitmap-indexed trie shape over 32 hash bits.
 - Immutable equal-hash collision buckets with linear equality probing.
@@ -369,6 +408,7 @@ Primary semantic docs:
 - [Rust HAMT API notes](../../src/Rust/Hamt/docs/api-notes.md)
 - [TypeScript API notes](../../src/TypeScript/docs/api-notes.md)
 - [Python API notes](../../src/Python/docs/api-notes.md)
+- [OCaml API notes](../../src/OCaml/docs/api-notes.md)
 
 Validation guides:
 
@@ -380,10 +420,11 @@ Validation guides:
 - [Rust HAMT validation](../../src/Rust/Hamt/docs/validation.md)
 - [TypeScript validation](../../src/TypeScript/docs/validation.md)
 - [Python validation](../../src/Python/docs/validation.md)
+- [OCaml validation](../../src/OCaml/docs/validation.md)
 
 ## FingerTree-Specific Checks
 
-For finger-tree-family changes, verify these contracts across the relevant C#, C++, C, Haskell, Kotlin, Rust, TypeScript, and Python surfaces:
+For finger-tree-family changes, verify these contracts across the relevant C#, C++, C, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml surfaces:
 
 - Tuned deque and general measured tree remain separate when the language exposes both.
 - Measure policies obey monoid identity and associativity assumptions used by split, locate, and
@@ -424,6 +465,7 @@ Primary semantic docs:
 - [Rust FingerTree API notes](../../src/Rust/FingerTree/docs/api-notes.md)
 - [TypeScript API notes](../../src/TypeScript/docs/api-notes.md)
 - [Python API notes](../../src/Python/docs/api-notes.md)
+- [OCaml API notes](../../src/OCaml/docs/api-notes.md)
 
 Validation guides:
 
@@ -435,10 +477,11 @@ Validation guides:
 - [Rust FingerTree validation](../../src/Rust/FingerTree/docs/validation.md)
 - [TypeScript validation](../../src/TypeScript/docs/validation.md)
 - [Python validation](../../src/Python/docs/validation.md)
+- [OCaml validation](../../src/OCaml/docs/validation.md)
 
 ## Ordered-Set-Specific Checks
 
-For `PersistentOrderedSet` changes, verify the shared general contract across all eight languages:
+For `PersistentOrderedSet` changes, verify the shared general contract across all nine languages:
 
 - neutral package ownership and a one-way dependency on public HAMT/FingerTree substrates, with no
   production, test, documentation-oracle, or privileged-access dependency on Tungsten;
@@ -470,6 +513,8 @@ Primary semantic and validation docs:
 - [TypeScript validation](../../src/TypeScript/docs/validation.md)
 - [Python API notes](../../src/Python/docs/api-notes.md)
 - [Python validation](../../src/Python/docs/validation.md)
+- [OCaml API notes](../../src/OCaml/docs/api-notes.md)
+- [OCaml validation](../../src/OCaml/docs/validation.md)
 - [Cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md)
 
 ## Validation Evidence

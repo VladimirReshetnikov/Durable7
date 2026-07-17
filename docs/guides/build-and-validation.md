@@ -50,6 +50,7 @@ entry points for unattended validation.
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | `.\test.ps1 -Workspace FingerTree` from `src/Rust` | [Validation](../../src/Rust/FingerTree/docs/validation.md) | [Tests](../../src/Rust/FingerTree/tests/README.md) | Safe Rust checkpoint crate with positional/measured/text cursor gap, measure, search, model, and overflow gates plus structurally shared storage and cached-measure tests across deque, reversible deque, sorted, priority, interval, rope, measured tree, measured rope, and text helpers |
 | [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten` from `src/Kotlin` | [README](../../src/Kotlin/Tungsten/README.md) | [Tests](../../src/Kotlin/Tungsten/test/tools/datastructures/tungsten/TungstenTests.kt) | Kotlin/JVM executable tests for Tungsten list and association semantics |
 | [`src/Rust/Tungsten`](../../src/Rust/Tungsten/README.md) | `.\test.ps1 -Workspace Tungsten` from `src/Rust` | [README](../../src/Rust/Tungsten/README.md) | [Source tests](../../src/Rust/Tungsten/src/lib.rs) | Safe Rust crate tests for Tungsten list and association semantics |
+| [`src/OCaml`](../../src/OCaml/README.md) | `opam exec -- dune build -j 1 @check @fmt @doc` then `opam exec -- dune runtest -j 1 --force` from `src/OCaml` | [Validation](../../src/OCaml/docs/validation.md) | [Tests](../../src/OCaml/tests/README.md) | Qualified package build with strict warnings, ocamlformat and odoc gates, plus 49 Alcotest/QCheck cases spanning every numerics and collection family |
 | [`src/TypeScript`](../../src/TypeScript/README.md) | `.\test.ps1` or `npm run validate` from `src/TypeScript` | [Validation](../../src/TypeScript/docs/validation.md) | [Tests](../../src/TypeScript/test/README.md) | Strict declaration checking; Vitest/fast-check coverage for one-descent HAMT factories, construction-only bulk building, hash bags, strict bimaps, complete transient-set relations, presence-safe rope-cursor peeks, and the neutral ordered set; exact `MST2`/`MSP2` vectors; ESM/declaration build; package surface |
 | [`src/Python`](../../src/Python/README.md) | `.\test.ps1` from `src/Python` | [Validation](../../src/Python/docs/validation.md) | [Tests](../../src/Python/tests/README.md) | Python 3.11+ Ruff and strict Mypy gates; pytest/Hypothesis coverage for one-descent HAMT factories, construction-only bulk building, hash bags, strict bimaps, complete transient-set relations, presence-safe rope-cursor peeks, and the neutral ordered set; exact `MST2`/`MSP2` vectors and all seven verification budgets; source/wheel builds, metadata checks, and installed-wheel smoke validation |
 
@@ -138,6 +139,22 @@ The launcher keeps pytest in its default single-process mode, disables its optio
 and pins Rayon, CMake helper builds, and Make-compatible helpers to one worker.
 See the [local validation guide](../../src/Python/docs/validation.md) and
 [test map](../../src/Python/tests/README.md).
+
+## OCaml Workspace
+
+```powershell
+cd C:\DataStructures\src\OCaml
+opam install . --deps-only --with-test --with-doc --with-dev-setup
+opam exec -- dune clean
+opam exec -- dune build -j 1 @check @fmt @doc
+opam exec -- dune runtest -j 1 --force
+```
+
+The OCaml package requires OCaml 4.14+, Dune 3.20+, Zarith, Digestif, and Uutf; Alcotest, QCheck,
+ocamlformat, and odoc supply the repository gates. The package and test flags enable strict warnings
+as errors. Keep `OPAMJOBS=1`, `DUNEJOBS=1`, and `-j 1`; the checked-in PowerShell launcher applies
+those controls and supports focused family names. See the [local validation guide](../../src/OCaml/docs/validation.md)
+and [test map](../../src/OCaml/tests/README.md).
 
 ## Rust Workspaces
 
@@ -354,7 +371,7 @@ For repository-owned Markdown links:
 $root = (Resolve-Path .).Path
 $files = rg --files -g '*.md' --glob '!src/CSharp/docs/FingerTree/external/**'
 $missing = New-Object System.Collections.Generic.List[string]
-$linkPattern = '!{0,1}\[[^\]]*\]\((?<target>[^)]+)\)'
+$linkPattern = '!{0,1}\[[^\]]+\]\((?<target>[^)]+)\)'
 foreach ($file in $files) {
     $full = Join-Path $root $file
     $text = [System.IO.File]::ReadAllText($full)

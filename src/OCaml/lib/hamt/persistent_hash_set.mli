@@ -28,6 +28,12 @@ module Transient : sig
   val create : 'element t -> 'element session
   val count : 'element session -> int
   val mem : 'element -> 'element session -> bool
+  val subset : 'element session -> 'element t -> bool
+  val proper_subset : 'element session -> 'element t -> bool
+  val superset : 'element session -> 'element t -> bool
+  val proper_superset : 'element session -> 'element t -> bool
+  val overlaps : 'element session -> 'element t -> bool
+  val equal : 'element session -> 'element t -> bool
   val add : 'element -> 'element session -> unit
   val remove : 'element -> 'element session -> unit
   val persistent : 'element session -> 'element t

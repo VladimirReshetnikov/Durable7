@@ -1,4 +1,4 @@
-(** Policy-canonical persistent sorted set with deterministic zip-tree ranks. *)
+(** Persistent sorted set with policy-canonical deterministic ranks. *)
 
 type rank = { geometric : int; secondary : int64; content : int64 }
 type 'element rank_policy

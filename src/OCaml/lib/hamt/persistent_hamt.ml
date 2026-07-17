@@ -281,6 +281,7 @@ module Transient = struct
 
   let count transient = count (active transient)
   let find_opt key transient = find_opt key (active transient)
+  let fold folder seed transient = fold folder seed (active transient)
   let set key value transient = transient.current <- Some (set key value (active transient))
   let remove key transient = transient.current <- Some (remove key (active transient))
 

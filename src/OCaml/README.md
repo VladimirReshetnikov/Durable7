@@ -28,8 +28,8 @@ general libraries only in that direction.
 
 ## Toolchain
 
-The workspace requires OCaml 4.14 or newer, Dune 3.20 or newer, Zarith, and Digestif. Alcotest and
-QCheck are test-only dependencies; odoc is the documentation dependency. The package constraints
+The workspace requires OCaml 4.14 or newer, Dune 3.20 or newer, Zarith, Digestif, and Uutf. Alcotest and
+QCheck are test-only dependencies; ocamlformat and odoc provide formatting and documentation gates. The package constraints
 are recorded in `tools-data-structures.opam`.
 
 ## Build And Test
@@ -37,10 +37,10 @@ are recorded in `tools-data-structures.opam`.
 From `src/OCaml`:
 
 ```powershell
-opam install . --deps-only --with-test --with-doc
-opam exec -- dune build -j 1
+opam install . --deps-only --with-test --with-doc --with-dev-setup
+opam exec -- dune clean
+opam exec -- dune build -j 1 @check @fmt @doc
 .\test.ps1
-opam exec -- dune build @doc -j 1
 ```
 
 Use `-Workspace Common`, `Numerics`, `Hamt`, `FingerTree`, `Ordered`, or `Tungsten` for a focused

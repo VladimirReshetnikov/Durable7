@@ -1,6 +1,6 @@
 # Frontier Structure Catalog
 
-- Status: Current-state catalog - shipped Axis 1 cores, completed eight-language benchmark-independent structures including the strict bimap facade, shipped C# Axis 2 C1/C2/C3/T2, cross-language cursor/session checkpoints, and remaining frontier candidates
+- Status: Current-state catalog - shipped Axis 1 cores, nine-language semantic families including OCaml checkpoints, shipped C# Axis 2 C1/C2/C3/T2, cross-language cursor/session checkpoints, and remaining frontier candidates
 - Created (UTC): 2026-07-11T03:31:23Z
 - Repository HEAD: f40e301e8faf26d748f33d8546d7d9216657301e
 - Audience: Maintainers and AI agents planning new repository-owned cores, representation tiers, and specialized sibling collections
@@ -14,7 +14,9 @@ candidates. Axis 2 now includes the shipped C# positional and measured rope curs
 Editor integration, measured/text semantic cursor checkpoints in every sibling language, the optimized C#
    one-way CHAMP transient, and semantic path-copying CHAMP editing sessions in every sibling language;
 frozen-hash and later phases remain planning material. Axis 3 now includes the shipped
-eight-language range-update family alongside still-unimplemented specialized candidates:
+range-update family across all nine languages alongside still-unimplemented specialized candidates.
+OCaml preserves the public semantics through a documented immutable-array checkpoint and does not
+inherit the eight established ports' implicit-AVL lazy-update bound:
 
 1. **New cores** - structures that need their own node layer, including several invented or refined
    in the last decade.
@@ -49,13 +51,20 @@ family (proposal Tier C1), the cursor/zipper (proposal A3), and the RRB vector (
 benchmark-first grounds). Patricia and RRB have since shipped across the language workspaces, and
 the positional cursor, measured/text cursor, sample integration, and CHAMP owner-token transients
 have shipped as C# Axis 2 C1, C2, C3, and T2. The one-way lifecycle has since gained semantic
-path-copying ports in C, C++, Haskell, Kotlin, Rust, TypeScript, and Python, and every sibling language now has positional,
+path-copying ports in C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml, and every sibling language now has positional,
 measured, and text snapshot-plus-gap cursor checkpoints without zipper or performance parity. The frozen tier and
 later cursor families remain planned. The cursor and the temporal-lifecycle work have a dedicated
 [Axis 2 final plan](../proposals/axis2-lifecycle-and-sequence-cursors.md), which is authoritative where
 its API, complexity, or sequencing detail differs from the older proposal. The entries below are
 the current-state record, while the 2026-07-09 proposal remains useful historical scheduling
 context.
+
+**OCaml checkpoint (2026-07-17).** `src/OCaml` adds the ninth-language public surfaces for CHAMP,
+Patricia, authenticated Merkle storage, RRB/vector operations, canonical ranking, heap and
+priority-search operations, DABA aggregation, Range updates, and positional/measured/text cursors.
+The exact semantic and wire contracts are tested locally. The [OCaml API notes](../../src/OCaml/docs/api-notes.md)
+separately identify storage checkpoints that do not claim the established ports' RRB, zip-tree,
+Brodal, winner-cached, DABA six-cursor, or implicit-AVL complexity and topology guarantees.
 
 Verdicts use the derived catalog's scale:
 
@@ -73,22 +82,22 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 
 | Structure or strategy | Axis | Verdict / status | Depends on | Rough size |
 | --- | --- | --- | --- | --- |
-| CHAMP canonicalization + structural equality/diff | 1 | Strong (canonical core and equality/diff semantics implemented across all eight languages; Python uses semantic lookup rather than lockstep descendant pruning) | Completed with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
-| `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all eight languages) | Completed as proposal Tier C1 | 1 shared core, 4 C# public types, structural map/set algebra |
-| DABA Lite sliding-window aggregator | 1, 3 | Strong (implemented in every applicable language: C#, C, C++, Kotlin/JVM, Rust, TypeScript, and Python; pure Haskell is not applicable) | Reuses the language's monoid abstraction | 1 small type, ~8 members |
-| Merkle search tree | 1 | Strong (implemented completely across all eight languages) | Deterministic wire + bounded verification | Largest single item in this catalog |
-| RRB vector | 1 | Plausible (implemented across all eight languages; evaluation remains benchmark-gated) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
-| Zip tree (canonical sorted set) | 1, 3 | Plausible (implemented across all eight languages) | Completed: coherent keyed rank policy | 1 new core, set facade |
-| Brodal-Okasaki heap | 1 | Plausible (implemented across all eight languages for the real-time niche) | Completed: invariant and operation-bound audit | 1 new core, small surface |
-| Priority search queue (winner-cached AVL) | 1 | Plausible (implemented across all eight languages) | Completed as a direct core rather than the addressable composition | 1 new core |
-| Ctrie (concurrent, O(1) snapshot) | 1 | Lock-free managed tier in C# + Kotlin/JVM; synchronous snapshot facades in TypeScript and Python | Tracing GC; native lock-free ports require reclamation design | 1 new core, concurrency test tier |
+| CHAMP canonicalization + structural equality/diff | 1 | Strong (semantics implemented across all nine languages; local traversal/pruning distinctions are documented) | Completed with proposal item A2 (HAMT diff) | Node-layer rewrite + 2 public ops + equality benchmark suite |
+| `PersistentIntMap` / `PersistentIntSet` (Patricia) | 1 | Strong (implemented across all nine languages) | Completed as proposal Tier C1 | 1 shared core, 4 C# public types, structural map/set algebra |
+| DABA Lite sliding-window aggregator | 1, 3 | Strong in the eight established applicable ports; OCaml adds the FIFO semantic facade without the specialized callback bounds; pure Haskell is not applicable | Reuses the language's monoid abstraction | 1 small type, ~8 members |
+| Merkle search tree | 1 | Strong (implemented completely across all nine languages) | Deterministic wire + bounded verification | Largest single item in this catalog |
+| RRB vector | 1 | Plausible (public vector surface in all nine languages; OCaml's initial array facade makes no RRB-topology claim) | Benchmark vs `Rope<T>` random access | 1 new core, transient tier |
+| Zip tree (canonical sorted set) | 1, 3 | Plausible (exact keyed rank contract in all nine; OCaml's initial sorted-set storage makes no zip-tree claim) | Completed: coherent keyed rank policy | 1 new core, set facade |
+| Brodal-Okasaki heap | 1 | Plausible (public heap surface in all nine; OCaml's initial facade makes no real-time bound claim) | Completed in specialized ports: invariant and operation-bound audit | 1 new core, small surface |
+| Priority search queue (winner-cached AVL) | 1 | Plausible (public surface in all nine; local topology and pruning claims remain implementation-specific) | Completed in specialized ports as a direct core | 1 new core |
+| Ctrie (concurrent, O(1) snapshot) | 1 | Lock-free managed tier in C# + Kotlin/JVM; synchronous or mutex-backed snapshot facades in TypeScript, Python, and OCaml | Tracing GC; native lock-free ports require reclamation design | 1 new core, concurrency test tier |
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
 | Size-tiered small representations | 2 | Strong, explicitly postponed | Re-entry benchmark after the Axis 2 fixed-layout evidence decision | Internal tier per selected facade + representation-forcing tests |
-| Transient -> persistent -> frozen lifecycle | 2 | C# CHAMP T2 owner-token transient and semantic path-copying sibling sessions implemented; frozen map/set tier remains unshipped and evidence-gated | T0/T1/T2 complete for the optimized transient; sibling lifecycle ports complete; postponed F0 then F1 evidence must precede F2 | Shipped map/set sessions across eight languages + planned frozen map/set types |
-| Version-bound cursor / zipper | 2, 3 | C1 positional cursor, C2 measured/text cursor, and C3 samples implemented in C#; positional/measured/text semantic checkpoints shipped in every sibling language; C4 consumer-gated | C0 selected the C# readonly-struct zipper-as-version; sibling checkpoints reuse persistent rope path copying without its complexity claim | C# positional/measured cursors and Tour/Editor integration plus C/C++/Haskell/Kotlin/Rust/TypeScript/Python semantic facades |
+| Transient -> persistent -> frozen lifecycle | 2 | C# CHAMP T2 owner-token transient and semantic path-copying sibling sessions implemented; frozen map/set tier remains unshipped and evidence-gated | T0/T1/T2 complete for the optimized transient; sibling lifecycle ports complete; postponed F0 then F1 evidence must precede F2 | Shipped map/set sessions across nine languages + planned frozen map/set types |
+| Version-bound cursor / zipper | 2, 3 | C1 positional cursor, C2 measured/text cursor, and C3 samples implemented in C#; positional/measured/text semantic checkpoints shipped in every sibling language; C4 consumer-gated | C0 selected the C# readonly-struct zipper-as-version; sibling checkpoints reuse persistent rope path copying without its complexity claim | C# positional/measured cursors and Tour/Editor integration plus C/C++/Haskell/Kotlin/Rust/TypeScript/Python/OCaml semantic facades |
 | Key-type-specialized map factories | 2 | Plausible, explicitly postponed | Named consumer after explicit Patricia consideration | Factory layer; ART only if independently justified |
 | Self-adjusting (splay-style) structures | 2 | Reject | - | Reads allocate under path copying; cursors + freeze substitute |
-| Range-update sequence (lazy propagation) | 3 | Strong (C# implicit-AVL reference and all seven sibling ports shipped) | Lawful range-update tag action | Eight language-local cores + algebra/property/model/invariant tests |
+| Range-update sequence (lazy propagation) | 3 | Strong (C# implicit-AVL reference, seven specialized sibling ports, and the OCaml semantic checkpoint ship) | Lawful range-update tag action | Nine language-local surfaces + algebra/property/model/invariant tests; OCaml makes no lazy-update bound claim |
 | Order-maintenance list | 3 | Plausible | Named general precedes-query consumer | 1 independently owned public type; Tungsten stamps are provenance only |
 | Persistent chunked bitset | 3 | Plausible | - (tree-only form per derived catalog follow-up) | 1 facade over measured tree |
 | Styled-text rope | 3 | Sample, not family | Range-update sequence (or interval runs) | Composition sample + docs |
@@ -150,8 +159,9 @@ the selected branch, retain stored key representatives, and publish no partial r
 multiplicity and receiver-policy contracts. TypeScript retains the
 established structural/reference-pruning checkpoint. Python deliberately performs semantic
 lookup-based equality and diff, including exact-policy fast paths, but does not claim the sibling
-ports' lockstep descendant-pruning optimization. The canonical CHAMP core and public semantics are
-therefore implemented across all eight repository languages; that optimization is not universal.
+ports' lockstep descendant-pruning optimization. OCaml adds an immutable 32-way CHAMP and the same
+public semantics, bringing the repository total to nine languages; descendant-pruning optimization
+remains implementation-specific.
 
 **What it is.** CHAMP (Compressed Hash-Array Mapped Prefix-tree; Steindorfer & Vinju, OOPSLA 2015)
 is a refinement of Bagwell's HAMT with two changes that matter here:
@@ -970,7 +980,7 @@ consumed state and expose lifecycle/iterator failures through status codes; C++ 
 move-only, terminally invalidate affected sessions after a throwing policy move, and document the
 separate publication caveat; Haskell sessions
 live in `IO`; Kotlin checks consumption dynamically and binds views to session versions; Rust uses
-consuming ownership for publication; TypeScript and Python consume sessions dynamically and reject
+consuming ownership for publication; TypeScript, Python, and OCaml consume sessions dynamically and reject
 stale version-bound iterators after mutation or publication.
 
 The first frozen types are separate `FrozenHashMap<TKey, TValue>` and `FrozenHashSet<T>` types with
@@ -1000,7 +1010,7 @@ all postponed. Benchmarks may contain tiny and string datasets, but those are wo
 permission to select a representation. This isolates the value of the temporal lifecycle before
 combining it with size or key specialization.
 
-**Verdict: CHAMP editing sessions are implemented across all eight languages; only C# claims the
+**Verdict: CHAMP editing sessions are implemented across all nine languages; only C# claims the
 owner-token optimization, and the frozen tier remains a strong evidence-gated candidate.** The
 independent C1 cursor, T2 transient, and sibling semantic-session shipments do not clear Track F.
 Advance F only through
@@ -1011,7 +1021,7 @@ not authorize sibling frozen types or a claim of owner-token edit performance.
 
 ### Cursor / zipper over the sequence family
 
-**Status (2026-07-15): C# C1, C2, and C3 are shipped; C, C++, Haskell, Kotlin, Rust, TypeScript, and Python have
+**Status (updated 2026-07-17): C# C1, C2, and C3 are shipped; C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml have
 positional and measured/text semantic checkpoints.**
 `Rope<T>.GetCursor(position)` and the public
 readonly `RopeCursor<T>` implement the positional version-bound gap cursor.
@@ -1020,14 +1030,14 @@ readonly `RopeCursor<T>` implement the positional version-bound gap cursor.
 `MeasuredRopeCursor<T, TMeasure, TMeasureOps>`. The Tour retains measured cursor versions for
 undo/redo, and the Editor demonstrates a sixteen-edit local Unicode/line/branch history. C4 cursor
 adapters remain consumer-gated. C `ft_rope_cursor`, C++ `rope_cursor<T>`, Haskell `RopeCursor a`, plus Kotlin, Rust,
-TypeScript, and Python `RopeCursor<T>` preserve
+TypeScript, Python, and OCaml rope cursors preserve
 the positional gap, immutable branching, unconditional replacement, and retained-snapshot semantics
 through root-sharing snapshot-plus-position facades. C `ft_measured_rope_cursor`, C++ `measured_rope_cursor<T, MeasurePolicy>`,
 Haskell `MeasuredRopeCursor v a`, Kotlin `MeasuredRopeCursor<T, M>`, Rust
-`MeasuredRopeCursor<T, P>`, and the TypeScript and Python `MeasuredRopeCursor<T, M>` checkpoints add ordered before/after measures
+`MeasuredRopeCursor<T, P>`, and the TypeScript, Python, and OCaml measured checkpoints add ordered before/after measures
 and absolute prefix search over their existing measured checkpoint cores. Their `TextRopeCursor`
 surfaces retain the existing text helpers with byte-oriented C/C++, `Char`-element Haskell, UTF-16
-Kotlin and TypeScript, Unicode-scalar Rust, and Python Unicode-code-point positions. They deliberately do not claim the C# zipper
+Kotlin and TypeScript, Unicode-scalar Rust and OCaml, and Python Unicode-code-point positions. They deliberately do not claim the C# zipper
 representation or its focus-local complexity. The
 [Axis 2 final cursor plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) remains normative for
 the unshipped phases, while the [C0 decision record](../../src/CSharp/docs/FingerTree/rope-cursor-c0-decision.md)
@@ -1178,7 +1188,7 @@ until a consumer and benchmark justify them.
 **Verdict: C1, C2, and C3 implemented; C4 remains consumer-gated.** The
 positional and measured cursors separately cleared their named local-edit, query, allocation,
 callback, and validation gates; the samples lock retained-history, branch, coordinate, and
-cadence-sixteen transcripts. The C, C++, Haskell, Kotlin, Rust, TypeScript, and Python positional/measured/text
+cadence-sixteen transcripts. The C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml positional/measured/text
 checkpoints add semantic behavior parity without asserting zipper or
 benchmark parity. Those results do not
 pre-approve later sequence adapters or a broader branched-history complexity claim.
@@ -1269,7 +1279,9 @@ remain postponed until the machine can run them in isolation.
 **Parity status.** The C, C++, Haskell, Kotlin, Rust, TypeScript, and Python Range ports ship with
 the same algebra and logical invariants expressed through language-local policy, ownership,
 failure, and iteration idioms. They are separate implicit-AVL cores rather than inferred facades
-over the existing measured-tree engines.
+over the existing measured-tree engines. OCaml ships the same public algebra and persistence
+semantics through an immutable-array checkpoint and explicitly makes no implicit-AVL or logarithmic
+lazy-update claim.
 
 **Verdict: Strong (C# reference and sibling parity shipped).** This remains the most
 differentiating specialized core in the catalog after CHAMP.
@@ -1370,27 +1382,29 @@ New rules this survey adds to the derived catalog's seven:
 The implementation wave described by this catalog has already landed these reference and port surfaces:
 
 - CHAMP canonical nodes plus structural equality/diff;
-- eight-language persistent CHAMP `GetOrAdd`/`AddOrUpdate` counterparts with one hash,
+- nine-language persistent CHAMP `GetOrAdd`/`AddOrUpdate` counterparts with one hash,
   one descent, deterministic factory selection, representative retention, and callback-failure
   atomicity;
 - public reusable construction-only CHAMP bulk builders in C++, Rust, TypeScript, and Python (the
   C# canonical range path keeps its equivalent staging builder internal), with detached frozen
   snapshots and first-key/last-distinct-value representative rules;
-- `PersistentHashBag` facades across all eight languages with separate distinct/total
+- the OCaml reusable staging builder, whose detached freezes preserve the same representatives but
+  whose edits remain persistent path copies and carry no unpublished-node performance claim;
+- `PersistentHashBag` facades across all nine languages with separate distinct/total
   cardinalities and receiver-policy multiset algebra;
-- strict `PersistentBiMap` facades across all eight languages, composing independent forward and
+- strict `PersistentBiMap` facades across all nine languages, composing independent forward and
   inverse CHAMP roots with two-domain uniqueness, non-displacing replacement, symmetric removal,
   failure atomicity, and O(1)-in-pair-count inversion, as recorded by the
   [completion audit](../reviews/persistent-bimap-cross-language-completion-2026-07-15.md);
-- neutral, independently owned `PersistentOrderedSet` packages across all eight languages,
+- neutral, independently owned `PersistentOrderedSet` packages across all nine languages,
   composing public HAMT/FingerTree substrates without a Tungsten dependency or semantic oracle;
-- the C# implicit-AVL `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` reference, all seven
-  language-local sibling ports, and their lawful range-action contracts, with persistent indexed edits,
-  logarithmic range updates/queries, cached logical measures, and lazy-tag invariants;
+- the C# implicit-AVL `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` reference, seven
+  specialized sibling ports, and the OCaml immutable-array semantic checkpoint. All preserve lawful
+  range-action contracts and persistent indexed edits; OCaml does not claim logarithmic lazy updates;
 - the C# `PersistentHashMap<TKey, TValue>.Transient` and `PersistentHashSet<T>.Transient` one-way
   owner-token editing sessions;
-- semantic one-way CHAMP map/set editing sessions in C, C++, Haskell, Kotlin, Rust, TypeScript, and Python, retaining
-  persistent path-copy costs, with TypeScript and Python now exposing all six transient-set relation
+- semantic one-way CHAMP map/set editing sessions in C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml, retaining
+  persistent path-copy costs, with TypeScript, Python, and OCaml exposing transient-set relation
   predicates;
 - 32-bit and 64-bit Patricia maps and sets;
 - `RrbVector<T>`;
@@ -1403,30 +1417,31 @@ The implementation wave described by this catalog has already landed these refer
 - the Axis 2 C1 positional `RopeCursor<T>` and C2 measured/text
   `MeasuredRopeCursor<T, TMeasure, TMeasureOps>` in C#, plus C `ft_rope_cursor`/`ft_measured_rope_cursor`/
   `ft_text_rope_cursor`, C++ `rope_cursor<T>`,
-  Haskell `RopeCursor a`, and Kotlin/Rust/TypeScript/Python `RopeCursor<T>` snapshot-plus-gap positional semantic checkpoints,
+  Haskell `RopeCursor a`, and Kotlin/Rust/TypeScript/Python/OCaml snapshot-plus-gap positional semantic checkpoints,
   with C++ `measured_rope_cursor<T, MeasurePolicy>`/`text_rope_cursor`, Haskell
   `MeasuredRopeCursor v a`/`TextRopeCursor`, Kotlin
   `MeasuredRopeCursor<T, M>`/`TextRopeCursor`, and Rust
   `MeasuredRopeCursor<T, P>`/`TextRopeCursor` measured/text checkpoints, plus the corresponding
-  TypeScript and Python `MeasuredRopeCursor<T, M>`/`TextRopeCursor` surfaces, including
+  TypeScript, Python, and OCaml measured/text cursor surfaces, including
   presence-safe entry peeks and unconditional measured replacement callbacks.
 
 CHAMP, Patricia, and RRB have also advanced through the sibling-language work recorded in their
-entries; the canonical zip-zip set, Brodal-Okasaki heap, and priority-search queue are implemented
-across all eight languages, and DABA Lite now exists in every applicable imperative
-language (C#, C, C++, Kotlin/JVM, Rust, TypeScript, and Python). The lock-free Ctrie's deliberate parity
+entries; canonical rank, heap, and priority-search surfaces are implemented across all nine languages,
+with OCaml's specialized topology and complexity boundaries documented locally. DABA Lite's semantic
+surface also exists in OCaml, while the established specialized core remains in the applicable
+imperative ports. The lock-free Ctrie's deliberate parity
 boundary remains C# and Kotlin/JVM; TypeScript exposes only an isolate-local synchronous facade,
-while Python exposes an `RLock`-coordinated persistent-root facade.
-The Merkle search tree's full trust-boundary tier is complete across all eight languages under the
+while Python and OCaml expose mutex-coordinated persistent-root facades.
+The Merkle search tree's full trust-boundary tier is complete across all nine languages under the
 same seven verification budgets.
-The one-way CHAMP editing lifecycle now spans all eight languages; the owner-token in-place-edit
+The one-way CHAMP editing lifecycle now spans all nine languages; the owner-token in-place-edit
 optimization and its performance evidence remain C#-only. These are current-state implementation
 records, not candidates awaiting a consumer.
 Future work on the already cross-language Axis 1 cores is ordinary hardening and isolated
 measurement. The benchmark-independent parity bill is complete: single-pass HAMT updates, hash
-bags, strict bimaps, neutral ordered sets, and Range now ship across all eight languages. The
-C/C++/Haskell/Kotlin/Rust/TypeScript/Python checkpoints make no zipper or focus-local complexity claim; measured/text
-cursor parity now spans all eight languages. The cursor's C4
+bags, strict bimaps, neutral ordered sets, and Range now ship across all nine languages. The
+C/C++/Haskell/Kotlin/Rust/TypeScript/Python/OCaml checkpoints make no zipper or focus-local complexity claim; measured/text
+cursor parity now spans all nine languages. The cursor's C4
 extensions retain the separate status recorded in its entry above.
 
 ### Remaining candidate sequencing
@@ -1444,7 +1459,7 @@ remaining work is sequenced as follows:
 2. **T2's optimized kernel is shipped in C#, and semantic sessions are shipped across the sibling
    languages:** T0 qualified the clustered many-edit regime, T1 selected the direct separate-node
    owner-token kernel, and T2 published the C# one-way CHAMP map/set transient after lifecycle,
-   failure, retained-memory, and API-shape gates. C, C++, Haskell, Kotlin, Rust, TypeScript, and Python port the
+   failure, retained-memory, and API-shape gates. C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml port the
    lifecycle through persistent path copying without inheriting the performance claim.
 3. **C2 is shipped:** the measured/text cursor cleared its measure-law, failure/race, text-helper,
    callback, allocation, dirty-query, and measured-workload gates.
@@ -1458,8 +1473,9 @@ remaining work is sequenced as follows:
    Advance F2 only if one general C# frozen hash layout clears the named lookup, enumeration,
    retained-memory, construction, and break-even gates; evaluate F3 Ctrie snapshot conversion only
    after that C# frozen contract ships.
-7. **Range-update sequence C# reference is shipped:** port its law-gated implicit-AVL contract to
-   C, C++, Haskell, Kotlin, Rust, TypeScript, and Python. It is not a cursor prerequisite; the later
+7. **Range-update sequence family is shipped:** seven sibling languages port the law-gated
+   implicit-AVL contract and OCaml ports the semantics through its documented checkpoint. It is not
+   a cursor prerequisite; the later
    styled-text sample depends on both tracks.
 8. **Order-maintenance list** and **persistent chunked bitset**, each only for a concrete general
    client not served by existing composition; Tungsten remains evidence rather than a substrate or
@@ -1520,7 +1536,8 @@ catalog's summary alone.
 - [Benchmark-independent next data structures (2026-07-14)](../proposals/benchmark-independent-next-structures-2026-07-14.md) -
   the detailed C#-first execution proposal whose persistent-HAMT single-pass update, hash-bag
   facade, independently owned ordered-set composite, and algebra-law-gated implicit-AVL Range core
-  now ship across all eight languages. This work advanced without benchmark evidence, and
+  shipped across the original eight-language audit and now extend to the OCaml semantic port. This
+  work advanced without benchmark evidence, and
   measurements remain postponed for isolation.
 - [Cross-language completion audit (2026-07-15)](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md) -
   the per-language source, test, dependency, review-status, and validation evidence for the
