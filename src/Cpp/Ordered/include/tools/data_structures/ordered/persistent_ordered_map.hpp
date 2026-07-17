@@ -428,8 +428,18 @@ public:
             return *this;
         }
         auto entries = order_.to_vector();
-        std::stable_sort(entries.begin(), entries.end(), [&](const entry& left, const entry& right) {
-            return std::invoke(compare, item_of(left), item_of(right));
+        // The private stamp is the current-order ordinal, so it is an exact
+        // decoration for stable ties. Using it with std::sort also avoids old
+        // libstdc++ implementations whose std::stable_sort instantiates the
+        // deprecated get_temporary_buffer API under newer Clang versions.
+        std::sort(entries.begin(), entries.end(), [&](const entry& left, const entry& right) {
+            if (std::invoke(compare, item_of(left), item_of(right))) {
+                return true;
+            }
+            if (std::invoke(compare, item_of(right), item_of(left))) {
+                return false;
+            }
+            return left.stamp < right.stamp;
         });
         for (auto index = size_type{0}; index != entries.size(); ++index) {
             if (entries[index].stamp != order_[index].stamp) {

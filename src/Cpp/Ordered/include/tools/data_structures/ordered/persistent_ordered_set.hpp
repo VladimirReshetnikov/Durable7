@@ -441,8 +441,17 @@ public:
         }
 
         auto entries = order_.to_vector();
-        std::stable_sort(entries.begin(), entries.end(), [&](const entry& left, const entry& right) {
-            return std::invoke(compare, item_of(left), item_of(right));
+        // Stamps increase in the collection's current explicit order. They
+        // therefore provide the stable tie-break without relying on older
+        // libstdc++ std::stable_sort internals deprecated by newer Clang.
+        std::sort(entries.begin(), entries.end(), [&](const entry& left, const entry& right) {
+            if (std::invoke(compare, item_of(left), item_of(right))) {
+                return true;
+            }
+            if (std::invoke(compare, item_of(right), item_of(left))) {
+                return false;
+            }
+            return left.stamp < right.stamp;
         });
 
         auto unchanged = true;

@@ -34,8 +34,11 @@ private:
     using reverse_type = persistent_hash_multimap<
         Right, Left, RightHash, RightEqual, LeftHash, LeftEqual>;
 
-    template <class, class, class, class, class, class>
-    friend class persistent_relation;
+    // Only the swapped specialization needs the private root-adopting constructor.
+    // Friending the unconstrained primary template is not a matching redeclaration
+    // of this constrained template (and Clang correctly rejects it).
+    friend class persistent_relation<
+        Right, Left, RightHash, RightEqual, LeftHash, LeftEqual>;
 
 public:
     using value_type = std::pair<Left, Right>;
