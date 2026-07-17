@@ -118,5 +118,13 @@ lookups and replacements. The facades own insertion, final-index movement, posit
 reversal, stable one-shot sorting, receiver-policy set algebra, independent key/value policies, and
 nested value movement. These modules depend only on general repository code and never on Tungsten.
 
-Each remaining collection-family checkpoint adds its public modules and corresponding focused tests
-before the repository-level indexes claim that family as shipped.
+The application-leaf Tungsten layer adds `Persistent_list` over the general deque and
+`Persistent_association` with its kernel-specific ordering rules. Association replacement retains
+the stored key and position; append/prepend deliberately move an existing class and adopt the
+caller representative; indexed insertion adjusts its target after removing an earlier occurrence.
+Join, key selection, ranges, reversal, and stable key/value sorting follow the same sibling contract.
+No general module imports this leaf namespace.
+
+All repository-owned collection and numerics families now have OCaml modules and focused tests in
+this workspace. Repository-level navigation and validation documents identify any language-local
+implementation distinctions and the exact commands used to validate the port.
