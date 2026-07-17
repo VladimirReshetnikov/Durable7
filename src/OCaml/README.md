@@ -47,6 +47,11 @@ Use `-Workspace Common`, `Numerics`, `Hamt`, `FingerTree`, `Ordered`, or `Tungst
 test run. The launcher enforces one opam/Dune job and imports the repository's noninteractive test
 failure handling.
 
-The current scaffold validates the retained policy layer. Each collection-family checkpoint adds
-its public modules and corresponding focused tests before the repository-level indexes claim that
-family as shipped.
+The shipped numerics modules expose `UInt256`/`Int256`, `UInt512`/`Int512`,
+`UInt1024`/`Int1024`, `Bit_converter_ex`, and non-negative `Sparse_integer` values. The fixed-width
+modules preserve modulo arithmetic, checked overflow, signed truncating division, width-constrained
+bit operations, and exact 32/64/128-byte two's-complement conversion. Zarith is an implementation
+substrate only; the public fixed-width contract never widens at runtime.
+
+Each remaining collection-family checkpoint adds its public modules and corresponding focused tests
+before the repository-level indexes claim that family as shipped.
