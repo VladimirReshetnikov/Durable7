@@ -219,6 +219,58 @@ let test_indexed_map () =
     "removed group empty" 0
     (Persistent_hash_set.count (Persistent_indexed_map.keys_for_index "c" removed))
 
+let test_patricia_maps_and_sets () =
+  let map =
+    Persistent_patricia.Int32_map.empty
+    |> Persistent_patricia.Int32_map.add Int32.min_int "minimum"
+    |> Persistent_patricia.Int32_map.add 0l "zero"
+    |> Persistent_patricia.Int32_map.add Int32.max_int "maximum"
+    |> Persistent_patricia.Int32_map.add (-1l) "minus-one"
+  in
+  Alcotest.(check int) "int32 count" 4 (Persistent_patricia.Int32_map.count map);
+  Alcotest.(check (option string))
+    "high-bit lookup" (Some "minimum")
+    (Persistent_patricia.Int32_map.find_opt Int32.min_int map);
+  let removed = Persistent_patricia.Int32_map.remove 0l map in
+  Alcotest.(check bool) "source retained" true (Persistent_patricia.Int32_map.mem 0l map);
+  Alcotest.(check bool) "removed" false (Persistent_patricia.Int32_map.mem 0l removed);
+  let set =
+    Persistent_patricia.Int64_set.empty
+    |> Persistent_patricia.Int64_set.add Int64.min_int
+    |> Persistent_patricia.Int64_set.add 0L
+    |> Persistent_patricia.Int64_set.add Int64.max_int
+  in
+  Alcotest.(check int) "int64 set" 3 (Persistent_patricia.Int64_set.count set)
+
+let test_concurrent_snapshot_facade () =
+  let trie = Concurrent_hash_trie.create (int_policy ()) in
+  Concurrent_hash_trie.set 1 "one" trie;
+  let snapshot = Concurrent_hash_trie.snapshot trie in
+  Concurrent_hash_trie.set 1 "first" trie;
+  Concurrent_hash_trie.set 2 "two" trie;
+  Alcotest.(check (option string))
+    "snapshot isolated" (Some "one")
+    (Concurrent_hash_trie.snapshot_find_opt 1 snapshot);
+  Alcotest.(check (option string))
+    "snapshot excludes later key" None
+    (Concurrent_hash_trie.snapshot_find_opt 2 snapshot);
+  let worker start =
+    Thread.create
+      (fun () ->
+        for key = start to start + 99 do
+          Concurrent_hash_trie.set key (string_of_int key) trie
+        done)
+      ()
+  in
+  let first = worker 1000 in
+  let second = worker 2000 in
+  Thread.join first;
+  Thread.join second;
+  Alcotest.(check int) "serialized concurrent writes" 202 (Concurrent_hash_trie.count trie);
+  Alcotest.(check bool)
+    "generation advances" true
+    (Int64.compare (Concurrent_hash_trie.generation trie) 200L >= 0)
+
 let map_model_property =
   let generator = QCheck.(list (pair (int_bound 63) (int_range (-10_000) 10_000))) in
   QCheck.Test.make ~count:200 ~name:"HAMT agrees with a mutable finite-map model" generator
@@ -259,5 +311,7 @@ let () =
           Alcotest.test_case "strict map patch" `Quick test_map_patch;
           Alcotest.test_case "directed graph" `Quick test_directed_graph;
           Alcotest.test_case "indexed map" `Quick test_indexed_map;
+          Alcotest.test_case "Patricia maps and sets" `Quick test_patricia_maps_and_sets;
+          Alcotest.test_case "concurrent snapshots" `Quick test_concurrent_snapshot_facade;
         ] );
     ]

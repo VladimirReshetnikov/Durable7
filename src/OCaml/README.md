@@ -65,5 +65,10 @@ The HAMT composition layer adds set-valued `Persistent_hash_multimap`, bidirecti
 nonunique secondary index. Multi-index edits validate or calculate every successor before the new
 facade is returned.
 
+`Persistent_patricia` provides structurally shared big-endian 32- and 64-bit integer maps and sets.
+`Concurrent_hash_trie` is the OCaml runtime checkpoint for a thread-safe live map: a mutex
+serializes writers and readers capture immutable HAMT roots in O(1). It preserves generation and
+snapshot behavior while explicitly making no lock-free progress claim.
+
 Each remaining collection-family checkpoint adds its public modules and corresponding focused tests
 before the repository-level indexes claim that family as shipped.
