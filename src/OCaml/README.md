@@ -104,5 +104,12 @@ stores Unicode scalar values, indexes by code point, and supports newline-aware 
 its cursor adds Unicode-safe insertion, deletion, peeking, positioning, and forward search. Cursor
 edits return newly bound values and never mutate the source rope snapshot.
 
+The remaining advanced facades are `Canonical_sorted_set` with seeded deterministic SHA-256 rank
+policies, `Brodal_okasaki_heap`, the key-ordered winner-cached `Priority_search_queue`, and mutable
+`Daba_lite` FIFO aggregation. They preserve canonical insertion-history independence, comparator
+identity, priority-then-key tie breaking, persistent heap/queue snapshots, FIFO monoid order, and
+failure-atomic callback publication. The initial heap and DABA implementations favor simple OCaml
+storage and do not claim the specialized sibling cores' worst-case callback or asymptotic bounds.
+
 Each remaining collection-family checkpoint adds its public modules and corresponding focused tests
 before the repository-level indexes claim that family as shipped.

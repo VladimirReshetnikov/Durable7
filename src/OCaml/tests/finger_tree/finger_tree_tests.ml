@@ -230,6 +230,71 @@ let test_text_rope_and_cursor () =
     "malformed UTF-8 rejected" true
     (Result.is_error (Text_rope.of_utf8 "\xC3\x28"))
 
+let test_canonical_sorted_set () =
+  let policy =
+    Canonical_sorted_set.create_policy ~comparator:int_order ~rank_hash:Int64.of_int ~seed:42L
+  in
+  let first = Canonical_sorted_set.of_list policy [ 5; 1; 9; 3; 7; 2 ] in
+  let second = Canonical_sorted_set.of_list policy [ 2; 7; 3; 9; 1; 5 ] in
+  check_int_list "canonical order" [ 1; 2; 3; 5; 7; 9 ] (Canonical_sorted_set.to_list first);
+  let first_stats = Canonical_sorted_set.statistics first in
+  let second_stats = Canonical_sorted_set.statistics second in
+  Alcotest.(check int)
+    "canonical height" first_stats.Canonical_sorted_set.canonical_height
+    second_stats.Canonical_sorted_set.canonical_height;
+  Alcotest.(check int64)
+    "canonical digest" first_stats.Canonical_sorted_set.structure_digest
+    second_stats.Canonical_sorted_set.structure_digest;
+  match Canonical_sorted_set.add 5 first with
+  | Canonical_sorted_set.Existing representative ->
+      Alcotest.(check int) "lookup representative" 5 representative
+  | Canonical_sorted_set.Added _ -> Alcotest.fail "duplicate canonical member was added"
+
+let test_meldable_heap () =
+  let left = Brodal_okasaki_heap.of_list int_order [ 9; 3; 7 ] in
+  let right = Brodal_okasaki_heap.of_list int_order [ 8; 1; 5 ] in
+  let heap = Brodal_okasaki_heap.meld left right in
+  Alcotest.(check (option int)) "heap minimum" (Some 1) (Brodal_okasaki_heap.minimum heap);
+  check_int_list "heap sorted drain" [ 1; 3; 5; 7; 8; 9 ] (Brodal_okasaki_heap.to_sorted_list heap);
+  let minimum, remainder = Option.get (Brodal_okasaki_heap.minimum_view heap) in
+  Alcotest.(check int) "minimum view" 1 minimum;
+  Alcotest.(check int) "persistent remainder" 5 (Brodal_okasaki_heap.count remainder);
+  Alcotest.(check int) "source retained" 6 (Brodal_okasaki_heap.count heap)
+
+let test_priority_search_queue () =
+  let queue =
+    Priority_search_queue.empty ~key_comparator:int_order ~priority_comparator:int_order
+  in
+  let _, queue = Priority_search_queue.set 5 1 "five" queue in
+  let _, queue = Priority_search_queue.set 2 1 "two" queue in
+  let _, queue = Priority_search_queue.set 8 0 "eight" queue in
+  let winner = Option.get (Priority_search_queue.minimum queue) in
+  Alcotest.(check int) "priority winner" 8 (Priority_search_queue.entry_key winner);
+  let winner, remainder = Option.get (Priority_search_queue.minimum_view queue) in
+  Alcotest.(check string) "winner payload" "eight" (Priority_search_queue.entry_value winner);
+  let next = Option.get (Priority_search_queue.minimum remainder) in
+  Alcotest.(check int) "key breaks priority tie" 2 (Priority_search_queue.entry_key next);
+  Alcotest.(check bool) "source retained" true (Priority_search_queue.mem 8 queue)
+
+let test_daba_lite () =
+  let window = Daba_lite.create ~identity:"" ~combine:( ^ ) () in
+  List.iter (fun value -> Daba_lite.insert value window) [ "a"; "b"; "c" ];
+  Alcotest.(check string) "FIFO aggregate" "abc" (Daba_lite.aggregate window);
+  Alcotest.(check bool) "evicted" true (Daba_lite.try_evict window);
+  Alcotest.(check string) "aggregate after eviction" "bc" (Daba_lite.aggregate window);
+  let fallible =
+    Daba_lite.create ~identity:""
+      ~combine:(fun left right ->
+        if String.equal right "boom" then failwith "combine" else left ^ right)
+      ()
+  in
+  Daba_lite.insert "safe" fallible;
+  (try Daba_lite.insert "boom" fallible with Failure _ -> ());
+  Alcotest.(check string) "failed insert leaves aggregate" "safe" (Daba_lite.aggregate fallible);
+  Alcotest.(check int) "failed insert leaves count" 1 (Daba_lite.count fallible);
+  Daba_lite.clear window;
+  Alcotest.(check bool) "clear" true (Daba_lite.is_empty window)
+
 let () =
   Alcotest.run "FingerTree core"
     [
@@ -247,5 +312,9 @@ let () =
           Alcotest.test_case "range update sequence" `Quick test_range_update_sequence;
           Alcotest.test_case "rope cursors" `Quick test_rope_and_cursor;
           Alcotest.test_case "text rope cursors" `Quick test_text_rope_and_cursor;
+          Alcotest.test_case "canonical sorted set" `Quick test_canonical_sorted_set;
+          Alcotest.test_case "meldable heap" `Quick test_meldable_heap;
+          Alcotest.test_case "priority search queue" `Quick test_priority_search_queue;
+          Alcotest.test_case "DABA Lite" `Quick test_daba_lite;
         ] );
     ]
