@@ -8,9 +8,14 @@
 This package ports the repository finger-tree family to Haskell. It includes a general measured
 finger tree, a size-and-rightmost-leaf-measured deque, a reversible deque, sorted bag/set/map
 facades, a stable meldable priority queue, a worst-case-optimal Brodal-Okasaki heap, a keyed
-priority-search queue, interval tree helpers, positional ropes, measured ropes, text-rope navigation
+priority-search queue, interval tree and payload-bearing interval-map helpers, positional ropes, measured ropes, text-rope navigation
 helpers, immutable positional/measured/text rope cursors, a persistent RRB vector, a policy-canonical
 zip-zip-tree sorted set, and a persistent lazy range-update sequence.
+
+`IntervalMap a v` composes the augmented low-sorted `IntervalTree` with an ordered exact-key map.
+It provides unique closed-interval keys, strict addition, payload replacement, exact and indexed
+lookup, pruned first/all/count overlap queries, snapshot-preserving removal, and cross-index
+validation.
 
 `RangeUpdateSequence` is a deterministic implicit-key AVL tree with cached count, height, and
 ordered logical measure. A retained `RangeUpdateAlgebra` record defines element measurement,

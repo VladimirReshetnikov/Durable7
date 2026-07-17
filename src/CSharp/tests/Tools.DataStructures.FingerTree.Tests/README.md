@@ -28,6 +28,10 @@ reasonable oracle.
   `PriorityQueueTests.cs`, `IntervalTreeTests.cs`, `ReversibleDequeTests.cs`, and
   `DerivedCollectionPersistenceTests.cs` cover derived collection facades and mutable sorted builders against
   BCL or brute-force model behavior.
+- `PersistentIntervalMapTests.cs` covers strict and replacing updates, lexicographic interval-key
+  order, configured payload equality, first interval representatives, reversed-endpoint rejection,
+  point and overlap queries against a brute-force model, removal, policy-preserving clear,
+  branching persistence, and annotation invariants.
 - `ComparerEquivalentFacadeTests.cs` covers canonical-instance behavior when comparer equality is coarser than
   object equality across all sorted facades, plus duplicate-low interval-tree stress.
 - `RopeTests.cs`, `RopeModelTests.cs`, `MeasuredRopeTests.cs`, `RopeTextTests.cs`, `RopeTextExtrasTests.cs`, and

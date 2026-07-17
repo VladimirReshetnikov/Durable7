@@ -13,6 +13,11 @@
 script compiles it with `src/hamt.c` and `src/persistent_hash_bag.c` into
 `build/<Configuration>/persistent_hash_bag_tests.exe` and runs it after the core HAMT suite.
 
+`persistent_hash_multimap_tests.c` is the focused derived-collection executable and also exercises
+the relation built from that core. It covers nonempty group normalization, checked pair accounting,
+representative and snapshot retention, receiver-policy multimap algebra, inverse relation lookup,
+failure-atomic two-index edits, and structural validation.
+
 `patricia_tests.c` is the companion dependency-free executable for the explicit-width Patricia
 maps and sets. The build script compiles it with `src/patricia.c` into
 `build/<Configuration>/patricia_tests.exe` and runs it after the hash-bag suite.

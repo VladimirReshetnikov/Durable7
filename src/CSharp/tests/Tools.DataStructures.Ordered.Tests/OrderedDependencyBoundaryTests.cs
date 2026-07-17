@@ -20,10 +20,10 @@ public sealed class OrderedDependencyBoundaryTests
 
         Assert.Equal(
             new[] { "Tools.DataStructures.FingerTree.csproj", "Tools.DataStructures.Hamt.csproj" },
-            ProjectReferences(productProject).Select(Path.GetFileName).OrderBy(name => name));
+            ProjectReferences(productProject).Select(ProjectFileName).OrderBy(name => name));
         Assert.Equal(
             new[] { "Tools.DataStructures.Ordered.csproj" },
-            ProjectReferences(testProject).Select(Path.GetFileName));
+            ProjectReferences(testProject).Select(ProjectFileName));
 
         var productDocument = XDocument.Load(productProject);
         var testDocument = XDocument.Load(testProject);
@@ -108,23 +108,26 @@ public sealed class OrderedDependencyBoundaryTests
         Assert.Equal(
             new[]
             {
+                typeof(PersistentOrderedMap<,>).FullName,
                 typeof(PersistentOrderedSet<>).FullName,
                 typeof(PersistentOrderedSet<>.Enumerator).FullName,
             }.OrderBy(name => name),
             assembly.GetExportedTypes().Select(type => type.FullName).OrderBy(name => name));
 
-        var closed = typeof(PersistentOrderedSet<string>);
-        foreach (var memberType in PublicSignatureTypes(closed))
+        foreach (var closed in new[] { typeof(PersistentOrderedSet<string>), typeof(PersistentOrderedMap<string, string>) })
         {
-            var name = memberType.Assembly.GetName().Name ?? string.Empty;
-            Assert.DoesNotContain("Tungsten", name, StringComparison.OrdinalIgnoreCase);
-            Assert.NotEqual("Tools.DataStructures.Hamt", name);
-            Assert.NotEqual("Tools.DataStructures.FingerTree", name);
+            foreach (var memberType in PublicSignatureTypes(closed))
+            {
+                var name = memberType.Assembly.GetName().Name ?? string.Empty;
+                Assert.DoesNotContain("Tungsten", name, StringComparison.OrdinalIgnoreCase);
+                Assert.NotEqual("Tools.DataStructures.Hamt", name);
+                Assert.NotEqual("Tools.DataStructures.FingerTree", name);
+            }
+            Assert.DoesNotContain(
+                closed.GetMembers(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static),
+                member => member.Name.Contains("Stamp", StringComparison.OrdinalIgnoreCase)
+                    || member.Name.Contains("Label", StringComparison.OrdinalIgnoreCase));
         }
-        Assert.DoesNotContain(
-            closed.GetMembers(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static),
-            member => member.Name.Contains("Stamp", StringComparison.OrdinalIgnoreCase)
-                || member.Name.Contains("Label", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>Verifies production and executable test sources contain no Tungsten symbol or live-oracle hook.</summary>
@@ -153,6 +156,12 @@ public sealed class OrderedDependencyBoundaryTests
         XDocument.Load(project)
             .Descendants("ProjectReference")
             .Select(element => element.Attribute("Include")!.Value);
+
+    // MSBuild project paths use Windows separators in the repository even when tests run on Unix.
+    // Path.GetFileName treats the backslash as an ordinary character there, so normalize both
+    // separator forms explicitly before comparing the dependency allowlist.
+    private static string ProjectFileName(string path) =>
+        path[(path.LastIndexOfAny(['\\', '/']) + 1)..];
 
     private static void AssertPackageReferences(
         XDocument document,

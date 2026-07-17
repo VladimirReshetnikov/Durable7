@@ -62,6 +62,13 @@ servers, and compiler sharing disabled:
 - the complete test run passed 1,355 of 1,355 tests: Numerics 319, HAMT 292, FingerTree 630,
   Ordered 62, and Tungsten 52.
 
+The later derived-structure integration gate on 2026-07-16 UTC adds seven focused ordered-map
+tests. The complete Ordered project passes 69/69 tests in both full serialized Debug and Release
+solution gates. Both builds finish with zero warnings and zero errors, and both full C# gates pass
+1,465/1,465 tests: Numerics 319, HAMT 324, FingerTree 701, Ordered 69, and Tungsten 52. This is the
+complete C# tranche evidence; the final cross-language shipment record will supersede it after all
+ports are complete.
+
 The solution build compiled the benchmark project as an ordinary project dependency, but no
 benchmark was executed and no performance evidence was recorded.
 
@@ -70,6 +77,8 @@ benchmark was executed and no performance evidence was recorded.
 The Ordered suite independently covers:
 
 - every public member and positional boundary;
+- ordered-map independent key/value policies, first-key/last-value construction, in-place value
+  replacement, strict insertion, explicit movement, ranges, reversal, relabeling, and retained branches;
 - default, custom, constant-hash, case-folding, and comparer-defined-null policies;
 - first-representative retention with equal but object-distinct values;
 - duplicate addition versus explicit movement and final-index movement semantics;

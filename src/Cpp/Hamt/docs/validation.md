@@ -3,6 +3,8 @@
 - Status: Current validation guide
 - Created (UTC): 2026-07-02T20:30:09Z
 - Repository HEAD: 44a09cefa5719bb8cbdb78354353aff7f4075aa5
+- Updated (UTC): 2026-07-17T00:25:16Z
+- Updated Repository HEAD: a26aac8f4ec2fa60a2d4871568c2c02d24c9b2a2
 - Audience: Maintainers validating the C++ HAMT port
 - Scope: Local build, test, warning-policy, and generated-output guidance for `src/Cpp/Hamt`
 
@@ -146,6 +148,12 @@ The suite covers:
   stored representatives, non-displacing replacement, symmetric removal, clear/enumeration,
   shared-root inversion, a 2,000-operation collision-heavy two-map model, retained snapshots,
   structural validation, and policy-failure atomicity;
+- set-valued persistent hash multimaps: no-empty-group contraction, pair and key counts,
+  first global representatives, no-op identity, symmetric point removal, receiver-policy set
+  operations, retained snapshots, and invariant validation;
+- persistent bidirectional relations: synchronized forward and inverse roots, pair/key/value
+  counts, global representatives in both domains, inverse-root identity, symmetric removal by pair
+  or endpoint, retained snapshots, and invariant validation;
 - move-only CHAMP map/set edit sessions: empty and retained-value adoption, clean/no-op root and
   policy preservation, stored representatives, point edits and clear, source isolation, active
   lookup and materialization, and rvalue-only one-way publication;
@@ -161,6 +169,11 @@ The suite covers:
 - 32-/64-bit Patricia signed ordering, 10,000 deterministic updates against `std::map`, retained
   no-op roots, cached subtree counts, fixed-bias and resolver-combining map algebra, and integer-set
   union/intersection/difference.
+
+The 2026-07-16 portable audit compiled the HAMT workspace with Clang 21 in strict C++20 mode and
+passed all 65/65 `persistent_hamt_tests` checks in both Debug and Release. The count includes the
+focused hash-multimap and relation suites. The Merkle and copied-header programs remain separate
+required gates under the compiler-matrix policy above.
 
 The Merkle suite covers:
 

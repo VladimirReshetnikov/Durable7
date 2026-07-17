@@ -22,17 +22,19 @@ and TypeScript package all families into one language-local distribution.
 | [Rust](Rust/README.md) | Cargo workspace with safe Rust crates and integration tests | [Hamt](Rust/Hamt/README.md), [FingerTree](Rust/FingerTree/README.md), [Ordered](Rust/Ordered/README.md), [RangeUpdate](Rust/RangeUpdate/README.md), [Tungsten](Rust/Tungsten/README.md) |
 | [TypeScript](TypeScript/README.md) | Strict TypeScript/ESM npm package with Vitest and fast-check validation | [HAMT, FingerTree, Ordered, Tungsten, and Numerics](TypeScript/README.md#public-families) |
 
-The benchmark-independent rollout now ships one-descent persistent HAMT updates,
-`PersistentHashBag`, strict `PersistentBiMap`, neutral `PersistentOrderedSet`, and independently implemented implicit-AVL
-`RangeUpdateSequence` surfaces across all eight language roots. C# owns the law-gated reference
-`IRangeUpdateAlgebra`, while siblings express the same action through language-local policies. At
-the pre-bimap Range shipment checkpoint, both complete serialized C# Debug and Release solution
-builds finished with zero warnings and zero errors and both test gates passed 1,417/1,417. The later
-bimap shipment passes 16 focused C# tests and all 308 HAMT tests in both configurations. No benchmark
-was run, and measurements remain postponed until an isolated session. The detailed
-[four-surface completion audit](../docs/reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md)
+The benchmark-independent rollouts now ship one-descent persistent HAMT updates,
+`PersistentHashBag`, strict `PersistentBiMap`, neutral `PersistentOrderedSet` and `PersistentOrderedMap`, set-valued
+`PersistentHashMultimap`, bidirectional `PersistentRelation`, payload-bearing
+`PersistentIntervalMap`, and the independently implemented implicit-AVL `RangeUpdateSequence`
+across all eight language roots. C# owns the detailed managed contracts while siblings express the
+same semantics through language-local policies and ownership. Both complete serialized C# Debug
+and Release solution builds finish with zero warnings and zero errors, and both test gates pass
+1,465/1,465. No benchmark was run, and measurements remain postponed until an isolated session.
+The [data-structure catalog](../docs/reference/data-structure-catalog.md#derived-persistent-maps-and-relations)
+indexes the four newest cross-language surfaces. The earlier
+[completion audit](../docs/reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md)
 and [bimap completion audit](../docs/reviews/persistent-bimap-cross-language-completion-2026-07-15.md)
-index every source, test, dependency, and validation checkpoint.
+index the preceding tranches.
 
 Across every language root, Tungsten is an application-specific leaf consumer. It may depend on
 general libraries; no general workspace may depend on it. See the normative

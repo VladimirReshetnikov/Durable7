@@ -13,6 +13,7 @@ library
   exposed-modules:
     Data.Structures.Ordered
     Data.Structures.Ordered.PersistentOrderedSet
+    Data.Structures.Ordered.PersistentOrderedMap
   hs-source-dirs: src
   build-depends:
     base >=4.21 && <4.22,

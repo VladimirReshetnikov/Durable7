@@ -22,11 +22,18 @@ postponed until an isolated run.
 The wrapper locates Cargo on `PATH` or under the default rustup profile and applies inherited,
 non-interactive Windows error handling before Cargo starts the test executable.
 
+## Current derived-structure evidence
+
+On 2026-07-16, the focused set-valued hash-multimap and relation suites each passed 6/6 tests. The
+serialized full Rust workspace subsequently passed in both Debug and Release, including all HAMT
+unit, integration, and documentation tests. Benchmarks were not run.
+
 The crate uses `#![forbid(unsafe_code)]`. HAMT, hash-bag invariant, and Patricia unit tests are inline
 in `Hamt/src/lib.rs`, `Hamt/src/hash_bag.rs`, and `Hamt/src/patricia.rs`; one-descent map factories
 and the hash bag have focused integration suites in `Hamt/tests/map_factory_updates.rs` and
-`Hamt/tests/persistent_hash_bag.rs`; the strict bimap has its focused suite in
-`Hamt/tests/persistent_bi_map.rs`; Merkle core/wire and persistence integration tests live in
+`Hamt/tests/persistent_hash_bag.rs`; the strict bimap, set-valued multimap, and relation have focused
+suites in `Hamt/tests/persistent_bi_map.rs`, `Hamt/tests/persistent_hash_multimap.rs`, and
+`Hamt/tests/persistent_relation.rs`; Merkle core/wire and persistence integration tests live in
 `Hamt/tests/merkle_core_wire.rs` and `Hamt/tests/merkle_persistence.rs`. Coverage includes:
 
 - persistent snapshot preservation;
@@ -44,6 +51,12 @@ and the hash bag have focused integration suites in `Hamt/tests/map_factory_upda
   non-displacing replacement, symmetric removal, nested-`Option` presence, root-sharing inversion
   and clear, a deterministic 2,000-command two-map model, retained snapshots, panic atomicity, and
   concurrent readers;
+- hash-multimap independent hash policies, first representatives, distinct key/pair counts,
+  duplicate root sharing, empty-group contraction, whole-key removal, branching histories, and
+  recursive invariants;
+- relation many-to-many adjacency, global representatives, duplicate two-index root sharing,
+  O(1) inverse root swapping, symmetric pair/whole-domain removal, retained branches, and mutually
+  inverse invariants;
 - same-hash collision insertion, lookup, and removal;
 - CHAMP inline-payload/child-run invariants, independent insertion histories, and typed diff,
   including exact callback counters proving same-policy equality/diff rehash no keys and prune a

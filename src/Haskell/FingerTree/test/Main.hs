@@ -20,6 +20,7 @@ import System.Mem.StableName (eqStableName, makeStableName)
 import qualified Data.Structures.FingerTree.Deque as Deque
 import qualified Data.Structures.FingerTree.BrodalOkasakiHeap as BrodalOkasakiHeap
 import qualified Data.Structures.FingerTree.IntervalTree as IntervalTree
+import qualified Data.Structures.FingerTree.IntervalMap as IntervalMap
 import qualified Data.Structures.FingerTree.Measured as FT
 import Data.Structures.FingerTree.Measured (ViewL(..), ViewR(..))
 import Data.Structures.FingerTree.Measures (Elem(..), Size(..))
@@ -52,6 +53,7 @@ main = do
   CanonicalSortedSetTests.run
   RangeUpdateSequenceTests.run
   testIntervalTree
+  testIntervalMap
   testRrbVector
   testRopes
   testRopeCursor
@@ -59,6 +61,22 @@ main = do
   testTextRope
   testConcurrentReads
   putStrLn "tools-data-structures-fingertree tests passed"
+
+testIntervalMap :: IO ()
+testIntervalMap = do
+  let a = IntervalTree.Interval (1 :: Int) 5
+      b = IntervalTree.Interval 1 3
+      c = IntervalTree.Interval 4 9
+      map0 = IntervalMap.fromList [(a, "a"), (b, "b"), (c, "c")]
+      map1 = IntervalMap.set b "B" map0
+      map2 = IntervalMap.delete a map1
+      probe = IntervalTree.Interval 2 6
+  assertEqual "interval map exact replacement" (Just "B") (IntervalMap.lookup b map1)
+  assertEqual "interval map overlap count" 3 (IntervalMap.countOverlaps probe map1)
+  assertEqual "interval map overlap values" 3 (length (IntervalMap.findOverlaps probe map1))
+  assertEqual "interval map snapshot" (Just "a") (IntervalMap.lookup a map0)
+  assertEqual "interval map removal" Nothing (IntervalMap.lookup a map2)
+  assertBool "interval map invariant" (IntervalMap.validStructure map2)
 
 testMeasuredTree :: IO ()
 testMeasuredTree = do

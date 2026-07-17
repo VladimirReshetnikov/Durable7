@@ -2,15 +2,15 @@
 
 - Created (UTC): 2026-07-02T21:06:57Z
 - Repository HEAD: 399710816b9007dde1374aef2043f118beddc225
-- Updated (UTC): 2026-07-14T04:50:00Z
-- Updated Repository HEAD: f814076ceba253306517114ff94d30f952af92e6
+- Updated (UTC): 2026-07-16T22:52:15Z
+- Updated Repository HEAD: 88164edb086096800b2fb32eeaa7e7a1e556e183
 - Audience: Maintainers validating the C++ FingerTree port
 - Scope: Native test executable, source grouping, and stress controls under `src/Cpp/FingerTree/tests`
 
 The C++ FingerTree workspace has one repository-owned native test executable, `fingertree_smoke_tests`; it uses no
-third-party test framework. CTest runs that executable through 22 subsystem entries (`fingertree.atomic-box`,
+third-party test framework. CTest runs that executable through 23 subsystem entries (`fingertree.atomic-box`,
 `fingertree.brodal-okasaki-heap`, `fingertree.canonical-sorted-set`, `fingertree.command-model`,
-`fingertree.concurrency`, `fingertree.daba-lite`, `fingertree.deque`, `fingertree.interval-tree`, `fingertree.lazy-cell`,
+`fingertree.concurrency`, `fingertree.daba-lite`, `fingertree.deque`, `fingertree.interval-tree`, `fingertree.interval-map`, `fingertree.lazy-cell`,
 `fingertree.measure`, `fingertree.measured-lazy-cell`, `fingertree.measured-rope`, `fingertree.measured-tree`,
 `fingertree.priority-queue`, `fingertree.priority-search-queue`, `fingertree.range-update-sequence`, `fingertree.reversible-deque`, `fingertree.rope`, `fingertree.rope-text`,
 `fingertree.rrb-vector`,
@@ -75,6 +75,9 @@ listing, and replay-seed selection.
   count overflow, recursive validation, and concurrent snapshot readers.
 - `interval_tree_tests.cpp` covers insertion, forward traversal/copy, overlap, containment, streaming coalescing,
   removal, and sweep-model checks.
+- `persistent_interval_map_tests.cpp` covers full-key same-low ordering, strict insertion,
+  representative-preserving replacement, invalid intervals, persistence, custom value equality,
+  point stabbing, overlap pruning, and annotation validation.
 - `rope_tests.cpp`, `measured_rope_tests.cpp`, and `rope_text_tests.cpp` cover chunked sequence editing, retained
   chunk-aware forward traversal, bounded nonmaterializing copy, same-type insertion regression guards, positional
   and measured cursor endpoints, chunk seams, no-ops, copy-on-move validity, lvalue-only borrowed peeks, retained

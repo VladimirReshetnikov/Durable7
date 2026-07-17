@@ -11,6 +11,7 @@ The public C API lives in `tools/data_structures/finger_tree/fingertree.h` and t
 `tools/data_structures/finger_tree/brodal_okasaki_heap.h`,
 `tools/data_structures/finger_tree/priority_search_queue.h`,
 `tools/data_structures/finger_tree/range_update_sequence.h`,
+`tools/data_structures/finger_tree/persistent_interval_map.h`,
 `tools/data_structures/finger_tree/rrb_vector.h`, and
 `tools/data_structures/finger_tree/daba_lite.h` headers. For setup and handle-lifetime examples, start with the
 [usage guide](usage.md). The API uses opaque handles plus explicit policy callbacks rather than C++ templates:
@@ -72,6 +73,9 @@ Implemented in this checkpoint:
 - generic persistent minimum-priority queue with caller-supplied value and priority copy policies;
 - generic closed-interval tree facade, plus a signed 64-bit convenience facade, with insertion, removal,
   containment, first-overlap, and overlap count;
+- derived persistent interval map with unique complete `(low, high)` keys, payload replacement,
+  exact lookup and ordered visitation, measure-pruned overlap discovery, overlap counting and
+  visitation, alias-safe persistent edits, and dual-index validation;
 - generic chunked positional rope with cumulative-length indexing, split, concat, insertion, removal, and traversal,
   plus an explicit-lifetime snapshot-plus-gap cursor with retained branching, copied peeks, positional navigation,
   single/range insertion, deletion, unconditional replacement, and snapshot publication;

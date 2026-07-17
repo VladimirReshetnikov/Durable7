@@ -24,6 +24,13 @@ structural-sharing semantics as the map. Both persistent CHAMP types expose a C#
 positive multiplicity per comparer equivalence class in `PersistentHashMap<T, int>` and tracks the
 expanded occurrence count separately as a `long`. It has no mutable builder or transient surface.
 
+`PersistentHashMultimap<TKey, TValue>` is the immutable set-valued multimap in the same project. It
+stores nonempty persistent value sets in a persistent map and applies independent equality policies
+to the key and value domains.
+
+`PersistentRelation<TLeft, TRight>` is the immutable many-to-many bidirectional relation. It stores
+every pair in forward and reverse multimaps and caches an O(1) inverse facade.
+
 `PersistentBiMap<TKey, TValue>` is the immutable bijection facade in the same project. It stores
 every pair in forward and inverse CHAMP maps, retains independent key and value comparers, and
 exposes an O(1) cached inverse facade without rebuilding either trie.
@@ -303,6 +310,99 @@ and throws `OverflowException` before allocating; checking only `int.MaxValue` w
 on the CLR. An empty bag returns `Array.Empty<T>()`. The debugger proxy exposes a distinct
 `KeyValuePair<T, int>[]`, never expanded enumeration, so debugger materialization is bounded by
 `DistinctCount` even when one multiplicity or the total is very large.
+
+## Persistent Hash Multimap Contract
+
+`PersistentHashMultimap<TKey, TValue>` is sealed, immutable, and implements
+`IEnumerable<KeyValuePair<TKey, TValue>>`. Its public surface intentionally distinguishes key-group
+count from total distinct-pair count:
+
+```csharp
+public sealed class PersistentHashMultimap<TKey, TValue>
+    : IEnumerable<KeyValuePair<TKey, TValue>>
+{
+    public static PersistentHashMultimap<TKey, TValue> Empty { get; }
+    public static PersistentHashMultimap<TKey, TValue> Create(
+        IEqualityComparer<TKey>? keyComparer = null,
+        IEqualityComparer<TValue>? valueComparer = null);
+    public static PersistentHashMultimap<TKey, TValue> CreateRange(
+        IEnumerable<KeyValuePair<TKey, TValue>> pairs,
+        IEqualityComparer<TKey>? keyComparer = null,
+        IEqualityComparer<TValue>? valueComparer = null);
+
+    public int KeyCount { get; }
+    public long PairCount { get; }
+    public bool IsEmpty { get; }
+    public IEqualityComparer<TKey> KeyComparer { get; }
+    public IEqualityComparer<TValue> ValueComparer { get; }
+    public IEnumerable<TKey> Keys { get; }
+    public IEnumerable<KeyValuePair<TKey, PersistentHashSet<TValue>>> Groups { get; }
+
+    public bool ContainsKey(TKey key);
+    public bool Contains(TKey key, TValue value);
+    public int CountValues(TKey key);
+    public PersistentHashSet<TValue> GetValues(TKey key);
+    public bool TryGetValues(TKey key, out PersistentHashSet<TValue> values);
+    public bool TryGetKey(TKey equalKey, out TKey actualKey);
+    public bool TryGetValue(TKey key, TValue equalValue, out TValue actualValue);
+    public PersistentHashMultimap<TKey, TValue> Add(TKey key, TValue value);
+    public bool TryAdd(TKey key, TValue value, out PersistentHashMultimap<TKey, TValue> result);
+    public PersistentHashMultimap<TKey, TValue> Remove(TKey key, TValue value);
+    public bool TryRemove(TKey key, TValue value, out PersistentHashMultimap<TKey, TValue> result);
+    public PersistentHashMultimap<TKey, TValue> RemoveKey(TKey key);
+    public bool TryRemoveKey(
+        TKey key,
+        out PersistentHashMultimap<TKey, TValue> result,
+        out PersistentHashSet<TValue> values);
+    public PersistentHashMultimap<TKey, TValue> Clear();
+    public KeyValuePair<TKey, TValue>[] ToArray();
+}
+```
+
+The multimap represents a mathematical set of comparer-distinct pairs: adding an existing pair is
+an identity-preserving no-op. `KeyCount` counts nonempty groups and `PairCount` counts distinct
+pairs as a `long`; there is no ambiguous `Count`. Each group uses the exact `ValueComparer` object,
+and empty groups are forbidden. Removing a group's last value therefore removes the outer key in
+the same successor. Absent `GetValues`/`TryGetValues` results are empty persistent sets retaining
+the value comparer.
+
+The first key representative survives all updates to its group, and the first value representative
+survives equivalent additions within that group. Enumeration visits outer groups in the CHAMP
+map's stable-for-one-version order and each group's values in its CHAMP set order. Neither level is
+insertion ordered or sorted. A point update copies only the affected outer and inner trie paths and
+shares all other nodes. The type deliberately exposes no bag multiplicity, duplicate-pair mode,
+algebra, transient, or mutable builder.
+
+## Persistent Relation Contract
+
+`PersistentRelation<TLeft, TRight>` represents a mathematical set of pairs through mutually
+inverse `PersistentHashMultimap` indexes. `LeftCount` and `RightCount` report represented domain
+classes, while checked `long PairCount` reports the same distinct-pair count in either direction.
+`LeftComparer` and `RightComparer` are retained independently and swap roles through `Inverse`.
+
+`Add` is idempotent and `TryAdd` reports whether a new pair was published. Before editing either
+index, addition recovers any existing outer left and right representatives and inserts those exact
+objects into both adjacency sets. This normalization is necessary because an ordinary nested
+multimap retains representatives per group; the relation instead promises one first representative
+globally for each represented domain class. A logical duplicate returns the receiver.
+
+`Contains`, `ContainsLeft`, and `ContainsRight` query membership. `GetRights`/`GetLefts` return
+persistent comparer-compatible adjacency sets, including comparer-preserving empties for absent
+classes. `TryGetRights`/`TryGetLefts`, `CountRights`/`CountLefts`, and
+`TryGetLeft`/`TryGetRight` expose presence, degree, and stored representatives without rebuilding a
+set. Forward enumeration and `Groups` use stable-for-one-version nested CHAMP order.
+
+`Remove` deletes one pair and automatically contracts any now-empty groups in both indexes.
+`RemoveLeft` and `RemoveRight` delete an entire adjacency class; their try forms return the removed
+persistent adjacency set. Whole-class removal is O(d log n) for degree d because it removes the
+corresponding pair from each inverse group. Failures during construction of either successor remain
+local: no partially updated relation is published and every retained source version is unchanged.
+
+`Inverse` swaps the already-existing multimap roots in O(1), performs no pair traversal, is safely
+cached for concurrent readers, and satisfies `ReferenceEquals(relation,
+relation.Inverse.Inverse)`. The honest space cost is approximately twice a forward multimap because
+every pair and adjacency membership occurs in both indexes. The relation exposes no displacement,
+bag multiplicity, algebra, transient, or mutable builder.
 
 ## Persistent Bimap Contract
 

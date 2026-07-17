@@ -1,10 +1,23 @@
-# C# Persistent Ordered Set Overview
+# C# Persistent Ordered Collections Overview
 
 - Status: Current overview
 - Created (UTC): 2026-07-15T01:28:46Z
 - Repository HEAD: 5fd1a85c5ec58886f0dbabe805552bd37ec40871
 - Audience: Users choosing the collection and maintainers reviewing its architecture
-- Scope: `Tools.DataStructures.Ordered.PersistentOrderedSet<T>`
+- Scope: `Tools.DataStructures.Ordered.PersistentOrderedMap<TKey, TValue>` and `PersistentOrderedSet<T>`
+
+## Ordered Map
+
+`PersistentOrderedMap<TKey, TValue>` combines comparer-defined keyed lookup with insertion and
+explicit-position order. Each logical entry is one immutable object referenced by a CHAMP key index
+and a stamp-ordered finger-tree deque. This keeps keyed reads on the hash path and lets positional
+reads and enumeration return keys and values without hashing or duplicating the raw payload.
+
+The key and value equality policies are independent. An existing-key `SetItem` retains the stored
+key representative and position; a value equal under `ValueComparer` returns the receiver. `Add`,
+`AddFirst`, and `Insert` are strict about duplicate keys, while `MoveToFirst`, `MoveToLast`, and
+`MoveTo` are the only ordering mutations. Ranges, reversal, removal by key or position, and retained
+branching versions follow the same sparse-label and failure-atomic publication discipline as the set.
 
 ## What The Type Provides
 
@@ -41,7 +54,7 @@ evolution policy. The exact label stride and relabel cadence are private impleme
 
 ## Representation
 
-Each version owns two persistent indexes:
+Each ordered-set version owns two persistent indexes:
 
 ```csharp
 FingerTreeDeque<Entry> _order;       // Entry = (strictly ascending stamp, representative)

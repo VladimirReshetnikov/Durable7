@@ -2,8 +2,8 @@
 
 - Created (UTC): 2026-07-02T20:03:36Z
 - Repository HEAD: 17d505f18e9e0a5748058701d408ed6642dcba29
-- Updated (UTC): 2026-07-14T04:50:00Z
-- Updated against repository HEAD: f814076ceba253306517114ff94d30f952af92e6
+- Updated (UTC): 2026-07-16T22:52:15Z
+- Updated against repository HEAD: 88164edb086096800b2fb32eeaa7e7a1e556e183
 - Audience: C++ consumers and maintainers using the public FingerTree headers
 - Scope: Public include path, value semantics, canonical ranking, priority cores, and facade quick starts
 
@@ -402,6 +402,18 @@ auto coalesced = intervals.coalesce();
 
 Endpoint equality follows the configured comparison policy, not necessarily `operator==`.
 
+Use `persistent_interval_map` when each exact interval has a payload:
+
+```cpp
+auto schedule = ft::persistent_interval_map<int, std::string>{}
+    .add({1, 5}, "first")
+    .add({1, 3}, "same low, distinct key")
+    .set_item({10, 12}, "later");
+
+auto exact = schedule.try_get({1, 3});
+auto active = schedule.find_overlaps({4, 10});
+```
+
 ## Ropes And Text
 
 Use `rope<T>` for persistent chunked positional sequences. Use `measured_rope<T, MeasurePolicy>` when
@@ -508,6 +520,7 @@ data-race rules still apply to your variables.
 | Keyed lookup plus cached global priority winner | `priority_search_queue<Key, Priority, Value>` |
 | Minimum-priority draining and meld | `priority_queue<T, Priority, Comparison>` |
 | Closed-interval overlap and containment queries | `interval_tree<T, Comparison>` |
+| Closed-interval keys with payload lookup | `persistent_interval_map<Endpoint, Value>` |
 | Chunked persistent positional sequence | `rope<T>` |
 | Chunked sequence with cumulative measure navigation | `measured_rope<T, MeasurePolicy>` |
 | Newline-aware text content | `text_rope`, `rope_builder`, and text helper functions |

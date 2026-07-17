@@ -86,7 +86,7 @@ call. Store lookups return owning `tds_merkle_block` snapshots that must be disp
 synchronization, repeatedly call `tds_merkle_search_tree_plan_sync`, export the requested digests,
 insert those blocks, and repeat until `tds_merkle_sync_plan_requires_blocks` is false.
 
-The workspace compiles and can run its four native test executables through `build.ps1`:
+The workspace compiles and can run its five native test executables through `build.ps1`:
 
 ```powershell
 .\build.ps1 -RunTests

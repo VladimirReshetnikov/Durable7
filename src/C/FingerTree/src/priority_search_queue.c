@@ -1,5 +1,6 @@
 #include <tools/data_structures/finger_tree/priority_search_queue.h>
 
+#include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>

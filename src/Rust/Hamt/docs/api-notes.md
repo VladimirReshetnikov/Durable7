@@ -21,6 +21,9 @@ Primary entry points:
 - `PersistentHashBag<T, S = RandomState>`, `HashBagEntry<T>`, `BagIter<T>`, and `HashBagError`;
 - `PersistentBiMap<K, V, SK = RandomState, SV = RandomState>`, `BiMapConflict`,
   `BiMapAddResult`, and `BiMapRemoveResult`;
+- `PersistentHashMultimap<K, V, SK = RandomState, SV = RandomState>`, its flattened iterator, and
+  invariant result types;
+- `PersistentRelation<L, R, SL = RandomState, SR = RandomState>` and its invariant result types;
 - `PersistentIntMap<V>` / `PersistentIntSet` and `PersistentLongMap<V>` / `PersistentLongSet`.
 - `MerkleSearchTree<K, V>`, `MerkleSearchTreePolicy<K, V>`, `MerkleEntry<K, V>`, and
   `MerkleMapDifference<K, V>`;
@@ -149,6 +152,31 @@ opposite stored representative in `Option<T>` and a root-sharing receiver on a m
 is `inverse().inverse().shares_roots_with(source)`, not object-reference identity. The bimap has no
 algebra, transient, builder, or displacing force-put surface, and honestly stores approximately two
 map entries per logical pair.
+## Persistent hash multimap
+
+`PersistentHashMultimap<K, V, SK, SV>` is a set-valued multimap composed from the public CHAMP map
+and set. Rust `Eq`/`Hash` define both equivalence domains, while `SK` and `SV` retain independent
+`BuildHasher` policies. `key_count` reports nonempty groups and `pair_count` reports distinct pairs;
+duplicate insertion returns a clone sharing the outer root.
+
+Every stored group is nonempty and uses a clone of the retained value hasher. Removing its final
+value removes the outer key in the same successor. `get_key` and `get_value` recover first stored
+representatives, `groups` exposes immutable adjacency sets, and `iter` flattens them in stable-for-
+one-version nested CHAMP order. `try_remove_key` returns the stored key and persistent adjacency set.
+The type has no multiplicity, algebra, transient, or mutable builder.
+
+## Persistent relation
+
+`PersistentRelation<L, R, SL, SR>` maintains mutually inverse persistent multimaps. Addition first
+normalizes through existing outer representatives so one first representative is reused globally
+across all adjacency groups. Pair removal contracts both indexes; `try_remove_left` and
+`try_remove_right` remove all incident pairs and return the stored representative plus immutable
+adjacency set. Each whole-domain removal costs O(d log n) for degree d.
+
+`inverse` clones and swaps the two existing root pairs in O(1) and performs no traversal. Rust
+facades are ordinary values, so the port does not build a cyclic identity cache: applying `inverse`
+twice yields a facade sharing both original roots, which is the ownership-native counterpart of the
+C# inverse-identity contract. The honest space cost remains two indexes.
 
 ## One-way edit sessions
 

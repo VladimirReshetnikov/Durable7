@@ -4,7 +4,7 @@
 - Created (UTC): 2026-07-15T01:28:46Z
 - Repository HEAD: 5fd1a85c5ec58886f0dbabe805552bd37ec40871
 - Audience: Maintainers validating `Tools.DataStructures.Ordered`
-- Scope: xUnit/CsCheck coverage for `PersistentOrderedSet<T>`
+- Scope: xUnit/CsCheck coverage for the persistent ordered map and set
 
 The test project directly references only `Tools.DataStructures.Ordered`; HAMT and FingerTree arrive
 through the production project's public dependency graph. The suite is independent of Tungsten code,
@@ -12,6 +12,7 @@ tests, internals, and runtime behavior.
 
 | File | Coverage |
 | --- | --- |
+| `PersistentOrderedMapTests.cs` | Independent policies, first-key/last-value construction, strict addition, in-place replacement, explicit movement, removal, ranges, reversal, repeated relabeling, branching histories, and dual-index invariants |
 | `PersistentOrderedSetCoreTests.cs` | Empty/comparer identity, construction collapse, comparer-defined null, representative lookup, addition/removal, retained versions, clear, and owned exceptions |
 | `PersistentOrderedSetMovementRangeAndSortTests.cs` | Exhaustive small final-index movement, endpoint moves, insertion- and move-triggered relabel histories with rebuild-failure atomicity, every small range boundary, reverse, default and custom stable one-shot sort, and result behavior after sort |
 | `PersistentOrderedSetAlgebraAndRelationTests.cs` | Receiver order/representatives, same-type and enumerable overloads, shared, reference-distinct equivalent, and semantically different comparers, first argument representative, eager normalization/failures, no-op identity, null, exhaustive small relation truth tables, and null operands |
@@ -44,9 +45,12 @@ dotnet build .\tests\Tools.DataStructures.Ordered.Tests\Tools.DataStructures.Ord
 The launcher enables inherited headless Windows failure handling before the SDK/testhost starts,
 uses the repository runsettings, and reasserts the single-worker build and test policies.
 
-The serialized Debug and Release lanes each discovered and passed 62 of 62 tests with zero build
+The ordered-set shipment's serialized Debug and Release lanes each discovered and passed 62 of 62 tests with zero build
 warnings or errors. The complete serialized C# Release solution built with zero warnings or errors
 and passed all 1,355 tests: Numerics 319, HAMT 292, FingerTree 630, Ordered 62, and Tungsten 52.
+
+The subsequent ordered-map development lane passes 69 of 69 tests in Debug. Final Release and full
+solution evidence will be recorded after the complete four-structure C# tranche is implemented.
 
 Benchmarks are deliberately outside this suite and remain postponed to an isolated machine run.
 See the [Ordered validation guide](../../docs/Ordered/validation.md) for the full gate and dependency

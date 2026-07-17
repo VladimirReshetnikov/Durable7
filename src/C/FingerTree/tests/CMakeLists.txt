@@ -144,3 +144,18 @@ target_include_directories(
 fingertree_c_configure_target(range_update_sequence_c_tests)
 
 tds_add_headless_test(NAME fingertree_c.range_update_sequence TARGET range_update_sequence_c_tests)
+
+add_executable(
+    persistent_interval_map_c_tests
+    persistent_interval_map_tests.c
+)
+
+target_link_libraries(
+    persistent_interval_map_c_tests
+    PRIVATE
+        tools::data_structures::finger_tree_c
+)
+
+fingertree_c_configure_target(persistent_interval_map_c_tests)
+
+tds_add_headless_test(NAME fingertree_c.persistent_interval_map TARGET persistent_interval_map_c_tests)

@@ -378,6 +378,27 @@ var coalesced = intervals.Coalesce();
 Intervals are ordered by low endpoint, and overlap queries use the cached maximum high endpoint
 measure to skip subtrees.
 
+Use `PersistentIntervalMap<TEndpoint, TValue>` when each distinct interval carries one payload:
+
+```csharp
+var bookings = PersistentIntervalMap<int, string>.Empty
+    .Add(new Interval<int>(9, 11), "design review")
+    .Add(new Interval<int>(10, 12), "release window")
+    .SetItem(new Interval<int>(14, 15), "retrospective");
+
+if (bookings.TryFindContaining(10, out var booking))
+    Console.WriteLine($"{booking.Key}: {booking.Value}");
+
+var morning = bookings.FindOverlaps(new Interval<int>(8, 12));
+```
+
+The map validates every interval argument, orders keys lexicographically by `(Low, High)`, and
+allows distinct keys to overlap. `Add` rejects an equivalent interval; `SetItem` replaces its
+payload while retaining the original interval representative. A configured value comparer defines
+when replacement is an identity-preserving no-op. Endpoint ordering is fixed to
+`Comparer<TEndpoint>.Default`, while value equality is independently configurable. Unlike
+`IntervalTree<T>`, the map has no `Coalesce` because it cannot infer how payloads should merge.
+
 ## Ropes And Text
 
 Use `Rope<T>` for a persistent chunked positional sequence:
@@ -651,6 +672,7 @@ the other advances.
 | Batched sorted-dictionary edits before one snapshot | `SortedDictionary<TKey, TValue>.Builder` |
 | Minimum-priority draining and meld | `PriorityQueue<TElement, TPriority>` |
 | Closed-interval overlap and containment queries | `IntervalTree<T>` |
+| Closed-interval keys with payload lookup and overlap queries | `PersistentIntervalMap<TEndpoint, TValue>` |
 | Chunked persistent positional sequence | `Rope<T>` |
 | Localized persistent positional editing with retained branches | `RopeCursor<T>` from `Rope<T>.GetCursor()` |
 | Uniform random-access persistent sequence | `RrbVector<T>` |

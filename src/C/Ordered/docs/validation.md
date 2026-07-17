@@ -22,11 +22,17 @@ composite build. No benchmark belongs to this gate.
 
 ## Coverage
 
-The native executable covers representative retention, duplicate structural no-ops, positional
+The ordered-set executable covers representative retention, duplicate structural no-ops, positional
 edits and final-index movement, missing and boundary statuses, removal, range/take/drop, reversal,
 stable sorting, every algebra/relation family, receiver-policy normalization across differently
 configured sets, ownership balance, repeated gap exhaustion/relabel, retained-version persistence,
 two-way invariant validation, and a deterministic 1,000-command independent ordered-list model.
+
+The ordered-map executable covers append/prepend/positional insertion, explicit order, payload
+replacement and retained snapshots, order-root sharing for replacement, value-root sharing for
+movement, payload-based stable sort, range extraction, conditional duplicate insertion, removal,
+and two-way cross-index validation. Focused ASan/UBSan validation additionally checks its shared
+policy-context and type-erased ownership paths.
 
 ## Dependency audit
 

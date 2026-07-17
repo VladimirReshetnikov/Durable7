@@ -92,12 +92,19 @@ from .persistent_hamt import (
     TransientHashSet,
 )
 from .persistent_hash_bag import HashBagEntry, PersistentHashBag
+from .persistent_hash_multimap import (
+    HashMultimapEntry,
+    HashMultimapKeyResult,
+    HashMultimapValuesResult,
+    PersistentHashMultimap,
+)
 from .persistent_patricia import (
     PersistentIntMap,
     PersistentIntSet,
     PersistentLongMap,
     PersistentLongSet,
 )
+from .persistent_relation import PersistentRelation, RelationEntry
 
 __all__ = [
     "INT32_MERKLE_CODEC",
@@ -116,6 +123,9 @@ __all__ = [
     "HamtEntry",
     "HashBagEntry",
     "HashMapBulkBuilder",
+    "HashMultimapEntry",
+    "HashMultimapKeyResult",
+    "HashMultimapValuesResult",
     "HashPolicy",
     "InMemoryMerkleBlockStore",
     "Int32MerkleCodec",
@@ -160,11 +170,14 @@ __all__ = [
     "PersistentBiMap",
     "PersistentHashBag",
     "PersistentHashMap",
+    "PersistentHashMultimap",
     "PersistentHashSet",
     "PersistentIntMap",
     "PersistentIntSet",
     "PersistentLongMap",
     "PersistentLongSet",
+    "PersistentRelation",
+    "RelationEntry",
     "Rfc4122UuidMerkleCodec",
     "SetRemoveResult",
     "TransientConsumedError",

@@ -3,7 +3,7 @@
 - Status: Implemented workspace
 - Created (UTC): 2026-07-02T05:02:24Z
 - Repository HEAD: 3c639e02d05377685676923a13b30a3d22fd4994
-- Audience: Maintainers implementing and reviewing the CHAMP, hash-bag, bimap, Ctrie, Patricia, and Merkle families
+- Audience: Maintainers implementing and reviewing the CHAMP, hash-bag, hash-multimap, relation, bimap, Ctrie, Patricia, and Merkle families
 - Scope: Project layout and validation entry points for `src/CSharp/src/Tools.DataStructures.Hamt`
 
 `src/CSharp/src/Tools.DataStructures.Hamt` contains the .NET 10 C# preview workspace for
@@ -23,6 +23,18 @@ itself, not an additional public facade allocation; the set surface is a thin `I
 facade over that map engine. C, C++, Haskell, Kotlin, and Rust separately expose the same one-way
 lifecycle through semantic sessions whose changed edits remain persistent path-copy operations;
 they do not inherit this C# engine's owner-token performance claim.
+
+`PersistentHashMultimap<TKey, TValue>` composes a CHAMP map with nonempty CHAMP value sets. It
+represents each comparer-distinct key/value pair once, retains independent key and value comparers,
+preserves the first representative in each domain, and tracks `KeyCount` separately from the
+checked `long PairCount`. Removing the last value of a group also removes its outer key, so empty
+value sets are never stored.
+
+`PersistentRelation<TLeft, TRight>` composes two mutually inverse hash multimaps into a persistent
+many-to-many relation. It normalizes every new pair through the retained outer representatives so
+the first left and right representatives are global across all adjacency groups, publishes both
+successor indexes atomically, supports symmetric pair and whole-domain removal, and exposes a
+cached O(1) inverse facade whose inverse is the original relation.
 
 `PersistentBiMap<TKey, TValue>` composes two persistent CHAMP maps into a strict immutable
 bijection. It retains independent key and value comparers, rejects duplicates in either domain,
@@ -120,6 +132,10 @@ and canonical topology alone does not confer reference identity.
     one hash computation, one trie descent, and one selected factory invocation.
   - `PersistentHashBag.cs` implements the immutable unordered multiset, including explicit distinct
     and expanded counts, checked multiplicities, receiver-policy algebra, and expanded enumeration.
+  - `PersistentHashMultimap.cs` implements the set-valued nested-CHAMP multimap with independent
+    policies, exact pair counting, and automatic empty-group contraction.
+  - `PersistentRelation.cs` implements the mutually inverse multimap relation, global representative
+    normalization, symmetric domain removal, and cached inverse facade.
   - `PersistentBiMap.cs` implements the strict two-HAMT bijection and cached inverse facade.
   - `PersistentHashMap.Transient.cs` and `PersistentHashMap.OwnerTokenKernel.cs` expose and implement
     the public one-way map transient.

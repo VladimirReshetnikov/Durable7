@@ -1,6 +1,12 @@
 #![forbid(unsafe_code)]
 #![doc = "Neutral persistent insertion-ordered collections for Rust."]
 
+mod ordered_map;
+pub use ordered_map::{
+    OrderedMapMoveError, OrderedMapRemoveResult, PersistentOrderedMap,
+    PersistentOrderedMapInvariantError, PersistentOrderedMapStatistics,
+};
+
 use std::cmp::Ordering;
 use std::collections::hash_map::RandomState;
 use std::fmt;

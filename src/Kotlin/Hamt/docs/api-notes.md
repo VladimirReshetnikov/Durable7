@@ -257,3 +257,8 @@ language keyword. Load/import never publish a tree before the complete reachable
 digest, codec, canonical-byte, count, ordering, level, and child-interval validation. Import may
 overlay a partial pack on an existing store, but it does not write supplied blocks until the full
 closure verifies and every existing address conflict has been preflighted.
+`PersistentHashMultimap<K, V>` stores one nonempty `PersistentHashSet<V>` per key under independent
+runtime policies and distinguishes key count from checked `Long` pair count. Pair and group edits
+retain first representatives; algebra normalizes the argument under the receiver policies.
+`PersistentRelation<L, R>` owns forward and reverse multimaps and publishes them only as exact
+inverse snapshots. Its validator checks both component invariants and every pair in both directions.

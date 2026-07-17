@@ -12,6 +12,7 @@ import Data.Maybe (fromMaybe)
 import Data.Structures.Hamt.Hashable (hash)
 import Data.Structures.Hamt.HashMap (HashPolicy(..))
 import qualified Data.Structures.Ordered.PersistentOrderedSet as Ordered
+import qualified Data.Structures.Ordered.PersistentOrderedMap as OrderedMap
 
 main :: IO ()
 main = do
@@ -22,7 +23,21 @@ main = do
   testDeterministicModel
   testFailureIsolation
   testConcurrentReads
+  testOrderedMap
   putStrLn "tools-data-structures-ordered tests passed"
+
+testOrderedMap :: IO ()
+testOrderedMap = do
+  let map0 = OrderedMap.fromList [(1 :: Int, "one"), (2, "two"), (3, "three")]
+      map1 = OrderedMap.set 2 "TWO" map0
+      map2 = expectJust "ordered map movement" (OrderedMap.moveToFirst 3 map1)
+      map3 = OrderedMap.sortBy (\(_, left) (_, right) -> compare right left) map2
+      range = expectJust "ordered map range" (OrderedMap.getRange 1 2 map3)
+  assertEqual "ordered map replacement keeps order" [1, 2, 3] (map fst (OrderedMap.toList map1))
+  assertEqual "ordered map snapshot" (Just "two") (OrderedMap.lookup 2 map0)
+  assertEqual "ordered map movement" [3, 1, 2] (map fst (OrderedMap.toList map2))
+  assertEqual "ordered map range count" 2 (OrderedMap.size range)
+  assertBool "ordered map invariant" (OrderedMap.validStructure range)
 
 casePolicy :: HashPolicy String
 casePolicy = HashPolicy

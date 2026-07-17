@@ -922,6 +922,22 @@ private fun concurrentReadersObserveConsistentSnapshots() {
     }
 }
 
+private fun persistentIntervalMapCombinesExactAndOverlapIndexes() {
+    val a = Interval(1, 5)
+    val b = Interval(1, 3)
+    val c = Interval(4, 9)
+    val source = PersistentIntervalMap.from(listOf(a to "a", b to "b", c to "c"))
+    val replaced = source.set(b, "B")
+    val removed = replaced.remove(a)
+    val probe = Interval(2, 6)
+    checkEquals("B", replaced[b], "interval map replacement")
+    checkEquals("b", source[b], "interval map snapshot")
+    checkEquals(3, replaced.countOverlaps(probe), "interval map overlap count")
+    checkEquals(3, replaced.findOverlaps(probe).size, "interval map overlap enumeration")
+    check(!removed.containsKey(a), "interval map removal")
+    removed.validateStructure()
+}
+
 public fun main() {
     val tests = listOf(
         "dequePreservesSnapshots" to ::dequePreservesSnapshots,
@@ -938,6 +954,8 @@ public fun main() {
         "priorityQueueDequeuesStably" to ::priorityQueueDequeuesStably,
         "intervalTreeUsesClosedOverlapAndCoalesces" to ::intervalTreeUsesClosedOverlapAndCoalesces,
         "intervalTreeInsertsNewEqualLowIntervalsFirst" to ::intervalTreeInsertsNewEqualLowIntervalsFirst,
+        "persistentIntervalMapCombinesExactAndOverlapIndexes" to
+            ::persistentIntervalMapCombinesExactAndOverlapIndexes,
         "recurringPortingRegressionsStayLocked" to ::recurringPortingRegressionsStayLocked,
         "ropesEditAndNavigateText" to ::ropesEditAndNavigateText,
         "ropeCursorHandlesBoundariesNullsAndPersistentEdits" to ::ropeCursorHandlesBoundariesNullsAndPersistentEdits,

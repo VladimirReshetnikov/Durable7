@@ -111,6 +111,17 @@ O(1) and points back to the original object under concurrent access. Forward ite
 stable-for-one-version, otherwise unspecified CHAMP order. The honest storage cost is approximately
 twice one map; no algebra, builder, transient, or displacement surface is exposed.
 
+`PersistentHashMultimap[K, V]` composes the public CHAMP map and set under independent key and
+value policies. It stores no empty groups, reports exact signed-64-bit `pair_count` separately from
+`key_count`, retains first representatives in both domains, and contracts an outer key when its
+final pair is removed. `try_get_key` and `try_get_values` keep a stored `None` distinct from
+absence. Flattened iteration follows stable-for-one-version, otherwise unspecified CHAMP order.
+
+`PersistentRelation[L, R]` maintains mutually inverse multimaps. Addition normalizes both arguments
+to globally retained representatives before updating either index, so equivalent objects cannot
+drift between adjacency groups. Pair and whole-side removals remain symmetric. Its lock-published
+cached `inverse` swaps existing roots in O(1), and `inverse.inverse` is the receiver.
+
 The shared default policy follows coherent Python hash/equality behavior. Hashable values use
 `hash` and `==`; the identical-object fast path recovers non-reflexive values such as a retained
 `NaN`. Unhashable objects use process-local identity hashing and are equivalent only to themselves;
@@ -173,6 +184,14 @@ through the public deque index API. Since one deque index is O(log n), this lang
 implementation is O(log^2 n) for that second phase rather than the C# workspace's O(log n)
 specialized lower bound. All updates remain immutable and failure-atomic.
 
+`PersistentOrderedMap[K, V]` uses the same neutral sparse-label design. Its persistent deque owns
+each `(stamp, key, value)` entry while CHAMP stores only key-to-stamp navigation, avoiding a second
+retained payload. Construction keeps the first key representative and position while the last
+value-distinct payload wins. `set` never moves an existing class; only explicit movement, reversal,
+and stable one-shot `sort` change order. Keyed/positional removal, range extraction, sharing probes,
+and dual-index validation follow the ordered-set conventions. Strict addition raises
+`DuplicateKeyError`; presence-safe lookup uses `OrderedMapLookup`.
+
 ## Measured and frontier structures
 
 The general sequence substrate is a persistent implicit AVL tree caching caller-supplied ordered
@@ -224,6 +243,14 @@ Extremal measures use the explicit `OptionalValue` carrier rather than reserving
 identity. Consequently, `MaxMeasure` and `MinMeasure` can measure nullable elements without losing
 the distinction between an empty tree and a tree whose extremum is `None`; interval summaries use
 the same presence-preserving representation for nullable endpoints.
+
+`PersistentIntervalMap[T, V]` adds payloads to validated closed interval keys without changing the
+interval set's merge semantics. Keys are unique and lexicographically ordered by `(low, high)`;
+the first interval representative is retained and a supplied value equality callback recognizes
+replacement no-ops. One measured sequence caches the complete rightmost key and maximum high
+endpoint, supporting exact same-low lookup and pruned overlap/stabbing queries. Distinct overlapping
+keys remain independent, and no coalescing API is provided because combining payloads requires an
+explicit application policy.
 
 Sequence, measured-tree, and measured-rope splits and cursor searches return frozen named
 dataclasses, so callers can use semantic fields such as `left`, `right`, `item`, `cursor`, and

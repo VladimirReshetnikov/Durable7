@@ -52,6 +52,9 @@ Coverage groups:
   updates;
 - `interval_tree.rs`: closed intervals, last-low/maximum-high measured overlap descent, a 100,000-interval
   sparse-hit regression, coalescing, and shared-storage updates;
+- `persistent_interval_map.rs`: payload-bearing lexicographic interval keys, strict and replacing
+  edits, invalid-interval errors, first representatives, overlap-model parity, point stabbing,
+  removal, storage sharing, retained versions, and annotation invariants;
 - `rope.rs`: chunked positional and measured rope storage over cached count/user-measure summaries, chunk-copy
   construction, caller-supplied copy targets, positional cursor boundaries/non-`Clone` navigation/chunk-edge
   edits/no-op seeks and inserts/retained branches/root-sharing snapshots/gap-vector model replay,

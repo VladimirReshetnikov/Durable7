@@ -620,6 +620,21 @@ private fun iteratorsAndConcurrentReadersObserveImmutableSnapshots() {
     assertEquals(4, completed.get(), "concurrent completed workers")
 }
 
+private fun orderedMapRetainsPositionsAcrossPayloadEdits() {
+    val source = PersistentOrderedMap.from(listOf(1 to "one", 2 to "two", 3 to "three"))
+    val replaced = source.set(2, "TWO")
+    val moved = replaced.moveToFirst(3)
+    val sorted = moved.sort(Comparator { left, right -> right.value.compareTo(left.value) })
+    val range = sorted.getRange(1, 2)
+    assertEquals(listOf(1, 2, 3), replaced.toList().map { it.key }, "ordered map replacement order")
+    assertEquals("two", source[2], "ordered map snapshot")
+    assertThat(source.sharesOrderWith(replaced), "ordered map value edit shares order")
+    assertThat(replaced.sharesValuesWith(moved), "ordered map movement shares values")
+    assertEquals(listOf(3, 1, 2), moved.toList().map { it.key }, "ordered map movement")
+    assertEquals(2, range.size, "ordered map range")
+    range.validateStructure()
+}
+
 public fun main() {
     val tests = listOf(
         "constructionRetainsPoliciesAndFirstRepresentatives" to ::constructionRetainsPoliciesAndFirstRepresentatives,
@@ -632,6 +647,7 @@ public fun main() {
         "eagerNormalizationAndCallbackFailuresAreSourceAtomic" to ::eagerNormalizationAndCallbackFailuresAreSourceAtomic,
         "generatedHistoriesMatchAListSetModelAndRetainedBranches" to ::generatedHistoriesMatchAListSetModelAndRetainedBranches,
         "iteratorsAndConcurrentReadersObserveImmutableSnapshots" to ::iteratorsAndConcurrentReadersObserveImmutableSnapshots,
+        "orderedMapRetainsPositionsAcrossPayloadEdits" to ::orderedMapRetainsPositionsAcrossPayloadEdits,
     )
 
     for ((name, test) in tests) {

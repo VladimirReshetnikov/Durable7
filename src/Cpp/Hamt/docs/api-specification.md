@@ -3,6 +3,8 @@
 - Status: Current API specification
 - Created (UTC): 2026-07-02T17:58:46Z
 - Repository HEAD: 9bba9109d24a3a104e05212e3828f12783fe8aaa
+- Updated (UTC): 2026-07-16T22:52:15Z
+- Updated against repository HEAD: 88164edb086096800b2fb32eeaa7e7a1e556e183
 - Audience: Maintainers and reviewers of `tools::data_structures::hamt`
 - Scope: Public C++ API, immutable-version semantics, wire contracts, and complexity guarantees
 
@@ -37,6 +39,13 @@ returns the swapped value-semantic facade over the same two immutable roots. Con
 `inverse().inverse().shares_roots_with(source)` holds even though C++ does not expose reference
 identity for collection values. The facade deliberately omits algebra, transients, builders, and a
 displacing force-put mode.
+
+`persistent_hash_multimap<Key, Value, ...>` is a set-valued immutable multimap composed from the
+public CHAMP map and set. It stores no empty group, retains first representatives independently in
+both domains, tracks key-class and pair counts separately, and supports pair removal plus whole-key
+contraction. `persistent_relation<Left, Right, ...>` owns mutually inverse multimaps, enforcing one
+global representative per equality class on either side. Pair and whole-side edits update both
+directions atomically; `inverse()` swaps the two persistent roots without rebuilding pairs.
 
 The port intentionally follows C++ value semantics rather than C# reference identity. No-op updates
 return values that share the same roots as the source; `shares_root_with`,

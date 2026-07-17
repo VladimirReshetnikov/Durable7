@@ -8,8 +8,10 @@
 `tools-data-structures-hamt` ports the repository HAMT, integer Patricia, and canonical Merkle
 search-tree families to safe Rust. It exposes `PersistentHashMap<K, V, S = RandomState>`,
 `PersistentHashSet<T, S = RandomState>`, their one-way `TransientHashMap` / `TransientHashSet`
-editing sessions, `PersistentHashBag<T, S = RandomState>`, and
-`PersistentBiMap<K, V, SK = RandomState, SV = RandomState>`, plus
+editing sessions, `PersistentHashBag<T, S = RandomState>`,
+`PersistentBiMap<K, V, SK = RandomState, SV = RandomState>`,
+`PersistentHashMultimap<K, V, SK = RandomState, SV = RandomState>`, and
+`PersistentRelation<L, R, SL = RandomState, SR = RandomState>`, plus
 `BulkBuilder<K, V, S = RandomState>`, the independent one-pass scratch constructor (mutable
 unpublished nodes frozen into detached persistent nodes; used by map/set `FromIterator`, set
 intersection, set-relation probes, and Tungsten association index rebuilds). The map additionally
@@ -40,6 +42,13 @@ The trie follows the existing ports:
   retains the two `BuildHasher` states, preserves the first `Eq` representative in each domain,
   rejects occupied keys or values, never displaces another key during replacement, removes through
   either domain, and inverts in O(1) by swapping `Arc`-shared roots;
+- `PersistentHashMultimap` stores nonempty persistent value sets in a persistent outer map,
+  retains independent key/value hash builders, preserves first representatives in both domains,
+  distinguishes key and pair counts, contracts the outer key after the last value removal, and
+  shares every unaffected inner and outer CHAMP path;
+- `PersistentRelation` stores mutually inverse multimaps, normalizes one global representative per
+  represented class, supports symmetric pair and whole-domain removal, and creates an inverse by
+  O(1) cloning/swapping of existing roots rather than pair traversal;
 - map equality and diff traverse same-policy CHAMP nodes in lockstep, use stored hashes, and prune
   every `Arc`-identical descendant before key or value comparison. Diff returns owned typed
   additions, removals, and changes. Across distinct `BuildHasher` policy identities both operations

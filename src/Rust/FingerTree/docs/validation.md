@@ -14,6 +14,12 @@ Run from `src/Rust`:
 The wrapper locates Cargo on `PATH` or under the default rustup profile and applies inherited,
 non-interactive Windows error handling before Cargo starts the test executable.
 
+## Current derived-structure evidence
+
+On 2026-07-16, the focused payload interval-map suite passed 6/6 tests. The serialized full Rust
+workspace subsequently passed in both Debug and Release, including all FingerTree unit,
+integration, compile-fail, and documentation tests. Benchmarks were not run.
+
 The crate uses `#![forbid(unsafe_code)]`. Unit tests are inline in the module files under
 `FingerTree/src/`; representation-scale integration tests live under `FingerTree/tests/`. Together
 they cover:
@@ -60,6 +66,9 @@ they cover:
   enqueue/meld/dequeue paths;
 - closed interval overlap, containment, coalescing, last-low/maximum-high measured descent (including a
   100,000-interval sparse-hit case), and shared-storage insert/remove paths;
+- payload interval-map strict/replacing edits, lexicographic same-low order, invalid-interval
+  rejection, first key representatives, equal-value storage sharing, overlap-model parity,
+  removal, retained versions, and full-key/maximum-high annotation invariants;
 - chunked positional rope construction from chunks, caller-supplied copy targets, edits, cached length measures,
   and chunk/subtree sharing; positional cursor gap boundaries and non-`Clone` navigation/snapshot,
   chunk-edge edits, exact seek/empty-insert no-ops, retained branch isolation, root-sharing snapshots,

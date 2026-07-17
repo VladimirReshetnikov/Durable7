@@ -3,13 +3,19 @@
 - Created (UTC): 2026-07-15T09:10:22Z
 - Repository HEAD: a47ada790d8028a744990c4608c32ab001376683
 - Audience: Kotlin/JVM API users, maintainers, reviewers, and sibling-port authors
-- Scope: `tools.datastructures.ordered.PersistentOrderedSet<T>`
+- Scope: neutral persistent ordered set and map
 
 ## Ownership And Type
 
 ```kotlin
 public class PersistentOrderedSet<T> : Iterable<T>
 ```
+
+`PersistentOrderedMap<K, V>` retains a `PersistentOrderedSet<K>` for explicit key order and a
+`PersistentHashMap<K, V>` for payload lookup. Existing-key `set` retains the first representative
+and position; movement/reversal/sort share the payload root, while value-only replacement retains
+the exact ordered-set object. Range extraction rebuilds precisely the selected payload index, and
+`validateStructure()` checks both directions of the composite invariant.
 
 The type is a general-purpose Ordered-owned collection. Production code imports only public
 `tools.datastructures.hamt` and `tools.datastructures.fingertree` APIs. It has no Tungsten

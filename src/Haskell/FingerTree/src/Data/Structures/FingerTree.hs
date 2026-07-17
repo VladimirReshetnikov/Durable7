@@ -30,6 +30,7 @@ module Data.Structures.FingerTree
   , PrioritySearchQueue.PrioritySearchQueueStatistics(..)
   , IntervalTree.Interval(..)
   , IntervalTree.IntervalTree
+  , IntervalMap.IntervalMap
   , Rope.Rope
   , Rope.RopeCursor
   , Rope.Chunk(..)
@@ -42,6 +43,7 @@ module Data.Structures.FingerTree
 
 import qualified Data.Structures.FingerTree.Deque as Deque
 import qualified Data.Structures.FingerTree.IntervalTree as IntervalTree
+import qualified Data.Structures.FingerTree.IntervalMap as IntervalMap
 import qualified Data.Structures.FingerTree.Measured as Measured
 import qualified Data.Structures.FingerTree.MeasuredRope as MeasuredRope
 import qualified Data.Structures.FingerTree.Measures as Measures

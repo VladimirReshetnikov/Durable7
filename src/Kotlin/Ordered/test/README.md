@@ -12,7 +12,7 @@ cd src/Kotlin
 .\build.ps1 -Workspace Ordered
 ```
 
-The ten named scenarios form four layers:
+The eleven named scenarios form four layers:
 
 1. construction, nullable values, representative retention, point edits, endpoints, and eager
    positional validation;
@@ -27,3 +27,7 @@ Every layer calls the public Ordered-owned `validateStructure()` diagnostic. The
 use constant-hash collision policies, object-distinct equivalent representatives, nullable values,
 semantically different policy objects, and unpublished rebuild failures. They do not import or
 compile Tungsten and do not execute benchmarks.
+
+The ordered-map scenario additionally covers payload replacement without movement, retained source
+values, order/value root sharing, explicit movement, stable entry sorting, range extraction, and
+dual-index validation.

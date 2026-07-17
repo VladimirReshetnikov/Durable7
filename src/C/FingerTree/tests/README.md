@@ -5,13 +5,14 @@
 - Audience: Maintainers validating the C FingerTree port
 - Scope: Native test executable and source organization under `src/C/FingerTree/tests`
 
-The C FingerTree workspace has seven focused native test executables. `fingertree_c_tests` is
+The C FingerTree workspace has eight focused native test executables. `fingertree_c_tests` is
 registered as `fingertree_c.core`; `rrb_vector_c_tests` is registered as
 `fingertree_c.rrb_vector`; `daba_lite_c_tests` is registered as `fingertree_c.daba_lite`;
 `canonical_sorted_set_c_tests` is registered as `fingertree_c.canonical_sorted_set`;
 `brodal_okasaki_heap_c_tests` is registered as `fingertree_c.brodal_okasaki_heap`;
 `priority_search_queue_c_tests` is registered as `fingertree_c.priority_search_queue`; and
-`range_update_sequence_c_tests` is registered as `fingertree_c.range_update_sequence`. Each source
+`range_update_sequence_c_tests` is registered as `fingertree_c.range_update_sequence`; and
+`persistent_interval_map_c_tests` is registered as `fingertree_c.persistent_interval_map`. Each source
 contains its runner, assertion macros, policy helpers, and test cases. The canonical executable uses
 the library's Windows CNG or OpenSSL Crypto backend but no test-framework dependency.
 
@@ -21,6 +22,10 @@ line information, and exits non-zero if any test increments the failure count. A
 `all C RRB vector tests passed`, `all C DABA Lite tests passed`, `all C canonical sorted-set tests passed`,
 `all C Brodal-Okasaki heap tests passed`, `all C priority search queue tests passed`, or
 `all C range-update sequence tests passed`.
+
+`persistent_interval_map_c_tests.c` covers unique interval keys, equal-low ordering, strict add,
+payload replacement, snapshot isolation, exact lookup, first-overlap and complete overlap
+visitation/counting, removal, invalid intervals, and dual-index validation.
 
 ## Test Cases
 
@@ -176,6 +181,7 @@ Run the built executables directly when changing runner diagnostics or a focused
 .\out\build\msvc-debug\tests\brodal_okasaki_heap_c_tests.exe
 .\out\build\msvc-debug\tests\priority_search_queue_c_tests.exe
 .\out\build\msvc-debug\tests\range_update_sequence_c_tests.exe
+.\out\build\msvc-debug\tests\persistent_interval_map_c_tests.exe
 .\out\build\msvc-debug\tests\rrb_vector_c_tests.exe
 .\out\build\msvc-debug\tests\daba_lite_c_tests.exe
 ```

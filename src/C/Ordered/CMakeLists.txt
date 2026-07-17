@@ -33,6 +33,7 @@ add_library(tools::data_structures::ordered_c ALIAS tools_data_structures_ordere
 target_sources(
     tools_data_structures_ordered_c
     PRIVATE
+        src/ordered_map.c
         src/ordered_set.c
 )
 

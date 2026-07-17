@@ -23,6 +23,8 @@
 namespace ordered = tools::data_structures::ordered;
 using namespace tools::data_structures::finger_tree::tests;
 
+void add_persistent_ordered_map_tests(suite& tests);
+
 namespace {
 
 template <class T>
@@ -695,6 +697,8 @@ int main(const int argument_count, const char* const* arguments)
 
     tests.set_group("construction-and-lookup");
     add_construction_and_lookup_tests(tests);
+    tests.set_group("ordered-map");
+    add_persistent_ordered_map_tests(tests);
     tests.set_group("edits-and-order");
     add_edit_and_order_tests(tests);
     tests.set_group("algebra-and-relations");

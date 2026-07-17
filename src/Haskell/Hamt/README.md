@@ -6,12 +6,17 @@
 - Scope: `tools-data-structures-hamt` package
 
 This package ports the repository's persistent map cores to Haskell. It provides persistent
-`HashMap`, `HashSet`, and `HashBag` values with a canonical 32-way CHAMP trie, strict split data/node maps,
+`HashMap`, `HashSet`, `HashBag`, `HashMultimap`, and `Relation` values with a canonical 32-way CHAMP trie, strict split data/node maps,
 inline payload runs, immutable equal-hash collision buckets, structural sharing between versions,
 and optional runtime `HashPolicy` values for custom hash/equality behavior. Same-policy maps expose
 lockstep node-based `mapEquals` and typed `MapDifference` classification; cross-policy maps retain
 semantic lookup comparison. Right-valued union, left-valued intersection, difference, and
 symmetric difference are implemented by direct CHAMP-slot combination.
+
+`HashMultimap k v` stores only nonempty `HashSet v` groups under independent runtime key and value
+policies, with distinct-key and checked pair counts, first representatives, pair/group edits, and
+receiver-policy algebra. `Relation a b` maintains exact forward and reverse multimaps; every pure
+edit constructs both successors together, and `validStructure` verifies complete inverse parity.
 
 ## One-Descent Map Factories
 

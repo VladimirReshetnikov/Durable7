@@ -3,8 +3,8 @@
 - Status: Active C++ workspace
 - Created (UTC): 2026-06-30T17:10:47Z
 - Repository HEAD: bdc938f66eaf22d97a9c0df9fdd547b53319e112
-- Updated (UTC): 2026-07-14T04:50:00Z
-- Updated against repository HEAD: f814076ceba253306517114ff94d30f952af92e6
+- Updated (UTC): 2026-07-16T22:52:15Z
+- Updated against repository HEAD: 88164edb086096800b2fb32eeaa7e7a1e556e183
 - Audience: Maintainers implementing and reviewing the C++ port
 - Scope: Build entry points, layout, and validation for `src/Cpp/FingerTree`
 
@@ -12,6 +12,12 @@ This workspace contains the C++ port of the `FingerTree` data-structure library.
 [`docs/port-plan.md`](docs/port-plan.md): a header-first library under the namespace
 `tools::data_structures::finger_tree`, CMake/Ninja build entry points for the local MSVC toolchain, and CTest
 validation from the first milestone onward.
+
+`persistent_interval_map<Endpoint, Value, Comparison, ValueEqual>` is the payload-bearing interval
+sibling. It orders validated closed intervals by the complete `(low, high)` key and uses one
+measured finger tree whose annotation retains both the complete rightmost interval and maximum high
+endpoint. Exact lookup, strict or replacing edits, point stabbing, and output-sensitive overlap
+enumeration therefore need no second index; distinct overlapping intervals remain distinct.
 
 Alongside the measured-tree family, the workspace now ships `rrb_vector<T>`: a persistent 32-way relaxed
 radix-balanced vector with dense regular branches, cumulative-size relaxed branches, boundary-spine split and

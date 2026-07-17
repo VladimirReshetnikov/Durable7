@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-#![doc = "Persistent HAMT map/set/bag/bimap, Patricia, and canonical Merkle search-tree collections."]
+#![doc = "Persistent HAMT map/set/bag/bimap/multimap/relation, Patricia, and canonical Merkle search-tree collections."]
 
 use std::collections::hash_map::RandomState;
 use std::fmt;
@@ -10,12 +10,17 @@ use std::sync::Arc;
 
 mod bi_map;
 mod hash_bag;
+mod hash_multimap;
 mod merkle_encoding;
 mod merkle_persistence;
 mod merkle_search_tree;
 mod patricia;
 pub use bi_map::{BiMapAddResult, BiMapConflict, BiMapRemoveResult, PersistentBiMap};
+mod relation;
 pub use hash_bag::{BagIter, HashBagEntry, HashBagError, PersistentHashBag};
+pub use hash_multimap::{
+    HashMultimapInvariantError, HashMultimapIter, HashMultimapStatistics, PersistentHashMultimap,
+};
 pub use merkle_encoding::{
     Int32MerkleCodec, Int64MerkleCodec, MerkleCodec, MerkleCodecError, MerkleDigest,
     MerkleDigestParseError, MerkleDigestWriteError, MerkleKeyComparer, MerklePolicyError,
@@ -35,6 +40,7 @@ pub use merkle_search_tree::{
     MerkleTreeIter,
 };
 pub use patricia::{PersistentIntMap, PersistentIntSet, PersistentLongMap, PersistentLongSet};
+pub use relation::{PersistentRelation, RelationInvariantError, RelationStatistics};
 
 const BITS_PER_LEVEL: u32 = 5;
 const BRANCH_MASK: u32 = 0x1f;

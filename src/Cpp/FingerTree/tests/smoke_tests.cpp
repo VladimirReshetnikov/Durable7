@@ -21,6 +21,7 @@ using namespace tools::data_structures::finger_tree::tests;
 
 void add_measure_tests(suite& tests);
 void add_interval_tree_tests(suite& tests);
+void add_persistent_interval_map_tests(suite& tests);
 void add_lazy_cell_tests(suite& tests);
 void add_atomic_box_tests(suite& tests);
 void add_brodal_okasaki_heap_tests(suite& tests);
@@ -123,6 +124,9 @@ int main(const int argument_count, const char* const* arguments)
 
     tests.set_group("interval-tree");
     add_interval_tree_tests(tests);
+
+    tests.set_group("interval-map");
+    add_persistent_interval_map_tests(tests);
 
     tests.set_group("lazy-cell");
     add_lazy_cell_tests(tests);

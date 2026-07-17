@@ -380,6 +380,66 @@ collapse failures therefore remain observable and leave both inputs unchanged. U
 comparer object for both operands when their policies are intentionally identical and normalization
 is unnecessary.
 
+## Persistent Hash Multimap
+
+Use `PersistentHashMultimap<TKey, TValue>` when each key owns a set of values and duplicate pairs
+must collapse under independent equality policies:
+
+```csharp
+var tags = PersistentHashMultimap<string, string>
+    .Create(StringComparer.OrdinalIgnoreCase, StringComparer.OrdinalIgnoreCase)
+    .Add("document-1", "Persistent")
+    .Add("DOCUMENT-1", "Collections")
+    .Add("document-1", "PERSISTENT"); // identity-preserving duplicate
+
+Debug.Assert(tags.KeyCount == 1);
+Debug.Assert(tags.PairCount == 2L);
+Debug.Assert(tags.Contains("Document-1", "collections"));
+
+foreach (string tag in tags.GetValues("DOCUMENT-1"))
+{
+    // Visits the originally stored representatives "Persistent" and "Collections".
+}
+```
+
+`GetValues` returns a persistent set using the configured value comparer. For a missing key that
+set is empty, so callers can query or extend it without special comparer handling. `Groups` exposes
+the nonempty persistent sets when grouped traversal is preferable to flattened pair enumeration.
+
+`Remove(key, value)` is a no-op for an absent pair. Removing the last value automatically removes
+the key group; `RemoveKey` removes a whole group in one outer-trie update. `TryRemoveKey` also
+returns the removed persistent set. Earlier multimap versions and returned group sets remain
+immutable and share untouched CHAMP paths with their successors.
+
+## Persistent Many-To-Many Relation
+
+Use `PersistentRelation<TLeft, TRight>` when adjacency must be queried and updated efficiently in
+both directions:
+
+```csharp
+var membership = PersistentRelation<string, string>
+    .Create(StringComparer.OrdinalIgnoreCase, StringComparer.OrdinalIgnoreCase)
+    .Add("alice", "reviewers")
+    .Add("alice", "maintainers")
+    .Add("bob", "reviewers");
+
+foreach (string group in membership.GetRights("ALICE")) { }
+foreach (string member in membership.GetLefts("REVIEWERS")) { }
+
+var withoutReviewers = membership.RemoveRight("reviewers");
+var reverse = membership.Inverse; // no index rebuild
+```
+
+Duplicate pairs are identity-preserving no-ops. The first representative introduced for a left or
+right equivalence class is reused globally across every adjacency group. `Remove` deletes one pair;
+`RemoveLeft` and `RemoveRight` delete all incident pairs and contract empty groups on both sides.
+Their try forms return the removed persistent adjacency set. `Inverse` swaps the two existing
+multimap indexes in O(1), is cached, and points back to the original relation.
+
+The relation deliberately stores every pair twice. Choose it when symmetric adjacency lookup and
+whole-domain removal justify that space; use `PersistentHashMultimap<TKey, TValue>` for a single
+forward index.
+
 ## Persistent Bidirectional Map
 
 Use `PersistentBiMap<TKey, TValue>` when both domains must be unique and lookup must work in either

@@ -19,6 +19,9 @@ the [API specification](api-specification.md) and [usage guide](usage.md).
 `build/<Configuration>/persistent_hash_bag_tests.exe`, then compiles
 `src/hamt.c`, `src/persistent_bi_map.c`, and `tests/persistent_bi_map_tests.c` into
 `build/<Configuration>/persistent_bi_map_tests.exe`, then compiles
+`src/persistent_hash_multimap.c`, `src/persistent_relation.c`, and
+`tests/persistent_hash_multimap_tests.c` into
+`build/<Configuration>/persistent_hash_multimap_tests.exe`, then compiles
 `src/patricia.c` and `tests/patricia_tests.c` into
 `build/<Configuration>/patricia_tests.exe`, and finally compiles `src/merkle_search_tree.c` and
 `tests/merkle_search_tree_tests.c` into
@@ -135,6 +138,12 @@ balanced-owner checks.
 precedence, first representatives, policy-aware non-displacing replacement, symmetric removal,
 stored `NULL`, clear, O(1) inverse round trips, a 2,000-operation collision-heavy two-map model,
 canonical validation, and failpoint atomicity.
+`tests/persistent_hash_multimap_tests.c` covers independent key/value policies, nonempty group
+normalization, distinct-key versus checked pair counts, first representatives, alias-safe point and
+group edits, receiver-policy algebra, retained snapshots, and two-level validation.
+The same executable covers relation forward/reverse lookup, exact inverse maintenance, duplicate
+and missing-pair no-ops, clear, retained snapshots, and failure-atomic publication of both component
+successors.
 
 `tests/patricia_tests.c` is the explicit-width integer-map/set executable. It covers signed extrema
 and traversal order, root-sharing no-ops, retained snapshots, fixed and callback-combining map

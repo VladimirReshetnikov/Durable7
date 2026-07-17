@@ -20,7 +20,9 @@ import Data.Structures.Hamt.Hashable (hash)
 import qualified Data.Structures.Hamt.HashBag as HashBag
 import Data.Structures.Hamt.HashMap (HashPolicy(..))
 import qualified Data.Structures.Hamt.HashMap as HashMap
+import qualified Data.Structures.Hamt.HashMultimap as HashMultimap
 import qualified Data.Structures.Hamt.HashSet as HashSet
+import qualified Data.Structures.Hamt.Relation as Relation
 import qualified Data.Structures.Hamt.Transient as Transient
 import Data.Structures.Hamt.MerkleEncoding
   ( MerkleCodec(..)
@@ -84,6 +86,7 @@ main = do
   testPersistentHashBagAlgebra
   testPersistentHashBagDeterministicModel
   runBiMapTests
+  testHashMultimapAndRelation
   testSetAlgebra
   testCrossPolicySetRelations
   testTransientSessions
@@ -92,6 +95,26 @@ main = do
   runPersistenceTests
   testConcurrentReads
   putStrLn "tools-data-structures-hamt tests passed"
+
+testHashMultimapAndRelation :: IO ()
+testHashMultimapAndRelation = do
+  let values0 = HashMultimap.empty :: HashMultimap.HashMultimap Int String
+      values1 = HashMultimap.insert 1 "a" (HashMultimap.insert 1 "b" (HashMultimap.insert 2 "b" values0))
+      snapshot = values1
+      values2 = HashMultimap.delete 1 "a" values1
+  assertEqual "multimap pair count" 3 (HashMultimap.size values1)
+  assertEqual "multimap key count" 2 (HashMultimap.keyCount values1)
+  assertBool "multimap membership" (HashMultimap.member 1 "a" snapshot)
+  assertBool "multimap delete preserves snapshot" (not (HashMultimap.member 1 "a" values2))
+  assertBool "multimap invariant" (HashMultimap.validStructure values2)
+  let relation0 = Relation.empty :: Relation.Relation Int String
+      relation1 = Relation.insert 1 "a" (Relation.insert 1 "b" (Relation.insert 2 "b" relation0))
+      relation2 = Relation.deleteLeft 1 relation1
+  assertEqual "relation pair count" 3 (Relation.size relation1)
+  assertBool "relation reverse lookup" (maybe False (HashSet.member 2) (Relation.lookupLefts "b" relation1))
+  assertEqual "relation group removal" 1 (Relation.size relation2)
+  assertBool "relation inverse" (Relation.member "b" 2 (Relation.inverse relation1))
+  assertBool "relation invariant" (Relation.validStructure relation2)
 
 testMapBasics :: IO ()
 testMapBasics = do

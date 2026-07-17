@@ -15,7 +15,7 @@ test, API, or complexity claims. For semantic contracts and usage examples, pair
 `DataStructures.sln` contains:
 
 - `src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj`, the public library containing
-  the CHAMP map/set/bag/bimap, Ctrie, Patricia, and Merkle families.
+  the CHAMP map/set/bag/bimap/multimap/relation, Ctrie, Patricia, and Merkle families.
 - `tests/Tools.DataStructures.Hamt.Tests/Tools.DataStructures.Hamt.Tests.csproj`, the xUnit/CsCheck
   test project.
 
@@ -83,7 +83,34 @@ dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Te
     -- RunConfiguration.MaxCpuCount=1
 ```
 
+For a focused set-valued hash-multimap pass, use:
+
+```powershell
+dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+    --no-restore --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false `
+    --filter FullyQualifiedName~PersistentHashMultimapTests `
+    -- RunConfiguration.MaxCpuCount=1
+```
+
+For the mutually inverse relation contract, use:
+
+```powershell
+dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+    --no-restore --disable-build-servers -m:1 -nr:false `
+    -p:BuildInParallel=false -p:UseSharedCompilation=false `
+    --filter FullyQualifiedName~PersistentRelationTests `
+    -- RunConfiguration.MaxCpuCount=1
+```
+
 ## Test Coverage
+
+### Current Derived-Structure Integration Evidence
+
+On 2026-07-16 UTC, the complete HAMT project passed 324/324 tests in both the full serialized Debug
+and Release solution gates. The focused new lanes pass 7/7 `PersistentHashMultimapTests` and 9/9
+`PersistentRelationTests`. Both complete solution builds finish with zero warnings and zero errors,
+and both full C# gates pass 1,465/1,465 tests. Benchmarks were not run.
 
 `PersistentBiMapTests` provides the bimap shipment gate: strict two-domain uniqueness, independent
 policy retention, configured-value-comparer replacement, first representatives, inverse identity,
@@ -117,6 +144,12 @@ The suite covers:
   default/before-first/active/exhausted/interface/reset states, `Array.MaxLength` materialization
   guard, distinct debugger projection, and exact API shape excluding `Count` and
   `IReadOnlyCollection<T>`;
+- hash-multimap construction, independent comparer retention, first representatives in both
+  domains, distinct key/pair counts, duplicate identity, comparer-preserving absent groups,
+  last-value group contraction, whole-group removal, retained histories, and recursive invariants;
+- relation many-to-many adjacency, independent policy retention, global representatives, pair and
+  whole-domain removal, comparer-preserving absent adjacency sets, cached inverse identity,
+  retained branching histories, and mutually inverse index invariants;
 - comparer-aware linear-model hash-bag histories with retained snapshots and invariant validation
   after commands under ordinary, nullable, and collision-heavy policies;
 - Axis 2 map/set contract oracles for comparer identity, stored representatives, nullable keys/items,

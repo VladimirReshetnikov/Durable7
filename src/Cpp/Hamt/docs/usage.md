@@ -2,6 +2,8 @@
 
 - Created (UTC): 2026-07-02T20:07:09Z
 - Repository HEAD: c58fc1159beb94e985ca66861bdc2ed3767eb2da
+- Updated (UTC): 2026-07-16T22:52:15Z
+- Updated against repository HEAD: 88164edb086096800b2fb32eeaa7e7a1e556e183
 - Audience: C++ consumers and maintainers using the HAMT, Patricia, and Merkle map families
 - Scope: Public include paths, value semantics, common operations, policy objects, canonical Merkle construction, iteration, and diagnostics
 
@@ -15,6 +17,8 @@ the specification.
 #include <Tools/DataStructures/Hamt/persistent_hash_map.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_bag.hpp>
 #include <Tools/DataStructures/Hamt/persistent_bi_map.hpp>
+#include <Tools/DataStructures/Hamt/persistent_hash_multimap.hpp>
+#include <Tools/DataStructures/Hamt/persistent_relation.hpp>
 #include <Tools/DataStructures/Hamt/persistent_hash_set.hpp>
 #include <Tools/DataStructures/Hamt/persistent_int_map.hpp>
 #include <Tools/DataStructures/Hamt/merkle_search_tree.hpp>
@@ -299,6 +303,32 @@ Ordinary iteration expands copies. Use `distinct_items()` for one item per class
 for (const auto& occurrence : addition) { /* repeated items */ }
 for (const auto& item : addition.distinct_items()) { /* one per class */ }
 for (const auto& [item, count] : addition.entries()) { /* counted classes */ }
+```
+
+## Hash Multimap And Relation
+
+Use `persistent_hash_multimap` when each key maps to a set of distinct values. Removing the final
+pair contracts the outer key automatically:
+
+```cpp
+auto tags = hamt::persistent_hash_multimap<std::string, int>{}
+    .add("red", 1)
+    .add("red", 2);
+auto values = tags.try_get_values("red");
+auto contracted = tags.remove("red", 1).remove("red", 2);
+```
+
+Use `persistent_relation` when both directions are first-class. It maintains forward and reverse
+multimaps as one invariant and globally retains the first representative of every left and right
+class. `inverse()` returns the opposite orientation by swapping the two persistent roots.
+
+```cpp
+auto relation = hamt::persistent_relation<std::string, int>{}
+    .add("alpha", 1)
+    .add("beta", 1);
+auto rights = relation.rights_or_empty("alpha");
+auto lefts = relation.lefts_or_empty(1);
+auto inverse = relation.inverse();
 ```
 
 ## One-Way Edit Sessions
@@ -603,6 +633,8 @@ diff, and validation; custom implementations must support the concurrency the ca
 | Immutable unordered value set | `persistent_hash_set<T>` |
 | Stored equivalent item recovery | `try_get_value` |
 | Immutable unordered multiset | `persistent_hash_bag<T>` |
+| Set-valued unordered multimap | `persistent_hash_multimap<Key, Value>` |
+| Bidirectional many-to-many lookup | `persistent_relation<Left, Right>` |
 | Maximum/minimum/subtract/add bag algebra | `union_with`, `intersect_with`, `except_with`, `sum_with` |
 | One-way map/set edit phase | `to_transient()` / `create_transient()`, then `std::move(session).persist()` |
 | Union/intersection/difference | `union_with`, `intersect_with`, `except_with`, `symmetric_except_with` |

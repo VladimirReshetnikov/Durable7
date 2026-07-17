@@ -1,9 +1,28 @@
-# C++ Persistent Ordered Set API Notes
+# C++ Persistent Ordered Collections API Notes
 
 - Created (UTC): 2026-07-15T09:20:15Z
-- Repository HEAD: a47ada790d8028a744990c4608c32ab001376683
+- Repository HEAD: 88164edb086096800b2fb32eeaa7e7a1e556e183
+- Updated (UTC): 2026-07-16T22:52:15Z
 - Audience: C++ API consumers, maintainers, and cross-language parity reviewers
-- Scope: `tools::data_structures::ordered::persistent_ordered_set`
+- Scope: `persistent_ordered_set` and `persistent_ordered_map`
+
+## Persistent Ordered Map
+
+`persistent_ordered_map<Key, Value, Hash, KeyEqual, ValueEqual>` adds payload-bearing keyed entries
+without adopting Tungsten semantics. A persistent deque owns `(stamp, key, value)` entries while a
+CHAMP map stores only `key -> stamp`; arbitrary payloads are therefore not duplicated in the hash
+index. Construction retains the first key representative and position and the last distinct value.
+`set_item` retains the stored key, label, and position, and an equal-value update shares the complete
+membership root.
+
+The map provides keyed lookup and representative recovery, `entry_at`/`front`/`back`, strict
+`add`/`add_first`/`insert`, conditional `try_add`, explicit movement, keyed and positional removal,
+policy-preserving clear and ranges, take/drop, reverse, stable sort, and ordered entry/key/value
+materialization. Sparse labels, deterministic relabeling, exception atomicity, and asymptotic bounds
+match the set. `validate_invariants` additionally proves that every ordered key has exactly one
+matching CHAMP label and that values occur only in engaged deque entries.
+
+## Persistent Ordered Set
 
 ## Type And Policy
 
