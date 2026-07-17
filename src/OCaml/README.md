@@ -59,5 +59,11 @@ buckets. `Persistent_hamt` retains key representatives and policies, exposes one
 sessions. `Persistent_hash_set`, `Persistent_hash_bag`, and strict `Persistent_bi_map` compose that
 core without introducing mutable published state.
 
+The HAMT composition layer adds set-valued `Persistent_hash_multimap`, bidirectional
+`Persistent_relation`, strict presence-aware and invertible `Persistent_map_patch`, explicit-vertex
+`Persistent_directed_graph`, and `Persistent_indexed_map` with one automatically maintained
+nonunique secondary index. Multi-index edits validate or calculate every successor before the new
+facade is returned.
+
 Each remaining collection-family checkpoint adds its public modules and corresponding focused tests
 before the repository-level indexes claim that family as shipped.

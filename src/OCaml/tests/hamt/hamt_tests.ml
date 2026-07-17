@@ -105,6 +105,120 @@ let test_bimap_strictness () =
     "new inverse" (Some 2)
     (Persistent_bi_map.find_key_opt "second" replaced)
 
+let test_multimap_and_relation () =
+  let ints = int_policy () in
+  let strings = Common.Hash_policy.default () in
+  let multimap =
+    Persistent_hash_multimap.empty ~key_policy:strings ~value_policy:ints
+    |> Persistent_hash_multimap.add "odd" 1
+    |> Persistent_hash_multimap.add "odd" 3
+    |> Persistent_hash_multimap.add "even" 2
+    |> Persistent_hash_multimap.add "odd" 3
+  in
+  Alcotest.(check int) "group count" 2 (Persistent_hash_multimap.key_count multimap);
+  Alcotest.(check int) "pair count" 3 (Persistent_hash_multimap.pair_count multimap);
+  let contracted =
+    multimap
+    |> Persistent_hash_multimap.remove "even" 2
+    |> Persistent_hash_multimap.remove "missing" 4
+  in
+  Alcotest.(check bool)
+    "empty groups contract" false
+    (Persistent_hash_multimap.contains_key "even" contracted);
+  let relation =
+    Persistent_relation.empty ~left_policy:strings ~right_policy:ints
+    |> Persistent_relation.add "a" 1 |> Persistent_relation.add "a" 2
+    |> Persistent_relation.add "b" 2
+  in
+  Alcotest.(check int) "relation pairs" 3 (Persistent_relation.pair_count relation);
+  Alcotest.(check bool) "forward" true (Persistent_relation.contains "a" 2 relation);
+  Alcotest.(check bool)
+    "inverse" true
+    (Persistent_relation.contains 2 "a" (Persistent_relation.inverse relation));
+  let removed = Persistent_relation.remove_left "a" relation in
+  Alcotest.(check bool)
+    "reverse index updated" false
+    (Persistent_hash_set.mem "a" (Persistent_relation.lefts 2 removed))
+
+let test_map_patch () =
+  let policy = int_policy () in
+  let before =
+    Persistent_hamt.empty policy |> Persistent_hamt.add 1 "one" |> Persistent_hamt.add 2 "two"
+  in
+  let after =
+    before |> Persistent_hamt.set 1 "first" |> Persistent_hamt.remove 2
+    |> Persistent_hamt.add 3 "three"
+  in
+  let patch = Persistent_map_patch.between before after in
+  Alcotest.(check int) "three changes" 3 (Persistent_map_patch.count patch);
+  let applied = Result.get_ok (Persistent_map_patch.apply patch before) in
+  Alcotest.(check bool) "apply" true (Persistent_hamt.equal after applied);
+  let restored =
+    Result.get_ok (Persistent_map_patch.apply (Persistent_map_patch.invert patch) applied)
+  in
+  Alcotest.(check bool) "invert" true (Persistent_hamt.equal before restored);
+  let incompatible = Persistent_hamt.set 1 "unexpected" before in
+  (match Persistent_map_patch.apply patch incompatible with
+  | Error _ -> ()
+  | Ok _ -> Alcotest.fail "strict application should reject an unexpected source");
+  let final_map = Persistent_hamt.set 3 "THREE" after in
+  let second = Persistent_map_patch.between after final_map in
+  let composed = Result.get_ok (Persistent_map_patch.compose patch second) in
+  Alcotest.(check bool)
+    "compose" true
+    (Persistent_hamt.equal final_map (Result.get_ok (Persistent_map_patch.apply composed before)))
+
+let test_directed_graph () =
+  let graph =
+    Persistent_directed_graph.empty (int_policy ())
+    |> Persistent_directed_graph.add_vertex 99
+    |> Persistent_directed_graph.add_edge 1 2
+    |> Persistent_directed_graph.add_edge 2 3
+    |> Persistent_directed_graph.add_edge 3 1
+  in
+  Alcotest.(check int)
+    "explicit and endpoint vertices" 4
+    (Persistent_directed_graph.vertex_count graph);
+  Alcotest.(check int) "edges" 3 (Persistent_directed_graph.edge_count graph);
+  Alcotest.(check bool)
+    "outgoing" true
+    (Persistent_hash_set.mem 2 (Persistent_directed_graph.outgoing 1 graph));
+  Alcotest.(check bool)
+    "reversed" true
+    (Persistent_directed_graph.contains_edge 2 1 (Persistent_directed_graph.reverse graph));
+  let removed = Persistent_directed_graph.remove_vertex 2 graph in
+  Alcotest.(check int) "incident edges removed" 1 (Persistent_directed_graph.edge_count removed);
+  Alcotest.(check bool)
+    "isolated retained" true
+    (Persistent_directed_graph.contains_vertex 99 removed)
+
+let test_indexed_map () =
+  let map =
+    Persistent_indexed_map.empty ~key_policy:(int_policy ())
+      ~index_policy:(Common.Hash_policy.default ())
+      ~index_selector:(fun _ value -> String.sub value 0 1)
+      ()
+    |> Persistent_indexed_map.add 1 "alpha"
+    |> Persistent_indexed_map.add 2 "apple"
+    |> Persistent_indexed_map.add 3 "beta"
+  in
+  Alcotest.(check int) "index groups" 2 (Persistent_indexed_map.index_count map);
+  Alcotest.(check int)
+    "nonunique group" 2
+    (Persistent_hash_set.count (Persistent_indexed_map.keys_for_index "a" map));
+  let moved = Persistent_indexed_map.set 2 "charlie" map in
+  Alcotest.(check bool)
+    "old group updated" false
+    (Persistent_hash_set.mem 2 (Persistent_indexed_map.keys_for_index "a" moved));
+  Alcotest.(check bool)
+    "new group updated" true
+    (Persistent_hash_set.mem 2 (Persistent_indexed_map.keys_for_index "c" moved));
+  let removed = Persistent_indexed_map.remove 2 moved in
+  Alcotest.(check int) "empty index contracted" 2 (Persistent_indexed_map.index_count removed);
+  Alcotest.(check int)
+    "removed group empty" 0
+    (Persistent_hash_set.count (Persistent_indexed_map.keys_for_index "c" removed))
+
 let map_model_property =
   let generator = QCheck.(list (pair (int_bound 63) (int_range (-10_000) 10_000))) in
   QCheck.Test.make ~count:200 ~name:"HAMT agrees with a mutable finite-map model" generator
@@ -141,5 +255,9 @@ let () =
           Alcotest.test_case "set algebra" `Quick test_set_algebra;
           Alcotest.test_case "bag algebra" `Quick test_bag_algebra;
           Alcotest.test_case "strict bimap" `Quick test_bimap_strictness;
+          Alcotest.test_case "multimap and relation" `Quick test_multimap_and_relation;
+          Alcotest.test_case "strict map patch" `Quick test_map_patch;
+          Alcotest.test_case "directed graph" `Quick test_directed_graph;
+          Alcotest.test_case "indexed map" `Quick test_indexed_map;
         ] );
     ]
