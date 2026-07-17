@@ -32,6 +32,7 @@ let digest_rank tag payload =
 
 let stable_rank_hash_bytes = digest_rank "bytes"
 let stable_rank_hash_string value = digest_rank "str" (Bytes.of_string value)
+
 let create_policy ~comparator ~rank_hash ~seed =
   let rank_key =
     Digestif.SHA256.to_raw_string
@@ -39,6 +40,7 @@ let create_policy ~comparator ~rank_hash ~seed =
          (Bytes.concat Bytes.empty [ Bytes.of_string "ZZT2"; int64_bytes seed ]))
   in
   { order = comparator; rank_hash; rank_key }
+
 let comparator policy = policy.order
 
 let leading_zero_bits value =
