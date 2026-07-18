@@ -1196,6 +1196,10 @@ macro_rules! map_cursor_type {
                 self.map.len()
             }
             #[must_use]
+            pub fn is_empty(&self) -> bool {
+                self.map.is_empty()
+            }
+            #[must_use]
             pub fn position(&self) -> usize {
                 self.position
             }
@@ -1459,6 +1463,10 @@ macro_rules! set_cursor_type {
             #[must_use]
             pub fn len(&self) -> usize {
                 self.set.len()
+            }
+            #[must_use]
+            pub fn is_empty(&self) -> bool {
+                self.set.is_empty()
             }
             #[must_use]
             pub fn position(&self) -> usize {

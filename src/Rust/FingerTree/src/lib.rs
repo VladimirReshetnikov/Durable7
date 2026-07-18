@@ -33,8 +33,8 @@ pub use daba_lite::{
     DabaLite, DabaLiteInvariantError, DabaLiteStatistics, DabaMonoid, EmptyDabaLiteError,
 };
 pub use deque::{
-    DequeItemSplit, DequePop, DequeRangeSplit, DequeSplit, PersistentDeque, ReversibleDeque,
-    ReversibleDequePop, ReversibleDequeSplit,
+    DequeItemSplit, DequePop, DequeRangeSplit, DequeSplit, PersistentDeque, PersistentDequeCursor,
+    ReversibleDeque, ReversibleDequeCursor, ReversibleDequePop, ReversibleDequeSplit,
 };
 pub use interval_map::{
     IntervalMapEntry, IntervalMapError, IntervalMapInvariantError, IntervalMapStatistics,
@@ -42,9 +42,9 @@ pub use interval_map::{
 };
 pub use interval_tree::{Interval, IntervalTree};
 pub use measured::{
-    FingerTree, KeyMeasure, LocateResult, MaxMeasure, MeasurePair, MeasurePolicy, MeasuredSplit,
-    MinMeasure, OrderStatisticMeasure, ProductMeasure, RankedKey, SizeAndMaxMeasure,
-    SizeAndMinMeasure, SizeAndSumMeasure, SizeMeasure, SumMeasure,
+    FingerTree, FingerTreeCursor, FingerTreeCursorSearch, KeyMeasure, LocateResult, MaxMeasure,
+    MeasurePair, MeasurePolicy, MeasuredSplit, MinMeasure, OrderStatisticMeasure, ProductMeasure,
+    RankedKey, SizeAndMaxMeasure, SizeAndMinMeasure, SizeAndSumMeasure, SizeMeasure, SumMeasure,
 };
 pub use ordering::{NaturalOrderComparer, OrderComparer, OrderPolicy};
 pub use priority_queue::{PriorityEntry, PriorityQueue};
@@ -59,8 +59,8 @@ pub use rope::{
     TextRopeCursor, TextRopeCursorSearch,
 };
 pub use rrb_vector::{
-    RrbVector, RrbVectorBuilder, RrbVectorIntoIter, RrbVectorInvariantError, RrbVectorIter,
-    RrbVectorPop, RrbVectorSplit, RrbVectorStatistics,
+    RrbVector, RrbVectorBuilder, RrbVectorCursor, RrbVectorIntoIter, RrbVectorInvariantError,
+    RrbVectorIter, RrbVectorPop, RrbVectorSplit, RrbVectorStatistics,
 };
 pub use sorted::{DuplicateKeyError, SortedBag, SortedMap, SortedSet};
 pub use text_extras::NewlineStyle;

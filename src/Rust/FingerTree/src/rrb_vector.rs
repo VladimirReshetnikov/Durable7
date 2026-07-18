@@ -19,6 +19,12 @@ pub struct RrbVector<T> {
     root: Option<Arc<Node<T>>>,
 }
 
+/// Immutable snapshot-plus-position gap cursor over a persistent RRB vector.
+pub struct RrbVectorCursor<T> {
+    vector: RrbVector<T>,
+    position: usize,
+}
+
 /// The two persistent vectors produced by [`RrbVector::split_at`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RrbVectorSplit<T> {
@@ -123,6 +129,15 @@ impl<T> Clone for RrbVector<T> {
     }
 }
 
+impl<T> Clone for RrbVectorCursor<T> {
+    fn clone(&self) -> Self {
+        Self {
+            vector: self.vector.clone(),
+            position: self.position,
+        }
+    }
+}
+
 impl<T> RrbVector<T> {
     /// Creates an empty vector.
     #[must_use]
@@ -150,6 +165,24 @@ impl<T> RrbVector<T> {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.root.is_none()
+    }
+
+    /// Creates a cursor before the first element.
+    #[must_use]
+    pub fn cursor(&self) -> RrbVectorCursor<T> {
+        RrbVectorCursor {
+            vector: self.clone(),
+            position: 0,
+        }
+    }
+
+    /// Creates a cursor at a boundary in `0..=len`.
+    #[must_use]
+    pub fn cursor_at(&self, position: usize) -> Option<RrbVectorCursor<T>> {
+        (position <= self.len()).then(|| RrbVectorCursor {
+            vector: self.clone(),
+            position,
+        })
     }
 
     /// Returns the tree height, where leaves have height zero.
@@ -397,6 +430,157 @@ impl<T> RrbVector<T> {
             }
         }
         result
+    }
+}
+
+impl<T> RrbVectorCursor<T> {
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.vector.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.vector.is_empty()
+    }
+
+    #[must_use]
+    pub fn position(&self) -> usize {
+        self.position
+    }
+
+    #[must_use]
+    pub fn is_at_start(&self) -> bool {
+        self.position == 0
+    }
+
+    #[must_use]
+    pub fn is_at_end(&self) -> bool {
+        self.position == self.len()
+    }
+
+    #[must_use]
+    pub fn peek_previous(&self) -> Option<&T> {
+        self.position
+            .checked_sub(1)
+            .and_then(|index| self.vector.get(index))
+    }
+
+    #[must_use]
+    pub fn peek_next(&self) -> Option<&T> {
+        self.vector.get(self.position)
+    }
+
+    #[must_use]
+    pub fn move_previous(&self) -> Option<Self> {
+        Some(Self {
+            vector: self.vector.clone(),
+            position: self.position.checked_sub(1)?,
+        })
+    }
+
+    #[must_use]
+    pub fn move_next(&self) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            vector: self.vector.clone(),
+            position: self.position + 1,
+        })
+    }
+
+    #[must_use]
+    pub fn seek(&self, position: usize) -> Option<Self> {
+        (position <= self.len()).then(|| Self {
+            vector: self.vector.clone(),
+            position,
+        })
+    }
+
+    #[must_use]
+    pub fn snapshot(&self) -> RrbVector<T> {
+        self.vector.clone()
+    }
+}
+
+impl<T> RrbVectorCursor<T>
+where
+    T: Clone,
+{
+    #[must_use]
+    pub fn insert(&self, value: T) -> Self {
+        Self {
+            vector: self
+                .vector
+                .insert_range(self.position, std::iter::once(value))
+                .expect("a cursor gap is a valid insertion boundary"),
+            position: self.position + 1,
+        }
+    }
+
+    #[must_use]
+    pub fn insert_range<I>(&self, values: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let inserted: RrbVector<T> = values.into_iter().collect();
+        self.insert_vector(&inserted)
+    }
+
+    /// Splices an existing vector while retaining structurally shared subtrees.
+    #[must_use]
+    pub fn insert_vector(&self, values: &RrbVector<T>) -> Self {
+        if values.is_empty() {
+            return self.clone();
+        }
+        let split = self
+            .vector
+            .split_at(self.position)
+            .expect("a cursor gap is a valid split boundary");
+        Self {
+            vector: split.left.concat(values).concat(&split.right),
+            position: self
+                .position
+                .checked_add(values.len())
+                .expect("RRB vector cursor position overflow"),
+        }
+    }
+
+    #[must_use]
+    pub fn delete_previous(&self) -> Option<Self> {
+        let position = self.position.checked_sub(1)?;
+        Some(Self {
+            vector: self
+                .vector
+                .remove_range(position, 1)
+                .expect("a non-start cursor has a previous element"),
+            position,
+        })
+    }
+
+    #[must_use]
+    pub fn delete_next(&self) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            vector: self
+                .vector
+                .remove_range(self.position, 1)
+                .expect("a non-end cursor has a next element"),
+            position: self.position,
+        })
+    }
+}
+
+impl<T> RrbVectorCursor<T>
+where
+    T: Clone + PartialEq,
+{
+    #[must_use]
+    pub fn replace_next(&self, value: T) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            vector: self
+                .vector
+                .set_item(self.position, value)
+                .expect("a non-end cursor has a next element"),
+            position: self.position,
+        })
     }
 }
 

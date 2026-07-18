@@ -6,6 +6,13 @@ pub struct PersistentDeque<T> {
     root: Arc<DequeTree<T>>,
 }
 
+/// Immutable snapshot-plus-position gap cursor over a persistent deque.
+#[derive(Debug, PartialEq, Eq)]
+pub struct PersistentDequeCursor<T> {
+    deque: PersistentDeque<T>,
+    position: usize,
+}
+
 impl<T> Clone for PersistentDeque<T> {
     fn clone(&self) -> Self {
         Self {
@@ -50,6 +57,31 @@ pub struct ReversibleDequeSplit<T> {
 pub struct ReversibleDequePop<T> {
     pub value: T,
     pub rest: ReversibleDeque<T>,
+}
+
+/// Immutable logical-order gap cursor over a reversible deque.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ReversibleDequeCursor<T> {
+    deque: ReversibleDeque<T>,
+    position: usize,
+}
+
+impl<T> Clone for PersistentDequeCursor<T> {
+    fn clone(&self) -> Self {
+        Self {
+            deque: self.deque.clone(),
+            position: self.position,
+        }
+    }
+}
+
+impl<T> Clone for ReversibleDequeCursor<T> {
+    fn clone(&self) -> Self {
+        Self {
+            deque: self.deque.clone(),
+            position: self.position,
+        }
+    }
 }
 
 enum DequeTree<T> {
@@ -516,6 +548,24 @@ impl<T> PersistentDeque<T> {
         self.root.len() == 0
     }
 
+    /// Creates a cursor before the first element.
+    #[must_use]
+    pub fn cursor(&self) -> PersistentDequeCursor<T> {
+        PersistentDequeCursor {
+            deque: self.clone(),
+            position: 0,
+        }
+    }
+
+    /// Creates a cursor at a boundary in `0..=len`.
+    #[must_use]
+    pub fn cursor_at(&self, position: usize) -> Option<PersistentDequeCursor<T>> {
+        (position <= self.len()).then(|| PersistentDequeCursor {
+            deque: self.clone(),
+            position,
+        })
+    }
+
     #[must_use]
     pub fn front(&self) -> Option<&T> {
         self.root.first()
@@ -747,6 +797,141 @@ impl<T> PersistentDeque<T> {
         let mut seen = HashSet::new();
         collect(&self.root, &mut seen);
         count(&other.root, &seen)
+    }
+}
+
+impl<T> PersistentDequeCursor<T> {
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.deque.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.deque.is_empty()
+    }
+
+    #[must_use]
+    pub fn position(&self) -> usize {
+        self.position
+    }
+
+    #[must_use]
+    pub fn is_at_start(&self) -> bool {
+        self.position == 0
+    }
+
+    #[must_use]
+    pub fn is_at_end(&self) -> bool {
+        self.position == self.len()
+    }
+
+    #[must_use]
+    pub fn peek_previous(&self) -> Option<&T> {
+        self.position
+            .checked_sub(1)
+            .and_then(|index| self.deque.get(index))
+    }
+
+    #[must_use]
+    pub fn peek_next(&self) -> Option<&T> {
+        self.deque.get(self.position)
+    }
+
+    #[must_use]
+    pub fn move_previous(&self) -> Option<Self> {
+        Some(Self {
+            deque: self.deque.clone(),
+            position: self.position.checked_sub(1)?,
+        })
+    }
+
+    #[must_use]
+    pub fn move_next(&self) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            deque: self.deque.clone(),
+            position: self.position + 1,
+        })
+    }
+
+    #[must_use]
+    pub fn seek(&self, position: usize) -> Option<Self> {
+        (position <= self.len()).then(|| Self {
+            deque: self.deque.clone(),
+            position,
+        })
+    }
+
+    #[must_use]
+    pub fn insert(&self, item: T) -> Self {
+        Self {
+            deque: self
+                .deque
+                .insert_at(self.position, item)
+                .expect("a cursor gap is a valid insertion boundary"),
+            position: self.position + 1,
+        }
+    }
+
+    #[must_use]
+    pub fn insert_range<I>(&self, items: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let inserted = PersistentDeque::from_vec(items.into_iter().collect());
+        if inserted.is_empty() {
+            return self.clone();
+        }
+        let split = self
+            .deque
+            .split_at(self.position)
+            .expect("a cursor gap is a valid split boundary");
+        Self {
+            position: self
+                .position
+                .checked_add(inserted.len())
+                .expect("deque cursor position overflow"),
+            deque: split.left.concat(&inserted).concat(&split.right),
+        }
+    }
+
+    #[must_use]
+    pub fn delete_previous(&self) -> Option<Self> {
+        let position = self.position.checked_sub(1)?;
+        Some(Self {
+            deque: self
+                .deque
+                .remove_at(position)
+                .expect("a non-start cursor has a previous element"),
+            position,
+        })
+    }
+
+    #[must_use]
+    pub fn delete_next(&self) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            deque: self
+                .deque
+                .remove_at(self.position)
+                .expect("a non-end cursor has a next element"),
+            position: self.position,
+        })
+    }
+
+    #[must_use]
+    pub fn replace_next(&self, item: T) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            deque: self
+                .deque
+                .set_item(self.position, item)
+                .expect("a non-end cursor has a next element"),
+            position: self.position,
+        })
+    }
+
+    #[must_use]
+    pub fn snapshot(&self) -> PersistentDeque<T> {
+        self.deque.clone()
     }
 }
 
@@ -1098,9 +1283,17 @@ impl<'a, T> Iterator for Iter<'a, T> {
 
 impl<T> ExactSizeIterator for Iter<'_, T> {}
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ReversibleDeque<T> {
     items: PersistentDeque<T>,
+}
+
+impl<T> Clone for ReversibleDeque<T> {
+    fn clone(&self) -> Self {
+        Self {
+            items: self.items.clone(),
+        }
+    }
 }
 
 impl<T> ReversibleDeque<T> {
@@ -1128,6 +1321,24 @@ impl<T> ReversibleDeque<T> {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
+    }
+
+    /// Creates a logical-order cursor before the first element.
+    #[must_use]
+    pub fn cursor(&self) -> ReversibleDequeCursor<T> {
+        ReversibleDequeCursor {
+            deque: self.clone(),
+            position: 0,
+        }
+    }
+
+    /// Creates a logical-order cursor at a boundary in `0..=len`.
+    #[must_use]
+    pub fn cursor_at(&self, position: usize) -> Option<ReversibleDequeCursor<T>> {
+        (position <= self.len()).then(|| ReversibleDequeCursor {
+            deque: self.clone(),
+            position,
+        })
     }
 
     #[must_use]
@@ -1202,6 +1413,150 @@ impl<T> ReversibleDeque<T> {
     #[must_use]
     pub fn concat(&self, other: &Self) -> Self {
         Self::from_deque(self.items.concat(&other.items))
+    }
+}
+
+impl<T> ReversibleDequeCursor<T> {
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.deque.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.deque.is_empty()
+    }
+
+    #[must_use]
+    pub fn position(&self) -> usize {
+        self.position
+    }
+
+    #[must_use]
+    pub fn is_at_start(&self) -> bool {
+        self.position == 0
+    }
+
+    #[must_use]
+    pub fn is_at_end(&self) -> bool {
+        self.position == self.len()
+    }
+
+    #[must_use]
+    pub fn peek_previous(&self) -> Option<&T> {
+        self.position
+            .checked_sub(1)
+            .and_then(|index| self.deque.get(index))
+    }
+
+    #[must_use]
+    pub fn peek_next(&self) -> Option<&T> {
+        self.deque.get(self.position)
+    }
+
+    #[must_use]
+    pub fn move_previous(&self) -> Option<Self> {
+        Some(Self {
+            deque: self.deque.clone(),
+            position: self.position.checked_sub(1)?,
+        })
+    }
+
+    #[must_use]
+    pub fn move_next(&self) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            deque: self.deque.clone(),
+            position: self.position + 1,
+        })
+    }
+
+    #[must_use]
+    pub fn seek(&self, position: usize) -> Option<Self> {
+        (position <= self.len()).then(|| Self {
+            deque: self.deque.clone(),
+            position,
+        })
+    }
+
+    #[must_use]
+    pub fn insert(&self, item: T) -> Self {
+        Self {
+            deque: self
+                .deque
+                .insert_at(self.position, item)
+                .expect("a cursor gap is a valid insertion boundary"),
+            position: self.position + 1,
+        }
+    }
+
+    #[must_use]
+    pub fn insert_range<I>(&self, items: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let inserted = ReversibleDeque::from_vec(items.into_iter().collect());
+        if inserted.is_empty() {
+            return self.clone();
+        }
+        let split = self
+            .deque
+            .split_at(self.position)
+            .expect("a cursor gap is a valid split boundary");
+        Self {
+            position: self
+                .position
+                .checked_add(inserted.len())
+                .expect("reversible-deque cursor position overflow"),
+            deque: split.left.concat(&inserted).concat(&split.right),
+        }
+    }
+
+    #[must_use]
+    pub fn delete_previous(&self) -> Option<Self> {
+        let position = self.position.checked_sub(1)?;
+        Some(Self {
+            deque: self
+                .deque
+                .remove_at(position)
+                .expect("a non-start cursor has a previous element"),
+            position,
+        })
+    }
+
+    #[must_use]
+    pub fn delete_next(&self) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            deque: self
+                .deque
+                .remove_at(self.position)
+                .expect("a non-end cursor has a next element"),
+            position: self.position,
+        })
+    }
+
+    #[must_use]
+    pub fn replace_next(&self, item: T) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            deque: self
+                .deque
+                .set_item(self.position, item)
+                .expect("a non-end cursor has a next element"),
+            position: self.position,
+        })
+    }
+
+    /// Reverses the logical snapshot and maps the gap to `len - position`.
+    #[must_use]
+    pub fn reverse(&self) -> Self {
+        Self {
+            deque: self.deque.reverse(),
+            position: self.len() - self.position,
+        }
+    }
+
+    #[must_use]
+    pub fn snapshot(&self) -> ReversibleDeque<T> {
+        self.deque.clone()
     }
 }
 

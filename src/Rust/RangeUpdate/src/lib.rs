@@ -164,6 +164,15 @@ where
     algebra: PhantomData<A>,
 }
 
+/// Immutable positional and measured cursor over a lazy range-update sequence snapshot.
+pub struct RangeUpdateSequenceCursor<T, A>
+where
+    A: RangeUpdateAlgebra<T>,
+{
+    sequence: RangeUpdateSequence<T, A>,
+    position: usize,
+}
+
 impl<T, A> Clone for RangeUpdateSequence<T, A>
 where
     A: RangeUpdateAlgebra<T>,
@@ -173,6 +182,18 @@ where
             root: self.root.clone(),
             empty_measure: self.empty_measure.clone(),
             algebra: PhantomData,
+        }
+    }
+}
+
+impl<T, A> Clone for RangeUpdateSequenceCursor<T, A>
+where
+    A: RangeUpdateAlgebra<T>,
+{
+    fn clone(&self) -> Self {
+        Self {
+            sequence: self.sequence.clone(),
+            position: self.position,
         }
     }
 }
@@ -230,6 +251,27 @@ where
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.root.is_none()
+    }
+
+    /// Creates a cursor before the first logical element.
+    #[must_use]
+    pub fn cursor(&self) -> RangeUpdateSequenceCursor<T, A> {
+        RangeUpdateSequenceCursor {
+            sequence: self.clone(),
+            position: 0,
+        }
+    }
+
+    /// Creates a cursor at a logical boundary in `0..=len`.
+    pub fn cursor_at(
+        &self,
+        position: usize,
+    ) -> Result<RangeUpdateSequenceCursor<T, A>, RangeUpdateError> {
+        self.check_boundary_index(position)?;
+        Ok(RangeUpdateSequenceCursor {
+            sequence: self.clone(),
+            position,
+        })
     }
 
     /// Returns the cached ordered measure of the complete logical sequence.
@@ -545,6 +587,171 @@ where
         (self.len() < MAXIMUM_COUNT)
             .then_some(())
             .ok_or(RangeUpdateError::CapacityOverflow)
+    }
+}
+
+impl<T, A> RangeUpdateSequenceCursor<T, A>
+where
+    T: Clone,
+    A: RangeUpdateAlgebra<T>,
+{
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.sequence.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.sequence.is_empty()
+    }
+
+    #[must_use]
+    pub fn position(&self) -> usize {
+        self.position
+    }
+
+    #[must_use]
+    pub fn is_at_start(&self) -> bool {
+        self.position == 0
+    }
+
+    #[must_use]
+    pub fn is_at_end(&self) -> bool {
+        self.position == self.len()
+    }
+
+    #[must_use]
+    pub fn measure_before(&self) -> A::Measure {
+        self.sequence
+            .measure_range(0, self.position)
+            .expect("a cursor prefix is a valid range")
+    }
+
+    #[must_use]
+    pub fn measure_after(&self) -> A::Measure {
+        self.sequence
+            .measure_range(self.position, self.len() - self.position)
+            .expect("a cursor suffix is a valid range")
+    }
+
+    #[must_use]
+    pub fn peek_previous(&self) -> Option<T> {
+        self.position
+            .checked_sub(1)
+            .and_then(|index| self.sequence.get(index))
+    }
+
+    #[must_use]
+    pub fn peek_next(&self) -> Option<T> {
+        self.sequence.get(self.position)
+    }
+
+    #[must_use]
+    pub fn move_previous(&self) -> Option<Self> {
+        Some(Self {
+            sequence: self.sequence.clone(),
+            position: self.position.checked_sub(1)?,
+        })
+    }
+
+    #[must_use]
+    pub fn move_next(&self) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            sequence: self.sequence.clone(),
+            position: self.position + 1,
+        })
+    }
+
+    pub fn seek(&self, position: usize) -> Result<Self, RangeUpdateError> {
+        self.sequence.cursor_at(position)
+    }
+
+    pub fn insert(&self, item: T) -> Result<Self, RangeUpdateError> {
+        Ok(Self {
+            sequence: self.sequence.insert(self.position, item)?,
+            position: self.position + 1,
+        })
+    }
+
+    #[must_use]
+    pub fn delete_previous(&self) -> Option<Self> {
+        let position = self.position.checked_sub(1)?;
+        Some(Self {
+            sequence: self
+                .sequence
+                .remove_at(position)
+                .expect("a non-start cursor has a previous element"),
+            position,
+        })
+    }
+
+    #[must_use]
+    pub fn delete_next(&self) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            sequence: self
+                .sequence
+                .remove_at(self.position)
+                .expect("a non-end cursor has a next element"),
+            position: self.position,
+        })
+    }
+
+    #[must_use]
+    pub fn replace_next(&self, item: T) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            sequence: self
+                .sequence
+                .set_item(self.position, item)
+                .expect("a non-end cursor has a next element"),
+            position: self.position,
+        })
+    }
+
+    pub fn measure_previous(&self, count: usize) -> Result<A::Measure, RangeUpdateError> {
+        self.check_directional_count(count, self.position)?;
+        self.sequence.measure_range(self.position - count, count)
+    }
+
+    pub fn measure_next(&self, count: usize) -> Result<A::Measure, RangeUpdateError> {
+        self.check_directional_count(count, self.len() - self.position)?;
+        self.sequence.measure_range(self.position, count)
+    }
+
+    pub fn apply_previous(&self, count: usize, tag: A::Tag) -> Result<Self, RangeUpdateError> {
+        self.check_directional_count(count, self.position)?;
+        Ok(Self {
+            sequence: self
+                .sequence
+                .apply_range(self.position - count, count, tag)?,
+            position: self.position,
+        })
+    }
+
+    pub fn apply_next(&self, count: usize, tag: A::Tag) -> Result<Self, RangeUpdateError> {
+        self.check_directional_count(count, self.len() - self.position)?;
+        Ok(Self {
+            sequence: self.sequence.apply_range(self.position, count, tag)?,
+            position: self.position,
+        })
+    }
+
+    #[must_use]
+    pub fn snapshot(&self) -> RangeUpdateSequence<T, A> {
+        self.sequence.clone()
+    }
+
+    fn check_directional_count(
+        &self,
+        count: usize,
+        available: usize,
+    ) -> Result<(), RangeUpdateError> {
+        (count <= available)
+            .then_some(())
+            .ok_or(RangeUpdateError::RangeOutOfRange {
+                index: self.position,
+                count,
+                len: self.len(),
+            })
     }
 }
 

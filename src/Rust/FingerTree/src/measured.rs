@@ -214,6 +214,27 @@ where
     _policy: PhantomData<P>,
 }
 
+/// Immutable measure-aware gap cursor over one exact general finger-tree snapshot.
+///
+/// The boundary index is representation state, not a public element-count contract. Arbitrary
+/// monoids are navigated through ordered measures and neighboring elements.
+pub struct FingerTreeCursor<T, P>
+where
+    P: MeasurePolicy<T>,
+{
+    tree: FingerTree<T, P>,
+    position: usize,
+}
+
+/// Result of locating a finger-tree cursor with an inclusive-prefix measure predicate.
+pub struct FingerTreeCursorSearch<T, P>
+where
+    P: MeasurePolicy<T>,
+{
+    pub cursor: FingerTreeCursor<T, P>,
+    pub found: bool,
+}
+
 #[derive(Clone)]
 pub struct MeasuredSplit<T, P>
 where
@@ -671,6 +692,18 @@ where
     }
 }
 
+impl<T, P> Clone for FingerTreeCursor<T, P>
+where
+    P: MeasurePolicy<T>,
+{
+    fn clone(&self) -> Self {
+        Self {
+            tree: self.tree.clone(),
+            position: self.position,
+        }
+    }
+}
+
 impl<T, P> fmt::Debug for FingerTree<T, P>
 where
     T: fmt::Debug,
@@ -719,6 +752,41 @@ where
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.root.len() == 0
+    }
+
+    /// Creates a measure-aware cursor before the first element.
+    #[must_use]
+    pub fn cursor_at_start(&self) -> FingerTreeCursor<T, P> {
+        FingerTreeCursor {
+            tree: self.clone(),
+            position: 0,
+        }
+    }
+
+    /// Creates a measure-aware cursor after the final element.
+    #[must_use]
+    pub fn cursor_at_end(&self) -> FingerTreeCursor<T, P> {
+        FingerTreeCursor {
+            tree: self.clone(),
+            position: self.len(),
+        }
+    }
+
+    /// Locates the gap before the first element whose inclusive prefix satisfies `predicate`.
+    /// A miss returns a usable end cursor with `found == false`.
+    #[must_use]
+    pub fn cursor_by_measure<F>(&self, predicate: F) -> FingerTreeCursorSearch<T, P>
+    where
+        F: FnMut(&P::Measure) -> bool,
+    {
+        let position = self.boundary_index(predicate);
+        FingerTreeCursorSearch {
+            cursor: FingerTreeCursor {
+                tree: self.clone(),
+                position: position.unwrap_or(self.len()),
+            },
+            found: position.is_some(),
+        }
     }
 
     #[must_use]
@@ -868,6 +936,149 @@ where
         let mut seen = HashSet::new();
         collect(&self.root, &mut seen);
         count(&other.root, &seen)
+    }
+}
+
+impl<T, P> FingerTreeCursor<T, P>
+where
+    P: MeasurePolicy<T>,
+{
+    #[must_use]
+    pub fn is_at_start(&self) -> bool {
+        self.position == 0
+    }
+
+    #[must_use]
+    pub fn is_at_end(&self) -> bool {
+        self.position == self.tree.len()
+    }
+
+    #[must_use]
+    pub fn measure_before(&self) -> P::Measure {
+        self.tree
+            .prefix_measure(self.position)
+            .expect("a cursor boundary has a prefix measure")
+    }
+
+    #[must_use]
+    pub fn measure_after(&self) -> P::Measure {
+        self.tree
+            .split_at_index(self.position)
+            .expect("a cursor boundary can be split")
+            .right
+            .measure()
+            .clone()
+    }
+
+    #[must_use]
+    pub fn peek_previous(&self) -> Option<&T> {
+        self.position
+            .checked_sub(1)
+            .and_then(|index| self.tree.get(index))
+    }
+
+    #[must_use]
+    pub fn peek_next(&self) -> Option<&T> {
+        self.tree.get(self.position)
+    }
+
+    #[must_use]
+    pub fn move_previous(&self) -> Option<Self> {
+        Some(Self {
+            tree: self.tree.clone(),
+            position: self.position.checked_sub(1)?,
+        })
+    }
+
+    #[must_use]
+    pub fn move_next(&self) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            tree: self.tree.clone(),
+            position: self.position + 1,
+        })
+    }
+
+    /// Seeks from the retained exact snapshot by an inclusive-prefix measure predicate.
+    #[must_use]
+    pub fn seek_by_measure<F>(&self, predicate: F) -> FingerTreeCursorSearch<T, P>
+    where
+        F: FnMut(&P::Measure) -> bool,
+    {
+        self.tree.cursor_by_measure(predicate)
+    }
+
+    #[must_use]
+    pub fn insert(&self, item: T) -> Self {
+        let split = self
+            .tree
+            .split_at_index(self.position)
+            .expect("a cursor boundary can be split");
+        let middle: FingerTree<T, P> = std::iter::once(item).collect();
+        Self {
+            tree: split.left.concat(&middle).concat(&split.right),
+            position: self.position + 1,
+        }
+    }
+
+    #[must_use]
+    pub fn delete_previous(&self) -> Option<Self> {
+        let position = self.position.checked_sub(1)?;
+        let first = self
+            .tree
+            .split_at_index(position)
+            .expect("a cursor boundary can be split");
+        let second = first
+            .right
+            .split_at_index(1)
+            .expect("a non-start cursor has a previous element");
+        Some(Self {
+            tree: first.left.concat(&second.right),
+            position,
+        })
+    }
+
+    #[must_use]
+    pub fn delete_next(&self) -> Option<Self> {
+        if self.is_at_end() {
+            return None;
+        }
+        let first = self
+            .tree
+            .split_at_index(self.position)
+            .expect("a cursor boundary can be split");
+        let second = first
+            .right
+            .split_at_index(1)
+            .expect("a non-end cursor has a next element");
+        Some(Self {
+            tree: first.left.concat(&second.right),
+            position: self.position,
+        })
+    }
+
+    #[must_use]
+    pub fn replace_next(&self, item: T) -> Option<Self> {
+        if self.is_at_end() {
+            return None;
+        }
+        let first = self
+            .tree
+            .split_at_index(self.position)
+            .expect("a cursor boundary can be split");
+        let second = first
+            .right
+            .split_at_index(1)
+            .expect("a non-end cursor has a next element");
+        let middle: FingerTree<T, P> = std::iter::once(item).collect();
+        Some(Self {
+            tree: first.left.concat(&middle).concat(&second.right),
+            position: self.position,
+        })
+    }
+
+    #[must_use]
+    pub fn snapshot(&self) -> FingerTree<T, P> {
+        self.tree.clone()
     }
 }
 
