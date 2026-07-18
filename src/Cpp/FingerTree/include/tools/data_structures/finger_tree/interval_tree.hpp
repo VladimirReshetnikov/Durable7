@@ -10,10 +10,15 @@
 #include <iterator>
 #include <optional>
 #include <ranges>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
 namespace tools::data_structures::finger_tree {
+
+namespace ordered_search_cursor_detail {
+struct access;
+}
 
 template <class T, class Comparison = default_comparison<T>>
     requires static_comparison_policy<Comparison, T>
@@ -240,6 +245,8 @@ public:
     [[nodiscard]] const_iterator cend() const noexcept { return end(); }
 
 private:
+    friend struct ordered_search_cursor_detail::access;
+
     struct last_low_at_least final {
         value_type low;
 
@@ -270,6 +277,20 @@ private:
     explicit interval_tree(tree_type tree)
         : tree_(std::move(tree))
     {
+    }
+
+    /// Removes the exact occurrence at an order-statistic rank for the cursor layer.
+    [[nodiscard]] interval_tree cursor_erase_at(const size_type rank) const
+    {
+        throw_if_index_out_of_range(rank, size());
+        auto split = tree_.split([rank](const annotation_type& annotation) {
+            return annotation.count > rank;
+        });
+        auto view = split.right.try_view_left();
+        if (!view.has_value()) {
+            throw std::logic_error("interval_tree cursor rank erase failed");
+        }
+        return interval_tree{split.left.concat(view->right)};
     }
 
     tree_type tree_;

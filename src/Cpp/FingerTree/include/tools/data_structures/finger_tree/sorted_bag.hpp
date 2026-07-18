@@ -17,6 +17,10 @@
 
 namespace tools::data_structures::finger_tree {
 
+namespace ordered_search_cursor_detail {
+struct access;
+}
+
 template <class T, class Less = std::less<>>
     requires strict_weak_less_for<Less, T, T>
 class sorted_bag final {
@@ -186,6 +190,8 @@ public:
     [[nodiscard]] const_iterator cend() const noexcept { return end(); }
 
 private:
+    friend struct ordered_search_cursor_detail::access;
+
     explicit sorted_bag(tree_type tree, Less less = Less{})
         : tree_(std::move(tree))
         , less_(std::move(less))
@@ -205,6 +211,18 @@ private:
     [[nodiscard]] sorted_bag wrap(tree_type tree) const
     {
         return sorted_bag{std::move(tree), less_};
+    }
+
+    /// Removes the exact occurrence at an order-statistic rank for the cursor layer.
+    [[nodiscard]] sorted_bag cursor_erase_at(const size_type rank) const
+    {
+        throw_if_index_out_of_range(rank, size());
+        auto split = tree_.split(count_above_predicate<value_type>{rank});
+        auto view = split.right.try_view_left();
+        if (!view.has_value()) {
+            throw std::logic_error("sorted_bag cursor rank erase failed");
+        }
+        return wrap(split.left.concat(view->right));
     }
 
     [[nodiscard]] bool equivalent(const value_type& left, const value_type& right) const

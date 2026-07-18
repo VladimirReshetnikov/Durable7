@@ -232,7 +232,15 @@ struct interval final {
     T low;
     T high;
 
-    [[nodiscard]] constexpr bool operator==(const interval&) const = default;
+    // A hand-written dependent body remains constexpr when endpoint equality is constexpr,
+    // without rejecting otherwise valid runtime-only endpoint equality during class instantiation.
+    [[nodiscard]] constexpr bool operator==(const interval& other) const
+        requires requires(const T& left, const T& right) {
+            { left == right } -> std::convertible_to<bool>;
+        }
+    {
+        return low == other.low && high == other.high;
+    }
 
     /// Tests closed-interval membership under `Comparison`, which defaults to
     /// `default_comparison<T>` and is NOT inferred from any owning tree: an

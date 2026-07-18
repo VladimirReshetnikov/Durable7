@@ -13,6 +13,7 @@ add_executable(
     measured_lazy_cell_tests.cpp
     measured_rope_tests.cpp
     measure_tests.cpp
+    ordered_search_cursor_tests.cpp
     persistent_deque_tests.cpp
     priority_queue_tests.cpp
     priority_search_queue_tests.cpp
@@ -67,6 +68,7 @@ set(
     measured-lazy-cell
     measured-rope
     measured-tree
+    ordered-search-cursors
     priority-queue
     priority-search-queue
     range-update-sequence
