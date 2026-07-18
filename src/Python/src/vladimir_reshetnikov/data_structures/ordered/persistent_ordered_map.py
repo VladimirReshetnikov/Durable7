@@ -59,6 +59,14 @@ class OrderedMapRemoveResult(Generic[K, V]):
     entry: OrderedMapEntry[K, V] | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class OrderedMapCursorSearch(Generic[K, V]):
+    """Focused key lookup with an append-position miss cursor."""
+
+    found: bool
+    cursor: PersistentOrderedMapCursor[K, V]
+
+
 def _values_equal(left: V, right: V) -> bool:
     if left is right:
         return True
@@ -183,6 +191,20 @@ class PersistentOrderedMap(Generic[K, V]):
     def index_of_key(self, key: K) -> int:
         indexed = self._stamps.get_entry(key)
         return -1 if indexed is None else self._index_of_stamp(indexed.value)
+
+    def cursor_at(self, position: int = 0) -> PersistentOrderedMapCursor[K, V]:
+        """Return an immutable explicit-order gap cursor."""
+
+        return PersistentOrderedMapCursor(self, position)
+
+    def find_cursor(self, key: K) -> OrderedMapCursorSearch[K, V]:
+        """Focus an equivalent key or return the append-position cursor on a miss."""
+
+        position = self.index_of_key(key)
+        return OrderedMapCursorSearch(
+            position >= 0,
+            PersistentOrderedMapCursor(self, self.size if position < 0 else position),
+        )
 
     def add(self, key: K, value: V) -> PersistentOrderedMap[K, V]:
         result = self.try_add(key, value)
@@ -529,10 +551,84 @@ class PersistentOrderedMap(Generic[K, V]):
             raise ValueError("count extends past the end of the ordered map.")
 
 
+@dataclass(frozen=True, slots=True)
+class PersistentOrderedMapCursor(Generic[K, V]):
+    """Immutable root-plus-position gap cursor over a persistent ordered map."""
+
+    map: PersistentOrderedMap[K, V]
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        if type(self.position) is not int or self.position < 0 or self.position > self.map.size:
+            raise IndexError("Cursor position is outside the ordered map.")
+
+    @property
+    def size(self) -> int:
+        return self.map.size
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.size
+
+    def peek_previous(self) -> OrderedMapEntry[K, V] | None:
+        return None if self.is_at_start else self.map.entry_at(self.position - 1)
+
+    def peek_next(self) -> OrderedMapEntry[K, V] | None:
+        return None if self.is_at_end else self.map.entry_at(self.position)
+
+    def move_previous(self) -> PersistentOrderedMapCursor[K, V]:
+        if self.is_at_start:
+            raise IndexError("The ordered-map cursor is already at the start.")
+        return PersistentOrderedMapCursor(self.map, self.position - 1)
+
+    def move_next(self) -> PersistentOrderedMapCursor[K, V]:
+        if self.is_at_end:
+            raise IndexError("The ordered-map cursor is already at the end.")
+        return PersistentOrderedMapCursor(self.map, self.position + 1)
+
+    def seek(self, position: int) -> PersistentOrderedMapCursor[K, V]:
+        return self if position == self.position else PersistentOrderedMapCursor(self.map, position)
+
+    def insert(self, key: K, value: V) -> PersistentOrderedMapCursor[K, V]:
+        return PersistentOrderedMapCursor(
+            self.map.insert(self.position, key, value), self.position + 1
+        )
+
+    def try_insert(self, key: K, value: V) -> tuple[bool, PersistentOrderedMapCursor[K, V]]:
+        existing = self.map.index_of_key(key)
+        return (
+            (False, PersistentOrderedMapCursor(self.map, existing))
+            if existing >= 0
+            else (True, self.insert(key, value))
+        )
+
+    def set_next_value(self, value: V) -> PersistentOrderedMapCursor[K, V]:
+        entry = self.peek_next()
+        if entry is None:
+            raise IndexError("The ordered-map cursor has no next entry.")
+        return PersistentOrderedMapCursor(self.map.set(entry.key, value), self.position)
+
+    def delete_previous(self) -> PersistentOrderedMapCursor[K, V]:
+        if self.is_at_start:
+            raise IndexError("The ordered-map cursor has no previous entry.")
+        return PersistentOrderedMapCursor(self.map.remove_at(self.position - 1), self.position - 1)
+
+    def delete_next(self) -> PersistentOrderedMapCursor[K, V]:
+        if self.is_at_end:
+            raise IndexError("The ordered-map cursor has no next entry.")
+        return PersistentOrderedMapCursor(self.map.remove_at(self.position), self.position)
+
+
 __all__ = [
     "OrderedMapAddResult",
+    "OrderedMapCursorSearch",
     "OrderedMapEntry",
     "OrderedMapLookup",
     "OrderedMapRemoveResult",
     "PersistentOrderedMap",
+    "PersistentOrderedMapCursor",
 ]

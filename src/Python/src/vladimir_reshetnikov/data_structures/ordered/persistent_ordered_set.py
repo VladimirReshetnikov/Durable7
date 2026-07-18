@@ -45,6 +45,22 @@ class OrderedSetRemoveResult(Generic[T]):
 
 
 @dataclass(frozen=True, slots=True)
+class OrderedSetCursorPeek(Generic[T]):
+    """Presence-discriminated adjacent representative, including stored ``None``."""
+
+    found: bool
+    value: T | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class OrderedSetCursorSearch(Generic[T]):
+    """Focused equivalence lookup with an append-position miss cursor."""
+
+    found: bool
+    cursor: PersistentOrderedSetCursor[T]
+
+
+@dataclass(frozen=True, slots=True)
 class _NormalizedArgument(Generic[T]):
     items: tuple[T, ...]
     membership: PersistentHashMap[T, bool]
@@ -172,6 +188,20 @@ class PersistentOrderedSet(Generic[T]):
     def index_of(self, equal_value: T) -> int:
         indexed = self._stamps.get_entry(equal_value)
         return -1 if indexed is None else self._index_of_stamp(indexed.value)
+
+    def cursor_at(self, position: int = 0) -> PersistentOrderedSetCursor[T]:
+        """Return an immutable explicit-order gap cursor."""
+
+        return PersistentOrderedSetCursor(self, position)
+
+    def find_cursor(self, equal_value: T) -> OrderedSetCursorSearch[T]:
+        """Focus an equivalence class or return the append-position cursor on a miss."""
+
+        position = self.index_of(equal_value)
+        return OrderedSetCursorSearch(
+            position >= 0,
+            PersistentOrderedSetCursor(self, self.size if position < 0 else position),
+        )
 
     def add(self, value: T) -> PersistentOrderedSet[T]:
         """Append an absent class; duplicate addition is an identity no-op."""
@@ -616,8 +646,82 @@ _DEFAULT_EMPTY: PersistentOrderedSet[object] = PersistentOrderedSet(
 )
 
 
+@dataclass(frozen=True, slots=True)
+class PersistentOrderedSetCursor(Generic[T]):
+    """Immutable root-plus-position gap cursor over a persistent ordered set."""
+
+    set: PersistentOrderedSet[T]
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        if type(self.position) is not int or self.position < 0 or self.position > self.set.size:
+            raise IndexError("Cursor position is outside the ordered set.")
+
+    @property
+    def size(self) -> int:
+        return self.set.size
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.size
+
+    def peek_previous(self) -> OrderedSetCursorPeek[T]:
+        return (
+            OrderedSetCursorPeek(False)
+            if self.is_at_start
+            else OrderedSetCursorPeek(True, self.set.get_at(self.position - 1))
+        )
+
+    def peek_next(self) -> OrderedSetCursorPeek[T]:
+        return (
+            OrderedSetCursorPeek(False)
+            if self.is_at_end
+            else OrderedSetCursorPeek(True, self.set.get_at(self.position))
+        )
+
+    def move_previous(self) -> PersistentOrderedSetCursor[T]:
+        if self.is_at_start:
+            raise IndexError("The ordered-set cursor is already at the start.")
+        return PersistentOrderedSetCursor(self.set, self.position - 1)
+
+    def move_next(self) -> PersistentOrderedSetCursor[T]:
+        if self.is_at_end:
+            raise IndexError("The ordered-set cursor is already at the end.")
+        return PersistentOrderedSetCursor(self.set, self.position + 1)
+
+    def seek(self, position: int) -> PersistentOrderedSetCursor[T]:
+        return self if position == self.position else PersistentOrderedSetCursor(self.set, position)
+
+    def insert(self, value: T) -> PersistentOrderedSetCursor[T]:
+        updated = self.set.insert(self.position, value)
+        return (
+            self if updated is self.set else PersistentOrderedSetCursor(updated, self.position + 1)
+        )
+
+    def try_insert(self, value: T) -> tuple[bool, PersistentOrderedSetCursor[T]]:
+        cursor = self.insert(value)
+        return cursor is not self, cursor
+
+    def delete_previous(self) -> PersistentOrderedSetCursor[T]:
+        if self.is_at_start:
+            raise IndexError("The ordered-set cursor has no previous representative.")
+        return PersistentOrderedSetCursor(self.set.remove_at(self.position - 1), self.position - 1)
+
+    def delete_next(self) -> PersistentOrderedSetCursor[T]:
+        if self.is_at_end:
+            raise IndexError("The ordered-set cursor has no next representative.")
+        return PersistentOrderedSetCursor(self.set.remove_at(self.position), self.position)
+
+
 __all__ = [
+    "OrderedSetCursorPeek",
+    "OrderedSetCursorSearch",
     "OrderedSetRemoveResult",
     "OrderedSetValueResult",
     "PersistentOrderedSet",
+    "PersistentOrderedSetCursor",
 ]

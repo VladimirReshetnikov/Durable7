@@ -48,6 +48,14 @@ class OrderedMultimapAddResult(Generic[K, V]):
     map: PersistentOrderedMultimap[K, V]
 
 
+@dataclass(frozen=True, slots=True)
+class OrderedMultimapCursorSearch(Generic[K, V]):
+    """Focused pair or group lookup over flattened key-grouped order."""
+
+    found: bool
+    cursor: PersistentOrderedMultimapCursor[K, V]
+
+
 def _same_set(left: PersistentOrderedSet[V], right: PersistentOrderedSet[V]) -> bool:
     return left is right
 
@@ -165,6 +173,48 @@ class PersistentOrderedMultimap(Generic[K, V]):
             else group.entry.value.try_get_value(value)
         )
 
+    def cursor_at(self, position: int = 0) -> PersistentOrderedMultimapCursor[K, V]:
+        """Return an immutable flattened key-grouped pair gap cursor."""
+
+        return PersistentOrderedMultimapCursor(self, position)
+
+    def find_cursor(self, key: K, value: V) -> OrderedMultimapCursorSearch[K, V]:
+        """Focus a pair or return the pair-end cursor on a miss."""
+
+        position = self._cursor_index_of(key, value)
+        return OrderedMultimapCursorSearch(
+            position >= 0,
+            PersistentOrderedMultimapCursor(self, self._pair_count if position < 0 else position),
+        )
+
+    def find_group_cursor(self, key: K) -> OrderedMultimapCursorSearch[K, V]:
+        """Focus the first pair in a key group or return the pair-end cursor."""
+
+        for position, pair in enumerate(self):
+            if self.key_policy.equivalent(pair.key, key):
+                return OrderedMultimapCursorSearch(
+                    True, PersistentOrderedMultimapCursor(self, position)
+                )
+        return OrderedMultimapCursorSearch(
+            False, PersistentOrderedMultimapCursor(self, self._pair_count)
+        )
+
+    def _cursor_entry_at(self, rank: int) -> OrderedMultimapEntry[K, V]:
+        if type(rank) is not int or rank < 0 or rank >= self._pair_count:
+            raise IndexError("rank must identify a key-grouped pair.")
+        for position, pair in enumerate(self):
+            if position == rank:
+                return pair
+        raise RuntimeError("The ordered multimap pair count disagrees with its groups.")
+
+    def _cursor_index_of(self, key: K, value: V) -> int:
+        for position, pair in enumerate(self):
+            if self.key_policy.equivalent(pair.key, key) and self._value_policy.equivalent(
+                pair.value, value
+            ):
+                return position
+        return -1
+
     def add(self, key: K, value: V) -> PersistentOrderedMultimap[K, V]:
         group = self._groups.try_get_entry(key)
         if group.found and group.entry is not None:
@@ -250,10 +300,90 @@ class PersistentOrderedMultimap(Generic[K, V]):
         return self._pair_count + 1
 
 
+@dataclass(frozen=True, slots=True)
+class PersistentOrderedMultimapCursor(Generic[K, V]):
+    """Immutable root-plus-pair-rank cursor over grouped ordered-multimap enumeration."""
+
+    map: PersistentOrderedMultimap[K, V]
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.position) is not int
+            or self.position < 0
+            or self.position > self.map.pair_count
+        ):
+            raise IndexError("Cursor position is outside the ordered multimap.")
+
+    @property
+    def pair_count(self) -> int:
+        return self.map.pair_count
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.pair_count
+
+    def peek_previous(self) -> OrderedMultimapEntry[K, V] | None:
+        return None if self.is_at_start else self.map._cursor_entry_at(self.position - 1)
+
+    def peek_next(self) -> OrderedMultimapEntry[K, V] | None:
+        return None if self.is_at_end else self.map._cursor_entry_at(self.position)
+
+    def move_previous(self) -> PersistentOrderedMultimapCursor[K, V]:
+        if self.is_at_start:
+            raise IndexError("The ordered-multimap cursor is already at the start.")
+        return PersistentOrderedMultimapCursor(self.map, self.position - 1)
+
+    def move_next(self) -> PersistentOrderedMultimapCursor[K, V]:
+        if self.is_at_end:
+            raise IndexError("The ordered-multimap cursor is already at the end.")
+        return PersistentOrderedMultimapCursor(self.map, self.position + 1)
+
+    def seek(self, position: int) -> PersistentOrderedMultimapCursor[K, V]:
+        return (
+            self
+            if position == self.position
+            else PersistentOrderedMultimapCursor(self.map, position)
+        )
+
+    def add(self, key: K, value: V) -> PersistentOrderedMultimapCursor[K, V]:
+        updated = self.map.add(key, value)
+        if updated is self.map:
+            return self
+        position = updated._cursor_index_of(key, value)
+        if position < 0:
+            raise RuntimeError("The inserted pair is missing from the ordered multimap.")
+        return PersistentOrderedMultimapCursor(updated, position + 1)
+
+    def try_add(self, key: K, value: V) -> tuple[bool, PersistentOrderedMultimapCursor[K, V]]:
+        cursor = self.add(key, value)
+        return cursor is not self, cursor
+
+    def delete_previous(self) -> PersistentOrderedMultimapCursor[K, V]:
+        pair = self.peek_previous()
+        if pair is None:
+            raise IndexError("The ordered-multimap cursor has no previous pair.")
+        return PersistentOrderedMultimapCursor(
+            self.map.remove(pair.key, pair.value), self.position - 1
+        )
+
+    def delete_next(self) -> PersistentOrderedMultimapCursor[K, V]:
+        pair = self.peek_next()
+        if pair is None:
+            raise IndexError("The ordered-multimap cursor has no next pair.")
+        return PersistentOrderedMultimapCursor(self.map.remove(pair.key, pair.value), self.position)
+
+
 __all__ = [
     "OrderedMultimapAddResult",
+    "OrderedMultimapCursorSearch",
     "OrderedMultimapEntry",
     "OrderedMultimapKeyResult",
     "OrderedMultimapValuesResult",
     "PersistentOrderedMultimap",
+    "PersistentOrderedMultimapCursor",
 ]
