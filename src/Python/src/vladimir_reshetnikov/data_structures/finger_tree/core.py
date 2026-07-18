@@ -58,6 +58,13 @@ class MeasuredItemSplit(Generic[T, M]):
     right: FingerTree[T, M]
 
 
+@dataclass(frozen=True, slots=True)
+class SequenceCursorPeek(Generic[T]):
+    """Present neighbor returned by a sequence cursor, including a stored ``None``."""
+
+    value: T
+
+
 class PersistentDeque(Generic[T]):
     """Persistent catenable sequence over a measured balanced tree."""
 
@@ -181,6 +188,11 @@ class PersistentDeque(Generic[T]):
     def __iter__(self) -> Iterator[T]:
         return iter(self._items)
 
+    def get_cursor(self, position: int = 0) -> PersistentDequeCursor[T]:
+        """Creates an immutable gap cursor at ``position`` in ``0..len(self)``."""
+
+        return PersistentDequeCursor(self, position)
+
 
 class ReversibleDeque(Generic[T]):
     """Orientation-aware immutable deque with constant-time whole-value reversal."""
@@ -279,6 +291,11 @@ class ReversibleDeque(Generic[T]):
 
     def __iter__(self) -> Iterator[T]:
         return iter(self._items) if not self._reversed else reversed(self._items.to_list())
+
+    def get_cursor(self, position: int = 0) -> ReversibleDequeCursor[T]:
+        """Creates an immutable cursor at a logical-order gap."""
+
+        return ReversibleDequeCursor(self, position)
 
 
 @dataclass(frozen=True, slots=True)
@@ -412,6 +429,303 @@ class FingerTree(Generic[T, M]):
     def __iter__(self) -> Iterator[T]:
         return iter(self._items)
 
+    def get_cursor_at_start(self) -> FingerTreeCursor[T, M]:
+        """Creates a measure-aware cursor before the first element."""
+
+        return FingerTreeCursor(self, 0)
+
+    def get_cursor_at_end(self) -> FingerTreeCursor[T, M]:
+        """Creates a measure-aware cursor after the final element."""
+
+        return FingerTreeCursor(self, len(self))
+
+    def get_cursor(self, predicate: Callable[[M], bool]) -> tuple[bool, FingerTreeCursor[T, M]]:
+        """Locates the first inclusive prefix satisfying a monotone predicate."""
+
+        located = self.try_locate(predicate)
+        position = located.index if located.found else len(self)
+        return located.found, FingerTreeCursor(self, position)
+
+
+@dataclass(frozen=True, slots=True)
+class PersistentDequeCursor(Generic[T]):
+    """Immutable snapshot-plus-position cursor over a persistent deque."""
+
+    _snapshot: PersistentDeque[T]
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        if self.position < 0 or self.position > len(self._snapshot):
+            raise IndexError("cursor position is outside the deque boundary range")
+
+    @property
+    def count(self) -> int:
+        return len(self._snapshot)
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.count
+
+    def peek_previous(self) -> SequenceCursorPeek[T] | None:
+        return None if self.is_at_start else SequenceCursorPeek(self._snapshot[self.position - 1])
+
+    def peek_next(self) -> SequenceCursorPeek[T] | None:
+        return None if self.is_at_end else SequenceCursorPeek(self._snapshot[self.position])
+
+    def move_previous(self) -> PersistentDequeCursor[T]:
+        if self.is_at_start:
+            raise IndexError("deque cursor is already at the start")
+        return PersistentDequeCursor(self._snapshot, self.position - 1)
+
+    def move_next(self) -> PersistentDequeCursor[T]:
+        if self.is_at_end:
+            raise IndexError("deque cursor is already at the end")
+        return PersistentDequeCursor(self._snapshot, self.position + 1)
+
+    def seek(self, position: int) -> PersistentDequeCursor[T]:
+        return (
+            self if position == self.position else PersistentDequeCursor(self._snapshot, position)
+        )
+
+    def insert(self, value: T) -> PersistentDequeCursor[T]:
+        snapshot = self._snapshot.insert_at(self.position, value)
+        if snapshot is None:
+            raise AssertionError("validated cursor insertion failed")
+        return PersistentDequeCursor(snapshot, self.position + 1)
+
+    def insert_range(self, values: Iterable[T]) -> PersistentDequeCursor[T]:
+        materialized = tuple(values)
+        if not materialized:
+            return self
+        split = self._snapshot.split_at(self.position)
+        if split is None:
+            raise AssertionError("validated cursor split failed")
+        middle = PersistentDeque.from_iterable(materialized)
+        return PersistentDequeCursor(
+            split.left.concat(middle).concat(split.right), self.position + len(materialized)
+        )
+
+    def delete_previous(self) -> PersistentDequeCursor[T]:
+        if self.is_at_start:
+            raise IndexError("deque cursor has no previous element")
+        snapshot = self._snapshot.remove_at(self.position - 1)
+        if snapshot is None:
+            raise AssertionError("validated cursor deletion failed")
+        return PersistentDequeCursor(snapshot, self.position - 1)
+
+    def delete_next(self) -> PersistentDequeCursor[T]:
+        if self.is_at_end:
+            raise IndexError("deque cursor has no next element")
+        snapshot = self._snapshot.remove_at(self.position)
+        if snapshot is None:
+            raise AssertionError("validated cursor deletion failed")
+        return PersistentDequeCursor(snapshot, self.position)
+
+    def replace_next(self, value: T) -> PersistentDequeCursor[T]:
+        if self.is_at_end:
+            raise IndexError("deque cursor has no next element")
+        snapshot = self._snapshot.set_item(self.position, value)
+        if snapshot is None:
+            raise AssertionError("validated cursor replacement failed")
+        return PersistentDequeCursor(snapshot, self.position)
+
+    def snapshot(self) -> PersistentDeque[T]:
+        return self._snapshot
+
+
+@dataclass(frozen=True, slots=True)
+class ReversibleDequeCursor(Generic[T]):
+    """Immutable logical-order gap cursor over a reversible deque."""
+
+    _snapshot: ReversibleDeque[T]
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        if self.position < 0 or self.position > len(self._snapshot):
+            raise IndexError("cursor position is outside the reversible-deque boundary range")
+
+    @property
+    def count(self) -> int:
+        return len(self._snapshot)
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.count
+
+    def peek_previous(self) -> SequenceCursorPeek[T] | None:
+        if self.is_at_start:
+            return None
+        return SequenceCursorPeek(cast(T, self._snapshot.get(self.position - 1)))
+
+    def peek_next(self) -> SequenceCursorPeek[T] | None:
+        if self.is_at_end:
+            return None
+        return SequenceCursorPeek(cast(T, self._snapshot.get(self.position)))
+
+    def move_previous(self) -> ReversibleDequeCursor[T]:
+        if self.is_at_start:
+            raise IndexError("reversible-deque cursor is already at the start")
+        return ReversibleDequeCursor(self._snapshot, self.position - 1)
+
+    def move_next(self) -> ReversibleDequeCursor[T]:
+        if self.is_at_end:
+            raise IndexError("reversible-deque cursor is already at the end")
+        return ReversibleDequeCursor(self._snapshot, self.position + 1)
+
+    def seek(self, position: int) -> ReversibleDequeCursor[T]:
+        return (
+            self if position == self.position else ReversibleDequeCursor(self._snapshot, position)
+        )
+
+    def insert(self, value: T) -> ReversibleDequeCursor[T]:
+        split = self._snapshot.split_at(self.position)
+        if split is None:
+            raise AssertionError("validated cursor split failed")
+        snapshot = split[0].append(value).concat(split[1])
+        return ReversibleDequeCursor(snapshot, self.position + 1)
+
+    def insert_range(self, values: Iterable[T]) -> ReversibleDequeCursor[T]:
+        materialized = tuple(values)
+        if not materialized:
+            return self
+        split = self._snapshot.split_at(self.position)
+        if split is None:
+            raise AssertionError("validated cursor split failed")
+        middle = ReversibleDeque.from_iterable(materialized)
+        snapshot = split[0].concat(middle).concat(split[1])
+        return ReversibleDequeCursor(snapshot, self.position + len(materialized))
+
+    def delete_previous(self) -> ReversibleDequeCursor[T]:
+        if self.is_at_start:
+            raise IndexError("reversible-deque cursor has no previous element")
+        first = self._snapshot.split_at(self.position - 1)
+        if first is None:
+            raise AssertionError("validated cursor split failed")
+        second = first[1].split_at(1)
+        if second is None:
+            raise AssertionError("validated cursor item split failed")
+        return ReversibleDequeCursor(first[0].concat(second[1]), self.position - 1)
+
+    def delete_next(self) -> ReversibleDequeCursor[T]:
+        if self.is_at_end:
+            raise IndexError("reversible-deque cursor has no next element")
+        first = self._snapshot.split_at(self.position)
+        if first is None:
+            raise AssertionError("validated cursor split failed")
+        second = first[1].split_at(1)
+        if second is None:
+            raise AssertionError("validated cursor item split failed")
+        return ReversibleDequeCursor(first[0].concat(second[1]), self.position)
+
+    def replace_next(self, value: T) -> ReversibleDequeCursor[T]:
+        return self.delete_next().insert(value).move_previous()
+
+    def reverse(self) -> ReversibleDequeCursor[T]:
+        return ReversibleDequeCursor(self._snapshot.reverse(), self.count - self.position)
+
+    def snapshot(self) -> ReversibleDeque[T]:
+        return self._snapshot
+
+
+@dataclass(frozen=True, slots=True)
+class FingerTreeCursor(Generic[T, M]):
+    """Immutable measure-aware cursor over one exact finger-tree version."""
+
+    _snapshot: FingerTree[T, M]
+    _position: int
+
+    def __post_init__(self) -> None:
+        if self._position < 0 or self._position > len(self._snapshot):
+            raise IndexError("cursor position is outside the finger-tree boundary range")
+
+    @property
+    def is_at_start(self) -> bool:
+        return self._position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self._position == len(self._snapshot)
+
+    @property
+    def measure_before(self) -> M:
+        measure = self._snapshot.prefix_measure(self._position)
+        if measure is None:
+            raise AssertionError("validated prefix measure failed")
+        return measure
+
+    @property
+    def measure_after(self) -> M:
+        split = self._snapshot.split_at_index(self._position)
+        if split is None:
+            raise AssertionError("validated cursor split failed")
+        return split.right.measure
+
+    def peek_previous(self) -> SequenceCursorPeek[T] | None:
+        if self.is_at_start:
+            return None
+        return SequenceCursorPeek(cast(T, self._snapshot.get(self._position - 1)))
+
+    def peek_next(self) -> SequenceCursorPeek[T] | None:
+        if self.is_at_end:
+            return None
+        return SequenceCursorPeek(cast(T, self._snapshot.get(self._position)))
+
+    def move_previous(self) -> FingerTreeCursor[T, M]:
+        if self.is_at_start:
+            raise IndexError("finger-tree cursor is already at the start")
+        return FingerTreeCursor(self._snapshot, self._position - 1)
+
+    def move_next(self) -> FingerTreeCursor[T, M]:
+        if self.is_at_end:
+            raise IndexError("finger-tree cursor is already at the end")
+        return FingerTreeCursor(self._snapshot, self._position + 1)
+
+    def seek_by_measure(self, predicate: Callable[[M], bool]) -> FingerTreeCursor[T, M]:
+        found, cursor = self._snapshot.get_cursor(predicate)
+        _ = found
+        return cursor
+
+    def insert(self, value: T) -> FingerTreeCursor[T, M]:
+        snapshot = self._snapshot.insert_at(self._position, value)
+        if snapshot is None:
+            raise AssertionError("validated cursor insertion failed")
+        return FingerTreeCursor(snapshot, self._position + 1)
+
+    def delete_previous(self) -> FingerTreeCursor[T, M]:
+        if self.is_at_start:
+            raise IndexError("finger-tree cursor has no previous element")
+        snapshot = self._snapshot.remove_at(self._position - 1)
+        if snapshot is None:
+            raise AssertionError("validated cursor deletion failed")
+        return FingerTreeCursor(snapshot, self._position - 1)
+
+    def delete_next(self) -> FingerTreeCursor[T, M]:
+        if self.is_at_end:
+            raise IndexError("finger-tree cursor has no next element")
+        snapshot = self._snapshot.remove_at(self._position)
+        if snapshot is None:
+            raise AssertionError("validated cursor deletion failed")
+        return FingerTreeCursor(snapshot, self._position)
+
+    def replace_next(self, value: T) -> FingerTreeCursor[T, M]:
+        if self.is_at_end:
+            raise IndexError("finger-tree cursor has no next element")
+        snapshot = self._snapshot.set_item(self._position, value)
+        if snapshot is None:
+            raise AssertionError("validated cursor replacement failed")
+        return FingerTreeCursor(snapshot, self._position)
+
+    def snapshot(self) -> FingerTree[T, M]:
+        return self._snapshot
+
 
 __all__ = [
     "DequeItemSplit",
@@ -419,9 +733,13 @@ __all__ = [
     "DequeRangeSplit",
     "DequeSplit",
     "FingerTree",
+    "FingerTreeCursor",
     "LocateResult",
     "MeasuredItemSplit",
     "MeasuredSplit",
     "PersistentDeque",
+    "PersistentDequeCursor",
     "ReversibleDeque",
+    "ReversibleDequeCursor",
+    "SequenceCursorPeek",
 ]

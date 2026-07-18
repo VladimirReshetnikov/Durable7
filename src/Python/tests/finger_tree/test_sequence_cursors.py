@@ -1,0 +1,100 @@
+"""Immutable cursor contracts for the persistent sequence families."""
+
+from __future__ import annotations
+
+import pytest
+
+from vladimir_reshetnikov.data_structures.finger_tree import (
+    FingerTree,
+    NumberSumMeasure,
+    PersistentDeque,
+    RangeUpdateSequence,
+    ReversibleDeque,
+    RrbVector,
+    create_range_update_algebra,
+)
+
+
+def test_deque_cursor_keeps_exact_versions_and_distinguishes_stored_none() -> None:
+    basis = PersistentDeque.from_iterable([1, None, 3])
+    cursor = basis.get_cursor(2)
+
+    previous = cursor.peek_previous()
+    assert previous is not None and previous.value is None
+    following = cursor.peek_next()
+    assert following is not None and following.value == 3
+
+    edited = cursor.insert_range([7, 8]).delete_previous().replace_next(9)
+    assert edited.position == 3
+    assert edited.snapshot().to_list() == [1, None, 7, 9]
+    assert basis.to_list() == [1, None, 3]
+
+    with pytest.raises(IndexError, match="start"):
+        basis.get_cursor().move_previous()
+
+
+def test_reversible_deque_cursor_uses_logical_order_and_maps_reverse_gap() -> None:
+    basis = ReversibleDeque.from_iterable([1, 2, 3, 4]).reverse()
+    cursor = basis.get_cursor(1)
+    previous = cursor.peek_previous()
+    following = cursor.peek_next()
+    assert previous is not None and previous.value == 4
+    assert following is not None and following.value == 3
+
+    edited = cursor.insert(9).delete_next()
+    assert edited.snapshot().to_list() == [4, 9, 2, 1]
+    reversed_cursor = edited.reverse()
+    assert reversed_cursor.position == 2
+    assert reversed_cursor.snapshot().to_list() == [1, 2, 9, 4]
+
+
+def test_general_finger_tree_cursor_exposes_measures_without_public_position() -> None:
+    tree = FingerTree.from_iterable([2, 3, 5, 7], NumberSumMeasure())
+    found, cursor = tree.get_cursor(lambda total: total >= 6)
+    assert found
+    assert cursor.measure_before == 5
+    assert cursor.measure_after == 12
+    following = cursor.peek_next()
+    assert following is not None and following.value == 5
+    assert not hasattr(cursor, "position")
+
+    edited = cursor.insert(11).delete_next().replace_next(13)
+    assert edited.snapshot().to_list() == [2, 3, 11, 13]
+    assert tree.to_list() == [2, 3, 5, 7]
+    sought = edited.seek_by_measure(lambda total: total >= 16).peek_next()
+    assert sought is not None and sought.value == 11
+
+
+def test_rrb_cursor_splices_existing_vectors_and_preserves_source() -> None:
+    basis = RrbVector.from_iterable(range(96))
+    inserted = RrbVector.from_iterable([500, 501, 502])
+    cursor = basis.get_cursor(32).insert_range(inserted)
+
+    assert cursor.position == 35
+    assert cursor.snapshot()[30:37].to_list() == [30, 31, 500, 501, 502, 32, 33]
+    assert basis.to_list() == list(range(96))
+    assert cursor.snapshot().shared_leaf_count(basis) > 0
+
+
+def test_range_cursor_preserves_logical_measures_and_directional_tags() -> None:
+    algebra = create_range_update_algebra(
+        0,
+        0,
+        lambda left, right: left + right,
+        lambda element: element,
+        lambda tag: tag == 0,
+        lambda newer, older: newer + older,
+        lambda tag, element: element + tag,
+        lambda tag, measure, count: measure + tag * count,
+    )
+    basis = RangeUpdateSequence.from_iterable([1, 2, 3, 4], algebra)
+    cursor = basis.get_cursor(2)
+    assert cursor.measure_before == 3
+    assert cursor.measure_after == 7
+    assert cursor.measure_previous(2) == 3
+    assert cursor.measure_next(2) == 7
+
+    edited = cursor.apply_previous(1, 10).apply_next(2, 20).replace_next(99)
+    assert edited.position == 2
+    assert edited.snapshot().to_list() == [1, 12, 99, 24]
+    assert basis.to_list() == [1, 2, 3, 4]

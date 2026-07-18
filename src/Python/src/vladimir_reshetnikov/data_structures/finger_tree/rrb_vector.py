@@ -7,6 +7,8 @@ from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import Generic, TypeVar, overload
 
+from .core import SequenceCursorPeek
+
 T = TypeVar("T")
 
 _BRANCH_FACTOR = 32
@@ -478,6 +480,104 @@ class RrbVector(Generic[T]):
     def __iter__(self) -> Iterator[T]:
         return iter(()) if self._root is None else _iterate(self._root)
 
+    def get_cursor(self, position: int = 0) -> RrbVectorCursor[T]:
+        """Creates an immutable gap cursor at ``position`` in ``0..len(self)``."""
+
+        return RrbVectorCursor(self, position)
+
+
+@dataclass(frozen=True, slots=True)
+class RrbVectorCursor(Generic[T]):
+    """Immutable snapshot-plus-position gap cursor over an RRB vector."""
+
+    _snapshot: RrbVector[T]
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        if self.position < 0 or self.position > len(self._snapshot):
+            raise IndexError("cursor position is outside the RRB vector boundary range")
+
+    @property
+    def count(self) -> int:
+        return len(self._snapshot)
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.count
+
+    def peek_previous(self) -> SequenceCursorPeek[T] | None:
+        return None if self.is_at_start else SequenceCursorPeek(self._snapshot[self.position - 1])
+
+    def peek_next(self) -> SequenceCursorPeek[T] | None:
+        return None if self.is_at_end else SequenceCursorPeek(self._snapshot[self.position])
+
+    def move_previous(self) -> RrbVectorCursor[T]:
+        if self.is_at_start:
+            raise IndexError("RRB vector cursor is already at the start")
+        return RrbVectorCursor(self._snapshot, self.position - 1)
+
+    def move_next(self) -> RrbVectorCursor[T]:
+        if self.is_at_end:
+            raise IndexError("RRB vector cursor is already at the end")
+        return RrbVectorCursor(self._snapshot, self.position + 1)
+
+    def seek(self, position: int) -> RrbVectorCursor[T]:
+        return self if position == self.position else RrbVectorCursor(self._snapshot, position)
+
+    def insert(self, value: T) -> RrbVectorCursor[T]:
+        snapshot = self._snapshot.insert_at(self.position, value)
+        if snapshot is None:
+            raise AssertionError("validated cursor insertion failed")
+        return RrbVectorCursor(snapshot, self.position + 1)
+
+    def insert_range(self, values: Iterable[T] | RrbVector[T]) -> RrbVectorCursor[T]:
+        if isinstance(values, RrbVector):
+            if values.is_empty:
+                return self
+            split = self._snapshot.split_at(self.position)
+            if split is None:
+                raise AssertionError("validated cursor split failed")
+            snapshot = split.left.concat(values).concat(split.right)
+            return RrbVectorCursor(snapshot, self.position + len(values))
+        materialized = tuple(values)
+        if not materialized:
+            return self
+        updated = self._snapshot.insert_range(self.position, materialized)
+        if updated is None:
+            raise AssertionError("validated cursor insertion failed")
+        return RrbVectorCursor(updated, self.position + len(materialized))
+
+    def delete_previous(self) -> RrbVectorCursor[T]:
+        if self.is_at_start:
+            raise IndexError("RRB vector cursor has no previous element")
+        snapshot = self._snapshot.remove_at(self.position - 1)
+        if snapshot is None:
+            raise AssertionError("validated cursor deletion failed")
+        return RrbVectorCursor(snapshot, self.position - 1)
+
+    def delete_next(self) -> RrbVectorCursor[T]:
+        if self.is_at_end:
+            raise IndexError("RRB vector cursor has no next element")
+        snapshot = self._snapshot.remove_at(self.position)
+        if snapshot is None:
+            raise AssertionError("validated cursor deletion failed")
+        return RrbVectorCursor(snapshot, self.position)
+
+    def replace_next(self, value: T) -> RrbVectorCursor[T]:
+        if self.is_at_end:
+            raise IndexError("RRB vector cursor has no next element")
+        snapshot = self._snapshot.set_item(self.position, value)
+        if snapshot is None:
+            raise AssertionError("validated cursor replacement failed")
+        return RrbVectorCursor(snapshot, self.position)
+
+    def snapshot(self) -> RrbVector[T]:
+        return self._snapshot
+
 
 class RrbVectorBuilder(Generic[T]):
     """Mutable append staging surface that publishes immutable RRB snapshots."""
@@ -544,6 +644,7 @@ __all__ = [
     "RrbPop",
     "RrbVector",
     "RrbVectorBuilder",
+    "RrbVectorCursor",
     "RrbVectorSplit",
     "RrbVectorStatistics",
 ]

@@ -26,6 +26,7 @@ from ._range_update_diagnostics import (
     _record_subtree_application,
     _record_tag_compose_callback,
 )
+from .core import SequenceCursorPeek
 
 T = TypeVar("T")
 M = TypeVar("M")
@@ -977,6 +978,123 @@ class RangeUpdateSequence(Generic[T, M, U]):
             )
         return report
 
+    def get_cursor(self, position: int = 0) -> RangeUpdateSequenceCursor[T, M, U]:
+        """Creates an immutable logical gap cursor with directional range operations."""
+
+        return RangeUpdateSequenceCursor(self, position)
+
+
+@dataclass(frozen=True, slots=True)
+class RangeUpdateSequenceCursor(Generic[T, M, U]):
+    """Immutable positional and measured cursor over a lazy range-update sequence."""
+
+    _snapshot: RangeUpdateSequence[T, M, U]
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        self._snapshot._check_boundary_index(self.position)
+
+    @property
+    def count(self) -> int:
+        return len(self._snapshot)
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.count
+
+    @property
+    def measure_before(self) -> M:
+        return self._snapshot.measure_range(0, self.position)
+
+    @property
+    def measure_after(self) -> M:
+        return self._snapshot.measure_range(self.position, self.count - self.position)
+
+    def peek_previous(self) -> SequenceCursorPeek[T] | None:
+        return None if self.is_at_start else SequenceCursorPeek(self._snapshot[self.position - 1])
+
+    def peek_next(self) -> SequenceCursorPeek[T] | None:
+        return None if self.is_at_end else SequenceCursorPeek(self._snapshot[self.position])
+
+    def move_previous(self) -> RangeUpdateSequenceCursor[T, M, U]:
+        if self.is_at_start:
+            raise IndexError("range-update cursor is already at the start")
+        return RangeUpdateSequenceCursor(self._snapshot, self.position - 1)
+
+    def move_next(self) -> RangeUpdateSequenceCursor[T, M, U]:
+        if self.is_at_end:
+            raise IndexError("range-update cursor is already at the end")
+        return RangeUpdateSequenceCursor(self._snapshot, self.position + 1)
+
+    def seek(self, position: int) -> RangeUpdateSequenceCursor[T, M, U]:
+        return (
+            self
+            if position == self.position
+            else RangeUpdateSequenceCursor(self._snapshot, position)
+        )
+
+    def insert(self, value: T) -> RangeUpdateSequenceCursor[T, M, U]:
+        return RangeUpdateSequenceCursor(
+            self._snapshot.insert(self.position, value), self.position + 1
+        )
+
+    def delete_previous(self) -> RangeUpdateSequenceCursor[T, M, U]:
+        if self.is_at_start:
+            raise IndexError("range-update cursor has no previous element")
+        return RangeUpdateSequenceCursor(
+            self._snapshot.remove_at(self.position - 1), self.position - 1
+        )
+
+    def delete_next(self) -> RangeUpdateSequenceCursor[T, M, U]:
+        if self.is_at_end:
+            raise IndexError("range-update cursor has no next element")
+        return RangeUpdateSequenceCursor(self._snapshot.remove_at(self.position), self.position)
+
+    def replace_next(self, value: T) -> RangeUpdateSequenceCursor[T, M, U]:
+        if self.is_at_end:
+            raise IndexError("range-update cursor has no next element")
+        return RangeUpdateSequenceCursor(
+            self._snapshot.set_item(self.position, value), self.position
+        )
+
+    def measure_previous(self, count: int) -> M:
+        self._check_directional_count(count, self.position)
+        return self._snapshot.measure_range(self.position - count, count)
+
+    def measure_next(self, count: int) -> M:
+        self._check_directional_count(count, self.count - self.position)
+        return self._snapshot.measure_range(self.position, count)
+
+    def apply_previous(self, count: int, tag: U) -> RangeUpdateSequenceCursor[T, M, U]:
+        self._check_directional_count(count, self.position)
+        snapshot = self._snapshot.apply_range(self.position - count, count, tag)
+        return (
+            self
+            if snapshot is self._snapshot
+            else RangeUpdateSequenceCursor(snapshot, self.position)
+        )
+
+    def apply_next(self, count: int, tag: U) -> RangeUpdateSequenceCursor[T, M, U]:
+        self._check_directional_count(count, self.count - self.position)
+        snapshot = self._snapshot.apply_range(self.position, count, tag)
+        return (
+            self
+            if snapshot is self._snapshot
+            else RangeUpdateSequenceCursor(snapshot, self.position)
+        )
+
+    def snapshot(self) -> RangeUpdateSequence[T, M, U]:
+        return self._snapshot
+
+    @staticmethod
+    def _check_directional_count(count: int, available: int) -> None:
+        if count < 0 or count > available:
+            raise ValueError("count is outside the available cursor direction")
+
 
 def _validate_node(
     node: _Node[T, M, U],
@@ -1036,6 +1154,7 @@ def _validate_node(
 __all__ = [
     "RangeUpdateAlgebra",
     "RangeUpdateSequence",
+    "RangeUpdateSequenceCursor",
     "RangeUpdateSplit",
     "create_range_update_algebra",
 ]
