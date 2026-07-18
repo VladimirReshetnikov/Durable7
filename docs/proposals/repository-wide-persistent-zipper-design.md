@@ -379,8 +379,9 @@ cursor whose next move can observe a different generation.
 - C# struct cursors use an explicitly invalid default value unless a family can make the default a
   policy-correct initialized empty cursor. Every member of an invalid default throws the same
   documented exception.
-- C and C++ moved-from/zeroed handles, and explicitly disposed C handles, are invalid but safely
-  destructible according to local conventions.
+- C zeroed, moved-from, or explicitly disposed handles are invalid but safely destructible according
+  to local conventions. C++ default and moved-from behavior follows the concrete value type and
+  must be documented rather than inferred from C's handle model.
 - Rust ownership should make use-after-move unrepresentable; an empty cursor is still an initialized
   value.
 - Haskell, Kotlin, OCaml, TypeScript, and Python constructors do not expose an uninitialized cursor.
@@ -1580,3 +1581,326 @@ one under this name.
 The private CHAMP edit-path engine may be used during one transient operation, but the path cannot
 outlive that operation or bypass its prepare/commit boundary, version increment, iterator
 invalidation, owner token, terminal publication, or exception guarantee.
+
+## Cross-Language API And Ownership Mapping
+
+Semantic parity means the same focus, movement, edit, branching, policy, and failure results. It
+does not require identical spelling, carrier representation, allocation profile, or borrowed-value
+rules.
+
+| Language | Recommended public shape | Ownership and result rules |
+| --- | --- | --- |
+| C# | Concrete `XCursor<...>` returned by `GetCursor`/search factories; readonly struct over immutable references when justified, otherwise sealed value-like class; `Snapshot()` | Default struct is explicitly invalid unless a policy-correct empty can be represented. Presence-safe `Try` methods support nullable payloads. Thread-safe memo cells may be used but are not globally required. |
+| C | Opaque or type-erased `x_cursor` owned handle with `init`/factory, `copy`, consuming `move`, `dispose`, navigation/edit status functions, and snapshot output | Callback contexts and policies outlive every related cursor. Exact source/result alias support follows the owning workspace. Output is installed only on success; copied peeks own or copy through the value policy rather than returning unstable storage. |
+| C++ | Immutable `x_cursor` value retaining shared nodes/context; free/member factories and `snapshot()` | Copy/move follows the collection's policy-object rules. Borrowed peek references are lvalue-only where a temporary cursor would dangle. Context frames retain nodes rather than copying move-only keys or values. |
+| Haskell | Opaque pure `XCursor` algebraic value with `cursorAt`, movement/edit functions, and `snapshot` | Outer `Maybe`/result distinguishes a missing neighbor from a stored `Nothing`. Pure exceptions or explicit results preserve every old value. Runtime/function policy caveats remain local. |
+| Kotlin | Opaque immutable `XCursor` class/value with `cursorAt` and `snapshot` | Non-null presence wrappers distinguish stored null from boundary. Runtime policy objects are retained exactly. No C# struct, memo, or allocation claim is inferred. |
+| Rust | Opaque owned `XCursor` with `cursor_at`, borrowing peeks, persistent edits, and `snapshot` | Prefer `Arc`-retained context. Navigation/search/snapshot add no `Clone` bound; only edits that must duplicate affected payload storage inherit the substrate's bound. Use-after-move is statically unavailable. |
+| OCaml | Abstract `X_cursor.t` module with `cursor_at`, `option`/`result` movement and edits, and `snapshot` | Preserve local policies and checkpoint representations. Do not infer native tree topology or another port's asymptotics. |
+| TypeScript | Immutable `XCursor<T>` class/value with camel-case factories and `snapshot()` | Entry-shaped results distinguish stored `undefined` from a miss. Runtime hash/measure/comparison policies and isolate-local constraints remain exact. |
+| Python | Typed immutable-style `XCursor` with snake-case factories, presence result objects, and `snapshot()` | Stored `None` is distinct from boundary. Python object mutability caveats remain; cursor persistence protects structure, not caller-mutated payload state. |
+
+`Snapshot` is the conceptual verb because the shipped rope uses it. A language whose collection
+already standardizes on `to_persistent`, `close`, or another unambiguous term may retain that term,
+provided it is explicitly non-consuming. C output functions may consume a moved handle as an
+optimization only when a non-consuming copy form also expresses the shared semantic contract.
+
+### No Universal Runtime Cursor Interface
+
+Do not introduce one inheritance/interface hierarchy spanning sequences, ordered sets, measured
+trees, and composite collections. Their position widths, measure/tag policies, key/value borrowing,
+static type-class constraints, and legal edits differ materially. Reuse occurs in private generic
+kernels and shared test laws. Public concrete types remain discoverable and honest.
+
+Recommended naming pattern:
+
+| Family | C#-shaped name |
+| --- | --- |
+| measured tree | `FingerTreeCursor<TElement, TMeasure, TMeasureOps>` |
+| deque / reversible deque | `FingerTreeDequeCursor<T>`, `ReversibleDequeCursor<T>` |
+| RRB / Range | `RrbVectorCursor<T>`, `RangeUpdateSequenceCursor<...>` |
+| sorted/canonical/priority-search/interval | owning type name plus `Cursor` |
+| chunked bit set | `PersistentChunkedBitSetCursor` |
+| neutral Ordered | `PersistentOrderedSetCursor<T>`, map and multimap counterparts |
+| Patricia | `PersistentIntMapCursor<TValue>` and width/set counterparts |
+| Merkle | `MerkleSearchTreeCursor<TKey, TValue>` |
+| Tungsten | leaf-local owning type name plus `Cursor` |
+
+The C, C++, Rust, OCaml, and scripting-language ports adapt casing and module conventions. Zipper
+tokens are never serialized and are never portable between language ports or policy instances.
+
+## Internal Architecture Guidance
+
+Implementation reuse should follow semantic boundaries rather than forcing every family through one
+node type.
+
+1. **Gap protocol helpers** own boundary validation, movement results, edit anchoring, version
+   identity, and command-model tests. They do not own tree representation.
+2. **Measured sequence context** owns ordered before/after measures and element-remeasurement rules.
+   Deque, raw measured tree, sorted measured facades, interval facades, and bit-set word traversal can
+   adapt it where their actual substrate permits.
+3. **Binary/wide ordered path kernel** owns predecessor/successor ascent/descents and clean/dirty
+   path identity. Patricia, AVL priority-search, canonical zip-zip, and Merkle each provide distinct
+   frame closure and rebalancing/canonicalization policies.
+4. **Private CHAMP path kernel** remains in the HAMT package and provides preparation to hash-derived
+   composites. It does not leak into public cursor contracts.
+5. **Composite version coordinator** stages ordered and auxiliary-index results and publishes one
+   facade. It is parameterized by validation/commit callbacks rather than by Tungsten behavior.
+6. **Application-leaf adapters** live in Tungsten and may consume public or internal-general APIs
+   only through allowed package dependencies.
+
+Avoid sharing a `CursorVersionState` across unrelated collections merely because both can memoize a
+snapshot. Version state is family-specific: a Merkle state owns policy domain and dirty encoded
+regions; a Range state owns tags and measure algebra; an Ordered state owns multiple indexes.
+
+## Validation Design
+
+### Shared Command Model
+
+Every public positional or ordered cursor gets a deterministic model suite that stores a plain
+logical sequence/map plus a gap. Commands include:
+
+```text
+create at every legal gap
+seek absolute / lower bound / upper bound / exact
+peek previous / next
+move previous / next
+insert one / insert range where legal
+delete previous / next
+replace or value-update where legal
+snapshot
+retain named ancestor
+branch from any retained cursor
+resume and snapshot every retained branch
+```
+
+After every command, assert position/focus, count, ordered enumeration, peeks, policies, stored
+representatives, and snapshot equivalence with the ordinary persistent operation. Generate null-like
+payloads, duplicate/equivalent representatives, custom policies, empty/singleton collections, and
+both endpoints.
+
+Core laws:
+
+1. `Snapshot(GetCursor(source, p))` is the source's exact logical value for every legal gap.
+2. On an interior gap, next then previous and previous then next restore the same logical version and
+   gap.
+3. Navigation never changes the snapshot or policy identity.
+4. Cursor edits equal the corresponding ordinary collection edits.
+5. Retained ancestors and sibling branches never change.
+6. Same-position seek, zero move, empty insertion, duplicate/no-op edits, and configured-equal value
+   updates preserve identity exactly where promised.
+7. A failed `Try` boundary operation preserves the cursor and distinguishes absence from a stored
+   null-like value.
+8. A dirty snapshot can be repeated; where memoization is promised, all callers receive the one
+   winning canonical instance.
+9. Default, disposed, moved-from, and invalid handles follow the language-local contract.
+10. Cursor values over initialized snapshots are safe for concurrent reads under the collection's
+    existing thread-safety boundary.
+
+### Measure And Tag Laws
+
+- Test a noncommutative monoid, not only count/sum, so before/after combination order is observable.
+- Moving through retained measured nodes invokes no element-measure callback.
+- Insert and unconditional replace invoke the exact local callback count; failure publishes no edit
+  or prepared cache.
+- Absolute measure seek covers predicate-true-at-identity, first/middle/last hit, miss, and empty.
+- Range cursors generate noncommuting tags and verify `Compose(newer, older)` through nested,
+  overlapping, whole-root, and zero-length histories.
+- Range rotations and deletion/insertion through tagged paths preserve the rule that old tags never
+  transform a newly supplied current value.
+
+### Structure-Specific Invariant Gates
+
+| Structure | Required invariant coverage |
+| --- | --- |
+| Finger tree/deque | Empty/single/deep constructors; digit and Node2/Node3 bounds; lazy middle sharing; cached measures/counts; endpoint and forced-spine histories. |
+| Reversible deque | Every orientation and gap; reversal involution; previous/next swap; non-palindromic range insertion; mixed-orientation snapshot. |
+| RRB vector | Packed and relaxed branches, cumulative sizes, height equality, full/partial leaves, split/concat seams, unary-root collapse, leaf-boundary fan-out. |
+| Sorted families | Lower/upper bounds, stable equal-bag order, stored set/map representatives, strict duplicate behavior, comparer failures, neighbor parity. |
+| Canonical set | Exact policy ranks, Cartesian heap order, canonical topology equal to ordinary edits, content hashes, degenerate-rank stack safety. |
+| Priority-search queue | BST order, AVL balance, count/height, winner priority/key tie-break, priority update on every ancestor, pruned-query parity. |
+| Interval structures | Inclusive endpoints, equal-low runs, complete-key lexicographic map order, min/max endpoints, max-high summaries, overlap continuation and validity rules. |
+| Chunked bit set | Negative and `int.MaxValue` boundaries, 63/64 seams, set-bit ranks/select, zero-word contraction, wide count, retained algebra results. |
+| Ordered set/map | Sequence/index count equality, exact entry identity where required, private stamps, duplicate no-op, relabel at the focus, first representatives. |
+| Ordered multimap | Nested key/value order, no empty group, final-value reanchor, checked pair count, independent policies, inner/outer relabel. |
+| Tungsten | List unconditional replace; Association pre-removal positional rule, incoming key adoption, update no-op, relabel; automated dependency scan proving the leaf direction. |
+| CHAMP private path | Bitmap/array popcounts, deepest routes, full-hash collisions, singleton promotion, representative/no-op rules, composite prepare/commit atomicity. |
+| Patricia | Signed min/-1/0/max, highest-differing-bit join, prefix mismatch, branch collapse, cached rank/count, 32/64-bit parity. |
+| Merkle | Canonical layers/blocks/counts, exact `MST2` bytes and root hashes, codec exceptions, degenerate blocks, retained dirty branches, no block-store write before explicit save. |
+
+Every implementation invokes the collection's recursive validator, when one exists, after each
+generated edit in a focused invariant lane. Model equality alone cannot detect a stale measure,
+winner, digest, size table, auxiliary index, or owner-policy reference.
+
+### Failure And Ownership Injection
+
+Managed/native policy tests inject exceptions or failures at each hash, equality, comparison,
+measure, tag, selector, codec, clone/retain, allocation, checked-count, and snapshot-close step. For
+each failpoint verify:
+
+- no edited cursor or half facade is observable;
+- source, ancestors, and sibling branches remain reusable;
+- no snapshot cache contains a failed candidate;
+- no C allocation/retain leaks and every partially prepared value is destroyed exactly once;
+- multi-index roots and counts remain mutually consistent; and
+- retry produces the same value as a failure-free ordinary edit.
+
+For C, run exhaustive allocator and fallible-callback failpoints through creation, movement that
+allocates ownership context, editing, closing, copying, moving, exact source/result aliasing where
+supported, and disposal. C++ covers throwing policy copy/move and move-only payloads. Rust compile
+tests ensure read-only cursor APIs do not add unnecessary `Clone`. Haskell evaluates enough of each
+result to force policy failures in the claimed phase.
+
+### Concurrency Tests
+
+- Race read-only movement/peeks/snapshots on one initialized cursor.
+- If snapshot memoization is promised, race first dirty snapshot; every successful caller returns
+  the winner and a failed candidate installs nothing.
+- Race independent edits from a shared ancestor and verify isolated branches.
+- Never present these as live-Ctrie write-back tests. A snapshot traversal observes exactly one
+  generation.
+- C handle lineage construction/destruction follows the package's non-atomic lifetime restrictions;
+  only already retained immutable snapshots are handed to concurrent readers.
+
+### Complexity And Allocation Evidence
+
+Semantic tests prove no asymptotic claim. A focused implementation that wants stronger bounds adds
+untimed counters for node/frame visits, path allocations, rotations, suspension forcing, size-table
+rebuilds, label relabeling, tag actions, element measurements, codec bytes, hash blocks, active-buffer
+copies, and dirty-snapshot closures.
+
+Required adversarial histories include:
+
+- repeated movement across one boundary;
+- edit oscillation on both sides of a focus;
+- a linear local history and fan-out from the same highest-potential boundary;
+- seeks alternating between far ends;
+- duplicate/collision runs;
+- Range operations through maximally tagged spines;
+- RRB packed/relaxed seam cascades;
+- canonical-rank and Merkle-layer degeneration; and
+- Ordered relabel fan-out.
+
+Counters establish work shape; isolated benchmarks decide constant-factor value. Neither can replace
+an amortized proof. Do not run benchmarks as part of routine semantic shipment, and do not advertise
+a focused tier unless it beats or otherwise justifies itself for a named consumer history.
+
+## Cross-Language Parity And Rollout
+
+### Shipment Units
+
+Ship one family at a time. A complete public-cursor shipment unit contains:
+
+1. locked shared focus/edit/result contract;
+2. C# reference API/source/XML docs or a documented reason another existing family is authoritative;
+3. deterministic model, invariant, failure, branching, and concurrency coverage;
+4. honest complexity and allocation documentation for that implementation;
+5. workspace usage/API/validation updates;
+6. repository catalog, semantic-contract, frontier, navigation, and test-map updates; and
+7. an explicit per-port decision: focused representation, semantic checkpoint, or deferred with
+   reason.
+
+Do not add proposed cursor names to current public-entry tables before the relevant implementation
+ships. A semantic checkpoint may port observable behavior without inheriting the C# representation,
+memo cell, callback ceiling, allocation bound, amortization, benchmark result, or node topology.
+
+### Recommended Sequence
+
+1. **Private CHAMP path.** Factor and exhaustively test it behind unchanged public map/set APIs, then
+   adopt it selectively in hash composites. This is an implementation refactor, not a public cursor
+   shipment.
+2. **Patricia cursor.** Ship the smallest true ordered-tree zipper first; fixed key width makes
+   contexts and worst-case bounds unusually crisp.
+3. **Deque and raw measured cursor checkpoints.** Lock the shared gap/measure API without promising a
+   focused representation; use named consumers and counters before optimizing.
+4. **Sorted, interval, bit-set, and priority-search adapters.** Reuse the established semantic
+   kernels while retaining each augmentation and duplicate rule.
+5. **RRB and Range.** Implement their specialized path frames only after the basic sequence model is
+   stable; both require nontrivial balancing metadata.
+6. **Neutral Ordered set/map, then nested multimap.** Stage both indexes atomically and stress
+   relabel branches before exposing public cursors.
+7. **Merkle cursor.** Prototype canonical dirty closure and prove exact cross-language wire parity
+   before any public surface. Treat this as a trust-boundary feature, not a generic ordered adapter.
+8. **Tungsten adapters.** Add only for a Tungsten consumer, after a suitable general mechanism exists
+   or as an independently leaf-owned implementation. Port kernel-driven behavior across Tungsten
+   siblings only.
+9. **Optional traversal objects.** Graph and Ctrie snapshot traversal require named consumers and
+   separate terminology; they do not block zipper work.
+
+Existing rope cursors need no rollout phase. Their current API, tests, and performance boundary
+remain authoritative.
+
+### Promotion Gates
+
+A public cursor is ready only when:
+
+- the focus position survives empty, boundary, duplicate, removal, and branching histories without
+  ambiguity;
+- ordinary-operation model parity and recursive invariants both pass;
+- policies, representatives, null/presence, error precedence, and failure atomicity are locked;
+- public docs separate semantic checkpoint and focused implementation costs;
+- C ownership and all language-local lifetime constraints are complete;
+- cross-language golden artifacts pass where bytes/hashes are shared; and
+- Tungsten/general dependency scans remain clean.
+
+An optimized focused representation additionally requires a proof-scoped complexity statement,
+operation counters, retained-memory analysis, and isolated benchmark evidence for a named history.
+Failure to clear that gate leaves the correct root-plus-position cursor in place; it is not a reason
+to weaken semantics.
+
+## Locked Decisions And Deliberate Deferrals
+
+| Topic | Decision |
+| --- | --- |
+| Public name | `Cursor`; “zipper” describes design/representation. |
+| Version relationship | Cursor owns one immutable logical version; edits branch; snapshot is non-consuming. |
+| Sequence focus | Gap, including empty/start/end. |
+| Ordered focus | Ordered gap whose next entry is the exact/lower-bound candidate. |
+| Raw measured position | Measure/neighbor based; no fabricated count unless the measure/substrate provides one. |
+| Snapshot memo | Required only where a family ships it; otherwise optional invisible optimization. |
+| Public CHAMP cursor | Rejected; private edit-path zipper only. |
+| Heap cursors | Rejected for measured priority queue and Brodal–Okasaki heap. |
+| Graph | Separate snapshot traversal, not a Huet zipper. |
+| Live concurrent cursor | Rejected; snapshot-bound read traversal only. |
+| Generic runtime interface | Rejected; concrete cursor types plus shared laws. |
+| Bookmarks and rebase | Deferred; no implicit cross-version application. |
+| Selection/range objects | Deferred; ranges are operations relative to one gap where specified. |
+| Mutable/transient cursor | Outside persistent zipper scope and terminology. |
+| Cross-language representation parity | Not required; observable semantics and honest local docs are required. |
+| Tungsten authority | Application leaf only; no reverse dependency or general semantic inheritance. |
+
+## Coverage Audit
+
+This proposal covers every persistent family in the current
+[data-structure catalog](../reference/data-structure-catalog.md):
+
+- numerics are explicitly excluded as scalars;
+- every CHAMP, derived hash-composition, Patricia, Merkle, and concurrent-snapshot family has a
+  public/private/no-zipper decision;
+- every FingerTree, sequence, sorted, priority, interval, RRB, Range, rope, bit-set, canonical,
+  DABA, and builder surface has a design or exclusion;
+- every neutral Ordered set/map/multimap has an atomic semantic cursor; and
+- both Tungsten persistent collections have leaf-local designs.
+
+The audit treats result carriers, codecs, measures, policies, proofs, packs, stores, builders,
+transients, and mutable DABA state as supporting mechanisms rather than silently counting them as
+unreviewed persistent aggregates.
+
+## Primary References
+
+- Gérard Huet, [The Zipper](https://www.st.cs.uni-saarland.de/edu/seminare/2005/advanced-fp/docs/huet-zipper.pdf),
+  *Journal of Functional Programming* 7(5), 1997
+  ([DOI 10.1017/S0956796897002864](https://doi.org/10.1017/S0956796897002864)).
+- [Zipper overview](https://en.wikipedia.org/wiki/Zipper_(data_structure)), the user-provided
+  orientation reference.
+- [Data-structure catalog](../reference/data-structure-catalog.md) for current public families and
+  language entry points.
+- [Semantic contracts](../reference/semantic-contracts.md) for current persistence, policy,
+  ordering, ownership, and cursor obligations.
+- [Axis 2 lifecycle and sequence-cursor plan](axis2-lifecycle-and-sequence-cursors.md) and the
+  [C# rope C0 decision](../../src/CSharp/docs/FingerTree/rope-cursor-c0-decision.md) for the shipped
+  zipper-as-version precedent and its proof boundary.
+- [Porting and semantic parity guide](../guides/porting-and-semantic-parity.md) for implementation and
+  documentation workflow.
+- [Tungsten application-leaf dependency boundary](../reference/tungsten-application-leaf-boundary.md)
+  for the mandatory one-way dependency and authority rules.
