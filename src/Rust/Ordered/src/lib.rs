@@ -1,8 +1,13 @@
 #![forbid(unsafe_code)]
 #![doc = "Neutral persistent insertion-ordered collections for Rust."]
 
+mod cursors;
 mod ordered_map;
 mod ordered_multimap;
+pub use cursors::{
+    OrderedCursorSearch, PersistentOrderedMapCursor, PersistentOrderedMultimapCursor,
+    PersistentOrderedSetCursor,
+};
 pub use ordered_map::{
     OrderedMapMoveError, OrderedMapRemoveResult, PersistentOrderedMap,
     PersistentOrderedMapInvariantError, PersistentOrderedMapStatistics,
