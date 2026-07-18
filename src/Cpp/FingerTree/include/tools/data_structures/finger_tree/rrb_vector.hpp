@@ -38,6 +38,9 @@ template <std::copy_constructible T>
 class rrb_vector;
 
 template <std::copy_constructible T>
+class rrb_vector_cursor;
+
+template <std::copy_constructible T>
 struct rrb_vector_split final {
     rrb_vector<T> left;
     rrb_vector<T> right;
@@ -308,6 +311,9 @@ public:
     {
         return root_ ? root_->height : 0;
     }
+
+    /// Creates an immutable cursor at a logical gap in `0..size()`.
+    [[nodiscard]] rrb_vector_cursor<value_type> get_cursor(size_type position = 0) const;
 
     [[nodiscard]] const_reference at(const size_type index) const
     {
@@ -946,6 +952,155 @@ private:
 
     node_pointer root_;
 };
+
+/// An immutable snapshot-plus-position gap cursor over a relaxed radix-balanced vector.
+template <std::copy_constructible T>
+class rrb_vector_cursor final {
+public:
+    using value_type = T;
+    using size_type = std::size_t;
+
+    rrb_vector_cursor() = delete;
+    rrb_vector_cursor(const rrb_vector_cursor&) = default;
+    rrb_vector_cursor& operator=(const rrb_vector_cursor&) = default;
+
+    rrb_vector_cursor(rrb_vector_cursor&& other) noexcept(
+        std::is_nothrow_copy_constructible_v<rrb_vector<value_type>>)
+        : snapshot_(other.snapshot_)
+        , position_(other.position_)
+    {
+    }
+
+    rrb_vector_cursor& operator=(rrb_vector_cursor&& other) noexcept(
+        std::is_nothrow_copy_assignable_v<rrb_vector<value_type>>)
+    {
+        if (this != &other) {
+            snapshot_ = other.snapshot_;
+            position_ = other.position_;
+        }
+        return *this;
+    }
+
+    [[nodiscard]] size_type size() const noexcept { return snapshot_.size(); }
+    [[nodiscard]] bool empty() const noexcept { return snapshot_.empty(); }
+    [[nodiscard]] size_type position() const noexcept { return position_; }
+    [[nodiscard]] bool is_at_start() const noexcept { return position_ == 0; }
+    [[nodiscard]] bool is_at_end() const noexcept { return position_ == snapshot_.size(); }
+
+    [[nodiscard]] const value_type* try_peek_previous() const &
+    {
+        return position_ == 0 ? nullptr : snapshot_.try_get(position_ - 1);
+    }
+
+    const value_type* try_peek_previous() const && = delete;
+
+    [[nodiscard]] const value_type* try_peek_next() const &
+    {
+        return snapshot_.try_get(position_);
+    }
+
+    const value_type* try_peek_next() const && = delete;
+
+    [[nodiscard]] rrb_vector_cursor move_previous() const
+    {
+        if (is_at_start()) {
+            throw std::logic_error("RRB cursor is already at the start");
+        }
+        return rrb_vector_cursor{snapshot_, position_ - 1};
+    }
+
+    [[nodiscard]] rrb_vector_cursor move_next() const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("RRB cursor is already at the end");
+        }
+        return rrb_vector_cursor{snapshot_, position_ + 1};
+    }
+
+    [[nodiscard]] rrb_vector_cursor seek(const size_type position) const
+    {
+        if (position > snapshot_.size()) {
+            throw std::out_of_range("cursor position is outside the RRB vector bounds");
+        }
+        return position == position_ ? *this : rrb_vector_cursor{snapshot_, position};
+    }
+
+    [[nodiscard]] rrb_vector_cursor insert(value_type value) const
+    {
+        auto values = std::vector<value_type>{};
+        values.reserve(1);
+        values.push_back(std::move(value));
+        return insert_range(values);
+    }
+
+    template <std::ranges::input_range Range>
+        requires(!std::same_as<std::remove_cvref_t<Range>, rrb_vector<value_type>>)
+            && std::constructible_from<value_type, std::ranges::range_reference_t<Range>>
+    [[nodiscard]] rrb_vector_cursor insert_range(Range&& values) const
+    {
+        auto middle = rrb_vector<value_type>::from_range(std::forward<Range>(values));
+        return middle.empty() ? *this : insert_vector(middle);
+    }
+
+    /// Splices an existing vector through its persistent split/concat operations.
+    [[nodiscard]] rrb_vector_cursor insert_vector(const rrb_vector<value_type>& values) const
+    {
+        if (values.empty()) {
+            return *this;
+        }
+        return rrb_vector_cursor{
+            snapshot_.insert_range(position_, values),
+            checked_add(position_, values.size())};
+    }
+
+    [[nodiscard]] rrb_vector_cursor delete_previous() const
+    {
+        if (is_at_start()) {
+            throw std::logic_error("RRB cursor has no previous element");
+        }
+        return rrb_vector_cursor{snapshot_.remove_range(position_ - 1, 1), position_ - 1};
+    }
+
+    [[nodiscard]] rrb_vector_cursor delete_next() const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("RRB cursor has no next element");
+        }
+        return rrb_vector_cursor{snapshot_.remove_range(position_, 1), position_};
+    }
+
+    [[nodiscard]] rrb_vector_cursor replace_next(value_type value) const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("RRB cursor has no next element");
+        }
+        return rrb_vector_cursor{snapshot_.set_item(position_, std::move(value)), position_};
+    }
+
+    [[nodiscard]] rrb_vector<value_type> snapshot() const { return snapshot_; }
+
+private:
+    friend class rrb_vector<T>;
+
+    rrb_vector_cursor(rrb_vector<value_type> snapshot, const size_type position)
+        : snapshot_(std::move(snapshot))
+        , position_(position)
+    {
+    }
+
+    rrb_vector<value_type> snapshot_;
+    size_type position_;
+};
+
+template <std::copy_constructible T>
+[[nodiscard]] rrb_vector_cursor<T>
+rrb_vector<T>::get_cursor(const size_type position) const
+{
+    if (position > size()) {
+        throw std::out_of_range("cursor position is outside the RRB vector bounds");
+    }
+    return rrb_vector_cursor<value_type>{*this, position};
+}
 
 template <std::copy_constructible T>
 class rrb_vector_builder final {

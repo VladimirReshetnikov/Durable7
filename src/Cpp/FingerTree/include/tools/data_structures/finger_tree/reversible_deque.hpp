@@ -3,6 +3,7 @@
 #include <tools/data_structures/finger_tree/detail/common.hpp>
 #include <tools/data_structures/finger_tree/detail/reversible_tree.hpp>
 
+#include <concepts>
 #include <cstddef>
 #include <initializer_list>
 #include <iterator>
@@ -10,6 +11,7 @@
 #include <optional>
 #include <ranges>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -17,6 +19,9 @@ namespace tools::data_structures::finger_tree {
 
 template <class T>
 class reversible_deque;
+
+template <class T>
+class reversible_deque_cursor;
 
 template <class T>
 struct reversible_deque_split;
@@ -67,6 +72,9 @@ public:
     {
         return root_.size();
     }
+
+    /// Creates an immutable cursor at a logical gap in `0..size()`.
+    [[nodiscard]] reversible_deque_cursor<value_type> get_cursor(size_type position = 0) const;
 
     [[nodiscard]] const_reference front() const
     {
@@ -307,6 +315,161 @@ struct reversible_deque_pop final {
     T value;
     reversible_deque<T> rest;
 };
+
+/// An immutable logical-order gap cursor over a persistent reversible deque.
+template <class T>
+class reversible_deque_cursor final {
+public:
+    using value_type = T;
+    using size_type = std::size_t;
+
+    reversible_deque_cursor() = delete;
+    reversible_deque_cursor(const reversible_deque_cursor&) = default;
+    reversible_deque_cursor& operator=(const reversible_deque_cursor&) = default;
+
+    reversible_deque_cursor(reversible_deque_cursor&& other) noexcept(
+        std::is_nothrow_copy_constructible_v<reversible_deque<value_type>>)
+        : snapshot_(other.snapshot_)
+        , position_(other.position_)
+    {
+    }
+
+    reversible_deque_cursor& operator=(reversible_deque_cursor&& other) noexcept(
+        std::is_nothrow_copy_assignable_v<reversible_deque<value_type>>)
+    {
+        if (this != &other) {
+            snapshot_ = other.snapshot_;
+            position_ = other.position_;
+        }
+        return *this;
+    }
+
+    [[nodiscard]] size_type size() const noexcept { return snapshot_.size(); }
+    [[nodiscard]] bool empty() const noexcept { return snapshot_.empty(); }
+    [[nodiscard]] size_type position() const noexcept { return position_; }
+    [[nodiscard]] bool is_at_start() const noexcept { return position_ == 0; }
+    [[nodiscard]] bool is_at_end() const noexcept { return position_ == snapshot_.size(); }
+
+    /// The outer optional reports presence, so a stored optional value remains distinguishable.
+    [[nodiscard]] std::optional<value_type> try_peek_previous() const
+    {
+        return position_ == 0
+            ? std::nullopt
+            : std::optional<value_type>{std::in_place, snapshot_.at(position_ - 1)};
+    }
+
+    [[nodiscard]] std::optional<value_type> try_peek_next() const
+    {
+        return is_at_end()
+            ? std::nullopt
+            : std::optional<value_type>{std::in_place, snapshot_.at(position_)};
+    }
+
+    [[nodiscard]] reversible_deque_cursor move_previous() const
+    {
+        if (is_at_start()) {
+            throw std::logic_error("reversible-deque cursor is already at the start");
+        }
+        return reversible_deque_cursor{snapshot_, position_ - 1};
+    }
+
+    [[nodiscard]] reversible_deque_cursor move_next() const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("reversible-deque cursor is already at the end");
+        }
+        return reversible_deque_cursor{snapshot_, position_ + 1};
+    }
+
+    [[nodiscard]] reversible_deque_cursor seek(const size_type position) const
+    {
+        if (position > snapshot_.size()) {
+            throw std::out_of_range("cursor position is outside the reversible-deque bounds");
+        }
+        return position == position_ ? *this : reversible_deque_cursor{snapshot_, position};
+    }
+
+    [[nodiscard]] reversible_deque_cursor insert(value_type value) const
+    {
+        return reversible_deque_cursor{
+            snapshot_.insert_at(position_, std::move(value)),
+            checked_add(position_, size_type{1})};
+    }
+
+    template <std::ranges::input_range Range>
+        requires(!std::same_as<std::remove_cvref_t<Range>, reversible_deque<value_type>>)
+    [[nodiscard]] reversible_deque_cursor insert_range(Range&& values) const
+    {
+        auto middle = reversible_deque<value_type>::from_range(std::forward<Range>(values));
+        return middle.empty() ? *this : insert_range(middle);
+    }
+
+    [[nodiscard]] reversible_deque_cursor insert_range(
+        const reversible_deque<value_type>& values) const
+    {
+        if (values.empty()) {
+            return *this;
+        }
+        const auto split = snapshot_.split_at(position_);
+        return reversible_deque_cursor{
+            split.left.concat(values).concat(split.right),
+            checked_add(position_, values.size())};
+    }
+
+    [[nodiscard]] reversible_deque_cursor delete_previous() const
+    {
+        if (is_at_start()) {
+            throw std::logic_error("reversible-deque cursor has no previous element");
+        }
+        return reversible_deque_cursor{snapshot_.remove_at(position_ - 1), position_ - 1};
+    }
+
+    [[nodiscard]] reversible_deque_cursor delete_next() const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("reversible-deque cursor has no next element");
+        }
+        return reversible_deque_cursor{snapshot_.remove_at(position_), position_};
+    }
+
+    [[nodiscard]] reversible_deque_cursor replace_next(value_type value) const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("reversible-deque cursor has no next element");
+        }
+        return reversible_deque_cursor{snapshot_.set_item(position_, std::move(value)), position_};
+    }
+
+    /// Reverses the logical version and maps this gap to `size() - position()`.
+    [[nodiscard]] reversible_deque_cursor reverse() const
+    {
+        return reversible_deque_cursor{snapshot_.reverse(), snapshot_.size() - position_};
+    }
+
+    [[nodiscard]] reversible_deque<value_type> snapshot() const { return snapshot_; }
+
+private:
+    friend class reversible_deque<T>;
+
+    reversible_deque_cursor(reversible_deque<value_type> snapshot, const size_type position)
+        : snapshot_(std::move(snapshot))
+        , position_(position)
+    {
+    }
+
+    reversible_deque<value_type> snapshot_;
+    size_type position_;
+};
+
+template <class T>
+[[nodiscard]] reversible_deque_cursor<T>
+reversible_deque<T>::get_cursor(const size_type position) const
+{
+    if (position > size()) {
+        throw std::out_of_range("cursor position is outside the reversible-deque bounds");
+    }
+    return reversible_deque_cursor<value_type>{*this, position};
+}
 
 template <class T>
 reversible_deque<T> reversible_deque<T>::remove_first() const

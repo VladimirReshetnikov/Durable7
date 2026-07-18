@@ -23,6 +23,9 @@ template <class T>
 class persistent_deque;
 
 template <class T>
+class persistent_deque_cursor;
+
+template <class T>
 struct deque_split final {
     persistent_deque<T> left;
     persistent_deque<T> right;
@@ -97,6 +100,9 @@ public:
     {
         return root_.size();
     }
+
+    /// Creates an immutable cursor at a logical gap in `0..size()`.
+    [[nodiscard]] persistent_deque_cursor<value_type> get_cursor(size_type position = 0) const;
 
     [[nodiscard]] const_reference front() const
     {
@@ -720,6 +726,162 @@ private:
 
     detail::deque_tree<T> root_;
 };
+
+/// An immutable snapshot-plus-position gap cursor over a persistent deque.
+///
+/// This semantic checkpoint retains the persistent root plus a boundary. It makes no focused
+/// representation or amortized local-edit claim.
+template <class T>
+class persistent_deque_cursor final {
+public:
+    using value_type = T;
+    using size_type = std::size_t;
+
+    persistent_deque_cursor() = delete;
+    persistent_deque_cursor(const persistent_deque_cursor&) = default;
+    persistent_deque_cursor& operator=(const persistent_deque_cursor&) = default;
+
+    // Cursor values are immutable version handles. Moving deliberately copies the shared root so
+    // the source remains usable, matching the repository's existing C++ rope cursor convention.
+    persistent_deque_cursor(persistent_deque_cursor&& other) noexcept(
+        std::is_nothrow_copy_constructible_v<persistent_deque<value_type>>)
+        : snapshot_(other.snapshot_)
+        , position_(other.position_)
+    {
+    }
+
+    persistent_deque_cursor& operator=(persistent_deque_cursor&& other) noexcept(
+        std::is_nothrow_copy_assignable_v<persistent_deque<value_type>>)
+    {
+        if (this != &other) {
+            snapshot_ = other.snapshot_;
+            position_ = other.position_;
+        }
+        return *this;
+    }
+
+    [[nodiscard]] size_type size() const noexcept { return snapshot_.size(); }
+    [[nodiscard]] bool empty() const noexcept { return snapshot_.empty(); }
+    [[nodiscard]] size_type position() const noexcept { return position_; }
+    [[nodiscard]] bool is_at_start() const noexcept { return position_ == 0; }
+    [[nodiscard]] bool is_at_end() const noexcept { return position_ == snapshot_.size(); }
+
+    /// Returns a pointer borrowed from this cursor's retained snapshot, or null at the start.
+    [[nodiscard]] const value_type* try_peek_previous() const &
+    {
+        return position_ == 0 ? nullptr : snapshot_.try_get(position_ - 1);
+    }
+
+    const value_type* try_peek_previous() const && = delete;
+
+    /// Returns a pointer borrowed from this cursor's retained snapshot, or null at the end.
+    [[nodiscard]] const value_type* try_peek_next() const &
+    {
+        return snapshot_.try_get(position_);
+    }
+
+    const value_type* try_peek_next() const && = delete;
+
+    [[nodiscard]] persistent_deque_cursor move_previous() const
+    {
+        if (is_at_start()) {
+            throw std::logic_error("deque cursor is already at the start");
+        }
+        return persistent_deque_cursor{snapshot_, position_ - 1};
+    }
+
+    [[nodiscard]] persistent_deque_cursor move_next() const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("deque cursor is already at the end");
+        }
+        return persistent_deque_cursor{snapshot_, position_ + 1};
+    }
+
+    [[nodiscard]] persistent_deque_cursor seek(const size_type position) const
+    {
+        if (position > snapshot_.size()) {
+            throw std::out_of_range("cursor position is outside the deque bounds");
+        }
+        return position == position_ ? *this : persistent_deque_cursor{snapshot_, position};
+    }
+
+    [[nodiscard]] persistent_deque_cursor insert(value_type value) const
+    {
+        return persistent_deque_cursor{
+            snapshot_.insert_at(position_, std::move(value)),
+            checked_add(position_, size_type{1})};
+    }
+
+    template <std::ranges::input_range Range>
+        requires(!std::same_as<std::remove_cvref_t<Range>, persistent_deque<value_type>>)
+    [[nodiscard]] persistent_deque_cursor insert_range(Range&& values) const
+    {
+        auto middle = persistent_deque<value_type>::from_range(std::forward<Range>(values));
+        return middle.empty() ? *this : insert_range(middle);
+    }
+
+    /// Splices an existing persistent deque without flattening it.
+    [[nodiscard]] persistent_deque_cursor insert_range(
+        const persistent_deque<value_type>& values) const
+    {
+        if (values.empty()) {
+            return *this;
+        }
+        const auto split = snapshot_.split_at(position_);
+        return persistent_deque_cursor{
+            split.left.concat(values).concat(split.right),
+            checked_add(position_, values.size())};
+    }
+
+    [[nodiscard]] persistent_deque_cursor delete_previous() const
+    {
+        if (is_at_start()) {
+            throw std::logic_error("deque cursor has no previous element");
+        }
+        return persistent_deque_cursor{snapshot_.remove_at(position_ - 1), position_ - 1};
+    }
+
+    [[nodiscard]] persistent_deque_cursor delete_next() const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("deque cursor has no next element");
+        }
+        return persistent_deque_cursor{snapshot_.remove_at(position_), position_};
+    }
+
+    [[nodiscard]] persistent_deque_cursor replace_next(value_type value) const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("deque cursor has no next element");
+        }
+        return persistent_deque_cursor{snapshot_.set_item(position_, value), position_};
+    }
+
+    [[nodiscard]] persistent_deque<value_type> snapshot() const { return snapshot_; }
+
+private:
+    friend class persistent_deque<T>;
+
+    persistent_deque_cursor(persistent_deque<value_type> snapshot, const size_type position)
+        : snapshot_(std::move(snapshot))
+        , position_(position)
+    {
+    }
+
+    persistent_deque<value_type> snapshot_;
+    size_type position_;
+};
+
+template <class T>
+[[nodiscard]] persistent_deque_cursor<T>
+persistent_deque<T>::get_cursor(const size_type position) const
+{
+    if (position > size()) {
+        throw std::out_of_range("cursor position is outside the deque bounds");
+    }
+    return persistent_deque_cursor<value_type>{*this, position};
+}
 
 template <class T>
     requires equality_comparable_value<T>

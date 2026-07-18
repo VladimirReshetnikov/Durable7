@@ -21,6 +21,7 @@ add_executable(
     rope_tests.cpp
     rope_text_tests.cpp
     rrb_vector_tests.cpp
+    sequence_cursor_tests.cpp
     sorted_collection_tests.cpp
     smoke_tests.cpp
     tearable_concurrency_tests.cpp
@@ -73,6 +74,7 @@ set(
     rope
     rope-text
     rrb-vector
+    sequence-cursors
     sorted-collections
 )
 

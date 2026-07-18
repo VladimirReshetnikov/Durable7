@@ -71,6 +71,10 @@ class range_update_sequence;
 
 template <class Element, class Algebra>
     requires range_update_sequence_types<Element, Algebra>
+class range_update_sequence_cursor;
+
+template <class Element, class Algebra>
+    requires range_update_sequence_types<Element, Algebra>
 struct range_update_split final {
     range_update_sequence<Element, Algebra> left;
     range_update_sequence<Element, Algebra> right;
@@ -304,6 +308,10 @@ public:
     {
         return count_of(root_);
     }
+
+    /// Creates an immutable positional and measured cursor at a gap in `0..size()`.
+    [[nodiscard]] range_update_sequence_cursor<value_type, algebra_type>
+    get_cursor(size_type position = 0) const;
 
     [[nodiscard]] measure_type measure() const
     {
@@ -1068,6 +1076,198 @@ private:
 
     node_pointer root_;
 };
+
+/// An immutable positional and measured cursor over a lazy range-update sequence snapshot.
+template <class Element, class Algebra>
+    requires range_update_sequence_types<Element, Algebra>
+class range_update_sequence_cursor final {
+public:
+    using value_type = Element;
+    using algebra_type = Algebra;
+    using measure_type = typename algebra_type::measure_type;
+    using tag_type = typename algebra_type::tag_type;
+    using size_type = std::size_t;
+
+    range_update_sequence_cursor() = delete;
+    range_update_sequence_cursor(const range_update_sequence_cursor&) = default;
+    range_update_sequence_cursor& operator=(const range_update_sequence_cursor&) = default;
+
+    range_update_sequence_cursor(range_update_sequence_cursor&& other) noexcept(
+        std::is_nothrow_copy_constructible_v<range_update_sequence<value_type, algebra_type>>)
+        : snapshot_(other.snapshot_)
+        , position_(other.position_)
+    {
+    }
+
+    range_update_sequence_cursor& operator=(range_update_sequence_cursor&& other) noexcept(
+        std::is_nothrow_copy_assignable_v<range_update_sequence<value_type, algebra_type>>)
+    {
+        if (this != &other) {
+            snapshot_ = other.snapshot_;
+            position_ = other.position_;
+        }
+        return *this;
+    }
+
+    [[nodiscard]] size_type size() const noexcept { return snapshot_.size(); }
+    [[nodiscard]] bool empty() const noexcept { return snapshot_.empty(); }
+    [[nodiscard]] size_type position() const noexcept { return position_; }
+    [[nodiscard]] bool is_at_start() const noexcept { return position_ == 0; }
+    [[nodiscard]] bool is_at_end() const noexcept { return position_ == snapshot_.size(); }
+    [[nodiscard]] measure_type measure_before() const
+    {
+        return snapshot_.measure_range(0, position_);
+    }
+    [[nodiscard]] measure_type measure_after() const
+    {
+        return snapshot_.measure_range(position_, snapshot_.size() - position_);
+    }
+
+    /// The outer optional reports presence and therefore distinguishes stored optional values.
+    [[nodiscard]] std::optional<value_type> try_peek_previous() const
+    {
+        return position_ == 0
+            ? std::nullopt
+            : std::optional<value_type>{std::in_place, snapshot_.at(position_ - 1)};
+    }
+
+    [[nodiscard]] std::optional<value_type> try_peek_next() const
+    {
+        return is_at_end()
+            ? std::nullopt
+            : std::optional<value_type>{std::in_place, snapshot_.at(position_)};
+    }
+
+    [[nodiscard]] range_update_sequence_cursor move_previous() const
+    {
+        if (is_at_start()) {
+            throw std::logic_error("Range cursor is already at the start");
+        }
+        return range_update_sequence_cursor{snapshot_, position_ - 1};
+    }
+
+    [[nodiscard]] range_update_sequence_cursor move_next() const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("Range cursor is already at the end");
+        }
+        return range_update_sequence_cursor{snapshot_, position_ + 1};
+    }
+
+    [[nodiscard]] range_update_sequence_cursor seek(const size_type position) const
+    {
+        if (position > snapshot_.size()) {
+            throw std::out_of_range("cursor position is outside the Range bounds");
+        }
+        return position == position_ ? *this : range_update_sequence_cursor{snapshot_, position};
+    }
+
+    [[nodiscard]] range_update_sequence_cursor insert(value_type value) const
+    {
+        return range_update_sequence_cursor{
+            snapshot_.insert_at(position_, std::move(value)),
+            checked_add(position_, size_type{1})};
+    }
+
+    [[nodiscard]] range_update_sequence_cursor delete_previous() const
+    {
+        if (is_at_start()) {
+            throw std::logic_error("Range cursor has no previous element");
+        }
+        return range_update_sequence_cursor{snapshot_.remove_at(position_ - 1), position_ - 1};
+    }
+
+    [[nodiscard]] range_update_sequence_cursor delete_next() const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("Range cursor has no next element");
+        }
+        return range_update_sequence_cursor{snapshot_.remove_at(position_), position_};
+    }
+
+    [[nodiscard]] range_update_sequence_cursor replace_next(value_type value) const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("Range cursor has no next element");
+        }
+        return range_update_sequence_cursor{
+            snapshot_.set_item(position_, std::move(value)),
+            position_};
+    }
+
+    /// Measures the final `count` elements before the gap in source order.
+    [[nodiscard]] measure_type measure_previous(const size_type count) const
+    {
+        check_directional_count(count, position_);
+        return snapshot_.measure_range(position_ - count, count);
+    }
+
+    /// Measures the first `count` elements after the gap in source order.
+    [[nodiscard]] measure_type measure_next(const size_type count) const
+    {
+        check_directional_count(count, snapshot_.size() - position_);
+        return snapshot_.measure_range(position_, count);
+    }
+
+    [[nodiscard]] range_update_sequence_cursor apply_previous(
+        const size_type count,
+        const tag_type& tag) const
+    {
+        check_directional_count(count, position_);
+        auto updated = snapshot_.apply_range(position_ - count, count, tag);
+        return updated.shares_root_with(snapshot_)
+            ? *this
+            : range_update_sequence_cursor{std::move(updated), position_};
+    }
+
+    [[nodiscard]] range_update_sequence_cursor apply_next(
+        const size_type count,
+        const tag_type& tag) const
+    {
+        check_directional_count(count, snapshot_.size() - position_);
+        auto updated = snapshot_.apply_range(position_, count, tag);
+        return updated.shares_root_with(snapshot_)
+            ? *this
+            : range_update_sequence_cursor{std::move(updated), position_};
+    }
+
+    [[nodiscard]] range_update_sequence<value_type, algebra_type> snapshot() const
+    {
+        return snapshot_;
+    }
+
+private:
+    friend class range_update_sequence<Element, Algebra>;
+
+    range_update_sequence_cursor(
+        range_update_sequence<value_type, algebra_type> snapshot,
+        const size_type position)
+        : snapshot_(std::move(snapshot))
+        , position_(position)
+    {
+    }
+
+    static void check_directional_count(const size_type count, const size_type available)
+    {
+        if (count > available) {
+            throw std::out_of_range("directional Range cursor count exceeds available elements");
+        }
+    }
+
+    range_update_sequence<value_type, algebra_type> snapshot_;
+    size_type position_;
+};
+
+template <class Element, class Algebra>
+    requires range_update_sequence_types<Element, Algebra>
+[[nodiscard]] range_update_sequence_cursor<Element, Algebra>
+range_update_sequence<Element, Algebra>::get_cursor(const size_type position) const
+{
+    if (position > size()) {
+        throw std::out_of_range("cursor position is outside the Range bounds");
+    }
+    return range_update_sequence_cursor<value_type, algebra_type>{*this, position};
+}
 
 template <class Element, class Algebra>
     requires range_update_sequence_types<Element, Algebra>
