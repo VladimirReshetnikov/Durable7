@@ -5,6 +5,100 @@ namespace Tools.DataStructures.Hamt.Tests;
 /// <summary>Canonical encoding, shape, digest, diff, persistence, and model coverage for <see cref="MerkleSearchTree{TKey,TValue}"/>.</summary>
 public sealed class MerkleSearchTreeTests
 {
+    /// <summary>Verifies ordered gap navigation, exact search, and authenticated persistent edits.</summary>
+    [Fact]
+    public void Cursor_PreservesPolicyOrderAndCanonicalSnapshots()
+    {
+        var source = MerkleSearchTree<int, string?>.CreateRange(
+            new[]
+            {
+                KeyValuePair.Create<int, string?>(-10, "a"),
+                KeyValuePair.Create<int, string?>(0, null),
+                KeyValuePair.Create<int, string?>(10, "c"),
+            },
+            IntStringPolicy());
+
+        for (var position = 0; position <= source.Count; position++)
+        {
+            var cursor = source.GetCursor(position);
+            Assert.Equal(position, cursor.Position);
+            Assert.Equal(position == 0, cursor.IsAtStart);
+            Assert.Equal(position == source.Count, cursor.IsAtEnd);
+            Assert.Same(source, cursor.Snapshot());
+            Assert.Equal(position > 0, cursor.TryPeekPrevious(out _));
+            Assert.Equal(position < source.Count, cursor.TryPeekNext(out _));
+        }
+
+        Assert.Equal(1, source.GetLowerBoundCursor(-5).Position);
+        Assert.Equal(2, source.GetUpperBoundCursor(0).Position);
+        var exact = source.GetCursorAtKey(0, out var found);
+        Assert.True(found);
+        Assert.True(exact.TryPeekNext(out var nullable));
+        Assert.Null(nullable.Value);
+        Assert.Equal(2, source.GetCursorAtKey(5, out found).Position);
+        Assert.False(found);
+
+        var noOp = exact.SetNextValue(null);
+        Assert.Same(source, noOp.Snapshot());
+        var changed = exact.SetNextValue("b");
+        Assert.Equal("b", changed.Snapshot()[0]);
+        Assert.NotEqual(source.RootHash, changed.Snapshot().RootHash);
+        Assert.Same(source.Policy, changed.Snapshot().Policy);
+        Assert.Null(source[0]);
+
+        var inserted = source.GetLowerBoundCursor(5).Insert(5, "five");
+        Assert.Equal(3, inserted.Position);
+        Assert.Equal(new[] { -10, 0, 5, 10 }, inserted.Snapshot().Keys);
+        Assert.Equal(source.RootHash, inserted.DeletePrevious().Snapshot().RootHash);
+        Assert.Equal(new[] { -10, 0 }, source.GetCursorAtEnd().DeletePrevious().Snapshot().Keys);
+        Assert.Equal(new[] { 0, 10 }, source.GetCursor().DeleteNext().Snapshot().Keys);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => source.GetCursor(-1));
+        Assert.Throws<InvalidOperationException>(() => source.GetCursor().MovePrevious());
+        Assert.Throws<InvalidOperationException>(() => source.GetCursorAtEnd().MoveNext());
+        Assert.Throws<ArgumentException>(() => exact.Insert(0, "duplicate"));
+        Assert.Throws<InvalidOperationException>(() => source.GetCursor().Insert(5, "wrong gap"));
+        Assert.Throws<InvalidOperationException>(() => default(MerkleSearchTreeCursor<int, string?>).Snapshot());
+    }
+
+    /// <summary>Checks cached-subtree rank selection and bounds against a sorted model.</summary>
+    [Fact]
+    public void Cursor_RandomizedRanksAndBoundsMatchSortedModel()
+    {
+        var random = new Random(20260717);
+        var keys = Enumerable.Range(0, 500).Select(_ => random.Next(-2_000, 2_001)).Distinct().Order().ToArray();
+        var tree = MerkleSearchTree<int, string?>.CreateRange(
+            keys.Select(key => KeyValuePair.Create<int, string?>(key, key.ToString())),
+            IntStringPolicy());
+
+        for (var position = 0; position <= keys.Length; position++)
+        {
+            var cursor = tree.GetCursor(position);
+            if (position > 0)
+            {
+                Assert.True(cursor.TryPeekPrevious(out var previous));
+                Assert.Equal(keys[position - 1], previous.Key);
+            }
+            if (position < keys.Length)
+            {
+                Assert.True(cursor.TryPeekNext(out var next));
+                Assert.Equal(keys[position], next.Key);
+            }
+        }
+
+        for (var probe = -2_100; probe <= 2_100; probe += 7)
+        {
+            var lower = Array.BinarySearch(keys, probe);
+            var found = lower >= 0;
+            if (!found)
+                lower = ~lower;
+            Assert.Equal(lower, tree.GetLowerBoundCursor(probe).Position);
+            Assert.Equal(found ? lower + 1 : lower, tree.GetUpperBoundCursor(probe).Position);
+            Assert.Equal(lower, tree.GetCursorAtKey(probe, out var actualFound).Position);
+            Assert.Equal(found, actualFound);
+        }
+    }
+
     /// <summary>Verifies independent policies and histories produce identical content addresses and shapes.</summary>
     [Fact]
     public void IndependentProcessesAndHistories_ConvergeOnContentAddress()
