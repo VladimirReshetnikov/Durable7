@@ -266,7 +266,160 @@ let test_patricia_maps_and_sets () =
     |> Persistent_patricia.Int64_set.add 0L
     |> Persistent_patricia.Int64_set.add Int64.max_int
   in
-  Alcotest.(check int) "int64 set" 3 (Persistent_patricia.Int64_set.count set)
+  Alcotest.(check int) "int64 set" 3 (Persistent_patricia.Int64_set.count set);
+  Alcotest.(check (list int32))
+    "int32 signed order"
+    [ Int32.min_int; -1l; 0l; Int32.max_int ]
+    (List.map fst (Persistent_patricia.Int32_map.to_list map))
+
+let test_patricia_cursors () =
+  let module M = Persistent_patricia.Int32_map in
+  let module C = M.Cursor in
+  let keys = [ Int32.min_int; -1l; 0l; 17l; Int32.max_int ] in
+  let map =
+    List.fold_left
+      (fun map key ->
+        M.set key (if Int32.equal key 0l then None else Some (Int32.to_string key)) map)
+      M.empty keys
+  in
+  List.iteri
+    (fun position _ ->
+      let cursor = Option.get (C.at position map) in
+      Alcotest.(check int) "cursor position" position (C.position cursor);
+      Alcotest.(check int) "cursor count" (List.length keys) (C.count cursor);
+      Alcotest.(check bool) "cursor start" (position = 0) (C.is_at_start cursor);
+      Alcotest.(check bool) "cursor end" (position = List.length keys) (C.is_at_end cursor);
+      Alcotest.(check (option int32))
+        "cursor previous"
+        (if position = 0 then None else List.nth_opt keys (position - 1))
+        (Option.map fst (C.peek_previous cursor));
+      Alcotest.(check (option int32))
+        "cursor next" (List.nth_opt keys position)
+        (Option.map fst (C.peek_next cursor));
+      Alcotest.(check (list int32))
+        "cursor snapshot" keys
+        (List.map fst (M.to_list (C.snapshot cursor))))
+    (keys @ [ 1l ]);
+  Alcotest.(check int) "lower bound" 1 (C.position (C.lower_bound (-2l) map));
+  Alcotest.(check int) "upper bound" 2 (C.position (C.upper_bound (-1l) map));
+  Alcotest.(check int) "missing lower bound" 4 (C.position (C.lower_bound 18l map));
+  Alcotest.(check int)
+    "maximum upper bound" (List.length keys)
+    (C.position (C.upper_bound Int32.max_int map));
+  let exact, found = C.exact 0l map in
+  Alcotest.(check bool) "exact hit" true found;
+  Alcotest.(check (option (pair int32 (option string))))
+    "stored None entry"
+    (Some (0l, None))
+    (C.peek_next exact);
+  let miss, found = C.exact 1l map in
+  Alcotest.(check bool) "exact miss" false found;
+  Alcotest.(check int) "exact miss rank" 3 (C.position miss);
+  Alcotest.(check (option int32))
+    "exact miss candidate" (Some 17l)
+    (Option.map fst (C.peek_next miss));
+  Alcotest.(check bool) "negative rank rejected" true (Option.is_none (C.at (-1) map));
+  Alcotest.(check bool) "excessive rank rejected" true (Option.is_none (C.at (M.count map + 1) map));
+  Alcotest.(check bool) "start move previous" true (Option.is_none (C.move_previous (C.start map)));
+  Alcotest.(check bool) "end move next" true (Option.is_none (C.move_next (C.at_end map)));
+
+  let source = M.empty |> M.set (-10l) (Some "a") |> M.set 0l None |> M.set 10l (Some "c") in
+  let at_zero = fst (C.exact 0l source) in
+  let updated = Option.get (C.set_next_value (Some "b") at_zero) in
+  Alcotest.(check int) "update rank" 1 (C.position updated);
+  Alcotest.(check (option (option string)))
+    "cursor update" (Some (Some "b"))
+    (M.find_opt 0l (C.snapshot updated));
+  Alcotest.(check (option (option string))) "retained source" (Some None) (M.find_opt 0l source);
+  Alcotest.(check (list int32))
+    "delete next" [ -10l; 10l ]
+    (List.map fst (M.to_list (C.snapshot (Option.get (C.delete_next at_zero)))));
+  Alcotest.(check (list int32))
+    "delete previous" [ 0l; 10l ]
+    (List.map fst (M.to_list (C.snapshot (Option.get (C.delete_previous at_zero)))));
+  let inserted = Option.get (C.insert 5l (Some "five") (fst (C.exact 5l source))) in
+  Alcotest.(check int) "insertion rank" 3 (C.position inserted);
+  Alcotest.(check (list int32))
+    "cursor insertion" [ -10l; 0l; 5l; 10l ]
+    (List.map fst (M.to_list (C.snapshot inserted)));
+  Alcotest.(check (list int32))
+    "insertion retained source" [ -10l; 0l; 10l ]
+    (List.map fst (M.to_list source));
+  Alcotest.(check bool) "strict duplicate rejected" true (Option.is_none (C.insert 0l None at_zero));
+  Alcotest.(check bool)
+    "wrong gap rejected" true
+    (Option.is_none (C.insert 5l (Some "wrong") (C.start source)));
+  Alcotest.(check bool)
+    "end update rejected" true
+    (Option.is_none (C.set_next_value None (C.at_end source)));
+  Alcotest.(check bool)
+    "start delete rejected" true
+    (Option.is_none (C.delete_previous (C.start source)));
+  Alcotest.(check bool)
+    "end delete rejected" true
+    (Option.is_none (C.delete_next (C.at_end source)));
+
+  let module LM = Persistent_patricia.Int64_map in
+  let module LC = LM.Cursor in
+  let long_map =
+    LM.empty
+    |> LM.set Int64.min_int Int64.min_int
+    |> LM.set (-1L) (-1L) |> LM.set 0L 0L
+    |> LM.set (Int64.shift_left 1L 40) 1L
+    |> LM.set Int64.max_int Int64.max_int
+  in
+  Alcotest.(check int)
+    "int64 lower boundary" 0
+    (LC.position (LC.lower_bound Int64.min_int long_map));
+  Alcotest.(check int)
+    "int64 upper boundary" 1
+    (LC.position (LC.upper_bound Int64.min_int long_map));
+  Alcotest.(check int) "int64 missing lower" 3 (LC.position (LC.lower_bound 1L long_map));
+  Alcotest.(check int) "int64 maximum upper" 5 (LC.position (LC.upper_bound Int64.max_int long_map));
+
+  let module S = Persistent_patricia.Int32_set in
+  let module SC = S.Cursor in
+  let set =
+    List.fold_left
+      (fun set value -> S.add value set)
+      S.empty
+      [ Int32.min_int; -1l; 0l; Int32.max_int ]
+  in
+  let set_miss, found = SC.exact (-2l) set in
+  Alcotest.(check bool) "set exact miss" false found;
+  let set_added = Option.get (SC.add (-2l) set_miss) in
+  Alcotest.(check int) "set insertion rank" 2 (SC.position set_added);
+  Alcotest.(check (list int32))
+    "set cursor insertion"
+    [ Int32.min_int; -2l; -1l; 0l; Int32.max_int ]
+    (S.to_list (SC.snapshot set_added));
+  let set_exact, found = SC.exact 0l set in
+  Alcotest.(check bool) "set exact hit" true found;
+  Alcotest.(check bool)
+    "set duplicate no-op" true
+    (SC.snapshot (Option.get (SC.add 0l set_exact)) == set);
+
+  let state = ref 0x6d2b79f5 in
+  for _history = 0 to 127 do
+    let generated = ref [] in
+    for _index = 0 to 63 do
+      state := (!state * 1_664_525) + 1_013_904_223;
+      generated := Int32.of_int (((!state lsr 8) mod 1_001) - 500) :: !generated
+    done;
+    let sorted = List.sort_uniq Int32.compare !generated in
+    let random_map = List.fold_left (fun map key -> M.set key key map) M.empty sorted in
+    for probe = -550 to 550 do
+      if probe mod 22 = 0 then (
+        let probe = Int32.of_int probe in
+        let lower = List.length (List.filter (fun key -> Int32.compare key probe < 0) sorted) in
+        let upper = List.length (List.filter (fun key -> Int32.compare key probe <= 0) sorted) in
+        Alcotest.(check int) "random lower rank" lower (C.position (C.lower_bound probe random_map));
+        Alcotest.(check int) "random upper rank" upper (C.position (C.upper_bound probe random_map));
+        let searched, found = C.exact probe random_map in
+        Alcotest.(check int) "random exact rank" lower (C.position searched);
+        Alcotest.(check bool) "random exact found" (List.mem probe sorted) found)
+    done
+  done
 
 let test_concurrent_snapshot_facade () =
   let trie = Concurrent_hash_trie.create (int_policy ()) in
@@ -472,6 +625,7 @@ let () =
           Alcotest.test_case "directed graph" `Quick test_directed_graph;
           Alcotest.test_case "indexed map" `Quick test_indexed_map;
           Alcotest.test_case "Patricia maps and sets" `Quick test_patricia_maps_and_sets;
+          Alcotest.test_case "Patricia cursors" `Quick test_patricia_cursors;
           Alcotest.test_case "concurrent snapshots" `Quick test_concurrent_snapshot_facade;
           Alcotest.test_case "Merkle golden wire" `Quick test_merkle_golden_wire;
           Alcotest.test_case "Merkle persistence and proofs" `Quick
