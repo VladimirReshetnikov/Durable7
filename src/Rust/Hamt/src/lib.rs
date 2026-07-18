@@ -47,7 +47,11 @@ pub use merkle_search_tree::{
     MerkleSearchTreeStatistics, MerkleShapeEntry, MerkleTreeError, MerkleTreeInvariantError,
     MerkleTreeIter,
 };
-pub use patricia::{PersistentIntMap, PersistentIntSet, PersistentLongMap, PersistentLongSet};
+pub use patricia::{
+    PatriciaCursorEditError, PersistentIntMap, PersistentIntMapCursor, PersistentIntSet,
+    PersistentIntSetCursor, PersistentLongMap, PersistentLongMapCursor, PersistentLongSet,
+    PersistentLongSetCursor,
+};
 pub use relation::{PersistentRelation, RelationInvariantError, RelationStatistics};
 
 const BITS_PER_LEVEL: u32 = 5;

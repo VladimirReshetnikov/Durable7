@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
 #[derive(Clone)]
 enum Node<K, V> {
@@ -16,11 +16,20 @@ enum Node<K, V> {
     },
 }
 
-#[derive(Clone)]
 struct Core<K, V> {
     root: Option<Arc<Node<K, V>>>,
     len: usize,
     encode: fn(K) -> u64,
+}
+
+impl<K, V> Clone for Core<K, V> {
+    fn clone(&self) -> Self {
+        Self {
+            root: self.root.clone(),
+            len: self.len,
+            encode: self.encode,
+        }
+    }
 }
 
 impl<K: Copy + Eq, V> Core<K, V> {
@@ -60,6 +69,70 @@ impl<K: Copy + Eq, V> Core<K, V> {
 
     fn contains(&self, key: K) -> bool {
         self.get(key).is_some()
+    }
+
+    fn entry_at(&self, index: usize) -> Option<(&K, &V)> {
+        if index >= self.len {
+            return None;
+        }
+        let mut remaining = index;
+        let mut node = self.root.as_deref()?;
+        loop {
+            match node {
+                Node::Leaf { key, value, .. } => return Some((key, value)),
+                Node::Branch { left, right, .. } => {
+                    let left_len = node_len(Some(left.as_ref()));
+                    if remaining < left_len {
+                        node = left;
+                    } else {
+                        remaining -= left_len;
+                        node = right;
+                    }
+                }
+            }
+        }
+    }
+
+    fn lower_bound_rank(&self, key: K) -> (usize, bool) {
+        let path = (self.encode)(key);
+        let mut rank = 0;
+        let Some(mut node) = self.root.as_deref() else {
+            return (0, false);
+        };
+        loop {
+            match node {
+                Node::Leaf {
+                    path: leaf_path, ..
+                } => {
+                    return if *leaf_path < path {
+                        (rank + 1, false)
+                    } else {
+                        (rank, *leaf_path == path)
+                    };
+                }
+                Node::Branch {
+                    prefix,
+                    mask,
+                    len,
+                    left,
+                    right,
+                } => {
+                    if prefix_of(path, *mask) != *prefix {
+                        return if path < *prefix {
+                            (rank, false)
+                        } else {
+                            (rank + len, false)
+                        };
+                    }
+                    if path & mask == 0 {
+                        node = left;
+                    } else {
+                        rank += node_len(Some(left.as_ref()));
+                        node = right;
+                    }
+                }
+            }
+        }
     }
 
     fn iter(&self) -> Iter<'_, K, V> {
@@ -899,11 +972,40 @@ fn same_root<K, V>(left: &Option<Arc<Node<K, V>>>, right: &Option<Arc<Node<K, V>
     }
 }
 
+/// Failure from a Patricia cursor edit whose key does not describe the current ordered gap.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PatriciaCursorEditError {
+    /// Strict map insertion found an existing key.
+    DuplicateKey,
+    /// The key's lower-bound rank differs from the cursor's current gap.
+    WrongGap { expected: usize, actual: usize },
+}
+
+impl fmt::Display for PatriciaCursorEditError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::DuplicateKey => formatter.write_str("the Patricia key is already present"),
+            Self::WrongGap { expected, actual } => write!(
+                formatter,
+                "the key belongs at gap {expected}, not at the current gap {actual}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for PatriciaCursorEditError {}
+
 macro_rules! map_type {
-    ($name:ident, $key:ty, $encode:expr) => {
-        #[derive(Clone)]
+    ($name:ident, $cursor:ident, $key:ty, $encode:expr) => {
         pub struct $name<V> {
             core: Core<$key, V>,
+        }
+        impl<V> Clone for $name<V> {
+            fn clone(&self) -> Self {
+                Self {
+                    core: self.core.clone(),
+                }
+            }
         }
         impl<V> $name<V> {
             #[must_use]
@@ -927,6 +1029,60 @@ macro_rules! map_type {
             #[must_use]
             pub fn contains_key(&self, key: $key) -> bool {
                 self.core.contains(key)
+            }
+            /// Creates a cursor at the gap before the first entry. O(1).
+            #[must_use]
+            pub fn cursor(&self) -> $cursor<V> {
+                $cursor {
+                    map: self.clone(),
+                    position: 0,
+                }
+            }
+            /// Creates a cursor at a rank gap, or returns `None` outside `0..=len`. O(1).
+            #[must_use]
+            pub fn cursor_at(&self, position: usize) -> Option<$cursor<V>> {
+                (position <= self.len()).then(|| $cursor {
+                    map: self.clone(),
+                    position,
+                })
+            }
+            /// Creates a cursor after the final entry. O(1).
+            #[must_use]
+            pub fn cursor_at_end(&self) -> $cursor<V> {
+                $cursor {
+                    map: self.clone(),
+                    position: self.len(),
+                }
+            }
+            /// Creates the lower-bound cursor for `key`. O(key width).
+            #[must_use]
+            pub fn lower_bound_cursor(&self, key: $key) -> $cursor<V> {
+                let (position, _) = self.core.lower_bound_rank(key);
+                $cursor {
+                    map: self.clone(),
+                    position,
+                }
+            }
+            /// Creates the upper-bound cursor for `key`. O(key width).
+            #[must_use]
+            pub fn upper_bound_cursor(&self, key: $key) -> $cursor<V> {
+                let (position, found) = self.core.lower_bound_rank(key);
+                $cursor {
+                    map: self.clone(),
+                    position: position + usize::from(found),
+                }
+            }
+            /// Creates a usable lower-bound cursor and reports whether its next entry is exact.
+            #[must_use]
+            pub fn cursor_at_key(&self, key: $key) -> ($cursor<V>, bool) {
+                let (position, found) = self.core.lower_bound_rank(key);
+                (
+                    $cursor {
+                        map: self.clone(),
+                        position,
+                    },
+                    found,
+                )
             }
             #[must_use]
             pub fn shares_root_with(&self, other: &Self) -> bool {
@@ -1001,13 +1157,177 @@ macro_rules! map_type {
         }
     };
 }
-map_type!(PersistentIntMap, i32, |key: i32| (key as u32 ^ 0x8000_0000)
-    as u64);
-map_type!(PersistentLongMap, i64, |key: i64| key as u64
-    ^ 0x8000_0000_0000_0000);
+map_type!(
+    PersistentIntMap,
+    PersistentIntMapCursor,
+    i32,
+    |key: i32| (key as u32 ^ 0x8000_0000) as u64
+);
+map_type!(
+    PersistentLongMap,
+    PersistentLongMapCursor,
+    i64,
+    |key: i64| key as u64 ^ 0x8000_0000_0000_0000
+);
+
+macro_rules! map_cursor_type {
+    ($name:ident, $map:ident, $key:ty) => {
+        /// Immutable root-plus-rank gap cursor over a signed Patricia map.
+        ///
+        /// Navigation and snapshotting clone only shared roots and require no payload `Clone`
+        /// bound. Peeks and edits are O(key width); rank movement is O(1).
+        pub struct $name<V> {
+            map: $map<V>,
+            position: usize,
+        }
+
+        impl<V> Clone for $name<V> {
+            fn clone(&self) -> Self {
+                Self {
+                    map: self.map.clone(),
+                    position: self.position,
+                }
+            }
+        }
+
+        impl<V> $name<V> {
+            #[must_use]
+            pub fn len(&self) -> usize {
+                self.map.len()
+            }
+            #[must_use]
+            pub fn position(&self) -> usize {
+                self.position
+            }
+            #[must_use]
+            pub fn is_at_start(&self) -> bool {
+                self.position == 0
+            }
+            #[must_use]
+            pub fn is_at_end(&self) -> bool {
+                self.position == self.len()
+            }
+            /// Borrows the entry immediately before the gap.
+            #[must_use]
+            pub fn peek_previous(&self) -> Option<(&$key, &V)> {
+                self.position
+                    .checked_sub(1)
+                    .and_then(|index| self.map.core.entry_at(index))
+            }
+            /// Borrows the entry immediately after the gap.
+            #[must_use]
+            pub fn peek_next(&self) -> Option<(&$key, &V)> {
+                self.map.core.entry_at(self.position)
+            }
+            #[must_use]
+            pub fn move_previous(&self) -> Option<Self> {
+                Some(Self {
+                    map: self.map.clone(),
+                    position: self.position.checked_sub(1)?,
+                })
+            }
+            #[must_use]
+            pub fn move_next(&self) -> Option<Self> {
+                if self.is_at_end() {
+                    return None;
+                }
+                Some(Self {
+                    map: self.map.clone(),
+                    position: self.position + 1,
+                })
+            }
+            #[must_use]
+            pub fn seek(&self, position: usize) -> Option<Self> {
+                (position <= self.len()).then(|| Self {
+                    map: self.map.clone(),
+                    position,
+                })
+            }
+            /// Returns this cursor version's canonical immutable map by root sharing.
+            #[must_use]
+            pub fn snapshot(&self) -> $map<V> {
+                self.map.clone()
+            }
+        }
+
+        impl<V: Clone + PartialEq> $name<V> {
+            /// Strictly inserts a missing key at the current lower-bound gap.
+            pub fn insert(&self, key: $key, value: V) -> Result<Self, PatriciaCursorEditError> {
+                let (expected, found) = self.map.core.lower_bound_rank(key);
+                if found {
+                    return Err(PatriciaCursorEditError::DuplicateKey);
+                }
+                self.ensure_current_gap(expected)?;
+                Ok(Self {
+                    map: self.map.insert(key, value),
+                    position: self.position + 1,
+                })
+            }
+            /// Updates an exact next entry or inserts at a missing lower-bound gap.
+            pub fn put(&self, key: $key, value: V) -> Result<Self, PatriciaCursorEditError> {
+                let (expected, found) = self.map.core.lower_bound_rank(key);
+                self.ensure_current_gap(expected)?;
+                let map = self.map.insert(key, value);
+                if map.shares_root_with(&self.map) {
+                    return Ok(self.clone());
+                }
+                Ok(Self {
+                    map,
+                    position: self.position + usize::from(!found),
+                })
+            }
+            /// Replaces the next value while retaining its key and the current gap.
+            #[must_use]
+            pub fn set_next_value(&self, value: V) -> Option<Self> {
+                let key = *self.peek_next()?.0;
+                let map = self.map.insert(key, value);
+                Some(if map.shares_root_with(&self.map) {
+                    self.clone()
+                } else {
+                    Self {
+                        map,
+                        position: self.position,
+                    }
+                })
+            }
+            /// Deletes the entry before the gap and moves the gap left.
+            #[must_use]
+            pub fn delete_previous(&self) -> Option<Self> {
+                let key = *self.peek_previous()?.0;
+                Some(Self {
+                    map: self.map.remove(key),
+                    position: self.position - 1,
+                })
+            }
+            /// Deletes the entry after the gap and keeps the gap fixed.
+            #[must_use]
+            pub fn delete_next(&self) -> Option<Self> {
+                let key = *self.peek_next()?.0;
+                Some(Self {
+                    map: self.map.remove(key),
+                    position: self.position,
+                })
+            }
+
+            fn ensure_current_gap(&self, expected: usize) -> Result<(), PatriciaCursorEditError> {
+                if expected == self.position {
+                    Ok(())
+                } else {
+                    Err(PatriciaCursorEditError::WrongGap {
+                        expected,
+                        actual: self.position,
+                    })
+                }
+            }
+        }
+    };
+}
+
+map_cursor_type!(PersistentIntMapCursor, PersistentIntMap, i32);
+map_cursor_type!(PersistentLongMapCursor, PersistentLongMap, i64);
 
 macro_rules! set_type {
-    ($name:ident, $map:ident, $key:ty) => {
+    ($name:ident, $cursor:ident, $map:ident, $key:ty) => {
         #[derive(Clone, Default)]
         pub struct $name {
             map: $map<()>,
@@ -1028,6 +1348,54 @@ macro_rules! set_type {
             #[must_use]
             pub fn contains(&self, value: $key) -> bool {
                 self.map.contains_key(value)
+            }
+            #[must_use]
+            pub fn cursor(&self) -> $cursor {
+                $cursor {
+                    set: self.clone(),
+                    position: 0,
+                }
+            }
+            #[must_use]
+            pub fn cursor_at(&self, position: usize) -> Option<$cursor> {
+                (position <= self.len()).then(|| $cursor {
+                    set: self.clone(),
+                    position,
+                })
+            }
+            #[must_use]
+            pub fn cursor_at_end(&self) -> $cursor {
+                $cursor {
+                    set: self.clone(),
+                    position: self.len(),
+                }
+            }
+            #[must_use]
+            pub fn lower_bound_cursor(&self, value: $key) -> $cursor {
+                let (position, _) = self.map.core.lower_bound_rank(value);
+                $cursor {
+                    set: self.clone(),
+                    position,
+                }
+            }
+            #[must_use]
+            pub fn upper_bound_cursor(&self, value: $key) -> $cursor {
+                let (position, found) = self.map.core.lower_bound_rank(value);
+                $cursor {
+                    set: self.clone(),
+                    position: position + usize::from(found),
+                }
+            }
+            #[must_use]
+            pub fn cursor_at_item(&self, value: $key) -> ($cursor, bool) {
+                let (position, found) = self.map.core.lower_bound_rank(value);
+                (
+                    $cursor {
+                        set: self.clone(),
+                        position,
+                    },
+                    found,
+                )
             }
             #[must_use]
             pub fn insert(&self, value: $key) -> Self {
@@ -1065,8 +1433,134 @@ macro_rules! set_type {
         }
     };
 }
-set_type!(PersistentIntSet, PersistentIntMap, i32);
-set_type!(PersistentLongSet, PersistentLongMap, i64);
+set_type!(
+    PersistentIntSet,
+    PersistentIntSetCursor,
+    PersistentIntMap,
+    i32
+);
+set_type!(
+    PersistentLongSet,
+    PersistentLongSetCursor,
+    PersistentLongMap,
+    i64
+);
+
+macro_rules! set_cursor_type {
+    ($name:ident, $set:ident, $key:ty) => {
+        /// Immutable root-plus-rank gap cursor over a signed Patricia set.
+        #[derive(Clone)]
+        pub struct $name {
+            set: $set,
+            position: usize,
+        }
+
+        impl $name {
+            #[must_use]
+            pub fn len(&self) -> usize {
+                self.set.len()
+            }
+            #[must_use]
+            pub fn position(&self) -> usize {
+                self.position
+            }
+            #[must_use]
+            pub fn is_at_start(&self) -> bool {
+                self.position == 0
+            }
+            #[must_use]
+            pub fn is_at_end(&self) -> bool {
+                self.position == self.len()
+            }
+            #[must_use]
+            pub fn peek_previous(&self) -> Option<&$key> {
+                self.position
+                    .checked_sub(1)
+                    .and_then(|index| self.set.map.core.entry_at(index))
+                    .map(|(key, _)| key)
+            }
+            #[must_use]
+            pub fn peek_next(&self) -> Option<&$key> {
+                self.set
+                    .map
+                    .core
+                    .entry_at(self.position)
+                    .map(|(key, _)| key)
+            }
+            #[must_use]
+            pub fn move_previous(&self) -> Option<Self> {
+                Some(Self {
+                    set: self.set.clone(),
+                    position: self.position.checked_sub(1)?,
+                })
+            }
+            #[must_use]
+            pub fn move_next(&self) -> Option<Self> {
+                if self.is_at_end() {
+                    return None;
+                }
+                Some(Self {
+                    set: self.set.clone(),
+                    position: self.position + 1,
+                })
+            }
+            #[must_use]
+            pub fn seek(&self, position: usize) -> Option<Self> {
+                (position <= self.len()).then(|| Self {
+                    set: self.set.clone(),
+                    position,
+                })
+            }
+            /// Adds at the current lower-bound gap; an exact duplicate is a no-op.
+            pub fn insert(&self, value: $key) -> Result<Self, PatriciaCursorEditError> {
+                let (expected, found) = self.set.map.core.lower_bound_rank(value);
+                self.ensure_current_gap(expected)?;
+                Ok(if found {
+                    self.clone()
+                } else {
+                    Self {
+                        set: self.set.insert(value),
+                        position: self.position + 1,
+                    }
+                })
+            }
+            #[must_use]
+            pub fn delete_previous(&self) -> Option<Self> {
+                let value = *self.peek_previous()?;
+                Some(Self {
+                    set: self.set.remove(value),
+                    position: self.position - 1,
+                })
+            }
+            #[must_use]
+            pub fn delete_next(&self) -> Option<Self> {
+                let value = *self.peek_next()?;
+                Some(Self {
+                    set: self.set.remove(value),
+                    position: self.position,
+                })
+            }
+            #[must_use]
+            pub fn snapshot(&self) -> $set {
+                self.set.clone()
+            }
+
+            fn ensure_current_gap(&self, expected: usize) -> Result<(), PatriciaCursorEditError> {
+                if expected == self.position {
+                    Ok(())
+                } else {
+                    Err(PatriciaCursorEditError::WrongGap {
+                        expected,
+                        actual: self.position,
+                    })
+                }
+            }
+        }
+    };
+}
+
+set_cursor_type!(PersistentIntSetCursor, PersistentIntSet, i32);
+set_cursor_type!(PersistentLongSetCursor, PersistentLongSet, i64);
 
 #[cfg(test)]
 mod tests {
@@ -1354,6 +1848,190 @@ mod tests {
             assert_cached_lengths(intersection.core.root.as_deref()),
             intersection.len()
         );
+    }
+
+    #[test]
+    fn int_map_cursor_exposes_ordered_gaps_and_presence_safe_peeks() {
+        let keys = [i32::MIN, -1, 0, 17, i32::MAX];
+        let map = keys.into_iter().fold(PersistentIntMap::new(), |map, key| {
+            map.insert(key, (key != 0).then_some(key))
+        });
+
+        for position in 0..=keys.len() {
+            let cursor = map.cursor_at(position).expect("every rank gap is valid");
+            assert_eq!(cursor.position(), position);
+            assert_eq!(cursor.len(), keys.len());
+            assert_eq!(cursor.is_at_start(), position == 0);
+            assert_eq!(cursor.is_at_end(), position == keys.len());
+            assert!(cursor.snapshot().shares_root_with(&map));
+            assert_eq!(
+                cursor.peek_previous().map(|(key, _)| *key),
+                position.checked_sub(1).map(|index| keys[index])
+            );
+            assert_eq!(
+                cursor.peek_next().map(|(key, _)| *key),
+                keys.get(position).copied()
+            );
+        }
+
+        assert_eq!(map.lower_bound_cursor(-2).position(), 1);
+        assert_eq!(map.upper_bound_cursor(-1).position(), 2);
+        assert_eq!(map.lower_bound_cursor(18).position(), 4);
+        assert_eq!(map.upper_bound_cursor(i32::MAX).position(), keys.len());
+        let (exact, found) = map.cursor_at_key(0);
+        assert!(found);
+        assert_eq!(
+            exact.peek_next().map(|(key, value)| (*key, *value)),
+            Some((0, None))
+        );
+        let (miss, found) = map.cursor_at_key(1);
+        assert!(!found);
+        assert_eq!(miss.position(), 3);
+        assert_eq!(miss.peek_next().map(|(key, _)| *key), Some(17));
+
+        assert!(map.cursor_at(keys.len() + 1).is_none());
+        assert!(map.cursor().move_previous().is_none());
+        assert!(map.cursor_at_end().move_next().is_none());
+
+        struct NotClone;
+        let non_clone = PersistentIntMap::<NotClone>::new();
+        let _snapshot = non_clone.cursor().snapshot();
+    }
+
+    #[test]
+    fn map_cursor_edits_preserve_gap_continuity_and_retained_versions() {
+        let source = PersistentIntMap::new()
+            .insert(-10, Some("a"))
+            .insert(0, None)
+            .insert(10, Some("c"));
+        let (at_zero, found) = source.cursor_at_key(0);
+        assert!(found);
+        let no_op = at_zero.set_next_value(None).expect("zero is focused");
+        assert!(no_op.snapshot().shares_root_with(&source));
+
+        let updated = at_zero.set_next_value(Some("b")).expect("zero is focused");
+        assert_eq!(updated.position(), 1);
+        assert_eq!(updated.snapshot().get(0), Some(&Some("b")));
+        assert_eq!(source.get(0), Some(&None));
+        assert_eq!(
+            at_zero
+                .delete_next()
+                .expect("zero is focused")
+                .snapshot()
+                .iter()
+                .map(|(key, _)| *key)
+                .collect::<Vec<_>>(),
+            [-10, 10]
+        );
+        assert_eq!(
+            at_zero
+                .delete_previous()
+                .expect("minus ten precedes the gap")
+                .snapshot()
+                .iter()
+                .map(|(key, _)| *key)
+                .collect::<Vec<_>>(),
+            [0, 10]
+        );
+
+        let inserted = source
+            .cursor_at_key(5)
+            .0
+            .insert(5, Some("five"))
+            .expect("five belongs at the missing gap");
+        assert_eq!(inserted.position(), 3);
+        assert_eq!(
+            inserted
+                .snapshot()
+                .iter()
+                .map(|(key, _)| *key)
+                .collect::<Vec<_>>(),
+            [-10, 0, 5, 10]
+        );
+        assert_eq!(
+            source.iter().map(|(key, _)| *key).collect::<Vec<_>>(),
+            [-10, 0, 10]
+        );
+
+        assert!(matches!(
+            at_zero.insert(0, Some("duplicate")),
+            Err(PatriciaCursorEditError::DuplicateKey)
+        ));
+        assert!(matches!(
+            source.cursor().insert(5, Some("wrong gap")),
+            Err(PatriciaCursorEditError::WrongGap {
+                expected: 2,
+                actual: 0
+            })
+        ));
+        assert!(source.cursor_at_end().set_next_value(None).is_none());
+        assert!(source.cursor().delete_previous().is_none());
+        assert!(source.cursor_at_end().delete_next().is_none());
+    }
+
+    #[test]
+    fn long_map_and_set_cursors_match_random_rank_models() {
+        let long_keys = [i64::MIN, -1, 0, 1_i64 << 40, i64::MAX];
+        let long_map = long_keys
+            .into_iter()
+            .fold(PersistentLongMap::new(), |map, key| map.insert(key, key));
+        assert_eq!(long_map.lower_bound_cursor(i64::MIN).position(), 0);
+        assert_eq!(long_map.upper_bound_cursor(i64::MIN).position(), 1);
+        assert_eq!(long_map.lower_bound_cursor(1).position(), 3);
+        assert_eq!(long_map.upper_bound_cursor(i64::MAX).position(), 5);
+        let inserted = long_map
+            .cursor_at_key(-2)
+            .0
+            .insert(-2, 99)
+            .expect("minus two belongs at rank one");
+        assert_eq!(inserted.position(), 2);
+
+        let int_set = [i32::MIN, -1, 0, i32::MAX]
+            .into_iter()
+            .fold(PersistentIntSet::new(), |set, value| set.insert(value));
+        let (missing, found) = int_set.cursor_at_item(-2);
+        assert!(!found);
+        let added = missing.insert(-2).expect("minus two belongs at the gap");
+        assert_eq!(added.position(), 2);
+        assert_eq!(
+            added.snapshot().iter().copied().collect::<Vec<_>>(),
+            [i32::MIN, -2, -1, 0, i32::MAX]
+        );
+        let (duplicate, found) = int_set.cursor_at_item(0);
+        assert!(found);
+        assert!(
+            duplicate
+                .insert(0)
+                .expect("duplicate insertion is a no-op")
+                .snapshot()
+                .map
+                .shares_root_with(&int_set.map)
+        );
+
+        let mut state = 0x6d2b_79f5_u32;
+        let mut model = std::collections::BTreeMap::new();
+        let mut map = PersistentIntMap::new();
+        for _ in 0..500 {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            let key = ((state >> 8) % 1_001) as i32 - 500;
+            map = map.insert(key, state);
+            model.insert(key, state);
+        }
+        for probe in (-550..=550).step_by(11) {
+            let lower = model
+                .range(probe..)
+                .next()
+                .map_or(model.len(), |(key, _)| model.range(..key).count());
+            let upper = model
+                .range((std::ops::Bound::Excluded(probe), std::ops::Bound::Unbounded))
+                .next()
+                .map_or(model.len(), |(key, _)| model.range(..key).count());
+            assert_eq!(map.lower_bound_cursor(probe).position(), lower);
+            assert_eq!(map.upper_bound_cursor(probe).position(), upper);
+            let (exact, found) = map.cursor_at_key(probe);
+            assert_eq!(exact.position(), lower);
+            assert_eq!(found, model.contains_key(&probe));
+        }
     }
 
     fn assert_cached_lengths<K, V>(node: Option<&Node<K, V>>) -> usize {
