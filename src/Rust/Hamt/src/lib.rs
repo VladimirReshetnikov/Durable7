@@ -43,9 +43,9 @@ pub use merkle_persistence::{
     MerkleVerificationBudget, MerkleVerificationError, MerkleVerificationFailureKind,
 };
 pub use merkle_search_tree::{
-    MerkleEntry, MerkleMapDifference, MerkleRangeError, MerkleRangeIter, MerkleSearchTree,
-    MerkleSearchTreeStatistics, MerkleShapeEntry, MerkleTreeError, MerkleTreeInvariantError,
-    MerkleTreeIter,
+    MerkleCursorEditError, MerkleEntry, MerkleMapDifference, MerkleRangeError, MerkleRangeIter,
+    MerkleSearchTree, MerkleSearchTreeCursor, MerkleSearchTreeStatistics, MerkleShapeEntry,
+    MerkleTreeError, MerkleTreeInvariantError, MerkleTreeIter,
 };
 pub use patricia::{
     PatriciaCursorEditError, PersistentIntMap, PersistentIntMapCursor, PersistentIntSet,

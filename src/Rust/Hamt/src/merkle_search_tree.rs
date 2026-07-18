@@ -282,6 +282,66 @@ impl<K, V> MerkleSearchTree<K, V> {
             .map_or_else(|| self.policy.empty_digest(), |root| root.digest)
     }
 
+    /// Creates a cursor at the gap before the first entry.
+    #[must_use]
+    pub fn cursor(&self) -> MerkleSearchTreeCursor<K, V> {
+        MerkleSearchTreeCursor {
+            tree: self.clone(),
+            position: 0,
+        }
+    }
+
+    /// Creates a cursor at a rank gap, or returns `None` outside `0..=len`.
+    #[must_use]
+    pub fn cursor_at(&self, position: usize) -> Option<MerkleSearchTreeCursor<K, V>> {
+        (position <= self.len()).then(|| MerkleSearchTreeCursor {
+            tree: self.clone(),
+            position,
+        })
+    }
+
+    /// Creates a cursor after the final entry.
+    #[must_use]
+    pub fn cursor_at_end(&self) -> MerkleSearchTreeCursor<K, V> {
+        MerkleSearchTreeCursor {
+            tree: self.clone(),
+            position: self.len(),
+        }
+    }
+
+    /// Creates the lower-bound cursor for `key`.
+    #[must_use]
+    pub fn lower_bound_cursor(&self, key: &K) -> MerkleSearchTreeCursor<K, V> {
+        let (position, _) = self.lower_bound_rank_for_cursor(key);
+        MerkleSearchTreeCursor {
+            tree: self.clone(),
+            position,
+        }
+    }
+
+    /// Creates the upper-bound cursor for `key`.
+    #[must_use]
+    pub fn upper_bound_cursor(&self, key: &K) -> MerkleSearchTreeCursor<K, V> {
+        let (position, found) = self.lower_bound_rank_for_cursor(key);
+        MerkleSearchTreeCursor {
+            tree: self.clone(),
+            position: position + usize::from(found),
+        }
+    }
+
+    /// Creates a usable lower-bound cursor and reports whether its next entry is exact.
+    #[must_use]
+    pub fn cursor_at_key(&self, key: &K) -> (MerkleSearchTreeCursor<K, V>, bool) {
+        let (position, found) = self.lower_bound_rank_for_cursor(key);
+        (
+            MerkleSearchTreeCursor {
+                tree: self.clone(),
+                position,
+            },
+            found,
+        )
+    }
+
     /// Returns whether two versions retain the exact same root node.
     #[must_use]
     pub fn shares_root_with(&self, other: &Self) -> bool {
@@ -366,6 +426,56 @@ impl<K, V> MerkleSearchTree<K, V> {
         None
     }
 
+    fn entry_at_rank_for_cursor(&self, mut rank: usize) -> Option<&MerkleEntry<K, V>> {
+        if rank >= self.len() {
+            return None;
+        }
+        let mut node = self.root.as_deref();
+        while let Some(current) = node {
+            let mut descended = false;
+            for (index, entry) in current.entries.iter().enumerate() {
+                let child_count = current.children[index]
+                    .as_ref()
+                    .map_or(0, |child| child.count);
+                if rank < child_count {
+                    node = current.children[index].as_deref();
+                    descended = true;
+                    break;
+                }
+                rank -= child_count;
+                if rank == 0 {
+                    return Some(entry);
+                }
+                rank -= 1;
+            }
+            if !descended {
+                node = current.children.last().and_then(Option::as_deref);
+            }
+        }
+        unreachable!("validated Merkle subtree counts contain every in-range rank")
+    }
+
+    fn lower_bound_rank_for_cursor(&self, key: &K) -> (usize, bool) {
+        let mut rank = 0_usize;
+        let mut node = self.root.as_deref();
+        while let Some(current) = node {
+            let (position, found) = self.find_position(&current.entries, key);
+            for child in current.children.iter().take(position) {
+                rank += child.as_ref().map_or(0, |child| child.count) + 1;
+            }
+            if found {
+                return (
+                    rank + current.children[position]
+                        .as_ref()
+                        .map_or(0, |child| child.count),
+                    true,
+                );
+            }
+            node = current.children[position].as_deref();
+        }
+        (rank, false)
+    }
+
     /// Adds or replaces an entry by copying only affected blocks.
     pub fn set_item(&self, key: K, value: V) -> Result<Self, MerkleTreeError> {
         if let Some(existing) = self.get_entry(&key) {
@@ -387,6 +497,28 @@ impl<K, V> MerkleSearchTree<K, V> {
 
         let entry = self.create_entry(key, value)?;
         let root = self.insert(self.root.as_ref(), entry)?;
+        Ok(Self {
+            root: Some(root),
+            policy: self.policy.clone(),
+        })
+    }
+
+    fn set_value_at_key(&self, key: &K, value: V) -> Result<Self, MerkleTreeError> {
+        let existing = self
+            .get_entry(key)
+            .ok_or(MerkleTreeError::InvalidRepresentation(
+                "cursor replacement key is absent",
+            ))?;
+        let value_bytes = self.policy.value_codec().encode(&value)?;
+        if existing.value_bytes() == value_bytes {
+            return Ok(self.clone());
+        }
+        let replacement = existing.replacing_value(value, value_bytes);
+        let root = self.update_value(
+            self.root.as_ref().expect("found entry requires root"),
+            key,
+            replacement,
+        )?;
         Ok(Self {
             root: Some(root),
             policy: self.policy.clone(),
@@ -1203,6 +1335,216 @@ impl fmt::Display for MerkleTreeError {
 }
 
 impl Error for MerkleTreeError {}
+
+/// Failure from a Merkle cursor edit that cannot publish at the current ordered gap.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MerkleCursorEditError {
+    /// Strict insertion found an equivalent key.
+    DuplicateKey,
+    /// The key's lower-bound rank differs from the cursor's current gap.
+    WrongGap { expected: usize, actual: usize },
+    /// Canonical encoding or tree construction failed.
+    Tree(MerkleTreeError),
+}
+
+impl From<MerkleTreeError> for MerkleCursorEditError {
+    fn from(error: MerkleTreeError) -> Self {
+        Self::Tree(error)
+    }
+}
+
+impl fmt::Display for MerkleCursorEditError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::DuplicateKey => formatter.write_str("the Merkle key is already present"),
+            Self::WrongGap { expected, actual } => write!(
+                formatter,
+                "the key belongs at gap {expected}, not at the current gap {actual}"
+            ),
+            Self::Tree(error) => fmt::Display::fmt(error, formatter),
+        }
+    }
+}
+
+impl Error for MerkleCursorEditError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Tree(error) => Some(error),
+            Self::DuplicateKey | Self::WrongGap { .. } => None,
+        }
+    }
+}
+
+/// Immutable tree-snapshot-plus-rank gap cursor in policy-comparer order.
+pub struct MerkleSearchTreeCursor<K, V> {
+    tree: MerkleSearchTree<K, V>,
+    position: usize,
+}
+
+impl<K, V> Clone for MerkleSearchTreeCursor<K, V> {
+    fn clone(&self) -> Self {
+        Self {
+            tree: self.tree.clone(),
+            position: self.position,
+        }
+    }
+}
+
+impl<K, V> MerkleSearchTreeCursor<K, V> {
+    /// Returns the number of entries in this cursor version.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.tree.len()
+    }
+
+    /// Returns whether this cursor version is empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.tree.is_empty()
+    }
+
+    /// Returns the number of entries before the gap.
+    #[must_use]
+    pub fn position(&self) -> usize {
+        self.position
+    }
+
+    /// Returns whether the gap precedes every entry.
+    #[must_use]
+    pub fn is_at_start(&self) -> bool {
+        self.position == 0
+    }
+
+    /// Returns whether the gap follows every entry.
+    #[must_use]
+    pub fn is_at_end(&self) -> bool {
+        self.position == self.len()
+    }
+
+    /// Borrows the entry immediately before the gap.
+    #[must_use]
+    pub fn peek_previous(&self) -> Option<&MerkleEntry<K, V>> {
+        self.position
+            .checked_sub(1)
+            .and_then(|rank| self.tree.entry_at_rank_for_cursor(rank))
+    }
+
+    /// Borrows the entry immediately after the gap.
+    #[must_use]
+    pub fn peek_next(&self) -> Option<&MerkleEntry<K, V>> {
+        self.tree.entry_at_rank_for_cursor(self.position)
+    }
+
+    /// Returns a cursor one entry toward the start.
+    #[must_use]
+    pub fn move_previous(&self) -> Option<Self> {
+        Some(Self {
+            tree: self.tree.clone(),
+            position: self.position.checked_sub(1)?,
+        })
+    }
+
+    /// Returns a cursor one entry toward the end.
+    #[must_use]
+    pub fn move_next(&self) -> Option<Self> {
+        if self.is_at_end() {
+            return None;
+        }
+        Some(Self {
+            tree: self.tree.clone(),
+            position: self.position + 1,
+        })
+    }
+
+    /// Returns a cursor at a valid rank gap.
+    #[must_use]
+    pub fn seek(&self, position: usize) -> Option<Self> {
+        (position <= self.len()).then(|| Self {
+            tree: self.tree.clone(),
+            position,
+        })
+    }
+
+    /// Strictly inserts a missing key at its lower-bound gap.
+    pub fn insert(&self, key: K, value: V) -> Result<Self, MerkleCursorEditError> {
+        let (expected, found) = self.tree.lower_bound_rank_for_cursor(&key);
+        if found {
+            return Err(MerkleCursorEditError::DuplicateKey);
+        }
+        self.ensure_current_gap(expected)?;
+        Ok(Self {
+            tree: self.tree.set_item(key, value)?,
+            position: self.position + 1,
+        })
+    }
+
+    /// Updates an exact next entry or inserts at a missing lower-bound gap.
+    pub fn set_item(&self, key: K, value: V) -> Result<Self, MerkleCursorEditError> {
+        let (expected, found) = self.tree.lower_bound_rank_for_cursor(&key);
+        self.ensure_current_gap(expected)?;
+        let tree = self.tree.set_item(key, value)?;
+        if tree.shares_root_with(&self.tree) {
+            return Ok(self.clone());
+        }
+        Ok(Self {
+            tree,
+            position: self.position + usize::from(!found),
+        })
+    }
+
+    /// Replaces the next value while retaining its key representative and the current gap.
+    pub fn set_next_value(&self, value: V) -> Result<Option<Self>, MerkleTreeError> {
+        let Some(next) = self.peek_next() else {
+            return Ok(None);
+        };
+        let tree = self.tree.set_value_at_key(next.key(), value)?;
+        Ok(Some(if tree.shares_root_with(&self.tree) {
+            self.clone()
+        } else {
+            Self {
+                tree,
+                position: self.position,
+            }
+        }))
+    }
+
+    /// Deletes the entry before the gap and moves the gap left.
+    #[must_use]
+    pub fn delete_previous(&self) -> Option<Self> {
+        let previous = self.peek_previous()?;
+        Some(Self {
+            tree: self.tree.remove(previous.key()),
+            position: self.position - 1,
+        })
+    }
+
+    /// Deletes the entry after the gap and keeps the gap fixed.
+    #[must_use]
+    pub fn delete_next(&self) -> Option<Self> {
+        let next = self.peek_next()?;
+        Some(Self {
+            tree: self.tree.remove(next.key()),
+            position: self.position,
+        })
+    }
+
+    /// Returns this cursor version's canonical immutable tree by root sharing.
+    #[must_use]
+    pub fn snapshot(&self) -> MerkleSearchTree<K, V> {
+        self.tree.clone()
+    }
+
+    fn ensure_current_gap(&self, expected: usize) -> Result<(), MerkleCursorEditError> {
+        if expected == self.position {
+            Ok(())
+        } else {
+            Err(MerkleCursorEditError::WrongGap {
+                expected,
+                actual: self.position,
+            })
+        }
+    }
+}
 
 /// An inclusive range had reversed bounds.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

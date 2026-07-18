@@ -39,6 +39,111 @@ fn decode_hex(value: &str) -> Vec<u8> {
 }
 
 #[test]
+fn cursor_navigates_ranks_and_publishes_canonical_edits() {
+    let source = StringTree::from_entries(
+        [
+            (-10, Some("a".to_owned())),
+            (0, None),
+            (10, Some("c".to_owned())),
+        ],
+        string_policy(),
+    )
+    .unwrap();
+    let keys = [-10, 0, 10];
+    for position in 0..=source.len() {
+        let cursor = source.cursor_at(position).unwrap();
+        assert_eq!(cursor.position(), position);
+        assert_eq!(cursor.is_at_start(), position == 0);
+        assert_eq!(cursor.is_at_end(), position == source.len());
+        assert!(cursor.snapshot().shares_root_with(&source));
+        assert_eq!(
+            cursor.peek_previous().map(|entry| *entry.key()),
+            position.checked_sub(1).map(|rank| keys[rank])
+        );
+        assert_eq!(
+            cursor.peek_next().map(|entry| *entry.key()),
+            keys.get(position).copied()
+        );
+    }
+
+    assert_eq!(source.lower_bound_cursor(&-5).position(), 1);
+    assert_eq!(source.upper_bound_cursor(&0).position(), 2);
+    assert_eq!(source.cursor_at_key(&0).1, true);
+    assert_eq!(source.cursor_at_key(&5).0.position(), 2);
+    assert!(!source.cursor_at_key(&5).1);
+
+    let exact = source.cursor_at_key(&0).0;
+    let no_op = exact.set_next_value(None).unwrap().unwrap();
+    assert!(no_op.snapshot().shares_root_with(&source));
+    let changed = exact
+        .set_next_value(Some("b".to_owned()))
+        .unwrap()
+        .unwrap()
+        .snapshot();
+    assert_eq!(changed.get(&0), Some(&Some("b".to_owned())));
+    assert_ne!(changed.root_hash(), source.root_hash());
+    assert_eq!(source.get(&0), Some(&None));
+
+    let inserted = source
+        .lower_bound_cursor(&5)
+        .insert(5, Some("five".to_owned()))
+        .unwrap();
+    assert_eq!(inserted.position(), 3);
+    assert_eq!(
+        inserted
+            .snapshot()
+            .iter()
+            .map(|entry| *entry.key())
+            .collect::<Vec<_>>(),
+        [-10, 0, 5, 10]
+    );
+    assert_eq!(
+        inserted.delete_previous().unwrap().snapshot().root_hash(),
+        source.root_hash()
+    );
+    assert!(source.cursor_at(4).is_none());
+    assert!(source.cursor().move_previous().is_none());
+    assert!(source.cursor_at_end().move_next().is_none());
+    assert!(exact.insert(0, Some("duplicate".to_owned())).is_err());
+    assert!(
+        source
+            .cursor()
+            .insert(5, Some("wrong gap".to_owned()))
+            .is_err()
+    );
+}
+
+#[test]
+fn cursor_cached_ranks_and_bounds_match_sorted_model() {
+    let keys = (-500..=500)
+        .filter(|key| key % 7 != 0)
+        .collect::<Vec<i32>>();
+    let tree = StringTree::from_entries(
+        keys.iter().map(|key| (*key, Some(key.to_string()))),
+        string_policy(),
+    )
+    .unwrap();
+    for (position, key) in keys.iter().enumerate() {
+        assert_eq!(
+            tree.cursor_at(position).unwrap().peek_next().unwrap().key(),
+            key
+        );
+    }
+    for probe in (-550..=550).step_by(11) {
+        let rank = keys.partition_point(|key| *key < probe);
+        let found = keys.get(rank) == Some(&probe);
+        assert_eq!(tree.lower_bound_cursor(&probe).position(), rank);
+        assert_eq!(
+            tree.upper_bound_cursor(&probe).position(),
+            rank + usize::from(found)
+        );
+        let (cursor, actual_found) = tree.cursor_at_key(&probe);
+        assert_eq!(cursor.position(), rank);
+        assert_eq!(actual_found, found);
+    }
+}
+
+#[test]
 fn built_in_codecs_match_strict_cross_language_vectors() {
     assert_eq!(Int32MerkleCodec.encoding_id(), "i32-be-v1");
     assert_eq!(Int32MerkleCodec.encode(&0x0102_0304).unwrap(), [1, 2, 3, 4]);
