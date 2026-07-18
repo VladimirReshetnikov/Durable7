@@ -31,6 +31,12 @@ typedef struct ft_persistent_interval_map {
     struct ft_interval_map_context* context;
 } ft_persistent_interval_map;
 
+/* Immutable lexicographic (low, high)-order root-plus-rank gap cursor. */
+typedef struct ft_persistent_interval_map_cursor {
+    ft_persistent_interval_map map;
+    size_t position;
+} ft_persistent_interval_map_cursor;
+
 ft_status ft_persistent_interval_map_init(
     ft_persistent_interval_map* map,
     const ft_value_type* endpoint_type,
@@ -112,6 +118,110 @@ ft_status ft_persistent_interval_map_visit_overlaps(
 
 bool ft_persistent_interval_map_debug_validate(
     const ft_persistent_interval_map* map);
+
+ft_status ft_persistent_interval_map_get_cursor(
+    const ft_persistent_interval_map* map,
+    size_t position,
+    ft_persistent_interval_map_cursor* result);
+ft_status ft_persistent_interval_map_get_cursor_lower_bound(
+    const ft_persistent_interval_map* map,
+    const void* low,
+    const void* high,
+    ft_persistent_interval_map_cursor* result);
+ft_status ft_persistent_interval_map_get_cursor_upper_bound(
+    const ft_persistent_interval_map* map,
+    const void* low,
+    const void* high,
+    ft_persistent_interval_map_cursor* result);
+ft_status ft_persistent_interval_map_get_cursor_at_key(
+    const ft_persistent_interval_map* map,
+    const void* low,
+    const void* high,
+    bool* found,
+    ft_persistent_interval_map_cursor* result);
+ft_status ft_persistent_interval_map_find_overlap_cursor(
+    const ft_persistent_interval_map* map,
+    const void* query_low,
+    const void* query_high,
+    bool* found,
+    ft_persistent_interval_map_cursor* result);
+ft_status ft_persistent_interval_map_find_containing_cursor(
+    const ft_persistent_interval_map* map,
+    const void* point,
+    bool* found,
+    ft_persistent_interval_map_cursor* result);
+
+ft_status ft_persistent_interval_map_cursor_copy(
+    const ft_persistent_interval_map_cursor* source,
+    ft_persistent_interval_map_cursor* destination);
+void ft_persistent_interval_map_cursor_move(
+    ft_persistent_interval_map_cursor* destination,
+    ft_persistent_interval_map_cursor* source);
+void ft_persistent_interval_map_cursor_dispose(ft_persistent_interval_map_cursor* cursor);
+bool ft_persistent_interval_map_cursor_valid(const ft_persistent_interval_map_cursor* cursor);
+bool ft_persistent_interval_map_cursor_empty(const ft_persistent_interval_map_cursor* cursor);
+size_t ft_persistent_interval_map_cursor_size(const ft_persistent_interval_map_cursor* cursor);
+size_t ft_persistent_interval_map_cursor_position(const ft_persistent_interval_map_cursor* cursor);
+ft_status ft_persistent_interval_map_cursor_is_at_start(
+    const ft_persistent_interval_map_cursor* cursor,
+    bool* result);
+ft_status ft_persistent_interval_map_cursor_is_at_end(
+    const ft_persistent_interval_map_cursor* cursor,
+    bool* result);
+/* Present entries are copied into any non-null component outputs. */
+ft_status ft_persistent_interval_map_cursor_try_peek_previous(
+    const ft_persistent_interval_map_cursor* cursor,
+    bool* found,
+    void* low,
+    void* high,
+    void* value);
+ft_status ft_persistent_interval_map_cursor_try_peek_next(
+    const ft_persistent_interval_map_cursor* cursor,
+    bool* found,
+    void* low,
+    void* high,
+    void* value);
+ft_status ft_persistent_interval_map_cursor_move_previous(
+    const ft_persistent_interval_map_cursor* cursor,
+    ft_persistent_interval_map_cursor* result);
+ft_status ft_persistent_interval_map_cursor_move_next(
+    const ft_persistent_interval_map_cursor* cursor,
+    ft_persistent_interval_map_cursor* result);
+ft_status ft_persistent_interval_map_cursor_seek_rank(
+    const ft_persistent_interval_map_cursor* cursor,
+    size_t position,
+    ft_persistent_interval_map_cursor* result);
+ft_status ft_persistent_interval_map_cursor_seek_next_overlap(
+    const ft_persistent_interval_map_cursor* cursor,
+    const void* query_low,
+    const void* query_high,
+    bool* found,
+    ft_persistent_interval_map_cursor* result);
+ft_status ft_persistent_interval_map_cursor_insert(
+    const ft_persistent_interval_map_cursor* cursor,
+    const void* low,
+    const void* high,
+    const void* value,
+    ft_persistent_interval_map_cursor* result);
+ft_status ft_persistent_interval_map_cursor_set_item(
+    const ft_persistent_interval_map_cursor* cursor,
+    const void* low,
+    const void* high,
+    const void* value,
+    ft_persistent_interval_map_cursor* result);
+ft_status ft_persistent_interval_map_cursor_set_next(
+    const ft_persistent_interval_map_cursor* cursor,
+    const void* value,
+    ft_persistent_interval_map_cursor* result);
+ft_status ft_persistent_interval_map_cursor_delete_previous(
+    const ft_persistent_interval_map_cursor* cursor,
+    ft_persistent_interval_map_cursor* result);
+ft_status ft_persistent_interval_map_cursor_delete_next(
+    const ft_persistent_interval_map_cursor* cursor,
+    ft_persistent_interval_map_cursor* result);
+ft_status ft_persistent_interval_map_cursor_snapshot(
+    const ft_persistent_interval_map_cursor* cursor,
+    ft_persistent_interval_map* result);
 
 #ifdef __cplusplus
 }

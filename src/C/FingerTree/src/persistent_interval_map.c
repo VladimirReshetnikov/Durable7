@@ -679,3 +679,610 @@ bool ft_persistent_interval_map_debug_validate(
         &map->values, ft_interval_map_validate_entry, &context) == FT_STATUS_OK
         && context.valid;
 }
+
+static ft_status ft_interval_map_cursor_bound(
+    const ft_persistent_interval_map* map,
+    const void* low,
+    const void* high,
+    bool upper_bound,
+    size_t* position,
+    bool* found)
+{
+    if (!ft_interval_map_interval_valid(map, low, high) ||
+        position == NULL || found == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const ft_interval_map_key probe = ft_interval_map_probe(low, high);
+    size_t rank = 0;
+    bool located = false;
+    ft_status status = ft_sorted_map_index_of_key(
+        &map->values, &probe, &located, &rank);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    if (upper_bound && located) {
+        if (rank == SIZE_MAX) {
+            return FT_STATUS_OVERFLOW;
+        }
+        ++rank;
+    }
+    *position = rank;
+    *found = located;
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_interval_map_cursor_key_at(
+    const ft_persistent_interval_map* map,
+    size_t position,
+    ft_interval_map_key* key)
+{
+    (void)memset(key, 0, sizeof(*key));
+    return ft_sorted_map_entry_at(&map->values, position, key, NULL);
+}
+
+static bool ft_interval_map_cursor_is_valid(
+    const ft_persistent_interval_map_cursor* cursor)
+{
+    return cursor != NULL && ft_interval_map_valid(&cursor->map) &&
+        cursor->position <= ft_persistent_interval_map_size(&cursor->map);
+}
+
+static ft_status ft_interval_map_cursor_stage(
+    const ft_persistent_interval_map* map,
+    size_t position,
+    ft_persistent_interval_map_cursor* result)
+{
+    (void)memset(result, 0, sizeof(*result));
+    ft_status status = ft_persistent_interval_map_copy(map, &result->map);
+    if (status == FT_STATUS_OK) {
+        result->position = position;
+    }
+    return status;
+}
+
+static void ft_interval_map_cursor_publish(
+    const ft_persistent_interval_map_cursor* source,
+    ft_persistent_interval_map_cursor* staged,
+    ft_persistent_interval_map_cursor* result)
+{
+    if (result == source) {
+        ft_persistent_interval_map_cursor_dispose(result);
+    }
+    ft_persistent_interval_map_cursor_move(result, staged);
+}
+
+static void ft_interval_map_cursor_publish_map(
+    const ft_persistent_interval_map_cursor* source,
+    ft_persistent_interval_map* map,
+    size_t position,
+    ft_persistent_interval_map_cursor* result)
+{
+    ft_persistent_interval_map_cursor staged;
+    (void)memset(&staged, 0, sizeof(staged));
+    ft_persistent_interval_map_move(&staged.map, map);
+    staged.position = position;
+    ft_interval_map_cursor_publish(source, &staged, result);
+}
+
+ft_status ft_persistent_interval_map_get_cursor(
+    const ft_persistent_interval_map* map,
+    size_t position,
+    ft_persistent_interval_map_cursor* result)
+{
+    if (!ft_interval_map_valid(map) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (position > ft_persistent_interval_map_size(map)) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_interval_map_cursor_stage(map, position, result);
+}
+
+static ft_status ft_interval_map_get_bound_cursor(
+    const ft_persistent_interval_map* map,
+    const void* low,
+    const void* high,
+    bool upper_bound,
+    bool* found,
+    ft_persistent_interval_map_cursor* result)
+{
+    if (!ft_interval_map_interval_valid(map, low, high) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    size_t position = 0;
+    bool located = false;
+    ft_status status = ft_interval_map_cursor_bound(
+        map, low, high, upper_bound, &position, &located);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_persistent_interval_map_cursor staged;
+    status = ft_interval_map_cursor_stage(map, position, &staged);
+    if (status == FT_STATUS_OK) {
+        if (found != NULL) {
+            *found = located;
+        }
+        ft_persistent_interval_map_cursor_move(result, &staged);
+    }
+    return status;
+}
+
+ft_status ft_persistent_interval_map_get_cursor_lower_bound(
+    const ft_persistent_interval_map* map,
+    const void* low,
+    const void* high,
+    ft_persistent_interval_map_cursor* result)
+{
+    return ft_interval_map_get_bound_cursor(
+        map, low, high, false, NULL, result);
+}
+
+ft_status ft_persistent_interval_map_get_cursor_upper_bound(
+    const ft_persistent_interval_map* map,
+    const void* low,
+    const void* high,
+    ft_persistent_interval_map_cursor* result)
+{
+    return ft_interval_map_get_bound_cursor(
+        map, low, high, true, NULL, result);
+}
+
+ft_status ft_persistent_interval_map_get_cursor_at_key(
+    const ft_persistent_interval_map* map,
+    const void* low,
+    const void* high,
+    bool* found,
+    ft_persistent_interval_map_cursor* result)
+{
+    return found == NULL
+        ? FT_STATUS_INVALID_ARGUMENT
+        : ft_interval_map_get_bound_cursor(
+            map, low, high, false, found, result);
+}
+
+static ft_status ft_interval_map_find_overlap_from(
+    const ft_persistent_interval_map* map,
+    size_t start,
+    const void* query_low,
+    const void* query_high,
+    bool* found,
+    ft_persistent_interval_map_cursor* result)
+{
+    if (!ft_interval_map_interval_valid(map, query_low, query_high) ||
+        found == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_persistent_interval_map_size(map);
+    if (start > size) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    bool located = false;
+    size_t position = size;
+    for (size_t rank = start; rank != size; ++rank) {
+        ft_interval_map_key key;
+        ft_status status = ft_interval_map_cursor_key_at(map, rank, &key);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+        const bool past = map->context->compare_endpoint(
+            key.low, query_high, map->context->compare_context) > 0;
+        const bool overlap = !past && map->context->compare_endpoint(
+            query_low, key.high, map->context->compare_context) <= 0;
+        ft_interval_map_key_destroy(&key, map->context);
+        if (past) {
+            break;
+        }
+        if (overlap) {
+            located = true;
+            position = rank;
+            break;
+        }
+    }
+    ft_persistent_interval_map_cursor staged;
+    ft_status status = ft_interval_map_cursor_stage(map, position, &staged);
+    if (status == FT_STATUS_OK) {
+        *found = located;
+        ft_persistent_interval_map_cursor_move(result, &staged);
+    }
+    return status;
+}
+
+ft_status ft_persistent_interval_map_find_overlap_cursor(
+    const ft_persistent_interval_map* map,
+    const void* query_low,
+    const void* query_high,
+    bool* found,
+    ft_persistent_interval_map_cursor* result)
+{
+    return ft_interval_map_find_overlap_from(
+        map, 0, query_low, query_high, found, result);
+}
+
+ft_status ft_persistent_interval_map_find_containing_cursor(
+    const ft_persistent_interval_map* map,
+    const void* point,
+    bool* found,
+    ft_persistent_interval_map_cursor* result)
+{
+    return ft_interval_map_find_overlap_from(
+        map, 0, point, point, found, result);
+}
+
+ft_status ft_persistent_interval_map_cursor_copy(
+    const ft_persistent_interval_map_cursor* source,
+    ft_persistent_interval_map_cursor* destination)
+{
+    if (!ft_interval_map_cursor_is_valid(source) || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (source == destination) {
+        return FT_STATUS_OK;
+    }
+    return ft_interval_map_cursor_stage(
+        &source->map, source->position, destination);
+}
+
+void ft_persistent_interval_map_cursor_move(
+    ft_persistent_interval_map_cursor* destination,
+    ft_persistent_interval_map_cursor* source)
+{
+    if (destination == NULL || source == NULL || destination == source) {
+        return;
+    }
+    (void)memset(destination, 0, sizeof(*destination));
+    ft_persistent_interval_map_move(&destination->map, &source->map);
+    destination->position = source->position;
+    source->position = 0;
+}
+
+void ft_persistent_interval_map_cursor_dispose(ft_persistent_interval_map_cursor* cursor)
+{
+    if (cursor != NULL) {
+        ft_persistent_interval_map_dispose(&cursor->map);
+        (void)memset(cursor, 0, sizeof(*cursor));
+    }
+}
+
+bool ft_persistent_interval_map_cursor_valid(
+    const ft_persistent_interval_map_cursor* cursor)
+{
+    return ft_interval_map_cursor_is_valid(cursor);
+}
+
+bool ft_persistent_interval_map_cursor_empty(
+    const ft_persistent_interval_map_cursor* cursor)
+{
+    return !ft_interval_map_cursor_is_valid(cursor) ||
+        ft_persistent_interval_map_empty(&cursor->map);
+}
+
+size_t ft_persistent_interval_map_cursor_size(
+    const ft_persistent_interval_map_cursor* cursor)
+{
+    return ft_interval_map_cursor_is_valid(cursor)
+        ? ft_persistent_interval_map_size(&cursor->map)
+        : 0;
+}
+
+size_t ft_persistent_interval_map_cursor_position(
+    const ft_persistent_interval_map_cursor* cursor)
+{
+    return ft_interval_map_cursor_is_valid(cursor) ? cursor->position : 0;
+}
+
+ft_status ft_persistent_interval_map_cursor_is_at_start(
+    const ft_persistent_interval_map_cursor* cursor,
+    bool* result)
+{
+    if (!ft_interval_map_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    *result = cursor->position == 0;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_persistent_interval_map_cursor_is_at_end(
+    const ft_persistent_interval_map_cursor* cursor,
+    bool* result)
+{
+    if (!ft_interval_map_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    *result = cursor->position == ft_persistent_interval_map_size(&cursor->map);
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_interval_map_cursor_peek(
+    const ft_persistent_interval_map_cursor* cursor,
+    size_t position,
+    bool* found,
+    void* low,
+    void* high,
+    void* value)
+{
+    if (!ft_interval_map_cursor_is_valid(cursor) || found == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (position >= ft_persistent_interval_map_size(&cursor->map)) {
+        *found = false;
+        return FT_STATUS_OK;
+    }
+    ft_status status = ft_persistent_interval_map_entry_at(
+        &cursor->map, position, low, high, value);
+    if (status == FT_STATUS_OK) {
+        *found = true;
+    }
+    return status;
+}
+
+ft_status ft_persistent_interval_map_cursor_try_peek_previous(
+    const ft_persistent_interval_map_cursor* cursor,
+    bool* found,
+    void* low,
+    void* high,
+    void* value)
+{
+    if (!ft_interval_map_cursor_is_valid(cursor) || found == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        *found = false;
+        return FT_STATUS_OK;
+    }
+    return ft_interval_map_cursor_peek(
+        cursor, cursor->position - 1u, found, low, high, value);
+}
+
+ft_status ft_persistent_interval_map_cursor_try_peek_next(
+    const ft_persistent_interval_map_cursor* cursor,
+    bool* found,
+    void* low,
+    void* high,
+    void* value)
+{
+    return ft_interval_map_cursor_peek(
+        cursor,
+        cursor == NULL ? 0 : cursor->position,
+        found,
+        low,
+        high,
+        value);
+}
+
+ft_status ft_persistent_interval_map_cursor_seek_rank(
+    const ft_persistent_interval_map_cursor* cursor,
+    size_t position,
+    ft_persistent_interval_map_cursor* result)
+{
+    if (!ft_interval_map_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (position > ft_persistent_interval_map_size(&cursor->map)) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    if (cursor == result && cursor->position == position) {
+        return FT_STATUS_OK;
+    }
+    ft_persistent_interval_map_cursor staged;
+    ft_status status = ft_interval_map_cursor_stage(
+        &cursor->map, position, &staged);
+    if (status == FT_STATUS_OK) {
+        ft_interval_map_cursor_publish(cursor, &staged, result);
+    }
+    return status;
+}
+
+ft_status ft_persistent_interval_map_cursor_move_previous(
+    const ft_persistent_interval_map_cursor* cursor,
+    ft_persistent_interval_map_cursor* result)
+{
+    if (!ft_interval_map_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        return ft_persistent_interval_map_empty(&cursor->map)
+            ? FT_STATUS_EMPTY
+            : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_persistent_interval_map_cursor_seek_rank(
+        cursor, cursor->position - 1u, result);
+}
+
+ft_status ft_persistent_interval_map_cursor_move_next(
+    const ft_persistent_interval_map_cursor* cursor,
+    ft_persistent_interval_map_cursor* result)
+{
+    if (!ft_interval_map_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_persistent_interval_map_size(&cursor->map);
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_persistent_interval_map_cursor_seek_rank(
+        cursor, cursor->position + 1u, result);
+}
+
+ft_status ft_persistent_interval_map_cursor_seek_next_overlap(
+    const ft_persistent_interval_map_cursor* cursor,
+    const void* query_low,
+    const void* query_high,
+    bool* found,
+    ft_persistent_interval_map_cursor* result)
+{
+    if (!ft_interval_map_cursor_is_valid(cursor) || found == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_persistent_interval_map_size(&cursor->map);
+    const size_t start = cursor->position == size
+        ? size
+        : cursor->position + 1u;
+    ft_persistent_interval_map_cursor staged;
+    bool located = false;
+    ft_status status = ft_interval_map_find_overlap_from(
+        &cursor->map,
+        start,
+        query_low,
+        query_high,
+        &located,
+        &staged);
+    if (status == FT_STATUS_OK) {
+        *found = located;
+        ft_interval_map_cursor_publish(cursor, &staged, result);
+    }
+    return status;
+}
+
+ft_status ft_persistent_interval_map_cursor_insert(
+    const ft_persistent_interval_map_cursor* cursor,
+    const void* low,
+    const void* high,
+    const void* value,
+    ft_persistent_interval_map_cursor* result)
+{
+    if (!ft_interval_map_cursor_is_valid(cursor) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    size_t position = 0;
+    bool found = false;
+    ft_status status = ft_interval_map_cursor_bound(
+        &cursor->map, low, high, false, &position, &found);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    if (found) {
+        return FT_STATUS_ALREADY_EXISTS;
+    }
+    if (position == SIZE_MAX) {
+        return FT_STATUS_OVERFLOW;
+    }
+    ft_persistent_interval_map edited;
+    status = ft_persistent_interval_map_add(
+        &cursor->map, low, high, value, &edited);
+    if (status == FT_STATUS_OK) {
+        ft_interval_map_cursor_publish_map(
+            cursor, &edited, position + 1u, result);
+    }
+    return status;
+}
+
+ft_status ft_persistent_interval_map_cursor_set_item(
+    const ft_persistent_interval_map_cursor* cursor,
+    const void* low,
+    const void* high,
+    const void* value,
+    ft_persistent_interval_map_cursor* result)
+{
+    if (!ft_interval_map_cursor_is_valid(cursor) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    size_t position = 0;
+    bool found = false;
+    ft_status status = ft_interval_map_cursor_bound(
+        &cursor->map, low, high, false, &position, &found);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    if (!found && position == SIZE_MAX) {
+        return FT_STATUS_OVERFLOW;
+    }
+    ft_persistent_interval_map edited;
+    status = ft_persistent_interval_map_set(
+        &cursor->map, low, high, value, &edited);
+    if (status == FT_STATUS_OK) {
+        ft_interval_map_cursor_publish_map(
+            cursor, &edited, found ? position : position + 1u, result);
+    }
+    return status;
+}
+
+ft_status ft_persistent_interval_map_cursor_set_next(
+    const ft_persistent_interval_map_cursor* cursor,
+    const void* value,
+    ft_persistent_interval_map_cursor* result)
+{
+    if (!ft_interval_map_cursor_is_valid(cursor) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == ft_persistent_interval_map_size(&cursor->map)) {
+        return ft_persistent_interval_map_empty(&cursor->map)
+            ? FT_STATUS_EMPTY
+            : FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_interval_map_key key;
+    ft_status status = ft_interval_map_cursor_key_at(
+        &cursor->map, cursor->position, &key);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_persistent_interval_map edited;
+    status = ft_persistent_interval_map_set(
+        &cursor->map, key.low, key.high, value, &edited);
+    ft_interval_map_key_destroy(&key, cursor->map.context);
+    if (status == FT_STATUS_OK) {
+        ft_interval_map_cursor_publish_map(
+            cursor, &edited, cursor->position, result);
+    }
+    return status;
+}
+
+static ft_status ft_interval_map_cursor_delete_at(
+    const ft_persistent_interval_map_cursor* cursor,
+    size_t rank,
+    size_t position,
+    ft_persistent_interval_map_cursor* result)
+{
+    ft_interval_map_key key;
+    ft_status status = ft_interval_map_cursor_key_at(&cursor->map, rank, &key);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_persistent_interval_map edited;
+    status = ft_persistent_interval_map_remove(
+        &cursor->map, key.low, key.high, &edited);
+    ft_interval_map_key_destroy(&key, cursor->map.context);
+    if (status == FT_STATUS_OK) {
+        ft_interval_map_cursor_publish_map(cursor, &edited, position, result);
+    }
+    return status;
+}
+
+ft_status ft_persistent_interval_map_cursor_delete_previous(
+    const ft_persistent_interval_map_cursor* cursor,
+    ft_persistent_interval_map_cursor* result)
+{
+    if (!ft_interval_map_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        return ft_persistent_interval_map_empty(&cursor->map)
+            ? FT_STATUS_EMPTY
+            : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_interval_map_cursor_delete_at(
+        cursor, cursor->position - 1u, cursor->position - 1u, result);
+}
+
+ft_status ft_persistent_interval_map_cursor_delete_next(
+    const ft_persistent_interval_map_cursor* cursor,
+    ft_persistent_interval_map_cursor* result)
+{
+    if (!ft_interval_map_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_persistent_interval_map_size(&cursor->map);
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_interval_map_cursor_delete_at(
+        cursor, cursor->position, cursor->position, result);
+}
+
+ft_status ft_persistent_interval_map_cursor_snapshot(
+    const ft_persistent_interval_map_cursor* cursor,
+    ft_persistent_interval_map* result)
+{
+    return !ft_interval_map_cursor_is_valid(cursor) || result == NULL
+        ? FT_STATUS_INVALID_ARGUMENT
+        : ft_persistent_interval_map_copy(&cursor->map, result);
+}

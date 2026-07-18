@@ -115,7 +115,65 @@ int main(void)
         == FT_STATUS_INVALID_ARGUMENT);
     CHECK(ft_persistent_interval_map_debug_validate(&map));
 
+    ft_persistent_interval_map_cursor cursor;
+    ft_persistent_interval_map_cursor retained;
+    ft_persistent_interval_map_cursor overlap_cursor;
+    ft_persistent_interval_map cursor_snapshot;
+    const int cursor_value = 50;
+    const int replacement_value = 41;
+    CHECK_STATUS(ft_persistent_interval_map_get_cursor_at_key(
+        &snapshot, &one, &five, &found, &cursor));
+    CHECK(found);
+    CHECK(ft_persistent_interval_map_cursor_position(&cursor) == 2u);
+    CHECK_STATUS(ft_persistent_interval_map_cursor_try_peek_next(
+        &cursor, &found, &low, &high, &value));
+    CHECK(found && low == 1 && high == 5 && value == 10);
+    CHECK_STATUS(ft_persistent_interval_map_cursor_copy(&cursor, &retained));
     ft_persistent_interval_map_dispose(&snapshot);
+
+    CHECK_STATUS(ft_persistent_interval_map_cursor_insert(
+        &cursor, &two, &six, &cursor_value, &cursor));
+    CHECK(ft_persistent_interval_map_cursor_position(&cursor) == 4u);
+    CHECK(ft_persistent_interval_map_cursor_size(&cursor) == 5u);
+    CHECK_STATUS(ft_persistent_interval_map_cursor_try_peek_previous(
+        &cursor, &found, &low, &high, &value));
+    CHECK(found && low == 2 && high == 6 && value == 50);
+    CHECK_STATUS(ft_persistent_interval_map_cursor_set_next(
+        &cursor, &replacement_value, &cursor));
+    CHECK_STATUS(ft_persistent_interval_map_cursor_try_peek_next(
+        &cursor, &found, &low, &high, &value));
+    CHECK(found && low == 4 && high == 9 && value == 41);
+    CHECK_STATUS(ft_persistent_interval_map_cursor_snapshot(
+        &cursor, &cursor_snapshot));
+
+    CHECK_STATUS(ft_persistent_interval_map_find_containing_cursor(
+        &cursor_snapshot, &three, &found, &overlap_cursor));
+    CHECK(found);
+    CHECK(ft_persistent_interval_map_cursor_position(&overlap_cursor) == 1u);
+    CHECK_STATUS(ft_persistent_interval_map_cursor_seek_next_overlap(
+        &overlap_cursor, &three, &three, &found, &overlap_cursor));
+    CHECK(found);
+    CHECK(ft_persistent_interval_map_cursor_position(&overlap_cursor) == 2u);
+    CHECK_STATUS(ft_persistent_interval_map_cursor_try_peek_next(
+        &overlap_cursor, &found, &low, &high, &value));
+    CHECK(found && low == 1 && high == 5);
+
+    CHECK_STATUS(ft_persistent_interval_map_cursor_delete_previous(
+        &cursor, &cursor));
+    CHECK(ft_persistent_interval_map_cursor_position(&cursor) == 3u);
+    CHECK(ft_persistent_interval_map_cursor_size(&cursor) == 4u);
+    CHECK(ft_persistent_interval_map_cursor_insert(
+        &cursor, &one, &five, &value_a, &cursor) == FT_STATUS_ALREADY_EXISTS);
+    CHECK(ft_persistent_interval_map_cursor_position(&cursor) == 3u);
+    CHECK(ft_persistent_interval_map_cursor_size(&retained) == 4u);
+    CHECK(ft_persistent_interval_map_cursor_seek_rank(
+        &cursor, 5u, &cursor) == FT_STATUS_OUT_OF_RANGE);
+
+    ft_persistent_interval_map_cursor_dispose(&overlap_cursor);
+    ft_persistent_interval_map_cursor_dispose(&retained);
+    ft_persistent_interval_map_cursor_dispose(&cursor);
+    ft_persistent_interval_map_dispose(&cursor_snapshot);
+
     ft_persistent_interval_map_dispose(&map);
     puts("[PASS] persistent interval map");
     return EXIT_SUCCESS;
