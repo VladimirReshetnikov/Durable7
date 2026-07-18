@@ -62,6 +62,17 @@ class PrioritySearchQueueStatistics:
 
 
 @dataclass(frozen=True, slots=True)
+class PrioritySearchCursorPeek(Generic[K, P, V]):
+    value: PrioritySearchEntry[K, P, V]
+
+
+@dataclass(frozen=True, slots=True)
+class PrioritySearchCursorSearch(Generic[K, P, V]):
+    found: bool
+    cursor: PrioritySearchQueueCursor[K, P, V]
+
+
+@dataclass(frozen=True, slots=True)
 class PrioritySearchAddResult(Generic[K, P, V]):
     added: bool
     queue: PrioritySearchQueue[K, P, V]
@@ -442,6 +453,42 @@ class PrioritySearchQueue(Generic[K, P, V]):
 
         return len(collect(self._root) & collect(other._root))
 
+    def _bound_rank(self, key: K, upper: bool) -> int:
+        rank = 0
+        node = self._root
+        while node is not None:
+            comparison = self.key_comparator(node.entry.key, key)
+            if comparison < 0 or (upper and comparison == 0):
+                rank += (0 if node.left is None else node.left.count) + 1
+                node = node.right
+            else:
+                node = node.left
+        return rank
+
+    def cursor_at(self, position: int = 0) -> PrioritySearchQueueCursor[K, P, V]:
+        return PrioritySearchQueueCursor(self, position)
+
+    def cursor_at_lower_bound(self, key: K) -> PrioritySearchQueueCursor[K, P, V]:
+        return self.cursor_at(self._bound_rank(key, False))
+
+    def cursor_at_upper_bound(self, key: K) -> PrioritySearchQueueCursor[K, P, V]:
+        return self.cursor_at(self._bound_rank(key, True))
+
+    def find_cursor(self, key: K) -> PrioritySearchCursorSearch[K, P, V]:
+        cursor = self.cursor_at_lower_bound(key)
+        candidate = cursor.peek_next()
+        return PrioritySearchCursorSearch(
+            candidate is not None and self.key_comparator(candidate.value.key, key) == 0,
+            cursor,
+        )
+
+    def cursor_at_minimum_priority(self) -> PrioritySearchQueueCursor[K, P, V]:
+        return (
+            self.cursor_at()
+            if self._root is None
+            else self.cursor_at_lower_bound(self._root.winner.key)
+        )
+
     def __iter__(self) -> Iterator[PrioritySearchEntry[K, P, V]]:
         pending: list[_Node[K, P, V]] = []
         current = self._root
@@ -454,11 +501,112 @@ class PrioritySearchQueue(Generic[K, P, V]):
             current = node.right
 
 
+@dataclass(frozen=True, slots=True)
+class PrioritySearchQueueCursor(Generic[K, P, V]):
+    """Immutable key-order root-plus-rank cursor over a priority-search queue."""
+
+    queue: PrioritySearchQueue[K, P, V]
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        if self.position < 0 or self.position > len(self.queue):
+            raise IndexError("Cursor position is outside the priority-search queue.")
+
+    @property
+    def count(self) -> int:
+        return len(self.queue)
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.count
+
+    def peek_previous(self) -> PrioritySearchCursorPeek[K, P, V] | None:
+        return (
+            None
+            if self.is_at_start
+            else PrioritySearchCursorPeek(tuple(self.queue)[self.position - 1])
+        )
+
+    def peek_next(self) -> PrioritySearchCursorPeek[K, P, V] | None:
+        return (
+            None if self.is_at_end else PrioritySearchCursorPeek(tuple(self.queue)[self.position])
+        )
+
+    def move_previous(self) -> PrioritySearchQueueCursor[K, P, V]:
+        if self.is_at_start:
+            raise IndexError("Cursor is already at the start.")
+        return PrioritySearchQueueCursor(self.queue, self.position - 1)
+
+    def move_next(self) -> PrioritySearchQueueCursor[K, P, V]:
+        if self.is_at_end:
+            raise IndexError("Cursor is already at the end.")
+        return PrioritySearchQueueCursor(self.queue, self.position + 1)
+
+    def seek_rank(self, position: int) -> PrioritySearchQueueCursor[K, P, V]:
+        return (
+            self if position == self.position else PrioritySearchQueueCursor(self.queue, position)
+        )
+
+    def insert(self, key: K, priority: P, value: V) -> PrioritySearchQueueCursor[K, P, V]:
+        position = self.queue._bound_rank(key, False)
+        result = self.queue.try_add(key, priority, value)
+        if not result.added:
+            raise ValueError("An equivalent key is already present.")
+        return PrioritySearchQueueCursor(result.queue, position + 1)
+
+    def try_insert(self, key: K, priority: P, value: V) -> PrioritySearchCursorSearch[K, P, V]:
+        position = self.queue._bound_rank(key, False)
+        result = self.queue.try_add(key, priority, value)
+        cursor = (
+            PrioritySearchQueueCursor(result.queue, position + 1)
+            if result.added
+            else PrioritySearchQueueCursor(self.queue, position)
+        )
+        return PrioritySearchCursorSearch(result.added, cursor)
+
+    def set_item(self, key: K, priority: P, value: V) -> PrioritySearchQueueCursor[K, P, V]:
+        location = self.queue.find_cursor(key)
+        return PrioritySearchQueueCursor(
+            self.queue.set_item(key, priority, value),
+            location.cursor.position if location.found else location.cursor.position + 1,
+        )
+
+    def set_next(self, priority: P, value: V) -> PrioritySearchQueueCursor[K, P, V]:
+        entry = self.peek_next()
+        if entry is None:
+            raise IndexError("No entry follows the cursor.")
+        return PrioritySearchQueueCursor(
+            self.queue.set_item(entry.value.key, priority, value), self.position
+        )
+
+    def delete_previous(self) -> PrioritySearchQueueCursor[K, P, V]:
+        entry = self.peek_previous()
+        if entry is None:
+            raise IndexError("No entry precedes the cursor.")
+        return PrioritySearchQueueCursor(self.queue.remove(entry.value.key), self.position - 1)
+
+    def delete_next(self) -> PrioritySearchQueueCursor[K, P, V]:
+        entry = self.peek_next()
+        if entry is None:
+            raise IndexError("No entry follows the cursor.")
+        return PrioritySearchQueueCursor(self.queue.remove(entry.value.key), self.position)
+
+    def snapshot(self) -> PrioritySearchQueue[K, P, V]:
+        return self.queue
+
+
 __all__ = [
     "PrioritySearchAddResult",
+    "PrioritySearchCursorPeek",
+    "PrioritySearchCursorSearch",
     "PrioritySearchEntry",
     "PrioritySearchMinimumView",
     "PrioritySearchQueue",
+    "PrioritySearchQueueCursor",
     "PrioritySearchQueueStatistics",
     "PrioritySearchRemoveResult",
 ]

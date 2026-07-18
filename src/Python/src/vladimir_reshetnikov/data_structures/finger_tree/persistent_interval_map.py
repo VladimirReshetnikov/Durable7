@@ -41,6 +41,17 @@ class IntervalMapAddResult(Generic[T, V]):
     map: PersistentIntervalMap[T, V]
 
 
+@dataclass(frozen=True, slots=True)
+class IntervalMapCursorPeek(Generic[T, V]):
+    value: IntervalMapEntry[T, V]
+
+
+@dataclass(frozen=True, slots=True)
+class IntervalMapCursorSearch(Generic[T, V]):
+    found: bool
+    cursor: PersistentIntervalMapCursor[T, V]
+
+
 class DuplicateIntervalError(ValueError):
     """Raised when strict insertion names an existing interval key."""
 
@@ -274,6 +285,51 @@ class PersistentIntervalMap(Generic[T, V]):
     def count_overlaps(self, probe: Interval[T]) -> int:
         return len(self.find_overlaps(probe))
 
+    def cursor_at(self, position: int = 0) -> PersistentIntervalMapCursor[T, V]:
+        return PersistentIntervalMapCursor(self, position)
+
+    def cursor_at_lower_bound(self, interval: Interval[T]) -> PersistentIntervalMapCursor[T, V]:
+        self._require_valid(interval)
+        return self.cursor_at(self._lower_bound(interval))
+
+    def cursor_at_upper_bound(self, interval: Interval[T]) -> PersistentIntervalMapCursor[T, V]:
+        cursor = self.cursor_at_lower_bound(interval)
+        candidate = cursor.peek_next()
+        return (
+            cursor.move_next()
+            if candidate is not None
+            and _compare_intervals(candidate.value.interval, interval, self.comparator) == 0
+            else cursor
+        )
+
+    def find_cursor(self, interval: Interval[T]) -> IntervalMapCursorSearch[T, V]:
+        cursor = self.cursor_at_lower_bound(interval)
+        candidate = cursor.peek_next()
+        return IntervalMapCursorSearch(
+            candidate is not None
+            and _compare_intervals(candidate.value.interval, interval, self.comparator) == 0,
+            cursor,
+        )
+
+    def find_overlap_cursor(self, probe: Interval[T]) -> IntervalMapCursorSearch[T, V]:
+        return self._find_overlap_cursor_from(0, probe)
+
+    def find_containing_cursor(self, point: T) -> IntervalMapCursorSearch[T, V]:
+        return self.find_overlap_cursor(Interval(point, point, self.comparator))
+
+    def _find_overlap_cursor_from(
+        self, start: int, probe: Interval[T]
+    ) -> IntervalMapCursorSearch[T, V]:
+        self._require_valid(probe)
+        if start < 0 or start > len(self):
+            raise IndexError("Cursor start is outside the interval map.")
+        for position, entry in enumerate(tuple(self)[start:], start):
+            if self.comparator(entry.interval.low, probe.high) > 0:
+                break
+            if entry.interval.overlaps(probe, self.comparator):
+                return IntervalMapCursorSearch(True, self.cursor_at(position))
+        return IntervalMapCursorSearch(False, self.cursor_at(len(self)))
+
     def keys(self) -> Iterator[Interval[T]]:
         for entry in self._entries:
             yield entry.interval
@@ -353,10 +409,99 @@ class PersistentIntervalMap(Generic[T, V]):
         return PersistentIntervalMap(entries, self.comparator, self.value_equals, self._measure)
 
 
+@dataclass(frozen=True, slots=True)
+class PersistentIntervalMapCursor(Generic[T, V]):
+    """Immutable interval-key-order root-plus-rank cursor."""
+
+    map: PersistentIntervalMap[T, V]
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        if self.position < 0 or self.position > len(self.map):
+            raise IndexError("Cursor position is outside the interval map.")
+
+    @property
+    def count(self) -> int:
+        return len(self.map)
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.count
+
+    def peek_previous(self) -> IntervalMapCursorPeek[T, V] | None:
+        return (
+            None if self.is_at_start else IntervalMapCursorPeek(tuple(self.map)[self.position - 1])
+        )
+
+    def peek_next(self) -> IntervalMapCursorPeek[T, V] | None:
+        return None if self.is_at_end else IntervalMapCursorPeek(tuple(self.map)[self.position])
+
+    def move_previous(self) -> PersistentIntervalMapCursor[T, V]:
+        if self.is_at_start:
+            raise IndexError("Cursor is already at the start.")
+        return PersistentIntervalMapCursor(self.map, self.position - 1)
+
+    def move_next(self) -> PersistentIntervalMapCursor[T, V]:
+        if self.is_at_end:
+            raise IndexError("Cursor is already at the end.")
+        return PersistentIntervalMapCursor(self.map, self.position + 1)
+
+    def seek_rank(self, position: int) -> PersistentIntervalMapCursor[T, V]:
+        return (
+            self if position == self.position else PersistentIntervalMapCursor(self.map, position)
+        )
+
+    def seek_next_overlap(self, probe: Interval[T]) -> IntervalMapCursorSearch[T, V]:
+        start = self.position + 1 if self.position < self.count else self.count
+        return self.map._find_overlap_cursor_from(start, probe)
+
+    def insert(self, interval: Interval[T], value: V) -> PersistentIntervalMapCursor[T, V]:
+        position = self.map._lower_bound(interval)
+        return PersistentIntervalMapCursor(self.map.add(interval, value), position + 1)
+
+    def try_insert(self, interval: Interval[T], value: V) -> IntervalMapCursorSearch[T, V]:
+        position = self.map._lower_bound(interval)
+        result = self.map.try_add(interval, value)
+        cursor = (
+            PersistentIntervalMapCursor(result.map, position + 1)
+            if result.added
+            else PersistentIntervalMapCursor(self.map, position)
+        )
+        return IntervalMapCursorSearch(result.added, cursor)
+
+    def set_next_value(self, value: V) -> PersistentIntervalMapCursor[T, V]:
+        entry = self.peek_next()
+        if entry is None:
+            raise IndexError("No entry follows the cursor.")
+        return PersistentIntervalMapCursor(self.map.set(entry.value.interval, value), self.position)
+
+    def delete_previous(self) -> PersistentIntervalMapCursor[T, V]:
+        entry = self.peek_previous()
+        if entry is None:
+            raise IndexError("No entry precedes the cursor.")
+        return PersistentIntervalMapCursor(self.map.remove(entry.value.interval), self.position - 1)
+
+    def delete_next(self) -> PersistentIntervalMapCursor[T, V]:
+        entry = self.peek_next()
+        if entry is None:
+            raise IndexError("No entry follows the cursor.")
+        return PersistentIntervalMapCursor(self.map.remove(entry.value.interval), self.position)
+
+    def snapshot(self) -> PersistentIntervalMap[T, V]:
+        return self.map
+
+
 __all__ = [
     "DuplicateIntervalError",
     "IntervalMapAddResult",
+    "IntervalMapCursorPeek",
+    "IntervalMapCursorSearch",
     "IntervalMapEntry",
     "IntervalMapLookup",
     "PersistentIntervalMap",
+    "PersistentIntervalMapCursor",
 ]

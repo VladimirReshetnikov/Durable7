@@ -60,6 +60,17 @@ class ChunkedBitSetStatistics:
     pop_count: int
 
 
+@dataclass(frozen=True, slots=True)
+class ChunkedBitSetCursorPeek:
+    value: int
+
+
+@dataclass(frozen=True, slots=True)
+class ChunkedBitSetCursorSearch:
+    found: bool
+    cursor: PersistentChunkedBitSetCursor
+
+
 class PersistentChunkedBitSet:
     """Immutable sparse bit set over the nonnegative signed-32-bit domain.
 
@@ -220,6 +231,19 @@ class PersistentChunkedBitSet:
     def clear(self) -> PersistentChunkedBitSet:
         return self if self.is_empty else self.empty()
 
+    def cursor_at(self, position: int = 0) -> PersistentChunkedBitSetCursor:
+        return PersistentChunkedBitSetCursor(self, position)
+
+    def cursor_at_or_after(self, bit_index: int) -> PersistentChunkedBitSetCursor:
+        return self.cursor_at(0 if bit_index <= 0 else self.rank(bit_index - 1))
+
+    def find_cursor(self, bit_index: int) -> ChunkedBitSetCursorSearch:
+        cursor = self.cursor_at_or_after(bit_index)
+        candidate = cursor.peek_next()
+        return ChunkedBitSetCursorSearch(
+            bit_index >= 0 and candidate is not None and candidate.value == bit_index, cursor
+        )
+
     def __iter__(self) -> Iterator[int]:
         for chunk in self._chunks:
             bits = chunk.bits
@@ -303,6 +327,77 @@ class PersistentChunkedBitSet:
         return PersistentChunkedBitSet(MeasuredSequence.from_iterable(result, _BIT_SET_MEASURE))
 
 
+@dataclass(frozen=True, slots=True)
+class PersistentChunkedBitSetCursor:
+    """Immutable root-plus-population-rank cursor over present set bits."""
+
+    set: PersistentChunkedBitSet
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        if self.position < 0 or self.position > self.set.count:
+            raise IndexError("Cursor position is outside the chunked bit set.")
+
+    @property
+    def count(self) -> int:
+        return self.set.count
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.count
+
+    def peek_previous(self) -> ChunkedBitSetCursorPeek | None:
+        return (
+            None
+            if self.is_at_start
+            else ChunkedBitSetCursorPeek(self.set.select(self.position - 1))
+        )
+
+    def peek_next(self) -> ChunkedBitSetCursorPeek | None:
+        return None if self.is_at_end else ChunkedBitSetCursorPeek(self.set.select(self.position))
+
+    def move_previous(self) -> PersistentChunkedBitSetCursor:
+        if self.is_at_start:
+            raise IndexError("Cursor is already at the start.")
+        return PersistentChunkedBitSetCursor(self.set, self.position - 1)
+
+    def move_next(self) -> PersistentChunkedBitSetCursor:
+        if self.is_at_end:
+            raise IndexError("Cursor is already at the end.")
+        return PersistentChunkedBitSetCursor(self.set, self.position + 1)
+
+    def seek_rank(self, position: int) -> PersistentChunkedBitSetCursor:
+        return (
+            self if position == self.position else PersistentChunkedBitSetCursor(self.set, position)
+        )
+
+    def add(self, bit_index: int) -> PersistentChunkedBitSetCursor:
+        updated = self.set.add(bit_index)
+        if updated is self.set:
+            return self
+        position = 0 if bit_index == 0 else self.set.rank(bit_index - 1)
+        return PersistentChunkedBitSetCursor(updated, position + 1)
+
+    def delete_previous(self) -> PersistentChunkedBitSetCursor:
+        bit = self.peek_previous()
+        if bit is None:
+            raise IndexError("No set bit precedes the cursor.")
+        return PersistentChunkedBitSetCursor(self.set.remove(bit.value), self.position - 1)
+
+    def delete_next(self) -> PersistentChunkedBitSetCursor:
+        bit = self.peek_next()
+        if bit is None:
+            raise IndexError("No set bit follows the cursor.")
+        return PersistentChunkedBitSetCursor(self.set.remove(bit.value), self.position)
+
+    def snapshot(self) -> PersistentChunkedBitSet:
+        return self.set
+
+
 def _require_bit_index(bit_index: int) -> None:
     if type(bit_index) is not int or bit_index < 0 or bit_index > _MAXIMUM_BIT_INDEX:
         raise ValueError("bit_index must be a nonnegative signed-32-bit integer.")
@@ -311,7 +406,10 @@ def _require_bit_index(bit_index: int) -> None:
 _EMPTY_BIT_SET = PersistentChunkedBitSet(MeasuredSequence.empty(_BIT_SET_MEASURE))
 
 __all__ = [
+    "ChunkedBitSetCursorPeek",
+    "ChunkedBitSetCursorSearch",
     "ChunkedBitSetStatistics",
     "ChunkedBitSetUpdateResult",
     "PersistentChunkedBitSet",
+    "PersistentChunkedBitSetCursor",
 ]

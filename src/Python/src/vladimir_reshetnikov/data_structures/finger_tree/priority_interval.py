@@ -152,6 +152,17 @@ class IntervalRemoveResult(Generic[T]):
 
 
 @dataclass(frozen=True, slots=True)
+class IntervalCursorPeek(Generic[T]):
+    value: Interval[T]
+
+
+@dataclass(frozen=True, slots=True)
+class IntervalCursorSearch(Generic[T]):
+    found: bool
+    cursor: IntervalTreeCursor[T]
+
+
+@dataclass(frozen=True, slots=True)
 class _IntervalSummary(Generic[T]):
     maximum_high: OptionalValue[T]
     last_low: OptionalValue[T]
@@ -304,6 +315,44 @@ class IntervalTree(Generic[T]):
     def count_overlaps(self, probe: Interval[T]) -> int:
         return len(self.find_overlaps(probe))
 
+    def cursor_at(self, position: int = 0) -> IntervalTreeCursor[T]:
+        return IntervalTreeCursor(self, position)
+
+    def cursor_at_lower_bound(self, low: T) -> IntervalTreeCursor[T]:
+        return self.cursor_at(self._lower_bound(low))
+
+    def cursor_at_upper_bound(self, low: T) -> IntervalTreeCursor[T]:
+        position = self._lower_bound(low)
+        values = self.to_list()
+        while position < len(values) and self.comparator(values[position].low, low) == 0:
+            position += 1
+        return self.cursor_at(position)
+
+    def find_cursor(self, interval: Interval[T]) -> IntervalCursorSearch[T]:
+        position = self._lower_bound(interval.low)
+        values = self.to_list()
+        while position < len(values) and self.comparator(values[position].low, interval.low) == 0:
+            if self.comparator(values[position].high, interval.high) == 0:
+                return IntervalCursorSearch(True, self.cursor_at(position))
+            position += 1
+        return IntervalCursorSearch(False, self.cursor_at(self._lower_bound(interval.low)))
+
+    def find_overlap_cursor(self, probe: Interval[T]) -> IntervalCursorSearch[T]:
+        return self._find_overlap_cursor_from(0, probe)
+
+    def find_containing_cursor(self, point: T) -> IntervalCursorSearch[T]:
+        return self.find_overlap_cursor(Interval(point, point, self.comparator))
+
+    def _find_overlap_cursor_from(self, start: int, probe: Interval[T]) -> IntervalCursorSearch[T]:
+        if start < 0 or start > len(self):
+            raise IndexError("Cursor start is outside the interval tree.")
+        for position, interval in enumerate(self.to_list()[start:], start):
+            if self.comparator(interval.low, probe.high) > 0:
+                break
+            if interval.overlaps(probe, self.comparator):
+                return IntervalCursorSearch(True, self.cursor_at(position))
+        return IntervalCursorSearch(False, self.cursor_at(len(self)))
+
     def coalesce(self) -> IntervalTree[T]:
         if len(self) < 2:
             return self
@@ -331,10 +380,87 @@ class IntervalTree(Generic[T]):
         return iter(self._intervals)
 
 
+@dataclass(frozen=True, slots=True)
+class IntervalTreeCursor(Generic[T]):
+    """Immutable low-endpoint-order root-plus-rank cursor."""
+
+    tree: IntervalTree[T]
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        if self.position < 0 or self.position > len(self.tree):
+            raise IndexError("Cursor position is outside the interval tree.")
+
+    @property
+    def count(self) -> int:
+        return len(self.tree)
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.count
+
+    def peek_previous(self) -> IntervalCursorPeek[T] | None:
+        return (
+            None if self.is_at_start else IntervalCursorPeek(self.tree.to_list()[self.position - 1])
+        )
+
+    def peek_next(self) -> IntervalCursorPeek[T] | None:
+        return None if self.is_at_end else IntervalCursorPeek(self.tree.to_list()[self.position])
+
+    def move_previous(self) -> IntervalTreeCursor[T]:
+        if self.is_at_start:
+            raise IndexError("Cursor is already at the start.")
+        return IntervalTreeCursor(self.tree, self.position - 1)
+
+    def move_next(self) -> IntervalTreeCursor[T]:
+        if self.is_at_end:
+            raise IndexError("Cursor is already at the end.")
+        return IntervalTreeCursor(self.tree, self.position + 1)
+
+    def seek_rank(self, position: int) -> IntervalTreeCursor[T]:
+        return self if position == self.position else IntervalTreeCursor(self.tree, position)
+
+    def seek_next_overlap(self, probe: Interval[T]) -> IntervalCursorSearch[T]:
+        start = self.position + 1 if self.position < self.count else self.count
+        return self.tree._find_overlap_cursor_from(start, probe)
+
+    def insert(self, interval: Interval[T]) -> IntervalTreeCursor[T]:
+        position = self.tree._lower_bound(interval.low)
+        return IntervalTreeCursor(self.tree.insert(interval), position + 1)
+
+    def _delete_at(self, rank: int, position: int) -> IntervalTreeCursor[T]:
+        intervals = self.tree._intervals.remove_at(rank)
+        if intervals is None:
+            raise AssertionError("Validated interval cursor removal failed.")
+        return IntervalTreeCursor(
+            IntervalTree(intervals, self.tree.comparator, self.tree._measure), position
+        )
+
+    def delete_previous(self) -> IntervalTreeCursor[T]:
+        if self.is_at_start:
+            raise IndexError("No occurrence precedes the cursor.")
+        return self._delete_at(self.position - 1, self.position - 1)
+
+    def delete_next(self) -> IntervalTreeCursor[T]:
+        if self.is_at_end:
+            raise IndexError("No occurrence follows the cursor.")
+        return self._delete_at(self.position, self.position)
+
+    def snapshot(self) -> IntervalTree[T]:
+        return self.tree
+
+
 __all__ = [
     "Interval",
+    "IntervalCursorPeek",
+    "IntervalCursorSearch",
     "IntervalRemoveResult",
     "IntervalTree",
+    "IntervalTreeCursor",
     "PriorityDequeue",
     "PriorityEntry",
     "PriorityQueue",

@@ -49,6 +49,17 @@ class SortedMapRemoveResult(Generic[K, V]):
     value: V
 
 
+@dataclass(frozen=True, slots=True)
+class OrderedCursorPeek(Generic[T]):
+    value: T
+
+
+@dataclass(frozen=True, slots=True)
+class OrderedCursorSearch(Generic[R]):
+    found: bool
+    cursor: R
+
+
 class SortedBag(Generic[T]):
     __slots__ = ("_items", "comparator")
 
@@ -156,6 +167,22 @@ class SortedBag(Generic[T]):
 
     def shares_storage_with(self, other: SortedBag[T]) -> bool:
         return self._items.shares_structure_with(other._items)
+
+    def cursor_at(self, position: int = 0) -> SortedBagCursor[T]:
+        return SortedBagCursor(self, position)
+
+    def cursor_at_lower_bound(self, value: T) -> SortedBagCursor[T]:
+        return self.cursor_at(self.count_less_than(value))
+
+    def cursor_at_upper_bound(self, value: T) -> SortedBagCursor[T]:
+        return self.cursor_at(self.count_at_most(value))
+
+    def find_cursor(self, value: T) -> OrderedCursorSearch[SortedBagCursor[T]]:
+        cursor = self.cursor_at_lower_bound(value)
+        candidate = cursor.peek_next()
+        return OrderedCursorSearch(
+            candidate is not None and self.comparator(candidate.value, value) == 0, cursor
+        )
 
     def __iter__(self) -> Iterator[T]:
         return iter(self._items)
@@ -317,6 +344,22 @@ class SortedSet(Generic[T]):
 
     def shares_storage_with(self, other: SortedSet[T]) -> bool:
         return self._items.shares_structure_with(other._items)
+
+    def cursor_at(self, position: int = 0) -> SortedSetCursor[T]:
+        return SortedSetCursor(self, position)
+
+    def cursor_at_lower_bound(self, value: T) -> SortedSetCursor[T]:
+        return self.cursor_at(self._items.lower_bound(value, self.comparator))
+
+    def cursor_at_upper_bound(self, value: T) -> SortedSetCursor[T]:
+        return self.cursor_at(self._items.upper_bound(value, self.comparator))
+
+    def find_cursor(self, value: T) -> OrderedCursorSearch[SortedSetCursor[T]]:
+        cursor = self.cursor_at_lower_bound(value)
+        candidate = cursor.peek_next()
+        return OrderedCursorSearch(
+            candidate is not None and self.comparator(candidate.value, value) == 0, cursor
+        )
 
     def __contains__(self, value: object) -> bool:
         return self.contains(cast(T, value))
@@ -490,8 +533,255 @@ class SortedMap(Generic[K, V]):
     def shares_storage_with(self, other: SortedMap[K, V]) -> bool:
         return self._entries.shares_structure_with(other._entries)
 
+    def cursor_at(self, position: int = 0) -> SortedMapCursor[K, V]:
+        return SortedMapCursor(self, position)
+
+    def cursor_at_lower_bound(self, key: K) -> SortedMapCursor[K, V]:
+        return self.cursor_at(self._lower_bound(key))
+
+    def cursor_at_upper_bound(self, key: K) -> SortedMapCursor[K, V]:
+        return self.cursor_at(self._upper_bound(key))
+
+    def find_cursor(self, key: K) -> OrderedCursorSearch[SortedMapCursor[K, V]]:
+        cursor = self.cursor_at_lower_bound(key)
+        candidate = cursor.peek_next()
+        return OrderedCursorSearch(
+            candidate is not None and self.comparator(candidate.value.key, key) == 0, cursor
+        )
+
     def __iter__(self) -> Iterator[SortedMapEntry[K, V]]:
         return iter(self._entries)
+
+
+@dataclass(frozen=True, slots=True)
+class SortedBagCursor(Generic[T]):
+    """Immutable root-plus-rank cursor over a persistent sorted bag."""
+
+    bag: SortedBag[T]
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        _require_cursor_rank(self.position, len(self.bag), "sorted bag")
+
+    @property
+    def count(self) -> int:
+        return len(self.bag)
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.count
+
+    def peek_previous(self) -> OrderedCursorPeek[T] | None:
+        return (
+            None
+            if self.is_at_start
+            else OrderedCursorPeek(cast(T, self.bag.get(self.position - 1)))
+        )
+
+    def peek_next(self) -> OrderedCursorPeek[T] | None:
+        return None if self.is_at_end else OrderedCursorPeek(cast(T, self.bag.get(self.position)))
+
+    def move_previous(self) -> SortedBagCursor[T]:
+        if self.is_at_start:
+            raise IndexError("Cursor is already at the start.")
+        return SortedBagCursor(self.bag, self.position - 1)
+
+    def move_next(self) -> SortedBagCursor[T]:
+        if self.is_at_end:
+            raise IndexError("Cursor is already at the end.")
+        return SortedBagCursor(self.bag, self.position + 1)
+
+    def seek_rank(self, position: int) -> SortedBagCursor[T]:
+        return self if position == self.position else SortedBagCursor(self.bag, position)
+
+    def add(self, value: T) -> SortedBagCursor[T]:
+        position = self.bag.count_at_most(value)
+        return SortedBagCursor(self.bag.add(value), position + 1)
+
+    def _delete_at(self, rank: int, position: int) -> SortedBagCursor[T]:
+        items = self.bag._items.remove_at(rank)
+        if items is None:
+            raise AssertionError("Validated cursor removal failed.")
+        return SortedBagCursor(SortedBag(items, self.bag.comparator), position)
+
+    def delete_previous(self) -> SortedBagCursor[T]:
+        if self.is_at_start:
+            raise IndexError("No occurrence precedes the cursor.")
+        return self._delete_at(self.position - 1, self.position - 1)
+
+    def delete_next(self) -> SortedBagCursor[T]:
+        if self.is_at_end:
+            raise IndexError("No occurrence follows the cursor.")
+        return self._delete_at(self.position, self.position)
+
+    def snapshot(self) -> SortedBag[T]:
+        return self.bag
+
+
+@dataclass(frozen=True, slots=True)
+class SortedSetCursor(Generic[T]):
+    """Immutable root-plus-rank cursor over a persistent sorted set."""
+
+    set: SortedSet[T]
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        _require_cursor_rank(self.position, len(self.set), "sorted set")
+
+    @property
+    def count(self) -> int:
+        return len(self.set)
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.count
+
+    def peek_previous(self) -> OrderedCursorPeek[T] | None:
+        return (
+            None
+            if self.is_at_start
+            else OrderedCursorPeek(cast(T, self.set.get(self.position - 1)))
+        )
+
+    def peek_next(self) -> OrderedCursorPeek[T] | None:
+        return None if self.is_at_end else OrderedCursorPeek(cast(T, self.set.get(self.position)))
+
+    def move_previous(self) -> SortedSetCursor[T]:
+        if self.is_at_start:
+            raise IndexError("Cursor is already at the start.")
+        return SortedSetCursor(self.set, self.position - 1)
+
+    def move_next(self) -> SortedSetCursor[T]:
+        if self.is_at_end:
+            raise IndexError("Cursor is already at the end.")
+        return SortedSetCursor(self.set, self.position + 1)
+
+    def seek_rank(self, position: int) -> SortedSetCursor[T]:
+        return self if position == self.position else SortedSetCursor(self.set, position)
+
+    def add(self, value: T) -> SortedSetCursor[T]:
+        location = self.set.cursor_at_lower_bound(value)
+        return SortedSetCursor(self.set.add(value), location.position + 1)
+
+    def delete_previous(self) -> SortedSetCursor[T]:
+        item = self.peek_previous()
+        if item is None:
+            raise IndexError("No item precedes the cursor.")
+        return SortedSetCursor(self.set.remove(item.value), self.position - 1)
+
+    def delete_next(self) -> SortedSetCursor[T]:
+        item = self.peek_next()
+        if item is None:
+            raise IndexError("No item follows the cursor.")
+        return SortedSetCursor(self.set.remove(item.value), self.position)
+
+    def snapshot(self) -> SortedSet[T]:
+        return self.set
+
+
+@dataclass(frozen=True, slots=True)
+class SortedMapCursor(Generic[K, V]):
+    """Immutable key-order root-plus-rank cursor over a persistent sorted map."""
+
+    map: SortedMap[K, V]
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        _require_cursor_rank(self.position, len(self.map), "sorted map")
+
+    @property
+    def count(self) -> int:
+        return len(self.map)
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.count
+
+    def peek_previous(self) -> OrderedCursorPeek[SortedMapEntry[K, V]] | None:
+        return (
+            None
+            if self.is_at_start
+            else OrderedCursorPeek(cast(SortedMapEntry[K, V], self.map.entry_at(self.position - 1)))
+        )
+
+    def peek_next(self) -> OrderedCursorPeek[SortedMapEntry[K, V]] | None:
+        return (
+            None
+            if self.is_at_end
+            else OrderedCursorPeek(cast(SortedMapEntry[K, V], self.map.entry_at(self.position)))
+        )
+
+    def move_previous(self) -> SortedMapCursor[K, V]:
+        if self.is_at_start:
+            raise IndexError("Cursor is already at the start.")
+        return SortedMapCursor(self.map, self.position - 1)
+
+    def move_next(self) -> SortedMapCursor[K, V]:
+        if self.is_at_end:
+            raise IndexError("Cursor is already at the end.")
+        return SortedMapCursor(self.map, self.position + 1)
+
+    def seek_rank(self, position: int) -> SortedMapCursor[K, V]:
+        return self if position == self.position else SortedMapCursor(self.map, position)
+
+    def insert(self, key: K, value: V) -> SortedMapCursor[K, V]:
+        position = self.map._lower_bound(key)
+        return SortedMapCursor(self.map.insert(key, value), position + 1)
+
+    def try_insert(self, key: K, value: V) -> OrderedCursorSearch[SortedMapCursor[K, V]]:
+        position = self.map._lower_bound(key)
+        result = self.map.try_insert(key, value)
+        cursor = (
+            SortedMapCursor(result.value, position + 1)
+            if result.added
+            else SortedMapCursor(self.map, position)
+        )
+        return OrderedCursorSearch(result.added, cursor)
+
+    def set_item(self, key: K, value: V) -> SortedMapCursor[K, V]:
+        location = self.map.find_cursor(key)
+        return SortedMapCursor(
+            self.map.set_item(key, value),
+            location.cursor.position if location.found else location.cursor.position + 1,
+        )
+
+    def set_next_value(self, value: V) -> SortedMapCursor[K, V]:
+        entry = self.peek_next()
+        if entry is None:
+            raise IndexError("No entry follows the cursor.")
+        return SortedMapCursor(self.map.set_item(entry.value.key, value), self.position)
+
+    def delete_previous(self) -> SortedMapCursor[K, V]:
+        entry = self.peek_previous()
+        if entry is None:
+            raise IndexError("No entry precedes the cursor.")
+        return SortedMapCursor(self.map.remove(entry.value.key), self.position - 1)
+
+    def delete_next(self) -> SortedMapCursor[K, V]:
+        entry = self.peek_next()
+        if entry is None:
+            raise IndexError("No entry follows the cursor.")
+        return SortedMapCursor(self.map.remove(entry.value.key), self.position)
+
+    def snapshot(self) -> SortedMap[K, V]:
+        return self.map
+
+
+def _require_cursor_rank(position: int, count: int, family: str) -> None:
+    if position < 0 or position > count:
+        raise IndexError(f"Cursor position is outside the {family}.")
 
 
 class SortedSetBuilder(Generic[T]):
@@ -543,13 +833,18 @@ class SortedMapBuilder(Generic[K, V]):
 
 
 __all__ = [
+    "OrderedCursorPeek",
+    "OrderedCursorSearch",
     "SortedAddResult",
     "SortedBag",
+    "SortedBagCursor",
     "SortedDuplicateKeyError",
     "SortedMap",
     "SortedMapBuilder",
+    "SortedMapCursor",
     "SortedMapEntry",
     "SortedMapRemoveResult",
     "SortedSet",
     "SortedSetBuilder",
+    "SortedSetCursor",
 ]

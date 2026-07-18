@@ -354,6 +354,17 @@ class CanonicalSortedSetStatistics:
     priority_collision_count: int
 
 
+@dataclass(frozen=True, slots=True)
+class CanonicalCursorPeek(Generic[T]):
+    value: T
+
+
+@dataclass(frozen=True, slots=True)
+class CanonicalCursorSearch(Generic[T]):
+    found: bool
+    cursor: CanonicalSortedSetCursor[T]
+
+
 class CanonicalSortedSet(Generic[T]):
     """Immutable policy-canonical Cartesian search tree."""
 
@@ -606,13 +617,107 @@ class CanonicalSortedSet(Generic[T]):
             raise ValueError("Canonical set root metadata invariant failed.")
         return CanonicalSortedSetStatistics(count, height, max_rank, collisions)
 
+    def _bound_rank(self, value: T, upper: bool) -> int:
+        rank = 0
+        node = self._root
+        while node is not None:
+            comparison = self.policy.comparator(node.item, value)
+            if comparison < 0 or (upper and comparison == 0):
+                rank += (0 if node.left is None else node.left.count) + 1
+                node = node.right
+            else:
+                node = node.left
+        return rank
+
+    def cursor_at(self, position: int = 0) -> CanonicalSortedSetCursor[T]:
+        return CanonicalSortedSetCursor(self, position)
+
+    def cursor_at_lower_bound(self, value: T) -> CanonicalSortedSetCursor[T]:
+        return self.cursor_at(self._bound_rank(value, False))
+
+    def cursor_at_upper_bound(self, value: T) -> CanonicalSortedSetCursor[T]:
+        return self.cursor_at(self._bound_rank(value, True))
+
+    def find_cursor(self, value: T) -> CanonicalCursorSearch[T]:
+        cursor = self.cursor_at_lower_bound(value)
+        candidate = cursor.peek_next()
+        return CanonicalCursorSearch(
+            candidate is not None and self.policy.comparator(candidate.value, value) == 0,
+            cursor,
+        )
+
     def __iter__(self) -> Iterator[T]:
         return iter(()) if self._root is None else _iterate(self._root)
 
 
+@dataclass(frozen=True, slots=True)
+class CanonicalSortedSetCursor(Generic[T]):
+    """Immutable policy-preserving root-plus-rank cursor."""
+
+    set: CanonicalSortedSet[T]
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        if self.position < 0 or self.position > len(self.set):
+            raise IndexError("Cursor position is outside the canonical sorted set.")
+
+    @property
+    def count(self) -> int:
+        return len(self.set)
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.count
+
+    def peek_previous(self) -> CanonicalCursorPeek[T] | None:
+        return None if self.is_at_start else CanonicalCursorPeek(tuple(self.set)[self.position - 1])
+
+    def peek_next(self) -> CanonicalCursorPeek[T] | None:
+        return None if self.is_at_end else CanonicalCursorPeek(tuple(self.set)[self.position])
+
+    def move_previous(self) -> CanonicalSortedSetCursor[T]:
+        if self.is_at_start:
+            raise IndexError("Cursor is already at the start.")
+        return CanonicalSortedSetCursor(self.set, self.position - 1)
+
+    def move_next(self) -> CanonicalSortedSetCursor[T]:
+        if self.is_at_end:
+            raise IndexError("Cursor is already at the end.")
+        return CanonicalSortedSetCursor(self.set, self.position + 1)
+
+    def seek_rank(self, position: int) -> CanonicalSortedSetCursor[T]:
+        return self if position == self.position else CanonicalSortedSetCursor(self.set, position)
+
+    def add(self, value: T) -> CanonicalSortedSetCursor[T]:
+        position = self.set._bound_rank(value, False)
+        return CanonicalSortedSetCursor(self.set.add(value), position + 1)
+
+    def delete_previous(self) -> CanonicalSortedSetCursor[T]:
+        item = self.peek_previous()
+        if item is None:
+            raise IndexError("No item precedes the cursor.")
+        return CanonicalSortedSetCursor(self.set.remove(item.value), self.position - 1)
+
+    def delete_next(self) -> CanonicalSortedSetCursor[T]:
+        item = self.peek_next()
+        if item is None:
+            raise IndexError("No item follows the cursor.")
+        return CanonicalSortedSetCursor(self.set.remove(item.value), self.position)
+
+    def snapshot(self) -> CanonicalSortedSet[T]:
+        return self.set
+
+
 __all__ = [
+    "CanonicalCursorPeek",
+    "CanonicalCursorSearch",
     "CanonicalSetLookup",
     "CanonicalSortedSet",
+    "CanonicalSortedSetCursor",
     "CanonicalSortedSetStatistics",
     "ZipTreeRank",
     "ZipTreeRankPolicy",
