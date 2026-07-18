@@ -53,6 +53,8 @@ module Data.Structures.FingerTree.CanonicalSortedSet
   , shapeForTesting
   , sharesRootWith
   , sharedNodeCount
+  , cursorBoundRank
+  , cursorIndex
   ) where
 
 import Prelude hiding (null)
@@ -248,6 +250,31 @@ rankFor policy item =
       !secondary = word64At 8 digest
       !content = word64At 16 digest
   in ZipTreeRank (countLeadingZeros primary) secondary content
+
+-- | Population rank of the lower or upper policy-order bound.
+cursorBoundRank :: Bool -> a -> CanonicalSortedSet a -> Int
+cursorBoundRank upper item (CanonicalSortedSet policy root) = go 0 root
+  where
+    go !rank Nothing = rank
+    go !rank (Just node) =
+      case policyCompare policy (nodeItem node) item of
+        LT -> go (rank + maybe 0 nodeCount (nodeLeft node) + 1) (nodeRight node)
+        EQ | upper -> go (rank + maybe 0 nodeCount (nodeLeft node) + 1) (nodeRight node)
+        _ -> go rank (nodeLeft node)
+
+-- | Item at a zero-based policy-order population rank.
+cursorIndex :: Int -> CanonicalSortedSet a -> Maybe a
+cursorIndex position (CanonicalSortedSet _ root)
+  | position < 0 = Nothing
+  | otherwise = go position root
+  where
+    go _ Nothing = Nothing
+    go remaining (Just node)
+      | remaining < leftCount = go remaining (nodeLeft node)
+      | remaining == leftCount = Just (nodeItem node)
+      | otherwise = go (remaining - leftCount - 1) (nodeRight node)
+      where
+        leftCount = maybe 0 nodeCount (nodeLeft node)
 
 -- | Creates an empty set retaining the supplied policy.
 empty :: ZipTreeRankPolicy a -> CanonicalSortedSet a

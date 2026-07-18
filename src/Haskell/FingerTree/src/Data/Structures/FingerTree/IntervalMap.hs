@@ -17,6 +17,8 @@ module Data.Structures.FingerTree.IntervalMap
   , countOverlaps
   , toList
   , validStructure
+  , lowerBoundRank
+  , upperBoundRank
   ) where
 
 import Prelude hiding (lookup, null)
@@ -103,6 +105,14 @@ validStructure (IntervalMap intervals values) =
   IntervalTree.count intervals == Map.size values
     && all (`Map.member` values) (IntervalTree.toList intervals)
     && all (`IntervalTree.contains` intervals) (Map.keys values)
+
+lowerBoundRank :: Ord a => Interval a -> IntervalMap a v -> Int
+lowerBoundRank interval (IntervalMap _ values) = Map.size lower
+  where
+    (lower, _) = Map.split interval values
+
+upperBoundRank :: Ord a => Interval a -> IntervalMap a v -> Int
+upperBoundRank interval mapValue = lowerBoundRank interval mapValue + if member interval mapValue then 1 else 0
 
 invalid :: Ord a => Interval a -> Bool
 invalid interval = low interval > high interval

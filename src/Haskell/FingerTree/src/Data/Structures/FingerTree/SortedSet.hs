@@ -17,6 +17,8 @@ module Data.Structures.FingerTree.SortedSet
   , higher
   , index
   , indexOf
+  , countLessThan
+  , countAtMost
   , slice
   , union
   , intersection
@@ -101,6 +103,14 @@ index position (SortedSet values)
 
 indexOf :: Ord a => a -> SortedSet a -> Maybe Int
 indexOf value (SortedSet values) = Set.lookupIndex value values
+
+countLessThan :: Ord a => a -> SortedSet a -> Int
+countLessThan value (SortedSet values) = Set.size lowerValues
+  where
+    (lowerValues, _) = Set.split value values
+
+countAtMost :: Ord a => a -> SortedSet a -> Int
+countAtMost value setValue = countLessThan value setValue + if member value setValue then 1 else 0
 
 slice :: Ord a => Int -> Int -> SortedSet a -> Maybe (SortedSet a)
 slice position lengthValue setValue

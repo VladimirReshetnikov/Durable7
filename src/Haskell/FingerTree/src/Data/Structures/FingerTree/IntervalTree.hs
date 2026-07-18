@@ -19,6 +19,10 @@ module Data.Structures.FingerTree.IntervalTree
   , countOverlaps
   , findContaining
   , coalesce
+  , lowerBoundRank
+  , upperBoundRank
+  , index
+  , deleteAt
   ) where
 
 import Prelude hiding (null)
@@ -129,6 +133,33 @@ findContaining point = findOverlap (Interval point point)
 
 coalesce :: Ord a => IntervalTree a -> IntervalTree a
 coalesce = fromList . mergeSorted . toList
+
+lowerBoundRank :: Ord a => a -> IntervalTree a -> Int
+lowerBoundRank lowValue (IntervalTree tree) = intervalCount (FT.measureTree left)
+  where
+    (left, _) = splitLowerBound lowValue tree
+
+upperBoundRank :: Ord a => a -> IntervalTree a -> Int
+upperBoundRank lowValue tree = go (lowerBoundRank lowValue tree)
+  where
+    go position =
+      case index position tree of
+        Just interval | compare (low interval) lowValue == EQ -> go (position + 1)
+        _ -> position
+
+index :: Ord a => Int -> IntervalTree a -> Maybe (Interval a)
+index position tree@(IntervalTree values)
+  | position < 0 || position >= count tree = Nothing
+  | otherwise = do
+      (_, IntervalEntry interval) <- FT.locate (\measureValue -> intervalCount measureValue > position) values
+      pure interval
+
+deleteAt :: Ord a => Int -> IntervalTree a -> Maybe (IntervalTree a)
+deleteAt position tree@(IntervalTree values)
+  | position < 0 || position >= count tree = Nothing
+  | otherwise = do
+      (left, _, right) <- FT.split (\measureValue -> intervalCount measureValue > position) values
+      pure (IntervalTree (FT.append left right))
 
 splitLowerBound :: Ord a => a -> FT.FingerTree (IntervalMeasure a) (IntervalEntry a) -> (FT.FingerTree (IntervalMeasure a) (IntervalEntry a), FT.FingerTree (IntervalMeasure a) (IntervalEntry a))
 splitLowerBound lowValue tree =

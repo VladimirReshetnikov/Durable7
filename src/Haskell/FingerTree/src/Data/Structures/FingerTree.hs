@@ -29,6 +29,16 @@ module Data.Structures.FingerTree
   , PrioritySearchQueue.PrioritySearchEntry(..)
   , PrioritySearchQueue.PrioritySearchQueueStatistics(..)
   , PersistentChunkedBitSet.PersistentChunkedBitSet
+  , OrderedSearchCursor.CursorSearch(..)
+  , OrderedSearchCursor.CursorInsert(..)
+  , OrderedSearchCursor.SortedBagCursor
+  , OrderedSearchCursor.SortedSetCursor
+  , OrderedSearchCursor.SortedMapCursor
+  , OrderedSearchCursor.CanonicalSortedSetCursor
+  , OrderedSearchCursor.PrioritySearchQueueCursor
+  , OrderedSearchCursor.IntervalTreeCursor
+  , OrderedSearchCursor.IntervalMapCursor
+  , OrderedSearchCursor.ChunkedBitSetCursor
   , IntervalTree.Interval(..)
   , IntervalTree.IntervalTree
   , IntervalMap.IntervalMap
@@ -48,6 +58,7 @@ import qualified Data.Structures.FingerTree.IntervalMap as IntervalMap
 import qualified Data.Structures.FingerTree.Measured as Measured
 import qualified Data.Structures.FingerTree.MeasuredRope as MeasuredRope
 import qualified Data.Structures.FingerTree.Measures as Measures
+import qualified Data.Structures.FingerTree.OrderedSearchCursor as OrderedSearchCursor
 import qualified Data.Structures.FingerTree.PriorityQueue as PriorityQueue
 import qualified Data.Structures.FingerTree.BrodalOkasakiHeap as BrodalOkasakiHeap
 import qualified Data.Structures.FingerTree.CanonicalSortedSet as CanonicalSortedSet

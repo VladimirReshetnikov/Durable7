@@ -20,6 +20,7 @@ module Data.Structures.FingerTree.SortedBag
   , countLessThan
   , countAtMost
   , index
+  , deleteAt
   , slice
   ) where
 
@@ -155,6 +156,14 @@ index position bag@(SortedBag buckets)
       (BagMeasure before _ _, bucket) <-
         Measured.locate (\measureValue -> measureCount measureValue > position) buckets
       Seq.lookup (position - before) (bucketSequence bucket)
+
+deleteAt :: Int -> SortedBag a -> Maybe (SortedBag a)
+deleteAt position bag@(SortedBag buckets)
+  | position < 0 || position >= count bag = Nothing
+  | otherwise =
+      let (left, selected) = splitAtRank position buckets
+          (_, right) = splitAtRank 1 selected
+       in Just (SortedBag (Measured.append left right))
 
 slice :: Ord a => Int -> Int -> SortedBag a -> Maybe (SortedBag a)
 slice position lengthValue bag@(SortedBag buckets)

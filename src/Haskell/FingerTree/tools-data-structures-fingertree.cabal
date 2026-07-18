@@ -20,6 +20,7 @@ library
     Data.Structures.FingerTree.Measured
     Data.Structures.FingerTree.MeasuredRope
     Data.Structures.FingerTree.Measures
+    Data.Structures.FingerTree.OrderedSearchCursor
     Data.Structures.FingerTree.PriorityQueue
     Data.Structures.FingerTree.PrioritySearchQueue
     Data.Structures.FingerTree.PersistentChunkedBitSet
@@ -48,6 +49,7 @@ test-suite ft-test
   hs-source-dirs: test
   other-modules:
     CanonicalSortedSetTests
+    OrderedSearchCursorTests
     RangeUpdateSequenceTests
   build-depends:
     base >=4.21 && <4.22,

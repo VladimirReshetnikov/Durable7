@@ -26,6 +26,8 @@ module Data.Structures.FingerTree.PrioritySearchQueue
   , enumerateAtMost
   , toAscList
   , validateStructure
+  , cursorBoundRank
+  , cursorIndex
   ) where
 
 import Prelude hiding (lookup, null)
@@ -181,6 +183,31 @@ toAscList (PrioritySearchQueue root) = go root []
     go Nothing tailValues = tailValues
     go (Just node) tailValues =
       go (nodeLeft node) (nodeEntry node : go (nodeRight node) tailValues)
+
+-- | Population rank of the lower or upper key-order bound.
+cursorBoundRank :: Ord k => Bool -> k -> PrioritySearchQueue k p v -> Int
+cursorBoundRank upper key (PrioritySearchQueue root) = go 0 root
+  where
+    go !rank Nothing = rank
+    go !rank (Just node) =
+      case compare (entryKey (nodeEntry node)) key of
+        LT -> go (rank + countOf (nodeLeft node) + 1) (nodeRight node)
+        EQ | upper -> go (rank + countOf (nodeLeft node) + 1) (nodeRight node)
+        _ -> go rank (nodeLeft node)
+
+-- | Entry at a zero-based key-order population rank.
+cursorIndex :: Int -> PrioritySearchQueue k p v -> Maybe (PrioritySearchEntry k p v)
+cursorIndex position (PrioritySearchQueue root)
+  | position < 0 = Nothing
+  | otherwise = go position root
+  where
+    go _ Nothing = Nothing
+    go remaining (Just node)
+      | remaining < leftCount = go remaining (nodeLeft node)
+      | remaining == leftCount = Just (nodeEntry node)
+      | otherwise = go (remaining - leftCount - 1) (nodeRight node)
+      where
+        leftCount = countOf (nodeLeft node)
 
 -- | Validates key order, AVL balance, cached count/height, and every cached
 -- winner.  Returns 'Nothing' on any invariant violation.

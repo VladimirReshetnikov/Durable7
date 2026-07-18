@@ -20,6 +20,8 @@ module Data.Structures.FingerTree.SortedMap
   , higherEntry
   , index
   , indexOfKey
+  , countKeysLessThan
+  , countKeysAtMost
   , slice
   , keys
   , elems
@@ -98,6 +100,14 @@ index position (SortedMap values)
 
 indexOfKey :: Ord k => k -> SortedMap k v -> Maybe Int
 indexOfKey key (SortedMap values) = Map.lookupIndex key values
+
+countKeysLessThan :: Ord k => k -> SortedMap k v -> Int
+countKeysLessThan key (SortedMap values) = Map.size lower
+  where
+    (lower, _) = Map.split key values
+
+countKeysAtMost :: Ord k => k -> SortedMap k v -> Int
+countKeysAtMost key mapValue = countKeysLessThan key mapValue + if member key mapValue then 1 else 0
 
 slice :: Ord k => Int -> Int -> SortedMap k v -> Maybe (SortedMap k v)
 slice position lengthValue mapValue

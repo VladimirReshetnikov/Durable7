@@ -38,6 +38,7 @@ import qualified Data.Structures.FingerTree.SortedMap as SortedMap
 import qualified Data.Structures.FingerTree.SortedSet as SortedSet
 import qualified CanonicalSortedSetTests
 import qualified RangeUpdateSequenceTests
+import qualified OrderedSearchCursorTests
 
 main :: IO ()
 main = do
@@ -59,6 +60,7 @@ main = do
   testIntervalMap
   testRrbVector
   testSequenceCursors
+  OrderedSearchCursorTests.run
   testRopes
   testRopeCursor
   testMeasuredRopeCursor
