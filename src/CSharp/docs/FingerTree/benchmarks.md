@@ -181,7 +181,7 @@ text-editor / large-buffer workload it is meant for.
 
 The C0 decision used a full BenchmarkDotNet job at one predeclared local-edit gate: a 65,536-character
 rope, 256 replacements within a window of eight positions, and a canonical snapshot every sixteen
-edits. The selected zipper has a sixteen-element active focus and a 256-element carry flush threshold.
+edits. The selected cursor representation has a sixteen-element active focus and a 256-element carry flush threshold.
 
 | Lane | Mean | 99.9% CI half-width | Allocated | Versus indexed mean | Versus indexed allocation |
 | --- | ---: | ---: | ---: | ---: | ---: |

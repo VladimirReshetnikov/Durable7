@@ -78,7 +78,7 @@ data MeasuredRope v a = MeasuredRope (a -> v) !(FT.FingerTree (RopeMeasure v) (M
 
 -- | An immutable measured editing cursor over one retained 'MeasuredRope'
 -- snapshot. The strict position is a validated gap in @0 .. cursorCount@.
--- This is a snapshot-plus-gap semantic checkpoint, not the C# focused zipper.
+-- This is a snapshot-plus-gap semantic checkpoint, not the C# focused cursor representation.
 data MeasuredRopeCursor v a = MeasuredRopeCursor !(MeasuredRope v a) !Int
 
 -- | The result of an absolute measure-guided cursor search. A miss retains a

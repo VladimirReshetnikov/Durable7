@@ -103,7 +103,7 @@ public sealed partial class MeasuredRope<T, TMeasure, TMeasureOps>
 /// Movement and edits return new values; the receiver and every retained ancestor remain valid and branchable.
 /// </para>
 /// <para>
-/// The cursor is a readonly value over immutable version and zipper state. A 16-element active window, a partial
+/// The cursor is a readonly value over immutable version and cursor state. A 16-element active window, a partial
 /// carry smaller than 256 elements on either side, and lineage-shared per-element prefix/suffix measure caches keep
 /// local copying and measure work bounded. Absolute measure seeks on an existing lineage prepare a selected
 /// ordinary fragment once; later seeks and focus materialization reuse its element measures, and directional

@@ -168,7 +168,7 @@ the shipment-gate evidence and prevents a "no measurable win" result from an ill
 
 ## Recommendation
 
-Adopt the plan's designs — the transient mechanics, the frozen layout, and the cursor gap/zipper
+Adopt the plan's designs — the transient mechanics, the frozen layout, and the focused cursor gap
 model are all sound and correctly gated. Change two things:
 
 1. **Re-sequence to cursor-first.** Ship the consumer-backed, differentiated capability (the rope

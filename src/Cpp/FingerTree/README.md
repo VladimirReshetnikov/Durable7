@@ -71,13 +71,13 @@ handles.
 The positional `rope<T>` exposes a persistent `rope_cursor<T>` checkpoint for gap-based editing. The C++ cursor
 is deliberately a cheap root-sharing rope snapshot plus a position: construction, movement, seek, and snapshot
 are O(1), while peeks and point edits retain the rope's O(log n) descent plus bounded chunk work. This is not the
-C# zipper implementation and makes no O(1)-amortized local-edit claim.
+C# focused cursor implementation and makes no O(1)-amortized local-edit claim.
 
 `measured_rope_cursor<T, MeasurePolicy>` applies the same immutable snapshot-plus-gap model to the exact measured
 rope root, adds ordered before/after measures and absolute monotone prefix search, and carries a usable end cursor
 on a miss. `text_rope_cursor` is the exact `char`/newline-policy alias, so snapshots retain every text helper and
 positions remain byte-oriented like the existing C++ text rope. Checked `size_t` preflights reject known-count
-growth before new element-measure callbacks. This semantic checkpoint adds no zipper, allocation, or benchmark
+growth before new element-measure callbacks. This semantic checkpoint adds no focused cursor representation, allocation, or benchmark
 claim.
 
 The native runner and benchmark harness remain repository-owned, so configuring a preset does not implicitly run

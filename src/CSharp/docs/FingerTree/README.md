@@ -30,7 +30,7 @@ project.
   sample and benchmark validation boundaries, stress controls, and test-suite coverage.
 - [Tests README](../../tests/Tools.DataStructures.FingerTree.Tests/README.md) maps the xUnit/CsCheck test project,
   source files, sample-smoke hooks, model/property suites, and stress controls.
-- [Rope cursor C0 decision](rope-cursor-c0-decision.md) records the readonly-struct zipper selected for
+- [Rope cursor C0 decision](rope-cursor-c0-decision.md) records the readonly-struct cursor representation selected for
   the shipped C# positional `RopeCursor<T>`, its 16/256 focus/carry tuning, benchmark gate, and the
   linear-lineage versus O(b log n) branch proof boundary.
 - [Measured rope cursor C2 decision](measured-rope-cursor-c2-decision.md) records the shipped

@@ -78,7 +78,7 @@ Movement, seek, and snapshot are O(1) and require no element cloning; peeks and 
 the rope substrate's O(log n) plus bounded-chunk work, and range insertion is O(m + log n). Retained
 cursors branch independently. Cached rope lengths use checked `usize` addition: a result that cannot
 fit panics before publication while every input snapshot remains valid. This is deliberately not the
-C# focused zipper and carries no amortized-locality claim. `MeasuredRopeCursor<T, P>` applies the
+C# focused cursor representation and carries no amortized-locality claim. `MeasuredRopeCursor<T, P>` applies the
 same immutable snapshot-plus-gap model to the exact measured version, adds ordered prefix/suffix
 measures and absolute monotone prefix search, and returns a usable end cursor on a search miss.
 `TextRopeCursor` is the nominal newline-specialized facade: it retains `TextRope`, reports scalar-

@@ -21,10 +21,9 @@
 ## What this is and is not
 
 This is **not a competing design.** The transient owner-token mechanics, the frozen packed-CHAMP-order
-layout, the Ctrie `SnapshotView.Freeze()` addition, and the rope gap/zipper model in the
+layout, the Ctrie `SnapshotView.Freeze()` addition, and the focused rope cursor representation in the
 [reviewed plan](https://github.com/VladimirReshetnikov/DataStructures/blob/4376db84b198ee5be7d3ee9dc62cb3e9c8b46149/docs/proposals/axis2-lifecycle-and-sequence-cursors.md)
-are all sound, and this alternative keeps
-them verbatim. It changes three things:
+are all sound, and this alternative keeps their mechanics unchanged. It changes three things:
 
 1. **Order:** ship the rope cursor first, not fourth.
 2. **Gates:** put a one-day fail-fast pre-gate in front of each of the two benchmark-contingent tiers
@@ -77,7 +76,7 @@ step earlier: measure the central assumption before building the API around it.
 
 ### 3. Risk isolation: the cursor's risk is design, the tiers' risk is "no win"
 
-The cursor's risk is representational (zipper-as-version vs focused-root) and is resolved by the C0
+The cursor's risk is representational (cursor-as-version vs focused-root) and is resolved by the C0
 spike — a design question with a definite answer. The tiers' risk is that, after real implementation
 effort, there is no measurable win to ship. Leading with the deliverable whose risk is *resolvable by
 design work* rather than *contingent on an uncertain measurement* front-loads certainty: Axis 2
@@ -89,7 +88,7 @@ produces a shippable result first, and the uncertain tiers are proven-or-dropped
 P0 contract lock (shared)
 │
 ├── TRACK C (lead): rope cursor
-│     C0 zipper-vs-focused-root spike  ── adds: branched-cursor amortized measurement (F3)
+│     C0 cursor-as-version vs focused-root spike  ── adds: branched-cursor amortized measurement (F3)
 │         └── C1 positional rope cursor  ── SHIP FIRST
 │               ├── C2 measured/text cursor
 │               │     └── C3 Editor + Tour integration
@@ -109,7 +108,7 @@ Recommended execution order:
 1. **P0 contract lock** — identical to the original: benchmark skeletons plus executable
    contract-oracle tests for `PersistentHashMap`/`PersistentHashSet` and `Rope<T>`, and the catalog
    status markers.
-2. **C0 spike** — the zipper-as-version vs focused-root prototypes, instrumented as the original
+2. **C0 spike** — the cursor-as-version vs focused-root prototypes, instrumented as the original
    specifies, **plus** the branched-cursor amortized-edit counter (below).
 3. **C1 positional rope cursor** — the first shipped Axis 2 feature, validated by its dedicated
    command-model tests and `RopeCursorBenchmarks` against indexed `Rope` edits and a mutable
@@ -189,9 +188,10 @@ Adopted verbatim: the builder/transient/persistent/frozen/snapshot-view vocabula
 state machine and its asymmetry; the L1 owner-token mechanics, prepare/commit failure atomicity, and
 semantic-contract preservation; the L2 layout candidates and L3 `FrozenHashMap`/`FrozenHashSet` surface;
 L4 `SnapshotView.Freeze()`; the cursor gap semantics, provisional `RopeCursor<T>` surface, internal
-zipper carry/flush model, honest complexity table, and C2 measured/text cursor with its line/column
-caveat; every shipment gate; the cross-language posture; and the explicitly-postponed list with its
-re-entry rule. The alternative changes sequencing and adds gates; it does not touch the designs.
+focused-cursor carry/flush model, honest complexity table, and C2 measured/text cursor with its
+line/column caveat; every shipment gate; the cross-language posture; and the explicitly-postponed
+list with its re-entry rule. The alternative changes sequencing and adds gates; it does not touch
+the designs.
 
 ## References
 

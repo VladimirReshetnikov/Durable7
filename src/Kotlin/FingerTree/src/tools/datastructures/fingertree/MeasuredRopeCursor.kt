@@ -23,7 +23,7 @@ public data class MeasuredRopeCursorSearch<T, M>(
  * movement, seek, and [snapshot] are O(1). Measure reads, peeks, point edits, and absolute measure
  * seeks are O(log n) over the measured AVL substrate; inserting `m` values is O(m + log n). Policy
  * callbacks used by measure reads, searches, or edits may propagate exceptions, but the immutable
- * receiver remains unchanged and retryable. There is no C# focused-zipper, memo-cell, allocation, or
+ * receiver remains unchanged and retryable. There is no C# focused cursor representation, memo-cell, allocation, or
  * amortized-locality claim.
  */
 public class MeasuredRopeCursor<T, M> private constructor(

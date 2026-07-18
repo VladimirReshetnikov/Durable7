@@ -729,7 +729,7 @@ private:
 /// An immutable gap cursor over one exact measured-rope snapshot.
 ///
 /// This semantic checkpoint retains the persistent root plus a position. It deliberately does not
-/// claim the focused zipper or amortized local-edit bounds of the C# implementation.
+/// claim the focused cursor representation or amortized local-edit bounds of the C# implementation.
 template <class T, class MeasurePolicy>
     requires measure_policy<MeasurePolicy, T>
 class measured_rope_cursor final {

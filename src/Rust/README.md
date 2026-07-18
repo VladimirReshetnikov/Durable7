@@ -44,7 +44,7 @@ higher-level algorithms remain simpler Rust checkpoint implementations instead o
 finger-tree spine. Its README marks that boundary so future work can tune representations without
 changing the Rust-facing surface. `RopeCursor<T>`, `MeasuredRopeCursor<T, P>`, and `TextRopeCursor`
 likewise preserve positional, ordered-measure, text-facade, edit, and branch semantics through
-root-sharing rope snapshots without claiming the C# zipper representation or its focus-local
+root-sharing rope snapshots without claiming the C# focused cursor representation or its focus-local
 complexity.
 
 Use the repository [semantic contracts reference](../../docs/reference/semantic-contracts.md) when

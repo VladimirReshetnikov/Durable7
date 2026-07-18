@@ -390,7 +390,8 @@ a temporary cursor that was its last backing-storage owner.
 
 Cursor construction, movement, seeking, and `snapshot()` are O(1) root-sharing operations. A peek or point edit
 is O(log n) plus bounded chunk work, and inserting m range elements is O(m + log n) amortized. This positional
-checkpoint does not port the C# zipper: it does not claim O(1)-amortized local navigation or point editing.
+checkpoint does not port the C# focused cursor representation: it does not claim O(1)-amortized local
+navigation or point editing.
 
 ## `measured_rope<T, MeasurePolicy>`
 
@@ -428,7 +429,7 @@ selects the gap before the first element whose inclusive prefix satisfies a lawf
 returns `found == false` with a usable end cursor. Predicate exceptions publish nothing. Creation, movement,
 positional seek, and snapshot are O(1); measures, peeks, point edits, and search are O(log n) plus bounded chunk
 work, and range insertion is O(m + log n). Known-count concat and insertion overflow is rejected before new
-element-measure callbacks. This is a semantic root-plus-gap checkpoint, not the C# focused zipper or its
+element-measure callbacks. This is a semantic root-plus-gap checkpoint, not the C# focused cursor representation or its
 allocation/locality evidence.
 
 ## Text Rope Helpers

@@ -45,7 +45,7 @@ interval, rope, and text operations; path copying retains unchanged JVM subtrees
 spell out the few engine-level differences from the C# lazy digit spine. Its positional
 `RopeCursor<T>`, generic `MeasuredRopeCursor<T, M>`, and newline-specialized `TextRopeCursor` preserve
 immutable gap/edit/branch and absolute measure-search semantics through exact retained snapshots
-without claiming the C# zipper representation, caches, or focus-local complexity. Its separate `DabaLite<T>`
+without claiming the C# focused cursor representation, caches, or focus-local complexity. Its separate `DabaLite<T>`
 member is deliberately mutable: a six-cursor, chunk-backed schedule maintains a FIFO monoid aggregate
 with bounded callback counts and requires external serialization.
 

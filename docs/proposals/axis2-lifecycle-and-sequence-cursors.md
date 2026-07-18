@@ -475,7 +475,7 @@ in the T0 regime after ordinary-map and edited-node retained memory is charged. 
 ships only with a documented lookup/enumeration/memory win and realistic construction break-even in
 a named read-heavy regime. A merely hypothetical semantic distinction does not override F0/F1.
 
-## Track C: Version-Bound Rope Cursor/Zipper
+## Track C: Version-Bound Rope Cursor
 
 ### The complexity correction
 
@@ -487,7 +487,7 @@ A `readonly struct` also does not make an arbitrary-depth context allocation-fre
 heap-backed storage or persistent context nodes, and snapshot caching naturally needs reference
 state. The public representation is therefore not locked until the C0 spike measures it.
 
-The baseline contract treats the cursor/zipper itself as a persistent working version:
+The baseline contract treats the cursor itself as a persistent working version:
 
 - movement and local edits return another cursor;
 - old cursors remain valid and can be edited to create branches;
@@ -500,9 +500,9 @@ bounded partial carries/focus + right ordinary-chunk tree) and canonicalize lazi
 could return `(Rope, Cursor)` after local edits in O(1) amortized time, but it broadens every rope
 operation's representation contract. It is an experiment in C0, not a pre-written complexity claim.
 
-### C0. Zipper-first representation and proof spike
+### C0. Focused cursor representation and proof spike
 
-Start with one minimally complete **zipper-as-version** prototype: split state remains in the cursor
+Start with one minimally complete **cursor-as-version** prototype: split state remains in the cursor
 and `Snapshot()` rebuilds a canonical root. Do not build a symmetric full focused-root implementation
 up front. Instrument node visits, spine allocations, forced suspensions, focus/carry copies, cursor
 wrapper allocations, retained memory, and snapshot cadence 1/16/256 across long local-edit histories.
@@ -546,9 +546,10 @@ linear-lineage amortized contract—rather than assuming persistence supplied th
 
 C0 has three outcomes:
 
-1. **Select zipper-as-version** when it materially beats indexed Rope edits in a predeclared named
+1. **Select cursor-as-version** when it materially beats indexed Rope edits in a predeclared named
    local workload at that workload's required snapshot cadence. Cadences 1, 16, and 256 are all
-   measured to expose tradeoffs; the zipper need not win every cadence to clear a narrower named gate.
+   measured to expose tradeoffs; the focused cursor representation need not win every cadence to
+   clear a narrower named gate.
 2. **Escalate conditionally to focused-root** only when snapshot-after-every-edit is itself a
    predeclared required workload, cadence 1 misses the gate, and dirty canonicalization is the measured
    blocker that a focused root can address. That escalation must then implement and benchmark every
@@ -576,7 +577,7 @@ context storage.
 
 ### Provisional C# surface
 
-The conservative zipper-as-version API is:
+The conservative cursor-as-version API is:
 
 ```csharp
 public sealed partial class Rope<T>
@@ -632,16 +633,16 @@ shared state, and as exact-object identity only under a class representation. C0
 pin representation-appropriate cursor identity, context-root identity, and snapshot identity
 separately so one is not inferred from another.
 
-Name the public abstraction `Cursor`; use “zipper” for the internal decomposition. Do not add a
-separate `Rope` argument to cursor operations. The cursor owns its source/context, so it cannot be
-silently applied to the wrong version.
+Name the public abstraction `Cursor`; call its internal decomposition the focused cursor
+representation or private cursor path. Do not add a separate `Rope` argument to cursor operations.
+The cursor owns its source/context, so it cannot be silently applied to the wrong version.
 
 Bookmarks and rebasing are not required for C1. If added later, a bookmark is a version-bound
 boundary plus left/right insertion affinity. It may rebase only through an explicit change record
 whose source identity matches; there is no meaningful automatic rebase onto an arbitrary unrelated
 rope with duplicate elements.
 
-### Internal zipper model
+### Internal focused cursor representation
 
 The working state is:
 
@@ -667,14 +668,15 @@ chunk-count policy. `RopeChunking` currently defines only `MinChunkSize = 256` a
 `FlushChunkSize` as an explicit candidate in `{256, 512, 1024, 2048}`, independent of the focus cap,
 and locks one value from measurements before C1.
 
-The zipper maintains at most one partial carry between the active window and each adjacent
-ordinary-chunk tree, with `0 <= carry.Length < FlushChunkSize`. Overflow merges into the near carry,
-flushes as many full `FlushChunkSize` ordinary chunks as needed, and retains only the sub-threshold
-remainder. Pulling an endpoint chunk first takes the bounded near-focus slice; any remaining valid
-ordinary chunk is reattached immediately, while only a remainder smaller than `MinChunkSize` can
-enter the carry (and is therefore smaller than every flush candidate). `Snapshot()` packs the two
-bounded carries plus the active window into chunks within `[MinChunkSize, MaxChunkSize]` except for
-the unavoidable final boundary chunk before joining the trees. Thus there are at most two partial
+The focused cursor representation maintains at most one partial carry between the active window and
+each adjacent ordinary-chunk tree, with `0 <= carry.Length < FlushChunkSize`. Overflow merges into
+the near carry, flushes as many full `FlushChunkSize` ordinary chunks as needed, and retains only the
+sub-threshold remainder. Pulling an endpoint chunk first takes the bounded near-focus slice; any
+remaining valid ordinary chunk is reattached immediately, while only a remainder smaller than
+`MinChunkSize` can enter the carry (and is therefore smaller than every flush candidate).
+`Snapshot()` packs the two bounded carries plus the active window into chunks within
+`[MinChunkSize, MaxChunkSize]` except for the unavoidable final boundary chunk before joining the
+trees. Thus there are at most two partial
 fragments outside the active window, and snapshot repair remains bounded chunk work plus the
 documented O(log n) tree join rather than an O(n) global `Compact()`. C0 exhaustively tests every
 flush candidate against endpoint chunk lengths 1 through `MaxChunkSize`, including existing chunks
@@ -817,17 +819,21 @@ text. Sample line/column output uses the cursor's newline prefix and O(log n) li
 
 ### C4. Later sequence families
 
-`FingerTreeDeque<T>` is the next plausible adapter: a gap zipper is a left deque plus a right deque,
-and movement transfers one endpoint. Returning a materialized deque after every edit again requires
-either O(log n) concatenation or a focused deque representation, so it waits for the rope decision.
+`FingerTreeDeque<T>` is the next plausible adapter: a gap cursor decomposition is a left deque plus
+a right deque, and movement transfers one endpoint. Returning a materialized deque after every edit
+again requires either O(log n) concatenation or a focused deque representation, so it waits for the
+rope decision.
 
 Defer these surfaces until a consumer and benchmark justify them:
 
 - editable RRB cursor: random access is already its strength, while persistent edits still copy a
   radix path;
-- `ReversibleDeque`, raw `FingerTree`, and Tungsten List cursors;
+- `ReversibleDeque` and raw `FingerTree` cursors;
 - element-identity handles or arbitrary-version bookmark rebasing; and
 - any cursor over the unimplemented range-update sequence.
+
+Tungsten collection cursors are excluded rather than deferred; their existing application-leaf
+operations remain the complete surface.
 
 ### Cursor validation and benchmark gates
 
@@ -876,8 +882,8 @@ lead public priority; T and F advance independently only when their private gate
 P0 contract oracles + benchmark/counter skeletons
 │
 ├── TRACK C (lead public target)
-│     C0 zipper-first representation/proof spike
-│       ├── select zipper-as-version ─────────────┐
+│     C0 focused cursor representation/proof spike
+│       ├── select cursor-as-version ─────────────┐
 │       ├── measured blocker -> focused-root spike│
 │       └── neither clears -> DEFER              │
 │                                                v
@@ -928,7 +934,7 @@ not follow-up documentation debt.
 | Phase | Evidence required to advance or ship |
 | --- | --- |
 | P0 | Contract-oracle tests green; benchmark IVT/internal diagnostics and counter skeletons build; materiality/noise rule and datasets committed before result collection |
-| C0 | Zipper benchmark/counter artifact; version-state/cache design; focus/carry invariants; version-DAG potential argument; adversarial branching results; explicit select/escalate/defer decision |
+| C0 | Focused cursor benchmark/counter artifact; version-state/cache design; focus/carry invariants; version-DAG potential argument; adversarial branching results; explicit select/escalate/defer decision |
 | Focused-root escalation | Evidence that dirty snapshot is the blocker; ordinary Rope operation matrix over both root variants; concurrency-safe normalization; no unacceptable non-cursor regression |
 | C1 | Public XML/API and current-state document set including the C0-proven branch-complexity scope; `List<T>` gap command model; boundary/overflow/representation-appropriate identity/sharing/concurrency tests; `RopeCursorBenchmarks` clearing the locked materiality gate in a predeclared named workload/cadence |
 | C2 | Noncommutative measure model; exact measure-seek identity/miss/boundary and true-at-empty parity tests; delegate/struct-predicate parity; per-fragment measure-cache ceilings and failed/racing snapshot tests; existing `NewlineMeasure` text-helper compatibility; UTF-16 line O(1)/column O(log n) examples; measured-text edit/seek/line-column benchmark gate at the sample cadence |
@@ -993,11 +999,12 @@ The following work is outside the active Axis 2 wave:
 - sorted, vector, and rope frozen families without their own read-heavy evidence;
 - owner-token mutation in the lazy raw FingerTree core;
 - composite Tungsten transients;
-- RRB/ReversibleDeque/Tungsten cursor surfaces without a consumer; and
+- RRB/ReversibleDeque cursor surfaces without a consumer; and
 - the styled-text sample until both cursor and range-update foundations exist.
 
 Re-entry requires a named consumer or benchmark showing that the fixed general representation is
 the bottleneck. Merely observing a different strategy in another library is not sufficient.
+Tungsten collection cursors are not a postponed track.
 
 ## References
 

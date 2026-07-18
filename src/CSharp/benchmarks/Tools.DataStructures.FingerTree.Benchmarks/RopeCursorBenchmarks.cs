@@ -4,7 +4,7 @@ using BenchmarkDotNet.Attributes;
 namespace Tools.DataStructures.FingerTree.Benchmarks;
 
 /// <summary>
-/// Compares the C0 zipper representations with indexed immutable editing and a mutable text
+/// Compares the C0 cursor representations with indexed immutable editing and a mutable text
 /// control over the locked document, locality, focus-capacity, and snapshot-cadence matrix.
 /// </summary>
 [MemoryDiagnoser]
@@ -32,7 +32,7 @@ public class RopeCursorBenchmarks
     [Params(1, 16, 256)]
     public int SnapshotCadence { get; set; }
 
-    /// <summary>Gets or sets the active focus capacity of each C0 zipper prototype.</summary>
+    /// <summary>Gets or sets the active focus capacity of each C0 cursor prototype.</summary>
     [Params(16, 32, 64, 128)]
     public int FocusCapacity { get; set; }
 
@@ -58,7 +58,7 @@ public class RopeCursorBenchmarks
             _positions,
             SnapshotCadence);
 
-    /// <summary>Runs the replacement history through the immutable class zipper.</summary>
+    /// <summary>Runs the replacement history through the immutable class cursor.</summary>
     [Benchmark]
     [BenchmarkCategory("Axis2C0", "LocalEdit")]
     public Rope<char> ClassCursorEditBurst() =>
@@ -70,7 +70,7 @@ public class RopeCursorBenchmarks
             FlushChunkSize,
             useAbsoluteSeek: LocalityWindow == int.MaxValue);
 
-    /// <summary>Runs the replacement history through the readonly-struct zipper.</summary>
+    /// <summary>Runs the replacement history through the readonly-struct cursor.</summary>
     [Benchmark]
     [BenchmarkCategory("Axis2C0", "LocalEdit")]
     public Rope<char> StructCursorEditBurst() =>
@@ -82,7 +82,7 @@ public class RopeCursorBenchmarks
             FlushChunkSize,
             useAbsoluteSeek: LocalityWindow == int.MaxValue);
 
-    /// <summary>Runs the replacement history through the mutable-session zipper control.</summary>
+    /// <summary>Runs the replacement history through the mutable-session cursor control.</summary>
     [Benchmark]
     [BenchmarkCategory("Axis2C0", "MutableControl")]
     public Rope<char> MutableCursorEditBurst() =>
@@ -183,7 +183,7 @@ public class RopeCursorTuningBenchmarks
 /// </summary>
 /// <remarks>
 /// The readonly-struct wrapper is the sole measured representation because all three C0 wrappers
-/// share the same zipper engine. This keeps the carry-tuning matrix at sixteen cases; the separate
+/// share the same focused cursor engine. This keeps the carry-tuning matrix at sixteen cases; the separate
 /// replacement matrix measures wrapper overhead.
 /// </remarks>
 [MemoryDiagnoser]
@@ -227,7 +227,7 @@ public class RopeCursorCarryTuningBenchmarks
             verifyStructuralTransitions: true);
     }
 
-    /// <summary>Measures the common zipper engine while both carry directions cross their flush thresholds.</summary>
+    /// <summary>Measures the common focused cursor engine while both carry directions cross their flush thresholds.</summary>
     [Benchmark]
     [BenchmarkCategory("Axis2C0", "CarryTuning")]
     public Rope<char> StructCursorCarryCycle() =>
@@ -281,7 +281,7 @@ public class RopeCursorGateBenchmarks
     public Rope<char> IndexedRope() =>
         RopeCursorBenchmarkWorkload.RunIndexedRope(_rope, _positions, SnapshotCadence);
 
-    /// <summary>Runs the persistent class carrier over the selected zipper configuration.</summary>
+    /// <summary>Runs the persistent class carrier over the selected cursor configuration.</summary>
     [Benchmark]
     [BenchmarkCategory("Axis2C0", "Gate")]
     public Rope<char> ClassCursor() =>
@@ -305,7 +305,7 @@ public class RopeCursorGateBenchmarks
             FlushChunkSize,
             useAbsoluteSeek: false);
 
-    /// <summary>Runs the single-wrapper mutable control over the same immutable zipper engine.</summary>
+    /// <summary>Runs the single-wrapper mutable control over the same immutable cursor engine.</summary>
     [Benchmark]
     [BenchmarkCategory("Axis2C0", "Gate", "MutableControl")]
     public Rope<char> MutableCursorControl() =>

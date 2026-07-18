@@ -76,19 +76,21 @@ lack.
   and the only one where the C port's refcounted nodes need real design (diff must not retain
   both versions' spines).
 
-### A3. FingerTree cursor / zipper over the measured tree
+### A3. Focused FingerTree cursor over the measured tree
 
 > **Final design disposition (2026-07-13):** the
 > [Axis 2 final cursor plan](axis2-lifecycle-and-sequence-cursors.md) is authoritative. A path stack alone
 > cannot both return a canonical immutable rope after every edit and preserve an amortized O(1)
 > local-edit claim: rebuilding the root is O(log n). C0 therefore begins with one minimally complete
-> zipper-as-version, uses gap positions, proves the applicable history class, and gives dirty snapshot
-> costs explicitly. A focused-root spike occurs only if snapshot-after-every-edit is a predeclared
-> required workload and canonicalization is the measured blocker; C0 may also defer the public cursor.
+> cursor-as-version representation, uses gap positions, proves the applicable history class, and
+> gives dirty snapshot costs explicitly. A focused-root spike occurs only if
+> snapshot-after-every-edit is a predeclared required workload and canonicalization is the measured
+> blocker; C0 may also defer the public cursor.
 
-Repeated local edits via `Split`/`Concat` pay `O(log n)` each. A finger-tree zipper retains locality,
-but the working zipper and a canonical `Rope<T>` are different representations: nearby movement
-and focus edits can be O(1) amortized while rebuilding the rope spine remains O(log n). The Axis 2
+Repeated local edits via `Split`/`Concat` pay `O(log n)` each. A focused finger-tree cursor retains
+locality, but the working focused cursor representation and a canonical `Rope<T>` are different
+representations: nearby movement and focus edits can be O(1) amortized while rebuilding the rope
+spine remains O(log n). The Axis 2
 baseline makes that rebuild an explicit `Snapshot()` boundary; a lazily normalized focused-root
 variant inside `Rope<T>` is only the conditional escalation described above.
 
@@ -211,7 +213,7 @@ contracts.
 2. **B2** (insertion-ordered set) — cheapest new family; all substrate shipped; high everyday value.
 3. **B1** (hash bag) — small, symmetric, immediately useful.
 4. **A2 phase 1** (HAMT `MapEquals` + `Diff`) — highest-leverage core work; phases 2–3 follow demand.
-5. **A3** (cursor/zipper) + Editor sample rewrite — historical C#-first slot, superseded by Axis 2.
+5. **A3** (focused cursor) + Editor sample rewrite — historical C#-first slot, superseded by Axis 2.
 6. **C1** (Patricia trie family) — the one big new structure; C#-first with a consumer.
 7. **D1/D2** (BigRational, modular arithmetic) — as numerics interest dictates.
 8. **B3/B4, D3** — opportunistic.
@@ -225,7 +227,7 @@ Items A4 (parity completions) ride along with ongoing maintenance and need no sc
 - [Frontier structure catalog](../reference/frontier-structure-catalog.md) (added 2026-07-11) —
   surveys the candidate space *beyond* composition (new cores, hybrid representation tiers, niche
   specializations). Patricia and RRB now follow their current-state catalog entries; the Axis 2 final
-  plan explicitly supersedes this proposal's A3 cursor/zipper sequencing and sample-integration slot.
+  plan explicitly supersedes this proposal's A3 focused-cursor sequencing and sample-integration slot.
 - [C#/Rust implementation review (2026-07-09)](../reviews/csharp-rust-implementation-review-2026-07-09.md)
   — source of the parity-gap and testing-pattern observations cited above.
 - [Porting and semantic parity](../guides/porting-and-semantic-parity.md) — the bill every shipped

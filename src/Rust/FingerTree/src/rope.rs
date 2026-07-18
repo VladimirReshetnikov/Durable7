@@ -149,7 +149,7 @@ pub struct Rope<T> {
 /// A cursor denotes a gap in `0..=len`: elements before `position` precede the gap and elements at
 /// or after it follow the gap. Movement and edits return new cursor values, so retained cursors can
 /// branch independently. This Rust checkpoint stores a cheap root-sharing rope value plus the gap;
-/// it is not the focused zipper used by the C# implementation and makes no amortized-locality claim.
+/// it is not the focused cursor representation used by the C# implementation and makes no amortized-locality claim.
 ///
 /// Creating, cloning, moving, seeking, and taking a snapshot are O(1). Peeks and point edits are
 /// O(log n) plus bounded chunk work. Inserting `m` elements is O(m + log n). Navigation, peeking,
@@ -1000,7 +1000,7 @@ where
 /// The cursor retains the exact measured rope version and a gap in `0..=len`. Operations return
 /// new values, so retained cursors branch independently. This Rust port deliberately uses the
 /// same root-sharing snapshot-plus-gap representation as [`RopeCursor`]; it does not claim the
-/// focused zipper or amortized local-edit bounds of the C# implementation.
+/// focused cursor representation or amortized local-edit bounds of the C# implementation.
 pub struct MeasuredRopeCursor<T, P>
 where
     P: MeasurePolicy<T>,

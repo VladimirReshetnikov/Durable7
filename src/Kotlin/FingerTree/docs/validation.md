@@ -124,4 +124,4 @@ Likewise, the JVM Brodal audit does not copy C# allocated-byte ceilings: HotSpot
 escape analysis, tiered compilation, and collector choice make them non-portable. Exact comparison
 counts and identity-sharing bounds are the deterministic JVM substitutes.
 The measured/text cursor checkpoint likewise claims only the documented snapshot-plus-gap costs;
-none of its correctness tests is presented as C# zipper, allocation, or amortized-locality evidence.
+none of its correctness tests is presented as C# focused cursor, allocation, or amortized-locality evidence.

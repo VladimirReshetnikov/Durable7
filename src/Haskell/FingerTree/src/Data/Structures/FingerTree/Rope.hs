@@ -70,7 +70,7 @@ newtype Rope a = Rope (FT.FingerTree Size (Chunk a))
 --
 -- The strict position is a validated gap in @0 .. cursorCount@. Movement and
 -- edits return new cursors, so retained values branch independently. This is a
--- snapshot-plus-gap semantic checkpoint, not the C# focused zipper.
+-- snapshot-plus-gap semantic checkpoint, not the C# focused cursor representation.
 data RopeCursor a = RopeCursor !(Rope a) !Int
 
 -- Chunk layout is an implementation detail.

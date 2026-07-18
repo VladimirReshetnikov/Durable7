@@ -161,7 +161,7 @@ TypeScript CHAMP transients preserve O(1) adoption, clean/no-op identity publica
 semantics, version-bound enumeration, and one-way publication. Their edits call the immutable CHAMP
 kernel; they do not claim the C# T2 owner-token in-place mutation bound. Rope cursors likewise preserve
 immutable branching, gap semantics, navigation/edit behavior, measures, and text line/column mapping,
-but use persistent path-copying edits instead of the C# bounded-window zipper optimization.
+but use persistent path-copying edits instead of the C# bounded-window cursor optimization.
 Positional and measured cursors expose `peekPreviousEntry`/`peekNextEntry` wrappers so stored
 `undefined` is distinct from a boundary. `replaceNext` is an unconditional edit: it publishes a
 fresh rope even for the identical object, and measured replacement invokes the supplied element's

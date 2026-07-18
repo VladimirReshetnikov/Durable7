@@ -107,7 +107,7 @@ Cached positional-rope lengths use checked `usize` addition. Any construction or
 whose resulting length is unrepresentable, including concatenation, ordinary rope insertion, and
 cursor insertion, panics before returning; all input ropes and cursors remain valid.
 
-This is a semantic positional checkpoint, not a port of the C# focused zipper. Cursor creation,
+This is a semantic positional checkpoint, not a port of the C# focused cursor representation. Cursor creation,
 cloning, movement, seek, and snapshot are O(1). Peeks and point edits are O(log n) plus bounded chunk
 work; inserting `m` values is O(m + log n). No O(1)-amortized local-edit claim is made.
 
@@ -135,7 +135,7 @@ over `MeasuredRopeCursor<char, NewlineMeasure>`. It preserves the exact `TextRop
 snapshot, exposes the full measured cursor vocabulary, and adds `line_column` at the gap. Offsets
 and columns count Unicode scalar values. The measure counts only `\n`, exactly like `TextRope`;
 CRLF recognition and grapheme segmentation remain explicit text-extra operations rather than
-cursor addressing rules. This sibling checkpoint makes no C# focused-zipper, allocation, or
+cursor addressing rules. This sibling checkpoint claims no C# focused cursor representation, allocation, or
 amortized-locality claim.
 
 ## Brodal-Okasaki heap

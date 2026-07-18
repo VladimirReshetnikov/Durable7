@@ -33,7 +33,7 @@ public sealed partial class Rope<T>
 /// valid, so any retained cursor may be used to create an independent branch.
 /// </para>
 /// <para>
-/// The cursor is a small value over immutable version and zipper state. Navigation shares the logical version;
+/// The cursor is a small value over immutable version and cursor state. Navigation shares the logical version;
 /// an edit creates a new version. A bounded 16-element active window and at most one partial carry smaller than
 /// 256 elements on each side keep local copying bounded. Along a linear editing lineage, local movement and
 /// single-element edits are O(1) amortized and O(log n) worst-case. The stronger amortized claim does not extend

@@ -1208,7 +1208,7 @@ and inheriting undocumented duplicate behavior.
 | GUID-specific full-key CHAMP/Patricia | No current consumer; the design study explicitly requires a representative GUID benchmark first. |
 | Persistent chunked bitset | Must first be compared with the shipped Patricia composition and needs a concrete client. |
 | RRB transient or persistent tail | Current vector ships; remaining adoption/performance questions are measurement-driven. |
-| C4 deque/RRB/reversible/raw-FingerTree/Tungsten cursors | Explicitly consumer- and benchmark-gated. |
+| C4 deque/RRB/reversible/raw-FingerTree cursors | Explicitly consumer- and benchmark-gated; Tungsten cursor work is excluded rather than parked. |
 | ART and automatic key-type dispatch | Requires a real byte-prefix/range consumer after explicit Patricia consideration. |
 | Order-maintenance list | The independent ordered-set fork may keep simple labels private. A public precedes-query core still needs a general consumer or evidence that independently owned private labeling is inadequate; Tungsten is provenance, not its foundation. |
 | Native Ctrie ports | Require an independent safe-reclamation architecture, not ordinary porting. |

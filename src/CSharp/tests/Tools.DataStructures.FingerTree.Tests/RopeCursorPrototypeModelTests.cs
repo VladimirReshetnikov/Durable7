@@ -3,7 +3,7 @@ using Xunit;
 namespace Tools.DataStructures.FingerTree.Tests;
 
 /// <summary>
-/// Exercises the Axis 2 positional zipper prototype against deterministic list models over every
+/// Exercises the Axis 2 positional cursor prototype against deterministic list models over every
 /// focus-capacity and carry-flush candidate in the C0 matrix.
 /// </summary>
 public sealed class RopeCursorPrototypeModelTests

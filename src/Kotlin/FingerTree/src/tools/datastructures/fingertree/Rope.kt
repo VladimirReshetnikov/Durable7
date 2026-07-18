@@ -197,7 +197,7 @@ public data class RopeCursorPeek<T>(public val value: T)
  * [position] denotes a gap in `0..size`: the previous element is at `position - 1` and the next
  * element is at `position`. Every movement or edit returns another immutable cursor, so retained
  * cursors branch independently. This semantic checkpoint stores a rope snapshot plus its gap; it
- * does not implement the C# focused zipper and makes no amortized-locality claim.
+ * does not implement the C# focused cursor representation and makes no amortized-locality claim.
  *
  * Creation, movement, seek, and [snapshot] are O(1). Peeks and point edits are O(log n), and
  * inserting `m` values is O(m + log n). Failed edits leave the receiver reusable. Like [Rope],

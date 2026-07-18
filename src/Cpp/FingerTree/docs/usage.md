@@ -446,14 +446,15 @@ only on lvalue cursors, preventing a pointer from escaping a temporary cursor th
 Construction, movement, seek, and snapshot are O(1); peeks and point edits are O(log n) plus bounded chunk work,
 and range insertion is O(m + log n) amortized. `replace_next` never invokes element equality, so replacing an
 element with an equal value still creates a distinct persistent version at the same gap. The cursor is a
-snapshot-plus-position facade, not the C# zipper, and does not promise O(1)-amortized local edits. A borrowed peek
-pointer must not outlive every cursor or snapshot copy that retains the pointed-to storage.
+snapshot-plus-position facade, not the C# focused cursor representation, and does not promise
+O(1)-amortized local edits. A borrowed peek pointer must not outlive every cursor or snapshot copy
+that retains the pointed-to storage.
 
 `measured_rope_cursor<T, MeasurePolicy>` retains the exact measured root and gap. It adds ordered
 `measure_before`/`measure_after` queries and absolute `seek_by_measure`; a miss returns `found == false` with a
 usable end cursor. Measures, peeks, point edits, and search are O(log n) plus bounded chunk work. The
 `text_rope_cursor` alias applies the same contract to byte-indexed `std::string` text and preserves the existing
-line/column helpers. These are root-plus-gap semantic checkpoints and make no C# zipper, memoization, allocation,
+line/column helpers. These are root-plus-gap semantic checkpoints and claim no C# focused cursor representation, memoization, allocation,
 or amortized-locality claim.
 
 For text:

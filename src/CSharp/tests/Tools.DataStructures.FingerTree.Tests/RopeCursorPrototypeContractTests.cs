@@ -3,7 +3,7 @@ using Xunit;
 namespace Tools.DataStructures.FingerTree.Tests;
 
 /// <summary>
-/// Locks the semantic contracts of the Axis 2 positional zipper prototype independently of its
+/// Locks the semantic contracts of the Axis 2 positional cursor prototype independently of its
 /// focus-window and carry-buffer tuning.
 /// </summary>
 public sealed class RopeCursorPrototypeContractTests
@@ -223,7 +223,7 @@ public sealed class RopeCursorPrototypeContractTests
         Assert.Equal(2, edited.Position);
     }
 
-    /// <summary>The mutable control follows the same model as class and struct zipper versions on their shared API.</summary>
+    /// <summary>The mutable control follows the same model as class and struct cursor versions on their shared API.</summary>
     [Fact]
     public void MutableControl_MatchesPersistentClassAndStructPrototypes()
     {

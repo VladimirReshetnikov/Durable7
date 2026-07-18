@@ -554,7 +554,7 @@ The implementation should keep XML documentation aligned with this file. XML sum
   `ReplaceNext` always creates a new edit version, even for an equal or identical value, and invokes no
   element-equality callback. The default struct value is invalid and every member throws
   `InvalidOperationException`; `Rope<T>.Empty.GetCursor()` is the initialized empty state.
-- **Representation.** The zipper holds a bounded 16-element active window between left and right
+- **Representation.** The cursor holds a bounded 16-element active window between left and right
   ordinary-chunk trees. Each side has at most one partial carry of 0 through 255 elements; overflow
   flushes a 256-element ordinary chunk. The cursor value holds immutable context references plus a
   `CursorVersionState<T>`; copying the struct never aliases mutable edit state.
@@ -611,7 +611,7 @@ measured rope.
   ordinary chunk and shares its element measures with descendant edit versions. Prefix and suffix
   tables are installed lazily and failure-atomically; later seeks through that fragment do no
   element remeasurement. A one-shot source factory deliberately does not retain a full
-  element-measure array and defers zipper materialization until movement or editing requires it.
+  element-measure array and defers focused cursor materialization until movement or editing requires it.
 - **Snapshot and callbacks.** Clean snapshots return the exact source reference. Dirty first
   snapshots publish one winner-returning canonical measured rope and do not re-invoke the element
   `Measure` callback for already prepared buffers. A callback exception publishes neither partial
@@ -623,8 +623,8 @@ measured rope.
 
 The [C2 shipment decision](measured-rope-cursor-c2-decision.md) owns the exact 16/256 representation,
 callback ceilings, source-versus-prepared split policy, benchmark thresholds, and validation
-evidence. No deque, RRB, reversible-deque, raw-finger-tree, Tungsten, bookmark, or rebase cursor is
-implied by this surface.
+evidence. No deque, RRB, reversible-deque, raw-finger-tree, bookmark, or rebase cursor is implied by
+this surface. Tungsten collection cursors are excluded rather than implied or deferred.
 
 ## Relaxed Radix-Balanced Vector
 

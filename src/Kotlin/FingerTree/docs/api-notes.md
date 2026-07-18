@@ -84,7 +84,7 @@ concatenation. An unrepresentable result throws `ArithmeticException` before pub
 ropes and cursors remain reusable. Cursor creation, movement, seek, and snapshot are O(1). Peeks and
 point edits are O(log n) over the measured AVL substrate, and inserting `m` values is O(m + log n).
 Immutable cursors are safe for structurally concurrent reads subject to the same caller-owned element
-mutability caveat as ropes. This is a semantic checkpoint, not the C# focused zipper, and it makes no
+mutability caveat as ropes. This is a semantic checkpoint, not the C# focused cursor representation, and it makes no
 O(1)-amortized local-edit claim.
 
 ## Measured and text rope cursors
@@ -126,7 +126,7 @@ the zero-based line and UTF-16 `Char` column at the gap. The generic
 Kotlin's measure-policy type is not part of the cursor's static type.
 
 Both cursor types are snapshot-plus-gap semantic ports. They deliberately do not port C#'s 16/256
-focus/carry zipper, 2,048-element fragment cache, winner-returning snapshot memo, allocation ceilings,
+focus/carry cursor representation, 2,048-element fragment cache, winner-returning snapshot memo, allocation ceilings,
 callback-count gates, or linear-lineage O(1)-amortized local-edit claim.
 
 ## Representation and complexity

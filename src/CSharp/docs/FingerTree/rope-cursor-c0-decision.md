@@ -1,16 +1,16 @@
 # Rope cursor C0 representation and proof decision
 
-- Status: Selected — readonly-struct zipper-as-version, focus 16, flush 256
+- Status: Selected — readonly-struct cursor-as-version, focus 16, flush 256
 - Created (UTC): 2026-07-13T06:10:29Z
 - Repository HEAD: 439b83e7738907c2ff01e66da1c232ab70a80388
 - Evidence commit: db05d492d2027afc44f551f886d5f91b3d42959e
 - Decision closed (UTC): 2026-07-13T07:20:50Z
 - Audience: Maintainers deciding whether the Axis 2 rope cursor can advance to C1
-- Scope: C# positional-rope zipper prototypes, their proof boundary, and the locked C0 evidence protocol
+- Scope: C# positional-rope cursor prototypes, their proof boundary, and the locked C0 evidence protocol
 
 ## Decision status
 
-**Select the readonly-struct zipper-as-version with `FocusCapacity = 16` and
+**Select the readonly-struct cursor-as-version with `FocusCapacity = 16` and
 `FlushChunkSize = 256`; advance to C1.** The selected named gate is 256 replacements in a 65,536
 element document, locality window eight, with a canonical snapshot every sixteen edits. Against
 ordinary indexed `Rope<char>` updates, the struct cursor reduced mean latency by 81.2% and allocated
@@ -29,17 +29,17 @@ amortized O(1).
 
 ## Prototype representations
 
-All three prototypes execute the same zipper engine and differ only in the caller-visible carrier:
+All three prototypes execute the same focused cursor engine and differ only in the caller-visible carrier:
 
 - the **immutable class cursor** allocates a wrapper for each navigation or edit result;
 - the **readonly-struct cursor** copies a value containing references to the immutable version state
-  and zipper context, avoiding the class wrapper but not the arrays and tree nodes created by edits;
+  and cursor context, avoiding the class wrapper but not the arrays and tree nodes created by edits;
 - the **mutable-session control** mutates one private wrapper's version/context fields while the
   engine continues to create immutable edit state. It measures the upper bound available by removing
   result-wrapper churn; it is not an owner-token transient and must not be described as one.
 
 The persistent version state and navigation context are intentionally separate. A
-`CursorVersionState<T>` holds the logical count, the exact zipper context that can normalize that
+`CursorVersionState<T>` holds the logical count, the exact cursor context that can normalize that
 version, and a nullable snapshot cache. Movement and seek return a new navigation context over the
 same version state. An edit creates a new version state seeded by the edited context. Consequently,
 two navigation positions in one version share snapshot identity, while retained edited branches own
@@ -53,7 +53,7 @@ normalization exception occurs before publication and leaves the cache empty, so
 retry. The proof and measurements must therefore distinguish **one published winner** from the false
 claim of **exactly one normalization attempt**.
 
-## Zipper decomposition and invariants
+## Cursor decomposition and invariants
 
 A context represents the sequence in this exact order:
 
@@ -223,7 +223,7 @@ processes. These runs retain the same single-worker environment:
 | Untimed counters and adversarial branch traces | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/counters/` | Complete |
 | Retained-version graph measurements | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/retained/` | Complete |
 | Curated tables and environment summary | `src/CSharp/docs/FingerTree/benchmarks.md`, section `Axis 2 C0 rope cursor` | Complete |
-| Final select/escalate/defer rationale | This document | Complete — select struct zipper |
+| Final select/escalate/defer rationale | This document | Complete — select struct cursor |
 
 Raw BenchmarkDotNet directories are git-ignored working artifacts. The curated table records the
 exact runtime/SDK, CPU, GC mode, commands, selected parameter rows, confidence intervals, measured
@@ -312,7 +312,7 @@ copying. That is the selected proof boundary.
 
 ## Exit outcome
 
-**Select the readonly-struct zipper-as-version with focus 16 and flush 256.** C1 is authorized for
+**Select the readonly-struct cursor-as-version with focus 16 and flush 256.** C1 is authorized for
 the positional Rope surface and the proof scope above. Focused-root escalation and deferral are
 closed for C1. Any later attempt to broaden the branch-amortization claim or change the focus/carry
 bounds requires a new counter, retention, and benchmark decision rather than silently editing this

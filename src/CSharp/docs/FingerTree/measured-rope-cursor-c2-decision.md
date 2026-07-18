@@ -22,14 +22,14 @@ families, and it does not create a sibling-language parity obligation.
 
 ## Selected representation
 
-The selected representation extends C1's readonly-struct zipper-as-version design:
+The selected representation extends C1's readonly-struct cursor-as-version design:
 
 - a 16-element active focus and sub-256-element carries keep local copying bounded;
 - the underlying measured finger tree now has an allocation-free two-sided locate that returns the
   ordered measure before the selected chunk and after it without splitting the tree;
 - an absolute measure seek initially retains the immutable source, selected ordinary chunk, exact
   gap, and ordered before/after measures as a deferred focus; peeks and clean snapshots do not force
-  zipper construction;
+  focused cursor construction;
 - one-shot `TryGetCursorByMeasure` scans at most one 2,048-element ordinary chunk without retaining
   a full element-measure array, preserving the source-factory latency gate;
 - a seek on an existing cursor lineage prepares a selected fragment once and shares that successful

@@ -460,8 +460,8 @@ result untouched. Peeks copy into caller storage, so the existing `ft_copy_fn` a
 
 Cursor copy, movement, seek, and snapshot perform O(1) structural work but allocate one small self-owned policy
 context and can return `FT_STATUS_NO_MEMORY`. Peeks and point edits are O(log n) plus bounded chunk copying;
-array insertion is O(m + log n) plus boundary normalization. The cursor is not the C# focused zipper and claims
-no snapshot memo, callback/allocation ceiling, or O(1)-amortized local editing. Use `ft_rope_cursor_try_size`
+array insertion is O(m + log n) plus boundary normalization. The cursor is not the C# focused cursor
+representation and claims no snapshot memo, callback/allocation ceiling, or O(1)-amortized local editing. Use `ft_rope_cursor_try_size`
 when allocation failure must remain distinguishable from zero; the convenience size form follows `ft_rope_size`.
 
 `ft_measured_rope_cursor` applies the same explicit ownership, aliasing, failure-publication, copied-peek, and gap
@@ -475,8 +475,8 @@ Cursor copy, movement, positional seek, and snapshot perform O(1) structural wor
 policy context. Ordered partitions, peeks, point edits, and measure search are O(log n) plus bounded chunk work;
 range insertion is O(m + log n). `ft_text_rope_cursor` is a nominal wrapper over the newline-measured cursor: it
 preserves byte/`char` positions, LF-only zero-based line/column helpers, and `ft_text_rope` snapshots. Neither
-cursor claims the C# focused zipper, snapshot memo, callback/allocation ceiling, amortized locality, or benchmark
-evidence.
+cursor claims the C# focused cursor representation, snapshot memo, callback/allocation ceiling,
+amortized locality, or benchmark evidence.
 
 `ft_text_rope` is based on `ft_measured_rope<char>` with a newline-count measure. Line count is O(1), while
 `line_of_offset`, `line_start_offset`, `line_column_of`, and the column-validated `offset_of` use measured

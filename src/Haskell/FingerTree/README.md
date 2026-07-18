@@ -98,7 +98,7 @@ boundary. Same-position seek and empty range insertion preserve the exact retain
 and unconditional replacement has no `Eq` constraint and stores the supplied representative.
 Construction, movement, and snapshot are O(1); peeks and point edits are O(log n) plus bounded
 64-element chunk work, and inserting `m` values is O(m + log n). This is deliberately a persistent
-path-copy checkpoint, not the C# zipper, so it makes no focus-local or benchmark-parity claim.
+path-copy checkpoint, not the C# focused cursor representation, so it makes no focus-local or benchmark-parity claim.
 
 `MeasuredRopeCursor v a` applies the same opaque immutable gap model to the exact retained
 `MeasuredRope`. It adds ordered `measureBefore` and `measureAfter` partitions plus absolute

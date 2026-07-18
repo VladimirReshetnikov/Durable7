@@ -44,7 +44,7 @@ reasonable oracle.
   logical order, chunk bounds and proportionality, backing-store sharing, snapshot identity, noncommutative
   measures, overflow rejection, and strong exception behavior for user measure callbacks.
 - `RopeCursorPrototypeContractTests.cs`, `RopeCursorPrototypeModelTests.cs`, and
-  `RopeCursorPrototypeBoundaryTests.cs` validate the private Axis 2 C0 zipper across all focus/flush candidates,
+  `RopeCursorPrototypeBoundaryTests.cs` validate the private Axis 2 C0 cursor representation across all focus/flush candidates,
   retained branches, class/struct/mutable representations, snapshot-cache races, every source chunk length,
   seam oscillation, and long typing/backspace histories retained as the representation/tuning oracle.
 - `RopeCursorTests.cs` and `RopeCursorModelTests.cs` validate the public Axis 2 C1 readonly-struct cursor:

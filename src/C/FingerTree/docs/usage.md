@@ -903,7 +903,7 @@ The cursor owns its embedded rope and requires `ft_rope_cursor_copy`, `ft_rope_c
 into caller-provided value storage and use `found` to report a boundary. Movement, seek, insertion, deletion,
 replacement, and snapshot operations leave the source reusable on failure. Distinct successful outputs must be
 uninitialized or disposed; exact source/result aliasing is supported. The checkpoint retains the canonical rope
-root plus its gap and makes no focused-zipper or amortized-locality claim.
+root plus its gap and makes no focused cursor representation or amortized-locality claim.
 
 Use `ft_measured_rope_get_cursor` for the same retained gap semantics over a custom measured rope.
 `ft_measured_rope_cursor_measure_before` and `measure_after` preserve left-to-right monoid order. Absolute search

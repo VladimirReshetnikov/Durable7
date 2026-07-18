@@ -54,7 +54,7 @@ newline-measured cursor and wraps edited measured snapshots in O(1), retaining a
 line, and UTF-16 column helpers without materialization.
 Creation, movement, seek, and snapshot are O(1); peeks, measured reads, measure search, and point edits
 are O(log n), while inserting `m` elements is O(m + log n). Rope growth uses checked `Int` arithmetic
-and fails before measure-policy callbacks or publication. These are not the C# focused zipper and make
+and fails before measure-policy callbacks or publication. These are not the C# focused cursor representation and make
 no memo-cell, allocation, or amortized-locality claim.
 
 `RrbVector<T>` is the family's random-access-optimized sequence. It stores up to 32 elements per
