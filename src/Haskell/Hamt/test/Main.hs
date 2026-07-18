@@ -1204,6 +1204,64 @@ testMerkleEncodingAndCore = do
   assertBool "canonical tree uses wide blocks" (any ((> 1) . Merkle.shapeEntriesInBlock) (Merkle.shape forward))
   assertBool "canonical tree validates" (isRight (Merkle.validateStructure forward))
 
+  let cursorTreeSource = take 3 [(key, key * 7 - 3) | key <- [-10, 0, 10 :: Int32]]
+  cursorTree <- expectRight "build Merkle cursor source" (Merkle.fromList cursorTreeSource intPolicy)
+  let cursorKeys = [-10, 0, 10 :: Int32]
+  forM_ [0 .. Merkle.size cursorTree] $ \position -> do
+    cursorValue <- maybe (fail "expected Merkle cursor rank") pure (Merkle.cursorAt position cursorTree)
+    assertEqual "Merkle cursor position" position (Merkle.cursorPosition cursorValue)
+    assertEqual "Merkle cursor start" (position == 0) (Merkle.cursorIsAtStart cursorValue)
+    assertEqual "Merkle cursor end" (position == Merkle.size cursorTree) (Merkle.cursorIsAtEnd cursorValue)
+    assertEqual "Merkle cursor previous" (atMay cursorKeys (position - 1))
+      (Merkle.entryKey <$> Merkle.cursorPeekPrevious cursorValue)
+    assertEqual "Merkle cursor next" (atMay cursorKeys position)
+      (Merkle.entryKey <$> Merkle.cursorPeekNext cursorValue)
+  assertEqual "Merkle cursor lower bound" 1
+    (Merkle.cursorPosition (Merkle.lowerBoundCursor (-5) cursorTree))
+  assertEqual "Merkle cursor upper bound" 2
+    (Merkle.cursorPosition (Merkle.upperBoundCursor 0 cursorTree))
+  let exactCursor = Merkle.cursorSearchCursor (Merkle.cursorAtKey 0 cursorTree)
+      missCursor = Merkle.cursorAtKey 5 cursorTree
+  assertBool "Merkle cursor exact hit" (Merkle.cursorSearchFound (Merkle.cursorAtKey 0 cursorTree))
+  assertEqual "Merkle cursor exact miss rank" 2
+    (Merkle.cursorPosition (Merkle.cursorSearchCursor missCursor))
+  assertBool "Merkle cursor exact miss" (not (Merkle.cursorSearchFound missCursor))
+  changedCursor <- expectRight "replace Merkle cursor next value"
+    (Merkle.cursorSetNextValue 999 exactCursor) >>= maybe (fail "expected Merkle next entry") pure
+  assertEqual "Merkle cursor source remains unchanged" (Just (-3)) (Merkle.lookup 0 cursorTree)
+  assertEqual "Merkle cursor changed value" (Just 999)
+    (Merkle.lookup 0 (Merkle.cursorSnapshot changedCursor))
+  insertedCursor <- expectRight "insert through Merkle cursor"
+    (Merkle.cursorInsert 5 500 (Merkle.lowerBoundCursor 5 cursorTree))
+  assertEqual "Merkle cursor insertion position" 3 (Merkle.cursorPosition insertedCursor)
+  assertEqual "Merkle cursor insertion keys" [-10, 0, 5, 10]
+    (map fst (Merkle.toAscList (Merkle.cursorSnapshot insertedCursor)))
+  restoredCursor <- expectRight "delete previous Merkle cursor entry"
+    (Merkle.cursorDeletePrevious insertedCursor) >>= maybe (fail "expected previous entry") pure
+  assertEqual "Merkle cursor hash restoration" (Merkle.rootDigest cursorTree)
+    (Merkle.rootDigest (Merkle.cursorSnapshot restoredCursor))
+  assertEqual "Merkle cursor invalid rank" True (isNothing (Merkle.cursorAt 4 cursorTree))
+  assertEqual "Merkle cursor before start" True (isNothing (Merkle.cursorMovePrevious (Merkle.cursor cursorTree)))
+  assertEqual "Merkle cursor after end" True (isNothing (Merkle.cursorMoveNext (Merkle.cursorAtEnd cursorTree)))
+  assertEqual "Merkle cursor duplicate" (Left Merkle.MerkleCursorDuplicateKey)
+    (fmap Merkle.cursorPosition (Merkle.cursorInsert 0 1 exactCursor))
+  assertEqual "Merkle cursor wrong gap" (Left (Merkle.MerkleCursorWrongGap 2 0))
+    (fmap Merkle.cursorPosition (Merkle.cursorInsert 5 1 (Merkle.cursor cursorTree)))
+  let rankKeys = filter ((/= 0) . (`mod` 7)) [-500 .. 500 :: Int32]
+  rankTree <- expectRight "build Merkle cursor rank model"
+    (Merkle.fromList [(key, key) | key <- rankKeys] intPolicy)
+  forM_ [-550, -539 .. 550 :: Int32] $ \probe -> do
+    let rank = length (takeWhile (< probe) rankKeys)
+        found = atMay rankKeys rank == Just probe
+        searched = Merkle.cursorAtKey probe rankTree
+    assertEqual "Merkle cursor model lower rank" rank
+      (Merkle.cursorPosition (Merkle.lowerBoundCursor probe rankTree))
+    assertEqual "Merkle cursor model upper rank" (rank + if found then 1 else 0)
+      (Merkle.cursorPosition (Merkle.upperBoundCursor probe rankTree))
+    assertEqual "Merkle cursor model exact rank" rank
+      (Merkle.cursorPosition (Merkle.cursorSearchCursor searched))
+    assertEqual "Merkle cursor model exact presence" found (Merkle.cursorSearchFound searched)
+
   noOp <- expectRight "replace with exact encoded value" (Merkle.insert 99 (99 * 7 - 3) forward)
   assertEqual "exact replacement is a root no-op" (Merkle.rootDigest forward) (Merkle.rootDigest noOp)
   changed <- expectRight "replace one Merkle value" (Merkle.insert 99 (-99) forward)
@@ -1446,6 +1504,13 @@ isLeft _ = False
 isRight :: Either a b -> Bool
 isRight (Right _) = True
 isRight _ = False
+
+atMay :: [a] -> Int -> Maybe a
+atMay values index
+  | index < 0 = Nothing
+  | otherwise = case drop index values of
+      value : _ -> Just value
+      [] -> Nothing
 
 expectRight :: Show error => String -> Either error value -> IO value
 expectRight _ (Right value) = pure value

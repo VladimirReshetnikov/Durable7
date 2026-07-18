@@ -16,6 +16,9 @@ module Data.Structures.Hamt.MerkleSearchTree
   , MerkleSearchTreeStatistics(..)
   , MerkleTreeError(..)
   , MerkleRangeError(..)
+  , MerkleCursor
+  , MerkleCursorSearch
+  , MerkleCursorEditError(..)
   , empty
   , fromList
   , policy
@@ -24,6 +27,29 @@ module Data.Structures.Hamt.MerkleSearchTree
   , height
   , blockCount
   , rootDigest
+  , cursor
+  , cursorAt
+  , cursorAtEnd
+  , lowerBoundCursor
+  , upperBoundCursor
+  , cursorAtKey
+  , cursorSearchFound
+  , cursorSearchCursor
+  , cursorCount
+  , cursorPosition
+  , cursorIsAtStart
+  , cursorIsAtEnd
+  , cursorPeekPrevious
+  , cursorPeekNext
+  , cursorMovePrevious
+  , cursorMoveNext
+  , cursorSeek
+  , cursorInsert
+  , cursorPut
+  , cursorSetNextValue
+  , cursorDeletePrevious
+  , cursorDeleteNext
+  , cursorSnapshot
   , member
   , lookup
   , lookupEntry
@@ -168,6 +194,19 @@ data MerkleTreeError
 data MerkleRangeError = MerkleRangeError
   deriving (Eq, Show)
 
+-- | An immutable tree-snapshot-plus-rank gap cursor in policy-comparer order.
+data MerkleCursor k v = MerkleCursor !(MerkleSearchTree k v) !Int
+
+-- | A presence-safe exact-key result whose cursor remains usable on a miss.
+data MerkleCursorSearch k v = MerkleCursorSearch !Bool !(MerkleCursor k v)
+
+-- | A cursor edit could not publish at the current ordered gap.
+data MerkleCursorEditError
+  = MerkleCursorDuplicateKey
+  | MerkleCursorWrongGap !Int !Int
+  | MerkleCursorTreeError !MerkleTreeError
+  deriving (Eq, Show)
+
 -- | Creates an empty tree retaining the supplied deterministic policy.
 empty :: MerkleSearchTreePolicy k v -> MerkleSearchTree k v
 empty treePolicy = MerkleSearchTree Nothing treePolicy
@@ -214,6 +253,134 @@ blockCount = maybe 0 nodeBlockCount . treeRoot
 -- | Returns the policy-bound root content address.
 rootDigest :: MerkleSearchTree k v -> MerkleDigest
 rootDigest tree = maybe (merkleEmptyDigest (policy tree)) nodeDigest (treeRoot tree)
+
+-- | Creates a cursor at the gap before the first entry.
+cursor :: MerkleSearchTree k v -> MerkleCursor k v
+cursor tree = MerkleCursor tree 0
+
+-- | Creates a cursor at a rank gap, or 'Nothing' outside @0 .. size@.
+cursorAt :: Int -> MerkleSearchTree k v -> Maybe (MerkleCursor k v)
+cursorAt position tree
+  | position < 0 || position > size tree = Nothing
+  | otherwise = Just (MerkleCursor tree position)
+
+-- | Creates a cursor after the final entry.
+cursorAtEnd :: MerkleSearchTree k v -> MerkleCursor k v
+cursorAtEnd tree = MerkleCursor tree (size tree)
+
+-- | Creates the lower-bound cursor for a key.
+lowerBoundCursor :: k -> MerkleSearchTree k v -> MerkleCursor k v
+lowerBoundCursor key tree = MerkleCursor tree (fst (lowerBoundRank key tree))
+
+-- | Creates the upper-bound cursor for a key.
+upperBoundCursor :: k -> MerkleSearchTree k v -> MerkleCursor k v
+upperBoundCursor key tree =
+  let (position, found) = lowerBoundRank key tree
+   in MerkleCursor tree (position + if found then 1 else 0)
+
+-- | Creates a usable lower-bound cursor and reports whether its next entry is exact.
+cursorAtKey :: k -> MerkleSearchTree k v -> MerkleCursorSearch k v
+cursorAtKey key tree =
+  let (position, found) = lowerBoundRank key tree
+   in MerkleCursorSearch found (MerkleCursor tree position)
+
+cursorSearchFound :: MerkleCursorSearch k v -> Bool
+cursorSearchFound (MerkleCursorSearch found _) = found
+
+cursorSearchCursor :: MerkleCursorSearch k v -> MerkleCursor k v
+cursorSearchCursor (MerkleCursorSearch _ cursorValue) = cursorValue
+
+cursorCount :: MerkleCursor k v -> Int
+cursorCount (MerkleCursor tree _) = size tree
+
+cursorPosition :: MerkleCursor k v -> Int
+cursorPosition (MerkleCursor _ position) = position
+
+cursorIsAtStart :: MerkleCursor k v -> Bool
+cursorIsAtStart cursorValue = cursorPosition cursorValue == 0
+
+cursorIsAtEnd :: MerkleCursor k v -> Bool
+cursorIsAtEnd cursorValue = cursorPosition cursorValue == cursorCount cursorValue
+
+-- | Returns the retained entry immediately before the gap.
+cursorPeekPrevious :: MerkleCursor k v -> Maybe (MerkleEntry k v)
+cursorPeekPrevious cursorValue@(MerkleCursor tree position)
+  | cursorIsAtStart cursorValue = Nothing
+  | otherwise = entryAtRank (position - 1) tree
+
+-- | Returns the retained entry immediately after the gap.
+cursorPeekNext :: MerkleCursor k v -> Maybe (MerkleEntry k v)
+cursorPeekNext (MerkleCursor tree position) = entryAtRank position tree
+
+cursorMovePrevious :: MerkleCursor k v -> Maybe (MerkleCursor k v)
+cursorMovePrevious cursorValue@(MerkleCursor tree position)
+  | cursorIsAtStart cursorValue = Nothing
+  | otherwise = Just (MerkleCursor tree (position - 1))
+
+cursorMoveNext :: MerkleCursor k v -> Maybe (MerkleCursor k v)
+cursorMoveNext cursorValue@(MerkleCursor tree position)
+  | cursorIsAtEnd cursorValue = Nothing
+  | otherwise = Just (MerkleCursor tree (position + 1))
+
+cursorSeek :: Int -> MerkleCursor k v -> Maybe (MerkleCursor k v)
+cursorSeek position cursorValue@(MerkleCursor tree _)
+  | position < 0 || position > size tree = Nothing
+  | position == cursorPosition cursorValue = Just cursorValue
+  | otherwise = Just (MerkleCursor tree position)
+
+-- | Strictly inserts a missing key at its lower-bound gap.
+cursorInsert
+  :: k -> v -> MerkleCursor k v
+  -> Either MerkleCursorEditError (MerkleCursor k v)
+cursorInsert key value (MerkleCursor tree position) =
+  let (expected, found) = lowerBoundRank key tree
+   in if found
+        then Left MerkleCursorDuplicateKey
+        else if expected /= position
+          then Left (MerkleCursorWrongGap expected position)
+          else do
+            edited <- mapLeft MerkleCursorTreeError (insert key value tree)
+            Right (MerkleCursor edited (position + 1))
+
+-- | Updates an exact next entry or inserts at a missing lower-bound gap.
+cursorPut
+  :: k -> v -> MerkleCursor k v
+  -> Either MerkleCursorEditError (MerkleCursor k v)
+cursorPut key value (MerkleCursor tree position) =
+  let (expected, found) = lowerBoundRank key tree
+   in if expected /= position
+        then Left (MerkleCursorWrongGap expected position)
+        else do
+          edited <- mapLeft MerkleCursorTreeError (insert key value tree)
+          Right (MerkleCursor edited (position + if found then 0 else 1))
+
+-- | Replaces the next value while retaining its key representative and current gap.
+cursorSetNextValue
+  :: v -> MerkleCursor k v
+  -> Either MerkleTreeError (Maybe (MerkleCursor k v))
+cursorSetNextValue value cursorValue@(MerkleCursor tree position) = case cursorPeekNext cursorValue of
+  Nothing -> Right Nothing
+  Just entry -> fmap (Just . flip MerkleCursor position) (insert (entryKey entry) value tree)
+
+-- | Deletes the entry before the gap and moves the gap left.
+cursorDeletePrevious
+  :: MerkleCursor k v
+  -> Either MerkleTreeError (Maybe (MerkleCursor k v))
+cursorDeletePrevious cursorValue@(MerkleCursor tree position) = case cursorPeekPrevious cursorValue of
+  Nothing -> Right Nothing
+  Just entry -> fmap (Just . flip MerkleCursor (position - 1)) (delete (entryKey entry) tree)
+
+-- | Deletes the entry after the gap and keeps the gap fixed.
+cursorDeleteNext
+  :: MerkleCursor k v
+  -> Either MerkleTreeError (Maybe (MerkleCursor k v))
+cursorDeleteNext cursorValue@(MerkleCursor tree position) = case cursorPeekNext cursorValue of
+  Nothing -> Right Nothing
+  Just entry -> fmap (Just . flip MerkleCursor position) (delete (entryKey entry) tree)
+
+-- | Returns this cursor version's canonical immutable tree.
+cursorSnapshot :: MerkleCursor k v -> MerkleSearchTree k v
+cursorSnapshot (MerkleCursor tree _) = tree
 
 -- | Returns whether an equivalent key is present.
 member :: k -> MerkleSearchTree k v -> Bool
@@ -626,6 +793,47 @@ findPosition treePolicy entryArray key = go 0 (arrayLength entryArray)
            in if compareMerkleKeys treePolicy (entryKey (entryArray ! middle)) key == LT
                 then go (middle + 1) high
                 else go low middle
+
+entryAtRank :: Int -> MerkleSearchTree k v -> Maybe (MerkleEntry k v)
+entryAtRank rank tree
+  | rank < 0 || rank >= size tree = Nothing
+  | otherwise = treeRoot tree >>= go rank
+  where
+    go target node = scan 0 target
+      where
+        entryCount = arrayLength (nodeEntries node)
+        scan index remaining
+          | index > entryCount = Nothing
+          | otherwise =
+              let child = nodeChildren node ! index
+                  childCount = maybe 0 nodeCount child
+               in if remaining < childCount
+                    then child >>= go remaining
+                    else if index == entryCount
+                      then Nothing
+                      else if remaining == childCount
+                        then Just (nodeEntries node ! index)
+                        else scan (index + 1) (remaining - childCount - 1)
+
+lowerBoundRank :: k -> MerkleSearchTree k v -> (Int, Bool)
+lowerBoundRank key tree = go 0 (treeRoot tree)
+  where
+    go rank Nothing = (rank, False)
+    go rank (Just node) =
+      let (position, found) = findPosition (policy tree) (nodeEntries node) key
+          preceding = sum
+            [ maybe 0 nodeCount (nodeChildren node ! index) + 1
+            | index <- [0 .. position - 1]
+            ]
+          nextRank = rank + preceding
+       in if found
+            then (nextRank + maybe 0 nodeCount (nodeChildren node ! position), True)
+            else go nextRank (nodeChildren node ! position)
+
+mapLeft :: (a -> b) -> Either a value -> Either b value
+mapLeft transform result = case result of
+  Left failure -> Left (transform failure)
+  Right value -> Right value
 
 enumerateNode :: MerkleNode k v -> [MerkleEntry k v]
 enumerateNode node = concat
