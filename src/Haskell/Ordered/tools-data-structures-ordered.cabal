@@ -12,6 +12,7 @@ build-type: Simple
 library
   exposed-modules:
     Data.Structures.Ordered
+    Data.Structures.Ordered.Cursor
     Data.Structures.Ordered.PersistentOrderedSet
     Data.Structures.Ordered.PersistentOrderedMap
     Data.Structures.Ordered.PersistentOrderedMultimap

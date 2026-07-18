@@ -11,6 +11,7 @@ import Data.Maybe (fromMaybe)
 
 import Data.Structures.Hamt.Hashable (hash)
 import Data.Structures.Hamt.HashMap (HashPolicy(..))
+import qualified Data.Structures.Ordered.Cursor as Cursor
 import qualified Data.Structures.Ordered.PersistentOrderedSet as Ordered
 import qualified Data.Structures.Ordered.PersistentOrderedMap as OrderedMap
 import qualified Data.Structures.Ordered.PersistentOrderedMultimap as OrderedMultimap
@@ -26,7 +27,87 @@ main = do
   testConcurrentReads
   testOrderedMap
   testOrderedMultimap
+  testOrderedCursors
   putStrLn "tools-data-structures-ordered tests passed"
+
+testOrderedCursors :: IO ()
+testOrderedCursors = do
+  let setSource = Ordered.fromListWith casePolicy ["Alpha", "beta", "gamma"]
+      setCursor = expectJust "ordered-set cursor" (Cursor.orderedSetCursorAt 1 setSource)
+      setInserted = Cursor.orderedSetCursorInsert "delta" setCursor
+      setDuplicate = Cursor.orderedSetCursorTryInsert "BETA" setInserted
+      setDeleted = expectJust "ordered-set cursor delete" (Cursor.orderedSetCursorDeletePrevious setInserted)
+      setFound = Cursor.findOrderedSetCursor "BETA" setSource
+      setMiss = Cursor.findOrderedSetCursor "missing" setSource
+  assertEqual "ordered-set cursor neighbors" (Just "Alpha", Just "beta")
+    (Cursor.orderedSetCursorPeekPrevious setCursor, Cursor.orderedSetCursorPeekNext setCursor)
+  assertEqual "ordered-set cursor insertion" ["Alpha", "delta", "beta", "gamma"]
+    (Ordered.toList (Cursor.orderedSetCursorSnapshot setInserted))
+  assertEqual "ordered-set cursor insertion gap" 2 (Cursor.orderedSetCursorPosition setInserted)
+  assertBool "ordered-set cursor duplicate flag" (not (Cursor.orderedCursorAdded setDuplicate))
+  assertEqual "ordered-set duplicate preserves gap" 2
+    (Cursor.orderedSetCursorPosition (Cursor.orderedInsertionCursor setDuplicate))
+  assertEqual "ordered-set cursor deletion" (Ordered.toList setSource)
+    (Ordered.toList (Cursor.orderedSetCursorSnapshot setDeleted))
+  assertBool "ordered-set cursor retains policy"
+    (Ordered.contains "ALPHA" (Cursor.orderedSetCursorSnapshot setDeleted))
+  assertBool "ordered-set cursor find" (Cursor.orderedCursorFound setFound)
+  assertEqual "ordered-set cursor find position" 1
+    (Cursor.orderedSetCursorPosition (Cursor.orderedSearchCursor setFound))
+  assertEqual "ordered-set cursor miss position" (Ordered.size setSource)
+    (Cursor.orderedSetCursorPosition (Cursor.orderedSearchCursor setMiss))
+  assertEqual "ordered-set cursor source snapshot" ["Alpha", "beta", "gamma"]
+    (Ordered.toList (Cursor.orderedSetCursorSnapshot setCursor))
+
+  let mapSource = OrderedMap.fromList [('a', 1 :: Int), ('b', 2), ('c', 3)]
+      mapCursor = expectJust "ordered-map cursor" (Cursor.orderedMapCursorAt 1 mapSource)
+      mapInserted = expectJust "ordered-map cursor insert" (Cursor.orderedMapCursorInsert 'x' 9 mapCursor)
+      mapUpdated = expectJust "ordered-map cursor set next" (Cursor.orderedMapCursorSetNextValue 20 mapInserted)
+      mapDuplicate = Cursor.orderedMapCursorTryInsert 'b' 200 mapUpdated
+      mapWithoutPrevious = expectJust "ordered-map delete previous" (Cursor.orderedMapCursorDeletePrevious mapUpdated)
+      mapDeleted = expectJust "ordered-map delete next" (Cursor.orderedMapCursorDeleteNext mapWithoutPrevious)
+  assertEqual "ordered-map cursor edits" [('a', 1), ('x', 9), ('b', 20), ('c', 3)]
+    (OrderedMap.toList (Cursor.orderedMapCursorSnapshot mapUpdated))
+  assertBool "ordered-map cursor duplicate flag" (not (Cursor.orderedCursorAdded mapDuplicate))
+  assertEqual "ordered-map duplicate focuses key" 2
+    (Cursor.orderedMapCursorPosition (Cursor.orderedInsertionCursor mapDuplicate))
+  assertEqual "ordered-map cursor deletes" [('a', 1), ('c', 3)]
+    (OrderedMap.toList (Cursor.orderedMapCursorSnapshot mapDeleted))
+  assertEqual "ordered-map cursor delete gap" 1 (Cursor.orderedMapCursorPosition mapDeleted)
+  assertEqual "ordered-map cursor source snapshot" [('a', 1), ('b', 2), ('c', 3)]
+    (OrderedMap.toList (Cursor.orderedMapCursorSnapshot mapCursor))
+
+  let multimapSource = OrderedMultimap.fromList [('b', 2 :: Int), ('a', 9), ('b', 1), ('c', 7)]
+      pairFound = Cursor.findOrderedMultimapCursor 'b' 1 multimapSource
+      multimapAdded = Cursor.orderedMultimapCursorInsert 'b' 3 (Cursor.orderedSearchCursor pairFound)
+      multimapDuplicate = Cursor.orderedMultimapCursorTryInsert 'b' 3 multimapAdded
+      multimapWithoutPrevious = expectJust "ordered-multimap delete previous"
+        (Cursor.orderedMultimapCursorDeletePrevious multimapAdded)
+      multimapDeleted = expectJust "ordered-multimap delete next"
+        (Cursor.orderedMultimapCursorDeleteNext multimapWithoutPrevious)
+      groupFound = Cursor.findOrderedMultimapGroupCursor 'a' multimapSource
+      groupMiss = Cursor.findOrderedMultimapGroupCursor 'z' multimapSource
+  assertEqual "ordered-multimap grouped source" [('b', 2), ('b', 1), ('a', 9), ('c', 7)]
+    (OrderedMultimap.toList multimapSource)
+  assertBool "ordered-multimap pair find" (Cursor.orderedCursorFound pairFound)
+  assertEqual "ordered-multimap pair position" 1
+    (Cursor.orderedMultimapCursorPosition (Cursor.orderedSearchCursor pairFound))
+  assertEqual "ordered-multimap grouped insertion gap" 3 (Cursor.orderedMultimapCursorPosition multimapAdded)
+  assertBool "ordered-multimap duplicate flag" (not (Cursor.orderedCursorAdded multimapDuplicate))
+  assertEqual "ordered-multimap duplicate preserves gap" 3
+    (Cursor.orderedMultimapCursorPosition (Cursor.orderedInsertionCursor multimapDuplicate))
+  assertEqual "ordered-multimap cursor deletion" [('b', 2), ('b', 1), ('c', 7)]
+    (OrderedMultimap.toList (Cursor.orderedMultimapCursorSnapshot multimapDeleted))
+  assertEqual "ordered-multimap cursor delete gap" 2 (Cursor.orderedMultimapCursorPosition multimapDeleted)
+  assertEqual "ordered-multimap cursor next" (Just ('c', 7))
+    (Cursor.orderedMultimapCursorPeekNext multimapDeleted)
+  assertBool "ordered-multimap group find" (Cursor.orderedCursorFound groupFound)
+  assertEqual "ordered-multimap group position" 2
+    (Cursor.orderedMultimapCursorPosition (Cursor.orderedSearchCursor groupFound))
+  assertEqual "ordered-multimap group miss position" (OrderedMultimap.size multimapSource)
+    (Cursor.orderedMultimapCursorPosition (Cursor.orderedSearchCursor groupMiss))
+  assertEqual "ordered-multimap cursor source snapshot" [('b', 2), ('b', 1), ('a', 9), ('c', 7)]
+    (OrderedMultimap.toList (Cursor.orderedMultimapCursorSnapshot (Cursor.orderedSearchCursor pairFound)))
 
 testOrderedMultimap :: IO ()
 testOrderedMultimap = do
