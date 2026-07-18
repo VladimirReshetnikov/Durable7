@@ -178,6 +178,32 @@ public class MerkleSearchTree<K, V> private constructor(
     public val blockCount: Int get() = root?.blockCount ?: 0
     public val rootHash: MerkleDigest get() = root?.digest ?: policy.emptyDigest
 
+    /** Creates a cursor at the gap before the first entry. */
+    public fun cursor(): MerkleSearchTreeCursor<K, V> = MerkleSearchTreeCursor.create(this, 0)
+
+    /** Creates a cursor at [position], or returns null outside `0..size`. */
+    public fun cursorAt(position: Int): MerkleSearchTreeCursor<K, V>? =
+        if (position < 0 || position > size) null else MerkleSearchTreeCursor.create(this, position)
+
+    /** Creates a cursor after the final entry. */
+    public fun cursorAtEnd(): MerkleSearchTreeCursor<K, V> = MerkleSearchTreeCursor.create(this, size)
+
+    /** Creates the lower-bound cursor for [key]. */
+    public fun lowerBoundCursor(key: K): MerkleSearchTreeCursor<K, V> =
+        MerkleSearchTreeCursor.create(this, lowerBoundRankForCursor(key).first)
+
+    /** Creates the upper-bound cursor for [key]. */
+    public fun upperBoundCursor(key: K): MerkleSearchTreeCursor<K, V> {
+        val (position, found) = lowerBoundRankForCursor(key)
+        return MerkleSearchTreeCursor.create(this, position + if (found) 1 else 0)
+    }
+
+    /** Creates a usable lower-bound cursor and reports whether its next entry is exact. */
+    public fun cursorAtKey(key: K): MerkleCursorSearch<K, V> {
+        val (position, found) = lowerBoundRankForCursor(key)
+        return MerkleCursorSearch(MerkleSearchTreeCursor.create(this, position), found)
+    }
+
     /** Returns whether two versions retain the exact same root object. */
     public fun sharesRootWith(other: MerkleSearchTree<K, V>): Boolean = root === other.root
 
@@ -219,6 +245,45 @@ public class MerkleSearchTree<K, V> private constructor(
             node = node.children[position.index]
         }
         return null
+    }
+
+    internal fun entryAtForCursor(requestedRank: Int): MerkleEntry<K, V>? {
+        if (requestedRank < 0 || requestedRank >= size) return null
+        var rank = requestedRank
+        var node = root
+        while (node != null) {
+            val current = node
+            var descended = false
+            for (index in current.entries.indices) {
+                val childCount = current.children[index]?.count ?: 0
+                if (rank < childCount) {
+                    node = current.children[index]
+                    descended = true
+                    break
+                }
+                rank -= childCount
+                if (rank == 0) return current.entries[index]
+                rank--
+            }
+            if (!descended) node = current.children.last()
+        }
+        error("Merkle subtree counts do not contain the requested rank.")
+    }
+
+    internal fun lowerBoundRankForCursor(key: K): Pair<Int, Boolean> {
+        var rank = 0
+        var node = root
+        while (node != null) {
+            val position = findPosition(node.entries, key)
+            for (index in 0 until position.index) {
+                rank = Math.addExact(rank, Math.addExact(node.children[index]?.count ?: 0, 1))
+            }
+            if (position.found) {
+                return Math.addExact(rank, node.children[position.index]?.count ?: 0) to true
+            }
+            node = node.children[position.index]
+        }
+        return rank to false
     }
 
     /** Returns a value, or `null` on absence; use [getEntry] when `V` itself is nullable. */

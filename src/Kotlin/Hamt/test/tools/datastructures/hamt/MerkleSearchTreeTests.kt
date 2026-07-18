@@ -450,6 +450,8 @@ private fun <K, V> assertCanonicalEquivalent(
 
 internal fun runMerkleSearchTreeTests(): Unit {
     val tests = listOf(
+        "cursorNavigatesRanksAndPublishesCanonicalEdits" to ::cursorNavigatesRanksAndPublishesCanonicalEdits,
+        "cursorCachedRanksAndBoundsMatchSortedModel" to ::cursorCachedRanksAndBoundsMatchSortedModel,
         "codecAndDigestVectorsAreStrict" to ::codecAndDigestVectorsAreStrict,
         "policyDomainAndGoldenBlockMatchCSharpAndRust" to ::policyDomainAndGoldenBlockMatchCSharpAndRust,
         "constructionAndChurnAreHistoryIndependent" to ::constructionAndChurnAreHistoryIndependent,
@@ -464,6 +466,61 @@ internal fun runMerkleSearchTreeTests(): Unit {
     for ((name, test) in tests) {
         test()
         println("PASS mst.$name")
+    }
+}
+
+private fun cursorNavigatesRanksAndPublishesCanonicalEdits(): Unit {
+    val source = MerkleSearchTree.from(listOf(-10 to "a", 0 to null, 10 to "c"), intStringPolicy())
+    val keys = listOf(-10, 0, 10)
+    for (position in 0..source.size) {
+        val cursor = checkNotNull(source.cursorAt(position))
+        mstEquals(position, cursor.position, "cursor position")
+        mstEquals(position == 0, cursor.isAtStart, "cursor start")
+        mstEquals(position == source.size, cursor.isAtEnd, "cursor end")
+        mstCheck(cursor.snapshot() === source, "cursor snapshot identity")
+        mstEquals(keys.getOrNull(position - 1), cursor.peekPrevious()?.key, "cursor previous")
+        mstEquals(keys.getOrNull(position), cursor.peekNext()?.key, "cursor next")
+    }
+
+    mstEquals(1, source.lowerBoundCursor(-5).position, "cursor lower bound")
+    mstEquals(2, source.upperBoundCursor(0).position, "cursor upper bound")
+    mstCheck(source.cursorAtKey(0).found, "cursor exact hit")
+    mstEquals(2, source.cursorAtKey(5).cursor.position, "cursor exact miss rank")
+    mstCheck(!source.cursorAtKey(5).found, "cursor exact miss")
+
+    val exact = source.cursorAtKey(0).cursor
+    mstCheck(exact.setNextValue(null) === exact, "cursor no-op identity")
+    val changed = checkNotNull(exact.setNextValue("b")).snapshot()
+    mstEquals("b", changed.getEntry(0)?.value, "cursor changed value")
+    mstCheck(changed.rootHash != source.rootHash, "cursor changed root hash")
+    mstCheck(changed.policy === source.policy, "cursor policy identity")
+    mstEquals(null, source.getEntry(0)?.value, "cursor source nullable value")
+
+    val inserted = source.lowerBoundCursor(5).insert(5, "five")
+    mstEquals(3, inserted.position, "cursor inserted position")
+    mstEquals(listOf(-10, 0, 5, 10), inserted.snapshot().map { it.key }, "cursor inserted keys")
+    mstEquals(source.rootHash, checkNotNull(inserted.deletePrevious()).snapshot().rootHash, "cursor restored root")
+    mstEquals(null, source.cursorAt(4), "cursor invalid rank")
+    mstEquals(null, source.cursor().movePrevious(), "cursor before start")
+    mstEquals(null, source.cursorAtEnd().moveNext(), "cursor after end")
+    mstThrows<IllegalArgumentException> { exact.insert(0, "duplicate") }
+    mstThrows<IllegalArgumentException> { source.cursor().insert(5, "wrong gap") }
+}
+
+private fun cursorCachedRanksAndBoundsMatchSortedModel(): Unit {
+    val keys = (-500..500).filter { it % 7 != 0 }
+    val tree = MerkleSearchTree.from(keys.map { it to it.toString() }, intStringPolicy())
+    for ((position, key) in keys.withIndex()) {
+        mstEquals(key, checkNotNull(tree.cursorAt(position)?.peekNext()).key, "cursor rank selection")
+    }
+    for (probe in -550..550 step 11) {
+        val rank = keys.indexOfFirst { it >= probe }.let { if (it < 0) keys.size else it }
+        val found = keys.getOrNull(rank) == probe
+        mstEquals(rank, tree.lowerBoundCursor(probe).position, "cursor lower rank")
+        mstEquals(rank + if (found) 1 else 0, tree.upperBoundCursor(probe).position, "cursor upper rank")
+        val result = tree.cursorAtKey(probe)
+        mstEquals(rank, result.cursor.position, "cursor exact rank")
+        mstEquals(found, result.found, "cursor exact presence")
     }
 }
 
