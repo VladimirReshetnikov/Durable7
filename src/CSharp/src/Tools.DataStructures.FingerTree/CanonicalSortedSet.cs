@@ -14,7 +14,7 @@ namespace Tools.DataStructures.FingerTree;
 /// tree to O(n). All traversals and updates use explicit stacks and remain stack-safe in that case.
 /// </remarks>
 [DebuggerDisplay("Count = {Count}, Height = {Height}")]
-public sealed class CanonicalSortedSet<T> : IReadOnlySet<T>
+public sealed partial class CanonicalSortedSet<T> : IReadOnlySet<T>
 {
     private readonly Node? _root;
 

@@ -9,7 +9,7 @@ namespace Tools.DataStructures.FingerTree;
 /// <typeparam name="TPriority">The priority type; lower values are selected first.</typeparam>
 /// <typeparam name="TValue">The payload type.</typeparam>
 [DebuggerDisplay("Count = {Count}, Height = {Height}")]
-public sealed class PrioritySearchQueue<TKey, TPriority, TValue> :
+public sealed partial class PrioritySearchQueue<TKey, TPriority, TValue> :
     IEnumerable<PrioritySearchEntry<TKey, TPriority, TValue>>
 {
     private readonly Node? _root;

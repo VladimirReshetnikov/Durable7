@@ -37,7 +37,7 @@ namespace Tools.DataStructures.FingerTree;
 /// var without = bag.Remove(3);      // removes one 3
 /// </code>
 /// </example>
-public sealed class SortedBag<T> : IReadOnlyCollection<T>
+public sealed partial class SortedBag<T> : IReadOnlyCollection<T>
 {
     private static readonly SortedBag<T> EmptyDefault = new(
         FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>>.Empty,

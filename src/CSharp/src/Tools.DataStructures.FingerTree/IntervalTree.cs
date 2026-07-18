@@ -122,7 +122,7 @@ public readonly struct IntervalMeasure<T> : IMeasure<Interval<T>, IntervalAnnota
 /// var all = tree.FindOverlaps(new Interval&lt;int&gt;(4, 12));  // [1,5], [3,8], [10,15]
 /// </code>
 /// </example>
-public sealed class IntervalTree<T> : IEnumerable<Interval<T>>
+public sealed partial class IntervalTree<T> : IEnumerable<Interval<T>>
 {
     private static readonly IntervalTree<T> EmptyInstance =
         new(FingerTree<Interval<T>, IntervalAnnotation<T>, IntervalMeasure<T>>.Empty);

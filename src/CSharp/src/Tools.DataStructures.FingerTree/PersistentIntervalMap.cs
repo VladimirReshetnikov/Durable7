@@ -52,7 +52,7 @@ internal readonly struct IntervalMapMeasure<TEndpoint, TValue> :
 /// pruning without a separate index. Instances are immutable and safe for concurrent reads when
 /// the endpoint and value comparers are safe for concurrent use.
 /// </remarks>
-public sealed class PersistentIntervalMap<TEndpoint, TValue> :
+public sealed partial class PersistentIntervalMap<TEndpoint, TValue> :
     IEnumerable<KeyValuePair<Interval<TEndpoint>, TValue>>
 {
     private static readonly PersistentIntervalMap<TEndpoint, TValue> EmptyInstance = new(

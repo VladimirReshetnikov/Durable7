@@ -35,7 +35,7 @@ internal readonly struct BitSetMeasure : IMeasure<BitSetChunk, BitSetAnnotation>
 /// chunk counts rather than in the largest bit index.
 /// </remarks>
 [DebuggerDisplay("Count = {Count}, ChunkCount = {ChunkCount}")]
-public sealed class PersistentChunkedBitSet : IEnumerable<int>
+public sealed partial class PersistentChunkedBitSet : IEnumerable<int>
 {
     private static readonly PersistentChunkedBitSet EmptyInstance = new(
         FingerTree<BitSetChunk, BitSetAnnotation, BitSetMeasure>.Empty);
