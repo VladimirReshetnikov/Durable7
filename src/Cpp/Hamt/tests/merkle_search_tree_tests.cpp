@@ -179,6 +179,100 @@ struct registrar final {
 using int_tree = merkle_search_tree<std::int32_t, std::int32_t>;
 using string_tree = merkle_search_tree<std::int32_t, std::optional<std::string>>;
 
+[[nodiscard]] int_tree::policy_type make_int_policy(std::string policy_id);
+[[nodiscard]] string_tree::policy_type make_string_policy(std::string policy_id);
+
+TEST(MerkleCursorNavigatesRanksAndPublishesCanonicalEdits)
+{
+    const auto source = string_tree::create_range(
+        {
+            {-10, std::optional<std::string>{"a"}},
+            {0, std::nullopt},
+            {10, std::optional<std::string>{"c"}},
+        },
+        make_string_policy("cpp-cursor-v1"));
+    const auto keys = std::vector<std::int32_t>{-10, 0, 10};
+    for (auto position = std::size_t{0}; position <= source.size(); ++position) {
+        const auto cursor = source.get_cursor(position);
+        CHECK_EQ(position, cursor.position());
+        CHECK_EQ(position == 0, cursor.is_at_start());
+        CHECK_EQ(position == source.size(), cursor.is_at_end());
+        CHECK(cursor.snapshot().shares_root_with(source));
+        CHECK_EQ(position == 0, cursor.peek_previous() == nullptr);
+        if (position != 0) {
+            CHECK_EQ(keys[position - 1], cursor.peek_previous()->key());
+        }
+        CHECK_EQ(position == source.size(), cursor.peek_next() == nullptr);
+        if (position != source.size()) {
+            CHECK_EQ(keys[position], cursor.peek_next()->key());
+        }
+    }
+
+    CHECK_EQ(std::size_t{1}, source.get_cursor_lower_bound(-5).position());
+    CHECK_EQ(std::size_t{2}, source.get_cursor_upper_bound(0).position());
+    const auto exact = source.get_cursor_at_key(0);
+    CHECK(exact.found);
+    CHECK_EQ(std::size_t{1}, exact.cursor.position());
+    const auto miss = source.get_cursor_at_key(5);
+    CHECK(!miss.found);
+    CHECK_EQ(std::size_t{2}, miss.cursor.position());
+
+    const auto no_op = exact.cursor.set_next_value(std::nullopt);
+    CHECK(no_op.snapshot().shares_root_with(source));
+    const auto changed = exact.cursor
+        .set_next_value(std::optional<std::string>{"b"})
+        .snapshot();
+    CHECK_EQ(std::optional<std::string>{"b"}, changed.at(0));
+    CHECK(changed.root_hash() != source.root_hash());
+    CHECK(changed.shares_policy_with(source));
+    CHECK(!source.at(0).has_value());
+
+    const auto inserted = source
+        .get_cursor_lower_bound(5)
+        .insert(5, std::optional<std::string>{"five"});
+    CHECK_EQ(std::size_t{3}, inserted.position());
+    auto inserted_keys = std::vector<std::int32_t>{};
+    for (const auto& entry : inserted.snapshot()) {
+        inserted_keys.push_back(entry.key());
+    }
+    CHECK(inserted_keys == std::vector<std::int32_t>({-10, 0, 5, 10}));
+    CHECK_EQ(source.root_hash(), inserted.delete_previous().snapshot().root_hash());
+    CHECK_THROWS_AS(source.get_cursor(4), std::out_of_range);
+    CHECK_THROWS_AS(source.get_cursor().move_previous(), std::logic_error);
+    CHECK_THROWS_AS(source.get_cursor_at_end().move_next(), std::logic_error);
+    CHECK_THROWS_AS(exact.cursor.insert(0, std::optional<std::string>{"duplicate"}), std::invalid_argument);
+    CHECK_THROWS_AS(source.get_cursor().insert(5, std::optional<std::string>{"wrong gap"}), std::invalid_argument);
+}
+
+TEST(MerkleCursorCachedRanksAndBoundsMatchSortedModel)
+{
+    auto items = std::vector<std::pair<std::int32_t, std::int32_t>>{};
+    for (auto key = std::int32_t{-500}; key <= 500; ++key) {
+        if (key % 7 != 0) {
+            items.emplace_back(key, key);
+        }
+    }
+    const auto tree = int_tree::create_range(std::move(items), make_int_policy("cpp-cursor-ranks-v1"));
+    auto keys = std::vector<std::int32_t>{};
+    for (const auto& entry : tree) {
+        keys.push_back(entry.key());
+    }
+    for (auto position = std::size_t{0}; position != keys.size(); ++position) {
+        const auto cursor = tree.get_cursor(position);
+        CHECK_EQ(keys[position], cursor.peek_next()->key());
+    }
+    for (auto probe = std::int32_t{-550}; probe <= 550; probe += 11) {
+        const auto lower = std::lower_bound(keys.begin(), keys.end(), probe);
+        const auto rank = static_cast<std::size_t>(lower - keys.begin());
+        const auto found = lower != keys.end() && *lower == probe;
+        CHECK_EQ(rank, tree.get_cursor_lower_bound(probe).position());
+        CHECK_EQ(rank + (found ? 1u : 0u), tree.get_cursor_upper_bound(probe).position());
+        const auto searched = tree.get_cursor_at_key(probe);
+        CHECK_EQ(rank, searched.cursor.position());
+        CHECK_EQ(found, searched.found);
+    }
+}
+
 [[nodiscard]] int_tree::policy_type make_int_policy(
     std::string policy_id = "canonical-i32-v1")
 {

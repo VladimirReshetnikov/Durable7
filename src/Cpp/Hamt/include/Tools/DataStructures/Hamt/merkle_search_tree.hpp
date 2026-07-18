@@ -26,6 +26,15 @@ template <class K, class V>
 struct access;
 } // namespace merkle_persistence_detail
 
+template <class K, class V>
+class merkle_search_tree;
+
+template <class K, class V>
+class merkle_search_tree_cursor;
+
+template <class K, class V>
+struct merkle_search_tree_cursor_search_result;
+
 /// One retained key/value representative and its canonical encodings.
 template <class K, class V>
 class merkle_search_tree_entry final {
@@ -210,6 +219,7 @@ template <class K, class V>
 class merkle_search_tree final {
 private:
     friend struct merkle_persistence_detail::access<K, V>;
+    friend class merkle_search_tree_cursor<K, V>;
 
     using entry_type_internal = merkle_search_tree_entry<K, V>;
 
@@ -236,6 +246,8 @@ public:
     using policy_type = merkle_search_tree_policy<K, V>;
     using difference_type = merkle_map_difference<K, V>;
     using size_type = std::size_t;
+    using cursor_type = merkle_search_tree_cursor<K, V>;
+    using cursor_search_result = merkle_search_tree_cursor_search_result<K, V>;
 
     class const_iterator final {
     private:
@@ -370,6 +382,21 @@ public:
     {
         return root_ == nullptr ? policy_.empty_digest() : root_->digest;
     }
+
+    /// Creates an immutable ordered gap cursor at `position`.
+    [[nodiscard]] cursor_type get_cursor(size_type position = 0) const;
+
+    /// Creates an immutable ordered gap cursor after the final entry.
+    [[nodiscard]] cursor_type get_cursor_at_end() const;
+
+    /// Creates the lower-bound cursor for `key`.
+    [[nodiscard]] cursor_type get_cursor_lower_bound(const K& key) const;
+
+    /// Creates the upper-bound cursor for `key`.
+    [[nodiscard]] cursor_type get_cursor_upper_bound(const K& key) const;
+
+    /// Creates a usable lower-bound cursor and reports whether its next entry is exact.
+    [[nodiscard]] cursor_search_result get_cursor_at_key(const K& key) const;
 
     [[nodiscard]] bool shares_root_with(const merkle_search_tree& other) const noexcept
     {
@@ -663,6 +690,81 @@ private:
             }
         }
         return {low, low != entries.size() && policy_.compare(entries[low].key(), key) == 0};
+    }
+
+    [[nodiscard]] const entry_type* entry_at_rank_for_cursor(size_type rank) const noexcept
+    {
+        if (rank >= size()) {
+            return nullptr;
+        }
+        auto* current = root_.get();
+        while (current != nullptr) {
+            auto descended = false;
+            for (auto index = size_type{0}; index != current->entries.size(); ++index) {
+                const auto child_count = current->children[index] == nullptr
+                    ? size_type{0}
+                    : current->children[index]->count;
+                if (rank < child_count) {
+                    current = current->children[index].get();
+                    descended = true;
+                    break;
+                }
+                rank -= child_count;
+                if (rank == 0) {
+                    return &current->entries[index];
+                }
+                --rank;
+            }
+            if (!descended) {
+                current = current->children.back().get();
+            }
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] std::pair<size_type, bool> lower_bound_rank_for_cursor(const K& key) const
+    {
+        auto rank = size_type{0};
+        auto* current = root_.get();
+        while (current != nullptr) {
+            const auto [position, found] = find_position(current->entries, key);
+            for (auto index = size_type{0}; index != position; ++index) {
+                rank = checked_add(
+                    rank,
+                    checked_add(
+                        current->children[index] == nullptr
+                            ? size_type{0}
+                            : current->children[index]->count,
+                        size_type{1}));
+            }
+            if (found) {
+                return {
+                    checked_add(
+                        rank,
+                        current->children[position] == nullptr
+                            ? size_type{0}
+                            : current->children[position]->count),
+                    true};
+            }
+            current = current->children[position].get();
+        }
+        return {rank, false};
+    }
+
+    [[nodiscard]] merkle_search_tree set_value_at_key(const K& key, V value) const
+    {
+        const auto* existing = get_entry(key);
+        if (existing == nullptr) {
+            throw merkle_tree_invariant_error("cursor replacement key is absent");
+        }
+        auto value_bytes = policy_.value_codec().encode(value);
+        if (value_bytes == existing->value_bytes()) {
+            return *this;
+        }
+        auto replacement = existing->replacing_value(std::move(value), std::move(value_bytes));
+        return merkle_search_tree{
+            update_value(root_, key, std::move(replacement)),
+            policy_};
     }
 
     [[nodiscard]] node_pointer build_canonical(const std::span<const entry_type> entries) const
@@ -1297,5 +1399,182 @@ private:
     node_pointer root_;
     policy_type policy_;
 };
+
+/// Immutable tree-snapshot-plus-rank gap cursor in policy-comparer order.
+template <class K, class V>
+class merkle_search_tree_cursor final {
+public:
+    using tree_type = merkle_search_tree<K, V>;
+    using entry_type = typename tree_type::entry_type;
+    using size_type = typename tree_type::size_type;
+
+    merkle_search_tree_cursor() = delete;
+
+    [[nodiscard]] size_type count() const noexcept { return tree_.size(); }
+    [[nodiscard]] size_type position() const noexcept { return position_; }
+    [[nodiscard]] bool is_at_start() const noexcept { return position_ == 0; }
+    [[nodiscard]] bool is_at_end() const noexcept { return position_ == count(); }
+
+    /// Returns the retained entry immediately before the gap.
+    [[nodiscard]] const entry_type* peek_previous() const & noexcept
+    {
+        return position_ == 0 ? nullptr : tree_.entry_at_rank_for_cursor(position_ - 1);
+    }
+    [[nodiscard]] const entry_type* peek_previous() const && = delete;
+
+    /// Returns the retained entry immediately after the gap.
+    [[nodiscard]] const entry_type* peek_next() const & noexcept
+    {
+        return tree_.entry_at_rank_for_cursor(position_);
+    }
+    [[nodiscard]] const entry_type* peek_next() const && = delete;
+
+    [[nodiscard]] merkle_search_tree_cursor move_previous() const
+    {
+        if (is_at_start()) {
+            throw std::logic_error("Merkle cursor is already at the start");
+        }
+        return merkle_search_tree_cursor{tree_, position_ - 1};
+    }
+
+    [[nodiscard]] merkle_search_tree_cursor move_next() const
+    {
+        if (is_at_end()) {
+            throw std::logic_error("Merkle cursor is already at the end");
+        }
+        return merkle_search_tree_cursor{tree_, position_ + 1};
+    }
+
+    [[nodiscard]] merkle_search_tree_cursor seek(const size_type position) const
+    {
+        if (position > count()) {
+            throw std::out_of_range("Merkle cursor position is outside the tree bounds");
+        }
+        return position == position_ ? *this : merkle_search_tree_cursor{tree_, position};
+    }
+
+    /// Strictly inserts a missing key at its lower-bound gap.
+    [[nodiscard]] merkle_search_tree_cursor insert(K key, V value) const
+    {
+        const auto [expected, found] = tree_.lower_bound_rank_for_cursor(key);
+        if (found) {
+            throw std::invalid_argument("Merkle cursor cannot insert a duplicate key");
+        }
+        ensure_current_gap(expected);
+        return merkle_search_tree_cursor{
+            tree_.set_item(std::move(key), std::move(value)),
+            position_ + 1};
+    }
+
+    /// Updates an exact next entry or inserts at a missing lower-bound gap.
+    [[nodiscard]] merkle_search_tree_cursor put(K key, V value) const
+    {
+        const auto [expected, found] = tree_.lower_bound_rank_for_cursor(key);
+        ensure_current_gap(expected);
+        auto tree = tree_.set_item(std::move(key), std::move(value));
+        if (tree.shares_root_with(tree_)) {
+            return *this;
+        }
+        return merkle_search_tree_cursor{
+            std::move(tree),
+            position_ + (found ? size_type{0} : size_type{1})};
+    }
+
+    /// Replaces the next value while retaining its key representative and this gap.
+    [[nodiscard]] merkle_search_tree_cursor set_next_value(V value) const
+    {
+        const auto* next = peek_next();
+        if (next == nullptr) {
+            throw std::logic_error("Merkle cursor has no next entry");
+        }
+        auto tree = tree_.set_value_at_key(next->key(), std::move(value));
+        return tree.shares_root_with(tree_)
+            ? *this
+            : merkle_search_tree_cursor{std::move(tree), position_};
+    }
+
+    [[nodiscard]] merkle_search_tree_cursor delete_previous() const
+    {
+        const auto* previous = peek_previous();
+        if (previous == nullptr) {
+            throw std::logic_error("Merkle cursor has no previous entry");
+        }
+        return merkle_search_tree_cursor{tree_.remove(previous->key()), position_ - 1};
+    }
+
+    [[nodiscard]] merkle_search_tree_cursor delete_next() const
+    {
+        const auto* next = peek_next();
+        if (next == nullptr) {
+            throw std::logic_error("Merkle cursor has no next entry");
+        }
+        return merkle_search_tree_cursor{tree_.remove(next->key()), position_};
+    }
+
+    [[nodiscard]] tree_type snapshot() const { return tree_; }
+
+private:
+    friend class merkle_search_tree<K, V>;
+
+    merkle_search_tree_cursor(tree_type tree, const size_type position)
+        : tree_(std::move(tree)), position_(position)
+    {
+    }
+
+    void ensure_current_gap(const size_type expected) const
+    {
+        if (expected != position_) {
+            throw std::invalid_argument("Merkle key does not belong at the current cursor gap");
+        }
+    }
+
+    tree_type tree_;
+    size_type position_;
+};
+
+template <class K, class V>
+struct merkle_search_tree_cursor_search_result final {
+    merkle_search_tree_cursor<K, V> cursor;
+    bool found;
+};
+
+template <class K, class V>
+[[nodiscard]] auto merkle_search_tree<K, V>::get_cursor(const size_type position) const
+    -> cursor_type
+{
+    if (position > size()) {
+        throw std::out_of_range("Merkle cursor position is outside the tree bounds");
+    }
+    return cursor_type{*this, position};
+}
+
+template <class K, class V>
+[[nodiscard]] auto merkle_search_tree<K, V>::get_cursor_at_end() const -> cursor_type
+{
+    return cursor_type{*this, size()};
+}
+
+template <class K, class V>
+[[nodiscard]] auto merkle_search_tree<K, V>::get_cursor_lower_bound(const K& key) const
+    -> cursor_type
+{
+    return cursor_type{*this, lower_bound_rank_for_cursor(key).first};
+}
+
+template <class K, class V>
+[[nodiscard]] auto merkle_search_tree<K, V>::get_cursor_upper_bound(const K& key) const
+    -> cursor_type
+{
+    const auto [position, found] = lower_bound_rank_for_cursor(key);
+    return cursor_type{*this, position + (found ? size_type{1} : size_type{0})};
+}
+
+template <class K, class V>
+[[nodiscard]] auto merkle_search_tree<K, V>::get_cursor_at_key(const K& key) const
+    -> cursor_search_result
+{
+    const auto [position, found] = lower_bound_rank_for_cursor(key);
+    return cursor_search_result{cursor_type{*this, position}, found};
+}
 
 } // namespace tools::data_structures::hamt
