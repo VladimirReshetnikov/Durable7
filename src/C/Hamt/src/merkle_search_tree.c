@@ -3139,6 +3139,453 @@ tds_merkle_status tds_merkle_search_tree_clear(
     return TDS_MERKLE_OK;
 }
 
+static bool tds_mst_cursor_valid(const tds_merkle_search_tree_cursor *cursor) {
+    return cursor != NULL && tds_mst_tree_valid(&cursor->tree) &&
+        cursor->position <= tds_merkle_search_tree_size(&cursor->tree);
+}
+
+static tds_merkle_status tds_mst_add_cursor_rank(
+    size_t *rank,
+    size_t increment) {
+    size_t result = 0;
+    if (tds_mst_add_overflows(*rank, increment, &result)) {
+        return TDS_MERKLE_OVERFLOW;
+    }
+    *rank = result;
+    return TDS_MERKLE_OK;
+}
+
+static tds_merkle_status tds_mst_cursor_lower_bound_rank(
+    const tds_merkle_search_tree *tree,
+    const void *key,
+    size_t *rank,
+    bool *found) {
+    const struct tds_merkle_node *node = tree->root;
+    size_t result = 0;
+    while (node != NULL) {
+        tds_mst_entry *const *entries = tds_mst_node_entries_const(node);
+        struct tds_merkle_node *const *children = tds_mst_node_children_const(node);
+        size_t position = 0;
+        size_t index;
+        bool hit = false;
+        tds_merkle_status status = tds_mst_find_position(
+            tree->policy,
+            entries,
+            node->entry_count,
+            key,
+            &position,
+            &hit);
+        if (status != TDS_MERKLE_OK) {
+            return status;
+        }
+        for (index = 0; index != position; ++index) {
+            const size_t child_count = children[index] == NULL ? 0 : children[index]->count;
+            status = tds_mst_add_cursor_rank(&result, child_count);
+            if (status == TDS_MERKLE_OK) {
+                status = tds_mst_add_cursor_rank(&result, 1);
+            }
+            if (status != TDS_MERKLE_OK) {
+                return status;
+            }
+        }
+        if (hit) {
+            const size_t child_count = children[position] == NULL
+                ? 0
+                : children[position]->count;
+            status = tds_mst_add_cursor_rank(&result, child_count);
+            if (status != TDS_MERKLE_OK) {
+                return status;
+            }
+            *rank = result;
+            *found = true;
+            return TDS_MERKLE_OK;
+        }
+        node = children[position];
+    }
+    *rank = result;
+    *found = false;
+    return TDS_MERKLE_OK;
+}
+
+static const tds_mst_entry *tds_mst_cursor_entry_at_rank(
+    const tds_merkle_search_tree *tree,
+    size_t rank) {
+    const struct tds_merkle_node *node = tree->root;
+    if (rank >= tds_merkle_search_tree_size(tree)) {
+        return NULL;
+    }
+    while (node != NULL) {
+        tds_mst_entry *const *entries = tds_mst_node_entries_const(node);
+        struct tds_merkle_node *const *children = tds_mst_node_children_const(node);
+        size_t index;
+        bool descended = false;
+        for (index = 0; index != node->entry_count; ++index) {
+            const size_t child_count = children[index] == NULL ? 0 : children[index]->count;
+            if (rank < child_count) {
+                node = children[index];
+                descended = true;
+                break;
+            }
+            rank -= child_count;
+            if (rank == 0) {
+                return entries[index];
+            }
+            --rank;
+        }
+        if (!descended) {
+            node = children[node->entry_count];
+        }
+    }
+    return NULL;
+}
+
+static void tds_mst_cursor_publish(
+    const tds_merkle_search_tree_cursor *source,
+    tds_merkle_search_tree_cursor *result,
+    tds_merkle_search_tree tree,
+    size_t position) {
+    const tds_merkle_search_tree_cursor produced = {tree, position};
+    if (source == result) {
+        tds_merkle_search_tree_cursor old = *result;
+        *result = produced;
+        tds_merkle_search_tree_dispose(&old.tree);
+    } else {
+        *result = produced;
+    }
+}
+
+static tds_merkle_status tds_mst_cursor_reposition(
+    const tds_merkle_search_tree_cursor *cursor,
+    size_t position,
+    tds_merkle_search_tree_cursor *result) {
+    tds_merkle_search_tree tree = {0};
+    tds_merkle_status status;
+    if (!tds_mst_cursor_valid(cursor) || result == NULL ||
+        position > tds_merkle_search_tree_size(&cursor->tree)) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    status = tds_merkle_search_tree_copy(&cursor->tree, &tree);
+    if (status == TDS_MERKLE_OK) {
+        tds_mst_cursor_publish(cursor, result, tree, position);
+    }
+    return status;
+}
+
+tds_merkle_status tds_merkle_search_tree_cursor_create(
+    const tds_merkle_search_tree *tree,
+    size_t position,
+    tds_merkle_search_tree_cursor *result) {
+    tds_merkle_search_tree snapshot = {0};
+    tds_merkle_status status;
+    if (!tds_mst_tree_valid(tree) || result == NULL ||
+        position > tds_merkle_search_tree_size(tree)) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    status = tds_merkle_search_tree_copy(tree, &snapshot);
+    if (status == TDS_MERKLE_OK) {
+        *result = (tds_merkle_search_tree_cursor){snapshot, position};
+    }
+    return status;
+}
+
+tds_merkle_status tds_merkle_search_tree_cursor_at_start(
+    const tds_merkle_search_tree *tree,
+    tds_merkle_search_tree_cursor *result) {
+    return tds_merkle_search_tree_cursor_create(tree, 0, result);
+}
+
+tds_merkle_status tds_merkle_search_tree_cursor_at_end(
+    const tds_merkle_search_tree *tree,
+    tds_merkle_search_tree_cursor *result) {
+    if (!tds_mst_tree_valid(tree)) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    return tds_merkle_search_tree_cursor_create(
+        tree,
+        tds_merkle_search_tree_size(tree),
+        result);
+}
+
+static tds_merkle_status tds_mst_cursor_from_bound(
+    const tds_merkle_search_tree *tree,
+    const void *key,
+    bool upper,
+    bool *found,
+    tds_merkle_search_tree_cursor *result) {
+    size_t position = 0;
+    bool hit = false;
+    tds_merkle_status status;
+    if (!tds_mst_tree_valid(tree) || key == NULL || result == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    status = tds_mst_cursor_lower_bound_rank(tree, key, &position, &hit);
+    if (status == TDS_MERKLE_OK && upper && hit) {
+        status = tds_mst_add_cursor_rank(&position, 1);
+    }
+    if (status == TDS_MERKLE_OK) {
+        status = tds_merkle_search_tree_cursor_create(tree, position, result);
+    }
+    if (status == TDS_MERKLE_OK && found != NULL) {
+        *found = hit;
+    }
+    return status;
+}
+
+tds_merkle_status tds_merkle_search_tree_cursor_lower_bound(
+    const tds_merkle_search_tree *tree,
+    const void *key,
+    tds_merkle_search_tree_cursor *result) {
+    return tds_mst_cursor_from_bound(tree, key, false, NULL, result);
+}
+
+tds_merkle_status tds_merkle_search_tree_cursor_upper_bound(
+    const tds_merkle_search_tree *tree,
+    const void *key,
+    tds_merkle_search_tree_cursor *result) {
+    return tds_mst_cursor_from_bound(tree, key, true, NULL, result);
+}
+
+tds_merkle_status tds_merkle_search_tree_cursor_at_key(
+    const tds_merkle_search_tree *tree,
+    const void *key,
+    bool *found,
+    tds_merkle_search_tree_cursor *result) {
+    if (found == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    return tds_mst_cursor_from_bound(tree, key, false, found, result);
+}
+
+tds_merkle_status tds_merkle_search_tree_cursor_copy(
+    const tds_merkle_search_tree_cursor *cursor,
+    tds_merkle_search_tree_cursor *result) {
+    if (!tds_mst_cursor_valid(cursor) || result == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    if (cursor == result) {
+        return TDS_MERKLE_OK;
+    }
+    return tds_merkle_search_tree_cursor_create(
+        &cursor->tree,
+        cursor->position,
+        result);
+}
+
+void tds_merkle_search_tree_cursor_destroy(
+    tds_merkle_search_tree_cursor *cursor) {
+    if (cursor != NULL) {
+        tds_merkle_search_tree_dispose(&cursor->tree);
+        cursor->position = 0;
+    }
+}
+
+size_t tds_merkle_search_tree_cursor_count(
+    const tds_merkle_search_tree_cursor *cursor) {
+    return !tds_mst_cursor_valid(cursor)
+        ? 0
+        : tds_merkle_search_tree_size(&cursor->tree);
+}
+
+size_t tds_merkle_search_tree_cursor_position(
+    const tds_merkle_search_tree_cursor *cursor) {
+    return !tds_mst_cursor_valid(cursor) ? 0 : cursor->position;
+}
+
+bool tds_merkle_search_tree_cursor_is_at_start(
+    const tds_merkle_search_tree_cursor *cursor) {
+    return tds_mst_cursor_valid(cursor) && cursor->position == 0;
+}
+
+bool tds_merkle_search_tree_cursor_is_at_end(
+    const tds_merkle_search_tree_cursor *cursor) {
+    return tds_mst_cursor_valid(cursor) &&
+        cursor->position == tds_merkle_search_tree_size(&cursor->tree);
+}
+
+static bool tds_mst_cursor_try_peek(
+    const tds_merkle_search_tree_cursor *cursor,
+    size_t position,
+    tds_merkle_search_entry_ref *entry) {
+    const tds_mst_entry *stored;
+    if (!tds_mst_cursor_valid(cursor) || entry == NULL) {
+        return false;
+    }
+    stored = tds_mst_cursor_entry_at_rank(&cursor->tree, position);
+    if (stored == NULL) {
+        return false;
+    }
+    *entry = tds_mst_entry_ref(stored);
+    return true;
+}
+
+bool tds_merkle_search_tree_cursor_try_peek_previous(
+    const tds_merkle_search_tree_cursor *cursor,
+    tds_merkle_search_entry_ref *entry) {
+    return tds_mst_cursor_valid(cursor) && cursor->position != 0 &&
+        tds_mst_cursor_try_peek(cursor, cursor->position - 1, entry);
+}
+
+bool tds_merkle_search_tree_cursor_try_peek_next(
+    const tds_merkle_search_tree_cursor *cursor,
+    tds_merkle_search_entry_ref *entry) {
+    return tds_mst_cursor_valid(cursor) &&
+        tds_mst_cursor_try_peek(cursor, cursor->position, entry);
+}
+
+tds_merkle_status tds_merkle_search_tree_cursor_move_previous(
+    const tds_merkle_search_tree_cursor *cursor,
+    tds_merkle_search_tree_cursor *result) {
+    if (!tds_mst_cursor_valid(cursor) || cursor->position == 0) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    return tds_mst_cursor_reposition(cursor, cursor->position - 1, result);
+}
+
+tds_merkle_status tds_merkle_search_tree_cursor_move_next(
+    const tds_merkle_search_tree_cursor *cursor,
+    tds_merkle_search_tree_cursor *result) {
+    if (!tds_mst_cursor_valid(cursor) ||
+        cursor->position == tds_merkle_search_tree_size(&cursor->tree)) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    return tds_mst_cursor_reposition(cursor, cursor->position + 1, result);
+}
+
+tds_merkle_status tds_merkle_search_tree_cursor_seek(
+    const tds_merkle_search_tree_cursor *cursor,
+    size_t position,
+    tds_merkle_search_tree_cursor *result) {
+    return tds_mst_cursor_reposition(cursor, position, result);
+}
+
+static tds_merkle_status tds_mst_cursor_put_core(
+    const tds_merkle_search_tree_cursor *cursor,
+    const void *key,
+    const void *value,
+    bool strict,
+    tds_merkle_search_tree_cursor *result) {
+    tds_merkle_search_tree tree = {0};
+    size_t expected = 0;
+    bool found = false;
+    tds_merkle_status status;
+    if (!tds_mst_cursor_valid(cursor) || key == NULL || value == NULL || result == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    status = tds_mst_cursor_lower_bound_rank(&cursor->tree, key, &expected, &found);
+    if (status != TDS_MERKLE_OK) {
+        return status;
+    }
+    if (strict && found) {
+        return TDS_MERKLE_DUPLICATE_KEY;
+    }
+    if (expected != cursor->position) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    status = tds_merkle_search_tree_set(&cursor->tree, key, value, &tree);
+    if (status == TDS_MERKLE_OK) {
+        tds_mst_cursor_publish(
+            cursor,
+            result,
+            tree,
+            cursor->position + (found ? 0 : 1));
+    }
+    return status;
+}
+
+tds_merkle_status tds_merkle_search_tree_cursor_insert(
+    const tds_merkle_search_tree_cursor *cursor,
+    const void *key,
+    const void *value,
+    tds_merkle_search_tree_cursor *result) {
+    return tds_mst_cursor_put_core(cursor, key, value, true, result);
+}
+
+tds_merkle_status tds_merkle_search_tree_cursor_put(
+    const tds_merkle_search_tree_cursor *cursor,
+    const void *key,
+    const void *value,
+    tds_merkle_search_tree_cursor *result) {
+    return tds_mst_cursor_put_core(cursor, key, value, false, result);
+}
+
+tds_merkle_status tds_merkle_search_tree_cursor_set_next_value(
+    const tds_merkle_search_tree_cursor *cursor,
+    const void *value,
+    tds_merkle_search_tree_cursor *result) {
+    const tds_mst_entry *entry;
+    tds_merkle_search_tree tree = {0};
+    tds_merkle_status status;
+    if (!tds_mst_cursor_valid(cursor) || value == NULL || result == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    entry = tds_mst_cursor_entry_at_rank(&cursor->tree, cursor->position);
+    if (entry == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    status = tds_merkle_search_tree_set(
+        &cursor->tree,
+        entry->key->value,
+        value,
+        &tree);
+    if (status == TDS_MERKLE_OK) {
+        tds_mst_cursor_publish(cursor, result, tree, cursor->position);
+    }
+    return status;
+}
+
+static tds_merkle_status tds_mst_cursor_delete(
+    const tds_merkle_search_tree_cursor *cursor,
+    bool previous,
+    tds_merkle_search_tree_cursor *result) {
+    const size_t position = previous && cursor != NULL && cursor->position != 0
+        ? cursor->position - 1
+        : cursor == NULL ? 0 : cursor->position;
+    const tds_mst_entry *entry;
+    tds_merkle_search_tree tree = {0};
+    tds_merkle_status status;
+    if (!tds_mst_cursor_valid(cursor) || result == NULL ||
+        (previous && cursor->position == 0) ||
+        (!previous && cursor->position == tds_merkle_search_tree_size(&cursor->tree))) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    entry = tds_mst_cursor_entry_at_rank(&cursor->tree, position);
+    if (entry == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    status = tds_merkle_search_tree_remove(
+        &cursor->tree,
+        entry->key->value,
+        &tree);
+    if (status == TDS_MERKLE_OK) {
+        tds_mst_cursor_publish(cursor, result, tree, position);
+    }
+    return status;
+}
+
+tds_merkle_status tds_merkle_search_tree_cursor_delete_previous(
+    const tds_merkle_search_tree_cursor *cursor,
+    tds_merkle_search_tree_cursor *result) {
+    return tds_mst_cursor_delete(cursor, true, result);
+}
+
+tds_merkle_status tds_merkle_search_tree_cursor_delete_next(
+    const tds_merkle_search_tree_cursor *cursor,
+    tds_merkle_search_tree_cursor *result) {
+    return tds_mst_cursor_delete(cursor, false, result);
+}
+
+tds_merkle_status tds_merkle_search_tree_cursor_snapshot(
+    const tds_merkle_search_tree_cursor *cursor,
+    tds_merkle_search_tree *result) {
+    if (!tds_mst_cursor_valid(cursor) || result == NULL) {
+        return TDS_MERKLE_INVALID_ARGUMENT;
+    }
+    if (result == &cursor->tree) {
+        return TDS_MERKLE_OK;
+    }
+    return tds_merkle_search_tree_copy(&cursor->tree, result);
+}
+
 static void tds_mst_iterator_init(
     tds_mst_iterator *iterator,
     const struct tds_merkle_node *root) {

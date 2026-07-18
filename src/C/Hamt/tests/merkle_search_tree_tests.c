@@ -643,6 +643,231 @@ static bool test_history_independence_and_structure(void) {
     return true;
 }
 
+static bool test_cursor_navigation_bounds_and_edits(void) {
+    int32_t keys[] = {-10, 0, 10};
+    int32_t values[] = {1, 2, 3};
+    tds_merkle_search_input inputs[] = {
+        {&keys[0], &values[0]},
+        {&keys[1], &values[1]},
+        {&keys[2], &values[2]},
+    };
+    tds_merkle_policy policy = {0};
+    tds_merkle_search_tree source = {0};
+    tds_merkle_search_tree snapshot = {0};
+    tds_merkle_search_tree_cursor cursor = {0};
+    tds_merkle_search_tree_cursor edited = {0};
+    tds_merkle_search_entry_ref entry = {0};
+    tds_merkle_digest source_root;
+    size_t position;
+    bool found = false;
+    int32_t probe = 0;
+    int32_t inserted_key = 5;
+    int32_t inserted_value = 50;
+    int32_t replacement = 20;
+
+    CHECK_STATUS(make_i32_policy("c-cursor-i32-v1", &policy));
+    CHECK_STATUS(tds_merkle_search_tree_from_array(
+        &source,
+        &policy,
+        inputs,
+        sizeof(inputs) / sizeof(inputs[0])));
+    source_root = tds_merkle_search_tree_root_hash(&source);
+
+    for (position = 0; position <= 3; ++position) {
+        CHECK_STATUS(tds_merkle_search_tree_cursor_create(
+            &source,
+            position,
+            &cursor));
+        CHECK(tds_merkle_search_tree_cursor_count(&cursor) == 3);
+        CHECK(tds_merkle_search_tree_cursor_position(&cursor) == position);
+        CHECK(tds_merkle_search_tree_cursor_is_at_start(&cursor) == (position == 0));
+        CHECK(tds_merkle_search_tree_cursor_is_at_end(&cursor) == (position == 3));
+        CHECK(tds_merkle_search_tree_cursor_try_peek_previous(&cursor, &entry) ==
+            (position != 0));
+        if (position != 0) {
+            CHECK(*(const int32_t *)entry.key == keys[position - 1]);
+        }
+        CHECK(tds_merkle_search_tree_cursor_try_peek_next(&cursor, &entry) ==
+            (position != 3));
+        if (position != 3) {
+            CHECK(*(const int32_t *)entry.key == keys[position]);
+        }
+        CHECK_STATUS(tds_merkle_search_tree_cursor_snapshot(&cursor, &snapshot));
+        CHECK(tds_merkle_digest_equal(
+            tds_merkle_search_tree_root_hash(&snapshot),
+            source_root));
+        tds_merkle_search_tree_dispose(&snapshot);
+        tds_merkle_search_tree_cursor_destroy(&cursor);
+    }
+
+    probe = -5;
+    CHECK_STATUS(tds_merkle_search_tree_cursor_lower_bound(&source, &probe, &cursor));
+    CHECK(tds_merkle_search_tree_cursor_position(&cursor) == 1);
+    CHECK_STATUS(tds_merkle_search_tree_cursor_move_next(&cursor, &cursor));
+    CHECK(tds_merkle_search_tree_cursor_position(&cursor) == 2);
+    CHECK_STATUS(tds_merkle_search_tree_cursor_move_previous(&cursor, &cursor));
+    CHECK(tds_merkle_search_tree_cursor_position(&cursor) == 1);
+    CHECK_STATUS(tds_merkle_search_tree_cursor_seek(&cursor, 3, &cursor));
+    CHECK(tds_merkle_search_tree_cursor_is_at_end(&cursor));
+    tds_merkle_search_tree_cursor_destroy(&cursor);
+
+    probe = 0;
+    CHECK_STATUS(tds_merkle_search_tree_cursor_upper_bound(&source, &probe, &cursor));
+    CHECK(tds_merkle_search_tree_cursor_position(&cursor) == 2);
+    tds_merkle_search_tree_cursor_destroy(&cursor);
+    CHECK_STATUS(tds_merkle_search_tree_cursor_at_key(
+        &source,
+        &probe,
+        &found,
+        &cursor));
+    CHECK(found && tds_merkle_search_tree_cursor_position(&cursor) == 1);
+    CHECK_STATUS(tds_merkle_search_tree_cursor_set_next_value(
+        &cursor,
+        &replacement,
+        &edited));
+    CHECK(tds_merkle_search_tree_cursor_position(&edited) == 1);
+    CHECK_STATUS(tds_merkle_search_tree_cursor_snapshot(&edited, &snapshot));
+    CHECK_STATUS(tds_merkle_search_tree_try_get_entry_ref(
+        &snapshot,
+        &probe,
+        &found,
+        &entry));
+    CHECK(found && *(const int32_t *)entry.value == replacement);
+    CHECK_STATUS(tds_merkle_search_tree_try_get_entry_ref(
+        &source,
+        &probe,
+        &found,
+        &entry));
+    CHECK(found && *(const int32_t *)entry.value == values[1]);
+    tds_merkle_search_tree_dispose(&snapshot);
+    tds_merkle_search_tree_cursor_destroy(&edited);
+
+    CHECK(tds_merkle_search_tree_cursor_insert(
+        &cursor,
+        &probe,
+        &replacement,
+        &edited) == TDS_MERKLE_DUPLICATE_KEY);
+    CHECK(edited.tree.policy == NULL);
+    tds_merkle_search_tree_cursor_destroy(&cursor);
+
+    CHECK_STATUS(tds_merkle_search_tree_cursor_lower_bound(
+        &source,
+        &inserted_key,
+        &cursor));
+    CHECK_STATUS(tds_merkle_search_tree_cursor_insert(
+        &cursor,
+        &inserted_key,
+        &inserted_value,
+        &edited));
+    CHECK(tds_merkle_search_tree_cursor_position(&edited) == 3);
+    CHECK(tds_merkle_search_tree_cursor_count(&edited) == 4);
+    CHECK(tds_merkle_search_tree_cursor_try_peek_previous(&edited, &entry));
+    CHECK(*(const int32_t *)entry.key == inserted_key);
+    CHECK_STATUS(tds_merkle_search_tree_cursor_delete_previous(&edited, &edited));
+    CHECK(tds_merkle_search_tree_cursor_position(&edited) == 2);
+    CHECK(tds_merkle_search_tree_cursor_count(&edited) == 3);
+    CHECK_STATUS(tds_merkle_search_tree_cursor_snapshot(&edited, &snapshot));
+    CHECK(tds_merkle_digest_equal(
+        tds_merkle_search_tree_root_hash(&snapshot),
+        source_root));
+    tds_merkle_search_tree_dispose(&snapshot);
+    tds_merkle_search_tree_cursor_destroy(&edited);
+    tds_merkle_search_tree_cursor_destroy(&cursor);
+
+    CHECK_STATUS(tds_merkle_search_tree_cursor_at_start(&source, &cursor));
+    CHECK(tds_merkle_search_tree_cursor_move_previous(&cursor, &cursor) ==
+        TDS_MERKLE_INVALID_ARGUMENT);
+    CHECK(tds_merkle_search_tree_cursor_is_at_start(&cursor));
+    CHECK(tds_merkle_search_tree_cursor_insert(
+        &cursor,
+        &inserted_key,
+        &inserted_value,
+        &edited) == TDS_MERKLE_INVALID_ARGUMENT);
+    CHECK(edited.tree.policy == NULL);
+    CHECK_STATUS(tds_merkle_search_tree_cursor_delete_next(&cursor, &edited));
+    CHECK(tds_merkle_search_tree_cursor_position(&edited) == 0);
+    CHECK(tds_merkle_search_tree_cursor_count(&edited) == 2);
+    tds_merkle_search_tree_cursor_destroy(&edited);
+    tds_merkle_search_tree_cursor_destroy(&cursor);
+
+    tds_merkle_search_tree_dispose(&source);
+    tds_merkle_policy_dispose(&policy);
+    return true;
+}
+
+static bool test_cursor_cached_ranks_match_sorted_model(void) {
+    enum { ENTRY_COUNT = 97 };
+    int32_t keys[ENTRY_COUNT];
+    int32_t values[ENTRY_COUNT];
+    tds_merkle_search_input inputs[ENTRY_COUNT];
+    tds_merkle_policy policy = {0};
+    tds_merkle_search_tree tree = {0};
+    size_t index;
+    int32_t probe;
+
+    CHECK_STATUS(make_i32_policy("c-cursor-model-i32-v1", &policy));
+    for (index = 0; index != ENTRY_COUNT; ++index) {
+        keys[index] = (int32_t)index - ENTRY_COUNT / 2;
+        values[index] = keys[index] * 7;
+        inputs[index] = (tds_merkle_search_input){&keys[index], &values[index]};
+    }
+    CHECK_STATUS(tds_merkle_search_tree_from_array(
+        &tree,
+        &policy,
+        inputs,
+        ENTRY_COUNT));
+    for (index = 0; index <= ENTRY_COUNT; ++index) {
+        tds_merkle_search_tree_cursor cursor = {0};
+        tds_merkle_search_entry_ref entry = {0};
+        CHECK_STATUS(tds_merkle_search_tree_cursor_create(&tree, index, &cursor));
+        CHECK(tds_merkle_search_tree_cursor_try_peek_previous(&cursor, &entry) ==
+            (index != 0));
+        if (index != 0) {
+            CHECK(*(const int32_t *)entry.key == keys[index - 1]);
+        }
+        CHECK(tds_merkle_search_tree_cursor_try_peek_next(&cursor, &entry) ==
+            (index != ENTRY_COUNT));
+        if (index != ENTRY_COUNT) {
+            CHECK(*(const int32_t *)entry.key == keys[index]);
+        }
+        tds_merkle_search_tree_cursor_destroy(&cursor);
+    }
+    for (probe = -60; probe <= 60; ++probe) {
+        tds_merkle_search_tree_cursor lower = {0};
+        tds_merkle_search_tree_cursor upper = {0};
+        tds_merkle_search_tree_cursor exact = {0};
+        size_t expected = 0;
+        bool found = false;
+        while (expected != ENTRY_COUNT && keys[expected] < probe) {
+            ++expected;
+        }
+        CHECK_STATUS(tds_merkle_search_tree_cursor_lower_bound(
+            &tree,
+            &probe,
+            &lower));
+        CHECK_STATUS(tds_merkle_search_tree_cursor_upper_bound(
+            &tree,
+            &probe,
+            &upper));
+        CHECK_STATUS(tds_merkle_search_tree_cursor_at_key(
+            &tree,
+            &probe,
+            &found,
+            &exact));
+        CHECK(tds_merkle_search_tree_cursor_position(&lower) == expected);
+        CHECK(found == (expected != ENTRY_COUNT && keys[expected] == probe));
+        CHECK(tds_merkle_search_tree_cursor_position(&upper) ==
+            expected + (found ? 1 : 0));
+        CHECK(tds_merkle_search_tree_cursor_position(&exact) == expected);
+        tds_merkle_search_tree_cursor_destroy(&exact);
+        tds_merkle_search_tree_cursor_destroy(&upper);
+        tds_merkle_search_tree_cursor_destroy(&lower);
+    }
+    tds_merkle_search_tree_dispose(&tree);
+    tds_merkle_policy_dispose(&policy);
+    return true;
+}
+
 typedef struct difference_capture {
     size_t count;
     bool removed_7;
@@ -3622,6 +3847,8 @@ int main(void) {
         {"MST2 wide multi-level golden wire", test_golden_wide_multi_level_wire},
         {"policy validation and typed compatibility", test_policy_validation_and_typed_compatibility},
         {"history independence and structure", test_history_independence_and_structure},
+        {"cursor navigation bounds and edits", test_cursor_navigation_bounds_and_edits},
+        {"cursor cached ranks match sorted model", test_cursor_cached_ranks_match_sorted_model},
         {"persistence range diff and sharing", test_persistence_range_diff_and_sharing},
         {"allocation failure atomicity", test_allocation_failure_atomicity},
         {"callback failure atomicity", test_callback_failure_atomicity},

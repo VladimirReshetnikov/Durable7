@@ -22,7 +22,8 @@ typedef enum tds_merkle_status {
     TDS_MERKLE_INCOMPATIBLE_POLICY = 6,
     TDS_MERKLE_INCONSISTENT_POLICY = 7,
     TDS_MERKLE_CALLBACK_FAILURE = 8,
-    TDS_MERKLE_VERIFICATION_FAILURE = 9
+    TDS_MERKLE_VERIFICATION_FAILURE = 9,
+    TDS_MERKLE_DUPLICATE_KEY = 10
 } tds_merkle_status;
 
 typedef struct tds_merkle_digest {
@@ -377,6 +378,94 @@ tds_merkle_status tds_merkle_search_tree_validate(
     const tds_merkle_search_tree *tree,
     bool *valid,
     tds_merkle_search_tree_statistics *statistics);
+
+/* Immutable retained-tree-snapshot-plus-rank gap cursor in policy-comparer
+ * order. Peeked entry references borrow from the retained snapshot and remain
+ * valid until the cursor is destroyed. Producing operations support exact
+ * source/result aliasing, publish only on success, and require a distinct
+ * result to be uninitialized or destroyed. */
+typedef struct tds_merkle_search_tree_cursor {
+    tds_merkle_search_tree tree;
+    size_t position;
+} tds_merkle_search_tree_cursor;
+
+tds_merkle_status tds_merkle_search_tree_cursor_create(
+    const tds_merkle_search_tree *tree,
+    size_t position,
+    tds_merkle_search_tree_cursor *result);
+tds_merkle_status tds_merkle_search_tree_cursor_at_start(
+    const tds_merkle_search_tree *tree,
+    tds_merkle_search_tree_cursor *result);
+tds_merkle_status tds_merkle_search_tree_cursor_at_end(
+    const tds_merkle_search_tree *tree,
+    tds_merkle_search_tree_cursor *result);
+tds_merkle_status tds_merkle_search_tree_cursor_lower_bound(
+    const tds_merkle_search_tree *tree,
+    const void *key,
+    tds_merkle_search_tree_cursor *result);
+tds_merkle_status tds_merkle_search_tree_cursor_upper_bound(
+    const tds_merkle_search_tree *tree,
+    const void *key,
+    tds_merkle_search_tree_cursor *result);
+tds_merkle_status tds_merkle_search_tree_cursor_at_key(
+    const tds_merkle_search_tree *tree,
+    const void *key,
+    bool *found,
+    tds_merkle_search_tree_cursor *result);
+tds_merkle_status tds_merkle_search_tree_cursor_copy(
+    const tds_merkle_search_tree_cursor *cursor,
+    tds_merkle_search_tree_cursor *result);
+void tds_merkle_search_tree_cursor_destroy(
+    tds_merkle_search_tree_cursor *cursor);
+
+size_t tds_merkle_search_tree_cursor_count(
+    const tds_merkle_search_tree_cursor *cursor);
+size_t tds_merkle_search_tree_cursor_position(
+    const tds_merkle_search_tree_cursor *cursor);
+bool tds_merkle_search_tree_cursor_is_at_start(
+    const tds_merkle_search_tree_cursor *cursor);
+bool tds_merkle_search_tree_cursor_is_at_end(
+    const tds_merkle_search_tree_cursor *cursor);
+bool tds_merkle_search_tree_cursor_try_peek_previous(
+    const tds_merkle_search_tree_cursor *cursor,
+    tds_merkle_search_entry_ref *entry);
+bool tds_merkle_search_tree_cursor_try_peek_next(
+    const tds_merkle_search_tree_cursor *cursor,
+    tds_merkle_search_entry_ref *entry);
+
+tds_merkle_status tds_merkle_search_tree_cursor_move_previous(
+    const tds_merkle_search_tree_cursor *cursor,
+    tds_merkle_search_tree_cursor *result);
+tds_merkle_status tds_merkle_search_tree_cursor_move_next(
+    const tds_merkle_search_tree_cursor *cursor,
+    tds_merkle_search_tree_cursor *result);
+tds_merkle_status tds_merkle_search_tree_cursor_seek(
+    const tds_merkle_search_tree_cursor *cursor,
+    size_t position,
+    tds_merkle_search_tree_cursor *result);
+tds_merkle_status tds_merkle_search_tree_cursor_insert(
+    const tds_merkle_search_tree_cursor *cursor,
+    const void *key,
+    const void *value,
+    tds_merkle_search_tree_cursor *result);
+tds_merkle_status tds_merkle_search_tree_cursor_put(
+    const tds_merkle_search_tree_cursor *cursor,
+    const void *key,
+    const void *value,
+    tds_merkle_search_tree_cursor *result);
+tds_merkle_status tds_merkle_search_tree_cursor_set_next_value(
+    const tds_merkle_search_tree_cursor *cursor,
+    const void *value,
+    tds_merkle_search_tree_cursor *result);
+tds_merkle_status tds_merkle_search_tree_cursor_delete_previous(
+    const tds_merkle_search_tree_cursor *cursor,
+    tds_merkle_search_tree_cursor *result);
+tds_merkle_status tds_merkle_search_tree_cursor_delete_next(
+    const tds_merkle_search_tree_cursor *cursor,
+    tds_merkle_search_tree_cursor *result);
+tds_merkle_status tds_merkle_search_tree_cursor_snapshot(
+    const tds_merkle_search_tree_cursor *cursor,
+    tds_merkle_search_tree *result);
 
 /* ------------------------------------------------------------------------- */
 /* Verified persistence, proofs, synchronization, and three-way merge.       */
