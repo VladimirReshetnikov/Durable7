@@ -55,6 +55,65 @@ describe("Merkle codecs and exact MST2 wire", () => {
 describe("Merkle search tree and persistence", () => {
   const policy = new MerkleSearchTreePolicy("typescript-test-i32-string-v1", numberOrder, MerkleCodecs.int32, MerkleCodecs.utf8String);
 
+  test("cursor navigates ranks and publishes canonical persistent edits", () => {
+    const source = MerkleSearchTree.from([[-10, "a"], [0, null], [10, "c"]] as const, policy);
+    for (let position = 0; position <= source.count; position++) {
+      const cursor = source.cursor(position);
+      expect(cursor.position).toBe(position);
+      expect(cursor.isAtStart).toBe(position === 0);
+      expect(cursor.isAtEnd).toBe(position === source.count);
+      expect(cursor.snapshot()).toBe(source);
+      expect(cursor.peekPrevious()?.key).toBe(position === 0 ? undefined : [...source][position - 1]!.key);
+      expect(cursor.peekNext()?.key).toBe(position === source.count ? undefined : [...source][position]!.key);
+    }
+
+    expect(source.lowerBoundCursor(-5).position).toBe(1);
+    expect(source.upperBoundCursor(0).position).toBe(2);
+    expect(source.cursorAtKey(0)).toMatchObject({ found: true, cursor: { position: 1 } });
+    expect(source.cursorAtKey(5)).toMatchObject({ found: false, cursor: { position: 2 } });
+
+    const exact = source.cursorAtKey(0).cursor;
+    expect(exact.setNextValue(null)).toBe(exact);
+    const changed = exact.setNextValue("b").snapshot();
+    expect(changed.get(0)).toBe("b");
+    expect(changed.rootHash.equals(source.rootHash)).toBe(false);
+    expect(changed.policy).toBe(source.policy);
+    expect(source.getEntry(0)).toEqual({ key: 0, value: null });
+
+    const inserted = source.lowerBoundCursor(5).insert(5, "five");
+    expect(inserted.position).toBe(3);
+    expect([...inserted.snapshot().keys]).toEqual([-10, 0, 5, 10]);
+    expect(inserted.deletePrevious().snapshot().rootHash.equals(source.rootHash)).toBe(true);
+    expect([...source.cursorAtEnd().deletePrevious().snapshot().keys]).toEqual([-10, 0]);
+    expect([...source.cursor().deleteNext().snapshot().keys]).toEqual([0, 10]);
+
+    expect(() => source.cursor(-1)).toThrow(RangeError);
+    expect(() => source.cursor().movePrevious()).toThrow(RangeError);
+    expect(() => source.cursorAtEnd().moveNext()).toThrow(RangeError);
+    expect(() => exact.insert(0, "duplicate")).toThrow();
+    expect(() => source.cursor().insert(5, "wrong gap")).toThrow(RangeError);
+  });
+
+  test("cursor cached ranks and bounds match a sorted randomized model", () => {
+    fc.assert(fc.property(fc.uniqueArray(fc.integer({ min: -2000, max: 2000 }), { maxLength: 300 }), values => {
+      const keys = [...values].sort(numberOrder);
+      const tree = MerkleSearchTree.from(keys.map(key => [key, String(key)] as const), policy);
+      for (let position = 0; position <= keys.length; position++) {
+        const cursor = tree.cursor(position);
+        expect(cursor.peekPrevious()?.key).toBe(position === 0 ? undefined : keys[position - 1]);
+        expect(cursor.peekNext()?.key).toBe(keys[position]);
+      }
+      for (let probe = -2100; probe <= 2100; probe += 97) {
+        const lower = keys.findIndex(key => key >= probe);
+        const rank = lower < 0 ? keys.length : lower;
+        const found = keys[rank] === probe;
+        expect(tree.lowerBoundCursor(probe).position).toBe(rank);
+        expect(tree.upperBoundCursor(probe).position).toBe(found ? rank + 1 : rank);
+        expect(tree.cursorAtKey(probe)).toMatchObject({ found, cursor: { position: rank } });
+      }
+    }), { numRuns: 50 });
+  });
+
   test("incremental histories converge and preserve snapshots", () => {
     fc.assert(fc.property(fc.uniqueArray(fc.integer({ min: -20_000, max: 20_000 }), { maxLength: 300 }), keys => {
       let incremental = MerkleSearchTree.empty(policy);

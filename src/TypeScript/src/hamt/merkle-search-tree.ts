@@ -116,6 +116,72 @@ export class MerkleSearchTree<K, V> implements Iterable<MerkleEntry<K, V>> {
   get keys(): Iterable<K> { const tree = this; return { *[Symbol.iterator]() { for (const entry of tree) yield entry.key; } }; }
   get values(): Iterable<V> { const tree = this; return { *[Symbol.iterator]() { for (const entry of tree) yield entry.value; } }; }
 
+  /** Creates an immutable ordered cursor at a rank gap in `0 .. count`. */
+  cursor(position = 0): MerkleSearchTreeCursor<K, V> {
+    validateMerkleCursorPosition(position, this.count);
+    return new MerkleSearchTreeCursor(this, position);
+  }
+
+  /** Creates an immutable ordered cursor after the final entry. */
+  cursorAtEnd(): MerkleSearchTreeCursor<K, V> { return new MerkleSearchTreeCursor(this, this.count); }
+
+  /** Creates a cursor before the first entry whose key is not less than `key`. */
+  lowerBoundCursor(key: K): MerkleSearchTreeCursor<K, V> {
+    return new MerkleSearchTreeCursor(this, this.lowerBoundRankForCursor(key)[0]);
+  }
+
+  /** Creates a cursor before the first entry whose key is greater than `key`. */
+  upperBoundCursor(key: K): MerkleSearchTreeCursor<K, V> {
+    const [rank, found] = this.lowerBoundRankForCursor(key);
+    return new MerkleSearchTreeCursor(this, found ? rank + 1 : rank);
+  }
+
+  /** Creates a lower-bound cursor and reports whether its next entry has `key`. */
+  cursorAtKey(key: K): { readonly cursor: MerkleSearchTreeCursor<K, V>; readonly found: boolean } {
+    const [rank, found] = this.lowerBoundRankForCursor(key);
+    return { cursor: new MerkleSearchTreeCursor(this, rank), found };
+  }
+
+  /** @internal Rank-selects an entry through authenticated cached subtree counts. */
+  entryAtForCursor(rank: number): MerkleEntry<K, V> | undefined {
+    if (!Number.isSafeInteger(rank) || rank < 0 || rank >= this.count) return undefined;
+    let node = this.root;
+    while (node !== undefined) {
+      const current = node;
+      let descended = false;
+      for (let index = 0; index < current.entries.length; index++) {
+        const childCount = current.children[index]?.count ?? 0;
+        if (rank < childCount) {
+          node = current.children[index];
+          descended = true;
+          break;
+        }
+        rank -= childCount;
+        if (rank === 0) {
+          const entry = current.entries[index]!;
+          return { key: entry.key, value: entry.value };
+        }
+        rank--;
+      }
+      if (!descended) node = current.children[current.entries.length];
+    }
+    throw new Error("Merkle subtree counts do not contain the requested rank.");
+  }
+
+  /** @internal Computes a key's lower-bound rank through authenticated cached subtree counts. */
+  lowerBoundRankForCursor(key: K): readonly [rank: number, found: boolean] {
+    let rank = 0;
+    let node = this.root;
+    while (node !== undefined) {
+      const position = lowerBound(node.entries, key, this.policy.comparer);
+      for (let index = 0; index < position; index++) rank += (node.children[index]?.count ?? 0) + 1;
+      const found = position < node.entries.length && this.policy.comparer(node.entries[position]!.key, key) === 0;
+      if (found) return [rank + (node.children[position]?.count ?? 0), true];
+      node = node.children[position];
+    }
+    return [rank, false];
+  }
+
   getEntry(key: K): MerkleEntry<K, V> | undefined {
     let node = this.root;
     while (node !== undefined) {
@@ -356,5 +422,107 @@ export class MerkleSearchTree<K, V> implements Iterable<MerkleEntry<K, V>> {
     if (this.root === undefined) return;
     const pending = [this.root];
     while (pending.length > 0) { const node = pending.pop()!; yield node; for (let index = node.children.length - 1; index >= 0; index--) if (node.children[index] !== undefined) pending.push(node.children[index]!); }
+  }
+}
+
+/** Immutable persistent gap cursor over an authenticated Merkle search-tree snapshot. */
+export class MerkleSearchTreeCursor<K, V> {
+  readonly #source: MerkleSearchTree<K, V>;
+  readonly #position: number;
+
+  /** Creates a tree-snapshot-plus-rank checkpoint; prefer the tree's cursor factories. */
+  public constructor(source: MerkleSearchTree<K, V>, position: number) {
+    validateMerkleCursorPosition(position, source.count);
+    this.#source = source;
+    this.#position = position;
+  }
+
+  /** Number of entries in this cursor version. */
+  public get count(): number { return this.#source.count; }
+  /** Number of entries before the gap. */
+  public get position(): number { return this.#position; }
+  /** Whether the gap precedes every entry. */
+  public get isAtStart(): boolean { return this.#position === 0; }
+  /** Whether the gap follows every entry. */
+  public get isAtEnd(): boolean { return this.#position === this.count; }
+
+  /** Entry immediately before the gap, or `undefined` at the start. */
+  public peekPrevious(): MerkleEntry<K, V> | undefined {
+    return this.#position === 0 ? undefined : this.#source.entryAtForCursor(this.#position - 1);
+  }
+
+  /** Entry immediately after the gap, or `undefined` at the end. */
+  public peekNext(): MerkleEntry<K, V> | undefined { return this.#source.entryAtForCursor(this.#position); }
+
+  /** Returns a cursor one entry toward the start. */
+  public movePrevious(): MerkleSearchTreeCursor<K, V> {
+    if (this.isAtStart) throw new RangeError("The cursor is already at the start.");
+    return new MerkleSearchTreeCursor(this.#source, this.#position - 1);
+  }
+
+  /** Returns a cursor one entry toward the end. */
+  public moveNext(): MerkleSearchTreeCursor<K, V> {
+    if (this.isAtEnd) throw new RangeError("The cursor is already at the end.");
+    return new MerkleSearchTreeCursor(this.#source, this.#position + 1);
+  }
+
+  /** Returns a cursor at a rank gap in `0 .. count`. */
+  public seek(position: number): MerkleSearchTreeCursor<K, V> {
+    validateMerkleCursorPosition(position, this.count);
+    return position === this.#position ? this : new MerkleSearchTreeCursor(this.#source, position);
+  }
+
+  /** Strictly inserts a missing key at its lower-bound gap and returns the gap after it. */
+  public insert(key: K, value: V): MerkleSearchTreeCursor<K, V> {
+    const [rank, found] = this.#source.lowerBoundRankForCursor(key);
+    if (found) throw new Error("The key is already present.");
+    this.ensureCurrentGap(rank);
+    return new MerkleSearchTreeCursor(this.#source.set(key, value), this.#position + 1);
+  }
+
+  /** Updates an exact next entry or inserts at a missing lower-bound gap. */
+  public set(key: K, value: V): MerkleSearchTreeCursor<K, V> {
+    const [rank, found] = this.#source.lowerBoundRankForCursor(key);
+    this.ensureCurrentGap(rank);
+    const edited = this.#source.set(key, value);
+    if (edited === this.#source) return this;
+    return new MerkleSearchTreeCursor(edited, found ? this.#position : this.#position + 1);
+  }
+
+  /** Replaces the next entry's value while retaining its stored key representative. */
+  public setNextValue(value: V): MerkleSearchTreeCursor<K, V> {
+    const next = this.peekNext();
+    if (next === undefined) throw new RangeError("No entry follows the cursor gap.");
+    const edited = this.#source.set(next.key, value);
+    return edited === this.#source ? this : new MerkleSearchTreeCursor(edited, this.#position);
+  }
+
+  /** Deletes the entry before the gap and moves the gap left. */
+  public deletePrevious(): MerkleSearchTreeCursor<K, V> {
+    const previous = this.peekPrevious();
+    if (previous === undefined) throw new RangeError("No entry precedes the cursor gap.");
+    return new MerkleSearchTreeCursor(this.#source.remove(previous.key), this.#position - 1);
+  }
+
+  /** Deletes the entry after the gap and keeps the gap fixed. */
+  public deleteNext(): MerkleSearchTreeCursor<K, V> {
+    const next = this.peekNext();
+    if (next === undefined) throw new RangeError("No entry follows the cursor gap.");
+    return new MerkleSearchTreeCursor(this.#source.remove(next.key), this.#position);
+  }
+
+  /** Returns this cursor version's canonical immutable tree. */
+  public snapshot(): MerkleSearchTree<K, V> { return this.#source; }
+
+  private ensureCurrentGap(rank: number): void {
+    if (rank !== this.#position) {
+      throw new RangeError(`The key belongs at gap ${rank}, not at the current gap ${this.#position}.`);
+    }
+  }
+}
+
+function validateMerkleCursorPosition(position: number, count: number): void {
+  if (!Number.isSafeInteger(position) || position < 0 || position > count) {
+    throw new RangeError(`Cursor position ${position} is outside 0 .. ${count}.`);
   }
 }
