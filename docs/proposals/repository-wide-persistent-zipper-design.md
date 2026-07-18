@@ -13,8 +13,9 @@ Adopt one repository-wide zipper vocabulary, but do **not** add one undifferenti
 to every immutable type.
 
 1. Public zippers are immutable, version-bound **cursors** over a stable semantic navigation axis.
-   Positional collections use a gap in `0 .. Count`; ordered collections use an ordered search
-   location with before-first and after-last sentinels; nested ordered collections expose both axes.
+   Positional and insertion-ordered collections use a gap in `0 .. Count`; key- or value-sorted
+   collections use an ordered search location with before-first and after-last sentinels; nested
+   ordered collections expose both applicable axes.
 2. Recursive implementation trees may use private structural zippers whose breadcrumbs retain the
    information needed to rebuild valid ancestors. A private edit path is not automatically a new
    public collection feature.
@@ -79,8 +80,8 @@ complexity parity.
 - Provide a C#-shaped reference API while allowing idiomatic C, C++, Haskell, Kotlin, OCaml, Rust,
   TypeScript, and Python spellings.
 - Separate semantic baseline requirements from optional focused-representation optimizations.
-- Reuse general sequence and ordered-cursor mechanisms from Tungsten without reversing the
-  repository's one-way dependency boundary.
+- Reuse repository-general sequence and ordered-cursor mechanisms inside Tungsten without reversing
+  the repository's one-way dependency boundary.
 
 ## Non-Goals
 
@@ -151,33 +152,33 @@ The disposition terms are:
 | `UInt256`/`Int256`, 512/1024-bit siblings | not applicable | Fixed-size numeric values have bit/limb operations, not a persistent recursive navigation axis; a bit cursor would add state without structural sharing. |
 | `SparseInteger` | not applicable | Its public identity is a number. Internal sparse storage is representation, not a stable child topology. |
 | CHAMP persistent hash map and set | internal zipper | A search/edit breadcrumb stack can retain bitmap nodes and collision context, but hash-trie traversal order and node shape are not public semantics. |
-| Persistent hash bag | internal zipper through its CHAMP substrate | The public unit is an equality class plus multiplicity; direct key lookup is the meaningful operation. Expanded enumeration is not a navigable identity. |
-| Persistent bimap | not applicable publicly | A focus would have to keep forward and inverse indexes synchronized; neither hash enumeration order is semantic. Use direct key/value lookup. |
-| Set-valued hash multimap and relation | not applicable publicly | Both axes are hashed and unordered. A pair focus would expose one private index order and complicate atomic dual-index publication without a semantic neighbor. |
-| Persistent map patch | not applicable publicly | Patch enumeration is stable only for one version and otherwise unspecified; key lookup and patch composition are the semantic operations. |
-| Persistent directed graph | not a classical zipper | Cycles and multiple parents prevent one unique reconstructing path. A future traversal state would be a graph navigator with visited/frontier state, not this zipper contract. |
-| Persistent indexed map | not applicable publicly | Primary and secondary indexes are hashed and atomic; there is no single canonical neighbor axis. |
-| Concurrent hash trie and immutable snapshot view | not applicable publicly | The live structure is mutable/concurrent; its snapshot reduces to the unordered CHAMP decision. A cursor must never imply editable access to a captured generation. |
+| Persistent hash bag | internal zipper | Its private adapter uses the CHAMP path, but the public unit is an equality class plus multiplicity; expanded enumeration is not a navigable identity. |
+| Persistent bimap | internal zipper | Paired private paths can publish both indexes, but neither hash enumeration order is semantic; use direct key/value lookup publicly. |
+| Set-valued hash multimap and relation | internal zipper | Nested/paired private paths can publish atomic results, but both public axes are hashed and unordered and have no semantic neighbor. |
+| Persistent map patch | internal zipper | A private CHAMP path can maintain one change, but patch enumeration is otherwise unspecified; lookup/composition remain the public operations. |
+| Persistent directed graph | not applicable | Cycles and multiple parents prevent one unique reconstructing path. A future traversal state is a graph navigator with visited/frontier state, not this zipper contract. |
+| Persistent indexed map | internal zipper | Paired private paths can publish primary and derived indexes, but there is no single canonical public neighbor axis. |
+| Concurrent hash trie and immutable snapshot view | not applicable | The live structure is mutable/concurrent; its snapshot reduces to the unordered CHAMP decision. A cursor must never imply editable access to a captured generation. |
 | Persistent integer Patricia maps and sets | public cursor | Ascending signed-key order is public and the compressed binary path provides compact reconstructing breadcrumbs. |
 | Merkle search tree | specialized cursor | Ordered key navigation and block-path editing are meaningful, but digest recomputation, canonical codecs, trust boundaries, and block persistence require a dedicated design. |
 | General measured finger tree / measured sequence | public cursor | Gap plus ordered before/after measures; positional or monotone-measure seek; private digit/node contexts remain hidden. |
 | Finger-tree deque | public cursor | Positional gap with neighbor movement and local insertion/deletion; a semantic checkpoint can precede a focused implementation. |
-| Reversible deque | public cursor adapter | Same positional gap in logical orientation; reversing maps `p` to `Count - p` and swaps directional operations. |
+| Reversible deque | public cursor | Same positional gap in logical orientation; reversing maps `p` to `Count - p` and swaps directional operations. |
 | RRB vector | public cursor | Positional gap plus leaf/path breadcrumbs and relaxed-size tables; especially useful for clustered indexed edits. |
 | Range-update sequence | public cursor | Positional gap, ordered measures, and range/tag operations; breadcrumbs must carry inherited lazy tags and rebuild normalized caches. |
 | Rope, measured rope, text rope | shipped cursor | Preserve existing positional, measured, text-unit, branching, snapshot, and port-specific complexity contracts. |
 | Sorted bag, set, and map | public cursor | Comparator-order search location with lower/upper-bound seek, predecessor/successor navigation, and invariant-checked edits. |
 | Canonical zip-zip sorted set | public cursor | Same logical ordered-set cursor; private breadcrumbs additionally maintain deterministic ranks and rotations. |
-| Measured priority queue | specialized/read-only cursor only | Its sequence order is observable but arbitrary element editing is not queue semantics. Reuse an internal measured-tree zipper; expose a public locator only if occurrence identity is first designed. |
-| Brodal–Okasaki heap | not applicable publicly | The forest topology is private and unstable under meld/delete-min; minimum access is already the semantic focus. |
-| Priority-search queue | public key-order cursor | Keys define a stable sorted axis; edits may replace priority/value while winner caches are rebuilt. Priority order is a query, not a second cursor order. |
+| Measured priority queue | internal zipper | Its stored sequence is not a portable public order and arbitrary element editing is not queue semantics. A measured-tree path may remain private; no public cursor ships without a separate occurrence-identity design. |
+| Brodal–Okasaki heap | not applicable | The forest topology is private and unstable under meld/delete-min; minimum access is already the semantic focus. |
+| Priority-search queue | public cursor | Keys define a stable sorted axis; edits may replace priority/value while winner caches are rebuilt. Priority order is a query, not a second cursor order. |
 | Interval tree | public cursor | Nondecreasing low-endpoint order with duplicate-occurrence positions; overlap summaries rebuild through context. |
-| Persistent interval map | public cursor | Unique complete interval key in deterministic interval order; exact and augmented indexes publish together. |
-| Persistent chunked bit set | public cursor | Focus an existing set bit with before-first/after-last sentinels; seek by bit index, rank, or select. Chunk boundaries stay private. |
+| Persistent interval map | public cursor | Unique complete interval key in deterministic interval order; exact-key and augmented-search state publish together. |
+| Persistent chunked bit set | public cursor | Population-rank gap whose next entry is an existing set bit; seek by bit index, rank, or select. Chunk boundaries stay private. |
 | Persistent ordered set and map | public cursor | Insertion/explicit-position gap; edits update sequence and hash index atomically without exposing sparse labels. |
-| Persistent ordered multimap | public nested cursor | Outer key-group focus plus inner value-order gap; flattened pair movement is derived, not the sole representation. |
-| Tungsten `PersistentList` | public application-leaf cursor | Positional gap adapter over the leaf's list vocabulary; may consume a general sequence cursor. |
-| Tungsten `PersistentAssociation` | public application-leaf cursor | Ordered rule gap plus keyed focus, preserving kernel-driven update/move rules inside Tungsten only. |
+| Persistent ordered multimap | public cursor | Nested outer key-group and inner value-order gaps; flattened pair movement is derived, not the sole representation. |
+| Tungsten `PersistentList` | public cursor | Application-leaf positional gap over the List vocabulary; may consume a general sequence cursor. |
+| Tungsten `PersistentAssociation` | public cursor | Application-leaf Association-order gap plus keyed search, preserving kernel-driven update/move rules inside Tungsten only. |
 | Builders, one-way edit sessions, block stores, proofs, packs, and DABA Lite | not applicable | These are mutable lifecycles, persistence support values, authenticated artifacts, or a mutable window—not persistent aggregate values needing zippers. |
 
 ## Shared Public Cursor Contract
@@ -223,18 +224,20 @@ ordered insertion-position collections, and Tungsten lists/associations.
 
 #### Ordered search location
 
-Sparse and key-ordered structures use one of:
+Sparse and key-ordered cursors always denote a gap:
 
 ```text
-BeforeFirst | At(entry) | InsertionGap(lower, upper) | AfterLast
+entries < boundary | entries >= boundary
+                     ^ next entry is the candidate
 ```
 
-The public API may encode hit/miss separately while retaining one usable cursor in either case.
-`SeekLowerBound`, `SeekUpperBound`, `SeekKey`, `MovePrevious`, and `MoveNext` operate in the
-collection's promised order. A miss is not an invalid cursor. Insertion validates the new key
-against both neighbor bounds and the collection's duplicate policy. Replacing a key or interval
-that changes ordering is modeled as atomic remove-plus-reinsert and returns the cursor at the new
-ordered location.
+`SeekLowerBound(key)` returns the gap immediately before the first entry not less than `key` and an
+exact seek adds a separate hit discriminator. Start and end are gaps zero and `Count`, not different
+focus variants. Replacement and deletion address the next entry after an exact hit. `SeekUpperBound`,
+`MovePrevious`, and `MoveNext` operate in the collection's promised order. A miss is not an invalid
+cursor. Insertion validates the new key against both neighbor bounds and the collection's duplicate
+policy. Replacing a key or interval that changes ordering is modeled as atomic remove-plus-reinsert
+and returns the cursor at the new ordered location.
 
 This model applies to Patricia, sorted, canonical sorted, priority-search, interval, Merkle, and
 sparse-bit-set families.
@@ -367,9 +370,13 @@ uninitialized and safe to dispose.
 ### Concurrency
 
 Initialized immutable cursors are safe for concurrent read-only use to the same extent as their
-source collections. Editing returns new values and needs no cross-thread coordination. The only
-permitted internal mutation is publication of a semantically invisible cache such as a canonical
-snapshot or prepared measure table; it must be thread-safe, winner-returning, and failure-atomic.
+source collections and reachable policy/callback objects. Editing returns new values and ordinarily
+needs no cross-thread coordination, subject to the owning collection's lifetime rules. In
+particular, related C HAMT/Patricia and Tungsten Association versions with non-atomic intrusive
+reference counts must be derived, copied, and destroyed serially or under an external lock. The
+only permitted internal mutation is publication of a semantically invisible cache such as a
+canonical snapshot or prepared measure table; it must be thread-safe, winner-returning, and
+failure-atomic.
 
 A cursor over a concurrent structure is always bound to one immutable snapshot. It is never a live
 cursor whose next move can observe a different generation.
@@ -494,9 +501,10 @@ public sealed partial class FingerTree<TElement, TMeasure, TMeasureOps>
 {
     public FingerTreeCursor<TElement, TMeasure, TMeasureOps> GetCursorAtStart();
     public FingerTreeCursor<TElement, TMeasure, TMeasureOps> GetCursorAtEnd();
-    public bool TryGetCursor(
-        IMeasurePredicate<TMeasure> predicate,
-        out FingerTreeCursor<TElement, TMeasure, TMeasureOps> cursor);
+    public bool TryGetCursor<TPredicate>(
+        TPredicate predicate,
+        out FingerTreeCursor<TElement, TMeasure, TMeasureOps> cursor)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>;
 }
 
 public readonly struct FingerTreeCursor<TElement, TMeasure, TMeasureOps>
@@ -509,7 +517,8 @@ public readonly struct FingerTreeCursor<TElement, TMeasure, TMeasureOps>
     public bool TryPeekNext(out TElement value);
     public FingerTreeCursor<...> MovePrevious();
     public FingerTreeCursor<...> MoveNext();
-    public FingerTreeCursor<...> SeekByMeasure(IMeasurePredicate<TMeasure> predicate);
+    public FingerTreeCursor<...> SeekByMeasure<TPredicate>(TPredicate predicate)
+        where TPredicate : struct, IMeasurePredicate<TMeasure>;
     public FingerTreeCursor<...> Insert(TElement value);
     public FingerTreeCursor<...> DeletePrevious();
     public FingerTreeCursor<...> DeleteNext();
@@ -518,11 +527,14 @@ public readonly struct FingerTreeCursor<TElement, TMeasure, TMeasureOps>
 }
 ```
 
-The predicate has the existing monotone-prefix precondition. A successful seek returns the gap
-immediately before the first element whose inclusive prefix satisfies it. A miss returns `false`
-with a usable end cursor; a predicate true for the identity selects the start on a nonempty tree.
-Size-measured aliases may add `Count`, `Position`, and positional `Seek` without putting those members
-on the arbitrary-monoid cursor.
+The constrained predicate overload preserves the existing zero-boxing value-predicate path; a
+delegate convenience may be added separately where idiomatic. The predicate has the existing
+monotone-prefix precondition. A successful seek returns the gap immediately before the first element
+whose inclusive prefix satisfies it. A miss returns `false` with a usable end cursor; a predicate
+true for the identity selects the start on a nonempty tree. Size-measured uses may add `Count`,
+`Position`, and positional `Seek` through extension methods, a dedicated size-cursor wrapper, or
+universal independently cached counts. They cannot conditionally add instance members to one closed
+C# generic instantiation merely because its policy happens to be a size measure.
 
 #### Structural representation
 
@@ -559,10 +571,12 @@ chunks and a different lazy-spine potential.
   zipper-specific cache is visible to callers.
 
 Creation at an endpoint is targeted at O(1). Monotone seek retains the tree's existing split bound.
-One neighbor step is O(1) amortized and O(log n) worst under the family-local persistent finger-tree
-analysis; a complete traversal after one seek is O(n). Point editing may be focus-local but must be
-documented as O(log n) worst until its digit/node repair proof is complete. Closing a dirty arbitrary
-depth context is O(log n) worst; a memoized repeat may be O(1).
+One neighbor step may target O(1) amortized and O(log n) worst, and a complete post-seek traversal
+O(n), only for a focused implementation whose actual lazy-spine or balanced-tree representation has
+the corresponding proof and evidence. Root-plus-position checkpoints retain their ordinary local
+bounds. Point editing may be focus-local but must be documented as O(log n) worst until its
+digit/node repair proof is complete. Closing a dirty arbitrary-depth context is O(log n) worst in
+the reference focused design; a memoized repeat may be O(1).
 
 ### Finger-Tree Deque
 
@@ -587,15 +601,16 @@ because the deque has no equality policy. `Snapshot()` produces an ordinary dequ
 root variant visible through `FingerTreeDeque<T>`.
 
 The focused representation reuses the deque's leaf-count/signpost tree. A path frame records digit
-or node siblings and cached size data; it does not expose sorted-search signposts. Pulling across a
-focus boundary must use ordinary smart constructors so the strict-language suspended middle spine
-retains its concurrency and fully persistent memoization behavior.
+or node siblings plus cached size, rightmost-leaf signpost, and `HasLast` data. Those search caches
+remain private even though reconstruction must preserve them. Pulling across a focus boundary must
+use ordinary smart constructors so the strict-language suspended middle spine retains its
+concurrency and fully persistent memoization behavior.
 
 The baseline Profile R checkpoint may implement an edit with `InsertAt`, `RemoveAt`, `SetItem`, and
-`SplitAt`. The focused target is O(1)-amortized unit traversal and local edit on the precisely proved
-history class, O(log n) worst for a forced repair, and O(log n) dirty closure. Endpoint creation may
-be O(1), arbitrary seek retains the current near-end logarithmic split bound, and no rope focus or
-flush constant is imported.
+`SplitAt`. A focused implementation may target O(1)-amortized unit traversal and local edit only on
+the precisely proved representation/history class, with O(log n) worst forced repair and dirty
+closure. Endpoint creation may be O(1), arbitrary seek retains the local collection's current bound,
+and no C# lazy-finger-tree, rope focus, or flush claim is imported by balanced-tree checkpoints.
 
 The deque's optional `SortedLowerBound` helpers do not turn this into a sorted cursor. Callers that
 maintain a deque in sorted order can seek by the same comparer through an explicit convenience, but
@@ -604,8 +619,11 @@ sorted collection facades below own invariant-preserving ordered cursors.
 
 ### Reversible Deque Adapter
 
-`ReversibleDeque<T>` does not need a second structural engine. Its cursor stores the logical
-orientation plus a cursor over the underlying deque. If logical position is `p` and count is `n`:
+`ReversibleDeque<T>` uses the same public positional contract, but its focused representation must
+follow the owning port's orientation-aware core. The conceptual adapter stores logical orientation
+plus a deque cursor. A port may realize that with per-node mirror bits, another orientation-aware
+tree, or an explicitly chosen ordinary-deque adapter; this design does not overwrite the shipped
+core topology. For the last representation, if logical position is `p` and count is `n`:
 
 ```text
 forward orientation: underlying position = p
@@ -619,18 +637,33 @@ In reversed orientation:
 - backspace/forward-delete swap;
 - inserting one value uses the mapped physical gap;
 - inserting logical range `[x0, ..., xm-1]` inserts the reversed range physically; and
-- `Reverse()` keeps the same logical version and maps the gap to `n - p` while toggling orientation.
+- `Reverse()` creates a new logical version while sharing storage, maps the gap to `n - p`, and
+  swaps the logical sides:
+
+  ```text
+  old:       left | right
+  reversed:  Reverse(right) | Reverse(left)
+  ```
+
+  It receives independent dirty/snapshot cache state; the source's clean snapshot cannot be reused
+  as the reversed logical value.
 
 `Snapshot()` returns a `ReversibleDeque<T>` retaining the cursor's logical orientation. A separate
 `SnapshotUnderlying()` is unnecessary and would couple consumers to representation. Cursor
-navigation has the underlying cursor's bounds; toggling orientation is O(1). Tests must cover the
-involution at every gap, especially empty/start/end states and non-palindromic range insertion.
+navigation has the chosen local core's bounds; logical reversal should remain O(1) where the owning
+deque already promises it. Tests must cover the involution at every gap, especially empty/start/end
+states and non-palindromic range insertion.
 
 ### Relaxed Radix-Balanced Vector
 
 `RrbVector<T>` and sibling RRB vectors receive `RrbVectorCursor<T>`, a positional gap cursor. RRB is
 a particularly good zipper target because one open radix path can serve several nearby indexed
 reads or edits without repeating root descent.
+
+The radix representation below applies only to ports that actually ship packed/relaxed RRB nodes.
+OCaml's current `Rrb_vector` reuses a balanced persistent sequence and expressly makes no relaxed-
+radix topology claim; it uses Profile R or a zipper over its own tree with that implementation's
+bounds and invariants.
 
 #### Representation
 
@@ -675,17 +708,21 @@ spliced with structural sharing, plus ordinary enumerable/span capture overloads
 The cursor is independent of `RrbVector.Builder`: the builder is append-oriented mutable staging,
 whereas the cursor is branchable local editing over an adopted persistent version.
 
-Seek is O(log32 n). In-leaf movement and replacement copy at most one bounded leaf plus changed
-cursor state; boundary crossing and rebalancing are O(log32 n) worst. A linear scan after one seek
-targets O(k + log32 n). Insert-range work is at least Omega(m) for uncaptured input and otherwise
-follows the vector's concat/rebalance bound. The design does not claim a dedicated tail, transient
-RRB nodes, or constant-amortized arbitrary version-DAG editing.
+In a full RRB port, seek is O(log32 n). In-leaf movement and replacement copy at most one bounded
+leaf plus changed cursor state; boundary crossing and rebalancing are O(log32 n) worst. A linear
+scan after one seek targets O(k + log32 n). Insert-range work is at least Omega(m) for uncaptured
+input and otherwise follows the vector's concat/rebalance bound. Checkpoint ports retain their local
+balanced-sequence costs. The design does not claim a dedicated tail, transient RRB nodes, or
+constant-amortized arbitrary version-DAG editing.
 
 ### Range-Update Sequence
 
 `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` and its sibling ports receive a positional and
-measured `RangeUpdateSequenceCursor`. It uses an implicit-AVL path zipper, but pending lazy tags make
-the context more than an ordinary binary-tree derivative.
+measured `RangeUpdateSequenceCursor`. Ports whose collection is the path-copied implicit AVL can use
+the focused design below; pending lazy tags make its context more than an ordinary binary-tree
+derivative. A port with another representation uses Profile R or a topology-local zipper and keeps
+its documented bounds. In particular, OCaml's immutable-array checkpoint claims neither the AVL
+frames nor logarithmic edit/measure bounds described for the reference core.
 
 #### Logical state and tag invariant
 
@@ -693,18 +730,19 @@ Each context frame records:
 
 ```text
 direction
-parent logical element
+parent stored logical element (already including the parent's own pending tag)
 complete sibling subtree
 parent height/count/measure
 optional parent pending tag
 optional inherited tag from ancestors
 ```
 
-The existing invariant remains authoritative: a node's own logical element and cached measure
-already include its pending tag; its children do not. A read-only cursor descent therefore **carries**
-the correctly composed inherited tag without mutating or path-copying nodes. It returns a logical
-peek by applying that carried action. Merely navigating away and back must keep the clean source
-snapshot reference-identical.
+The existing invariant remains authoritative: a node's stored logical element and cached measure
+already include its own pending tag; its children do not. The value exposed at a focus is that stored
+logical element after applying only the carried ancestor tag—never the node tag a second time. A
+read-only cursor descent therefore **carries** correctly composed inherited tags without mutating or
+path-copying nodes. Merely navigating away and back must keep the clean source snapshot
+reference-identical.
 
 The first edit through a tagged path prepares an immutable normalized edit spine:
 
@@ -732,20 +770,29 @@ Snapshot()
 `ApplyPrevious(k, tag)` targets `[Position - k, Position)` and keeps the gap fixed;
 `ApplyNext(k, tag)` targets `[Position, Position + k)` and keeps it fixed. Both validate the complete
 range before `IsIdentity` or any tag/measure action, matching `ApplyRange`. Zero length returns the
-same cursor without callbacks. A whole-version tag may remain an O(1) tagged root even when invoked
-through a cursor; the implementation must not open every path simply to preserve focus. Absolute
-range operations remain available on `Snapshot()` or through cursor methods taking an absolute
-index if consumer evidence justifies them.
+same cursor without callbacks. `MeasurePrevious` and `MeasureNext` use the same subtraction-safe
+range validation; zero length returns the monoid identity without element or tag callbacks, and a
+nonempty result combines elements in snapshot order. Their bounds are the owning implementation's
+`MeasureRange` bound plus any cursor-close/open work, never an assumed constant-time inverse.
+
+A whole-version tag through a clean root-plus-gap checkpoint can retain the owning substrate's O(1)
+root update when that substrate promises it. A dirty focused zipper cannot inherit that result
+automatically: it must first close, retain a separately specified global overlay tag across both
+sides, or use another proved representation. The implementation must document which path it takes
+and its cache/failure behavior. Absolute range operations remain available on `Snapshot()` or
+through cursor methods taking an absolute index if consumer evidence justifies them.
 
 `MeasureBefore` and `MeasureAfter` must reflect all carried tags and combine in logical order to the
 whole measure. They may use cached annotated sibling subtrees plus O(log n) composed-frame work; no
 O(1) promise is made until a chosen representation stores failure-atomically prepared aggregates.
 
-Seek, point edit, proper range update, and dirty close are O(log n) worst under the existing implicit-
-AVL contract. Whole-sequence nonidentity tagging remains O(1). Unit navigation may be O(1)
-amortized over a linear traversal but O(log n) worst at a spine crossing. A focused implementation
-must count tag composition/application and measure callbacks separately from node allocations; no
-rope callback ceiling or finger-tree amortization applies.
+Seek, point edit, proper range update, and dirty close are O(log n) worst for the implicit-AVL
+reference design. A whole-sequence nonidentity tag is O(1) only in the clean/overlay cases just
+specified; closing a dirty path first can add O(log n). Unit navigation may be O(1) amortized over a
+linear traversal but O(log n) worst at a spine crossing in a proved focused tree implementation.
+Every port otherwise publishes its local array/tree bound. A focused implementation must count tag
+composition/application and measure callbacks separately from node allocations; no rope callback
+ceiling or finger-tree amortization applies.
 
 ### Rope, Measured Rope, And Text
 
@@ -778,18 +825,20 @@ consumer evidence; it is not part of the first public tranche.
 
 #### Brodal–Okasaki heap
 
-The heap's bootstrapped forest, violations, and scheduling structure are private and may change
-drastically after `Meld` or `DeleteMinimum`. There is no comparer-ordered neighbor traversal, and an
-arbitrary focused node cannot be replaced without restoring global heap invariants. `Minimum`,
-`Insert`, `Meld`, and `DeleteMinimum` already express its semantic locations. Do not add a public
-zipper.
+The shipped heap's bootstrapped skew-binomial structure, fused primitive child/embedded forest, and
+skew-rank invariants are private and may change drastically after `Meld` or `DeleteMinimum`. There
+is no comparer-ordered neighbor traversal, and an arbitrary focused node cannot be replaced without
+restoring global heap invariants. `Minimum`, `Insert`, `Meld`, and `DeleteMinimum` already express
+its semantic locations. Do not add a public zipper.
 
 #### DABA Lite and builders
 
-`DabaLite` is a mutable FIFO aggregate with deterministic reclamation; RRB/rope/sorted builders are
-mutable staging lifecycles. A persistent zipper would neither describe their ownership nor improve
-their intended operations. They remain out of scope. Immutable snapshots produced by a builder may
-create an ordinary family cursor after publication.
+`DabaLite` is a mutable FIFO aggregate that overwrites/detaches raw-value storage and does not expose
+persistent snapshots; native ports destroy detached values promptly, while tracing-GC ports leave
+reclamation to their runtimes. RRB/rope/sorted builders are mutable staging lifecycles. A persistent
+zipper would neither describe their ownership nor improve their intended operations. They remain
+out of scope. Immutable snapshots produced by a builder may create an ordinary family cursor after
+publication.
 
 ## Ordered And Search-Family Designs
 
@@ -959,8 +1008,10 @@ Factories:
 - first interval containing a point; and
 - start/end.
 
-`SeekNextOverlap(query)` advances through the suffix using cached `MaxHigh` and stops after low
-endpoints exceed `query.High`. It preserves inclusive endpoints and returns a usable end cursor on a
+`SeekNextOverlap(query)` searches strictly after the currently focused occurrence, then advances
+through the suffix using cached `MaxHigh` and stops after low endpoints exceed `query.High`. This
+exclusive continuation rule prevents a factory's gap-before-hit result from rediscovering the same
+occurrence indefinitely. It preserves inclusive endpoints and returns a usable end cursor on a
 miss. A focused implementation retains count, last-low, and max-high context summaries; a portable
 one may delegate each continuation to the current augmented search.
 
@@ -981,7 +1032,8 @@ scans must state any additional run cost honestly.
 key `(Low, High)` under the endpoint policy.
 
 - exact/lower/upper/rank factories use lexicographic interval order;
-- first-overlap/containing factories and `SeekNextOverlap` reuse max-high augmentation;
+- first-overlap/containing factories and strictly-after-current `SeekNextOverlap` reuse max-high
+  augmentation;
 - strict insert succeeds only at a missing complete key;
 - `SetNextValue` retains the stored interval representative and applies the value-comparer no-op
   rule; and
@@ -989,7 +1041,7 @@ key `(Low, High)` under the endpoint policy.
 
 Context measures preserve count, rightmost complete interval key, and max-high. Whether a port uses
 one augmented tree for exact and overlap queries or composes multiple physical indexes is private;
-every cursor edit publishes the exact-key and augmented-search views together or publishes nothing.
+every cursor edit publishes the exact-key and augmented-search state together or publishes nothing.
 No endpoint replacement or zipper-level `Coalesce` is proposed because both require application-
 specific payload decisions.
 
@@ -1002,16 +1054,19 @@ Conceptual state:
 
 ```text
 words before focus
-active word index + nonzero 64-bit word + bit offset
+optional active word index + nonzero 64-bit word + bit offset
 words after focus
 population before active word
 logical set-bit gap rank
 ```
 
-Factories are `AtOrAfter(bitIndex)`, exact search with `Found`, `AtRank(populationRank)`, start, and
-end. `Position` uses the same wide count type as population count. Within one word, next/previous use
-trailing/leading-set-bit operations; crossing a word moves through the underlying ordered measured
-context. Rank is cached population before the word plus the popcount below the active offset.
+The active word is absent for an empty set, the end gap, and a missing-word insertion gap until an
+edit creates it. Factories are `AtOrAfter(bitIndex)`, exact search with `Found`,
+`AtRank(populationGapRank)`, start, and end. Cursor rank accepts `0 .. Count`; `Count` returns the end
+gap, unlike element `Select`, whose domain is `0 .. Count - 1`. `Position` uses the same wide count
+type as population count. Within one word, next/previous use trailing/leading-set-bit operations;
+crossing a word moves through the underlying ordered measured context. Rank is cached population
+before the word plus the popcount below the active offset.
 
 - `Add(bitIndex)` searches at-or-after. A present bit is an identity no-op; a missing bit updates or
   inserts its word and returns the gap after the new bit.
@@ -1028,9 +1083,9 @@ Enumeration, rank, select, count width, and overflow remain language-local.
 ## Neutral Ordered Composite Designs
 
 The independently owned Ordered family is a particularly strong public-zipper fit because insertion
-and explicit-position order are semantic. The cursor works over that order while retaining the
-hashed membership/key index as an atomic auxiliary root. It never exposes sparse stamps or depends
-on Tungsten.
+and explicit-position order are semantic. Under this proposal it would receive cursors over that
+order while retaining the hashed membership/key index as an atomic auxiliary root. It never exposes
+sparse stamps or depends on Tungsten.
 
 ### Shared Ordered Context
 
@@ -1054,10 +1109,17 @@ the already complete index. Implementations may instead retain a canonical root 
 logical split does not mandate payload duplication, one stamp representation, or a finger tree in
 every port.
 
-Private labels serve only to order index entries. They are not cursor positions, bookmarks,
+Private labels coordinate ordered-sequence entries with membership/key-index entries and support
+positional recovery; they do not order the CHAMP itself. They are not cursor positions, bookmarks,
 serialized values, or rebase anchors. An ordinary insertion chooses a label between neighbors. Gap
-exhaustion relabels and rebuilds one unpublished complete result; the returned cursor is reconstructed
-at the same logical gap. No relabel amortization crosses retained branches.
+exhaustion relabels and rebuilds one unpublished complete result; the returned cursor is
+reconstructed at the operation's contractually resulting gap—after inserted values for insertion.
+No relabel amortization crosses retained branches.
+
+An equality-seek instance method on an insertion-ordered cursor returns `false` with the receiver
+location unchanged when the class is absent; there is no key-sorted lower-bound insertion gap to
+infer. A collection factory may instead return `false` with a documented usable end cursor. Set,
+map, multimap-group, and Association APIs must choose these forms consistently.
 
 ### Persistent Ordered Set
 
@@ -1141,11 +1203,18 @@ Edits:
   predecessor-at-end, otherwise `Empty`; and
 - deleting a group subtracts its complete value count and uses the same deterministic reanchor.
 
+Shipment of group-before/after and arbitrary-position inner-value insertion is gated on first
+adding and specifying equivalent ordinary persistent operations. If a port deliberately makes them
+cursor-only instead, it needs an independent normative model and cannot claim parity with today's
+append-style `Add` surface. The preferred v1 sequence is to ship the ordinary positional operations
+first, then require cursor/ordinary-operation parity.
+
 No publishable intermediate contains an empty group. Pair-count overflow is checked before
 publication. A dirty snapshot closes the inner context, installs that complete group in the outer
-context/index, then closes the outer context. Its focused cost is the relevant inner and outer hash
-lookups plus O(log v + log k) sequence closure; inner and outer relabeling retain their separate
-O(v...) and O(k...) per-version bounds. A flattened seek without an outer pair-count measure is
+context/index, then closes the outer context. Let `w_k`/`c_k` and `w_v`/`c_v` be the outer-key and
+inner-value CHAMP depth/collision costs. Focused work includes those hash paths plus
+O(log v + log k) sequence closure; inner relabeling costs O(v (w_v + c_v)) and outer relabeling
+O(k (w_k + c_k)) per produced version. A flattened seek without an outer pair-count measure is
 honestly O(k + log v).
 
 ## Tungsten Application-Leaf Designs
@@ -1157,8 +1226,8 @@ subclass, or adopt the Tungsten cursor or its kernel-driven behavior.
 
 ### Tungsten Persistent List
 
-`PersistentList<T>` receives the leaf-local equivalent of the deque positional cursor. Prefer an
-adapter over a general deque cursor when that dependency exists in the allowed direction.
+`PersistentList<T>` would receive the leaf-local equivalent of the deque positional cursor. Prefer
+an adapter over a general deque cursor when that dependency exists in the allowed direction.
 
 Peeks, move, seek, insertion/range insertion, previous/next deletion, and snapshot follow the shared
 gap contract. `ReplaceNext` follows Tungsten List `SetItem`: it creates a new logical version even
@@ -1172,17 +1241,18 @@ profile.
 
 ### Tungsten Persistent Association
 
-`PersistentAssociation<TKey, TValue>` receives an Association-order gap cursor plus complete key
-index and retained policy. Its update and movement behavior is explicitly application-specific.
+`PersistentAssociation<TKey, TValue>` would receive an Association-order gap cursor plus complete
+key index and retained policy. Its update and movement behavior is explicitly application-specific.
 
-- `TrySeekKey` places the gap before the stored rule.
+- `TrySeekKey` places the gap before the stored entry; an instance-method miss returns `false` with
+  the receiver location unchanged, while a collection factory may document an end cursor.
 - `SetNextValue` preserves the focused stored key, position, and stamp and applies Association's
   existing value no-op rule.
 - `DeletePrevious`/`DeleteNext` removes both keyed and ordered state atomically.
 - `InsertHere(key, value)` mirrors Association's current positional insertion rule. The position is
   interpreted against the pre-removal association. If an equivalent key at rank `r` precedes target
   `p`, remove it and insert at `p - 1`; otherwise insert at `p`. The returned gap is after the
-  installed rule.
+  installed entry.
 - Existing-key insertion adopts the incoming key representative and creates a new logical version/
   stamp even when the resulting key/value pair compares equal, exactly where the Tungsten contract
   requires it. It is not neutral Ordered-map behavior.
@@ -1201,24 +1271,24 @@ authority; neutral Ordered validation must never use Tungsten as an oracle.
 
 ### Fixed-Width Integers
 
-`UInt256`/`Int256`, 512-bit, and 1024-bit values are numeric scalars. Their limb arrays are fixed-size
-implementation details, not public recursive constructors. A limb zipper would expose layout and
-endianness, add more state than copying 4/8/16 limbs, and provide no asymptotic structural-sharing
-benefit. A bit-gap editor would actually be a shift/mask/bit-string API; insertion and deletion do
-not naturally preserve fixed width. No cursor is designed.
+`UInt256`/`Int256`, 512-bit, and 1024-bit values are numeric scalars. Their fixed-width half/limb
+representations are implementation details, not public recursive constructors. A limb zipper would
+expose layout and endianness, add more state than copying a fixed 32/64/128-byte value, and provide
+no asymptotic structural-sharing benefit. A bit-gap editor would actually be a shift/mask/bit-string
+API; insertion and deletion do not naturally preserve fixed width. No cursor is designed.
 
 ### Sparse Integer
 
-`SparseInteger` is also a scalar. C# may use recursive sparse storage internally, while TypeScript,
-Python, and OCaml use their arbitrary-precision integer substrates. Publicly freezing a tree path
+`SparseInteger` is also a scalar. C# uses recursive sparse-position storage internally, while
+TypeScript, Python, and OCaml use their arbitrary-precision integer substrates. Publicly freezing a tree path
 would make one representation a cross-language semantic authority. Moving a set-bit exponent can
 also trigger numeric carries, ordering/uniqueness repair, and a canonical small/large representation
 transition rather than one local subtree replacement.
 
-Consumers needing navigable sparse set bits should use `PersistentChunkedBitSet`; consumers needing
-numeric edits use existing arithmetic and bit operations. `BitConverterEx`, codecs, policies,
-measures, predicates, result records, and split carriers are stateless or auxiliary values rather
-than persistent aggregates and receive no zipper.
+Consumers needing navigable sparse set bits should use `PersistentChunkedBitSet`; wide-integer
+consumers use existing arithmetic/bit operations, while sparse-integer consumers use its arithmetic
+operations. `BitConverterEx`, codecs, policies, measures, predicates, result records, and split
+carriers are stateless or auxiliary values rather than persistent aggregates and receive no zipper.
 
 ## HAMT And Hash-Composition Designs
 
@@ -1250,14 +1320,16 @@ protocols below.
 Focus is one of:
 
 ```text
-PresentLeaf(storedHash, storedKeyRepresentative, storedValue)
+PresentEntry(storedHash, storedKeyRepresentative, storedValue, origin)
 PresentCollision(fullHash, immutableBucket, selectedIndex)
 Missing(key, hash, terminalKind)
 EmptyRoot
 ```
 
-`terminalKind` distinguishes an empty logical slot, an unequal terminal payload, and an equal-full-
-hash collision miss. A collision bucket remains shared until an actual edit requires one new bucket.
+`origin` distinguishes an inline bitmap-node payload from a terminal leaf when the implementation
+has both forms; a port may instead normalize both into this logical focus. `terminalKind`
+distinguishes an empty logical slot, an unequal terminal payload, and an equal-full-hash collision
+miss. A collision bucket remains shared until an actual edit requires one new bucket.
 
 Each bitmap-node frame retains:
 
@@ -1285,15 +1357,28 @@ Edits close through ordinary CHAMP smart constructors:
 - clean closure returns the exact source root/instance under the language's identity model.
 
 Every closed result preserves disjoint data/node bitmaps, compact array lengths equal to bitmap
-popcounts, five-bit routing, collision buckets containing one full hash, cached recursive counts,
-first representatives, comparer/hash policy, and the local canonical empty/singleton rules. An
-immutable path never mutates nodes sealed by C# transient publication or any storage reachable from
-another version.
+popcounts, five-bit routing, collision buckets containing one full hash in their existing local
+entry order except for the ordinary operation's specified insertion/removal, cached recursive
+counts, first representatives, comparer/hash policy, and the local canonical empty/singleton rules.
+An immutable path never mutates nodes sealed by C# transient publication or any storage reachable
+from another version.
+
+Factored one-descent map factories retain the complete ordinary contract:
+
+- validate every required factory before hashing, compute the hash once, and descend once;
+- call no factory on a hit and call exactly the selected factory exactly once on a miss/update;
+- distinguish a present null-like value from absence and retain stored representatives on semantic
+  no-ops;
+- prepare the complete result before publication so factory, retain, allocation, or callback failure
+  exposes no change; and
+- never import Ctrie retry semantics into a persistent `GetOrAdd`/`AddOrUpdate` factory.
 
 With depth `d <= 7` and collision-bucket length `c`, seek/edit/close are O(d + c), context is O(d),
-and changed allocation is limited to the bucket and ancestor path plus local compact arrays. C
-retains every key/value/context before publishing output and releases a completely prepared failed
-candidate; other ports follow their clone/move/GC rules. Failure leaves the old path reusable.
+and changed allocation is limited to the bucket and ancestor path plus local compact arrays. A C
+operation-local path may borrow nodes while its source remains live; an owning path retains the root
+or required frames. Newly rebuilt nodes retain payloads through the configured policy. A null result
+from an allocating retain callback unwinds every completed retain and installs no output. Other
+ports follow their clone/move/GC rules. Failure leaves the old path reusable.
 
 ### Persistent Hash Bag Adapter
 
@@ -1301,13 +1386,15 @@ The bag has no public occurrence zipper. Its expanded equal occurrences are mult
 separately stored positions. A private adapter focuses one distinct equality class:
 
 ```text
-(CHAMP path, stored representative, multiplicity, checked TotalCount)
+(CHAMP path, stored representative, multiplicity, language-local expanded total)
 ```
 
 It changes multiplicity only within `1 .. 2^31 - 1`; a transition to zero removes the class. Every
-edit updates total count by the exact checked delta and publishes the new map and total together.
-First representative retention and receiver policy remain unchanged. Cost is one CHAMP path plus
-O(1) arithmetic; overflow, hashing, equality, allocation, clone, or retain failure publishes no bag.
+edit updates the expanded total by the exact delta and publishes the new map and total together.
+Arithmetic is checked where that total is bounded; TypeScript `bigint` and Python `int` remain
+unbounded. First representative retention and receiver policy remain unchanged. Cost is one CHAMP
+path plus O(1) arithmetic; overflow where applicable, hashing, equality, allocation, clone, or retain
+failure publishes no bag.
 
 ### Persistent Bimap Adapter
 
@@ -1328,8 +1415,10 @@ Prepare/commit order preserves current conflict precedence:
 5. construct the bimap only after both succeed.
 
 Replacement removes/readds both directions and never displaces another key. Removal closes both
-holes. Clean close returns the source; changed reference-semantic ports retain their reciprocal
-inverse-view identity contract, while value-semantic ports preserve the equivalent two-root sharing.
+holes. Clean close returns the source. Changed C#, Kotlin, TypeScript, and Python facades preserve
+their reciprocal cached-inverse contract. C, C++, Haskell, and Rust preserve their documented
+two-root sharing analogue. OCaml currently exposes forward/inverse lookup and enumeration rather
+than an inverse facade and receives no new identity promise.
 
 ### Hash Multimap Adapter
 
@@ -1423,6 +1512,11 @@ edits produce another graph; the traversal remains on the original snapshot and 
 explicitly. Cycles, isolated vertices, self-loops, and the cached reversed facade require model
 tests. Expected traversal work is one visit per reached vertex/edge plus HAMT frontier/visited costs.
 
+Neighbor discovery follows the source snapshot's stable-for-that-version but otherwise unspecified
+HAMT adjacency order unless the traversal explicitly accepts a caller ordering policy; it introduces
+no canonical graph order. Its stack/queue is traversal-owned or lives in an appropriate composition
+package. Do not introduce a HAMT-to-FingerTree dependency solely to obtain a persistent frontier.
+
 ## Integer Patricia Cursor Design
 
 `PersistentIntMap<TValue>`, `PersistentIntSet`, `PersistentLongMap<TValue>`, and
@@ -1447,11 +1541,13 @@ cached subtree count
 original node identity
 ```
 
-Focus is a leaf, empty root, or ordered insertion gap. Search follows compressed prefixes and stops
-at the first mismatch or exact leaf. `Position` is derived from cached counts of left siblings on
-the path.
+The public focus is always an ordered gap; physically the next entry may be a retained leaf, or be
+absent at end/empty. Search follows compressed prefixes and stops at the first mismatch or exact
+leaf. `Position` is derived from cached counts of left siblings on the path.
 
-- Map `SetNextValue` retains the integer key and applies the ordinary value-equality no-op.
+- Map `SetNextValue` retains the integer key and follows the owning port's ordinary replacement
+  rule. Ports with a value-equality policy preserve its configured no-op; Haskell deliberately has
+  no `Eq` constraint on Patricia values and rebuilds a present-key replacement.
 - strict insertion at a miss joins the new leaf with the encountered leaf/subtree at the highest
   differing transformed bit and may splice that branch above one or more frames.
 - set duplicate insertion is an exact no-op.
@@ -1469,9 +1565,11 @@ context is O(W). One move is O(W) worst and O(1) amortized over a complete linea
 either add it as an internal invariant or omit/qualify rank members rather than scan silently.
 
 Port-specific ownership remains explicit: C retains/releases the path; C++ and Rust frames retain
-nodes without copying move-only/owned payloads unnecessarily; TypeScript uses its documented 64-bit
-key representation; Python validates fixed-width key ranges; OCaml retains its module-local key
-facades. No cursor token is portable across widths, policy instances, or languages.
+shared nodes and introduce no payload-copy requirement beyond the owning Patricia implementation
+(current C++ edits copy from `const T&`; Rust edit bounds retain their `Clone + PartialEq`
+requirements); TypeScript uses its documented 64-bit key representation; Python validates fixed-
+width key ranges; OCaml retains its module-local key facades. No cursor token is portable across
+widths, policy instances, or languages.
 
 ## Merkle Search Tree Cursor Design
 
@@ -1491,30 +1589,32 @@ A frame retains:
 
 - original trusted node/block identity and hash-derived layer;
 - selected child interval or separator position;
-- entries and child subtrees/digests on both sides, preferably as original arrays plus indexes;
+- entries and complete in-memory child subtrees on both sides, preferably as original arrays plus
+  indexes; child digests are cached metadata and cannot replace a subtree needed for closure;
 - lower and upper separator bounds for the selected interval;
 - cached subtree count, height/block metadata, and original digest; and
 - ancestor context.
 
-Factories support start/end, rank, lower/upper bound, exact key, and bounded inclusive-range entry.
-Within-block next/previous is constant work; crossing a child/block boundary climbs and descends the
-context. `Position` uses authenticated cached subtree counts already validated in the source tree.
+Factories support start/end, rank, lower/upper bound, and exact key. Within-block next/previous is
+constant work; crossing a child/block boundary climbs and descends the context. `Position` uses
+validated cached subtree counts structurally committed by the source blocks; their authentication
+still depends on a trusted root. Bounded range objects remain deferred.
 
 ### Canonical Editing And Closure
 
-- Equivalent-key value replacement retains the stored key representative.
+- `SetNextValue` after an exact hit retains the stored key representative.
 - Exact canonical value bytes recognize the ordinary `SetItem` no-op.
 - Insertion computes the policy-bound SHA-256 key layer once after required validation.
-- Removal deletes the focused key.
+- `DeleteNext` after an exact hit removes the candidate key and keeps the public gap convention.
 - Every changed block is canonically encoded and rehashed; subtree count, height, block count,
   `MST2` bytes, block digests, and root digest are recomputed.
 
 Merkle closure cannot naively plug one child into its old parent. A higher-layer inserted key can
 become an ancestor; an equal-layer key can join a wide block; removal can expose/promote child
 separators. Dirty closure therefore invokes the existing canonical layer-partition/split/merge logic
-on the minimal affected interval while sharing digest-identical unaffected subtrees. The closed
-tree's topology, bytes, and root hash must equal ordinary `SetItem`/`Remove` for the same policy and
-logical contents.
+on the minimal affected interval while reference-sharing unaffected original subtrees; equal
+digests alone neither require nor authorize object reuse. The closed tree's topology, bytes, and root
+hash must equal ordinary `SetItem`/`Remove` for the same policy and logical contents.
 
 `Snapshot()` publishes only a complete canonical in-memory tree and retains the exact policy/domain
 object. It does not write an `IMerkleBlockStore`. `Save`, export, proof creation, synchronization,
@@ -1532,16 +1632,20 @@ and merge operate on the closed snapshot.
 - Root trust, authentication, confidentiality, replay, and peer identity remain outside the zipper
   exactly as they are outside the tree.
 
-Let `h` be block height, `e` entries per visited block, and `S` changed encoded bytes. Seek retains
-the existing O(sum log(e + 1)) comparison bound. Within-block movement is O(1), boundary movement is
-O(h) worst, and a complete traversal is O(n). Edit plus first dirty snapshot is expected
-O(16 log16 n + S) under uniform layers and O(n + S) worst for a degenerate block. Context is O(h).
-Clean and memoized repeated snapshots are O(1). These are the existing tree assumptions, not new
-cryptographic or adversarial guarantees.
+Let `h` be block height, `e_i` the occupancy of visited block `i`, and `S` changed encoded bytes. Key
+seek retains O(sum log(e_i + 1)) comparisons. Existing nodes cache each child's total count rather
+than cumulative child-prefix ranks, so rank seek and initial `Position` accumulation cost
+O(sum (e_i + 1)) unless a validated cumulative-rank table is added. Within-block movement is O(1),
+boundary movement is O(h) worst, and a complete traversal is O(n). Edit plus first dirty snapshot is
+expected O(16 log16 n + S) under uniform layers and O(n + S) worst for a degenerate block. Context
+is O(h) only when frames retain original nodes plus indexes; copying left/right entry or child runs
+uses O(sum e_i) space. Clean and memoized repeated snapshots are O(1). These are the existing tree
+assumptions, not new cryptographic or adversarial guarantees.
 
-Cross-language golden tests must apply the same cursor edit histories and require byte-identical
-root hashes and `MST2` block closures, including adversarial layer patterns, start/end/min/max gaps,
-present-null values, retained branches, and codec failures.
+Cross-language golden tests must apply the same cursor edit histories and require byte-identical root
+hashes and `MST2` block closures under the shared golden policy, comparer semantics, codecs, and
+canonical inputs, including adversarial layer patterns, start/end/min/max gaps, present-null values,
+retained branches, and codec failures.
 
 ## Concurrent Facades, Builders, And Transients
 
@@ -1552,17 +1656,20 @@ snapshot facades. A focus cannot remain attached to one structural generation wh
 writes renew paths, and write-back would require a new compare/exchange, conflict, factory-retry,
 and linearization contract that the ports do not share.
 
-An optional read-only `SnapshotCursor` may capture one immutable generation and traverse its
-documented snapshot order. It is a traversal cursor, not a reconstructing zipper. Editing follows:
+An optional read-only `SnapshotTraversal` may capture one immutable generation and traverse its
+documented snapshot order. It is explicitly outside the reconstructing-zipper contract. Editing
+follows:
 
 1. capture a snapshot;
 2. convert to a detached persistent CHAMP where needed;
 3. use ordinary persistent operations/private edit paths; and
 4. return the detached map without implicit write-back.
 
-C#/Kotlin conversion retains its O(n), policy/representative-preserving canonical-order contract.
-Root-backed facades follow their local sharing/copy contract. No lock-free, cross-worker, or live-
-rebasing claim transfers between them.
+C#/Kotlin traversal follows their documented canonical CHAMP-conversion order. TypeScript, Python,
+and OCaml follow their captured persistent-root iteration contracts. Root-backed facades retain
+their local sharing/copy costs. There is no shared cross-port entry sequence beyond those local
+documents, and no lock-free, cross-worker, write-back, or live-rebasing claim transfers between
+them.
 
 ### Construction Builders
 
@@ -1580,7 +1687,11 @@ one under this name.
 
 The private CHAMP edit-path engine may be used during one transient operation, but the path cannot
 outlive that operation or bypass its prepare/commit boundary, version increment, iterator
-invalidation, owner token, terminal publication, or exception guarantee.
+invalidation, owner token, terminal publication, or language-local publication/failure contract.
+Factoring preserves C# owner-token O(1) adoption/publication and retryable preparation failure;
+sibling path-copy semantics without a transient-performance claim; C alias-wide consumption; C++
+throwing-policy-move terminal invalidation/no-retry behavior; Haskell masked commit; Kotlin/Python
+version invalidation; and Rust consuming publication.
 
 ## Cross-Language API And Ownership Mapping
 
@@ -1591,14 +1702,21 @@ rules.
 | Language | Recommended public shape | Ownership and result rules |
 | --- | --- | --- |
 | C# | Concrete `XCursor<...>` returned by `GetCursor`/search factories; readonly struct over immutable references when justified, otherwise sealed value-like class; `Snapshot()` | Default struct is explicitly invalid unless a policy-correct empty can be represented. Presence-safe `Try` methods support nullable payloads. Thread-safe memo cells may be used but are not globally required. |
-| C | Opaque or type-erased `x_cursor` owned handle with `init`/factory, `copy`, consuming `move`, `dispose`, navigation/edit status functions, and snapshot output | Callback contexts and policies outlive every related cursor. Exact source/result alias support follows the owning workspace. Output is installed only on success; copied peeks own or copy through the value policy rather than returning unstable storage. |
-| C++ | Immutable `x_cursor` value retaining shared nodes/context; free/member factories and `snapshot()` | Copy/move follows the collection's policy-object rules. Borrowed peek references are lvalue-only where a temporary cursor would dangle. Context frames retain nodes rather than copying move-only keys or values. |
+| C | Opaque or type-erased `x_cursor` owned handle with factory/init, the family's established clone/destroy vocabulary, navigation/edit status functions, and snapshot output; consuming move is optional rather than universal | Callback contexts and policies outlive every related cursor. Exact source/result alias support follows the owning workspace. Output is installed only on success. Peeks may borrow from the owning cursor snapshot under the existing lookup lifetime rule; an owning-copy result is added only when the family needs one. |
+| C++ | Immutable `x_cursor` value retaining shared nodes/context; free/member factories and `snapshot()` | Copy/move follows the collection's policy-object rules. Borrowed peek references are lvalue-only where a temporary cursor would dangle. Context frames add no payload copies beyond the owning API and do not imply move-only support for copy-requiring families. |
 | Haskell | Opaque pure `XCursor` algebraic value with `cursorAt`, movement/edit functions, and `snapshot` | Outer `Maybe`/result distinguishes a missing neighbor from a stored `Nothing`. Pure exceptions or explicit results preserve every old value. Runtime/function policy caveats remain local. |
 | Kotlin | Opaque immutable `XCursor` class/value with `cursorAt` and `snapshot` | Non-null presence wrappers distinguish stored null from boundary. Runtime policy objects are retained exactly. No C# struct, memo, or allocation claim is inferred. |
 | Rust | Opaque owned `XCursor` with `cursor_at`, borrowing peeks, persistent edits, and `snapshot` | Prefer `Arc`-retained context. Navigation/search/snapshot add no `Clone` bound; only edits that must duplicate affected payload storage inherit the substrate's bound. Use-after-move is statically unavailable. |
 | OCaml | Abstract `X_cursor.t` module with `cursor_at`, `option`/`result` movement and edits, and `snapshot` | Preserve local policies and checkpoint representations. Do not infer native tree topology or another port's asymptotics. |
 | TypeScript | Immutable `XCursor<T>` class/value with camel-case factories and `snapshot()` | Entry-shaped results distinguish stored `undefined` from a miss. Runtime hash/measure/comparison policies and isolate-local constraints remain exact. |
 | Python | Typed immutable-style `XCursor` with snake-case factories, presence result objects, and `snapshot()` | Stored `None` is distinct from boundary. Python object mutability caveats remain; cursor persistence protects structure, not caller-mutated payload state. |
+
+Current source types and language-local entry points are indexed by the catalog's
+[fixed-width numerics](../reference/data-structure-catalog.md#fixed-width-integer-numerics),
+[derived/Ordered](../reference/data-structure-catalog.md#derived-persistent-maps-relations-and-sparse-bit-sets),
+[insertion-ordered set](../reference/data-structure-catalog.md#insertion-ordered-persistent-set), and
+[Tungsten](../reference/data-structure-catalog.md#tungsten-application-collections) tables. Ordered
+and Tungsten span all nine language roots, whereas numerics span C#, OCaml, TypeScript, and Python.
 
 `Snapshot` is the conceptual verb because the shipped rope uses it. A language whose collection
 already standardizes on `to_persistent`, `close`, or another unambiguous term may retain that term,
@@ -1713,10 +1831,10 @@ Core laws:
 
 | Structure | Required invariant coverage |
 | --- | --- |
-| Finger tree/deque | Empty/single/deep constructors; digit and Node2/Node3 bounds; lazy middle sharing; cached measures/counts; endpoint and forced-spine histories. |
+| Finger tree/deque | Empty/single/deep constructors; digit and Node2/Node3 bounds where applicable; lazy middle sharing; cached measures/counts/rightmost signposts/`HasLast`; endpoint and forced-spine histories. |
 | Reversible deque | Every orientation and gap; reversal involution; previous/next swap; non-palindromic range insertion; mixed-orientation snapshot. |
-| RRB vector | Packed and relaxed branches, cumulative sizes, height equality, full/partial leaves, split/concat seams, unary-root collapse, leaf-boundary fan-out. |
-| Sorted families | Lower/upper bounds, stable equal-bag order, stored set/map representatives, strict duplicate behavior, comparer failures, neighbor parity. |
+| RRB vector | Full RRB ports: packed and relaxed branches, cumulative sizes, height equality, full/partial leaves, split/concat seams, unary-root collapse, leaf-boundary fan-out. Checkpoints: representation-local sequence invariants. |
+| Sorted families | Lower/upper bounds, stable equal-bag order, port-specific stored-key representative replacement/retention, strict duplicate behavior, comparer failures, neighbor parity. |
 | Canonical set | Exact policy ranks, Cartesian heap order, canonical topology equal to ordinary edits, content hashes, degenerate-rank stack safety. |
 | Priority-search queue | BST order, AVL balance, count/height, winner priority/key tie-break, priority update on every ancestor, pruned-query parity. |
 | Interval structures | Inclusive endpoints, equal-low runs, complete-key lexicographic map order, min/max endpoints, max-high summaries, overlap continuation and validity rules. |
@@ -1724,9 +1842,18 @@ Core laws:
 | Ordered set/map | Sequence/index count equality, exact entry identity where required, private stamps, duplicate no-op, relabel at the focus, first representatives. |
 | Ordered multimap | Nested key/value order, no empty group, final-value reanchor, checked pair count, independent policies, inner/outer relabel. |
 | Tungsten | List unconditional replace; Association pre-removal positional rule, incoming key adoption, update no-op, relabel; automated dependency scan proving the leaf direction. |
-| CHAMP private path | Bitmap/array popcounts, deepest routes, full-hash collisions, singleton promotion, representative/no-op rules, composite prepare/commit atomicity. |
+| CHAMP map/set private path | Bitmap/array popcounts, deepest routes, full-hash collisions and bucket order, singleton promotion, representative/no-op rules, one-hash/one-descent factories with exact callback cardinality, and unchanged algebra/diff work bounds. |
+| Hash bag adapter | Positive per-class multiplicities; distinct and expanded totals; checked bounded totals versus unbounded language totals; first representatives and receiver policy. |
+| Bimap adapter | Independent key/value policies, key-first conflict precedence, equal root counts, reciprocal mapping, and port-specific inverse-view identity. |
+| Hash multimap adapter | No empty groups, exact key/pair counts, independent policies, duplicate no-op, and final-value contraction. |
+| Relation adapter | Exact forward/reverse pair equivalence and counts, global stored representatives, inverse parity, and degree-wide removal. |
+| Map patch adapter | Explicit presence rather than null sentinels, no stored semantic no-op, preflight conflict atomicity, inversion, and composition. |
+| Indexed map adapter | Selector exactly once only on genuine change, stored selected key on removal, one secondary membership per primary row, and atomic roots/counts. |
+| Graph traversal | Snapshot binding, cycles/self-loops/isolated vertices, local neighbor order, frontier/visited invariants, and no write-back or canonical-order claim. |
 | Patricia | Signed min/-1/0/max, highest-differing-bit join, prefix mismatch, branch collapse, cached rank/count, 32/64-bit parity. |
 | Merkle | Canonical layers/blocks/counts, exact `MST2` bytes and root hashes, codec exceptions, degenerate blocks, retained dirty branches, no block-store write before explicit save. |
+| Ctrie snapshot traversal | Exactly one generation, local conversion/iteration sequence, representatives and policy retention, and no write-back. |
+| Transient regression | Every local consumption, alias, iterator/version invalidation, failure-retry/terminal, publication, and performance-boundary contract survives private-path factoring. |
 
 Every implementation invokes the collection's recursive validator, when one exists, after each
 generated edit in a focused invariant lane. Model equality alone cannot detect a stale measure,
@@ -1735,8 +1862,11 @@ winner, digest, size table, auxiliary index, or owner-policy reference.
 ### Failure And Ownership Injection
 
 Managed/native policy tests inject exceptions or failures at each hash, equality, comparison,
-measure, tag, selector, codec, clone/retain, allocation, checked-count, and snapshot-close step. For
-each failpoint verify:
+measure, tag, selector, codec, clone/retain, allocation, checked-count, and snapshot-close step that
+is fallible under the owning API. Infallible-by-signature callbacks still receive cardinality and
+ordering tests. For example, C HAMT hash/equality callbacks are infallible while retain callbacks and
+factories may fail; C Merkle exposes a broader fallible callback boundary. For each available
+failpoint verify:
 
 - no edited cursor or half facade is observable;
 - source, ancestors, and sibling branches remain reusable;
@@ -1747,20 +1877,28 @@ each failpoint verify:
 
 For C, run exhaustive allocator and fallible-callback failpoints through creation, movement that
 allocates ownership context, editing, closing, copying, moving, exact source/result aliasing where
-supported, and disposal. C++ covers throwing policy copy/move and move-only payloads. Rust compile
-tests ensure read-only cursor APIs do not add unnecessary `Clone`. Haskell evaluates enough of each
-result to force policy failures in the claimed phase.
+supported, and disposal. C++ covers throwing policy copy/move and move-only payloads only where the
+owning shipped API supports them; copy-requiring FingerTree facades keep that constraint. Rust
+compile tests ensure read-only cursor APIs do not add unnecessary `Clone`. Haskell evaluates enough
+of each result to force policy failures in the claimed phase.
 
 ### Concurrency Tests
 
 - Race read-only movement/peeks/snapshots on one initialized cursor.
 - If snapshot memoization is promised, race first dirty snapshot; every successful caller returns
   the winner and a failed candidate installs nothing.
-- Race independent edits from a shared ancestor and verify isolated branches.
+- Where the owning lifetime/policy contract permits it, race independent edits from a shared
+  ancestor and verify isolated branches; otherwise derive fully independent roots or test the
+  serialized lineage rule.
 - Never present these as live-Ctrie write-back tests. A snapshot traversal observes exactly one
   generation.
-- C handle lineage construction/destruction follows the package's non-atomic lifetime restrictions;
-  only already retained immutable snapshots are handed to concurrent readers.
+- Require every comparer, measure/tag, hash/equality, allocator, codec, ownership, and other callback
+  reachable in the raced operations to support concurrent calls; immutable structure does not make
+  caller policy state thread-safe.
+- C handle lineage construction/destruction follows the owning family's retention contract. Do not
+  race independent edits/copies/destruction for C HAMT/Patricia/Tungsten lineages with non-atomic
+  references; C FingerTree families with atomic immutable representation references may use their
+  documented read/share boundary. Only already retained values enter a concurrent test.
 
 ### Complexity And Allocation Evidence
 
@@ -1818,7 +1956,8 @@ memo cell, callback ceiling, allocation bound, amortization, benchmark result, o
 5. **RRB and Range.** Implement their specialized path frames only after the basic sequence model is
    stable; both require nontrivial balancing metadata.
 6. **Neutral Ordered set/map, then nested multimap.** Stage both indexes atomically and stress
-   relabel branches before exposing public cursors.
+   relabel branches before exposing public cursors. Add and specify the multimap's ordinary
+   positional group/value operations before claiming cursor-operation parity.
 7. **Merkle cursor.** Prototype canonical dirty closure and prove exact cross-language wire parity
    before any public surface. Treat this as a trust-boundary feature, not a generic ordered adapter.
 8. **Tungsten adapters.** Add only for a Tungsten consumer, after a suitable general mechanism exists
@@ -1855,7 +1994,8 @@ to weaken semantics.
 | Public name | `Cursor`; “zipper” describes design/representation. |
 | Version relationship | Cursor owns one immutable logical version; edits branch; snapshot is non-consuming. |
 | Sequence focus | Gap, including empty/start/end. |
-| Ordered focus | Ordered gap whose next entry is the exact/lower-bound candidate. |
+| Search-ordered focus | Key-/value-sorted gap whose next entry is the exact/lower-bound candidate. |
+| Insertion-ordered focus | Positional gap in explicit collection order; equality-seek misses do not infer an insertion position. |
 | Raw measured position | Measure/neighbor based; no fabricated count unless the measure/substrate provides one. |
 | Snapshot memo | Required only where a family ships it; otherwise optional invisible optimization. |
 | Public CHAMP cursor | Rejected; private edit-path zipper only. |
@@ -1879,8 +2019,8 @@ This proposal covers every persistent family in the current
   public/private/no-zipper decision;
 - every FingerTree, sequence, sorted, priority, interval, RRB, Range, rope, bit-set, canonical,
   DABA, and builder surface has a design or exclusion;
-- every neutral Ordered set/map/multimap has an atomic semantic cursor; and
-- both Tungsten persistent collections have leaf-local designs.
+- every neutral Ordered set/map/multimap has a proposed atomic semantic-cursor design; and
+- both Tungsten persistent collections have proposed leaf-local cursor designs.
 
 The audit treats result carriers, codecs, measures, policies, proofs, packs, stores, builders,
 transients, and mutable DABA state as supporting mechanisms rather than silently counting them as
