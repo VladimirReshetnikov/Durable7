@@ -1003,6 +1003,173 @@ impl<K, P, V> PrioritySearchQueue<K, P, V> {
 }
 
 /// Borrowed in-order iterator for [`PrioritySearchQueue`].
+/// Presence-discriminated key-order cursor search.
+pub struct PrioritySearchCursorSearch<K, P, V> {
+    pub found: bool,
+    pub cursor: PrioritySearchQueueCursor<K, P, V>,
+}
+
+/// Immutable key-order root-plus-rank cursor over a priority-search queue.
+pub struct PrioritySearchQueueCursor<K, P, V> {
+    queue: PrioritySearchQueue<K, P, V>,
+    position: usize,
+}
+
+impl<K, P, V> Clone for PrioritySearchQueueCursor<K, P, V> {
+    fn clone(&self) -> Self {
+        Self {
+            queue: self.queue.clone(),
+            position: self.position,
+        }
+    }
+}
+
+impl<K, P, V> PrioritySearchQueue<K, P, V> {
+    fn cursor_bound_rank(&self, key: &K, upper: bool) -> usize {
+        let mut rank = 0;
+        let mut node = self.root.as_deref();
+        while let Some(current) = node {
+            let comparison = self.key_policy.compare(current.entry.key(), key);
+            if comparison.is_lt() || upper && comparison.is_eq() {
+                rank += count_of(current.left.as_ref()) + 1;
+                node = current.right.as_deref();
+            } else {
+                node = current.left.as_deref();
+            }
+        }
+        rank
+    }
+    pub fn cursor_at(&self, position: usize) -> Option<PrioritySearchQueueCursor<K, P, V>> {
+        (position <= self.len()).then(|| PrioritySearchQueueCursor {
+            queue: self.clone(),
+            position,
+        })
+    }
+    pub fn cursor_at_lower_bound(&self, key: &K) -> PrioritySearchQueueCursor<K, P, V> {
+        self.cursor_at(self.cursor_bound_rank(key, false))
+            .expect("lower bound is valid")
+    }
+    pub fn cursor_at_upper_bound(&self, key: &K) -> PrioritySearchQueueCursor<K, P, V> {
+        self.cursor_at(self.cursor_bound_rank(key, true))
+            .expect("upper bound is valid")
+    }
+    pub fn find_cursor(&self, key: &K) -> PrioritySearchCursorSearch<K, P, V> {
+        let cursor = self.cursor_at_lower_bound(key);
+        PrioritySearchCursorSearch {
+            found: cursor
+                .peek_next()
+                .is_some_and(|entry| self.key_policy.compare(entry.key(), key).is_eq()),
+            cursor,
+        }
+    }
+    pub fn cursor_at_minimum_priority(&self) -> PrioritySearchQueueCursor<K, P, V> {
+        self.minimum().map_or_else(
+            || self.cursor_at(0).expect("empty start is valid"),
+            |entry| self.cursor_at_lower_bound(entry.key()),
+        )
+    }
+}
+
+impl<K, P, V> PrioritySearchQueueCursor<K, P, V> {
+    pub fn len(&self) -> usize {
+        self.queue.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.queue.is_empty()
+    }
+    pub fn position(&self) -> usize {
+        self.position
+    }
+    pub fn is_at_start(&self) -> bool {
+        self.position == 0
+    }
+    pub fn is_at_end(&self) -> bool {
+        self.position == self.len()
+    }
+    pub fn peek_previous(&self) -> Option<&PrioritySearchEntry<K, P, V>> {
+        self.position
+            .checked_sub(1)
+            .and_then(|rank| self.queue.iter().nth(rank))
+    }
+    pub fn peek_next(&self) -> Option<&PrioritySearchEntry<K, P, V>> {
+        self.queue.iter().nth(self.position)
+    }
+    pub fn move_previous(&self) -> Option<Self> {
+        self.position
+            .checked_sub(1)
+            .and_then(|position| self.queue.cursor_at(position))
+    }
+    pub fn move_next(&self) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            queue: self.queue.clone(),
+            position: self.position + 1,
+        })
+    }
+    pub fn seek_rank(&self, position: usize) -> Option<Self> {
+        if position == self.position {
+            Some(self.clone())
+        } else {
+            self.queue.cursor_at(position)
+        }
+    }
+    pub fn snapshot(&self) -> &PrioritySearchQueue<K, P, V> {
+        &self.queue
+    }
+}
+
+impl<K: Clone, P: Clone + PartialEq, V: Clone + PartialEq> PrioritySearchQueueCursor<K, P, V> {
+    pub fn insert(
+        &self,
+        key: K,
+        priority: P,
+        value: V,
+    ) -> Result<Self, PrioritySearchAddResult<K, P, V>> {
+        let position = self.queue.cursor_bound_rank(&key, false);
+        let result = self.queue.try_add(key, priority, value);
+        if result.added {
+            Ok(Self {
+                queue: result.queue,
+                position: position + 1,
+            })
+        } else {
+            Err(result)
+        }
+    }
+    pub fn set_item(&self, key: K, priority: P, value: V) -> Self {
+        let location = self.queue.find_cursor(&key);
+        Self {
+            queue: self.queue.set_item(key, priority, value),
+            position: if location.found {
+                location.cursor.position
+            } else {
+                location.cursor.position + 1
+            },
+        }
+    }
+    pub fn set_next(&self, priority: P, value: V) -> Option<Self> {
+        let key = self.peek_next()?.key().clone();
+        Some(Self {
+            queue: self.queue.set_item(key, priority, value),
+            position: self.position,
+        })
+    }
+    pub fn delete_previous(&self) -> Option<Self> {
+        let position = self.position.checked_sub(1)?;
+        let key = self.queue.iter().nth(position)?.key().clone();
+        Some(Self {
+            queue: self.queue.remove(&key),
+            position,
+        })
+    }
+    pub fn delete_next(&self) -> Option<Self> {
+        let key = self.queue.iter().nth(self.position)?.key().clone();
+        Some(Self {
+            queue: self.queue.remove(&key),
+            position: self.position,
+        })
+    }
+}
+
 pub struct PrioritySearchIter<'a, K, P, V> {
     pending: Vec<&'a Node<K, P, V>>,
     cursor: Option<&'a Node<K, P, V>>,

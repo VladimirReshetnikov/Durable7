@@ -937,6 +937,139 @@ impl<'a, T> IntoIterator for &'a CanonicalSortedSet<T> {
 }
 
 /// Borrowed in-order iterator over a [`CanonicalSortedSet`].
+/// Presence-discriminated canonical-set cursor search.
+pub struct CanonicalCursorSearch<T> {
+    pub found: bool,
+    pub cursor: CanonicalSortedSetCursor<T>,
+}
+
+/// Immutable policy-preserving root-plus-rank cursor.
+pub struct CanonicalSortedSetCursor<T> {
+    set: CanonicalSortedSet<T>,
+    position: usize,
+}
+
+impl<T> Clone for CanonicalSortedSetCursor<T> {
+    fn clone(&self) -> Self {
+        Self {
+            set: self.set.clone(),
+            position: self.position,
+        }
+    }
+}
+
+impl<T> CanonicalSortedSet<T> {
+    fn cursor_bound_rank(&self, value: &T, upper: bool) -> usize {
+        let mut rank = 0;
+        let mut node = self.root.as_deref();
+        while let Some(current) = node {
+            let comparison = self.policy.compare(&current.item, value);
+            if comparison.is_lt() || upper && comparison.is_eq() {
+                rank += current.left.as_ref().map_or(0, |child| child.count) + 1;
+                node = current.right.as_deref();
+            } else {
+                node = current.left.as_deref();
+            }
+        }
+        rank
+    }
+    pub fn cursor_at(&self, position: usize) -> Option<CanonicalSortedSetCursor<T>> {
+        (position <= self.len()).then(|| CanonicalSortedSetCursor {
+            set: self.clone(),
+            position,
+        })
+    }
+    pub fn cursor_at_lower_bound(&self, value: &T) -> CanonicalSortedSetCursor<T> {
+        self.cursor_at(self.cursor_bound_rank(value, false))
+            .expect("lower bound is valid")
+    }
+    pub fn cursor_at_upper_bound(&self, value: &T) -> CanonicalSortedSetCursor<T> {
+        self.cursor_at(self.cursor_bound_rank(value, true))
+            .expect("upper bound is valid")
+    }
+    pub fn find_cursor(&self, value: &T) -> CanonicalCursorSearch<T> {
+        let cursor = self.cursor_at_lower_bound(value);
+        CanonicalCursorSearch {
+            found: cursor
+                .peek_next()
+                .is_some_and(|item| self.policy.compare(item, value).is_eq()),
+            cursor,
+        }
+    }
+}
+
+impl<T> CanonicalSortedSetCursor<T> {
+    pub fn len(&self) -> usize {
+        self.set.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.set.is_empty()
+    }
+    pub fn position(&self) -> usize {
+        self.position
+    }
+    pub fn is_at_start(&self) -> bool {
+        self.position == 0
+    }
+    pub fn is_at_end(&self) -> bool {
+        self.position == self.len()
+    }
+    pub fn peek_previous(&self) -> Option<&T> {
+        self.position
+            .checked_sub(1)
+            .and_then(|rank| self.set.iter().nth(rank))
+    }
+    pub fn peek_next(&self) -> Option<&T> {
+        self.set.iter().nth(self.position)
+    }
+    pub fn move_previous(&self) -> Option<Self> {
+        self.position
+            .checked_sub(1)
+            .and_then(|position| self.set.cursor_at(position))
+    }
+    pub fn move_next(&self) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            set: self.set.clone(),
+            position: self.position + 1,
+        })
+    }
+    pub fn seek_rank(&self, position: usize) -> Option<Self> {
+        if position == self.position {
+            Some(self.clone())
+        } else {
+            self.set.cursor_at(position)
+        }
+    }
+    pub fn snapshot(&self) -> &CanonicalSortedSet<T> {
+        &self.set
+    }
+}
+
+impl<T: Clone> CanonicalSortedSetCursor<T> {
+    pub fn insert(&self, value: T) -> Result<Self, CanonicalSetError> {
+        let position = self.set.cursor_bound_rank(&value, false);
+        self.set.insert(value).map(|set| Self {
+            set,
+            position: position + 1,
+        })
+    }
+    pub fn delete_previous(&self) -> Option<Self> {
+        let position = self.position.checked_sub(1)?;
+        let item = self.set.iter().nth(position)?.clone();
+        Some(Self {
+            set: self.set.remove(&item),
+            position,
+        })
+    }
+    pub fn delete_next(&self) -> Option<Self> {
+        let item = self.set.iter().nth(self.position)?.clone();
+        Some(Self {
+            set: self.set.remove(&item),
+            position: self.position,
+        })
+    }
+}
+
 pub struct CanonicalSortedSetIter<'a, T> {
     stack: Vec<&'a Node<T>>,
     remaining: usize,

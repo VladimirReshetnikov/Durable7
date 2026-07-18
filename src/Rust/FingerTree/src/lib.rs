@@ -22,12 +22,14 @@ pub use brodal_okasaki_heap::{
     BrodalOkasakiHeapStatistics,
 };
 pub use canonical_sorted_set::{
-    CanonicalSetDifference, CanonicalSetError, CanonicalSetInvariantError, CanonicalSortedSet,
-    CanonicalSortedSetIter, CanonicalSortedSetStatistics, NaturalZipTreeComparer, StableRankHash,
-    StableZipTreeRankHash, ZipTreeComparer, ZipTreePolicyError, ZipTreeRankHash, ZipTreeRankPolicy,
+    CanonicalCursorSearch, CanonicalSetDifference, CanonicalSetError, CanonicalSetInvariantError,
+    CanonicalSortedSet, CanonicalSortedSetCursor, CanonicalSortedSetIter,
+    CanonicalSortedSetStatistics, NaturalZipTreeComparer, StableRankHash, StableZipTreeRankHash,
+    ZipTreeComparer, ZipTreePolicyError, ZipTreeRankHash, ZipTreeRankPolicy,
 };
 pub use chunked_bit_set::{
-    ChunkedBitSetInvariantError, ChunkedBitSetStatistics, NegativeBitIndex, PersistentChunkedBitSet,
+    ChunkedBitSetCursorSearch, ChunkedBitSetInvariantError, ChunkedBitSetStatistics,
+    NegativeBitIndex, PersistentChunkedBitSet, PersistentChunkedBitSetCursor,
 };
 pub use daba_lite::{
     DabaLite, DabaLiteInvariantError, DabaLiteStatistics, DabaMonoid, EmptyDabaLiteError,
@@ -37,10 +39,10 @@ pub use deque::{
     ReversibleDeque, ReversibleDequeCursor, ReversibleDequePop, ReversibleDequeSplit,
 };
 pub use interval_map::{
-    IntervalMapEntry, IntervalMapError, IntervalMapInvariantError, IntervalMapStatistics,
-    PersistentIntervalMap,
+    IntervalMapCursorSearch, IntervalMapEntry, IntervalMapError, IntervalMapInvariantError,
+    IntervalMapStatistics, PersistentIntervalMap, PersistentIntervalMapCursor,
 };
-pub use interval_tree::{Interval, IntervalTree};
+pub use interval_tree::{Interval, IntervalCursorSearch, IntervalTree, IntervalTreeCursor};
 pub use measured::{
     FingerTree, FingerTreeCursor, FingerTreeCursorSearch, KeyMeasure, LocateResult, MaxMeasure,
     MeasurePair, MeasurePolicy, MeasuredSplit, MinMeasure, OrderStatisticMeasure, ProductMeasure,
@@ -49,8 +51,9 @@ pub use measured::{
 pub use ordering::{NaturalOrderComparer, OrderComparer, OrderPolicy};
 pub use priority_queue::{PriorityEntry, PriorityQueue};
 pub use priority_search_queue::{
-    PrioritySearchAddResult, PrioritySearchEntry, PrioritySearchInvariantError, PrioritySearchIter,
-    PrioritySearchMinimumView, PrioritySearchQueue, PrioritySearchQueueStatistics,
+    PrioritySearchAddResult, PrioritySearchCursorSearch, PrioritySearchEntry,
+    PrioritySearchInvariantError, PrioritySearchIter, PrioritySearchMinimumView,
+    PrioritySearchQueue, PrioritySearchQueueCursor, PrioritySearchQueueStatistics,
     PrioritySearchRangeError, PrioritySearchRangeIter, PrioritySearchRemoveResult,
 };
 pub use rope::{
@@ -62,7 +65,10 @@ pub use rrb_vector::{
     RrbVector, RrbVectorBuilder, RrbVectorCursor, RrbVectorIntoIter, RrbVectorInvariantError,
     RrbVectorIter, RrbVectorPop, RrbVectorSplit, RrbVectorStatistics,
 };
-pub use sorted::{DuplicateKeyError, SortedBag, SortedMap, SortedSet};
+pub use sorted::{
+    DuplicateKeyError, OrderedCursorSearch, SortedBag, SortedBagCursor, SortedMap, SortedMapCursor,
+    SortedSet, SortedSetCursor,
+};
 pub use text_extras::NewlineStyle;
 
 #[cfg(test)]

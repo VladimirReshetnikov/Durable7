@@ -319,6 +319,158 @@ where
     }
 }
 
+/// Presence-discriminated interval cursor search.
+pub struct IntervalCursorSearch<T: Ord + Clone> {
+    pub found: bool,
+    pub cursor: IntervalTreeCursor<T>,
+}
+
+/// Immutable low-endpoint-order root-plus-rank cursor.
+#[derive(Clone, Debug)]
+pub struct IntervalTreeCursor<T: Ord + Clone> {
+    tree: IntervalTree<T>,
+    position: usize,
+}
+
+impl<T: Ord + Clone> IntervalTree<T> {
+    pub fn cursor_at(&self, position: usize) -> Option<IntervalTreeCursor<T>> {
+        (position <= self.len()).then(|| IntervalTreeCursor {
+            tree: self.clone(),
+            position,
+        })
+    }
+    pub fn cursor_at_lower_bound(&self, low: &T) -> IntervalTreeCursor<T> {
+        self.cursor_at(lower_bound_by_low(&self.intervals, low))
+            .expect("lower bound is valid")
+    }
+    pub fn cursor_at_upper_bound(&self, low: &T) -> IntervalTreeCursor<T> {
+        self.cursor_at(self.upper_low_bound_index(low))
+            .expect("upper bound is valid")
+    }
+    pub fn find_cursor(&self, interval: &Interval<T>) -> IntervalCursorSearch<T> {
+        let position = lower_bound_by_low(&self.intervals, &interval.low);
+        let found = self
+            .intervals
+            .iter()
+            .enumerate()
+            .skip(position)
+            .take_while(|(_, item)| item.low == interval.low)
+            .find(|(_, item)| item.high == interval.high)
+            .map(|(rank, _)| rank);
+        IntervalCursorSearch {
+            found: found.is_some(),
+            cursor: self
+                .cursor_at(found.unwrap_or(position))
+                .expect("search rank is valid"),
+        }
+    }
+    pub fn find_overlap_cursor(&self, probe: &Interval<T>) -> IntervalCursorSearch<T> {
+        self.find_overlap_cursor_from(0, probe)
+    }
+    pub fn find_containing_cursor(&self, point: &T) -> IntervalCursorSearch<T> {
+        self.find_overlap_cursor(&Interval::new(point.clone(), point.clone()))
+    }
+    fn find_overlap_cursor_from(
+        &self,
+        start: usize,
+        probe: &Interval<T>,
+    ) -> IntervalCursorSearch<T> {
+        assert!(start <= self.len(), "cursor start is outside interval tree");
+        let found = self
+            .intervals
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take_while(|(_, item)| item.low <= probe.high)
+            .find(|(_, item)| item.overlaps(probe))
+            .map(|(rank, _)| rank);
+        IntervalCursorSearch {
+            found: found.is_some(),
+            cursor: self
+                .cursor_at(found.unwrap_or(self.len()))
+                .expect("overlap rank is valid"),
+        }
+    }
+}
+
+impl<T: Ord + Clone> IntervalTreeCursor<T> {
+    pub fn len(&self) -> usize {
+        self.tree.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.tree.is_empty()
+    }
+    pub fn position(&self) -> usize {
+        self.position
+    }
+    pub fn is_at_start(&self) -> bool {
+        self.position == 0
+    }
+    pub fn is_at_end(&self) -> bool {
+        self.position == self.len()
+    }
+    pub fn peek_previous(&self) -> Option<&Interval<T>> {
+        self.position
+            .checked_sub(1)
+            .and_then(|rank| self.tree.intervals.get(rank))
+    }
+    pub fn peek_next(&self) -> Option<&Interval<T>> {
+        self.tree.intervals.get(self.position)
+    }
+    pub fn move_previous(&self) -> Option<Self> {
+        self.position
+            .checked_sub(1)
+            .and_then(|position| self.tree.cursor_at(position))
+    }
+    pub fn move_next(&self) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            tree: self.tree.clone(),
+            position: self.position + 1,
+        })
+    }
+    pub fn seek_rank(&self, position: usize) -> Option<Self> {
+        if position == self.position {
+            Some(self.clone())
+        } else {
+            self.tree.cursor_at(position)
+        }
+    }
+    pub fn seek_next_overlap(&self, probe: &Interval<T>) -> IntervalCursorSearch<T> {
+        self.tree.find_overlap_cursor_from(
+            if self.position < self.len() {
+                self.position + 1
+            } else {
+                self.len()
+            },
+            probe,
+        )
+    }
+    pub fn insert(&self, interval: Interval<T>) -> Self {
+        let position = lower_bound_by_low(&self.tree.intervals, &interval.low);
+        Self {
+            tree: self.tree.insert(interval),
+            position: position + 1,
+        }
+    }
+    pub fn delete_previous(&self) -> Option<Self> {
+        let position = self.position.checked_sub(1)?;
+        self.tree
+            .remove_at_index(position)
+            .map(|(tree, _)| Self { tree, position })
+    }
+    pub fn delete_next(&self) -> Option<Self> {
+        self.tree
+            .remove_at_index(self.position)
+            .map(|(tree, _)| Self {
+                tree,
+                position: self.position,
+            })
+    }
+    pub fn snapshot(&self) -> &IntervalTree<T> {
+        &self.tree
+    }
+}
+
 impl<T> FromIterator<Interval<T>> for IntervalTree<T>
 where
     T: Ord + Clone,

@@ -378,6 +378,214 @@ where
     }
 }
 
+/// Presence-discriminated interval-map cursor search.
+pub struct IntervalMapCursorSearch<T: Ord + Clone, V: Clone> {
+    pub found: bool,
+    pub cursor: PersistentIntervalMapCursor<T, V>,
+}
+
+/// Immutable interval-key-order root-plus-rank cursor.
+#[derive(Clone)]
+pub struct PersistentIntervalMapCursor<T: Ord + Clone, V: Clone> {
+    map: PersistentIntervalMap<T, V>,
+    position: usize,
+}
+
+impl<T: Ord + Clone, V: Clone> PersistentIntervalMap<T, V> {
+    pub fn cursor_at(&self, position: usize) -> Option<PersistentIntervalMapCursor<T, V>> {
+        (position <= self.len()).then(|| PersistentIntervalMapCursor {
+            map: self.clone(),
+            position,
+        })
+    }
+    pub fn cursor_at_lower_bound(
+        &self,
+        interval: &Interval<T>,
+    ) -> Result<PersistentIntervalMapCursor<T, V>, IntervalMapError> {
+        validate_interval(interval)?;
+        Ok(self
+            .cursor_at(self.lower_bound(interval))
+            .expect("lower bound is valid"))
+    }
+    pub fn cursor_at_upper_bound(
+        &self,
+        interval: &Interval<T>,
+    ) -> Result<PersistentIntervalMapCursor<T, V>, IntervalMapError> {
+        let cursor = self.cursor_at_lower_bound(interval)?;
+        Ok(
+            if cursor
+                .peek_next()
+                .is_some_and(|entry| compare_intervals(&entry.interval, interval).is_eq())
+            {
+                cursor
+                    .move_next()
+                    .expect("matching entry has successor gap")
+            } else {
+                cursor
+            },
+        )
+    }
+    pub fn find_cursor(
+        &self,
+        interval: &Interval<T>,
+    ) -> Result<IntervalMapCursorSearch<T, V>, IntervalMapError> {
+        let cursor = self.cursor_at_lower_bound(interval)?;
+        Ok(IntervalMapCursorSearch {
+            found: cursor
+                .peek_next()
+                .is_some_and(|entry| compare_intervals(&entry.interval, interval).is_eq()),
+            cursor,
+        })
+    }
+    pub fn find_overlap_cursor(
+        &self,
+        probe: &Interval<T>,
+    ) -> Result<IntervalMapCursorSearch<T, V>, IntervalMapError> {
+        self.find_overlap_cursor_from(0, probe)
+    }
+    pub fn find_containing_cursor(&self, point: &T) -> IntervalMapCursorSearch<T, V> {
+        self.find_overlap_cursor_from(
+            0,
+            &Interval {
+                low: point.clone(),
+                high: point.clone(),
+            },
+        )
+        .expect("point interval is valid")
+    }
+    fn find_overlap_cursor_from(
+        &self,
+        start: usize,
+        probe: &Interval<T>,
+    ) -> Result<IntervalMapCursorSearch<T, V>, IntervalMapError> {
+        validate_interval(probe)?;
+        assert!(start <= self.len(), "cursor start is outside interval map");
+        let found = self
+            .entries
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take_while(|(_, entry)| entry.interval.low <= probe.high)
+            .find(|(_, entry)| entry.interval.overlaps(probe))
+            .map(|(rank, _)| rank);
+        Ok(IntervalMapCursorSearch {
+            found: found.is_some(),
+            cursor: self
+                .cursor_at(found.unwrap_or(self.len()))
+                .expect("overlap rank is valid"),
+        })
+    }
+}
+
+impl<T: Ord + Clone, V: Clone> PersistentIntervalMapCursor<T, V> {
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+    pub fn position(&self) -> usize {
+        self.position
+    }
+    pub fn is_at_start(&self) -> bool {
+        self.position == 0
+    }
+    pub fn is_at_end(&self) -> bool {
+        self.position == self.len()
+    }
+    pub fn peek_previous(&self) -> Option<&IntervalMapEntry<T, V>> {
+        self.position
+            .checked_sub(1)
+            .and_then(|rank| self.map.entries.get(rank))
+    }
+    pub fn peek_next(&self) -> Option<&IntervalMapEntry<T, V>> {
+        self.map.entries.get(self.position)
+    }
+    pub fn move_previous(&self) -> Option<Self> {
+        self.position
+            .checked_sub(1)
+            .and_then(|position| self.map.cursor_at(position))
+    }
+    pub fn move_next(&self) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            map: self.map.clone(),
+            position: self.position + 1,
+        })
+    }
+    pub fn seek_rank(&self, position: usize) -> Option<Self> {
+        if position == self.position {
+            Some(self.clone())
+        } else {
+            self.map.cursor_at(position)
+        }
+    }
+    pub fn seek_next_overlap(
+        &self,
+        probe: &Interval<T>,
+    ) -> Result<IntervalMapCursorSearch<T, V>, IntervalMapError> {
+        self.map.find_overlap_cursor_from(
+            if self.position < self.len() {
+                self.position + 1
+            } else {
+                self.len()
+            },
+            probe,
+        )
+    }
+    pub fn insert(&self, interval: Interval<T>, value: V) -> Result<Self, IntervalMapError> {
+        let position = self.map.lower_bound(&interval);
+        self.map.add(interval, value).map(|map| Self {
+            map,
+            position: position + 1,
+        })
+    }
+    pub fn delete_previous(&self) -> Result<Option<Self>, IntervalMapError> {
+        let Some(position) = self.position.checked_sub(1) else {
+            return Ok(None);
+        };
+        let interval = self
+            .map
+            .entries
+            .get(position)
+            .expect("cursor previous exists")
+            .interval
+            .clone();
+        self.map
+            .remove(&interval)
+            .map(|map| Some(Self { map, position }))
+    }
+    pub fn delete_next(&self) -> Result<Option<Self>, IntervalMapError> {
+        let Some(entry) = self.map.entries.get(self.position) else {
+            return Ok(None);
+        };
+        let interval = entry.interval.clone();
+        self.map.remove(&interval).map(|map| {
+            Some(Self {
+                map,
+                position: self.position,
+            })
+        })
+    }
+    pub fn snapshot(&self) -> &PersistentIntervalMap<T, V> {
+        &self.map
+    }
+}
+
+impl<T: Ord + Clone, V: Clone + PartialEq> PersistentIntervalMapCursor<T, V> {
+    pub fn set_next_value(&self, value: V) -> Result<Option<Self>, IntervalMapError> {
+        let Some(entry) = self.peek_next() else {
+            return Ok(None);
+        };
+        let interval = entry.interval.clone();
+        self.map.set_item(interval, value).map(|map| {
+            Some(Self {
+                map,
+                position: self.position,
+            })
+        })
+    }
+}
+
 impl<T, V> Default for PersistentIntervalMap<T, V>
 where
     T: Ord + Clone,

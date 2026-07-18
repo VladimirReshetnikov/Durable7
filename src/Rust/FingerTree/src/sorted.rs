@@ -716,6 +716,350 @@ where
     }
 }
 
+/// Presence-discriminated ordered cursor search.
+pub struct OrderedCursorSearch<C> {
+    pub found: bool,
+    pub cursor: C,
+}
+
+/// Immutable root-plus-rank cursor over a persistent sorted bag.
+#[derive(Clone, Debug)]
+pub struct SortedBagCursor<T: Clone> {
+    bag: SortedBag<T>,
+    position: usize,
+}
+
+impl<T: Ord + Clone> SortedBag<T> {
+    pub fn cursor_at(&self, position: usize) -> Option<SortedBagCursor<T>> {
+        (position <= self.len()).then(|| SortedBagCursor {
+            bag: self.clone(),
+            position,
+        })
+    }
+    pub fn cursor_at_lower_bound(&self, value: &T) -> SortedBagCursor<T> {
+        self.cursor_at(self.count_less_than(value))
+            .expect("lower bound is valid")
+    }
+    pub fn cursor_at_upper_bound(&self, value: &T) -> SortedBagCursor<T> {
+        self.cursor_at(self.count_at_most(value))
+            .expect("upper bound is valid")
+    }
+    pub fn find_cursor(&self, value: &T) -> OrderedCursorSearch<SortedBagCursor<T>> {
+        let cursor = self.cursor_at_lower_bound(value);
+        OrderedCursorSearch {
+            found: cursor.peek_next().is_some_and(|item| item == value),
+            cursor,
+        }
+    }
+}
+
+impl<T: Ord + Clone> SortedBagCursor<T> {
+    pub fn len(&self) -> usize {
+        self.bag.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.bag.is_empty()
+    }
+    pub fn position(&self) -> usize {
+        self.position
+    }
+    pub fn is_at_start(&self) -> bool {
+        self.position == 0
+    }
+    pub fn is_at_end(&self) -> bool {
+        self.position == self.len()
+    }
+    pub fn peek_previous(&self) -> Option<&T> {
+        self.position
+            .checked_sub(1)
+            .and_then(|rank| self.bag.get(rank))
+    }
+    pub fn peek_next(&self) -> Option<&T> {
+        self.bag.get(self.position)
+    }
+    pub fn move_previous(&self) -> Option<Self> {
+        self.position
+            .checked_sub(1)
+            .and_then(|position| self.bag.cursor_at(position))
+    }
+    pub fn move_next(&self) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            bag: self.bag.clone(),
+            position: self.position + 1,
+        })
+    }
+    pub fn seek_rank(&self, position: usize) -> Option<Self> {
+        if position == self.position {
+            Some(self.clone())
+        } else {
+            self.bag.cursor_at(position)
+        }
+    }
+    pub fn add(&self, value: T) -> Self {
+        let position = self.bag.count_at_most(&value);
+        Self {
+            bag: self.bag.add(value),
+            position: position + 1,
+        }
+    }
+    fn delete_at(&self, rank: usize, position: usize) -> Self {
+        let first = self
+            .bag
+            .items
+            .split_at_index(rank)
+            .expect("cursor rank is valid");
+        let tail = first
+            .right
+            .split_at_index(1)
+            .expect("focused occurrence exists")
+            .right;
+        Self {
+            bag: SortedBag::from_items(first.left.concat(&tail)),
+            position,
+        }
+    }
+    pub fn delete_previous(&self) -> Option<Self> {
+        self.position
+            .checked_sub(1)
+            .map(|rank| self.delete_at(rank, rank))
+    }
+    pub fn delete_next(&self) -> Option<Self> {
+        (!self.is_at_end()).then(|| self.delete_at(self.position, self.position))
+    }
+    pub fn snapshot(&self) -> &SortedBag<T> {
+        &self.bag
+    }
+}
+
+/// Immutable root-plus-rank cursor over a persistent sorted set.
+#[derive(Clone, Debug)]
+pub struct SortedSetCursor<T: Clone> {
+    set: SortedSet<T>,
+    position: usize,
+}
+
+impl<T: Ord + Clone> SortedSet<T> {
+    pub fn cursor_at(&self, position: usize) -> Option<SortedSetCursor<T>> {
+        (position <= self.len()).then(|| SortedSetCursor {
+            set: self.clone(),
+            position,
+        })
+    }
+    pub fn cursor_at_lower_bound(&self, value: &T) -> SortedSetCursor<T> {
+        self.cursor_at(lower_bound(&self.items, value))
+            .expect("lower bound is valid")
+    }
+    pub fn cursor_at_upper_bound(&self, value: &T) -> SortedSetCursor<T> {
+        self.cursor_at(upper_bound(&self.items, value))
+            .expect("upper bound is valid")
+    }
+    pub fn find_cursor(&self, value: &T) -> OrderedCursorSearch<SortedSetCursor<T>> {
+        let cursor = self.cursor_at_lower_bound(value);
+        OrderedCursorSearch {
+            found: cursor.peek_next().is_some_and(|item| item == value),
+            cursor,
+        }
+    }
+}
+
+impl<T: Ord + Clone> SortedSetCursor<T> {
+    pub fn len(&self) -> usize {
+        self.set.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.set.is_empty()
+    }
+    pub fn position(&self) -> usize {
+        self.position
+    }
+    pub fn is_at_start(&self) -> bool {
+        self.position == 0
+    }
+    pub fn is_at_end(&self) -> bool {
+        self.position == self.len()
+    }
+    pub fn peek_previous(&self) -> Option<&T> {
+        self.position
+            .checked_sub(1)
+            .and_then(|rank| self.set.get(rank))
+    }
+    pub fn peek_next(&self) -> Option<&T> {
+        self.set.get(self.position)
+    }
+    pub fn move_previous(&self) -> Option<Self> {
+        self.position
+            .checked_sub(1)
+            .and_then(|position| self.set.cursor_at(position))
+    }
+    pub fn move_next(&self) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            set: self.set.clone(),
+            position: self.position + 1,
+        })
+    }
+    pub fn seek_rank(&self, position: usize) -> Option<Self> {
+        if position == self.position {
+            Some(self.clone())
+        } else {
+            self.set.cursor_at(position)
+        }
+    }
+    pub fn add(&self, value: T) -> Self {
+        let position = lower_bound(&self.set.items, &value);
+        Self {
+            set: self.set.add(value),
+            position: position + 1,
+        }
+    }
+    pub fn delete_previous(&self) -> Option<Self> {
+        let position = self.position.checked_sub(1)?;
+        let item = self.set.get(position)?.clone();
+        Some(Self {
+            set: self.set.remove(&item),
+            position,
+        })
+    }
+    pub fn delete_next(&self) -> Option<Self> {
+        let item = self.set.get(self.position)?.clone();
+        Some(Self {
+            set: self.set.remove(&item),
+            position: self.position,
+        })
+    }
+    pub fn snapshot(&self) -> &SortedSet<T> {
+        &self.set
+    }
+}
+
+/// Immutable key-order root-plus-rank cursor over a persistent sorted map.
+#[derive(Clone, Debug)]
+pub struct SortedMapCursor<K: Clone, V> {
+    map: SortedMap<K, V>,
+    position: usize,
+}
+
+impl<K: Ord + Clone, V: Clone> SortedMap<K, V> {
+    pub fn cursor_at(&self, position: usize) -> Option<SortedMapCursor<K, V>> {
+        (position <= self.len()).then(|| SortedMapCursor {
+            map: self.clone(),
+            position,
+        })
+    }
+    pub fn cursor_at_lower_bound(&self, key: &K) -> SortedMapCursor<K, V> {
+        self.cursor_at(lower_bound_by_key(&self.entries, key))
+            .expect("lower bound is valid")
+    }
+    pub fn cursor_at_upper_bound(&self, key: &K) -> SortedMapCursor<K, V> {
+        self.cursor_at(upper_bound_by_key(&self.entries, key))
+            .expect("upper bound is valid")
+    }
+    pub fn find_cursor(&self, key: &K) -> OrderedCursorSearch<SortedMapCursor<K, V>> {
+        let cursor = self.cursor_at_lower_bound(key);
+        OrderedCursorSearch {
+            found: cursor.peek_next().is_some_and(|(stored, _)| stored == key),
+            cursor,
+        }
+    }
+}
+
+impl<K: Ord + Clone, V: Clone> SortedMapCursor<K, V> {
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+    pub fn position(&self) -> usize {
+        self.position
+    }
+    pub fn is_at_start(&self) -> bool {
+        self.position == 0
+    }
+    pub fn is_at_end(&self) -> bool {
+        self.position == self.len()
+    }
+    pub fn peek_previous(&self) -> Option<(&K, &V)> {
+        self.position
+            .checked_sub(1)
+            .and_then(|rank| self.map.entry_at(rank))
+    }
+    pub fn peek_next(&self) -> Option<(&K, &V)> {
+        self.map.entry_at(self.position)
+    }
+    pub fn move_previous(&self) -> Option<Self> {
+        self.position
+            .checked_sub(1)
+            .and_then(|position| self.map.cursor_at(position))
+    }
+    pub fn move_next(&self) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            map: self.map.clone(),
+            position: self.position + 1,
+        })
+    }
+    pub fn seek_rank(&self, position: usize) -> Option<Self> {
+        if position == self.position {
+            Some(self.clone())
+        } else {
+            self.map.cursor_at(position)
+        }
+    }
+    pub fn insert(&self, key: K, value: V) -> Result<Self, DuplicateKeyError> {
+        let position = lower_bound_by_key(&self.map.entries, &key);
+        self.map.insert(key, value).map(|map| Self {
+            map,
+            position: position + 1,
+        })
+    }
+    pub fn try_insert(&self, key: K, value: V) -> OrderedCursorSearch<Self> {
+        let position = lower_bound_by_key(&self.map.entries, &key);
+        let (map, found) = self.map.try_insert(key, value);
+        OrderedCursorSearch {
+            found,
+            cursor: Self {
+                map,
+                position: if found { position + 1 } else { position },
+            },
+        }
+    }
+    pub fn set_item(&self, key: K, value: V) -> Self {
+        let location = self.map.find_cursor(&key);
+        Self {
+            map: self.map.set_item(key, value),
+            position: if location.found {
+                location.cursor.position
+            } else {
+                location.cursor.position + 1
+            },
+        }
+    }
+    pub fn set_next_value(&self, value: V) -> Option<Self> {
+        let (key, _) = self.peek_next()?;
+        Some(Self {
+            map: self.map.set_item(key.clone(), value),
+            position: self.position,
+        })
+    }
+    pub fn delete_previous(&self) -> Option<Self> {
+        let position = self.position.checked_sub(1)?;
+        let (key, _) = self.map.entry_at(position)?;
+        Some(Self {
+            map: self.map.remove(key),
+            position,
+        })
+    }
+    pub fn delete_next(&self) -> Option<Self> {
+        let (key, _) = self.map.entry_at(self.position)?;
+        Some(Self {
+            map: self.map.remove(key),
+            position: self.position,
+        })
+    }
+    pub fn snapshot(&self) -> &SortedMap<K, V> {
+        &self.map
+    }
+}
+
 fn split_at_least<T>(
     items: &SortedStorage<T>,
     value: &T,

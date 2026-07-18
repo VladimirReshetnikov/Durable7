@@ -505,6 +505,120 @@ impl PersistentChunkedBitSet {
     }
 }
 
+/// Presence-discriminated set-bit cursor search.
+pub struct ChunkedBitSetCursorSearch {
+    pub found: bool,
+    pub cursor: PersistentChunkedBitSetCursor,
+}
+
+/// Immutable root-plus-population-rank cursor over present set bits.
+#[derive(Clone)]
+pub struct PersistentChunkedBitSetCursor {
+    set: PersistentChunkedBitSet,
+    position: u64,
+}
+
+impl PersistentChunkedBitSet {
+    pub fn cursor_at(&self, position: u64) -> Option<PersistentChunkedBitSetCursor> {
+        (position <= self.len()).then(|| PersistentChunkedBitSetCursor {
+            set: self.clone(),
+            position,
+        })
+    }
+    pub fn cursor_at_or_after(&self, bit_index: i32) -> PersistentChunkedBitSetCursor {
+        let position = if bit_index <= 0 {
+            0
+        } else {
+            self.rank(bit_index - 1)
+        };
+        self.cursor_at(position).expect("population rank is valid")
+    }
+    pub fn find_cursor(&self, bit_index: i32) -> ChunkedBitSetCursorSearch {
+        let cursor = self.cursor_at_or_after(bit_index);
+        ChunkedBitSetCursorSearch {
+            found: bit_index >= 0 && cursor.peek_next() == Some(bit_index),
+            cursor,
+        }
+    }
+}
+
+impl PersistentChunkedBitSetCursor {
+    pub fn len(&self) -> u64 {
+        self.set.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.set.is_empty()
+    }
+    pub fn position(&self) -> u64 {
+        self.position
+    }
+    pub fn is_at_start(&self) -> bool {
+        self.position == 0
+    }
+    pub fn is_at_end(&self) -> bool {
+        self.position == self.len()
+    }
+    pub fn peek_previous(&self) -> Option<i32> {
+        self.position
+            .checked_sub(1)
+            .and_then(|rank| self.set.select(rank))
+    }
+    pub fn peek_next(&self) -> Option<i32> {
+        self.set.select(self.position)
+    }
+    pub fn move_previous(&self) -> Option<Self> {
+        self.position
+            .checked_sub(1)
+            .and_then(|position| self.set.cursor_at(position))
+    }
+    pub fn move_next(&self) -> Option<Self> {
+        (!self.is_at_end()).then(|| Self {
+            set: self.set.clone(),
+            position: self.position + 1,
+        })
+    }
+    pub fn seek_rank(&self, position: u64) -> Option<Self> {
+        if position == self.position {
+            Some(self.clone())
+        } else {
+            self.set.cursor_at(position)
+        }
+    }
+    pub fn insert(&self, bit_index: i32) -> Result<Self, NegativeBitIndex> {
+        let set = self.set.insert(bit_index)?;
+        if self.set.contains(bit_index) {
+            return Ok(self.clone());
+        }
+        let position = if bit_index == 0 {
+            0
+        } else {
+            self.set.rank(bit_index - 1)
+        };
+        Ok(Self {
+            set,
+            position: position + 1,
+        })
+    }
+    pub fn delete_previous(&self) -> Option<Self> {
+        let position = self.position.checked_sub(1)?;
+        let bit = self.set.select(position)?;
+        Some(Self {
+            set: self.set.remove(bit),
+            position,
+        })
+    }
+    pub fn delete_next(&self) -> Option<Self> {
+        let bit = self.set.select(self.position)?;
+        Some(Self {
+            set: self.set.remove(bit),
+            position: self.position,
+        })
+    }
+    pub fn snapshot(&self) -> &PersistentChunkedBitSet {
+        &self.set
+    }
+}
+
 impl Default for PersistentChunkedBitSet {
     fn default() -> Self {
         Self::new()
