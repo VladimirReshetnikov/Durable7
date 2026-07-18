@@ -1023,6 +1023,11 @@ not authorize sibling frozen types or a claim of owner-token edit performance.
 
 **Status (updated 2026-07-17): C# C1, C2, and C3 are shipped; C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml have
 positional and measured/text semantic checkpoints.**
+The [repository-wide persistent zipper design](../proposals/repository-wide-persistent-zipper-design.md)
+now audits every persistent family and specifies candidate deque, raw-measured, RRB, Range, sorted,
+ordered, Patricia, Merkle, and Tungsten cursors plus explicit exclusions. It is a forward-looking
+applicability and contract document: it does not change this catalog's shipped status, clear C4's
+consumer/evidence gates, or turn sibling semantic checkpoints into focused-zipper implementations.
 `Rope<T>.GetCursor(position)` and the public
 readonly `RopeCursor<T>` implement the positional version-bound gap cursor.
 `MeasuredRope<T, TMeasure, TMeasureOps>.GetCursor(position)` and
@@ -1465,8 +1470,10 @@ remaining work is sequenced as follows:
    callback, allocation, dirty-query, and measured-workload gates.
 4. **C3 is shipped:** Editor and Tour retain measured cursors, use the measured cadence of sixteen,
    and smoke-lock their undo, branch, Unicode, and line/column transcripts.
-5. Evaluate **C4 later sequence cursors** separately and only for a named consumer; do not infer a
-   deque, RRB, reversible-deque, raw-FingerTree, or Tungsten cursor from C1.
+5. Evaluate **C4 later sequence cursors** separately and only for a named consumer, using the
+   [repository-wide zipper design](../proposals/repository-wide-persistent-zipper-design.md) for
+   applicability and contract details; do not infer a deque, RRB, reversible-deque, raw-FingerTree,
+   Range, Ordered, or Tungsten shipment from C1 or from the proposal.
 6. Complete the postponed **F0 packed-index signal gate** in isolation, then run F1 only if F0
    records an evidence-backed advance. Complete the dependent **F1 fixed-layout evidence collection**
    before any F2 public implementation.

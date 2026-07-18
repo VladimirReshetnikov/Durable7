@@ -395,6 +395,9 @@ evidence, not permission to make a general structure depend on Tungsten.
 - Use the [workspace map](workspace-map.md) when choosing the correct language/data-structure directory.
 - Use the [semantic contracts reference](semantic-contracts.md) when checking shared persistence,
   ownership, policy, ordering, and failure-behavior obligations.
+- Use the proposed [repository-wide persistent zipper design](../proposals/repository-wide-persistent-zipper-design.md)
+  when assessing focused navigation/editing across families. Its applicability matrix and API
+  sketches do not add cursor types to the shipped entry-point tables above.
 - Use the [porting and semantic parity guide](../guides/porting-and-semantic-parity.md) when changing behavior that may cross language workspaces.
 - Use workspace API specs and public headers for normative contracts.
 - Keep new public data structures visible here when they become part of a long-lived workspace surface.
