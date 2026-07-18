@@ -2,6 +2,7 @@
 
 type ('element, 'measure, 'tag) algebra
 type ('element, 'measure, 'tag) t
+type ('element, 'measure, 'tag) cursor
 
 val create_algebra :
   id:string ->
@@ -42,3 +43,51 @@ val remove :
 
 val split_at :
   int -> ('element, 'measure, 'tag) t -> ('element, 'measure, 'tag) t * ('element, 'measure, 'tag) t
+
+val cursor : ('element, 'measure, 'tag) t -> ('element, 'measure, 'tag) cursor
+val cursor_at : int -> ('element, 'measure, 'tag) t -> ('element, 'measure, 'tag) cursor option
+val cursor_position : ('element, 'measure, 'tag) cursor -> int
+val cursor_length : ('element, 'measure, 'tag) cursor -> int
+val cursor_is_at_start : ('element, 'measure, 'tag) cursor -> bool
+val cursor_is_at_end : ('element, 'measure, 'tag) cursor -> bool
+val cursor_measure_before : ('element, 'measure, 'tag) cursor -> 'measure
+val cursor_measure_after : ('element, 'measure, 'tag) cursor -> 'measure
+val cursor_peek_previous : ('element, 'measure, 'tag) cursor -> 'element option
+val cursor_peek_next : ('element, 'measure, 'tag) cursor -> 'element option
+
+val cursor_move_previous :
+  ('element, 'measure, 'tag) cursor -> ('element, 'measure, 'tag) cursor option
+
+val cursor_move_next : ('element, 'measure, 'tag) cursor -> ('element, 'measure, 'tag) cursor option
+
+val cursor_seek :
+  int -> ('element, 'measure, 'tag) cursor -> ('element, 'measure, 'tag) cursor option
+
+val cursor_insert :
+  'element -> ('element, 'measure, 'tag) cursor -> ('element, 'measure, 'tag) cursor
+
+val cursor_delete_previous :
+  ('element, 'measure, 'tag) cursor -> ('element, 'measure, 'tag) cursor option
+
+val cursor_delete_next :
+  ('element, 'measure, 'tag) cursor -> ('element, 'measure, 'tag) cursor option
+
+val cursor_replace_next :
+  'element -> ('element, 'measure, 'tag) cursor -> ('element, 'measure, 'tag) cursor option
+
+val cursor_measure_previous : int -> ('element, 'measure, 'tag) cursor -> ('measure, string) result
+val cursor_measure_next : int -> ('element, 'measure, 'tag) cursor -> ('measure, string) result
+
+val cursor_update_previous :
+  int ->
+  'tag ->
+  ('element, 'measure, 'tag) cursor ->
+  (('element, 'measure, 'tag) cursor, string) result
+
+val cursor_update_next :
+  int ->
+  'tag ->
+  ('element, 'measure, 'tag) cursor ->
+  (('element, 'measure, 'tag) cursor, string) result
+
+val cursor_snapshot : ('element, 'measure, 'tag) cursor -> ('element, 'measure, 'tag) t

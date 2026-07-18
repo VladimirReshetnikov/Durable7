@@ -14,6 +14,11 @@ type ('element, 'measure, 'tag) t = {
   cached_measure : 'measure;
 }
 
+type ('element, 'measure, 'tag) cursor = {
+  cursor_snapshot : ('element, 'measure, 'tag) t;
+  cursor_position : int;
+}
+
 let create_algebra ~id ~identity ~combine ~measure ~apply_element ~apply_measure ~compose
     ~laws_verified () =
   if String.trim id = "" then Error "range-update algebra id must not be empty"
@@ -75,3 +80,88 @@ let split_at index sequence =
   let index = Int.max 0 (Int.min index (length sequence)) in
   ( make sequence.algebra (Array.sub sequence.values 0 index),
     make sequence.algebra (Array.sub sequence.values index (length sequence - index)) )
+
+let cursor sequence = { cursor_snapshot = sequence; cursor_position = 0 }
+
+let cursor_at position sequence =
+  if position < 0 || position > length sequence then None
+  else Some { cursor_snapshot = sequence; cursor_position = position }
+
+let cursor_position value = value.cursor_position
+let cursor_length value = length value.cursor_snapshot
+let cursor_is_at_start value = value.cursor_position = 0
+let cursor_is_at_end value = value.cursor_position = cursor_length value
+
+let cursor_measure_before value =
+  Result.get_ok (measure_range ~start:0 ~length:value.cursor_position value.cursor_snapshot)
+
+let cursor_measure_after value =
+  Result.get_ok
+    (measure_range ~start:value.cursor_position
+       ~length:(cursor_length value - value.cursor_position)
+       value.cursor_snapshot)
+
+let cursor_peek_previous value = nth (value.cursor_position - 1) value.cursor_snapshot
+let cursor_peek_next value = nth value.cursor_position value.cursor_snapshot
+let cursor_move_previous value = cursor_at (value.cursor_position - 1) value.cursor_snapshot
+
+let cursor_move_next value =
+  if cursor_is_at_end value then None
+  else cursor_at (value.cursor_position + 1) value.cursor_snapshot
+
+let cursor_seek position value = cursor_at position value.cursor_snapshot
+
+let cursor_insert element value =
+  {
+    cursor_snapshot = Result.get_ok (insert value.cursor_position element value.cursor_snapshot);
+    cursor_position = value.cursor_position + 1;
+  }
+
+let cursor_delete_previous value =
+  if cursor_is_at_start value then None
+  else
+    let _, snapshot = Result.get_ok (remove (value.cursor_position - 1) value.cursor_snapshot) in
+    Some { cursor_snapshot = snapshot; cursor_position = value.cursor_position - 1 }
+
+let cursor_delete_next value =
+  if cursor_is_at_end value then None
+  else
+    let _, snapshot = Result.get_ok (remove value.cursor_position value.cursor_snapshot) in
+    Some { cursor_snapshot = snapshot; cursor_position = value.cursor_position }
+
+let cursor_replace_next element value =
+  if cursor_is_at_end value then None
+  else
+    let values = Array.copy value.cursor_snapshot.values in
+    values.(value.cursor_position) <- element;
+    Some
+      {
+        cursor_snapshot = make value.cursor_snapshot.algebra values;
+        cursor_position = value.cursor_position;
+      }
+
+let cursor_measure_previous count value =
+  if count < 0 || count > value.cursor_position then Error "cursor previous range is out of bounds"
+  else measure_range ~start:(value.cursor_position - count) ~length:count value.cursor_snapshot
+
+let cursor_measure_next count value =
+  if count < 0 || count > cursor_length value - value.cursor_position then
+    Error "cursor next range is out of bounds"
+  else measure_range ~start:value.cursor_position ~length:count value.cursor_snapshot
+
+let cursor_update_previous count tag value =
+  if count < 0 || count > value.cursor_position then Error "cursor previous range is out of bounds"
+  else
+    Result.map
+      (fun snapshot -> { cursor_snapshot = snapshot; cursor_position = value.cursor_position })
+      (update_range ~start:(value.cursor_position - count) ~length:count tag value.cursor_snapshot)
+
+let cursor_update_next count tag value =
+  if count < 0 || count > cursor_length value - value.cursor_position then
+    Error "cursor next range is out of bounds"
+  else
+    Result.map
+      (fun snapshot -> { cursor_snapshot = snapshot; cursor_position = value.cursor_position })
+      (update_range ~start:value.cursor_position ~length:count tag value.cursor_snapshot)
+
+let cursor_snapshot value = value.cursor_snapshot

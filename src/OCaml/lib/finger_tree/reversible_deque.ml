@@ -1,4 +1,5 @@
 type 'element t = { deque : 'element Persistent_deque.t; reversed : bool }
+type 'element cursor = { cursor_snapshot : 'element t; cursor_position : int }
 
 let empty = { deque = Persistent_deque.empty; reversed = false }
 let of_list values = { deque = Persistent_deque.of_list values; reversed = false }
@@ -49,3 +50,80 @@ let to_list value =
   if value.reversed then List.rev values else values
 
 let concat left right = of_list (to_list left @ to_list right)
+let cursor deque = { cursor_snapshot = deque; cursor_position = 0 }
+
+let cursor_at position deque =
+  if position < 0 || position > length deque then None
+  else Some { cursor_snapshot = deque; cursor_position = position }
+
+let cursor_position value = value.cursor_position
+let cursor_length value = length value.cursor_snapshot
+let cursor_is_at_start value = value.cursor_position = 0
+let cursor_is_at_end value = value.cursor_position = cursor_length value
+let cursor_peek_previous value = nth (value.cursor_position - 1) value.cursor_snapshot
+let cursor_peek_next value = nth value.cursor_position value.cursor_snapshot
+let cursor_move_previous value = cursor_at (value.cursor_position - 1) value.cursor_snapshot
+
+let cursor_move_next value =
+  if cursor_is_at_end value then None
+  else cursor_at (value.cursor_position + 1) value.cursor_snapshot
+
+let cursor_seek position value = cursor_at position value.cursor_snapshot
+
+let split_list position elements =
+  let rec loop remaining reversed_before rest =
+    if remaining = 0 then (List.rev reversed_before, rest)
+    else
+      match rest with
+      | [] -> (List.rev reversed_before, [])
+      | head :: tail -> loop (remaining - 1) (head :: reversed_before) tail
+  in
+  loop position [] elements
+
+let cursor_insert_many elements value =
+  match elements with
+  | [] -> value
+  | _ ->
+      let before, after = split_list value.cursor_position (to_list value.cursor_snapshot) in
+      {
+        cursor_snapshot = of_list (before @ elements @ after);
+        cursor_position = value.cursor_position + List.length elements;
+      }
+
+let cursor_insert element value = cursor_insert_many [ element ] value
+
+let cursor_delete_previous value =
+  if cursor_is_at_start value then None
+  else
+    let elements = to_list value.cursor_snapshot in
+    let snapshot =
+      of_list (List.filteri (fun index _ -> index <> value.cursor_position - 1) elements)
+    in
+    Some { cursor_snapshot = snapshot; cursor_position = value.cursor_position - 1 }
+
+let cursor_delete_next value =
+  if cursor_is_at_end value then None
+  else
+    let elements = to_list value.cursor_snapshot in
+    let snapshot =
+      of_list (List.filteri (fun index _ -> index <> value.cursor_position) elements)
+    in
+    Some { cursor_snapshot = snapshot; cursor_position = value.cursor_position }
+
+let cursor_replace_next element value =
+  if cursor_is_at_end value then None
+  else
+    let elements =
+      List.mapi
+        (fun index stored -> if index = value.cursor_position then element else stored)
+        (to_list value.cursor_snapshot)
+    in
+    Some { cursor_snapshot = of_list elements; cursor_position = value.cursor_position }
+
+let cursor_reverse value =
+  {
+    cursor_snapshot = reverse value.cursor_snapshot;
+    cursor_position = cursor_length value - value.cursor_position;
+  }
+
+let cursor_snapshot value = value.cursor_snapshot

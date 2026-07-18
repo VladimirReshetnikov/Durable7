@@ -1,4 +1,5 @@
 type 'element t = Empty | Tree of ('element, int) Measured_tree.t
+type 'element cursor = { cursor_snapshot : 'element t; cursor_position : int }
 
 let empty = Empty
 let singleton value = Tree (Measured_tree.singleton Measures.size value)
@@ -57,3 +58,60 @@ let fold_left folder state = function
   | Tree value -> Measured_tree.fold_left folder state value
 
 let validate = function Empty -> Ok () | Tree value -> Measured_tree.validate value
+let cursor deque = { cursor_snapshot = deque; cursor_position = 0 }
+
+let cursor_at position deque =
+  if position < 0 || position > length deque then None
+  else Some { cursor_snapshot = deque; cursor_position = position }
+
+let cursor_position value = value.cursor_position
+let cursor_length value = length value.cursor_snapshot
+let cursor_is_at_start value = value.cursor_position = 0
+let cursor_is_at_end value = value.cursor_position = cursor_length value
+let cursor_peek_previous value = nth (value.cursor_position - 1) value.cursor_snapshot
+let cursor_peek_next value = nth value.cursor_position value.cursor_snapshot
+let cursor_move_previous value = cursor_at (value.cursor_position - 1) value.cursor_snapshot
+
+let cursor_move_next value =
+  if cursor_is_at_end value then None
+  else cursor_at (value.cursor_position + 1) value.cursor_snapshot
+
+let cursor_seek position value = cursor_at position value.cursor_snapshot
+
+let cursor_insert element value =
+  {
+    cursor_snapshot = Result.get_ok (insert_at value.cursor_position element value.cursor_snapshot);
+    cursor_position = value.cursor_position + 1;
+  }
+
+let cursor_insert_many elements value =
+  match elements with
+  | [] -> value
+  | _ ->
+      let left, right = split_at value.cursor_position value.cursor_snapshot in
+      {
+        cursor_snapshot = concat (concat left (of_list elements)) right;
+        cursor_position = value.cursor_position + List.length elements;
+      }
+
+let cursor_delete_previous value =
+  if cursor_is_at_start value then None
+  else
+    let _, snapshot = Result.get_ok (remove_at (value.cursor_position - 1) value.cursor_snapshot) in
+    Some { cursor_snapshot = snapshot; cursor_position = value.cursor_position - 1 }
+
+let cursor_delete_next value =
+  if cursor_is_at_end value then None
+  else
+    let _, snapshot = Result.get_ok (remove_at value.cursor_position value.cursor_snapshot) in
+    Some { cursor_snapshot = snapshot; cursor_position = value.cursor_position }
+
+let cursor_replace_next element value =
+  if cursor_is_at_end value then None
+  else
+    let snapshot =
+      Result.get_ok (update_at value.cursor_position (fun _ -> element) value.cursor_snapshot)
+    in
+    Some { cursor_snapshot = snapshot; cursor_position = value.cursor_position }
+
+let cursor_snapshot value = value.cursor_snapshot

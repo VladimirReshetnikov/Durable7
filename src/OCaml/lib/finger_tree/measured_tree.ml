@@ -8,6 +8,8 @@ type ('element, 'measure) t = {
   root : ('element, 'measure) node;
 }
 
+type ('element, 'measure) cursor = { cursor_snapshot : ('element, 'measure) t; cursor_index : int }
+
 let node_length = function Empty -> 0 | Leaf _ -> 1 | Node (length, _, _, _) -> length
 
 let node_measure policy = function
@@ -216,3 +218,63 @@ let validate tree =
   match loop tree.root with
   | Error message -> Error message
   | Ok _ -> Ok ()
+
+let cursor_at_start tree = { cursor_snapshot = tree; cursor_index = 0 }
+let cursor_at_end tree = { cursor_snapshot = tree; cursor_index = length tree }
+
+let cursor_by_measure predicate tree =
+  match locate predicate tree with
+  | Some (index, _, _) -> (true, { cursor_snapshot = tree; cursor_index = index })
+  | None -> (false, cursor_at_end tree)
+
+let cursor_is_at_start value = value.cursor_index = 0
+let cursor_is_at_end value = value.cursor_index = length value.cursor_snapshot
+
+let cursor_measure_before value =
+  Result.get_ok (measure_range 0 value.cursor_index value.cursor_snapshot)
+
+let cursor_measure_after value =
+  Result.get_ok
+    (measure_range value.cursor_index
+       (length value.cursor_snapshot - value.cursor_index)
+       value.cursor_snapshot)
+
+let cursor_peek_previous value = nth (value.cursor_index - 1) value.cursor_snapshot
+let cursor_peek_next value = nth value.cursor_index value.cursor_snapshot
+
+let cursor_move_previous value =
+  if cursor_is_at_start value then None
+  else Some { value with cursor_index = value.cursor_index - 1 }
+
+let cursor_move_next value =
+  if cursor_is_at_end value then None else Some { value with cursor_index = value.cursor_index + 1 }
+
+let cursor_seek_by_measure predicate value = cursor_by_measure predicate value.cursor_snapshot
+
+let cursor_insert element value =
+  {
+    cursor_snapshot = Result.get_ok (insert_at value.cursor_index element value.cursor_snapshot);
+    cursor_index = value.cursor_index + 1;
+  }
+
+let cursor_delete_previous value =
+  if cursor_is_at_start value then None
+  else
+    let _, snapshot = Result.get_ok (remove_at (value.cursor_index - 1) value.cursor_snapshot) in
+    Some { cursor_snapshot = snapshot; cursor_index = value.cursor_index - 1 }
+
+let cursor_delete_next value =
+  if cursor_is_at_end value then None
+  else
+    let _, snapshot = Result.get_ok (remove_at value.cursor_index value.cursor_snapshot) in
+    Some { cursor_snapshot = snapshot; cursor_index = value.cursor_index }
+
+let cursor_replace_next element value =
+  if cursor_is_at_end value then None
+  else
+    let snapshot =
+      Result.get_ok (update_at value.cursor_index (fun _ -> element) value.cursor_snapshot)
+    in
+    Some { cursor_snapshot = snapshot; cursor_index = value.cursor_index }
+
+let cursor_snapshot value = value.cursor_snapshot

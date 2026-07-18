@@ -1,6 +1,7 @@
 (** Size-measured persistent double-ended sequence. *)
 
 type 'element t
+type 'element cursor
 
 val empty : 'element t
 val singleton : 'element -> 'element t
@@ -26,3 +27,20 @@ val remove_at : int -> 'element t -> ('element * 'element t, string) result
 val iter : ('element -> unit) -> 'element t -> unit
 val fold_left : ('state -> 'element -> 'state) -> 'state -> 'element t -> 'state
 val validate : 'element t -> (unit, string) result
+val cursor : 'element t -> 'element cursor
+val cursor_at : int -> 'element t -> 'element cursor option
+val cursor_position : 'element cursor -> int
+val cursor_length : 'element cursor -> int
+val cursor_is_at_start : 'element cursor -> bool
+val cursor_is_at_end : 'element cursor -> bool
+val cursor_peek_previous : 'element cursor -> 'element option
+val cursor_peek_next : 'element cursor -> 'element option
+val cursor_move_previous : 'element cursor -> 'element cursor option
+val cursor_move_next : 'element cursor -> 'element cursor option
+val cursor_seek : int -> 'element cursor -> 'element cursor option
+val cursor_insert : 'element -> 'element cursor -> 'element cursor
+val cursor_insert_many : 'element list -> 'element cursor -> 'element cursor
+val cursor_delete_previous : 'element cursor -> 'element cursor option
+val cursor_delete_next : 'element cursor -> 'element cursor option
+val cursor_replace_next : 'element -> 'element cursor -> 'element cursor option
+val cursor_snapshot : 'element cursor -> 'element t

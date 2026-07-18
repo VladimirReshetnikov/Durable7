@@ -188,6 +188,73 @@ let test_range_update_sequence () =
     "range aggregate" (Ok 39)
     (Range_update_sequence.measure_range ~start:1 ~length:3 updated)
 
+let test_sequence_cursors () =
+  let deque_source = Persistent_deque.of_list [ Some 1; None; Some 3 ] in
+  let deque = Option.get (Persistent_deque.cursor_at 2 deque_source) in
+  Alcotest.(check (option (option int)))
+    "stored None is present" (Some None)
+    (Persistent_deque.cursor_peek_previous deque);
+  let deque = Persistent_deque.cursor_insert_many [ Some 7; Some 8 ] deque in
+  let deque = Option.get (Persistent_deque.cursor_delete_previous deque) in
+  let deque = Option.get (Persistent_deque.cursor_replace_next (Some 9) deque) in
+  Alcotest.(check int) "deque cursor position" 3 (Persistent_deque.cursor_position deque);
+  Alcotest.(check (list (option int)))
+    "deque cursor edit" [ Some 1; None; Some 7; Some 9 ]
+    (Persistent_deque.to_list (Persistent_deque.cursor_snapshot deque));
+  Alcotest.(check (list (option int)))
+    "deque source retained" [ Some 1; None; Some 3 ]
+    (Persistent_deque.to_list deque_source);
+
+  let reversible_source = Reversible_deque.reverse (Reversible_deque.of_list [ 1; 2; 3; 4 ]) in
+  let reversible = Option.get (Reversible_deque.cursor_at 1 reversible_source) in
+  let reversible = Reversible_deque.cursor_insert 9 reversible in
+  let reversible = Option.get (Reversible_deque.cursor_delete_next reversible) in
+  check_int_list "reversible cursor edit" [ 4; 9; 2; 1 ]
+    (Reversible_deque.to_list (Reversible_deque.cursor_snapshot reversible));
+  let reversed = Reversible_deque.cursor_reverse reversible in
+  Alcotest.(check int) "reversed cursor position" 2 (Reversible_deque.cursor_position reversed);
+  check_int_list "reversed cursor snapshot" [ 1; 2; 9; 4 ]
+    (Reversible_deque.to_list (Reversible_deque.cursor_snapshot reversed));
+
+  let measured_source = Measured_tree.of_list Measures.int_sum [ 2; 3; 5; 7 ] in
+  let found, measured = Measured_tree.cursor_by_measure (fun total -> total >= 6) measured_source in
+  Alcotest.(check bool) "measured cursor found" true found;
+  Alcotest.(check int) "measure before" 5 (Measured_tree.cursor_measure_before measured);
+  Alcotest.(check int) "measure after" 12 (Measured_tree.cursor_measure_after measured);
+  let measured = Measured_tree.cursor_insert 11 measured in
+  let measured = Option.get (Measured_tree.cursor_delete_next measured) in
+  let measured = Option.get (Measured_tree.cursor_replace_next 13 measured) in
+  check_int_list "measured cursor edit" [ 2; 3; 11; 13 ]
+    (Measured_tree.to_list (Measured_tree.cursor_snapshot measured));
+  check_int_list "measured source retained" [ 2; 3; 5; 7 ] (Measured_tree.to_list measured_source);
+
+  let vector_source = Rrb_vector.of_list (List.init 96 Fun.id) in
+  let vector = Option.get (Rrb_vector.cursor_at 32 vector_source) in
+  let vector = Rrb_vector.cursor_insert_vector (Rrb_vector.of_list [ 500; 501; 502 ]) vector in
+  Alcotest.(check int) "RRB cursor position" 35 (Rrb_vector.cursor_position vector);
+  check_int_list "RRB cursor splice" [ 30; 31; 500; 501; 502; 32; 33 ]
+    (Rrb_vector.to_list
+       (Result.get_ok (Rrb_vector.slice ~start:30 ~length:7 (Rrb_vector.cursor_snapshot vector))));
+  check_int_list "RRB source retained" (List.init 96 Fun.id) (Rrb_vector.to_list vector_source);
+
+  let algebra =
+    Result.get_ok
+      (Range_update_sequence.create_algebra ~id:"cursor-add-sum-v1" ~identity:0 ~combine:( + )
+         ~measure:Fun.id ~apply_element:( + )
+         ~apply_measure:(fun tag ~length measure -> measure + (tag * length))
+         ~compose:( + ) ~laws_verified:true ())
+  in
+  let range_source = Range_update_sequence.of_list algebra [ 1; 2; 3; 4 ] in
+  let range = Option.get (Range_update_sequence.cursor_at 2 range_source) in
+  Alcotest.(check int) "Range measure before" 3 (Range_update_sequence.cursor_measure_before range);
+  Alcotest.(check int) "Range measure after" 7 (Range_update_sequence.cursor_measure_after range);
+  let range = Result.get_ok (Range_update_sequence.cursor_update_previous 1 10 range) in
+  let range = Result.get_ok (Range_update_sequence.cursor_update_next 2 20 range) in
+  let range = Option.get (Range_update_sequence.cursor_replace_next 99 range) in
+  check_int_list "Range cursor edit" [ 1; 12; 99; 24 ]
+    (Range_update_sequence.to_list (Range_update_sequence.cursor_snapshot range));
+  check_int_list "Range source retained" [ 1; 2; 3; 4 ] (Range_update_sequence.to_list range_source)
+
 let test_rope_and_cursor () =
   let source = Rope.of_list [ 1; 2; 3; 4 ] in
   let cursor = Result.get_ok (Rope_cursor.create ~position:2 source) in
@@ -315,6 +382,7 @@ let () =
           Alcotest.test_case "RRB vector" `Quick test_rrb_vector;
           Alcotest.test_case "chunked bit set" `Quick test_chunked_bit_set;
           Alcotest.test_case "range update sequence" `Quick test_range_update_sequence;
+          Alcotest.test_case "sequence cursors" `Quick test_sequence_cursors;
           Alcotest.test_case "rope cursors" `Quick test_rope_and_cursor;
           Alcotest.test_case "text rope cursors" `Quick test_text_rope_and_cursor;
           Alcotest.test_case "canonical sorted set" `Quick test_canonical_sorted_set;

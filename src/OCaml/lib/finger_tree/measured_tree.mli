@@ -1,6 +1,7 @@
 (** Structurally shared persistent sequence with cached monoidal measurements. *)
 
 type ('element, 'measure) t
+type ('element, 'measure) cursor
 
 val empty : ('element, 'measure) Measures.policy -> ('element, 'measure) t
 val singleton : ('element, 'measure) Measures.policy -> 'element -> ('element, 'measure) t
@@ -38,3 +39,29 @@ val locate : ('measure -> bool) -> ('element, 'measure) t -> (int * 'measure * '
     [predicate], together with its index and the exclusive-prefix measure. *)
 
 val validate : ('element, 'measure) t -> (unit, string) result
+val cursor_at_start : ('element, 'measure) t -> ('element, 'measure) cursor
+val cursor_at_end : ('element, 'measure) t -> ('element, 'measure) cursor
+
+val cursor_by_measure :
+  ('measure -> bool) -> ('element, 'measure) t -> bool * ('element, 'measure) cursor
+
+val cursor_is_at_start : ('element, 'measure) cursor -> bool
+val cursor_is_at_end : ('element, 'measure) cursor -> bool
+val cursor_measure_before : ('element, 'measure) cursor -> 'measure
+val cursor_measure_after : ('element, 'measure) cursor -> 'measure
+val cursor_peek_previous : ('element, 'measure) cursor -> 'element option
+val cursor_peek_next : ('element, 'measure) cursor -> 'element option
+val cursor_move_previous : ('element, 'measure) cursor -> ('element, 'measure) cursor option
+val cursor_move_next : ('element, 'measure) cursor -> ('element, 'measure) cursor option
+
+val cursor_seek_by_measure :
+  ('measure -> bool) -> ('element, 'measure) cursor -> bool * ('element, 'measure) cursor
+
+val cursor_insert : 'element -> ('element, 'measure) cursor -> ('element, 'measure) cursor
+val cursor_delete_previous : ('element, 'measure) cursor -> ('element, 'measure) cursor option
+val cursor_delete_next : ('element, 'measure) cursor -> ('element, 'measure) cursor option
+
+val cursor_replace_next :
+  'element -> ('element, 'measure) cursor -> ('element, 'measure) cursor option
+
+val cursor_snapshot : ('element, 'measure) cursor -> ('element, 'measure) t
