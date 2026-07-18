@@ -657,6 +657,77 @@ private fun orderedMultimapPreservesGroupedOrderAndRepresentatives() {
     removed.validateStructure()
 }
 
+private fun orderedCursorsPreserveGapsPoliciesAndSnapshots() {
+    val setSource = PersistentOrderedSet.from<String?>(listOf("a", null, "c"))
+    val setCursor = checkNotNull(setSource.cursorAt(1))
+    assertEquals(null, checkNotNull(setCursor.peekNext()).value, "ordered-set cursor stored null")
+    assertEquals("a", checkNotNull(setCursor.peekPrevious()).value, "ordered-set cursor previous")
+    val setInserted = setCursor.insert("x")
+    assertEquals(2, setInserted.position, "ordered-set cursor insertion position")
+    assertEquals(listOf("a", "x", null, "c"), setInserted.snapshot().toList(), "ordered-set cursor insertion")
+    val setDuplicate = setInserted.tryInsert(null)
+    assertThat(!setDuplicate.added, "ordered-set cursor duplicate flag")
+    assertSame(setInserted, setDuplicate.cursor, "ordered-set duplicate cursor identity")
+    val setDeleted = checkNotNull(setInserted.deletePrevious())
+    assertEquals(1, setDeleted.position, "ordered-set cursor deletion position")
+    assertEquals(setSource.toList(), setDeleted.snapshot().toList(), "ordered-set cursor deletion")
+    assertSame(setSource.policy, setDeleted.snapshot().policy, "ordered-set cursor policy")
+    val setFound = setSource.findCursor(null)
+    assertThat(setFound.found, "ordered-set cursor find null")
+    assertEquals(1, setFound.cursor.position, "ordered-set cursor find position")
+    assertEquals(setSource.size, setSource.findCursor("missing").cursor.position, "ordered-set cursor miss")
+    assertSame(setSource, setCursor.snapshot(), "ordered-set cursor source snapshot")
+
+    val mapSource = PersistentOrderedMap.from(listOf("a" to 1, "b" to 2, "c" to 3))
+    val mapCursor = checkNotNull(mapSource.cursorAt(1))
+    val mapInserted = mapCursor.insert("x", 9)
+    val mapUpdated = checkNotNull(mapInserted.setNextValue(20))
+    assertEquals(2, mapUpdated.position, "ordered-map cursor update gap")
+    assertEquals(
+        listOf("a" to 1, "x" to 9, "b" to 20, "c" to 3),
+        mapUpdated.snapshot().toList().map { it.key to it.value },
+        "ordered-map cursor edits",
+    )
+    val mapDuplicate = mapUpdated.tryInsert("b", 200)
+    assertThat(!mapDuplicate.added, "ordered-map cursor duplicate flag")
+    assertEquals(2, mapDuplicate.cursor.position, "ordered-map duplicate focuses stored key")
+    assertSame(mapUpdated.snapshot(), mapDuplicate.cursor.snapshot(), "ordered-map duplicate snapshot")
+    val mapDeleted = checkNotNull(checkNotNull(mapUpdated.deletePrevious()).deleteNext())
+    assertEquals(listOf("a" to 1, "c" to 3), mapDeleted.snapshot().toList().map { it.key to it.value }, "ordered-map cursor deletes")
+    assertEquals(1, mapDeleted.position, "ordered-map cursor delete gap")
+    assertSame(mapSource, mapCursor.snapshot(), "ordered-map cursor source snapshot")
+
+    val multimapSource = PersistentOrderedMultimap.from(
+        listOf("b" to 2, "a" to 9, "b" to 1, "c" to 7),
+    )
+    assertEquals(
+        listOf("b" to 2, "b" to 1, "a" to 9, "c" to 7),
+        multimapSource.toList().map { it.key to it.value },
+        "ordered-multimap grouped source",
+    )
+    val pairFound = multimapSource.findCursor("b", 1)
+    assertThat(pairFound.found, "ordered-multimap pair cursor find")
+    assertEquals(1L, pairFound.cursor.position, "ordered-multimap pair cursor position")
+    val multimapAdded = pairFound.cursor.add("b", 3)
+    assertEquals(3L, multimapAdded.position, "ordered-multimap cursor grouped insertion gap")
+    val multimapDuplicate = multimapAdded.tryAdd("b", 3)
+    assertThat(!multimapDuplicate.added, "ordered-multimap cursor duplicate flag")
+    assertSame(multimapAdded, multimapDuplicate.cursor, "ordered-multimap duplicate cursor identity")
+    val multimapDeleted = checkNotNull(checkNotNull(multimapAdded.deletePrevious()).deleteNext())
+    assertEquals(
+        listOf("b" to 2, "b" to 1, "c" to 7),
+        multimapDeleted.snapshot().toList().map { it.key to it.value },
+        "ordered-multimap cursor deletes and empty-group contraction",
+    )
+    assertEquals(2L, multimapDeleted.position, "ordered-multimap cursor delete gap")
+    assertEquals("c" to 7, checkNotNull(multimapDeleted.peekNext()).value.let { it.key to it.value }, "ordered-multimap cursor next")
+    val groupFound = multimapSource.findGroupCursor("a")
+    assertThat(groupFound.found, "ordered-multimap group cursor find")
+    assertEquals(2L, groupFound.cursor.position, "ordered-multimap group cursor position")
+    assertEquals(multimapSource.pairCount, multimapSource.findGroupCursor("z").cursor.position, "ordered-multimap group miss")
+    assertSame(multimapSource, pairFound.cursor.snapshot(), "ordered-multimap cursor source snapshot")
+}
+
 public fun main() {
     val tests = listOf(
         "constructionRetainsPoliciesAndFirstRepresentatives" to ::constructionRetainsPoliciesAndFirstRepresentatives,
@@ -672,6 +743,8 @@ public fun main() {
         "orderedMapRetainsPositionsAcrossPayloadEdits" to ::orderedMapRetainsPositionsAcrossPayloadEdits,
         "orderedMultimapPreservesGroupedOrderAndRepresentatives" to
             ::orderedMultimapPreservesGroupedOrderAndRepresentatives,
+        "orderedCursorsPreserveGapsPoliciesAndSnapshots" to
+            ::orderedCursorsPreserveGapsPoliciesAndSnapshots,
     )
 
     for ((name, test) in tests) {
