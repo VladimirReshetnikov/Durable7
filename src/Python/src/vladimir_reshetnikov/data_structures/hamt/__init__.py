@@ -114,10 +114,16 @@ from .persistent_map_patch import (
     PersistentMapPatch,
 )
 from .persistent_patricia import (
+    PatriciaCursorSearch,
+    PatriciaMapEntry,
     PersistentIntMap,
+    PersistentIntMapCursor,
     PersistentIntSet,
+    PersistentIntSetCursor,
     PersistentLongMap,
+    PersistentLongMapCursor,
     PersistentLongSet,
+    PersistentLongSetCursor,
 )
 from .persistent_relation import PersistentRelation, RelationEntry
 
@@ -191,6 +197,8 @@ __all__ = [
     "MerkleVerificationBudget",
     "NullableBytesMerkleCodec",
     "NullableUtf8MerkleCodec",
+    "PatriciaCursorSearch",
+    "PatriciaMapEntry",
     "PersistentBiMap",
     "PersistentDirectedGraph",
     "PersistentHashBag",
@@ -199,9 +207,13 @@ __all__ = [
     "PersistentHashSet",
     "PersistentIndexedMap",
     "PersistentIntMap",
+    "PersistentIntMapCursor",
     "PersistentIntSet",
+    "PersistentIntSetCursor",
     "PersistentLongMap",
+    "PersistentLongMapCursor",
     "PersistentLongSet",
+    "PersistentLongSetCursor",
     "PersistentMapPatch",
     "PersistentRelation",
     "RelationEntry",

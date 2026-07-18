@@ -11,6 +11,23 @@ from .hash_policy import same_value
 K = TypeVar("K")
 V = TypeVar("V")
 W = TypeVar("W")
+C = TypeVar("C")
+
+
+@dataclass(frozen=True, slots=True)
+class PatriciaMapEntry(Generic[K, V]):
+    """Presence-safe map cursor entry; ``value`` may itself be ``None``."""
+
+    key: K
+    value: V
+
+
+@dataclass(frozen=True, slots=True)
+class PatriciaCursorSearch(Generic[C]):
+    """Exact-search result whose cursor remains usable on a miss."""
+
+    cursor: C
+    found: bool
 
 
 class _PatriciaNode(Generic[K, V]):
@@ -180,6 +197,37 @@ class _PatriciaCore(Generic[K, V]):
         path = self._encode(key)
         return self._root is not None and _find_leaf(self._root, path) is not None
 
+    def entry_at(self, index: int) -> tuple[K, V] | None:
+        if index < 0 or index >= self.size or self._root is None:
+            return None
+        current = self._root
+        remaining = index
+        while isinstance(current, _PatriciaBranch):
+            if remaining < current.left.count:
+                current = current.left
+            else:
+                remaining -= current.left.count
+                current = current.right
+        assert isinstance(current, _PatriciaLeaf)
+        return current.key, current.value
+
+    def lower_bound_rank(self, key: K) -> tuple[int, bool]:
+        path = self._encode(key)
+        current = self._root
+        rank = 0
+        while isinstance(current, _PatriciaBranch):
+            if _prefix_of(path, current.mask) != current.prefix:
+                return (rank, False) if path < current.prefix else (rank + current.count, False)
+            if path & current.mask:
+                rank += current.left.count
+                current = current.right
+            else:
+                current = current.left
+        if current is None:
+            return 0, False
+        assert isinstance(current, _PatriciaLeaf)
+        return (rank + 1, False) if current.path < path else (rank, current.path == path)
+
     def put(self, key: K, value: V) -> _PatriciaCore[K, V]:
         change = _put_node(self._root, self._encode(key), key, value)
         if not change.changed:
@@ -294,6 +342,29 @@ class PersistentIntMap(Generic[V]):
     def contains_key(self, key: int) -> bool:
         return self._core.contains_key(key)
 
+    def cursor(self, position: int = 0) -> PersistentIntMapCursor[V]:
+        """Return an immutable ordered cursor at a rank gap."""
+        return PersistentIntMapCursor(self, position)
+
+    def cursor_at_end(self) -> PersistentIntMapCursor[V]:
+        """Return an immutable ordered cursor after the final entry."""
+        return PersistentIntMapCursor(self, self.size)
+
+    def lower_bound_cursor(self, key: int) -> PersistentIntMapCursor[V]:
+        """Return the gap before the first key not less than ``key``."""
+        rank, _found = self._core.lower_bound_rank(key)
+        return PersistentIntMapCursor(self, rank)
+
+    def upper_bound_cursor(self, key: int) -> PersistentIntMapCursor[V]:
+        """Return the gap before the first key greater than ``key``."""
+        rank, found = self._core.lower_bound_rank(key)
+        return PersistentIntMapCursor(self, rank + int(found))
+
+    def cursor_at_key(self, key: int) -> PatriciaCursorSearch[PersistentIntMapCursor[V]]:
+        """Return a usable lower-bound cursor and exact-key discriminator."""
+        rank, found = self._core.lower_bound_rank(key)
+        return PatriciaCursorSearch(PersistentIntMapCursor(self, rank), found)
+
     def put(self, key: int, value: V) -> PersistentIntMap[V]:
         return self._with_core(self._core.put(key, value))
 
@@ -325,6 +396,13 @@ class PersistentIntMap(Generic[V]):
 
     def __iter__(self) -> Iterator[tuple[int, V]]:
         return iter(self._core)
+
+    def _entry_at(self, index: int) -> PatriciaMapEntry[int, V] | None:
+        entry = self._core.entry_at(index)
+        return None if entry is None else PatriciaMapEntry(*entry)
+
+    def _lower_bound_rank(self, key: int) -> tuple[int, bool]:
+        return self._core.lower_bound_rank(key)
 
     def _with_core(self, core: _PatriciaCore[int, V]) -> PersistentIntMap[V]:
         return self if core is self._core else PersistentIntMap(core)
@@ -366,6 +444,29 @@ class PersistentLongMap(Generic[V]):
     def contains_key(self, key: int) -> bool:
         return self._core.contains_key(key)
 
+    def cursor(self, position: int = 0) -> PersistentLongMapCursor[V]:
+        """Return an immutable ordered cursor at a rank gap."""
+        return PersistentLongMapCursor(self, position)
+
+    def cursor_at_end(self) -> PersistentLongMapCursor[V]:
+        """Return an immutable ordered cursor after the final entry."""
+        return PersistentLongMapCursor(self, self.size)
+
+    def lower_bound_cursor(self, key: int) -> PersistentLongMapCursor[V]:
+        """Return the gap before the first key not less than ``key``."""
+        rank, _found = self._core.lower_bound_rank(key)
+        return PersistentLongMapCursor(self, rank)
+
+    def upper_bound_cursor(self, key: int) -> PersistentLongMapCursor[V]:
+        """Return the gap before the first key greater than ``key``."""
+        rank, found = self._core.lower_bound_rank(key)
+        return PersistentLongMapCursor(self, rank + int(found))
+
+    def cursor_at_key(self, key: int) -> PatriciaCursorSearch[PersistentLongMapCursor[V]]:
+        """Return a usable lower-bound cursor and exact-key discriminator."""
+        rank, found = self._core.lower_bound_rank(key)
+        return PatriciaCursorSearch(PersistentLongMapCursor(self, rank), found)
+
     def put(self, key: int, value: V) -> PersistentLongMap[V]:
         return self._with_core(self._core.put(key, value))
 
@@ -398,8 +499,187 @@ class PersistentLongMap(Generic[V]):
     def __iter__(self) -> Iterator[tuple[int, V]]:
         return iter(self._core)
 
+    def _entry_at(self, index: int) -> PatriciaMapEntry[int, V] | None:
+        entry = self._core.entry_at(index)
+        return None if entry is None else PatriciaMapEntry(*entry)
+
+    def _lower_bound_rank(self, key: int) -> tuple[int, bool]:
+        return self._core.lower_bound_rank(key)
+
     def _with_core(self, core: _PatriciaCore[int, V]) -> PersistentLongMap[V]:
         return self if core is self._core else PersistentLongMap(core)
+
+
+@dataclass(frozen=True, slots=True)
+class PersistentIntMapCursor(Generic[V]):
+    """Immutable root-plus-rank gap cursor over a signed 32-bit Patricia map."""
+
+    map: PersistentIntMap[V]
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        _validate_cursor_position(self.position, self.map.size)
+
+    @property
+    def count(self) -> int:
+        return self.map.size
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.count
+
+    def peek_previous(self) -> PatriciaMapEntry[int, V] | None:
+        return None if self.is_at_start else self.map._entry_at(self.position - 1)
+
+    def peek_next(self) -> PatriciaMapEntry[int, V] | None:
+        return self.map._entry_at(self.position)
+
+    def move_previous(self) -> PersistentIntMapCursor[V]:
+        if self.is_at_start:
+            raise IndexError("Cursor is already at the start.")
+        return PersistentIntMapCursor(self.map, self.position - 1)
+
+    def move_next(self) -> PersistentIntMapCursor[V]:
+        if self.is_at_end:
+            raise IndexError("Cursor is already at the end.")
+        return PersistentIntMapCursor(self.map, self.position + 1)
+
+    def seek(self, position: int) -> PersistentIntMapCursor[V]:
+        return self if position == self.position else PersistentIntMapCursor(self.map, position)
+
+    def insert(self, key: int, value: V) -> PersistentIntMapCursor[V]:
+        """Strictly insert at a missing lower-bound gap and return the gap after it."""
+        rank, found = self.map._lower_bound_rank(key)
+        if found:
+            raise KeyError(f"The key {key!r} is already present.")
+        self._ensure_current_gap(rank, key)
+        return PersistentIntMapCursor(self.map.put(key, value), self.position + 1)
+
+    def put(self, key: int, value: V) -> PersistentIntMapCursor[V]:
+        """Update an exact next entry or insert at a missing lower-bound gap."""
+        rank, found = self.map._lower_bound_rank(key)
+        self._ensure_current_gap(rank, key)
+        edited = self.map.put(key, value)
+        if edited is self.map:
+            return self
+        return PersistentIntMapCursor(edited, self.position if found else self.position + 1)
+
+    def set_next_value(self, value: V) -> PersistentIntMapCursor[V]:
+        next_entry = self.peek_next()
+        if next_entry is None:
+            raise IndexError("No entry follows the cursor gap.")
+        edited = self.map.put(next_entry.key, value)
+        return self if edited is self.map else PersistentIntMapCursor(edited, self.position)
+
+    def delete_previous(self) -> PersistentIntMapCursor[V]:
+        previous = self.peek_previous()
+        if previous is None:
+            raise IndexError("No entry precedes the cursor gap.")
+        return PersistentIntMapCursor(self.map.remove(previous.key), self.position - 1)
+
+    def delete_next(self) -> PersistentIntMapCursor[V]:
+        next_entry = self.peek_next()
+        if next_entry is None:
+            raise IndexError("No entry follows the cursor gap.")
+        return PersistentIntMapCursor(self.map.remove(next_entry.key), self.position)
+
+    def snapshot(self) -> PersistentIntMap[V]:
+        return self.map
+
+    def _ensure_current_gap(self, rank: int, key: int) -> None:
+        if rank != self.position:
+            raise ValueError(
+                f"Key {key!r} belongs at gap {rank}, not at the current gap {self.position}."
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class PersistentLongMapCursor(Generic[V]):
+    """Immutable root-plus-rank gap cursor over a signed 64-bit Patricia map."""
+
+    map: PersistentLongMap[V]
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        _validate_cursor_position(self.position, self.map.size)
+
+    @property
+    def count(self) -> int:
+        return self.map.size
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.count
+
+    def peek_previous(self) -> PatriciaMapEntry[int, V] | None:
+        return None if self.is_at_start else self.map._entry_at(self.position - 1)
+
+    def peek_next(self) -> PatriciaMapEntry[int, V] | None:
+        return self.map._entry_at(self.position)
+
+    def move_previous(self) -> PersistentLongMapCursor[V]:
+        if self.is_at_start:
+            raise IndexError("Cursor is already at the start.")
+        return PersistentLongMapCursor(self.map, self.position - 1)
+
+    def move_next(self) -> PersistentLongMapCursor[V]:
+        if self.is_at_end:
+            raise IndexError("Cursor is already at the end.")
+        return PersistentLongMapCursor(self.map, self.position + 1)
+
+    def seek(self, position: int) -> PersistentLongMapCursor[V]:
+        return self if position == self.position else PersistentLongMapCursor(self.map, position)
+
+    def insert(self, key: int, value: V) -> PersistentLongMapCursor[V]:
+        rank, found = self.map._lower_bound_rank(key)
+        if found:
+            raise KeyError(f"The key {key!r} is already present.")
+        self._ensure_current_gap(rank, key)
+        return PersistentLongMapCursor(self.map.put(key, value), self.position + 1)
+
+    def put(self, key: int, value: V) -> PersistentLongMapCursor[V]:
+        rank, found = self.map._lower_bound_rank(key)
+        self._ensure_current_gap(rank, key)
+        edited = self.map.put(key, value)
+        if edited is self.map:
+            return self
+        return PersistentLongMapCursor(edited, self.position if found else self.position + 1)
+
+    def set_next_value(self, value: V) -> PersistentLongMapCursor[V]:
+        next_entry = self.peek_next()
+        if next_entry is None:
+            raise IndexError("No entry follows the cursor gap.")
+        edited = self.map.put(next_entry.key, value)
+        return self if edited is self.map else PersistentLongMapCursor(edited, self.position)
+
+    def delete_previous(self) -> PersistentLongMapCursor[V]:
+        previous = self.peek_previous()
+        if previous is None:
+            raise IndexError("No entry precedes the cursor gap.")
+        return PersistentLongMapCursor(self.map.remove(previous.key), self.position - 1)
+
+    def delete_next(self) -> PersistentLongMapCursor[V]:
+        next_entry = self.peek_next()
+        if next_entry is None:
+            raise IndexError("No entry follows the cursor gap.")
+        return PersistentLongMapCursor(self.map.remove(next_entry.key), self.position)
+
+    def snapshot(self) -> PersistentLongMap[V]:
+        return self.map
+
+    def _ensure_current_gap(self, rank: int, key: int) -> None:
+        if rank != self.position:
+            raise ValueError(
+                f"Key {key!r} belongs at gap {rank}, not at the current gap {self.position}."
+            )
 
 
 class PersistentIntSet:
@@ -435,6 +715,24 @@ class PersistentIntSet:
     def contains(self, value: int) -> bool:
         return self._map.contains_key(value)
 
+    def cursor(self, position: int = 0) -> PersistentIntSetCursor:
+        return PersistentIntSetCursor(self, position)
+
+    def cursor_at_end(self) -> PersistentIntSetCursor:
+        return PersistentIntSetCursor(self, self.size)
+
+    def lower_bound_cursor(self, value: int) -> PersistentIntSetCursor:
+        rank, _found = self._map._lower_bound_rank(value)
+        return PersistentIntSetCursor(self, rank)
+
+    def upper_bound_cursor(self, value: int) -> PersistentIntSetCursor:
+        rank, found = self._map._lower_bound_rank(value)
+        return PersistentIntSetCursor(self, rank + int(found))
+
+    def cursor_at_item(self, value: int) -> PatriciaCursorSearch[PersistentIntSetCursor]:
+        rank, found = self._map._lower_bound_rank(value)
+        return PatriciaCursorSearch(PersistentIntSetCursor(self, rank), found)
+
     def add(self, value: int) -> PersistentIntSet:
         return self._with_map(self._map.put(value, True))
 
@@ -452,6 +750,13 @@ class PersistentIntSet:
 
     def __iter__(self) -> Iterator[int]:
         return (key for key, _value in self._map)
+
+    def _item_at(self, index: int) -> int | None:
+        entry = self._map._entry_at(index)
+        return None if entry is None else entry.key
+
+    def _lower_bound_rank(self, value: int) -> tuple[int, bool]:
+        return self._map._lower_bound_rank(value)
 
     def _with_map(self, map_value: PersistentIntMap[bool]) -> PersistentIntSet:
         return self if map_value is self._map else PersistentIntSet(map_value)
@@ -490,6 +795,24 @@ class PersistentLongSet:
     def contains(self, value: int) -> bool:
         return self._map.contains_key(value)
 
+    def cursor(self, position: int = 0) -> PersistentLongSetCursor:
+        return PersistentLongSetCursor(self, position)
+
+    def cursor_at_end(self) -> PersistentLongSetCursor:
+        return PersistentLongSetCursor(self, self.size)
+
+    def lower_bound_cursor(self, value: int) -> PersistentLongSetCursor:
+        rank, _found = self._map._lower_bound_rank(value)
+        return PersistentLongSetCursor(self, rank)
+
+    def upper_bound_cursor(self, value: int) -> PersistentLongSetCursor:
+        rank, found = self._map._lower_bound_rank(value)
+        return PersistentLongSetCursor(self, rank + int(found))
+
+    def cursor_at_item(self, value: int) -> PatriciaCursorSearch[PersistentLongSetCursor]:
+        rank, found = self._map._lower_bound_rank(value)
+        return PatriciaCursorSearch(PersistentLongSetCursor(self, rank), found)
+
     def add(self, value: int) -> PersistentLongSet:
         return self._with_map(self._map.put(value, True))
 
@@ -508,13 +831,167 @@ class PersistentLongSet:
     def __iter__(self) -> Iterator[int]:
         return (key for key, _value in self._map)
 
+    def _item_at(self, index: int) -> int | None:
+        entry = self._map._entry_at(index)
+        return None if entry is None else entry.key
+
+    def _lower_bound_rank(self, value: int) -> tuple[int, bool]:
+        return self._map._lower_bound_rank(value)
+
     def _with_map(self, map_value: PersistentLongMap[bool]) -> PersistentLongSet:
         return self if map_value is self._map else PersistentLongSet(map_value)
 
 
+@dataclass(frozen=True, slots=True)
+class PersistentIntSetCursor:
+    """Immutable root-plus-rank gap cursor over a signed 32-bit Patricia set."""
+
+    set: PersistentIntSet
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        _validate_cursor_position(self.position, self.set.size)
+
+    @property
+    def count(self) -> int:
+        return self.set.size
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.count
+
+    def peek_previous(self) -> int | None:
+        return None if self.is_at_start else self.set._item_at(self.position - 1)
+
+    def peek_next(self) -> int | None:
+        return self.set._item_at(self.position)
+
+    def move_previous(self) -> PersistentIntSetCursor:
+        if self.is_at_start:
+            raise IndexError("Cursor is already at the start.")
+        return PersistentIntSetCursor(self.set, self.position - 1)
+
+    def move_next(self) -> PersistentIntSetCursor:
+        if self.is_at_end:
+            raise IndexError("Cursor is already at the end.")
+        return PersistentIntSetCursor(self.set, self.position + 1)
+
+    def seek(self, position: int) -> PersistentIntSetCursor:
+        return self if position == self.position else PersistentIntSetCursor(self.set, position)
+
+    def add(self, value: int) -> PersistentIntSetCursor:
+        rank, found = self.set._lower_bound_rank(value)
+        self._ensure_current_gap(rank, value)
+        return self if found else PersistentIntSetCursor(self.set.add(value), self.position + 1)
+
+    def delete_previous(self) -> PersistentIntSetCursor:
+        previous = self.peek_previous()
+        if previous is None:
+            raise IndexError("No item precedes the cursor gap.")
+        return PersistentIntSetCursor(self.set.remove(previous), self.position - 1)
+
+    def delete_next(self) -> PersistentIntSetCursor:
+        next_item = self.peek_next()
+        if next_item is None:
+            raise IndexError("No item follows the cursor gap.")
+        return PersistentIntSetCursor(self.set.remove(next_item), self.position)
+
+    def snapshot(self) -> PersistentIntSet:
+        return self.set
+
+    def _ensure_current_gap(self, rank: int, value: int) -> None:
+        if rank != self.position:
+            raise ValueError(
+                f"Item {value!r} belongs at gap {rank}, not at the current gap {self.position}."
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class PersistentLongSetCursor:
+    """Immutable root-plus-rank gap cursor over a signed 64-bit Patricia set."""
+
+    set: PersistentLongSet
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        _validate_cursor_position(self.position, self.set.size)
+
+    @property
+    def count(self) -> int:
+        return self.set.size
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.count
+
+    def peek_previous(self) -> int | None:
+        return None if self.is_at_start else self.set._item_at(self.position - 1)
+
+    def peek_next(self) -> int | None:
+        return self.set._item_at(self.position)
+
+    def move_previous(self) -> PersistentLongSetCursor:
+        if self.is_at_start:
+            raise IndexError("Cursor is already at the start.")
+        return PersistentLongSetCursor(self.set, self.position - 1)
+
+    def move_next(self) -> PersistentLongSetCursor:
+        if self.is_at_end:
+            raise IndexError("Cursor is already at the end.")
+        return PersistentLongSetCursor(self.set, self.position + 1)
+
+    def seek(self, position: int) -> PersistentLongSetCursor:
+        return self if position == self.position else PersistentLongSetCursor(self.set, position)
+
+    def add(self, value: int) -> PersistentLongSetCursor:
+        rank, found = self.set._lower_bound_rank(value)
+        self._ensure_current_gap(rank, value)
+        return self if found else PersistentLongSetCursor(self.set.add(value), self.position + 1)
+
+    def delete_previous(self) -> PersistentLongSetCursor:
+        previous = self.peek_previous()
+        if previous is None:
+            raise IndexError("No item precedes the cursor gap.")
+        return PersistentLongSetCursor(self.set.remove(previous), self.position - 1)
+
+    def delete_next(self) -> PersistentLongSetCursor:
+        next_item = self.peek_next()
+        if next_item is None:
+            raise IndexError("No item follows the cursor gap.")
+        return PersistentLongSetCursor(self.set.remove(next_item), self.position)
+
+    def snapshot(self) -> PersistentLongSet:
+        return self.set
+
+    def _ensure_current_gap(self, rank: int, value: int) -> None:
+        if rank != self.position:
+            raise ValueError(
+                f"Item {value!r} belongs at gap {rank}, not at the current gap {self.position}."
+            )
+
+
+def _validate_cursor_position(position: int, size: int) -> None:
+    if position < 0 or position > size:
+        raise ValueError(f"Cursor position must be in 0 .. {size}.")
+
+
 __all__ = [
+    "PatriciaCursorSearch",
+    "PatriciaMapEntry",
     "PersistentIntMap",
+    "PersistentIntMapCursor",
     "PersistentIntSet",
+    "PersistentIntSetCursor",
     "PersistentLongMap",
+    "PersistentLongMapCursor",
     "PersistentLongSet",
+    "PersistentLongSetCursor",
 ]

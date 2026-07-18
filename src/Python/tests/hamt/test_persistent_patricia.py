@@ -121,3 +121,147 @@ def test_long_map_endpoint_updates_preserve_old_versions() -> None:
     ]
     assert second.shares_root_with(second)
     assert not first.shares_root_with(second)
+
+
+def test_int_map_cursor_exposes_every_ordered_gap_and_nullable_entry() -> None:
+    keys = [-(1 << 31), -1, 0, 17, (1 << 31) - 1]
+    map_value = PersistentIntMap.from_items([(key, None if key == 0 else str(key)) for key in keys])
+
+    for position in range(len(keys) + 1):
+        cursor = map_value.cursor(position)
+        assert cursor.position == position
+        assert cursor.count == len(keys)
+        assert cursor.is_at_start == (position == 0)
+        assert cursor.is_at_end == (position == len(keys))
+        assert cursor.snapshot() is map_value
+        previous = cursor.peek_previous()
+        next_entry = cursor.peek_next()
+        assert (None if previous is None else previous.key) == (
+            None if position == 0 else keys[position - 1]
+        )
+        assert (None if next_entry is None else next_entry.key) == (
+            None if position == len(keys) else keys[position]
+        )
+
+    assert map_value.lower_bound_cursor(-2).position == 1
+    assert map_value.upper_bound_cursor(-1).position == 2
+    assert map_value.lower_bound_cursor(18).position == 4
+    assert map_value.upper_bound_cursor((1 << 31) - 1).position == len(keys)
+    exact = map_value.cursor_at_key(0)
+    assert exact.found
+    exact_entry = exact.cursor.peek_next()
+    assert exact_entry is not None
+    assert exact_entry.key == 0
+    assert exact_entry.value is None
+    miss = map_value.cursor_at_key(1)
+    assert not miss.found
+    assert miss.cursor.position == 3
+    miss_entry = miss.cursor.peek_next()
+    assert miss_entry is not None
+    assert miss_entry.key == 17
+
+    assert map_value.cursor_at_end().snapshot() is map_value
+    with pytest.raises(ValueError):
+        map_value.cursor(-1)
+    with pytest.raises(ValueError):
+        map_value.cursor(map_value.size + 1)
+    with pytest.raises(IndexError):
+        map_value.cursor().move_previous()
+    with pytest.raises(IndexError):
+        map_value.cursor_at_end().move_next()
+
+
+def test_int_map_cursor_edits_branch_persistently_at_the_focused_gap() -> None:
+    source = PersistentIntMap.from_items([(-10, "a"), (0, None), (10, "c")])
+    at_zero = source.cursor_at_key(0)
+    assert at_zero.found
+    assert at_zero.cursor.set_next_value(None).snapshot() is source
+
+    updated = at_zero.cursor.set_next_value("b")
+    assert updated.position == 1
+    assert updated.snapshot().get(0) == "b"
+    assert source.get(0) is None
+    assert [key for key, _value in at_zero.cursor.delete_next().snapshot()] == [-10, 10]
+    assert [key for key, _value in at_zero.cursor.delete_previous().snapshot()] == [0, 10]
+
+    inserted = source.cursor_at_key(5).cursor.insert(5, "five")
+    assert inserted.position == 3
+    assert [key for key, _value in inserted.snapshot()] == [-10, 0, 5, 10]
+    assert [key for key, _value in source] == [-10, 0, 10]
+    assert source.lower_bound_cursor(-5).put(-5, "minus five").position == 2
+    assert at_zero.cursor.put(0, "zero").position == 1
+
+    with pytest.raises(KeyError):
+        at_zero.cursor.insert(0, "duplicate")
+    with pytest.raises(ValueError, match="belongs at gap"):
+        source.cursor().insert(5, "wrong gap")
+    with pytest.raises(IndexError):
+        source.cursor_at_end().set_next_value("none")
+    with pytest.raises(IndexError):
+        source.cursor().delete_previous()
+    with pytest.raises(IndexError):
+        source.cursor_at_end().delete_next()
+
+
+def test_long_map_and_set_cursors_cover_signed_boundaries_and_edits() -> None:
+    minimum = -(1 << 63)
+    maximum = (1 << 63) - 1
+    keys = [minimum, -1, 0, 1 << 40, maximum]
+    long_map = PersistentLongMap.from_items([(key, key) for key in keys])
+    assert long_map.lower_bound_cursor(minimum).position == 0
+    assert long_map.upper_bound_cursor(minimum).position == 1
+    assert long_map.lower_bound_cursor(1).position == 3
+    assert long_map.upper_bound_cursor(maximum).position == len(keys)
+    exact = long_map.cursor_at_key(1 << 40)
+    assert exact.found
+    assert exact.cursor.set_next_value(42).snapshot().get(1 << 40) == 42
+    inserted = long_map.cursor_at_key(-2).cursor.insert(-2, 99)
+    assert inserted.position == 2
+    assert [key for key, _value in inserted.snapshot()] == [
+        minimum,
+        -2,
+        -1,
+        0,
+        1 << 40,
+        maximum,
+    ]
+
+    int_set = PersistentIntSet.from_values([-(1 << 31), -1, 0, (1 << 31) - 1])
+    int_miss = int_set.cursor_at_item(-2)
+    assert not int_miss.found
+    int_added = int_miss.cursor.add(-2)
+    assert int_added.position == 2
+    assert list(int_added.snapshot()) == [-(1 << 31), -2, -1, 0, (1 << 31) - 1]
+    assert int_set.cursor_at_item(0).cursor.add(0).snapshot() is int_set
+    assert list(int_set.cursor_at_item(0).cursor.delete_next().snapshot()) == [
+        -(1 << 31),
+        -1,
+        (1 << 31) - 1,
+    ]
+
+    long_set = PersistentLongSet.from_values([minimum, -1, 0, maximum])
+    assert long_set.upper_bound_cursor(minimum).position == 1
+    long_added = long_set.cursor_at_item(1).cursor.add(1)
+    assert long_added.position == 4
+    assert list(long_added.snapshot()) == [minimum, -1, 0, 1, maximum]
+    with pytest.raises(ValueError, match="belongs at gap"):
+        long_set.cursor().add(1)
+
+
+@settings(max_examples=300)
+@given(
+    st.lists(st.integers(min_value=-500, max_value=500), max_size=100, unique=True),
+    st.integers(min_value=-550, max_value=550),
+)
+def test_int_map_cursor_search_ranks_agree_with_sorted_model(
+    generated: list[int], probe: int
+) -> None:
+    keys = sorted(generated)
+    map_value = PersistentIntMap.from_items([(key, key) for key in keys])
+    lower = next((index for index, key in enumerate(keys) if key >= probe), len(keys))
+    upper = next((index for index, key in enumerate(keys) if key > probe), len(keys))
+    assert map_value.lower_bound_cursor(probe).position == lower
+    assert map_value.upper_bound_cursor(probe).position == upper
+    exact = map_value.cursor_at_key(probe)
+    assert exact.cursor.position == lower
+    assert exact.found == (probe in keys)
