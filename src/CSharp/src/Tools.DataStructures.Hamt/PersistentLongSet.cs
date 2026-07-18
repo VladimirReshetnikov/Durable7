@@ -3,7 +3,7 @@ using System.Collections;
 namespace Tools.DataStructures.Hamt;
 
 /// <summary>Represents an immutable set of signed 64-bit integers using a big-endian Patricia trie.</summary>
-public sealed class PersistentLongSet : IReadOnlySet<long>
+public sealed partial class PersistentLongSet : IReadOnlySet<long>
 {
     private readonly PersistentLongMap<Unit> _map;
 

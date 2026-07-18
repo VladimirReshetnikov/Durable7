@@ -41,6 +41,69 @@ internal sealed class PatriciaMapCore<TKey, TValue, TKeyPolicy>
 
     internal object? RootIdentity => _root;
 
+    internal bool TryGetAt(int index, out KeyValuePair<TKey, TValue> entry)
+    {
+        if ((uint)index >= (uint)Count)
+        {
+            entry = default;
+            return false;
+        }
+
+        var node = _root!;
+        while (node is Branch branch)
+        {
+            if (index < branch.Left.Count)
+            {
+                node = branch.Left;
+            }
+            else
+            {
+                index -= branch.Left.Count;
+                node = branch.Right;
+            }
+        }
+
+        var leaf = (Leaf)node;
+        entry = KeyValuePair.Create(TKeyPolicy.Decode(leaf.Key), leaf.Value);
+        return true;
+    }
+
+    internal int GetLowerBoundRank(TKey key, out bool found)
+    {
+        var bits = TKeyPolicy.Encode(key);
+        var node = _root;
+        var rank = 0;
+
+        while (node is Branch branch)
+        {
+            if (!Matches(bits, branch.Prefix, branch.Mask))
+            {
+                found = false;
+                return bits < branch.Prefix ? rank : checked(rank + branch.Count);
+            }
+
+            if (GoesLeft(bits, branch.Mask))
+            {
+                node = branch.Left;
+            }
+            else
+            {
+                rank = checked(rank + branch.Left.Count);
+                node = branch.Right;
+            }
+        }
+
+        if (node is null)
+        {
+            found = false;
+            return 0;
+        }
+
+        var leaf = (Leaf)node;
+        found = leaf.Key == bits;
+        return leaf.Key < bits ? checked(rank + 1) : rank;
+    }
+
     internal bool TryGetValue(TKey key, [MaybeNullWhen(false)] out TValue value)
     {
         var bits = TKeyPolicy.Encode(key);

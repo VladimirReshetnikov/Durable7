@@ -6,7 +6,7 @@ namespace Tools.DataStructures.Hamt;
 
 /// <summary>Represents an immutable map from signed 32-bit integer keys using a big-endian Patricia trie.</summary>
 /// <typeparam name="TValue">The value type.</typeparam>
-public sealed class PersistentIntMap<TValue> : IReadOnlyDictionary<int, TValue>
+public sealed partial class PersistentIntMap<TValue> : IReadOnlyDictionary<int, TValue>
 {
     private readonly PatriciaMapCore<int, TValue, Int32PatriciaKey> _core;
 

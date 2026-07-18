@@ -6,7 +6,7 @@ namespace Tools.DataStructures.Hamt;
 
 /// <summary>Represents an immutable map from signed 64-bit integer keys using a big-endian Patricia trie.</summary>
 /// <typeparam name="TValue">The value type.</typeparam>
-public sealed class PersistentLongMap<TValue> : IReadOnlyDictionary<long, TValue>
+public sealed partial class PersistentLongMap<TValue> : IReadOnlyDictionary<long, TValue>
 {
     private readonly PatriciaMapCore<long, TValue, Int64PatriciaKey> _core;
 

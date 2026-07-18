@@ -234,6 +234,213 @@ public sealed class PersistentIntegerPatriciaTests
                 ^ (int)System.Numerics.BitOperations.RotateRight((uint)right, 11));
     }
 
+    /// <summary>Verifies every rank gap, boundary, and signed-key search factory for the 32-bit map cursor.</summary>
+    [Fact]
+    public void IntMapCursor_UsesOrderedGapAndPresenceSafeSearchSemantics()
+    {
+        int[] keys = [int.MinValue, -1, 0, 17, int.MaxValue];
+        var map = PersistentIntMap<string?>.CreateRange(
+            keys.Select(key => KeyValuePair.Create<int, string?>(key, key == 0 ? null : key.ToString())));
+
+        for (var position = 0; position <= keys.Length; position++)
+        {
+            var cursor = map.GetCursor(position);
+            Assert.Equal(position, cursor.Position);
+            Assert.Equal(keys.Length, cursor.Count);
+            Assert.Equal(position == 0, cursor.IsAtStart);
+            Assert.Equal(position == keys.Length, cursor.IsAtEnd);
+            Assert.Same(map, cursor.Snapshot());
+
+            Assert.Equal(position > 0, cursor.TryPeekPrevious(out var previous));
+            if (position > 0)
+                Assert.Equal(keys[position - 1], previous.Key);
+            Assert.Equal(position < keys.Length, cursor.TryPeekNext(out var next));
+            if (position < keys.Length)
+                Assert.Equal(keys[position], next.Key);
+        }
+
+        Assert.Equal(0, map.GetLowerBoundCursor(int.MinValue).Position);
+        Assert.Equal(1, map.GetUpperBoundCursor(int.MinValue).Position);
+        Assert.Equal(1, map.GetLowerBoundCursor(-2).Position);
+        Assert.Equal(2, map.GetUpperBoundCursor(-1).Position);
+        Assert.Equal(4, map.GetLowerBoundCursor(18).Position);
+        Assert.Equal(keys.Length, map.GetUpperBoundCursor(int.MaxValue).Position);
+
+        var nullable = map.GetCursorAtKey(0, out var foundNull);
+        Assert.True(foundNull);
+        Assert.True(nullable.TryPeekNext(out var nullEntry));
+        Assert.Null(nullEntry.Value);
+
+        var miss = map.GetCursorAtKey(1, out var foundMiss);
+        Assert.False(foundMiss);
+        Assert.Equal(3, miss.Position);
+        Assert.Equal(17, AssertNext(miss).Key);
+
+        Assert.Same(map, map.GetCursorAtEnd().Snapshot());
+        Assert.Throws<ArgumentOutOfRangeException>(() => map.GetCursor(-1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => map.GetCursor(map.Count + 1));
+        Assert.Throws<InvalidOperationException>(() => map.GetCursor().MovePrevious());
+        Assert.Throws<InvalidOperationException>(() => map.GetCursorAtEnd().MoveNext());
+        Assert.Throws<InvalidOperationException>(() => default(PersistentIntMapCursor<string?>).Snapshot());
+    }
+
+    /// <summary>Verifies map edits preserve gap continuity, no-op identity, and retained ancestor branches.</summary>
+    [Fact]
+    public void IntMapCursor_EditsBranchPersistentlyAtTheFocusedGap()
+    {
+        var source = PersistentIntMap<string?>.CreateRange(
+        [
+            KeyValuePair.Create<int, string?>(-10, "a"),
+            KeyValuePair.Create<int, string?>(0, null),
+            KeyValuePair.Create<int, string?>(10, "c"),
+        ]);
+        var atZero = source.GetCursorAtKey(0, out var found);
+        Assert.True(found);
+        Assert.Equal(1, atZero.Position);
+
+        var noOp = atZero.SetNextValue(null);
+        Assert.Same(source, noOp.Snapshot());
+        var updated = atZero.SetNextValue("b");
+        Assert.Equal(1, updated.Position);
+        Assert.Equal("b", updated.Snapshot()[0]);
+        Assert.Null(source[0]);
+
+        var deletedNext = atZero.DeleteNext();
+        Assert.Equal(1, deletedNext.Position);
+        Assert.Equal(new[] { -10, 10 }, deletedNext.Snapshot().Keys);
+        var deletedPrevious = atZero.DeletePrevious();
+        Assert.Equal(0, deletedPrevious.Position);
+        Assert.Equal(new[] { 0, 10 }, deletedPrevious.Snapshot().Keys);
+
+        var missing = source.GetCursorAtKey(5, out found);
+        Assert.False(found);
+        var inserted = missing.Insert(5, "five");
+        Assert.Equal(3, inserted.Position);
+        Assert.Equal(new[] { -10, 0, 5, 10 }, inserted.Snapshot().Keys);
+        Assert.Equal(new[] { -10, 0, 10 }, source.Keys);
+
+        var setInserted = source.GetLowerBoundCursor(-5).SetItem(-5, "minus five");
+        Assert.Equal(2, setInserted.Position);
+        Assert.Equal("minus five", setInserted.Snapshot()[-5]);
+        var setUpdated = atZero.SetItem(0, "zero");
+        Assert.Equal(1, setUpdated.Position);
+        Assert.Equal("zero", setUpdated.Snapshot()[0]);
+
+        Assert.Throws<ArgumentException>(() => atZero.Insert(0, "duplicate"));
+        Assert.Throws<InvalidOperationException>(() => source.GetCursor().Insert(5, "wrong gap"));
+        Assert.Throws<InvalidOperationException>(() => source.GetCursorAtEnd().SetNextValue("none"));
+        Assert.Throws<InvalidOperationException>(() => source.GetCursor().DeletePrevious());
+        Assert.Throws<InvalidOperationException>(() => source.GetCursorAtEnd().DeleteNext());
+    }
+
+    /// <summary>Checks 64-bit map cursor rank/search/edit parity across the signed transform boundary.</summary>
+    [Fact]
+    public void LongMapCursor_CoversSignedBoundariesAndPersistentEdits()
+    {
+        long[] keys = [long.MinValue, -1, 0, 1L << 40, long.MaxValue];
+        var map = PersistentLongMap<long>.CreateRange(keys.Select(key => KeyValuePair.Create(key, key)));
+
+        Assert.Equal(0, map.GetLowerBoundCursor(long.MinValue).Position);
+        Assert.Equal(1, map.GetUpperBoundCursor(long.MinValue).Position);
+        Assert.Equal(2, map.GetLowerBoundCursor(0).Position);
+        Assert.Equal(3, map.GetUpperBoundCursor(0).Position);
+        Assert.Equal(4, map.GetLowerBoundCursor((1L << 40) + 1).Position);
+        Assert.Equal(keys.Length, map.GetUpperBoundCursor(long.MaxValue).Position);
+
+        var exact = map.GetCursorAtKey(1L << 40, out var found);
+        Assert.True(found);
+        Assert.Equal(3, exact.Position);
+        Assert.Equal(1L << 40, AssertNext(exact).Key);
+        var updated = exact.SetNextValue(42);
+        Assert.Equal(42, updated.Snapshot()[1L << 40]);
+        Assert.Equal(1L << 40, map[1L << 40]);
+
+        var miss = map.GetCursorAtKey(-2, out found);
+        Assert.False(found);
+        var inserted = miss.Insert(-2, 99);
+        Assert.Equal(2, inserted.Position);
+        Assert.Equal(new[] { long.MinValue, -2, -1, 0, 1L << 40, long.MaxValue }, inserted.Snapshot().Keys);
+        Assert.Equal(1, inserted.DeletePrevious().Position);
+        Assert.Same(map, map.GetCursorAtEnd().Snapshot());
+        Assert.Throws<InvalidOperationException>(() => default(PersistentLongMapCursor<long>).TryPeekNext(out _));
+    }
+
+    /// <summary>Verifies set cursors use lower-bound insertion, duplicate no-ops, and gap-stable deletion.</summary>
+    [Fact]
+    public void PatriciaSetCursors_ProvideOrderedPersistentGapEditingAtBothWidths()
+    {
+        var ints = PersistentIntSet.CreateRange([int.MinValue, -1, 0, int.MaxValue]);
+        var intMiss = ints.GetCursorAtItem(-2, out var found);
+        Assert.False(found);
+        Assert.Equal(1, intMiss.Position);
+        var intAdded = intMiss.Add(-2);
+        Assert.Equal(2, intAdded.Position);
+        Assert.Equal(new[] { int.MinValue, -2, -1, 0, int.MaxValue }, intAdded.Snapshot());
+        Assert.Equal(new[] { int.MinValue, -1, 0, int.MaxValue }, ints);
+
+        var intExact = ints.GetCursorAtItem(0, out found);
+        Assert.True(found);
+        Assert.Same(ints, intExact.Add(0).Snapshot());
+        Assert.Equal(new[] { int.MinValue, -1, int.MaxValue }, intExact.DeleteNext().Snapshot());
+        Assert.Equal(new[] { int.MinValue, 0, int.MaxValue }, intExact.DeletePrevious().Snapshot());
+        Assert.Throws<InvalidOperationException>(() => ints.GetCursor().Add(17));
+
+        var longs = PersistentLongSet.CreateRange([long.MinValue, -1, 0, long.MaxValue]);
+        Assert.Equal(1, longs.GetUpperBoundCursor(long.MinValue).Position);
+        var longMiss = longs.GetCursorAtItem(1, out found);
+        Assert.False(found);
+        var longAdded = longMiss.Add(1);
+        Assert.Equal(4, longAdded.Position);
+        Assert.Equal(new[] { long.MinValue, -1L, 0L, 1L, long.MaxValue }, longAdded.Snapshot());
+        Assert.Equal(3, longAdded.MovePrevious().Position);
+        Assert.Same(longs, longs.GetCursorAtEnd().Snapshot());
+        Assert.Throws<InvalidOperationException>(() => default(PersistentLongSetCursor).Snapshot());
+    }
+
+    /// <summary>Compares lower/upper/exact cursor ranks with a sorted-array model over randomized prefix shapes.</summary>
+    [Fact]
+    public void IntMapCursor_RandomizedSearchRanksMatchSortedModel()
+    {
+        var random = new Random(20260717);
+        for (var trial = 0; trial < 200; trial++)
+        {
+            var keys = Enumerable.Range(0, random.Next(0, 100))
+                .Select(_ => random.Next(-500, 501))
+                .Distinct()
+                .Order()
+                .ToArray();
+            var map = PersistentIntMap<int>.CreateRange(keys.Select(key => KeyValuePair.Create(key, key)));
+
+            for (var probe = -550; probe <= 550; probe += 11)
+            {
+                var lower = Array.FindIndex(keys, key => key >= probe);
+                if (lower < 0)
+                    lower = keys.Length;
+                var upper = Array.FindIndex(keys, key => key > probe);
+                if (upper < 0)
+                    upper = keys.Length;
+
+                Assert.Equal(lower, map.GetLowerBoundCursor(probe).Position);
+                Assert.Equal(upper, map.GetUpperBoundCursor(probe).Position);
+                var exact = map.GetCursorAtKey(probe, out var found);
+                Assert.Equal(lower, exact.Position);
+                Assert.Equal(Array.BinarySearch(keys, probe) >= 0, found);
+            }
+        }
+    }
+
+    private static KeyValuePair<int, TValue> AssertNext<TValue>(PersistentIntMapCursor<TValue> cursor)
+    {
+        Assert.True(cursor.TryPeekNext(out var entry));
+        return entry;
+    }
+
+    private static KeyValuePair<long, TValue> AssertNext<TValue>(PersistentLongMapCursor<TValue> cursor)
+    {
+        Assert.True(cursor.TryPeekNext(out var entry));
+        return entry;
+    }
+
     private static void AssertMap(Dictionary<int, int> expected, PersistentIntMap<int> actual)
     {
         Assert.Equal(expected.Count, actual.Count);
