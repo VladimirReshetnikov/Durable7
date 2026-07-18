@@ -584,6 +584,118 @@ let test_merkle_three_way_merge () =
   | Merkle_proof_merge.Conflicted _ -> Alcotest.fail "unexpected conflict set"
   | Merkle_proof_merge.Merged _ -> Alcotest.fail "competing updates unexpectedly merged"
 
+let test_merkle_cursors () =
+  let policy =
+    Result.get_ok
+      (Merkle_encoding.create_policy ~policy_id:"ocaml-cursor-int32-v1" ~compare:Int32.compare
+         ~key_codec:Merkle_encoding.int32_codec ~value_codec:Merkle_encoding.nullable_utf8_codec ())
+  in
+  let source =
+    Result.get_ok
+      (Merkle_search_tree.of_list policy [ (-10l, Some "a"); (0l, None); (10l, Some "c") ])
+  in
+  let keys = [ -10l; 0l; 10l ] in
+  List.iter
+    (fun position ->
+      let cursor = Option.get (Merkle_search_tree.Cursor.at position source) in
+      Alcotest.(check int) "cursor position" position (Merkle_search_tree.Cursor.position cursor);
+      Alcotest.(check bool)
+        "cursor start" (position = 0)
+        (Merkle_search_tree.Cursor.is_at_start cursor);
+      Alcotest.(check bool)
+        "cursor end"
+        (position = Merkle_search_tree.count source)
+        (Merkle_search_tree.Cursor.is_at_end cursor);
+      Alcotest.(check (option int32))
+        "cursor previous"
+        (if position = 0 then None else List.nth_opt keys (position - 1))
+        (Option.map Merkle_search_tree.entry_key (Merkle_search_tree.Cursor.peek_previous cursor));
+      Alcotest.(check (option int32))
+        "cursor next" (List.nth_opt keys position)
+        (Option.map Merkle_search_tree.entry_key (Merkle_search_tree.Cursor.peek_next cursor)))
+    (List.init (Merkle_search_tree.count source + 1) Fun.id);
+  Alcotest.(check int)
+    "cursor lower bound" 1
+    (Merkle_search_tree.Cursor.position (Merkle_search_tree.Cursor.lower_bound (-5l) source));
+  Alcotest.(check int)
+    "cursor upper bound" 2
+    (Merkle_search_tree.Cursor.position (Merkle_search_tree.Cursor.upper_bound 0l source));
+  let exact, found = Merkle_search_tree.Cursor.exact 0l source in
+  Alcotest.(check bool) "cursor exact hit" true found;
+  let miss, found = Merkle_search_tree.Cursor.exact 5l source in
+  Alcotest.(check bool) "cursor exact miss" false found;
+  Alcotest.(check int) "cursor exact miss rank" 2 (Merkle_search_tree.Cursor.position miss);
+  let changed =
+    Option.get (Result.get_ok (Merkle_search_tree.Cursor.set_next_value (Some "b") exact))
+  in
+  Alcotest.(check (option (option string)))
+    "cursor changed value" (Some (Some "b"))
+    (Merkle_search_tree.find_opt 0l (Merkle_search_tree.Cursor.snapshot changed));
+  Alcotest.(check (option (option string)))
+    "cursor source value" (Some None)
+    (Merkle_search_tree.find_opt 0l source);
+  let inserted =
+    Result.get_ok
+      (Merkle_search_tree.Cursor.insert 5l (Some "five")
+         (Merkle_search_tree.Cursor.lower_bound 5l source))
+  in
+  Alcotest.(check int) "cursor insertion position" 3 (Merkle_search_tree.Cursor.position inserted);
+  Alcotest.(check (list int32))
+    "cursor insertion keys" [ -10l; 0l; 5l; 10l ]
+    (List.map Merkle_search_tree.entry_key
+       (Merkle_search_tree.to_list (Merkle_search_tree.Cursor.snapshot inserted)));
+  let restored = Option.get (Result.get_ok (Merkle_search_tree.Cursor.delete_previous inserted)) in
+  Alcotest.(check string)
+    "cursor restored root"
+    (Merkle_encoding.digest_hex (Merkle_search_tree.root_digest source))
+    (Merkle_encoding.digest_hex
+       (Merkle_search_tree.root_digest (Merkle_search_tree.Cursor.snapshot restored)));
+  Alcotest.(check bool)
+    "cursor invalid rank" true
+    (Option.is_none (Merkle_search_tree.Cursor.at 4 source));
+  Alcotest.(check bool)
+    "cursor before start" true
+    (Option.is_none
+       (Merkle_search_tree.Cursor.move_previous (Merkle_search_tree.Cursor.start source)));
+  Alcotest.(check bool)
+    "cursor after end" true
+    (Option.is_none (Merkle_search_tree.Cursor.move_next (Merkle_search_tree.Cursor.at_end source)));
+  Alcotest.(check bool)
+    "cursor duplicate" true
+    (Result.is_error (Merkle_search_tree.Cursor.insert 0l (Some "duplicate") exact));
+  Alcotest.(check bool)
+    "cursor wrong gap" true
+    (Result.is_error
+       (Merkle_search_tree.Cursor.insert 5l (Some "wrong gap")
+          (Merkle_search_tree.Cursor.start source)));
+  let rank_keys =
+    List.filter
+      (fun key -> Int32.rem key 7l <> 0l)
+      (List.init 1001 (fun i -> Int32.of_int (i - 500)))
+  in
+  let rank_tree =
+    Result.get_ok
+      (Merkle_search_tree.of_list policy
+         (List.map (fun key -> (key, Some (Int32.to_string key))) rank_keys))
+  in
+  List.iter
+    (fun probe ->
+      let rank = List.length (List.filter (fun key -> Int32.compare key probe < 0) rank_keys) in
+      let found = List.nth_opt rank_keys rank = Some probe in
+      Alcotest.(check int)
+        "cursor model lower rank" rank
+        (Merkle_search_tree.Cursor.position (Merkle_search_tree.Cursor.lower_bound probe rank_tree));
+      Alcotest.(check int)
+        "cursor model upper rank"
+        (rank + if found then 1 else 0)
+        (Merkle_search_tree.Cursor.position (Merkle_search_tree.Cursor.upper_bound probe rank_tree));
+      let searched, actual_found = Merkle_search_tree.Cursor.exact probe rank_tree in
+      Alcotest.(check int)
+        "cursor model exact rank" rank
+        (Merkle_search_tree.Cursor.position searched);
+      Alcotest.(check bool) "cursor model exact presence" found actual_found)
+    (List.init 101 (fun i -> Int32.of_int (-550 + (i * 11))))
+
 let map_model_property =
   let generator = QCheck.(list (pair (int_bound 63) (int_range (-10_000) 10_000))) in
   QCheck.Test.make ~count:200 ~name:"HAMT agrees with a mutable finite-map model" generator
@@ -628,6 +740,7 @@ let () =
           Alcotest.test_case "Patricia cursors" `Quick test_patricia_cursors;
           Alcotest.test_case "concurrent snapshots" `Quick test_concurrent_snapshot_facade;
           Alcotest.test_case "Merkle golden wire" `Quick test_merkle_golden_wire;
+          Alcotest.test_case "Merkle cursors" `Quick test_merkle_cursors;
           Alcotest.test_case "Merkle persistence and proofs" `Quick
             test_merkle_persistence_and_proofs;
           Alcotest.test_case "Merkle three-way merge" `Quick test_merkle_three_way_merge;

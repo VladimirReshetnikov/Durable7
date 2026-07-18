@@ -268,3 +268,152 @@ let validate tree =
   | Ok rebuilt ->
       if Merkle_encoding.digest_equal (root_digest tree) (root_digest rebuilt) then Ok ()
       else Error "Merkle root does not match its canonical contents"
+
+let entry_at_rank requested_rank tree =
+  if requested_rank < 0 || requested_rank >= count tree then None
+  else
+    let rec descend rank node = scan rank node 0
+    and scan rank node index =
+      let entry_count = Array.length node.entries in
+      if index > entry_count then None
+      else
+        let child = node.children.(index) in
+        let child_count = match child with None -> 0 | Some value -> value.node_count in
+        if rank < child_count then Option.bind child (descend rank)
+        else if index = entry_count then None
+        else if rank = child_count then
+          let entry = node.entries.(index) in
+          Some { key = entry.stored_key; value = entry.stored_value }
+        else scan (rank - child_count - 1) node (index + 1)
+    in
+    Option.bind tree.root (descend requested_rank)
+
+let lower_bound_rank key tree =
+  let rec descend rank = function
+    | None -> (rank, false)
+    | Some node ->
+        let rec search low high =
+          if low >= high then low
+          else
+            let middle = (low + high) / 2 in
+            if Merkle_encoding.compare tree.tree_policy node.entries.(middle).stored_key key < 0
+            then search (middle + 1) high
+            else search low middle
+        in
+        let position = search 0 (Array.length node.entries) in
+        let preceding = ref rank in
+        for index = 0 to position - 1 do
+          preceding :=
+            !preceding
+            + (match node.children.(index) with None -> 0 | Some child -> child.node_count)
+            + 1
+        done;
+        let found =
+          position < Array.length node.entries
+          && Merkle_encoding.compare tree.tree_policy node.entries.(position).stored_key key = 0
+        in
+        if found then
+          ( (!preceding
+            + match node.children.(position) with None -> 0 | Some child -> child.node_count),
+            true )
+        else descend !preceding node.children.(position)
+  in
+  descend 0 tree.root
+
+let cursor_tree_count = count
+let cursor_tree_add = add
+let cursor_tree_set = set
+let cursor_tree_remove = remove
+
+module Cursor = struct
+  type ('key, 'value) cursor = { tree : ('key, 'value) t; position : int }
+
+  let start tree = { tree; position = 0 }
+
+  let at position tree =
+    if position < 0 || position > count tree then None else Some { tree; position }
+
+  let at_end tree = { tree; position = count tree }
+
+  let lower_bound key tree =
+    let position, _ = lower_bound_rank key tree in
+    { tree; position }
+
+  let upper_bound key tree =
+    let position, found = lower_bound_rank key tree in
+    { tree; position = (position + if found then 1 else 0) }
+
+  let exact key tree =
+    let position, found = lower_bound_rank key tree in
+    ({ tree; position }, found)
+
+  let count cursor = cursor_tree_count cursor.tree
+  let position cursor = cursor.position
+  let is_at_start cursor = cursor.position = 0
+  let is_at_end cursor = cursor.position = count cursor
+
+  let peek_previous cursor =
+    if is_at_start cursor then None else entry_at_rank (cursor.position - 1) cursor.tree
+
+  let peek_next cursor = entry_at_rank cursor.position cursor.tree
+
+  let move_previous cursor =
+    if is_at_start cursor then None else Some { cursor with position = cursor.position - 1 }
+
+  let move_next cursor =
+    if is_at_end cursor then None else Some { cursor with position = cursor.position + 1 }
+
+  let seek position cursor =
+    if position < 0 || position > count cursor then None
+    else if position = cursor.position then Some cursor
+    else Some { cursor with position }
+
+  let insert key value cursor =
+    let expected, found = lower_bound_rank key cursor.tree in
+    if found then Error "the Merkle key is already present"
+    else if expected <> cursor.position then
+      Error
+        (Printf.sprintf "the key belongs at gap %d, not at the current gap %d" expected
+           cursor.position)
+    else
+      match cursor_tree_add key value cursor.tree with
+      | Error message -> Error message
+      | Ok tree -> Ok { tree; position = cursor.position + 1 }
+
+  let set key value cursor =
+    let expected, found = lower_bound_rank key cursor.tree in
+    if expected <> cursor.position then
+      Error
+        (Printf.sprintf "the key belongs at gap %d, not at the current gap %d" expected
+           cursor.position)
+    else
+      match cursor_tree_set key value cursor.tree with
+      | Error message -> Error message
+      | Ok tree -> Ok { tree; position = (cursor.position + if found then 0 else 1) }
+
+  let set_next_value value cursor =
+    match peek_next cursor with
+    | None -> Ok None
+    | Some entry -> (
+        match cursor_tree_set entry.key value cursor.tree with
+        | Error message -> Error message
+        | Ok tree -> Ok (Some { cursor with tree }))
+
+  let delete_previous cursor =
+    match peek_previous cursor with
+    | None -> Ok None
+    | Some entry -> (
+        match cursor_tree_remove entry.key cursor.tree with
+        | Error message -> Error message
+        | Ok tree -> Ok (Some { tree; position = cursor.position - 1 }))
+
+  let delete_next cursor =
+    match peek_next cursor with
+    | None -> Ok None
+    | Some entry -> (
+        match cursor_tree_remove entry.key cursor.tree with
+        | Error message -> Error message
+        | Ok tree -> Ok (Some { cursor with tree }))
+
+  let snapshot cursor = cursor.tree
+end
