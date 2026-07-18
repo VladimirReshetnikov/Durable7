@@ -364,6 +364,440 @@ cleanup:
     return status;
 }
 
+#endif
+
+static ft_status ft_canonical_compare(
+    const ft_canonical_policy_rep* policy,
+    const void* left,
+    const void* right,
+    int* comparison);
+static bool ft_canonical_set_valid(const ft_canonical_sorted_set* set);
+
+static ft_status ft_canonical_cursor_bound(
+    const ft_canonical_sorted_set* set,
+    const void* value,
+    bool upper_bound,
+    size_t* position,
+    bool* found)
+{
+    if (!ft_canonical_set_valid(set) || value == NULL || position == NULL || found == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    size_t rank = 0;
+    ft_canonical_node* node = set->root;
+    *found = false;
+    while (node != NULL) {
+        int comparison = 0;
+        ft_status status = ft_canonical_compare(set->policy, value, node->value->bytes, &comparison);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+        const size_t left_count = node->left == NULL ? 0 : node->left->count;
+        if (comparison == 0) {
+            if (rank > SIZE_MAX - left_count ||
+                (upper_bound && rank + left_count == SIZE_MAX)) {
+                return FT_STATUS_OVERFLOW;
+            }
+            rank += left_count + (upper_bound ? 1u : 0u);
+            *found = true;
+            break;
+        }
+        if (comparison < 0) {
+            node = node->left;
+        } else {
+            if (left_count == SIZE_MAX || rank > SIZE_MAX - left_count - 1u) {
+                return FT_STATUS_OVERFLOW;
+            }
+            rank += left_count + 1u;
+            node = node->right;
+        }
+    }
+    *position = rank;
+    return FT_STATUS_OK;
+}
+
+static const void* ft_canonical_cursor_item_at(
+    const ft_canonical_sorted_set* set,
+    size_t position)
+{
+    ft_canonical_node* node = set->root;
+    while (node != NULL) {
+        const size_t left_count = node->left == NULL ? 0 : node->left->count;
+        if (position < left_count) {
+            node = node->left;
+        } else if (position == left_count) {
+            return node->value->bytes;
+        } else {
+            position -= left_count + 1u;
+            node = node->right;
+        }
+    }
+    return NULL;
+}
+
+static bool ft_canonical_cursor_is_valid(const ft_canonical_sorted_set_cursor* cursor)
+{
+    return cursor != NULL && ft_canonical_set_valid(&cursor->set) &&
+        cursor->position <= ft_canonical_sorted_set_size(&cursor->set);
+}
+
+static ft_status ft_canonical_cursor_stage(
+    const ft_canonical_sorted_set* set,
+    size_t position,
+    ft_canonical_sorted_set_cursor* result)
+{
+    (void)memset(result, 0, sizeof(*result));
+    ft_status status = ft_canonical_sorted_set_copy(set, &result->set);
+    if (status == FT_STATUS_OK) {
+        result->position = position;
+    }
+    return status;
+}
+
+static void ft_canonical_cursor_publish(
+    const ft_canonical_sorted_set_cursor* source,
+    ft_canonical_sorted_set_cursor* staged,
+    ft_canonical_sorted_set_cursor* result)
+{
+    if (result == source) {
+        ft_canonical_sorted_set_cursor_dispose(result);
+    }
+    ft_canonical_sorted_set_cursor_move(result, staged);
+}
+
+static ft_status ft_canonical_cursor_publish_set(
+    const ft_canonical_sorted_set_cursor* source,
+    ft_canonical_sorted_set* set,
+    size_t position,
+    ft_canonical_sorted_set_cursor* result)
+{
+    ft_canonical_sorted_set_cursor staged;
+    (void)memset(&staged, 0, sizeof(staged));
+    ft_canonical_sorted_set_move(&staged.set, set);
+    staged.position = position;
+    ft_canonical_cursor_publish(source, &staged, result);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_canonical_sorted_set_get_cursor(
+    const ft_canonical_sorted_set* set,
+    size_t position,
+    ft_canonical_sorted_set_cursor* result)
+{
+    if (!ft_canonical_set_valid(set) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (position > ft_canonical_sorted_set_size(set)) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_canonical_cursor_stage(set, position, result);
+}
+
+static ft_status ft_canonical_get_bound_cursor(
+    const ft_canonical_sorted_set* set,
+    const void* value,
+    bool upper_bound,
+    bool* found,
+    ft_canonical_sorted_set_cursor* result)
+{
+    if (!ft_canonical_set_valid(set) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    size_t position = 0;
+    bool located = false;
+    ft_status status = ft_canonical_cursor_bound(set, value, upper_bound, &position, &located);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_canonical_sorted_set_cursor staged;
+    status = ft_canonical_cursor_stage(set, position, &staged);
+    if (status == FT_STATUS_OK) {
+        if (found != NULL) {
+            *found = located;
+        }
+        ft_canonical_sorted_set_cursor_move(result, &staged);
+    }
+    return status;
+}
+
+ft_status ft_canonical_sorted_set_get_cursor_lower_bound(
+    const ft_canonical_sorted_set* set,
+    const void* value,
+    ft_canonical_sorted_set_cursor* result)
+{
+    return ft_canonical_get_bound_cursor(set, value, false, NULL, result);
+}
+
+ft_status ft_canonical_sorted_set_get_cursor_upper_bound(
+    const ft_canonical_sorted_set* set,
+    const void* value,
+    ft_canonical_sorted_set_cursor* result)
+{
+    return ft_canonical_get_bound_cursor(set, value, true, NULL, result);
+}
+
+ft_status ft_canonical_sorted_set_get_cursor_at_item(
+    const ft_canonical_sorted_set* set,
+    const void* value,
+    bool* found,
+    ft_canonical_sorted_set_cursor* result)
+{
+    return found == NULL
+        ? FT_STATUS_INVALID_ARGUMENT
+        : ft_canonical_get_bound_cursor(set, value, false, found, result);
+}
+
+ft_status ft_canonical_sorted_set_cursor_copy(
+    const ft_canonical_sorted_set_cursor* source,
+    ft_canonical_sorted_set_cursor* destination)
+{
+    if (!ft_canonical_cursor_is_valid(source) || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (source == destination) {
+        return FT_STATUS_OK;
+    }
+    return ft_canonical_cursor_stage(&source->set, source->position, destination);
+}
+
+void ft_canonical_sorted_set_cursor_move(
+    ft_canonical_sorted_set_cursor* destination,
+    ft_canonical_sorted_set_cursor* source)
+{
+    if (destination == NULL || source == NULL || destination == source) {
+        return;
+    }
+    (void)memset(destination, 0, sizeof(*destination));
+    ft_canonical_sorted_set_move(&destination->set, &source->set);
+    destination->position = source->position;
+    source->position = 0;
+}
+
+void ft_canonical_sorted_set_cursor_dispose(ft_canonical_sorted_set_cursor* cursor)
+{
+    if (cursor != NULL) {
+        ft_canonical_sorted_set_dispose(&cursor->set);
+        (void)memset(cursor, 0, sizeof(*cursor));
+    }
+}
+
+bool ft_canonical_sorted_set_cursor_valid(const ft_canonical_sorted_set_cursor* cursor)
+{
+    return ft_canonical_cursor_is_valid(cursor);
+}
+
+bool ft_canonical_sorted_set_cursor_empty(const ft_canonical_sorted_set_cursor* cursor)
+{
+    return !ft_canonical_cursor_is_valid(cursor) || ft_canonical_sorted_set_empty(&cursor->set);
+}
+
+size_t ft_canonical_sorted_set_cursor_size(const ft_canonical_sorted_set_cursor* cursor)
+{
+    return ft_canonical_cursor_is_valid(cursor) ? ft_canonical_sorted_set_size(&cursor->set) : 0;
+}
+
+size_t ft_canonical_sorted_set_cursor_position(const ft_canonical_sorted_set_cursor* cursor)
+{
+    return ft_canonical_cursor_is_valid(cursor) ? cursor->position : 0;
+}
+
+ft_status ft_canonical_sorted_set_cursor_is_at_start(
+    const ft_canonical_sorted_set_cursor* cursor,
+    bool* result)
+{
+    if (!ft_canonical_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    *result = cursor->position == 0;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_canonical_sorted_set_cursor_is_at_end(
+    const ft_canonical_sorted_set_cursor* cursor,
+    bool* result)
+{
+    if (!ft_canonical_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    *result = cursor->position == ft_canonical_sorted_set_size(&cursor->set);
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_canonical_cursor_peek(
+    const ft_canonical_sorted_set_cursor* cursor,
+    size_t position,
+    bool* found,
+    const void** value_ref)
+{
+    if (!ft_canonical_cursor_is_valid(cursor) || found == NULL || value_ref == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const void* value = ft_canonical_cursor_item_at(&cursor->set, position);
+    *found = value != NULL;
+    if (value != NULL) {
+        *value_ref = value;
+    }
+    return FT_STATUS_OK;
+}
+
+ft_status ft_canonical_sorted_set_cursor_try_peek_previous_ref(
+    const ft_canonical_sorted_set_cursor* cursor,
+    bool* found,
+    const void** value_ref)
+{
+    if (!ft_canonical_cursor_is_valid(cursor) || found == NULL || value_ref == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        *found = false;
+        return FT_STATUS_OK;
+    }
+    return ft_canonical_cursor_peek(cursor, cursor->position - 1u, found, value_ref);
+}
+
+ft_status ft_canonical_sorted_set_cursor_try_peek_next_ref(
+    const ft_canonical_sorted_set_cursor* cursor,
+    bool* found,
+    const void** value_ref)
+{
+    return ft_canonical_cursor_peek(
+        cursor,
+        cursor == NULL ? 0 : cursor->position,
+        found,
+        value_ref);
+}
+
+ft_status ft_canonical_sorted_set_cursor_seek_rank(
+    const ft_canonical_sorted_set_cursor* cursor,
+    size_t position,
+    ft_canonical_sorted_set_cursor* result)
+{
+    if (!ft_canonical_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (position > ft_canonical_sorted_set_size(&cursor->set)) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    if (result == cursor && position == cursor->position) {
+        return FT_STATUS_OK;
+    }
+    ft_canonical_sorted_set_cursor staged;
+    ft_status status = ft_canonical_cursor_stage(&cursor->set, position, &staged);
+    if (status == FT_STATUS_OK) {
+        ft_canonical_cursor_publish(cursor, &staged, result);
+    }
+    return status;
+}
+
+ft_status ft_canonical_sorted_set_cursor_move_previous(
+    const ft_canonical_sorted_set_cursor* cursor,
+    ft_canonical_sorted_set_cursor* result)
+{
+    if (!ft_canonical_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        return ft_canonical_sorted_set_empty(&cursor->set) ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_canonical_sorted_set_cursor_seek_rank(cursor, cursor->position - 1u, result);
+}
+
+ft_status ft_canonical_sorted_set_cursor_move_next(
+    const ft_canonical_sorted_set_cursor* cursor,
+    ft_canonical_sorted_set_cursor* result)
+{
+    if (!ft_canonical_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_canonical_sorted_set_size(&cursor->set);
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_canonical_sorted_set_cursor_seek_rank(cursor, cursor->position + 1u, result);
+}
+
+ft_status ft_canonical_sorted_set_cursor_add(
+    const ft_canonical_sorted_set_cursor* cursor,
+    const void* value,
+    ft_canonical_sorted_set_cursor* result)
+{
+    if (!ft_canonical_cursor_is_valid(cursor) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    size_t position = 0;
+    bool found = false;
+    ft_status status = ft_canonical_cursor_bound(&cursor->set, value, false, &position, &found);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    if (position == SIZE_MAX) {
+        return FT_STATUS_OVERFLOW;
+    }
+    ft_canonical_sorted_set edited;
+    status = ft_canonical_sorted_set_add(&cursor->set, value, &edited);
+    return status == FT_STATUS_OK
+        ? ft_canonical_cursor_publish_set(cursor, &edited, position + 1u, result)
+        : status;
+}
+
+static ft_status ft_canonical_cursor_delete_at(
+    const ft_canonical_sorted_set_cursor* cursor,
+    size_t rank,
+    size_t position,
+    ft_canonical_sorted_set_cursor* result)
+{
+    const void* value = ft_canonical_cursor_item_at(&cursor->set, rank);
+    if (value == NULL) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_canonical_sorted_set edited;
+    ft_status status = ft_canonical_sorted_set_remove(&cursor->set, value, &edited);
+    return status == FT_STATUS_OK
+        ? ft_canonical_cursor_publish_set(cursor, &edited, position, result)
+        : status;
+}
+
+ft_status ft_canonical_sorted_set_cursor_delete_previous(
+    const ft_canonical_sorted_set_cursor* cursor,
+    ft_canonical_sorted_set_cursor* result)
+{
+    if (!ft_canonical_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        return ft_canonical_sorted_set_empty(&cursor->set) ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_canonical_cursor_delete_at(
+        cursor,
+        cursor->position - 1u,
+        cursor->position - 1u,
+        result);
+}
+
+ft_status ft_canonical_sorted_set_cursor_delete_next(
+    const ft_canonical_sorted_set_cursor* cursor,
+    ft_canonical_sorted_set_cursor* result)
+{
+    if (!ft_canonical_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_canonical_sorted_set_size(&cursor->set);
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_canonical_cursor_delete_at(cursor, cursor->position, cursor->position, result);
+}
+
+ft_status ft_canonical_sorted_set_cursor_snapshot(
+    const ft_canonical_sorted_set_cursor* cursor,
+    ft_canonical_sorted_set* result)
+{
+    return !ft_canonical_cursor_is_valid(cursor) || result == NULL
+        ? FT_STATUS_INVALID_ARGUMENT
+        : ft_canonical_sorted_set_copy(&cursor->set, result);
+}
+
+#ifdef _WIN32
 static ft_status ft_canonical_random(
     const ft_canonical_policy_config* config,
     unsigned char* destination,

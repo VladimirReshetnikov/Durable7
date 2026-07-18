@@ -1174,6 +1174,98 @@ static ft_status plain_rank_hash(const void* value, uint64_t* rank_hash, void* c
     return FT_STATUS_OK;
 }
 
+static void test_cursor_rank_policy_and_persistent_edits(void)
+{
+    ft_canonical_policy_config config;
+    ft_canonical_policy policy;
+    ft_canonical_sorted_set set;
+    ft_canonical_sorted_set snapshot;
+    ft_canonical_sorted_set_cursor cursor;
+    ft_canonical_sorted_set_cursor copy;
+    test_value values[] = {
+        { 30, 300, NULL },
+        { 10, 100, NULL },
+        { 20, 200, NULL }
+    };
+    test_value query = make_value(20, 999);
+    test_value absent = make_value(25, 250);
+    test_value inserted = make_value(25, 251);
+    const void* value_ref = NULL;
+    bool found = false;
+    bool at_boundary = false;
+
+    ft_canonical_policy_config_init(
+        &config,
+        sizeof(test_value),
+        &g_test_value_type_identity,
+        plain_compare,
+        plain_rank_hash,
+        NULL);
+    REQUIRE_STATUS(ft_canonical_policy_create_seeded(&policy, &config, 4815162342ULL), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_canonical_sorted_set_from_array(&set, &policy, values, 3), FT_STATUS_OK);
+
+    REQUIRE_STATUS(
+        ft_canonical_sorted_set_get_cursor_at_item(&set, &query, &found, &cursor),
+        FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(ft_canonical_sorted_set_cursor_position(&cursor) == 1);
+    REQUIRE_STATUS(
+        ft_canonical_sorted_set_cursor_try_peek_next_ref(&cursor, &found, &value_ref),
+        FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(((const test_value*)value_ref)->representative == 200);
+
+    REQUIRE_STATUS(ft_canonical_sorted_set_cursor_copy(&cursor, &copy), FT_STATUS_OK);
+    ft_canonical_sorted_set_dispose(&set);
+    ft_canonical_policy_dispose(&policy);
+    REQUIRE_STATUS(
+        ft_canonical_sorted_set_cursor_try_peek_next_ref(&copy, &found, &value_ref),
+        FT_STATUS_OK);
+    REQUIRE(found && ((const test_value*)value_ref)->key == 20);
+
+    REQUIRE_STATUS(
+        ft_canonical_sorted_set_cursor_add(&cursor, &inserted, &cursor),
+        FT_STATUS_OK);
+    REQUIRE(ft_canonical_sorted_set_cursor_position(&cursor) == 3);
+    REQUIRE(ft_canonical_sorted_set_cursor_size(&cursor) == 4);
+    REQUIRE_STATUS(
+        ft_canonical_sorted_set_cursor_try_peek_previous_ref(&cursor, &found, &value_ref),
+        FT_STATUS_OK);
+    REQUIRE(found && ((const test_value*)value_ref)->representative == 251);
+    REQUIRE_STATUS(ft_canonical_sorted_set_cursor_snapshot(&cursor, &snapshot), FT_STATUS_OK);
+    REQUIRE(ft_canonical_sorted_set_size(&snapshot) == 4);
+
+    REQUIRE_STATUS(
+        ft_canonical_sorted_set_cursor_delete_previous(&cursor, &cursor),
+        FT_STATUS_OK);
+    REQUIRE(ft_canonical_sorted_set_cursor_position(&cursor) == 2);
+    REQUIRE(ft_canonical_sorted_set_cursor_size(&cursor) == 3);
+    REQUIRE_STATUS(
+        ft_canonical_sorted_set_cursor_try_peek_next_ref(&cursor, &found, &value_ref),
+        FT_STATUS_OK);
+    REQUIRE(found && ((const test_value*)value_ref)->key == 30);
+
+    ft_canonical_sorted_set_cursor_dispose(&cursor);
+    REQUIRE_STATUS(
+        ft_canonical_sorted_set_get_cursor_at_item(&snapshot, &absent, &found, &cursor),
+        FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(ft_canonical_sorted_set_cursor_position(&cursor) == 2);
+    REQUIRE_STATUS(ft_canonical_sorted_set_cursor_seek_rank(&cursor, 0, &cursor), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_canonical_sorted_set_cursor_is_at_start(&cursor, &at_boundary), FT_STATUS_OK);
+    REQUIRE(at_boundary);
+    REQUIRE_STATUS(
+        ft_canonical_sorted_set_cursor_move_previous(&cursor, &cursor),
+        FT_STATUS_OUT_OF_RANGE);
+    REQUIRE_STATUS(
+        ft_canonical_sorted_set_cursor_seek_rank(&cursor, 5, &cursor),
+        FT_STATUS_OUT_OF_RANGE);
+
+    ft_canonical_sorted_set_cursor_dispose(&copy);
+    ft_canonical_sorted_set_cursor_dispose(&cursor);
+    ft_canonical_sorted_set_dispose(&snapshot);
+}
+
 typedef struct concurrent_context {
     const ft_canonical_sorted_set* set;
     bool success;
@@ -1306,6 +1398,7 @@ int main(void)
     run_test("canonical randomized histories and snapshots", test_randomized_histories_and_snapshots);
     run_test("canonical algebra relations aliasing and sharing", test_algebra_relations_aliasing_and_sharing);
     run_test("canonical allocation and callback atomicity", test_allocation_and_callback_failure_atomicity);
+    run_test("canonical cursor rank policy and persistent edits", test_cursor_rank_policy_and_persistent_edits);
     run_test("canonical concurrent digest copy and readers", test_concurrent_digest_copy_and_readers);
     if (g_failures != 0) {
         (void)fprintf(stderr, "%d failure(s)\n", g_failures);

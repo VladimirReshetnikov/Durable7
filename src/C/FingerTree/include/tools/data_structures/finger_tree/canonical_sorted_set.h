@@ -123,6 +123,11 @@ typedef struct ft_canonical_sorted_set {
     ft_canonical_node* root;
 } ft_canonical_sorted_set;
 
+typedef struct ft_canonical_sorted_set_cursor {
+    ft_canonical_sorted_set set;
+    size_t position;
+} ft_canonical_sorted_set_cursor;
+
 /* Sets are immutable after publication. Independently owned handles may be
  * copied and read concurrently subject to the callback contract above. Moving,
  * disposing, or otherwise writing the same handle object concurrently requires
@@ -256,6 +261,73 @@ ft_status ft_canonical_sorted_set_validate(
     const ft_canonical_sorted_set* set,
     bool* valid,
     ft_canonical_sorted_set_statistics* statistics);
+
+ft_status ft_canonical_sorted_set_get_cursor(
+    const ft_canonical_sorted_set* set,
+    size_t position,
+    ft_canonical_sorted_set_cursor* result);
+ft_status ft_canonical_sorted_set_get_cursor_lower_bound(
+    const ft_canonical_sorted_set* set,
+    const void* value,
+    ft_canonical_sorted_set_cursor* result);
+ft_status ft_canonical_sorted_set_get_cursor_upper_bound(
+    const ft_canonical_sorted_set* set,
+    const void* value,
+    ft_canonical_sorted_set_cursor* result);
+ft_status ft_canonical_sorted_set_get_cursor_at_item(
+    const ft_canonical_sorted_set* set,
+    const void* value,
+    bool* found,
+    ft_canonical_sorted_set_cursor* result);
+ft_status ft_canonical_sorted_set_cursor_copy(
+    const ft_canonical_sorted_set_cursor* source,
+    ft_canonical_sorted_set_cursor* destination);
+void ft_canonical_sorted_set_cursor_move(
+    ft_canonical_sorted_set_cursor* destination,
+    ft_canonical_sorted_set_cursor* source);
+void ft_canonical_sorted_set_cursor_dispose(ft_canonical_sorted_set_cursor* cursor);
+bool ft_canonical_sorted_set_cursor_valid(const ft_canonical_sorted_set_cursor* cursor);
+bool ft_canonical_sorted_set_cursor_empty(const ft_canonical_sorted_set_cursor* cursor);
+size_t ft_canonical_sorted_set_cursor_size(const ft_canonical_sorted_set_cursor* cursor);
+size_t ft_canonical_sorted_set_cursor_position(const ft_canonical_sorted_set_cursor* cursor);
+ft_status ft_canonical_sorted_set_cursor_is_at_start(
+    const ft_canonical_sorted_set_cursor* cursor,
+    bool* result);
+ft_status ft_canonical_sorted_set_cursor_is_at_end(
+    const ft_canonical_sorted_set_cursor* cursor,
+    bool* result);
+/* Borrowed representative references remain valid while the cursor is retained. */
+ft_status ft_canonical_sorted_set_cursor_try_peek_previous_ref(
+    const ft_canonical_sorted_set_cursor* cursor,
+    bool* found,
+    const void** value_ref);
+ft_status ft_canonical_sorted_set_cursor_try_peek_next_ref(
+    const ft_canonical_sorted_set_cursor* cursor,
+    bool* found,
+    const void** value_ref);
+ft_status ft_canonical_sorted_set_cursor_move_previous(
+    const ft_canonical_sorted_set_cursor* cursor,
+    ft_canonical_sorted_set_cursor* result);
+ft_status ft_canonical_sorted_set_cursor_move_next(
+    const ft_canonical_sorted_set_cursor* cursor,
+    ft_canonical_sorted_set_cursor* result);
+ft_status ft_canonical_sorted_set_cursor_seek_rank(
+    const ft_canonical_sorted_set_cursor* cursor,
+    size_t position,
+    ft_canonical_sorted_set_cursor* result);
+ft_status ft_canonical_sorted_set_cursor_add(
+    const ft_canonical_sorted_set_cursor* cursor,
+    const void* value,
+    ft_canonical_sorted_set_cursor* result);
+ft_status ft_canonical_sorted_set_cursor_delete_previous(
+    const ft_canonical_sorted_set_cursor* cursor,
+    ft_canonical_sorted_set_cursor* result);
+ft_status ft_canonical_sorted_set_cursor_delete_next(
+    const ft_canonical_sorted_set_cursor* cursor,
+    ft_canonical_sorted_set_cursor* result);
+ft_status ft_canonical_sorted_set_cursor_snapshot(
+    const ft_canonical_sorted_set_cursor* cursor,
+    ft_canonical_sorted_set* result);
 
 #ifdef __cplusplus
 }
