@@ -1,9 +1,10 @@
 # Repository-Wide Persistent Cursor Design
 
 - Created (UTC): 2026-07-18T00:59:25Z
-- Repository HEAD: 5a51fc35ce9f5f7a4333d7fc29857af25fd188d3
-- Status: Design proposal; only the rope cursor surfaces identified below are currently shipped
-- Audience: Maintainers and port authors designing persistent navigation and localized editing
+- Repository implementation baseline: 7a3924c116b941cb1e43a902b63f94876bfd251a
+- Status: Implemented semantic contract; all applicable public cursor families ship in all nine
+  language ports, with focused-representation optimizations remaining family-local
+- Audience: Maintainers and port authors maintaining persistent navigation and localized editing
 - Scope: Applicability, semantics, representations, APIs, complexity, validation, and porting of
   cursors across every repository-owned persistent data-structure family
 
@@ -28,16 +29,18 @@ cursor to every immutable type.
 5. `Cursor` is the sole normative API and documentation term. The background below mentions Huet's
    historical name once to explain the concept's origin; subsequent sections use *focused cursor*
    or *edit path* for representations.
-6. The existing C# focused rope cursor and the eight sibling snapshot-plus-gap cursor checkpoints
-   remain the normative shipped surfaces. This proposal generalizes their observable contract but
-   does not retroactively claim their representations or performance for another family or port.
+6. The existing C# focused rope cursor and the eight sibling snapshot-plus-gap rope cursors remain
+   the focused-performance precedent. The broader shipment uses family-local semantic checkpoints;
+   it does not claim the rope representation or performance for another family or port.
 7. Tungsten collections do not need cursors. They remain application-leaf consumers of ordinary
-   repository-general collections and are explicitly excluded from the proposed cursor surface.
+   repository-general collections and are explicitly excluded from the cursor surface.
 
-This proposal is intentionally a design, not a shipment claim. A row marked **public cursor** below
-means that the abstraction is applicable and specified here; it does not mean that the named type
-already exists. Each implementation still requires its own API documentation, tests, measurements
-where performance is claimed, and repository catalog update.
+This document is both the repository-wide design and the normative applicability record for the
+shipped semantic checkpoint tier. A row marked **shipped cursor** below means that all nine language
+ports expose the family-local equivalent. Representation and complexity remain local: most new
+surfaces retain a canonical persistent snapshot plus a validated gap or rank, while C# rope keeps
+its separately proved focused implementation. A future representation change must preserve this
+observable contract and update the affected language documentation before making stronger claims.
 
 ## Background And Repository Context
 
@@ -55,7 +58,7 @@ minimal tree example does not have: cached monoidal measures, balancing, canonic
 content digests, comparer and ownership policies, multiple indexes that must publish atomically,
 and cross-language failure models.
 
-The repository already ships a production instance of the idea:
+The repository's focused-performance precedent is:
 
 - C# `RopeCursor<T>` and `MeasuredRopeCursor<T, TMeasure, TMeasureOps>` use a persistent
   focused-cursor-as-version representation with a bounded 16-element focus, bounded carries, and a
@@ -87,8 +90,8 @@ complexity parity.
 
 ## Non-Goals
 
-- No implementation is authorized merely by this document.
-- No universal reflection- or continuation-based generic cursor is proposed.
+- No representation rewrite or stronger performance claim is authorized merely by this document.
+- No universal reflection- or continuation-based generic cursor is part of the design.
 - No raw private node, digit, sparse label, owner token, hash fragment, lazy suspension, or block
   layout becomes public API.
 - No cursor silently rebases onto an unrelated collection version.
@@ -97,12 +100,11 @@ complexity parity.
 - No arbitrary element editing is added to a semantic heap merely because its private forest can be
   traversed.
 - No worst-case or amortized bound is inherited from a different substrate or language port.
-- No benchmark conclusion is asserted. Performance claims require family-local evidence after an
-  implementation exists.
+- No benchmark conclusion is asserted. Stronger performance claims require family-local evidence.
 
 ## Terminology
 
-| Term | Meaning in this proposal |
+| Term | Meaning in this design |
 | --- | --- |
 | **focus** | The current element, subtree, search result, or gap from whose perspective the rest of the value is represented. |
 | **gap** | A boundary `p` between `[0, p)` and `[p, n)`; valid even for empty, start, and end positions. |
@@ -135,17 +137,16 @@ A public cursor is applicable only when all of the following are true:
    unverified mutable block graph.
 
 When only conditions 3–5 hold for private nodes, an internal focused path may be useful but no
-public cursor is proposed. When a retained root plus a key or index already provides the complete
+public cursor is exposed. When a retained root plus a key or index already provides the complete
 operation with no useful navigation context, the design prefers that simpler value.
 
 ## Repository-Wide Applicability Matrix
 
 The disposition terms are:
 
-- **shipped cursor** — public semantics already exist; retain the current contract;
-- **public cursor** — applicable and recommended for a future public surface;
-- **specialized cursor** — applicable only on the named semantic axis or behind an evidence/API
-  gate; do not expose raw structure;
+- **shipped cursor** — the public semantic checkpoint exists in all nine language ports;
+- **specialized shipped cursor** — the public surface exists only on the named semantic axis and
+  does not expose raw structure;
 - **internal edit path** — useful as a private algorithmic path, not a public abstraction; and
 - **not applicable** — no cursor should be added under the current public contract.
 
@@ -161,26 +162,64 @@ The disposition terms are:
 | Persistent directed graph | not applicable | Cycles and multiple parents prevent one unique reconstructing path. A future traversal state is a graph navigator with visited/frontier state, not this cursor contract. |
 | Persistent indexed map | internal edit path | Paired private paths can publish primary and derived indexes, but there is no single canonical public neighbor axis. |
 | Concurrent hash trie and immutable snapshot view | not applicable | The live structure is mutable/concurrent; its snapshot reduces to the unordered CHAMP decision. A cursor must never imply editable access to a captured generation. |
-| Persistent integer Patricia maps and sets | public cursor | Ascending signed-key order is public and the compressed binary path provides compact reconstructing breadcrumbs. |
-| Merkle search tree | specialized cursor | Ordered key navigation and block-path editing are meaningful, but digest recomputation, canonical codecs, trust boundaries, and block persistence require a dedicated design. |
-| General measured finger tree / measured sequence | public cursor | Gap plus ordered before/after measures; positional or monotone-measure seek; private digit/node contexts remain hidden. |
-| Finger-tree deque | public cursor | Positional gap with neighbor movement and local insertion/deletion; a semantic checkpoint can precede a focused implementation. |
-| Reversible deque | public cursor | Same positional gap in logical orientation; reversing maps `p` to `Count - p` and swaps directional operations. |
-| RRB vector | public cursor | Positional gap plus leaf/path breadcrumbs and relaxed-size tables; especially useful for clustered indexed edits. |
-| Range-update sequence | public cursor | Positional gap, ordered measures, and range/tag operations; breadcrumbs must carry inherited lazy tags and rebuild normalized caches. |
+| Persistent integer Patricia maps and sets | shipped cursor | Ascending signed-key order is public; the shipped tier retains a snapshot plus rank while preserving compressed-tree semantics. |
+| Merkle search tree | specialized shipped cursor | Ordered key navigation and persistent editing ship without exposing block topology; ordinary tree operations retain canonical codecs, digests, trust boundaries, and block-persistence rules. |
+| General measured finger tree / measured sequence | shipped cursor | Gap plus ordered before/after measures; positional or monotone-measure seek; private digit/node contexts remain hidden. |
+| Finger-tree deque | shipped cursor | Positional gap with neighbor movement and local insertion/deletion over a retained persistent snapshot. |
+| Reversible deque | shipped cursor | Same positional gap in logical orientation; reversing maps `p` to `Count - p` and swaps directional operations. |
+| RRB vector | shipped cursor | Positional gap and persistent indexed edits; relaxed-size tables and leaf paths remain private. |
+| Range-update sequence | shipped cursor | Positional gap, ordered measures, and range/tag operations retain the owning collection's lazy-tag semantics. |
 | Rope, measured rope, text rope | shipped cursor | Preserve existing positional, measured, text-unit, branching, snapshot, and port-specific complexity contracts. |
-| Sorted bag, set, and map | public cursor | Comparator-order search location with lower/upper-bound seek, predecessor/successor navigation, and invariant-checked edits. |
-| Canonical zip-zip sorted set | public cursor | Same logical ordered-set cursor; private breadcrumbs additionally maintain deterministic ranks and rotations. |
+| Sorted bag, set, and map | shipped cursor | Comparator-order search location with lower/upper-bound seek, predecessor/successor navigation, and invariant-checked edits. |
+| Canonical zip-zip sorted set | shipped cursor | Same logical ordered-set cursor; ordinary persistent edits maintain deterministic ranks and rotations. |
 | Measured priority queue | internal edit path | Its stored sequence is not a portable public order and arbitrary element editing is not queue semantics. A measured-tree path may remain private; no public cursor ships without a separate occurrence-identity design. |
 | Brodal–Okasaki heap | not applicable | The forest topology is private and unstable under meld/delete-min; minimum access is already the semantic focus. |
-| Priority-search queue | public cursor | Keys define a stable sorted axis; edits may replace priority/value while winner caches are rebuilt. Priority order is a query, not a second cursor order. |
-| Interval tree | public cursor | Nondecreasing low-endpoint order with duplicate-occurrence positions; overlap summaries rebuild through context. |
-| Persistent interval map | public cursor | Unique complete interval key in deterministic interval order; exact-key and augmented-search state publish together. |
-| Persistent chunked bit set | public cursor | Population-rank gap whose next entry is an existing set bit; seek by bit index, rank, or select. Chunk boundaries stay private. |
-| Persistent ordered set and map | public cursor | Insertion/explicit-position gap; edits update sequence and hash index atomically without exposing sparse labels. |
-| Persistent ordered multimap | public cursor | Nested outer key-group and inner value-order gaps; flattened pair movement is derived, not the sole representation. |
+| Priority-search queue | shipped cursor | Keys define a stable sorted axis; edits may replace priority/value while ordinary operations rebuild winner caches. Priority order is a query, not a second cursor order. |
+| Interval tree | shipped cursor | Nondecreasing low-endpoint order with duplicate-occurrence positions; ordinary edits preserve overlap summaries. |
+| Persistent interval map | shipped cursor | Unique complete interval key in deterministic interval order; exact-key and augmented-search state publish together. |
+| Persistent chunked bit set | shipped cursor | Population-rank gap whose next entry is an existing set bit; seek by bit index, rank, or select. Chunk boundaries stay private. |
+| Persistent ordered set and map | shipped cursor | Insertion/explicit-position gap; edits update sequence and hash index atomically without exposing sparse labels. |
+| Persistent ordered multimap | shipped cursor | Nested outer key-group and inner value-order gaps; flattened pair movement is derived, not the sole representation. |
 | Tungsten `PersistentList` and `PersistentAssociation` | not applicable | These application-leaf collections have no cursor requirement; their existing persistent operations remain the complete surface. |
 | Builders, one-way edit sessions, block stores, proofs, packs, and DABA Lite | not applicable | These are mutable lifecycles, persistence support values, authenticated artifacts, or a mutable window—not persistent aggregate values needing cursors. |
+
+## Implementation Status And Shipment Boundary
+
+The semantic checkpoint tier is complete in C#, C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript,
+and Python. “Complete” means the applicable cursor can retain one immutable version, navigate its
+documented semantic axis, perform the family-appropriate persistent edits, return a snapshot, and
+preserve the source and every retained branch. It does not mean that all ports use the same node
+topology or have the same asymptotic constants.
+
+| Shipment group | Public cursor capability | Implementation boundary |
+| --- | --- | --- |
+| Patricia maps and sets | Start/end/rank and signed-key bounds, exact-key result, adjacent peeks and movement, strict insert or put/add, adjacent deletion, snapshot | Ascending signed-key order; 32- and 64-bit maps and sets; no exposure of compressed bit paths. |
+| Measured sequence, deque, reversible deque, RRB vector, Range sequence | Validated positional or measured gaps, adjacent peeks/movement, family-local insert/replace/delete, measure/tag operations where owned, snapshot | Snapshot-plus-gap checkpoints over the existing substrate. Reversal, relaxed sizes, and lazy tags remain collection invariants rather than cursor state visible to callers. |
+| Rope, measured rope, text rope | Positional and measure-aware edit cursors, text-facade preservation, branching snapshots | Existing mature cursor tier; C# retains its focused implementation and siblings retain their documented checkpoints. |
+| Sorted bag/set/map, canonical set, priority-search queue, interval tree/map, chunked bit set | Comparator/order/rank factories, ordered neighbors, duplicate-aware or key-preserving edits, snapshot | The cursor delegates canonical ranks, winner caches, interval summaries, and sparse-word contraction to ordinary persistent operations. |
+| Neutral Ordered set/map/multimap | Explicit-position gaps, equality search where meaningful, group/value navigation for multimap, atomic persistent edits, snapshot | Sequence and CHAMP indexes publish as one facade; private sparse labels never enter the cursor contract. |
+| Merkle search tree | Rank, lower/upper/exact-key factories, ordered neighbors, strict insert/put/value update/delete, authenticated snapshot | Specialized snapshot-plus-rank cursor. Every edit uses the canonical tree operation, so `MST2` bytes, root digest, representative, callback, and failure rules remain unchanged. |
+
+The language surfaces are idiomatic rather than mechanically identical:
+
+| Language | Carrier and ownership model | Primary implementation areas |
+| --- | --- | --- |
+| C# | Immutable cursor classes/readonly values; family-named factories and result carriers | `Tools.DataStructures.Hamt`, `Tools.DataStructures.FingerTree`, and `Tools.DataStructures.Ordered` partial cursor sources. |
+| C | Explicit owned structs/handles; `copy`/`destroy` or family-local `dispose`; producing calls support exact source/result aliasing and failure-atomic publication | HAMT public headers/sources, FingerTree cursor declarations/cores, and `Ordered/ordered_cursor`. |
+| C++ | Immutable value cursors in public headers, with exceptions following owning operations | HAMT headers, FingerTree sequence/ordered-search cursor headers, and Ordered cursor header. |
+| Haskell | Pure opaque cursor values and explicit search-result records; policy construction remains where already required | HAMT modules, FingerTree cursor modules/facades, and `Data.Structures.Ordered.Cursor`. |
+| Kotlin | Immutable cursor classes/data carriers over retained snapshots | HAMT Merkle/Patricia sources, FingerTree sequence/ordered-search sources, and Ordered cursors. |
+| OCaml | Abstract/module-qualified cursor values with `option`/`result` following the local API | `lib/hamt`, `lib/finger_tree`, and `lib/ordered` cursor modules or owning family modules. |
+| Rust | Owned immutable cursor structs over shared persistent storage; moves are enforced by the type system | HAMT modules, FingerTree/Range cursor implementations, and the Ordered `cursors` module. |
+| TypeScript | Immutable exported cursor classes with strict ESM typing | `src/hamt`, `src/finger-tree`, and `src/ordered`. |
+| Python | Typed immutable cursor objects and search result dataclasses | `data_structures.hamt`, `data_structures.finger_tree`, and `data_structures.ordered`. |
+
+The intentionally cursor-free boundary is equally normative. CHAMP and its bag/bimap/multimap/
+relation/patch/indexed-map composites keep lookup paths private because hash enumeration has no
+semantic neighbor. The concurrent trie, graph, measured priority queue, Brodal–Okasaki heap,
+builders, sessions, stores, proofs, numerics, DABA Lite, and all Tungsten collections do not expose
+a cursor. Adding one of those surfaces requires a new applicability decision rather than borrowing
+the APIs shipped here.
 
 ## Shared Public Cursor Contract
 
@@ -657,7 +696,7 @@ states and non-palindromic range insertion.
 
 ### Relaxed Radix-Balanced Vector
 
-`RrbVector<T>` and sibling RRB vectors receive `RrbVectorCursor<T>`, a positional gap cursor. RRB is
+`RrbVector<T>` and sibling RRB vectors ship `RrbVectorCursor<T>`, a positional gap cursor. RRB is
 a particularly good focused-cursor target because one open radix path can serve several nearby indexed
 reads or edits without repeating root descent.
 
@@ -809,7 +848,7 @@ observable template for positional semantics:
 
 C# keeps its selected 16-element focus, 256-element carry flush, prepared-measure fragments, and
 winner-returning snapshot memo. Sibling ports remain correct root-plus-gap checkpoints unless their
-own design, proof, measurements, and documentation select a focused representation. This proposal
+own design, proof, measurements, and documentation select a focused representation. This design
 does not rename current methods, change default-state behavior, add bookmarks/rebase, or widen the
 proven linear-lineage complexity scope.
 
@@ -822,7 +861,7 @@ is the minimum-priority entry. An arbitrary occurrence has no key or handle by w
 survive domain operations, and exposing `ReplaceNext` would turn the queue into a list editor with a
 priority cache. Keep a measured-tree structural cursor private for `TryDequeue` or traversal
 experiments. A future read-only occurrence cursor requires a separate occurrence-identity design and
-consumer evidence; it is not part of the first public tranche.
+consumer evidence; it is not part of the public cursor contract.
 
 #### Brodal–Okasaki heap
 
@@ -879,7 +918,7 @@ measures. The public contract does not reveal which one a port selected.
 
 ### Sorted Bag
 
-`SortedBag<T>` and its language-local multiset siblings receive `SortedBagCursor<T>`.
+`SortedBag<T>` and its language-local multiset siblings ship `SortedBagCursor<T>`.
 
 - `AtRank`, `LowerBound`, `UpperBound`, and exact-range factories preserve the runtime comparer.
 - `Add(item)` always finds the **upper bound** and inserts after all existing comparer-equal
@@ -903,7 +942,7 @@ local persistent-sequence cost. A complete post-seek traversal targets O(n).
 
 ### Sorted Set
 
-`SortedSet<T>` and sibling sorted sets receive `SortedSetCursor<T>`.
+`SortedSet<T>` and sibling sorted sets ship `SortedSetCursor<T>`.
 
 - Exact search is lower bound plus comparer equivalence.
 - `Add(item)` at a miss inserts at that lower-bound gap. At a hit it is an identity-preserving no-op
@@ -969,7 +1008,7 @@ without claiming canonical node topology or zip-tree bounds.
 
 ### Priority-Search Queue
 
-`PrioritySearchQueue<TKey, TPriority, TValue>` receives a **key-order** cursor. Priority is cached
+`PrioritySearchQueue<TKey, TPriority, TValue>` ships a **key-order** cursor. Priority is cached
 augmentation, not a second navigation order.
 
 Factories include exact/lower/upper key, minimum key, end, and optionally `AtMinimumPriority()`. The
@@ -995,7 +1034,7 @@ naive cursor scan must not replace it or claim its output-sensitive pruning boun
 
 ### Interval Tree
 
-`IntervalTree<T>` receives a low-endpoint-ordered cursor. The C# reference promises nondecreasing
+`IntervalTree<T>` ships a low-endpoint-ordered cursor. The C# reference promises nondecreasing
 `Low`, not full lexicographic `(Low, High)` order. Equal-low occurrences keep the facade's defined
 placement order; in the current C# implementation a newly inserted equal-low interval precedes the
 older run. Other ports follow their documented local ordering while preserving their shared
@@ -1029,7 +1068,7 @@ scans must state any additional run cost honestly.
 
 ### Persistent Interval Map
 
-`PersistentIntervalMap<TEndpoint, TValue>` receives a cursor ordered by the unique complete interval
+`PersistentIntervalMap<TEndpoint, TValue>` ships a cursor ordered by the unique complete interval
 key `(Low, High)` under the endpoint policy.
 
 - exact/lower/upper/rank factories use lexicographic interval order;
@@ -1048,7 +1087,7 @@ specific payload decisions.
 
 ### Persistent Chunked Bit Set
 
-`PersistentChunkedBitSet` receives a set-bit cursor. It traverses present bit indexes, not a dense
+`PersistentChunkedBitSet` ships a set-bit cursor. It traverses present bit indexes, not a dense
 Boolean sequence extending to `int.MaxValue`.
 
 Conceptual state:
@@ -1084,7 +1123,7 @@ Enumeration, rank, select, count width, and overflow remain language-local.
 ## Neutral Ordered Composite Designs
 
 The independently owned Ordered family is a particularly strong public-cursor fit because insertion
-and explicit-position order are semantic. Under this proposal it would receive cursors over that
+and explicit-position order are semantic. It ships cursors over that
 order while retaining the hashed membership/key index as an atomic auxiliary root. It never exposes
 sparse stamps or depends on Tungsten.
 
@@ -1124,7 +1163,7 @@ map, multimap-group, and Association APIs must choose these forms consistently.
 
 ### Persistent Ordered Set
 
-`PersistentOrderedSet<T>` receives `PersistentOrderedSetCursor<T>`.
+`PersistentOrderedSet<T>` ships `PersistentOrderedSetCursor<T>`.
 
 Surface additions to the positional protocol are `TrySeekValue(equalValue)`, which places the gap
 before the stored representative, and optional `TryInsert` result forms.
@@ -1478,7 +1517,7 @@ package. Do not introduce a HAMT-to-FingerTree dependency solely to obtain a per
 ## Integer Patricia Cursor Design
 
 `PersistentIntMap<TValue>`, `PersistentIntSet`, `PersistentLongMap<TValue>`, and
-`PersistentLongSet`—plus their sibling names—receive true ordered gap cursors. Signed keys are
+`PersistentLongSet`—plus their sibling names—ship true ordered gap cursors. Signed keys are
 encoded with the existing sign-bit transform, so in-order trie traversal remains ascending signed
 order across minimum, zero, and maximum boundaries.
 
@@ -1657,7 +1696,7 @@ Semantic parity means the same focus, movement, edit, branching, policy, and fai
 does not require identical spelling, carrier representation, allocation profile, or borrowed-value
 rules.
 
-| Language | Recommended public shape | Ownership and result rules |
+| Language | Shipped idiomatic shape | Ownership and result rules |
 | --- | --- | --- |
 | C# | Concrete `XCursor<...>` returned by `GetCursor`/search factories; readonly struct over immutable references when justified, otherwise sealed value-like class; `Snapshot()` | Default struct is explicitly invalid unless a policy-correct empty can be represented. Presence-safe `Try` methods support nullable payloads. Thread-safe memo cells may be used but are not globally required. |
 | C | Opaque or type-erased `x_cursor` owned handle with factory/init, the family's established clone/destroy vocabulary, navigation/edit status functions, and snapshot output; consuming move is optional rather than universal | Callback contexts and policies outlive every related cursor. Exact source/result alias support follows the owning workspace. Output is installed only on success. Peeks may borrow from the owning cursor snapshot under the existing lookup lifetime rule; an owning-copy result is added only when the family needs one. |
@@ -1669,12 +1708,9 @@ rules.
 | TypeScript | Immutable `XCursor<T>` class/value with camel-case factories and `snapshot()` | Entry-shaped results distinguish stored `undefined` from a miss. Runtime hash/measure/comparison policies and isolate-local constraints remain exact. |
 | Python | Typed immutable-style `XCursor` with snake-case factories, presence result objects, and `snapshot()` | Stored `None` is distinct from boundary. Python object mutability caveats remain; cursor persistence protects structure, not caller-mutated payload state. |
 
-Current source types and language-local entry points are indexed by the catalog's
-[fixed-width numerics](../reference/data-structure-catalog.md#fixed-width-integer-numerics),
-[derived/Ordered](../reference/data-structure-catalog.md#derived-persistent-maps-relations-and-sparse-bit-sets),
-[insertion-ordered set](../reference/data-structure-catalog.md#insertion-ordered-persistent-set), and
-family-specific tables. Ordered cursor targets span all nine language roots, whereas numerics span
-C#, OCaml, TypeScript, and Python and are excluded above.
+Current source families and the nine-language availability map are indexed by the catalog's
+[persistent cursor section](../reference/data-structure-catalog.md#persistent-cursor-availability)
+and family-specific tables. Numerics remain excluded even in workspaces that implement them.
 
 `Snapshot` is the conceptual verb because the shipped rope uses it. A language whose collection
 already standardizes on `to_persistent`, `close`, or another unambiguous term may retain that term,
@@ -1877,11 +1913,11 @@ Counters establish work shape; isolated benchmarks decide constant-factor value.
 an amortized proof. Do not run benchmarks as part of routine semantic shipment, and do not advertise
 a focused tier unless it beats or otherwise justifies itself for a named consumer history.
 
-## Cross-Language Parity And Rollout
+## Cross-Language Parity, Shipment, And Evolution
 
 ### Shipment Units
 
-Ship one family at a time. A complete public-cursor shipment unit contains:
+The implementation was delivered one family at a time. Each public-cursor shipment unit contains:
 
 1. locked shared focus/edit/result contract;
 2. C# reference API/source/XML docs or a documented reason another existing family is authoritative;
@@ -1892,37 +1928,57 @@ Ship one family at a time. A complete public-cursor shipment unit contains:
 7. an explicit per-port decision: focused representation, semantic checkpoint, or deferred with
    reason.
 
-Do not add proposed cursor names to current public-entry tables before the relevant implementation
-ships. A semantic checkpoint may port observable behavior without inheriting the C# representation,
-memo cell, callback ceiling, allocation bound, amortization, benchmark result, or node topology.
+The completed checkpoint tier does not inherit the C# rope representation, memo cell, callback
+ceiling, allocation bound, amortization, benchmark result, or node topology. Language-local public
+indexes may name the concrete cursors now; they must keep focused-performance statements scoped to
+the implementations that actually prove them.
 
-### Recommended Sequence
+### Implementation Ledger
 
-1. **Private CHAMP path.** Factor and exhaustively test it behind unchanged public map/set APIs, then
-   adopt it selectively in hash composites. This is an implementation refactor, not a public cursor
-   shipment.
-2. **Patricia cursor.** Ship the smallest true ordered-tree cursor first; fixed key width makes
-   contexts and worst-case bounds unusually crisp.
-3. **Deque and raw measured cursor checkpoints.** Lock the shared gap/measure API without promising a
-   focused representation; use named consumers and counters before optimizing.
-4. **Sorted, interval, bit-set, and priority-search adapters.** Reuse the established semantic
-   kernels while retaining each augmentation and duplicate rule.
-5. **RRB and Range.** Implement their specialized path frames only after the basic sequence model is
-   stable; both require nontrivial balancing metadata.
-6. **Neutral Ordered set/map, then nested multimap.** Stage both indexes atomically and stress
-   relabel branches before exposing public cursors. Add and specify the multimap's ordinary
-   positional group/value operations before claiming cursor-operation parity.
-7. **Merkle cursor.** Prototype canonical dirty closure and prove exact cross-language wire parity
-   before any public surface. Treat this as a trust-boundary feature, not a generic ordered adapter.
-8. **Optional traversal objects.** Graph and Ctrie snapshot traversal require named consumers and
-   separate terminology; they do not block cursor work.
+The branch history is deliberately granular. Every row is a nine-language semantic shipment, in
+the same C#, TypeScript, Python, Rust, Kotlin, Haskell, OCaml, C++, C port order unless the family
+needed additional C core commits.
 
-Existing rope cursors need no rollout phase. Their current API, tests, and performance boundary
-remain authoritative.
+| Phase | Commit span | Result |
+| --- | --- | --- |
+| Design and terminology | `0478c51` through `ee75704` | Exhaustive family audit, shared version/gap/search contract, public term `cursor`, navigation indexes, and explicit Tungsten exclusion. |
+| Patricia | `484eeed` through `8d17039` | Signed 32/64-bit map and set cursors with bound/exact search, persistent edits, rank models, and native ownership rules. |
+| Sequence families | `8f96b2c` through `7001618` | Measured sequence, deque, reversible deque, RRB vector, Range sequence, and retained rope/text cursor alignment. |
+| Ordered-search families | `a057b3e` through `2fdcfbb` | Sorted bag/set/map, canonical set, priority-search queue, interval tree/map, and chunked-bit-set cursors; C used separate core commits for its erased families. |
+| Neutral Ordered | `ae22290` through `e65580f` | Set/map positional cursors and nested multimap group/value cursors with atomic facade publication. |
+| Authenticated Merkle | `222aa39` through `7a3924c` | Specialized ordered snapshot-plus-rank cursors preserving canonical tree edits, exact wire/digest behavior, and each port's failure/ownership channel. |
 
-### Promotion Gates
+The private CHAMP/edit-path decision required no new public type: existing persistent point updates
+already retain and rebuild their path internally. Graph and Ctrie traversal objects remain separate
+future designs with different state and terminology; neither is an incomplete cursor shipment.
 
-A public cursor is ready only when:
+### Validation Evidence
+
+Each phase added deterministic boundary and edit examples plus sorted-sequence or plain-model
+comparisons in every port. Applicable suites cover every gap, lower/upper/exact misses and hits,
+duplicate and wrong-gap edits, retained sources and branches, null-like payloads where supported,
+policy/comparer retention, and recursive invariants. Native C additionally exercises explicit
+ownership, exact source/result aliasing, failure-atomic outputs, strict-warning compilers, and
+sanitizers. Merkle tests verify that insert-then-delete restores the source digest and run alongside
+the existing `MST2`/`MSP2` wire, proof, persistence, merge, and failure suites.
+
+The final Merkle gates passed as follows:
+
+| Language | Evidence on this branch |
+| --- | --- |
+| C# | Eight selected Merkle core/cursor tests. |
+| TypeScript | Strict type checking and ten Merkle tests. |
+| Python | Ruff, strict Mypy, and fourteen Merkle tests. |
+| Rust | Seventeen Merkle tests, rustfmt, and library Clippy; the unsuppressed all-target Clippy lane remains blocked by unrelated pre-existing warnings. |
+| Kotlin | Complete HAMT executable. |
+| Haskell | Complete clean Cabal HAMT suite; only the pre-existing no-op `Typeable` warning remains. |
+| OCaml | Dune `@check`, `@fmt`, and all eighteen HAMT tests. |
+| C++ | Strict Clang Merkle executable with twenty-two tests plus the public-header consumer; the documented libstdc++ 12 `stable_sort` deprecation warning is suppressed for this Clang 21 lane. |
+| C | Strict GCC and Clang ASan/UBSan builds with all twenty-four Merkle core/wire/persistence/cursor tests. |
+
+### Future Focused-Representation Promotion Gates
+
+The shipped semantic checkpoints already satisfy the public behavior gate:
 
 - the focus position survives empty, boundary, duplicate, removal, and branching histories without
   ambiguity;
@@ -1932,7 +1988,8 @@ A public cursor is ready only when:
 - C ownership and all language-local lifetime constraints are complete;
 - cross-language golden artifacts pass where bytes/hashes are shared.
 
-An optimized focused representation additionally requires a proof-scoped complexity statement,
+Replacing a checkpoint with an optimized focused representation additionally requires a
+proof-scoped complexity statement,
 operation counters, retained-memory analysis, and isolated benchmark evidence for a named history.
 Failure to clear that gate leaves the correct root-plus-position cursor in place; it is not a reason
 to weaken semantics.
@@ -1957,11 +2014,11 @@ to weaken semantics.
 | Selection/range objects | Deferred; ranges are operations relative to one gap where specified. |
 | Mutable/transient cursor | Outside persistent cursor scope and terminology. |
 | Cross-language representation parity | Not required; observable semantics and honest local docs are required. |
-| Tungsten collections | Excluded; no cursor is proposed or required. |
+| Tungsten collections | Excluded; no cursor is shipped or required. |
 
 ## Coverage Audit
 
-This proposal covers every persistent family in the current
+This design and shipment audit covers every persistent family in the current
 [data-structure catalog](../reference/data-structure-catalog.md):
 
 - numerics are explicitly excluded as scalars;
@@ -1969,7 +2026,7 @@ This proposal covers every persistent family in the current
   public/private/no-cursor decision;
 - every FingerTree, sequence, sorted, priority, interval, RRB, Range, rope, bit-set, canonical,
   DABA, and builder surface has a design or exclusion;
-- every neutral Ordered set/map/multimap has a proposed atomic semantic-cursor design; and
+- every neutral Ordered set/map/multimap has a shipped atomic semantic cursor; and
 - Tungsten application collections are explicitly excluded; their repository-general substrates
   retain their own cursor decisions.
 

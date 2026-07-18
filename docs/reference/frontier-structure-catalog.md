@@ -1,6 +1,6 @@
 # Frontier Structure Catalog
 
-- Status: Current-state catalog - shipped Axis 1 cores, nine-language semantic families including OCaml checkpoints, shipped C# Axis 2 C1/C2/C3/T2, cross-language cursor/session checkpoints, and remaining frontier candidates
+- Status: Current-state catalog - shipped Axis 1 cores, nine-language semantic families including OCaml checkpoints, complete applicable cross-language semantic cursor tier, shipped C# Axis 2 C1/C2/C3/T2, cross-language sessions, and remaining frontier candidates
 - Created (UTC): 2026-07-11T03:31:23Z
 - Repository HEAD: f40e301e8faf26d748f33d8546d7d9216657301e
 - Audience: Maintainers and AI agents planning new repository-owned cores, representation tiers, and specialized sibling collections
@@ -10,8 +10,8 @@ This document began as a catalog of candidate work that the
 [derived structure catalog](derived-structure-catalog.md) deliberately does not cover. That catalog
 records what can be built *by composing* the shipped HAMT and FingerTree families; this one records
 three complementary axes. Axis 1 now includes both implemented reference cores and unimplemented
-candidates. Axis 2 now includes the shipped C# positional and measured rope cursors, their Tour and
-Editor integration, measured/text semantic cursor checkpoints in every sibling language, the optimized C#
+candidates. Axis 2 now includes the complete nine-language applicable semantic cursor tier, the C#
+focused positional and measured rope cursors and their Tour/Editor integration, and the optimized C#
    one-way CHAMP transient, and semantic path-copying CHAMP editing sessions in every sibling language;
 frozen-hash and later phases remain planning material. Axis 3 now includes the shipped
 range-update family across all nine languages alongside still-unimplemented specialized candidates.
@@ -52,8 +52,9 @@ benchmark-first grounds). Patricia and RRB have since shipped across the languag
 the positional cursor, measured/text cursor, sample integration, and CHAMP owner-token transients
 have shipped as C# Axis 2 C1, C2, C3, and T2. The one-way lifecycle has since gained semantic
 path-copying ports in C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml, and every sibling language now has positional,
-measured, and text snapshot-plus-gap cursor checkpoints without focused cursor representation or performance parity. The frozen tier and
-later cursor families remain planned. The cursor and the temporal-lifecycle work have a dedicated
+measured, and text snapshot-plus-gap cursor checkpoints without focused cursor representation or performance parity. All applicable
+later cursor families now ship as semantic checkpoints across all nine ports; the frozen tier and
+focused cursor optimizations remain planned. Cursor and temporal-lifecycle work have a dedicated
 [Axis 2 final plan](../proposals/axis2-lifecycle-and-sequence-cursors.md), which is authoritative where
 its API, complexity, or sequencing detail differs from the older proposal. The entries below are
 the current-state record, while the 2026-07-09 proposal remains useful historical scheduling
@@ -94,7 +95,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
 | Size-tiered small representations | 2 | Strong, explicitly postponed | Re-entry benchmark after the Axis 2 fixed-layout evidence decision | Internal tier per selected facade + representation-forcing tests |
 | Transient -> persistent -> frozen lifecycle | 2 | C# CHAMP T2 owner-token transient and semantic path-copying sibling sessions implemented; frozen map/set tier remains unshipped and evidence-gated | T0/T1/T2 complete for the optimized transient; sibling lifecycle ports complete; postponed F0 then F1 evidence must precede F2 | Shipped map/set sessions across nine languages + planned frozen map/set types |
-| Version-bound cursor | 2, 3 | C1 positional cursor, C2 measured/text cursor, and C3 samples implemented in C#; positional/measured/text semantic checkpoints shipped in every sibling language; C4 consumer-gated | C0 selected the C# readonly-struct cursor-as-version representation with a bounded focus/carry layout; sibling checkpoints reuse persistent rope path copying without its complexity claim | C# positional/measured cursors and Tour/Editor integration plus C/C++/Haskell/Kotlin/Rust/TypeScript/Python/OCaml semantic facades |
+| Version-bound cursor | 2, 3 | Applicable Patricia, sequence, ordered-search, neutral Ordered, and Merkle semantic cursors ship in all nine languages; C# rope C1/C2 and C3 samples remain the focused precedent; C4 consumer adapters are gated | C0 selected the C# readonly-struct rope cursor-as-version representation with a bounded focus/carry layout; other checkpoints reuse ordinary persistent operations without its complexity claim | Nine-language semantic cursor tier plus C# focused positional/measured ropes and Tour/Editor integration |
 | Key-type-specialized map factories | 2 | Plausible, explicitly postponed | Named consumer after explicit Patricia consideration | Factory layer; ART only if independently justified |
 | Self-adjusting (splay-style) structures | 2 | Reject | - | Reads allocate under path copying; cursors + freeze substitute |
 | Range-update sequence (lazy propagation) | 3 | Strong (C# implicit-AVL reference, seven specialized sibling ports, and the OCaml semantic checkpoint ship) | Lawful range-update tag action | Nine language-local surfaces + algebra/property/model/invariant tests; OCaml makes no lazy-update bound claim |
@@ -1021,14 +1022,14 @@ not authorize sibling frozen types or a claim of owner-token edit performance.
 
 ### Cursor over the sequence family
 
-**Status (updated 2026-07-17): C# C1, C2, and C3 are shipped; C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml have
-positional and measured/text semantic checkpoints.**
+**Status (updated 2026-07-18): the semantic cursor tier is shipped for every applicable persistent
+family in C#, C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python; focused-representation
+optimization remains family-local and evidence-gated.**
 The [repository-wide persistent cursor design](../proposals/repository-wide-persistent-cursor-design.md)
-now audits every persistent family and specifies candidate deque, raw-measured, RRB, Range, sorted,
+audits every persistent family and records the shipped deque, raw-measured, RRB, Range, sorted,
 ordered, Patricia, and Merkle cursors plus explicit exclusions. Tungsten cursor work is explicitly
-excluded. The proposal is a forward-looking
-applicability and contract document: it does not change this catalog's shipped status, clear C4's
-consumer/evidence gates, or turn sibling semantic checkpoints into focused cursor implementations.
+excluded. The semantic shipment does not clear C4's consumer/evidence gates or turn sibling
+snapshot-plus-gap/rank checkpoints into focused cursor implementations.
 `Rope<T>.GetCursor(position)` and the public
 readonly `RopeCursor<T>` implement the positional version-bound gap cursor.
 `MeasuredRope<T, TMeasure, TMeasureOps>.GetCursor(position)` and
@@ -1046,7 +1047,7 @@ surfaces retain the existing text helpers with byte-oriented C/C++, `Char`-eleme
 Kotlin and TypeScript, Unicode-scalar Rust and OCaml, and Python Unicode-code-point positions. They deliberately do not claim the C# focused cursor
 representation or its focus-local complexity. The
 [Axis 2 final cursor plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) remains normative for
-the unshipped phases, while the [C0 decision record](../../src/CSharp/docs/FingerTree/rope-cursor-c0-decision.md)
+the consumer-gated rope adapter phase, while the [C0 decision record](../../src/CSharp/docs/FingerTree/rope-cursor-c0-decision.md)
 records the selected representation and proof boundary for C1.
 
 **Selected representation.** C0 selected the cursor-as-version representation as a readonly struct
@@ -1473,8 +1474,8 @@ remaining work is sequenced as follows:
    and smoke-lock their undo, branch, Unicode, and line/column transcripts.
 5. Evaluate **C4 later sequence cursors** separately and only for a named consumer, using the
    [repository-wide cursor design](../proposals/repository-wide-persistent-cursor-design.md) for
-   applicability and contract details; do not infer a deque, RRB, reversible-deque, raw-FingerTree,
-   Range or Ordered shipment from C1 or from the proposal. Tungsten cursor work is not planned.
+   applicability, shipped semantic coverage, and contract details; do not infer focused-performance
+   parity from the semantic checkpoints. Tungsten cursor work is not planned.
 6. Complete the postponed **F0 packed-index signal gate** in isolation, then run F1 only if F0
    records an evidence-backed advance. Complete the dependent **F1 fixed-layout evidence collection**
    before any F2 public implementation.
@@ -1495,7 +1496,7 @@ This numbering expresses dependencies and gates, not a ceremonial landing order:
 and T2 shipments do not clear C4 or the still-unshipped F2 tier.
 
 Automatic size tiers, count/key-specific frozen strategies, key-type-specialized factories, and
-unrequested sequence cursor families are postponed rather than placed in this active sequence.
+new cursor axes or focused-representation optimizations are postponed rather than placed in this active sequence.
 They require a named consumer or benchmark demonstrating that the fixed general representation is
 the bottleneck.
 

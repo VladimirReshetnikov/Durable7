@@ -90,6 +90,14 @@ owned result (`TDS_MERKLE_OK`, `success == false`, no tree), not an error status
 [Merkle specification](merkle-search-tree.md) for the full store, ownership, sync, and complexity
 contracts.
 
+The Merkle tree also exposes an explicit-lifetime comparer-order cursor. It retains one tree
+snapshot and a rank gap, supports rank/lower/upper/exact factories, borrowed adjacent peeks,
+persistent insert/put/value-update/delete edits, and non-consuming snapshot. Strict duplicate
+insertion returns `TDS_MERKLE_DUPLICATE_KEY`. Exact source/result aliasing is supported and a
+distinct output is installed only on success. The dedicated
+[Merkle specification](merkle-search-tree.md#ordered-persistent-cursor) owns the full lifetime and
+edit contract.
+
 ## Patricia Integer Contract
 
 Include `patricia.h` for `tds_int_map`, `tds_long_map`, `tds_int_set`, and `tds_long_set`. The two
@@ -111,6 +119,14 @@ still report `TDS_HAMT_OUT_OF_MEMORY`. Callback execution is synchronous; its co
 valid only for the call, while any pointed-to returned value must obey the configured retain policy.
 Both operands of structural algebra must have identical equality/retain/release callback and context
 identities. A result may alias either operand.
+
+Patricia maps and sets expose explicit-lifetime ascending-order cursors. Factories accept a rank,
+start/end, lower/upper bound, or exact lookup; a miss retains its usable lower-bound gap. Map
+cursors support strict insert, put, next-value replacement, adjacent deletion, and snapshot. Set
+cursors support add/insert, adjacent deletion, and snapshot. Peeks borrow stored representatives
+from the retained cursor version. Every initialized cursor is cloned/destroyed explicitly, and
+producing operations support exact source/result aliasing under the same failure-atomic ownership
+rules as the owning Patricia values.
 
 ## Ownership
 

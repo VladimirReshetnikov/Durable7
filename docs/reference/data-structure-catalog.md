@@ -359,6 +359,31 @@ serialized C# Release build had zero warnings and zero errors and the complete g
 structure gate recorded above. No benchmark was run for either shipment, and measurements remain postponed for an
 isolated session.
 
+## Persistent Cursor Availability
+
+All nine language ports ship the repository-wide semantic cursor tier. Concrete names follow each
+language and owning family, so this table groups the surfaces by contract rather than repeating
+every generic spelling. Use the
+[repository-wide cursor design](../proposals/repository-wide-persistent-cursor-design.md) for the
+exhaustive applicability matrix, API/result rules, complexity boundary, implementation ledger, and
+validation design; use the [shared cursor contract](semantic-contracts.md#persistent-collection-cursors)
+for the concise normative obligations.
+
+| Family group | Availability | Semantic axis |
+| --- | --- | --- |
+| Patricia integer maps/sets | C#, C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, Python | Ascending signed 32/64-bit key/value order and rank gaps. |
+| Measured sequence, deque, reversible deque, RRB, Range, rope/text | All nine ports | Position or ordered measure boundary; text units remain language-local. |
+| Sorted bag/set/map, canonical set, priority-search queue, interval tree/map, chunked bit set | All nine ports | Comparer order, interval order, key order, or population-rank gaps as owned by the family. |
+| Neutral Ordered set/map/multimap | All nine ports | Explicit position; multimap additionally exposes nested group/value positions. |
+| Merkle search tree | All nine ports | Specialized policy-comparer order and authenticated persistent edits. |
+| CHAMP and derived unordered hash facades | No public cursor | Private lookup/edit path only; hash enumeration is not semantic order. |
+| Numerics, Ctrie, graph, heaps without stable order, builders/sessions/support artifacts, DABA Lite | No persistent cursor | No stable semantic neighbor axis or not a persistent aggregate. |
+| Tungsten `List`/`Association` | No cursor | Explicitly excluded application-leaf family. |
+
+Most newly shipped cursors retain a canonical root plus a validated gap/rank and delegate edits to
+ordinary persistent operations. That is a semantic checkpoint, not a claim of C# rope's focused
+representation, memoization, allocation/callback ceilings, or local-edit amortization.
+
 ## Tungsten Application Collections
 
 The Tungsten-collections workspaces are application-specific leaf consumers for the Tungsten
@@ -395,9 +420,10 @@ evidence, not permission to make a general structure depend on Tungsten.
 - Use the [workspace map](workspace-map.md) when choosing the correct language/data-structure directory.
 - Use the [semantic contracts reference](semantic-contracts.md) when checking shared persistence,
   ownership, policy, ordering, and failure-behavior obligations.
-- Use the proposed [repository-wide persistent cursor design](../proposals/repository-wide-persistent-cursor-design.md)
-  when assessing focused navigation/editing across families. Its applicability matrix and API
-  sketches do not add cursor types to the shipped entry-point tables above.
+- Use the implemented [repository-wide persistent cursor design](../proposals/repository-wide-persistent-cursor-design.md)
+  when assessing navigation/editing across families or deciding whether a new family has a stable
+  cursor axis. Its applicability exclusions are normative, and its focused-representation tier
+  remains a separate evidence-gated optimization.
 - Use the [porting and semantic parity guide](../guides/porting-and-semantic-parity.md) when changing behavior that may cross language workspaces.
 - Use workspace API specs and public headers for normative contracts.
 - Keep new public data structures visible here when they become part of a long-lived workspace surface.

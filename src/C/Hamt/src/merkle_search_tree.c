@@ -3537,9 +3537,7 @@ static tds_merkle_status tds_mst_cursor_delete(
     const tds_merkle_search_tree_cursor *cursor,
     bool previous,
     tds_merkle_search_tree_cursor *result) {
-    const size_t position = previous && cursor != NULL && cursor->position != 0
-        ? cursor->position - 1
-        : cursor == NULL ? 0 : cursor->position;
+    size_t position;
     const tds_mst_entry *entry;
     tds_merkle_search_tree tree = {0};
     tds_merkle_status status;
@@ -3548,6 +3546,7 @@ static tds_merkle_status tds_mst_cursor_delete(
         (!previous && cursor->position == tds_merkle_search_tree_size(&cursor->tree))) {
         return TDS_MERKLE_INVALID_ARGUMENT;
     }
+    position = previous ? cursor->position - 1 : cursor->position;
     entry = tds_mst_cursor_entry_at_rank(&cursor->tree, position);
     if (entry == NULL) {
         return TDS_MERKLE_INVALID_ARGUMENT;

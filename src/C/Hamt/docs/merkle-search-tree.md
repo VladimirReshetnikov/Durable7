@@ -1,10 +1,10 @@
 # C Merkle Search Tree
 
-- Status: Current core, persistence, proof, synchronization, and merge specification
+- Status: Current core, ordered cursor, persistence, proof, synchronization, and merge specification
 - Created (UTC): 2026-07-12T05:30:00Z
 - Repository HEAD: 2a2c92d10d308a18793067106b1ef10d3748f0ba
 - Audience: C consumers, maintainers, and cross-language port reviewers
-- Scope: `mst-sha256-b16-v2`, MST2/MSP2, persistent core/store API, verification, sync, and merge
+- Scope: `mst-sha256-b16-v2`, MST2/MSP2, persistent core/cursor/store API, verification, sync, and merge
 
 The C17 Merkle search tree is an immutable ordered content-addressed map. It is the type-erased C
 port of the C# reference and implements the exact `mst-sha256-b16-v2` hashing and `MST2` block
@@ -140,6 +140,29 @@ only with an empty block; it disposes callback scratch on failure. `put` accepts
 `OK + PRESENT_IDENTICAL`, or `VERIFICATION_FAILURE + CONFLICT`. Inconsistent callback combinations
 become `TDS_MERKLE_CALLBACK_FAILURE`, and caller outputs remain untouched. Callback contexts are
 borrowed for the lifetime of adapter use.
+
+## Ordered Persistent Cursor
+
+`tds_merkle_search_tree_cursor` owns a retained tree snapshot plus a comparer-order rank gap. Create
+one at a rank, start, end, lower bound, upper bound, or exact-key lower-bound result. `at_key`
+publishes a separate `found` flag, so a miss still returns a usable insertion gap. Peeks return
+borrowed `tds_merkle_search_entry_ref` values that remain valid until the cursor is destroyed.
+
+Navigation and edits are immutable. `move_previous`, `move_next`, and `seek` return a new cursor over
+the same snapshot. `insert` rejects an existing key with `TDS_MERKLE_DUPLICATE_KEY` and also rejects
+a key whose lower-bound rank is not the current gap. `put` updates the exact next entry or inserts
+at a missing lower-bound gap. `set_next_value` retains the stored key representative;
+`delete_previous` moves the gap left and `delete_next` keeps it fixed. `snapshot` returns an owning
+tree copy and never consumes the cursor.
+
+Use `tds_merkle_search_tree_cursor_copy` for a second live owner and
+`tds_merkle_search_tree_cursor_destroy` for every initialized cursor. A zeroed or destroyed cursor
+is invalid but safely destroyable. Producing operations support exact source/result aliasing and
+otherwise require a distinct output to be zeroed or destroyed; failure leaves both source and
+output unchanged. Rank and neighbor lookup use cached subtree counts. Cursor edits call the
+ordinary canonical set/remove operations, so policy, representative, encoding, digest,
+failure-atomicity, and block-persistence behavior are identical to direct tree edits. Cursor state
+is local navigation state and is never part of `MST2`, `MSP2`, a pack, proof, or store.
 
 ## Verified Persistence
 

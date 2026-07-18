@@ -632,6 +632,50 @@ endpoint remain distinct. Shared obligations are:
 See the C# [FingerTree API specification](../../src/CSharp/docs/FingerTree/api-specification.md) and
 the [cross-language catalog](data-structure-catalog.md#derived-persistent-maps-relations-and-sparse-bit-sets).
 
+## Persistent Collection Cursors
+
+C#, C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python ship public cursors for every
+repository-owned persistent family with a stable semantic navigation axis. The complete
+applicability matrix, per-family edit rules, representation profiles, complexity vocabulary,
+ownership mapping, and validation design are in the
+[repository-wide persistent cursor design](../proposals/repository-wide-persistent-cursor-design.md).
+
+The shipped groups are:
+
+- signed 32/64-bit Patricia maps and sets in ascending key order;
+- measured sequences, deques, reversible deques, RRB vectors, Range sequences, and ropes/text over
+  positional or measured gaps;
+- sorted bags/sets/maps, canonical sorted sets, priority-search queues, interval trees/maps, and
+  chunked bit sets over their documented order or population-rank axis;
+- neutral insertion-/explicit-position Ordered sets, maps, and nested multimaps; and
+- Merkle search trees through a specialized comparer-order authenticated cursor.
+
+Every initialized cursor owns or retains one immutable logical version and a valid gap, rank, or
+measure boundary. Navigation returns a cursor over the same version. Editing returns a cursor over
+one new version and never changes the receiver, a retained ancestor, or a sibling branch. Snapshot
+is non-consuming. A cursor is not a detachable position, mutable iterator, builder, transient,
+bookmark, rebase operation, or live concurrent view.
+
+Positional cursors use gaps in `0 .. Count`: previous operations address `p - 1`, next operations
+address `p`, insertion returns the gap after inserted values, backspace moves the gap left, and
+forward deletion or replacement keeps it fixed. Ordered cursors use the gap before the next
+comparer-ordered candidate; lower-bound misses remain usable, exact search carries a separate hit
+discriminator, and edits validate that a key/value belongs at the current gap. Nested Ordered
+multimap cursors keep group and value positions explicit rather than inventing a private flattened
+tree order.
+
+Cursors retain the source's exact comparer, equality/hash policies, measure/tag algebra, ownership
+callbacks, codecs, allocators, and stored-representative rules. Family-local ordinary persistent
+operations remain authoritative for duplicate behavior, no-op identity, checked growth, lazy tags,
+balancing, canonical ranks, auxiliary indexes, winner/interval caches, Merkle bytes/digests, error
+precedence, and failure atomicity. Most new ports are semantic snapshot-plus-gap/rank checkpoints;
+they make no C# focused-rope locality, callback, allocation, memoization, or benchmark claim.
+
+CHAMP maps/sets and their bag, bimap, hash multimap/relation, patch, and indexed-map compositions
+keep edit paths private because hash traversal has no public semantic neighbor. Numerics, Ctrie live
+views, graphs, measured priority queues, Brodal–Okasaki heaps, DABA Lite, builders, sessions, stores,
+proofs, packs, and all Tungsten collections intentionally expose no persistent cursor.
+
 ## Ropes And Text
 
 Ropes provide persistent chunked sequences. Measured ropes add custom measure-based split and locate.
@@ -652,10 +696,9 @@ Shared obligations:
 - Builders must document mutation, snapshot publication, and whether later builder changes can affect
   previously produced immutable ropes.
 
-C#, C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python ship positional and measured/text cursors. No deque, RRB,
-raw-finger-tree or reversible-deque cursor is implied by those surfaces. Tungsten cursor work is
-explicitly excluded. Every shipped
-cursor shares these observable obligations:
+C#, C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python ship positional and measured/text
+rope cursors. In addition to the repository-wide cursor contract above, every rope cursor shares
+these observable obligations:
 
 - A cursor position is a gap in `0 .. Count`: previous operations address `p - 1`, next operations
   address `p`, insertion returns the gap after the inserted values, backspace moves the gap left,

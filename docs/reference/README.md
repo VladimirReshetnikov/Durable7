@@ -18,6 +18,7 @@ For language-level source browsing, start with the [`src` index](../../src/READM
 - [Documentation navigation matrix](navigation-matrix.md) - task-oriented entry points across repository-level docs and workspace-owned docs.
 - [Reversible deque complexity audit](reversible-deque-complexity-audit.md) - cross-language verification of O(1) reverse and reversed-operation behavior.
 - [Semantic contracts](semantic-contracts.md) - shared behavior, ownership, policy, ordering, dual-index, and documentation obligations across repository-owned numerics and data structures.
+- [Repository-wide persistent cursor design](../proposals/repository-wide-persistent-cursor-design.md) - implemented nine-language applicability, semantics, ownership, representation/complexity boundaries, exclusions, validation, and shipment ledger for public cursors and private edit paths.
 - [Test suite map](test-suite-map.md) - cross-workspace map of test runners, including the serialized C# Ordered checkpoint, local test READMEs, routine commands, stress knobs, samples, and deferred/runnable benchmark boundaries.
 - [Tungsten application-leaf dependency boundary](tungsten-application-leaf-boundary.md) - normative one-way dependency and semantic-authority policy, independent-fork requirements, worked ordered-set example, and extraction checklist for Tungsten workspaces.
 - [Workspace map](workspace-map.md) - language-first layout, data-structure workspace roles, port lineage, and documentation placement rules.
