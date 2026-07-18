@@ -782,3 +782,358 @@ ft_status ft_persistent_chunked_bit_set_from_array(
     }
     return FT_STATUS_OK;
 }
+
+static bool ft_chunked_cursor_is_valid(
+    const ft_persistent_chunked_bit_set_cursor* cursor)
+{
+    return cursor != NULL && ft_chunked_bit_set_valid(&cursor->set) &&
+        cursor->position <= ft_persistent_chunked_bit_set_count(&cursor->set);
+}
+
+static ft_status ft_chunked_cursor_stage(
+    const ft_persistent_chunked_bit_set* set,
+    uint64_t position,
+    ft_persistent_chunked_bit_set_cursor* result)
+{
+    (void)memset(result, 0, sizeof(*result));
+    ft_status status = ft_persistent_chunked_bit_set_copy(set, &result->set);
+    if (status == FT_STATUS_OK) {
+        result->position = position;
+    }
+    return status;
+}
+
+static void ft_chunked_cursor_publish(
+    const ft_persistent_chunked_bit_set_cursor* source,
+    ft_persistent_chunked_bit_set_cursor* staged,
+    ft_persistent_chunked_bit_set_cursor* result)
+{
+    if (result == source) {
+        ft_persistent_chunked_bit_set_cursor_dispose(result);
+    }
+    ft_persistent_chunked_bit_set_cursor_move(result, staged);
+}
+
+static void ft_chunked_cursor_publish_set(
+    const ft_persistent_chunked_bit_set_cursor* source,
+    ft_persistent_chunked_bit_set* set,
+    uint64_t position,
+    ft_persistent_chunked_bit_set_cursor* result)
+{
+    ft_persistent_chunked_bit_set_cursor staged;
+    (void)memset(&staged, 0, sizeof(staged));
+    ft_persistent_chunked_bit_set_move(&staged.set, set);
+    staged.position = position;
+    ft_chunked_cursor_publish(source, &staged, result);
+}
+
+ft_status ft_persistent_chunked_bit_set_get_cursor(
+    const ft_persistent_chunked_bit_set* set,
+    uint64_t position,
+    ft_persistent_chunked_bit_set_cursor* result)
+{
+    if (!ft_chunked_bit_set_valid(set) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (position > ft_persistent_chunked_bit_set_count(set)) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_chunked_cursor_stage(set, position, result);
+}
+
+ft_status ft_persistent_chunked_bit_set_get_cursor_at_or_after(
+    const ft_persistent_chunked_bit_set* set,
+    int32_t bit_index,
+    ft_persistent_chunked_bit_set_cursor* result)
+{
+    if (!ft_chunked_bit_set_valid(set) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    uint64_t position = 0;
+    ft_status status = bit_index <= 0
+        ? FT_STATUS_OK
+        : ft_persistent_chunked_bit_set_rank(set, bit_index - 1, &position);
+    return status == FT_STATUS_OK
+        ? ft_persistent_chunked_bit_set_get_cursor(set, position, result)
+        : status;
+}
+
+ft_status ft_persistent_chunked_bit_set_get_cursor_at_item(
+    const ft_persistent_chunked_bit_set* set,
+    int32_t bit_index,
+    bool* found,
+    ft_persistent_chunked_bit_set_cursor* result)
+{
+    if (!ft_chunked_bit_set_valid(set) || found == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    ft_persistent_chunked_bit_set_cursor staged;
+    ft_status status = ft_persistent_chunked_bit_set_get_cursor_at_or_after(
+        set, bit_index, &staged);
+    if (status == FT_STATUS_OK) {
+        *found = ft_persistent_chunked_bit_set_contains(set, bit_index);
+        ft_persistent_chunked_bit_set_cursor_move(result, &staged);
+    }
+    return status;
+}
+
+ft_status ft_persistent_chunked_bit_set_cursor_copy(
+    const ft_persistent_chunked_bit_set_cursor* source,
+    ft_persistent_chunked_bit_set_cursor* destination)
+{
+    if (!ft_chunked_cursor_is_valid(source) || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (source == destination) {
+        return FT_STATUS_OK;
+    }
+    return ft_chunked_cursor_stage(
+        &source->set, source->position, destination);
+}
+
+void ft_persistent_chunked_bit_set_cursor_move(
+    ft_persistent_chunked_bit_set_cursor* destination,
+    ft_persistent_chunked_bit_set_cursor* source)
+{
+    if (destination == NULL || source == NULL || destination == source) {
+        return;
+    }
+    (void)memset(destination, 0, sizeof(*destination));
+    ft_persistent_chunked_bit_set_move(&destination->set, &source->set);
+    destination->position = source->position;
+    source->position = 0;
+}
+
+void ft_persistent_chunked_bit_set_cursor_dispose(
+    ft_persistent_chunked_bit_set_cursor* cursor)
+{
+    if (cursor != NULL) {
+        ft_persistent_chunked_bit_set_dispose(&cursor->set);
+        (void)memset(cursor, 0, sizeof(*cursor));
+    }
+}
+
+bool ft_persistent_chunked_bit_set_cursor_valid(
+    const ft_persistent_chunked_bit_set_cursor* cursor)
+{
+    return ft_chunked_cursor_is_valid(cursor);
+}
+
+bool ft_persistent_chunked_bit_set_cursor_empty(
+    const ft_persistent_chunked_bit_set_cursor* cursor)
+{
+    return !ft_chunked_cursor_is_valid(cursor) ||
+        ft_persistent_chunked_bit_set_empty(&cursor->set);
+}
+
+uint64_t ft_persistent_chunked_bit_set_cursor_count(
+    const ft_persistent_chunked_bit_set_cursor* cursor)
+{
+    return ft_chunked_cursor_is_valid(cursor)
+        ? ft_persistent_chunked_bit_set_count(&cursor->set)
+        : 0;
+}
+
+uint64_t ft_persistent_chunked_bit_set_cursor_position(
+    const ft_persistent_chunked_bit_set_cursor* cursor)
+{
+    return ft_chunked_cursor_is_valid(cursor) ? cursor->position : 0;
+}
+
+ft_status ft_persistent_chunked_bit_set_cursor_is_at_start(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    bool* result)
+{
+    if (!ft_chunked_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    *result = cursor->position == 0;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_persistent_chunked_bit_set_cursor_is_at_end(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    bool* result)
+{
+    if (!ft_chunked_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    *result = cursor->position == ft_persistent_chunked_bit_set_count(&cursor->set);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_persistent_chunked_bit_set_cursor_try_peek_previous(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    bool* found,
+    int32_t* bit_index)
+{
+    if (!ft_chunked_cursor_is_valid(cursor) || found == NULL || bit_index == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        *found = false;
+        *bit_index = 0;
+        return FT_STATUS_OK;
+    }
+    return ft_persistent_chunked_bit_set_try_select(
+        &cursor->set, cursor->position - 1u, found, bit_index);
+}
+
+ft_status ft_persistent_chunked_bit_set_cursor_try_peek_next(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    bool* found,
+    int32_t* bit_index)
+{
+    if (!ft_chunked_cursor_is_valid(cursor) || found == NULL || bit_index == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_persistent_chunked_bit_set_try_select(
+        &cursor->set, cursor->position, found, bit_index);
+}
+
+ft_status ft_persistent_chunked_bit_set_cursor_seek_rank(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    uint64_t position,
+    ft_persistent_chunked_bit_set_cursor* result)
+{
+    if (!ft_chunked_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (position > ft_persistent_chunked_bit_set_count(&cursor->set)) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    if (cursor == result && cursor->position == position) {
+        return FT_STATUS_OK;
+    }
+    ft_persistent_chunked_bit_set_cursor staged;
+    ft_status status = ft_chunked_cursor_stage(
+        &cursor->set, position, &staged);
+    if (status == FT_STATUS_OK) {
+        ft_chunked_cursor_publish(cursor, &staged, result);
+    }
+    return status;
+}
+
+ft_status ft_persistent_chunked_bit_set_cursor_move_previous(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    ft_persistent_chunked_bit_set_cursor* result)
+{
+    if (!ft_chunked_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        return ft_persistent_chunked_bit_set_empty(&cursor->set)
+            ? FT_STATUS_EMPTY
+            : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_persistent_chunked_bit_set_cursor_seek_rank(
+        cursor, cursor->position - 1u, result);
+}
+
+ft_status ft_persistent_chunked_bit_set_cursor_move_next(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    ft_persistent_chunked_bit_set_cursor* result)
+{
+    if (!ft_chunked_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const uint64_t count = ft_persistent_chunked_bit_set_count(&cursor->set);
+    if (cursor->position == count) {
+        return count == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_persistent_chunked_bit_set_cursor_seek_rank(
+        cursor, cursor->position + 1u, result);
+}
+
+ft_status ft_persistent_chunked_bit_set_cursor_add(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    int32_t bit_index,
+    ft_persistent_chunked_bit_set_cursor* result)
+{
+    if (!ft_chunked_cursor_is_valid(cursor) || bit_index < 0 || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (ft_persistent_chunked_bit_set_contains(&cursor->set, bit_index)) {
+        if (cursor == result) {
+            return FT_STATUS_OK;
+        }
+        return ft_chunked_cursor_stage(&cursor->set, cursor->position, result);
+    }
+    uint64_t position = 0;
+    ft_status status = bit_index == 0
+        ? FT_STATUS_OK
+        : ft_persistent_chunked_bit_set_rank(
+            &cursor->set, bit_index - 1, &position);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_persistent_chunked_bit_set edited;
+    status = ft_persistent_chunked_bit_set_add(
+        &cursor->set, bit_index, &edited);
+    if (status == FT_STATUS_OK) {
+        ft_chunked_cursor_publish_set(
+            cursor, &edited, position + 1u, result);
+    }
+    return status;
+}
+
+static ft_status ft_chunked_cursor_delete_at(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    uint64_t rank,
+    uint64_t position,
+    ft_persistent_chunked_bit_set_cursor* result)
+{
+    int32_t bit_index = 0;
+    ft_status status = ft_persistent_chunked_bit_set_select(
+        &cursor->set, rank, &bit_index);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_persistent_chunked_bit_set edited;
+    status = ft_persistent_chunked_bit_set_remove(
+        &cursor->set, bit_index, &edited);
+    if (status == FT_STATUS_OK) {
+        ft_chunked_cursor_publish_set(cursor, &edited, position, result);
+    }
+    return status;
+}
+
+ft_status ft_persistent_chunked_bit_set_cursor_delete_previous(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    ft_persistent_chunked_bit_set_cursor* result)
+{
+    if (!ft_chunked_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        return ft_persistent_chunked_bit_set_empty(&cursor->set)
+            ? FT_STATUS_EMPTY
+            : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_chunked_cursor_delete_at(
+        cursor, cursor->position - 1u, cursor->position - 1u, result);
+}
+
+ft_status ft_persistent_chunked_bit_set_cursor_delete_next(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    ft_persistent_chunked_bit_set_cursor* result)
+{
+    if (!ft_chunked_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const uint64_t count = ft_persistent_chunked_bit_set_count(&cursor->set);
+    if (cursor->position == count) {
+        return count == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_chunked_cursor_delete_at(
+        cursor, cursor->position, cursor->position, result);
+}
+
+ft_status ft_persistent_chunked_bit_set_cursor_snapshot(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    ft_persistent_chunked_bit_set* result)
+{
+    return !ft_chunked_cursor_is_valid(cursor) || result == NULL
+        ? FT_STATUS_INVALID_ARGUMENT
+        : ft_persistent_chunked_bit_set_copy(&cursor->set, result);
+}

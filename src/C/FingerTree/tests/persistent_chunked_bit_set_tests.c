@@ -104,11 +104,70 @@ int main(void)
     const int32_t symmetric_values[] = {0, 2, 65, 130};
     require_values(&algebra, symmetric_values, 4u);
 
+    ft_persistent_chunked_bit_set_cursor cursor;
+    ft_persistent_chunked_bit_set_cursor retained;
+    ft_persistent_chunked_bit_set cursor_snapshot;
+    bool found = false;
+    bool at_end = false;
+    int32_t bit = -1;
+    CHECK_STATUS(ft_persistent_chunked_bit_set_get_cursor_at_item(
+        &set, 64, &found, &cursor));
+    CHECK(found);
+    CHECK(ft_persistent_chunked_bit_set_cursor_position(&cursor) == 3u);
+    CHECK_STATUS(ft_persistent_chunked_bit_set_cursor_try_peek_next(
+        &cursor, &found, &bit));
+    CHECK(found && bit == 64);
+    CHECK_STATUS(ft_persistent_chunked_bit_set_cursor_copy(&cursor, &retained));
+    ft_persistent_chunked_bit_set_dispose(&set);
+
+    CHECK_STATUS(ft_persistent_chunked_bit_set_cursor_add(&cursor, 62, &cursor));
+    CHECK(ft_persistent_chunked_bit_set_cursor_position(&cursor) == 3u);
+    CHECK(ft_persistent_chunked_bit_set_cursor_count(&cursor) == 8u);
+    CHECK_STATUS(ft_persistent_chunked_bit_set_cursor_try_peek_previous(
+        &cursor, &found, &bit));
+    CHECK(found && bit == 62);
+    CHECK_STATUS(ft_persistent_chunked_bit_set_cursor_try_peek_next(
+        &cursor, &found, &bit));
+    CHECK(found && bit == 63);
+    CHECK_STATUS(ft_persistent_chunked_bit_set_cursor_add(&cursor, 64, &cursor));
+    CHECK(ft_persistent_chunked_bit_set_cursor_position(&cursor) == 3u);
+
+    CHECK_STATUS(ft_persistent_chunked_bit_set_cursor_delete_previous(
+        &cursor, &cursor));
+    CHECK(ft_persistent_chunked_bit_set_cursor_position(&cursor) == 2u);
+    CHECK_STATUS(ft_persistent_chunked_bit_set_cursor_delete_next(
+        &cursor, &cursor));
+    CHECK(ft_persistent_chunked_bit_set_cursor_position(&cursor) == 2u);
+    CHECK(ft_persistent_chunked_bit_set_cursor_count(&cursor) == 6u);
+    CHECK_STATUS(ft_persistent_chunked_bit_set_cursor_try_peek_next(
+        &cursor, &found, &bit));
+    CHECK(found && bit == 64);
+    CHECK_STATUS(ft_persistent_chunked_bit_set_cursor_snapshot(
+        &cursor, &cursor_snapshot));
+    const int32_t cursor_expected[] = {0, 1, 64, 65, 130, INT32_MAX};
+    require_values(&cursor_snapshot, cursor_expected, 6u);
+    CHECK(ft_persistent_chunked_bit_set_cursor_count(&retained) == 7u);
+
+    CHECK_STATUS(ft_persistent_chunked_bit_set_cursor_seek_rank(
+        &cursor, 6u, &cursor));
+    CHECK_STATUS(ft_persistent_chunked_bit_set_cursor_is_at_end(
+        &cursor, &at_end));
+    CHECK(at_end);
+    CHECK(ft_persistent_chunked_bit_set_cursor_move_next(&cursor, &cursor)
+        == FT_STATUS_OUT_OF_RANGE);
+    ft_persistent_chunked_bit_set_cursor_dispose(&cursor);
+    CHECK_STATUS(ft_persistent_chunked_bit_set_get_cursor_at_item(
+        &cursor_snapshot, 63, &found, &cursor));
+    CHECK(!found);
+    CHECK(ft_persistent_chunked_bit_set_cursor_position(&cursor) == 2u);
+
     ft_persistent_chunked_bit_set_dispose(&algebra);
     ft_persistent_chunked_bit_set_dispose(&left);
     ft_persistent_chunked_bit_set_dispose(&right);
     ft_persistent_chunked_bit_set_dispose(&branch);
-    ft_persistent_chunked_bit_set_dispose(&set);
+    ft_persistent_chunked_bit_set_cursor_dispose(&retained);
+    ft_persistent_chunked_bit_set_cursor_dispose(&cursor);
+    ft_persistent_chunked_bit_set_dispose(&cursor_snapshot);
     ft_persistent_chunked_bit_set_dispose(&empty);
     puts("[PASS] persistent chunked bit set");
     return EXIT_SUCCESS;

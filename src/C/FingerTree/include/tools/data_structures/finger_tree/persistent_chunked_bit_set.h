@@ -18,6 +18,12 @@ typedef struct ft_persistent_chunked_bit_set {
     struct ft_chunked_bit_set_context* context;
 } ft_persistent_chunked_bit_set;
 
+/* Immutable root-plus-population-rank gap cursor over present bits. */
+typedef struct ft_persistent_chunked_bit_set_cursor {
+    ft_persistent_chunked_bit_set set;
+    uint64_t position;
+} ft_persistent_chunked_bit_set_cursor;
+
 typedef void (*ft_chunked_bit_set_visit_fn)(int32_t bit_index, void* context);
 
 ft_status ft_persistent_chunked_bit_set_init(ft_persistent_chunked_bit_set* set);
@@ -91,6 +97,73 @@ bool ft_persistent_chunked_bit_set_debug_validate(
 bool ft_persistent_chunked_bit_set_debug_shares_root(
     const ft_persistent_chunked_bit_set* left,
     const ft_persistent_chunked_bit_set* right);
+
+ft_status ft_persistent_chunked_bit_set_get_cursor(
+    const ft_persistent_chunked_bit_set* set,
+    uint64_t position,
+    ft_persistent_chunked_bit_set_cursor* result);
+ft_status ft_persistent_chunked_bit_set_get_cursor_at_or_after(
+    const ft_persistent_chunked_bit_set* set,
+    int32_t bit_index,
+    ft_persistent_chunked_bit_set_cursor* result);
+ft_status ft_persistent_chunked_bit_set_get_cursor_at_item(
+    const ft_persistent_chunked_bit_set* set,
+    int32_t bit_index,
+    bool* found,
+    ft_persistent_chunked_bit_set_cursor* result);
+ft_status ft_persistent_chunked_bit_set_cursor_copy(
+    const ft_persistent_chunked_bit_set_cursor* source,
+    ft_persistent_chunked_bit_set_cursor* destination);
+void ft_persistent_chunked_bit_set_cursor_move(
+    ft_persistent_chunked_bit_set_cursor* destination,
+    ft_persistent_chunked_bit_set_cursor* source);
+void ft_persistent_chunked_bit_set_cursor_dispose(
+    ft_persistent_chunked_bit_set_cursor* cursor);
+bool ft_persistent_chunked_bit_set_cursor_valid(
+    const ft_persistent_chunked_bit_set_cursor* cursor);
+bool ft_persistent_chunked_bit_set_cursor_empty(
+    const ft_persistent_chunked_bit_set_cursor* cursor);
+uint64_t ft_persistent_chunked_bit_set_cursor_count(
+    const ft_persistent_chunked_bit_set_cursor* cursor);
+uint64_t ft_persistent_chunked_bit_set_cursor_position(
+    const ft_persistent_chunked_bit_set_cursor* cursor);
+ft_status ft_persistent_chunked_bit_set_cursor_is_at_start(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    bool* result);
+ft_status ft_persistent_chunked_bit_set_cursor_is_at_end(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    bool* result);
+ft_status ft_persistent_chunked_bit_set_cursor_try_peek_previous(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    bool* found,
+    int32_t* bit_index);
+ft_status ft_persistent_chunked_bit_set_cursor_try_peek_next(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    bool* found,
+    int32_t* bit_index);
+ft_status ft_persistent_chunked_bit_set_cursor_move_previous(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    ft_persistent_chunked_bit_set_cursor* result);
+ft_status ft_persistent_chunked_bit_set_cursor_move_next(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    ft_persistent_chunked_bit_set_cursor* result);
+ft_status ft_persistent_chunked_bit_set_cursor_seek_rank(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    uint64_t position,
+    ft_persistent_chunked_bit_set_cursor* result);
+ft_status ft_persistent_chunked_bit_set_cursor_add(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    int32_t bit_index,
+    ft_persistent_chunked_bit_set_cursor* result);
+ft_status ft_persistent_chunked_bit_set_cursor_delete_previous(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    ft_persistent_chunked_bit_set_cursor* result);
+ft_status ft_persistent_chunked_bit_set_cursor_delete_next(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    ft_persistent_chunked_bit_set_cursor* result);
+ft_status ft_persistent_chunked_bit_set_cursor_snapshot(
+    const ft_persistent_chunked_bit_set_cursor* cursor,
+    ft_persistent_chunked_bit_set* result);
 
 #ifdef __cplusplus
 }
