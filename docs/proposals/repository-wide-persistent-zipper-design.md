@@ -1218,3 +1218,365 @@ Consumers needing navigable sparse set bits should use `PersistentChunkedBitSet`
 numeric edits use existing arithmetic and bit operations. `BitConverterEx`, codecs, policies,
 measures, predicates, result records, and split carriers are stateless or auxiliary values rather
 than persistent aggregates and receive no zipper.
+
+## HAMT And Hash-Composition Designs
+
+### Why CHAMP Has No Public Cursor
+
+CHAMP map/set nodes are recursive, so a private Huet zipper is well defined. The public collection
+does not have a meaningful focus axis:
+
+- equality and the 32-bit hash determine every child choice; callers cannot semantically choose a
+  parent, child, or sibling;
+- enumeration is stable for one unchanged version but is neither sorted, insertion ordered, nor a
+  wire contract;
+- `Seek(key)` followed by replace/remove would be a keyed lens around operations the map already
+  exposes, not a navigator;
+- exposing next/previous would promote private bitmap and collision layout into API; and
+- canonical deletion can promote a singleton child into its parent's inline-data run. Since inline
+  payloads enumerate before child runs, that repair can move surviving entries relative to other
+  survivors. “Continue after the removed entry” therefore has no stable cross-version meaning.
+
+No `PersistentHashMapCursor`, `PersistentHashSetCursor`, or editable CHAMP snapshot cursor is
+proposed. Existing enumerators remain the representation-order traversal surface. The reusable
+private edit path below may improve implementation factoring without changing public semantics.
+
+### Private CHAMP Edit-Path Zipper
+
+The private engine is shared by ordinary map/set point operations and the composite preparation
+protocols below.
+
+Focus is one of:
+
+```text
+PresentLeaf(storedHash, storedKeyRepresentative, storedValue)
+PresentCollision(fullHash, immutableBucket, selectedIndex)
+Missing(key, hash, terminalKind)
+EmptyRoot
+```
+
+`terminalKind` distinguishes an empty logical slot, an unequal terminal payload, and an equal-full-
+hash collision miss. A collision bucket remains shared until an actual edit requires one new bucket.
+
+Each bitmap-node frame retains:
+
+- original immutable parent node or an equivalent normalized view;
+- current five-bit shift and selected logical bit;
+- `DataMap` and `NodeMap`;
+- compact payload or child index;
+- route kind—inline data, child node, or absent slot;
+- untouched compact-array runs or the original array plus slice indexes; and
+- cached subtree count/metadata required by the local implementation.
+
+Private navigation descends by the caller's already computed hash. An implementation may reseek a
+second key by ascending to the common hash-prefix ancestor, but good hashes intentionally destroy
+key locality, so no performance promise follows. Representation-order iteration may use a separate
+frame mode for equality/diff algorithms; it never becomes a public position token.
+
+Edits close through ordinary CHAMP smart constructors:
+
+- map replacement retains the stored key representative and applies the local value no-op rule;
+- insertion fills an inline slot, creates a child at the first differing route, or extends an
+  equal-hash collision bucket;
+- removal shrinks a collision bucket, clears the correct bitmap slot, contracts empty branches, and
+  performs canonical singleton promotion;
+- set uses the same engine with a unit payload and never replaces a stored representative; and
+- clean closure returns the exact source root/instance under the language's identity model.
+
+Every closed result preserves disjoint data/node bitmaps, compact array lengths equal to bitmap
+popcounts, five-bit routing, collision buckets containing one full hash, cached recursive counts,
+first representatives, comparer/hash policy, and the local canonical empty/singleton rules. An
+immutable path never mutates nodes sealed by C# transient publication or any storage reachable from
+another version.
+
+With depth `d <= 7` and collision-bucket length `c`, seek/edit/close are O(d + c), context is O(d),
+and changed allocation is limited to the bucket and ancestor path plus local compact arrays. C
+retains every key/value/context before publishing output and releases a completely prepared failed
+candidate; other ports follow their clone/move/GC rules. Failure leaves the old path reusable.
+
+### Persistent Hash Bag Adapter
+
+The bag has no public occurrence zipper. Its expanded equal occurrences are multiplicity, not
+separately stored positions. A private adapter focuses one distinct equality class:
+
+```text
+(CHAMP path, stored representative, multiplicity, checked TotalCount)
+```
+
+It changes multiplicity only within `1 .. 2^31 - 1`; a transition to zero removes the class. Every
+edit updates total count by the exact checked delta and publishes the new map and total together.
+First representative retention and receiver policy remain unchanged. Cost is one CHAMP path plus
+O(1) arithmetic; overflow, hashing, equality, allocation, clone, or retain failure publishes no bag.
+
+### Persistent Bimap Adapter
+
+A bimap focus would still be a key/value lens over two unordered indexes, so it remains private. Its
+paired context contains:
+
+- forward path for the active stored `(key, value)` pair or key miss;
+- inverse path for the current stored value, acquired when an edit needs it; and
+- a separate inverse path for a proposed new value class.
+
+Prepare/commit order preserves current conflict precedence:
+
+1. probe the key domain;
+2. probe old and proposed value classes under the independent value policy;
+3. recognize the configured-value-equivalent no-op without substituting the ordinary map's value
+   equality policy;
+4. prepare complete forward and inverse roots; and
+5. construct the bimap only after both succeed.
+
+Replacement removes/readds both directions and never displaces another key. Removal closes both
+holes. Clean close returns the source; changed reference-semantic ports retain their reciprocal
+inverse-view identity contract, while value-semantic ports preserve the equivalent two-root sharing.
+
+### Hash Multimap Adapter
+
+The private pair focus is nested:
+
+```text
+outer map path at stored key representative
+inner set path at stored value representative
+KeyCount, PairCount, exact independent policies
+```
+
+Insertion into a missing key creates a policy-compatible inner set. Duplicate pair insertion is a
+root-preserving no-op. Removing the final value removes the outer group in the same successor; no
+closed intermediate contains an empty group. Whole-key removal subtracts the checked group count.
+
+Publication builds the complete inner set, installs or removes its outer entry, verifies count
+deltas, then creates the facade. Pair seek/change costs one key path plus one value path. This nested
+private shape must not be confused with the public ordered-multimap cursor, whose two orders are
+semantic.
+
+### Persistent Relation Adapter
+
+The private relation context is a bidirectional nested transaction:
+
+```text
+forward: left outer path + right inner path
+reverse: right outer path + left inner path
+global stored left/right representatives
+equal forward/reverse pair counts
+```
+
+The mirror paths may be acquired lazily so a read-only forward operation does not pay a reverse
+seek. Before editing, recover the globally stored representatives, prepare both complete multimap
+successors, contract empty groups in both directions, verify equal pair-count deltas, and publish one
+relation. Duplicate insertion and removal miss return the exact source. Degree-wide removal remains
+the existing degree-local collection operation rather than being misrepresented as one local focus
+edit. `Inverse` stays the public O(1) dual view.
+
+### Persistent Map Patch Adapter
+
+Patch enumeration is unordered, so a public zipper would not improve the semantic workflows
+`Between`, preflight `Apply`, `Invert`, and `Compose`. A private path focus stores one patch key and
+its explicit present/absent before/after values.
+
+Editing or inversion retains the stored key, uses the retained value policy, and removes the CHAMP
+entry when before and after collapse to a semantic no-op. A missing presence discriminator is never
+represented by a nullable sentinel. Cost is the ordinary CHAMP path bound per change.
+
+### Persistent Indexed Map Adapter
+
+The secondary index is derived state and must never expose an independently editable cursor. A
+private row context contains:
+
+- primary CHAMP path with stored primary key, value, and exact stored selected index key;
+- lazily acquired old/new secondary-group paths;
+- retained selector and independent primary/value/index policies.
+
+For an update:
+
+1. a configured-value-equivalent no-op returns without calling the selector;
+2. a genuine change calls the selector exactly once;
+3. an equivalent selected index class retains its stored index representative;
+4. otherwise prepare removal from the old secondary group, contraction if empty, and insertion into
+   the new group;
+5. prepare the primary row; and
+6. publish both indexes only after all work succeeds.
+
+Removal uses the stored selected key and never invokes the selector. The cost is a bounded number of
+CHAMP paths plus at most one selector call.
+
+### Persistent Directed Graph: Traversal, Not Zipper
+
+A graph's cycles, self-loops, and multiple incoming paths prevent one unique reconstructing ancestor
+context. Choosing a spanning-tree parent records traversal history, not collection structure. No
+Huet zipper is designed.
+
+If current enumeration proves insufficient for a named consumer, add a separately named immutable
+`GraphTraversal` bound to one graph snapshot, with:
+
+```text
+DFS or BFS mode
+successor, predecessor, or reversed direction
+current stored vertex representative
+persistent frontier
+persistent visited set
+optional discovery parent/edge and depth
+```
+
+Advancing may return a new traversal value, but it never edits or reconstructs the graph. Graph
+edits produce another graph; the traversal remains on the original snapshot and can only restart
+explicitly. Cycles, isolated vertices, self-loops, and the cached reversed facade require model
+tests. Expected traversal work is one visit per reached vertex/edge plus HAMT frontier/visited costs.
+
+## Integer Patricia Cursor Design
+
+`PersistentIntMap<TValue>`, `PersistentIntSet`, `PersistentLongMap<TValue>`, and
+`PersistentLongSet`—plus their sibling names—receive true ordered gap cursors. Signed keys are
+encoded with the existing sign-bit transform, so in-order trie traversal remains ascending signed
+order across minimum, zero, and maximum boundaries.
+
+Suggested C# names are `PersistentIntMapCursor<TValue>`, `PersistentIntSetCursor`,
+`PersistentLongMapCursor<TValue>`, and `PersistentLongSetCursor`. Each family offers start/end,
+rank, lower/upper-bound, and exact factories, plus ordered peeks/movement and `Snapshot()`.
+
+### Context And Reconstruction
+
+A Patricia frame records:
+
+```text
+branch prefix
+branching mask (highest differing transformed bit)
+hole direction
+complete sibling subtree
+cached subtree count
+original node identity
+```
+
+Focus is a leaf, empty root, or ordered insertion gap. Search follows compressed prefixes and stops
+at the first mismatch or exact leaf. `Position` is derived from cached counts of left siblings on
+the path.
+
+- Map `SetNextValue` retains the integer key and applies the ordinary value-equality no-op.
+- strict insertion at a miss joins the new leaf with the encountered leaf/subtree at the highest
+  differing transformed bit and may splice that branch above one or more frames.
+- set duplicate insertion is an exact no-op.
+- `DeleteNext` removes the focused leaf and collapses its unary parent to the sibling.
+- `DeletePrevious` does the same and moves the gap left.
+- closing recomputes counts only on changed ancestors and shares every untouched sibling.
+
+Unlike CHAMP promotion, these repairs never change the ascending relative order of surviving keys;
+gap continuity is semantic. Clean snapshot returns the exact source. A dirty cursor may memoize one
+canonical reconstructed root per edit version.
+
+With key width `W` equal to 32 or 64, seek, rank, edit, and first dirty snapshot are O(W) worst;
+context is O(W). One move is O(W) worst and O(1) amortized over a complete linear in-order traversal.
+`Count` and `Position` are O(1) when the port caches subtree counts. A port without that cache must
+either add it as an internal invariant or omit/qualify rank members rather than scan silently.
+
+Port-specific ownership remains explicit: C retains/releases the path; C++ and Rust frames retain
+nodes without copying move-only/owned payloads unnecessarily; TypeScript uses its documented 64-bit
+key representation; Python validates fixed-width key ranges; OCaml retains its module-local key
+facades. No cursor token is portable across widths, policy instances, or languages.
+
+## Merkle Search Tree Cursor Design
+
+`MerkleSearchTree<TKey, TValue>` receives the specialized
+`MerkleSearchTreeCursor<TKey, TValue>`. It is a comparer-ordered persistent gap cursor over an
+already trusted in-memory tree, never a mutable editor for raw stored blocks.
+
+### Focus And Wide-Block Context
+
+A block with `e` separators is traversed in this exact order:
+
+```text
+child[0], entry[0], child[1], entry[1], ..., entry[e - 1], child[e]
+```
+
+A frame retains:
+
+- original trusted node/block identity and hash-derived layer;
+- selected child interval or separator position;
+- entries and child subtrees/digests on both sides, preferably as original arrays plus indexes;
+- lower and upper separator bounds for the selected interval;
+- cached subtree count, height/block metadata, and original digest; and
+- ancestor context.
+
+Factories support start/end, rank, lower/upper bound, exact key, and bounded inclusive-range entry.
+Within-block next/previous is constant work; crossing a child/block boundary climbs and descends the
+context. `Position` uses authenticated cached subtree counts already validated in the source tree.
+
+### Canonical Editing And Closure
+
+- Equivalent-key value replacement retains the stored key representative.
+- Exact canonical value bytes recognize the ordinary `SetItem` no-op.
+- Insertion computes the policy-bound SHA-256 key layer once after required validation.
+- Removal deletes the focused key.
+- Every changed block is canonically encoded and rehashed; subtree count, height, block count,
+  `MST2` bytes, block digests, and root digest are recomputed.
+
+Merkle closure cannot naively plug one child into its old parent. A higher-layer inserted key can
+become an ancestor; an equal-layer key can join a wide block; removal can expose/promote child
+separators. Dirty closure therefore invokes the existing canonical layer-partition/split/merge logic
+on the minimal affected interval while sharing digest-identical unaffected subtrees. The closed
+tree's topology, bytes, and root hash must equal ordinary `SetItem`/`Remove` for the same policy and
+logical contents.
+
+`Snapshot()` publishes only a complete canonical in-memory tree and retains the exact policy/domain
+object. It does not write an `IMerkleBlockStore`. `Save`, export, proof creation, synchronization,
+and merge operate on the closed snapshot.
+
+### Trust Boundary
+
+- Create a cursor only from an in-memory tree constructed normally or obtained through completely
+  verified `Load`/`Import`.
+- Cursor operations do not weaken codec canonical-round-trip checks or verification budgets.
+- `MerkleProof` is authenticated partial evidence, not a zipper: opaque child digests cannot
+  reconstruct omitted subtrees.
+- `MerkleSyncPlan` is a transfer frontier, not a location.
+- Neither `MerkleBlock` nor store content becomes editable through the cursor.
+- Root trust, authentication, confidentiality, replay, and peer identity remain outside the zipper
+  exactly as they are outside the tree.
+
+Let `h` be block height, `e` entries per visited block, and `S` changed encoded bytes. Seek retains
+the existing O(sum log(e + 1)) comparison bound. Within-block movement is O(1), boundary movement is
+O(h) worst, and a complete traversal is O(n). Edit plus first dirty snapshot is expected
+O(16 log16 n + S) under uniform layers and O(n + S) worst for a degenerate block. Context is O(h).
+Clean and memoized repeated snapshots are O(1). These are the existing tree assumptions, not new
+cryptographic or adversarial guarantees.
+
+Cross-language golden tests must apply the same cursor edit histories and require byte-identical
+root hashes and `MST2` block closures, including adversarial layer patterns, start/end/min/max gaps,
+present-null values, retained branches, and codec failures.
+
+## Concurrent Facades, Builders, And Transients
+
+### Concurrent Hash Tries
+
+Reject a live editable zipper for C#/Kotlin lock-free Ctries and the TypeScript, Python, and OCaml
+snapshot facades. A focus cannot remain attached to one structural generation while concurrent
+writes renew paths, and write-back would require a new compare/exchange, conflict, factory-retry,
+and linearization contract that the ports do not share.
+
+An optional read-only `SnapshotCursor` may capture one immutable generation and traverse its
+documented snapshot order. It is a traversal cursor, not a reconstructing zipper. Editing follows:
+
+1. capture a snapshot;
+2. convert to a detached persistent CHAMP where needed;
+3. use ordinary persistent operations/private edit paths; and
+4. return the detached map without implicit write-back.
+
+C#/Kotlin conversion retains its O(n), policy/representative-preserving canonical-order contract.
+Root-backed facades follow their local sharing/copy contract. No lock-free, cross-worker, or live-
+rebasing claim transfers between them.
+
+### Construction Builders
+
+Builders contain unpublished mutable nodes or staging state and may freeze repeatedly into detached
+snapshots. Retaining a branchable persistent breadcrumb path across later builder mutation would
+either alias mutable storage or force eager detachment and defeat the builder. No builder zipper is
+designed. A frozen persistent snapshot can create its ordinary family cursor.
+
+### One-Way Editing Sessions
+
+Transients are single-owner and publication consumes the logical session; persistent zippers branch
+freely and materialization does not consume them. A “transient zipper” would conflict with owner-
+token uniqueness, version invalidation, alias consumption, and language ownership rules. Do not add
+one under this name.
+
+The private CHAMP edit-path engine may be used during one transient operation, but the path cannot
+outlive that operation or bypass its prepare/commit boundary, version increment, iterator
+invalidation, owner token, terminal publication, or exception guarantee.
