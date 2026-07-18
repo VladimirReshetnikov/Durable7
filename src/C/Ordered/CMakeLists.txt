@@ -35,6 +35,7 @@ target_sources(
     PRIVATE
         src/ordered_map.c
         src/ordered_multimap.c
+        src/ordered_cursor.c
         src/ordered_set.c
 )
 
