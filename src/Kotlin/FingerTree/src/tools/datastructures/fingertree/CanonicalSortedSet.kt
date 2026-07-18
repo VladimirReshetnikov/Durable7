@@ -715,6 +715,39 @@ public class CanonicalSortedSet<T> private constructor(
 
     internal fun nodeIdentityForTesting(value: T): Any? = findNode(value)
 
+    internal fun cursorBoundRank(value: T, upper: Boolean): Int {
+        var rank = 0
+        var cursor = root
+        while (cursor != null) {
+            val comparison = policy.comparator.compare(cursor.item, value)
+            if (comparison < 0 || (upper && comparison == 0)) {
+                rank = Math.addExact(rank, Math.addExact(cursor.left?.count ?: 0, 1))
+                cursor = cursor.right
+            } else {
+                cursor = cursor.left
+            }
+        }
+        return rank
+    }
+
+    internal fun cursorItemAt(rank: Int): T {
+        require(rank in 0 until size) { "Rank must identify a canonical-set item." }
+        var remaining = rank
+        var cursor = root
+        while (cursor != null) {
+            val leftCount = cursor.left?.count ?: 0
+            when {
+                remaining < leftCount -> cursor = cursor.left
+                remaining == leftCount -> return cursor.item
+                else -> {
+                    remaining -= leftCount + 1
+                    cursor = cursor.right
+                }
+            }
+        }
+        error("Canonical-set rank metadata is inconsistent.")
+    }
+
     private fun findNode(value: T): Node<T>? {
         var cursor = root
         while (cursor != null) {

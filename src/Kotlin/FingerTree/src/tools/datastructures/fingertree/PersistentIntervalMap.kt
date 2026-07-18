@@ -95,6 +95,10 @@ public class PersistentIntervalMap<T : Comparable<T>, V> private constructor(
         return PersistentIntervalMapStatistics(size)
     }
 
+    internal fun cursorLowerBound(interval: Interval<T>): Int = values.cursorLowerBound(interval)
+
+    internal fun cursorUpperBound(interval: Interval<T>): Int = values.cursorUpperBound(interval)
+
     override fun iterator(): Iterator<IntervalMapEntry<T, V>> = toList().iterator()
 
     private fun indexDisagreement(): IllegalStateException =

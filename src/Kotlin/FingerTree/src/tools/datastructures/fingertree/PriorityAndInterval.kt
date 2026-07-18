@@ -252,6 +252,20 @@ public class IntervalTree<T : Comparable<T>> private constructor(
 
     internal fun debugIsBalanced(): Boolean = intervals.isBalanced()
 
+    internal fun cursorLowerBound(low: T): Int = lowerBoundByLow(low)
+
+    internal fun cursorUpperBound(low: T): Int {
+        var index = lowerBoundByLow(low)
+        while (index < size && intervalAt(index).low.compareTo(low) == 0) index++
+        return index
+    }
+
+    internal fun cursorIntervalAt(rank: Int): Interval<T>? =
+        if (rank < 0 || rank >= size) null else intervalAt(rank)
+
+    internal fun cursorRemoveAt(rank: Int): IntervalTree<T> =
+        IntervalTree(checkNotNull(intervals.removeAt(rank)))
+
     override fun iterator(): Iterator<Interval<T>> = intervals.iterator()
 
     @Suppress("UNCHECKED_CAST")

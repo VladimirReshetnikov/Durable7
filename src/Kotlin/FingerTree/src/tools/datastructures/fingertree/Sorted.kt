@@ -126,6 +126,11 @@ public class SortedBag<T> private constructor(
 
     internal fun debugIsBalanced(): Boolean = items.debugIsBalanced()
 
+    internal fun cursorRemoveAt(rank: Int): SortedBag<T> =
+        SortedBag(checkNotNull(items.removeAt(rank)), comparator)
+
+    internal fun cursorItemAt(rank: Int): T = items.itemAt(rank)
+
     override fun iterator(): Iterator<T> = items.iterator()
 }
 
@@ -289,6 +294,12 @@ public class SortedSet<T> private constructor(
 
     internal fun debugIsBalanced(): Boolean = items.debugIsBalanced()
 
+    internal fun cursorLowerBound(value: T): Int = items.lowerBound(value, comparator)
+
+    internal fun cursorUpperBound(value: T): Int = items.upperBound(value, comparator)
+
+    internal fun cursorItemAt(rank: Int): T = items.itemAt(rank)
+
     override fun iterator(): Iterator<T> = items.iterator()
 }
 
@@ -432,6 +443,10 @@ public class SortedMap<K, V> private constructor(
     public fun sharesStorageWith(other: SortedMap<K, V>): Boolean = entries.sharesStorageWith(other.entries)
 
     internal fun debugIsBalanced(): Boolean = entries.debugIsBalanced()
+
+    internal fun cursorLowerBound(key: K): Int = lowerBoundByKey(key)
+
+    internal fun cursorUpperBound(key: K): Int = upperBoundByKey(key)
 
     override fun iterator(): Iterator<SortedMapEntry<K, V>> = entries.iterator()
 

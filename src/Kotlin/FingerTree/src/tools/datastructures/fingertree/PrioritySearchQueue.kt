@@ -310,6 +310,39 @@ public class PrioritySearchQueue<K, P, V> private constructor(
 
     internal fun nodeIdentityForTesting(key: K): Any? = findNode(key)
 
+    internal fun cursorBoundRank(key: K, upper: Boolean): Int {
+        var rank = 0
+        var cursor = root
+        while (cursor != null) {
+            val comparison = keyComparator.compare(cursor.entry.key, key)
+            if (comparison < 0 || (upper && comparison == 0)) {
+                rank = Math.addExact(rank, Math.addExact(cursor.left?.count ?: 0, 1))
+                cursor = cursor.right
+            } else {
+                cursor = cursor.left
+            }
+        }
+        return rank
+    }
+
+    internal fun cursorEntryAt(rank: Int): PrioritySearchEntry<K, P, V>? {
+        if (rank < 0 || rank >= count) return null
+        var remaining = rank
+        var cursor = root
+        while (cursor != null) {
+            val leftCount = cursor.left?.count ?: 0
+            when {
+                remaining < leftCount -> cursor = cursor.left
+                remaining == leftCount -> return cursor.entry
+                else -> {
+                    remaining -= leftCount + 1
+                    cursor = cursor.right
+                }
+            }
+        }
+        return null
+    }
+
     private fun collectNodes(
         initialRoot: Node<K, P, V>?,
         destination: IdentityHashMap<Node<K, P, V>, Boolean>,
