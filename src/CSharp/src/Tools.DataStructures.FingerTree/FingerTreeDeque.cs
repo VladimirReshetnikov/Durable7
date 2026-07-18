@@ -53,7 +53,7 @@ namespace Tools.DataStructures.FingerTree;
 /// // items is still [5, 10, 20]
 /// </code>
 /// </example>
-public sealed class FingerTreeDeque<T> : IReadOnlyList<T>
+public sealed partial class FingerTreeDeque<T> : IReadOnlyList<T>
 {
     private static readonly FingerTreeDeque<T> EmptyInstance = new(EmptyTree<T, Leaf<T>>.Instance);
 

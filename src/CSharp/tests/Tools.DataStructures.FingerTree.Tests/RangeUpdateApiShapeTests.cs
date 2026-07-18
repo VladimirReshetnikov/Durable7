@@ -90,6 +90,7 @@ public sealed class RangeUpdateApiShapeTests
         var tag = parameters[2];
         var enumeratorDefinition = sequence.GetNestedType("Enumerator", BindingFlags.Public)!;
         var enumerator = enumeratorDefinition.MakeGenericType(parameters);
+        var cursor = typeof(RangeUpdateSequenceCursor<,,,>).MakeGenericType(parameters);
 
         var properties = sequence
             .GetProperties(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly)
@@ -114,6 +115,7 @@ public sealed class RangeUpdateApiShapeTests
                 "Concat",
                 "Create",
                 "CreateRange",
+                "GetCursor",
                 "GetEnumerator",
                 "GetRange",
                 "Insert",
@@ -149,6 +151,7 @@ public sealed class RangeUpdateApiShapeTests
         AssertMethod(sequence, "GetRange", isStatic: false, sequence, typeof(int), typeof(int));
         AssertMethod(sequence, "ApplyRange", isStatic: false, sequence, typeof(int), typeof(int), tag);
         AssertMethod(sequence, "MeasureRange", isStatic: false, measure, typeof(int), typeof(int));
+        AssertMethod(sequence, "GetCursor", isStatic: false, cursor, typeof(int));
         AssertMethod(sequence, "GetEnumerator", isStatic: false, enumerator);
     }
 

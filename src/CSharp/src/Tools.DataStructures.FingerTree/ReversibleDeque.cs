@@ -32,7 +32,7 @@ namespace Tools.DataStructures.FingerTree;
 /// // deque is still [1, 2, 3, 4]
 /// </code>
 /// </example>
-public sealed class ReversibleDeque<T> : IReadOnlyList<T>
+public sealed partial class ReversibleDeque<T> : IReadOnlyList<T>
 {
     private static readonly ReversibleDeque<T> EmptyInstance = new(RevEmptyTree<T>.Instance);
 

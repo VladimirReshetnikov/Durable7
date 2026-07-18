@@ -49,7 +49,7 @@ namespace Tools.DataStructures.FingerTree;
 /// // right is [30, 40]   (the element at index 2 begins Right)
 /// </code>
 /// </example>
-public sealed class FingerTree<TElement, TMeasure, TMeasureOps>
+public sealed partial class FingerTree<TElement, TMeasure, TMeasureOps>
     : IEnumerable<TElement>
     where TMeasureOps : IMeasure<TElement, TMeasure>
 {

@@ -15,7 +15,7 @@ namespace Tools.DataStructures.FingerTree;
 /// <see cref="Builder"/> for append-heavy bulk construction.
 /// </remarks>
 [DebuggerDisplay("Count = {Count}, Height = {Height}")]
-public sealed class RrbVector<T> : IReadOnlyList<T>
+public sealed partial class RrbVector<T> : IReadOnlyList<T>
 {
     private const int RadixBits = 5;
     private const int BranchFactor = 32;
